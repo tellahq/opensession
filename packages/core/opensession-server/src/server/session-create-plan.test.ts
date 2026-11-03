@@ -83,7 +83,7 @@ describe("durable create plan", () => {
     expect(restored.accountId).toBeUndefined();
   });
 
-  test("prunes only terminal plans with bounded retention", () => {
+  test("prunes only terminal plans with bounded retention", async () => {
     const root = mkdtempSync(join(tmpdir(), "create-plan-prune-"));
     roots.push(root);
     const previous = __setSessionsDirForTest(root);
@@ -104,12 +104,14 @@ describe("durable create plan", () => {
         id: plan.sessionId,
       });
       expect(
-        pruneCreatePlans(
+        await pruneCreatePlans(
           store,
           Date.parse(plan.createdAt) + 24 * 60 * 60_000 + 1,
         ),
       ).toBe(1);
-      expect(readCreatePlan(plan.sessionId, plan.identity)).toBeUndefined();
+      expect(
+        await readCreatePlan(plan.sessionId, plan.identity),
+      ).toBeUndefined();
 
       const retryable = writeLegacyPlan(root, {
         version: 1,
@@ -129,13 +131,13 @@ describe("durable create plan", () => {
         true,
       );
       expect(
-        pruneCreatePlans(
+        await pruneCreatePlans(
           store,
           Date.parse(retryable.createdAt) + 365 * 24 * 60 * 60_000,
         ),
       ).toBe(0);
       expect(
-        readCreatePlan(retryable.sessionId, retryable.identity),
+        await readCreatePlan(retryable.sessionId, retryable.identity),
       ).toBeDefined();
     } finally {
       store.close();
@@ -143,7 +145,7 @@ describe("durable create plan", () => {
     }
   });
 
-  test("keeps branch and workspace choices across a retry", () => {
+  test("keeps branch and workspace choices across a retry", async () => {
     const root = mkdtempSync(join(tmpdir(), "create-plan-"));
     roots.push(root);
     const previous = __setSessionsDirForTest(root);
@@ -169,12 +171,12 @@ describe("durable create plan", () => {
           openingPrompt: "stable context",
         },
       });
-      expect(readCreatePlan("os-create", "same")).toEqual(first);
-      expect(() => readCreatePlan("os-create", "different")).toThrow(
+      expect(await readCreatePlan("os-create", "same")).toEqual(first);
+      await expect(readCreatePlan("os-create", "different")).rejects.toThrow(
         "reused with another payload",
       );
-      clearCreatePlan("os-create");
-      expect(readCreatePlan("os-create", "same")).toBeUndefined();
+      await clearCreatePlan("os-create");
+      expect(await readCreatePlan("os-create", "same")).toBeUndefined();
     } finally {
       __setSessionsDirForTest(previous);
     }

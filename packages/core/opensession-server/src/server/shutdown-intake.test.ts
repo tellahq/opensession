@@ -41,7 +41,9 @@ describe("shutdown intake fence", () => {
     expect(source).toContain("recordAutomationIntentTerminal(");
     // A replayed intent reuses the Plain discussion its first attempt opened
     // (recorded durably before any other setup) instead of creating another.
-    expect(source).toContain("const durableIntent = persistAutomationIntent({");
+    expect(source).toContain(
+      "const durableIntent = await persistAutomationIntent({",
+    );
     const openDiscussion = source.indexOf(
       "durableIntent.plainDiscussionId,",
       run,
@@ -60,7 +62,7 @@ describe("shutdown intake fence", () => {
     expect(settle).toBeLessThan(
       source.indexOf("clearAutomationIntent(bksId)", settle),
     );
-    expect(source).toContain("if (!hasAutomationIntent(osSessionId))");
+    expect(source).toContain("if (!(await hasAutomationIntent(osSessionId)))");
     expect(
       source.indexOf("automationPreparations.delete(bksId)", streamAdoption),
     ).toBeGreaterThan(streamAdoption);

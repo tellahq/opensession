@@ -5,6 +5,7 @@ import { tmpdir } from "os";
 import { parseJsonlLines } from "./jsonl-parser";
 import {
   __setEngineSessionMapPathForTest,
+  engineSessionOwnersPersisted,
   recordEngineSessionOwner,
   sessionForEngineId,
   transcriptLineAssistantText,
@@ -25,11 +26,16 @@ afterEach(() => {
 });
 
 describe("transcript persistence", () => {
-  test("persists engine-session ownership", () => {
+  test("persists engine-session ownership", async () => {
     dir = mkdtempSync(join(tmpdir(), "engine-session-map-"));
-    previous = __setEngineSessionMapPathForTest(join(dir, "map.json"));
+    const path = join(dir, "map.json");
+    previous = __setEngineSessionMapPathForTest(path);
     recordEngineSessionOwner("engine-1", "session-1");
-    expect(sessionForEngineId("engine-1")).toBe("session-1");
+    expect(await sessionForEngineId("engine-1")).toBe("session-1");
+    await engineSessionOwnersPersisted();
+    // A fresh process reads the owner back from disk.
+    __setEngineSessionMapPathForTest(path);
+    expect(await sessionForEngineId("engine-1")).toBe("session-1");
   });
 
   test("builders round-trip through the shared parser", () => {

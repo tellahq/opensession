@@ -1221,10 +1221,12 @@ async function refreshPrCacheInner(): Promise<Set<string>> {
     // lazily to keep the session-control/worktree graph out of this module.
     if (freshRepos.size && process.env.OPENSESSION_PR_CONFLICTS !== "0") {
       void import("../agents/github/pr-conflict")
-        .then(({ scanConflictTransitions, notifyConflictedPrSession }) => {
-          for (const event of scanConflictTransitions(next, freshRepos))
-            void notifyConflictedPrSession(event);
-        })
+        .then(
+          async ({ scanConflictTransitions, notifyConflictedPrSession }) => {
+            for (const event of await scanConflictTransitions(next, freshRepos))
+              void notifyConflictedPrSession(event);
+          },
+        )
         .catch((e) => console.error("[github] PR conflict scan failed:", e));
     }
   } catch (e) {

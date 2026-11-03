@@ -1364,7 +1364,7 @@ describe("run journal", () => {
         startedAt: new Date().toISOString(),
       });
     }
-    mod.journalQuarantine([
+    await mod.journalQuarantine([
       {
         run: mod.activeRunRecords().find((run) => run.runKey === "batch-1")!,
         reason: "recovery_expired",
@@ -1406,7 +1406,7 @@ describe("run journal", () => {
       startedAt: new Date().toISOString(),
     };
     await mod.journalSet(run);
-    mod.journalQuarantine([
+    await mod.journalQuarantine([
       { run, reason: "ambiguous_runner_launch", notify: false },
     ]);
     expect(mod.activeRunRecords()).toEqual([]);

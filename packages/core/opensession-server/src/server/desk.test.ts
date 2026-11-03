@@ -17,7 +17,7 @@ function ensureDesk() {
       "bun",
       "-e",
       `import { ensureDeskSession } from "./packages/core/opensession-server/src/server/desk.ts";
-console.log(JSON.stringify(ensureDeskSession("Desk Test")));`,
+console.log(JSON.stringify(await ensureDeskSession("Desk Test")));`,
     ],
     { cwd: process.cwd(), env },
   );

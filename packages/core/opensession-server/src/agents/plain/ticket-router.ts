@@ -20,9 +20,9 @@
  * code so prompt tweaks can't break parsing.
  */
 import { stateDir } from "../../server/paths";
-import { existsSync, readFileSync } from "fs";
 import { oneShot } from "../../server/one-shot";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
+import { writeJsonAtomicAsync } from "../../server/shared/atomic-write";
+import { readTextIfExists } from "../../server/shared/async-fs";
 import { resolveModel } from "../../server/models";
 import { personaCompany, personaProduct } from "../../server/config";
 
@@ -61,18 +61,21 @@ export interface RouterConfig {
   basicModel: string;
 }
 
-function readConfigFile(): { prompt?: string; basicModel?: string } {
+async function readConfigFile(): Promise<{
+  prompt?: string;
+  basicModel?: string;
+}> {
   try {
-    if (existsSync(CONFIG_PATH))
-      return JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
+    const text = await readTextIfExists(CONFIG_PATH);
+    if (text !== undefined) return JSON.parse(text);
   } catch (e) {
     console.error("[plain] Failed to read router config:", e);
   }
   return {};
 }
 
-export function getRouterConfig(): RouterConfig {
-  const file = readConfigFile();
+export async function getRouterConfig(): Promise<RouterConfig> {
+  const file = await readConfigFile();
   const prompt =
     typeof file.prompt === "string" && file.prompt.trim()
       ? file.prompt
@@ -85,11 +88,11 @@ export function getRouterConfig(): RouterConfig {
 }
 
 /** Update the router config. Empty/absent prompt resets to the default. */
-export function setRouterConfig(patch: {
+export async function setRouterConfig(patch: {
   prompt?: string;
   basicModel?: string;
-}): RouterConfig | { error: string } {
-  const file = readConfigFile();
+}): Promise<RouterConfig | { error: string }> {
+  const file = await readConfigFile();
   if ("prompt" in patch) {
     const p = (patch.prompt || "").trim();
     if (p && p === DEFAULT_ROUTER_PROMPT.trim()) delete file.prompt;
@@ -103,7 +106,7 @@ export function setRouterConfig(patch: {
     else file.basicModel = resolved.id;
   }
   try {
-    writeJsonAtomic(CONFIG_PATH, file);
+    await writeJsonAtomicAsync(CONFIG_PATH, file);
   } catch (e: any) {
     return { error: `Failed to save router config: ${e?.message || e}` };
   }
@@ -120,7 +123,7 @@ export async function classifyTicketRoute(
     const resultText = await oneShot(
       `Classify this support ticket:\n\n${ticketContent.slice(0, 8000)}`,
       {
-        system: `${getRouterConfig().prompt}\n\n${OUTPUT_CONTRACT}`,
+        system: `${(await getRouterConfig()).prompt}\n\n${OUTPUT_CONTRACT}`,
         model: ROUTER_MODEL,
         label: "ticket-router",
       },

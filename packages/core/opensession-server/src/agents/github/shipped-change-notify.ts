@@ -3,20 +3,13 @@
  * `after` screenshot is both the visual-change signal and the attachment; the
  * route calls this only after a teammate clicks Share to Slack.
  */
-import {
-  mkdirSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "fs";
+import { mkdir, readFile, realpath, rm, stat, writeFile } from "fs/promises";
 import { dirname, relative, resolve } from "path";
 import { createHash } from "crypto";
 import { configuredIntegration } from "../../server/config";
 import { audit } from "../../server/audit";
 import { stateDir } from "../../server/paths";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
+import { writeJsonAtomicAsync } from "../../server/shared/atomic-write";
 import { UPLOADS_DIR } from "../../server/uploads";
 import { homeDir } from "../../server/paths";
 import type { UnifiedSession } from "../../server/types";
@@ -57,25 +50,27 @@ function announcementReceiptPath(key: string, root: string): string {
   return `${root}/${digest}.json`;
 }
 
-function readAnnouncementReceipt(path: string): AnnouncementReceipt | null {
+async function readAnnouncementReceipt(
+  path: string,
+): Promise<AnnouncementReceipt | null> {
   try {
-    const value = JSON.parse(readFileSync(path, "utf8"));
+    const value = JSON.parse(await readFile(path, "utf8"));
     return value && typeof value === "object" ? value : null;
   } catch {
     return null;
   }
 }
 
-export function claimShippedChangeAnnouncement(
+export async function claimShippedChangeAnnouncement(
   key: string,
   root = ANNOUNCEMENT_STATE_ROOT,
   now = Date.now(),
-): string | null {
+): Promise<string | null> {
   const claimId = crypto.randomUUID();
   const receiptPath = announcementReceiptPath(key, root);
-  mkdirSync(dirname(receiptPath), { recursive: true });
+  await mkdir(dirname(receiptPath), { recursive: true });
   try {
-    writeFileSync(
+    await writeFile(
       receiptPath,
       JSON.stringify({
         status: "pending",
@@ -93,25 +88,25 @@ export function claimShippedChangeAnnouncement(
   return claimId;
 }
 
-export function settleShippedChangeAnnouncement(
+export async function settleShippedChangeAnnouncement(
   key: string,
   claimId: string,
   sent: boolean,
   sessionId?: string,
   root = ANNOUNCEMENT_STATE_ROOT,
-): void {
+): Promise<void> {
   const receiptPath = announcementReceiptPath(key, root);
-  const receipt = readAnnouncementReceipt(receiptPath);
+  const receipt = await readAnnouncementReceipt(receiptPath);
   if (receipt?.claimId !== claimId) return;
   if (sent) {
-    writeJsonAtomic(receiptPath, {
+    await writeJsonAtomicAsync(receiptPath, {
       status: "sent",
       claimId,
       at: new Date().toISOString(),
       sessionId,
     });
   } else {
-    rmSync(receiptPath, { force: true });
+    await rm(receiptPath, { force: true });
   }
 }
 
@@ -119,70 +114,75 @@ export function settleShippedChangeAnnouncement(
  * Drop a receipt so the same update can be shared again. Undo removes the
  * message from Slack, so the claim that stopped a second send is stale.
  */
-export function forgetShippedChangeAnnouncement(
+export async function forgetShippedChangeAnnouncement(
   key: string,
   root = ANNOUNCEMENT_STATE_ROOT,
-): void {
-  rmSync(announcementReceiptPath(key, root), { force: true });
+): Promise<void> {
+  await rm(announcementReceiptPath(key, root), { force: true });
 }
 
-export function validWalkthroughScreenshot(
+export async function validWalkthroughScreenshot(
   path: string,
   sessionId: string,
   uploadsRoot = UPLOADS_DIR,
-): boolean {
+): Promise<boolean> {
   try {
-    const root = realpathSync(resolve(uploadsRoot, "walkthrough", sessionId));
-    const candidate = realpathSync(path);
+    const root = await realpath(resolve(uploadsRoot, "walkthrough", sessionId));
+    const candidate = await realpath(path);
     const within = relative(root, candidate);
     if (within.startsWith("..") || resolve(root, within) !== candidate)
       return false;
     const dot = candidate.lastIndexOf(".");
     if (dot < 0 || !SCREENSHOT_EXTS.has(candidate.slice(dot).toLowerCase()))
       return false;
-    const stat = statSync(candidate);
-    return stat.isFile() && stat.size > 0 && stat.size <= MAX_SCREENSHOT_BYTES;
+    const info = await stat(candidate);
+    return info.isFile() && info.size > 0 && info.size <= MAX_SCREENSHOT_BYTES;
   } catch {
     return false;
   }
 }
 
-export function validFeaturedScreenshot(path: string): boolean {
+export async function validFeaturedScreenshot(path: string): Promise<boolean> {
   try {
-    const candidate = realpathSync(path);
+    const candidate = await realpath(path);
     const scoped =
       candidate.startsWith("/tmp/") || candidate.startsWith(`${homeDir()}/`);
     if (!scoped) return false;
     const dot = candidate.lastIndexOf(".");
     if (dot < 0 || !SCREENSHOT_EXTS.has(candidate.slice(dot).toLowerCase()))
       return false;
-    const stat = statSync(candidate);
-    return stat.isFile() && stat.size > 0 && stat.size <= MAX_SCREENSHOT_BYTES;
+    const info = await stat(candidate);
+    return info.isFile() && info.size > 0 && info.size <= MAX_SCREENSHOT_BYTES;
   } catch {
     return false;
   }
 }
 
-export function selectShippedVisualChange(
+export async function selectShippedVisualChange(
   session: UnifiedSession,
   fileExists: (
     path: string,
     sessionId: string,
-  ) => boolean = validWalkthroughScreenshot,
+  ) => boolean | Promise<boolean> = validWalkthroughScreenshot,
   requestedScreenshots?: string[],
-): ShippedVisualChange | null {
+): Promise<ShippedVisualChange | null> {
   const walkthroughScreenshot = session.walkthrough?.shots?.find(
     (shot) => shot.after,
   )?.after;
-  const screenshots = [
-    ...new Set(
-      requestedScreenshots === undefined
-        ? walkthroughScreenshot && fileExists(walkthroughScreenshot, session.id)
-          ? [walkthroughScreenshot]
-          : []
-        : requestedScreenshots.filter(validFeaturedScreenshot),
-    ),
-  ].slice(0, 10);
+  let candidates: string[];
+  if (requestedScreenshots === undefined) {
+    candidates =
+      walkthroughScreenshot &&
+      (await fileExists(walkthroughScreenshot, session.id))
+        ? [walkthroughScreenshot]
+        : [];
+  } else {
+    const valid = await Promise.all(
+      requestedScreenshots.map(validFeaturedScreenshot),
+    );
+    candidates = requestedScreenshots.filter((_, i) => valid[i]);
+  }
+  const screenshots = [...new Set(candidates)].slice(0, 10);
   if (!screenshots.length) return null;
   return {
     sessionId: session.id,
@@ -294,7 +294,7 @@ export async function shareShippedVisualChange(opts: {
       );
   if (!target) throw new Error("Choose a Slack channel you can post to");
   const channel = target.id;
-  const visual = selectShippedVisualChange(
+  const visual = await selectShippedVisualChange(
     opts.session,
     validWalkthroughScreenshot,
     opts.screenshots,
@@ -312,7 +312,7 @@ export async function shareShippedVisualChange(opts: {
     comment,
     visual?.screenshots || [],
   );
-  const claimId = claimShippedChangeAnnouncement(announcementKey);
+  const claimId = await claimShippedChangeAnnouncement(announcementKey);
   if (!claimId) return { status: "already_shared" };
   let permalink: string | undefined;
   let ts: string | undefined;
@@ -330,14 +330,14 @@ export async function shareShippedVisualChange(opts: {
         ...(opts.thread ? { threadTs: opts.thread.threadTs } : {}),
       },
     ));
-    settleShippedChangeAnnouncement(
+    await settleShippedChangeAnnouncement(
       announcementKey,
       claimId,
       true,
       opts.session.id,
     );
   } catch (error) {
-    settleShippedChangeAnnouncement(announcementKey, claimId, false);
+    await settleShippedChangeAnnouncement(announcementKey, claimId, false);
     throw error;
   }
   audit({

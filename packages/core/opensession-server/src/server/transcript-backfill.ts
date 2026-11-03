@@ -25,7 +25,8 @@
  * offline authority cutover because the shared source is rollback evidence.
  */
 
-import { existsSync, statSync, writeFileSync } from "fs";
+import { stat, writeFile } from "node:fs/promises";
+import { pathExists } from "./shared/path-exists";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { audit } from "./audit";
 import type { UnifiedSession } from "./types";
@@ -58,12 +59,12 @@ function sleep(ms: number): Promise<void> {
  * Null when no mirror file is resolvable — the store records a null watermark
  * and the read path treats any mirror growth as drift.
  */
-function mirrorFileSize(
+async function mirrorFileSize(
   session: Pick<UnifiedSession, "transcriptPath">,
-): number | null {
+): Promise<number | null> {
   if (!session.transcriptPath) return null;
   try {
-    return statSync(session.transcriptPath).size;
+    return (await stat(session.transcriptPath)).size;
   } catch {
     return null;
   }
@@ -138,7 +139,7 @@ export async function runTranscriptBackfill(
         continue;
       }
       if (!opts.dryRun) {
-        const watermark = mirrorFileSize(session);
+        const watermark = await mirrorFileSize(session);
         // WP-A touchpoint: chunked import (≤500 rows/tx, design §1);
         // importLegacyTranscript marks the session imported with the
         // src + mirror watermark internally.
@@ -181,17 +182,20 @@ export async function runTranscriptBackfill(
  * module-locals reset on reload). W5 wires this into boot; nothing calls it
  * yet.
  */
-export function kickTranscriptBackfillOnce(): void {
-  if (existsSync(MARKER_PATH)) return;
+export async function kickTranscriptBackfillOnce(): Promise<void> {
   const g = globalThis as typeof globalThis & {
     __osTranscriptBackfillKick?: boolean;
   };
   if (g.__osTranscriptBackfillKick) return;
   g.__osTranscriptBackfillKick = true;
+  if (await pathExists(MARKER_PATH)) {
+    g.__osTranscriptBackfillKick = false;
+    return;
+  }
   void runTranscriptBackfill()
-    .then((summary) => {
+    .then(async (summary) => {
       try {
-        writeFileSync(
+        await writeFile(
           MARKER_PATH,
           JSON.stringify(
             { finishedAt: new Date().toISOString(), ...summary },

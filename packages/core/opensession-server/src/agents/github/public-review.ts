@@ -1,11 +1,11 @@
-import { existsSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { getSandboxProvider } from "../../server/sandbox";
 import { sandboxProviderConfigured } from "../../server/sandbox/config";
 import { getRepo } from "../../server/worktree";
 import { oneShotDetailed } from "../../server/one-shot";
 import { stateDir } from "../../server/paths";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
+import { writeJsonAtomicAsync } from "../../server/shared/atomic-write";
+import { keyedOrder, readTextIfExists } from "../../server/shared/async-fs";
 import type { PrAutomationDetails, PrDiffData } from "../../server/pr-info";
 
 const DEFAULT_MAX_FILES = 300;
@@ -214,23 +214,32 @@ function budgetPath(): string {
   return stateDir("github-public-review-budget.json");
 }
 
+/** Serializes read-modify-write cycles of the budget file. */
+const budgetOrder = keyedOrder();
+
 export function admitPublicReview(input: {
   repo: string;
   prNumber: number;
   headSha: string;
   author: string;
   now?: Date;
-}): PublicReviewAdmission {
-  let previous: PublicReviewBudgetState | null = null;
+}): Promise<PublicReviewAdmission> {
   const path = budgetPath();
-  if (existsSync(path)) {
-    try {
-      previous = JSON.parse(
-        readFileSync(path, "utf8"),
-      ) as PublicReviewBudgetState;
-    } catch {
-      throw new Error("public review budget state is unreadable");
-    }
+  return budgetOrder(path, () => admitPublicReviewNow(path, input));
+}
+
+async function admitPublicReviewNow(
+  path: string,
+  input: Parameters<typeof admitPublicReview>[0],
+): Promise<PublicReviewAdmission> {
+  let previous: PublicReviewBudgetState | null = null;
+  let text: string | undefined;
+  try {
+    text = await readTextIfExists(path);
+    if (text !== undefined)
+      previous = JSON.parse(text) as PublicReviewBudgetState;
+  } catch {
+    throw new Error("public review budget state is unreadable");
   }
   const result = evaluatePublicReviewAdmission(previous, {
     day: (input.now || new Date()).toISOString().slice(0, 10),
@@ -239,7 +248,7 @@ export function admitPublicReview(input: {
     headSha: input.headSha,
     author: input.author,
   });
-  if (result.ok) writeJsonAtomic(path, result.state, true, 0o600);
+  if (result.ok) await writeJsonAtomicAsync(path, result.state, true, 0o600);
   return result;
 }
 

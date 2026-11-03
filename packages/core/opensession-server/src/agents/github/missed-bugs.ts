@@ -116,7 +116,7 @@ export async function analyzeMergedPrForMissedBugs(
       ).trim();
       const culpritPr = prNumberFromSubject(subject);
       if (!culpritPr || culpritPr === pr.number) continue;
-      const state = readPrState(culpritPr, ghRepo);
+      const state = await readPrState(culpritPr, ghRepo);
       if (!state || !state.reviewedShas?.length) continue; // we never reviewed it
       const age = Date.now() - Date.parse(state.updatedAt || "");
       if (!Number.isFinite(age) || age > CULPRIT_MAX_AGE_MS) continue;
@@ -136,7 +136,7 @@ export async function analyzeMergedPrForMissedBugs(
       repo: repoFull,
       fix_title: title.slice(0, 200),
     });
-    recordFalseNegative(
+    await recordFalseNegative(
       ghRepo,
       culpritPr,
       `Fix PR #${pr.number} "${title}" changed code introduced by reviewed PR #${culpritPr} (${subjects[0] || ""})`,

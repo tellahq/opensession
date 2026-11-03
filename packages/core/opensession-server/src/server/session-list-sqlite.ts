@@ -14,8 +14,6 @@
  */
 
 import { Database } from "bun:sqlite";
-import { chmodSync, existsSync, mkdirSync } from "fs";
-import { dirname } from "path";
 import type { UnifiedSession } from "./types";
 import { SESSION_BRANCH_MATCH_LIMIT } from "./session-list-protocol";
 
@@ -65,11 +63,10 @@ export class SessionListStore {
   private readonly db: Database;
   private readonly upsertStatement;
 
+  /** No filesystem setup: the gateway imports this class. A file-backed
+   *  index opens through openSessionListStoreFile (session-list-db-files.ts),
+   *  which creates the directory and restricts the file modes. */
   constructor(path: string) {
-    if (path !== ":memory:") {
-      const dir = dirname(path);
-      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    }
     this.db = new Database(path);
     // Deploy overlap and maintenance readers can briefly own the WAL writer.
     // Wait for that bounded handoff instead of dropping the targeted session
@@ -137,11 +134,6 @@ export class SessionListStore {
 				ON session_list(branch, archived)
 				WHERE branch IS NOT NULL;
 		`);
-    if (path !== ":memory:") {
-      for (const file of [path, `${path}-wal`, `${path}-shm`]) {
-        if (existsSync(file)) chmodSync(file, 0o600);
-      }
-    }
     // A maintained relation, not json_each over every session at lookup time.
     // Upgrade from the existing catalog projection only, never session files.
     this.db.transaction(() => {

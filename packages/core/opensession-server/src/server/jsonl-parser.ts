@@ -1,6 +1,5 @@
-import { readFileSync, statSync } from "fs";
-import { openSync, readSync, closeSync, fstatSync } from "fs";
-import { existsSync } from "fs";
+import { open, readFile, stat } from "node:fs/promises";
+import { pathExists } from "./shared/path-exists";
 import type { TranscriptEntry } from "./types";
 import {
   classifyEntries,
@@ -13,7 +12,10 @@ import { configuredIntegration } from "./config";
 import {
   assistantProseFields,
   extractAssistantVideos,
+  resolveLocalMedia,
   toolResultMedia,
+  withLocalMedia,
+  withLocalMediaFor,
 } from "./transcript-media";
 import { transcriptEntryMatchSnippet } from "./transcript-search";
 export {
@@ -862,6 +864,20 @@ export function parseJsonlLines(lines: string[]): TranscriptEntry[] {
   return acc.entries;
 }
 
+/** parseJsonlLines with the local media the lines name checked on disk
+ * first (asynchronously), so existing files render inline. Every reader on
+ * the gateway thread parses through this; the bare parseJsonlLines treats
+ * every local media path as absent. */
+export function parseJsonlLinesWithMedia(
+  lines: string[],
+): Promise<TranscriptEntry[]> {
+  return withLocalMediaFor(lines, () => parseJsonlLines(lines));
+}
+
+function parseCodexLinesWithMedia(lines: string[]): Promise<TranscriptEntry[]> {
+  return withLocalMediaFor(lines, () => parseCodexLines(lines));
+}
+
 /**
  * Line-by-line state shared by the sync and async jsonl parses: entry
  * accumulation plus the assistant-requestId dedupe (keep last). Both variants
@@ -914,10 +930,16 @@ export async function parseJsonlLinesAsync(
   lines: string[],
   yieldEveryLines = 1000,
 ): Promise<TranscriptEntry[]> {
+  const existing = await resolveLocalMedia(lines);
   const acc = makeJsonlAccumulator();
-  for (let i = 0; i < lines.length; i++) {
-    if (i > 0 && i % yieldEveryLines === 0) await Bun.sleep(0);
-    acc.push(lines[i]);
+  for (let start = 0; start < lines.length; start += yieldEveryLines) {
+    if (start > 0) await Bun.sleep(0);
+    // The media scope is set only for each synchronous chunk, never across
+    // the yield, so another parse running meanwhile cannot see it.
+    withLocalMedia(existing, () => {
+      const end = Math.min(lines.length, start + yieldEveryLines);
+      for (let i = start; i < end; i++) acc.push(lines[i]);
+    });
   }
   return acc.entries;
 }
@@ -956,42 +978,64 @@ function pruneParseCache(): void {
 }
 
 // Read only the last `maxBytes` of a file straight off disk (positional read,
-// not a full readFileSync) so opening a huge transcript doesn't pay to load the
+// not a full file read) so opening a huge transcript doesn't pay to load the
 // whole history. `truncated` is true when earlier bytes were skipped.
 const DEFAULT_TAIL_BYTES = 256 * 1024;
-function readTailBytes(
+async function readTailBytes(
   path: string,
   maxBytes: number,
-): { buf: Buffer; truncated: boolean; size: number } {
-  const fd = openSync(path, "r");
+): Promise<{ buf: Buffer; truncated: boolean; size: number }> {
+  const handle = await open(path, "r");
   try {
-    const size = fstatSync(fd).size;
+    const size = (await handle.stat()).size;
     const start = size > maxBytes ? size - maxBytes : 0;
     const len = size - start;
     const buf = Buffer.allocUnsafe(len);
-    if (len > 0) readSync(fd, buf, 0, len, start);
+    if (len > 0) await readFully(handle, buf, start);
     return { buf, truncated: start > 0, size };
   } finally {
-    closeSync(fd);
+    await handle.close();
   }
 }
 
+/** Fill `buf` from `position`; a short read (the file shrank) zeroes the
+ * rest instead of leaving uninitialized bytes. */
+async function readFully(
+  handle: Awaited<ReturnType<typeof open>>,
+  buf: Buffer,
+  position: number,
+): Promise<number> {
+  let read = 0;
+  while (read < buf.length) {
+    const { bytesRead } = await handle.read(
+      buf,
+      read,
+      buf.length - read,
+      position + read,
+    );
+    if (bytesRead === 0) break;
+    read += bytesRead;
+  }
+  if (read < buf.length) buf.fill(0, read);
+  return read;
+}
+
 /** File size right now, 0 when it can't be stat'd. */
-function fileSizeSafe(path: string): number {
+async function fileSizeSafe(path: string): Promise<number> {
   try {
-    return statSync(path).size;
+    return (await stat(path)).size;
   } catch {
     return 0;
   }
 }
 
-export function parseTranscript(path: string): TranscriptEntry[] {
-  if (!existsSync(path)) return [];
-
+export async function parseTranscript(
+  path: string,
+): Promise<TranscriptEntry[]> {
   let mtimeMs = 0;
   let size = 0;
   try {
-    const st = statSync(path);
+    const st = await stat(path);
     mtimeMs = st.mtimeMs;
     size = st.size;
     const hit = parseCache.get(path);
@@ -1001,15 +1045,22 @@ export function parseTranscript(path: string): TranscriptEntry[] {
       parseCache.set(path, hit);
       return hit.entries;
     }
-  } catch {
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return [];
     // stat failed — fall through to an uncached parse
   }
 
-  const raw = readFileSync(path, "utf-8");
+  let raw: string;
+  try {
+    raw = await readFile(path, "utf-8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return [];
+    throw error;
+  }
   const lines = raw.split("\n").filter((l) => l.trim());
   const entries = isCodexRolloutPath(path)
-    ? parseCodexLines(lines)
-    : parseJsonlLines(lines);
+    ? await parseCodexLinesWithMedia(lines)
+    : await parseJsonlLinesWithMedia(lines);
 
   if (mtimeMs) {
     parseCache.set(path, { mtimeMs, size, entries });
@@ -1030,12 +1081,10 @@ export function parseTranscript(path: string): TranscriptEntry[] {
 export async function parseTranscriptAsync(
   path: string,
 ): Promise<TranscriptEntry[]> {
-  if (!existsSync(path)) return [];
-
   let mtimeMs = 0;
   let size = 0;
   try {
-    const st = statSync(path);
+    const st = await stat(path);
     mtimeMs = st.mtimeMs;
     size = st.size;
     const hit = parseCache.get(path);
@@ -1044,14 +1093,21 @@ export async function parseTranscriptAsync(
       parseCache.set(path, hit);
       return hit.entries;
     }
-  } catch {
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return [];
     // stat failed — fall through to an uncached parse
   }
 
-  const raw = await Bun.file(path).text();
+  let raw: string;
+  try {
+    raw = await readFile(path, "utf-8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return [];
+    throw error;
+  }
   const lines = raw.split("\n").filter((l) => l.trim());
   const entries = isCodexRolloutPath(path)
-    ? parseCodexLines(lines)
+    ? await parseCodexLinesWithMedia(lines)
     : await parseJsonlLinesAsync(lines);
 
   if (mtimeMs) {
@@ -1083,22 +1139,22 @@ export async function parseTranscriptAsync(
  * so at worst the watcher re-sends an overlap, never skips.
  */
 const MAX_TAIL_BYTES = 16 * 1024 * 1024;
-export function parseTranscriptTail(
+export async function parseTranscriptTail(
   path: string,
   maxBytes: number = DEFAULT_TAIL_BYTES,
   minEntries = 40,
-): {
+): Promise<{
   entries: TranscriptEntry[];
   truncated: boolean;
   endOffset: number;
   startOffset: number;
-} {
-  if (!existsSync(path))
+}> {
+  if (!(await pathExists(path)))
     return { entries: [], truncated: false, endOffset: 0, startOffset: 0 };
   if (isCodexRolloutPath(path)) {
-    const endOffset = fileSizeSafe(path);
+    const endOffset = await fileSizeSafe(path);
     return {
-      entries: parseTranscript(path),
+      entries: await parseTranscript(path),
       truncated: false,
       endOffset,
       startOffset: 0,
@@ -1111,11 +1167,11 @@ export function parseTranscriptTail(
     let truncated: boolean;
     let size: number;
     try {
-      ({ buf, truncated, size } = readTailBytes(path, win));
+      ({ buf, truncated, size } = await readTailBytes(path, win));
     } catch {
-      const endOffset = fileSizeSafe(path);
+      const endOffset = await fileSizeSafe(path);
       return {
-        entries: parseTranscript(path),
+        entries: await parseTranscript(path),
         truncated: false,
         endOffset,
         startOffset: 0,
@@ -1141,7 +1197,7 @@ export function parseTranscriptTail(
       .toString("utf-8")
       .split("\n")
       .filter((l) => l.trim());
-    const entries = parseJsonlLines(lines);
+    const entries = await parseJsonlLinesWithMedia(lines);
 
     if (!truncated || entries.length >= minEntries)
       return { entries, truncated, endOffset, startOffset };
@@ -1151,7 +1207,7 @@ export function parseTranscriptTail(
       // is never blank.
       if (entries.length === 0) {
         return {
-          entries: parseTranscript(path),
+          entries: await parseTranscript(path),
           truncated: false,
           endOffset,
           startOffset: 0,
@@ -1170,7 +1226,7 @@ export function parseTranscriptTail(
  * start of the file. Same partial-line discipline as the tail parse. Replaces
  * the old full-file resend, whose wire payload hit ~15MB on big transcripts.
  */
-export function parseTranscriptWindow(
+export async function parseTranscriptWindow(
   path: string,
   beforeOffset: number,
   maxBytes: number = DEFAULT_TAIL_BYTES,
@@ -1185,8 +1241,12 @@ export function parseTranscriptWindow(
    *  prepend). Past the floor the cap wins; below it the window keeps
    *  growing to MAX_TAIL_BYTES, so a click never returns a near-empty page. */
   maxWindowBytes: number = MAX_TAIL_BYTES,
-): { entries: TranscriptEntry[]; startOffset: number; truncated: boolean } {
-  if (!existsSync(path) || beforeOffset <= 0)
+): Promise<{
+  entries: TranscriptEntry[];
+  startOffset: number;
+  truncated: boolean;
+}> {
+  if (beforeOffset <= 0 || !(await pathExists(path)))
     return { entries: [], startOffset: 0, truncated: false };
 
   let win = maxBytes;
@@ -1195,12 +1255,12 @@ export function parseTranscriptWindow(
     const len = beforeOffset - start;
     let buf: Buffer;
     try {
-      const fd = openSync(path, "r");
+      const handle = await open(path, "r");
       try {
         buf = Buffer.allocUnsafe(len);
-        if (len > 0) readSync(fd, buf, 0, len, start);
+        if (len > 0) await readFully(handle, buf, start);
       } finally {
-        closeSync(fd);
+        await handle.close();
       }
     } catch {
       return { entries: [], startOffset: beforeOffset, truncated: false };
@@ -1216,7 +1276,7 @@ export function parseTranscriptWindow(
       .toString("utf-8")
       .split("\n")
       .filter((l) => l.trim());
-    const entries = parseJsonlLines(lines);
+    const entries = await parseJsonlLinesWithMedia(lines);
 
     if (start === 0 || entries.length >= minEntries) {
       // A growth pass can overshoot hard — a 4× window jump through a dense
@@ -1231,7 +1291,7 @@ export function parseTranscriptWindow(
         const frac = (minEntries * 1.5) / entries.length;
         let cut = Math.floor(rawLines.length * (1 - frac));
         while (cut > 0) {
-          const page = parseJsonlLines(
+          const page = await parseJsonlLinesWithMedia(
             rawLines.slice(cut).filter((l) => l.trim()),
           );
           if (page.length >= minEntries) {
@@ -1441,41 +1501,38 @@ export function entriesForWire(
  * doubles as a false-positive filter for a cheap ripgrep pre-pass over the raw
  * jsonl. Uses the shared parse cache.
  */
-export function transcriptMatchSnippet(
+export async function transcriptMatchSnippet(
   path: string,
   query: string,
   ctx: number = 60,
-): string | null {
-  for (const entry of parseTranscript(path)) {
+): Promise<string | null> {
+  for (const entry of await parseTranscript(path)) {
     const snippet = transcriptEntryMatchSnippet(entry, query, ctx);
     if (snippet) return snippet;
   }
   return null;
 }
 
-export function parseTranscriptFrom(
+export async function parseTranscriptFrom(
   path: string,
   byteOffset: number,
-): { entries: TranscriptEntry[]; newOffset: number; ok: boolean } {
-  if (!existsSync(path))
-    return { entries: [], newOffset: byteOffset, ok: false };
-
+): Promise<{ entries: TranscriptEntry[]; newOffset: number; ok: boolean }> {
   // Positional read of just [byteOffset, EOF) — this runs every second per
-  // watched session (file-watcher poll), and a full readFileSync of a 30 MB
+  // watched session (file-watcher poll), and a full read of a 30 MB
   // transcript per tick is exactly the kind of load the swapless VPS can't eat.
   let buf: Buffer;
   let size: number;
   try {
-    const fd = openSync(path, "r");
+    const handle = await open(path, "r");
     try {
-      size = fstatSync(fd).size;
+      size = (await handle.stat()).size;
       if (size <= byteOffset)
         return { entries: [], newOffset: byteOffset, ok: true };
       const len = size - byteOffset;
       buf = Buffer.allocUnsafe(len);
-      readSync(fd, buf, 0, len, byteOffset);
+      await readFully(handle, buf, byteOffset);
     } finally {
-      closeSync(fd);
+      await handle.close();
     }
   } catch {
     return { entries: [], newOffset: byteOffset, ok: false };
@@ -1494,21 +1551,27 @@ export function parseTranscriptFrom(
   const lines = chunk.split("\n").filter((l) => l.trim());
 
   if (isCodexRolloutPath(path)) {
-    return { entries: parseCodexLines(lines), newOffset, ok: true };
+    return {
+      entries: await parseCodexLinesWithMedia(lines),
+      newOffset,
+      ok: true,
+    };
   }
 
-  const entries: TranscriptEntry[] = [];
-
-  for (const line of lines) {
-    let parsed: RawJsonlEntry;
-    try {
-      parsed = JSON.parse(line);
-    } catch {
-      continue;
+  const entries = await withLocalMediaFor(lines, () => {
+    const parsedEntries: TranscriptEntry[] = [];
+    for (const line of lines) {
+      let parsed: RawJsonlEntry;
+      try {
+        parsed = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (parsed.type !== "user" && parsed.type !== "assistant") continue;
+      parsedEntries.push(...parseEntry(parsed));
     }
-    if (parsed.type !== "user" && parsed.type !== "assistant") continue;
-    entries.push(...parseEntry(parsed));
-  }
+    return parsedEntries;
+  });
 
   return { entries, newOffset, ok: true };
 }

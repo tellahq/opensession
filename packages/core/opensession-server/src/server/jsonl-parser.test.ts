@@ -1,3 +1,4 @@
+import { withLocalMediaFor } from "./transcript-media";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -109,7 +110,7 @@ describe("user attachments", () => {
   // A remote host appends a fenced note naming its scratch copies of the
   // turn's files (prompt-attachments.ts). The end-anchored uploads note the
   // UI reads for its chips must still be found once the fence is stripped.
-  it("keeps the uploads chips when a fenced in-host note follows the note", () => {
+  it("keeps the uploads chips when a fenced in-host note follows the note", async () => {
     const uploadsNote =
       "[The user attached 1 file(s), saved to disk — read them with your file tools if relevant:\n- brief.pdf: /srv/uploads/os-1/brief.pdf\n]";
     const inHostNote =
@@ -117,7 +118,7 @@ describe("user attachments", () => {
     const path = writeFixture([
       userLine("u1", `Summarize this\n\n${uploadsNote}\n\n${inHostNote}`),
     ]);
-    const [entry] = parseTranscript(path);
+    const [entry] = await parseTranscript(path);
     expect(entry.content).toBe("Summarize this");
     expect(entry.files).toEqual([
       { name: "brief.pdf", path: "/srv/uploads/os-1/brief.pdf" },
@@ -220,12 +221,12 @@ describe("entriesForWire", () => {
 });
 
 describe("parseTranscript", () => {
-  it("parses basic user/assistant turns in order", () => {
+  it("parses basic user/assistant turns in order", async () => {
     const path = writeFixture([
       userLine("u1", "Hello there"),
       assistantLine("a1", "Hi! How can I help?"),
     ]);
-    const entries = parseTranscript(path);
+    const entries = await parseTranscript(path);
     expect(entries.length).toBe(2);
     expect(entries[0].type).toBe("user");
     expect(entries[0].content).toBe("Hello there");
@@ -233,9 +234,9 @@ describe("parseTranscript", () => {
     expect(entries[1].content).toBe("Hi! How can I help?");
   });
 
-  it("pairs tool_use with its tool_result via toolUseId", () => {
+  it("pairs tool_use with its tool_result via toolUseId", async () => {
     const path = writeFixture(BASIC_LINES);
-    const entries = parseTranscript(path);
+    const entries = await parseTranscript(path);
     expect(entries.map((e) => e.type)).toEqual([
       "user",
       "tool_use",
@@ -250,41 +251,41 @@ describe("parseTranscript", () => {
     expect(result.content).toContain("file-a.txt");
   });
 
-  it("skips a corrupt/truncated line mid-file without throwing and parses the rest", () => {
+  it("skips a corrupt/truncated line mid-file without throwing and parses the rest", async () => {
     const path = writeFixture([
       userLine("u1", "first"),
       '{"type":"assistant","message":{"content"', // truncated JSON
       "not json at all",
       assistantLine("a1", "last"),
     ]);
-    const entries = parseTranscript(path);
+    const entries = await parseTranscript(path);
     expect(entries.length).toBe(2);
     expect(entries[0].content).toBe("first");
     expect(entries[1].content).toBe("last");
   });
 
-  it("ignores non-message line types", () => {
+  it("ignores non-message line types", async () => {
     const path = writeFixture([
       JSON.stringify({ type: "summary", summary: "a summary line" }),
       userLine("u1", "hello"),
       JSON.stringify({ type: "system", content: "system noise" }),
     ]);
-    const entries = parseTranscript(path);
+    const entries = await parseTranscript(path);
     expect(entries.length).toBe(1);
     expect(entries[0].type).toBe("user");
   });
 
-  it("drops harness-injected system-reminder user lines", () => {
+  it("drops harness-injected system-reminder user lines", async () => {
     const path = writeFixture([
       userLine("u1", "<system-reminder>internal note</system-reminder>"),
       userLine("u2", "real question"),
     ]);
-    const entries = parseTranscript(path);
+    const entries = await parseTranscript(path);
     expect(entries.length).toBe(1);
     expect(entries[0].content).toBe("real question");
   });
 
-  it("maps runner-notice user lines to system entries (both content shapes)", () => {
+  it("maps runner-notice user lines to system entries (both content shapes)", async () => {
     const blockLine = JSON.stringify({
       type: "user",
       uuid: "n1",
@@ -308,7 +309,7 @@ describe("parseTranscript", () => {
         "<runner-notice>Transient engine error — retrying once.</runner-notice>",
       ),
     ]);
-    const entries = parseTranscript(path);
+    const entries = await parseTranscript(path);
     expect(entries.map((e) => e.type)).toEqual(["user", "system", "system"]);
     expect(entries[1].content).toBe(
       'Claude usage limit hit on account "A"; switched to "B" and retrying.',
@@ -316,14 +317,14 @@ describe("parseTranscript", () => {
     expect(entries[2].content).toBe("Transient engine error — retrying once.");
   });
 
-  it("maps compaction-summary lines to system entries tagged for the classifier", () => {
+  it("maps compaction-summary lines to system entries tagged for the classifier", async () => {
     const path = writeFixture([
       userLine(
         "prt_sum1",
         "<compaction-summary>## Objective\nShip the sidebar refactor.</compaction-summary>",
       ),
     ]);
-    const entries = parseTranscript(path);
+    const entries = await parseTranscript(path);
     expect(entries).toHaveLength(1);
     expect(entries[0]).toMatchObject({
       id: "sys-prt_sum1",
@@ -333,7 +334,7 @@ describe("parseTranscript", () => {
     });
   });
 
-  it("preserves structured answered-ask data beside the markdown fallback", () => {
+  it("preserves structured answered-ask data beside the markdown fallback", async () => {
     const ask = {
       version: 1,
       questions: [
@@ -362,7 +363,7 @@ describe("parseTranscript", () => {
         },
       }),
     ]);
-    expect(parseTranscript(path)[0]).toMatchObject({
+    expect((await parseTranscript(path))[0]).toMatchObject({
       id: "sys-ask1",
       type: "system",
       noticeKind: "ask",
@@ -370,20 +371,22 @@ describe("parseTranscript", () => {
     });
   });
 
-  it("drops retired recap lines", () => {
+  it("drops retired recap lines", async () => {
     const path = writeFixture([
       userLine("rc1", "<recap>We shipped it. Next: try it.</recap>"),
     ]);
-    expect(parseTranscript(path)).toEqual([]);
+    expect(await parseTranscript(path)).toEqual([]);
   });
 
-  it("returns [] for an empty file", () => {
+  it("returns [] for an empty file", async () => {
     const path = writeFixture([]);
-    expect(parseTranscript(path)).toEqual([]);
+    expect(await parseTranscript(path)).toEqual([]);
   });
 
-  it("returns [] for a missing file", () => {
-    expect(parseTranscript(join(dir, "does-not-exist.jsonl"))).toEqual([]);
+  it("returns [] for a missing file", async () => {
+    expect(await parseTranscript(join(dir, "does-not-exist.jsonl"))).toEqual(
+      [],
+    );
   });
 
   it("produces identical output through the yielding parser", async () => {
@@ -396,8 +399,12 @@ describe("parseTranscript", () => {
     ];
     const path = writeFixture(lines);
 
-    expect(await parseJsonlLinesAsync(lines, 1)).toEqual(parseTranscript(path));
-    expect(await parseTranscriptAsync(path)).toEqual(parseTranscript(path));
+    expect(await parseJsonlLinesAsync(lines, 1)).toEqual(
+      await parseTranscript(path),
+    );
+    expect(await parseTranscriptAsync(path)).toEqual(
+      await parseTranscript(path),
+    );
   });
 
   it("returns [] asynchronously for a missing file", async () => {
@@ -408,14 +415,14 @@ describe("parseTranscript", () => {
 });
 
 describe("parseTranscriptTail", () => {
-  it("returns the whole transcript untruncated when it fits the window", () => {
+  it("returns the whole transcript untruncated when it fits the window", async () => {
     const path = writeFixture(BASIC_LINES);
-    const { entries, truncated } = parseTranscriptTail(path);
+    const { entries, truncated } = await parseTranscriptTail(path);
     expect(truncated).toBe(false);
-    expect(entries).toEqual(parseTranscript(path));
+    expect(entries).toEqual(await parseTranscript(path));
   });
 
-  it("returns a suffix of the full parse when the file exceeds the window", () => {
+  it("returns a suffix of the full parse when the file exceeds the window", async () => {
     // Many turns with chunky content so a small byte window can't hold them all.
     const lines: string[] = [];
     for (let i = 0; i < 60; i++) {
@@ -423,8 +430,8 @@ describe("parseTranscriptTail", () => {
       lines.push(assistantLine(`a${i}`, `answer ${i} ` + "y".repeat(400)));
     }
     const path = writeFixture(lines);
-    const full = parseTranscript(path);
-    const { entries, truncated } = parseTranscriptTail(path, 1024, 5);
+    const full = await parseTranscript(path);
+    const { entries, truncated } = await parseTranscriptTail(path, 1024, 5);
     expect(truncated).toBe(true);
     expect(entries.length).toBeGreaterThanOrEqual(5);
     expect(entries.length).toBeLessThan(full.length);
@@ -432,30 +439,30 @@ describe("parseTranscriptTail", () => {
     expect(entries).toEqual(full.slice(full.length - entries.length));
   });
 
-  it("handles an empty file", () => {
+  it("handles an empty file", async () => {
     const path = writeFixture([]);
-    const res = parseTranscriptTail(path);
+    const res = await parseTranscriptTail(path);
     expect(res.entries).toEqual([]);
     expect(res.truncated).toBe(false);
   });
 
-  it("handles a missing file", () => {
-    const res = parseTranscriptTail(join(dir, "nope.jsonl"));
+  it("handles a missing file", async () => {
+    const res = await parseTranscriptTail(join(dir, "nope.jsonl"));
     expect(res.entries).toEqual([]);
     expect(res.truncated).toBe(false);
   });
 });
 
 describe("parseTranscriptWindow", () => {
-  it("pages backwards from the tail's startOffset until the whole file is covered", () => {
+  it("pages backwards from the tail's startOffset until the whole file is covered", async () => {
     const lines: string[] = [];
     for (let i = 0; i < 60; i++) {
       lines.push(userLine(`u${i}`, `question ${i} ` + "x".repeat(400)));
       lines.push(assistantLine(`a${i}`, `answer ${i} ` + "y".repeat(400)));
     }
     const path = writeFixture(lines);
-    const full = parseTranscript(path);
-    const tail = parseTranscriptTail(path, 1024, 5);
+    const full = await parseTranscript(path);
+    const tail = await parseTranscriptTail(path, 1024, 5);
     expect(tail.truncated).toBe(true);
     expect(tail.startOffset).toBeGreaterThan(0);
 
@@ -465,7 +472,7 @@ describe("parseTranscriptWindow", () => {
     let truncated = true;
     let guard = 0;
     while (truncated && guard++ < 200) {
-      const page = parseTranscriptWindow(path, cursor, 1024, 5);
+      const page = await parseTranscriptWindow(path, cursor, 1024, 5);
       expect(page.startOffset).toBeLessThan(cursor);
       collected = [...page.entries, ...collected];
       cursor = page.startOffset;
@@ -476,15 +483,15 @@ describe("parseTranscriptWindow", () => {
     expect(cursor).toBe(0);
   });
 
-  it("returns empty at offset 0 and for a missing file", () => {
+  it("returns empty at offset 0 and for a missing file", async () => {
     const path = writeFixture(BASIC_LINES);
-    expect(parseTranscriptWindow(path, 0).entries).toEqual([]);
-    expect(parseTranscriptWindow(join(dir, "nope.jsonl"), 100).entries).toEqual(
-      [],
-    );
+    expect((await parseTranscriptWindow(path, 0)).entries).toEqual([]);
+    expect(
+      (await parseTranscriptWindow(join(dir, "nope.jsonl"), 100)).entries,
+    ).toEqual([]);
   });
 
-  it("keeps an entry floor through fat tool-result regions despite the soft cap", () => {
+  it("keeps an entry floor through fat tool-result regions despite the soft cap", async () => {
     const lines: string[] = [];
     for (let i = 0; i < 30; i++) lines.push(userLine(`h${i}`, `head ${i}`));
     // Fat region: each line ~200KB — a 256KB soft cap alone fits one entry.
@@ -492,19 +499,25 @@ describe("parseTranscriptWindow", () => {
       lines.push(assistantLine(`fat${i}`, "z".repeat(200 * 1024)));
     const path = writeFixture(lines);
     const end = statSync(path).size;
-    const page = parseTranscriptWindow(path, end, 64 * 1024, 8, 256 * 1024);
+    const page = await parseTranscriptWindow(
+      path,
+      end,
+      64 * 1024,
+      8,
+      256 * 1024,
+    );
     // Floor = ceil(minEntries/4): the window must keep growing past the soft
     // cap until the page is actually useful, not ship a 1-entry page.
     expect(page.entries.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("trims a growth overshoot back near the target page size, cursor exact", () => {
+  it("trims a growth overshoot back near the target page size, cursor exact", async () => {
     const lines: string[] = [];
     for (let i = 0; i < 400; i++)
       lines.push(userLine(`t${i}`, `msg ${i} ` + "x".repeat(50)));
     const path = writeFixture(lines);
-    const full = parseTranscript(path);
-    const tail = parseTranscriptTail(path, 512, 4);
+    const full = await parseTranscript(path);
+    const tail = await parseTranscriptTail(path, 512, 4);
     expect(tail.truncated).toBe(true);
     let collected = [...tail.entries];
     let cursor = tail.startOffset;
@@ -513,7 +526,7 @@ describe("parseTranscriptWindow", () => {
     while (truncated && guard++ < 200) {
       // Tiny initial window: growth quadruples, so an untrimmed page would
       // overshoot to several times minEntries.
-      const page = parseTranscriptWindow(path, cursor, 512, 10);
+      const page = await parseTranscriptWindow(path, cursor, 512, 10);
       expect(page.entries.length).toBeLessThanOrEqual(30);
       expect(page.startOffset).toBeLessThan(cursor);
       collected = [...page.entries, ...collected];
@@ -526,32 +539,32 @@ describe("parseTranscriptWindow", () => {
     expect(cursor).toBe(0);
   });
 
-  it("tail startOffset is 0 for an untruncated file", () => {
+  it("tail startOffset is 0 for an untruncated file", async () => {
     const path = writeFixture(BASIC_LINES);
-    const res = parseTranscriptTail(path);
+    const res = await parseTranscriptTail(path);
     expect(res.truncated).toBe(false);
     expect(res.startOffset).toBe(0);
   });
 });
 
 describe("parseTranscriptFrom", () => {
-  it("returns everything from offset 0 with newOffset = file size", () => {
+  it("returns everything from offset 0 with newOffset = file size", async () => {
     const path = writeFixture(BASIC_LINES);
-    const { entries, newOffset } = parseTranscriptFrom(path, 0);
-    const full = parseTranscript(path);
+    const { entries, newOffset } = await parseTranscriptFrom(path, 0);
+    const full = await parseTranscript(path);
     expect(entries.map((e) => e.id)).toEqual(full.map((e) => e.id));
     expect(newOffset).toBe(Bun.file(path).size);
   });
 
-  it("returns only entries after a line-boundary byte offset (suffix of full parse)", () => {
+  it("returns only entries after a line-boundary byte offset (suffix of full parse)", async () => {
     const path = writeFixture(BASIC_LINES);
     // Offset = end of the first two lines (each line is terminated by "\n").
     const offset =
       Buffer.byteLength(BASIC_LINES[0], "utf-8") +
       Buffer.byteLength(BASIC_LINES[1], "utf-8") +
       2;
-    const { entries, newOffset } = parseTranscriptFrom(path, offset);
-    const full = parseTranscript(path);
+    const { entries, newOffset } = await parseTranscriptFrom(path, offset);
+    const full = await parseTranscript(path);
     expect(entries.length).toBeGreaterThan(0);
     expect(entries.map((e) => `${e.type}:${e.content}`)).toEqual(
       full
@@ -564,14 +577,14 @@ describe("parseTranscriptFrom", () => {
     expect(newOffset).toBe(Bun.file(path).size);
   });
 
-  it("supports incremental consumption: resume from newOffset after append", () => {
+  it("supports incremental consumption: resume from newOffset after append", async () => {
     const path = writeFixture([BASIC_LINES[0], BASIC_LINES[1]]);
-    const first = parseTranscriptFrom(path, 0);
+    const first = await parseTranscriptFrom(path, 0);
     expect(first.entries.length).toBe(2);
     // Append two more lines, resume from the returned offset.
     const appended = [BASIC_LINES[2], BASIC_LINES[3]];
     writeFileSync(path, appended.map((l) => l + "\n").join(""), { flag: "a" });
-    const second = parseTranscriptFrom(path, first.newOffset);
+    const second = await parseTranscriptFrom(path, first.newOffset);
     expect(second.entries.map((e) => e.type)).toEqual([
       "tool_result",
       "assistant",
@@ -579,47 +592,47 @@ describe("parseTranscriptFrom", () => {
     expect(second.newOffset).toBe(Bun.file(path).size);
   });
 
-  it("returns no entries when the offset is at or past the end of file", () => {
+  it("returns no entries when the offset is at or past the end of file", async () => {
     const path = writeFixture(BASIC_LINES);
     const size = Bun.file(path).size;
-    const atEnd = parseTranscriptFrom(path, size);
+    const atEnd = await parseTranscriptFrom(path, size);
     expect(atEnd.entries).toEqual([]);
     expect(atEnd.newOffset).toBe(size);
-    const pastEnd = parseTranscriptFrom(path, size + 100);
+    const pastEnd = await parseTranscriptFrom(path, size + 100);
     expect(pastEnd.entries).toEqual([]);
     expect(pastEnd.newOffset).toBe(size + 100);
   });
 
-  it("handles an empty file", () => {
+  it("handles an empty file", async () => {
     const path = writeFixture([]);
-    const res = parseTranscriptFrom(path, 0);
+    const res = await parseTranscriptFrom(path, 0);
     expect(res.entries).toEqual([]);
     expect(res.newOffset).toBe(0);
   });
 
-  it("handles a missing file (offset preserved)", () => {
-    const res = parseTranscriptFrom(join(dir, "gone.jsonl"), 42);
+  it("handles a missing file (offset preserved)", async () => {
+    const res = await parseTranscriptFrom(join(dir, "gone.jsonl"), 42);
     expect(res.entries).toEqual([]);
     expect(res.newOffset).toBe(42);
   });
 
-  it("degrades gracefully when the offset lands mid-line", () => {
+  it("degrades gracefully when the offset lands mid-line", async () => {
     const path = writeFixture(BASIC_LINES);
     // Point into the middle of the second line: the partial line can't parse
     // as JSON, but every complete later line must still come through.
     const offset = Buffer.byteLength(BASIC_LINES[0], "utf-8") + 1 + 10;
-    const { entries } = parseTranscriptFrom(path, offset);
+    const { entries } = await parseTranscriptFrom(path, offset);
     const tail = entries.slice(-2).map((e) => e.type);
     expect(tail).toEqual(["tool_result", "assistant"]);
   });
 
-  it("leaves a half-written trailing line for the next poll instead of skipping it", () => {
+  it("leaves a half-written trailing line for the next poll instead of skipping it", async () => {
     const path = writeFixture([BASIC_LINES[0]]);
     // Simulate catching the writer mid-append: a complete line plus the first
     // half of the next one, no trailing newline yet.
     const nextLine = assistantLine("a9", "Half-written reply");
     writeFileSync(path, nextLine.slice(0, 25), { flag: "a" });
-    const first = parseTranscriptFrom(path, 0);
+    const first = await parseTranscriptFrom(path, 0);
     expect(first.entries.map((e) => e.id)).toEqual(["u1"]);
     // Offset must stop at the end of the complete line, not EOF.
     expect(first.newOffset).toBe(
@@ -627,14 +640,14 @@ describe("parseTranscriptFrom", () => {
     );
     // Writer finishes the line; the next poll picks up the WHOLE entry.
     writeFileSync(path, nextLine.slice(25) + "\n", { flag: "a" });
-    const second = parseTranscriptFrom(path, first.newOffset);
+    const second = await parseTranscriptFrom(path, first.newOffset);
     expect(second.entries.map((e) => e.id)).toEqual(["a9"]);
     expect(second.newOffset).toBe(Bun.file(path).size);
   });
 });
 
 describe("Codex rollout parsing", () => {
-  it("keeps Codex entry ids stable between full and incremental parses", () => {
+  it("keeps Codex entry ids stable between full and incremental parses", async () => {
     const lines = [
       JSON.stringify({
         timestamp: TS,
@@ -660,8 +673,8 @@ describe("Codex rollout parsing", () => {
     ];
     const path = writeCodexFixture(lines);
 
-    const full = parseTranscript(path);
-    const incremental = parseTranscriptFrom(path, 0).entries;
+    const full = await parseTranscript(path);
+    const incremental = (await parseTranscriptFrom(path, 0)).entries;
 
     expect(incremental.map((e) => e.id)).toEqual(full.map((e) => e.id));
     expect(full.map((e) => e.type)).toEqual(["user", "tool_use", "assistant"]);
@@ -669,7 +682,7 @@ describe("Codex rollout parsing", () => {
     expect(full[1].id).toStartWith("codex-web-");
   });
 
-  it("parses Codex file_change items as file edit tool uses", () => {
+  it("parses Codex file_change items as file edit tool uses", async () => {
     const path = writeCodexFixture([
       JSON.stringify({
         timestamp: TS,
@@ -686,7 +699,7 @@ describe("Codex rollout parsing", () => {
       }),
     ]);
 
-    const entries = parseTranscript(path);
+    const entries = await parseTranscript(path);
     expect(entries).toHaveLength(1);
     expect(entries[0].type).toBe("tool_use");
     expect(entries[0].toolName).toBe("FileChange");
@@ -699,7 +712,7 @@ describe("Codex rollout parsing", () => {
     });
   });
 
-  it("still reads the pre-rename BACKSTAGE_VIDEO marker (old transcripts)", () => {
+  it("still reads the pre-rename BACKSTAGE_VIDEO marker (old transcripts)", async () => {
     const path = writeCodexFixture([
       JSON.stringify({
         timestamp: TS,
@@ -711,14 +724,14 @@ describe("Codex rollout parsing", () => {
         },
       }),
     ]);
-    const entries = parseTranscript(path);
+    const entries = await parseTranscript(path);
     expect(entries[0].videos).toHaveLength(1);
     expect(entries[0].videos![0]).toContain(
       encodeURIComponent("/tmp/legacy-demo.mp4"),
     );
   });
 
-  it("extracts videos from Codex shell tool output markers", () => {
+  it("extracts videos from Codex shell tool output markers", async () => {
     const path = writeCodexFixture([
       JSON.stringify({
         timestamp: TS,
@@ -731,7 +744,7 @@ describe("Codex rollout parsing", () => {
       }),
     ]);
 
-    const entries = parseTranscript(path);
+    const entries = await parseTranscript(path);
     expect(entries).toHaveLength(1);
     expect(entries[0].type).toBe("tool_result");
     expect(entries[0].id).toBe("tr-call_shell_1");
@@ -741,7 +754,7 @@ describe("Codex rollout parsing", () => {
     ]);
   });
 
-  it("extracts videos from Codex MCP tool output markers", () => {
+  it("extracts videos from Codex MCP tool output markers", async () => {
     const path = writeCodexFixture([
       JSON.stringify({
         timestamp: TS,
@@ -756,7 +769,7 @@ describe("Codex rollout parsing", () => {
       }),
     ]);
 
-    const entries = parseTranscript(path);
+    const entries = await parseTranscript(path);
     expect(entries).toHaveLength(1);
     expect(entries[0].type).toBe("tool_result");
     expect(entries[0].id).toBe("tr-call_mcp_1");
@@ -766,7 +779,7 @@ describe("Codex rollout parsing", () => {
     ]);
   });
 
-  it("places video markers in Codex assistant messages", () => {
+  it("places video markers in Codex assistant messages", async () => {
     const path = writeCodexFixture([
       JSON.stringify({
         timestamp: TS,
@@ -779,7 +792,7 @@ describe("Codex rollout parsing", () => {
       }),
     ]);
 
-    const entries = parseTranscript(path);
+    const entries = await parseTranscript(path);
     expect(entries).toHaveLength(1);
     expect(entries[0].type).toBe("assistant");
     expect(entries[0].content).toBe(
@@ -793,7 +806,7 @@ describe("Codex rollout parsing", () => {
 });
 
 describe("assistant video markers", () => {
-  it("extracts a session asset and places the marker in assistant content", () => {
+  it("extracts a session asset and places the marker in assistant content", async () => {
     const assetPath =
       "/home/ubuntu/.opensession-assets/bks-019f861d-ffe5-7000-8638-5f69fc798fac/capture/tella-production-login-recording.mov";
     const path = writeFixture([
@@ -803,7 +816,7 @@ describe("assistant video markers", () => {
       ),
     ]);
 
-    const entries = parseTranscript(path);
+    const entries = await parseTranscript(path);
     expect(entries).toHaveLength(1);
     expect(entries[0].type).toBe("assistant");
     expect(entries[0].content).toBe(
@@ -855,14 +868,14 @@ describe("markers wrapped in markdown", () => {
     ).toEqual(["/media?path=%2Ftmp%2Fmy_final_shot.png"]);
   });
 
-  it("places the whole wrapped line in an assistant bubble as an image", () => {
+  it("places the whole wrapped line in an assistant bubble as an image", async () => {
     const path = writeFixture([
       assistantLine(
         "a-wrapped",
         "Done.\n\n**OPENSESSION_IMAGE: /tmp/shot.png**\n\nTop is now.",
       ),
     ]);
-    const [entry] = parseTranscript(path);
+    const [entry] = await parseTranscript(path);
     expect(entry.images).toEqual(["/media?path=%2Ftmp%2Fshot.png"]);
     expect(entry.featuredMedia).toEqual(["/media?path=%2Ftmp%2Fshot.png"]);
     expect(entry.content).toBe(
@@ -870,15 +883,16 @@ describe("markers wrapped in markdown", () => {
     );
   });
 
-  it("renders an emphasised bare path mention", () => {
+  it("renders an emphasised bare path mention", async () => {
     const shot = join(dir, "emphasised.png");
     writeFileSync(shot, "x");
-    expect(extractImplicitMedia(`Look at **${shot}** for the result.`)).toEqual(
-      {
-        images: [`/media?path=${encodeURIComponent(shot)}`],
-        videos: [],
-      },
-    );
+    const text = `Look at **${shot}** for the result.`;
+    expect(
+      await withLocalMediaFor([text], () => extractImplicitMedia(text)),
+    ).toEqual({
+      images: [`/media?path=${encodeURIComponent(shot)}`],
+      videos: [],
+    });
   });
 });
 
@@ -983,7 +997,7 @@ describe("featuredMedia (which tool-result media the agent asked to show)", () =
     return path;
   }
 
-  it("features marker media and leaves an implicit path mention folded", () => {
+  it("features marker media and leaves an implicit path mention folded", async () => {
     const shown = writeMediaFile("shown.png");
     const touched = writeMediaFile("touched.png");
     const path = writeFixture([
@@ -993,7 +1007,7 @@ describe("featuredMedia (which tool-result media the agent asked to show)", () =
         `wrote ${touched}\nOPENSESSION_IMAGE: ${shown}\n`,
       ),
     ]);
-    const [entry] = parseTranscript(path);
+    const [entry] = await parseTranscript(path);
     // Both still attach — the change is prominence, not availability.
     expect(entry.images).toEqual(
       expect.arrayContaining([
@@ -1006,7 +1020,7 @@ describe("featuredMedia (which tool-result media the agent asked to show)", () =
     ]);
   });
 
-  it("does not feature a Read's image block", () => {
+  it("does not feature a Read's image block", async () => {
     const path = writeFixture([
       JSON.stringify({
         type: "user",
@@ -1034,12 +1048,12 @@ describe("featuredMedia (which tool-result media the agent asked to show)", () =
         },
       }),
     ]);
-    const [entry] = parseTranscript(path);
+    const [entry] = await parseTranscript(path);
     expect(entry.images).toEqual(["data:image/png;base64,AAAA"]);
     expect(entry.featuredMedia).toBeUndefined();
   });
 
-  it("features a video marker alongside an image marker", () => {
+  it("features a video marker alongside an image marker", async () => {
     const png = writeMediaFile("both.png");
     const mp4 = writeMediaFile("both.mp4");
     const path = writeFixture([
@@ -1049,29 +1063,31 @@ describe("featuredMedia (which tool-result media the agent asked to show)", () =
         `OPENSESSION_IMAGE: ${png}\nOPENSESSION_VIDEO: ${mp4}\n`,
       ),
     ]);
-    const [entry] = parseTranscript(path);
+    const [entry] = await parseTranscript(path);
     expect(entry.featuredMedia).toEqual([
       `/media?path=${encodeURIComponent(png)}`,
       `/media?path=${encodeURIComponent(mp4)}`,
     ]);
   });
 
-  it("leaves a tool result with no media unfeatured", () => {
+  it("leaves a tool result with no media unfeatured", async () => {
     const path = writeFixture([toolResultLine("u1", "toolu_3", "all done")]);
-    const [entry] = parseTranscript(path);
+    const [entry] = await parseTranscript(path);
     expect(entry.featuredMedia).toBeUndefined();
   });
 });
 
 describe("steer-joined composite user turns", () => {
-  it("splits co-released attributed messages into separate entries", () => {
+  it("splits co-released attributed messages into separate entries", async () => {
     const path = writeFixture([
       userLine(
         "u1",
         "[Alex] we flagged autoRatio right?\n\n[Alex] Also, explain the changes",
       ),
     ]);
-    const entries = parseTranscript(path).filter((e) => e.type === "user");
+    const entries = (await parseTranscript(path)).filter(
+      (e) => e.type === "user",
+    );
     expect(entries.length).toBe(2);
     expect(entries[0].content).toBe("[Alex] we flagged autoRatio right?");
     expect(entries[1].content).toBe("[Alex] Also, explain the changes");
@@ -1079,28 +1095,32 @@ describe("steer-joined composite user turns", () => {
     expect(entries[1].id).toBe("u1-j2");
   });
 
-  it("keeps each source delivery identity on its normalized part", () => {
+  it("keeps each source delivery identity on its normalized part", async () => {
     const path = writeFixture([
       userLine("batch-entry", "[Alex] first\n\n[Johnny] second", [
         "delivery-one",
         "delivery-two",
       ]),
     ]);
-    const entries = parseTranscript(path).filter((e) => e.type === "user");
+    const entries = (await parseTranscript(path)).filter(
+      (e) => e.type === "user",
+    );
     expect(entries.map((entry) => entry.sourceMessageIds)).toEqual([
       ["delivery-one"],
       ["delivery-two"],
     ]);
   });
 
-  it("keeps every source identity when normalization cannot split the batch", () => {
+  it("keeps every source identity when normalization cannot split the batch", async () => {
     const path = writeFixture([
       userLine("batch-entry", "first\n\nsecond", [
         "delivery-one",
         "delivery-two",
       ]),
     ]);
-    const entries = parseTranscript(path).filter((e) => e.type === "user");
+    const entries = (await parseTranscript(path)).filter(
+      (e) => e.type === "user",
+    );
     expect(entries).toHaveLength(1);
     expect(entries[0].sourceMessageIds).toEqual([
       "delivery-one",
@@ -1108,30 +1128,36 @@ describe("steer-joined composite user turns", () => {
     ]);
   });
 
-  it("splits parts from different senders", () => {
+  it("splits parts from different senders", async () => {
     const path = writeFixture([
       userLine("u1", "[Alex] first\n\n[Johnny] second"),
     ]);
-    const entries = parseTranscript(path).filter((e) => e.type === "user");
+    const entries = (await parseTranscript(path)).filter(
+      (e) => e.type === "user",
+    );
     expect(entries.map((e) => e.content)).toEqual([
       "[Alex] first",
       "[Johnny] second",
     ]);
   });
 
-  it("does not split a paste with bracketed lines when the turn is unattributed", () => {
+  it("does not split a paste with bracketed lines when the turn is unattributed", async () => {
     const path = writeFixture([
       userLine("u1", "look at these logs\n\n[ERROR] it broke\n\n[ERROR] again"),
     ]);
-    const entries = parseTranscript(path).filter((e) => e.type === "user");
+    const entries = (await parseTranscript(path)).filter(
+      (e) => e.type === "user",
+    );
     expect(entries.length).toBe(1);
   });
 
-  it("keeps a single attributed message intact (blank lines without a prefix)", () => {
+  it("keeps a single attributed message intact (blank lines without a prefix)", async () => {
     const path = writeFixture([
       userLine("u1", "[Alex] first paragraph\n\nsecond paragraph"),
     ]);
-    const entries = parseTranscript(path).filter((e) => e.type === "user");
+    const entries = (await parseTranscript(path)).filter(
+      (e) => e.type === "user",
+    );
     expect(entries.length).toBe(1);
   });
 });

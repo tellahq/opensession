@@ -285,13 +285,13 @@ test("manual renames, fixed-title sessions and machine prompters are never re-ti
       session,
     }),
   ).toBeNull();
-  overrides.setTitleOverride(id, "My chosen name");
+  await overrides.setTitleOverride(id, "My chosen name");
   try {
     expect(
       await titles.refreshGeneratedTitle(id, prompt, { user: "ada", session }),
     ).toBeNull();
   } finally {
-    overrides.setTitleOverride(id, null);
+    await overrides.setTitleOverride(id, null);
   }
   expect(calls.length).toBe(1);
   expect(titles.getGeneratedTitle(id)).toBe("Add onboarding flow");
@@ -311,12 +311,12 @@ test("a rename made while the model call is in flight wins", async () => {
   );
   await waitForCalls(2);
   expect(calls.length).toBe(2);
-  overrides.setTitleOverride(id, "My chosen name");
+  await overrides.setTitleOverride(id, "My chosen name");
   try {
     gate.resolve("Fix flaky login test");
     expect(await pending).toBeNull();
   } finally {
-    overrides.setTitleOverride(id, null);
+    await overrides.setTitleOverride(id, null);
   }
   expect(titles.getGeneratedTitle(id)).toBe("Add onboarding flow");
 });
@@ -466,25 +466,25 @@ test("a session without a title yet is not refreshed; ensure covers it", async (
 test("a manual rename blocks the first generation too, before and during the call", async () => {
   const id = sessionId();
   answer = async () => "Add onboarding flow";
-  overrides.setTitleOverride(id, "My chosen name");
+  await overrides.setTitleOverride(id, "My chosen name");
   try {
     expect(await titles.ensureGeneratedTitle(id, "Please add onboarding")).toBe(
       null,
     );
     expect(calls.length).toBe(0);
   } finally {
-    overrides.setTitleOverride(id, null);
+    await overrides.setTitleOverride(id, null);
   }
   const gate = deferred<string | null>();
   answer = () => gate.promise;
   const pending = titles.ensureGeneratedTitle(id, "Please add onboarding");
   await waitForCalls(1);
-  overrides.setTitleOverride(id, "My chosen name");
+  await overrides.setTitleOverride(id, "My chosen name");
   try {
     gate.resolve("Add onboarding flow");
     expect(await pending).toBeNull();
   } finally {
-    overrides.setTitleOverride(id, null);
+    await overrides.setTitleOverride(id, null);
   }
   expect(titles.getGeneratedTitle(id)).toBeUndefined();
 });

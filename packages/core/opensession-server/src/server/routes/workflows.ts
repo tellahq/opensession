@@ -32,8 +32,10 @@ import {
 /** The journal's agent() records only. mcp.* records live in the same file
  *  under their own seq space, so every seq-keyed agent lookup goes through
  *  here — a raw find() can otherwise match an unrelated tool call. */
-function agentJournalEntries(runId: string): WorkflowJournalEntry[] {
-  return readWorkflowJournal(runId).filter(
+async function agentJournalEntries(
+  runId: string,
+): Promise<WorkflowJournalEntry[]> {
+  return (await readWorkflowJournal(runId)).filter(
     (e): e is WorkflowJournalEntry =>
       !isMcpJournalEntry(e) && !isSessionJournalEntry(e),
   );
@@ -62,9 +64,11 @@ export async function handleWorkflowsRoutes(
     if (m && req.method === "GET") {
       const runId = decodeURIComponent(m[1]);
       const seq = parseInt(m[2], 10);
-      if (!getWorkflowRun(runId))
+      if (!(await getWorkflowRun(runId)))
         return Response.json({ error: "Workflow not found" }, { status: 404 });
-      const entry = agentJournalEntries(runId).find((e) => e.seq === seq);
+      const entry = (await agentJournalEntries(runId)).find(
+        (e) => e.seq === seq,
+      );
       if (!entry)
         return Response.json(
           { error: "No journal entry for that agent (still running?)" },
@@ -87,25 +91,31 @@ export async function handleWorkflowsRoutes(
     if (m && req.method === "GET") {
       const runId = decodeURIComponent(m[1]);
       const seq = parseInt(m[2], 10);
-      if (!getWorkflowRun(runId))
+      if (!(await getWorkflowRun(runId)))
         return Response.json({ error: "Workflow not found" }, { status: 404 });
-      const snap = getWorkflowRun(runId)?.agents.find((a) => a.seq === seq);
+      const snap = (await getWorkflowRun(runId))?.agents.find(
+        (a) => a.seq === seq,
+      );
       // mcp.* records share journal.jsonl and number their own seq space,
       // so an agent lookup MUST skip them or it can match the wrong record.
-      const journal = agentJournalEntries(runId).find((e) => e.seq === seq);
+      const journal = (await agentJournalEntries(runId)).find(
+        (e) => e.seq === seq,
+      );
       const engineSessionId =
         snap?.engineSessionId || journal?.outcome.engineSessionId;
       const nativePath = engineSessionId
-        ? findPiNativeTranscript(engineSessionId)
+        ? await findPiNativeTranscript(engineSessionId)
         : journal
-          ? findPiNativeTranscriptByPrompt(journal)
+          ? await findPiNativeTranscriptByPrompt(journal)
           : null;
       if (!nativePath)
         return Response.json(
           { error: "No conversation recorded for this agent", entries: [] },
           { status: 404 },
         );
-      return Response.json({ entries: readPiNativeTranscript(nativePath) });
+      return Response.json({
+        entries: await readPiNativeTranscript(nativePath),
+      });
     }
   }
 
@@ -145,7 +155,7 @@ export async function handleWorkflowsRoutes(
   {
     const m = path.match(/^\/api\/workflows\/([^/]+)$/);
     if (m && req.method === "GET") {
-      const run = getWorkflowRun(decodeURIComponent(m[1]));
+      const run = await getWorkflowRun(decodeURIComponent(m[1]));
       if (!run)
         return Response.json({ error: "Workflow not found" }, { status: 404 });
       return Response.json(run);

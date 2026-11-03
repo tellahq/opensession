@@ -15,8 +15,8 @@
  */
 import { stateDir } from "../../server/paths";
 import { audit } from "../../server/audit";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
-import { existsSync, readFileSync } from "fs";
+import { writeJsonAtomicAsync } from "../../server/shared/atomic-write";
+import { keyedOrder, readJsonOrUndefined } from "../../server/shared/async-fs";
 import { defaultRepo, isGithubBotLogin } from "../../server/config";
 import { oneShot } from "../../server/one-shot";
 import { repoForFullName } from "./constants";
@@ -41,22 +41,28 @@ function feedbackPath(ghRepo?: string): string {
   return `${STATE_DIR}/feedback-${key}.json`;
 }
 
-export function readFeedback(ghRepo?: string): FeedbackRecord[] {
-  const path = feedbackPath(ghRepo);
-  if (!existsSync(path)) return [];
-  try {
-    const parsed = JSON.parse(readFileSync(path, "utf-8"));
-    return Array.isArray(parsed) ? (parsed as FeedbackRecord[]) : [];
-  } catch {
-    return [];
-  }
+export async function readFeedback(ghRepo?: string): Promise<FeedbackRecord[]> {
+  const parsed = await readJsonOrUndefined(feedbackPath(ghRepo));
+  return Array.isArray(parsed) ? (parsed as FeedbackRecord[]) : [];
 }
 
 function writeFeedback(
   ghRepo: string | undefined,
   records: FeedbackRecord[],
-): void {
-  writeJsonAtomic(feedbackPath(ghRepo), records.slice(-MAX_RECORDS));
+): Promise<void> {
+  return writeJsonAtomicAsync(
+    feedbackPath(ghRepo),
+    records.slice(-MAX_RECORDS),
+  );
+}
+
+/** Serializes read-modify-write cycles of one repo's feedback file. */
+const feedbackOrder = keyedOrder();
+function withFeedback<T>(
+  ghRepo: string | undefined,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return feedbackOrder(feedbackPath(ghRepo), fn);
 }
 
 /** Record the inline findings a review just posted. */
@@ -69,21 +75,23 @@ export function recordPostedFindings(
     title?: string;
     body: string;
   }>,
-): void {
-  if (!findings.length) return;
-  const records = readFeedback(ghRepo);
-  const now = new Date().toISOString();
-  for (const f of findings) {
-    records.push({
-      pr: prNumber,
-      path: f.path,
-      severity: (f.severity || "").toUpperCase(),
-      title: (f.title || "").slice(0, 200),
-      text: f.body.replace(/\s+/g, " ").trim().slice(0, 400),
-      postedAt: now,
-    });
-  }
-  writeFeedback(ghRepo, records);
+): Promise<void> {
+  if (!findings.length) return Promise.resolve();
+  return withFeedback(ghRepo, async () => {
+    const records = await readFeedback(ghRepo);
+    const now = new Date().toISOString();
+    for (const f of findings) {
+      records.push({
+        pr: prNumber,
+        path: f.path,
+        severity: (f.severity || "").toUpperCase(),
+        title: (f.title || "").slice(0, 200),
+        text: f.body.replace(/\s+/g, " ").trim().slice(0, 400),
+        postedAt: now,
+      });
+    }
+    await writeFeedback(ghRepo, records);
+  });
 }
 
 /** Match a stored record to a bot thread: same PR + path, and the thread's
@@ -115,45 +123,47 @@ export function harvestThreadOutcomes(
   prNumber: number,
   threads: ReviewThread[],
   prClosed: boolean,
-): { addressed: number; ignored: number } {
-  const records = readFeedback(ghRepo);
-  let addressed = 0;
-  let ignored = 0;
-  let dirty = false;
-  for (const t of threads) {
-    if (!isGithubBotLogin(t.rootAuthor)) continue;
-    const rec = matchRecord(records, prNumber, t);
-    if (!rec) continue;
-    const root = t.comments[0];
-    if (root && (root.plus || root.minus)) {
-      if (rec.plus !== root.plus || rec.minus !== root.minus) {
-        rec.plus = root.plus;
-        rec.minus = root.minus;
+): Promise<{ addressed: number; ignored: number }> {
+  return withFeedback(ghRepo, async () => {
+    const records = await readFeedback(ghRepo);
+    let addressed = 0;
+    let ignored = 0;
+    let dirty = false;
+    for (const t of threads) {
+      if (!isGithubBotLogin(t.rootAuthor)) continue;
+      const rec = matchRecord(records, prNumber, t);
+      if (!rec) continue;
+      const root = t.comments[0];
+      if (root && (root.plus || root.minus)) {
+        if (rec.plus !== root.plus || rec.minus !== root.minus) {
+          rec.plus = root.plus;
+          rec.minus = root.minus;
+          dirty = true;
+        }
+      }
+      if (rec.outcome) continue; // outcomes are terminal — first verdict sticks
+      if (t.isResolved || t.isOutdated) {
+        rec.outcome = "addressed";
+        addressed++;
+        dirty = true;
+      } else if (prClosed) {
+        rec.outcome = "ignored";
+        ignored++;
         dirty = true;
       }
     }
-    if (rec.outcome) continue; // outcomes are terminal — first verdict sticks
-    if (t.isResolved || t.isOutdated) {
-      rec.outcome = "addressed";
-      addressed++;
-      dirty = true;
-    } else if (prClosed) {
-      rec.outcome = "ignored";
-      ignored++;
-      dirty = true;
+    if (dirty) await writeFeedback(ghRepo, records);
+    if (prClosed && (addressed || ignored)) {
+      audit({
+        msg: "review_feedback_outcome",
+        pr_number: prNumber,
+        repo: ghRepo || defaultRepo().ghRepo,
+        addressed,
+        ignored,
+      });
     }
-  }
-  if (dirty) writeFeedback(ghRepo, records);
-  if (prClosed && (addressed || ignored)) {
-    audit({
-      msg: "review_feedback_outcome",
-      pr_number: prNumber,
-      repo: ghRepo || defaultRepo().ghRepo,
-      addressed,
-      ignored,
-    });
-  }
-  return { addressed, ignored };
+    return { addressed, ignored };
+  });
 }
 
 /**
@@ -169,7 +179,7 @@ export async function harvestReplySignals(
   prNumber: number,
   threads: ReviewThread[],
 ): Promise<void> {
-  const records = readFeedback(ghRepo);
+  const records = await readFeedback(ghRepo);
   const pending: Array<{
     path: string;
     title: string;
@@ -235,52 +245,54 @@ Output ONLY a JSON array: [{"i": 0, "signal": "dismissive" | "positive" | "neutr
     return;
   }
 
-  const fresh = readFeedback(ghRepo);
-  let dirty = false;
-  const counts = { positive: 0, dismissive: 0, neutral: 0 };
-  for (const c of classified) {
-    const p = pending[c?.i];
-    if (!p) continue;
-    const rec = fresh.find(
-      (r) =>
-        r.pr === prNumber &&
-        r.path === p.path &&
-        r.title === p.title &&
-        !r.falseNegative,
-    );
-    if (!rec) continue;
-    rec.repliesSeen = p.replyCount;
-    if (c.signal === "positive" || c.signal === "dismissive") {
-      if (rec.replySignal !== c.signal) {
-        rec.replySignal = c.signal;
-        dirty = true;
+  await withFeedback(ghRepo, async () => {
+    const fresh = await readFeedback(ghRepo);
+    let dirty = false;
+    const counts = { positive: 0, dismissive: 0, neutral: 0 };
+    for (const c of classified) {
+      const p = pending[c?.i];
+      if (!p) continue;
+      const rec = fresh.find(
+        (r) =>
+          r.pr === prNumber &&
+          r.path === p.path &&
+          r.title === p.title &&
+          !r.falseNegative,
+      );
+      if (!rec) continue;
+      rec.repliesSeen = p.replyCount;
+      if (c.signal === "positive" || c.signal === "dismissive") {
+        if (rec.replySignal !== c.signal) {
+          rec.replySignal = c.signal;
+          dirty = true;
+        }
+        counts[c.signal]++;
+      } else {
+        counts.neutral++;
       }
-      counts[c.signal]++;
-    } else {
-      counts.neutral++;
+      dirty = true;
     }
-    dirty = true;
-  }
-  if (dirty) {
-    writeFeedback(ghRepo, fresh);
-    audit({
-      msg: "review_reply_signal",
-      pr_number: prNumber,
-      repo: ghRepo || defaultRepo().ghRepo,
-      ...counts,
-    });
-  }
+    if (dirty) {
+      await writeFeedback(ghRepo, fresh);
+      audit({
+        msg: "review_reply_signal",
+        pr_number: prNumber,
+        repo: ghRepo || defaultRepo().ghRepo,
+        ...counts,
+      });
+    }
+  });
 }
 
 /** Should this candidate finding be withheld? Never suppresses P0/P1 — the
  *  filter exists to kill recurring nits, not to gamble with blockers. */
-export function shouldSuppressFinding(
+export async function shouldSuppressFinding(
   ghRepo: string | undefined,
   finding: { severity?: string; title?: string; body: string },
-): boolean {
+): Promise<boolean> {
   const sev = (finding.severity || "").toUpperCase();
   if (sev === "P0" || sev === "P1" || sev === "HIGH") return false;
-  const records = readFeedback(ghRepo).filter((r) => !r.falseNegative);
+  const records = (await readFeedback(ghRepo)).filter((r) => !r.falseNegative);
   if (records.length < 10) return false; // not enough history to trust
   return (
     suppressDecision(`${finding.title || ""} ${finding.body}`, records) ===
@@ -293,23 +305,27 @@ export function recordFalseNegative(
   ghRepo: string | undefined,
   culpritPr: number,
   text: string,
-): void {
-  const records = readFeedback(ghRepo);
-  records.push({
-    pr: culpritPr,
-    path: "",
-    severity: "",
-    title: "missed bug",
-    text: text.slice(0, 400),
-    postedAt: new Date().toISOString(),
-    falseNegative: true,
+): Promise<void> {
+  return withFeedback(ghRepo, async () => {
+    const records = await readFeedback(ghRepo);
+    records.push({
+      pr: culpritPr,
+      path: "",
+      severity: "",
+      title: "missed bug",
+      text: text.slice(0, 400),
+      postedAt: new Date().toISOString(),
+      falseNegative: true,
+    });
+    await writeFeedback(ghRepo, records);
   });
-  writeFeedback(ghRepo, records);
 }
 
 /** Aggregate health numbers (surfaced via the github agent's health()). */
-export function feedbackStats(ghRepo?: string): Record<string, number> {
-  const records = readFeedback(ghRepo);
+export async function feedbackStats(
+  ghRepo?: string,
+): Promise<Record<string, number>> {
+  const records = await readFeedback(ghRepo);
   const settled = records.filter((r) => r.outcome);
   return {
     findings: records.filter((r) => !r.falseNegative).length,

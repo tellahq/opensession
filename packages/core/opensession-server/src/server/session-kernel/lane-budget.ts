@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 
 /**
  * Upper bound for a scaled lane budget. The gateway RPC client gives up after
@@ -11,11 +11,18 @@ export const LANE_BUDGET_MAX_MS = 12_000;
 const IO_PRESSURE_FULL_SCALE = 50;
 const REFRESH_MS = 1_000;
 
-export function readIoSomeAvg10(
-  read: (path: string) => string = readProcFile,
-): number | null {
-  const match = /some avg10=([\d.]+)/.exec(read("/proc/pressure/io"));
+const IO_PRESSURE_PATH = "/proc/pressure/io";
+
+export function readIoSomeAvg10(read: (path: string) => string): number | null {
+  const match = /some avg10=([\d.]+)/.exec(read(IO_PRESSURE_PATH));
   return match ? Number(match[1]) : null;
+}
+
+/** readIoSomeAvg10 off the calling thread. Failures (macOS, containers
+ * without PSI) simply disable the signal. */
+export async function readIoSomeAvg10Async(): Promise<number | null> {
+  const text = await readFile(IO_PRESSURE_PATH, "utf8").catch(() => "");
+  return readIoSomeAvg10(() => text);
 }
 
 /**
@@ -47,30 +54,35 @@ export function scaledLaneBudgetMs(
 export function createLaneBudget(options: {
   baseMs: number;
   maxMs?: number;
-  readIoPressure?: () => number | null;
+  /** Sync for tests; the default reads asynchronously and the budget picks
+   *  the value up once the read lands. */
+  readIoPressure?: () => number | null | Promise<number | null>;
   now?: () => number;
 }): () => number {
-  const readIoPressure = options.readIoPressure ?? (() => readIoSomeAvg10());
+  const readIoPressure = options.readIoPressure ?? readIoSomeAvg10Async;
   const now = options.now ?? Date.now;
   const maxMs = options.maxMs ?? LANE_BUDGET_MAX_MS;
   if (maxMs <= options.baseMs) return () => options.baseMs;
   let refreshedAt = -Infinity;
   let budgetMs = options.baseMs;
+  let reading = false;
+  const apply = (pressure: number | null) => {
+    budgetMs = scaledLaneBudgetMs(options.baseMs, pressure, maxMs);
+  };
   return () => {
     const at = now();
-    if (at - refreshedAt >= REFRESH_MS) {
+    if (at - refreshedAt >= REFRESH_MS && !reading) {
       refreshedAt = at;
-      budgetMs = scaledLaneBudgetMs(options.baseMs, readIoPressure(), maxMs);
+      const pressure = readIoPressure();
+      if (pressure instanceof Promise) {
+        reading = true;
+        void pressure
+          .then(apply, () => {})
+          .finally(() => {
+            reading = false;
+          });
+      } else apply(pressure);
     }
     return budgetMs;
   };
-}
-
-function readProcFile(path: string): string {
-  try {
-    // Failures (macOS, containers without PSI) simply disable the signal.
-    return readFileSync(path, "utf8");
-  } catch {
-    return "";
-  }
 }

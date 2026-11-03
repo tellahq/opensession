@@ -92,9 +92,9 @@ export function createSlackComposeMcpServer(ctx: {
           channel?: string;
           images?: string[];
         }) => {
-          let opened: ReturnType<typeof openSlackComposer>;
+          let opened: Awaited<ReturnType<typeof openSlackComposer>>;
           try {
-            opened = openSlackComposer(ctx.sessionId, args);
+            opened = await openSlackComposer(ctx.sessionId, args);
           } catch (error: any) {
             return text(
               `Could not open the Slack composer: ${error?.message || String(error)}`,

@@ -175,7 +175,7 @@ describe("DesiredReviewScheduler", () => {
       firstPushAt: new Date(100).toISOString(),
       dueAt: new Date(200).toISOString(),
     };
-    h.scheduler.restore([h.state]);
+    await h.scheduler.restore([h.state]);
     h.setDetails(prDetails(HEAD_B));
 
     await h.runNextTimer();
@@ -199,7 +199,7 @@ describe("DesiredReviewScheduler", () => {
       blocking: 0,
       error: "temporary",
     }));
-    h.scheduler.admit(HEAD_A);
+    await h.scheduler.admit(HEAD_A);
 
     await h.runNextTimer();
     expect(h.state.pendingReview).toMatchObject({
@@ -219,7 +219,7 @@ describe("DesiredReviewScheduler", () => {
           finishReview = resolve;
         }),
     );
-    h.scheduler.admit(HEAD_A);
+    await h.scheduler.admit(HEAD_A);
     await h.runNextTimer();
     expect(h.state.pendingReview).toMatchObject({
       phase: "running",
@@ -227,7 +227,7 @@ describe("DesiredReviewScheduler", () => {
     });
 
     h.setNow(9_000);
-    h.scheduler.admit(HEAD_B);
+    await h.scheduler.admit(HEAD_B);
     const newer = h.state.pendingReview;
     expect(newer).toMatchObject({
       phase: "queued",
@@ -244,7 +244,7 @@ describe("DesiredReviewScheduler", () => {
   test("waits out the selected REST backoff without spending an attempt", async () => {
     const h = harness();
     h.setRestBackoff(20_000);
-    h.scheduler.admit(HEAD_A);
+    await h.scheduler.admit(HEAD_A);
 
     await h.runNextTimer();
     expect(h.resolveCalls).toBe(0);
@@ -257,7 +257,7 @@ describe("DesiredReviewScheduler", () => {
   test("asks for the pending review's repo, not another installation's backoff", async () => {
     const h = harness();
     h.setRestBackoff(20_000, "acme/app");
-    h.scheduler.admit({ ...HEAD_A, ghRepo: "other/app" });
+    await h.scheduler.admit({ ...HEAD_A, ghRepo: "other/app" });
     await h.runNextTimer();
     expect(h.backoffLookups).toEqual(["other/app"]);
     expect(h.resolveCalls).toBe(1);

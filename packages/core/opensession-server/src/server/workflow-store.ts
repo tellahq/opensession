@@ -16,17 +16,14 @@
  * take down a store write.
  */
 
-import {
-  appendFileSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-} from "fs";
-import { readdir, readFile, stat } from "fs/promises";
+import { appendFile, mkdir, readdir, readFile, stat } from "fs/promises";
 import { catalogDocuments } from "./catalog-documents";
 import { stateDir } from "./paths";
-import { writeFileAtomic, writeJsonAtomic } from "./shared/atomic-write";
+import {
+  writeFileAtomicAsync,
+  writeJsonAtomicAsync,
+} from "./shared/atomic-write";
+import { keyedOrder, readTextIfExists } from "./shared/async-fs";
 import { broadcastSessionActivityStatus, broadcastToSession } from "./ws-hub";
 import {
   holdSessionRunning,
@@ -82,16 +79,6 @@ function workflowsDir(): string {
 
 function runDir(runId: string): string {
   return `${workflowsDir()}/${runId}`;
-}
-
-function readRunJson(runId: string): WorkflowRunSnapshot | undefined {
-  try {
-    return JSON.parse(
-      readFileSync(`${runDir(runId)}/run.json`, "utf-8"),
-    ) as WorkflowRunSnapshot;
-  } catch {
-    return undefined;
-  }
 }
 
 async function readRunJsonAsync(
@@ -273,10 +260,57 @@ export async function reconcileWorkflowCatalog(since: number): Promise<void> {
   await projectionWrites;
 }
 
-function persistSnapshot(snapshot: WorkflowRunSnapshot): void {
-  mkdirSync(runDir(snapshot.runId), { recursive: true });
-  writeJsonAtomic(`${runDir(snapshot.runId)}/run.json`, snapshot);
+/** Orders every write to one run's directory (run.json, script.mjs). */
+const runFileOrder = keyedOrder();
+/** Snapshots changed in memory whose run.json write has not landed yet. A
+ *  run that is no longer live is still read from here until it has. */
+const unflushedSnapshots = new Map<string, WorkflowRunSnapshot>();
+const scheduledSnapshotWrites = new Map<string, Promise<void>>();
+
+/** The run's in-memory snapshot: live, or written moments ago. */
+function memorySnapshot(runId: string): WorkflowRunSnapshot | undefined {
+  return liveWorkflows.get(runId)?.snapshot ?? unflushedSnapshots.get(runId);
+}
+
+/** Write run.json asynchronously. A burst of mutations collapses into one
+ *  write that renders the snapshot as it is when the write starts. Resolves
+ *  once that write landed; a failure is logged and rejects the promise. */
+function persistSnapshot(snapshot: WorkflowRunSnapshot): Promise<void> {
+  const runId = snapshot.runId;
+  unflushedSnapshots.set(runId, snapshot);
   projectOpenWorkflow(snapshot);
+  const scheduled = scheduledSnapshotWrites.get(runId);
+  if (scheduled) return scheduled;
+  const write = runFileOrder(runId, async () => {
+    scheduledSnapshotWrites.delete(runId);
+    const current = unflushedSnapshots.get(runId);
+    if (!current) return;
+    await writeJsonAtomicAsync(`${runDir(runId)}/run.json`, current);
+    if (
+      !scheduledSnapshotWrites.has(runId) &&
+      unflushedSnapshots.get(runId) === current
+    )
+      unflushedSnapshots.delete(runId);
+  });
+  scheduledSnapshotWrites.set(runId, write);
+  write.catch((error) =>
+    console.warn(`[workflow] failed to persist ${runId}:`, error),
+  );
+  return write;
+}
+
+/** Resolves once every run snapshot changed so far is on disk (shutdown). */
+export async function flushWorkflowWrites(): Promise<void> {
+  await Promise.all(
+    [...unflushedSnapshots.keys()].map((runId) =>
+      flushWorkflowRun(runId).catch(() => {}),
+    ),
+  );
+}
+
+/** Resolves once every write queued so far for this run has landed. */
+export function flushWorkflowRun(runId: string): Promise<void> {
+  return runFileOrder(runId, async () => {});
 }
 
 function broadcastSnapshot(snapshot: WorkflowRunSnapshot): void {
@@ -370,8 +404,12 @@ export function createWorkflowRun(init: {
     cwd: init.cwd,
   };
   refreshDerivedProgress(snapshot);
-  persistSnapshot(snapshot);
-  writeFileAtomic(`${runDir(init.runId)}/script.mjs`, init.script);
+  void persistSnapshot(snapshot).catch(() => {});
+  void runFileOrder(init.runId, () =>
+    writeFileAtomicAsync(`${runDir(init.runId)}/script.mjs`, init.script),
+  ).catch((error) =>
+    console.warn(`[workflow] failed to save ${init.runId} script:`, error),
+  );
   projectSessionWorkflow(snapshot);
   // Park the snapshot in the live map now; registerLiveWorkflow fills in the
   // real cancel hook once the runner has one.
@@ -386,30 +424,75 @@ export function createWorkflowRun(init: {
   return snapshot;
 }
 
-/** Apply a mutation, persist run.json, broadcast. Returns the snapshot, or
- *  undefined when the run doesn't exist (live or on disk). */
-export function updateWorkflowRun(
-  runId: string,
+function applyWorkflowMutation(
+  snapshot: WorkflowRunSnapshot,
   mutate: (s: WorkflowRunSnapshot) => void,
-): WorkflowRunSnapshot | undefined {
-  const snapshot = liveWorkflows.get(runId)?.snapshot ?? readRunJson(runId);
-  if (!snapshot) return undefined;
+): WorkflowRunSnapshot {
   mutate(snapshot);
   refreshDerivedProgress(snapshot);
   enforceSnapshotLimits(snapshot);
-  persistSnapshot(snapshot);
+  void persistSnapshot(snapshot).catch(() => {});
   broadcastSnapshot(snapshot);
   return snapshot;
 }
 
-export function getWorkflowRun(runId: string): WorkflowRunSnapshot | undefined {
-  return liveWorkflows.get(runId)?.snapshot ?? readRunJson(runId);
+/** Apply a mutation, persist run.json (asynchronously), broadcast. A run held
+ *  in memory (live, or just written) is mutated at once and returned. Any
+ *  other run is loaded from disk and updated in the background, and this
+ *  returns undefined; await updateStoredWorkflowRun to wait for that. */
+export function updateWorkflowRun(
+  runId: string,
+  mutate: (s: WorkflowRunSnapshot) => void,
+): WorkflowRunSnapshot | undefined {
+  const snapshot = memorySnapshot(runId);
+  if (snapshot) return applyWorkflowMutation(snapshot, mutate);
+  void updateStoredWorkflowRun(runId, mutate).catch((error) =>
+    console.warn(`[workflow] failed to update ${runId}:`, error),
+  );
+  return undefined;
+}
+
+/** updateWorkflowRun for a run that may exist only on disk. Resolves with the
+ *  updated snapshot once its run.json write landed, or undefined when the
+ *  run doesn't exist. */
+export async function updateStoredWorkflowRun(
+  runId: string,
+  mutate: (s: WorkflowRunSnapshot) => void,
+): Promise<WorkflowRunSnapshot | undefined> {
+  const snapshot = await runFileOrder(
+    runId,
+    async () => memorySnapshot(runId) ?? (await readRunJsonAsync(runId)),
+  );
+  if (!snapshot) return undefined;
+  // Another caller may have loaded it meanwhile; mutate the one in memory.
+  const current = memorySnapshot(runId) ?? snapshot;
+  applyWorkflowMutation(current, mutate);
+  await persistSnapshot(current);
+  return current;
+}
+
+/** The run's snapshot when this process holds it in memory (live, or just
+ *  written). For the runner's checks on its own run; others use
+ *  getWorkflowRun. */
+export function liveWorkflowRun(
+  runId: string,
+): WorkflowRunSnapshot | undefined {
+  return memorySnapshot(runId);
+}
+
+export async function getWorkflowRun(
+  runId: string,
+): Promise<WorkflowRunSnapshot | undefined> {
+  return memorySnapshot(runId) ?? (await readRunJsonAsync(runId));
 }
 
 /** The run's script source (script.mjs), for resume without a new script. */
-export function readWorkflowScript(runId: string): string | undefined {
+export async function readWorkflowScript(
+  runId: string,
+): Promise<string | undefined> {
+  await flushWorkflowRun(runId);
   try {
-    return readFileSync(`${runDir(runId)}/script.mjs`, "utf8");
+    return await readFile(`${runDir(runId)}/script.mjs`, "utf8");
   } catch {
     return undefined;
   }
@@ -452,15 +535,9 @@ function validStateKey(key: string): void {
     throw new Error("Workflow state keys must be 1-128 safe characters");
 }
 
-function readState(scopeId: string): PersistedWorkflowState {
-  let raw: string;
-  try {
-    raw = readFileSync(workflowStatePath(scopeId), "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException)?.code === "ENOENT")
-      return { entries: {}, operations: {} };
-    throw error;
-  }
+async function readState(scopeId: string): Promise<PersistedWorkflowState> {
+  const raw = await readTextIfExists(workflowStatePath(scopeId));
+  if (raw === undefined) return { entries: {}, operations: {} };
   if (Buffer.byteLength(raw) > WORKFLOW_LIMITS.maxStateBytes)
     throw new Error(`Workflow state for ${scopeId} exceeds the byte limit`);
   let parsed: unknown;
@@ -529,24 +606,29 @@ function readState(scopeId: string): PersistedWorkflowState {
   return { entries, operations };
 }
 
-/** Replay-lineage-scoped state for long-running coordinators. The synchronous
- * atomic write makes each compare-and-set indivisible on the server event loop. */
-export function readWorkflowState(
+/** Orders reads and compare-and-sets of one scope's state file, so each
+ *  compare-and-set stays indivisible in this process. */
+const stateOrder = keyedOrder();
+
+/** Replay-lineage-scoped state for long-running coordinators. */
+export async function readWorkflowState(
   scopeId: string,
   key: string,
-): WorkflowStateValue {
+): Promise<WorkflowStateValue> {
   validStateKey(key);
-  const current = readState(scopeId).entries[key];
+  const current = (await stateOrder(scopeId, () => readState(scopeId))).entries[
+    key
+  ];
   return { key, version: current?.version || 0, value: current?.value ?? null };
 }
 
-export function compareAndSetWorkflowState(
+export async function compareAndSetWorkflowState(
   scopeId: string,
   key: string,
   expectedVersion: number,
   value: unknown,
   operationId?: string,
-): WorkflowStateCasResult {
+): Promise<WorkflowStateCasResult> {
   validStateKey(key);
   if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 0)
     throw new Error(
@@ -557,7 +639,19 @@ export function compareAndSetWorkflowState(
     throw new Error(
       "Workflow state values must be JSON and at most 250000 characters",
     );
-  const state = readState(scopeId);
+  return stateOrder(scopeId, () =>
+    compareAndSetNow(scopeId, key, expectedVersion, encoded, operationId),
+  );
+}
+
+async function compareAndSetNow(
+  scopeId: string,
+  key: string,
+  expectedVersion: number,
+  encoded: string,
+  operationId?: string,
+): Promise<WorkflowStateCasResult> {
+  const state = await readState(scopeId);
   if (operationId && state.operations[operationId])
     return state.operations[operationId];
   const current = state.entries[key];
@@ -586,29 +680,37 @@ export function compareAndSetWorkflowState(
     throw new Error(
       `Workflow state byte limit exceeded (${WORKFLOW_LIMITS.maxStateBytes})`,
     );
-  mkdirSync(runDir(scopeId), { recursive: true });
-  writeJsonAtomic(workflowStatePath(scopeId), state);
+  await writeJsonAtomicAsync(workflowStatePath(scopeId), state);
   return result;
 }
 
+/** Orders one run's journal appends and reads. */
+const journalOrder = keyedOrder();
+
+/** Append one journal record. Appends to a run land in call order, whether
+ *  or not the caller awaits; the promise resolves once this one is on disk. */
 export function appendWorkflowJournal(
   runId: string,
   entry: WorkflowJournalRecord,
-): void {
-  mkdirSync(runDir(runId), { recursive: true });
-  appendFileSync(
-    `${runDir(runId)}/journal.jsonl`,
-    JSON.stringify(entry) + "\n",
-  );
+): Promise<void> {
+  const line = JSON.stringify(entry) + "\n";
+  return journalOrder(runId, async () => {
+    await mkdir(runDir(runId), { recursive: true });
+    await appendFile(`${runDir(runId)}/journal.jsonl`, line);
+  });
 }
 
 /** Journal entries in append order; a partial/corrupt trailing line (crash
  *  mid-append) is skipped, not fatal. */
-export function readWorkflowJournal(runId: string): WorkflowJournalRecord[] {
-  const path = `${runDir(runId)}/journal.jsonl`;
-  if (!existsSync(path)) return [];
+export async function readWorkflowJournal(
+  runId: string,
+): Promise<WorkflowJournalRecord[]> {
+  const text = await journalOrder(runId, () =>
+    readTextIfExists(`${runDir(runId)}/journal.jsonl`),
+  );
+  if (text === undefined) return [];
   const entries: WorkflowJournalRecord[] = [];
-  for (const line of readFileSync(path, "utf-8").split("\n")) {
+  for (const line of text.split("\n")) {
     if (!line.trim()) continue;
     try {
       entries.push(JSON.parse(line) as WorkflowJournalRecord);
@@ -630,8 +732,15 @@ export function registerLiveWorkflow(
     existing.controls = resolved;
     return;
   }
-  const snapshot = readRunJson(runId);
-  if (snapshot) liveWorkflows.set(runId, { snapshot, controls: resolved });
+  const held = unflushedSnapshots.get(runId);
+  if (held) {
+    liveWorkflows.set(runId, { snapshot: held, controls: resolved });
+    return;
+  }
+  void readRunJsonAsync(runId).then((snapshot) => {
+    if (snapshot && !liveWorkflows.has(runId))
+      liveWorkflows.set(runId, { snapshot, controls: resolved });
+  });
 }
 
 export function unregisterLiveWorkflow(runId: string): void {
@@ -685,7 +794,7 @@ export function pauseWorkflowsForShutdown(): number {
 export async function recoverableWorkflowRunIds(): Promise<string[]> {
   const recoverable: string[] = [];
   for (const runId of await openWorkflowRunIds()) {
-    const snapshot = await readRunJsonAsync(runId);
+    const snapshot = memorySnapshot(runId) ?? (await readRunJsonAsync(runId));
     if (
       snapshot?.status === "interrupted" &&
       snapshot.recovery?.autoResume === true &&
@@ -703,7 +812,8 @@ export async function recoverableWorkflowRunIds(): Promise<string[]> {
 export async function markInterruptedWorkflows(): Promise<void> {
   for (const runId of await openWorkflowRunIds()) {
     if (liveWorkflows.has(runId)) continue;
-    const snapshot = await readRunJsonAsync(runId);
+    const snapshot =
+      unflushedSnapshots.get(runId) ?? (await readRunJsonAsync(runId));
     if (!snapshot) continue;
     const pendingCancellation =
       snapshot.status === "cancelled" &&
@@ -723,7 +833,7 @@ export async function markInterruptedWorkflows(): Promise<void> {
       }
     }
     try {
-      persistSnapshot(snapshot);
+      await persistSnapshot(snapshot);
     } catch (e) {
       console.warn(`[workflow] failed to mark ${runId} interrupted:`, e);
       continue;

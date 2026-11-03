@@ -12,13 +12,14 @@ import { prKey } from "./constants";
 import { configuredRepos, getConfigAsync } from "../../server/config";
 import type { HandoffState } from "./handoff-gates";
 import type { StoredMonitoringPlan } from "./monitoring-plan";
-import { mkdirSync, readFileSync, existsSync } from "fs";
+import { readFileSync } from "node:fs";
 import { readFile, readdir, stat } from "node:fs/promises";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
+import { writeJsonAtomicAsync } from "../../server/shared/atomic-write";
+import { keyedOrder, readJsonOrUndefined } from "../../server/shared/async-fs";
 
+// Created on first write: writeJsonAtomicAsync makes the directory, and every
+// reader treats a missing directory like a missing file.
 const STATE_DIR = stateDir("github");
-
-mkdirSync(STATE_DIR, { recursive: true });
 
 // Engine-session resume is handled via the deterministic per-PR session file
 // (see run.ts `bksIdFor`), so these track only behavioral state.
@@ -191,14 +192,28 @@ function statePath(prNumber: number, ghRepo?: string): string {
   return `${STATE_DIR}/${prKey(prNumber, ghRepo)}.json`;
 }
 
-export function readPrState(
+export async function readPrState(
+  prNumber: number,
+  ghRepo?: string,
+): Promise<GithubPrState | null> {
+  return (
+    (await readJsonOrUndefined<GithubPrState>(statePath(prNumber, ghRepo))) ??
+    null
+  );
+}
+
+/** Synchronous read for the offline/test session list assembly only
+ *  (sessions.ts assembleSessionList, reached from getAllSessions, which
+ *  refuses to run in the live service). Everything else uses readPrState. */
+export function readPrStateForOfflineAssembly(
   prNumber: number,
   ghRepo?: string,
 ): GithubPrState | null {
-  const path = statePath(prNumber, ghRepo);
-  if (!existsSync(path)) return null;
   try {
-    return JSON.parse(readFileSync(path, "utf-8")) as GithubPrState;
+    return JSON.parse(
+      // gateway-sync-ok: offline/test-only sync session list assembly; the gateway's cooperative assembly reads with readPrStateAsync
+      readFileSync(statePath(prNumber, ghRepo), "utf-8"),
+    ) as GithubPrState;
   } catch {
     return null;
   }
@@ -255,13 +270,13 @@ export function pendingMentionRefs(): Array<{
   return [...pendingMentionPrs.values()];
 }
 
-export function getOrInitPrState(
+export async function getOrInitPrState(
   prNumber: number,
   headRef: string,
   ghRepo?: string,
-): GithubPrState {
+): Promise<GithubPrState> {
   return (
-    readPrState(prNumber, ghRepo) || {
+    (await readPrState(prNumber, ghRepo)) || {
       prNumber,
       headRef,
       ...(prKey(prNumber, ghRepo) !== String(prNumber) ? { ghRepo } : {}),
@@ -275,12 +290,12 @@ export function getOrInitPrState(
  *  await and writes it back reverts whatever another behavior landed in between.
  *  Every mutation goes through updatePrState (or one of the helpers below), which
  *  re-reads immediately before patching. */
-function writePrState(state: GithubPrState): void {
+async function writePrState(state: GithubPrState): Promise<void> {
   state.updatedAt = new Date().toISOString();
   // Keep the reviewed-SHA list bounded.
   if (state.reviewedShas.length > 20)
     state.reviewedShas = state.reviewedShas.slice(-20);
-  writeJsonAtomic(statePath(state.prNumber, state.ghRepo), state);
+  await writeJsonAtomicAsync(statePath(state.prNumber, state.ghRepo), state);
   indexPendingMention(state);
   // Request paths read review status from the catalog projection, never
   // from these files. Publication is asynchronous and ordered per PR.
@@ -290,6 +305,10 @@ function writePrState(state: GithubPrState): void {
     m.publishPrReview(key, snapshot),
   );
 }
+
+/** Orders read-patch-write cycles per PR file: the async read and write of
+ *  one update never interleave with another update of the same PR. */
+const prStateOrder = keyedOrder();
 
 /**
  * Read, patch, write: the ONLY way to mutate a PR's state. Behaviors keep their
@@ -302,11 +321,16 @@ export function updatePrState(
   headRef: string,
   patch: (s: GithubPrState) => void,
   ghRepo?: string,
-): GithubPrState {
-  const s = getOrInitPrState(prNumber, headRef, ghRepo);
-  patch(s);
-  writePrState(s);
-  return s;
+): Promise<GithubPrState> {
+  return updatePrStateIf(
+    prNumber,
+    headRef,
+    (s) => {
+      patch(s);
+      return true;
+    },
+    ghRepo,
+  );
 }
 
 /** Generation-fenced variant for races where a stale callback should do no I/O. */
@@ -315,20 +339,22 @@ export function updatePrStateIf(
   headRef: string,
   patch: (s: GithubPrState) => boolean,
   ghRepo?: string,
-): GithubPrState {
-  const s = getOrInitPrState(prNumber, headRef, ghRepo);
-  if (patch(s)) writePrState(s);
-  return s;
+): Promise<GithubPrState> {
+  return prStateOrder(statePath(prNumber, ghRepo), async () => {
+    const s = await getOrInitPrState(prNumber, headRef, ghRepo);
+    if (patch(s)) await writePrState(s);
+    return s;
+  });
 }
 
 /** Persist a just-received mention so a crash/restart before the run self-persists
  *  can still recover it. headRef may be unknown here; the run backfills the real one. */
-export function setPendingMention(
+export async function setPendingMention(
   prNumber: number,
   pending: NonNullable<GithubPrState["pendingMention"]>,
   ghRepo?: string,
-): void {
-  updatePrState(
+): Promise<void> {
+  await updatePrState(
     prNumber,
     `pr-${prNumber}`,
     (s) => {
@@ -339,9 +365,12 @@ export function setPendingMention(
 }
 
 /** Clear the pending-mention marker once a run owns the mention or it completes. */
-export function clearPendingMention(prNumber: number, ghRepo?: string): void {
-  if (!readPrState(prNumber, ghRepo)?.pendingMention) return;
-  updatePrState(
+export async function clearPendingMention(
+  prNumber: number,
+  ghRepo?: string,
+): Promise<void> {
+  if (!(await readPrState(prNumber, ghRepo))?.pendingMention) return;
+  await updatePrState(
     prNumber,
     `pr-${prNumber}`,
     (s) => {
@@ -352,14 +381,14 @@ export function clearPendingMention(prNumber: number, ghRepo?: string): void {
 }
 
 /** Record a completed review: the SHA (dedup) plus the verdict the UI shows. */
-export function recordReviewed(
+export async function recordReviewed(
   prNumber: number,
   headRef: string,
   sha: string,
   lastReview: LastReviewState,
   ghRepo?: string,
-): void {
-  updatePrState(
+): Promise<void> {
+  await updatePrState(
     prNumber,
     headRef,
     (s) => {
@@ -373,13 +402,13 @@ export function recordReviewed(
 
 /** Clear the one-shot recovery marker — but only when it's still ours. A run that
  *  chains into another one (simplify → re-review) must not clear the successor's. */
-export function clearActiveRun(
+export async function clearActiveRun(
   prNumber: number,
   headRef: string,
   kind: NonNullable<GithubPrState["activeRun"]>["kind"],
   ghRepo?: string,
-): void {
-  updatePrState(
+): Promise<void> {
+  await updatePrState(
     prNumber,
     headRef,
     (s) => {
@@ -391,14 +420,14 @@ export function clearActiveRun(
 
 /** Persist a stop request before aborting the engine, so startup recovery and
  *  pre-engine setup cannot bring the run back. */
-export function requestActiveRunCancellation(
+export async function requestActiveRunCancellation(
   prNumber: number,
   headRef: string,
   kind: NonNullable<GithubPrState["activeRun"]>["kind"],
   ghRepo?: string,
-): boolean {
+): Promise<boolean> {
   let requested = false;
-  updatePrState(
+  await updatePrState(
     prNumber,
     headRef,
     (s) => {
@@ -411,12 +440,12 @@ export function requestActiveRunCancellation(
   return requested;
 }
 
-export function activeRunCancellationRequested(
+export async function activeRunCancellationRequested(
   prNumber: number,
   kind: NonNullable<GithubPrState["activeRun"]>["kind"],
   ghRepo?: string,
-): boolean {
-  const run = readPrState(prNumber, ghRepo)?.activeRun;
+): Promise<boolean> {
+  const run = (await readPrState(prNumber, ghRepo))?.activeRun;
   return run?.kind === kind && Boolean(run.cancelRequestedAt);
 }
 
@@ -565,11 +594,11 @@ export function planRecovery(
 }
 
 /** Clear one recovery marker (used for the stale ones planRecovery reports). */
-export function clearRecoveryMarker(
+export async function clearRecoveryMarker(
   s: GithubPrState,
   kind: RecoveryKind,
-): void {
-  updatePrState(
+): Promise<void> {
+  await updatePrState(
     s.prNumber,
     s.headRef,
     (st) => {

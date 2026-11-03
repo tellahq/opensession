@@ -7,7 +7,7 @@
 import type { SessionSpeed } from "@tellahq/opensession-protocol/session";
 import type { McpScope } from "./runner-shared";
 import type { RemoteWorkspaceSpec } from "@tellahq/opensession-protocol/runner";
-import { existsSync, readFileSync } from "fs";
+import { readFile } from "node:fs/promises";
 import { readJsonFileShared } from "./shared/json-file-cache";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import {} from "./paths";
@@ -341,9 +341,17 @@ export interface QuarantinedRun {
  * of writes. They remain inspectable beside active-runs.json instead of being
  * silently deleted; `notify` is consumed by agent-runner to settle the owning
  * session visibly when no newer duplicate will continue it. */
-export function journalQuarantine(entries: QuarantinedRun[]): void {
-  if (!entries.length) return;
-  const journal = readRunJournal();
+let quarantineWrites: Promise<void> = Promise.resolve();
+
+export function journalQuarantine(entries: QuarantinedRun[]): Promise<void> {
+  if (!entries.length) return Promise.resolve();
+  // One quarantine at a time: each merges into the file the previous wrote.
+  const done = quarantineWrites.then(() => quarantineNow(entries));
+  quarantineWrites = done.catch(() => {});
+  return done;
+}
+
+async function quarantineNow(entries: QuarantinedRun[]): Promise<void> {
   const quarantinePath =
     ACTIVE_RUNS_PATH.replace(/\.json$/, "") + ".quarantine.json";
   let quarantine: Record<
@@ -354,10 +362,10 @@ export function journalQuarantine(entries: QuarantinedRun[]): void {
     }
   > = {};
   try {
-    if (existsSync(quarantinePath)) {
-      quarantine = JSON.parse(readFileSync(quarantinePath, "utf-8"));
-    }
+    quarantine = JSON.parse(await readFile(quarantinePath, "utf-8"));
   } catch {}
+  // Read after the await, so the removal applies to the current journal.
+  const journal = readRunJournal();
   const quarantinedAt = new Date().toISOString();
   let changed = false;
   for (const [index, entry] of entries.entries()) {

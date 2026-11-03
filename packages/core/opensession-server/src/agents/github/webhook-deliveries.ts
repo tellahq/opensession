@@ -4,7 +4,7 @@
  * Keep the historical Slack-store path so upgrading a GitHub-only deployment
  * retains delivery IDs that were accepted before webhook ownership moved here.
  */
-import { existsSync, readFileSync } from "fs";
+import { readTextIfExists } from "../../server/shared/async-fs";
 import { statePath } from "../../server/paths";
 import { coalescedWriter } from "../../server/shared/coalesced-write";
 
@@ -19,7 +19,7 @@ const githubDeliveryExpiry: Map<string, number> = ((
 const githubDeliveriesInFlight: Set<string> = ((
   globalThis as any
 ).__githubDeliveriesInFlight ??= new Set<string>());
-let githubDeliveriesLoaded = false;
+let githubDeliveriesLoad: Promise<void> | undefined;
 
 function pruneGithubDeliveries(now = Date.now()): void {
   for (const [id, expiresAt] of githubDeliveryExpiry) {
@@ -57,17 +57,26 @@ export function flushGithubDeliveries(): Promise<void> {
  * this lazily so a webhook accepted before agent startup cannot bypass replay
  * protection. A hot reload safely rehydrates from the atomically persisted file.
  */
-export function loadGithubDeliveries(force = false): void {
-  if (githubDeliveriesLoaded && !force) return;
-  githubDeliveriesLoaded = true;
+export function loadGithubDeliveries(force = false): Promise<void> {
+  if (githubDeliveriesLoad && !force) return githubDeliveriesLoad;
+  const load = restoreGithubDeliveries();
+  githubDeliveriesLoad = load;
+  return load;
+}
+
+async function restoreGithubDeliveries(): Promise<void> {
+  let text: string | undefined;
+  try {
+    text = await readTextIfExists(githubDeliveriesStore());
+  } catch (e) {
+    console.error("[github] Failed to load webhook deliveries:", e);
+  }
+  // Cleared only once the read finished, so a check that awaits this load
+  // never sees a half-restored map.
   githubDeliveryExpiry.clear();
   try {
-    const store = githubDeliveriesStore();
-    if (existsSync(store)) {
-      const entries = JSON.parse(readFileSync(store, "utf-8")) as [
-        string,
-        number,
-      ][];
+    if (text !== undefined) {
+      const entries = JSON.parse(text) as [string, number][];
       const now = Date.now();
       for (const [id, expiresAt] of entries) {
         if (
@@ -87,8 +96,12 @@ export function loadGithubDeliveries(force = false): void {
 }
 
 /** True if this signed GitHub delivery was already accepted within its TTL. */
-export function isGithubDeliveryProcessed(id: string): boolean {
-  loadGithubDeliveries();
+export async function isGithubDeliveryProcessed(id: string): Promise<boolean> {
+  await loadGithubDeliveries();
+  return processedNow(id);
+}
+
+function processedNow(id: string): boolean {
   const expiresAt = githubDeliveryExpiry.get(id);
   if (expiresAt === undefined) return false;
   if (expiresAt <= Date.now()) {
@@ -102,16 +115,19 @@ export function isGithubDeliveryProcessed(id: string): boolean {
 export type GithubDeliveryClaim = "claimed" | "in_flight" | "processed";
 
 /** Claim one delivery in this process without durably calling it complete yet. */
-export function claimGithubDelivery(id: string): GithubDeliveryClaim {
-  if (isGithubDeliveryProcessed(id)) return "processed";
+export async function claimGithubDelivery(
+  id: string,
+): Promise<GithubDeliveryClaim> {
+  await loadGithubDeliveries();
+  if (processedNow(id)) return "processed";
   if (githubDeliveriesInFlight.has(id)) return "in_flight";
   githubDeliveriesInFlight.add(id);
   return "claimed";
 }
 
 /** Record a signed GitHub delivery after its durable admission step succeeds. */
-export function markGithubDeliveryProcessed(id: string): void {
-  loadGithubDeliveries();
+export async function markGithubDeliveryProcessed(id: string): Promise<void> {
+  await loadGithubDeliveries();
   githubDeliveriesInFlight.delete(id);
   githubDeliveryExpiry.set(id, Date.now() + GITHUB_DELIVERY_TTL_MS);
   pruneGithubDeliveries();

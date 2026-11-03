@@ -1,11 +1,11 @@
 /** Transcript entry builders and the single-writer owned-store bridge. */
-import { existsSync, readFileSync } from "fs";
+import { readFile } from "node:fs/promises";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import type { TranscriptEntry } from "./types";
 import type { AnsweredAskData } from "@tellahq/opensession-protocol/notices";
 import type { ImageInput } from "./run-events";
-import { parseJsonlLines } from "./jsonl-parser";
+import { parseJsonlLinesWithMedia } from "./jsonl-parser";
 import { appendTranscriptEvents } from "./actor-transcript";
 import { transcriptForwarder } from "./transcript-forward";
 
@@ -17,6 +17,10 @@ interface OwnerMapState {
   map: Map<string, string>;
   loaded: boolean;
   warned: Set<string>;
+  /** The one asynchronous read of the persisted map. */
+  loading?: Promise<void>;
+  /** Persisted-map writes in call order. */
+  writes?: Promise<void>;
 }
 
 const ownerState: OwnerMapState = ((
@@ -29,24 +33,35 @@ const ownerState: OwnerMapState = ((
   warned: new Set(),
 });
 
-function ownerMap(): Map<string, string> {
-  if (ownerState.loaded) return ownerState.map;
-  ownerState.loaded = true;
-  try {
-    if (existsSync(ENGINE_SESSION_MAP_PATH)) {
-      const parsed = JSON.parse(readFileSync(ENGINE_SESSION_MAP_PATH, "utf8"));
+/** Merge the persisted map under whatever this process recorded meanwhile.
+ * In-memory owners are newer, so they win and keep the newest positions. */
+function loadOwnerMap(): Promise<void> {
+  if (ownerState.loaded) return Promise.resolve();
+  return (ownerState.loading ??= (async () => {
+    const path = ENGINE_SESSION_MAP_PATH;
+    const persisted: [string, string][] = [];
+    try {
+      const parsed = JSON.parse(await readFile(path, "utf8"));
       if (parsed && typeof parsed === "object") {
         for (const [engineId, sessionId] of Object.entries(parsed)) {
           if (typeof sessionId === "string" && sessionId) {
-            ownerState.map.set(engineId, sessionId);
+            persisted.push([engineId, sessionId]);
           }
         }
       }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException)?.code !== "ENOENT")
+        console.warn("[transcript] engine-session map read failed:", error);
     }
-  } catch (error) {
-    console.warn("[transcript] engine-session map read failed:", error);
-  }
-  return ownerState.map;
+    // A test swapped the path while this read was in flight.
+    if (path !== ENGINE_SESSION_MAP_PATH) return;
+    const recorded = ownerState.map;
+    ownerState.map = new Map([
+      ...persisted.filter(([engineId]) => !recorded.has(engineId)),
+      ...recorded,
+    ]);
+    ownerState.loaded = true;
+  })());
 }
 
 export function __setEngineSessionMapPathForTest(path: string): string {
@@ -54,36 +69,53 @@ export function __setEngineSessionMapPathForTest(path: string): string {
   ENGINE_SESSION_MAP_PATH = path;
   ownerState.map = new Map();
   ownerState.loaded = false;
+  ownerState.loading = undefined;
   ownerState.warned = new Set();
   return previous;
 }
 
 const OWNER_MAP_MAX_ENTRIES = 10_000;
 
+/** Record the owner in memory now; the persisted map follows asynchronously
+ * (see engineSessionOwnersPersisted). */
 export function recordEngineSessionOwner(
   engineSessionId: string,
   sessionId: string,
 ): void {
   if (!engineSessionId || !sessionId) return;
-  try {
-    const map = ownerMap();
-    if (map.get(engineSessionId) === sessionId) return;
-    map.set(engineSessionId, sessionId);
-    while (map.size > OWNER_MAP_MAX_ENTRIES) {
-      const oldest = map.keys().next().value;
-      if (!oldest || oldest === engineSessionId) break;
-      map.delete(oldest);
-    }
-    writeJsonAtomic(ENGINE_SESSION_MAP_PATH, Object.fromEntries(map));
-  } catch (error) {
-    console.warn("[transcript] engine-session map write failed:", error);
-  }
+  const map = ownerState.map;
+  if (map.get(engineSessionId) === sessionId && ownerState.loaded) return;
+  map.set(engineSessionId, sessionId);
+  const path = ENGINE_SESSION_MAP_PATH;
+  ownerState.writes = (ownerState.writes ?? Promise.resolve()).then(
+    async () => {
+      try {
+        await loadOwnerMap();
+        const current = ownerState.map;
+        while (current.size > OWNER_MAP_MAX_ENTRIES) {
+          const oldest = current.keys().next().value;
+          if (!oldest || oldest === engineSessionId) break;
+          current.delete(oldest);
+        }
+        await writeJsonAtomicAsync(path, Object.fromEntries(current));
+      } catch (error) {
+        console.warn("[transcript] engine-session map write failed:", error);
+      }
+    },
+  );
 }
 
-export function sessionForEngineId(
+/** Resolves once every recorded owner so far is on disk. */
+export function engineSessionOwnersPersisted(): Promise<void> {
+  return ownerState.writes ?? Promise.resolve();
+}
+
+export async function sessionForEngineId(
   engineSessionId: string | null | undefined,
-): string | undefined {
-  return engineSessionId ? ownerMap().get(engineSessionId) : undefined;
+): Promise<string | undefined> {
+  if (!engineSessionId) return undefined;
+  await loadOwnerMap();
+  return ownerState.map.get(engineSessionId);
 }
 
 const degraded: Set<string> = ((
@@ -124,7 +156,7 @@ async function appendLines(
   engineSessionId: string,
   lines: JsonlLine[],
 ): Promise<void> {
-  const sessionId = sessionForEngineId(engineSessionId);
+  const sessionId = await sessionForEngineId(engineSessionId);
   if (!sessionId) {
     markTranscriptStoreDegraded(engineSessionId);
     if (!ownerState.warned.has(engineSessionId)) {
@@ -136,7 +168,9 @@ async function appendLines(
     return;
   }
   try {
-    const entries = parseJsonlLines(lines.map((line) => JSON.stringify(line)));
+    const entries = await parseJsonlLinesWithMedia(
+      lines.map((line) => JSON.stringify(line)),
+    );
     if (entries.length) await appendTranscriptEvents(sessionId, entries);
   } catch (error) {
     markTranscriptStoreDegraded(sessionId);
@@ -160,7 +194,7 @@ export async function storeAppendUserLineEarly(
     return;
   }
   try {
-    const entries = parseJsonlLines([JSON.stringify(line)]);
+    const entries = await parseJsonlLinesWithMedia([JSON.stringify(line)]);
     if (entries.length) await appendTranscriptEvents(sessionId, entries);
   } catch (error) {
     warnFailureOnce(
@@ -472,7 +506,9 @@ export async function applyForwardedTranscriptStrict(
     throw new Error("Invalid forwarded transcript projection");
   if (engineSessionId && engineSessionId !== sessionId)
     recordEngineSessionOwner(engineSessionId, sessionId);
-  const entries = parseJsonlLines(lines.map((line) => JSON.stringify(line)));
+  const entries = await parseJsonlLinesWithMedia(
+    lines.map((line) => JSON.stringify(line)),
+  );
   if (entries.length) await appendTranscriptEvents(sessionId, entries);
 }
 
@@ -484,7 +520,7 @@ export async function applyForwardedTranscript(
   if (!sessionId || !lines.length) return;
   try {
     if (!engineSessionId || engineSessionId === sessionId) {
-      const entries = parseJsonlLines(
+      const entries = await parseJsonlLinesWithMedia(
         lines.map((line) => JSON.stringify(line)),
       );
       if (entries.length) await appendTranscriptEvents(sessionId, entries);

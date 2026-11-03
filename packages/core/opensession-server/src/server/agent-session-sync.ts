@@ -27,8 +27,8 @@
  * before its next disk load doesn't resurrect the stale id.
  */
 
-import { existsSync, readFileSync } from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { readFile } from "node:fs/promises";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import { statePath } from "./paths";
 import { publishSessionChange } from "./session-cache";
 import {
@@ -51,14 +51,21 @@ export interface EngineSessionPatch {
   model?: string;
 }
 
-function patchFile(
+async function patchFile(
   path: string,
   patch: EngineSessionPatch,
   activityField: string,
-): boolean {
-  if (!existsSync(path)) return false;
+): Promise<boolean> {
+  let text: string;
   try {
-    const data = JSON.parse(readFileSync(path, "utf-8"));
+    text = await readFile(path, "utf-8");
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException)?.code === "ENOENT") return false;
+    console.error(`[agent-session-sync] failed to patch ${path}:`, e);
+    return false;
+  }
+  try {
+    const data = JSON.parse(text);
     let changed = false;
     if (
       patch.engineSessionId &&
@@ -83,7 +90,7 @@ function patchFile(
     }
     if (!changed) return false;
     data[activityField] = new Date().toISOString();
-    writeJsonAtomic(path, data);
+    await writeJsonAtomicAsync(path, data);
     return true;
   } catch (e) {
     console.error(`[agent-session-sync] failed to patch ${path}:`, e);
@@ -96,10 +103,10 @@ function patchFile(
  * session. No-op for other sources and for empty patches. Returns true when
  * anything was actually written.
  */
-export function syncAgentSessionEngine(
+export async function syncAgentSessionEngine(
   session: Pick<UnifiedSession, "id" | "source" | "branch" | "slackThread">,
   patch: EngineSessionPatch,
-): boolean {
+): Promise<boolean> {
   if (!patch.engineSessionId && !patch.piSessionId && !patch.model)
     return false;
 
@@ -116,7 +123,8 @@ export function syncAgentSessionEngine(
     if (session.branch)
       files.add(`${SLACK_SESSION_DIR}/${session.branch}.json`);
     let wrote = false;
-    for (const f of files) wrote = patchFile(f, patch, "lastActivity") || wrote;
+    for (const f of files)
+      wrote = (await patchFile(f, patch, "lastActivity")) || wrote;
     // The list index and the catalog projection learn source files only from
     // targeted publishes; without one a cold rebuild would still show the
     // dead engine session this write just replaced.
@@ -143,7 +151,7 @@ export function syncAgentSessionEngine(
 
   if (session.source === "linear") {
     if (!session.branch) return false;
-    const wrote = patchFile(
+    const wrote = await patchFile(
       `${LINEAR_SESSION_DIR}/${session.branch}.json`,
       patch,
       "updatedAt",

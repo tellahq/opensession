@@ -9,15 +9,17 @@ import { randomUUIDv7 } from "bun";
 import { automationBranchName } from "./automation-branch";
 import { OPENSESSION_SESSIONS_DIR, newSessionId } from "./paths";
 import {
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  unlinkSync,
-  existsSync,
-} from "fs";
-import { mkdir, rename, rm, writeFile } from "node:fs/promises";
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { dirname, join } from "path";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
+import { pathExists, readTextIfExists } from "./shared/async-fs";
 import { catalogDocuments } from "./catalog-documents";
 import {
   RequestBodyTooLargeError,
@@ -153,7 +155,9 @@ export interface GrafanaPollConfig {
   lokiQuery: string;
   /** Label whose distinct values define one failure (e.g. "story_id", "streaming_upload_id"). */
   dedupLabel: string;
-  /** Slack channel id for the control card + investigation thread. */
+  /** Slack channel id for the control card + investigation thread. Empty
+   *  string posts no card: the run gets a null slackThreadTs and decides
+   *  itself what, if anything, to post. */
   slackChannel: string;
   /** Human label for the card, e.g. "export failure" / "upload processing failure". */
   cardTitle: string;
@@ -538,10 +542,9 @@ function sanitizeGrafanaPoll(
   const dedupLabel = str(c.dedupLabel);
   const slackChannel = str(c.slackChannel);
   const cardTitle = str(c.cardTitle);
-  if (!lokiQuery || !dedupLabel || !slackChannel || !cardTitle) {
+  if (!lokiQuery || !dedupLabel || !cardTitle) {
     return {
-      error:
-        "grafanaPoll requires lokiQuery, dedupLabel, slackChannel, and cardTitle",
+      error: "grafanaPoll requires lokiQuery, dedupLabel, and cardTitle",
     };
   }
   const out: GrafanaPollConfig = {
@@ -1654,14 +1657,16 @@ export async function automationResumeMcpForSession(
 export async function deleteAutomation(id: string): Promise<boolean> {
   if (!isAutomationId(id)) return false;
   if (!(await automationStore().delete(id))) return false;
-  deleteAutomationInputState(id);
-  deleteAutomationOutputState(id);
+  await deleteAutomationInputState(id);
+  await deleteAutomationOutputState(id);
   return true;
 }
 
 // ── Runner ───────────────────────────────────────────────────
 
 const runningCounts = new Map<string, number>();
+/** Runs still writing their durable intent, counted as running. */
+const launchingCounts = new Map<string, number>();
 
 const RUNS_CAP = 50;
 
@@ -1842,7 +1847,7 @@ export async function settleResumedAutomationRun(
       error: error || undefined,
       durationMs: Math.max(0, Date.now() - new Date(run.at).getTime()),
     });
-    const completedIntent = clearAutomationIntent(sessionId);
+    const completedIntent = await clearAutomationIntent(sessionId);
     if (completedIntent?.deleteAutomationAfterRun)
       await deleteAutomation(automation.id);
     console.log(
@@ -1897,13 +1902,14 @@ const automationPreparations = new Set<string>();
 const activeAutomationIntentSessions = new Set<string>();
 
 export function isAutomationRunning(id: string): boolean {
-  return (runningCounts.get(id) || 0) > 0;
+  return (runningCounts.get(id) || 0) + (launchingCounts.get(id) || 0) > 0;
 }
 
 /** Would a webhook call for this automation exceed its concurrency cap? */
 export function webhookAtCapacity(
   automation: Pick<Automation, "id" | "webhookMaxConcurrent">,
-  running: number = runningCounts.get(automation.id) || 0,
+  running: number = (runningCounts.get(automation.id) || 0) +
+    (launchingCounts.get(automation.id) || 0),
 ): boolean {
   return running >= (automation.webhookMaxConcurrent || 1);
 }
@@ -1941,15 +1947,14 @@ const automationIntentPath = (sessionId: string) =>
 /** Persist a run's intent, or return the one already on disk when a replay
  *  presents the same identity, so progress it recorded (the discussion it
  *  opened) is reused rather than repeated. */
-function persistAutomationIntent(
+async function persistAutomationIntent(
   intent: PendingAutomationIntent,
-): PendingAutomationIntent {
-  mkdirSync(automationIntentDir, { recursive: true, mode: 0o700 });
+): Promise<PendingAutomationIntent> {
+  await mkdir(automationIntentDir, { recursive: true, mode: 0o700 });
   const path = automationIntentPath(intent.sessionId);
-  if (existsSync(path)) {
-    const existing = JSON.parse(
-      readFileSync(path, "utf8"),
-    ) as PendingAutomationIntent;
+  const stored = await readTextIfExists(path);
+  if (stored !== undefined) {
+    const existing = JSON.parse(stored) as PendingAutomationIntent;
     const identity = ({
       acceptedAt: _acceptedAt,
       plainDiscussionId: _plainDiscussionId,
@@ -1961,30 +1966,35 @@ function persistAutomationIntent(
       throw new Error(`Automation intent ${intent.sessionId} changed identity`);
     return existing;
   }
-  writeJsonAtomic(path, intent, true, 0o600);
+  await writeJsonAtomicAsync(path, intent, true, 0o600);
   return intent;
 }
 
-function recordAutomationIntentDiscussion(
+async function recordAutomationIntentDiscussion(
   sessionId: string,
   plainDiscussionId: string,
-): void {
+): Promise<void> {
   const path = automationIntentPath(sessionId);
   const intent = JSON.parse(
-    readFileSync(path, "utf8"),
+    await readFile(path, "utf8"),
   ) as PendingAutomationIntent;
-  writeJsonAtomic(path, { ...intent, plainDiscussionId }, true, 0o600);
+  await writeJsonAtomicAsync(
+    path,
+    { ...intent, plainDiscussionId },
+    true,
+    0o600,
+  );
 }
 
-function recordAutomationIntentTerminal(
+async function recordAutomationIntentTerminal(
   sessionId: string,
   error?: string,
-): void {
+): Promise<void> {
   const path = automationIntentPath(sessionId);
   const intent = JSON.parse(
-    readFileSync(path, "utf8"),
+    await readFile(path, "utf8"),
   ) as PendingAutomationIntent;
-  writeJsonAtomic(
+  await writeJsonAtomicAsync(
     path,
     {
       ...intent,
@@ -1996,15 +2006,15 @@ function recordAutomationIntentTerminal(
   );
 }
 
-function clearAutomationIntent(
+async function clearAutomationIntent(
   sessionId: string,
-): PendingAutomationIntent | undefined {
+): Promise<PendingAutomationIntent | undefined> {
   const path = automationIntentPath(sessionId);
   try {
     const intent = JSON.parse(
-      readFileSync(path, "utf8"),
+      await readFile(path, "utf8"),
     ) as PendingAutomationIntent;
-    unlinkSync(path);
+    await unlink(path);
     return intent;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -2012,20 +2022,26 @@ function clearAutomationIntent(
   }
 }
 
-function hasAutomationIntent(sessionId: string): boolean {
-  return existsSync(automationIntentPath(sessionId));
+function hasAutomationIntent(sessionId: string): Promise<boolean> {
+  return pathExists(automationIntentPath(sessionId));
 }
 
 export async function resumePendingAutomationRuns(
   onSessionCreated?: (sessionId: string) => void,
 ): Promise<number> {
-  if (isShuttingDown() || !existsSync(automationIntentDir)) return 0;
+  if (isShuttingDown()) return 0;
+  let entries: string[];
+  try {
+    entries = await readdir(automationIntentDir);
+  } catch {
+    return 0;
+  }
   let resumed = 0;
-  for (const entry of readdirSync(automationIntentDir)) {
+  for (const entry of entries) {
     if (!entry.endsWith(".json")) continue;
     try {
       const intent = JSON.parse(
-        readFileSync(join(automationIntentDir, entry), "utf8"),
+        await readFile(join(automationIntentDir, entry), "utf8"),
       ) as PendingAutomationIntent;
       if (
         intent.version !== 1 ||
@@ -2040,7 +2056,7 @@ export async function resumePendingAutomationRuns(
       if (
         automationIntentAlreadySettled(intent.sessionId, automation.runs || [])
       ) {
-        const completedIntent = clearAutomationIntent(intent.sessionId);
+        const completedIntent = await clearAutomationIntent(intent.sessionId);
         if (completedIntent?.deleteAutomationAfterRun)
           await deleteAutomation(automation.id);
         resumed++;
@@ -2055,7 +2071,7 @@ export async function resumePendingAutomationRuns(
             Date.parse(intent.terminalAt) - Date.parse(intent.acceptedAt),
           ),
         });
-        const completedIntent = clearAutomationIntent(intent.sessionId);
+        const completedIntent = await clearAutomationIntent(intent.sessionId);
         if (completedIntent?.deleteAutomationAfterRun)
           await deleteAutomation(automation.id);
         resumed++;
@@ -2206,7 +2222,19 @@ export async function runAutomation(
   }
   const bksId = options?.osSessionId || newSessionId();
   const acceptedAt = options?.acceptedAt || new Date().toISOString();
-  const durableIntent = persistAutomationIntent({
+  // Count the run as launching before the first await: boot recovery starts
+  // several parked intents in one loop and relies on the overlap guard above
+  // seeing the earlier one as running while its intent is being written.
+  launchingCounts.set(
+    automation.id,
+    (launchingCounts.get(automation.id) || 0) + 1,
+  );
+  const endLaunch = () => {
+    const launching = (launchingCounts.get(automation.id) || 1) - 1;
+    if (launching <= 0) launchingCounts.delete(automation.id);
+    else launchingCounts.set(automation.id, launching);
+  };
+  const durableIntent = await persistAutomationIntent({
     version: 1,
     automationId: automation.id,
     sessionId: bksId,
@@ -2215,7 +2243,13 @@ export async function runAutomation(
     modelOverride: options?.modelOverride,
     acceptedAt,
     deleteAutomationAfterRun: options?.deleteAutomationAfterRun,
+  }).catch((error) => {
+    endLaunch();
+    throw error;
   });
+  // Same synchronous step as the running claim below, so the run is never
+  // seen as neither launching nor running.
+  endLaunch();
   if (isShuttingDown()) {
     console.log(
       `[automations] "${automation.name}" durably parked during shutdown`,
@@ -2870,16 +2904,16 @@ export async function runAutomation(
         sessionId: bksId,
         startedAt,
       });
-      preparedInputs.commit();
+      await preparedInputs.commit();
     }
 
-    recordAutomationIntentTerminal(bksId, errorMsg || undefined);
+    await recordAutomationIntentTerminal(bksId, errorMsg || undefined);
     await settleRun(automation.id, bksId, {
       status: errorMsg ? "error" : "ok",
       error: errorMsg || undefined,
       durationMs: Date.now() - startedAt.getTime(),
     });
-    const completedIntent = clearAutomationIntent(bksId);
+    const completedIntent = await clearAutomationIntent(bksId);
     if (completedIntent?.deleteAutomationAfterRun)
       await deleteAutomation(automation.id);
     console.log(
@@ -2962,7 +2996,7 @@ export async function retriggerAutomationSession(
   let session: NativeSessionFile;
   try {
     session = JSON.parse(
-      readFileSync(`${SESSIONS_DIR}/${sessionId}.json`, "utf-8"),
+      await readFile(`${SESSIONS_DIR}/${sessionId}.json`, "utf-8"),
     );
   } catch {
     return { ok: false, reason: `session ${sessionId} not found` };
@@ -3083,15 +3117,17 @@ async function fireDueAutomations(
           trigger: "cron",
           osSessionId,
           deleteAutomationAfterRun: true,
-        }).finally(() => {
+        }).finally(async () => {
           // Pre-launch failure stays durable and retains its disabled config.
-          if (!hasAutomationIntent(osSessionId))
-            void deleteAutomation(automation.id).catch((error) =>
-              console.error(
-                `[automations] Could not delete consumed one-off ${automation.id}:`,
-                error,
-              ),
+          try {
+            if (!(await hasAutomationIntent(osSessionId)))
+              await deleteAutomation(automation.id);
+          } catch (error) {
+            console.error(
+              `[automations] Could not delete consumed one-off ${automation.id}:`,
+              error,
             );
+          }
         });
       }
       continue;

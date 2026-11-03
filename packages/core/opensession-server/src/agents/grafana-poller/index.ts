@@ -23,8 +23,9 @@
 import { configuredServer, productName } from "../../server/config";
 import { stateDir } from "../../server/paths";
 import { randomUUIDv7 } from "bun";
-import { mkdirSync, readFileSync, existsSync, unlinkSync } from "fs";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
+import { unlink } from "fs/promises";
+import { writeJsonAtomicAsync } from "../../server/shared/atomic-write";
+import { readJsonOrUndefined } from "../../server/shared/async-fs";
 import {
   RequestBodyTooLargeError,
   readRequestTextWithinLimit,
@@ -152,44 +153,37 @@ interface DedupRecord {
   slackTs?: string;
 }
 
-function dedupDir(automationId: string): string {
-  const dir = `${DEDUP_ROOT}/${automationId}`;
-  mkdirSync(dir, { recursive: true });
-  return dir;
-}
-
+// The per-automation directory is created by the first atomic write.
 function dedupPath(automationId: string, dedupValue: string): string {
   const safe = dedupValue.replace(/[^A-Za-z0-9_.-]/g, "_");
-  return `${dedupDir(automationId)}/${safe}.json`;
+  return `${DEDUP_ROOT}/${automationId}/${safe}.json`;
 }
 
-function readDedup(
+async function readDedup(
   automationId: string,
   dedupValue: string,
-): DedupRecord | null {
-  const path = dedupPath(automationId, dedupValue);
-  if (!existsSync(path)) return null;
-  try {
-    return JSON.parse(readFileSync(path, "utf-8")) as DedupRecord;
-  } catch {
-    return null;
-  }
+): Promise<DedupRecord | null> {
+  return (
+    (await readJsonOrUndefined<DedupRecord>(
+      dedupPath(automationId, dedupValue),
+    )) ?? null
+  );
 }
 
-function recentlyInvestigated(
+async function recentlyInvestigated(
   automationId: string,
   dedupValue: string,
   dedupDays: number,
-): boolean {
-  const rec = readDedup(automationId, dedupValue);
+): Promise<boolean> {
+  const rec = await readDedup(automationId, dedupValue);
   if (!rec) return false;
   const last = Date.parse(rec.lastInvestigatedAt);
   if (Number.isNaN(last)) return false;
   return Date.now() - last < dedupDays * 24 * 60 * 60 * 1000;
 }
 
-function writeDedup(automationId: string, rec: DedupRecord): void {
-  writeJsonAtomic(dedupPath(automationId, rec.dedupValue), rec);
+function writeDedup(automationId: string, rec: DedupRecord): Promise<void> {
+  return writeJsonAtomicAsync(dedupPath(automationId, rec.dedupValue), rec);
 }
 
 // ── Slack control card ───────────────────────────────────────
@@ -257,27 +251,29 @@ async function investigate(
 
   // Claim the dedup slot BEFORE the async work so an overlapping poll can't
   // double-fire the same failure.
-  const prior = readDedup(automation.id, failure.dedupValue);
+  const prior = await readDedup(automation.id, failure.dedupValue);
   const base: DedupRecord = {
     dedupValue: failure.dedupValue,
     firstSeen: prior?.firstSeen || nowIso,
     lastInvestigatedAt: nowIso,
     osSessionId: bksId,
   };
-  writeDedup(automation.id, base);
+  await writeDedup(automation.id, base);
 
+  // No channel = no card: the run decides itself what is worth a post.
   let slackTs: string | undefined;
-  try {
-    const card = await postSlackBlocks(
-      cfg.slackChannel,
-      `Investigating ${cfg.cardTitle} for ${failure.dedupValue}`,
-      controlCardBlocks(cfg, failure, bksId, true),
-    );
-    slackTs = card?.ts;
-  } catch (e) {
-    console.error("[grafana-poller] Failed to post Slack control card:", e);
-  }
-  if (slackTs) writeDedup(automation.id, { ...base, slackTs });
+  if (cfg.slackChannel)
+    try {
+      const card = await postSlackBlocks(
+        cfg.slackChannel,
+        `Investigating ${cfg.cardTitle} for ${failure.dedupValue}`,
+        controlCardBlocks(cfg, failure, bksId, true),
+      );
+      slackTs = card?.ts;
+    } catch (e) {
+      console.error("[grafana-poller] Failed to post Slack control card:", e);
+    }
+  if (slackTs) await writeDedup(automation.id, { ...base, slackTs });
 
   const eventContext = JSON.stringify(
     {
@@ -291,7 +287,7 @@ async function investigate(
       // namespace / user_email / story_name / run_id …) at the top level.
       ...failure.labels,
       title: `${cfg.cardTitle} — ${failure.dedupValue}`,
-      slackChannelId: cfg.slackChannel,
+      slackChannelId: cfg.slackChannel || null,
       slackThreadTs: slackTs || null,
     },
     null,
@@ -307,7 +303,7 @@ async function investigate(
     osSessionId: bksId,
     eventContext,
   })
-    .catch((e) => {
+    .catch(async (e) => {
       console.error(
         `[grafana-poller] runAutomation failed for ${failure.dedupValue}:`,
         e,
@@ -316,8 +312,8 @@ async function investigate(
       // from double-firing) — but a crashed launch must not mute this alert
       // for dedupDays. Roll the stamp back so the next poll retries.
       try {
-        if (prior) writeDedup(automation.id, prior);
-        else unlinkSync(dedupPath(automation.id, failure.dedupValue));
+        if (prior) await writeDedup(automation.id, prior);
+        else await unlink(dedupPath(automation.id, failure.dedupValue));
       } catch (e2) {
         console.error(
           `[grafana-poller] Failed to roll back dedup stamp for ${failure.dedupValue}:`,
@@ -354,9 +350,10 @@ async function pollAutomation(
     if (!failures.length) return;
 
     const dedupDays = cfg.dedupDays || DEFAULT_DEDUP_DAYS;
-    const fresh = failures.filter(
-      (f) => !recentlyInvestigated(automation.id, f.dedupValue, dedupDays),
-    );
+    const fresh: typeof failures = [];
+    for (const f of failures)
+      if (!(await recentlyInvestigated(automation.id, f.dedupValue, dedupDays)))
+        fresh.push(f);
     console.log(
       `[grafana-poller] "${automation.name}": ${failures.length} failing, ${fresh.length} new`,
     );
@@ -433,7 +430,10 @@ export class GrafanaPollerAgent implements AgentModule {
 
       const force = body?.force === true;
       const dedupDays = cfg.dedupDays || DEFAULT_DEDUP_DAYS;
-      if (!force && recentlyInvestigated(automation.id, value, dedupDays)) {
+      if (
+        !force &&
+        (await recentlyInvestigated(automation.id, value, dedupDays))
+      ) {
         return Response.json({
           ok: false,
           skipped: `investigated within ${dedupDays} days`,

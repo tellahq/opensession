@@ -15,19 +15,15 @@
  * model text are both transcript output and remain visible in provider order.
  */
 
-import {
-  closeSync,
-  existsSync,
-  openSync,
-  readFileSync,
-  readSync,
-  readdirSync,
-  statSync,
-} from "fs";
+import { open, readFile, readdir, stat } from "node:fs/promises";
 import { basename, join } from "path";
 import type { TranscriptEntry } from "@tellahq/opensession-protocol/session";
 import { stateDir } from "./paths";
-import { assistantProseFields, toolResultMedia } from "./transcript-media";
+import {
+  assistantProseFields,
+  toolResultMedia,
+  withLocalMediaFor,
+} from "./transcript-media";
 
 function piSessionsRoot(): string {
   return `${stateDir("pi")}/sessions`;
@@ -62,25 +58,40 @@ let indexCache: {
   ts: number;
 } | null = null;
 const INDEX_TTL = 2000;
+/** Rebuilds in flight, one per root, so concurrent polls share one pass. */
+const indexBuilds = new Map<string, Promise<Map<string, string>>>();
 
-function transcriptIndex(root = piSessionsRoot()): Map<string, string> {
+function transcriptIndex(
+  root = piSessionsRoot(),
+): Promise<Map<string, string>> {
   if (
     indexCache &&
     indexCache.root === root &&
     Date.now() - indexCache.ts < INDEX_TTL
   )
-    return indexCache.map;
+    return Promise.resolve(indexCache.map);
+  let build = indexBuilds.get(root);
+  if (!build) {
+    build = buildTranscriptIndex(root).finally(() => indexBuilds.delete(root));
+    indexBuilds.set(root, build);
+  }
+  return build;
+}
+
+async function buildTranscriptIndex(
+  root: string,
+): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   let dirs: string[];
   try {
-    dirs = readdirSync(root);
+    dirs = await readdir(root);
   } catch {
     dirs = [];
   }
   for (const dir of dirs) {
     let entries: string[];
     try {
-      entries = readdirSync(join(root, dir));
+      entries = await readdir(join(root, dir));
     } catch {
       continue;
     }
@@ -100,9 +111,17 @@ function transcriptIndex(root = piSessionsRoot()): Map<string, string> {
 }
 
 /** Locate a native pi session file by its engine session id. */
-export function findPiNativeTranscript(engineSessionId: string): string | null {
-  const hit = transcriptIndex().get(engineSessionId);
-  return hit && existsSync(hit) ? hit : null;
+export async function findPiNativeTranscript(
+  engineSessionId: string,
+): Promise<string | null> {
+  const hit = (await transcriptIndex()).get(engineSessionId);
+  if (!hit) return null;
+  try {
+    await stat(hit);
+    return hit;
+  } catch {
+    return null;
+  }
 }
 
 const NATIVE_FILE_TIME = /^(\d{4}-\d{2}-\d{2}T\d{2})-(\d{2})-(\d{2})-(\d{3})Z_/;
@@ -115,17 +134,20 @@ function nativeFileStartedAt(path: string): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
-function filePrefixContains(path: string, needle: string): boolean {
-  let fd: number | undefined;
+async function filePrefixContains(
+  path: string,
+  needle: string,
+): Promise<boolean> {
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
   try {
-    fd = openSync(path, "r");
+    handle = await open(path, "r");
     const buffer = Buffer.allocUnsafe(PROMPT_PROBE_BYTES);
-    const bytes = readSync(fd, buffer, 0, buffer.length, 0);
-    return buffer.toString("utf8", 0, bytes).includes(needle);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    return buffer.toString("utf8", 0, bytesRead).includes(needle);
   } catch {
     return false;
   } finally {
-    if (fd !== undefined) closeSync(fd);
+    await handle?.close().catch(() => {});
   }
 }
 
@@ -136,10 +158,10 @@ function filePrefixContains(path: string, needle: string): boolean {
  * largest exact-prompt match wins because a provider fallback can leave an
  * earlier, nearly empty Pi session beside the conversation that did the work.
  */
-export function findPiNativeTranscriptByPrompt(
+export async function findPiNativeTranscriptByPrompt(
   input: { prompt: string; startedAt: string; endedAt: string },
   sessionsRoot = piSessionsRoot(),
-): string | null {
+): Promise<string | null> {
   const startedAt = Date.parse(input.startedAt);
   const endedAt = Date.parse(input.endedAt);
   const prompt = input.prompt.trim();
@@ -150,18 +172,18 @@ export function findPiNativeTranscriptByPrompt(
   const earliest = startedAt - 30_000;
   const latest = Math.max(startedAt, endedAt) + 30_000;
   let best: { path: string; size: number } | null = null;
-  for (const path of transcriptIndex(sessionsRoot).values()) {
+  for (const path of (await transcriptIndex(sessionsRoot)).values()) {
     const fileStartedAt = nativeFileStartedAt(path);
     if (
       fileStartedAt === null ||
       fileStartedAt < earliest ||
       fileStartedAt > latest ||
-      !filePrefixContains(path, escapedPrompt)
+      !(await filePrefixContains(path, escapedPrompt))
     )
       continue;
     let size: number;
     try {
-      size = statSync(path).size;
+      size = (await stat(path)).size;
     } catch {
       continue;
     }
@@ -179,18 +201,23 @@ function blocks(message: PiNativeMessage): PiNativeBlock[] {
 
 /** Parse one native pi session file into UI entries. Best-effort per line: a
  * malformed line skips rather than failing the whole read. */
-export function readPiNativeTranscript(
+export async function readPiNativeTranscript(
   path: string,
   cap = 500,
-): TranscriptEntry[] {
+): Promise<TranscriptEntry[]> {
   let raw: string;
   try {
-    raw = readFileSync(path, "utf-8");
+    raw = await readFile(path, "utf-8");
   } catch {
     return [];
   }
+  const lines = raw.split("\n");
+  return withLocalMediaFor(lines, () => parsePiNativeLines(lines, cap));
+}
+
+function parsePiNativeLines(lines: string[], cap: number): TranscriptEntry[] {
   const entries: TranscriptEntry[] = [];
-  for (const line of raw.split("\n")) {
+  for (const line of lines) {
     if (!line) continue;
     let row: {
       type?: string;

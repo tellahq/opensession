@@ -541,7 +541,7 @@ export async function* runAgent(
   const scratchDir = remote
     ? remote.scratchDir
     : (opts.scratchDir ??
-      (osSessionId ? ensureSessionScratch(osSessionId) : undefined));
+      (osSessionId ? await ensureSessionScratch(osSessionId) : undefined));
   const stageWriter = remote ? remoteAttachmentWriter(remote) : undefined;
   const effectiveOpts: RunAgentOpts = {
     ...opts,
@@ -1888,7 +1888,7 @@ export async function resumeInterruptedRuns(
   // claim so resumeLocalHostRun owns them synchronously and the generic
   // drained-session wake cannot start a second host for the same turn.
   const { interrupted, quarantined } = sanitizeInterruptedRuns(taken);
-  journalQuarantine(quarantined);
+  await journalQuarantine(quarantined);
   for (const entry of quarantined) {
     if (!entry.notify || !entry.run.osSessionId) continue;
     await reportRecoveryFailure(entry.run, recoveryQuarantineMessage(entry));

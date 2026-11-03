@@ -43,8 +43,8 @@ async function callTranscript<T extends TranscriptActorRequest>(
         throw error;
     }
   }
-  const { transcriptStore } = await import("./transcript-store");
-  return transcriptStore().applyActorRequest(
+  const { transcriptStoreAsync } = await import("./transcript-store");
+  return (await transcriptStoreAsync()).applyActorRequest(
     request,
   ) as import("./session-kernel").TranscriptActorResult<T>;
 }

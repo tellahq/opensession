@@ -13,9 +13,9 @@
  *
  * Pure decision logic (validation, due-check) lives in learned-rules-gates.ts.
  */
-import { existsSync, readFileSync } from "fs";
 import { stateDir } from "../../server/paths";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
+import { writeJsonAtomicAsync } from "../../server/shared/atomic-write";
+import { readJsonOrUndefined } from "../../server/shared/async-fs";
 import { audit } from "../../server/audit";
 import { configuredRepos, defaultRepo } from "../../server/config";
 import { oneShot } from "../../server/one-shot";
@@ -49,20 +49,16 @@ function rulesPath(ghRepo?: string): string {
   return `${STATE_DIR}/learned-rules-${repoKey(ghRepo)}.json`;
 }
 
-export function readLearnedRules(ghRepo?: string): LearnedRulesFile | null {
-  const path = rulesPath(ghRepo);
-  if (!existsSync(path)) return null;
-  try {
-    const parsed = JSON.parse(readFileSync(path, "utf-8")) as LearnedRulesFile;
-    return Array.isArray(parsed?.rules) ? parsed : null;
-  } catch {
-    return null;
-  }
+export async function readLearnedRules(
+  ghRepo?: string,
+): Promise<LearnedRulesFile | null> {
+  const parsed = await readJsonOrUndefined<LearnedRulesFile>(rulesPath(ghRepo));
+  return Array.isArray(parsed?.rules) ? parsed : null;
 }
 
 /** Prompt section for review runs; "" until rules exist. */
-export function learnedRulesSection(ghRepo?: string): string {
-  const file = readLearnedRules(ghRepo);
+export async function learnedRulesSection(ghRepo?: string): Promise<string> {
+  const file = await readLearnedRules(ghRepo);
   if (!file?.rules.length) return "";
   const lines = file.rules.map((r) => `- (${r.kind}) ${r.text}`);
   return `## Learned calibration for this repo (distilled from reader feedback on your past reviews)
@@ -135,9 +131,9 @@ export async function distillLearnedRules(
   ghRepo?: string,
   force = false,
 ): Promise<boolean> {
-  const records = readFeedback(ghRepo);
+  const records = await readFeedback(ghRepo);
   const signalCount = records.filter(hasSignal).length;
-  const current = readLearnedRules(ghRepo);
+  const current = await readLearnedRules(ghRepo);
   if (!force && !distillDue(current, signalCount, Date.now())) return false;
 
   const repoFull = ghRepo || defaultRepo().ghRepo;
@@ -169,7 +165,7 @@ export async function distillLearnedRules(
     signalCount,
     rules,
   };
-  writeJsonAtomic(rulesPath(ghRepo), file);
+  await writeJsonAtomicAsync(rulesPath(ghRepo), file);
   console.log(
     `[github] distilled ${rules.length} learned review rule(s) for ${repoFull} (${signalCount} signals)`,
   );

@@ -25,7 +25,7 @@
  */
 
 import { randomUUID } from "crypto";
-import { readdirSync } from "fs";
+import { readdir } from "node:fs/promises";
 import {
   activeMemories,
   loadScope,
@@ -432,7 +432,7 @@ export async function listAllMemory(
     ...repoIds.map((r) => `repo-${r}`),
   ]);
   try {
-    for (const f of readdirSync(memoryDir())) {
+    for (const f of await readdir(memoryDir())) {
       if (f.endsWith(".json")) keys.add(f.slice(0, -5));
     }
   } catch {} // no store dir yet — the fixed scopes still render

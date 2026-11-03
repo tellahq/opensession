@@ -25,7 +25,7 @@ export async function handleGoalsRoutes(
 
   // ── Goals (long-running, self-pacing missions) ──
   if (path === "/api/goals" && req.method === "GET") {
-    const list = listGoals().map((g) => ({
+    const list = (await listGoals()).map((g) => ({
       ...g,
       isRunning: runningGoals.has(g.id),
     }));
@@ -35,7 +35,7 @@ export async function handleGoalsRoutes(
   if (path === "/api/goals" && req.method === "POST") {
     const body = await req.json().catch(() => null);
     if (!body) return Response.json({ error: "Invalid JSON" }, { status: 400 });
-    const result = createGoal(body);
+    const result = await createGoal(body);
     if ("error" in result) return Response.json(result, { status: 400 });
     return Response.json(result);
   }
@@ -43,7 +43,7 @@ export async function handleGoalsRoutes(
   // Specific sub-routes must precede the bare /:id matcher.
   const goalRunMatch = path.match(/^\/api\/goals\/([^/]+)\/run$/);
   if (goalRunMatch && req.method === "POST") {
-    const goal = getGoal(goalRunMatch[1]);
+    const goal = await getGoal(goalRunMatch[1]);
     if (!goal) return Response.json({ error: "Not found" }, { status: 404 });
     if (runningGoals.has(goal.id)) {
       return Response.json({ error: "Already running" }, { status: 409 });
@@ -56,7 +56,7 @@ export async function handleGoalsRoutes(
   const goalResumeMatch = path.match(/^\/api\/goals\/([^/]+)\/resume$/);
   if (goalResumeMatch && req.method === "POST") {
     const body = await req.json().catch(() => null);
-    const result = resumeGoal(goalResumeMatch[1], body?.when);
+    const result = await resumeGoal(goalResumeMatch[1], body?.when);
     if ("error" in result) return Response.json(result, { status: 400 });
     return Response.json(result);
   }
@@ -64,7 +64,7 @@ export async function handleGoalsRoutes(
   const goalPauseMatch = path.match(/^\/api\/goals\/([^/]+)\/pause$/);
   if (goalPauseMatch && req.method === "POST") {
     const body = await req.json().catch(() => null);
-    const result = updateGoal(goalPauseMatch[1], {
+    const result = await updateGoal(goalPauseMatch[1], {
       status: "paused",
       pauseReason: body?.reason?.trim() || "Paused from the UI",
     });
@@ -74,7 +74,7 @@ export async function handleGoalsRoutes(
 
   const goalMatch = path.match(/^\/api\/goals\/([^/]+)$/);
   if (goalMatch && req.method === "GET") {
-    const goal = getGoal(goalMatch[1]);
+    const goal = await getGoal(goalMatch[1]);
     if (!goal) return Response.json({ error: "Not found" }, { status: 404 });
     let ledger = "";
     try {
@@ -90,13 +90,13 @@ export async function handleGoalsRoutes(
   if (goalMatch && req.method === "PUT") {
     const body = await req.json().catch(() => null);
     if (!body) return Response.json({ error: "Invalid JSON" }, { status: 400 });
-    const result = updateGoal(goalMatch[1], body);
+    const result = await updateGoal(goalMatch[1], body);
     if ("error" in result) return Response.json(result, { status: 400 });
     return Response.json(result);
   }
 
   if (goalMatch && req.method === "DELETE") {
-    return deleteGoal(goalMatch[1])
+    return (await deleteGoal(goalMatch[1]))
       ? Response.json({ ok: true })
       : Response.json({ error: "Not found" }, { status: 404 });
   }

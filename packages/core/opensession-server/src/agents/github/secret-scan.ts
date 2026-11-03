@@ -22,6 +22,7 @@ import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { audit } from "../../server/audit";
 import { runCommand } from "../../server/run-command";
+import { whichAsync } from "../../server/shared/async-fs";
 
 export interface SecretFinding {
   /** Repo-relative path. */
@@ -79,7 +80,7 @@ export function parseAddedLines(diff: string): Map<string, Set<number>> {
 }
 
 async function trufflehogBin(): Promise<string | null> {
-  const onPath = Bun.which("trufflehog");
+  const onPath = await whichAsync("trufflehog");
   if (onPath) return onPath;
   const home = join(homedir(), "bin", "trufflehog");
   try {
