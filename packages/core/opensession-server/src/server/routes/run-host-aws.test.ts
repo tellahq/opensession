@@ -26,9 +26,9 @@ const HOST = "rh-0123456789ab";
 const PATH = `/run-hosts/${HOST}/aws-credentials`;
 const ROLE = "arn:aws:iam::123456789012:role/ci";
 
-function pairRunner() {
+async function pairRunner() {
   const { code } = createRunnerPairing("tester");
-  const result = registerRunner({
+  const result = await registerRunner({
     code,
     name: "Bill",
     platform: "win32",
@@ -53,8 +53,8 @@ const vended = {
   Region: "eu-west-1",
 };
 
-beforeEach(() => {
-  for (const runner of listRunners()) removeRunner(runner.id);
+beforeEach(async () => {
+  for (const runner of await listRunners()) await removeRunner(runner.id);
   unregisterRunWsHost(HOST);
 });
 
@@ -66,8 +66,8 @@ describe("run host AWS credential route", () => {
   });
 
   test("refuses a host without its registered dial-back bearer", async () => {
-    const runner = pairRunner();
-    updateRunner(runner.id, { aws: { roleArn: ROLE } });
+    const runner = await pairRunner();
+    await updateRunner(runner.id, { aws: { roleArn: ROLE } });
     registerRunWsHost(HOST, "secret", { runnerId: runner.id, aws: true });
     let calls = 0;
     const assume: typeof assumeRunnerRole = async () => {
@@ -88,8 +88,8 @@ describe("run host AWS credential route", () => {
   });
 
   test("vends the Runner's role session, never the instance credentials", async () => {
-    const runner = pairRunner();
-    updateRunner(runner.id, {
+    const runner = await pairRunner();
+    await updateRunner(runner.id, {
       aws: { roleArn: ROLE, externalId: "team-42" },
     });
     registerRunWsHost(HOST, "secret", { runnerId: runner.id, aws: true });
@@ -118,7 +118,7 @@ describe("run host AWS credential route", () => {
     expect(
       (await handleRunHostAwsRoute(get("secret"), PATH, { assume })).status,
     ).toBe(404);
-    const runner = pairRunner();
+    const runner = await pairRunner();
     registerRunWsHost(HOST, "secret", { runnerId: runner.id, aws: true });
     const res = await handleRunHostAwsRoute(get("secret"), PATH, { assume });
     expect(res.status).toBe(404);
@@ -128,8 +128,8 @@ describe("run host AWS credential route", () => {
   });
 
   test("withholds the role from a run the server withheld AWS from", async () => {
-    const runner = pairRunner();
-    updateRunner(runner.id, { aws: { roleArn: ROLE } });
+    const runner = await pairRunner();
+    await updateRunner(runner.id, { aws: { roleArn: ROLE } });
     registerRunWsHost(HOST, "secret", { runnerId: runner.id, aws: false });
     const res = await handleRunHostAwsRoute(get("secret"), PATH, {
       assume: async () => vended,
@@ -139,8 +139,8 @@ describe("run host AWS credential route", () => {
   });
 
   test("reports an unconfigured or failing host mint as unavailable", async () => {
-    const runner = pairRunner();
-    updateRunner(runner.id, { aws: { roleArn: ROLE } });
+    const runner = await pairRunner();
+    await updateRunner(runner.id, { aws: { roleArn: ROLE } });
     registerRunWsHost(HOST, "secret", { runnerId: runner.id, aws: true });
     expect(
       (

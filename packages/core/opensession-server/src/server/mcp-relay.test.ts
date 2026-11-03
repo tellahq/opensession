@@ -42,7 +42,7 @@ test("relay forwards authenticated requests and rejects other servers", async ()
         process.execPath,
         "--eval",
         `import { mintMcpRelayToken, handleMcpRelay } from ${JSON.stringify(join(import.meta.dir, "mcp-relay.ts"))};
-       const token = mintMcpRelayToken("observability", ["Example"]);
+       const token = await mintMcpRelayToken("observability", ["Example"]);
        const req = new Request("http://127.0.0.1/relay/observability", {
          method: "POST", headers: { Authorization: "Bearer wrong", "Content-Type": "application/json" },
          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),

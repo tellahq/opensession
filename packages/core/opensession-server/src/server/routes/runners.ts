@@ -34,8 +34,8 @@ function tailnetOrigin(ctx: RouteContext): string | undefined {
   return runnerTailnetOrigin(ctx.req, server);
 }
 
-function publicView() {
-  return listRunners().map((runner) =>
+async function publicView() {
+  return (await listRunners()).map((runner) =>
     publicRunner(runner, isRunnerConnected(runner.id)),
   );
 }
@@ -45,7 +45,7 @@ export async function handleRunnersRoutes(
 ): Promise<Response | undefined> {
   const { path, req } = ctx;
   if (path === "/api/runners" && req.method === "GET")
-    return Response.json({ runners: publicView() });
+    return Response.json({ runners: await publicView() });
   if (path === "/api/runners/bootstrap" && req.method === "GET") {
     const targets = configuredRunnerBootstrapTargets();
     return Response.json({
@@ -136,7 +136,7 @@ export async function handleRunnersRoutes(
         { error: "Unsupported Runner platform" },
         { status: 400 },
       );
-    const result = registerRunner({
+    const result = await registerRunner({
       code: String(body.code ?? ""),
       name: String(body.name ?? ""),
       platform: platform as RunnerPlatform,
@@ -171,7 +171,7 @@ export async function handleRunnersRoutes(
       "",
     );
     const id = req.headers.get("x-opensession-runner") ?? "";
-    if (!authenticateRunner(id, token))
+    if (!(await authenticateRunner(id, token)))
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     if (!tailnetOrigin(ctx))
       return Response.json({ error: "Not on the tailnet" }, { status: 403 });
@@ -179,7 +179,7 @@ export async function handleRunnersRoutes(
       string,
       unknown
     >;
-    touchRunner(id, {
+    await touchRunner(id, {
       capabilities: body.capabilities as any,
       resources: body.resources as any,
       softwareVersion:
@@ -200,7 +200,7 @@ export async function handleRunnersRoutes(
       unknown
     > | null;
     if (!body) return Response.json({ error: "Invalid JSON" }, { status: 400 });
-    const runner = updateRunner(id, body as any);
+    const runner = await updateRunner(id, body as any);
     if (!runner)
       return Response.json({ error: "Runner not found" }, { status: 404 });
     audit({ msg: "runner_updated", runner_id: id, user: requestUser(ctx) });
@@ -209,7 +209,7 @@ export async function handleRunnersRoutes(
     });
   }
   if (!action && req.method === "DELETE") {
-    if (!removeRunner(id))
+    if (!(await removeRunner(id)))
       return Response.json({ error: "Runner not found" }, { status: 404 });
     await dropRunnerPortalsForRunner(id);
     const disconnected = disconnectRunner(id);
@@ -226,7 +226,7 @@ export async function handleRunnersRoutes(
       string,
       unknown
     >;
-    const runner = reserveRunner(id, {
+    const runner = await reserveRunner(id, {
       reason: String(body.reason ?? "Session work"),
       sessionId:
         typeof body.sessionId === "string" ? body.sessionId : undefined,
@@ -252,7 +252,10 @@ export async function handleRunnersRoutes(
     });
   }
   if (action === "release" && req.method === "POST") {
-    const runner = releaseRunnerReservation(id, requestUser(ctx) || undefined);
+    const runner = await releaseRunnerReservation(
+      id,
+      requestUser(ctx) || undefined,
+    );
     if (!runner)
       return Response.json(
         { error: "Runner reservation cannot be released" },

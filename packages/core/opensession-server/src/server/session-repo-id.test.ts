@@ -63,21 +63,21 @@ afterEach(() => {
 describe("repoForPathOrNull", () => {
   test("owns main checkouts and their worktrees", async () => {
     await withConfig();
-    expect(repoForPathOrNull(APP_REPO)?.id).toBe("app");
-    expect(repoForPathOrNull(`${WT_DIR}/app-feat-x`)?.id).toBe("app");
-    expect(repoForPathOrNull(`${WT_DIR}/lib-feat-x`)?.id).toBe("lib");
+    expect((await repoForPathOrNull(APP_REPO))?.id).toBe("app");
+    expect((await repoForPathOrNull(`${WT_DIR}/app-feat-x`))?.id).toBe("app");
+    expect((await repoForPathOrNull(`${WT_DIR}/lib-feat-x`))?.id).toBe("lib");
   });
 
   test("undefined instead of throwing for a path no repo owns", async () => {
     await withConfig();
     expect(
-      repoForPathOrNull("/var/lib/opensession/scratch/os-123"),
+      await repoForPathOrNull("/var/lib/opensession/scratch/os-123"),
     ).toBeUndefined();
     // repoForPath keeps throwing — callers that require a repo still get a
     // loud failure rather than a silent default.
-    expect(() => repoForPath("/var/lib/opensession/scratch/os-123")).toThrow(
-      /No registered repo/,
-    );
+    expect(
+      async () => await repoForPath("/var/lib/opensession/scratch/os-123"),
+    ).toThrow(/No registered repo/);
   });
 });
 
@@ -85,33 +85,35 @@ describe("sessionRepoId", () => {
   test("an explicit repo wins over the path", async () => {
     await withConfig();
     expect(
-      sessionRepoId({ repo: "lib", worktreeDir: `${WT_DIR}/app-feat-x` }),
+      await sessionRepoId({ repo: "lib", worktreeDir: `${WT_DIR}/app-feat-x` }),
     ).toBe("lib");
   });
 
   test("derives from worktreeDir for sessions stored before the repo field", async () => {
     await withConfig();
-    expect(sessionRepoId({ worktreeDir: `${WT_DIR}/app-feat-x` })).toBe("app");
-    expect(sessionRepoId({ worktreeDir: APP_REPO })).toBe("app");
+    expect(await sessionRepoId({ worktreeDir: `${WT_DIR}/app-feat-x` })).toBe(
+      "app",
+    );
+    expect(await sessionRepoId({ worktreeDir: APP_REPO })).toBe("app");
   });
 
   test("no worktree, no repo → undefined", async () => {
     await withConfig();
-    expect(sessionRepoId({})).toBeUndefined();
-    expect(sessionRepoId({ worktreeDir: "" })).toBeUndefined();
-    expect(sessionRepoId({ worktreeDir: null })).toBeUndefined();
+    expect(await sessionRepoId({})).toBeUndefined();
+    expect(await sessionRepoId({ worktreeDir: "" })).toBeUndefined();
+    expect(await sessionRepoId({ worktreeDir: null })).toBeUndefined();
   });
 
   test("repo-less sessions resolve by path, whatever their mode", async () => {
     await withConfig();
     const scratchDir = "/var/lib/opensession/scratch/ws-1";
     // Scratch: unchanged from the old `mode !== "scratch"` test.
-    expect(sessionRepoId({ worktreeDir: scratchDir })).toBeUndefined();
+    expect(await sessionRepoId({ worktreeDir: scratchDir })).toBeUndefined();
     // A repo-less ask session sits in the same kind of dir. Under the old
     // mode test this returned the DEFAULT repo, which pointed diff, PR and
     // git routes at a checkout the session had nothing to do with.
     expect(
-      sessionRepoId({ repo: undefined, worktreeDir: scratchDir }),
+      await sessionRepoId({ repo: undefined, worktreeDir: scratchDir }),
     ).toBeUndefined();
   });
 });

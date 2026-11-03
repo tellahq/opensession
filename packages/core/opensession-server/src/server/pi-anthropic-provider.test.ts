@@ -221,18 +221,18 @@ describe("ensureAnthropicBridgeCwd", () => {
     const cwd = join(dir, "missing-state", "bridge-cwd");
     expect(existsSync(cwd)).toBe(false);
 
-    expect(ensureAnthropicBridgeCwd(cwd)).toBe(cwd);
-    expect(ensureAnthropicBridgeCwd(cwd)).toBe(cwd);
+    expect(await ensureAnthropicBridgeCwd(cwd)).toBe(cwd);
+    expect(await ensureAnthropicBridgeCwd(cwd)).toBe(cwd);
     expect(statSync(cwd).isDirectory()).toBe(true);
   });
 
   test("recreates the SDK cwd after its state tree is removed", async () => {
     const root = join(dir, "removed-state");
-    const cwd = ensureAnthropicBridgeCwd(join(root, "bridge-cwd"));
+    const cwd = await ensureAnthropicBridgeCwd(join(root, "bridge-cwd"));
     rmSync(root, { recursive: true, force: true });
 
     expect(existsSync(cwd)).toBe(false);
-    expect(ensureAnthropicBridgeCwd(cwd)).toBe(cwd);
+    expect(await ensureAnthropicBridgeCwd(cwd)).toBe(cwd);
     expect(statSync(cwd).isDirectory()).toBe(true);
   });
 
@@ -240,7 +240,7 @@ describe("ensureAnthropicBridgeCwd", () => {
     const cwd = join(dir, "cwd-is-a-file");
     writeFileSync(cwd, "not a directory");
 
-    expect(() => ensureAnthropicBridgeCwd(cwd)).toThrow();
+    await expect(ensureAnthropicBridgeCwd(cwd)).rejects.toThrow();
   });
 });
 

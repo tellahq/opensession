@@ -20,13 +20,15 @@ import { broadcastToSession } from "./ws-hub";
 import type { UnifiedSession } from "./types";
 
 /** Whether this session's branch ships straight to the default branch. */
-export function tracksDirectShips(session: UnifiedSession): boolean {
+export async function tracksDirectShips(
+  session: UnifiedSession,
+): Promise<boolean> {
   if (session.mode !== "code" || !session.worktreeDir || !session.branch)
     return false;
   if (session.automation || session.automationId) return false;
   if (session.automationDescendantPolicy) return false;
   if (hasRemoteWorkspace(session)) return false;
-  const repoId = sessionRepoId(session);
+  const repoId = await sessionRepoId(session);
   if (!repoId) return false;
   let repo;
   try {
@@ -36,7 +38,10 @@ export function tracksDirectShips(session: UnifiedSession): boolean {
   }
   // A shared checkout is the default branch already, used by every session
   // there: its pushes cannot be attributed to one workspace.
-  if (canonicalPath(session.worktreeDir) === canonicalPath(repo.repo))
+  if (
+    (await canonicalPath(session.worktreeDir)) ===
+    (await canonicalPath(repo.repo))
+  )
     return false;
   if (session.branch === repo.defaultBranch) return false;
   return sessionShipMode(session, repo).mode === "direct";
@@ -82,8 +87,8 @@ export async function trackDirectShipAfterTurn(
 ): Promise<void> {
   // PR-aware, so a branch that opened a PR stops being tracked as direct.
   const session = await findPrSessionAsync(sessionId);
-  if (!session || !tracksDirectShips(session)) return;
-  const repo = getRepo(sessionRepoId(session)!);
+  if (!session || !(await tracksDirectShips(session))) return;
+  const repo = getRepo(await sessionRepoId(session)!);
   const env = session.createdByLogin
     ? githubCredentialForLogin(session.createdByLogin)?.env
     : githubCredentialForRun(session.createdBy || session.startedBy)?.env;

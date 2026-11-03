@@ -70,8 +70,10 @@ export const SEED_ENV_FILES = ["packages/core/webapp/.env.local", ".envrc"];
  */
 export async function seedHostEnvFiles(
   worktreeDir: string,
-  repo: Repo | undefined = repoForPathOrNull(worktreeDir),
+  owner?: Repo | null,
 ): Promise<string[]> {
+  const repo =
+    owner === undefined ? await repoForPathOrNull(worktreeDir) : owner;
   if (!repo?.repo || resolve(repo.repo) === resolve(worktreeDir)) return [];
   const seeded: string[] = [];
   for (const rel of SEED_ENV_FILES) {

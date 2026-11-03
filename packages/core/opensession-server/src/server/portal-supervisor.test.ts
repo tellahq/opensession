@@ -137,7 +137,7 @@ describe("host Portal lifecycle cleanup", () => {
     registry();
     const result = await reapOrphanedPortalServices([owner(true)]);
     expect(result.stopped).toHaveLength(1);
-    expect(readPortalRegistry(worktree)[0]?.state).toBe("stopped");
+    expect((await readPortalRegistry(worktree))[0]?.state).toBe("stopped");
   });
 
   test("preserves a sibling owner's Portal in a shared worktree", async () => {
@@ -164,12 +164,12 @@ describe("host Portal lifecycle cleanup", () => {
       expect((await reapOrphanedPortalServices([canonical])).stopped).toEqual(
         [],
       );
-      expect(readPortalRegistry(worktree)[0]?.state).toBe("awake");
+      expect((await readPortalRegistry(worktree))[0]?.state).toBe("awake");
       expect(
         (await reapOrphanedPortalServices([{ ...canonical, archived: true }]))
           .stopped,
       ).toHaveLength(1);
-      expect(readPortalRegistry(worktree)[0]?.state).toBe("stopped");
+      expect((await readPortalRegistry(worktree))[0]?.state).toBe("stopped");
     });
   }
 
@@ -186,7 +186,7 @@ describe("host Portal lifecycle cleanup", () => {
     expect((await sweep(0)).slept).toEqual([]);
     expect((await sweep(PORTAL_IDLE_MS, true)).slept).toEqual([]);
     expect((await sweep(PORTAL_IDLE_MS)).slept).toHaveLength(1);
-    expect(readPortalRegistry(worktree)[0]?.state).toBe("sleeping");
+    expect((await readPortalRegistry(worktree))[0]?.state).toBe("sleeping");
   });
 
   test("legacy ownerless Portals survive until every worktree owner archives", async () => {
@@ -224,7 +224,7 @@ describe("host Portal lifecycle cleanup", () => {
     );
     expect((await sweep(3 * PORTAL_IDLE_MS, null)).slept).toEqual([]);
     expect((await sweep(3 * PORTAL_IDLE_MS)).slept).toHaveLength(1);
-    expect(readPortalRegistry(worktree)[0]?.state).toBe("sleeping");
+    expect((await readPortalRegistry(worktree))[0]?.state).toBe("sleeping");
     // The archive sweep must not turn an idle, wakeable Portal into stopped.
     expect((await reapOrphanedPortalServices([owner()])).stopped).toEqual([]);
   });
@@ -296,7 +296,7 @@ describe("host Portal lifecycle cleanup", () => {
         command: "sleep 60",
       }),
     ).rejects.toThrow("host memory is nearly full");
-    expect(readPortalRegistry(worktree)[0]).toMatchObject({
+    expect((await readPortalRegistry(worktree))[0]).toMatchObject({
       name: "web",
       state: "failed",
       lastError: expect.stringContaining("host memory is nearly full"),
@@ -305,7 +305,7 @@ describe("host Portal lifecycle cleanup", () => {
 
   test("archiving through an alias stops Portals under every id of the owner", async () => {
     registry("canonical");
-    const web = readPortalRegistry(worktree)[0]!;
+    const web = (await readPortalRegistry(worktree))[0]!;
     writeFileSync(
       join(worktree, ".ports.conf"),
       [
@@ -337,7 +337,10 @@ describe("host Portal lifecycle cleanup", () => {
       }),
     });
     expect(
-      readPortalRegistry(worktree).map((record) => [record.name, record.state]),
+      (await readPortalRegistry(worktree)).map((record) => [
+        record.name,
+        record.state,
+      ]),
     ).toEqual([
       ["web", "stopped"],
       ["api", "stopped"],
@@ -345,9 +348,9 @@ describe("host Portal lifecycle cleanup", () => {
     ]);
   });
 
-  test("a status probe of a replaced generation cannot mark the replacement failed", () => {
+  test("a status probe of a replaced generation cannot mark the replacement failed", async () => {
     registry();
-    const first = readPortalRegistry(worktree)[0]!;
+    const first = (await readPortalRegistry(worktree))[0]!;
     const replacement = {
       ...first,
       pid: 4242,
@@ -431,12 +434,12 @@ describe("host Portal lifecycle cleanup", () => {
         expectedGeneration: "obsolete",
       }),
     ).rejects.toThrow("Portal changed");
-    expect(readPortalRegistry(worktree)[0]?.state).toBe("awake");
+    expect((await readPortalRegistry(worktree))[0]?.state).toBe("awake");
   });
 
   test("concurrent registry updates preserve unrelated services", async () => {
     registry();
-    const web = readPortalRegistry(worktree)[0];
+    const web = (await readPortalRegistry(worktree))[0];
     writeFileSync(
       join(worktree, ".ports.conf"),
       [web, { ...web, name: "api", key: "API_PORT", port: 18092 }]
@@ -448,7 +451,7 @@ describe("host Portal lifecycle cleanup", () => {
       setPortalPath(worktree, "/api", "api"),
     ]);
     expect(
-      readPortalRegistry(worktree).map((record) => record.defaultPath),
+      (await readPortalRegistry(worktree)).map((record) => record.defaultPath),
     ).toEqual(["/web", "/api"]);
   });
 });
@@ -611,7 +614,7 @@ describe("session Portal supervisor", () => {
       `${PREFIX(record)}\nPORTAL_API_PORT=4200\nWEBAPP_PORT=3300\n`,
     );
     await setPortalPath(worktree, "/health", "api");
-    const [portal] = readPortalRegistry(worktree);
+    const [portal] = await readPortalRegistry(worktree);
     expect(portal).toMatchObject({
       name: "api",
       key: "PORTAL_API_PORT",
@@ -642,7 +645,7 @@ describe("session Portal supervisor", () => {
     expect(text).not.toContain("\x1b");
     expect(text).not.toContain("@modal");
     expect(text).toContain("WEBAPP_PORT=4000");
-    expect(readPortalRegistry(worktree)[0]).toMatchObject({
+    expect((await readPortalRegistry(worktree))[0]).toMatchObject({
       defaultPath: "/videos",
     });
   });
@@ -863,7 +866,7 @@ describe("session Portal supervisor", () => {
     const pid = Number(await Bun.file(pidFile).text());
     expect(pid).toBeGreaterThan(1);
     expect(() => process.kill(pid, 0)).toThrow();
-    const failed = readPortalRegistry(worktree)[0];
+    const failed = (await readPortalRegistry(worktree))[0];
     expect(failed).toMatchObject({ name: "slow-app", state: "failed" });
     expect(failed?.pid).toBeUndefined();
   }, 10_000);
@@ -985,11 +988,11 @@ describe("session Portal supervisor", () => {
     });
     expect(signals).toEqual(["TERM", "KILL"]);
     expect(groupAlive).toBe(false);
-    expect(readPortalRegistry(worktree)[0]).toMatchObject({
+    expect((await readPortalRegistry(worktree))[0]).toMatchObject({
       name: "dead-leader",
       state: "stopped",
     });
-    expect(readPortalRegistry(worktree)[0]?.pid).toBeUndefined();
+    expect((await readPortalRegistry(worktree))[0]?.pid).toBeUndefined();
   }, 10_000);
 
   test("reaps a Portal whose durable owner no longer owns the worktree", async () => {
@@ -1002,7 +1005,7 @@ describe("session Portal supervisor", () => {
       command:
         "bun -e 'Bun.serve({port:Number(process.env.PORT),fetch(){return new Response(\"orphan\")}})'",
     });
-    expect(readPortalRegistry(worktree)[0]).toMatchObject({
+    expect((await readPortalRegistry(worktree))[0]).toMatchObject({
       sessionId: "deleted-session",
       state: "awake",
     });

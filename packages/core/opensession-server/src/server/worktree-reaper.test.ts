@@ -242,10 +242,10 @@ describe("checkoutAgeMs", () => {
       writeFileSync(pointer, "gitdir: /repo/.git/worktrees/x\n");
       const created = new Date(NOW - 20 * 60_000);
       utimesSync(pointer, created, created);
-      const age = checkoutAgeMs(tmp, NOW);
+      const age = await checkoutAgeMs(tmp, NOW);
       expect(age).not.toBeNull();
       expect(Math.round((age ?? 0) / 60_000)).toBe(20);
-      expect(checkoutAgeMs(join(tmp, "missing"), NOW)).toBeNull();
+      expect(await checkoutAgeMs(join(tmp, "missing"), NOW)).toBeNull();
     } finally {
       await rm(tmp, { recursive: true, force: true });
     }

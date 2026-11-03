@@ -12,11 +12,11 @@ import {
   runnerAllowed,
 } from "./runners";
 
-function resolveRunner(query: string) {
+async function resolveRunner(query: string) {
   const wanted = query.trim().toLowerCase();
   if (!wanted)
     return { error: "Name a Runner. Use list_runners first." } as const;
-  const runners = listRunners();
+  const runners = await listRunners();
   const exact = runners.filter(
     (runner) => runner.id === query || runner.name.toLowerCase() === wanted,
   );
@@ -62,7 +62,7 @@ export function createRunnersMcpServer(
           tag?: string;
           online?: boolean;
         }) => {
-          const runners = listRunners().filter((runner) => {
+          const runners = (await listRunners()).filter((runner) => {
             if (
               args.capability &&
               !runner.capabilities.toolchains.includes(args.capability)
@@ -98,7 +98,7 @@ export function createRunnersMcpServer(
         "Read one Runner's health, workload, resources, and execution permissions. A Runner may be offline, busy, or in maintenance.",
         { runner: z.string() },
         async ({ runner }: { runner: string }) => {
-          const resolved = resolveRunner(runner);
+          const resolved = await resolveRunner(runner);
           if ("error" in resolved)
             return text(resolved.error ?? "Runner not found.");
           const view = publicRunner(
@@ -124,7 +124,7 @@ export function createRunnersMcpServer(
           cwd?: string;
           timeoutSeconds?: number;
         }) => {
-          const resolved = resolveRunner(args.runner);
+          const resolved = await resolveRunner(args.runner);
           if ("error" in resolved)
             return text(resolved.error ?? "Runner not found.");
           if (!isRunnerConnected(resolved.runner.id))
@@ -170,10 +170,10 @@ export function createRunnersMcpServer(
           reason: string;
           durationMinutes?: number;
         }) => {
-          const resolved = resolveRunner(args.runner);
+          const resolved = await resolveRunner(args.runner);
           if ("error" in resolved)
             return text(resolved.error ?? "Runner not found.");
-          const reserved = reserveRunner(resolved.runner.id, {
+          const reserved = await reserveRunner(resolved.runner.id, {
             reason: args.reason,
             reservedBy: context.user,
             sessionId: context.sessionId,
@@ -193,10 +193,13 @@ export function createRunnersMcpServer(
         "Release this user's reservation on a Runner.",
         { runner: z.string() },
         async ({ runner }: { runner: string }) => {
-          const resolved = resolveRunner(runner);
+          const resolved = await resolveRunner(runner);
           if ("error" in resolved)
             return text(resolved.error ?? "Runner not found.");
-          return releaseRunnerReservation(resolved.runner.id, context.user)
+          return (await releaseRunnerReservation(
+            resolved.runner.id,
+            context.user,
+          ))
             ? text(`Released ${resolved.runner.name}.`)
             : text(`Could not release ${resolved.runner.name}.`);
         },

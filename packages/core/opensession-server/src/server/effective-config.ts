@@ -434,7 +434,7 @@ export async function buildSessionEffectiveConfig(
 
   const scopes = sessionMemoryScopes({
     user: inputs.user,
-    repos: sessionRepoIds(session),
+    repos: await sessionRepoIds(session),
   });
   const memory: Record<string, ConfigRow> = {
     injected: row(inputs.sessionNote, "run-session.ts session note"),
@@ -473,7 +473,7 @@ export async function buildSessionEffectiveConfig(
     ),
     paths: row(configuredPaths(), "config.ts configuredPaths"),
   };
-  const localInstructions = readLocalInstructions(
+  const localInstructions = await readLocalInstructions(
     session.worktreeDir || undefined,
   );
   const instructions: Record<string, ConfigRow> = {

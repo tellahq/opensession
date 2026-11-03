@@ -26,15 +26,15 @@ afterAll(() => {
   process.env.HOME = realHome;
   rmSync(HOME, { recursive: true, force: true });
 });
-beforeEach(() => {
-  for (const runner of listRunners()) removeRunner(runner.id);
+beforeEach(async () => {
+  for (const runner of await listRunners()) await removeRunner(runner.id);
 });
 
-function register(
+async function register(
   overrides: Partial<Parameters<typeof registerRunner>[0]> = {},
 ) {
   const { code } = createRunnerPairing("tester");
-  return registerRunner({
+  return await registerRunner({
     code,
     name: "mac-mini",
     platform: "darwin",
@@ -50,7 +50,7 @@ function register(
 }
 
 describe("Runner registry security", () => {
-  test("registers only from a tailnet origin, before spending the code", () => {
+  test("registers only from a tailnet origin, before spending the code", async () => {
     for (const address of [
       "100.63.255.255",
       "100.128.0.1",
@@ -61,23 +61,23 @@ describe("Runner registry security", () => {
       "",
     ]) {
       const { code } = createRunnerPairing("tester");
-      const rejected = register({ code, address });
+      const rejected = await register({ code, address });
       expect(rejected.ok).toBe(false);
-      expect(register({ code }).ok).toBe(true);
+      expect((await register({ code })).ok).toBe(true);
     }
     expect(normalizeAddress("::ffff:100.64.0.1")).toBe("100.64.0.1");
   });
 
-  test("pairing is one-time and stored credentials are hashed", () => {
-    const first = register();
+  test("pairing is one-time and stored credentials are hashed", async () => {
+    const first = await register();
     if (!first.ok) throw new Error(first.error);
     expect(first.token).toMatch(/^[0-9a-f]{64}$/);
-    expect(JSON.stringify(listRunners()[0])).not.toContain(first.token);
-    expect(authenticateRunner(first.runner.id, first.token)?.id).toBe(
+    expect(JSON.stringify((await listRunners())[0])).not.toContain(first.token);
+    expect((await authenticateRunner(first.runner.id, first.token))?.id).toBe(
       first.runner.id,
     );
-    expect(authenticateRunner(first.runner.id, "wrong")).toBeUndefined();
-    const reused = registerRunner({
+    expect(await authenticateRunner(first.runner.id, "wrong")).toBeUndefined();
+    const reused = await registerRunner({
       code: "ZZZZ-ZZZZ",
       name: "other",
       platform: "linux",
@@ -87,19 +87,21 @@ describe("Runner registry security", () => {
     expect(reused.ok).toBe(false);
   });
 
-  test("re-pairing retains policy but rotates the credential", () => {
-    const first = register();
+  test("re-pairing retains policy but rotates the credential", async () => {
+    const first = await register();
     if (!first.ok) throw new Error(first.error);
-    updateRunner(first.runner.id, { allowedRepos: ["opensession"] });
-    const second = register();
+    await updateRunner(first.runner.id, { allowedRepos: ["opensession"] });
+    const second = await register();
     if (!second.ok) throw new Error(second.error);
     expect(second.runner.id).toBe(first.runner.id);
     expect(second.runner.permissions.fullSessions).toBe(false);
     expect(second.runner.allowedRepos).toEqual(["opensession"]);
-    expect(authenticateRunner(first.runner.id, first.token)).toBeUndefined();
+    expect(
+      await authenticateRunner(first.runner.id, first.token),
+    ).toBeUndefined();
   });
 
-  test("keeps non-secret Kubernetes migration diagnostics with the paired Runner", () => {
+  test("keeps non-secret Kubernetes migration diagnostics with the paired Runner", async () => {
     const { code } = createRunnerPairing("tester");
     expect(
       bindRunnerPairingMigration(code, {
@@ -110,7 +112,7 @@ describe("Runner registry security", () => {
         workload: "gpu-runner",
       }),
     ).toBe(true);
-    const result = registerRunner({
+    const result = await registerRunner({
       code,
       name: "gpu-devbox",
       platform: "linux",
@@ -129,41 +131,47 @@ describe("Runner registry security", () => {
 });
 
 describe("Runner AWS role", () => {
-  test("stores a validated IAM role, keeps it across re-pairing, and clears it on null", () => {
-    const { runner } = register() as { runner: { id: string } };
+  test("stores a validated IAM role, keeps it across re-pairing, and clears it on null", async () => {
+    const { runner } = (await register()) as { runner: { id: string } };
     expect(
-      updateRunner(runner.id, {
-        aws: { roleArn: " arn:aws:iam::123456789012:role/opensession/ci " },
-      })?.aws,
+      (
+        await updateRunner(runner.id, {
+          aws: { roleArn: " arn:aws:iam::123456789012:role/opensession/ci " },
+        })
+      )?.aws,
     ).toEqual({ roleArn: "arn:aws:iam::123456789012:role/opensession/ci" });
     expect(
-      updateRunner(runner.id, {
-        aws: {
-          roleArn: "arn:aws:iam::123456789012:role/ci",
-          externalId: "team-42",
-        },
-      })?.aws,
+      (
+        await updateRunner(runner.id, {
+          aws: {
+            roleArn: "arn:aws:iam::123456789012:role/ci",
+            externalId: "team-42",
+          },
+        })
+      )?.aws,
     ).toEqual({
       roleArn: "arn:aws:iam::123456789012:role/ci",
       externalId: "team-42",
     });
     // An unrelated patch leaves the role alone.
-    expect(updateRunner(runner.id, { label: "Bill" })?.aws?.roleArn).toBe(
-      "arn:aws:iam::123456789012:role/ci",
-    );
+    expect(
+      (await updateRunner(runner.id, { label: "Bill" }))?.aws?.roleArn,
+    ).toBe("arn:aws:iam::123456789012:role/ci");
     // Re-pairing rotates the credential but keeps operator policy.
-    const again = register() as { runner: { id: string; aws?: unknown } };
+    const again = (await register()) as {
+      runner: { id: string; aws?: unknown };
+    };
     expect(again.runner.id).toBe(runner.id);
     expect(again.runner.aws).toEqual({
       roleArn: "arn:aws:iam::123456789012:role/ci",
       externalId: "team-42",
     });
-    expect(updateRunner(runner.id, { aws: null })?.aws).toBeUndefined();
-    expect("aws" in (listRunners()[0] as object)).toBe(false);
+    expect((await updateRunner(runner.id, { aws: null }))?.aws).toBeUndefined();
+    expect("aws" in ((await listRunners())[0] as object)).toBe(false);
   });
 
-  test("rejects anything that is not an IAM role ARN", () => {
-    const { runner } = register() as { runner: { id: string } };
+  test("rejects anything that is not an IAM role ARN", async () => {
+    const { runner } = (await register()) as { runner: { id: string } };
     for (const roleArn of [
       "",
       "arn:aws:iam::123456789012:user/alice",
@@ -173,22 +181,27 @@ describe("Runner AWS role", () => {
       "AROAEXAMPLE",
     ])
       expect(
-        updateRunner(runner.id, { aws: { roleArn } })?.aws,
+        (await updateRunner(runner.id, { aws: { roleArn } }))?.aws,
       ).toBeUndefined();
     // A bad external id is dropped, the role stays.
     expect(
-      updateRunner(runner.id, {
-        aws: { roleArn: "arn:aws:iam::123456789012:role/ci", externalId: "x" },
-      })?.aws,
+      (
+        await updateRunner(runner.id, {
+          aws: {
+            roleArn: "arn:aws:iam::123456789012:role/ci",
+            externalId: "x",
+          },
+        })
+      )?.aws,
     ).toEqual({ roleArn: "arn:aws:iam::123456789012:role/ci" });
   });
 });
 
 describe("Runner policy and reservations", () => {
-  test("enforces explicit user, repository, and execution permission policy", () => {
-    const result = register();
+  test("enforces explicit user, repository, and execution permission policy", async () => {
+    const result = await register();
     if (!result.ok) throw new Error(result.error);
-    const runner = updateRunner(result.runner.id, {
+    const runner = (await updateRunner(result.runner.id, {
       allowedUsers: ["alex"],
       allowedRepos: ["ios-app"],
       permissions: {
@@ -198,7 +211,7 @@ describe("Runner policy and reservations", () => {
         portals: true,
         automationDescendants: true,
       },
-    })!;
+    }))!;
     expect(
       runnerAllowed(runner, {
         user: "alex",
@@ -246,33 +259,40 @@ describe("Runner policy and reservations", () => {
     ).toBe(false);
   });
 
-  test("prevents competing reservations and lets the owner release one", () => {
-    const result = register();
+  test("prevents competing reservations and lets the owner release one", async () => {
+    const result = await register();
     if (!result.ok) throw new Error(result.error);
     expect(
-      reserveRunner(result.runner.id, {
-        reason: "iOS release",
-        reservedBy: "alex",
-        durationMinutes: 30,
-      })?.reservation?.reservedBy,
+      (
+        await reserveRunner(result.runner.id, {
+          reason: "iOS release",
+          reservedBy: "alex",
+          durationMinutes: 30,
+        })
+      )?.reservation?.reservedBy,
     ).toBe("alex");
     expect(
-      reserveRunner(result.runner.id, { reason: "other", reservedBy: "sam" }),
+      await reserveRunner(result.runner.id, {
+        reason: "other",
+        reservedBy: "sam",
+      }),
     ).toBeUndefined();
-    expect(releaseRunnerReservation(result.runner.id, "sam")).toBeUndefined();
     expect(
-      releaseRunnerReservation(result.runner.id, "alex")?.reservation,
+      await releaseRunnerReservation(result.runner.id, "sam"),
+    ).toBeUndefined();
+    expect(
+      (await releaseRunnerReservation(result.runner.id, "alex"))?.reservation,
     ).toBeUndefined();
   });
 
-  test("requires an explicit, user- and model-scoped local inference policy", () => {
-    const result = register({
+  test("requires an explicit, user- and model-scoped local inference policy", async () => {
+    const result = await register({
       resources: {
         localInference: [{ runtime: "ollama", models: ["llama3"] }],
       },
     });
     if (!result.ok) throw new Error(result.error);
-    let runner = listRunners()[0];
+    let runner = (await listRunners())[0];
     expect(
       runnerAllowsLocalInference(runner, {
         user: "alex",
@@ -280,7 +300,7 @@ describe("Runner policy and reservations", () => {
         task: "chat",
       }),
     ).toBe(false);
-    updateRunner(runner.id, {
+    await updateRunner(runner.id, {
       localInferencePolicy: {
         enabled: true,
         allowedUsers: ["alex"],
@@ -288,7 +308,7 @@ describe("Runner policy and reservations", () => {
         allowedTasks: ["chat"],
       },
     });
-    runner = listRunners()[0];
+    runner = (await listRunners())[0];
     expect(
       runnerAllowsLocalInference(runner, {
         user: "alex",

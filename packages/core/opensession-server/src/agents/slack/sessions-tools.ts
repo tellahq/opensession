@@ -594,7 +594,8 @@ export async function spawnTaskImpl(
         sharable = Boolean(
           parent &&
           parent.mode === "code" &&
-          resolveSessionRepoContext(parent, args.repo, args.prompt)?.dir,
+          (await resolveSessionRepoContext(parent, args.repo, args.prompt))
+            ?.dir,
         );
       } catch {}
     }

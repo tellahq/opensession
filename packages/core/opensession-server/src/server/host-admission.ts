@@ -18,7 +18,7 @@
  * Gateway process: knobs read ~/.opensession.env (or a drop-in on
  * opensession.service).
  */
-import { readFileSync } from "fs";
+import { readFile } from "node:fs/promises";
 import { audit } from "./audit";
 import { envCapacity } from "./shared/env-capacity";
 
@@ -78,24 +78,24 @@ export type HostCapacitySnapshot = {
   pendingHosts: number;
 };
 
-export function readMemAvailableMb(
-  read: (path: string) => string = readProcFile,
-): number | null {
-  const match = /MemAvailable:\s+(\d+)\s*kB/.exec(read("/proc/meminfo"));
+export async function readMemAvailableMb(
+  read: (path: string) => string | Promise<string> = readProcFile,
+): Promise<number | null> {
+  const match = /MemAvailable:\s+(\d+)\s*kB/.exec(await read("/proc/meminfo"));
   return match ? Math.floor(Number(match[1]) / 1_024) : null;
 }
 
-export function readCpuSomeAvg10(
-  read: (path: string) => string = readProcFile,
-): number | null {
-  const match = /some avg10=([\d.]+)/.exec(read("/proc/pressure/cpu"));
+export async function readCpuSomeAvg10(
+  read: (path: string) => string | Promise<string> = readProcFile,
+): Promise<number | null> {
+  const match = /some avg10=([\d.]+)/.exec(await read("/proc/pressure/cpu"));
   return match ? Number(match[1]) : null;
 }
 
-function readProcFile(path: string): string {
+async function readProcFile(path: string): Promise<string> {
   try {
     // Failures (macOS, containers without PSI) simply disable that signal.
-    return readFileSync(path, "utf8");
+    return await readFile(path, "utf8");
   } catch {
     return "";
   }
@@ -156,18 +156,22 @@ export type WaitForAdmissionOptions = {
   snapshot?: (
     activeHosts: number,
     pendingHosts: number,
-  ) => HostCapacitySnapshot;
+  ) => HostCapacitySnapshot | Promise<HostCapacitySnapshot>;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
 };
 
-function defaultSnapshot(
+async function defaultSnapshot(
   activeHosts: number,
   pendingHosts: number,
-): HostCapacitySnapshot {
+): Promise<HostCapacitySnapshot> {
+  const [memAvailableMb, cpuSomeAvg10] = await Promise.all([
+    readMemAvailableMb(),
+    readCpuSomeAvg10(),
+  ]);
   return {
-    memAvailableMb: readMemAvailableMb(),
-    cpuSomeAvg10: readCpuSomeAvg10(),
+    memAvailableMb,
+    cpuSomeAvg10,
     activeHosts,
     pendingHosts,
   };
@@ -192,7 +196,7 @@ export async function waitForRunHostAdmission(
   for (;;) {
     if (options.shouldCancel?.()) return "cancelled";
     const decision = decideRunHostAdmission(
-      snapshot(options.activeHosts(), options.pendingHosts?.() ?? 0),
+      await snapshot(options.activeHosts(), options.pendingHosts?.() ?? 0),
       limits,
     );
     if (decision.admit) {

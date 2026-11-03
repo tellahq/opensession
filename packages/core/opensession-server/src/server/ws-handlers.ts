@@ -1137,11 +1137,16 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
             sinceOffset !== undefined &&
             typeof msg.sinceRev === "string" &&
             session.transcriptPath &&
-            msg.sinceRev === transcriptRev(session.transcriptPath) &&
+            msg.sinceRev === (await transcriptRev(session.transcriptPath)) &&
             sinceOffset <=
               ((await transcriptFileSize(session.transcriptPath)) ?? -1)
           ) {
-            startWatching(session.transcriptPath, ws, sinceOffset, sessionId);
+            await startWatching(
+              session.transcriptPath,
+              ws,
+              sinceOffset,
+              sessionId,
+            );
             await sendWatchExtras(ws, sessionId, session);
             break;
           }
@@ -1183,14 +1188,22 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
             // Resume cursor (see the sinceOffset branch above): where this
             // snapshot ends in the mirror file, and which file that was.
             ...(session.transcriptPath
-              ? { endOffset, rev: transcriptRev(session.transcriptPath) }
+              ? {
+                  endOffset,
+                  rev: await transcriptRev(session.transcriptPath),
+                }
               : {}),
           });
 
           // Start file watcher from where the tail parse left off — bytes
           // appended between the parse and the watch would otherwise be lost.
           if (session.transcriptPath) {
-            startWatching(session.transcriptPath, ws, endOffset, sessionId);
+            await startWatching(
+              session.transcriptPath,
+              ws,
+              endOffset,
+              sessionId,
+            );
           }
 
           await sendWatchExtras(ws, sessionId, session);
@@ -1334,7 +1347,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
               ? msg.beforeOffset
               : null;
           if (before !== null) {
-            const rev = transcriptRev(session.transcriptPath);
+            const rev = await transcriptRev(session.transcriptPath);
             const fileSize = await transcriptFileSize(session.transcriptPath);
             if (
               msg.beforeRev !== rev ||

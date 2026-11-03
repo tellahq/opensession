@@ -12,7 +12,8 @@
  * checkout that ships its own `simplify` beats Open Session's.
  */
 
-import { existsSync, readFileSync, realpathSync } from "fs";
+import { readFile, realpath } from "node:fs/promises";
+import { pathExists } from "./run-fs";
 import { join, resolve } from "path";
 
 /**
@@ -33,7 +34,9 @@ export const SHIPPED_SKILLS_DIR =
  * Missing directories are dropped: pi reports a diagnostic for a skill path
  * that does not exist, and most checkouts carry neither directory.
  */
-export function skillSearchPaths(worktreeDir?: string): string[] {
+export async function skillSearchPaths(
+  worktreeDir?: string,
+): Promise<string[]> {
   const candidates = [
     ...(worktreeDir
       ? [
@@ -46,12 +49,12 @@ export function skillSearchPaths(worktreeDir?: string): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const dir of candidates) {
-    if (!existsSync(dir)) continue;
+    if (!(await pathExists(dir))) continue;
     // A session on this repo has the shipped directory as its own project
     // directory; loading it twice would report every skill as a collision.
     let key = resolve(dir);
     try {
-      key = realpathSync(key);
+      key = await realpath(key);
     } catch {}
     if (seen.has(key)) continue;
     seen.add(key);
@@ -123,10 +126,10 @@ const SKILL_COMMAND_LEAD_RE =
  * Byte-for-byte the same block as pi's `_expandSkillCommand`, so a session
  * that later resumes through pi sees one consistent shape.
  */
-export function expandSkillCommand(
+export async function expandSkillCommand(
   text: string,
   skills: LoadedSkill[],
-): string {
+): Promise<string> {
   // The server prepends fenced context (retrieved memory, handoffs, the
   // portals note) and, for steers, a "[user] " attribution before the engine
   // sees a prompt. The command is what the person typed after those, so look
@@ -145,7 +148,7 @@ export function expandSkillCommand(
   try {
     // A Sandbox skill is presented at its Sandbox path and read from its
     // local mirror (pi-runner, remote-workspace.ts).
-    const body = readFileSync(skill.mirrorPath ?? skill.filePath, "utf8")
+    const body = (await readFile(skill.mirrorPath ?? skill.filePath, "utf8"))
       .replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "")
       .trim();
     const block =

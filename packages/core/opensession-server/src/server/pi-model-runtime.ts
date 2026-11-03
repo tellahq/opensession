@@ -29,7 +29,7 @@
  * time sockets, timers, or subprocesses; queries start only from stream().
  */
 
-import { mkdirSync } from "fs";
+import { mkdir } from "node:fs/promises";
 import {
   query,
   createSdkMcpServer,
@@ -50,6 +50,7 @@ import {
   SDK_BUILTIN_TOOLS,
   PASSTHROUGH_MCP,
   PASSTHROUGH_PREFIX,
+  BRIDGE_CWD,
   bridgeDesignationError,
   ensureAnthropicBridgeCwd,
   IMAGE_ONLY_PROMPT,
@@ -787,11 +788,18 @@ export interface PiAnthropicProviderOpts {
   ephemeral?: boolean;
 }
 
-/** Per-account isolated SDK config dir — never host ~/.claude. */
+/** Per-account isolated SDK config dir — never host ~/.claude. Created by
+ *  ensureSdkDirs before a conversation starts. */
 function claudeConfigDirFor(accountId: string): string {
-  const dir = `${stateDir("pi")}/claude-cfg/${accountId.replace(/[^A-Za-z0-9._-]/g, "_")}`;
-  mkdirSync(dir, { recursive: true });
-  return dir;
+  return `${stateDir("pi")}/claude-cfg/${accountId.replace(/[^A-Za-z0-9._-]/g, "_")}`;
+}
+
+/** Create the SDK cwd and the account's config dir off the event loop. */
+async function ensureSdkDirs(accountId: string): Promise<void> {
+  await Promise.all([
+    ensureAnthropicBridgeCwd(),
+    mkdir(claudeConfigDirFor(accountId), { recursive: true }),
+  ]);
 }
 
 /**
@@ -1278,7 +1286,7 @@ function createLiveSdkConversation(input: {
   const sdkQuery = query({
     prompt,
     options: {
-      cwd: ensureAnthropicBridgeCwd(),
+      cwd: BRIDGE_CWD,
       model: input.model.id,
       resume: input.plan.resume,
       ...(input.plan.resumeSessionAt
@@ -1521,6 +1529,7 @@ async function* runSdkAttempt(
     });
     if ("error" in picked) throw new Error(picked.error);
     account = picked;
+    await ensureSdkDirs(account.id);
 
     // Continuation planning happens with the account known: a stored SDK
     // session lives in ITS account's isolated CLAUDE_CONFIG_DIR, so a turn

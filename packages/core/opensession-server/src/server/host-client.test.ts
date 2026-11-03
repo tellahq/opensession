@@ -1543,22 +1543,22 @@ describe("local run-host capability", () => {
     expect((await events.next()).done).toBe(true);
   });
 
-  test("requires Linux, a booted systemd, systemctl, and sudo", () => {
+  test("requires Linux, a booted systemd, systemctl, and sudo", async () => {
     const commands = (command: string) =>
       ["systemctl", "sudo"].includes(command) ? `/usr/bin/${command}` : null;
-    expect(localRunHostsSupported("linux", true, commands)).toBe(true);
-    expect(localRunHostsSupported("darwin", true, commands)).toBe(false);
-    expect(localRunHostsSupported("linux", false, commands)).toBe(false);
-    expect(localRunHostsSupported("linux", true, () => null)).toBe(false);
+    expect(await localRunHostsSupported("linux", true, commands)).toBe(true);
+    expect(await localRunHostsSupported("darwin", true, commands)).toBe(false);
+    expect(await localRunHostsSupported("linux", false, commands)).toBe(false);
+    expect(await localRunHostsSupported("linux", true, () => null)).toBe(false);
   });
 
-  test("keeps hermetic fixtures off the live run-host installation", () => {
+  test("keeps hermetic fixtures off the live run-host installation", async () => {
     const previous = process.env.OPENSESSION_TEST_IN_PROCESS_RUNS;
     process.env.OPENSESSION_TEST_IN_PROCESS_RUNS = "1";
     try {
-      expect(localRunHostsSupported("linux", true, () => "/usr/bin/tool")).toBe(
-        false,
-      );
+      expect(
+        await localRunHostsSupported("linux", true, () => "/usr/bin/tool"),
+      ).toBe(false);
     } finally {
       if (previous === undefined)
         delete process.env.OPENSESSION_TEST_IN_PROCESS_RUNS;

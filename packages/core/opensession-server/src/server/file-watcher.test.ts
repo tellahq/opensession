@@ -77,7 +77,7 @@ describe("startWatching", () => {
     const second = wsStub();
 
     try {
-      startWatching(path, first, Bun.file(path).size, "bks-test");
+      await startWatching(path, first, Bun.file(path).size, "bks-test");
       await startWatching(path, second, 0, "bks-test");
 
       expect(second.sent).toHaveLength(1);
@@ -90,21 +90,21 @@ describe("startWatching", () => {
       // The replay carries the reconnect-resume cursor: where it ends in the
       // file, and which file that was (echoed back as sinceOffset/sinceRev).
       expect(msg.endOffset).toBe(Bun.file(path).size);
-      expect(msg.rev).toBe(transcriptRev(path));
+      expect(msg.rev).toBe(await transcriptRev(path));
     } finally {
       stopAllWatchesForClient(first);
       stopAllWatchesForClient(second);
     }
   });
 
-  it("transcriptRev tells mirror files apart (engine-rotation safety)", () => {
+  it("transcriptRev tells mirror files apart (engine-rotation safety)", async () => {
     // An offset into the old engine session's mirror must never be applied to
     // the new one — the rev is what the watch handler compares.
-    expect(transcriptRev("/x/ses_one.jsonl")).not.toBe(
-      transcriptRev("/x/ses_two.jsonl"),
+    expect(await transcriptRev("/x/ses_one.jsonl")).not.toBe(
+      await transcriptRev("/x/ses_two.jsonl"),
     );
-    expect(transcriptRev("/x/ses_one.jsonl")).toBe(
-      transcriptRev("/x/ses_one.jsonl"),
+    expect(await transcriptRev("/x/ses_one.jsonl")).toBe(
+      await transcriptRev("/x/ses_one.jsonl"),
     );
   });
 });
@@ -178,7 +178,7 @@ describe("pollTranscriptFile", () => {
     const replacement = join(dir, "replace.next.jsonl");
     writeFileSync(path, `${userLine("old", "old")}\n`);
     const harness = pollHarness(path);
-    const oldRev = transcriptRev(path);
+    const oldRev = await transcriptRev(path);
     writeFileSync(replacement, `${userLine("new", "new")}\n`);
     renameSync(replacement, path);
 

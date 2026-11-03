@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync } from "fs";
+import { mkdir, readFile } from "node:fs/promises";
 import { dirname } from "path";
 
 /**
@@ -94,7 +94,7 @@ export async function acquireGatewayActivationLease(
     env.OPENSESSION_DEPLOY_STATE || `${env.HOME || ""}/.opensession/deploy`;
   const lockPath =
     env.OPENSESSION_GATEWAY_LEASE || `${state}/gateway-active.lock`;
-  mkdirSync(dirname(lockPath), { recursive: true, mode: 0o700 });
+  await mkdir(dirname(lockPath), { recursive: true, mode: 0o700 });
   const waitSeconds = env.OPENSESSION_GATEWAY_LEASE_WAIT_SECS || "5";
   if (!/^\d+$/.test(waitSeconds)) {
     throw new Error("Invalid OPENSESSION_GATEWAY_LEASE_WAIT_SECS");
@@ -146,7 +146,7 @@ export async function waitForRuntimePeerGeneration(
   options: {
     env?: GatewayEnvironment;
     fetchReady?: (url: string) => Promise<Response>;
-    readReadyFile?: (path: string) => string;
+    readReadyFile?: (path: string) => string | Promise<string>;
     sleep?: (ms: number) => Promise<void>;
     timeoutMs?: number;
   } = {},
@@ -175,7 +175,7 @@ export async function waitForRuntimePeerGeneration(
     options.fetchReady ??
     ((url: string) => fetch(url, { signal: AbortSignal.timeout(1_000) }));
   const readReadyFile =
-    options.readReadyFile ?? ((path: string) => readFileSync(path, "utf8"));
+    options.readReadyFile ?? ((path: string) => readFile(path, "utf8"));
   const sleep = options.sleep ?? Bun.sleep;
   const deadline = Date.now() + (options.timeoutMs ?? 60_000);
   const kernelUrl = new URL(

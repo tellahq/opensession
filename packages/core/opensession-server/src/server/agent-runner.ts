@@ -1623,7 +1623,9 @@ export async function resumeInterruptedRuns(
     | Record<string, unknown>
     | Promise<Record<string, unknown> | undefined>
     | undefined,
-  reposNoteFor?: (osSessionId: string) => string | undefined,
+  reposNoteFor?: (
+    osSessionId: string,
+  ) => string | undefined | Promise<string | undefined>,
   onEvent?: (osSessionId: string, event: StreamEvent) => void | Promise<void>,
   snapshotLocalHostRuns: ActiveRunRecord[] = [],
   deferRecovery?: (run: ActiveRunRecord) => boolean | Promise<boolean>,
@@ -2136,7 +2138,7 @@ export async function resumeInterruptedRuns(
                     ? await inProcessMcpFor?.(run.osSessionId, run.user)
                     : undefined,
                   reposNote: run.osSessionId
-                    ? reposNoteFor?.(run.osSessionId)
+                    ? await reposNoteFor?.(run.osSessionId)
                     : undefined,
                   user: run.user,
                   accountUser: run.accountUser,
@@ -2250,7 +2252,7 @@ export async function resumeInterruptedRuns(
                   ? await inProcessMcpFor?.(run.osSessionId, run.user)
                   : undefined,
                 reposNote: run.osSessionId
-                  ? reposNoteFor?.(run.osSessionId)
+                  ? await reposNoteFor?.(run.osSessionId)
                   : undefined,
                 user: run.user,
                 accountUser: run.accountUser,
@@ -2356,7 +2358,7 @@ export async function resumeInterruptedRuns(
                 ? await inProcessMcpFor?.(run.osSessionId, run.user)
                 : undefined,
               reposNote: run.osSessionId
-                ? reposNoteFor?.(run.osSessionId)
+                ? await reposNoteFor?.(run.osSessionId)
                 : undefined,
               user: run.user,
               accountUser: run.accountUser,

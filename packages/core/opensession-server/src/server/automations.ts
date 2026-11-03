@@ -2544,8 +2544,10 @@ export async function runAutomation(
     // wrote to — wins); this run owns the current disposable sandbox mapping,
     // engine-id/model fields, HEAD-synced branch, and Slack threads it posted.
     // Serialized via updateSessionFile.
-    const persistSession = (engineSessionId: string) =>
-      updateSessionFile(bksId, (data) => {
+    const persistSession = async (engineSessionId: string) => {
+      const headBranch =
+        !sandbox && branch ? await worktreeHeadBranch(cwd) : null;
+      return updateSessionFile(bksId, (data) => {
         // Widen to Partial: the file may not exist yet (create-if-absent).
         const existing: Partial<NativeSessionFile> = data;
         return {
@@ -2592,13 +2594,12 @@ export async function runAutomation(
           // Code-mode runs can rename their auto-generated branch before opening
           // a PR — record the worktree's actual HEAD so PR lookups and the
           // review handoff keep resolving this session.
-          branch: sandbox
-            ? branch
-            : (branch && worktreeHeadBranch(cwd)) || branch,
+          branch: sandbox ? branch : headBranch || branch,
           ...(slackThreads.length ? { slackThreads: [...slackThreads] } : {}),
           lastActivity: new Date().toISOString(),
         };
       });
+    };
 
     // A host can report a terminal event before `init`. Create the native
     // session before any backend can journal or launch the run, so an immediate

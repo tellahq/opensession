@@ -1,11 +1,11 @@
 /** Fixed local run-host launcher shared by the executor service and the
  * gateway's rollout fallback. It accepts no caller-provided command or path. */
 
-import { existsSync } from "fs";
 import { userInfo } from "os";
 import { homeDir, statePath } from "../server/paths";
+import { pathExists } from "../server/run-fs";
 import {
-  BUN_BIN,
+  bunBinary,
   HOST_ENTRY,
   HOST_JOURNAL_NAME,
   REPO_ROOT,
@@ -16,7 +16,7 @@ export const RUN_HOST_HELPER = "/usr/local/libexec/opensession-run-host";
 export const RUN_HOST_HELPER_VERSION = 2;
 
 export async function verifyRunHostHelper(): Promise<void> {
-  if (!existsSync(RUN_HOST_HELPER))
+  if (!(await pathExists(RUN_HOST_HELPER)))
     throw new Error("run-host helper is not installed");
   const proc = Bun.spawn(
     [
@@ -50,12 +50,20 @@ export async function launchHostUnitDirect(
 ): Promise<void> {
   if (!specHash) throw new Error("run-host launch requires a spec hash");
   const user = userInfo();
-  if (!existsSync(RUN_HOST_HELPER) && user.uid === 0) {
+  const helperInstalled = await pathExists(RUN_HOST_HELPER);
+  if (!helperInstalled && user.uid === 0) {
     throw new Error("legacy run-host launch refuses to run an agent as root");
   }
-  const args = existsSync(RUN_HOST_HELPER)
+  const args = helperInstalled
     ? hostUnitArgs(hostId, dir, specHash)
-    : legacyHostUnitArgs(hostId, dir, user.uid, user.gid, specHash);
+    : legacyHostUnitArgs(
+        hostId,
+        dir,
+        user.uid,
+        user.gid,
+        specHash,
+        await bunBinary(),
+      );
   const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
   const [error, code] = await Promise.all([
     new Response(proc.stderr).text(),
@@ -76,6 +84,7 @@ export function legacyHostUnitArgs(
   uid: number,
   gid: number,
   specHash: string,
+  bunBin = process.execPath,
 ): string[] {
   const env = (kv: string) => ["-p", `Environment=${kv}`];
   return [
@@ -103,7 +112,7 @@ export function legacyHostUnitArgs(
     "StandardOutput=journal",
     "-p",
     "StandardError=journal",
-    ...runnerHostArgv(BUN_BIN, HOST_ENTRY, `${dir}/spec.json`),
+    ...runnerHostArgv(bunBin, HOST_ENTRY, `${dir}/spec.json`),
   ];
 }
 
@@ -117,7 +126,7 @@ export function hostUnitArgs(
 
 export async function stopHostUnitDirect(hostId: string): Promise<void> {
   const proc = Bun.spawn(
-    existsSync(RUN_HOST_HELPER)
+    (await pathExists(RUN_HOST_HELPER))
       ? ["sudo", "-n", RUN_HOST_HELPER, "stop", hostId]
       : ["sudo", "-n", "systemctl", "stop", runHostUnitName(hostId)],
     { stdout: "pipe", stderr: "pipe" },

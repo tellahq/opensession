@@ -473,7 +473,7 @@ describe("automation run settlement", () => {
       resolve(import.meta.dir, "automations.ts"),
       "utf8",
     );
-    const persistDefinition = source.indexOf("const persistSession = (");
+    const persistDefinition = source.indexOf("const persistSession = async (");
     const prelaunchPersist = source.indexOf(
       'await persistSession("");',
       persistDefinition,
@@ -498,7 +498,7 @@ describe("automation run settlement", () => {
       resolve(import.meta.dir, "automations.ts"),
       "utf8",
     );
-    const persistDefinition = source.indexOf("const persistSession = (");
+    const persistDefinition = source.indexOf("const persistSession = async (");
     const existingFields = source.indexOf("...existing,", persistDefinition);
     const authoritativeSandbox = source.indexOf(
       "Intent recovery reuses the session id",

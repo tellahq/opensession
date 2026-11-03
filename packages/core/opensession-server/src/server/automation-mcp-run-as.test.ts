@@ -90,7 +90,7 @@ afterAll(() => {
 async function upstreamAuthorization(
   candidates: string[],
 ): Promise<string | null> {
-  const token = mintMcpRelayToken("acme", candidates);
+  const token = await mintMcpRelayToken("acme", candidates);
   const res = await handleMcpRelay(
     new Request("http://127.0.0.1/relay/acme", {
       method: "POST",

@@ -6,7 +6,6 @@
  * agent can inspect services without becoming their process manager.
  */
 
-import { existsSync, readFileSync } from "fs";
 import {
   mkdir,
   open,
@@ -225,11 +224,10 @@ function parsePortalRegistry(contents: string): PortalRecord[] {
   return records;
 }
 
-export function readPortalRegistry(worktreeDir: string): PortalRecord[] {
-  const path = registryPath(worktreeDir);
-  return existsSync(path)
-    ? parsePortalRegistry(readFileSync(path, "utf8"))
-    : [];
+export function readPortalRegistry(
+  worktreeDir: string,
+): Promise<PortalRecord[]> {
+  return readHostPortalRegistry(worktreeDir);
 }
 
 async function readHostRegistryText(worktreeDir: string): Promise<string> {
@@ -976,7 +974,7 @@ async function startHostPortal(
           // during shutdown. Portals do not need telemetry, so never create it.
           NEXT_TELEMETRY_DISABLED: "1",
         };
-        const scoped = previewScopeCommand(
+        const scoped = await previewScopeCommand(
           directCommand,
           input.worktreeDir,
           name,
@@ -1208,7 +1206,7 @@ export async function sleepIdlePortalServices(
 
 export function portalsNeedingContainment(
   records: readonly PortalRecord[],
-  scopesAvailable = systemdUserScopesAvailable(),
+  scopesAvailable: boolean,
 ): PortalRecord[] {
   if (!scopesAvailable) return [];
   return records.filter(
@@ -1661,7 +1659,7 @@ async function findMergedSession(
 export async function migrateUnscopedPortalServices(
   sessions: readonly PortalOwnerSession[],
 ): Promise<PortalContainmentMigrationResult> {
-  if (!systemdUserScopesAvailable()) return { migrated: [] };
+  if (!(await systemdUserScopesAvailable())) return { migrated: [] };
   const owners = new Map<string, Set<string>>();
   const addOwner = async (
     dir: string | null | undefined,
@@ -1962,7 +1960,7 @@ export async function ensureRemoteSandboxPortalAgent(input: {
     // into session scratch on every launch; the app workspace stays untouched.
     const agentPath = `${logDir}/sandbox-portal-agent.ts`;
     const agentPayload = Buffer.from(
-      readFileSync(SANDBOX_PORTAL_AGENT_ENTRY, "utf8"),
+      await readFile(SANDBOX_PORTAL_AGENT_ENTRY, "utf8"),
     ).toString("base64");
     const relayLaunch = `mkdir -p ${shellQuoteWord(logDir)} && printf %s ${shellQuoteWord(agentPayload)} | base64 -d > ${shellQuoteWord(agentPath)} && OPENSESSION_SANDBOX_PORTAL_WS_URL=${shellQuoteWord(endpoint)} OPENSESSION_SANDBOX_PORTAL_TOKEN=${shellQuoteWord(grant.token)} OPENSESSION_SANDBOX_PORTAL_PORT=${shellQuoteWord(String(input.port))} OPENSESSION_SANDBOX_PORTAL_EXPIRES_AT=${shellQuoteWord(String(grant.expiresAt))} exec ${guest.bun} run ${shellQuoteWord(agentPath)} </dev/null >${shellQuoteWord(logPath)} 2>&1`;
     const started = await input.sandbox.exec(["bash", "-c", relayLaunch], {

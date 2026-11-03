@@ -81,7 +81,7 @@ export interface EvidenceDeps {
     totalDeletions: number;
   }>;
   defaultBranch: (repo?: string) => string;
-  isSharedCheckout: (path: string) => boolean;
+  isSharedCheckout: (path: string) => boolean | Promise<boolean>;
   exists: (path: string) => boolean;
 }
 
@@ -119,7 +119,7 @@ async function defaultDeps(): Promise<EvidenceDeps> {
     getSession: (id) => findSession(id),
     transcript: (session) => mergedSessionTranscriptAsync(session),
     diff: async (session, dir, base) => {
-      const ownPaths = worktree.isSharedCheckoutDir(dir)
+      const ownPaths = (await worktree.isSharedCheckoutDir(dir))
         ? await sessionTouchedPaths(session, dir)
         : undefined;
       const d = await gitDiff.getSessionDiff(
@@ -292,7 +292,7 @@ export async function collectHandoffEvidence(
         ? d.getSession(session.parentSessionId)
         : null;
       const shared =
-        d.isSharedCheckout(session.worktreeDir) ||
+        (await d.isSharedCheckout(session.worktreeDir)) ||
         Boolean(
           parent?.worktreeDir && parent.worktreeDir === session.worktreeDir,
         );

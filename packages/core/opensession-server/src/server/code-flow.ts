@@ -424,7 +424,7 @@ export async function sessionCodeFlow(
 ): Promise<CodeFlowResult> {
   enterRequest();
   try {
-    const context = resolveSessionRepoContext(session, repoId);
+    const context = await resolveSessionRepoContext(session, repoId);
     if (!context) throw new Error("Repo not in session");
     const repo = getRepo(context.repo);
     const exec = await workspaceExecFor(
@@ -434,7 +434,7 @@ export async function sessionCodeFlow(
     const canonicalRoot = exec.remote
       ? undefined
       : await realpath(context.dir).catch(() => resolve(context.dir));
-    const ownPaths = isSharedCheckoutDir(context.dir)
+    const ownPaths = (await isSharedCheckoutDir(context.dir))
       ? await sessionTouchedPaths(session, context.dir)
       : undefined;
     for (let attempt = 0; attempt < 2; attempt++) {
