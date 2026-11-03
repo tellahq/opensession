@@ -1,6 +1,12 @@
 import { getConfigAsync } from "./config";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import {
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "fs";
 import { tmpdir, userInfo } from "os";
 import { join } from "path";
 import {
@@ -19,6 +25,7 @@ import {
   type AssumeRoleInput,
   type MintSpawn,
   type VendFetch,
+  writeAwsCredsFile,
 } from "./aws-creds";
 import { makeAskHandler } from "./asks";
 
@@ -379,5 +386,26 @@ describe("IMDS mint gate", () => {
       "opensession-bill-s-mini-pc-2",
     );
     expect(roleSessionName("x".repeat(100))).toHaveLength(64);
+  });
+});
+
+describe("writeAwsCredsFile", () => {
+  test("concurrent writers all succeed and leave no temp files", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "aws-creds-file-"));
+    try {
+      const file = join(dir, "aws", "agent-credentials");
+      const envs = Array.from({ length: 20 }, (_, i) => ({
+        AWS_ACCESS_KEY_ID: `ASIA${i}`,
+        AWS_SECRET_ACCESS_KEY: `secret${i}`,
+        AWS_SESSION_TOKEN: `token${i}`,
+      }));
+      await Promise.all(envs.map((env) => writeAwsCredsFile(file, env)));
+      expect(readdirSync(join(dir, "aws"))).toEqual(["agent-credentials"]);
+      expect(readFileSync(file, "utf8")).toMatch(
+        /^\[default\]\naws_access_key_id = ASIA(\d+)\naws_secret_access_key = secret\1\naws_session_token = token\1\n$/,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

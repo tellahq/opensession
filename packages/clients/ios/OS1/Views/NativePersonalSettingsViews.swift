@@ -167,6 +167,8 @@ struct PreferencesSettingsView: View {
     /// note above. It is deliberately not in `seededPrefs`/`commit()`: those
     /// are the server round-trip, and this value never makes that trip.
     @AppStorage(Haptics.preferenceKey) private var haptics = true
+    /// Device-local too: it depends on whether this phone has the GitHub app.
+    @AppStorage(GitHubAppLinks.preferenceKey) private var prsInGitHubApp = false
 
     @State private var repos: [OS1API.RepoInfo]
     @State private var models: [SettingsModelOption]
@@ -411,6 +413,14 @@ struct PreferencesSettingsView: View {
                 Text("Haptics")
             } footer: {
                 Text("Play haptics when you send a message, answer a question, or stop a run.")
+            }
+
+            Section {
+                Toggle("Open pull requests in GitHub", isOn: $prsInGitHubApp)
+            } header: {
+                Text("Links")
+            } footer: {
+                Text("Pull request links in a transcript open in the GitHub app instead of the Review panel. Without the app, they open in the browser.")
             }
             #endif
 

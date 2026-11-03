@@ -35,6 +35,22 @@ export function isReadReducer(command: SessionActorReducerCommand): boolean {
   return command.kind === "turn" && command.request.op === "snapshot";
 }
 
+/** Transcript appends settle with an immutable receipt keyed by their request
+ *  id, so replaying the identical request after an ambiguous failure (a
+ *  transport timeout while the actor may have committed) returns the stored
+ *  result instead of writing twice. */
+export function isReceiptReplayableReducer(
+  command: SessionActorReducerCommand,
+): boolean {
+  if (command.kind !== "transcript") return false;
+  const op = command.request.op;
+  return (
+    op === "append" ||
+    op === "append_destination" ||
+    op === "agent_append_destination"
+  );
+}
+
 /** Exhaustive routing for the typed reducer union. */
 export function sessionActorReducerRoute(
   command: SessionActorReducerCommand,

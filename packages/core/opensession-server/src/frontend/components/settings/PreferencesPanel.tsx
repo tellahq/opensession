@@ -124,6 +124,11 @@ import {
 } from "../../lib/agentation-pref";
 import { AGENTATION_ENABLED } from "../../lib/brand";
 import {
+  getPrLinksOnGithubPref,
+  onPrLinksOnGithubChanged,
+  setPrLinksOnGithubPref,
+} from "../../lib/pr-links-on-github";
+import {
   getViewportReadoutPref,
   onViewportReadoutChanged,
   setViewportReadoutPref,
@@ -341,6 +346,33 @@ function DeskVoicePanel() {
         are shared across this instance. The composer's model pill sets the
         typed Desk only; it does not change a call.
       </SettingsHint>
+    </>
+  );
+}
+
+function LinksSection() {
+  const [onGithub, setOnGithub] = useState(getPrLinksOnGithubPref);
+  useEffect(
+    () => onPrLinksOnGithubChanged(() => setOnGithub(getPrLinksOnGithubPref())),
+    [],
+  );
+
+  return (
+    <>
+      <SettingsGroupLabel>Links</SettingsGroupLabel>
+      <SettingCard>
+        <SettingRow
+          title="Open pull requests on GitHub"
+          desc="Pull request links open on GitHub instead of the review here. On a phone with the GitHub app, they open in the app. Only this device."
+          control={
+            <Switch
+              aria-label="Open pull requests on GitHub"
+              checked={onGithub}
+              onCheckedChange={setPrLinksOnGithubPref}
+            />
+          }
+        />
+      </SettingCard>
     </>
   );
 }
@@ -1034,6 +1066,7 @@ export function PreferencesPanel() {
           }
         />
       </SettingCard>
+      <LinksSection />
       <SettingsGroupLabel
         actions={
           !checkoutOverrideDraft && availableCheckoutRepos.length > 0 ? (

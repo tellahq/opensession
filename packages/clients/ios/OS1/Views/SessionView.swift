@@ -753,7 +753,12 @@ struct SessionView: View {
                 // the GitHub page, which belongs in the same in-app browser a
                 // transcript link opens in.
                 if let reference = PrLinks.reference(from: url) {
-                    if PrLinks.isOwnPr(reference, of: viewModel.session),
+                    // With the GitHub preference on, every PR chip, this
+                    // session's own included, goes to the GitHub app.
+                    if GitHubAppLinks.isEnabled,
+                       let github = PrLinks.githubURL(for: reference) {
+                        GitHubAppLinks.open(github) { safariLink = SafariLink(url: $0) }
+                    } else if PrLinks.isOwnPr(reference, of: viewModel.session),
                        openPanel.isAvailable {
                         openPanel(.review(sessionId: viewModel.session.id))
                     } else if let github = PrLinks.githubURL(for: reference) {
@@ -765,6 +770,12 @@ struct SessionView: View {
                     // Session links and custom schemes stay with the action
                     // the sessions list installed above us.
                     enclosingOpenURL(url)
+                    return .handled
+                }
+                // A raw github.com PR URL the chip rewrite left alone (a repo
+                // this instance does not serve) follows the same preference.
+                if GitHubAppLinks.isEnabled, GitHubAppLinks.isPullRequest(url) {
+                    GitHubAppLinks.open(url) { safariLink = SafariLink(url: $0) }
                     return .handled
                 }
                 safariLink = SafariLink(url: url)
