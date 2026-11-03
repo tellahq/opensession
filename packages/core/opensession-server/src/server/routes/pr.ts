@@ -279,7 +279,7 @@ export async function handlePrRoutes(
     const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
-    const target = resolvePrTarget(
+    const target = await resolvePrTarget(
       session,
       url.searchParams.get("repo"),
       url.searchParams.get("branch"),
@@ -294,7 +294,7 @@ export async function handlePrRoutes(
     // The branch this session stacked on, for the panel's "link this stack"
     // action. Only for the session's OWN branch — an attached or linked PR is
     // not what this session was stacked on top of.
-    const primaryTarget = resolvePrTarget(session);
+    const primaryTarget = await resolvePrTarget(session);
     const stackBase =
       session.stackedOn?.branch &&
       target.repoId === primaryTarget?.repoId &&
@@ -338,7 +338,7 @@ export async function handlePrRoutes(
     const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
-    const target = resolvePrTarget(
+    const target = await resolvePrTarget(
       session,
       url.searchParams.get("repo"),
       url.searchParams.get("branch"),
@@ -361,7 +361,7 @@ export async function handlePrRoutes(
     const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
-    const target = resolvePrTarget(
+    const target = await resolvePrTarget(
       session,
       url.searchParams.get("repo"),
       url.searchParams.get("branch"),
@@ -434,7 +434,7 @@ export async function handlePrRoutes(
     const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
-    const target = resolvePrTarget(
+    const target = await resolvePrTarget(
       session,
       url.searchParams.get("repo"),
       url.searchParams.get("branch"),
@@ -675,7 +675,7 @@ export async function handlePrRoutes(
     const body = await req.json().catch(() => null);
     if (!body?.text?.trim())
       return Response.json({ error: "Empty comment" }, { status: 400 });
-    const target = resolvePrTarget(session, body.repo, body.branch);
+    const target = await resolvePrTarget(session, body.repo, body.branch);
     if (!target)
       return Response.json(
         { error: "No branch/PR for that repo" },
@@ -715,7 +715,7 @@ export async function handlePrRoutes(
       return Response.json({ error: "Session not found" }, { status: 404 });
 
     const body = await req.json().catch(() => null);
-    const target = resolvePrTarget(session, body?.repo, body?.branch);
+    const target = await resolvePrTarget(session, body?.repo, body?.branch);
     if (!target)
       return Response.json(
         { error: "No branch/PR for that repo" },
@@ -780,7 +780,7 @@ export async function handlePrRoutes(
       return Response.json({ error: "Session not found" }, { status: 404 });
 
     const body = await req.json().catch(() => ({}));
-    const target = resolvePrTarget(session, body.repo, body.branch);
+    const target = await resolvePrTarget(session, body.repo, body.branch);
     if (!target)
       return Response.json(
         { error: "No branch/PR for that repo" },
@@ -900,7 +900,7 @@ export async function handlePrRoutes(
       return Response.json({ error: "Session not found" }, { status: 404 });
 
     const body = await req.json().catch(() => ({}));
-    const target = resolvePrTarget(session, body.repo, body.branch);
+    const target = await resolvePrTarget(session, body.repo, body.branch);
     if (!target)
       return Response.json(
         { error: "No branch/PR for that repo" },
@@ -987,7 +987,7 @@ export async function handlePrRoutes(
       return Response.json({ error: "Session not found" }, { status: 404 });
 
     const body = await req.json().catch(() => ({}));
-    const target = resolvePrTarget(session, body.repo, body.branch);
+    const target = await resolvePrTarget(session, body.repo, body.branch);
     if (!target)
       return Response.json(
         { error: "No branch/PR for that repo" },
@@ -1019,7 +1019,7 @@ export async function handlePrRoutes(
       return Response.json({ error: "Session not found" }, { status: 404 });
 
     const body = await req.json().catch(() => ({}));
-    const target = resolvePrTarget(session, body.repo, body.branch);
+    const target = await resolvePrTarget(session, body.repo, body.branch);
     if (!target)
       return Response.json(
         { error: "No branch/PR for that repo" },
@@ -1064,7 +1064,7 @@ export async function handlePrRoutes(
     )
       return Response.json({ error: "Unknown action" }, { status: 400 });
 
-    const target = resolvePrTarget(session, body?.repo, body?.branch);
+    const target = await resolvePrTarget(session, body?.repo, body?.branch);
     if (!target)
       return Response.json(
         { error: "No branch/PR for that repo" },

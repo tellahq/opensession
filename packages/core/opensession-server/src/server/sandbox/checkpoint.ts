@@ -392,7 +392,7 @@ export function checkpointHostWorkspace(
 ): Promise<CheckpointOutcome> {
   return withSessionLifecycleLane(session.id, async () => {
     if (!existsSync(dir)) return { state: "skipped", reason: "no worktree" };
-    if (isSharedCheckoutDir(dir))
+    if (await isSharedCheckoutDir(dir))
       return { state: "skipped", reason: "shared checkout" };
     const current = await findSessionAsync(session.id);
     if (!current) return { state: "skipped", reason: "session was deleted" };
@@ -456,7 +456,7 @@ export async function restoreCheckpointToHostWorktree(
     env,
     async ({ path: dir, created, createdBranch }) => {
       if (!created) {
-        if (dir !== ownWorktreeDir || isSharedCheckoutDir(dir))
+        if (dir !== ownWorktreeDir || (await isSharedCheckoutDir(dir)))
           throw new Error(
             `branch ${branch} is already checked out at ${dir} on this machine, and restoring the checkpoint there would overwrite its files. Move or remove that checkout first.`,
           );

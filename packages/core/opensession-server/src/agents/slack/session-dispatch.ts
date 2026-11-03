@@ -94,10 +94,10 @@ export async function dispatchSlackSessionMessage(
     // Existing work belongs to its current checkout. Preserve it, including
     // uncommitted edits, rather than cloning a branch into a different machine.
     const dir = legacy?.worktreeDir || message.worktreeDir;
-    const owned = Boolean(dir && !isSharedCheckoutDir(dir));
+    const owned = Boolean(dir && !(await isSharedCheckoutDir(dir)));
     const repo = getRepo(
       legacy?.repoId ||
-        (dir ? repoForPathOrNull(dir)?.id : undefined) ||
+        (dir ? (await repoForPathOrNull(dir))?.id : undefined) ||
         message.repoId,
     );
     const attachments = message.files?.length

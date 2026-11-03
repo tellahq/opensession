@@ -1,13 +1,12 @@
 import { $ } from "bun";
 import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  realpathSync,
-  statSync,
-  unlinkSync,
-} from "fs";
-import { lstat, unlink } from "fs/promises";
+  lstat,
+  mkdir,
+  readFile,
+  realpath,
+  stat,
+  unlink,
+} from "node:fs/promises";
 import { resolve as resolvePath } from "path";
 import type { UnifiedSession } from "./types";
 import { stopAllPortalServices } from "./portal-supervisor";
@@ -20,6 +19,7 @@ import {
   type Repo,
 } from "./config";
 import { stateDir } from "./paths";
+import { pathExists } from "./run-fs";
 import { workloadArgv } from "./workload-scope";
 import {
   assertSetupPipelineLive,
@@ -80,17 +80,17 @@ export function getRepo(id?: string): Repo {
  *  kept behind as a symlink) still match the registered repo. Never rewrite a stored worktreeDir with
  *  this — transcript locations hash the recorded string, so canonicalizing
  *  persisted data would orphan old transcripts. */
-export function canonicalPath(p: string): string {
+export async function canonicalPath(p: string): Promise<string> {
   try {
-    return realpathSync(p);
+    return await realpath(p);
   } catch {
     return p;
   }
 }
 
 /** Infer the repo that owns a checkout/worktree path. */
-export function repoForPath(p: string): Repo {
-  const repo = repoForPathOrNull(p);
+export async function repoForPath(p: string): Promise<Repo> {
+  const repo = await repoForPathOrNull(p);
   if (!repo) throw new Error(`No registered repo owns path "${p}"`);
   return repo;
 }
@@ -103,19 +103,21 @@ export function repoForPath(p: string): Repo {
  *
  *  `gitdir` is the raw pointer target; worktree-reaper needs it to run
  *  `git worktree remove` through the owning checkout. */
-export function repoFromGitPointer(
+export async function repoFromGitPointer(
   dir: string,
-): { repo: Repo; gitdir: string } | null {
+): Promise<{ repo: Repo; gitdir: string } | null> {
   let pointer: string;
   try {
-    pointer = readFileSync(`${dir}/.git`, "utf8");
+    pointer = await readFile(`${dir}/.git`, "utf8");
   } catch {
     return null;
   }
   const gitdir = pointer.replace(/^gitdir:\s*/, "").trim();
-  const ownerPath = canonicalPath(gitdir.split("/.git/worktrees/")[0] ?? "");
+  const ownerPath = await canonicalPath(
+    gitdir.split("/.git/worktrees/")[0] ?? "",
+  );
   for (const repo of Object.values(configuredRepos())) {
-    if (canonicalPath(repo.repo) === ownerPath) return { repo, gitdir };
+    if ((await canonicalPath(repo.repo)) === ownerPath) return { repo, gitdir };
   }
   return null;
 }
@@ -123,28 +125,49 @@ export function repoFromGitPointer(
 /** Like `repoForPath`, but undefined instead of throwing when no registered
  *  repo owns the path — a scratch dir, a sandbox volume, a stale path from a
  *  repo that has since been unregistered. */
-export function repoForPathOrNull(p: string): Repo | undefined {
-  const cp = canonicalPath(p);
+export async function repoForPathOrNull(p: string): Promise<Repo | undefined> {
+  const cp = await canonicalPath(p);
   for (const r of Object.values(configuredRepos())) {
-    if (cp === canonicalPath(r.repo)) return r;
+    if (cp === (await canonicalPath(r.repo))) return r;
   }
   // Ask git before reading the path. `wtPrefix` defaults to the repo id, so
   // two registered repos can have prefix-overlapping ids (`app`, `app-web`)
   // and `<wt>/app-web-<branch>` matches BOTH conventions; the .git pointer
   // does not guess.
-  const owner = repoFromGitPointer(cp);
+  const owner = await repoFromGitPointer(cp);
   if (owner) return owner.repo;
   // Fallback for dirs that are no longer on disk — reaped worktrees whose
   // path a session file still records. Longest prefix wins so the answer is
   // the most specific convention that matches, not whichever repo config
   // happened to list first.
-  const wtRoot = canonicalPath(worktreesDir());
+  return repoByWorktreeName(cp, await canonicalPath(worktreesDir()));
+}
+
+/** The repo whose worktree naming convention matches `p` under `wtRoot`. */
+function repoByWorktreeName(p: string, wtRoot: string): Repo | undefined {
   let best: Repo | undefined;
   for (const r of Object.values(configuredRepos())) {
-    if (!cp.startsWith(`${wtRoot}/${r.wtPrefix}-`)) continue;
+    if (!p.startsWith(`${wtRoot}/${r.wtPrefix}-`)) continue;
     if (!best || r.wtPrefix.length > best.wtPrefix.length) best = r;
   }
   return best;
+}
+
+/** A session's repo from its record alone: the stored repo, else the
+ *  registered checkout or worktree naming convention its recorded path
+ *  matches. Never touches the disk, so a synchronous caller can use it; it
+ *  skips the symlink and `.git` pointer checks sessionRepoId makes, so prefer
+ *  that wherever the caller can await. */
+export function sessionRepoIdByName(session: {
+  repo?: string;
+  worktreeDir?: string | null;
+}): string | undefined {
+  if (session.repo) return session.repo;
+  const dir = session.worktreeDir;
+  if (!dir) return undefined;
+  for (const r of Object.values(configuredRepos()))
+    if (dir === r.repo) return r.id;
+  return repoByWorktreeName(dir, worktreesDir())?.id;
 }
 
 /**
@@ -171,26 +194,29 @@ export const NO_REPO = "none";
  * `worktreeDir`. Callers that need a repo no matter what append
  * `?? defaultRepo().id`; callers that can say "no repo" should.
  */
-export function sessionRepoId(session: {
+export async function sessionRepoId(session: {
   repo?: string;
   worktreeDir?: string | null;
-}): string | undefined {
+}): Promise<string | undefined> {
   if (session.repo) return session.repo;
   if (!session.worktreeDir) return undefined;
-  return repoForPathOrNull(session.worktreeDir)?.id;
+  return (await repoForPathOrNull(session.worktreeDir))?.id;
 }
 
 /** Is this dir a shared checkout no single session owns — a repo's live main
  *  checkout or its pinned ask checkout? Worktree "ownership" is meaningless
  *  there: the tree is shared by every ask/legacy session, and its parked branch
  *  says nothing about the sessions running in it. */
-export function isSharedCheckoutDir(dir: string | null | undefined): boolean {
+export async function isSharedCheckoutDir(
+  dir: string | null | undefined,
+): Promise<boolean> {
   if (!dir) return false;
-  const cd = canonicalPath(dir);
+  const cd = await canonicalPath(dir);
   for (const r of Object.values(configuredRepos())) {
     if (
-      cd === canonicalPath(r.repo) ||
-      cd === canonicalPath(`${worktreesDir()}/${r.wtPrefix}-ask-checkout`)
+      cd === (await canonicalPath(r.repo)) ||
+      cd ===
+        (await canonicalPath(`${worktreesDir()}/${r.wtPrefix}-ask-checkout`))
     )
       return true;
   }
@@ -222,23 +248,23 @@ export function sharedCheckoutForSessionCreate(
   return sharedCheckoutForNewSessions(repo);
 }
 
-/** Actual HEAD branch of a checkout/worktree, or null (detached/missing). Sync
- *  + cheap (two tiny file reads, no git subprocess): follows the `.git`
+/** Actual HEAD branch of a checkout/worktree, or null (detached/missing).
+ *  Cheap (two tiny file reads, no git subprocess): follows the `.git`
  *  file/dir to its HEAD ref. An agent can switch branches inside its worktree
  *  mid-run, so the session record's `branch` is a claim, not a fact — use this
  *  when the actual branch matters (PR lookups, review handoff, merge notify). */
-export function worktreeHeadBranch(
+export async function worktreeHeadBranch(
   dir: string | null | undefined,
-): string | null {
+): Promise<string | null> {
   if (!dir) return null;
   try {
     let gitDir = `${dir}/.git`;
-    if (statSync(gitDir).isFile()) {
-      const m = readFileSync(gitDir, "utf-8").match(/^gitdir: (.+)$/m);
+    if ((await stat(gitDir)).isFile()) {
+      const m = (await readFile(gitDir, "utf-8")).match(/^gitdir: (.+)$/m);
       if (!m) return null;
       gitDir = resolvePath(dir, m[1].trim());
     }
-    const ref = readFileSync(`${gitDir}/HEAD`, "utf-8").match(
+    const ref = (await readFile(`${gitDir}/HEAD`, "utf-8")).match(
       /^ref: refs\/heads\/(.+)$/m,
     );
     return ref ? ref[1].trim() : null;
@@ -273,7 +299,7 @@ const STALE_REVIEW_INDEX_LOCK_MS = 5 * 60_000;
 async function clearStaleReviewIndexLock(wtPath: string): Promise<boolean> {
   let lockPath: string;
   try {
-    const gitdir = readFileSync(`${wtPath}/.git`, "utf8")
+    const gitdir = (await readFile(`${wtPath}/.git`, "utf8"))
       .match(/^gitdir:\s*(.+)$/m)?.[1]
       ?.trim();
     if (!gitdir) return false;
@@ -282,13 +308,11 @@ async function clearStaleReviewIndexLock(wtPath: string): Promise<boolean> {
     return false;
   }
 
-  if (!existsSync(lockPath)) return true;
-
   let age: number;
   try {
-    age = Date.now() - statSync(lockPath).mtimeMs;
-  } catch {
-    return false;
+    age = Date.now() - (await stat(lockPath)).mtimeMs;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "ENOENT";
   }
   if (age < STALE_REVIEW_INDEX_LOCK_MS) return false;
 
@@ -298,7 +322,7 @@ async function clearStaleReviewIndexLock(wtPath: string): Promise<boolean> {
   if (holders.exitCode !== 1 || holders.stderr.toString().trim()) return false;
 
   try {
-    unlinkSync(lockPath);
+    await unlink(lockPath);
     console.warn(`[worktree] removed stale review index lock: ${lockPath}`);
     return true;
   } catch (error) {
@@ -391,7 +415,7 @@ async function runWorktreeSetupCommands(
     // `.agents/setup` — the repo lifecycle provision hook (same dir preview.ts
     // resolves; docs/repo-lifecycle.md).
     const repoSetup = `${wtPath}/.agents/setup`;
-    if (existsSync(repoSetup)) {
+    if (await pathExists(repoSetup)) {
       await run(["bash", repoSetup]);
     } else if (repo.worktreeSetup) {
       await run(["sh", "-c", repo.worktreeSetup]);
@@ -455,13 +479,18 @@ export async function isRegisteredWorktree(
   branch: string,
 ): Promise<boolean> {
   const repo = getRepo(repoId);
-  const registered = (await listWorktrees(repo.id)).find(
-    (worktree) =>
-      canonicalPath(worktree.path) === canonicalPath(path) &&
-      worktree.branch === branch,
-  );
+  const target = await canonicalPath(path);
+  let registered = false;
+  for (const worktree of await listWorktrees(repo.id))
+    if (
+      worktree.branch === branch &&
+      (await canonicalPath(worktree.path)) === target
+    ) {
+      registered = true;
+      break;
+    }
   if (!registered) return false;
-  return repoFromGitPointer(path)?.repo.id === repo.id;
+  return (await repoFromGitPointer(path))?.repo.id === repo.id;
 }
 
 /**
@@ -472,10 +501,10 @@ export async function isRegisteredWorktree(
  * (falls back to the session id for workspace-less creates). Never a git
  * repo — repo-derivation call sites must treat scratch sessions as repoless.
  */
-export function ensureScratchDir(key: string): string {
+export async function ensureScratchDir(key: string): Promise<string> {
   const safe = key.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 80) || "scratch";
   const dir = `${stateDir("scratch")}/${safe}`;
-  mkdirSync(dir, { recursive: true });
+  await mkdir(dir, { recursive: true });
   return dir;
 }
 
@@ -568,7 +597,7 @@ export async function ensureAskCheckout(repoId?: string): Promise<string> {
   if (sharedCheckoutForNewSessions(repo)) return repo.repo;
   const dir = `${worktreesDir()}/${repo.wtPrefix}-ask-checkout`;
   const requiredVersion = askCheckoutInvalidationVersion.get(repo.id) || 0;
-  if (existsSync(dir)) {
+  if (await pathExists(dir)) {
     const last = askCheckoutRefreshedAt.get(repo.id) || 0;
     const force =
       requiredVersion > (askCheckoutAppliedVersion.get(repo.id) || 0);
@@ -590,7 +619,7 @@ export async function ensureAskCheckout(repoId?: string): Promise<string> {
     return dir;
   }
   return withGitLock(async () => {
-    if (existsSync(dir)) {
+    if (await pathExists(dir)) {
       // A sibling may have created the checkout from the previous default
       // while this call was waiting for the Git lock. Apply the generation
       // captured by this call before returning instead of bypassing it.
@@ -607,7 +636,7 @@ export async function ensureAskCheckout(repoId?: string): Promise<string> {
       await $`${workloadArgv(["git", "-C", repo.repo, "worktree", "add", "--detach", dir, `origin/${repo.defaultBranch}`], "git")}`
         .quiet()
         .nothrow();
-    if (add.exitCode !== 0 || !existsSync(dir)) {
+    if (add.exitCode !== 0 || !(await pathExists(dir))) {
       console.error(
         `[worktree] ask-checkout create failed for ${repo.id}: ${add.stderr.toString().trim()}`,
       );
@@ -711,7 +740,7 @@ export async function sweepArchivedWorktrees(
     try {
       if (!(await isWorktreeClean(wtPath, branch))) continue;
       await removeWorktree(branch);
-      if (!existsSync(wtPath)) removed.push(branch);
+      if (!(await pathExists(wtPath))) removed.push(branch);
     } catch (e) {
       console.error(`[worktree-sweep] Skipping ${branch}:`, e);
     }
@@ -744,12 +773,12 @@ export async function reviveWorktree(
 ): Promise<string> {
   const repo = getRepo(repoId);
   const wtPath = `${worktreesDir()}/${repo.wtPrefix}-${branch}`;
-  if (existsSync(wtPath)) return wtPath;
+  if (await pathExists(wtPath)) return wtPath;
 
   return withGitLock(async () => {
     await $`git -C ${repo.repo} worktree prune`.quiet();
-    if (existsSync(wtPath)) return wtPath;
-    // A symlink whose target is gone reads as missing to existsSync but
+    if (await pathExists(wtPath)) return wtPath;
+    // A symlink whose target is gone reads as missing to pathExists but
     // still blocks `worktree add` with "already exists". Drop it.
     if ((await lstat(wtPath).catch(() => null))?.isSymbolicLink())
       await unlink(wtPath);
@@ -849,7 +878,7 @@ export async function createWorktreeForPrBranch(
 
   const reused = await withGitLock(async () => {
     await fetchBranchesWithTracking(repo.repo, repo.ghRepo, headRef);
-    if (existsSync(wtPath)) {
+    if (await pathExists(wtPath)) {
       await $`${workloadArgv(["git", "-C", wtPath, "fetch", "origin", headRef, "--quiet"], "git")}`
         .env(await githubServiceGitEnv(repo.ghRepo))
         .nothrow();
@@ -894,7 +923,7 @@ export async function createReviewWorktreeForPrHead(
       headRef,
       baseRef || repo.defaultBranch,
     );
-    if (existsSync(wtPath)) {
+    if (await pathExists(wtPath)) {
       // A code session recovering from a deleted worktree may have borrowed this
       // path and switched it onto the source branch. Restore review ownership.
       const repairAllowed = await clearStaleReviewIndexLock(wtPath);
@@ -945,7 +974,7 @@ export async function createWorktreeForFollowup(
   const wtPath = `${worktreesDir()}/${repo.wtPrefix}-${branch}`;
   await withGitLock(async () => {
     await $`git -C ${repo.repo} worktree prune`.quiet();
-    if (existsSync(wtPath)) return; // pruned stale registration; dir already usable
+    if (await pathExists(wtPath)) return; // pruned stale registration; dir already usable
     await $`${workloadArgv(["git", "-C", repo.repo, "fetch", "origin", baseRef, "--quiet"], "git")}`.nothrow();
     const startPoint =
       (
@@ -989,7 +1018,7 @@ export async function createWorktreeForExistingBranch(
   const wtPath = `${worktreesDir()}/${repo.wtPrefix}-${branch}`;
   await withGitLock(async () => {
     await $`git -C ${repo.repo} worktree prune`.quiet();
-    if (existsSync(wtPath)) return; // pruned stale registration; dir already usable
+    if (await pathExists(wtPath)) return; // pruned stale registration; dir already usable
     await shell`git -C ${repo.repo} fetch origin ${branch} --quiet`.nothrow();
     const hasLocal =
       (
@@ -1058,7 +1087,7 @@ export async function withClaimedBranchWorktree<T>(
     if (shared === branch)
       return fn({ path: repo.repo, created: false, createdBranch: false });
     const wtPath = `${worktreesDir()}/${repo.wtPrefix}-${branch}`;
-    if (existsSync(wtPath))
+    if (await pathExists(wtPath))
       return fn({ path: wtPath, created: false, createdBranch: false });
     await shell`git -C ${repo.repo} fetch origin ${branch} --quiet`
       .quiet()
@@ -1304,7 +1333,7 @@ export async function createWorktree(
       const registered = (await listWorktrees(repo.id)).some(
         (w) => w.branch === branch,
       );
-      if (ahead === "0" && !registered && !existsSync(wtPath)) {
+      if (ahead === "0" && !registered && !(await pathExists(wtPath))) {
         console.warn(
           `[worktree] adopting orphan branch ${branch} (0 commits ahead of ${startPoint}, no worktree) — likely a killed create attempt`,
         );

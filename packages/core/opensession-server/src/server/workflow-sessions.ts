@@ -28,7 +28,11 @@ export interface WorkflowSessionControllerDeps {
   defaultBranch: (repoId: string) => string;
   publicationRepo: (repoId: string) => string;
   publishSessionBranch: typeof publishSessionBranch;
-  resolveRepo: typeof resolveSessionRepoContext;
+  resolveRepo: (
+    ...args: Parameters<typeof resolveSessionRepoContext>
+  ) =>
+    | Awaited<ReturnType<typeof resolveSessionRepoContext>>
+    | ReturnType<typeof resolveSessionRepoContext>;
   baseUrl: string;
 }
 
@@ -320,7 +324,11 @@ export function createWorkflowSessionController(
             `Automation is not allowed to use Runner \`${input.runner}\``,
           );
       }
-      const parentRepo = deps.resolveRepo(parent, input.repo, input.prompt);
+      const parentRepo = await deps.resolveRepo(
+        parent,
+        input.repo,
+        input.prompt,
+      );
       if (!parentRepo)
         throw new Error(
           `Repo \`${input.repo}\` is not registered on the workflow parent session`,

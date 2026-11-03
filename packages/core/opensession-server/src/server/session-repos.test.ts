@@ -87,8 +87,8 @@ describe("buildBranchNote", () => {
     worktreeDir: join(configDir, "worktrees/direct-change"),
   });
 
-  test("direct publication keeps worktree isolation and safe default-branch pushes", () => {
-    const note = buildBranchNote(directSession());
+  test("direct publication keeps worktree isolation and safe default-branch pushes", async () => {
+    const note = await buildBranchNote(directSession());
     expect(note).toContain("## Branch discipline (direct publication)");
     expect(note).toContain("git push origin HEAD:refs/heads/trunk");
     expect(note).toContain("git merge-base --is-ancestor origin/trunk HEAD");
@@ -128,18 +128,18 @@ describe("buildBranchNote", () => {
     },
   ])(
     "explicit PR contexts and automation do not get direct publication: %j",
-    (context) => {
-      const note = buildBranchNote({ ...directSession(), ...context });
+    async (context) => {
+      const note = await buildBranchNote({ ...directSession(), ...context });
       expect(note).toContain("This workspace keeps ONE pull request");
       expect(note).not.toContain("HEAD:refs/heads/trunk");
     },
   );
 
-  test("a session's ship-mode choice overrides the repository default", () => {
+  test("a session's ship-mode choice overrides the repository default", async () => {
     expect(
-      buildBranchNote({ ...directSession(), shipMode: "pull-request" }),
+      await buildBranchNote({ ...directSession(), shipMode: "pull-request" }),
     ).toContain("This workspace keeps ONE pull request");
-    const prRepoDirect = buildBranchNote({
+    const prRepoDirect = await buildBranchNote({
       mode: "code",
       branch: "change",
       worktreeDir: join(configDir, "worktrees/infra-change"),
@@ -149,13 +149,13 @@ describe("buildBranchNote", () => {
     expect(prRepoDirect).toContain("git push origin HEAD:refs/heads/main");
   });
 
-  test("a direct choice never reaches automations, open PRs or Code Storage", () => {
+  test("a direct choice never reaches automations, open PRs or Code Storage", async () => {
     for (const context of [
       { automation: "nightly" },
       { prNumber: 3 },
       { worktreeDir: join(configDir, "worktrees/storage-change") },
     ]) {
-      const note = buildBranchNote({
+      const note = await buildBranchNote({
         ...directSession(),
         worktreeDir: join(configDir, "worktrees/infra-change"),
         ...context,
@@ -165,20 +165,20 @@ describe("buildBranchNote", () => {
     }
   });
 
-  test("ask and actual main-checkout sessions do not get worktree instructions", () => {
+  test("ask and actual main-checkout sessions do not get worktree instructions", async () => {
     expect(
-      buildBranchNote({ ...directSession(), mode: "ask" }),
+      await buildBranchNote({ ...directSession(), mode: "ask" }),
     ).toBeUndefined();
     expect(
-      buildBranchNote({
+      await buildBranchNote({
         ...directSession(),
         worktreeDir: join(configDir, "direct"),
       }),
     ).toBeUndefined();
   });
 
-  test("code storage keeps its existing publication rules", () => {
-    const note = buildBranchNote({
+  test("code storage keeps its existing publication rules", async () => {
+    const note = await buildBranchNote({
       ...directSession(),
       worktreeDir: join(configDir, "worktrees/storage-change"),
     });
@@ -186,8 +186,8 @@ describe("buildBranchNote", () => {
     expect(note).not.toContain("HEAD:refs/heads/");
   });
 
-  test("attached repos get their own publication instructions", () => {
-    const note = buildReposNote({
+  test("attached repos get their own publication instructions", async () => {
+    const note = await buildReposNote({
       ...directSession(),
       repo: "direct",
       attachedRepos: [
@@ -203,8 +203,8 @@ describe("buildBranchNote", () => {
     expect(note).toContain("This workspace keeps ONE pull request");
   });
 
-  test("an attached repo's open PR overrides its direct default", () => {
-    const note = buildReposNote({
+  test("an attached repo's open PR overrides its direct default", async () => {
+    const note = await buildReposNote({
       ...directSession(),
       repo: "infra",
       worktreeDir: join(configDir, "worktrees/infra-change"),
@@ -229,8 +229,8 @@ describe("buildBranchNote", () => {
     expect(note).not.toContain("HEAD:refs/heads/trunk");
   });
 
-  test("another branch's PR does not change the direct default", () => {
-    const note = buildBranchNote({
+  test("another branch's PR does not change the direct default", async () => {
+    const note = await buildBranchNote({
       ...directSession(),
       prs: [
         {
@@ -245,8 +245,8 @@ describe("buildBranchNote", () => {
     expect(note).toContain("HEAD:refs/heads/trunk");
   });
 
-  test("requires explicit user authorization before merging a PR", () => {
-    const note = buildBranchNote({
+  test("requires explicit user authorization before merging a PR", async () => {
+    const note = await buildBranchNote({
       mode: "code",
       branch: "ready-after-review",
       worktreeDir: join(configDir, "worktrees/tella-fusion-ready-after-review"),
@@ -262,8 +262,8 @@ describe("buildBranchNote", () => {
     expect(note).not.toContain("you may merge it yourself");
   });
 
-  test("allows a user-requested rebase onto the trunk", () => {
-    const note = buildBranchNote({
+  test("allows a user-requested rebase onto the trunk", async () => {
+    const note = await buildBranchNote({
       mode: "code",
       branch: "tweet-media",
       worktreeDir: join(configDir, "worktrees/tella-fusion-tweet-media"),
@@ -282,8 +282,8 @@ describe("buildBranchNote", () => {
     ["shared worktree", { prNumber: 1 }],
   ])(
     "%s: conflicts with the trunk are always resolved by one claimed session",
-    (_, extra) => {
-      const note = buildBranchNote({ ...directSession(), ...extra });
+    async (_, extra) => {
+      const note = await buildBranchNote({ ...directSession(), ...extra });
       expect(note).toContain(
         "## Merge conflicts after the default branch moves",
       );
@@ -297,8 +297,8 @@ describe("buildBranchNote", () => {
     },
   );
 
-  test("a stacked branch gets no trunk-merge duty", () => {
-    const note = buildBranchNote({
+  test("a stacked branch gets no trunk-merge duty", async () => {
+    const note = await buildBranchNote({
       ...directSession(),
       stackedOn: { repo: "direct", branch: "base" },
     });
@@ -309,12 +309,14 @@ describe("buildBranchNote", () => {
 });
 
 describe("resolveSessionRepoContext", () => {
-  test("defaults to the primary repo", () => {
-    expect(resolveSessionRepoContext(session)?.repo).toBe("opensession");
+  test("defaults to the primary repo", async () => {
+    expect((await resolveSessionRepoContext(session))?.repo).toBe(
+      "opensession",
+    );
   });
 
-  test("selects an attached repo explicitly", () => {
-    expect(resolveSessionRepoContext(session, "tella-fusion")).toEqual({
+  test("selects an attached repo explicitly", async () => {
+    expect(await resolveSessionRepoContext(session, "tella-fusion")).toEqual({
       repo: "tella-fusion",
       dir: "/home/ubuntu/worktrees/tella-fusion-task",
       branch: "task",
@@ -322,8 +324,8 @@ describe("resolveSessionRepoContext", () => {
     });
   });
 
-  test("infers exactly one attached worktree from a delegated prompt", () => {
-    const resolved = resolveSessionRepoContext(
+  test("infers exactly one attached worktree from a delegated prompt", async () => {
+    const resolved = await resolveSessionRepoContext(
       session,
       undefined,
       "Review the changes in /home/ubuntu/worktrees/tella-fusion-task and report findings.",
@@ -331,8 +333,8 @@ describe("resolveSessionRepoContext", () => {
     expect(resolved?.repo).toBe("tella-fusion");
   });
 
-  test("keeps the primary when a prompt is ambiguous", () => {
-    const resolved = resolveSessionRepoContext(
+  test("keeps the primary when a prompt is ambiguous", async () => {
+    const resolved = await resolveSessionRepoContext(
       session,
       undefined,
       "Compare /home/ubuntu/worktrees/tella-fusion-task with /home/ubuntu/worktrees/infra-task.",
@@ -340,8 +342,8 @@ describe("resolveSessionRepoContext", () => {
     expect(resolved?.repo).toBe("opensession");
   });
 
-  test("rejects an explicit repo the parent does not carry", () => {
-    expect(resolveSessionRepoContext(session, "gitops")).toBeNull();
+  test("rejects an explicit repo the parent does not carry", async () => {
+    expect(await resolveSessionRepoContext(session, "gitops")).toBeNull();
   });
 });
 
@@ -359,8 +361,8 @@ describe("resolveWorktreeTarget", () => {
     ],
   };
 
-  test("resolves the primary worktree by default", () => {
-    expect(resolveWorktreeTarget(target)).toEqual({
+  test("resolves the primary worktree by default", async () => {
+    expect(await resolveWorktreeTarget(target)).toEqual({
       repoId: "opensession",
       dir: hostDir,
       primary: true,
@@ -369,47 +371,47 @@ describe("resolveWorktreeTarget", () => {
     });
   });
 
-  test("resolves an attached repo by id, unreachable when its dir is gone", () => {
-    const attached = resolveWorktreeTarget(target, "tella-fusion");
+  test("resolves an attached repo by id, unreachable when its dir is gone", async () => {
+    const attached = await resolveWorktreeTarget(target, "tella-fusion");
     expect(attached?.dir).toBe("/home/ubuntu/worktrees/gone");
     expect(attached?.primary).toBe(false);
     expect(attached?.reachable).toBe(false);
   });
 
-  test("returns null for a repo the session does not carry", () => {
-    expect(resolveWorktreeTarget(target, "gitops")).toBeNull();
+  test("returns null for a repo the session does not carry", async () => {
+    expect(await resolveWorktreeTarget(target, "gitops")).toBeNull();
   });
 
-  test("counts a volume-mode primary workspace with no host dir as reachable", () => {
+  test("counts a volume-mode primary workspace with no host dir as reachable", async () => {
     const volume = {
       repo: "opensession",
       worktreeDir: "/workspace/opensession",
       sandbox: { workspace: "volume" },
       attachedRepos: target.attachedRepos,
     };
-    expect(resolveWorktreeTarget(volume)?.reachable).toBe(true);
+    expect((await resolveWorktreeTarget(volume))?.reachable).toBe(true);
     // The remote exception is the primary repo's only: attached repos are
     // always host worktrees.
-    expect(resolveWorktreeTarget(volume, "tella-fusion")?.reachable).toBe(
-      false,
-    );
+    expect(
+      (await resolveWorktreeTarget(volume, "tella-fusion"))?.reachable,
+    ).toBe(false);
   });
 
-  test("returns null for a scratch session with no worktree", () => {
+  test("returns null for a scratch session with no worktree", async () => {
     expect(
-      resolveWorktreeTarget({ repo: "opensession", worktreeDir: null }),
+      await resolveWorktreeTarget({ repo: "opensession", worktreeDir: null }),
     ).toBeNull();
   });
 
-  test("infers the repo id from the worktree path when the session has none", () => {
-    const resolved = resolveWorktreeTarget({ worktreeDir: hostDir });
+  test("infers the repo id from the worktree path when the session has none", async () => {
+    const resolved = await resolveWorktreeTarget({ worktreeDir: hostDir });
     expect(resolved?.repoId).toBe("opensession");
     expect(resolved?.primary).toBe(true);
   });
 });
 
 describe("resolvePrTarget", () => {
-  test("uses the projected PR refs when they conflict with legacy fields", () => {
+  test("uses the projected PR refs when they conflict with legacy fields", async () => {
     const modern = {
       repo: "opensession",
       branch: "legacy-primary",
@@ -438,16 +440,16 @@ describe("resolvePrTarget", () => {
       ],
     } as UnifiedSession;
 
-    expect(resolvePrTarget(modern)?.branch).toBe("projected-primary");
-    expect(resolvePrTarget(modern, "tella-fusion")?.branch).toBe(
+    expect((await resolvePrTarget(modern))?.branch).toBe("projected-primary");
+    expect((await resolvePrTarget(modern, "tella-fusion"))?.branch).toBe(
       "projected-attached",
     );
     expect(
-      resolvePrTarget(modern, "tella-fusion", "legacy-attached"),
+      await resolvePrTarget(modern, "tella-fusion", "legacy-attached"),
     ).toBeNull();
   });
 
-  test("projects legacy primary, attached, and linked targets", () => {
+  test("projects legacy primary, attached, and linked targets", async () => {
     const legacy = {
       repo: "opensession",
       branch: "legacy-primary",
@@ -465,12 +467,13 @@ describe("resolvePrTarget", () => {
       ],
     } as UnifiedSession;
 
-    expect(resolvePrTarget(legacy)?.branch).toBe("legacy-primary");
-    expect(resolvePrTarget(legacy, "tella-fusion")?.branch).toBe(
+    expect((await resolvePrTarget(legacy))?.branch).toBe("legacy-primary");
+    expect((await resolvePrTarget(legacy, "tella-fusion"))?.branch).toBe(
       "legacy-attached",
     );
     expect(
-      resolvePrTarget(legacy, "opensession", "legacy-follow-up")?.branch,
+      (await resolvePrTarget(legacy, "opensession", "legacy-follow-up"))
+        ?.branch,
     ).toBe("legacy-follow-up");
   });
 });

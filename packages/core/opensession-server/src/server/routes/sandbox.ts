@@ -438,7 +438,7 @@ async function attachSandbox(
         { status: fresh.status },
       );
   } else {
-    const target = resolveWorktreeTarget(session);
+    const target = await resolveWorktreeTarget(session);
     if (target && existsSync(target.dir)) {
       let outcome: CheckpointOutcome = { state: "skipped", reason: "unknown" };
       try {
@@ -451,7 +451,7 @@ async function attachSandbox(
       }
       if (outcome.state === "skipped") {
         // A shared checkout holds every session's edits; count only this one's.
-        const ownPaths = isSharedCheckoutDir(target.dir)
+        const ownPaths = (await isSharedCheckoutDir(target.dir))
           ? await sessionTouchedPaths(session, target.dir)
           : undefined;
         const unpublished = unpublishedWorkSummary(

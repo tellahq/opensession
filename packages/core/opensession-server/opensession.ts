@@ -185,6 +185,7 @@ import {
   stopSessionKernelRuntime,
 } from "./src/server/session-kernel";
 import { activeRunRecords } from "./src/server/run-journal";
+import { refreshWorkloadScoping } from "./src/server/workload-scope";
 import {
   markInterruptedWorkflows,
   pauseWorkflowsForShutdown,
@@ -303,6 +304,8 @@ const g = globalThis as any;
 
 // The actor owns the writable kernel store before any gateway projection hydrates.
 if (!g.__opensessionBooted) await startSessionKernelActor();
+// Classify this process's cgroup before any request can start a workload.
+if (!g.__opensessionBooted) await refreshWorkloadScoping();
 // Import legacy application documents before any sidebar or scheduler reads.
 // After cutover, their catalog is authoritative; requests never read the files.
 if (!g.__opensessionBooted) {
@@ -366,8 +369,7 @@ function hotServe(
   options: Parameters<typeof Bun.serve<WSClientData>>[0],
 ): import("bun").Server<WSClientData> {
   const live = g.__opensessionServer as
-    | import("bun").Server<WSClientData>
-    | undefined;
+    import("bun").Server<WSClientData> | undefined;
   if (!live) return (g.__opensessionServer = Bun.serve<WSClientData>(options));
   try {
     // reload's declared type is narrower than the full serve options, but it
@@ -494,12 +496,9 @@ const server: import("bun").Server<WSClientData> = hotServe({
 
     // Refresh identity/policy before admission. Liveness must not wait for
     // configuration storage; nested getters otherwise share this snapshot.
-    if (
-      !(
-        req.method === "GET" &&
-        ["/api/health", "/live", "/ready"].includes(path)
-      )
-    )
+    if (!(
+      req.method === "GET" && ["/api/health", "/live", "/ready"].includes(path)
+    ))
       await getConfigAsync();
     const workloadIdentity = await handleWorkloadIdentityRequest(req);
     if (workloadIdentity) return workloadIdentity;
@@ -1052,7 +1051,7 @@ if (!g.__opensessionBooted) {
           // sweep has already skipped the quarantined lineage and its terminal host
           // receipt can remain stranded behind a ghost owner until another restart.
           await reconcileRecoverableSafetyFences();
-          const shutdownRecords = readActiveShutdownSnapshot();
+          const shutdownRecords = await readActiveShutdownSnapshot();
           const resumedIds = await resumeInterruptedRuns(
             async (bksSessionId, terminalEvent, recoveredRun) => {
               if (bksSessionId && terminalEvent) {
@@ -1183,7 +1182,7 @@ if (!g.__opensessionBooted) {
                 return undefined;
               }
             },
-            (bksSessionId) => {
+            async (bksSessionId) => {
               const session = findSession(bksSessionId);
               if (
                 !session ||
@@ -1191,10 +1190,10 @@ if (!g.__opensessionBooted) {
                 session.automation
               )
                 return undefined;
-              return buildReposNote(session);
+              return await buildReposNote(session);
             },
             recordRecoveredRunEvent,
-            recoverableLocalHostSnapshotRecords(shutdownRecords),
+            await recoverableLocalHostSnapshotRecords(shutdownRecords),
             (run) =>
               !!run.osSessionId &&
               !!run.promptEntryId &&
@@ -1207,7 +1206,7 @@ if (!g.__opensessionBooted) {
             );
             invalidateSessionsCache();
           }
-          resumeDrainedSessions(new Set(resumedIds), shutdownRecords);
+          await resumeDrainedSessions(new Set(resumedIds), shutdownRecords);
           // Re-deliver messages that were queued/steered when the process went down.
           await restorePromptQueues(new Set(resumedIds));
           const ownedSessionIds = new Set(
@@ -1363,7 +1362,7 @@ if (!g.__opensessionBooted) {
     // record of sessions that should be woken on the next boot. Dev
     // instances skip it (nothing resumes them, and a snapshot must never
     // make the production boot try to wake dev sessions).
-    if (!devInstance) snapshotActiveSessions();
+    if (!devInstance) await snapshotActiveSessions();
     // Script runs keep going; save their latest credential call counts so
     // the next boot reattaches them with nothing lost.
     void import("./src/server/script-runs")

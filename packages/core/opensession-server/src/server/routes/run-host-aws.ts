@@ -52,7 +52,7 @@ export async function handleRunHostAwsRoute(
       { error: "This run host is not on a Runner" },
       { status: 404 },
     );
-  const runner = getRunner(context.runnerId);
+  const runner = await getRunner(context.runnerId);
   if (!runner?.aws)
     return Response.json(
       { error: "No AWS role is configured for this Runner" },

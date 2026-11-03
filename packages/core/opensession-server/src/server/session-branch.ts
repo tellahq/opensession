@@ -149,7 +149,7 @@ export async function moveSessionToBranch(
   if (!repo.sharedCheckout)
     throw new Error("This session already uses an isolated worktree");
   const current = session.worktreeDir || repo.repo;
-  if (!isSharedCheckoutDir(current)) {
+  if (!(await isSharedCheckoutDir(current))) {
     if (session.branch && existsSync(current))
       return {
         branch: session.branch,

@@ -243,7 +243,7 @@ export async function handleWorkspaceRoutes(
           session.repo ||
           (session.mode === "scratch"
             ? defaultRepo().id
-            : repoForPath(session.worktreeDir).id),
+            : (await repoForPath(session.worktreeDir)).id),
         dir: session.worktreeDir,
         primary: true,
       });
@@ -378,7 +378,7 @@ export async function handleWorkspaceRoutes(
     // the prompt path, not on new-session opening prompts.
     const includeBuiltins = session?.source === "opensession";
     return Response.json({
-      skills: searchSkills(dir, q, undefined, includeBuiltins),
+      skills: await searchSkills(dir, q, undefined, includeBuiltins),
     });
   }
 
@@ -867,8 +867,8 @@ export async function handleWorkspaceRoutes(
     if (
       !srcScratch &&
       worktreeMode === "share" &&
-      isSharedCheckoutDir(worktreeDir) &&
-      !repoForPath(worktreeDir).sharedCheckout
+      (await isSharedCheckoutDir(worktreeDir)) &&
+      !(await repoForPath(worktreeDir)).sharedCheckout
     ) {
       branch = "";
       worktreeDir = "";
@@ -886,8 +886,10 @@ export async function handleWorkspaceRoutes(
       // checkout — a session reading a repo nobody asked about. Derived
       // from the path, so a legacy session that records no repo but does
       // sit in a real checkout still gets a repo-scoped ask sibling.
-      repoId = sessionRepoId(src);
-      worktreeDir = repoId ? "" : ensureScratchDir(src.workspaceId || bksId);
+      repoId = await sessionRepoId(src);
+      worktreeDir = repoId
+        ? ""
+        : await ensureScratchDir(src.workspaceId || bksId);
     } else if (worktreeMode === "stack" && src.branch && src.repo) {
       const repo = getRepo(src.repo);
       if (!repo.sharedCheckout) {
@@ -914,7 +916,7 @@ export async function handleWorkspaceRoutes(
         branch = ws.branch || "";
         worktreeDir = ws.worktreeDir;
         mode = "code";
-        repoId = repoForPath(ws.worktreeDir).id;
+        repoId = (await repoForPath(ws.worktreeDir)).id;
       } else if (ws?.branch && !getRepo(ws.repo).sharedCheckout) {
         // A workspace minted session-less from a PR/ticket knows its branch
         // but owns no worktree yet: materialize one on that existing
@@ -1082,15 +1084,15 @@ export async function handleWorkspaceRoutes(
       !body.repo &&
       !body.branch &&
       Boolean(current) &&
-      !isSharedCheckoutDir(current) &&
+      !(await isSharedCheckoutDir(current)) &&
       existsSync(current);
     const repo = adopt
-      ? repoForPath(current)
+      ? await repoForPath(current)
       : getRepo(body.repo || session.repo);
     let branch: string;
     let worktreeDir: string;
     if (adopt) {
-      branch = session.branch || worktreeHeadBranch(current) || "";
+      branch = session.branch || (await worktreeHeadBranch(current)) || "";
       worktreeDir = current;
     } else if (repo.sharedCheckout) {
       // Nothing to create: mode is the whole difference here.
@@ -1139,7 +1141,7 @@ export async function handleWorkspaceRoutes(
     if (
       session.workspaceId &&
       worktreeDir &&
-      !isSharedCheckoutDir(worktreeDir)
+      !(await isSharedCheckoutDir(worktreeDir))
     ) {
       const ws = await getWorkspace(session.workspaceId);
       if (ws && !ws.worktreeDir)

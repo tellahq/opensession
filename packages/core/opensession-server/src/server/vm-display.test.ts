@@ -8,7 +8,12 @@ import {
   registerRunner,
   removeRunner,
 } from "./runners";
-import { runnerWsClose, runnerWsMessage, runnerWsOpen } from "./runner-ws";
+import {
+  runnerWsClose,
+  runnerWsMessage,
+  runnerWsOpen,
+  runnerWsSettled,
+} from "./runner-ws";
 import {
   vmDisplayClose,
   vmDisplayMessage,
@@ -21,17 +26,17 @@ const HOME = mkdtempSync(join(tmpdir(), "os-vm-display-test-"));
 const realHome = process.env.HOME;
 process.env.HOME = HOME;
 
-afterEach(() => {
-  for (const runner of listRunners()) removeRunner(runner.id);
+afterEach(async () => {
+  for (const runner of await listRunners()) await removeRunner(runner.id);
 });
 afterAll(() => {
   process.env.HOME = realHome;
   rmSync(HOME, { recursive: true, force: true });
 });
 
-function connectedRunner(name = "mac-mini", address = "100.101.102.103") {
+async function connectedRunner(name = "mac-mini", address = "100.101.102.103") {
   const { code } = createRunnerPairing("tester");
-  const registered = registerRunner({
+  const registered = await registerRunner({
     code,
     name,
     platform: "darwin",
@@ -46,7 +51,9 @@ function connectedRunner(name = "mac-mini", address = "100.101.102.103") {
     close: () => {},
   };
   runnerWsOpen(ws);
+  await runnerWsSettled(ws);
   runnerWsMessage(ws, JSON.stringify({ t: "hello", version: 1 }));
+  await runnerWsSettled(ws);
   return { id: registered.runner.id, ws, sent };
 }
 
@@ -75,8 +82,8 @@ describe("Mac VM display bridge", () => {
     );
   });
 
-  test("relays bytes both ways for one viewer and names only the VM", () => {
-    const runner = connectedRunner();
+  test("relays bytes both ways for one viewer and names only the VM", async () => {
+    const runner = await connectedRunner();
     const view = viewer(runner.id, "a1b2c3d4e5f6a7b8");
     expect(vmDisplayOpen(view.ws)).toBe(true);
     expect(runner.sent.at(-1)).toMatchObject({
@@ -96,6 +103,7 @@ describe("Mac VM display bridge", () => {
         data: Buffer.from("RFB 003.008\n").toString("base64"),
       }),
     );
+    await runnerWsSettled(runner.ws);
     expect(view.received).toHaveLength(1);
     expect(Buffer.from(view.received[0] as Buffer).toString()).toBe(
       "RFB 003.008\n",
@@ -119,10 +127,11 @@ describe("Mac VM display bridge", () => {
     });
     expect(vmDisplayViewerCount()).toBe(0);
     runnerWsClose(runner.ws);
+    await runnerWsSettled(runner.ws);
   });
 
-  test("a frame for another viewer or from another Runner is dropped", () => {
-    const runner = connectedRunner();
+  test("a frame for another viewer or from another Runner is dropped", async () => {
+    const runner = await connectedRunner();
     const view = viewer(runner.id, "b1b2c3d4e5f6a7b8");
     vmDisplayOpen(view.ws);
     runnerWsMessage(
@@ -133,8 +142,9 @@ describe("Mac VM display bridge", () => {
         data: Buffer.from("x").toString("base64"),
       }),
     );
+    await runnerWsSettled(runner.ws);
     expect(view.received).toHaveLength(0);
-    const other = connectedRunner("other-mac", "100.101.102.104");
+    const other = await connectedRunner("other-mac", "100.101.102.104");
     runnerWsMessage(
       other.ws,
       JSON.stringify({
@@ -143,14 +153,17 @@ describe("Mac VM display bridge", () => {
         data: Buffer.from("x").toString("base64"),
       }),
     );
+    await runnerWsSettled(other.ws);
     expect(view.received).toHaveLength(0);
     vmDisplayClose(view.ws);
     runnerWsClose(runner.ws);
+    await runnerWsSettled(runner.ws);
     runnerWsClose(other.ws);
+    await runnerWsSettled(other.ws);
   });
 
-  test("the Runner closing the display closes the viewer with its reason", () => {
-    const runner = connectedRunner();
+  test("the Runner closing the display closes the viewer with its reason", async () => {
+    const runner = await connectedRunner();
     const view = viewer(runner.id, "c1b2c3d4e5f6a7b8");
     vmDisplayOpen(view.ws);
     runnerWsMessage(
@@ -161,6 +174,7 @@ describe("Mac VM display bridge", () => {
         error: "Mac VM sbx-session-1 has not published its display yet.",
       }),
     );
+    await runnerWsSettled(runner.ws);
     expect(view.closes).toEqual([
       {
         code: 1011,
@@ -169,6 +183,7 @@ describe("Mac VM display bridge", () => {
     ]);
     expect(vmDisplayViewerCount()).toBe(0);
     runnerWsClose(runner.ws);
+    await runnerWsSettled(runner.ws);
   });
 
   test("an offline Mac host refuses the viewer at once", () => {

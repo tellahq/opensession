@@ -98,7 +98,7 @@ export class LocalProvider implements SandboxProvider {
   async ensure(spec: SandboxSessionSpec): Promise<Sandbox> {
     if (spec.cwd) {
       if (existsSync(spec.cwd)) return makeLocalSandbox(spec.cwd);
-      const repo = spec.repo ? getRepo(spec.repo) : repoForPath(spec.cwd);
+      const repo = spec.repo ? getRepo(spec.repo) : await repoForPath(spec.cwd);
       if (spec.branch) {
         try {
           return makeLocalSandbox(await reviveWorktree(spec.branch, repo.id));

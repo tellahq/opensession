@@ -23,7 +23,7 @@ import {
 
 import { deskTextNavigation } from "./desk-text-navigation";
 import type { McpScope } from "./runner-shared";
-import { existsSync, mkdirSync, readFileSync } from "fs";
+import { mkdir, readFile } from "node:fs/promises";
 import {
   runAgent,
   isAgentSessionBusy,
@@ -155,7 +155,11 @@ import {
   maybePredictComposer,
 } from "./composer-prediction";
 import { commitAuthorFor } from "./shared/user-mappings";
-import { writeFileAtomic, writeJsonAtomic } from "./shared/atomic-write";
+import {
+  writeFileAtomicAsync,
+  writeJsonAtomicAsync,
+} from "./shared/atomic-write";
+import { pathExists } from "./run-fs";
 import { startWatching } from "./file-watcher";
 import {
   ensureAskCheckout,
@@ -1011,12 +1015,12 @@ export async function restorePromptQueues(
 // the journal, so both paths are covered.
 const RESUME_SNAPSHOT_PATH = `${SESSIONS_DIR}/active-at-shutdown.json`;
 
-export function readActiveShutdownSnapshot(): ActiveRunRecord[] {
+export async function readActiveShutdownSnapshot(): Promise<ActiveRunRecord[]> {
   try {
-    if (!existsSync(RESUME_SNAPSHOT_PATH)) return [];
-    const records = JSON.parse(readFileSync(RESUME_SNAPSHOT_PATH, "utf-8"));
+    const records = JSON.parse(await readFile(RESUME_SNAPSHOT_PATH, "utf-8"));
     return Array.isArray(records) ? records : [];
   } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
     console.error("[resume] Failed to read active-session snapshot:", e);
     return [];
   }
@@ -1025,30 +1029,33 @@ export function readActiveShutdownSnapshot(): ActiveRunRecord[] {
 /** Snapshot-only local hosts that still have a run directory to reattach to.
  * A host that finished cleanly during the shutdown drain removes this file and
  * remains eligible for the normal generic wake instead. */
-export function recoverableLocalHostSnapshotRecords(
+export async function recoverableLocalHostSnapshotRecords(
   records: ActiveRunRecord[],
   hostsDir = runHostsDir(SESSIONS_DIR),
-): ActiveRunRecord[] {
-  return records.filter(
-    (record) =>
-      !!record.hostId &&
-      !record.sandboxId &&
-      !record.runnerId &&
-      existsSync(`${hostsDir}/${record.hostId}/spec.json`),
+): Promise<ActiveRunRecord[]> {
+  const live = await Promise.all(
+    records.map(
+      async (record) =>
+        !!record.hostId &&
+        !record.sandboxId &&
+        !record.runnerId &&
+        (await pathExists(`${hostsDir}/${record.hostId}/spec.json`)),
+    ),
   );
+  return records.filter((_record, index) => live[index]);
 }
 
 /** Capture the sessions with an in-flight run, for boot-time wake-up. Called at
  *  the very start of graceful shutdown, before the drain empties the journal. */
-export function snapshotActiveSessions(): void {
+export async function snapshotActiveSessions(): Promise<void> {
   try {
     const records = activeRunRecords();
     if (records.length === 0) {
-      if (existsSync(RESUME_SNAPSHOT_PATH))
-        writeFileAtomic(RESUME_SNAPSHOT_PATH, "[]");
+      if (await pathExists(RESUME_SNAPSHOT_PATH))
+        await writeFileAtomicAsync(RESUME_SNAPSHOT_PATH, "[]");
       return;
     }
-    writeJsonAtomic(RESUME_SNAPSHOT_PATH, records, false);
+    await writeJsonAtomicAsync(RESUME_SNAPSHOT_PATH, records, false);
     console.log(
       `[resume] Snapshotted ${records.length} active session(s) for wake-up on restart`,
     );
@@ -1060,15 +1067,13 @@ export function snapshotActiveSessions(): void {
 /** Wake sessions that were active at the last graceful shutdown but finished
  *  their turn during the drain (so they weren't in the journal to resume).
  *  `alreadyResumed` are the osSessionIds the journal resume already handled. */
-export function resumeDrainedSessions(
+export async function resumeDrainedSessions(
   alreadyResumed: Set<string>,
-  records = readActiveShutdownSnapshot(),
-): void {
+  records: ActiveRunRecord[],
+): Promise<void> {
   if (!records.length) return;
   // Consume the snapshot so the next (non-graceful) boot doesn't replay it.
-  try {
-    writeFileAtomic(RESUME_SNAPSHOT_PATH, "[]");
-  } catch {}
+  await writeFileAtomicAsync(RESUME_SNAPSHOT_PATH, "[]").catch(() => {});
 
   let woken = 0;
   for (const r of records) {
@@ -1439,7 +1444,7 @@ export function attachSessionWatchersToTranscript(
     // the in-process bus — force-registering them onto the (new) mirror
     // watch would double-feed a full-file replay.
     if ((ws as any)?.data?.transcriptV2) continue;
-    startWatching(path, ws, 0, sessionId);
+    void startWatching(path, ws, 0, sessionId);
   }
 }
 
@@ -1857,7 +1862,7 @@ export async function autoPushSessionBranches(
   // Repo-less sessions (scratch, repo-less ask) have no primary branch to
   // push, and their worktreeDir is a plain dir repoForPath would throw on.
   // Attached repos still push: those carry their own repo and branch.
-  const primaryRepoId = sessionRepoId(session);
+  const primaryRepoId = await sessionRepoId(session);
   const targets: Array<{ dir: string; branch: string; repoId: string }> = [];
   if (session.worktreeDir && session.branch && primaryRepoId)
     targets.push({
@@ -1874,7 +1879,7 @@ export async function autoPushSessionBranches(
     // container — status/push route through the session's sandbox exec.
     const isPrimary = dir === session.worktreeDir;
     const remote = isPrimary && hasRemoteWorkspace(session);
-    if (!existsSync(dir) && !remote) continue;
+    if (!remote && !(await pathExists(dir))) continue;
     let repo;
     try {
       repo = getRepo(repoId);
@@ -2107,8 +2112,7 @@ export async function maybeLaunchSandboxedRun(
   // Hoisted so the catch below can dispose a sandbox when launch fails after
   // ensure but before the event stream exists.
   let disposableResumeSandbox:
-    | { provider: ReturnType<typeof getSandboxProvider>; id: string }
-    | undefined;
+    { provider: ReturnType<typeof getSandboxProvider>; id: string } | undefined;
   const disposeResumeSandbox = async () => {
     const owned = disposableResumeSandbox;
     if (!owned) return;
@@ -2979,26 +2983,25 @@ async function runSessionPromptInner(
   let cwd =
     session.worktreeDir ||
     (session.mode === "scratch"
-      ? ensureScratchDir(session.workspaceId || session.id)
+      ? await ensureScratchDir(session.workspaceId || session.id)
       : session.mode === "ask"
         ? await ensureAskCheckout(session.repo)
         : defaultRepo().repo);
-  if (!repoForPathOrNull(cwd)) {
+  if (!(await repoForPathOrNull(cwd))) {
     // A dir no registered repo owns: a scratch dir, or a repo-less ask
     // session's inert cwd. Nothing to revive — just make sure it exists
     // after cleanups/moves. (Asking the path rather than the mode is what
     // keeps a repo-less ask session out of the revive branch below, whose
     // repoForPath would throw on it.)
-    if (!existsSync(cwd) && !hasRemoteWorkspace(session))
-      mkdirSync(cwd, { recursive: true });
+    if (!hasRemoteWorkspace(session)) await mkdir(cwd, { recursive: true });
   } else if (
     session.worktreeDir &&
-    !existsSync(session.worktreeDir) &&
-    !hasRemoteWorkspace(session)
+    !hasRemoteWorkspace(session) &&
+    !(await pathExists(session.worktreeDir))
   ) {
     const repo = session.repo
       ? getRepo(session.repo)
-      : repoForPath(session.worktreeDir);
+      : await repoForPath(session.worktreeDir);
     if (session.branch) {
       broadcastToSession(sessionId, {
         type: "notice",
@@ -3142,7 +3145,7 @@ async function runSessionPromptInner(
     const memoryContext = await retrievedMemoryNoteFor(
       content,
       user,
-      sessionRepoIds(session),
+      await sessionRepoIds(session),
       session.id,
     );
     if (memoryContext) prompt = `${memoryContext}\n\n${prompt}`;
@@ -3337,7 +3340,7 @@ async function runSessionPromptInner(
       : undefined;
   const attachedGhRepos = session.automationDescendantPolicy
     ? undefined
-    : sessionGithubRepos(session);
+    : await sessionGithubRepos(session);
   const runnerRun = fixedSubscriptionRefusal
     ? null
     : await maybeLaunchRunnerRun(session, {

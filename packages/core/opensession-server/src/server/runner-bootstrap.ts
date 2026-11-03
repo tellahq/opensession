@@ -9,7 +9,7 @@
  * the Runner's outbound authenticated control channel exclusively.
  */
 
-import { existsSync } from "fs";
+import { pathExists } from "./run-fs";
 import { configuredIntegration, configuredServer } from "./config";
 import { bindRunnerPairingMigration } from "./runners";
 
@@ -197,7 +197,7 @@ async function output(
 }
 
 async function verifySshFingerprint(target: SshBootstrapTarget): Promise<void> {
-  if (!existsSync(target.knownHostsPath))
+  if (!(await pathExists(target.knownHostsPath)))
     throw new Error("The configured SSH known-hosts file is unavailable.");
   const keys = await output([
     "ssh-keyscan",
@@ -293,7 +293,7 @@ export async function bootstrapKubernetesRunner(
     })
   )
     throw new Error("The Runner pairing code is invalid or expired.");
-  if (!existsSync(target.manifestPath))
+  if (!(await pathExists(target.manifestPath)))
     throw new Error("The configured Runner workload manifest is unavailable.");
   const common = [
     "kubectl",

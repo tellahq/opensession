@@ -832,7 +832,10 @@ function runWorkflow(
   // The session's repo + branch, resolved once per run (write agents branch
   // off it; merge() merges back into it). Explicit opts win — tests pass them.
   let repoInfo: { repo?: string; baseBranch?: string } | undefined;
-  function sessionRepoInfo(): { repo?: string; baseBranch?: string } {
+  async function sessionRepoInfo(): Promise<{
+    repo?: string;
+    baseBranch?: string;
+  }> {
     if (repoInfo) return repoInfo;
     if (opts.repo !== undefined || opts.baseBranch !== undefined) {
       repoInfo = { repo: opts.repo, baseBranch: opts.baseBranch };
@@ -844,7 +847,7 @@ function runWorkflow(
         repo:
           session?.repo ||
           (session?.worktreeDir
-            ? repoForPath(session.worktreeDir).id
+            ? (await repoForPath(session.worktreeDir)).id
             : undefined),
         baseBranch: session?.branch || undefined,
       };
@@ -858,8 +861,10 @@ function runWorkflow(
     return repoInfo;
   }
 
-  function execCtx(extra?: Partial<WorkflowExecCtx>): WorkflowExecCtx {
-    const { repo, baseBranch } = sessionRepoInfo();
+  async function execCtx(
+    extra?: Partial<WorkflowExecCtx>,
+  ): Promise<WorkflowExecCtx> {
+    const { repo, baseBranch } = await sessionRepoInfo();
     return {
       runId,
       sessionId: opts.sessionId,
@@ -1315,7 +1320,7 @@ function runWorkflow(
           const executor = await executorPromise;
           outcome = await executor.execute(
             { prompt: msg.prompt, opts: msg.opts, seq: msg.seq },
-            execCtx({
+            await execCtx({
               signal: attemptController.signal,
               // The engine session id lands on the row as soon as it exists,
               // so the UI can drill into a RUNNING agent's conversation.
@@ -1445,7 +1450,7 @@ function runWorkflow(
       if (!executor.merge) {
         throw new Error("this workflow executor cannot merge write agents");
       }
-      result = await executor.merge(execCtx(), items);
+      result = await executor.merge(await execCtx(), items);
     } catch (e) {
       result = {
         merged: [],

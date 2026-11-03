@@ -162,7 +162,7 @@ export async function setSessionReviewer(opts: {
           ? prevReviewer
           : githubLoginFor(prevReviewer))
       : null;
-  const target = resolvePrTarget(session, opts.repo);
+  const target = await resolvePrTarget(session, opts.repo);
   // Hosts without a reviewer concept (code.storage) have nothing to mirror
   // onto; the internal request stands on its own there.
   const hostReviewers = target

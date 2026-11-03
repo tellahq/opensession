@@ -68,11 +68,7 @@ import { listInstalledPackages } from "./plugins";
 import { readMcpConfig } from "./connections";
 
 export type LibraryEntryType =
-  | "tool"
-  | "automation"
-  | "integration"
-  | "connection"
-  | "package";
+  "tool" | "automation" | "integration" | "connection" | "package";
 
 /**
  * How an entry gets installed — which decides what the card's button does and
@@ -308,9 +304,9 @@ function connectionEntries(): LibraryEntry[] {
   ];
 }
 
-function packageEntries(): LibraryEntry[] {
+async function packageEntries(): Promise<LibraryEntry[]> {
   try {
-    return listInstalledPackages().map((pkg) => ({
+    return (await listInstalledPackages()).map((pkg) => ({
       id: `package:${pkg.name}`,
       type: "package" as const,
       slug: pkg.name,
@@ -335,6 +331,6 @@ export async function listLibrary(): Promise<LibraryEntry[]> {
     ...automationEntries(installedNames),
     ...integrationEntries(),
     ...connectionEntries(),
-    ...packageEntries(),
+    ...(await packageEntries()),
   ];
 }

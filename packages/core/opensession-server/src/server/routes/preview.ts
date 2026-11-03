@@ -193,7 +193,7 @@ export async function startSessionPortal(
   }
   if (!existsSync(session.worktreeDir))
     throw new PortalStartError(400, "Session has no Portal workspace");
-  seedHostEnvFiles(session.worktreeDir);
+  await seedHostEnvFiles(session.worktreeDir);
   await startPortalService({
     sessionId: session.id,
     worktreeDir: session.worktreeDir,

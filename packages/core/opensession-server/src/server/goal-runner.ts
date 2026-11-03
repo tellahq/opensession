@@ -132,8 +132,10 @@ export async function runGoal(goal: Goal): Promise<void> {
     // engine-id/model fields plus the goal's live config projection
     // (mode/repo/worktree/branch/title track the goal record). Serialized
     // via updateSessionFile.
-    const persistSession = (engineSessionId: string) =>
-      updateSessionFile(bksId, (data) => {
+    const persistSession = async (engineSessionId: string) => {
+      const headBranch =
+        goal.mode === "code" ? await worktreeHeadBranch(cwd) : null;
+      return updateSessionFile(bksId, (data) => {
         // Widen to Partial: the file may not exist yet (create-if-absent).
         const existing: Partial<NativeSessionFile> = data;
         return {
@@ -150,7 +152,7 @@ export async function runGoal(goal: Goal): Promise<void> {
           ...(selectedModel ? { model: selectedModel } : {}),
           // Actual worktree HEAD wins over the recorded name — the agent may
           // have switched branches mid-run (see run-session.ts's same sync).
-          branch: goal.mode === "code" ? worktreeHeadBranch(cwd) || branch : "",
+          branch: goal.mode === "code" ? headBranch || branch : "",
           worktreeDir: cwd,
           ...(goal.mode === "code" ? { repo: getRepo(goal.repo).id } : {}),
           title: `${goal.name} — goal`,
@@ -159,6 +161,7 @@ export async function runGoal(goal: Goal): Promise<void> {
           lastActivity: new Date().toISOString(),
         };
       });
+    };
 
     console.log(`[goals] Wake #${wake} of "${goal.name}" → ${bksId}`);
 

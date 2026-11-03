@@ -26,25 +26,45 @@ import {
   SYSTEMD_USER_RUNTIME,
   engineScopeSystemdArgs,
   processRunsInControlPlane,
+  selfCgroup,
   systemdUserScopesAvailable,
 } from "./systemd-scopes";
 
 /** Re-check availability now and then: the user manager can come and go. */
 const AVAILABILITY_TTL_MS = 60_000;
 let availability: { at: number; scope: boolean } | null = null;
+let probing: Promise<void> | null = null;
+let generation = 0;
 
+/** Detect scoping off the event loop. Boot awaits this once before serving,
+ *  so the first command a request starts is already classified. */
+export function refreshWorkloadScoping(): Promise<void> {
+  probing ??= (async () => {
+    const started = generation;
+    try {
+      const scope =
+        processRunsInControlPlane(await selfCgroup()) &&
+        (await systemdUserScopesAvailable());
+      if (started === generation) availability = { at: Date.now(), scope };
+    } finally {
+      probing = null;
+    }
+  })();
+  return probing;
+}
+
+/** The last detected answer; a stale one refreshes in the background. Before
+ *  the first detection finishes (a process that never primed it) commands run
+ *  unwrapped, as they do outside the control plane. */
 function shouldScope(): boolean {
-  const now = Date.now();
-  if (!availability || now - availability.at > AVAILABILITY_TTL_MS)
-    availability = {
-      at: now,
-      scope: processRunsInControlPlane() && systemdUserScopesAvailable(),
-    };
-  return availability.scope;
+  if (!availability || Date.now() - availability.at > AVAILABILITY_TTL_MS)
+    void refreshWorkloadScoping().catch(() => {});
+  return availability?.scope ?? false;
 }
 
 /** Test seam: force scoping on or off, or `null` to detect again. */
 export function __setWorkloadScopingForTest(scope: boolean | null): void {
+  generation++;
   availability = scope === null ? null : { at: Date.now(), scope };
 }
 

@@ -115,12 +115,12 @@ type SessionRepoCarrier = Pick<
  * that names exactly one carried worktree selects it; ambiguous/no hint keeps
  * the primary for backwards compatibility.
  */
-export function resolveSessionRepoContext(
+export async function resolveSessionRepoContext(
   session: SessionRepoCarrier,
   repoId?: string,
   hint?: string,
-): SessionRepoContext | null {
-  const primaryRepo = sessionRepoId(session) ?? defaultRepo().id;
+): Promise<SessionRepoContext | null> {
+  const primaryRepo = (await sessionRepoId(session)) ?? defaultRepo().id;
   const contexts: SessionRepoContext[] = [
     ...(session.worktreeDir
       ? [
@@ -163,7 +163,7 @@ export function resolveSessionRepoContext(
  * one per workspace. The text itself, in the session's effective ship mode,
  * comes from ship-mode.ts.
  */
-export function buildBranchNote(session: {
+export async function buildBranchNote(session: {
   mode?: "ask" | "code" | "scratch";
   branch?: string | null;
   worktreeDir?: string | null;
@@ -177,13 +177,16 @@ export function buildBranchNote(session: {
   automationDescendantPolicy?: UnifiedSession["automationDescendantPolicy"];
   /** The session's or workspace's ship-mode choice; absent = the repo's. */
   shipMode?: ShipMode;
-}): string | undefined {
+}): Promise<string | undefined> {
   if (session.mode === "ask" || !session.branch || !session.worktreeDir)
     return undefined;
-  const repo = repoForPath(session.worktreeDir);
+  const repo = await repoForPath(session.worktreeDir);
   // Use the actual checkout, not the default for NEW sessions: changing that
   // default must not remove branch discipline from an existing worktree.
-  if (canonicalPath(session.worktreeDir) === canonicalPath(repo.repo))
+  if (
+    (await canonicalPath(session.worktreeDir)) ===
+    (await canonicalPath(repo.repo))
+  )
     return undefined;
   const { mode } = sessionShipMode(session, repo);
   return buildWorktreePublicationNote({
@@ -241,18 +244,19 @@ export { MERGE_CLAIM_FILE };
  * each layer reviewed on its own diff, lower layers rebased automatically as
  * they merge. See pr-stack.ts for the read/link surface behind the UI.
  */
-export function buildStackNote(session: {
+export async function buildStackNote(session: {
   mode?: "ask" | "code" | "scratch";
   branch?: string | null;
   worktreeDir?: string | null;
   stackedOn?: StackedOn;
-}): string | undefined {
+}): Promise<string | undefined> {
   const base = session.stackedOn?.branch;
   if (!base || session.mode !== "code" || !session.branch) return undefined;
   let codeStorage = false;
   if (session.worktreeDir) {
     try {
-      codeStorage = repoForPath(session.worktreeDir).host === "codestorage";
+      codeStorage =
+        (await repoForPath(session.worktreeDir)).host === "codestorage";
     } catch {}
   }
   return buildStackPublicationNote({
@@ -268,22 +272,25 @@ export function buildStackNote(session: {
  * `@<project>:path` mentions resolve. Returns undefined for single-repo sessions
  * so the prompt stays clean.
  */
-export function buildReposNote(
+export async function buildReposNote(
   session: UnifiedSession & { existingBranch?: boolean },
-): string | undefined {
-  const branchNote = [buildBranchNote(session), buildStackNote(session)]
+): Promise<string | undefined> {
+  const branchNote = [
+    await buildBranchNote(session),
+    await buildStackNote(session),
+  ]
     .filter(Boolean)
     .join("\n\n");
   const attached = session.attachedRepos || [];
   if (!attached.length) return branchNote || undefined;
-  const primaryRepo = sessionRepoId(session) ?? defaultRepo().id;
+  const primaryRepo = (await sessionRepoId(session)) ?? defaultRepo().id;
   const lines = [
     "## Repos in this session",
     "This session spans multiple repos. Each is an isolated git worktree — `cd` into the right one to read or edit its files and follow that repository's publication policy independently (don't edit another repo's shared main checkout).",
     // Canonicalized for the note only — the stored worktreeDir stays literal
     // (see canonicalPath) — so a session that predates a checkout rename
     // points the agent at the path that exists today.
-    `- **${primaryRepo}** (primary): ${canonicalPath(session.worktreeDir!)}${session.branch ? ` — branch \`${session.branch}\`` : ""}`,
+    `- **${primaryRepo}** (primary): ${await canonicalPath(session.worktreeDir!)}${session.branch ? ` — branch \`${session.branch}\`` : ""}`,
   ];
   for (const r of attached)
     lines.push(`- **${r.repo}**: ${r.dir} — branch \`${r.branch}\``);
@@ -292,16 +299,18 @@ export function buildReposNote(
   );
   // A session's ship-mode choice is about its primary repository; an
   // attached repository keeps its own configured mode.
-  const attachedNotes = attached.map((repo) =>
-    buildBranchNote({
-      mode: session.mode,
-      branch: repo.branch,
-      worktreeDir: repo.dir,
-      prs: session.prs,
-      pstackMode: session.pstackMode,
-      automation: session.automation,
-      automationDescendantPolicy: session.automationDescendantPolicy,
-    }),
+  const attachedNotes = await Promise.all(
+    attached.map((repo) =>
+      buildBranchNote({
+        mode: session.mode,
+        branch: repo.branch,
+        worktreeDir: repo.dir,
+        prs: session.prs,
+        pstackMode: session.pstackMode,
+        automation: session.automation,
+        automationDescendantPolicy: session.automationDescendantPolicy,
+      }),
+    ),
   );
   return [branchNote, lines.join("\n"), ...attachedNotes]
     .filter(Boolean)
@@ -309,8 +318,10 @@ export function buildReposNote(
 }
 
 /** Repo ids a session spans, primary first — memory scopes + repos note agree on this. */
-export function sessionRepoIds(session: UnifiedSession): string[] {
-  const primary = sessionRepoId(session) ?? defaultRepo().id;
+export async function sessionRepoIds(
+  session: UnifiedSession,
+): Promise<string[]> {
+  const primary = (await sessionRepoId(session)) ?? defaultRepo().id;
   return [primary, ...(session.attachedRepos || []).map((r) => r.repo)];
 }
 
@@ -330,14 +341,16 @@ export function attachedGithubRepos(
  * as a review handoff for one of those PRs, holds the App token, and without
  * these GitHub refuses every comment and PR call for the PR it was asked to
  * fix. Automation sessions keep attached repositories only. */
-export function sessionGithubRepos(session: UnifiedSession): string[] {
+export async function sessionGithubRepos(
+  session: UnifiedSession,
+): Promise<string[]> {
   const ids = (session.attachedRepos || []).map((att) => att.repo);
   if (!session.automationId) {
     for (const linked of session.linkedPrs || []) ids.push(linked.repo);
     for (const found of footerPrsFor(prsBySessionRef(getPrsByRepo()), session))
       ids.push(found.repo);
   }
-  const primary = sessionRepoId(session);
+  const primary = await sessionRepoId(session);
   return githubNamesOf(ids.filter((id) => id !== primary));
 }
 
@@ -379,12 +392,12 @@ export async function buildSessionNote(
       // spawn a worker onto work that's already running.
       session.desk ? DESK_NOTE : "",
       session.desk ? await deskBriefingFor(user) : "",
-      buildReposNote(session),
+      await buildReposNote(session),
       // GPU jobs the repository declares, for a session without a GPU.
       await (await import("./gpu-jobs")).gpuJobsNote(session).catch(() => ""),
       await memoryNoteFor(
         user,
-        sessionRepoIds(session),
+        await sessionRepoIds(session),
         session.id,
         sessionWorkspaceIsRemote(session),
       ),
@@ -583,7 +596,9 @@ interface ProjectedPrTarget {
  * persisted branch, attached repos, and links fill gaps for legacy sessions
  * and branches that do not have a cached PR yet.
  */
-function projectPrTargets(session: UnifiedSession): ProjectedPrTarget[] {
+async function projectPrTargets(
+  session: UnifiedSession,
+): Promise<ProjectedPrTarget[]> {
   const targets: ProjectedPrTarget[] = (session.prs || [])
     .filter((ref) => ref.repo && ref.branch)
     .map((ref) => ({
@@ -594,7 +609,7 @@ function projectPrTargets(session: UnifiedSession): ProjectedPrTarget[] {
   const primaryBranch = sessionPrBranch(session);
   if (primaryBranch && !targets.some((target) => target.source === "primary")) {
     targets.unshift({
-      repoId: sessionRepoId(session) ?? defaultRepo().id,
+      repoId: (await sessionRepoId(session)) ?? defaultRepo().id,
       branch: primaryBranch,
       source: "primary",
     });
@@ -639,12 +654,12 @@ function projectPrTargets(session: UnifiedSession): ProjectedPrTarget[] {
  * apply the remote-workspace exception inconsistently, so a volume-mode session
  * had a worktree for diff/status/push/pull and none for image/file reads.
  */
-export function resolveWorktreeTarget(
+export async function resolveWorktreeTarget(
   session: Pick<UnifiedSession, "repo" | "worktreeDir" | "attachedRepos"> &
     WorkspaceExecSession,
   repoId?: string | null,
-): WorktreeTarget | null {
-  const primaryRepo = sessionRepoId(session) ?? defaultRepo().id;
+): Promise<WorktreeTarget | null> {
+  const primaryRepo = (await sessionRepoId(session)) ?? defaultRepo().id;
   const primary = !repoId || repoId === primaryRepo;
   const dir = primary
     ? session.worktreeDir
@@ -667,12 +682,12 @@ export function resolveWorktreeTarget(
  * when there's no branch to act on. `ghRepo` is the host-side repo identifier
  * (hostRepoId — GitHub owner/name, or the code.storage repo id).
  */
-export function resolvePrTarget(
+export async function resolvePrTarget(
   session: UnifiedSession,
   repoId?: string | null,
   branch?: string | null,
-): { ghRepo: string; branch: string; repoId: string } | null {
-  const targets = projectPrTargets(session);
+): Promise<{ ghRepo: string; branch: string; repoId: string } | null> {
+  const targets = await projectPrTargets(session);
   const target =
     repoId && branch
       ? targets.find(
@@ -709,9 +724,9 @@ export async function workspaceOwningWorktree(
   worktreeDir: string | null | undefined,
 ): Promise<Workspace | null> {
   if (!worktreeDir) return null;
-  const cd = canonicalPath(worktreeDir);
-  if (Object.values(REPOS).some((r) => canonicalPath(r.repo) === cd))
-    return null;
+  const cd = await canonicalPath(worktreeDir);
+  for (const r of Object.values(REPOS))
+    if ((await canonicalPath(r.repo)) === cd) return null;
   return findWorkspaceByWorktree(worktreeDir);
 }
 
@@ -1113,7 +1128,7 @@ export async function linkPr(
     number = resolved.number;
   }
 
-  const primaryRepo = sessionRepoId(session) ?? defaultRepo().id;
+  const primaryRepo = (await sessionRepoId(session)) ?? defaultRepo().id;
   if (repoId === primaryRepo && branch === session.branch)
     throw new Error("That's this session's own PR — it's already shown");
   if (
@@ -1165,7 +1180,7 @@ export async function resolvePrReadinessTarget(
   const repoFilter = input.repo?.trim();
   if (repoFilter && !REPOS[repoFilter])
     throw new Error(`Unknown repo "${repoFilter}"`);
-  const targets = projectPrTargets(session).filter(
+  const targets = (await projectPrTargets(session)).filter(
     (t) =>
       (!repoFilter || t.repoId === repoFilter) &&
       REPOS[t.repoId] &&

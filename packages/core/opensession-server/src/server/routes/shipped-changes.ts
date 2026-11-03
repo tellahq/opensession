@@ -39,7 +39,7 @@ export async function handleShippedChangeRoutes(
   // PR title. Null tells the card to keep its title-based fallback.
   if (match[2]) {
     if (req.method !== "GET") return;
-    const target = resolvePrTarget(
+    const target = await resolvePrTarget(
       session,
       url.searchParams.get("repo"),
       url.searchParams.get("branch"),
@@ -113,7 +113,7 @@ export async function handleShippedChangeRoutes(
     }));
     return Response.json({ status: "undone" });
   }
-  const target = resolvePrTarget(session, body?.repo, body?.branch);
+  const target = await resolvePrTarget(session, body?.repo, body?.branch);
   if (!target)
     return Response.json(
       { error: "Pull request target not found" },

@@ -61,10 +61,12 @@ export const SEED_ENV_FILES = ["packages/core/webapp/.env.local", ".envrc"];
  * for every fresh worktree. Only fills gaps: a worktree copy may carry
  * deliberate per-session edits, so an existing file is never overwritten.
  */
-export function seedHostEnvFiles(
+export async function seedHostEnvFiles(
   worktreeDir: string,
-  repo: Repo | undefined = repoForPathOrNull(worktreeDir),
-): string[] {
+  owner?: Repo | null,
+): Promise<string[]> {
+  const repo =
+    owner === undefined ? await repoForPathOrNull(worktreeDir) : owner;
   if (!repo?.repo || resolve(repo.repo) === resolve(worktreeDir)) return [];
   const seeded: string[] = [];
   for (const rel of SEED_ENV_FILES) {
@@ -131,22 +133,14 @@ export interface PreviewStatus {
   portalRecipes: PreviewPortalRecipe[];
   /** Present when the session's Sandbox cannot be inspected right now. */
   sandboxLifecycle?:
-    | "preparing"
-    | "awake"
-    | "sleeping"
-    | "waking"
-    | "needs_attention";
+    "preparing" | "awake" | "sleeping" | "waking" | "needs_attention";
   /** Set for a session on this machine whose Portals run in a Sandbox of
    * their own (portal-sandbox.ts): which provider, and how that machine is
    * doing. */
   portalSandbox?: {
     provider: string;
     lifecycle?:
-      | "preparing"
-      | "awake"
-      | "sleeping"
-      | "waking"
-      | "needs_attention";
+      "preparing" | "awake" | "sleeping" | "waking" | "needs_attention";
     error?: string;
   };
 }

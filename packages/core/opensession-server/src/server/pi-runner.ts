@@ -11,20 +11,14 @@
  */
 
 import { registerMemoryProbe } from "./memory-probes";
-import {
-  mkdirSync,
-  readdirSync,
-  openSync,
-  readSync,
-  closeSync,
-  realpathSync,
-  constants as fsConstants,
-} from "fs";
+import { constants as fsConstants } from "fs";
 import {
   access as fsAccess,
   mkdir as fsMkdir,
+  open as fsOpen,
   readFile as fsReadFile,
   readdir as fsReaddir,
+  realpath as fsRealpath,
   stat as fsStat,
   writeFile as fsWriteFile,
 } from "fs/promises";
@@ -42,6 +36,7 @@ import type {
  *  accepts (ProviderConfigInput — not re-exported by the package index). */
 type PiProviderConfigInput = Parameters<ModelRuntime["registerProvider"]>[1];
 import { stateDir } from "./paths";
+import { cachedWhich } from "./run-fs";
 import { audit, summarizeText } from "./audit";
 import { recordModelUsage, shortModel } from "./model-usage";
 import {
@@ -223,7 +218,7 @@ export async function githubCodeRunEnv(
 ): Promise<Record<string, string>> {
   if (process.env[GITHUB_RUN_AUTH_FILE_ENV]) return projectedGithubRunEnv();
   const { repoForPathOrNull } = await import("./worktree");
-  const repo = repoForPathOrNull(cwd);
+  const repo = await repoForPathOrNull(cwd);
   if (!repo || repo.host === "codestorage" || !repo.ghRepo) return {};
   const { githubServiceCredentialEnv } = await import("./github-app");
   return githubServiceCredentialEnv(repo.ghRepo, attachedRepos);
@@ -240,7 +235,7 @@ export async function githubReadRunEnv(
 ): Promise<Record<string, string>> {
   if (process.env[GITHUB_RUN_AUTH_FILE_ENV]) return projectedGithubRunEnv();
   const { repoForPathOrNull } = await import("./worktree");
-  const repo = repoForPathOrNull(cwd);
+  const repo = await repoForPathOrNull(cwd);
   if (!repo || repo.host === "codestorage" || !repo.ghRepo) return {};
   const { githubServiceReadOnlyEnv } = await import("./github-app");
   return githubServiceReadOnlyEnv(repo.ghRepo, attachedRepos);
@@ -259,7 +254,7 @@ export async function githubReadReposRunEnv(
   if (!readRepos?.length) return {};
   if (process.env[GITHUB_RUN_AUTH_FILE_ENV]) return {};
   const { repoForPathOrNull } = await import("./worktree");
-  const repo = repoForPathOrNull(cwd);
+  const repo = await repoForPathOrNull(cwd);
   if (!repo || repo.host === "codestorage" || !repo.ghRepo) return {};
   const { githubServiceReadReposEnv } = await import("./github-app");
   return githubServiceReadReposEnv(repo.ghRepo, readRepos);
@@ -1014,41 +1009,51 @@ export function piErrorContent(message: string, providerID: string): string {
 }
 
 /** First jsonl line of a pi session file (the v3 header), bounded read. */
-function readSessionHeader(
+async function readSessionHeader(
   path: string,
-): { type?: string; id?: string } | null {
-  let fd: number | null = null;
+): Promise<{ type?: string; id?: string } | null> {
+  const buf = await readFilePrefix(path, 4096);
+  if (!buf) return null;
   try {
-    fd = openSync(path, "r");
-    const buf = Buffer.alloc(4096);
-    const n = readSync(fd, buf, 0, buf.length, 0);
-    const firstLine = buf.toString("utf-8", 0, n).split("\n")[0];
+    const firstLine = buf.toString("utf-8").split("\n")[0];
     if (!firstLine) return null;
     return JSON.parse(firstLine);
   } catch {
     return null;
+  }
+}
+
+/** Up to `bytes` from the start of a file, or null when it cannot be read. */
+async function readFilePrefix(
+  path: string,
+  bytes: number,
+): Promise<Buffer | null> {
+  let handle: Awaited<ReturnType<typeof fsOpen>> | undefined;
+  try {
+    handle = await fsOpen(path, "r");
+    const buf = Buffer.alloc(bytes);
+    const { bytesRead } = await handle.read(buf, 0, bytes, 0);
+    return buf.subarray(0, bytesRead);
+  } catch {
+    return null;
   } finally {
-    if (fd !== null) {
-      try {
-        closeSync(fd);
-      } catch {}
-    }
+    await handle?.close().catch(() => {});
   }
 }
 
 /** Find the session jsonl whose header id matches — resume-by-piSessionId. */
-function findPiSessionFile(
+async function findPiSessionFile(
   sessionDir: string,
   piSessionId: string,
-): string | null {
+): Promise<string | null> {
   try {
-    const names = readdirSync(sessionDir)
+    const names = (await fsReaddir(sessionDir))
       .filter((n) => n.endsWith(".jsonl"))
       .sort()
       .reverse();
     for (const name of names) {
       const path = join(sessionDir, name);
-      const header = readSessionHeader(path);
+      const header = await readSessionHeader(path);
       if (header?.type === "session" && header.id === piSessionId) return path;
     }
   } catch {}
@@ -1124,18 +1129,18 @@ const BLOCKED_PATH_ROOTS = ["/proc", "/sys", "/dev"];
  * own scratch dir, its TMPDIR). Throws with a model-facing message on
  * escape. Returns the fully-resolved path it validated.
  */
-export function assertContainedPiPath(
+export async function assertContainedPiPath(
   rawPath: string,
   realRoot: string,
   extraRealRoots: readonly string[] = [],
-): string {
+): Promise<string> {
   const resolved = resolve(rawPath);
   let probe = resolved;
   const pendingSuffix: string[] = [];
   let real: string;
   for (;;) {
     try {
-      real = realpathSync(probe);
+      real = await fsRealpath(probe);
       break;
     } catch {
       const parent = dirname(probe);
@@ -1169,37 +1174,24 @@ export function assertContainedPiPath(
 
 /** Magic-byte image sniff for the guarded read tool (pi's default detector is
  *  not importable standalone; same formats: png/jpeg/gif/webp/bmp). */
-function sniffImageMime(path: string): string | undefined {
-  try {
-    const fd = openSync(path, "r");
-    try {
-      const buf = Buffer.alloc(16);
-      const n = readSync(fd, buf, 0, 16, 0);
-      if (n < 4) return undefined;
-      if (
-        buf[0] === 0x89 &&
-        buf[1] === 0x50 &&
-        buf[2] === 0x4e &&
-        buf[3] === 0x47
-      )
-        return "image/png";
-      if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff)
-        return "image/jpeg";
-      if (buf.toString("ascii", 0, 4) === "GIF8") return "image/gif";
-      if (
-        n >= 12 &&
-        buf.toString("ascii", 0, 4) === "RIFF" &&
-        buf.toString("ascii", 8, 12) === "WEBP"
-      )
-        return "image/webp";
-      if (buf[0] === 0x42 && buf[1] === 0x4d) return "image/bmp";
-      return undefined;
-    } finally {
-      closeSync(fd);
-    }
-  } catch {
-    return undefined;
-  }
+async function sniffImageMime(path: string): Promise<string | undefined> {
+  const buf = await readFilePrefix(path, 16);
+  if (!buf) return undefined;
+  const n = buf.length;
+  if (n < 4) return undefined;
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47)
+    return "image/png";
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff)
+    return "image/jpeg";
+  if (buf.toString("ascii", 0, 4) === "GIF8") return "image/gif";
+  if (
+    n >= 12 &&
+    buf.toString("ascii", 0, 4) === "RIFF" &&
+    buf.toString("ascii", 8, 12) === "WEBP"
+  )
+    return "image/webp";
+  if (buf[0] === 0x42 && buf[1] === 0x4d) return "image/bmp";
+  return undefined;
 }
 
 /**
@@ -1211,21 +1203,22 @@ function sniffImageMime(path: string): string | undefined {
  * traversed out of. Exported for the containment unit tests.
  */
 export function makeGuardedToolOps(cwd: string, scratchDir?: string) {
-  const realOrResolved = (p: string) => {
-    try {
-      return realpathSync(p);
-    } catch {
-      return resolve(p);
-    }
-  };
-  const realRoot = realOrResolved(cwd);
+  const realOrResolved = (p: string) => fsRealpath(p).catch(() => resolve(p));
   // The session's own scratch dir is its TMPDIR (bashEnv), and attachments
   // are staged there, so the file tools must reach it too. Never a shared
   // root: /tmp itself stays out, it holds every other session's files.
-  const extraRoots = scratchDir ? [realOrResolved(scratchDir)] : [];
-  const guard = (p: string) => assertContainedPiPath(p, realRoot, extraRoots);
+  // Resolved once, on first use.
+  let roots: Promise<{ realRoot: string; extraRoots: string[] }> | undefined;
+  const guard = async (p: string) => {
+    roots ??= (async () => ({
+      realRoot: await realOrResolved(cwd),
+      extraRoots: scratchDir ? [await realOrResolved(scratchDir)] : [],
+    }))();
+    const { realRoot, extraRoots } = await roots;
+    return assertContainedPiPath(p, realRoot, extraRoots);
+  };
   const exists = async (p: string) => {
-    guard(p);
+    await guard(p);
     try {
       await fsAccess(p, fsConstants.F_OK);
       return true;
@@ -1237,26 +1230,26 @@ export function makeGuardedToolOps(cwd: string, scratchDir?: string) {
     guard,
     read: {
       readFile: async (p: string) => {
-        guard(p);
+        await guard(p);
         return fsReadFile(p);
       },
       access: async (p: string) => {
-        guard(p);
+        await guard(p);
         await fsAccess(p, fsConstants.R_OK);
       },
       detectImageMimeType: async (p: string) => {
-        guard(p);
+        await guard(p);
         return sniffImageMime(p);
       },
     },
     ls: {
       exists,
       stat: async (p: string) => {
-        guard(p);
+        await guard(p);
         return fsStat(p);
       },
       readdir: async (p: string) => {
-        guard(p);
+        await guard(p);
         return fsReaddir(p);
       },
     },
@@ -1267,7 +1260,7 @@ export function makeGuardedToolOps(cwd: string, scratchDir?: string) {
         searchPath: string,
         options: { ignore: string[]; limit: number },
       ): Promise<string[]> => {
-        guard(searchPath);
+        await guard(searchPath);
         // fd (pi's default) matches bare patterns against basenames while
         // globbing relative paths — mirror that with a `**/` prefix.
         const effective = pattern.includes("/") ? pattern : `**/${pattern}`;
@@ -1290,25 +1283,25 @@ export function makeGuardedToolOps(cwd: string, scratchDir?: string) {
     },
     edit: {
       readFile: async (p: string) => {
-        guard(p);
+        await guard(p);
         return fsReadFile(p);
       },
       writeFile: async (p: string, content: string) => {
-        guard(p);
+        await guard(p);
         await fsWriteFile(p, content, "utf-8");
       },
       access: async (p: string) => {
-        guard(p);
+        await guard(p);
         await fsAccess(p, fsConstants.R_OK | fsConstants.W_OK);
       },
     },
     write: {
       writeFile: async (p: string, content: string) => {
-        guard(p);
+        await guard(p);
         await fsWriteFile(p, content, "utf-8");
       },
       mkdir: async (dir: string) => {
-        guard(dir);
+        await guard(dir);
         await fsMkdir(dir, { recursive: true });
       },
     },
@@ -1317,10 +1310,10 @@ export function makeGuardedToolOps(cwd: string, scratchDir?: string) {
 
 /** The skills this server ships, which a Sandbox run may read from here
  *  (they exist nowhere else; remote-workspace.ts). */
-function shippedSkillRoots(): string[] {
+async function shippedSkillRoots(): Promise<string[]> {
   const roots = [resolve(SHIPPED_SKILLS_DIR)];
   try {
-    roots.push(realpathSync(SHIPPED_SKILLS_DIR));
+    roots.push(await fsRealpath(SHIPPED_SKILLS_DIR));
   } catch {}
   return [...new Set(roots)];
 }
@@ -1339,7 +1332,7 @@ const GREP_OUTPUT_CAP = 50 * 1024;
 export function makeGuardedGrepExecute(
   cwd: string,
   env: Record<string, string>,
-  guard: (p: string) => string,
+  guard: (p: string) => string | Promise<string>,
 ) {
   return async function execute(
     _toolCallId: string,
@@ -1363,8 +1356,8 @@ export function makeGuardedGrepExecute(
     const rawPath =
       typeof params?.path === "string" && params.path ? params.path : ".";
     const searchPath = resolve(cwd, rawPath);
-    guard(searchPath);
-    const rgPath = Bun.which("rg");
+    await guard(searchPath);
+    const rgPath = await cachedWhich("rg");
     if (!rgPath) throw new Error("ripgrep (rg) is not available on this host");
     const st = await fsStat(searchPath).catch(() => null);
     if (!st) throw new Error(`Path not found: ${searchPath}`);
@@ -1757,11 +1750,11 @@ export function makePiBashTool(input: {
       // grandchildren a plain proc.kill() misses (bash may already be gone
       // when the timeout fires). Absent setsid (macOS), degrade to the
       // direct-child kill.
-      const setsidPath = Bun.which("setsid");
+      const setsidPath = await cachedWhich("setsid");
       const directCommand = setsidPath
         ? [setsidPath, "/bin/bash", "-c", command]
         : ["/bin/bash", "-c", command];
-      const scoped = controlPlaneWorkloadCommand(
+      const scoped = await controlPlaneWorkloadCommand(
         directCommand,
         `opensession-agent-cmd-${crypto.randomUUID().slice(0, 13)}`,
         { env: input.env },
@@ -2357,7 +2350,7 @@ async function* runPiAttempt(
           return opts.remoteWorkspace?.repo
             ? getRepo(opts.remoteWorkspace.repo)
             : undefined;
-        return repoForPathOrNull(cwd);
+        return await repoForPathOrNull(cwd);
       } catch {
         return undefined;
       }
@@ -2490,7 +2483,7 @@ async function* runPiAttempt(
       );
       if (cliAccount) {
         const cliCfgDir = `${PI_STATE_DIR}/cli/claude/${cliAccount.id}`;
-        mkdirSync(cliCfgDir, { recursive: true, mode: 0o700 });
+        await fsMkdir(cliCfgDir, { recursive: true, mode: 0o700 });
         cliEnv.CLAUDE_CODE_OAUTH_TOKEN = cliAccount.token;
         cliEnv.CLAUDE_CONFIG_DIR = cliCfgDir;
         audit({
@@ -2550,9 +2543,9 @@ async function* runPiAttempt(
       hostGithubLogin,
     });
     if (!remote && opts.publicationPolicy && homeEnv.HOME)
-      mkdirSync(homeEnv.HOME, { recursive: true, mode: 0o700 });
+      await fsMkdir(homeEnv.HOME, { recursive: true, mode: 0o700 });
     if (!remote && homeEnv.GH_CONFIG_DIR)
-      mkdirSync(homeEnv.GH_CONFIG_DIR, { recursive: true, mode: 0o700 });
+      await fsMkdir(homeEnv.GH_CONFIG_DIR, { recursive: true, mode: 0o700 });
     const bashEnv: Record<string, string> = {
       ...(process.env.PATH ? { PATH: process.env.PATH } : {}),
       ...homeEnv,
@@ -2647,7 +2640,7 @@ async function* runPiAttempt(
     // back to its in-process built-ins for a name without an override, so a
     // separately maintained enabled-name list would be a containment escape.
     const guardedOps = remote
-      ? makeRemoteToolOps(remote, shippedSkillRoots())
+      ? makeRemoteToolOps(remote, await shippedSkillRoots())
       : makeGuardedToolOps(cwd, opts.scratchDir);
     const commandEnv = remote
       ? remoteCommandEnv(
@@ -2769,7 +2762,7 @@ async function* runPiAttempt(
       // push-the-branch instructions instead of `gh pr create`.
       repoHost: isScratch ? undefined : cwdRepo?.host,
       publicRepo,
-      localInstructions: readLocalInstructions(context.dir),
+      localInstructions: await readLocalInstructions(context.dir),
       stripeApprovalsNote: stripeApprovals
         ? stripeApprovalsNote(policy.unattended)
         : undefined,
@@ -2817,8 +2810,8 @@ async function* runPiAttempt(
 
     const agentDir = `${PI_STATE_DIR}/agent`;
     const sessionDir = `${PI_STATE_DIR}/sessions/${sanitizeId(unifiedSessionId || runKey)}`;
-    mkdirSync(agentDir, { recursive: true });
-    mkdirSync(sessionDir, { recursive: true });
+    await fsMkdir(agentDir, { recursive: true });
+    await fsMkdir(sessionDir, { recursive: true });
 
     // Pi's `auto` transport tries the experimental ChatGPT WebSocket first.
     // A mid-response 1006 cannot safely fall back in-place after output has
@@ -2854,7 +2847,7 @@ async function* runPiAttempt(
       // with no additionalSkillPaths loaded nothing at all, which left every
       // shipped skill dead in the product.
       noSkills: true,
-      additionalSkillPaths: skillSearchPaths(context.dir),
+      additionalSkillPaths: await skillSearchPaths(context.dir),
       // The pstack family stays loaded but invisible to the model until the
       // session turns pstack mode on (composer toggle or /pstack). A mirrored
       // Sandbox skill is presented at its Sandbox path; its local copy only
@@ -2918,7 +2911,7 @@ async function* runPiAttempt(
     // open transcripts.db itself.
     const resumePath =
       !walk.continuation && opts.sessionId
-        ? findPiSessionFile(sessionDir, opts.sessionId)
+        ? await findPiSessionFile(sessionDir, opts.sessionId)
         : null;
     // Resume-miss bridge: pi's SessionManager buffers a session's jsonl until
     // its first ASSISTANT message, so a turn that died before any assistant
@@ -3166,14 +3159,11 @@ async function* runPiAttempt(
       });
     };
     handle.steer = (text, images, steerId) => {
-      // Same skill expansion as the prompt path. The queue holds the expanded
-      // text so the delivery match stays exact; the audit line below still
-      // records what the person typed.
-      const entry = {
-        text: expandSkillCommand(text, loader.getSkills().skills),
-        images,
-        steerId,
-      };
+      // Same skill expansion as the prompt path. The queued step below
+      // expands the text before pi sees it, so the delivery match stays
+      // exact; the audit line below still records what the person typed.
+      const entry = { text, images, steerId };
+      const skills = loader.getSkills().skills;
       steeringBoundaryPending = true;
       pendingSteers.push(entry);
       onEngineQueue(async () => {
@@ -3183,7 +3173,7 @@ async function* runPiAttempt(
         // before pi ever sees it: delivery matches pi's echo against it, and
         // a retraction replays it verbatim.
         entry.text = withImagesNote(
-          entry.text,
+          await expandSkillCommand(entry.text, skills),
           await stagePromptImages(
             opts.scratchDir,
             images,
@@ -3319,7 +3309,7 @@ async function* runPiAttempt(
     // works, which is what the composer's "/" menu inserts, and this text
     // stays identical to the user message pi echoes back, which the
     // steer-delivery check below compares against.
-    const promptWithSkill = expandSkillCommand(
+    const promptWithSkill = await expandSkillCommand(
       prompt,
       loader.getSkills().skills,
     );
@@ -4008,9 +3998,7 @@ export async function runPiSmokeTurn(
 
   const cwd = `${PI_STATE_DIR}/smoke`;
   if (enabled) {
-    try {
-      mkdirSync(cwd, { recursive: true });
-    } catch {}
+    await fsMkdir(cwd, { recursive: true }).catch(() => {});
   }
   const eventTypes: string[] = [];
   let text = "";

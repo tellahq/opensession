@@ -271,7 +271,7 @@ async function mirrorWalkthroughToPr(
   const walkthrough = fresh ?? session.walkthrough;
   if (!walkthrough)
     return { mirrored: false, reason: "no walkthrough on session" };
-  const target = resolvePrTarget(session, null, null);
+  const target = await resolvePrTarget(session, null, null);
   if (!target) return { mirrored: false, reason: "session has no branch" };
   const repo = getRepo(target.repoId);
   // code.storage has no PR description to splice a walkthrough into

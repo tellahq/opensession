@@ -21,13 +21,14 @@
  * stateless across hot reloads (every mutable bit is parked on globalThis).
  */
 
-import { existsSync, unlinkSync, chmodSync, mkdirSync } from "fs";
+import { chmod, mkdir, unlink } from "node:fs/promises";
 import { dirname } from "path";
 import { timingSafeEqual } from "crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { lazyJsonSchemaValidator } from "./inprocess-mcp";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
+import { pathExists } from "./run-fs";
 import { audit } from "./audit";
 import { devInstanceBootError, isDevInstance } from "./dev-mode";
 import {
@@ -333,8 +334,8 @@ async function handleRpc(req: Request): Promise<Response> {
 async function bindRunRpcSocket(): Promise<boolean> {
   if (g.__runRpcServer) return true;
   const sock = rpcSocketPath(OPENSESSION_SESSIONS_DIR);
-  mkdirSync(dirname(sock), { recursive: true });
-  if (existsSync(sock)) {
+  await mkdir(dirname(sock), { recursive: true });
+  if (await pathExists(sock)) {
     if (await rpcSocketPathAlive(sock)) {
       console.error(
         `[run-rpc] ${sock} is already served by a live process — not binding. ` +
@@ -344,9 +345,7 @@ async function bindRunRpcSocket(): Promise<boolean> {
       audit({ msg: "run_rpc_bind_declined", socket: sock });
       return false;
     }
-    try {
-      unlinkSync(sock);
-    } catch {}
+    await unlink(sock).catch(() => {});
   }
   try {
     g.__runRpcServer = Bun.serve({
@@ -366,9 +365,7 @@ async function bindRunRpcSocket(): Promise<boolean> {
     audit({ msg: "run_rpc_bind_failed", socket: sock, error: String(e) });
     return false;
   }
-  try {
-    chmodSync(sock, 0o600);
-  } catch {}
+  await chmod(sock, 0o600).catch(() => {});
   console.log(`[run-rpc] listening on ${sock}`);
   return true;
 }

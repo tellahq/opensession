@@ -20,7 +20,7 @@ import { reposForScopes } from "./layout";
 
 export interface RepoMemoryToolContext {
   /** Scope keys this run can see (its own plus checked-out participants'). */
-  scopeKeys: () => string[];
+  scopeKeys: () => string[] | Promise<string[]>;
   sessionId?: string;
   sessionLink?: string;
   /** Commit author for tool writes. */
@@ -45,11 +45,13 @@ function errorText(error: unknown): string {
 }
 
 export function createRepoMemoryMcpServer(ctx: RepoMemoryToolContext) {
-  const repos = () => reposForScopes(ctx.scopeKeys());
-  const checkRepo = (repo: string): string | null =>
-    repos().includes(repo)
+  const repos = async () => reposForScopes(await ctx.scopeKeys());
+  const checkRepo = async (repo: string): Promise<string | null> => {
+    const visible = await repos();
+    return visible.includes(repo)
       ? null
-      : `This run cannot see memory repository "${repo}". Visible: ${repos().join(", ") || "none"}.`;
+      : `This run cannot see memory repository "${repo}". Visible: ${visible.join(", ") || "none"}.`;
+  };
 
   const search = [
     tool(
@@ -62,7 +64,7 @@ export function createRepoMemoryMcpServer(ctx: RepoMemoryToolContext) {
       },
       async (args) => {
         try {
-          const scopeKeys = ctx.scopeKeys();
+          const scopeKeys = await ctx.scopeKeys();
           await memoryRepo.service("fresh", reposForScopes(scopeKeys));
           const page = await memoryRepo.index("search", args.query, {
             scopeKeys,
@@ -89,7 +91,7 @@ export function createRepoMemoryMcpServer(ctx: RepoMemoryToolContext) {
           "List every file in one memory repository.",
           { repo: z.string().trim().min(1) },
           async (args) => {
-            const denied = checkRepo(args.repo);
+            const denied = await checkRepo(args.repo);
             if (denied) return text(denied);
             const files = await memoryRepo.service("listFiles", args.repo);
             return text(
@@ -102,7 +104,7 @@ export function createRepoMemoryMcpServer(ctx: RepoMemoryToolContext) {
           "Read one file from a memory repository (latest version).",
           { repo: z.string().trim().min(1), path: z.string().trim().min(1) },
           async (args) => {
-            const denied = checkRepo(args.repo);
+            const denied = await checkRepo(args.repo);
             if (denied) return text(denied);
             const content = await memoryRepo.service(
               "readFile",
@@ -124,7 +126,7 @@ export function createRepoMemoryMcpServer(ctx: RepoMemoryToolContext) {
             message: z.string().trim().min(1).max(200),
           },
           async (args) => {
-            const denied = checkRepo(args.repo);
+            const denied = await checkRepo(args.repo);
             if (denied) return text(denied);
             try {
               await memoryRepo.service(
@@ -154,7 +156,7 @@ export function createRepoMemoryMcpServer(ctx: RepoMemoryToolContext) {
             message: z.string().trim().min(1).max(200),
           },
           async (args) => {
-            const denied = checkRepo(args.repo);
+            const denied = await checkRepo(args.repo);
             if (denied) return text(denied);
             try {
               await memoryRepo.service(
@@ -185,7 +187,7 @@ export function createRepoMemoryMcpServer(ctx: RepoMemoryToolContext) {
           "Sync one visible memory repository with its configured upstream and report the result. This commits no changes; file writes already commit separately.",
           { repo: z.string().trim().min(1) },
           async ({ repo }) => {
-            const denied = checkRepo(repo);
+            const denied = await checkRepo(repo);
             if (denied) return text(denied);
             try {
               const result = await memoryRepo.service("syncRemote", repo);

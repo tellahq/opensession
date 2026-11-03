@@ -62,14 +62,16 @@
  * one-shot run checkouts stand at ~2-3G each.
  */
 
+import type { Dirent } from "node:fs";
 import {
-  type Dirent,
-  existsSync,
-  readdirSync,
-  readlinkSync,
-  statSync,
-} from "node:fs";
-import { lstat, mkdir, rm, writeFile } from "node:fs/promises";
+  lstat,
+  mkdir,
+  readdir,
+  readlink,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { $ } from "bun";
 import { githubRequest } from "../agents/github/github-rest";
@@ -89,6 +91,7 @@ import {
   repoFromGitPointer,
 } from "./worktree";
 import { workloadArgv } from "./workload-scope";
+import { pathExists } from "./run-fs";
 
 const worktreesDir = () => configuredPaths().worktreesDir;
 
@@ -177,6 +180,51 @@ export type WorktreeActivitySession = Pick<
   | "archived"
 >;
 
+/** Sync lookups over paths resolved ahead of time, so the pure selectors
+ *  below never touch the disk. */
+export interface SessionPaths {
+  /** The symlink-resolved form of a session dir (canonicalPath). */
+  canonical(dir: string): string;
+  /** The repo owning a session dir without a recorded repo. */
+  repoId(dir: string): string | undefined;
+}
+
+/** Paths as given: for callers whose dirs are already canonical. */
+const LITERAL_PATHS: SessionPaths = {
+  canonical: (dir) => dir,
+  repoId: () => undefined,
+};
+
+/** Resolve every dir the sessions name, once, off the event loop. */
+export async function resolveSessionPaths(
+  sessions: readonly WorktreeActivitySession[],
+): Promise<SessionPaths> {
+  const dirs = new Set<string>();
+  const unowned = new Set<string>();
+  for (const session of sessions) {
+    if (session.worktreeDir) {
+      dirs.add(session.worktreeDir);
+      if (!session.repo) unowned.add(session.worktreeDir);
+    }
+    for (const attached of session.attachedRepos ?? [])
+      if (attached.dir) dirs.add(attached.dir);
+  }
+  const canonical = new Map<string, string>();
+  const repos = new Map<string, string | undefined>();
+  await Promise.all([
+    ...[...dirs].map(async (dir) => {
+      canonical.set(dir, await canonicalPath(dir));
+    }),
+    ...[...unowned].map(async (dir) => {
+      repos.set(dir, (await repoForPathOrNull(dir))?.id);
+    }),
+  ]);
+  return {
+    canonical: (dir) => canonical.get(dir) ?? dir,
+    repoId: (dir) => repos.get(dir),
+  };
+}
+
 /** A session a person can still come back to: not archived and not an
  *  automation run. Its checkout holds gitignored state (dependency installs,
  *  build output, screenshots it showed in chat) that no branch or bank can
@@ -194,6 +242,7 @@ function isOpenInteractiveSession(session: WorktreeActivitySession): boolean {
  */
 function worktreeActivity(
   sessions: readonly WorktreeActivitySession[],
+  paths: SessionPaths,
 ): Map<
   string,
   { latestMs: number; protected: boolean; automationOnly: boolean }
@@ -209,7 +258,7 @@ function worktreeActivity(
     ].filter((dir): dir is string => !!dir);
     const lastActivityMs = Date.parse(session.lastActivity);
     for (const rawDir of dirs) {
-      const dir = canonicalPath(rawDir);
+      const dir = paths.canonical(rawDir);
       const current = activity.get(dir) ?? {
         latestMs: Number.NEGATIVE_INFINITY,
         protected: false,
@@ -233,9 +282,10 @@ export function idleSessionWorktrees(
   sessions: readonly WorktreeActivitySession[],
   cutoffMs: number,
   automationCutoffMs: number = cutoffMs,
+  paths: SessionPaths = LITERAL_PATHS,
 ): Set<string> {
   const idle = new Set<string>();
-  for (const [dir, state] of worktreeActivity(sessions)) {
+  for (const [dir, state] of worktreeActivity(sessions, paths)) {
     const cutoff = state.automationOnly ? automationCutoffMs : cutoffMs;
     if (!state.protected && state.latestMs < cutoff) idle.add(dir);
   }
@@ -251,6 +301,7 @@ export function idleSessionWorktrees(
  *  parked by the idle horizon. */
 export function openSessionWorktrees(
   sessions: readonly WorktreeActivitySession[],
+  paths: SessionPaths = LITERAL_PATHS,
 ): Set<string> {
   const open = new Set<string>();
   for (const session of sessions) {
@@ -259,7 +310,7 @@ export function openSessionWorktrees(
       session.worktreeDir,
       ...(session.attachedRepos ?? []).map((repo) => repo.dir),
     ])
-      if (dir) open.add(canonicalPath(dir));
+      if (dir) open.add(paths.canonical(dir));
   }
   return open;
 }
@@ -269,9 +320,10 @@ export function openSessionWorktrees(
 export function activeSessionWorktrees(
   sessions: readonly WorktreeActivitySession[],
   cutoffMs: number,
+  paths: SessionPaths = LITERAL_PATHS,
 ): Set<string> {
   const active = new Set<string>();
-  for (const [dir, state] of worktreeActivity(sessions)) {
+  for (const [dir, state] of worktreeActivity(sessions, paths)) {
     if (state.protected || state.latestMs >= cutoffMs) active.add(dir);
   }
   return active;
@@ -285,8 +337,9 @@ export function activeSessionWorktrees(
 export function activeSessionBranches(
   sessions: readonly WorktreeActivitySession[],
   cutoffMs: number,
+  paths: SessionPaths = LITERAL_PATHS,
 ): Map<string, Set<string>> {
-  return sessionBranches(sessions, (session) => {
+  return sessionBranches(sessions, paths, (session) => {
     const lastActivityMs = Date.parse(session.lastActivity);
     return (
       !Number.isFinite(lastActivityMs) ||
@@ -301,12 +354,14 @@ export function activeSessionBranches(
  *  `activeSessionBranches`. */
 export function openSessionBranches(
   sessions: readonly WorktreeActivitySession[],
+  paths: SessionPaths = LITERAL_PATHS,
 ): Map<string, Set<string>> {
-  return sessionBranches(sessions, isOpenInteractiveSession);
+  return sessionBranches(sessions, paths, isOpenInteractiveSession);
 }
 
 function sessionBranches(
   sessions: readonly WorktreeActivitySession[],
+  paths: SessionPaths,
   holds: (session: WorktreeActivitySession) => boolean,
 ): Map<string, Set<string>> {
   const active = new Map<string, Set<string>>();
@@ -324,9 +379,7 @@ function sessionBranches(
     if (!holds(session)) continue;
     const primaryRepo =
       session.repo ||
-      (session.worktreeDir
-        ? repoForPathOrNull(session.worktreeDir)?.id
-        : undefined);
+      (session.worktreeDir ? paths.repoId(session.worktreeDir) : undefined);
     add(primaryRepo, session.branch);
     for (const attached of session.attachedRepos ?? [])
       add(attached.repo, attached.branch);
@@ -337,9 +390,12 @@ function sessionBranches(
 /** Age of the checkout itself, dated by its `.git` pointer file: written once
  *  by `git worktree add` and never touched by the work inside. Null when the
  *  dir is not a worktree. */
-export function checkoutAgeMs(dir: string, nowMs = Date.now()): number | null {
+export async function checkoutAgeMs(
+  dir: string,
+  nowMs = Date.now(),
+): Promise<number | null> {
   try {
-    return nowMs - statSync(join(dir, ".git")).mtimeMs;
+    return nowMs - (await stat(join(dir, ".git"))).mtimeMs;
   } catch {
     return null;
   }
@@ -347,23 +403,22 @@ export function checkoutAgeMs(dir: string, nowMs = Date.now()): number | null {
 
 /** Worktree dirs that are the cwd of ANY live process. Null = /proc unreadable
  *  (non-Linux) — callers must skip the sweep rather than guess. */
-function worktreesWithProcesses(root: string): Set<string> | null {
+async function worktreesWithProcesses(
+  root: string,
+): Promise<Set<string> | null> {
   let pids: string[];
   try {
-    pids = readdirSync("/proc").filter((p) => /^\d+$/.test(p));
+    pids = (await readdir("/proc")).filter((p) => /^\d+$/.test(p));
   } catch {
     return null;
   }
   const inUse = new Set<string>();
   const prefix = `${root}/`;
-  for (const pid of pids) {
-    let cwd: string;
-    try {
-      cwd = readlinkSync(`/proc/${pid}/cwd`);
-    } catch {
-      continue;
-    }
-    if (!cwd.startsWith(prefix)) continue;
+  const cwds = await Promise.all(
+    pids.map((pid) => readlink(`/proc/${pid}/cwd`).catch(() => null)),
+  );
+  for (const cwd of cwds) {
+    if (!cwd?.startsWith(prefix)) continue;
     const name = cwd.slice(prefix.length).split("/")[0];
     if (name) inUse.add(join(root, name));
   }
@@ -504,7 +559,7 @@ export async function bankWorkingState(
         await $`git -C ${dir} ls-files --others --exclude-standard -z | tar --null -C ${dir} -T - -czf ${tar}`
           .quiet()
           .nothrow();
-      if (tarred.exitCode !== 0 || !existsSync(tar))
+      if (tarred.exitCode !== 0 || !(await pathExists(tar)))
         throw new Error("untracked tar failed");
     }
     if (work.unpushed) {
@@ -513,7 +568,7 @@ export async function bankWorkingState(
         await $`git -C ${dir} bundle create ${bundle} HEAD --not --remotes`
           .quiet()
           .nothrow();
-      if (bundled.exitCode !== 0 || !existsSync(bundle))
+      if (bundled.exitCode !== 0 || !(await pathExists(bundle)))
         throw new Error("git bundle failed");
     }
     await writeFile(
@@ -542,17 +597,17 @@ export async function bankWorkingState(
 }
 
 /** Drop banked work past its retention window. */
-function pruneParkedWork(nowMs: number): void {
+async function pruneParkedWork(nowMs: number): Promise<void> {
   let entries: Dirent[];
   try {
-    entries = readdirSync(parkedWorkDir(), { withFileTypes: true });
+    entries = await readdir(parkedWorkDir(), { withFileTypes: true });
   } catch {
     return;
   }
   for (const e of entries) {
     const p = join(parkedWorkDir(), e.name);
     try {
-      if (nowMs - statSync(p).mtimeMs > PARKED_WORK_RETENTION_DAYS * DAY) {
+      if (nowMs - (await stat(p)).mtimeMs > PARKED_WORK_RETENTION_DAYS * DAY) {
         void rm(p, { recursive: true, force: true });
         console.log(
           `[worktree-reaper] pruned banked work ${e.name} (>${PARKED_WORK_RETENTION_DAYS}d)`,
@@ -572,15 +627,15 @@ async function removeDir(repo: Repo, dir: string): Promise<boolean> {
   await $`${workloadArgv(["git", "-C", repo.repo, "worktree", "remove", "--force", dir], "reaper")}`
     .quiet()
     .nothrow();
-  if (existsSync(dir))
+  if (await pathExists(dir))
     await rm(dir, { recursive: true, force: true }).catch(() => {});
   // Root-owned cargo/wasm build output defeats a plain rm.
-  if (existsSync(dir))
+  if (await pathExists(dir))
     await $`${workloadArgv(["sudo", "rm", "-rf", dir], "reaper")}`
       .nothrow()
       .quiet();
   await $`git -C ${repo.repo} worktree prune`.quiet().nothrow();
-  return !existsSync(dir);
+  return !(await pathExists(dir));
 }
 
 /** One reaper pass over every directory in the worktrees root. */
@@ -618,33 +673,41 @@ export async function sweepWorktreeReaper(
     },
   };
   const nowMs = opts.nowMs ?? Date.now();
-  if (!opts.dryRun) pruneParkedWork(nowMs);
+  if (!opts.dryRun) await pruneParkedWork(nowMs);
+  const paths = await resolveSessionPaths(sessions);
   const idleWorktrees = idleSessionWorktrees(
     sessions,
     nowMs - IDLE_DAYS * DAY,
     nowMs - AUTOMATION_IDLE_HOURS * HOUR,
+    paths,
   );
   const activeCutoffMs = nowMs - ACTIVE_HOURS * HOUR;
-  const activeWorktrees = activeSessionWorktrees(sessions, activeCutoffMs);
-  const activeBranches = activeSessionBranches(sessions, activeCutoffMs);
-  const openWorktrees = openSessionWorktrees(sessions);
-  const openBranches = openSessionBranches(sessions);
+  const activeWorktrees = activeSessionWorktrees(
+    sessions,
+    activeCutoffMs,
+    paths,
+  );
+  const activeBranches = activeSessionBranches(sessions, activeCutoffMs, paths);
+  const openWorktrees = openSessionWorktrees(sessions, paths);
+  const openBranches = openSessionBranches(sessions, paths);
   // An open session's checkout can be owned through its branch alone (a
   // revived checkout whose stored path is stale), which the path-keyed idle
   // set never sees. Date those by every owner, path or branch, instead.
   const idleCutoffMs = nowMs - IDLE_DAYS * DAY;
-  const recentWorktrees = activeSessionWorktrees(sessions, idleCutoffMs);
-  const recentBranches = activeSessionBranches(sessions, idleCutoffMs);
+  const recentWorktrees = activeSessionWorktrees(sessions, idleCutoffMs, paths);
+  const recentBranches = activeSessionBranches(sessions, idleCutoffMs, paths);
   const ownedWorktrees = activeSessionWorktrees(
     sessions,
     Number.NEGATIVE_INFINITY,
+    paths,
   );
   const ownedBranches = activeSessionBranches(
     sessions,
     Number.NEGATIVE_INFINITY,
+    paths,
   );
 
-  const inUse = worktreesWithProcesses(root);
+  const inUse = await worktreesWithProcesses(root);
   if (!inUse) {
     console.warn(
       "[worktree-reaper] cannot read /proc — skipping (never reap without the in-use check)",
@@ -654,7 +717,7 @@ export async function sweepWorktreeReaper(
 
   let entries: Dirent[];
   try {
-    entries = readdirSync(root, { withFileTypes: true }).filter((e) =>
+    entries = (await readdir(root, { withFileTypes: true })).filter((e) =>
       e.isDirectory(),
     );
   } catch {
@@ -677,7 +740,7 @@ export async function sweepWorktreeReaper(
     // Independent clone (real .git directory) — never auto-remove.
     let gitEntry: "file" | "dir" | "none" = "none";
     try {
-      gitEntry = statSync(join(dir, ".git")).isDirectory() ? "dir" : "file";
+      gitEntry = (await stat(join(dir, ".git"))).isDirectory() ? "dir" : "file";
     } catch {}
     if (gitEntry === "dir") continue;
     const isWorktreePointer = gitEntry === "file";
@@ -686,7 +749,7 @@ export async function sweepWorktreeReaper(
     // everything below (removal, the slug we archive/kill by) is
     // irreversible. Shared with repoForPathOrNull, which owns the fallback
     // for dirs that are gone.
-    const owner = repoFromGitPointer(dir);
+    const owner = await repoFromGitPointer(dir);
     const gitOk =
       isWorktreePointer &&
       (await $`git -C ${dir} rev-parse --is-inside-work-tree`.quiet().nothrow())
@@ -703,7 +766,7 @@ export async function sweepWorktreeReaper(
       // mis-nested but freshly created worktree wrapper (seen 2026-08-05).
       let mtimeMs = 0;
       try {
-        mtimeMs = statSync(dir).mtimeMs;
+        mtimeMs = (await stat(dir)).mtimeMs;
       } catch {}
       if (Date.now() - mtimeMs < 7 * 86_400_000) continue;
       if (await huskHasWork(dir)) {
@@ -721,7 +784,7 @@ export async function sweepWorktreeReaper(
       await $`${workloadArgv(["sudo", "rm", "-rf", dir], "reaper")}`
         .nothrow()
         .quiet();
-      if (!existsSync(dir)) {
+      if (!(await pathExists(dir))) {
         result.husksSwept.push(e.name);
         console.log(`[worktree-reaper] swept husk ${e.name}`);
         audit({ event: "worktree_reap", dir, kind: "husk" });
@@ -753,20 +816,21 @@ export async function sweepWorktreeReaper(
         .nothrow();
     if (ancestor.exitCode === 0) reason = `tip in origin/${repo.defaultBranch}`;
     else reason = await closedPrReason(repo, branch);
+    const canonicalDir = await canonicalPath(dir);
     const openOwned =
-      openWorktrees.has(canonicalPath(dir)) ||
+      openWorktrees.has(canonicalDir) ||
       !!openBranches.get(repo.id)?.has(branch);
-    const age = checkoutAgeMs(dir, nowMs);
+    const age = await checkoutAgeMs(dir, nowMs);
     const orphanWorkflow =
       WORKFLOW_BRANCH.test(branch) &&
-      !ownedWorktrees.has(canonicalPath(dir)) &&
+      !ownedWorktrees.has(canonicalDir) &&
       !ownedBranches.get(repo.id)?.has(branch);
     const idle = openOwned
-      ? !recentWorktrees.has(canonicalPath(dir)) &&
+      ? !recentWorktrees.has(canonicalDir) &&
         !recentBranches.get(repo.id)?.has(branch)
       : orphanWorkflow
         ? age !== null && age >= IDLE_DAYS * DAY
-        : idleWorktrees.has(canonicalPath(dir));
+        : idleWorktrees.has(canonicalDir);
     if (!reason && idle)
       reason = `${orphanWorkflow ? "workflow checkout" : "session"} idle>${IDLE_DAYS}d (checkout parked; branch retained)`;
     if (!reason) continue;
@@ -778,7 +842,7 @@ export async function sweepWorktreeReaper(
     // the snapshot claims it: the snapshot can trail the session that made it.
     const youngCheckout = age !== null && age < ACTIVE_HOURS * HOUR;
     if (
-      activeWorktrees.has(canonicalPath(dir)) ||
+      activeWorktrees.has(canonicalDir) ||
       activeBranches.get(repo.id)?.has(branch) ||
       youngCheckout
     ) {

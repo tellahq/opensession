@@ -25,9 +25,10 @@
  * distilled first.
  */
 
-import { existsSync, readFileSync } from "fs";
+import { readFile } from "node:fs/promises";
 import { join } from "path";
 import { configuredRepos } from "./config";
+import { pathExists } from "./run-fs";
 
 /** Directory depth shown per repo. One level is too coarse to separate
  *  `packages/core` from `packages/libs`; three is mostly test fixtures. */
@@ -108,22 +109,22 @@ function clampDoc(text: string, budget: number = MAX_DOC): string {
   return (lastBreak > budget / 2 ? cut.slice(0, lastBreak) : cut).trim();
 }
 
-function readDoc(repoPath: string): string {
+async function readDoc(repoPath: string): Promise<string> {
   const found: { name: string; text: string }[] = [];
   for (const name of DOC_FILES) {
     const path = join(repoPath, name);
-    if (!existsSync(path)) continue;
     try {
       // Read a bounded prefix: AGENTS.md runs to 32 KB in this very repo,
       // and everything that names the stack is at the top.
       const cleaned = cleanDoc(
-        readFileSync(path, "utf-8").slice(0, MAX_DOC * 6),
+        (await readFile(path, "utf-8")).slice(0, MAX_DOC * 6),
       );
       // A CLAUDE.md that only points at AGENTS.md (the convention in
       // several of these repos) describes nothing.
       if (cleaned && cleaned.length > 40) found.push({ name, text: cleaned });
     } catch {
-      // Unreadable doc is not a reason to drop the repo from the catalog.
+      // A missing or unreadable doc is not a reason to drop the repo from
+      // the catalog.
     }
   }
   // CLAUDE.md is the last resort, not a third helping: it is nearly always a
@@ -198,14 +199,14 @@ export async function repoRoutingCatalog(): Promise<RepoCard[]> {
 
   const cards = await Promise.all(
     repos.map(async (repo): Promise<RepoCard> => {
-      const onDisk = !!repo.repo && existsSync(repo.repo);
+      const onDisk = !!repo.repo && (await pathExists(repo.repo));
       return {
         id: repo.id,
         label: repo.label,
         ghRepo: repo.ghRepo || "",
         description: repo.description || "",
         layout: onDisk ? await readLayout(repo.repo) : [],
-        doc: onDisk ? readDoc(repo.repo) : "",
+        doc: onDisk ? await readDoc(repo.repo) : "",
         sharedCheckout: !!repo.sharedCheckout,
       };
     }),

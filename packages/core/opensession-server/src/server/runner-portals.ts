@@ -5,9 +5,8 @@
  * Portal command can name an arbitrary host or leave its session workspace.
  */
 
-import { existsSync, readFileSync } from "fs";
 import { statePath } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { cachedJsonStore } from "./run-fs";
 import {
   registerRunnerPortalFrameHandler,
   requestRunnerPortal,
@@ -71,47 +70,46 @@ const browserSockets = (socketState.__opensessionRunnerPortalSockets ??=
 function storePath(): string {
   return statePath(".opensession-runner-portals.json");
 }
-function load(): Store {
-  try {
-    const parsed = existsSync(storePath())
-      ? JSON.parse(readFileSync(storePath(), "utf8"))
-      : null;
-    return Array.isArray(parsed?.portals)
-      ? { portals: parsed.portals }
-      : { portals: [] };
-  } catch {
-    return { portals: [] };
-  }
+// Single-writer in this server process: read once, kept in memory.
+const portalStore = cachedJsonStore<Store>(storePath, (raw) => {
+  const parsed = raw as { portals?: unknown } | undefined;
+  return Array.isArray(parsed?.portals)
+    ? { portals: parsed.portals as RunnerPortalRecord[] }
+    : { portals: [] };
+});
+function load(): Promise<Store> {
+  return portalStore.load();
 }
-function save(store: Store): void {
-  writeJsonAtomic(storePath(), store);
-}
-function remove(records: readonly RunnerPortalRecord[]): void {
+async function remove(records: readonly RunnerPortalRecord[]): Promise<void> {
   if (!records.length) return;
   const keys = new Set(
     records.map(
       (record) => `${record.runnerId}:${record.sessionId}:${record.name}`,
     ),
   );
-  const store = load();
-  save({
-    portals: store.portals.filter(
-      (record) =>
-        !keys.has(`${record.runnerId}:${record.sessionId}:${record.name}`),
-    ),
+  await portalStore.exclusive(async () => {
+    const store = await load();
+    await portalStore.save({
+      portals: store.portals.filter(
+        (record) =>
+          !keys.has(`${record.runnerId}:${record.sessionId}:${record.name}`),
+      ),
+    });
   });
 }
-function upsert(record: RunnerPortalRecord): void {
-  const store = load();
-  const index = store.portals.findIndex(
-    (item) =>
-      item.runnerId === record.runnerId &&
-      item.sessionId === record.sessionId &&
-      item.name === record.name,
-  );
-  if (index < 0) store.portals.push(record);
-  else store.portals[index] = record;
-  save(store);
+async function upsert(record: RunnerPortalRecord): Promise<void> {
+  await portalStore.exclusive(async () => {
+    const store = await load();
+    const index = store.portals.findIndex(
+      (item) =>
+        item.runnerId === record.runnerId &&
+        item.sessionId === record.sessionId &&
+        item.name === record.name,
+    );
+    if (index < 0) store.portals.push(record);
+    else store.portals[index] = record;
+    await portalStore.save(store);
+  });
 }
 
 function relayKey(record: RunnerPortalRecord): string {
@@ -393,7 +391,7 @@ export async function dropRunnerPortalRoutes(
   runnerId?: string,
   user?: string,
 ): Promise<void> {
-  const records = load().portals.filter(
+  const records = (await load()).portals.filter(
     (record) =>
       record.sessionId === sessionId &&
       (!runnerId || record.runnerId === runnerId),
@@ -421,17 +419,17 @@ export async function dropRunnerPortalRoutes(
     }
   }
   await dropRecords(records);
-  remove(stopped);
+  await remove(stopped);
 }
 
 export async function dropRunnerPortalsForRunner(
   runnerId: string,
 ): Promise<void> {
-  const records = load().portals.filter(
+  const records = (await load()).portals.filter(
     (record) => record.runnerId === runnerId,
   );
   await dropRunnerPortalRoutesForRecords(records);
-  remove(records);
+  await remove(records);
 }
 
 async function dropRunnerPortalRoutesForRecords(
@@ -470,7 +468,7 @@ export function orphanedRunnerPortalRecords(
 export async function reapOrphanedRunnerPortals(): Promise<number> {
   const sessions = await getSessionListSnapshotAsync();
   const records = orphanedRunnerPortalRecords(
-    load().portals,
+    (await load()).portals,
     new Set(sessions.map((session) => session.id)),
   );
   if (!records.length) return 0;
@@ -495,7 +493,7 @@ export async function reapOrphanedRunnerPortals(): Promise<number> {
     }
   }
   await dropRecords(records);
-  remove(stopped);
+  await remove(stopped);
   return stopped.length;
 }
 
@@ -523,11 +521,11 @@ export function startRunnerPortalReaper(): void {
   );
 }
 
-function runnerSession(session: UnifiedSession, user?: string) {
+async function runnerSession(session: UnifiedSession, user?: string) {
   const target = session.runner;
   if (!target || !session.repo || !session.worktreeDir)
     throw new Error("This session does not run on a Runner.");
-  const runner = getRunner(target.id);
+  const runner = await getRunner(target.id);
   if (
     !runner ||
     !runnerAllowed(runner, { user, repo: session.repo, permission: "portals" })
@@ -541,16 +539,16 @@ function runnerSession(session: UnifiedSession, user?: string) {
   };
 }
 
-function parseRecord(
+async function parseRecord(
   value: unknown,
   session: UnifiedSession,
   user?: string,
-): RunnerPortalRecord {
+): Promise<RunnerPortalRecord> {
   const valueRecord =
     value && typeof value === "object"
       ? (value as Record<string, unknown>)
       : {};
-  const context = runnerSession(session, user);
+  const context = await runnerSession(session, user);
   const name = typeof valueRecord.name === "string" ? valueRecord.name : "";
   const command =
     typeof valueRecord.command === "string" ? valueRecord.command : "";
@@ -611,7 +609,7 @@ export async function startRunnerPortal(input: {
   port?: number;
   description?: string;
 }): Promise<RunnerPortalRecord> {
-  const context = runnerSession(input.session, input.user);
+  const context = await runnerSession(input.session, input.user);
   const allocation = (await requestRunnerPortal(context.target.id, {
     sessionId: input.session.id,
     repo: context.repo,
@@ -664,8 +662,8 @@ export async function startRunnerPortal(input: {
         ...(input.description ? { description: input.description } : {}),
       },
     });
-    const record = parseRecord(result, input.session, input.user);
-    upsert(record);
+    const record = await parseRecord(result, input.session, input.user);
+    await upsert(record);
     await runnerPortalUrl(record);
     return record;
   } catch (error) {
@@ -678,7 +676,7 @@ export async function listRunnerPortalServices(
   session: UnifiedSession,
   user?: string,
 ): Promise<RunnerPortalRecord[]> {
-  const context = runnerSession(session, user);
+  const context = await runnerSession(session, user);
   try {
     const result = await requestRunnerPortal(context.target.id, {
       sessionId: session.id,
@@ -688,16 +686,18 @@ export async function listRunnerPortalServices(
       user,
     });
     const records = Array.isArray(result)
-      ? result.map((value) => parseRecord(value, session, user))
+      ? await Promise.all(
+          result.map((value) => parseRecord(value, session, user)),
+        )
       : [];
     for (const record of records) {
-      upsert(record);
+      await upsert(record);
       await runnerPortalUrl(record);
     }
     return records;
   } catch {
-    return load()
-      .portals.filter(
+    return (await load()).portals
+      .filter(
         (record) =>
           record.runnerId === context.target.id &&
           record.sessionId === session.id,
@@ -714,7 +714,7 @@ export async function stopRunnerPortal(input: {
   user?: string;
   name: string;
 }): Promise<RunnerPortalRecord> {
-  const context = runnerSession(input.session, input.user);
+  const context = await runnerSession(input.session, input.user);
   const result = await requestRunnerPortal(context.target.id, {
     sessionId: input.session.id,
     repo: context.repo,
@@ -723,8 +723,8 @@ export async function stopRunnerPortal(input: {
     user: input.user,
     payload: { name: input.name },
   });
-  const record = parseRecord(result, input.session, input.user);
-  upsert(record);
+  const record = await parseRecord(result, input.session, input.user);
+  await upsert(record);
   await dropRelay(record);
   return record;
 }
@@ -734,8 +734,8 @@ export async function restartRunnerPortal(input: {
   user?: string;
   name: string;
 }): Promise<RunnerPortalRecord> {
-  const context = runnerSession(input.session, input.user);
-  const existing = load().portals.find(
+  const context = await runnerSession(input.session, input.user);
+  const existing = (await load()).portals.find(
     (record) =>
       record.runnerId === context.target.id &&
       record.sessionId === input.session.id &&
@@ -750,8 +750,8 @@ export async function restartRunnerPortal(input: {
     user: input.user,
     payload: { name: input.name, ...(portalUrl ? { portalUrl } : {}) },
   });
-  const record = parseRecord(result, input.session, input.user);
-  upsert(record);
+  const record = await parseRecord(result, input.session, input.user);
+  await upsert(record);
   await runnerPortalUrl(record);
   return record;
 }
@@ -762,7 +762,7 @@ export async function setRunnerPortalPath(input: {
   name: string;
   path: string;
 }): Promise<RunnerPortalRecord> {
-  const context = runnerSession(input.session, input.user);
+  const context = await runnerSession(input.session, input.user);
   const result = await requestRunnerPortal(context.target.id, {
     sessionId: input.session.id,
     repo: context.repo,
@@ -771,7 +771,7 @@ export async function setRunnerPortalPath(input: {
     user: input.user,
     payload: { name: input.name, path: input.path },
   });
-  const record = parseRecord(result, input.session, input.user);
-  upsert(record);
+  const record = await parseRecord(result, input.session, input.user);
+  await upsert(record);
   return record;
 }

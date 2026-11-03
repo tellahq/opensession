@@ -60,7 +60,7 @@ import { callMcpTool } from "./mcp-client";
 import { papercutsEnabledForRepo } from "./papercuts";
 import { defaultRepo, productName } from "./config";
 import { githubCredentialForRun } from "./github-auth";
-import { REPOS, getRepo, sessionRepoId } from "./worktree";
+import { REPOS, getRepo, sessionRepoId, sessionRepoIdByName } from "./worktree";
 import { labelPr } from "./pr-labels";
 import { registerInteractiveMcpBuilder } from "./run-rpc";
 import {
@@ -100,9 +100,11 @@ import {
 
 /** The session's primary repo id, for the papercuts toggle (undefined =
  *  session-only session, which logs under no repo and is always enabled). */
-function repoIdForSessionId(sessionId: string): string | undefined {
+async function repoIdForSessionId(
+  sessionId: string,
+): Promise<string | undefined> {
   const s = findSession(sessionId);
-  return s ? sessionRepoId(s) : undefined;
+  return s ? await sessionRepoId(s) : undefined;
 }
 
 /** The papercuts server for a session, or {} when its repo opted out
@@ -114,15 +116,21 @@ function papercutsServerFor(
   runKind: string,
   by?: string,
 ): Record<string, unknown> {
-  if (!papercutsEnabledForRepo(repoIdForSessionId(sessionId))) return {};
+  // The server set is built synchronously, so the opt-out reads the session's
+  // recorded repo; the tool's own default below resolves it fully.
+  const session = findSession(sessionId);
+  if (
+    !papercutsEnabledForRepo(session ? sessionRepoIdByName(session) : undefined)
+  )
+    return {};
   return {
     "opensession-papercuts": createPapercutsMcpServer({
       sessionId,
       runKind,
       by,
-      defaults: () => {
+      defaults: async () => {
         const s = findSession(sessionId);
-        return { repo: repoIdForSessionId(sessionId), model: s?.model };
+        return { repo: await repoIdForSessionId(sessionId), model: s?.model };
       },
     }),
   };
@@ -287,11 +295,11 @@ export function interactiveMcpServers(
                   false,
                   githubCredentialForRun(createdBy)?.env,
                 ),
-              snapshot: () => {
+              snapshot: async () => {
                 const s = findSession(sessionId);
                 if (!s) return null;
                 return {
-                  primaryRepo: sessionRepoId(s) ?? defaultRepo().id,
+                  primaryRepo: (await sessionRepoId(s)) ?? defaultRepo().id,
                   branch: s.branch,
                   worktreeDir: s.worktreeDir,
                   attached: s.attachedRepos || [],
@@ -321,9 +329,9 @@ export function interactiveMcpServers(
               // Lets a write refresh THIS session's memory snapshot without
               // disturbing anyone else's cached prompt prefix.
               sessionId,
-              repos: () => {
+              repos: async () => {
                 const s = findSession(sessionId);
-                return s ? sessionRepoIds(s) : [];
+                return s ? await sessionRepoIds(s) : [];
               },
               fileTools: () => {
                 const s = findSession(sessionId);
@@ -507,10 +515,14 @@ export function interactiveMcpServers(
             createWorkflowsMcpServer({
               sessionId,
               user: createdBy,
-              workspace: (repo, hint) => {
+              workspace: async (repo, hint) => {
                 const session = findSession(sessionId);
                 if (!session) return undefined;
-                const context = resolveSessionRepoContext(session, repo, hint);
+                const context = await resolveSessionRepoContext(
+                  session,
+                  repo,
+                  hint,
+                );
                 if (!context) return undefined;
                 return {
                   cwd: context.dir,

@@ -1,4 +1,5 @@
-import { statSync } from "fs";
+import type { Stats } from "node:fs";
+import { stat as statFile } from "node:fs/promises";
 import { entriesForWire, parseTranscriptFrom } from "./jsonl-parser";
 import { markTranscriptStoreDegraded } from "./transcript-persistence";
 import {
@@ -20,6 +21,10 @@ export interface WatchState {
   lastIno: number;
   viewers: Set<any>; // WebSocket connections
   interval: ReturnType<typeof setInterval> | null;
+  /** Settles once the initial stat filled the cursor fields above. */
+  ready?: Promise<void>;
+  /** A poll is in flight; the interval skips a tick rather than overlap. */
+  polling?: boolean;
 }
 
 // Parked on globalThis so a `bun --hot` reload keeps the live watch map: the
@@ -47,8 +52,7 @@ function notifyAppendListener(
 ) {
   if (!sessionId || entries.length === 0) return;
   const fn = (globalThis as any).__transcriptAppendListener as
-    | AppendListener
-    | undefined;
+    AppendListener | undefined;
   if (!fn) return;
   try {
     void Promise.resolve(fn(sessionId, entries)).catch((error) => {
@@ -68,32 +72,20 @@ function notifyAppendListener(
  * be applied to the new one) — a short path hash does that without leaking
  * server paths to the browser.
  */
-export function transcriptRev(path: string): string {
-  let h = 5381;
+export async function transcriptRev(path: string): Promise<string> {
   let identity = path;
   try {
-    const stat = statSync(path);
+    const stat = await statFile(path);
     identity += `:${stat.dev}:${stat.ino}`;
   } catch {}
+  return revOf(identity);
+}
+
+function revOf(identity: string): string {
+  let h = 5381;
   for (let i = 0; i < identity.length; i++)
     h = ((h * 33) ^ identity.charCodeAt(i)) >>> 0;
   return h.toString(36);
-}
-
-function getMtime(path: string): number {
-  try {
-    return statSync(path).mtimeMs;
-  } catch {
-    return 0;
-  }
-}
-
-function getFileSize(path: string): number {
-  try {
-    return statSync(path).size;
-  } catch {
-    return 0;
-  }
 }
 
 /**
@@ -147,13 +139,13 @@ const pollDeps: FilePollDeps = {
 
 /** One deterministic poll step. Dependencies are explicit so tests use real
  * temp files while replacing only the surrounding delivery/store ports. */
-export function pollTranscriptFile(
+export async function pollTranscriptFile(
   state: WatchState,
   deps: FilePollDeps = pollDeps,
-): void {
-  let stat: ReturnType<typeof statSync>;
+): Promise<void> {
+  let stat: Stats;
   try {
-    stat = statSync(state.path);
+    stat = await statFile(state.path);
   } catch {
     return;
   }
@@ -207,7 +199,8 @@ export function pollTranscriptFile(
     ...(state.sessionId ? { sessionId: state.sessionId } : {}),
     entries: entriesForWire(entries),
     endOffset: state.lastByteOffset,
-    rev: transcriptRev(state.path),
+    // The stat above is the file this poll read, so its identity is the rev.
+    rev: revOf(`${state.path}:${stat.dev}:${stat.ino}`),
   });
   for (const ws of state.viewers) {
     try {
@@ -241,26 +234,28 @@ function sendTranscriptAppend(
   }
 }
 
-export function startWatching(
+export async function startWatching(
   path: string,
   ws: any,
   initialOffset?: number,
   sessionId?: string,
-): void {
+): Promise<void> {
   let state = watches.get(path);
   if (state) {
+    await state.ready;
     // A shared watch has one global byte offset. A new viewer may have just
     // parsed an older tail (or, for a fresh session, no transcript at all) and
     // ask to stream from that offset. Fill that viewer's gap without rewinding
     // the global watch for everyone else.
     if (initialOffset !== undefined && initialOffset < state.lastByteOffset) {
+      const rev = await transcriptRev(path);
       const { entries, newOffset } = parseTranscriptFrom(path, initialOffset);
       sendTranscriptAppend(
         ws,
         entries,
         sessionId || state.sessionId,
         newOffset,
-        transcriptRev(path),
+        rev,
       );
     }
     state.viewers.add(ws);
@@ -268,31 +263,53 @@ export function startWatching(
     return;
   }
 
-  state = {
+  // Registered before the first await, so a second viewer of the same path
+  // joins this watch instead of starting another.
+  const created: WatchState = {
     path,
     sessionId,
+    lastMtime: 0,
+    lastByteOffset: initialOffset ?? 0,
+    lastSize: 0,
+    lastDev: 0,
+    lastIno: 0,
+    viewers: new Set([ws]),
+    interval: null,
+  };
+  watches.set(path, created);
+  created.ready = (async () => {
+    let stat: Stats | undefined;
+    try {
+      stat = await statFile(path);
+    } catch {}
     // With a caller-supplied offset (including an explicit 0 — "stream this
     // file from the beginning", used when a run starts writing a brand-new
     // transcript), start with lastMtime 0 so the first poll flushes bytes
     // appended between the caller's parse and this watch (the file's current
     // mtime already covers them and would skip the tick). No offset = tail
     // only from the file's current end.
-    lastMtime: initialOffset !== undefined ? 0 : getMtime(path),
-    lastByteOffset: initialOffset ?? getFileSize(path),
-    lastSize: getFileSize(path),
-    lastDev: 0,
-    lastIno: 0,
-    viewers: new Set([ws]),
-    interval: null,
-  };
-
-  try {
-    const stat = statSync(path);
-    state.lastDev = stat.dev;
-    state.lastIno = stat.ino;
-  } catch {}
-  state.interval = setInterval(() => pollTranscriptFile(state!), 1000);
-  watches.set(path, state);
+    if (initialOffset === undefined) {
+      created.lastMtime = stat?.mtimeMs ?? 0;
+      created.lastByteOffset = stat?.size ?? 0;
+    }
+    created.lastSize = stat?.size ?? 0;
+    created.lastDev = stat?.dev ?? 0;
+    created.lastIno = stat?.ino ?? 0;
+    // The last viewer may have left while the stat ran.
+    if (watches.get(path) !== created) return;
+    created.interval = setInterval(() => {
+      if (created.polling) return;
+      created.polling = true;
+      void pollTranscriptFile(created)
+        .catch((error) =>
+          console.warn(`[file-watcher] poll failed for ${path}:`, error),
+        )
+        .finally(() => {
+          created.polling = false;
+        });
+    }, 1000);
+  })();
+  await created.ready;
 }
 
 export function stopAllWatchesForClient(ws: any): void {

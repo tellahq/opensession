@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 describe("shutdown snapshot recovery", () => {
-  test("promotes only still-present local hosts into journal recovery", () => {
+  test("promotes only still-present local hosts into journal recovery", async () => {
     const hostsDir = mkdtempSync(join(tmpdir(), "local-host-snapshot-"));
     roots.push(hostsDir);
     mkdirSync(join(hostsDir, "rh-live"));
@@ -29,7 +29,7 @@ describe("shutdown snapshot recovery", () => {
     const live = record({ runKey: "rh-live", hostId: "rh-live" });
 
     expect(
-      recoverableLocalHostSnapshotRecords(
+      await recoverableLocalHostSnapshotRecords(
         [
           live,
           record({ runKey: "rh-gone", hostId: "rh-gone" }),

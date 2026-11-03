@@ -8,10 +8,9 @@
  */
 
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
-import { existsSync, readFileSync } from "fs";
 import { randomUUIDv7 } from "bun";
 import { statePath } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { cachedJsonStore } from "./run-fs";
 import { normalizeAddress } from "./shared/network-address";
 import { isRunnerTailnetOrigin } from "./runner-origin";
 
@@ -148,20 +147,25 @@ function storePath(): string {
   return statePath(".opensession-runners.json");
 }
 
-function load(): Store {
-  if (!existsSync(storePath())) return { runners: [] };
+// The registry is single-writer in this server process, so it is read once
+// and kept in memory; every mutation writes it back.
+const registry = cachedJsonStore<Store>(storePath, (raw) => {
+  const parsed = raw as { runners?: unknown } | undefined;
   try {
-    const parsed = JSON.parse(readFileSync(storePath(), "utf8"));
     return Array.isArray(parsed?.runners)
       ? { runners: parsed.runners.map(normalizeRunner) }
       : { runners: [] };
   } catch {
     return { runners: [] };
   }
+});
+
+function load(): Promise<Store> {
+  return registry.load();
 }
 
-function save(store: Store): void {
-  writeJsonAtomic(storePath(), store);
+function save(store: Store): Promise<void> {
+  return registry.save(store);
 }
 
 function cleanStrings(value: unknown, max = 64): string[] {
@@ -436,12 +440,12 @@ function redeemPairing(code: string): Pairing | undefined {
   return pairing.expiresAt > Date.now() ? pairing : undefined;
 }
 
-export function listRunners(): Runner[] {
-  return load().runners;
+export async function listRunners(): Promise<Runner[]> {
+  return (await load()).runners;
 }
 
-export function getRunner(id: string): Runner | undefined {
-  return load().runners.find((runner) => runner.id === id);
+export async function getRunner(id: string): Promise<Runner | undefined> {
+  return (await load()).runners.find((runner) => runner.id === id);
 }
 
 export type RegisterRunnerInput = {
@@ -457,68 +461,73 @@ export type RegisterRunnerInput = {
   softwareVersion?: string;
 };
 
-export function registerRunner(
+export async function registerRunner(
   input: RegisterRunnerInput,
-): { ok: true; runner: Runner; token: string } | { ok: false; error: string } {
-  if (!isRunnerTailnetOrigin(input.address))
-    return { ok: false, error: "Runners must connect from the tailnet." };
-  const pairing = redeemPairing(input.code);
-  if (!pairing)
-    return { ok: false, error: "Pairing code is invalid or expired." };
-  const name = input.name.trim();
-  if (!name || name.length > 120)
-    return { ok: false, error: "Runner name is required." };
-  const token = randomBytes(32).toString("hex");
-  const store = load();
-  const existingIndex = store.runners.findIndex(
-    (runner) => runner.name === name && runner.platform === input.platform,
-  );
-  const existing =
-    existingIndex >= 0 ? store.runners[existingIndex] : undefined;
-  const capabilityInput = Array.isArray(input.capabilities)
-    ? { toolchains: input.capabilities }
-    : (input.capabilities ?? {});
-  const runner = normalizeRunner({
-    id: existing?.id ?? `runner-${randomUUIDv7()}`,
-    name,
-    platform: input.platform,
-    arch: input.arch.trim() || "unknown",
-    address: normalizeAddress(input.address),
-    tokenHash: hashToken(token),
-    createdAt: existing?.createdAt ?? new Date().toISOString(),
-    createdBy: pairing.createdBy,
-    label: input.label?.trim() || existing?.label,
-    description: input.description?.trim() || existing?.description,
-    softwareVersion: input.softwareVersion?.trim() || existing?.softwareVersion,
-    capabilities: {
+): Promise<
+  { ok: true; runner: Runner; token: string } | { ok: false; error: string }
+> {
+  return registry.exclusive(async () => {
+    if (!isRunnerTailnetOrigin(input.address))
+      return { ok: false, error: "Runners must connect from the tailnet." };
+    const pairing = redeemPairing(input.code);
+    if (!pairing)
+      return { ok: false, error: "Pairing code is invalid or expired." };
+    const name = input.name.trim();
+    if (!name || name.length > 120)
+      return { ok: false, error: "Runner name is required." };
+    const token = randomBytes(32).toString("hex");
+    const store = await load();
+    const existingIndex = store.runners.findIndex(
+      (runner) => runner.name === name && runner.platform === input.platform,
+    );
+    const existing =
+      existingIndex >= 0 ? store.runners[existingIndex] : undefined;
+    const capabilityInput = Array.isArray(input.capabilities)
+      ? { toolchains: input.capabilities }
+      : (input.capabilities ?? {});
+    const runner = normalizeRunner({
+      id: existing?.id ?? `runner-${randomUUIDv7()}`,
+      name,
       platform: input.platform,
-      toolchains: cleanStrings(capabilityInput.toolchains),
-      tags: cleanStrings(capabilityInput.tags),
-      ...(normalizeResources(capabilityInput.hardware)
-        ? { hardware: normalizeResources(capabilityInput.hardware) }
-        : {}),
-    },
-    resources: input.resources,
-    permissions: existing?.permissions ?? defaultPermissions(),
-    allowedUsers: existing?.allowedUsers ?? [],
-    allowedRepos: existing?.allowedRepos ?? [],
-    workspaceRoots: existing?.workspaceRoots ?? [],
-    migration: pairing.migration ?? existing?.migration,
-    localInferencePolicy: existing?.localInferencePolicy,
-    aws: existing?.aws,
-    maintenance: existing?.maintenance,
+      arch: input.arch.trim() || "unknown",
+      address: normalizeAddress(input.address),
+      tokenHash: hashToken(token),
+      createdAt: existing?.createdAt ?? new Date().toISOString(),
+      createdBy: pairing.createdBy,
+      label: input.label?.trim() || existing?.label,
+      description: input.description?.trim() || existing?.description,
+      softwareVersion:
+        input.softwareVersion?.trim() || existing?.softwareVersion,
+      capabilities: {
+        platform: input.platform,
+        toolchains: cleanStrings(capabilityInput.toolchains),
+        tags: cleanStrings(capabilityInput.tags),
+        ...(normalizeResources(capabilityInput.hardware)
+          ? { hardware: normalizeResources(capabilityInput.hardware) }
+          : {}),
+      },
+      resources: input.resources,
+      permissions: existing?.permissions ?? defaultPermissions(),
+      allowedUsers: existing?.allowedUsers ?? [],
+      allowedRepos: existing?.allowedRepos ?? [],
+      workspaceRoots: existing?.workspaceRoots ?? [],
+      migration: pairing.migration ?? existing?.migration,
+      localInferencePolicy: existing?.localInferencePolicy,
+      aws: existing?.aws,
+      maintenance: existing?.maintenance,
+    });
+    if (existingIndex >= 0) store.runners[existingIndex] = runner;
+    else store.runners.push(runner);
+    await save(store);
+    return { ok: true, runner, token };
   });
-  if (existingIndex >= 0) store.runners[existingIndex] = runner;
-  else store.runners.push(runner);
-  save(store);
-  return { ok: true, runner, token };
 }
 
-export function authenticateRunner(
+export async function authenticateRunner(
   id: string,
   token: string,
-): Runner | undefined {
-  const runner = getRunner(id);
+): Promise<Runner | undefined> {
+  const runner = await getRunner(id);
   if (!runner) return undefined;
   const expected = Buffer.from(runner.tokenHash, "hex");
   const actual = Buffer.from(hashToken(token), "hex");
@@ -548,82 +557,89 @@ export type RunnerPatch = Partial<
   aws?: RunnerAwsRole | null;
 };
 
-export function updateRunner(
+export async function updateRunner(
   id: string,
   patch: RunnerPatch,
-): Runner | undefined {
-  const store = load();
-  const index = store.runners.findIndex((runner) => runner.id === id);
-  if (index < 0) return undefined;
-  const current = store.runners[index];
-  store.runners[index] = normalizeRunner({
-    ...current,
-    ...patch,
-    aws: patch.aws === undefined ? current.aws : (patch.aws ?? undefined),
-    workspaceRetention:
-      patch.workspaceRetention === "delete"
-        ? "delete"
-        : patch.workspaceRetention === "retain"
-          ? "retain"
-          : (current.workspaceRetention ?? "retain"),
-    permissions: { ...current.permissions, ...patch.permissions },
-    capabilities: { ...current.capabilities, ...patch.capabilities },
+): Promise<Runner | undefined> {
+  return registry.exclusive(async () => {
+    const store = await load();
+    const index = store.runners.findIndex((runner) => runner.id === id);
+    if (index < 0) return undefined;
+    const current = store.runners[index];
+    store.runners[index] = normalizeRunner({
+      ...current,
+      ...patch,
+      aws: patch.aws === undefined ? current.aws : (patch.aws ?? undefined),
+      workspaceRetention:
+        patch.workspaceRetention === "delete"
+          ? "delete"
+          : patch.workspaceRetention === "retain"
+            ? "retain"
+            : (current.workspaceRetention ?? "retain"),
+      permissions: { ...current.permissions, ...patch.permissions },
+      capabilities: { ...current.capabilities, ...patch.capabilities },
+    });
+    await save(store);
+    return store.runners[index];
   });
-  save(store);
-  return store.runners[index];
 }
 
-export function touchRunner(
+export async function touchRunner(
   id: string,
   patch: Partial<
     Pick<Runner, "softwareVersion" | "capabilities" | "resources">
   > = {},
-): void {
-  const store = load();
-  const runner = store.runners.find((candidate) => candidate.id === id);
-  if (!runner) return;
-  runner.lastSeenAt = new Date().toISOString();
-  if (patch.softwareVersion) runner.softwareVersion = patch.softwareVersion;
-  if (patch.capabilities)
-    runner.capabilities = normalizeRunner({
-      ...runner,
-      capabilities: patch.capabilities,
-    }).capabilities;
-  if (patch.resources) runner.resources = normalizeResources(patch.resources);
-  save(store);
+): Promise<void> {
+  return registry.exclusive(async () => {
+    const store = await load();
+    const runner = store.runners.find((candidate) => candidate.id === id);
+    if (!runner) return;
+    runner.lastSeenAt = new Date().toISOString();
+    if (patch.softwareVersion) runner.softwareVersion = patch.softwareVersion;
+    if (patch.capabilities)
+      runner.capabilities = normalizeRunner({
+        ...runner,
+        capabilities: patch.capabilities,
+      }).capabilities;
+    if (patch.resources) runner.resources = normalizeResources(patch.resources);
+    await save(store);
+  });
 }
 
-export function setRunnerWorkload(
+export async function setRunnerWorkload(
   id: string,
   workload?: Runner["workload"],
   clearSessionId?: string,
-): void {
-  const store = load();
-  const runner = store.runners.find((candidate) => candidate.id === id);
-  if (!runner) return;
-  const previous =
-    runner.workloads ?? (runner.workload ? [runner.workload] : []);
-  const next = workload?.sessionId
-    ? [
-        ...previous.filter((item) => item.sessionId !== workload.sessionId),
-        workload,
-      ]
-    : clearSessionId
-      ? previous.filter((item) => item.sessionId !== clearSessionId)
-      : [];
-  runner.workloads = next;
-  runner.workload = next[0];
-  if (!next.length) {
-    delete runner.workload;
-    delete runner.workloads;
-  }
-  save(store);
+): Promise<void> {
+  return registry.exclusive(async () => {
+    const store = await load();
+    const runner = store.runners.find((candidate) => candidate.id === id);
+    if (!runner) return;
+    const previous =
+      runner.workloads ?? (runner.workload ? [runner.workload] : []);
+    const next = workload?.sessionId
+      ? [
+          ...previous.filter((item) => item.sessionId !== workload.sessionId),
+          workload,
+        ]
+      : clearSessionId
+        ? previous.filter((item) => item.sessionId !== clearSessionId)
+        : [];
+    runner.workloads = next;
+    runner.workload = next[0];
+    if (!next.length) {
+      delete runner.workload;
+      delete runner.workloads;
+    }
+    await save(store);
+  });
 }
 
 /** Atomically check and claim one capacity slot. The registry is single-writer
- * in this server process, so this synchronous load/mutate/save sequence cannot
- * interleave with another turn between eligibility and reservation. */
-export function claimRunnerWorkload(
+ * in this server process and held in memory, so once it is loaded the
+ * check/mutate/save sequence runs without yielding and cannot interleave with
+ * another turn between eligibility and reservation. */
+export async function claimRunnerWorkload(
   id: string,
   input: {
     user?: string;
@@ -632,77 +648,85 @@ export function claimRunnerWorkload(
     operation: string;
     automationDescendant?: boolean;
   },
-): Runner | undefined {
-  const store = load();
-  const runner = store.runners.find((candidate) => candidate.id === id);
-  if (!runner || !runnerAvailableForSession(runner, input)) return undefined;
-  const previous =
-    runner.workloads ?? (runner.workload ? [runner.workload] : []);
-  if (!previous.some((workload) => workload.sessionId === input.sessionId)) {
-    const next = [
-      ...previous,
-      {
-        sessionId: input.sessionId,
-        operation: input.operation,
-        startedAt: new Date().toISOString(),
-      },
-    ];
-    runner.workloads = next;
-    runner.workload = next[0];
-    save(store);
-  }
-  return runner;
+): Promise<Runner | undefined> {
+  return registry.exclusive(async () => {
+    const store = await load();
+    const runner = store.runners.find((candidate) => candidate.id === id);
+    if (!runner || !runnerAvailableForSession(runner, input)) return undefined;
+    const previous =
+      runner.workloads ?? (runner.workload ? [runner.workload] : []);
+    if (!previous.some((workload) => workload.sessionId === input.sessionId)) {
+      const next = [
+        ...previous,
+        {
+          sessionId: input.sessionId,
+          operation: input.operation,
+          startedAt: new Date().toISOString(),
+        },
+      ];
+      runner.workloads = next;
+      runner.workload = next[0];
+      await save(store);
+    }
+    return runner;
+  });
 }
 
-export function reserveRunner(
+export async function reserveRunner(
   id: string,
   input: Omit<RunnerReservation, "expiresAt"> & { durationMinutes?: number },
-): Runner | undefined {
-  const store = load();
-  const runner = store.runners.find((candidate) => candidate.id === id);
-  if (!runner || runner.maintenance) return undefined;
-  const now = Date.now();
-  if (
-    runner.reservation &&
-    Date.parse(runner.reservation.expiresAt) > now &&
-    runner.reservation.reservedBy !== input.reservedBy
-  )
-    return undefined;
-  const minutes = Math.min(Math.max(input.durationMinutes ?? 60, 1), 24 * 60);
-  runner.reservation = {
-    sessionId: input.sessionId,
-    reason: input.reason.trim().slice(0, 240),
-    reservedBy: input.reservedBy,
-    expiresAt: new Date(now + minutes * 60_000).toISOString(),
-  };
-  save(store);
-  return runner;
+): Promise<Runner | undefined> {
+  return registry.exclusive(async () => {
+    const store = await load();
+    const runner = store.runners.find((candidate) => candidate.id === id);
+    if (!runner || runner.maintenance) return undefined;
+    const now = Date.now();
+    if (
+      runner.reservation &&
+      Date.parse(runner.reservation.expiresAt) > now &&
+      runner.reservation.reservedBy !== input.reservedBy
+    )
+      return undefined;
+    const minutes = Math.min(Math.max(input.durationMinutes ?? 60, 1), 24 * 60);
+    runner.reservation = {
+      sessionId: input.sessionId,
+      reason: input.reason.trim().slice(0, 240),
+      reservedBy: input.reservedBy,
+      expiresAt: new Date(now + minutes * 60_000).toISOString(),
+    };
+    await save(store);
+    return runner;
+  });
 }
 
-export function releaseRunnerReservation(
+export async function releaseRunnerReservation(
   id: string,
   reservedBy?: string,
-): Runner | undefined {
-  const store = load();
-  const runner = store.runners.find((candidate) => candidate.id === id);
-  if (
-    !runner ||
-    (reservedBy &&
-      runner.reservation?.reservedBy &&
-      runner.reservation.reservedBy !== reservedBy)
-  )
-    return undefined;
-  delete runner.reservation;
-  save(store);
-  return runner;
+): Promise<Runner | undefined> {
+  return registry.exclusive(async () => {
+    const store = await load();
+    const runner = store.runners.find((candidate) => candidate.id === id);
+    if (
+      !runner ||
+      (reservedBy &&
+        runner.reservation?.reservedBy &&
+        runner.reservation.reservedBy !== reservedBy)
+    )
+      return undefined;
+    delete runner.reservation;
+    await save(store);
+    return runner;
+  });
 }
 
-export function removeRunner(id: string): boolean {
-  const store = load();
-  const runners = store.runners.filter((runner) => runner.id !== id);
-  if (runners.length === store.runners.length) return false;
-  save({ runners });
-  return true;
+export async function removeRunner(id: string): Promise<boolean> {
+  return registry.exclusive(async () => {
+    const store = await load();
+    const runners = store.runners.filter((runner) => runner.id !== id);
+    if (runners.length === store.runners.length) return false;
+    await save({ runners });
+    return true;
+  });
 }
 
 export function runnerAllowed(

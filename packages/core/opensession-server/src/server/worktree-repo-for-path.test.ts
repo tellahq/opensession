@@ -69,11 +69,17 @@ describe("repoForPathOrNull with prefix-overlapping repo ids", () => {
       const wt = join(root, "worktrees");
       // Nothing on disk: the path fallback decides, and it must pick the
       // most specific prefix rather than the first-registered one.
-      expect(repoForPathOrNull(join(wt, "app-web-feat-x"))?.id).toBe("app-web");
-      expect(repoForPathOrNull(join(wt, "app-feat-x"))?.id).toBe("app");
-      expect(repoForPathOrNull(join(root, "app-web-main"))?.id).toBe("app-web");
-      expect(repoForPathOrNull(join(root, "app-main"))?.id).toBe("app");
-      expect(repoForPathOrNull(join(root, "scratch", "ws-1"))).toBeUndefined();
+      expect((await repoForPathOrNull(join(wt, "app-web-feat-x")))?.id).toBe(
+        "app-web",
+      );
+      expect((await repoForPathOrNull(join(wt, "app-feat-x")))?.id).toBe("app");
+      expect((await repoForPathOrNull(join(root, "app-web-main")))?.id).toBe(
+        "app-web",
+      );
+      expect((await repoForPathOrNull(join(root, "app-main")))?.id).toBe("app");
+      expect(
+        await repoForPathOrNull(join(root, "scratch", "ws-1")),
+      ).toBeUndefined();
     });
   }
 
@@ -87,10 +93,10 @@ describe("repoForPathOrNull with prefix-overlapping repo ids", () => {
       join(dir, ".git"),
       `gitdir: ${join(root, "app-main", ".git", "worktrees", "web-x")}\n`,
     );
-    expect(repoForPathOrNull(dir)?.id).toBe("app");
+    expect((await repoForPathOrNull(dir))?.id).toBe("app");
     // Reaped: the dir is gone, the persisted worktreeDir is not, and the
     // fallback still answers rather than losing the session's repo id.
     rmSync(dir, { recursive: true, force: true });
-    expect(repoForPathOrNull(dir)?.id).toBe("app-web");
+    expect((await repoForPathOrNull(dir))?.id).toBe("app-web");
   });
 });

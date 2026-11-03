@@ -380,8 +380,7 @@ type SessionListRuntimeSignals = {
 
 const RUNTIME_SIGNALS_TTL_MS = 250;
 let runtimeSignalsCache:
-  | { value: SessionListRuntimeSignals; expiresAt: number }
-  | undefined;
+  { value: SessionListRuntimeSignals; expiresAt: number } | undefined;
 let runtimeSignalsRefresh: Promise<SessionListRuntimeSignals> | undefined;
 
 async function sessionListRuntimeSignals(): Promise<SessionListRuntimeSignals> {
@@ -820,12 +819,7 @@ export function archivedIndexRow(
  * very long file list can't overflow the argv limit.
  */
 type StoredTranscriptSearchExhaustion =
-  | "sessions"
-  | "rows"
-  | "time"
-  | "matches"
-  | "error"
-  | null;
+  "sessions" | "rows" | "time" | "matches" | "error" | null;
 
 interface StoredTranscriptSearchResult {
   matches: Array<{ id: string; snippet: string }>;
@@ -1793,7 +1787,7 @@ export async function handleSessionsRoutes(
         return Response.json({ error: "Session not found" }, { status: 404 });
       return Response.json({
         subagents: session.transcriptPath
-          ? listSubagents(session.transcriptPath)
+          ? await listSubagents(session.transcriptPath)
           : [],
         sessionRunning: session.isRunning,
       });
@@ -2025,7 +2019,7 @@ export async function handleSessionsRoutes(
       if (cleanWorktree && session.worktreeDir && session.branch) {
         await removeWorktree(
           session.branch,
-          repoForPath(session.worktreeDir).id,
+          (await repoForPath(session.worktreeDir)).id,
         );
         // A session can span repos, and each one it spans has a checkout
         // of its own. Cleaning up only the first would leave the rest on

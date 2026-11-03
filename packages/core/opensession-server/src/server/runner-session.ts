@@ -7,7 +7,7 @@
  * as a second agent-event protocol.
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync } from "fs";
+import { mkdir, readdir, readFile } from "node:fs/promises";
 import { configuredServer } from "./config";
 import { agentAwsCredsForUntrustedRuns } from "./aws-creds";
 import {
@@ -53,7 +53,7 @@ import {
   journalSet,
   type ActiveRunRecord,
 } from "./run-journal";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 
 type RunnerLaunchOpts = {
   prompt: string;
@@ -99,7 +99,7 @@ export async function maybeLaunchRunnerRun(
   if (!target) return null;
   if (!session.repo || !session.worktreeDir)
     throw new Error("Runner session is missing its repository workspace");
-  const registeredRunner = getRunner(target.id);
+  const registeredRunner = await getRunner(target.id);
   if (!registeredRunner)
     throw new Error("This Runner is no longer available for this session");
   if (
@@ -109,7 +109,7 @@ export async function maybeLaunchRunnerRun(
     throw new Error(
       "This Runner is not configured with automation descendant OS isolation",
     );
-  const runner = claimRunnerWorkload(registeredRunner.id, {
+  const runner = await claimRunnerWorkload(registeredRunner.id, {
     user: opts.user,
     repo: session.repo,
     sessionId: session.id,
@@ -133,8 +133,8 @@ export async function maybeLaunchRunnerRun(
   const hostDir = `${runHostsDir(OPENSESSION_SESSIONS_DIR)}/${hostId}`;
   const specPath = `${hostDir}/${HOST_SPEC_NAME}`;
   const launchStatePath = `${hostDir}/${RUNNER_OPENING_LAUNCH_STATE}`;
-  const priorSpec = existsSync(specPath) ? readRunnerHostSpec(specPath) : null;
-  if (existsSync(specPath) && !priorSpec)
+  const priorSpec = await readRunnerHostSpec(specPath);
+  if (priorSpec === null)
     throw new Error(
       `Runner host ${hostId} has an unreadable durable specification`,
     );
@@ -152,10 +152,8 @@ export async function maybeLaunchRunnerRun(
       run.hostId === hostId &&
       run.promptEntryId === opts.promptEntryId,
   );
-  const priorLaunchState = existsSync(launchStatePath)
-    ? readRunnerOpeningLaunchState(launchStatePath)
-    : null;
-  if (existsSync(launchStatePath) && !priorLaunchState)
+  const priorLaunchState = await readRunnerOpeningLaunchState(launchStatePath);
+  if (priorLaunchState === null)
     throw new Error(
       `Runner host ${hostId} has unreadable durable launch state`,
     );
@@ -213,8 +211,8 @@ export async function maybeLaunchRunnerRun(
       `Runner host ${hostId} is missing its durable connection fence`,
     );
   if (!priorSpec) {
-    mkdirSync(hostDir, { recursive: true });
-    writeJsonAtomic(specPath, spec);
+    await mkdir(hostDir, { recursive: true });
+    await writeJsonAtomicAsync(specPath, spec);
   }
   let launchState: RunnerOpeningLaunchState = priorLaunchState ?? {
     version: 1,
@@ -223,7 +221,8 @@ export async function maybeLaunchRunnerRun(
     promptEntryId: opts.promptEntryId,
     phase: priorRun?.launchPhase ?? "prepared",
   };
-  if (!priorLaunchState) writeJsonAtomic(launchStatePath, launchState);
+  if (!priorLaunchState)
+    await writeJsonAtomicAsync(launchStatePath, launchState);
   const rpcToken = spec.rpcToken;
   const wsToken = spec.wsToken;
   let run: ActiveRunRecord = {
@@ -288,8 +287,8 @@ export async function maybeLaunchRunnerRun(
       `${runHostsDir(OPENSESSION_SESSIONS_DIR)}/${nextHostId}`,
     connector: (_dir, hostSpec) => runWsConnector(hostSpec.hostId),
     async writeSpec(dir, nextSpec) {
-      mkdirSync(dir, { recursive: true });
-      writeJsonAtomic(`${dir}/${HOST_SPEC_NAME}`, nextSpec);
+      await mkdir(dir, { recursive: true });
+      await writeJsonAtomicAsync(`${dir}/${HOST_SPEC_NAME}`, nextSpec);
       hostSpecs.set(nextSpec.hostId, nextSpec);
       registerRunWsHost(nextSpec.hostId, nextSpec.wsToken!, {
         runnerId: runner.id,
@@ -329,13 +328,13 @@ export async function maybeLaunchRunnerRun(
       // restart may adopt remote evidence, but may never infer non-execution
       // from an absent connection and launch the same turn again.
       launchState = { ...launchState, phase: "launching" };
-      writeJsonAtomic(launchStatePath, launchState);
+      await writeJsonAtomicAsync(launchStatePath, launchState);
       run = { ...run, launchPhase: "launching" };
       await journalSet(run);
       await launcher.launch(hostId, hostDir);
       if (opts.shouldCancel?.()) handle.requestCancel();
       launchState = { ...launchState, phase: "started" };
-      writeJsonAtomic(launchStatePath, launchState);
+      await writeJsonAtomicAsync(launchStatePath, launchState);
       run = { ...run, launchPhase: "started" };
       await journalSet(run);
     } else {
@@ -354,7 +353,7 @@ export async function maybeLaunchRunnerRun(
         );
       if (run.launchPhase !== "started") {
         launchState = { ...launchState, phase: "started" };
-        writeJsonAtomic(launchStatePath, launchState);
+        await writeJsonAtomicAsync(launchStatePath, launchState);
         run = { ...run, launchPhase: "started" };
         await journalSet(run);
       }
@@ -374,7 +373,7 @@ export async function maybeLaunchRunnerRun(
       } finally {
         if (sourceCompleted && sawTerminal) journalClear(run.runKey);
         else if (sourceCompleted) await journalRecordAbnormalCompletion(run);
-        setRunnerWorkload(runner.id, undefined, session.id);
+        await setRunnerWorkload(runner.id, undefined, session.id);
       }
     })() as RunnerEvents;
     events.runnerId = runner.id;
@@ -389,7 +388,7 @@ export async function maybeLaunchRunnerRun(
       // Server-side preflight rejection proves the launch request was never
       // sent. Fence retries durably before retiring the prepared journal.
       launchState = { ...launchState, phase: "rejected" };
-      writeJsonAtomic(launchStatePath, launchState);
+      await writeJsonAtomicAsync(launchStatePath, launchState);
       journalClearIfLineage(run);
     } else {
       // Once launch admission may have crossed the Runner connection, absence
@@ -399,26 +398,46 @@ export async function maybeLaunchRunnerRun(
         { run, reason: "ambiguous_runner_launch", notify: false },
       ]);
     }
-    setRunnerWorkload(runner.id, undefined, session.id);
+    await setRunnerWorkload(runner.id, undefined, session.id);
     throw error;
   }
 }
 
-function readRunnerHostSpec(path: string): RunHostSpec | null {
+/** The file's text; undefined when it does not exist, null when it exists
+ *  but cannot be read. */
+async function readDurableText(
+  path: string,
+): Promise<string | null | undefined> {
   try {
-    return JSON.parse(readFileSync(path, "utf8")) as RunHostSpec;
+    return await readFile(path, "utf8");
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "ENOENT"
+      ? undefined
+      : null;
+  }
+}
+
+/** undefined when absent, null when present but unreadable. */
+async function readRunnerHostSpec(
+  path: string,
+): Promise<RunHostSpec | null | undefined> {
+  const text = await readDurableText(path);
+  if (text == null) return text;
+  try {
+    return JSON.parse(text) as RunHostSpec;
   } catch {
     return null;
   }
 }
 
-function readRunnerOpeningLaunchState(
+/** undefined when absent, null when present but unreadable or invalid. */
+async function readRunnerOpeningLaunchState(
   path: string,
-): RunnerOpeningLaunchState | null {
+): Promise<RunnerOpeningLaunchState | null | undefined> {
+  const text = await readDurableText(path);
+  if (text == null) return text;
   try {
-    const value = JSON.parse(
-      readFileSync(path, "utf8"),
-    ) as Partial<RunnerOpeningLaunchState>;
+    const value = JSON.parse(text) as Partial<RunnerOpeningLaunchState>;
     if (
       value.version !== 1 ||
       typeof value.hostId !== "string" ||
@@ -454,24 +473,35 @@ export async function resumeRunnerRun(
   )
     return null;
   const hostsRoot = runHostsDir(OPENSESSION_SESSIONS_DIR);
-  if (!existsSync(hostsRoot)) return null;
-  const candidates = readdirSync(hostsRoot)
-    .map((name) => {
-      const dir = `${hostsRoot}/${name}`;
-      return { dir, spec: readRunnerHostSpec(`${dir}/${HOST_SPEC_NAME}`) };
-    })
-    .filter((entry): entry is { dir: string; spec: RunHostSpec } => {
-      const candidate = entry.spec;
-      return Boolean(
-        candidate &&
-        candidate.osSessionId === session.id &&
-        candidate.cwd === session.worktreeDir &&
-        (!run.hostId || candidate.hostId === run.hostId) &&
-        (!run.promptEntryId || candidate.promptEntryId === run.promptEntryId) &&
-        candidate.wsToken &&
-        candidate.rpcToken,
-      );
-    });
+  let names: string[];
+  try {
+    names = await readdir(hostsRoot);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+  const candidates = (
+    await Promise.all(
+      names.map(async (name) => {
+        const dir = `${hostsRoot}/${name}`;
+        return {
+          dir,
+          spec: await readRunnerHostSpec(`${dir}/${HOST_SPEC_NAME}`),
+        };
+      }),
+    )
+  ).filter((entry): entry is { dir: string; spec: RunHostSpec } => {
+    const candidate = entry.spec;
+    return Boolean(
+      candidate &&
+      candidate.osSessionId === session.id &&
+      candidate.cwd === session.worktreeDir &&
+      (!run.hostId || candidate.hostId === run.hostId) &&
+      (!run.promptEntryId || candidate.promptEntryId === run.promptEntryId) &&
+      candidate.wsToken &&
+      candidate.rpcToken,
+    );
+  });
   const candidate =
     run.hostId || run.promptEntryId
       ? candidates.length === 1
@@ -515,8 +545,8 @@ export async function resumeRunnerRun(
     newRunDir: (hostId) => `${runHostsDir(OPENSESSION_SESSIONS_DIR)}/${hostId}`,
     connector: (_dir, hostSpec) => runWsConnector(hostSpec.hostId),
     async writeSpec(dir, nextSpec) {
-      mkdirSync(dir, { recursive: true });
-      writeJsonAtomic(`${dir}/${HOST_SPEC_NAME}`, nextSpec);
+      await mkdir(dir, { recursive: true });
+      await writeJsonAtomicAsync(`${dir}/${HOST_SPEC_NAME}`, nextSpec);
       hostSpecs.set(nextSpec.hostId, nextSpec);
       registerRunWsHost(nextSpec.hostId, nextSpec.wsToken!, {
         runnerId: run.runnerId!,
@@ -536,7 +566,7 @@ export async function resumeRunnerRun(
       });
     },
   };
-  setRunnerWorkload(run.runnerId, {
+  await setRunnerWorkload(run.runnerId, {
     sessionId: session.id,
     operation: "full session",
     startedAt: run.startedAt,
@@ -554,12 +584,12 @@ export async function resumeRunnerRun(
       try {
         yield* handle.events();
       } finally {
-        setRunnerWorkload(run.runnerId!, undefined, session.id);
+        await setRunnerWorkload(run.runnerId!, undefined, session.id);
       }
     })();
   } catch (error) {
     handle.abandon();
-    setRunnerWorkload(run.runnerId, undefined, session.id);
+    await setRunnerWorkload(run.runnerId, undefined, session.id);
     throw error;
   }
 }

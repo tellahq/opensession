@@ -8,12 +8,13 @@ import {
   EXECUTOR_PROTOCOL_VERSION,
   executorSocketPath,
 } from "@tellahq/opensession-protocol/executor";
-import { existsSync, readFileSync } from "fs";
+import { readFile } from "node:fs/promises";
 import type { RunHostMeta } from "../runner-host/protocol";
 import { HOST_META_NAME, HOST_SOCK_NAME } from "../runner-host/protocol";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { readExecutorCredential } from "../executor/auth";
 import { sameProcess } from "./process-identity";
+import { pathExists } from "./run-fs";
 
 interface ExecutorClientStats {
   delegatedLaunches: number;
@@ -39,10 +40,10 @@ export class ExecutorProtocolError extends Error {
   }
 }
 
-export function executorClientHealth(): Record<string, unknown> {
+export async function executorClientHealth(): Promise<Record<string, unknown>> {
   const socketPath = executorSocketPath(OPENSESSION_SESSIONS_DIR);
   return {
-    socketPresent: existsSync(socketPath),
+    socketPresent: await pathExists(socketPath),
     configured: process.env.OPENSESSION_EXECUTOR !== "0",
     ...stats,
   };
@@ -58,8 +59,8 @@ function refreshExecutorReadiness(): Promise<{
   if (!readinessRefresh) {
     readinessRefresh = (async () => {
       const socketPath = executorSocketPath(OPENSESSION_SESSIONS_DIR);
-      const token = readExecutorCredential();
-      if (!existsSync(socketPath) || !token) {
+      const token = await readExecutorCredential();
+      if (!(await pathExists(socketPath)) || !token) {
         readinessCache = {
           at: Date.now(),
           ready: false,
@@ -140,11 +141,11 @@ export async function launchHostViaExecutor(
   if (process.env.OPENSESSION_EXECUTOR === "0") return false;
   const socketPath =
     options?.socketPath ?? executorSocketPath(OPENSESSION_SESSIONS_DIR);
-  if (!existsSync(socketPath))
+  if (!(await pathExists(socketPath)))
     throw new ExecutorProtocolError(
       `executor socket is unavailable: ${socketPath}`,
     );
-  const token = options?.token ?? readExecutorCredential();
+  const token = options?.token ?? (await readExecutorCredential());
   if (!token)
     throw new ExecutorProtocolError("executor credential is unavailable");
 
@@ -182,7 +183,7 @@ export async function launchHostViaExecutor(
   const specHash =
     options?.specHash ??
     new Bun.CryptoHasher("sha256")
-      .update(readFileSync(`${dir}/spec.json`))
+      .update(await readFile(`${dir}/spec.json`))
       .digest("hex");
   let launched: ExecutorResponse;
   const launchRequestId = crypto.randomUUID();
@@ -249,12 +250,12 @@ export async function waitForLocalHost(
 ): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (existsSync(`${dir}/${HOST_SOCK_NAME}`)) {
+    if (await pathExists(`${dir}/${HOST_SOCK_NAME}`)) {
       try {
         const meta = JSON.parse(
-          readFileSync(`${dir}/${HOST_META_NAME}`, "utf8"),
+          await readFile(`${dir}/${HOST_META_NAME}`, "utf8"),
         ) as RunHostMeta;
-        const matches = sameProcess(meta);
+        const matches = await sameProcess(meta);
         if (matches !== undefined) return matches;
         process.kill(meta.pid, 0);
         return true;
@@ -328,7 +329,7 @@ async function reconcileLaunch(input: {
       noteDelegatedLaunch();
       return true;
     }
-    if (existsSync(input.socketPath)) {
+    if (await pathExists(input.socketPath)) {
       const requestId = crypto.randomUUID();
       try {
         const response = await requestExecutor(

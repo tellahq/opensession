@@ -56,7 +56,7 @@ export async function handleSessionGitRoutes(
     // Each carries its repo id so the panel can show a repo switcher and
     // route per-line feedback to the right checkout.
     const repoIds = [
-      sessionRepoId(session) ?? defaultRepo().id,
+      (await sessionRepoId(session)) ?? defaultRepo().id,
       ...(session.attachedRepos || []).map((r) => r.repo),
     ];
 
@@ -76,10 +76,10 @@ export async function handleSessionGitRoutes(
           // A volume-mode workspace has no host dir but is still reachable:
           // the primary repo's diff runs through the session's sandbox exec
           // instead (workspaceExecFor; host exec when no active sandbox).
-          const target = resolveWorktreeTarget(session, repoId);
+          const target = await resolveWorktreeTarget(session, repoId);
           if (target?.reachable) {
             try {
-              const ownPaths = isSharedCheckoutDir(target.dir)
+              const ownPaths = (await isSharedCheckoutDir(target.dir))
                 ? await sessionTouchedPaths(session, target.dir)
                 : undefined;
               diff = await getSessionDiff(
@@ -181,7 +181,7 @@ export async function handleSessionGitRoutes(
       patch?: string;
     };
     const repoIds = [
-      sessionRepoId(session) ?? defaultRepo().id,
+      (await sessionRepoId(session)) ?? defaultRepo().id,
       ...(session.attachedRepos || []).map((repo) => repo.repo),
     ];
     if (!body.repo || !repoIds.includes(body.repo))
@@ -221,7 +221,7 @@ export async function handleSessionGitRoutes(
     // Primary volume-mode workspaces exist only in the sandbox — the
     // resolver counts them as reachable and the discard routes through
     // the session's exec instead of a host dir.
-    const target = resolveWorktreeTarget(session, body.repo);
+    const target = await resolveWorktreeTarget(session, body.repo);
     if (!target?.reachable)
       return Response.json(
         { error: "No worktree for this repo" },
@@ -262,12 +262,15 @@ export async function handleSessionGitRoutes(
     // Primary volume-mode workspaces have no host dir — status runs
     // through the sandbox exec (host exec when no active sandbox). No
     // checkout at all answers 200 with null; clients read that.
-    const target = resolveWorktreeTarget(session, url.searchParams.get("repo"));
+    const target = await resolveWorktreeTarget(
+      session,
+      url.searchParams.get("repo"),
+    );
     if (!target?.reachable) return Response.json(null);
     // A shared checkout holds every concurrent session's edits, so the raw
     // dirty count belongs to nobody. Scope it to the files this session's own
     // tool calls wrote.
-    const ownPaths = isSharedCheckoutDir(target.dir)
+    const ownPaths = (await isSharedCheckoutDir(target.dir))
       ? await sessionTouchedPaths(session, target.dir)
       : undefined;
     return Response.json(
@@ -298,7 +301,10 @@ export async function handleSessionGitRoutes(
     const filePath = url.searchParams.get("path") || "";
     const contentType = imageContentType(filePath);
     if (!contentType) return new Response("Not an image path", { status: 400 });
-    const target = resolveWorktreeTarget(session, url.searchParams.get("repo"));
+    const target = await resolveWorktreeTarget(
+      session,
+      url.searchParams.get("repo"),
+    );
     if (!target?.reachable) return new Response("No worktree", { status: 404 });
     const dir = target.dir;
     // Reachable but host-invisible (volume-mode sandbox / runner): image
@@ -371,7 +377,7 @@ export async function handleSessionGitRoutes(
     if (!filePath)
       return Response.json({ error: "Missing path" }, { status: 400 });
     const repoId = body ? body.repo || null : url.searchParams.get("repo");
-    const target = resolveWorktreeTarget(session, repoId);
+    const target = await resolveWorktreeTarget(session, repoId);
     if (!target?.reachable)
       return Response.json({ error: "No worktree" }, { status: 404 });
     const dir = target.dir;
@@ -443,7 +449,7 @@ export async function handleSessionGitRoutes(
       return Response.json({ error: "Session not found" }, { status: 404 });
     const body = await req.json().catch(() => ({}));
     const repoId = typeof body?.repo === "string" ? body.repo : null;
-    const target = resolveWorktreeTarget(session, repoId);
+    const target = await resolveWorktreeTarget(session, repoId);
     if (!target?.reachable)
       return Response.json(
         { error: "Session has no worktree" },
@@ -474,7 +480,7 @@ export async function handleSessionGitRoutes(
       return Response.json({ error: "Session not found" }, { status: 404 });
     const body = await req.json().catch(() => ({}));
     const repoId = typeof body?.repo === "string" ? body.repo : null;
-    const target = resolveWorktreeTarget(session, repoId);
+    const target = await resolveWorktreeTarget(session, repoId);
     if (!target?.reachable)
       return Response.json(
         { error: "Session has no worktree" },
@@ -483,7 +489,7 @@ export async function handleSessionGitRoutes(
     // Nobody owns a shared checkout's HEAD. Pulling it from one session can
     // rewrite the live tree under every other session, so fail closed even for
     // an old client that still offers the action.
-    if (isSharedCheckoutDir(target.dir))
+    if (await isSharedCheckoutDir(target.dir))
       return Response.json(
         {
           error:

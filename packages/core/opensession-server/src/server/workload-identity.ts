@@ -17,10 +17,9 @@
  */
 
 import { createHash, randomUUID } from "crypto";
-import { existsSync, readFileSync } from "fs";
 import { readFile } from "fs/promises";
 import { stateDir } from "./paths";
-import { writeJsonAtomic, writeJsonAtomicAsync } from "./shared/atomic-write";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import { remoteSandboxCallbackBaseUrl } from "./sandbox/config";
 
 const IDENTITY_PATH = "/workload-identity";
@@ -32,11 +31,7 @@ const LEASE_TTL_MS = 24 * 60 * 60 * 1_000;
 const MAX_LEASES = 10_000;
 
 export type WorkloadLifecycle =
-  | "setup"
-  | "resume"
-  | "preview"
-  | "run"
-  | "prewarm";
+  "setup" | "resume" | "preview" | "run" | "prewarm";
 
 export interface WorkloadIdentityContext {
   sandboxId: string;
@@ -228,9 +223,18 @@ function keyId(publicKey: JsonWebKey): string {
 }
 
 async function loadKey(): Promise<StoredKey> {
-  if (existsSync(KEY_PATH)) {
+  let text: string | undefined;
+  try {
+    text = await readFile(KEY_PATH, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT")
+      throw new Error(
+        `Cannot read workload identity signing key at ${KEY_PATH}`,
+      );
+  }
+  if (text !== undefined) {
     try {
-      const parsed = JSON.parse(readFileSync(KEY_PATH, "utf8")) as StoredKey;
+      const parsed = JSON.parse(text) as StoredKey;
       if (
         parsed.privateKey?.kty === "RSA" &&
         parsed.publicKey?.kty === "RSA" &&
@@ -260,7 +264,7 @@ async function loadKey(): Promise<StoredKey> {
   const publicKey = await crypto.subtle.exportKey("jwk", pair.publicKey);
   const privateKey = await crypto.subtle.exportKey("jwk", pair.privateKey);
   const stored = { privateKey, publicKey, kid: keyId(publicKey) };
-  writeJsonAtomic(KEY_PATH, stored, true, 0o600);
+  await writeJsonAtomicAsync(KEY_PATH, stored, true, 0o600);
   return stored;
 }
 

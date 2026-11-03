@@ -69,7 +69,7 @@ function pollHarness(path: string) {
 }
 
 describe("startWatching", () => {
-  it("replays the requested backlog when joining an existing path watch", () => {
+  it("replays the requested backlog when joining an existing path watch", async () => {
     const path = join(dir, "existing-watch.jsonl");
     writeFileSync(path, `${userLine("u-opening", "Opening prompt")}\n`);
 
@@ -77,8 +77,8 @@ describe("startWatching", () => {
     const second = wsStub();
 
     try {
-      startWatching(path, first, Bun.file(path).size, "bks-test");
-      startWatching(path, second, 0, "bks-test");
+      await startWatching(path, first, Bun.file(path).size, "bks-test");
+      await startWatching(path, second, 0, "bks-test");
 
       expect(second.sent).toHaveLength(1);
       const msg = JSON.parse(second.sent[0]);
@@ -90,27 +90,27 @@ describe("startWatching", () => {
       // The replay carries the reconnect-resume cursor: where it ends in the
       // file, and which file that was (echoed back as sinceOffset/sinceRev).
       expect(msg.endOffset).toBe(Bun.file(path).size);
-      expect(msg.rev).toBe(transcriptRev(path));
+      expect(msg.rev).toBe(await transcriptRev(path));
     } finally {
       stopAllWatchesForClient(first);
       stopAllWatchesForClient(second);
     }
   });
 
-  it("transcriptRev tells mirror files apart (engine-rotation safety)", () => {
+  it("transcriptRev tells mirror files apart (engine-rotation safety)", async () => {
     // An offset into the old engine session's mirror must never be applied to
     // the new one — the rev is what the watch handler compares.
-    expect(transcriptRev("/x/ses_one.jsonl")).not.toBe(
-      transcriptRev("/x/ses_two.jsonl"),
+    expect(await transcriptRev("/x/ses_one.jsonl")).not.toBe(
+      await transcriptRev("/x/ses_two.jsonl"),
     );
-    expect(transcriptRev("/x/ses_one.jsonl")).toBe(
-      transcriptRev("/x/ses_one.jsonl"),
+    expect(await transcriptRev("/x/ses_one.jsonl")).toBe(
+      await transcriptRev("/x/ses_one.jsonl"),
     );
   });
 });
 
 describe("pollTranscriptFile", () => {
-  it("retries the exact range after a transient read failure", () => {
+  it("retries the exact range after a transient read failure", async () => {
     const path = join(dir, "retry-read.jsonl");
     writeFileSync(path, "");
     const harness = pollHarness(path);
@@ -126,10 +126,10 @@ describe("pollTranscriptFile", () => {
       },
     };
 
-    pollTranscriptFile(harness.state, deps);
+    await pollTranscriptFile(harness.state, deps);
     expect(harness.state.lastByteOffset).toBe(0);
     expect(harness.ws.sent).toHaveLength(0);
-    pollTranscriptFile(harness.state, deps);
+    await pollTranscriptFile(harness.state, deps);
     expect(attempts).toBe(2);
     expect(JSON.parse(harness.ws.sent[0]).entries[0].content).toBe(
       "Read me twice",
@@ -139,23 +139,23 @@ describe("pollTranscriptFile", () => {
     expect(harness.fed[0].reset).toBe(false);
   });
 
-  it("does not consume a partial final line", () => {
+  it("does not consume a partial final line", async () => {
     const path = join(dir, "partial-line.jsonl");
     writeFileSync(path, "");
     const harness = pollHarness(path);
     appendFileSync(path, userLine("partial", "Complete later"));
 
-    pollTranscriptFile(harness.state, harness.deps);
+    await pollTranscriptFile(harness.state, harness.deps);
     expect(harness.state.lastByteOffset).toBe(0);
     expect(harness.ws.sent).toHaveLength(0);
     appendFileSync(path, "\n");
-    pollTranscriptFile(harness.state, harness.deps);
+    await pollTranscriptFile(harness.state, harness.deps);
     expect(JSON.parse(harness.ws.sent[0]).entries[0].content).toBe(
       "Complete later",
     );
   });
 
-  it("resets to byte zero and sends init after in-place truncation", () => {
+  it("resets to byte zero and sends init after in-place truncation", async () => {
     const path = join(dir, "truncate.jsonl");
     writeFileSync(
       path,
@@ -164,7 +164,7 @@ describe("pollTranscriptFile", () => {
     const harness = pollHarness(path);
     writeFileSync(path, `${userLine("new", "new")}\n`);
 
-    pollTranscriptFile(harness.state, harness.deps);
+    await pollTranscriptFile(harness.state, harness.deps);
     const frame = JSON.parse(harness.ws.sent[0]);
     expect(frame.type).toBe("transcript_init");
     expect(
@@ -173,16 +173,16 @@ describe("pollTranscriptFile", () => {
     expect(harness.fed[0].reset).toBe(true);
   });
 
-  it("detects atomic replacement even when the replacement is not larger", () => {
+  it("detects atomic replacement even when the replacement is not larger", async () => {
     const path = join(dir, "replace.jsonl");
     const replacement = join(dir, "replace.next.jsonl");
     writeFileSync(path, `${userLine("old", "old")}\n`);
     const harness = pollHarness(path);
-    const oldRev = transcriptRev(path);
+    const oldRev = await transcriptRev(path);
     writeFileSync(replacement, `${userLine("new", "new")}\n`);
     renameSync(replacement, path);
 
-    pollTranscriptFile(harness.state, harness.deps);
+    await pollTranscriptFile(harness.state, harness.deps);
     const frame = JSON.parse(harness.ws.sent[0]);
     expect(frame.type).toBe("transcript_init");
     expect(frame.entries[0].content).toBe("new");
@@ -190,7 +190,7 @@ describe("pollTranscriptFile", () => {
     expect(harness.fed[0].reset).toBe(true);
   });
 
-  it("retries a partial replacement, then resets once its first line completes", () => {
+  it("retries a partial replacement, then resets once its first line completes", async () => {
     const path = join(dir, "partial-replace.jsonl");
     const replacement = join(dir, "partial-replace.next.jsonl");
     writeFileSync(path, `${userLine("old", "old")}\n`);
@@ -198,16 +198,16 @@ describe("pollTranscriptFile", () => {
     writeFileSync(replacement, userLine("new", "new"));
     renameSync(replacement, path);
 
-    pollTranscriptFile(harness.state, harness.deps);
+    await pollTranscriptFile(harness.state, harness.deps);
     expect(harness.ws.sent).toHaveLength(0);
     expect(harness.fed).toHaveLength(0);
     appendFileSync(path, "\n");
-    pollTranscriptFile(harness.state, harness.deps);
+    await pollTranscriptFile(harness.state, harness.deps);
     expect(JSON.parse(harness.ws.sent[0]).type).toBe("transcript_init");
     expect(harness.fed[0].reset).toBe(true);
   });
 
-  it("treats an empty replacement as an authoritative empty init", () => {
+  it("treats an empty replacement as an authoritative empty init", async () => {
     const path = join(dir, "empty-replace.jsonl");
     const replacement = join(dir, "empty-replace.next.jsonl");
     writeFileSync(path, `${userLine("old", "old")}\n`);
@@ -215,7 +215,7 @@ describe("pollTranscriptFile", () => {
     writeFileSync(replacement, "");
     renameSync(replacement, path);
 
-    pollTranscriptFile(harness.state, harness.deps);
+    await pollTranscriptFile(harness.state, harness.deps);
     const frame = JSON.parse(harness.ws.sent[0]);
     expect(frame.type).toBe("transcript_init");
     expect(frame.entries).toEqual([]);

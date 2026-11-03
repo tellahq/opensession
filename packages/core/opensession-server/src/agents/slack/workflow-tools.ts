@@ -61,7 +61,10 @@ export interface WorkflowsToolContext {
   workspace: (
     repo?: string,
     hint?: string,
-  ) => { cwd: string; repo?: string; baseBranch?: string } | undefined;
+  ) =>
+    | { cwd: string; repo?: string; baseBranch?: string }
+    | undefined
+    | Promise<{ cwd: string; repo?: string; baseBranch?: string } | undefined>;
   /** Overrides WORKFLOW_DEFAULT_MODEL for agent() calls that name no model.
    *  Left unset in production — agents default to Opus, not the session's model. */
   defaultModel?: () => string | undefined;
@@ -205,7 +208,7 @@ export function createWorkflowsMcpServer(ctx: WorkflowsToolContext) {
             );
           }
         }
-        const workspace = ctx.workspace(args.repo, args.script);
+        const workspace = await ctx.workspace(args.repo, args.script);
         if (!workspace) {
           return text(
             args.repo
@@ -474,8 +477,8 @@ export function createWorkflowsMcpServer(ctx: WorkflowsToolContext) {
         // Re-resolve the old cwd as a hint so an attached-repo workflow
         // resumes with the correct repo/base branch for write agents too.
         const workspace = args.repo
-          ? ctx.workspace(args.repo, script)
-          : ctx.workspace(undefined, old.cwd);
+          ? await ctx.workspace(args.repo, script)
+          : await ctx.workspace(undefined, old.cwd);
         if (args.repo && !workspace)
           return text(`Repo "${args.repo}" is not attached to this session.`);
         try {

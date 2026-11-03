@@ -1,4 +1,4 @@
-import { readFileSync } from "fs";
+import { readFile } from "node:fs/promises";
 
 export type LinuxProcessIdentity = {
   pid: number;
@@ -6,9 +6,11 @@ export type LinuxProcessIdentity = {
   startTicks: string;
 };
 
-export function linuxProcessStartTicks(pid: number): string | undefined {
+export async function linuxProcessStartTicks(
+  pid: number,
+): Promise<string | undefined> {
   try {
-    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    const stat = await readFile(`/proc/${pid}/stat`, "utf8");
     const fields = stat
       .slice(stat.lastIndexOf(")") + 2)
       .trim()
@@ -19,28 +21,34 @@ export function linuxProcessStartTicks(pid: number): string | undefined {
   }
 }
 
-export function linuxBootId(): string | undefined {
-  try {
-    return readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
-  } catch {
-    return undefined;
-  }
+let bootId: Promise<string | undefined> | undefined;
+
+/** The kernel boot id. It cannot change while this process runs, so it is
+ * read once. */
+export function linuxBootId(): Promise<string | undefined> {
+  bootId ??= readFile("/proc/sys/kernel/random/boot_id", "utf8").then(
+    (text) => text.trim(),
+    () => undefined,
+  );
+  return bootId;
 }
 
-export function processIdentity(
+export async function processIdentity(
   pid = process.pid,
-): LinuxProcessIdentity | undefined {
-  const bootId = linuxBootId();
-  const startTicks = linuxProcessStartTicks(pid);
+): Promise<LinuxProcessIdentity | undefined> {
+  const [bootId, startTicks] = await Promise.all([
+    linuxBootId(),
+    linuxProcessStartTicks(pid),
+  ]);
   return bootId && startTicks ? { pid, bootId, startTicks } : undefined;
 }
 
-export function sameProcess(
+export async function sameProcess(
   identity: Partial<LinuxProcessIdentity>,
-): boolean | undefined {
+): Promise<boolean | undefined> {
   if (!identity.pid || !identity.bootId || !identity.startTicks)
     return undefined;
-  const current = processIdentity(identity.pid);
+  const current = await processIdentity(identity.pid);
   return current
     ? current.bootId === identity.bootId &&
         current.startTicks === identity.startTicks

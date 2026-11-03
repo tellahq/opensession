@@ -204,7 +204,7 @@ function b64(text: string): string {
 export async function resolveTartHost(spec: TartHostSpec): Promise<TartHost> {
   const { listRunners } = await import("../../runners");
   const { isRunnerConnected } = await import("../../runner-ws");
-  const runner = listRunners().find(
+  const runner = (await listRunners()).find(
     (candidate) =>
       candidate.id === spec.runner || candidate.name === spec.runner,
   );
@@ -355,7 +355,7 @@ export async function tartHostForVm(
     if (known) return known;
     // Configured but not usable right now: say which, not "unknown VM".
     const { listRunners } = await import("../../runners");
-    const runner = listRunners().find((r) => r.id === recorded);
+    const runner = (await listRunners()).find((r) => r.id === recorded);
     const spec = settings.hosts.find(
       (h) => h.runner === recorded || h.runner === runner?.name,
     );
