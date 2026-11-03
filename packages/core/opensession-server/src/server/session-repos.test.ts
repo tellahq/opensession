@@ -359,8 +359,8 @@ describe("resolveWorktreeTarget", () => {
     ],
   };
 
-  test("resolves the primary worktree by default", () => {
-    expect(resolveWorktreeTarget(target)).toEqual({
+  test("resolves the primary worktree by default", async () => {
+    expect(await resolveWorktreeTarget(target)).toEqual({
       repoId: "opensession",
       dir: hostDir,
       primary: true,
@@ -369,40 +369,40 @@ describe("resolveWorktreeTarget", () => {
     });
   });
 
-  test("resolves an attached repo by id, unreachable when its dir is gone", () => {
-    const attached = resolveWorktreeTarget(target, "tella-fusion");
+  test("resolves an attached repo by id, unreachable when its dir is gone", async () => {
+    const attached = await resolveWorktreeTarget(target, "tella-fusion");
     expect(attached?.dir).toBe("/home/ubuntu/worktrees/gone");
     expect(attached?.primary).toBe(false);
     expect(attached?.reachable).toBe(false);
   });
 
-  test("returns null for a repo the session does not carry", () => {
-    expect(resolveWorktreeTarget(target, "gitops")).toBeNull();
+  test("returns null for a repo the session does not carry", async () => {
+    expect(await resolveWorktreeTarget(target, "gitops")).toBeNull();
   });
 
-  test("counts a volume-mode primary workspace with no host dir as reachable", () => {
+  test("counts a volume-mode primary workspace with no host dir as reachable", async () => {
     const volume = {
       repo: "opensession",
       worktreeDir: "/workspace/opensession",
       sandbox: { workspace: "volume" },
       attachedRepos: target.attachedRepos,
     };
-    expect(resolveWorktreeTarget(volume)?.reachable).toBe(true);
+    expect((await resolveWorktreeTarget(volume))?.reachable).toBe(true);
     // The remote exception is the primary repo's only: attached repos are
     // always host worktrees.
-    expect(resolveWorktreeTarget(volume, "tella-fusion")?.reachable).toBe(
-      false,
-    );
+    expect(
+      (await resolveWorktreeTarget(volume, "tella-fusion"))?.reachable,
+    ).toBe(false);
   });
 
-  test("returns null for a scratch session with no worktree", () => {
+  test("returns null for a scratch session with no worktree", async () => {
     expect(
-      resolveWorktreeTarget({ repo: "opensession", worktreeDir: null }),
+      await resolveWorktreeTarget({ repo: "opensession", worktreeDir: null }),
     ).toBeNull();
   });
 
-  test("infers the repo id from the worktree path when the session has none", () => {
-    const resolved = resolveWorktreeTarget({ worktreeDir: hostDir });
+  test("infers the repo id from the worktree path when the session has none", async () => {
+    const resolved = await resolveWorktreeTarget({ worktreeDir: hostDir });
     expect(resolved?.repoId).toBe("opensession");
     expect(resolved?.primary).toBe(true);
   });

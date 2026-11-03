@@ -290,7 +290,7 @@ describe("spawnTaskImpl", () => {
     );
     expect(r1.ok).toBe(true);
     const child = (r1 as { taskId: string }).taskId;
-    expect(resolveSpawnDepth(child, h1.deps)).toBe(1);
+    expect(await resolveSpawnDepth(child, h1.deps)).toBe(1);
 
     const h2 = makeHarness(`bks-test-c2-${++uniq}`);
     const r2 = await spawnTaskImpl(
@@ -300,7 +300,7 @@ describe("spawnTaskImpl", () => {
     );
     expect(r2.ok).toBe(true);
     const grandchild = (r2 as { taskId: string }).taskId;
-    expect(resolveSpawnDepth(grandchild, h2.deps)).toBe(2);
+    expect(await resolveSpawnDepth(grandchild, h2.deps)).toBe(2);
 
     const h3 = makeHarness();
     const r3 = await spawnTaskImpl(

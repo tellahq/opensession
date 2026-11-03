@@ -21,7 +21,8 @@
  * into the catalogs the gateway reads and marks them complete, after which a
  * cold rebuild never needs these directories again.
  */
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdir, readFile, stat } from "node:fs/promises";
 import {
   AGENT_SESSION_STORE_SKIP_FILES,
   agentSessionSourceDirectory,
@@ -88,8 +89,84 @@ function activityMs(data: Partial<NativeSessionFile>): number {
   return Number.isFinite(value) ? Math.max(0, value) : 0;
 }
 
-export function scanNativeSessionFiles(): NativeSessionFileScan {
-  assertOfflineSessionSourceScan("scanNativeSessionFiles");
+/** One candidate source file: its text (and mtime when asked for), or null
+ * when it could not be read. */
+type SourceFileRead = {
+  file: string;
+  read: { text: string; mtime?: string } | null;
+};
+
+function sourceFileWanted(file: string): boolean {
+  return file.endsWith(".json") && !AGENT_SESSION_STORE_SKIP_FILES.has(file);
+}
+
+function isMissing(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException)?.code === "ENOENT";
+}
+
+/** The synchronous directory read behind the test-only list assembly
+ * (getAllSessions). Every caller first passes assertOfflineSessionSourceScan,
+ * which refuses in a live gateway; the demo and operator seed use
+ * readSourceDirectory instead. */
+function readSourceDirectorySync(
+  dir: string,
+  withMtime: boolean,
+): SourceFileRead[] {
+  let files: string[];
+  try {
+    // gateway-sync-ok: test-only scan, assertOfflineSessionSourceScan refuses it in a live gateway
+    files = readdirSync(dir);
+  } catch (error) {
+    if (isMissing(error)) return [];
+    throw error;
+  }
+  return files.filter(sourceFileWanted).map((file) => {
+    const path = `${dir}/${file}`;
+    try {
+      // gateway-sync-ok: test-only scan, assertOfflineSessionSourceScan refuses it in a live gateway
+      const text = readFileSync(path, "utf-8");
+      const mtime = withMtime
+        ? // gateway-sync-ok: test-only scan, assertOfflineSessionSourceScan refuses it in a live gateway
+          statSync(path).mtime.toISOString()
+        : undefined;
+      return { file, read: { text, mtime } };
+    } catch {
+      return { file, read: null };
+    }
+  });
+}
+
+/** readSourceDirectorySync without blocking, for the demo and operator seed. */
+async function readSourceDirectory(
+  dir: string,
+  withMtime: boolean,
+): Promise<SourceFileRead[]> {
+  let files: string[];
+  try {
+    files = await readdir(dir);
+  } catch (error) {
+    if (isMissing(error)) return [];
+    throw error;
+  }
+  const reads: SourceFileRead[] = [];
+  for (const file of files.filter(sourceFileWanted)) {
+    const path = `${dir}/${file}`;
+    try {
+      const text = await readFile(path, "utf-8");
+      const mtime = withMtime
+        ? (await stat(path)).mtime.toISOString()
+        : undefined;
+      reads.push({ file, read: { text, mtime } });
+    } catch {
+      reads.push({ file, read: null });
+    }
+  }
+  return reads;
+}
+
+function nativeSessionFileScan(
+  reads: readonly SourceFileRead[],
+): NativeSessionFileScan {
   const scan: NativeSessionFileScan = {
     rows: [],
     sidecars: 0,
@@ -97,15 +174,12 @@ export function scanNativeSessionFiles(): NativeSessionFileScan {
     unreadable: [],
     unversioned: 0,
   };
-  const dir = registeredSessionsDir();
-  if (!existsSync(dir)) return scan;
-  for (const file of readdirSync(dir)) {
-    if (!file.endsWith(".json") || AGENT_SESSION_STORE_SKIP_FILES.has(file))
-      continue;
+  for (const { file, read } of reads) {
     let doc: string;
     let data: NativeSessionFile | null;
     try {
-      doc = readFileSync(`${dir}/${file}`, "utf-8");
+      if (!read) throw new Error("unreadable");
+      doc = read.text;
       data = JSON.parse(doc);
     } catch {
       scan.unreadable.push(file);
@@ -137,6 +211,20 @@ export function scanNativeSessionFiles(): NativeSessionFileScan {
   return scan;
 }
 
+export function scanNativeSessionFiles(): NativeSessionFileScan {
+  assertOfflineSessionSourceScan("scanNativeSessionFiles");
+  return nativeSessionFileScan(
+    readSourceDirectorySync(registeredSessionsDir(), false),
+  );
+}
+
+export async function scanNativeSessionFilesAsync(): Promise<NativeSessionFileScan> {
+  assertOfflineSessionSourceScan("scanNativeSessionFilesAsync");
+  return nativeSessionFileScan(
+    await readSourceDirectory(registeredSessionsDir(), false),
+  );
+}
+
 export type AgentSessionFileScan<
   K extends AgentSessionKind = AgentSessionKind,
 > = {
@@ -145,30 +233,44 @@ export type AgentSessionFileScan<
   unreadable: string[];
 };
 
-export function scanAgentSessionFiles<K extends AgentSessionKind>(
+function agentSessionFileScan<K extends AgentSessionKind>(
   kind: K,
+  reads: readonly SourceFileRead[],
 ): AgentSessionFileScan<K> {
-  assertOfflineSessionSourceScan("scanAgentSessionFiles");
   const scan: AgentSessionFileScan<K> = { kind, sources: [], unreadable: [] };
-  const dir = agentSessionSourceDirectory(kind);
-  if (!existsSync(dir)) return scan;
-  for (const file of readdirSync(dir)) {
-    if (!file.endsWith(".json") || AGENT_SESSION_STORE_SKIP_FILES.has(file))
-      continue;
-    const path = `${dir}/${file}`;
+  for (const { file, read } of reads) {
     let data: AgentSessionSource<K>["data"] | null;
-    let mtime: string;
     try {
-      data = JSON.parse(readFileSync(path, "utf-8"));
-      mtime = statSync(path).mtime.toISOString();
+      if (!read?.mtime) throw new Error("unreadable");
+      data = JSON.parse(read.text);
     } catch {
       scan.unreadable.push(file);
       continue;
     }
     if (!data || typeof data !== "object") continue;
-    scan.sources.push({ file, data, mtime });
+    scan.sources.push({ file, data, mtime: read.mtime });
   }
   return scan;
+}
+
+export function scanAgentSessionFiles<K extends AgentSessionKind>(
+  kind: K,
+): AgentSessionFileScan<K> {
+  assertOfflineSessionSourceScan("scanAgentSessionFiles");
+  return agentSessionFileScan(
+    kind,
+    readSourceDirectorySync(agentSessionSourceDirectory(kind), true),
+  );
+}
+
+export async function scanAgentSessionFilesAsync<K extends AgentSessionKind>(
+  kind: K,
+): Promise<AgentSessionFileScan<K>> {
+  assertOfflineSessionSourceScan("scanAgentSessionFilesAsync");
+  return agentSessionFileScan(
+    kind,
+    await readSourceDirectory(agentSessionSourceDirectory(kind), true),
+  );
 }
 
 /** Everything the synchronous test assembly needs, read from files. */
@@ -330,7 +432,7 @@ export async function seedSessionCatalogsFromFiles(
     }
   }
 
-  const nativeScan = scanNativeSessionFiles();
+  const nativeScan = await scanNativeSessionFilesAsync();
   const alreadyComplete = await sessionMetadata({ op: "catalog_complete" });
   const known = await catalogSessionIds();
   const missing = nativeScan.rows.filter((row) => !known.has(row.sessionId));
@@ -381,8 +483,8 @@ export async function seedSessionCatalogsFromFiles(
   };
 
   const agentScans = {
-    slack: scanAgentSessionFiles("slack"),
-    linear: scanAgentSessionFiles("linear"),
+    slack: await scanAgentSessionFilesAsync("slack"),
+    linear: await scanAgentSessionFilesAsync("linear"),
   };
   for (const kind of ["slack", "linear"] as const) {
     const scan = agentScans[kind];

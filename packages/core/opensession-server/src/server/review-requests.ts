@@ -9,8 +9,8 @@
  * session in getAllSessions. Slack/Linear session files are read-only for
  * opensession, so the request can't live in the session file.
  */
-import { readFileSync, existsSync } from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { readFile } from "fs/promises";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 
 export interface ReviewRequest {
@@ -30,23 +30,40 @@ export interface ReviewRequest {
 
 const REGISTRY_PATH = `${OPENSESSION_SESSIONS_DIR}/review-requests.json`;
 
+// This process is the registry's only writer, so once loaded the in-memory
+// copy is authoritative and reads never touch the disk.
 let cache: Record<string, ReviewRequest> | null = null;
+let loading: Promise<Record<string, ReviewRequest>> | undefined;
 
-function load(): Record<string, ReviewRequest> {
-  if (cache) return cache;
-  try {
-    cache = existsSync(REGISTRY_PATH)
-      ? JSON.parse(readFileSync(REGISTRY_PATH, "utf-8"))
-      : {};
-  } catch {
-    cache = {};
-  }
-  return cache!;
+/** Read the registry once, asynchronously. Boot awaits this before the
+ *  session list is primed; setters await it before changing anything. */
+export function loadReviewRequests(): Promise<Record<string, ReviewRequest>> {
+  if (cache) return Promise.resolve(cache);
+  loading ??= readFile(REGISTRY_PATH, "utf-8")
+    .then((text) => JSON.parse(text) as Record<string, ReviewRequest>)
+    .catch(() => ({}))
+    .then((loaded) => (cache ??= loaded));
+  return loading;
 }
 
-function save(registry: Record<string, ReviewRequest>): void {
+/** The loaded registry. Before the boot load lands, nothing is flagged. */
+function load(): Record<string, ReviewRequest> {
+  if (cache) return cache;
+  void loadReviewRequests();
+  return {};
+}
+
+/** Writes run one at a time in call order, so the file ends on the latest
+ *  registry. */
+let saving: Promise<void> = Promise.resolve();
+
+function save(registry: Record<string, ReviewRequest>): Promise<void> {
   cache = registry;
-  writeJsonAtomic(REGISTRY_PATH, registry);
+  const write = saving.then(() =>
+    writeJsonAtomicAsync(REGISTRY_PATH, registry),
+  );
+  saving = write.catch(() => {});
+  return write;
 }
 
 function requestIds(id: string, aliasIds: readonly string[]): string[] {
@@ -66,26 +83,26 @@ export function getReviewRequest(
 /** Set (a reviewer) or clear (null) the review request for a session. Historical
  * aliases are removed at the same time so an old key cannot revive a cleared
  * request when the unified session list is rebuilt. */
-export function setReviewRequest(
+export async function setReviewRequest(
   id: string,
   req: ReviewRequest | null,
   aliasIds: readonly string[] = [],
-): void {
-  const registry = { ...load() };
+): Promise<void> {
+  const registry = { ...(await loadReviewRequests()) };
   for (const candidate of requestIds(id, aliasIds)) delete registry[candidate];
   if (req) registry[id] = req;
-  save(registry);
+  await save(registry);
 }
 
 /** Mark the current request accepted (reviewer signed off) or reopen it (null),
  * preserving the original `to`/`by`/`at`. No-op if the session and its aliases
  * have no request. The write also migrates an alias-keyed request to `id`. */
-export function setReviewAccepted(
+export async function setReviewAccepted(
   id: string,
   accepted: { by: string; at: string } | null,
   aliasIds: readonly string[] = [],
-): void {
-  const registry = { ...load() };
+): Promise<void> {
+  const registry = { ...(await loadReviewRequests()) };
   const ids = requestIds(id, aliasIds);
   const existing = ids
     .map((candidate) => registry[candidate])
@@ -96,5 +113,5 @@ export function setReviewAccepted(
   else delete next.accepted;
   for (const candidate of ids) delete registry[candidate];
   registry[id] = next;
-  save(registry);
+  await save(registry);
 }

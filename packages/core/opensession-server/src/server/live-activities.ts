@@ -5,14 +5,15 @@
  * transitions are aggregated per authenticated person into one Live Activity,
  * so a burst of workers never floods the Lock Screen with separate cards.
  */
-import { chmodSync, existsSync, readFileSync } from "fs";
+import { readFile } from "fs/promises";
+import { pathExists, readTextIfExists } from "./shared/async-fs";
 import { connect } from "node:http2";
 import { importPkcs8Pem } from "./codestorage/auth";
 import { stateDir } from "./paths";
 import { getReads, isUnread } from "./reads";
 import { getCachedSessions } from "./session-cache";
 import { onSessionStateChange } from "./session-state-events";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import { userMatchesAny } from "./shared/user-mappings";
 import type { UnifiedSession } from "./types";
 
@@ -89,10 +90,11 @@ function withStoreLock<T>(work: () => Promise<T> | T): Promise<T> {
   return run;
 }
 
-function readStore(): RegistrationStore {
+async function readStore(): Promise<RegistrationStore> {
   try {
-    if (existsSync(STORE_PATH)) {
-      const parsed = JSON.parse(readFileSync(STORE_PATH, "utf8"));
+    const text = await readTextIfExists(STORE_PATH);
+    if (text !== undefined) {
+      const parsed = JSON.parse(text);
       if (Array.isArray(parsed?.devices)) {
         const now = Date.now();
         const before = JSON.stringify(parsed.devices);
@@ -119,7 +121,7 @@ function readStore(): RegistrationStore {
             );
             return device;
           });
-        if (JSON.stringify(parsed.devices) !== before) writeStore(parsed);
+        if (JSON.stringify(parsed.devices) !== before) await writeStore(parsed);
         return parsed;
       }
     }
@@ -129,9 +131,9 @@ function readStore(): RegistrationStore {
   return { devices: [] };
 }
 
-function writeStore(store: RegistrationStore): void {
-  writeJsonAtomic(STORE_PATH, store);
-  chmodSync(STORE_PATH, 0o600);
+/** The atomic write creates the replacement file with mode 0600. */
+function writeStore(store: RegistrationStore): Promise<void> {
+  return writeJsonAtomicAsync(STORE_PATH, store, true, 0o600);
 }
 
 function cleanText(value: unknown, maximum: number): string {
@@ -247,8 +249,8 @@ export async function registerLiveActivityDevice(input: {
     return { error: "invalid push-to-start token" };
 
   let retired: LiveActivityRegistration | undefined;
-  const result = await withStoreLock(() => {
-    const store = readStore();
+  const result = await withStoreLock(async () => {
+    const store = await readStore();
     const previous = store.devices.find(
       (device) => device.deviceId === deviceId,
     );
@@ -281,7 +283,7 @@ export async function registerLiveActivityDevice(input: {
       (device) => device.deviceId !== deviceId,
     );
     store.devices.push(next);
-    writeStore(store);
+    await writeStore(store);
     return { ok: true } as const;
   });
   if (retired) void endRegistrationActivities(retired);
@@ -302,8 +304,8 @@ export async function registerLiveActivityToken(input: {
   if (!deviceId || !activityId)
     return { error: "deviceId and activityId required" };
   if (!validToken(pushToken)) return { error: "invalid activity push token" };
-  const result = await withStoreLock(() => {
-    const store = readStore();
+  const result = await withStoreLock(async () => {
+    const store = await readStore();
     const device = store.devices.find(
       (candidate) => candidate.deviceId === deviceId,
     );
@@ -338,7 +340,7 @@ export async function registerLiveActivityToken(input: {
     device.expiresAt = new Date(
       now.getTime() + REGISTRATION_TTL_MS,
     ).toISOString();
-    writeStore(store);
+    await writeStore(store);
     return { ok: true } as const;
   });
   scheduleLiveActivitySync();
@@ -351,8 +353,8 @@ export async function unregisterLiveActivityDevice(
   login?: string,
 ): Promise<{ ok: true } | { error: string }> {
   let retired: LiveActivityRegistration | undefined;
-  const result = await withStoreLock(() => {
-    const store = readStore();
+  const result = await withStoreLock(async () => {
+    const store = await readStore();
     const device = store.devices.find(
       (candidate) => candidate.deviceId === deviceId,
     );
@@ -363,18 +365,23 @@ export async function unregisterLiveActivityDevice(
     store.devices = store.devices.filter(
       (candidate) => candidate.deviceId !== deviceId,
     );
-    writeStore(store);
+    await writeStore(store);
     return { ok: true } as const;
   });
   if (retired) void endRegistrationActivities(retired);
   return result;
 }
 
-function apnsConfig(): ApnsConfig | null {
+async function apnsConfig(): Promise<ApnsConfig | null> {
   const keyId = process.env.OPENSESSION_APNS_KEY_ID?.trim();
   const teamId = process.env.OPENSESSION_APNS_TEAM_ID?.trim();
   const privateKeyPath = process.env.OPENSESSION_APNS_PRIVATE_KEY_PATH?.trim();
-  if (!keyId || !teamId || !privateKeyPath || !existsSync(privateKeyPath))
+  if (
+    !keyId ||
+    !teamId ||
+    !privateKeyPath ||
+    !(await pathExists(privateKeyPath))
+  )
     return null;
   return {
     keyId,
@@ -395,7 +402,7 @@ async function apnsJwt(config: ApnsConfig): Promise<string> {
     return jwtCache.token;
   }
   const imported = await importPkcs8Pem(
-    readFileSync(config.privateKeyPath, "utf8"),
+    await readFile(config.privateKeyPath, "utf8"),
   );
   if (imported.alg !== "ES256")
     throw new Error("APNs key must be an ES256 private key");
@@ -534,7 +541,7 @@ function nextPushTimestamp(previous?: number): number {
 async function endRegistrationActivities(
   registration: LiveActivityRegistration,
 ): Promise<void> {
-  const config = apnsConfig();
+  const config = await apnsConfig();
   if (!config) return;
   const snapshot: LiveActivitySnapshot = {
     sessions: [],
@@ -676,9 +683,9 @@ async function syncDevice(
 }
 
 async function syncLiveActivitiesOnce(): Promise<void> {
-  const config = apnsConfig();
+  const config = await apnsConfig();
   if (!config) return;
-  const devices = await withStoreLock(() => readStore().devices);
+  const devices = await withStoreLock(async () => (await readStore()).devices);
   if (devices.length === 0) return;
   const sessions = getCachedSessions();
   const outcomes: DeviceSyncResult[] = [];
@@ -693,8 +700,8 @@ async function syncLiveActivitiesOnce(): Promise<void> {
     }
   }
 
-  await withStoreLock(() => {
-    const store = readStore();
+  await withStoreLock(async () => {
+    const store = await readStore();
     let changed = false;
     for (const outcome of outcomes) {
       const device = store.devices.find(
@@ -769,7 +776,7 @@ async function syncLiveActivitiesOnce(): Promise<void> {
       }
       if (deviceChanged) device.updatedAt = new Date().toISOString();
     }
-    if (changed) writeStore(store);
+    if (changed) await writeStore(store);
   });
 }
 

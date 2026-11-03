@@ -24,8 +24,11 @@ import {
   MAX_REPORT_TASKS,
 } from "../../server/reports";
 import { safeAssetPath } from "../../server/session-assets";
-import { ensureSessionScratch } from "../../server/session-scratch";
-import { lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
+import {
+  ensureSessionScratch,
+  sessionScratchPath,
+} from "../../server/session-scratch";
+import { lstat, readFile, realpath, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 function text(s: string) {
@@ -38,8 +41,10 @@ export function createReportMcpServer(ctx: {
   sessionId?: string;
 }) {
   const stagingDir = ctx.sessionId
-    ? ensureSessionScratch(ctx.sessionId)
+    ? sessionScratchPath(ctx.sessionId)
     : undefined;
+  // Created ahead of the first publish; the handler awaits it again.
+  if (ctx.sessionId) void ensureSessionScratch(ctx.sessionId);
   const tools = [
     tool(
       "publish_report",
@@ -125,33 +130,37 @@ prompt: the whole opening prompt for that session (max ${MAX_REPORT_TASK_PROMPT}
         try {
           if (args.assets?.length && !ctx.sessionId)
             throw new Error("Report assets require a session id");
-          if (args.assets?.length && !stagingDir)
+          if (
+            args.assets?.length &&
+            !(stagingDir && (await ensureSessionScratch(ctx.sessionId!)))
+          )
             throw new Error("Report assets require session scratch");
           const realStagingDir = args.assets?.length
-            ? realpathSync(stagingDir!)
+            ? await realpath(stagingDir!)
             : null;
           let assetBytes = 0;
           const assetPaths = new Set<string>();
-          const assets = (args.assets || []).map((path) => {
+          const assets: Array<{ path: string; data: Buffer }> = [];
+          for (const path of args.assets || []) {
             const rel = safeAssetPath(path);
             if (assetPaths.has(rel))
               throw new Error(`Duplicate report asset: ${rel}`);
             assetPaths.add(rel);
             const candidate = resolve(join(stagingDir!, rel));
-            if (!lstatSync(candidate).isFile())
+            if (!(await lstat(candidate)).isFile())
               throw new Error(`Not a file: ${path}`);
-            const realPath = realpathSync(candidate);
+            const realPath = await realpath(candidate);
             if (!realPath.startsWith(`${realStagingDir!}/`))
               throw new Error(
                 `Asset resolves outside session scratch: ${path}`,
               );
-            assetBytes += statSync(realPath).size;
+            assetBytes += (await stat(realPath)).size;
             if (assetBytes > MAX_REPORT_ASSET_BYTES)
               throw new Error(
                 `Report assets too large (${assetBytes} bytes > ${MAX_REPORT_ASSET_BYTES})`,
               );
-            return { path: rel, data: readFileSync(realPath) };
-          });
+            assets.push({ path: rel, data: await readFile(realPath) });
+          }
           const meta = await publishReport({
             automationId: ctx.automationId,
             automationName: ctx.automationName,

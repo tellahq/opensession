@@ -305,7 +305,7 @@ async function refreshOnce(prNumber: number, ghRepo: string): Promise<void> {
     fromFork,
     files: paths,
     filesComplete,
-    lastReview: readPrState(prNumber, ghRepo)?.lastReview ?? null,
+    lastReview: (await readPrState(prNumber, ghRepo))?.lastReview ?? null,
     reviews: gateReviews,
     approvers,
     codeowners,

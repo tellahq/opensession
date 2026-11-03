@@ -83,10 +83,9 @@ test("external publication reads the canonical file asynchronously and preserves
   // This publisher also serves writes outside the facade: do not silently
   // substitute the older catalog copy for the externally changed file.
   writeDoc(id, doc(id, { model: "external-model" }));
-  (await import("./title-overrides")).setTitleOverride(
-    "publish-alias",
-    "Alias title",
-  );
+  await (
+    await import("./title-overrides")
+  ).setTitleOverride("publish-alias", "Alias title");
   const read = spyOn(fs, "readFileSync");
   const exists = spyOn(fs, "existsSync");
   try {

@@ -21,7 +21,7 @@
  * webhook has no PR worktree yet — slight staleness is fine for a knob);
  * finding filters read the PR-head worktree copy for exactness.
  */
-import { existsSync, readFileSync } from "fs";
+import { readTextIfExists } from "../../server/shared/async-fs";
 import {
   capPromptRules,
   normalizeReviewRuleGroups,
@@ -67,12 +67,15 @@ export const REVIEW_OPTION_DEFAULTS: ReviewOptions = {
 
 const OPTIONS_FILE = ".os-review.json";
 
-export function loadReviewOptions(repoDir: string | undefined): ReviewOptions {
+export async function loadReviewOptions(
+  repoDir: string | undefined,
+): Promise<ReviewOptions> {
   if (!repoDir) return REVIEW_OPTION_DEFAULTS;
   const path = `${repoDir}/${OPTIONS_FILE}`;
-  if (!existsSync(path)) return REVIEW_OPTION_DEFAULTS;
   try {
-    const raw = JSON.parse(readFileSync(path, "utf-8"));
+    const text = await readTextIfExists(path);
+    if (text === undefined) return REVIEW_OPTION_DEFAULTS;
+    const raw = JSON.parse(text);
     const rejected = collectReviewRules(raw).rejected;
     if (rejected.length)
       console.warn(

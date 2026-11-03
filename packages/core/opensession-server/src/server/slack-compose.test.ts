@@ -121,7 +121,7 @@ describe("Slack composer lifecycle", () => {
   });
 
   test("saves edits for reconnecting viewers", async () => {
-    void openSlackComposer("os-test", { message: "Original response" });
+    await openSlackComposer("os-test", { message: "Original response" });
     const requestId = pendingSlackComposers.get("os-test")!.request.id;
     const path = "/api/sessions/os-test/slack-composer";
     const response = await handleSlackComposeRoutes(
@@ -164,7 +164,7 @@ describe("Slack composer lifecycle", () => {
   });
 
   test("resolves when the human sends", async () => {
-    const { result } = openSlackComposer("os-test", {
+    const { result } = await openSlackComposer("os-test", {
       message: "Status update",
     });
     const request = pendingSlackComposers.get("os-test")?.request;
@@ -183,21 +183,21 @@ describe("Slack composer lifecycle", () => {
   });
 
   test("cancel resolves without sending", async () => {
-    const { result } = openSlackComposer("os-test", {});
+    const { result } = await openSlackComposer("os-test", {});
     const requestId = pendingSlackComposers.get("os-test")!.request.id;
     expect(cancelPendingSlackComposer("os-test", requestId)).toBe(true);
     expect(await result).toEqual({ status: "cancelled" });
   });
 
-  test("allows only one pending composer per session", () => {
-    void openSlackComposer("os-test", {});
-    expect(() => openSlackComposer("os-test", {})).toThrow(
+  test("allows only one pending composer per session", async () => {
+    await openSlackComposer("os-test", {});
+    await expect(openSlackComposer("os-test", {})).rejects.toThrow(
       "already has a Slack composer open",
     );
   });
 
-  test("only one sender can claim a pending composer", () => {
-    void openSlackComposer("os-test", {});
+  test("only one sender can claim a pending composer", async () => {
+    await openSlackComposer("os-test", {});
     const requestId = pendingSlackComposers.get("os-test")!.request.id;
     expect(claimPendingSlackComposer("os-test", requestId)).toBe(true);
     expect(claimPendingSlackComposer("os-test", requestId)).toBe(false);

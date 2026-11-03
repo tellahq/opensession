@@ -11,8 +11,8 @@
  * live in run-session.ts — they need the runner.
  */
 
-import { copyFileSync, existsSync, readFileSync, rmSync } from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { copyFile, readFile, rm } from "node:fs/promises";
+import { writeFileAtomicAsync } from "./shared/atomic-write";
 import { setTranscriptAppendListener } from "./file-watcher";
 import { splitPastedTexts } from "@tellahq/opensession-protocol/pasted-text";
 import { stripContext } from "./prompt-context";
@@ -332,10 +332,10 @@ async function durableQueueItems(
   return owned;
 }
 
-function removeLegacyQueueStore(storePath = QUEUE_STORE): void {
+async function removeLegacyQueueStore(storePath = QUEUE_STORE): Promise<void> {
   for (const path of [storePath, `${storePath}.bak`]) {
     try {
-      rmSync(path, { force: true });
+      await rm(path, { force: true });
     } catch (error) {
       console.error(
         `[queue] Failed to remove migrated queue store ${path}:`,
@@ -345,37 +345,46 @@ function removeLegacyQueueStore(storePath = QUEUE_STORE): void {
   }
 }
 
-export function persistQueues(storePath = QUEUE_STORE): void {
+/** Queue-store writes in call order, so an older snapshot never lands last. */
+let queuePersistChain: Promise<void> = Promise.resolve();
+
+/** Snapshot the maps now and write them behind any write still in flight.
+ * Resolves once this snapshot is on disk (or its failure was logged). */
+export function persistQueues(storePath = QUEUE_STORE): Promise<void> {
+  let snapshot: string;
   try {
     // Custom paths are migration/test fixtures. The production JSON stopped
     // being a projection once the actor acknowledged its one-time import.
-    if (storePath === QUEUE_STORE && queueMigrationState.complete) return;
+    if (storePath === QUEUE_STORE && queueMigrationState.complete)
+      return Promise.resolve();
     const entries = (m: Iterable<[string, QueueItem[]]>) =>
       Object.fromEntries(
         [...m]
           .map(([k, v]) => [k, queueWithIds(v)] as const)
           .filter(([, v]) => v.length > 0),
       );
-    // Keep the previous copy as .bak before overwriting: if the store on disk
-    // ever ends up unparsable, restorePromptQueues falls back to it instead of
-    // silently dropping every queued message.
-    if (existsSync(storePath)) {
-      try {
-        copyFileSync(storePath, `${storePath}.bak`);
-      } catch {}
-    }
-    writeJsonAtomic(
-      storePath,
-      {
-        queued: entries(promptQueues),
-        steered: entries(steeredReceipts),
-        dispatching: Object.fromEntries(promptDispatches),
-      },
-      false,
-    );
+    snapshot = JSON.stringify({
+      queued: entries(promptQueues),
+      steered: entries(steeredReceipts),
+      dispatching: Object.fromEntries(promptDispatches),
+    });
   } catch (e) {
     console.error("[queue] Failed to persist prompt queues:", e);
+    return Promise.resolve();
   }
+  const write = queuePersistChain.then(async () => {
+    try {
+      // Keep the previous copy as .bak before overwriting: if the store on
+      // disk ever ends up unparsable, restorePromptQueues falls back to it
+      // instead of silently dropping every queued message.
+      await copyFile(storePath, `${storePath}.bak`).catch(() => {});
+      await writeFileAtomicAsync(storePath, snapshot);
+    } catch (e) {
+      console.error("[queue] Failed to persist prompt queues:", e);
+    }
+  });
+  queuePersistChain = write;
+  return write;
 }
 
 export type PersistedQueueState = {
@@ -384,15 +393,21 @@ export type PersistedQueueState = {
   dispatching?: Record<string, PromptDispatch>;
 };
 
-function readPersistedQueueState(
+/** The persisted maps, falling back to the .bak copy when the store is
+ * unreadable. With `missingAsUndefined`, an absent store resolves undefined
+ * instead of trying the backup. */
+async function readPersistedQueueState(
   storePath: string,
-): PersistedQueueState | null {
+  missingAsUndefined = false,
+): Promise<PersistedQueueState | null | undefined> {
   try {
-    return JSON.parse(readFileSync(storePath, "utf8"));
+    return JSON.parse(await readFile(storePath, "utf8"));
   } catch (e) {
+    if (missingAsUndefined && (e as NodeJS.ErrnoException)?.code === "ENOENT")
+      return undefined;
     console.error("[queue] Failed to read persisted queues:", e);
     try {
-      const recovered = JSON.parse(readFileSync(`${storePath}.bak`, "utf8"));
+      const recovered = JSON.parse(await readFile(`${storePath}.bak`, "utf8"));
       console.warn("[queue] Recovered persisted queues from .bak");
       return recovered;
     } catch (backupError) {
@@ -415,7 +430,7 @@ export async function hydratePersistedQueueState(
     migrateToKernel && (await sessionDeliveryMigrationComplete());
   if (migrateToKernel) queueMigrationState.complete = actorAuthority;
   if (actorAuthority) {
-    removeLegacyQueueStore(storePath);
+    await removeLegacyQueueStore(storePath);
     // The first schema-29 boot rebuilds the durable sparse projection in
     // bounded retryable read turns. Finish that before the one mutating
     // pending-steer reconciliation so no isolated store is skipped.
@@ -433,15 +448,15 @@ export async function hydratePersistedQueueState(
       ) + dispatching.length
     );
   }
-  if (!existsSync(storePath)) {
+  const data = await readPersistedQueueState(storePath, true);
+  if (data === undefined) {
     if (migrateToKernel) {
       await markSessionDeliveryMigrationComplete();
       queueMigrationState.complete = true;
-      removeLegacyQueueStore(storePath);
+      await removeLegacyQueueStore(storePath);
     }
     return 0;
   }
-  const data = readPersistedQueueState(storePath);
   if (!data) return 0;
   await promptQueues.clear();
   await steeredReceipts.clear();
@@ -472,7 +487,7 @@ export async function hydratePersistedQueueState(
   if (migrateToKernel) {
     await markSessionDeliveryMigrationComplete();
     queueMigrationState.complete = true;
-    removeLegacyQueueStore(storePath);
+    await removeLegacyQueueStore(storePath);
   }
   return (
     [...promptQueues.values(), ...steeredReceipts.values()].reduce(
@@ -528,7 +543,7 @@ export async function restorePersistedQueueState(options: {
           PromptDispatch
         >,
       }
-    : (readPersistedQueueState(storePath) ?? {});
+    : ((await readPersistedQueueState(storePath)) ?? {});
   if (
     !Object.keys(data.queued || {}).length &&
     !Object.keys(data.steered || {}).length &&

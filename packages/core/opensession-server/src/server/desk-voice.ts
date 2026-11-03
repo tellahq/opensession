@@ -24,7 +24,6 @@
  * OpenAI may call.
  */
 
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import {
   appendFile,
   mkdir,
@@ -37,7 +36,8 @@ import {
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { stateDir } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
+import { keyedOrder, readTextIfExists } from "./shared/async-fs";
 import { ensureDeskSession } from "./desk";
 import { getSessionControl } from "./session-control";
 import { appendTranscriptEvents } from "./actor-transcript";
@@ -407,7 +407,7 @@ export async function mintVoiceSecret(user: string): Promise<{
   sessionId: string;
 }> {
   const key = await requireVoiceApiKey();
-  const { sessionId } = ensureDeskSession(user);
+  const { sessionId } = await ensureDeskSession(user);
   const session = await buildVoiceSessionConfig(sessionId, user);
   const res = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
     method: "POST",
@@ -446,7 +446,7 @@ export async function executeVoiceTool(
   args: Record<string, unknown>,
 ): Promise<unknown> {
   const control = getSessionControl();
-  const desk = ensureDeskSession(user);
+  const desk = await ensureDeskSession(user);
   const mcp = await callVoiceMcpTool(user, desk.sessionId, name, args);
   if (mcp.found) return mcp.result;
   switch (name) {
@@ -574,38 +574,52 @@ function handoffPath(sessionId: string): string {
   return `${handoffDir()}/${sessionId.replace(/[^A-Za-z0-9_-]/g, "_")}.json`;
 }
 
-function appendHandoff(sessionId: string, entries: HandoffEntry[]): void {
-  try {
-    mkdirSync(handoffDir(), { recursive: true });
-    const path = handoffPath(sessionId);
-    let existing: HandoffEntry[] = [];
+/** Orders appends and takes of one session's handoff file. */
+const handoffOrder = keyedOrder();
+
+function appendHandoff(
+  sessionId: string,
+  entries: HandoffEntry[],
+): Promise<void> {
+  const path = handoffPath(sessionId);
+  return handoffOrder(path, async () => {
     try {
-      if (existsSync(path))
-        existing = JSON.parse(readFileSync(path, "utf-8")) as HandoffEntry[];
-    } catch {}
-    for (const e of entries) {
-      const i = existing.findIndex((x) => x.id === e.id);
-      if (i >= 0) existing[i] = e;
-      else existing.push(e);
+      let existing: HandoffEntry[] = [];
+      try {
+        const text = await readTextIfExists(path);
+        if (text !== undefined) existing = JSON.parse(text) as HandoffEntry[];
+      } catch {}
+      for (const e of entries) {
+        const i = existing.findIndex((x) => x.id === e.id);
+        if (i >= 0) existing[i] = e;
+        else existing.push(e);
+      }
+      // writeJsonAtomicAsync creates the handoff directory.
+      await writeJsonAtomicAsync(path, existing.slice(-80));
+    } catch (e) {
+      console.error("[desk-voice] failed to buffer handoff:", e);
     }
-    writeJsonAtomic(path, existing.slice(-80));
-  } catch (e) {
-    console.error("[desk-voice] failed to buffer handoff:", e);
-  }
+  });
 }
 
 /** Consume the pending voice handoff for a session (one-shot), formatted as a
  *  context note for the next text turn. Undefined when no voice turns landed. */
-export function takeVoiceHandoff(sessionId: string): string | undefined {
+export async function takeVoiceHandoff(
+  sessionId: string,
+): Promise<string | undefined> {
   const path = handoffPath(sessionId);
-  let entries: HandoffEntry[] = [];
-  try {
-    if (!existsSync(path)) return undefined;
-    entries = JSON.parse(readFileSync(path, "utf-8")) as HandoffEntry[];
-    rmSync(path, { force: true });
-  } catch {
-    return undefined;
-  }
+  const entries = await handoffOrder(path, async () => {
+    try {
+      const text = await readTextIfExists(path);
+      if (text === undefined) return undefined;
+      const parsed = JSON.parse(text) as HandoffEntry[];
+      await rm(path, { force: true });
+      return parsed;
+    } catch {
+      return undefined;
+    }
+  });
+  if (!entries) return undefined;
   if (!entries.length) return undefined;
   const lines = entries.map((e) =>
     e.role === "action"
@@ -615,12 +629,19 @@ export function takeVoiceHandoff(sessionId: string): string | undefined {
   return `## Voice conversation handoff\nWhile in voice mode, you (the Desk) had this spoken conversation through a voice model. It is already in the visible transcript — don't repeat or re-answer it; continue with full awareness of what was said and done:\n\n${lines.join("\n")}`;
 }
 
-export function mirrorVoiceEntries(
+/** Never rejects: a failure is logged, so live callbacks may fire and forget. */
+export async function mirrorVoiceEntries(
   user: string,
   entries: { id: string; role: "user" | "assistant"; text: string }[],
-): void {
+): Promise<void> {
   if (!entries.length) return;
-  const { sessionId } = ensureDeskSession(user);
+  let sessionId: string;
+  try {
+    ({ sessionId } = await ensureDeskSession(user));
+  } catch (error) {
+    console.error("[desk-voice] Failed to resolve the Desk session:", error);
+    return;
+  }
   const now = new Date().toISOString();
   const tes: TranscriptEntry[] = entries.map((e) => ({
     id: e.id,
@@ -634,7 +655,7 @@ export function mirrorVoiceEntries(
       error,
     );
   });
-  appendHandoff(
+  await appendHandoff(
     sessionId,
     entries.map((e) => ({
       id: e.id,
@@ -644,14 +665,21 @@ export function mirrorVoiceEntries(
   );
 }
 
-export function mirrorVoiceToolCall(
+/** Never rejects: a failure is logged, so live callbacks may fire and forget. */
+export async function mirrorVoiceToolCall(
   user: string,
   callId: string,
   name: string,
   args: Record<string, unknown>,
   result: unknown,
-): void {
-  const { sessionId } = ensureDeskSession(user);
+): Promise<void> {
+  let sessionId: string;
+  try {
+    ({ sessionId } = await ensureDeskSession(user));
+  } catch (error) {
+    console.error("[desk-voice] Failed to resolve the Desk session:", error);
+    return;
+  }
   void appendTranscriptEvents(
     sessionId,
     voiceToolTranscriptEntries(callId, name, args, result),
@@ -661,7 +689,7 @@ export function mirrorVoiceToolCall(
       error,
     );
   });
-  appendHandoff(sessionId, [
+  await appendHandoff(sessionId, [
     {
       id: `voice-act-${callId}`,
       role: "action",

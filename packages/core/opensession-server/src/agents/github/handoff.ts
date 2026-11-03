@@ -65,24 +65,30 @@ export function handoffEnabled(): boolean {
 }
 
 /**
- * Sync probe for webhook.ts: is a fix round in flight for this PR? Bot-authored
+ * Probe for webhook.ts: is a fix round in flight for this PR? Bot-authored
  * pushes during a round are the fixes themselves and must still be re-reviewed
  * (the webhook normally skips bot `synchronize` events).
  */
-export function isHandoffActive(prNumber: number, ghRepo?: string): boolean {
+export async function isHandoffActive(
+  prNumber: number,
+  ghRepo?: string,
+): Promise<boolean> {
   if (!handoffEnabled()) return false;
   return handoffActive(
-    readPrState(prNumber, ghRepo)?.handoff,
+    (await readPrState(prNumber, ghRepo))?.handoff,
     Date.now(),
     ACTIVE_TTL_MS,
   );
 }
 
 /** Drop round tracking (PR closed, or a review came back satisfied). */
-export function clearHandoff(prNumber: number, ghRepo?: string): void {
-  const s = readPrState(prNumber, ghRepo);
+export async function clearHandoff(
+  prNumber: number,
+  ghRepo?: string,
+): Promise<void> {
+  const s = await readPrState(prNumber, ghRepo);
   if (!s?.handoff) return;
-  updatePrState(
+  await updatePrState(
     prNumber,
     s.headRef,
     (st) => {
@@ -185,7 +191,8 @@ export async function maybeHandoffFindings(
       // fresh summary comment, so this lands once per review, not per sweep).
       await appendToSummary(
         pr,
-        getOrInitPrState(pr.number, pr.headRef, pr.ghRepo).summaryCommentId,
+        (await getOrInitPrState(pr.number, pr.headRef, pr.ghRepo))
+          .summaryCommentId,
         `🔁 Not merge-ready and no live session owns this branch — add the \`os-auto-fix\` label and I'll fix the findings automatically.`,
       );
       audit({
@@ -198,7 +205,7 @@ export async function maybeHandoffFindings(
       return;
     }
 
-    const state = getOrInitPrState(pr.number, pr.headRef, pr.ghRepo);
+    const state = await getOrInitPrState(pr.number, pr.headRef, pr.ghRepo);
     const sha = state.lastReviewedSha || pr.headSha;
     const decision = handoffDecision(state.handoff, sha, MAX_ROUNDS);
     if (decision === "duplicate") return;
@@ -241,7 +248,7 @@ export async function maybeHandoffFindings(
 
     // Re-read here: the delivery above is a network round-trip, and a mention
     // webhook landing in that window writes to the same file.
-    const delivered = updatePrState(
+    const delivered = await updatePrState(
       pr.number,
       pr.headRef,
       (s) => {
@@ -289,9 +296,9 @@ async function settleHandoff(
   review: ReviewResult,
   outcome: ReviewSettledOutcome,
 ): Promise<void> {
-  const state = readPrState(pr.number, pr.ghRepo);
+  const state = await readPrState(pr.number, pr.ghRepo);
   const handoff = state?.handoff;
-  if (outcome === "passed") clearHandoff(pr.number, pr.ghRepo);
+  if (outcome === "passed") await clearHandoff(pr.number, pr.ghRepo);
   if (!handoff?.rounds || !handoff.sessionId) return;
   const control = tryGetSessionControl();
   if (!control) return;
@@ -340,14 +347,14 @@ async function settleHandoff(
 
 /** One-time "over to humans" notice once the round cap is hit. */
 async function announceCap(pr: PrRef, review: ReviewResult): Promise<void> {
-  const state = readPrState(pr.number, pr.ghRepo);
+  const state = await readPrState(pr.number, pr.ghRepo);
   if (!state?.handoff || state.handoff.cappedAnnounced) return;
   await appendToSummary(
     pr,
     state.summaryCommentId,
     `🔁 Still not merge-ready after ${state.handoff.rounds} handed-off fix round(s) — over to humans. (The \`os-auto-fix\` label still works for another automated pass.)`,
   );
-  updatePrState(
+  await updatePrState(
     pr.number,
     pr.headRef,
     (s) => {

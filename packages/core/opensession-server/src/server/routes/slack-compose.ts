@@ -64,7 +64,7 @@ export async function handleSlackComposeRoutes(
     }
     const body = await ctx.req.json().catch(() => ({}));
     try {
-      const { request } = openSlackComposer(sessionId, {
+      const { request } = await openSlackComposer(sessionId, {
         message: typeof body?.message === "string" ? body.message : "",
       });
       return Response.json(request);
@@ -162,12 +162,13 @@ export async function handleSlackComposeRoutes(
   const requestedScreenshots = Array.isArray(body?.screenshots)
     ? body.screenshots
     : [];
-  if (
-    requestedScreenshots.some(
-      (path: unknown) =>
-        typeof path !== "string" || !validFeaturedScreenshot(path),
-    )
-  ) {
+  const screenshotsValid = await Promise.all(
+    requestedScreenshots.map(
+      async (path: unknown) =>
+        typeof path === "string" && (await validFeaturedScreenshot(path)),
+    ),
+  );
+  if (screenshotsValid.some((valid) => !valid)) {
     return Response.json(
       { error: "One or more Slack images are no longer available" },
       { status: 400 },
@@ -241,7 +242,7 @@ export async function handleSlackComposeRoutes(
     );
   }
   try {
-    const snapshottedScreenshots = snapshotPendingSlackImages(
+    const snapshottedScreenshots = await snapshotPendingSlackImages(
       sessionId,
       requestId,
       screenshots,

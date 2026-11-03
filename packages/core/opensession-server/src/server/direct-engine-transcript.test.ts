@@ -30,11 +30,8 @@ const previous = {
 process.env.HOME = scratch;
 process.env.OPENSESSION_STATE_DIR = scratch;
 process.env.OPENSESSION_SESSIONS_DIR = join(scratch, "sessions");
-const {
-  readEngineTranscript,
-  readEngineTranscriptAsync,
-  getEngineTranscriptPath,
-} = await import("./sessions");
+const { readEngineTranscriptAsync, getEngineTranscriptPath } =
+  await import("./sessions");
 afterAll(() => {
   for (const [key, value] of Object.entries(previous)) {
     if (value === undefined) delete process.env[key];
@@ -69,22 +66,14 @@ describe("readEngineTranscript for direct-SDK engine sessions", () => {
   test("a legacy claude jsonl on disk is still parsed", async () => {
     const engineId = crypto.randomUUID();
     writeLegacyJsonl(scratch, engineId, "from the legacy file");
-    for (const entries of [
-      readEngineTranscript(scratch, engineId, "claude"),
-      await readEngineTranscriptAsync(scratch, engineId, "claude"),
-    ]) {
-      expect(entries.map((e) => e.content).join("\n")).toContain(
-        "from the legacy file",
-      );
-    }
-  });
-
-  test("synchronous store fallback fails closed instead of using an unverified cache", () => {
-    for (const provider of ["claude", "codex", "pi"] as const) {
-      expect(() =>
-        readEngineTranscript(scratch, crypto.randomUUID(), provider),
-      ).toThrow("readEngineTranscriptAsync");
-    }
+    const entries = await readEngineTranscriptAsync(
+      scratch,
+      engineId,
+      "claude",
+    );
+    expect(entries.map((e) => e.content).join("\n")).toContain(
+      "from the legacy file",
+    );
   });
 
   test("no file on disk delegates asynchronously to the store", async () => {

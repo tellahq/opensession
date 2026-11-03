@@ -189,13 +189,19 @@ import { activeRunRecords } from "./src/server/run-journal";
 import {
   markInterruptedWorkflows,
   pauseWorkflowsForShutdown,
+  flushWorkflowWrites,
 } from "./src/server/workflow-store";
 import { recoverInterruptedWorkflows } from "./src/server/workflow-runner";
 import { ensureSlackLinkIndex } from "./src/server/session-control-wiring"; // opensession-sessions MCP + Slack-link bridge
 import "./src/server/keychain"; // registers the keychain human-ask domain handler
-import { websocketHandlers } from "./src/server/ws-handlers";
+import { loadLastRestartBy, websocketHandlers } from "./src/server/ws-handlers";
+import { loadTitleOverrides } from "./src/server/title-overrides";
+import { loadStatusOverrides } from "./src/server/status-overrides";
 import { routeHandlers, type RouteContext } from "./src/server/routes";
 import { isRetiredKeychainBrokerPath } from "./src/server/routes/keychain";
+import { loadReviewRequests } from "./src/server/review-requests";
+import { warmGeneratedTitles } from "./src/server/generated-titles";
+import { warmPapercutsConfig } from "./src/server/papercuts";
 
 // Under the stable supervisor, PORT/HOST remain the public address while the
 // child binds the private backend override. Direct and dev launches keep the
@@ -325,6 +331,22 @@ await (await import("./src/server/archive")).warmArchiveRegistry();
 // the catalogs first, because the list is primed from the catalogs alone.
 if (!g.__opensessionBooted && process.env.OPENSESSION_DEMO === "1")
   await (await import("./src/server/demo")).seedDemoDataset();
+// Small registries the list overlays and the hello frame read synchronously:
+// load them into memory before the first reader (also after a hot reload,
+// which resets module state).
+await Promise.all([
+  loadTitleOverrides(),
+  loadStatusOverrides(),
+  loadLastRestartBy(),
+]);
+// Review requests and generated titles overlay every listed row; load them
+// before the first list.
+if (!g.__opensessionBooted)
+  await Promise.all([
+    loadReviewRequests(),
+    warmGeneratedTitles(),
+    warmPapercutsConfig(),
+  ]);
 if (!g.__opensessionBooted) await primeSessionListIndex();
 void ensureSlackLinkIndex();
 
@@ -337,7 +359,7 @@ let agents: AgentModule[] = (g.__agents as AgentModule[] | undefined) ?? [];
 // request that persists these globalThis-backed maps. Hot reloads reuse the
 // live maps and skip this branch.
 if (!g.__opensessionBooted && !isDevInstance()) {
-  initHumanAsks();
+  await initHumanAsks();
   await restorePendingAsks();
   await hydratePersistedQueueState();
 }
@@ -936,7 +958,7 @@ if (!g.__opensessionBooted) {
 
     // Scheduled prompts are durable SessionKernel timers. The runtime starts
     // after run recovery below; hydrate their rows before that gate opens.
-    hydrateScheduledPromptTimers();
+    await hydrateScheduledPromptTimers();
 
     // Archive triage sessions when their Plain ticket is done.
     startPlainArchiveSweep();
@@ -1395,6 +1417,9 @@ if (!g.__opensessionBooted) {
       console.log(
         `[shutdown] paused ${pausedWorkflows} workflow(s) for journal recovery`,
       );
+    // Their snapshots are written asynchronously; the drain below gives the
+    // writes time to land.
+    void flushWorkflowWrites().catch(() => {});
     // Best-effort attribution: a session-triggered `systemctl restart` shows
     // up as an in-flight run in this checkout (sharedCheckoutEditors). The
     // marker file lets the NEXT boot's hello frame name the culprit in the

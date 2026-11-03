@@ -5,31 +5,43 @@
  * lives in a server-owned registry keyed by unified session id, applied over
  * the derived title in getAllSessions — exactly like the archive registry.
  */
-import { readFileSync, existsSync } from "fs";
 import { readFile } from "fs/promises";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import { homeDir, OPENSESSION_SESSIONS_DIR } from "./paths";
 
 const HOME = homeDir();
 const REGISTRY_PATH = `${OPENSESSION_SESSIONS_DIR}/title-overrides.json`;
 
 let cache: Record<string, string> | null = null;
+let loading: Promise<Record<string, string>> | null = null;
+let writes: Promise<void> = Promise.resolve();
+
+/** Read the registry once, asynchronously. Boot awaits this before serving,
+ * so the synchronous getters below answer from memory. */
+export function loadTitleOverrides(): Promise<Record<string, string>> {
+  if (cache) return Promise.resolve(cache);
+  return (loading ??= readFile(REGISTRY_PATH, "utf-8")
+    .then((text) => JSON.parse(text) as Record<string, string>)
+    .catch(() => ({}))
+    .then((registry) => (cache ??= registry)));
+}
 
 function load(): Record<string, string> {
   if (cache) return cache;
-  try {
-    cache = existsSync(REGISTRY_PATH)
-      ? JSON.parse(readFileSync(REGISTRY_PATH, "utf-8"))
-      : {};
-  } catch {
-    cache = {};
-  }
-  return cache!;
+  // Not hydrated yet (a test or a script that skipped boot): answer empty and
+  // read the file in the background rather than block on it.
+  void loadTitleOverrides();
+  return {};
 }
 
-function save(registry: Record<string, string>): void {
+/** Replace the registry in memory now and on disk in call order. */
+async function save(registry: Record<string, string>): Promise<void> {
   cache = registry;
-  writeJsonAtomic(REGISTRY_PATH, registry);
+  const write = writes.then(() =>
+    writeJsonAtomicAsync(REGISTRY_PATH, registry),
+  );
+  writes = write.catch(() => {});
+  await write;
 }
 
 export function getTitleOverride(id: string): string | undefined {
@@ -48,10 +60,14 @@ export async function getTitleOverrideAsync(
 }
 
 /** Set (non-empty) or clear (empty/null) the manual title for a session id. */
-export function setTitleOverride(id: string, title: string | null): void {
-  const registry = { ...load() };
+export async function setTitleOverride(
+  id: string,
+  title: string | null,
+): Promise<void> {
+  await loadTitleOverrides();
+  const registry = { ...cache! };
   const trimmed = title?.trim();
   if (trimmed) registry[id] = trimmed;
   else delete registry[id];
-  save(registry);
+  await save(registry);
 }

@@ -16,16 +16,17 @@
  * ~/.opensession-goals/<id>.json, mirroring the automation store.
  */
 import { randomUUIDv7 } from "bun";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import {
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  writeFileSync,
-  appendFileSync,
-  unlinkSync,
-  existsSync,
-} from "fs";
+  appendFile,
+  mkdir,
+  readdir,
+  readFile,
+  unlink,
+  writeFile,
+} from "fs/promises";
+import { dirname } from "path";
+import { isMissingFileError, readJsonOrUndefined } from "./shared/async-fs";
 import { stateDir } from "./paths";
 
 const GOALS_DIR = stateDir("goals");
@@ -75,17 +76,25 @@ export interface Goal {
   createdAt: string;
 }
 
-mkdirSync(GOALS_DIR, { recursive: true });
+// GOALS_DIR is created by the first goal write; a missing directory reads as
+// no goals.
 
 // ── Store ────────────────────────────────────────────────────
 
-export function listGoals(): Goal[] {
+export async function listGoals(): Promise<Goal[]> {
   const out: Goal[] = [];
-  for (const file of readdirSync(GOALS_DIR)) {
+  let files: string[];
+  try {
+    files = await readdir(GOALS_DIR);
+  } catch (error) {
+    if (isMissingFileError(error)) return out;
+    throw error;
+  }
+  for (const file of files) {
     if (!file.endsWith(".json")) continue;
     try {
       out.push(
-        JSON.parse(readFileSync(`${GOALS_DIR}/${file}`, "utf-8")) as Goal,
+        JSON.parse(await readFile(`${GOALS_DIR}/${file}`, "utf-8")) as Goal,
       );
     } catch {}
   }
@@ -93,35 +102,30 @@ export function listGoals(): Goal[] {
   return out;
 }
 
-export function getGoal(id: string): Goal | null {
-  const path = `${GOALS_DIR}/${id}.json`;
-  if (!existsSync(path)) return null;
+export async function getGoal(id: string): Promise<Goal | null> {
+  return (await readJsonOrUndefined<Goal>(`${GOALS_DIR}/${id}.json`)) ?? null;
+}
+
+export function saveGoal(g: Goal): Promise<void> {
+  return writeJsonAtomicAsync(`${GOALS_DIR}/${g.id}.json`, g);
+}
+
+export async function deleteGoal(id: string): Promise<boolean> {
   try {
-    return JSON.parse(readFileSync(path, "utf-8"));
-  } catch {
-    return null;
+    await unlink(`${GOALS_DIR}/${id}.json`);
+  } catch (error) {
+    if (isMissingFileError(error)) return false;
+    throw error;
   }
-}
-
-export function saveGoal(g: Goal): void {
-  writeJsonAtomic(`${GOALS_DIR}/${g.id}.json`, g);
-}
-
-export function deleteGoal(id: string): boolean {
-  const path = `${GOALS_DIR}/${id}.json`;
-  if (!existsSync(path)) return false;
-  unlinkSync(path);
-  try {
-    const ledger = `${GOALS_DIR}/${id}.ledger.md`;
-    if (existsSync(ledger)) unlinkSync(ledger);
-  } catch {}
+  await unlink(`${GOALS_DIR}/${id}.ledger.md`).catch(() => {});
   return true;
 }
 
 /** Append a timestamped entry to a goal's fact ledger (its durable memory). */
-export function appendLedger(goal: Goal, text: string): void {
+export async function appendLedger(goal: Goal, text: string): Promise<void> {
   const stamp = new Date().toISOString();
-  appendFileSync(goal.stateFile, `\n\n## ${stamp}\n\n${text.trim()}\n`);
+  await mkdir(dirname(goal.stateFile), { recursive: true });
+  await appendFile(goal.stateFile, `\n\n## ${stamp}\n\n${text.trim()}\n`);
 }
 
 // ── Create / update ──────────────────────────────────────────
@@ -135,7 +139,7 @@ function sanitizeMcpList(list?: unknown): string[] | undefined {
     .map((s) => s.trim());
 }
 
-export function createGoal(input: {
+export async function createGoal(input: {
   name: string;
   mission: string;
   mode?: "ask" | "code";
@@ -148,7 +152,7 @@ export function createGoal(input: {
   /** ISO8601 first wake; omitted/empty = wake on the next tick. */
   firstWakeAt?: string;
   createdBy: string;
-}): Goal | { error: string } {
+}): Promise<Goal | { error: string }> {
   if (!input.name?.trim()) return { error: "Name is required" };
   if (!input.mission?.trim()) return { error: "Mission is required" };
 
@@ -189,10 +193,10 @@ export function createGoal(input: {
     createdBy: input.createdBy || "Anonymous",
     createdAt: new Date().toISOString(),
   };
-  saveGoal(g);
+  await saveGoal(g);
 
   // Seed the ledger so the first wake has something to read.
-  writeFileSync(
+  await writeFile(
     g.stateFile,
     `# Ledger — ${g.name}\n\n` +
       `This is the durable, authoritative record of this goal's work: baselines, ` +
@@ -205,7 +209,7 @@ export function createGoal(input: {
 
 /** Fields an operator (via opensession-goals) may patch. Runtime/scheduling fields
  *  (engineSessionId, wakeCount, lastRun*, worktreePath) are owned by the runner. */
-export function updateGoal(
+export async function updateGoal(
   id: string,
   patch: Partial<
     Pick<
@@ -226,8 +230,8 @@ export function updateGoal(
       | "doneReason"
     >
   >,
-): Goal | { error: string } {
-  const g = getGoal(id);
+): Promise<Goal | { error: string }> {
+  const g = await getGoal(id);
   if (!g) return { error: "Goal not found" };
   const next: Goal = { ...g, ...patch };
   if ("mcpServers" in patch)
@@ -235,16 +239,16 @@ export function updateGoal(
   if (typeof next.minWakeMinutes === "number") {
     next.minWakeMinutes = Math.max(MIN_WAKE_FLOOR, next.minWakeMinutes);
   }
-  saveGoal(next);
+  await saveGoal(next);
   return next;
 }
 
 /** Resume a paused/done goal: mark active and (re)schedule a wake. */
-export function resumeGoal(
+export async function resumeGoal(
   id: string,
   firstWakeAt?: string,
-): Goal | { error: string } {
-  const g = getGoal(id);
+): Promise<Goal | { error: string }> {
+  const g = await getGoal(id);
   if (!g) return { error: "Goal not found" };
   let nextWakeAt = new Date().toISOString();
   if (firstWakeAt?.trim()) {
@@ -258,6 +262,6 @@ export function resumeGoal(
     pauseReason: undefined,
     nextWakeAt,
   };
-  saveGoal(next);
+  await saveGoal(next);
   return next;
 }

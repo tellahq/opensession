@@ -57,18 +57,18 @@ function pendingMention(commentId: number) {
 describe("concurrent writers on one PR's state", () => {
   // Reviews and code actions hold DIFFERENT locks by design, so their windows
   // overlap: a mention webhook lands while a review is awaiting network work.
-  test("a review-lane commit keeps a mention marker that landed mid-flight", () => {
+  test("a review-lane commit keeps a mention marker that landed mid-flight", async () => {
     // The review's early read, taken before its (slow) model run.
-    const snapshot = getOrInitPrState(PR, HEAD);
-    updatePrState(PR, HEAD, (s) => {
+    const snapshot = await getOrInitPrState(PR, HEAD);
+    await updatePrState(PR, HEAD, (s) => {
       s.summaryCommentId = 11;
     });
 
     // A mention webhook arrives while the review is still awaiting.
-    setPendingMention(PR, pendingMention(7));
+    await setPendingMention(PR, pendingMention(7));
 
     // The review's commit point, after the await.
-    recordReviewed(PR, HEAD, "bbbbbbb", {
+    await recordReviewed(PR, HEAD, "bbbbbbb", {
       verdict: "comment",
       confidence: 4,
       findings: 2,
@@ -77,7 +77,7 @@ describe("concurrent writers on one PR's state", () => {
       at: new Date().toISOString(),
     });
 
-    const after = readPrState(PR)!;
+    const after = (await readPrState(PR))!;
     // pendingMention exists to survive a crash in exactly this window; writing a
     // pre-await snapshot back would have reverted it.
     expect(after.pendingMention?.commentId).toBe(7);
@@ -88,9 +88,9 @@ describe("concurrent writers on one PR's state", () => {
     expect(snapshot.pendingMention).toBeUndefined();
   });
 
-  test("a code-lane commit keeps the review verdict written during its run", () => {
+  test("a code-lane commit keeps the review verdict written during its run", async () => {
     const pr = PR + 1;
-    updatePrState(pr, HEAD, (s) => {
+    await updatePrState(pr, HEAD, (s) => {
       s.autoFix = {
         active: true,
         iterations: 1,
@@ -99,7 +99,7 @@ describe("concurrent writers on one PR's state", () => {
     });
 
     // The review lane records its verdict while the auto-fix loop is running.
-    recordReviewed(pr, HEAD, "ccccccc", {
+    await recordReviewed(pr, HEAD, "ccccccc", {
       findings: 0,
       blocking: 0,
       sha: "ccccccc",
@@ -107,7 +107,7 @@ describe("concurrent writers on one PR's state", () => {
     });
 
     // The loop's own locals win for its own fields, and nothing else is touched.
-    updatePrState(pr, HEAD, (s) => {
+    await updatePrState(pr, HEAD, (s) => {
       if (s.autoFix) {
         s.autoFix.active = false;
         s.autoFix.iterations = 3;
@@ -115,7 +115,7 @@ describe("concurrent writers on one PR's state", () => {
       }
     });
 
-    const after = readPrState(pr)!;
+    const after = (await readPrState(pr))!;
     expect(after.autoFix).toMatchObject({
       active: false,
       iterations: 3,
@@ -125,9 +125,9 @@ describe("concurrent writers on one PR's state", () => {
     expect(after.lastReviewedSha).toBe("ccccccc");
   });
 
-  test("a review cancellation is durable and kind-scoped", () => {
+  test("a review cancellation is durable and kind-scoped", async () => {
     const pr = PR + 2;
-    updatePrState(pr, HEAD, (s) => {
+    await updatePrState(pr, HEAD, (s) => {
       s.activeRun = {
         kind: "review",
         requestedBy: "Kent",
@@ -135,15 +135,17 @@ describe("concurrent writers on one PR's state", () => {
       };
     });
 
-    expect(requestActiveRunCancellation(pr, HEAD, "review")).toBe(true);
-    expect(activeRunCancellationRequested(pr, "review")).toBe(true);
-    expect(requestActiveRunCancellation(pr, HEAD, "simplify")).toBe(false);
-    expect(readPrState(pr)?.activeRun?.cancelRequestedAt).toBeTruthy();
+    expect(await requestActiveRunCancellation(pr, HEAD, "review")).toBe(true);
+    expect(await activeRunCancellationRequested(pr, "review")).toBe(true);
+    expect(await requestActiveRunCancellation(pr, HEAD, "simplify")).toBe(
+      false,
+    );
+    expect((await readPrState(pr))?.activeRun?.cancelRequestedAt).toBeTruthy();
   });
 
-  test("a review commit preserves a newer debounced head", () => {
+  test("a review commit preserves a newer debounced head", async () => {
     const pr = PR + 3;
-    updatePrState(pr, HEAD, (s) => {
+    await updatePrState(pr, HEAD, (s) => {
       s.pendingReview = {
         headRef: HEAD,
         headSha: "new-head",
@@ -153,19 +155,19 @@ describe("concurrent writers on one PR's state", () => {
       };
     });
 
-    recordReviewed(pr, HEAD, "old-head", {
+    await recordReviewed(pr, HEAD, "old-head", {
       findings: 0,
       blocking: 0,
       sha: "old-head",
       at: new Date().toISOString(),
     });
 
-    expect(readPrState(pr)?.pendingReview?.headSha).toBe("new-head");
+    expect((await readPrState(pr))?.pendingReview?.headSha).toBe("new-head");
   });
 });
 
 describe("review debounce timing", () => {
-  test("keeps the quiet period but caps a continuous push burst", () => {
+  test("keeps the quiet period but caps a continuous push burst", async () => {
     const first = nextReviewDebounce(undefined, 1_000, 4_000, 10_000);
     expect(first).toEqual({ firstPushAt: 1_000, dueAt: 5_000 });
 
@@ -177,7 +179,7 @@ describe("review debounce timing", () => {
     expect(reviewDebounceDelay(capped.dueAt, 12_000)).toBe(0);
   });
 
-  test("starts a fresh burst after work was attempted", () => {
+  test("starts a fresh burst after work was attempted", async () => {
     expect(reviewBurstStart({ firstPushAt: 1_000, attempts: 0 }, 8_000)).toBe(
       1_000,
     );
@@ -186,7 +188,7 @@ describe("review debounce timing", () => {
     );
   });
 
-  test("backs retries off exponentially with a cap", () => {
+  test("backs retries off exponentially with a cap", async () => {
     expect(reviewRetryDelay(1, 15_000, 300_000)).toBe(15_000);
     expect(reviewRetryDelay(4, 15_000, 300_000)).toBe(120_000);
     expect(reviewRetryDelay(10, 15_000, 300_000)).toBe(300_000);
@@ -194,11 +196,11 @@ describe("review debounce timing", () => {
 });
 
 describe("pending mention index", () => {
-  test("tracks writes so the retry sweep never lists every PR", () => {
+  test("tracks writes so the retry sweep never lists every PR", async () => {
     indexPendingMentions([]);
-    setPendingMention(PR + 4, pendingMention(7));
+    await setPendingMention(PR + 4, pendingMention(7));
     expect(pendingMentionRefs().map((r) => r.prNumber)).toContain(PR + 4);
-    clearPendingMention(PR + 4);
+    await clearPendingMention(PR + 4);
     expect(pendingMentionRefs().map((r) => r.prNumber)).not.toContain(PR + 4);
   });
 });

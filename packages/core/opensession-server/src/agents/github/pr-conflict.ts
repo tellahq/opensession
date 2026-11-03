@@ -28,8 +28,8 @@
 import type { UnifiedSession } from "../../server/types";
 import type { PrInfo } from "../../server/pr-cache";
 import { stateDir } from "../../server/paths";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
-import { existsSync, readFileSync, rmSync } from "fs";
+import { coalescedWriter } from "../../server/shared/coalesced-write";
+import { readFile, rm } from "fs/promises";
 
 export interface PrConflictEvent {
   repoId: string;
@@ -56,10 +56,9 @@ function pendingPath(): string {
   return pendingPathOverride || `${stateDir("github")}/conflict-intents.json`;
 }
 
-function readPending(): Map<string, PrConflictEvent> {
+async function readPendingFile(): Promise<Map<string, PrConflictEvent>> {
   try {
-    if (!existsSync(pendingPath())) return new Map();
-    const stored = JSON.parse(readFileSync(pendingPath(), "utf8")) as {
+    const stored = JSON.parse(await readFile(pendingPath(), "utf8")) as {
       intents?: PrConflictEvent[];
     };
     return new Map(
@@ -73,11 +72,30 @@ function readPending(): Map<string, PrConflictEvent> {
   }
 }
 
-function writePending(pending: Map<string, PrConflictEvent>): void {
-  writeJsonAtomic(pendingPath(), {
-    version: 1,
-    intents: [...pending.values()],
-  });
+/** This process is the file's only writer, so after one async load the
+ *  in-memory map is the source of truth and the file follows it. */
+let pendingCache: Map<string, PrConflictEvent> | undefined;
+let pendingLoad: Promise<Map<string, PrConflictEvent>> | undefined;
+
+function loadPending(): Promise<Map<string, PrConflictEvent>> {
+  if (pendingCache) return Promise.resolve(pendingCache);
+  pendingLoad ??= readPendingFile().then((loaded) => (pendingCache = loaded));
+  return pendingLoad;
+}
+
+const pendingWriter = coalescedWriter({
+  path: pendingPath,
+  render: () =>
+    JSON.stringify(
+      { version: 1, intents: [...(pendingCache?.values() ?? [])] },
+      null,
+      2,
+    ),
+  label: "github",
+});
+
+function writePending(): void {
+  pendingWriter.schedule();
 }
 
 export function __setConflictIntentPathForTest(path?: string): void {
@@ -85,21 +103,22 @@ export function __setConflictIntentPathForTest(path?: string): void {
 }
 
 /** Test seam: forget remembered state and pending test intents. */
-export function resetConflictWatch(): void {
+export async function resetConflictWatch(): Promise<void> {
   lastKnown.clear();
   delivering.clear();
   conflictSequence = 0;
-  try {
-    rmSync(pendingPath(), { force: true });
-  } catch {}
+  await pendingWriter.flush();
+  pendingCache = undefined;
+  pendingLoad = undefined;
+  await rm(pendingPath(), { force: true }).catch(() => {});
 }
 
-export function scanConflictTransitions(
+export async function scanConflictTransitions(
   data: Map<string, Map<string, PrInfo>>,
   freshRepos: Set<string>,
-): PrConflictEvent[] {
+): Promise<PrConflictEvent[]> {
   const events: PrConflictEvent[] = [];
-  const pending = readPending();
+  const pending = await loadPending();
   let pendingChanged = false;
   const seen = new Set<string>();
   for (const repoId of freshRepos) {
@@ -147,7 +166,7 @@ export function scanConflictTransitions(
     )
       events.push(event);
   }
-  if (pendingChanged) writePending(pending);
+  if (pendingChanged) writePending();
   return events;
 }
 
@@ -157,17 +176,17 @@ export function conflictMessage(event: PrConflictEvent): string {
 
 export function isCurrentConflictIntent(event: PrConflictEvent): boolean {
   return (
-    readPending().get(prKeyOf(event.repoId, event.number))?.conflictId ===
+    pendingCache?.get(prKeyOf(event.repoId, event.number))?.conflictId ===
     event.conflictId
   );
 }
 
 export function settleConflictIntent(event: PrConflictEvent): void {
-  const pending = readPending();
+  const pending = pendingCache;
   const key = prKeyOf(event.repoId, event.number);
-  if (pending.get(key)?.conflictId !== event.conflictId) return;
+  if (!pending || pending.get(key)?.conflictId !== event.conflictId) return;
   pending.delete(key);
-  writePending(pending);
+  writePending();
 }
 
 /** Whether the session a PR's attribution footer names can take review

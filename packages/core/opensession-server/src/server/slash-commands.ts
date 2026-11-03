@@ -163,7 +163,7 @@ export async function handleSlashCommand(
       }
       // Slack session files don't carry modelHistory; the sync writer
       // patches the model field only (existing files, atomic).
-      if (!syncAgentSessionEngine(session, { model: resolved.id })) {
+      if (!(await syncAgentSessionEngine(session, { model: resolved.id }))) {
         return "Couldn't update the Slack session file — send /model <name> in the Slack thread instead.";
       }
     } else {

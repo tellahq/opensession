@@ -1101,7 +1101,7 @@ export async function handleConnectionsRoutes(
     const { getRouterConfig, DEFAULT_ROUTER_PROMPT, DEFAULT_BASIC_MODEL } =
       await import("../../agents/plain/ticket-router");
     return Response.json({
-      ...getRouterConfig(),
+      ...(await getRouterConfig()),
       defaultPrompt: DEFAULT_ROUTER_PROMPT,
       defaultBasicModel: DEFAULT_BASIC_MODEL,
     });
@@ -1115,7 +1115,7 @@ export async function handleConnectionsRoutes(
     if (!body) return Response.json({ error: "Invalid JSON" }, { status: 400 });
     const { setRouterConfig } =
       await import("../../agents/plain/ticket-router");
-    const result = setRouterConfig(body);
+    const result = await setRouterConfig(body);
     if ("error" in result) return Response.json(result, { status: 400 });
     return Response.json(result);
   }

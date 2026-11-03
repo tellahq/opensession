@@ -182,7 +182,7 @@ export function createScheduleMcpServer(ctx: ScheduleToolContext) {
           return text(await startLoop(ctx, args));
         const at = resolveDeliveryTime(args);
         if ("error" in at) return text(`Couldn't schedule it: ${at.error}`);
-        const result = createScheduledPrompt({
+        const result = await createScheduledPrompt({
           sessionId: ctx.sessionId,
           prompt: args.prompt,
           at: at.at,
@@ -200,7 +200,7 @@ export function createScheduleMcpServer(ctx: ScheduleToolContext) {
       "List prompts scheduled for this session, soonest first.",
       {},
       async () => {
-        const lines = listScheduledPrompts(ctx.sessionId).map(fmt);
+        const lines = (await listScheduledPrompts(ctx.sessionId)).map(fmt);
         const loop = await loopCommand(ctx, "/loop status");
         if (loop.startsWith("Loop active")) lines.push(`- [loop] ${loop}`);
         if (!lines.length)
@@ -221,7 +221,7 @@ export function createScheduleMcpServer(ctx: ScheduleToolContext) {
       async (args: { id: string }) => {
         if (args.id.trim() === "loop")
           return text(await loopCommand(ctx, "/loop stop"));
-        const own = listScheduledPrompts(ctx.sessionId).some(
+        const own = (await listScheduledPrompts(ctx.sessionId)).some(
           (p) => p.id === args.id,
         );
         if (!own)

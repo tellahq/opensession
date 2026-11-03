@@ -24,7 +24,7 @@ import {
   isFixedSubscription,
 } from "./fixed-subscription";
 import { executeSessionProjection } from "./session-projection-executor";
-import { existsSync, readFileSync } from "fs";
+import { readFile } from "node:fs/promises";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { updateSessionFile } from "./session-cache";
 import { explicitEngineFor, resolveModel } from "./models";
@@ -35,23 +35,22 @@ export type MigrateEngineResult =
   | { ok: true; sessionId: string; from?: string; to: string }
   | { ok: false; error: string };
 
-function readJson<T>(path: string): T | null {
+async function readJson<T>(path: string): Promise<T | null> {
   try {
-    return existsSync(path)
-      ? (JSON.parse(readFileSync(path, "utf-8")) as T)
-      : null;
+    return JSON.parse(await readFile(path, "utf-8")) as T;
   } catch {
+    // Missing or unreadable.
     return null;
   }
 }
 
 /** Journal read (file-level, not via claude-runner's in-memory maps) so this
  *  module stays import-light and usable from standalone scripts. */
-function journaledRuns(): ActiveRunRecord[] {
+async function journaledRuns(): Promise<ActiveRunRecord[]> {
   const path =
     process.env.OPENSESSION_RUN_JOURNAL ||
     `${OPENSESSION_SESSIONS_DIR}/active-runs.json`;
-  const journal = readJson<Record<string, ActiveRunRecord>>(path);
+  const journal = await readJson<Record<string, ActiveRunRecord>>(path);
   return journal ? Object.values(journal) : [];
 }
 
@@ -62,13 +61,13 @@ export function isAutomationOwnedSession(
 }
 
 /** Whether the shared run journal shows an in-flight run for this session. */
-export function sessionHasJournaledRun(
+export async function sessionHasJournaledRun(
   sessionId: string,
   data?: Pick<
     NativeSessionFile,
     "claudeSessionId" | "codexThreadId" | "piSessionId"
   >,
-): boolean {
+): Promise<boolean> {
   const engineIds = new Set(
     [
       sessionId,
@@ -77,7 +76,7 @@ export function sessionHasJournaledRun(
       data?.piSessionId,
     ].filter(Boolean) as string[],
   );
-  return journaledRuns().some(
+  return (await journaledRuns()).some(
     (r) =>
       (r.osSessionId && engineIds.has(r.osSessionId)) ||
       (r.claudeSessionId && engineIds.has(r.claudeSessionId)) ||
@@ -97,7 +96,7 @@ export async function migrateSessionEngine(
   options: { preserveActivity?: boolean } = {},
 ): Promise<MigrateEngineResult> {
   const path = `${OPENSESSION_SESSIONS_DIR}/${sessionId}.json`;
-  const data = readJson<NativeSessionFile>(path);
+  const data = await readJson<NativeSessionFile>(path);
   if (!data?.id) {
     return {
       ok: false,
@@ -131,7 +130,7 @@ export async function migrateSessionEngine(
     : undefined;
   if (fixedRefusal) return { ok: false, error: fixedRefusal };
 
-  if (sessionHasJournaledRun(sessionId, data)) {
+  if (await sessionHasJournaledRun(sessionId, data)) {
     return {
       ok: false,
       error: `Session ${sessionId} has an in-flight run — let it finish (or cancel it) before migrating.`,

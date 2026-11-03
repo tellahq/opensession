@@ -35,7 +35,7 @@ afterAll(() => {
 async function finished(runId: string): Promise<WorkflowRunSnapshot> {
   const deadline = Date.now() + 8_000;
   while (Date.now() < deadline) {
-    const snapshot = getWorkflowRun(runId);
+    const snapshot = await getWorkflowRun(runId);
     if (snapshot && snapshot.status !== "running") return snapshot;
     await Bun.sleep(10);
   }
@@ -195,7 +195,7 @@ describe("unattended workflow swarm integration", () => {
         return { ok: true, text: "unused" };
       },
     };
-    const run = startWorkflow({
+    const run = await startWorkflow({
       sessionId: "parent",
       cwd: "/repo",
       executor,
@@ -226,7 +226,7 @@ describe("unattended workflow swarm integration", () => {
     expect(messages).toHaveLength(1);
     expect(messages[0]).toContain("do not merge");
     expect(
-      readWorkflowJournal(run.runId).filter(
+      (await readWorkflowJournal(run.runId)).filter(
         (entry) => entry.kind === "session" && entry.operation === "wait",
       ).length,
     ).toBe(2);
@@ -339,7 +339,7 @@ describe("unattended workflow swarm integration", () => {
       (_, index) =>
         `{ prompt: "item-${index}", repo: "renderer", branch: "soak-${index}" }`,
     ).join(",\n");
-    const run = startWorkflow({
+    const run = await startWorkflow({
       sessionId: "parent",
       cwd: "/repo",
       executor: {

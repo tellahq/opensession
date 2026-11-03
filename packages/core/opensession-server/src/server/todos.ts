@@ -11,12 +11,12 @@
  * so a future daily-digest automation sees todo activity with no extra
  * plumbing.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { keyedOrder, readTextIfExists } from "./shared/async-fs";
 import { randomUUIDv7 } from "bun";
 import { audit } from "./audit";
 import { notifyUser } from "./notifications";
 import { stateDir } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import { resolveTeammate } from "./shared/user-mappings";
 import { broadcastToAll } from "./ws-hub";
 import { openDirectMessage, sendSlackMessage } from "../agents/slack/slack-api";
@@ -66,33 +66,38 @@ interface TodoStore {
 const MAX_TEXT_CHARS = 500;
 const MAX_NOTE_CHARS = 500;
 
-function readStore(): TodoStore {
+async function readStore(): Promise<TodoStore> {
   try {
-    const path = todosPath();
-    if (existsSync(path))
-      return JSON.parse(readFileSync(path, "utf-8")) as TodoStore;
+    const text = await readTextIfExists(todosPath());
+    if (text !== undefined) return JSON.parse(text) as TodoStore;
   } catch (e) {
     console.error("[todos] failed to read store:", e);
   }
   return { items: [] };
 }
 
-function writeStore(store: TodoStore): void {
-  writeJsonAtomic(todosPath(), store);
+function writeStore(store: TodoStore): Promise<void> {
+  return writeJsonAtomicAsync(todosPath(), store);
+}
+
+/** Serializes read-modify-write cycles of the todo store. */
+const storeOrder = keyedOrder();
+function withStore<T>(fn: () => Promise<T>): Promise<T> {
+  return storeOrder(todosPath(), fn);
 }
 
 function changed(user: string): void {
   broadcastToAll({ type: "todos_changed", user });
 }
 
-export function addTodo(input: {
+export async function addTodo(input: {
   user: string;
   text: string;
   note?: string;
   due?: string;
   remindAt?: string;
   source: TodoSource;
-}): TodoItem {
+}): Promise<TodoItem> {
   const text = (input.text || "").trim().slice(0, MAX_TEXT_CHARS);
   if (!text) throw new Error("todo text is empty");
   const user = (input.user || "").trim();
@@ -110,9 +115,11 @@ export function addTodo(input: {
     ...(input.remindAt ? { remindAt: input.remindAt } : {}),
     source: input.source,
   };
-  const store = readStore();
-  store.items.push(item);
-  writeStore(store);
+  await withStore(async () => {
+    const store = await readStore();
+    store.items.push(item);
+    await writeStore(store);
+  });
   audit({
     kind: "todo_added",
     session_id: input.source.sessionId,
@@ -125,16 +132,16 @@ export function addTodo(input: {
 }
 
 /** Newest first within a status; open items before done/dropped. */
-export function listTodos(opts?: {
+export async function listTodos(opts?: {
   user?: string;
   status?: TodoStatus | "all";
   limit?: number;
-}): TodoItem[] {
+}): Promise<TodoItem[]> {
   const limit = Math.min(500, Math.max(1, opts?.limit || 200));
   const status = opts?.status || "open";
   const rank: Record<TodoStatus, number> = { open: 0, done: 1, dropped: 2 };
-  return readStore()
-    .items.filter(
+  return (await readStore()).items
+    .filter(
       (t) =>
         (!opts?.user || t.user === opts.user) &&
         (status === "all" || t.status === status),
@@ -146,11 +153,11 @@ export function listTodos(opts?: {
     .slice(0, limit);
 }
 
-export function getTodo(id: string): TodoItem | undefined {
-  return readStore().items.find((t) => t.id === id);
+export async function getTodo(id: string): Promise<TodoItem | undefined> {
+  return (await readStore()).items.find((t) => t.id === id);
 }
 
-export function updateTodo(
+export async function updateTodo(
   id: string,
   patch: {
     status?: TodoStatus;
@@ -160,33 +167,36 @@ export function updateTodo(
     remindAt?: string | null;
   },
   by?: string,
-): TodoItem {
-  const store = readStore();
-  const item = store.items.find((t) => t.id === id);
-  if (!item) throw new Error(`unknown todo "${id}"`);
-  const now = new Date().toISOString();
-  if (patch.status && patch.status !== item.status) {
-    item.status = patch.status;
-    if (patch.status === "open") delete item.completedAt;
-    else item.completedAt = now;
-  }
-  if (typeof patch.text === "string" && patch.text.trim())
-    item.text = patch.text.trim().slice(0, MAX_TEXT_CHARS);
-  if (patch.note === null) delete item.note;
-  else if (typeof patch.note === "string")
-    item.note = patch.note.trim().slice(0, MAX_NOTE_CHARS);
-  if (patch.due === null) delete item.due;
-  else if (typeof patch.due === "string") item.due = patch.due;
-  if (patch.remindAt === null) {
-    delete item.remindAt;
-    delete item.remindedAt;
-  } else if (typeof patch.remindAt === "string") {
-    item.remindAt = patch.remindAt;
-    // A (re)scheduled reminder fires again.
-    delete item.remindedAt;
-  }
-  item.updatedAt = now;
-  writeStore(store);
+): Promise<TodoItem> {
+  const item = await withStore(async () => {
+    const store = await readStore();
+    const item = store.items.find((t) => t.id === id);
+    if (!item) throw new Error(`unknown todo "${id}"`);
+    const now = new Date().toISOString();
+    if (patch.status && patch.status !== item.status) {
+      item.status = patch.status;
+      if (patch.status === "open") delete item.completedAt;
+      else item.completedAt = now;
+    }
+    if (typeof patch.text === "string" && patch.text.trim())
+      item.text = patch.text.trim().slice(0, MAX_TEXT_CHARS);
+    if (patch.note === null) delete item.note;
+    else if (typeof patch.note === "string")
+      item.note = patch.note.trim().slice(0, MAX_NOTE_CHARS);
+    if (patch.due === null) delete item.due;
+    else if (typeof patch.due === "string") item.due = patch.due;
+    if (patch.remindAt === null) {
+      delete item.remindAt;
+      delete item.remindedAt;
+    } else if (typeof patch.remindAt === "string") {
+      item.remindAt = patch.remindAt;
+      // A (re)scheduled reminder fires again.
+      delete item.remindedAt;
+    }
+    item.updatedAt = now;
+    await writeStore(store);
+    return item;
+  });
   audit({
     kind: "todo_updated",
     by: by || item.user,
@@ -206,15 +216,19 @@ export function updateTodo(
 const SWEEP_MS = 30_000;
 
 async function sweepReminders(): Promise<void> {
-  const store = readStore();
-  const now = new Date().toISOString();
-  const due = store.items.filter(
-    (t) =>
-      t.status === "open" && t.remindAt && !t.remindedAt && t.remindAt <= now,
-  );
+  const due = await withStore(async () => {
+    const store = await readStore();
+    const now = new Date().toISOString();
+    const due = store.items.filter(
+      (t) =>
+        t.status === "open" && t.remindAt && !t.remindedAt && t.remindAt <= now,
+    );
+    if (!due.length) return due;
+    for (const t of due) t.remindedAt = now;
+    await writeStore(store);
+    return due;
+  });
   if (!due.length) return;
-  for (const t of due) t.remindedAt = now;
-  writeStore(store);
   for (const t of due) {
     audit({ kind: "todo_reminder", user: t.user, message: t.text });
     try {

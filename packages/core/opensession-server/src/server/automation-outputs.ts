@@ -5,7 +5,7 @@
  * a Slack write tool.
  */
 
-import { readFileSync, rmSync } from "fs";
+import { readFile, rm } from "fs/promises";
 import { configuredServer } from "./config";
 import { stateDir } from "./paths";
 import {
@@ -14,7 +14,7 @@ import {
   type ReportMeta,
   type ReportUrgency,
 } from "./reports";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 
 interface AutomationOutputBase {
   id: string;
@@ -60,10 +60,10 @@ function outputStateFile(automationId: string): string {
   return `${OUTPUT_STATE_ROOT}/${automationId}.json`;
 }
 
-function readOutputState(automationId: string): OutputState {
+async function readOutputState(automationId: string): Promise<OutputState> {
   try {
     const parsed = JSON.parse(
-      readFileSync(outputStateFile(automationId), "utf8"),
+      await readFile(outputStateFile(automationId), "utf8"),
     );
     return parsed && typeof parsed.delivered === "object"
       ? { delivered: parsed.delivered }
@@ -73,8 +73,10 @@ function readOutputState(automationId: string): OutputState {
   }
 }
 
-export function deleteAutomationOutputState(automationId: string): void {
-  rmSync(outputStateFile(automationId), { force: true });
+export async function deleteAutomationOutputState(
+  automationId: string,
+): Promise<void> {
+  await rm(outputStateFile(automationId), { force: true });
 }
 
 export function sanitizeAutomationOutputs(
@@ -237,7 +239,7 @@ export async function deliverAutomationOutputs(opts: {
   for (const output of opts.outputs) {
     if (output.type !== "slack" || output.enabled === false) continue;
     if (!reportMeetsThreshold(latest, output)) continue;
-    const state = readOutputState(opts.automationId);
+    const state = await readOutputState(opts.automationId);
     if (state.delivered[output.id]?.reportId === latest.id) continue;
     const reportUrl = `${configuredServer().publicBaseUrl.replace(/\/+$/, "")}/reports/${encodeURIComponent(latest.automationId)}/${encodeURIComponent(latest.id)}`;
     const title = neutralText(latest.title, 150);
@@ -256,11 +258,11 @@ export async function deliverAutomationOutputs(opts: {
       throw new Error(
         `Slack output failed: ${response?.error || "unknown error"}`,
       );
-    const next = readOutputState(opts.automationId);
+    const next = await readOutputState(opts.automationId);
     next.delivered[output.id] = {
       reportId: latest.id,
       at: new Date().toISOString(),
     };
-    writeJsonAtomic(outputStateFile(opts.automationId), next);
+    await writeJsonAtomicAsync(outputStateFile(opts.automationId), next);
   }
 }

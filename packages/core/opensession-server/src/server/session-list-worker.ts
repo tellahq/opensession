@@ -16,7 +16,8 @@ import {
   type SessionListWorkerRequest,
   type SessionListWorkerResponse,
 } from "./session-list-protocol";
-import { SessionListStore } from "./session-list-sqlite";
+import type { SessionListStore } from "./session-list-sqlite";
+import { openSessionListStoreFile } from "./session-list-db-files";
 
 declare const self: Worker;
 
@@ -35,7 +36,7 @@ let store: SessionListStore | undefined;
 function openStore(): SessionListStore {
   if (store) return store;
   if (!context) throw new Error("Session list index has no state context");
-  store = new SessionListStore(statePathIn(SESSION_LIST_DB_FILE, context));
+  store = openSessionListStoreFile(statePathIn(SESSION_LIST_DB_FILE, context));
   return store;
 }
 
