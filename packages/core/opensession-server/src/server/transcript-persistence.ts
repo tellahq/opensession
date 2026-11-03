@@ -36,8 +36,11 @@ const ownerState: OwnerMapState = ((
 /** Merge the persisted map under whatever this process recorded meanwhile.
  * In-memory owners are newer, so they win and keep the newest positions. */
 function loadOwnerMap(): Promise<void> {
+  // Every caller awaits the one load promise, even after it settled, so
+  // their continuations resume in call order (appendLines relies on it).
+  if (ownerState.loading) return ownerState.loading;
   if (ownerState.loaded) return Promise.resolve();
-  return (ownerState.loading ??= (async () => {
+  return (ownerState.loading = (async () => {
     const path = ENGINE_SESSION_MAP_PATH;
     const persisted: [string, string][] = [];
     try {
@@ -152,6 +155,33 @@ function warnFailureOnce(id: string, message: string, error: unknown): void {
   );
 }
 
+/** The latest append queued per unified session. */
+const appendQueues = new Map<string, Promise<void>>();
+
+/** Parse `lines` and append them to `sessionId`'s store in call order. The
+ * local-media check for each batch starts at once, but a batch is appended
+ * only after every batch queued before it for the same session, so a batch
+ * whose media stat is slow is never overtaken by a later one. Must be called
+ * synchronously at the point the caller submits the batch. */
+function appendInOrder(sessionId: string, lines: JsonlLine[]): Promise<void> {
+  const parsed = parseJsonlLinesWithMedia(
+    lines.map((line) => JSON.stringify(line)),
+  );
+  // Settled either way, so the next batch is not left unhandled.
+  parsed.catch(() => {});
+  const previous = appendQueues.get(sessionId) ?? Promise.resolve();
+  const done = previous.then(async () => {
+    const entries = await parsed;
+    if (entries.length) await appendTranscriptEvents(sessionId, entries);
+  });
+  const settled = done.catch(() => {});
+  appendQueues.set(sessionId, settled);
+  void settled.then(() => {
+    if (appendQueues.get(sessionId) === settled) appendQueues.delete(sessionId);
+  });
+  return done;
+}
+
 async function appendLines(
   engineSessionId: string,
   lines: JsonlLine[],
@@ -168,10 +198,7 @@ async function appendLines(
     return;
   }
   try {
-    const entries = await parseJsonlLinesWithMedia(
-      lines.map((line) => JSON.stringify(line)),
-    );
-    if (entries.length) await appendTranscriptEvents(sessionId, entries);
+    await appendInOrder(sessionId, lines);
   } catch (error) {
     markTranscriptStoreDegraded(sessionId);
     warnFailureOnce(
@@ -194,8 +221,7 @@ export async function storeAppendUserLineEarly(
     return;
   }
   try {
-    const entries = await parseJsonlLinesWithMedia([JSON.stringify(line)]);
-    if (entries.length) await appendTranscriptEvents(sessionId, entries);
+    await appendInOrder(sessionId, [line]);
   } catch (error) {
     warnFailureOnce(
       sessionId,
@@ -506,10 +532,7 @@ export async function applyForwardedTranscriptStrict(
     throw new Error("Invalid forwarded transcript projection");
   if (engineSessionId && engineSessionId !== sessionId)
     recordEngineSessionOwner(engineSessionId, sessionId);
-  const entries = await parseJsonlLinesWithMedia(
-    lines.map((line) => JSON.stringify(line)),
-  );
-  if (entries.length) await appendTranscriptEvents(sessionId, entries);
+  await appendInOrder(sessionId, lines);
 }
 
 export async function applyForwardedTranscript(
@@ -519,16 +542,14 @@ export async function applyForwardedTranscript(
 ): Promise<void> {
   if (!sessionId || !lines.length) return;
   try {
-    if (!engineSessionId || engineSessionId === sessionId) {
-      const entries = await parseJsonlLinesWithMedia(
-        lines.map((line) => JSON.stringify(line)),
-      );
-      if (entries.length) await appendTranscriptEvents(sessionId, entries);
-      return;
-    }
-    recordEngineSessionOwner(engineSessionId, sessionId);
-    await appendTranscriptEntries(engineSessionId, lines);
+    if (engineSessionId && engineSessionId !== sessionId)
+      recordEngineSessionOwner(engineSessionId, sessionId);
+    // The owner is known here, so queue directly under it: going through the
+    // engine-id lookup would enqueue a hop later than a same-id batch.
+    await appendInOrder(sessionId, lines);
   } catch (error) {
+    if (engineSessionId && engineSessionId !== sessionId)
+      markTranscriptStoreDegraded(sessionId);
     warnFailureOnce(
       sessionId,
       `[transcript] forwarded append failed for ${sessionId}`,
