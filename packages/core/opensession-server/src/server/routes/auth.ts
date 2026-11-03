@@ -42,7 +42,7 @@ export async function handleAuthRoutes(
   if (!path.startsWith("/api/auth/")) return undefined;
 
   if (path === "/api/auth/status" && req.method === "GET") {
-    const identity = resolveWebAuth(req);
+    const identity = await resolveWebAuth(req);
     // GitHub has permanently rejected this person's grant, so the sign-in
     // gate is already refusing their session (opensession.ts). Report them
     // as signed out, which is what every client's gate keys on, but say
@@ -137,10 +137,10 @@ export async function handleAuthRoutes(
         { status: 401 },
       );
     }
-    let session: ReturnType<typeof createWebSession>;
+    let session: Awaited<ReturnType<typeof createWebSession>>;
     try {
       await enrollGithubSignIn(result.login);
-      session = createWebSession(result.login);
+      session = await createWebSession(result.login);
     } catch {
       return Response.json(
         { status: "error", error: "Could not save sign-in. Please try again." },
@@ -172,7 +172,7 @@ export async function handleAuthRoutes(
 
   if (path === "/api/auth/logout" && req.method === "POST") {
     const token = webAuthToken(req);
-    if (token) destroyWebSession(token);
+    if (token) await destroyWebSession(token);
     return Response.json(
       { ok: true },
       { headers: { "Set-Cookie": webAuthClearCookie() } },

@@ -13,7 +13,7 @@
  * /media, and http(s) image URLs pass through as-is.
  */
 
-import { existsSync } from "fs";
+import { pathExists } from "./shared/path-exists";
 import { parseTranscriptAsync } from "./jsonl-parser";
 import { createRecentCommitMatcher } from "./recent-commits";
 import { mergedSessionTranscriptAsync } from "./sessions";
@@ -104,20 +104,22 @@ function imageSrcFor(
  * stays in the transcript, and an `OPENSESSION_IMAGE:`/`OPENSESSION_VIDEO:`
  * marker is how an agent says "show this one".
  */
-export function isWorkspaceArtifact(
+export async function isWorkspaceArtifact(
   src: string,
   featured: Set<string>,
-): boolean {
+): Promise<boolean> {
   if (featured.has(src)) return true;
   if (src.startsWith("data:") || src.startsWith("os-blob:")) return true;
   if (src.startsWith("/api/sessions/")) return true;
   const local = src.match(/^(?:\/[a-z-]+)?\/media\?path=([^&]+)$/i);
   if (!local) return false;
+  let path: string;
   try {
-    return existsSync(decodeURIComponent(local[1]));
+    path = decodeURIComponent(local[1]);
   } catch {
     return false;
   }
+  return pathExists(path);
 }
 
 export async function buildWorkspaceOverview(
@@ -169,7 +171,7 @@ export async function buildWorkspaceOverview(
       const featured = new Set(e.featuredMedia || []);
       for (let i = 0; i < (e.images?.length || 0); i++) {
         const raw = e.images![i];
-        if (!isWorkspaceArtifact(raw, featured)) continue;
+        if (!(await isWorkspaceArtifact(raw, featured))) continue;
         media.push({
           kind: "image",
           src: imageSrcFor(session.id, e, i, raw),
@@ -179,7 +181,7 @@ export async function buildWorkspaceOverview(
         });
       }
       for (const v of e.videos || []) {
-        if (!isWorkspaceArtifact(v, featured)) continue;
+        if (!(await isWorkspaceArtifact(v, featured))) continue;
         media.push({
           kind: "video",
           src: v,

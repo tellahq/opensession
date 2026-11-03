@@ -94,7 +94,7 @@ function generatedTextFiles(root: string): string[] {
 describe.skipIf(!CHILD)("demo dataset generator", () => {
   it("generates a dataset the real session reader lists", async () => {
     const { generateDemoData } = await import("./generate");
-    const result = generateDemoData();
+    const result = await generateDemoData();
     expect(result.created).toBe(true);
     expect(result.sessionIds.length).toBeGreaterThanOrEqual(8);
 
@@ -105,7 +105,7 @@ describe.skipIf(!CHILD)("demo dataset generator", () => {
     // The PR bulk cache lives in pr-cache.ts, which the cache-busting query
     // does NOT reload — reseed it from the snapshot the generator just wrote
     // (the same explicit reseed the real demo boot does).
-    loadPrCacheSnapshot();
+    await loadPrCacheSnapshot();
     const sessions = getAllSessions();
     const byId = new Map(sessions.map((s: { id: string }) => [s.id, s]));
     for (const id of result.sessionIds) {
@@ -199,7 +199,7 @@ describe.skipIf(!CHILD)("demo dataset generator", () => {
         .sort()
         .join("\n");
     const before = snapshot(home);
-    const again = generateDemoData();
+    const again = await generateDemoData();
     expect(again.created).toBe(false);
     expect(again.sessionIds).toEqual([]);
     expect(snapshot(home)).toBe(before);

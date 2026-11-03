@@ -398,7 +398,7 @@ async function startPortalForContext(
     });
     return `${portal.name} is ready at ${(await runnerPortalUrl(portal)) ?? "its authenticated Portal URL"}.`;
   }
-  if (!sandbox) seedHostEnvFiles(dir);
+  if (!sandbox) await seedHostEnvFiles(dir);
   const starting = sandbox
     ? startSandboxPortalService({
         sessionId: ctx.sessionId,

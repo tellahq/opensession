@@ -27,13 +27,13 @@
  * recipes reach it), and the origin is tailnet-only.
  */
 
-import { chmodSync, existsSync, readFileSync } from "fs";
+import { chmod, readFile } from "fs/promises";
 import { randomBytes, timingSafeEqual } from "crypto";
 import { audit } from "./audit";
 import { configuredIdentity } from "./config";
 import { githubUserAuthActive } from "./github-auth";
 import { stateDir } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 
 /** Env override is for tests; read once at first use (the map loads lazily). */
 function sessionsPath(): string {
@@ -68,23 +68,34 @@ export interface WebIdentity {
 
 const g = globalThis as any;
 
-function sessions(): Map<string, WebSession> {
-  if (!g.__webAuthSessions) {
-    const map = new Map<string, WebSession>();
-    try {
-      const raw = JSON.parse(readFileSync(sessionsPath(), "utf-8"));
-      for (const s of raw?.sessions || []) {
-        if (s?.token && s?.login && s?.name) map.set(s.token, s);
-      }
-    } catch {}
-    g.__webAuthSessions = map;
+/** The session map, loaded once (asynchronously) and kept on globalThis so
+ *  hot reloads keep everyone signed in. Concurrent first callers share one
+ *  read. */
+async function sessions(): Promise<Map<string, WebSession>> {
+  if (g.__webAuthSessions) return g.__webAuthSessions;
+  if (!g.__webAuthSessionsLoading) {
+    g.__webAuthSessionsLoading = (async () => {
+      const map = new Map<string, WebSession>();
+      try {
+        const raw = JSON.parse(await readFile(sessionsPath(), "utf-8"));
+        for (const s of raw?.sessions || []) {
+          if (s?.token && s?.login && s?.name) map.set(s.token, s);
+        }
+      } catch {}
+      return map;
+    })().finally(() => {
+      g.__webAuthSessionsLoading = undefined;
+    });
   }
+  const map: Map<string, WebSession> = await g.__webAuthSessionsLoading;
+  // A concurrent caller may already have installed the same map.
+  g.__webAuthSessions ??= map;
   return g.__webAuthSessions;
 }
 
-function persist(): void {
+async function writeSessions(path: string): Promise<void> {
   const now = Date.now();
-  const map = sessions();
+  const map = await sessions();
   for (const [token, s] of map) {
     if (now - s.lastSeenAt > TTL_MS) map.delete(token);
   }
@@ -93,10 +104,34 @@ function persist(): void {
   const ordered = [...map.values()].sort(
     (a, b) => Number(b.kind === "automation") - Number(a.kind === "automation"),
   );
-  writeJsonAtomic(sessionsPath(), { sessions: ordered });
+  await writeJsonAtomicAsync(path, { sessions: ordered }, true, 0o600);
   try {
-    chmodSync(sessionsPath(), 0o600);
+    await chmod(path, 0o600);
   } catch {}
+}
+
+/** Writes run one at a time, each snapshotting the map when it starts, so a
+ *  slower earlier write can never land over a newer one. */
+let persistChain: Promise<void> = Promise.resolve();
+function persist(): Promise<void> {
+  const path = sessionsPath();
+  const write = () => writeSessions(path);
+  const next = persistChain.then(write, write);
+  persistChain = next.catch(() => {});
+  return next;
+}
+
+/** Resolves once every queued session-store write has landed (tests). */
+export function webSessionWrites(): Promise<void> {
+  return persistChain;
+}
+
+/** Background persist for the per-request paths (touch, expiry, roster
+ *  removal): the in-memory map is authoritative, the file follows. */
+function persistInBackground(): void {
+  persist().catch((error) =>
+    console.error("[web-auth] could not save web sessions:", error),
+  );
 }
 
 /** Sign-in is required exactly when per-user GitHub auth is opted in. */
@@ -113,15 +148,17 @@ export function webAuthRequired(): boolean {
  * and attribution says Automation. Hosted loopback requests enforce this kind
  * in opensession.ts; possessing a human cookie is not enough there.
  */
-export function ensureAutomationWebSession(): { token: string } | null {
+export async function ensureAutomationWebSession(): Promise<{
+  token: string;
+} | null> {
   if (!webAuthRequired()) return null;
-  const map = sessions();
+  const map = await sessions();
   const now = Date.now();
   for (const [token, session] of map) {
     if (session.kind !== "automation") continue;
     if (now - session.lastSeenAt <= TTL_MS) {
       session.lastSeenAt = now;
-      persist();
+      await persist();
       return { token };
     }
     map.delete(token);
@@ -135,7 +172,7 @@ export function ensureAutomationWebSession(): { token: string } | null {
     lastSeenAt: now,
     kind: "automation",
   });
-  persist();
+  await persist();
   return { token };
 }
 
@@ -182,14 +219,15 @@ export function refreshWebIdentity(identity: WebIdentity): WebIdentity | null {
 
 /** Mint a session for a VERIFIED login. Returns null for non-team logins
  *  (fail-closed — the caller should also discard the OAuth token). */
-export function createWebSession(
+export async function createWebSession(
   login: string,
-): { token: string; name: string } | null {
+): Promise<{ token: string; name: string } | null> {
   const member = teamMemberForLogin(login);
   if (!member) return null;
   const token = randomBytes(32).toString("hex");
   const now = Date.now();
-  sessions().set(token, {
+  const map = await sessions();
+  map.set(token, {
     token,
     login,
     name: member.name,
@@ -198,20 +236,21 @@ export function createWebSession(
     lastSeenAt: now,
   });
   try {
-    persist();
+    await persist();
   } catch (error) {
-    sessions().delete(token);
+    map.delete(token);
     throw error;
   }
   audit({ kind: "web_auth_signin", login, user: member.name });
   return { token, name: member.name };
 }
 
-export function destroyWebSession(token: string): void {
-  const s = sessions().get(token);
+export async function destroyWebSession(token: string): Promise<void> {
+  const map = await sessions();
+  const s = map.get(token);
   if (!s) return;
-  sessions().delete(token);
-  persist();
+  map.delete(token);
+  await persist();
   audit({ kind: "web_auth_signout", login: s.login, user: s.name });
 }
 
@@ -229,15 +268,18 @@ function tokenFromRequest(req: Request): string | null {
 }
 
 /** The verified identity on a request, or null. Sliding expiry. */
-export function resolveWebAuth(req: Request): WebIdentity | null {
+export async function resolveWebAuth(
+  req: Request,
+): Promise<WebIdentity | null> {
   const token = tokenFromRequest(req);
   if (!token) return null;
-  const s = sessions().get(token);
+  const map = await sessions();
+  const s = map.get(token);
   if (!s) return null;
   const now = Date.now();
   if (now - s.lastSeenAt > TTL_MS) {
-    sessions().delete(token);
-    persist();
+    map.delete(token);
+    persistInBackground();
     return null;
   }
   let changed = false;
@@ -248,8 +290,8 @@ export function resolveWebAuth(req: Request): WebIdentity | null {
     ...(s.kind === "automation" ? { automation: true } : {}),
   });
   if (!refreshed) {
-    sessions().delete(token);
-    persist();
+    map.delete(token);
+    persistInBackground();
     audit({
       kind: "web_auth_signout",
       login: s.login,
@@ -273,7 +315,7 @@ export function resolveWebAuth(req: Request): WebIdentity | null {
     s.lastSeenAt = now;
     changed = true;
   }
-  if (changed) persist();
+  if (changed) persistInBackground();
   return {
     ...refreshed,
     name: s.name,

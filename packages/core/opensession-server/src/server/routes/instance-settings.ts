@@ -457,7 +457,7 @@ export async function handleInstanceSettingsRoutes(
     } catch (e: any) {
       return Response.json({ error: e?.message || String(e) }, { status: 400 });
     }
-    refreshIndexHtml("identity settings");
+    await refreshIndexHtml("identity settings");
     return Response.json(identityDto());
   }
 

@@ -12,9 +12,9 @@ const releaseInput = {
 };
 
 describe("Apple mobile connection setup", () => {
-  test("keeps build credentials separate from user-restricted release tools", () => {
+  test("keeps build credentials separate from user-restricted release tools", async () => {
     const checked: string[] = [];
-    const updates = buildAppleMobileUpdates(
+    const updates = await buildAppleMobileUpdates(
       releaseInput,
       {},
       {
@@ -36,18 +36,18 @@ describe("Apple mobile connection setup", () => {
     expect(checked).toEqual(["/protected/apple/AuthKey_KEY1234567.p8"]);
   });
 
-  test("refuses release without an allowed user", () => {
-    expect(() =>
+  test("refuses release without an allowed user", async () => {
+    await expect(
       buildAppleMobileUpdates(
         { ...releaseInput, allowedUsers: [] },
         {},
         { releaseCapable: true, validatePrivateKey: () => {} },
       ),
-    ).toThrow("Choose at least one person allowed to release");
+    ).rejects.toThrow("Choose at least one person allowed to release");
   });
 
-  test("refuses release on a host without Xcode", () => {
-    expect(() =>
+  test("refuses release on a host without Xcode", async () => {
+    await expect(
       buildAppleMobileUpdates(
         releaseInput,
         {},
@@ -56,11 +56,11 @@ describe("Apple mobile connection setup", () => {
           validatePrivateKey: () => {},
         },
       ),
-    ).toThrow("Release tools require Xcode on this Mac");
+    ).rejects.toThrow("Release tools require Xcode on this Mac");
   });
 
-  test("can install credential-free build tools by themselves", () => {
-    const updates = buildAppleMobileUpdates({
+  test("can install credential-free build tools by themselves", async () => {
+    const updates = await buildAppleMobileUpdates({
       buildEnabled: true,
       releaseEnabled: false,
     });

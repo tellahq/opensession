@@ -91,6 +91,7 @@ import {
   hasSessionRunningHold,
 } from "./session-state-events";
 import { advanceSessionListResponseRevision } from "./session-list-response-revision";
+import { ORPHANED_RUN_QUARANTINE_REASON } from "./orphaned-run-proof";
 
 export const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
 
@@ -730,7 +731,7 @@ function checkRunStateWedge(
   if (!missingOwner) return;
   void quarantineSessionForSafety(
     sessionId,
-    "The active run no longer has a live execution owner or recovery claim",
+    ORPHANED_RUN_QUARANTINE_REASON,
     `run_state:${state}`,
   )
     .then((quarantine) => {
@@ -739,7 +740,8 @@ function checkRunStateWedge(
         type: "session_status",
         sessionId,
         isRunning: false,
-        safety: publicSessionSafety(quarantine),
+        // This fence is itself the orphaned-run proof the release needs.
+        safety: publicSessionSafety(quarantine, undefined, true),
       });
     })
     .catch((error) => {

@@ -90,6 +90,34 @@ export interface DurableRunState {
   changeSeq: number;
 }
 
+/** Gateway evidence that no engine, run journal record or pending opening
+ * owns a session's unsettled run, fenced by the state and run id it saw. */
+export interface OrphanedRunProof {
+  state: string;
+  runId?: string;
+}
+
+/** Unsettled states the wedge detector fences when nothing owns the run.
+ * `ask_blocked` is absent: it is visibly waiting on a person. */
+export const ORPHANED_RUN_STATES: ReadonlySet<string> = new Set([
+  "preparing",
+  "starting",
+  "running",
+  "interrupted",
+  "reattaching",
+]);
+
+export function parseOrphanedRunProof(
+  value: unknown,
+): OrphanedRunProof | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const { state, runId } = value as { state?: unknown; runId?: unknown };
+  if (typeof state !== "string" || !ORPHANED_RUN_STATES.has(state))
+    return undefined;
+  if (runId !== undefined && typeof runId !== "string") return undefined;
+  return runId === undefined ? { state } : { state, runId };
+}
+
 export interface DurableTimer {
   sessionId: string;
   timerId: string;
@@ -1902,9 +1930,14 @@ export class SessionKernelStore {
       )
       .get(sessionId);
     if (ambiguousCommands && !recoverableSettlement) return false;
+    // A search-history index timer only rebuilds this session's derived
+    // history projection, idempotently, so firing it after release cannot
+    // repeat or contradict anything the session did.
     const claimedTimer = this.db
       .query(
-        "SELECT 1 FROM session_kernel_timers WHERE session_id = ? AND token IS NOT NULL LIMIT 1",
+        `SELECT 1 FROM session_kernel_timers
+         WHERE session_id = ? AND token IS NOT NULL AND kind != 'session_history_index'
+         LIMIT 1`,
       )
       .get(sessionId);
     if (claimedTimer) return false;
@@ -1977,6 +2010,56 @@ export class SessionKernelStore {
         ),
       };
     });
+  }
+
+  /**
+   * Settle a fenced session's run after the gateway proved nothing owns it.
+   *
+   * The wedge detector fences a run that has no live engine or recovery claim,
+   * and `quarantineRepairEvidence` refuses to release while that run is
+   * unsettled, so without this step a person could never repair it online.
+   * The proof is fenced by the exact state and run id the gateway inspected:
+   * if a new run took over since, nothing changes. The run settles through
+   * `boot_owner_missing`, the edge boot recovery applies to the same evidence.
+   * A prompt held for a run that never registered never reached an engine, so
+   * it goes back to the front of the queue instead of being lost.
+   */
+  settleOrphanedRun(
+    sessionId: string,
+    proof: OrphanedRunProof,
+  ): { from: string; to: string; requeued: boolean } | undefined {
+    let settled: { from: string; to: string; requeued: boolean } | undefined;
+    const transaction = this.db.transaction(() => {
+      const run = this.runState(sessionId);
+      if (
+        run.state !== proof.state ||
+        (run.currentRunId ?? null) !== (proof.runId ?? null) ||
+        !ORPHANED_RUN_STATES.has(run.state)
+      )
+        return;
+      const to = nextRunState(run.state as RunState, "boot_owner_missing");
+      if (!to) return;
+      let requeued = false;
+      if (run.state === "preparing" || run.state === "starting") {
+        const dispatch = this.deliveryRow(sessionId).dispatch as
+          | { promptEntryId?: string }
+          | undefined;
+        if (dispatch?.promptEntryId)
+          requeued = this.failDeliveryDispatch(
+            sessionId,
+            dispatch.promptEntryId,
+          );
+      }
+      this.setRunState({
+        sessionId,
+        state: to,
+        event: "boot_owner_missing",
+        detail: { source: "orphaned_run_repair", runId: run.currentRunId },
+      });
+      settled = { from: run.state, to, requeued };
+    });
+    transaction.immediate();
+    return settled;
   }
 
   releaseQuarantine(

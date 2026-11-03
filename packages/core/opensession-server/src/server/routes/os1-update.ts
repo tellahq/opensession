@@ -24,7 +24,7 @@
  */
 
 import { stateDir } from "../paths";
-import { existsSync, mkdirSync, readdirSync, rmSync } from "fs";
+import { access, mkdir, readdir, rm } from "fs/promises";
 import { $ } from "bun";
 import type { RouteContext } from "./context";
 import { configuredIntegration, configuredServer } from "../config";
@@ -221,6 +221,13 @@ async function chromeLatestRelease(): Promise<LatestRelease | null> {
   return value;
 }
 
+function fileExists(path: string): Promise<boolean> {
+  return access(path).then(
+    () => true,
+    () => false,
+  );
+}
+
 /**
  * Fetch the release asset into the disk cache (once — concurrent requests share
  * one download) and return its path, or null on failure.
@@ -231,7 +238,7 @@ async function cachedAssetPath(
 ): Promise<string | null> {
   const dir = `${cacheDir}/${rel.tag}`;
   const file = `${dir}/${rel.asset}`;
-  if (existsSync(file)) return file;
+  if (await fileExists(file)) return file;
   const downloads = (g.__os1UpdateDownloads ??= new Map());
   const inflightKey = `${cacheDir}:${rel.tag}`;
   let inflight = downloads.get(inflightKey);
@@ -241,17 +248,17 @@ async function cachedAssetPath(
       // download never gets served.
       const tmp = `${cacheDir}/.tmp-${rel.tag}-${Date.now()}`;
       try {
-        mkdirSync(tmp, { recursive: true });
+        await mkdir(tmp, { recursive: true });
         await $`gh api ${rel.assetApiUrl} -H "Accept: application/octet-stream" > ${tmp}/${rel.asset}`.quiet();
-        mkdirSync(cacheDir, { recursive: true });
-        rmSync(dir, { recursive: true, force: true });
+        await mkdir(cacheDir, { recursive: true });
+        await rm(dir, { recursive: true, force: true });
         await $`mv ${tmp} ${dir}`.quiet();
         // Drop caches of older tags — only the latest is ever served.
-        for (const entry of readdirSync(cacheDir)) {
+        for (const entry of await readdir(cacheDir)) {
           if (entry !== rel.tag)
-            rmSync(`${cacheDir}/${entry}`, { recursive: true, force: true });
+            await rm(`${cacheDir}/${entry}`, { recursive: true, force: true });
         }
-        return existsSync(file) ? file : null;
+        return (await fileExists(file)) ? file : null;
       } catch (err) {
         // Transient failures (e.g. GitHub rate-limit exhaustion) are fine:
         // the updater retries on its next check. Just don't leave debris.
@@ -261,7 +268,7 @@ async function cachedAssetPath(
         console.warn(
           `[os1-update] release download failed: ${err} ${stderr}`.trim(),
         );
-        rmSync(tmp, { recursive: true, force: true });
+        await rm(tmp, { recursive: true, force: true }).catch(() => {});
         return null;
       } finally {
         downloads.delete(inflightKey);

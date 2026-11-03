@@ -20,7 +20,7 @@ import {
   portalsInSandbox,
   sandboxForPortals,
 } from "../portal-sandbox";
-import { existsSync } from "fs";
+import { access } from "fs/promises";
 import {
   hostPortalRouteStatus,
   restartPortalService,
@@ -45,6 +45,13 @@ import { portalWaitingResponse } from "../portal-waiting-page";
 import { sleepingSandboxPortalStatus } from "../sandbox-portals";
 import type { UnifiedSession } from "../types";
 import { createWorkloadIdentityEnv } from "../workload-identity";
+
+function pathExists(path: string): Promise<boolean> {
+  return access(path).then(
+    () => true,
+    () => false,
+  );
+}
 
 export { recipeCommand } from "../preview";
 
@@ -191,9 +198,9 @@ export async function startSessionPortal(
       true,
     );
   }
-  if (!existsSync(session.worktreeDir))
+  if (!(await pathExists(session.worktreeDir)))
     throw new PortalStartError(400, "Session has no Portal workspace");
-  seedHostEnvFiles(session.worktreeDir);
+  await seedHostEnvFiles(session.worktreeDir);
   await startPortalService({
     sessionId: session.id,
     worktreeDir: session.worktreeDir,
@@ -388,7 +395,7 @@ export async function handlePreviewRoutes(
       }
       const unavailableSandbox = unavailableSandboxPreviewStatus(session);
       if (unavailableSandbox) return Response.json(unavailableSandbox);
-      if (!session.worktreeDir || !existsSync(session.worktreeDir))
+      if (!session.worktreeDir || !(await pathExists(session.worktreeDir)))
         return Response.json(EMPTY_STATUS);
       return Response.json(
         withPortalSandbox(
@@ -510,7 +517,7 @@ export async function handlePreviewRoutes(
             ),
           );
         }
-        if (!session.worktreeDir || !existsSync(session.worktreeDir))
+        if (!session.worktreeDir || !(await pathExists(session.worktreeDir)))
           return Response.json(
             { error: "Session has no Portal workspace" },
             { status: 400 },

@@ -18,7 +18,7 @@
  * automations are persisted, validated or migrated.
  */
 
-import { existsSync, readFileSync, readdirSync } from "fs";
+import { readFile, readdir } from "fs/promises";
 import { join } from "path";
 import { CONFIG_PATH, REPO_ROOT } from "./paths";
 
@@ -50,14 +50,19 @@ export type Recipe = {
 
 export const RECIPES_DIR = join(REPO_ROOT, "recipes", "automations");
 
-export function listRecipes(): Recipe[] {
-  if (!existsSync(RECIPES_DIR)) return [];
+export async function listRecipes(): Promise<Recipe[]> {
+  let files: string[];
+  try {
+    files = await readdir(RECIPES_DIR);
+  } catch {
+    return [];
+  }
   const recipes: Recipe[] = [];
-  for (const file of readdirSync(RECIPES_DIR).sort()) {
+  for (const file of files.sort()) {
     if (!file.endsWith(".json")) continue;
     try {
       const recipe = JSON.parse(
-        readFileSync(join(RECIPES_DIR, file), "utf8"),
+        await readFile(join(RECIPES_DIR, file), "utf8"),
       ) as Recipe;
       if (recipe?.id && recipe?.automation?.prompt) recipes.push(recipe);
     } catch {
@@ -67,14 +72,13 @@ export function listRecipes(): Recipe[] {
   return recipes;
 }
 
-export function findRecipe(id: string): Recipe | undefined {
-  return listRecipes().find((r) => r.id === id);
+export async function findRecipe(id: string): Promise<Recipe | undefined> {
+  return (await listRecipes()).find((r) => r.id === id);
 }
 
 type Config = Record<string, any>;
 
 async function readConfig(): Promise<Config> {
-  if (!existsSync(CONFIG_PATH)) return {};
   try {
     return JSON.parse(await Bun.file(CONFIG_PATH).text());
   } catch {

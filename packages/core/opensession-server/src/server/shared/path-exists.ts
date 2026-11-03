@@ -1,11 +1,13 @@
 import { access } from "node:fs/promises";
 
-/** Whether `path` names an existing file or directory: the non-blocking
- * counterpart of `existsSync` for code on the gateway thread. Prefer reading
- * the file and catching ENOENT when the content is wanted anyway. */
-export function pathExists(path: string): Promise<boolean> {
-  return access(path).then(
-    () => true,
-    () => false,
-  );
+/** The asynchronous counterpart of `existsSync`: true when `path` exists
+ *  (F_OK), false on any error. Prefer reading the file and catching ENOENT
+ *  when the next step reads it anyway. */
+export async function pathExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
