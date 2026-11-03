@@ -81,13 +81,13 @@ describe("pstack mode", () => {
     expect(gatePstackSkills(skills, true)).toBe(skills);
   });
 
-  test("lists and expands both bundled command names with their tasks", () => {
+  test("lists and expands both bundled command names with their tasks", async () => {
     for (const name of ["pstack", "poteto-mode"]) {
-      const listed = searchSkills(process.cwd(), name);
+      const listed = await searchSkills(process.cwd(), name);
       expect(listed.some((skill) => skill.name === name)).toBe(true);
 
       const dir = join(SHIPPED_SKILLS_DIR, name);
-      const expanded = expandSkillCommand(`/${name} fix it`, [
+      const expanded = await expandSkillCommand(`/${name} fix it`, [
         {
           name,
           filePath: join(dir, "SKILL.md"),

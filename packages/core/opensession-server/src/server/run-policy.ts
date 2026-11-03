@@ -3,7 +3,7 @@
  * It owns trusted run kinds, unattended classification, pool wait budgets,
  * tool stripping, and instance-local instruction loading.
  */
-import { existsSync, readFileSync } from "fs";
+import { readFile } from "node:fs/promises";
 import { join } from "path";
 import { STRIPE_APPROVAL_GATED_TOOLS } from "./stripe-approvals";
 
@@ -148,16 +148,15 @@ export function runToolPolicy(opts: {
 }
 
 /** Read untracked instance-local instructions at the workspace root. */
-export function readLocalInstructions(
+export async function readLocalInstructions(
   dir: string | undefined,
-): string | undefined {
+): Promise<string | undefined> {
   if (!dir) return undefined;
   const parts: string[] = [];
   for (const name of ["AGENTS.local.md", "CLAUDE.local.md"]) {
     const path = join(dir, name);
     try {
-      if (!existsSync(path)) continue;
-      const text = readFileSync(path, "utf8").trim();
+      const text = (await readFile(path, "utf8")).trim();
       if (text) parts.push(text);
     } catch {}
   }

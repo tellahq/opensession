@@ -42,7 +42,7 @@ import {
 
 export interface MemoryToolContext {
   user?: string;
-  repos: () => string[];
+  repos: () => string[] | Promise<string[]>;
   sessionId?: string;
   /** Team memory affects everyone. Only a server-verified privileged context
    * may grant this; model-authored arguments can never enable it. */
@@ -60,16 +60,16 @@ function text(value: string) {
   return { content: [{ type: "text" as const, text: value }] };
 }
 
-function scopesFor(ctx: MemoryToolContext): MemoryScope[] {
-  return sessionMemoryScopes({ user: ctx.user, repos: ctx.repos() });
+async function scopesFor(ctx: MemoryToolContext): Promise<MemoryScope[]> {
+  return sessionMemoryScopes({ user: ctx.user, repos: await ctx.repos() });
 }
 
-function writableScope(
+async function writableScope(
   ctx: MemoryToolContext,
   kind: "repo" | "user" | "team",
   repo?: string,
-): MemoryScope | string {
-  const scopes = scopesFor(ctx);
+): Promise<MemoryScope | string> {
+  const scopes = await scopesFor(ctx);
   if (kind === "team" && !ctx.allowTeamWrites) {
     return "Team memory affects every teammate. Add or pin it from Memory settings.";
   }
@@ -90,8 +90,8 @@ function writableScope(
   );
 }
 
-function visibleScopeKeys(ctx: MemoryToolContext): string[] {
-  return scopesFor(ctx).map((scope) => scope.key);
+async function visibleScopeKeys(ctx: MemoryToolContext): Promise<string[]> {
+  return (await scopesFor(ctx)).map((scope) => scope.key);
 }
 
 function compactRecord(record: MemoryRecord): string {
@@ -101,8 +101,11 @@ function compactRecord(record: MemoryRecord): string {
   return `[${record.id}] (${qualifiers.join(", ")}) ${record.summary}`;
 }
 
-function canRead(ctx: MemoryToolContext, record: MemoryRecord): boolean {
-  return visibleScopeKeys(ctx).includes(record.scopeKey);
+async function canRead(
+  ctx: MemoryToolContext,
+  record: MemoryRecord,
+): Promise<boolean> {
+  return (await visibleScopeKeys(ctx)).includes(record.scopeKey);
 }
 
 function overlap(left: string, right: string): number {
@@ -125,9 +128,9 @@ export function createMemoryMcpServer(ctx: MemoryToolContext) {
   const mode = memoryRolloutMode();
   if (mode === "repo")
     return createRepoMemoryMcpServer({
-      scopeKeys: () =>
+      scopeKeys: async () =>
         retrievalScopeKeys(
-          scopesFor(ctx).map((scope) => scope.key),
+          (await scopesFor(ctx)).map((scope) => scope.key),
           ctx.presentRepos?.() ?? [],
         ),
       sessionId: ctx.sessionId,
@@ -164,7 +167,7 @@ export function createMemoryMcpServer(ctx: MemoryToolContext) {
               "to the person for review instead of growing memory automatically.",
           );
         }
-        const scope = writableScope(ctx, input.scope, input.repo);
+        const scope = await writableScope(ctx, input.scope, input.repo);
         if (typeof scope === "string") return text(scope);
         const { store } = await ensureMemoryV2Ready();
         const related = store
@@ -221,7 +224,7 @@ export function createMemoryMcpServer(ctx: MemoryToolContext) {
       },
       async (args) => {
         const { store } = await ensureMemoryV2Ready();
-        const allowed = scopesFor(ctx).filter(
+        const allowed = (await scopesFor(ctx)).filter(
           (scope) => !args.scope || scope.kind === args.scope,
         );
         const page = store.search(args.query, {
@@ -258,7 +261,7 @@ export function createMemoryMcpServer(ctx: MemoryToolContext) {
         let omitted = 0;
         for (const id of parsed.ids) {
           const record = store.get(id);
-          if (!record || !canRead(ctx, record)) {
+          if (!record || !(await canRead(ctx, record))) {
             const line = `[${id}] Not found in this session's scopes.`;
             lines.push(line);
             bytes += Buffer.byteLength(line, "utf8");
@@ -297,7 +300,7 @@ export function createMemoryMcpServer(ctx: MemoryToolContext) {
         if (typeof input === "string")
           return text(`Cannot list memory: ${input}.`);
         const { store } = await ensureMemoryV2Ready();
-        const allowed = scopesFor(ctx).filter(
+        const allowed = (await scopesFor(ctx)).filter(
           (scope) => !input.scope || scope.kind === input.scope,
         );
         const filters = {
@@ -361,7 +364,7 @@ export function createMemoryMcpServer(ctx: MemoryToolContext) {
           return text(`Memory not updated: ${input}.`);
         const { store } = await ensureMemoryV2Ready();
         const current = store.get(input.id);
-        if (!current || !canRead(ctx, current))
+        if (!current || !(await canRead(ctx, current)))
           return text(
             `Memory [${input.id}] was not found in this session's scopes.`,
           );
@@ -393,7 +396,7 @@ export function createMemoryMcpServer(ctx: MemoryToolContext) {
           const missing: string[] = [];
           for (const id of args.ids) {
             const current = store.get(id);
-            if (!current || !canRead(ctx, current)) {
+            if (!current || !(await canRead(ctx, current))) {
               missing.push(id);
               continue;
             }
@@ -439,7 +442,7 @@ export function createMemoryMcpServer(ctx: MemoryToolContext) {
       async (args) => {
         const { store } = await ensureMemoryV2Ready();
         const current = store.get(args.id);
-        if (!current || !canRead(ctx, current))
+        if (!current || !(await canRead(ctx, current)))
           return text(
             `Memory [${args.id}] was not found in this session's scopes.`,
           );
@@ -475,7 +478,7 @@ function createLegacyMemoryMcpServer(ctx: MemoryToolContext) {
       },
       async (args) => {
         const kind = args.scope || "repo";
-        const scopes = currentScopes();
+        const scopes = await currentScopes();
         const target =
           kind === "repo"
             ? args.repo
@@ -514,9 +517,13 @@ function createLegacyMemoryMcpServer(ctx: MemoryToolContext) {
         limit: z.number().int().min(1).max(50).optional(),
       },
       async (args) => {
-        const hits = await searchSessionMemory(currentScopes(), args.query, {
-          limit: args.limit,
-        });
+        const hits = await searchSessionMemory(
+          await currentScopes(),
+          args.query,
+          {
+            limit: args.limit,
+          },
+        );
         return text(
           hits.length
             ? hits
@@ -534,7 +541,7 @@ function createLegacyMemoryMcpServer(ctx: MemoryToolContext) {
       "List a bounded set of legacy memory summaries.",
       { limit: z.number().int().min(1).max(50).optional() },
       async (args) => {
-        const entries = (await listSessionMemory(currentScopes()))
+        const entries = (await listSessionMemory(await currentScopes()))
           .flatMap(({ scope, entries }) =>
             entries.map((entry) => ({ scope, entry })),
           )
@@ -556,7 +563,7 @@ function createLegacyMemoryMcpServer(ctx: MemoryToolContext) {
       "Archive obsolete legacy memories without deleting them.",
       { ids: z.array(z.string()).min(1).max(50) },
       async (args) => {
-        const writableScopes = currentScopes().filter(
+        const writableScopes = (await currentScopes()).filter(
           (scope) => ctx.allowTeamWrites || scope.kind !== "team",
         );
         const result = await archiveMemories(writableScopes, args.ids);
@@ -569,7 +576,7 @@ function createLegacyMemoryMcpServer(ctx: MemoryToolContext) {
       "Permanently remove one legacy memory.",
       { id: z.string().trim().min(1) },
       async (args) => {
-        const writableScopes = currentScopes().filter(
+        const writableScopes = (await currentScopes()).filter(
           (scope) => ctx.allowTeamWrites || scope.kind !== "team",
         );
         const result = await forgetSessionMemory(writableScopes, args.id);
@@ -589,5 +596,5 @@ function createLegacyMemoryMcpServer(ctx: MemoryToolContext) {
 export async function renderMemoryNoteFor(
   ctx: MemoryToolContext,
 ): Promise<string> {
-  return renderSessionMemoryNote(scopesFor(ctx), { tools: true });
+  return renderSessionMemoryNote(await scopesFor(ctx), { tools: true });
 }

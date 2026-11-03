@@ -35,7 +35,6 @@ import {
   isRetryableSessionCommandError,
   sessionKernel,
 } from "./session-kernel";
-import { existsSync, readFileSync } from "fs";
 import { access, mkdir, readFile, rm } from "fs/promises";
 import {
   runAgent,
@@ -62,6 +61,7 @@ import {
   applyForwardedTranscriptStrict,
 } from "./transcript-persistence";
 import { sameProcess } from "./process-identity";
+import { cachedWhich, pathExists } from "./run-fs";
 import type { GitIdentity } from "./shared/user-mappings";
 import { modelSupportsSteer, providerFor } from "./models";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
@@ -188,25 +188,35 @@ function activeRunHostCount(): number {
   return hostRunCount() + launchesWithoutHandle;
 }
 
-export function localRunHostsSupported(
+export async function localRunHostsSupported(
   platform = process.platform,
-  systemdBooted = existsSync("/run/systemd/system"),
-  commandLookup: (command: string) => string | null = Bun.which,
-): boolean {
+  systemdBooted?: boolean,
+  commandLookup: (
+    command: string,
+  ) => string | null | Promise<string | null> = cachedWhich,
+): Promise<boolean> {
   // Hermetic end-to-end fixtures have scratch state but no matching privileged
   // run-host installation. They exercise the same runner in-process instead of
   // reaching the live VPS executor or fixed helper.
   if (process.env.OPENSESSION_TEST_IN_PROCESS_RUNS === "1") return false;
   return (
     platform === "linux" &&
-    systemdBooted &&
-    !!commandLookup("systemctl") &&
-    !!commandLookup("sudo")
+    (systemdBooted ?? (await systemdBootedOnce())) &&
+    !!(await commandLookup("systemctl")) &&
+    !!(await commandLookup("sudo"))
   );
 }
 
-function runHostsEnabled(): boolean {
-  return localRunHostsSupported() && !existsSync(DISABLE_FILE);
+let systemdBootedProbe: Promise<boolean> | undefined;
+
+/** Whether systemd booted this host cannot change while the process runs. */
+function systemdBootedOnce(): Promise<boolean> {
+  systemdBootedProbe ??= pathExists("/run/systemd/system");
+  return systemdBootedProbe;
+}
+
+async function runHostsEnabled(): Promise<boolean> {
+  return (await localRunHostsSupported()) && !(await pathExists(DISABLE_FILE));
 }
 
 /** Options for a hosted run: RunAgentOpts minus the non-serializable bits,
@@ -301,8 +311,8 @@ export async function* runAgentHosted(
   opts: HostedRunOpts,
 ): AsyncGenerator<StreamEvent> {
   if (opts.shouldCancel?.()) return;
-  if (!runHostsEnabled()) {
-    if (localRunHostsSupported()) {
+  if (!(await runHostsEnabled())) {
+    if (await localRunHostsSupported()) {
       throw new Error(
         "Detached run hosts are disabled; refusing to run agent work inside the gateway",
       );
@@ -377,8 +387,8 @@ export async function* runAuxiliaryAgentHosted(
   const shouldCancel = () =>
     Boolean(opts.signal?.aborted || opts.shouldCancel?.());
   if (shouldCancel()) return;
-  if (!runHostsEnabled()) {
-    if (localRunHostsSupported()) {
+  if (!(await runHostsEnabled())) {
+    if (await localRunHostsSupported()) {
       throw new Error(
         "Detached run hosts are disabled; refusing to run auxiliary agent work inside the gateway",
       );
@@ -799,7 +809,7 @@ async function spawnHostRun(
  */
 async function launchHostUnit(hostId: string, dir: string): Promise<void> {
   const specHash = new Bun.CryptoHasher("sha256")
-    .update(readFileSync(`${dir}/${HOST_SPEC_NAME}`))
+    .update(await readFile(`${dir}/${HOST_SPEC_NAME}`))
     .digest("hex");
   if (await launchHostViaExecutor(hostId, dir, { specHash })) return;
   noteExecutorFallback();
@@ -824,7 +834,7 @@ async function stopAndVerifyHostAbsent(
       const meta = await readJsonSafe<RunHostMeta>(`${dir}/${HOST_META_NAME}`);
       let processAlive = false;
       if (meta?.pid) {
-        const matches = sameProcess(meta);
+        const matches = await sameProcess(meta);
         if (matches !== undefined) processAlive = matches;
         else {
           try {
@@ -997,7 +1007,7 @@ const systemdHostLauncher: HostLauncher = {
   async alive(dir, meta) {
     meta ??= await readJsonSafe<RunHostMeta>(`${dir}/${HOST_META_NAME}`);
     if (!meta?.pid) return false;
-    const matches = sameProcess(meta);
+    const matches = await sameProcess(meta);
     if (matches !== undefined) return matches;
     try {
       process.kill(meta.pid, 0);

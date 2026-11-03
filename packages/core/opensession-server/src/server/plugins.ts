@@ -29,7 +29,7 @@
  * pinned module-level path is how a test ends up writing to the live store.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { statePath } from "./paths";
 
 /** The manifest file a package repository must carry at its root. */
@@ -379,49 +379,57 @@ export function packagesCheckoutDir(root?: string): string {
     : statePath(".opensession-plugins");
 }
 
-export function listInstalledPackages(root?: string): InstalledPackage[] {
+export async function listInstalledPackages(
+  root?: string,
+): Promise<InstalledPackage[]> {
   try {
-    const raw = JSON.parse(readFileSync(packagesStorePath(root), "utf8"));
+    const raw = JSON.parse(await readFile(packagesStorePath(root), "utf8"));
     return Array.isArray(raw?.packages) ? raw.packages : [];
   } catch {
     return [];
   }
 }
 
-export function readInstalledPackage(
+export async function readInstalledPackage(
   name: string,
   root?: string,
-): InstalledPackage | undefined {
-  return listInstalledPackages(root).find((p) => p.name === name);
+): Promise<InstalledPackage | undefined> {
+  return (await listInstalledPackages(root)).find((p) => p.name === name);
 }
 
-function writeLedger(packages: InstalledPackage[], root?: string): void {
+async function writeLedger(
+  packages: InstalledPackage[],
+  root?: string,
+): Promise<void> {
   const path = packagesStorePath(root);
   const dir = path.slice(0, path.lastIndexOf("/"));
-  if (dir && !existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(path, JSON.stringify({ packages }, null, 2) + "\n", {
+  if (dir) await mkdir(dir, { recursive: true });
+  await writeFile(path, JSON.stringify({ packages }, null, 2) + "\n", {
     mode: 0o600,
   });
 }
 
 /** Record an install or an update. Replaces any entry with the same name. */
-export function recordInstalledPackage(
+export async function recordInstalledPackage(
   pkg: InstalledPackage,
   root?: string,
-): void {
-  const packages = listInstalledPackages(root).filter(
+): Promise<void> {
+  const packages = (await listInstalledPackages(root)).filter(
     (p) => p.name !== pkg.name,
   );
   packages.push(pkg);
   packages.sort((a, b) => a.name.localeCompare(b.name));
-  writeLedger(packages, root);
+  await writeLedger(packages, root);
 }
 
 /** Drop a package from the ledger. Returns false when it was not there. */
-export function forgetInstalledPackage(name: string, root?: string): boolean {
-  const packages = listInstalledPackages(root);
+export async function forgetInstalledPackage(
+  name: string,
+  root?: string,
+): Promise<boolean> {
+  const packages = await listInstalledPackages(root);
   const next = packages.filter((p) => p.name !== name);
   if (next.length === packages.length) return false;
-  writeLedger(next, root);
+  await writeLedger(next, root);
   return true;
 }

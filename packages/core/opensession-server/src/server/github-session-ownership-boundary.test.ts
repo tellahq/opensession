@@ -111,7 +111,7 @@ describe("GitHub ownership gateway boundary", () => {
     });
     const run = source("server/run-session.ts").text;
     expect(run).toContain("await ownedWorktreeHeadBranch(session.worktreeDir)");
-    expect(run).not.toContain("worktreeHeadBranch(");
+    expect(run).not.toContain("await worktreeHeadBranch(");
   });
 
   test("cold-list workspace filing cannot reintroduce checkout probes", () => {

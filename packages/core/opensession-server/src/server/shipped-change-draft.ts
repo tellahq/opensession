@@ -117,7 +117,7 @@ export async function draftShippedChangeAfterTurn(
 ): Promise<void> {
   const session = await findSessionAsync(sessionId);
   if (!session) return;
-  const target = resolvePrTarget(session);
+  const target = await resolvePrTarget(session);
   if (!target) return;
   const pr = getPrsByRepo().get(target.repoId)?.get(target.branch);
   if (!pr || pr.state !== "MERGED") return;

@@ -242,7 +242,7 @@ export async function getGitStatus(
       ) || 0;
   } catch {}
 
-  const sharedCheckout = isSharedCheckoutDir(dir);
+  const sharedCheckout = await isSharedCheckoutDir(dir);
   let uncommittedFiles = 0;
   let uncommittedPaths: string[] | undefined;
   try {

@@ -90,18 +90,18 @@ describe("decideRunHostAdmission", () => {
 });
 
 describe("proc parsing", () => {
-  test("parses MemAvailable in MiB", () => {
+  test("parses MemAvailable in MiB", async () => {
     const read = () =>
       "MemTotal:       128000000 kB\nMemAvailable:   116736000 kB\n";
-    expect(readMemAvailableMb(read)).toBe(114_000);
-    expect(readMemAvailableMb(() => "")).toBeNull();
+    expect(await readMemAvailableMb(read)).toBe(114_000);
+    expect(await readMemAvailableMb(() => "")).toBeNull();
   });
 
-  test("parses CPU PSI some avg10", () => {
+  test("parses CPU PSI some avg10", async () => {
     const read = () =>
       "some avg10=12.34 avg60=5.00 avg300=1.00 total=1\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n";
-    expect(readCpuSomeAvg10(read)).toBe(12.34);
-    expect(readCpuSomeAvg10(() => "")).toBeNull();
+    expect(await readCpuSomeAvg10(read)).toBe(12.34);
+    expect(await readCpuSomeAvg10(() => "")).toBeNull();
   });
 });
 

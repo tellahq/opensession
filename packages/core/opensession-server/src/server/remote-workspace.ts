@@ -22,12 +22,12 @@
  * exist only here (see `hostReadableRoots`).
  */
 
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { existsSync, realpathSync } from "node:fs";
+import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { dirname, posix, resolve as resolveLocal, sep } from "node:path";
 import type { RemoteWorkspaceSpec } from "@tellahq/opensession-protocol/runner";
 import { INLINE_GITHUB_READ_CREDENTIAL_HELPER } from "./github-git-credential";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
+import { pathExists } from "./run-fs";
 import { rpcSocketPath } from "./run-rpc-protocol";
 
 /** A remote workspace as the run host sees it: the spec plus its bearer. */
@@ -515,18 +515,20 @@ export function makeRemoteToolOps(
   hostReadableRoots: string[] = [],
 ) {
   // Lexically under a shipped root, and still there once symlinks resolve.
-  const local = (path: string) => {
+  const local = async (path: string) => {
     if (!underRoot(path, hostReadableRoots)) return false;
     try {
-      return underRoot(realpathSync(path), hostReadableRoots);
+      return underRoot(await realpath(path), hostReadableRoots);
     } catch {
       return true; // not there: answered from here as missing
     }
   };
   const exists = async (path: string) =>
-    local(path) ? existsSync(path) : (await workspace.kind(path)) !== null;
-  const readOnlyHere = (path: string) => {
-    if (local(path))
+    (await local(path))
+      ? pathExists(path)
+      : (await workspace.kind(path)) !== null;
+  const readOnlyHere = async (path: string) => {
+    if (await local(path))
       throw new RemoteWorkspaceError(
         `${path} is one of Open Session's shipped skills and is read only.`,
       );
@@ -536,9 +538,9 @@ export function makeRemoteToolOps(
     guard: (path: string) => workspace.resolve(path),
     read: {
       readFile: async (path: string) =>
-        local(path) ? readFile(path) : workspace.readFile(path),
+        (await local(path)) ? readFile(path) : workspace.readFile(path),
       access: async (path: string) => {
-        if (local(path)) {
+        if (await local(path)) {
           await readFile(path);
           return;
         }
@@ -547,7 +549,7 @@ export function makeRemoteToolOps(
       },
       detectImageMimeType: async (path: string) =>
         sniffImageBytes(
-          local(path)
+          (await local(path))
             ? await readFile(path)
             : await workspace.readFile(path, { keep: true }),
         ),
@@ -555,7 +557,7 @@ export function makeRemoteToolOps(
     ls: {
       exists,
       stat: async (path: string) => {
-        if (local(path)) {
+        if (await local(path)) {
           const { stat } = await import("node:fs/promises");
           return stat(path);
         }
@@ -568,7 +570,7 @@ export function makeRemoteToolOps(
         return { isDirectory: () => kind === "d" };
       },
       readdir: async (path: string) => {
-        if (local(path)) {
+        if (await local(path)) {
           const { readdir } = await import("node:fs/promises");
           return readdir(path);
         }
@@ -582,7 +584,7 @@ export function makeRemoteToolOps(
         searchPath: string,
         options: { ignore: string[]; limit: number },
       ) => {
-        if (local(searchPath)) {
+        if (await local(searchPath)) {
           const out: string[] = [];
           const effective = pattern.includes("/") ? pattern : `**/${pattern}`;
           for await (const rel of new Bun.Glob(effective).scan({
@@ -600,16 +602,16 @@ export function makeRemoteToolOps(
     },
     edit: {
       readFile: async (path: string) => {
-        readOnlyHere(path);
+        await readOnlyHere(path);
         // Written back whole: never edit a truncated copy.
         return workspace.readFile(path, { whole: true });
       },
       writeFile: async (path: string, content: string) => {
-        readOnlyHere(path);
+        await readOnlyHere(path);
         await workspace.writeFile(path, content);
       },
       access: async (path: string) => {
-        readOnlyHere(path);
+        await readOnlyHere(path);
         const result = await workspace.exec({
           script:
             'if [ ! -e "$OS_PATH" ]; then echo ENOENT >&2; exit 2; fi; ' +
@@ -623,7 +625,7 @@ export function makeRemoteToolOps(
     },
     write: {
       writeFile: async (path: string, content: string) => {
-        readOnlyHere(path);
+        await readOnlyHere(path);
         await workspace.writeFile(path, content);
       },
       // writeFile creates the directory in the same command.

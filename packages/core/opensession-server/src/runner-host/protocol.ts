@@ -5,6 +5,7 @@
  * paths that don't belong in a published protocol.
  */
 import { fileURLToPath } from "url";
+import { cachedWhich } from "../server/run-fs";
 
 export * from "@tellahq/opensession-protocol/runner";
 export { isCompiledBinary, runnerHostArgv, mcpProxyArgv } from "./exe";
@@ -14,7 +15,9 @@ export { isCompiledBinary, runnerHostArgv, mcpProxyArgv } from "./exe";
  *  `src/` tree next to the executable; the spawn sites re-exec the binary with
  *  a subcommand instead (see ./exe and src/main.ts), so these source paths are
  *  never consulted. REPO_ROOT resolves to a harmless in-bundle path there. */
-export const BUN_BIN = Bun.which("bun") || process.execPath;
+export async function bunBinary(): Promise<string> {
+  return (await cachedWhich("bun")) || process.execPath;
+}
 export const REPO_ROOT = fileURLToPath(
   new URL("../../../../..", import.meta.url),
 ).replace(/\/$/, "");

@@ -46,7 +46,7 @@ process.once("exit", cleanupProjectedGithubAuth);
 writeFileSync(
   `${hostDir}/startup.json`,
   JSON.stringify({
-    ...processIdentity(),
+    ...(await processIdentity()),
     pid: process.pid,
     specPath: resolve(specPath),
     startedAt: new Date().toISOString(),
@@ -109,7 +109,7 @@ const metaPath = `${hostDir}/${HOST_META_NAME}`;
 
 const meta: RunHostMeta = {
   hostId: spec.hostId,
-  ...processIdentity(),
+  ...(await processIdentity()),
   pid: process.pid,
   osSessionId: spec.osSessionId,
   startedAt: new Date().toISOString(),

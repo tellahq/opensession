@@ -48,14 +48,13 @@ import {
 } from "../session-kernel";
 import { audit } from "../audit";
 import { serviceReadiness } from "../service-readiness";
-import { runtimeGeneration } from "../runtime-generation";
+import { currentRuntimeGeneration } from "../runtime-generation";
 import { controlPlaneResidents } from "../workload-scope";
 
 // The listing is served from catalog state only. Keep a short-TTL snapshot with
 // single-flight refresh so repeated reliability-panel polling is cheap even
 // when the catalog is degraded; mutations invalidate it immediately.
 const DEAD_LETTERS_CACHE_TTL_MS = 5_000;
-const RUNTIME_GENERATION = runtimeGeneration();
 type DeadLettersEntry = {
   at: number;
   inFlight?: Promise<unknown>;
@@ -256,7 +255,7 @@ export async function handleSystemRoutes(
   if (path === "/ready" && req.method === "GET") {
     try {
       const kernel = sessionKernelReadinessSnapshot();
-      const executor = executorClientHealth();
+      const executor = await executorClientHealth();
       const executorReadiness = executorClientReadinessSnapshot();
       const readiness = serviceReadiness();
       // This is the only gateway node. Keep serving the UI while a worker
@@ -268,7 +267,7 @@ export async function handleSystemRoutes(
           ready,
           phase: readiness.phase,
           bootId: BOOT_ID,
-          generation: RUNTIME_GENERATION,
+          generation: await currentRuntimeGeneration(),
           activeRuns: activeAgentRunCount(),
           executor: { ...executor, ...executorReadiness },
           sessionKernel: kernel,
@@ -311,7 +310,7 @@ export async function handleSystemRoutes(
       // polls this to restart only when the service is idle (or near it), so a
       // restart kills as few in-flight runs/background tasks as possible.
       activeRuns: activeAgentRunCount(),
-      executor: executorClientHealth(),
+      executor: await executorClientHealth(),
       sessionKernel: await sessionKernelHealth(),
       agents: agentHealth,
       system: systemStats(),

@@ -1599,47 +1599,47 @@ describe("local-tool path containment", () => {
   symlinkSync("/etc", join(ws, "esc"));
   afterAll(() => rmSync(ws, { recursive: true, force: true }));
 
-  test("assertContainedPiPath allows workspace paths, incl. not-yet-created ones", () => {
-    expect(assertContainedPiPath(join(ws, "sub", "inside.txt"), realWs)).toBe(
-      join(realWs, "sub", "inside.txt"),
-    );
-    expect(assertContainedPiPath(ws, realWs)).toBe(realWs);
+  test("assertContainedPiPath allows workspace paths, incl. not-yet-created ones", async () => {
+    expect(
+      await assertContainedPiPath(join(ws, "sub", "inside.txt"), realWs),
+    ).toBe(join(realWs, "sub", "inside.txt"));
+    expect(await assertContainedPiPath(ws, realWs)).toBe(realWs);
     // write/edit targets that don't exist yet are contained via their
     // nearest existing ancestor
-    expect(assertContainedPiPath(join(ws, "newdir", "new.txt"), realWs)).toBe(
-      join(realWs, "newdir", "new.txt"),
-    );
+    expect(
+      await assertContainedPiPath(join(ws, "newdir", "new.txt"), realWs),
+    ).toBe(join(realWs, "newdir", "new.txt"));
   });
 
-  test("rejects absolute escapes, /proc//sys//dev, and .. traversal", () => {
-    expect(() => assertContainedPiPath("/etc/passwd", realWs)).toThrow(
+  test("rejects absolute escapes, /proc//sys//dev, and .. traversal", async () => {
+    await expect(assertContainedPiPath("/etc/passwd", realWs)).rejects.toThrow(
       /outside the session workspace/,
     );
-    expect(() => assertContainedPiPath("/proc/self/environ", realWs)).toThrow(
+    await expect(
+      assertContainedPiPath("/proc/self/environ", realWs),
+    ).rejects.toThrow(/not accessible/);
+    await expect(assertContainedPiPath("/sys/kernel", realWs)).rejects.toThrow(
       /not accessible/,
     );
-    expect(() => assertContainedPiPath("/sys/kernel", realWs)).toThrow(
+    await expect(assertContainedPiPath("/dev/stdin", realWs)).rejects.toThrow(
       /not accessible/,
     );
-    expect(() => assertContainedPiPath("/dev/stdin", realWs)).toThrow(
-      /not accessible/,
-    );
-    expect(() =>
+    await expect(
       assertContainedPiPath(
         join(ws, "..", "..", "..", "..", "etc", "passwd"),
         realWs,
       ),
-    ).toThrow(/outside the session workspace|not accessible/);
+    ).rejects.toThrow(/outside the session workspace|not accessible/);
   });
 
-  test("rejects symlink escapes, existing and dangling targets", () => {
-    expect(() =>
+  test("rejects symlink escapes, existing and dangling targets", async () => {
+    await expect(
       assertContainedPiPath(join(ws, "esc", "passwd"), realWs),
-    ).toThrow(/outside the session workspace|not accessible/);
+    ).rejects.toThrow(/outside the session workspace|not accessible/);
     // non-existent path UNDER an escaping symlink still resolves out
-    expect(() =>
+    await expect(
       assertContainedPiPath(join(ws, "esc", "nope", "x.txt"), realWs),
-    ).toThrow(/outside the session workspace|not accessible/);
+    ).rejects.toThrow(/outside the session workspace|not accessible/);
   });
 
   test("guarded read/ls/write ops enforce containment; inside paths work", async () => {

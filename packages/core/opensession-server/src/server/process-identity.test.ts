@@ -6,13 +6,13 @@ import {
 } from "./process-identity";
 
 describe("process identity", () => {
-  test("matches the current process by boot and start ticks", () => {
-    const identity = processIdentity();
+  test("matches the current process by boot and start ticks", async () => {
+    const identity = await processIdentity();
     if (!identity) return;
-    expect(linuxProcessStartTicks(process.pid)).toBe(identity.startTicks);
-    expect(sameProcess(identity)).toBe(true);
+    expect(await linuxProcessStartTicks(process.pid)).toBe(identity.startTicks);
+    expect(await sameProcess(identity)).toBe(true);
     expect(
-      sameProcess({ ...identity, startTicks: `${identity.startTicks}0` }),
+      await sameProcess({ ...identity, startTicks: `${identity.startTicks}0` }),
     ).toBe(false);
   });
 });

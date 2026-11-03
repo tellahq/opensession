@@ -114,24 +114,24 @@ afterEach(() => {
 });
 
 describe("skillSearchPaths", () => {
-  test("ships a set every session gets, checkout first", () => {
+  test("ships a set every session gets, checkout first", async () => {
     const ws = workspace();
     mkdirSync(join(ws, ".agents", "skills"), { recursive: true });
     mkdirSync(join(ws, ".claude", "skills"), { recursive: true });
 
-    expect(skillSearchPaths(ws)).toEqual([
+    expect(await skillSearchPaths(ws)).toEqual([
       join(ws, ".claude", "skills"),
       join(ws, ".agents", "skills"),
       SHIPPED_SKILLS_DIR,
     ]);
     // A session with no skills of its own still gets the shipped ones, and a
     // directory that does not exist is dropped rather than handed to pi.
-    expect(skillSearchPaths(workspace())).toEqual([SHIPPED_SKILLS_DIR]);
-    expect(skillSearchPaths()).toEqual([SHIPPED_SKILLS_DIR]);
+    expect(await skillSearchPaths(workspace())).toEqual([SHIPPED_SKILLS_DIR]);
+    expect(await skillSearchPaths()).toEqual([SHIPPED_SKILLS_DIR]);
   });
 
-  test("the shipped directory is listed once, even for a session on this repo", () => {
-    const paths = skillSearchPaths(join(SHIPPED_SKILLS_DIR, "..", ".."));
+  test("the shipped directory is listed once, even for a session on this repo", async () => {
+    const paths = await skillSearchPaths(join(SHIPPED_SKILLS_DIR, "..", ".."));
     expect(paths.length).toBe(new Set(paths).size);
   });
 });
@@ -148,7 +148,7 @@ describe("expandSkillCommand", () => {
     return { filePath, baseDir: join(root, "bro") };
   };
 
-  test("a bare /name expands to the same block pi builds for /skill:name", () => {
+  test("a bare /name expands to the same block pi builds for /skill:name", async () => {
     const { filePath, baseDir } = ws();
     const skills = [{ name: "bro", filePath, baseDir }];
     const expected =
@@ -158,51 +158,56 @@ describe("expandSkillCommand", () => {
         "Say it again, plainly.\n</skill>",
       );
 
-    expect(expandSkillCommand("/bro", skills)).toBe(expected);
-    expect(expandSkillCommand("/skill:bro", skills)).toBe(expected);
+    expect(await expandSkillCommand("/bro", skills)).toBe(expected);
+    expect(await expandSkillCommand("/skill:bro", skills)).toBe(expected);
   });
 
-  test("arguments ride along after the block", () => {
+  test("arguments ride along after the block", async () => {
     const { filePath, baseDir } = ws();
     expect(
-      expandSkillCommand("/bro the deploy bit", [
+      await expandSkillCommand("/bro the deploy bit", [
         { name: "bro", filePath, baseDir },
       ]),
     ).toEndWith("</skill>\n\nthe deploy bit");
   });
 
-  test("expands after injected context and a steer attribution", () => {
+  test("expands after injected context and a steer attribution", async () => {
     const { filePath, baseDir } = ws();
     const skills = [{ name: "bro", filePath, baseDir }];
     const memory =
       '<opensession:context source="memory">\nsome fact\n</opensession:context>';
     const portals =
       '<opensession:context source="portals-note">\nnote\n</opensession:context>';
-    const block = expandSkillCommand("/bro", skills);
+    const block = await expandSkillCommand("/bro", skills);
 
-    expect(expandSkillCommand(`${memory}\n\n/bro`, skills)).toBe(
+    expect(await expandSkillCommand(`${memory}\n\n/bro`, skills)).toBe(
       `${memory}\n\n${block}`,
     );
     expect(
-      expandSkillCommand(`${memory}\n\n${portals}\n\n/bro shorter`, skills),
+      await expandSkillCommand(
+        `${memory}\n\n${portals}\n\n/bro shorter`,
+        skills,
+      ),
     ).toBe(`${memory}\n\n${portals}\n\n${block}\n\nshorter`);
-    expect(expandSkillCommand("[ada] /bro", skills)).toBe(`[ada] ${block}`);
-    expect(expandSkillCommand(`${memory}\n\nsee /bro`, skills)).toBe(
+    expect(await expandSkillCommand("[ada] /bro", skills)).toBe(
+      `[ada] ${block}`,
+    );
+    expect(await expandSkillCommand(`${memory}\n\nsee /bro`, skills)).toBe(
       `${memory}\n\nsee /bro`,
     );
   });
 
-  test("anything that is not a loaded skill is left alone", () => {
+  test("anything that is not a loaded skill is left alone", async () => {
     const { filePath, baseDir } = ws();
     const skills = [{ name: "bro", filePath, baseDir }];
-    expect(expandSkillCommand("/model opus", skills)).toBe("/model opus");
-    expect(expandSkillCommand("/brother", skills)).toBe("/brother");
-    expect(expandSkillCommand("look at /bro in the docs", skills)).toBe(
+    expect(await expandSkillCommand("/model opus", skills)).toBe("/model opus");
+    expect(await expandSkillCommand("/brother", skills)).toBe("/brother");
+    expect(await expandSkillCommand("look at /bro in the docs", skills)).toBe(
       "look at /bro in the docs",
     );
   });
 
-  test("expands a nested pstack skill with its references and arguments", () => {
+  test("expands a nested pstack skill with its references and arguments", async () => {
     const loaded = loadShippedSkills().skills;
     const skill = loaded.find(
       (item) => item.name === "create-verification-skill",
@@ -216,7 +221,7 @@ describe("expandSkillCommand", () => {
       "/create-verification-skill verify this repo",
       "/skill:create-verification-skill verify this repo",
     ]) {
-      const expanded = expandSkillCommand(command, loaded);
+      const expanded = await expandSkillCommand(command, loaded);
       expect(expanded).toContain('<skill name="create-verification-skill"');
       expect(expanded).toContain(
         `References are relative to ${skill!.baseDir}.`,
@@ -227,7 +232,7 @@ describe("expandSkillCommand", () => {
 });
 
 describe("searchSkills", () => {
-  test("lists the skills opensession ships for every repo", () => {
+  test("lists the skills opensession ships for every repo", async () => {
     // Every session gets these whatever it is working on, so the menu must
     // offer them with no worktree at all.
     for (const name of [
@@ -241,14 +246,14 @@ describe("searchSkills", () => {
       "vercel-react-best-practices",
       "vercel-composition-patterns",
     ]) {
-      const shipped = searchSkills(undefined, name).filter(
+      const shipped = (await searchSkills(undefined, name)).filter(
         (s) => s.name === name,
       );
       expect(shipped.map((s) => s.source)).toEqual(["user"]);
     }
   });
 
-  test("ships the complete upstream pstack skill inventory", () => {
+  test("ships the complete upstream pstack skill inventory", async () => {
     const loaded = loadShippedSkills();
     expect(loaded.diagnostics).toEqual([]);
 
@@ -259,7 +264,9 @@ describe("searchSkills", () => {
           .map((skill) => skill.name),
       ).toEqual([name]);
       expect(
-        searchSkills(undefined, name).filter((skill) => skill.name === name),
+        (await searchSkills(undefined, name)).filter(
+          (skill) => skill.name === name,
+        ),
       ).toHaveLength(1);
     }
   });
@@ -326,7 +333,7 @@ describe("searchSkills", () => {
     expect(statSync(helper).mode & 0o111).not.toBe(0);
   });
 
-  test("a checkout's own skill shadows the shipped one of the same name", () => {
+  test("a checkout's own skill shadows the shipped one of the same name", async () => {
     const ws = workspace();
     writeSkill(
       join(ws, ".agents", "skills"),
@@ -335,7 +342,7 @@ describe("searchSkills", () => {
     );
 
     expect(
-      searchSkills(ws, "simplify").filter((s) => s.name === "simplify"),
+      (await searchSkills(ws, "simplify")).filter((s) => s.name === "simplify"),
     ).toEqual([
       {
         name: "simplify",
@@ -347,7 +354,7 @@ describe("searchSkills", () => {
     const runtime = loadSkills({
       cwd: ws,
       agentDir: workspace(),
-      skillPaths: skillSearchPaths(ws),
+      skillPaths: await skillSearchPaths(ws),
       includeDefaults: false,
     });
     expect(
@@ -357,17 +364,21 @@ describe("searchSkills", () => {
     ).toEqual(["The checkout's own take"]);
   });
 
-  test("builtin commands only join the menu for an existing session", () => {
+  test("builtin commands only join the menu for an existing session", async () => {
     const ws = workspace();
-    const named = (name: string, includeBuiltins: boolean) =>
-      searchSkills(ws, name, 24, includeBuiltins).filter(
+    const named = async (name: string, includeBuiltins: boolean) =>
+      (await searchSkills(ws, name, 24, includeBuiltins)).filter(
         (s) => s.name === name,
       );
 
-    expect(named("model", false)).toEqual([]);
-    expect(named("model", true).map((s) => s.source)).toEqual(["builtin"]);
-    expect(named("poteto-mode", false).map((s) => s.source)).toEqual(["user"]);
-    expect(named("poteto-mode", true).map((s) => s.source)).toEqual([
+    expect(await named("model", false)).toEqual([]);
+    expect((await named("model", true)).map((s) => s.source)).toEqual([
+      "builtin",
+    ]);
+    expect((await named("poteto-mode", false)).map((s) => s.source)).toEqual([
+      "user",
+    ]);
+    expect((await named("poteto-mode", true)).map((s) => s.source)).toEqual([
       "builtin",
     ]);
   });

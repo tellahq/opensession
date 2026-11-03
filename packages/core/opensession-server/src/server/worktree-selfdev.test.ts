@@ -289,8 +289,8 @@ describe('selfDev: "worktree" — isolated worktrees for the self repo', () => {
     // isSharedCheckoutDir stays keyed on the repo property, NOT the mode:
     // sessions created before the flip recorded the live checkout as their
     // dir, and its no-reset/commit-scoping guards must survive the mode.
-    expect(isSharedCheckoutDir(SELF_REPO)).toBe(true);
-    expect(isSharedCheckoutDir(`${WT_DIR}/self-ask-checkout`)).toBe(true);
-    expect(isSharedCheckoutDir(`${WT_DIR}/self-feat-x`)).toBe(false);
+    expect(await isSharedCheckoutDir(SELF_REPO)).toBe(true);
+    expect(await isSharedCheckoutDir(`${WT_DIR}/self-ask-checkout`)).toBe(true);
+    expect(await isSharedCheckoutDir(`${WT_DIR}/self-feat-x`)).toBe(false);
   });
 });

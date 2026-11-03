@@ -310,9 +310,9 @@ function connectionEntries(): LibraryEntry[] {
   ];
 }
 
-function packageEntries(): LibraryEntry[] {
+async function packageEntries(): Promise<LibraryEntry[]> {
   try {
-    return listInstalledPackages().map((pkg) => ({
+    return (await listInstalledPackages()).map((pkg) => ({
       id: `package:${pkg.name}`,
       type: "package" as const,
       slug: pkg.name,
@@ -337,6 +337,6 @@ export async function listLibrary(): Promise<LibraryEntry[]> {
     ...(await automationEntries(installedNames)),
     ...integrationEntries(),
     ...connectionEntries(),
-    ...packageEntries(),
+    ...(await packageEntries()),
   ];
 }

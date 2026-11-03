@@ -12,7 +12,7 @@
 // `~/.claude/commands` or pi's own bundled set would offer people commands
 // that silently do nothing when they press enter.
 
-import { readdirSync, readFileSync, existsSync, statSync } from "fs";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { join, resolve } from "path";
 import { SHIPPED_SKILLS_DIR, skillSearchPaths } from "./skill-paths";
 
@@ -107,37 +107,42 @@ function firstContentLine(text: string): string {
  * SKILL.md nested below its skills root (grouped in a subfolder) is found too,
  * not just `<dir>/<name>/SKILL.md`. Depth-bounded; skips dot-dirs.
  */
-function readSkillsDir(
+async function readSkillsDir(
   dir: string,
   source: SkillEntry["source"],
   depth = 4,
   out: SkillEntry[] = [],
-): SkillEntry[] {
+): Promise<SkillEntry[]> {
   try {
-    for (const name of readdirSync(dir, { withFileTypes: true })) {
+    for (const name of await readdir(dir, { withFileTypes: true })) {
       if (name.name.startsWith(".")) continue;
       const sub = join(dir, name.name);
       if (!name.isDirectory()) {
         try {
-          if (!statSync(sub).isDirectory()) continue;
+          if (!(await stat(sub)).isDirectory()) continue;
         } catch {
           continue;
         }
       }
       const md = join(sub, "SKILL.md");
-      if (existsSync(md)) {
-        try {
-          const text = readFileSync(md, "utf8");
+      let text: string | undefined;
+      let present = true;
+      try {
+        text = await readFile(md, "utf8");
+      } catch (error) {
+        present = (error as NodeJS.ErrnoException).code !== "ENOENT";
+      }
+      if (present) {
+        if (text !== undefined)
           out.push({
             name: frontmatterField(text, "name") || name.name,
             description:
               frontmatterField(text, "description") || firstContentLine(text),
             source,
           });
-        } catch {}
         continue; // a skill's own files never hold another skill
       }
-      if (depth > 1) readSkillsDir(sub, source, depth - 1, out);
+      if (depth > 1) await readSkillsDir(sub, source, depth - 1, out);
     }
   } catch {}
   return out;
@@ -150,25 +155,25 @@ function readSkillsDir(
  *  installer-managed OPENSESSION_SKILLS_DIR points it somewhere writable. */
 const dirCache = new Map<string, { entries: SkillEntry[]; at: number }>();
 
-function cachedSkillsDir(
+async function cachedSkillsDir(
   dir: string,
   source: SkillEntry["source"],
   immutable: boolean,
-): SkillEntry[] {
+): Promise<SkillEntry[]> {
   const key = `${source}\0${dir}`;
   const hit = dirCache.get(key);
   if (hit && (immutable || performance.now() - hit.at < CACHE_TTL_MS))
     return hit.entries;
-  const entries = readSkillsDir(dir, source);
+  const entries = await readSkillsDir(dir, source);
   dirCache.set(key, { entries, at: performance.now() });
   return entries;
 }
 
 /** All skills a run in `worktreeDir` would see (deduped by name; the directory the run would load it from wins). */
-function loadSkills(
+async function loadSkills(
   worktreeDir?: string,
   includeBuiltins = false,
-): SkillEntry[] {
+): Promise<SkillEntry[]> {
   const key = `${includeBuiltins ? "b|" : ""}${worktreeDir || ""}`;
   const hit = cache.get(key);
   if (hit && performance.now() - hit.at < CACHE_TTL_MS) return hit.entries;
@@ -178,18 +183,19 @@ function loadSkills(
   // skillSearchPaths is precedence order, most specific first, and pi keeps
   // the first skill it sees for a name. Later entries win the dedupe below,
   // so walk it backwards: the menu then describes the file that would run.
+  const dirs = (await skillSearchPaths(worktreeDir)).slice().reverse();
+  const scanned = await Promise.all(
+    dirs.map((dir) => {
+      const isShipped = resolve(dir) === shipped;
+      return cachedSkillsDir(
+        dir,
+        isShipped ? "user" : "project",
+        isShipped && !process.env.OPENSESSION_SKILLS_DIR,
+      );
+    }),
+  );
   const all = [
-    ...skillSearchPaths(worktreeDir)
-      .slice()
-      .reverse()
-      .flatMap((dir) => {
-        const isShipped = resolve(dir) === shipped;
-        return cachedSkillsDir(
-          dir,
-          isShipped ? "user" : "project",
-          isShipped && !process.env.OPENSESSION_SKILLS_DIR,
-        );
-      }),
+    ...scanned.flat(),
     // Last so they win dedupe: opensession intercepts these names before any
     // same-named file skill could run, so the menu should describe the builtin.
     // Only for existing-session composers (includeBuiltins) — an opening prompt
@@ -203,15 +209,15 @@ function loadSkills(
 }
 
 /** Filter + rank skills for a typed query (prefix beats substring beats description hit). */
-export function searchSkills(
+export async function searchSkills(
   worktreeDir: string | undefined,
   query: string,
   limit = 24,
   includeBuiltins = false,
-): SkillEntry[] {
+): Promise<SkillEntry[]> {
   const q = query.toLowerCase();
   const scored: Array<{ e: SkillEntry; score: number }> = [];
-  for (const e of loadSkills(worktreeDir, includeBuiltins)) {
+  for (const e of await loadSkills(worktreeDir, includeBuiltins)) {
     const name = e.name.toLowerCase();
     let score: number;
     if (!q) score = 1;

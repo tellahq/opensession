@@ -59,10 +59,10 @@ const defaultDeps: ExecutorCoordinatorDeps = {
   launch: launchHostUnitDirect,
   stop: stopHostUnitDirect,
   unitActive: hostUnitActive,
-  hostReady: (dir) => {
+  hostReady: async (dir) => {
     const meta = readJson<RunHostMeta>(`${dir}/${HOST_META_NAME}`);
     if (!existsSync(`${dir}/${HOST_SOCK_NAME}`) || !meta?.pid) return false;
-    const matches = sameProcess(meta);
+    const matches = await sameProcess(meta);
     if (matches !== undefined) return matches;
     try {
       process.kill(meta.pid, 0);

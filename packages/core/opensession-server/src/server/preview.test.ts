@@ -60,9 +60,7 @@ describe("seedHostEnvFiles", () => {
       mkdirSync(dirname(join(root, envRel)), { recursive: true });
       writeFileSync(join(root, envRel), "SECRET=1\n");
       expect(await seedHostEnvFiles(root, repoAt(root))).toEqual([]);
-      expect(await seedHostEnvFiles(join(root, "missing"), undefined)).toEqual(
-        [],
-      );
+      expect(await seedHostEnvFiles(join(root, "missing"), null)).toEqual([]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

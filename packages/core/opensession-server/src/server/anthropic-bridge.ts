@@ -95,7 +95,7 @@ import {
   configPath as modelProvidersConfigPath,
 } from "./model-providers";
 import { readPiEngineConfig, piConfigPath } from "./pi-config";
-import { mkdirSync } from "fs";
+import { mkdir } from "node:fs/promises";
 
 const HOME = homeDir();
 // Empty, dedicated cwd for the SDK subprocess: the bridge never touches files
@@ -104,8 +104,10 @@ export const BRIDGE_CWD = `${stateDir("anthropic-bridge")}/bridge-cwd`;
 
 /** Create the SDK cwd on the call path. The in-process provider uses the same
  * directory without starting the HTTP bridge, so bridge startup cannot own it. */
-export function ensureAnthropicBridgeCwd(dir = BRIDGE_CWD): string {
-  mkdirSync(dir, { recursive: true });
+export async function ensureAnthropicBridgeCwd(
+  dir = BRIDGE_CWD,
+): Promise<string> {
+  await mkdir(dir, { recursive: true });
   return dir;
 }
 
@@ -174,7 +176,6 @@ export function ensureAnthropicBridge(): BridgeInfo {
       key: bridgeKey(),
     };
   }
-  ensureAnthropicBridgeCwd();
   g.__anthropicBridgeHandler = handleBridgeRequest;
   g.__anthropicBridgeServer = Bun.serve({
     hostname: "127.0.0.1",
@@ -763,7 +764,7 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
     const q = query({
       prompt: promptContent ? singleUserMessage(promptContent) : prompt,
       options: {
-        cwd: ensureAnthropicBridgeCwd(),
+        cwd: await ensureAnthropicBridgeCwd(),
         model: model || undefined,
         resume: sdkSessionId,
         // Turn 1 is the real answer; turn 2 exists because blocked tool calls

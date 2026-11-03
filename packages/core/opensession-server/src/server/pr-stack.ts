@@ -408,7 +408,7 @@ export function unmergedLayersBelow(stack: PrStack): PrStackLayer[] {
  * its service token comes from that owner's installation. */
 async function repoForCwd(cwd: string): Promise<{ repo?: string }> {
   const { repoForPathOrNull } = await import("./worktree");
-  const repo = repoForPathOrNull(cwd);
+  const repo = await repoForPathOrNull(cwd);
   return repo?.host !== "codestorage" && repo?.ghRepo
     ? { repo: repo.ghRepo }
     : {};
