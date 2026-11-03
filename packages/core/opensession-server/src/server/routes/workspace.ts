@@ -96,7 +96,8 @@ import {
   worktreeHasWork,
   worktreeHeadBranch,
 } from "../worktree";
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from "fs";
+import { copyFile, mkdir, readFile } from "fs/promises";
+import { pathExists } from "../shared/path-exists";
 import { isClientSessionId, isNativeSessionId, newSessionId } from "../paths";
 import { githubMutationCredential } from "./github-credential";
 import { conditionalJsonResponse } from "../http-json";
@@ -187,9 +188,9 @@ export async function archiveWorkspaceMemberSessions(
   return { archived, failed };
 }
 
-function findNativeSessionForFileMentions(
+async function findNativeSessionForFileMentions(
   sessionId: string | null,
-): NativeSessionFile | undefined {
+): Promise<NativeSessionFile | undefined> {
   if (
     !(sessionId && isNativeSessionId(sessionId)) ||
     !/^[a-z0-9-]+$/i.test(sessionId)
@@ -197,7 +198,7 @@ function findNativeSessionForFileMentions(
     return undefined;
   try {
     const session = JSON.parse(
-      readFileSync(`${SESSIONS_DIR}/${sessionId}.json`, "utf8"),
+      await readFile(`${SESSIONS_DIR}/${sessionId}.json`, "utf8"),
     ) as NativeSessionFile;
     return session.id === sessionId ? session : undefined;
   } catch {
@@ -230,13 +231,13 @@ export async function handleWorkspaceRoutes(
     // Open Session sessions have an owned JSON file, so read their small record
     // directly instead of refreshing the entire cross-source session catalog.
     const session =
-      findNativeSessionForFileMentions(sessionId) ??
+      (await findNativeSessionForFileMentions(sessionId)) ??
       (sessionId ? await findSessionAsync(sessionId) : undefined);
     // Volume-mode sandbox workspaces have no host dir — the primary
     // repo's `git ls-files` runs through the sandbox exec below.
     if (
       session?.worktreeDir &&
-      (existsSync(session.worktreeDir) || hasRemoteWorkspace(session))
+      ((await pathExists(session.worktreeDir)) || hasRemoteWorkspace(session))
     ) {
       repos.push({
         repo:
@@ -248,7 +249,7 @@ export async function handleWorkspaceRoutes(
         primary: true,
       });
       for (const r of session.attachedRepos || []) {
-        if (existsSync(r.dir))
+        if (await pathExists(r.dir))
           repos.push({ repo: r.repo, dir: r.dir, primary: false });
       }
     }
@@ -366,12 +367,12 @@ export async function handleWorkspaceRoutes(
     const sessionId = url.searchParams.get("session");
     const session = sessionId ? await findSessionAsync(sessionId) : undefined;
     let dir: string | undefined =
-      session?.worktreeDir && existsSync(session.worktreeDir)
+      session?.worktreeDir && (await pathExists(session.worktreeDir))
         ? session.worktreeDir
         : undefined;
     if (!dir) {
       const proj = getRepo(url.searchParams.get("repo") || undefined);
-      if (existsSync(proj.repo)) dir = proj.repo;
+      if (await pathExists(proj.repo)) dir = proj.repo;
     }
     // Open Session's own slash commands (/compact, /model, /goal, …) only
     // work on existing opensession sessions — handleSlashCommand runs in
@@ -910,7 +911,7 @@ export async function handleWorkspaceRoutes(
       // worktree of its own (e.g. + from an ask tab), a share sibling
       // joins the workspace's owned worktree instead of starting bare.
       const ws = await getWorkspace(src.workspaceId);
-      if (ws?.worktreeDir && existsSync(ws.worktreeDir)) {
+      if (ws?.worktreeDir && (await pathExists(ws.worktreeDir))) {
         branch = ws.branch || "";
         worktreeDir = ws.worktreeDir;
         mode = "code";
@@ -1083,7 +1084,7 @@ export async function handleWorkspaceRoutes(
       !body.branch &&
       Boolean(current) &&
       !isSharedCheckoutDir(current) &&
-      existsSync(current);
+      (await pathExists(current));
     const repo = adopt
       ? repoForPath(current)
       : getRepo(body.repo || session.repo);
@@ -1116,9 +1117,9 @@ export async function handleWorkspaceRoutes(
         if (session.claudeSessionId) {
           const from = getTranscriptPath(oldCwd, session.claudeSessionId);
           const to = getTranscriptPath(worktreeDir, session.claudeSessionId);
-          if (existsSync(from) && !existsSync(to)) {
-            mkdirSync(to.slice(0, to.lastIndexOf("/")), { recursive: true });
-            copyFileSync(from, to);
+          if ((await pathExists(from)) && !(await pathExists(to))) {
+            await mkdir(to.slice(0, to.lastIndexOf("/")), { recursive: true });
+            await copyFile(from, to);
           }
         }
       } catch (e) {

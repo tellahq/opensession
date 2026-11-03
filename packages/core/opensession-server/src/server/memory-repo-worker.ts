@@ -5,6 +5,8 @@
  * and this thread answers them. Requests for one repository are serialized by
  * the service itself, so a slow push or reindex never blocks the gateway.
  */
+import { mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import {
   INDEX_METHODS,
   SERVICE_METHODS,
@@ -25,6 +27,14 @@ let service: MemoryRepoService | undefined;
 function open(): MemoryRepoService {
   if (service) return service;
   if (!options) throw new Error("Memory repository worker was not opened.");
+  // The index's directory must exist before SQLite opens it. This is the
+  // worker thread, so the synchronous mkdir never blocks the gateway.
+  mkdirSync(
+    dirname(
+      options.indexPath ?? join(options.base, "memory-repo-index.sqlite"),
+    ),
+    { recursive: true },
+  );
   service = new MemoryRepoService(options);
   return service;
 }

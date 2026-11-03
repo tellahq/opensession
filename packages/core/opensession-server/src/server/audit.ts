@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, mkdirSync } from "node:fs";
 import { appendFile, mkdir, readdir, unlink } from "node:fs/promises";
 import { stateDir } from "./paths";
 
@@ -57,8 +57,10 @@ function installExitHook(): void {
   process.on("exit", () => {
     if (!pendingLines.length) return;
     try {
+      // gateway-sync-ok: process "exit" hook; async writes cannot finish after exit and no request is served any more
       mkdirSync(AUDIT_DIR, { recursive: true });
       for (const [file, text] of linesByFile(pendingLines.splice(0)))
+        // gateway-sync-ok: process "exit" hook; async writes cannot finish after exit and no request is served any more
         appendFileSync(file, text);
     } catch (e) {
       console.error("[audit] exit flush failed:", e);
@@ -246,16 +248,18 @@ export interface AuditEventQuery {
   limit?: number;
 }
 
-/** Synchronous whole-file read: audit-read worker only. The gateway calls
- *  readAuditEvents in audit-read-client.ts. */
-export function readAuditEventsIn(
-  dir: string,
+/** True for a well-formed audit day (YYYY-MM-DD). */
+export function isAuditDate(date: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(date);
+}
+
+/** Filter one day's audit log contents. Pure: the audit-read worker reads the
+ *  file (audit-read-worker.ts); the gateway calls readAuditEvents in
+ *  audit-read-client.ts. */
+export function filterAuditEvents(
+  contents: string,
   opts: AuditEventQuery,
 ): AuditReadResult {
-  const path = `${dir}/audit-${opts.date}.jsonl`;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(opts.date) || !existsSync(path)) {
-    return { events: [], total: 0, types: [] };
-  }
   const q = (opts.q || "").toLowerCase();
   const significantOnly = opts.significantOnly !== false;
   const offset = Math.max(0, opts.offset || 0);
@@ -263,7 +267,7 @@ export function readAuditEventsIn(
 
   const types = new Set<string>();
   const matches: Array<Record<string, unknown>> = [];
-  for (const line of readFileSync(path, "utf-8").split("\n")) {
+  for (const line of contents.split("\n")) {
     if (!line) continue;
     let e: Record<string, unknown>;
     try {
@@ -297,17 +301,8 @@ export function readAuditEventsIn(
  *  instead of shell-processing the log. The whole digest is 50-70KB, which the
  *  engine truncates as a large tool output — callers can pass `?section=` to
  *  fetch detail sections individually. Keep the field names stable — the
- *  automation prompt names them. */
-export function buildAuditDigestIn(
-  dir: string,
-  date: string,
-): Record<string, unknown> | null {
-  const path = `${dir}/audit-${date}.jsonl`;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !existsSync(path)) return null;
-  return buildAuditDigestFromLines(date, readFileSync(path, "utf-8"));
-}
-
-/** Pure digest builder used by focused mixed-format fixtures. */
+ *  automation prompt names them. Pure: the audit-read worker reads the file
+ *  (audit-read-worker.ts). */
 export function buildAuditDigestFromLines(
   date: string,
   contents: string,

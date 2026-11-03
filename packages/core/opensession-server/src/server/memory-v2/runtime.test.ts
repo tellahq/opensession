@@ -55,7 +55,7 @@ describe("memory v2 runtime migration", () => {
     const first = await ensureMemoryV2Ready();
     expect(first.migration.complete).toBe(true);
     expect(first.migration.mapped).toBe(1);
-    expect(memoryStore().metadata("legacy-migration-v2")).toContain(
+    expect((await memoryStore()).metadata("legacy-migration-v2")).toContain(
       first.migration.sourceDigest,
     );
     unlinkSync(file);
@@ -76,7 +76,7 @@ describe("memory v2 runtime migration", () => {
     await expect(ensureMemoryV2Ready()).rejects.toThrow(
       "migration is incomplete",
     );
-    expect(memoryStore().metadata("legacy-migration-v2")).toBeNull();
+    expect((await memoryStore()).metadata("legacy-migration-v2")).toBeNull();
   });
 
   test("upgrades an older seal and backfills raw legacy provenance", async () => {
@@ -94,7 +94,7 @@ describe("memory v2 runtime migration", () => {
         ],
       }),
     );
-    const store = memoryStore();
+    const store = await memoryStore();
     store.importLegacy(
       `${file}#workspace`,
       "legacy-old-seal",
@@ -152,7 +152,7 @@ describe("memory v2 runtime migration", () => {
         at: "2026-04-02T00:00:00Z",
       },
     ]);
-    expect(memoryStore().get("shadow-write")?.summary).toBe(
+    expect((await memoryStore()).get("shadow-write")?.summary).toBe(
       "A fact written during shadow comparison.",
     );
   });

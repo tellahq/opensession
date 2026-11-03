@@ -310,7 +310,7 @@ async function listIntegrations(): Promise<number> {
  * list, and the server creates it (create-if-absent) on the next boot.
  */
 async function listAutomations(): Promise<number> {
-  const recipes = listRecipes();
+  const recipes = await listRecipes();
   if (!recipes.length) {
     warn("no bundled recipes found", RECIPES_HINT);
     return 0;
@@ -332,13 +332,11 @@ async function listAutomations(): Promise<number> {
 }
 
 async function addAutomation(id: string): Promise<number> {
-  const recipe = findRecipe(id);
+  const recipe = await findRecipe(id);
   if (!recipe) {
     fail(
       `unknown recipe '${id}'`,
-      `known: ${listRecipes()
-        .map((r) => r.id)
-        .join(", ")}`,
+      `known: ${(await listRecipes()).map((r) => r.id).join(", ")}`,
     );
     return 1;
   }
@@ -361,7 +359,7 @@ async function addAutomation(id: string): Promise<number> {
 }
 
 async function removeAutomation(id: string): Promise<number> {
-  const recipe = findRecipe(id);
+  const recipe = await findRecipe(id);
   if (!recipe) {
     fail(`unknown recipe '${id}'`);
     return 1;

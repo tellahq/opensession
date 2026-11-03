@@ -367,7 +367,7 @@ export async function runMacSelfDeploy(options: Options): Promise<void> {
   const release = async (args: string[]): Promise<string> =>
     await capture(["/bin/bash", releaseScript, ...args], { env: releaseEnv });
 
-  let releaseLock: (() => void) | null = null;
+  let releaseLock: (() => Promise<void>) | null = null;
   let current = "";
   let selectedTarget = options.target;
   try {
@@ -542,7 +542,7 @@ export async function runMacSelfDeploy(options: Options): Promise<void> {
     log(`ERROR: ${error instanceof Error ? error.message : String(error)}`);
     throw error;
   } finally {
-    releaseLock?.();
+    await releaseLock?.();
     // launchctl submit keeps short-lived jobs registered and respawns them.
     // Removing our own label terminates this process after durable result/log
     // writes, preventing an already-covered deploy from restarting forever.

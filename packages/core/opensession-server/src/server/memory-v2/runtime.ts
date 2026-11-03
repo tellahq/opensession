@@ -10,7 +10,7 @@ import {
   importLegacyMemoryDirectory,
   type LegacyImportResult,
 } from "./legacy-import";
-import { MemoryStore } from "./store";
+import { MemoryStore, openMemoryStore } from "./store";
 
 export type MemoryRolloutMode =
   | "legacy"
@@ -63,11 +63,17 @@ export function memoryDatabasePath(): string {
 }
 
 /** Lazily acquire the database. Importing this module has no live effects. */
-export function memoryStore(): MemoryStore {
+export async function memoryStore(): Promise<MemoryStore> {
   const path = memoryDatabasePath();
   if (runtime?.path === path) return runtime.store;
+  const store = await openMemoryStore(path);
+  // A concurrent caller may have opened the same path while this one waited.
+  if (runtime?.path === path) {
+    store.close();
+    return runtime.store;
+  }
   runtime?.store.close();
-  runtime = { path, store: new MemoryStore(path) };
+  runtime = { path, store };
   return runtime.store;
 }
 
@@ -82,7 +88,7 @@ export async function ensureMemoryV2Ready(): Promise<{
   migration: LegacyImportResult;
 }> {
   const sourceDirs = memoryImportDirs();
-  const store = memoryStore();
+  const store = await memoryStore();
   if (!runtime) throw new Error("Memory runtime was not initialized.");
   runtime.migration ??= (async () => {
     const sealed = store.metadata(LEGACY_MIGRATION_SEAL);
