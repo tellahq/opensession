@@ -1,5 +1,5 @@
-import { findExecutable } from "../../../../integrations/apple-mobile/src/exec";
-import { resolvePrivateKeyPath } from "../../../../integrations/apple-mobile/src/security";
+import { resolvePrivateKeyPathAsync } from "../../../../integrations/apple-mobile/src/private-key";
+import { whichAsync } from "./shared/which-async";
 import { readMcpConfig, replaceMcpServerEntries } from "./connections";
 import { stateDir } from "./paths";
 
@@ -67,12 +67,12 @@ function configured(entry: AppleMcpEntry, mode: "build" | "release"): boolean {
   );
 }
 
-export function appleMobileSetupStatus(): AppleMobileSetupStatus {
+export async function appleMobileSetupStatus(): Promise<AppleMobileSetupStatus> {
   const servers = readMcpConfig().mcpServers;
   const build = entry(servers[BUILD_SERVER]);
   const release = entry(servers[RELEASE_SERVER]);
   const macos = process.platform === "darwin";
-  const xcode = Boolean(findExecutable("xcodebuild"));
+  const xcode = Boolean(await whichAsync("xcodebuild"));
   return {
     buildEnabled: configured(build, "build"),
     releaseEnabled: configured(release, "release"),
@@ -109,15 +109,15 @@ function existingEnv(name: string): Record<string, unknown> {
 
 type AppleMobileUpdates = Record<string, Record<string, unknown> | undefined>;
 
-export function buildAppleMobileUpdates(
+export async function buildAppleMobileUpdates(
   input: AppleMobileSetupInput,
   releaseEnv: Record<string, unknown> = {},
   options: {
     releaseCapable?: boolean;
-    validatePrivateKey?: (path: string) => void;
+    validatePrivateKey?: (path: string) => unknown;
     stateDir?: string;
   } = {},
-): AppleMobileUpdates {
+): Promise<AppleMobileUpdates> {
   const buildEnabled = boolean(input.buildEnabled, "buildEnabled");
   const releaseEnabled = boolean(input.releaseEnabled, "releaseEnabled");
   const teamId =
@@ -144,7 +144,7 @@ export function buildAppleMobileUpdates(
     if (allowedUsers.length === 0) {
       throw new Error("Choose at least one person allowed to release");
     }
-    (options.validatePrivateKey ?? resolvePrivateKeyPath)(
+    await (options.validatePrivateKey ?? resolvePrivateKeyPathAsync)(
       String(privateKeyPath),
     );
   }
@@ -180,15 +180,19 @@ export function buildAppleMobileUpdates(
   };
 }
 
-export function configureAppleMobileConnections(
+export async function configureAppleMobileConnections(
   input: AppleMobileSetupInput,
-): AppleMobileSetupStatus {
+): Promise<AppleMobileSetupStatus> {
   const releaseCapable =
-    process.platform === "darwin" && Boolean(findExecutable("xcodebuild"));
-  const updates = buildAppleMobileUpdates(input, existingEnv(RELEASE_SERVER), {
-    releaseCapable,
-    stateDir: stateDir("apple-mobile"),
-  });
+    process.platform === "darwin" && Boolean(await whichAsync("xcodebuild"));
+  const updates = await buildAppleMobileUpdates(
+    input,
+    existingEnv(RELEASE_SERVER),
+    {
+      releaseCapable,
+      stateDir: stateDir("apple-mobile"),
+    },
+  );
   const result = replaceMcpServerEntries(updates);
   if ("error" in result) throw new Error(result.error);
   return appleMobileSetupStatus();

@@ -410,7 +410,7 @@ export function interactiveMcpServers(
                     previewPath: path || undefined,
                   });
                   try {
-                    releasePreviewPathLease(sessionId);
+                    await releasePreviewPathLease(sessionId);
                   } catch (error) {
                     console.error(
                       `Failed to release preview reservation for ${sessionId}:`,
@@ -419,7 +419,7 @@ export function interactiveMcpServers(
                   }
                   return {};
                 }
-                const claim = claimPreviewPathLease({
+                const claim = await claimPreviewPathLease({
                   key: options.exclusiveKey,
                   sessionId,
                   path: path || "/",
@@ -436,7 +436,7 @@ export function interactiveMcpServers(
                   });
                   return { leaseId: claim.lease.id };
                 } catch (error) {
-                  releasePreviewPathLease(sessionId, {
+                  await releasePreviewPathLease(sessionId, {
                     leaseId: claim.lease.id,
                   });
                   throw error;

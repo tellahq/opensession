@@ -44,6 +44,7 @@ import {
   keypadBearerAuthorized,
   refreshWebIdentity,
   resolveWebAuth,
+  webSessionWrites,
   teamMemberForLogin,
   webAuthRequired,
 } from "./web-auth";
@@ -73,7 +74,8 @@ beforeEach(async () => {
   process.env.OPENSESSION_WEB_SESSIONS_STORE = join(dir, "web-sessions.json");
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await webSessionWrites();
   rmSync(dir, { recursive: true, force: true });
   for (const k of ENV_KEYS) {
     if (saved[k] === undefined) delete process.env[k];
@@ -110,6 +112,14 @@ async function enableFeature(
   );
   process.env.OPENSESSION_CONFIG = path;
   await getConfigAsync();
+}
+
+/** The session store on disk, once every queued write has landed. */
+async function storedWebSessions(): Promise<any> {
+  await webSessionWrites();
+  return JSON.parse(
+    readFileSync(process.env.OPENSESSION_WEB_SESSIONS_STORE!, "utf8"),
+  );
 }
 
 function seedToken(login = "alice", token = "gho_test123"): void {
@@ -642,10 +652,10 @@ describe("web sign-in resolution", () => {
         ],
       }),
     );
-    const machine = ensureAutomationWebSession();
+    const machine = await ensureAutomationWebSession();
     expect(machine?.token).toBeString();
     expect(
-      resolveWebAuth(
+      await resolveWebAuth(
         new Request("http://x/", {
           headers: { authorization: `Bearer ${machine!.token}` },
         }),
@@ -655,9 +665,7 @@ describe("web sign-in resolution", () => {
       name: "Automation",
       automation: true,
     });
-    const stored = JSON.parse(
-      readFileSync(process.env.OPENSESSION_WEB_SESSIONS_STORE!, "utf8"),
-    );
+    const stored = await storedWebSessions();
     expect(stored.sessions[0].kind).toBe("automation");
     expect(stored.sessions[1].login).toBe("alice");
   });
@@ -687,21 +695,21 @@ describe("web sign-in resolution", () => {
         ],
       }),
     );
-    const byCookie = resolveWebAuth(
+    const byCookie = await resolveWebAuth(
       new Request("http://x/", {
         headers: { cookie: "foo=1; opensession_auth=tok-abc" },
       }),
     );
     expect(byCookie).toEqual({ login: "alice", name: "Alice Example" });
-    const byBearer = resolveWebAuth(
+    const byBearer = await resolveWebAuth(
       new Request("http://x/", {
         headers: { authorization: "Bearer tok-abc" },
       }),
     );
     expect(byBearer?.login).toBe("alice");
-    expect(resolveWebAuth(new Request("http://x/"))).toBeNull();
+    expect(await resolveWebAuth(new Request("http://x/"))).toBeNull();
     expect(
-      resolveWebAuth(
+      await resolveWebAuth(
         new Request("http://x/", {
           headers: { cookie: "opensession_auth=wrong" },
         }),
@@ -727,7 +735,7 @@ describe("web sign-in resolution", () => {
       }),
     );
 
-    const identity = resolveWebAuth(
+    const identity = await resolveWebAuth(
       new Request("http://x/", {
         headers: { authorization: "Bearer renamed-token" },
       }),
@@ -735,17 +743,15 @@ describe("web sign-in resolution", () => {
     expect(identity).toEqual({ login: "alice", name: "Alice Example" });
 
     await enableFeature("Alice Newly Renamed");
-    const renamed = resolveWebAuth(
+    const renamed = await resolveWebAuth(
       new Request("http://x/", {
         headers: { authorization: "Bearer renamed-token" },
       }),
     );
     expect(renamed).toEqual({ login: "alice", name: "Alice Newly Renamed" });
-    expect(
-      JSON.parse(
-        readFileSync(process.env.OPENSESSION_WEB_SESSIONS_STORE!, "utf8"),
-      ).sessions[0].name,
-    ).toBe("Alice Newly Renamed");
+    expect((await storedWebSessions()).sessions[0].name).toBe(
+      "Alice Newly Renamed",
+    );
   });
 
   test("revokes a human session when its roster row is removed", async () => {
@@ -767,7 +773,7 @@ describe("web sign-in resolution", () => {
     );
 
     expect(
-      resolveWebAuth(
+      await resolveWebAuth(
         new Request("http://x/", {
           headers: { authorization: "Bearer removed-token" },
         }),
@@ -776,17 +782,13 @@ describe("web sign-in resolution", () => {
 
     await enableFeature(null);
     expect(
-      resolveWebAuth(
+      await resolveWebAuth(
         new Request("http://x/", {
           headers: { authorization: "Bearer removed-token" },
         }),
       ),
     ).toBeNull();
-    expect(
-      JSON.parse(
-        readFileSync(process.env.OPENSESSION_WEB_SESSIONS_STORE!, "utf8"),
-      ).sessions,
-    ).toEqual([]);
+    expect((await storedWebSessions()).sessions).toEqual([]);
   });
 
   test("refreshes identities used by long-lived transports", async () => {

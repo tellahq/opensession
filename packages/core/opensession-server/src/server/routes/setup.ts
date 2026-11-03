@@ -340,16 +340,18 @@ export async function handleSetupRoutes(
       // Configuration is immediate. DNS and reachability checks stay on the
       // ingress request so they cannot hold up the rest of Setup.
       ingress: { publicBaseUrl: configuredPublicIngress().publicBaseUrl },
-      repos: Object.values(configuredRepos()).map((r) => ({
-        id: r.id,
-        label: r.label,
-        path: r.repo,
-        defaultBranch: r.defaultBranch,
-        isolatedWorktrees: !sharedCheckoutForNewSessions(r),
-        // Can sessions in this repo provision and boot themselves? Read off
-        // the main checkout — worktrees carry the same committed files.
-        lifecycle: repoLifecycle(r.repo),
-      })),
+      repos: await Promise.all(
+        Object.values(configuredRepos()).map(async (r) => ({
+          id: r.id,
+          label: r.label,
+          path: r.repo,
+          defaultBranch: r.defaultBranch,
+          isolatedWorktrees: !sharedCheckoutForNewSessions(r),
+          // Can sessions in this repo provision and boot themselves? Read off
+          // the main checkout — worktrees carry the same committed files.
+          lifecycle: await repoLifecycle(r.repo),
+        })),
+      ),
       team: (() => {
         const team = configuredIdentity().team;
         return { count: team.length, names: team.map((m) => m.name) };

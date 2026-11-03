@@ -8,7 +8,8 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { __setDatabasesStoreForTest, DatabasesStore } from "../databases";
+import { __setDatabasesStoreForTest } from "../databases";
+import { DatabasesStore } from "../databases-sqlite";
 import { handleDatabasesRoutes } from "./databases";
 
 const root = mkdtempSync(join(tmpdir(), "databases-routes-"));

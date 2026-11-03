@@ -195,8 +195,10 @@ function toolEntries(): LibraryEntry[] {
   }));
 }
 
-function automationEntries(installedNames: Set<string>): LibraryEntry[] {
-  const recipes = listRecipes().map((recipe) => ({
+async function automationEntries(
+  installedNames: Set<string>,
+): Promise<LibraryEntry[]> {
+  const recipes = (await listRecipes()).map((recipe) => ({
     id: `automation:${recipe.id}`,
     type: "automation" as const,
     slug: recipe.id,
@@ -332,7 +334,7 @@ export async function listLibrary(): Promise<LibraryEntry[]> {
   const installedNames = await installedAutomationNames();
   return [
     ...toolEntries(),
-    ...automationEntries(installedNames),
+    ...(await automationEntries(installedNames)),
     ...integrationEntries(),
     ...connectionEntries(),
     ...(await packageEntries()),

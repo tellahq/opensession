@@ -179,6 +179,7 @@ import {
   targetForTurnCancel,
 } from "./session-kernel";
 import { publicSessionSafety } from "./session-safety";
+import { orphanedRunProof } from "./orphaned-run-proof";
 import { TRANSCRIPT_ACTOR_RANGE_PAGE_LIMIT } from "./session-kernel/transcript-protocol";
 
 // Who likely triggered the restart that booted THIS process — read once from
@@ -261,7 +262,18 @@ async function sendWatchExtras(
     );
   }
   const quarantine = await sessionQuarantineSnapshot(sessionId);
-  const safety = quarantine ? publicSessionSafety(quarantine) : undefined;
+  const safety = quarantine
+    ? publicSessionSafety(
+        quarantine,
+        undefined,
+        // Durable read: after a restart the gateway's run-state projection
+        // has not seen this session's unsettled run.
+        !!(await orphanedRunProof(sessionId, [
+          session.claudeSessionId,
+          session.codexThreadId,
+        ])),
+      )
+    : undefined;
   ws.send(
     JSON.stringify({
       type: "session_status",

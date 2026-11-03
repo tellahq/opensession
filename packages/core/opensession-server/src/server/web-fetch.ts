@@ -26,17 +26,13 @@
  */
 import { createHash } from "crypto";
 import { lookup } from "dns/promises";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  statSync,
-} from "fs";
+import { mkdir, readFile, readdir, rm, stat } from "fs/promises";
 import { isIP } from "net";
 import { stateDir } from "./paths";
-import { writeFileAtomic, writeJsonAtomic } from "./shared/atomic-write";
+import {
+  writeFileAtomicAsync,
+  writeJsonAtomicAsync,
+} from "./shared/atomic-write";
 import { isBlockedAddress } from "./shared/network-address";
 
 export { isBlockedAddress } from "./shared/network-address";
@@ -197,9 +193,9 @@ interface CacheMeta {
   at: number;
 }
 
-function cacheDir(): string {
+async function cacheDir(): Promise<string> {
   const dir = stateDir("web-cache");
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: DIR_MODE });
+  await mkdir(dir, { recursive: true, mode: DIR_MODE });
   return dir;
 }
 
@@ -208,61 +204,66 @@ function handleFor(url: string): string {
 }
 
 /** Drop expired entries, then oldest-first until under the caps. */
-function sweepCache(now = Date.now()): void {
+async function sweepCache(now = Date.now()): Promise<void> {
   try {
-    const dir = cacheDir();
+    const dir = await cacheDir();
     const entries: Array<{ base: string; at: number; bytes: number }> = [];
-    for (const file of readdirSync(dir)) {
+    for (const file of await readdir(dir)) {
       if (!file.endsWith(".json")) continue;
       const base = file.slice(0, -".json".length);
       try {
-        const stat = statSync(`${dir}/${file}`);
-        const body = `${dir}/${base}.txt`;
-        const bytes = stat.size + (existsSync(body) ? statSync(body).size : 0);
-        entries.push({ base, at: stat.mtimeMs, bytes });
+        const meta = await stat(`${dir}/${file}`);
+        const bodyBytes = await stat(`${dir}/${base}.txt`).then(
+          (body) => body.size,
+          () => 0,
+        );
+        entries.push({ base, at: meta.mtimeMs, bytes: meta.size + bodyBytes });
       } catch {}
     }
-    const drop = (base: string) => {
-      rmSync(`${dir}/${base}.json`, { force: true });
-      rmSync(`${dir}/${base}.txt`, { force: true });
+    const drop = async (base: string) => {
+      await rm(`${dir}/${base}.json`, { force: true });
+      await rm(`${dir}/${base}.txt`, { force: true });
     };
-    const live = entries.filter((e) => {
-      if (now - e.at > CACHE_TTL_MS) {
-        drop(e.base);
-        return false;
-      }
-      return true;
-    });
+    const live: typeof entries = [];
+    for (const e of entries) {
+      if (now - e.at > CACHE_TTL_MS) await drop(e.base);
+      else live.push(e);
+    }
     live.sort((a, b) => a.at - b.at); // oldest first
     let count = live.length;
     let bytes = live.reduce((sum, e) => sum + e.bytes, 0);
     for (const entry of live) {
       if (count <= CACHE_MAX_ENTRIES && bytes <= CACHE_MAX_BYTES) break;
-      drop(entry.base);
+      await drop(entry.base);
       count -= 1;
       bytes -= entry.bytes;
     }
   } catch {}
 }
 
-function storePage(meta: CacheMeta, body: string): void {
-  const dir = cacheDir();
-  writeFileAtomic(`${dir}/${meta.handle}.txt`, body, FILE_MODE);
-  writeJsonAtomic(`${dir}/${meta.handle}.json`, meta, true, FILE_MODE);
-  sweepCache();
+async function storePage(meta: CacheMeta, body: string): Promise<void> {
+  const dir = await cacheDir();
+  await writeFileAtomicAsync(`${dir}/${meta.handle}.txt`, body, FILE_MODE);
+  await writeJsonAtomicAsync(
+    `${dir}/${meta.handle}.json`,
+    meta,
+    true,
+    FILE_MODE,
+  );
+  await sweepCache();
 }
 
-function loadPage(
+/** A cached page, or undefined when either half is missing or expired. */
+async function loadPage(
   handle: string,
-): { meta: CacheMeta; body: string } | undefined {
+): Promise<{ meta: CacheMeta; body: string } | undefined> {
   try {
-    const dir = cacheDir();
-    const metaPath = `${dir}/${handle}.json`;
-    const bodyPath = `${dir}/${handle}.txt`;
-    if (!existsSync(metaPath) || !existsSync(bodyPath)) return undefined;
-    const meta = JSON.parse(readFileSync(metaPath, "utf8")) as CacheMeta;
+    const dir = await cacheDir();
+    const meta = JSON.parse(
+      await readFile(`${dir}/${handle}.json`, "utf8"),
+    ) as CacheMeta;
     if (Date.now() - meta.at > CACHE_TTL_MS) return undefined;
-    return { meta, body: readFileSync(bodyPath, "utf8") };
+    return { meta, body: await readFile(`${dir}/${handle}.txt`, "utf8") };
   } catch {
     return undefined;
   }
@@ -326,7 +327,7 @@ export async function fetchWeb(
     Math.min(MAX_HEAD_CHARS, opts.headChars ?? DEFAULT_HEAD_CHARS),
   );
   const handle = handleFor(raw);
-  const cached = opts.refresh ? undefined : loadPage(handle);
+  const cached = opts.refresh ? undefined : await loadPage(handle);
   if (cached) return page(cached.meta, cached.body, headChars);
 
   const { response, finalUrl } = await fetchChecked(raw, opts.signal);
@@ -362,7 +363,7 @@ export async function fetchWeb(
     chars: body.length,
     at: Date.now(),
   };
-  storePage(meta, body);
+  await storePage(meta, body);
   return page(meta, body, headChars);
 }
 
@@ -391,11 +392,11 @@ export interface ReadFetchedOptions {
 }
 
 /** Read more of a fetched page: by search (`find`) or by offset. */
-export function readFetched(
+export async function readFetched(
   handle: string,
   opts: ReadFetchedOptions = {},
-): FetchedSlice {
-  const loaded = loadPage(handle);
+): Promise<FetchedSlice> {
+  const loaded = await loadPage(handle);
   if (!loaded) {
     throw new Error(
       `No fetched page for handle "${handle}" — it expired (entries live one hour) or was never fetched. Fetch the URL again.`,

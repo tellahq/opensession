@@ -89,7 +89,7 @@ export function createPublishMcpServer(ctx: PublishToolContext) {
           );
         }
         try {
-          const r = publishDeploy({
+          const r = await publishDeploy({
             dir,
             entrypoint: args.entrypoint,
             name: args.name,
@@ -114,7 +114,7 @@ export function createPublishMcpServer(ctx: PublishToolContext) {
       "List the published internal apps — name, link, running state, current version and owner. Use it before publishing to see whether the app you're about to create already exists (reuse its name to ship a new version rather than making a near-duplicate).",
       {},
       async () => {
-        const all = listDeploys();
+        const all = await listDeploys();
         if (!all.length) return text("No apps are published yet.");
         return text(
           all
@@ -141,7 +141,7 @@ export function createPublishMcpServer(ctx: PublishToolContext) {
       },
       async (args: { name: string; version: number }) => {
         try {
-          const d = rollbackDeploy(args.name, args.version);
+          const d = await rollbackDeploy(args.name, args.version);
           return text(
             `Rolled ${d.name} back to v${d.currentVersion} (${d.state}).`,
           );
@@ -157,7 +157,7 @@ export function createPublishMcpServer(ctx: PublishToolContext) {
         name: z.string().describe("The app's handle."),
       },
       async (args: { name: string }) => {
-        const d = getDeploy(args.name);
+        const d = await getDeploy(args.name);
         if (!d) return text(`No app named "${args.name}".`);
         await stopDeploy(d.id);
         return text(

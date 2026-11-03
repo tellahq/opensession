@@ -127,9 +127,9 @@ describe("repoLifecycle", () => {
     return root;
   }
 
-  test("reports each committed lifecycle file", () => {
+  test("reports each committed lifecycle file", async () => {
     expect(
-      repoLifecycle(
+      await repoLifecycle(
         repoWith({
           ".agents/setup": "",
           ".agents/resume": "",
@@ -141,16 +141,16 @@ describe("repoLifecycle", () => {
     ).toEqual({ dir: ".agents", setup: true, resume: true, portals: true });
   });
 
-  test("an empty portals.json declares nothing", () => {
+  test("an empty portals.json declares nothing", async () => {
     expect(
-      repoLifecycle(
+      await repoLifecycle(
         repoWith({ ".agents/setup": "", ".agents/portals.json": "{}" }),
       ),
     ).toEqual({ dir: ".agents", setup: true, resume: false, portals: false });
   });
 
-  test("a repo with no lifecycle dir reports nothing", () => {
-    expect(repoLifecycle(repoWith({ "package.json": "{}" }))).toEqual({
+  test("a repo with no lifecycle dir reports nothing", async () => {
+    expect(await repoLifecycle(repoWith({ "package.json": "{}" }))).toEqual({
       dir: null,
       setup: false,
       resume: false,
@@ -158,9 +158,9 @@ describe("repoLifecycle", () => {
     });
   });
 
-  test("the retired .opensession/ dir contributes nothing", () => {
+  test("the retired .opensession/ dir contributes nothing", async () => {
     expect(
-      repoLifecycle(
+      await repoLifecycle(
         repoWith({ ".opensession/start.sh": "", ".opensession/setup.sh": "" }),
       ),
     ).toEqual({ dir: null, setup: false, resume: false, portals: false });
