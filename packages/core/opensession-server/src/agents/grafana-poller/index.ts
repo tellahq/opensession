@@ -266,17 +266,19 @@ async function investigate(
   };
   writeDedup(automation.id, base);
 
+  // No channel = no card: the run decides itself what is worth a post.
   let slackTs: string | undefined;
-  try {
-    const card = await postSlackBlocks(
-      cfg.slackChannel,
-      `Investigating ${cfg.cardTitle} for ${failure.dedupValue}`,
-      controlCardBlocks(cfg, failure, bksId, true),
-    );
-    slackTs = card?.ts;
-  } catch (e) {
-    console.error("[grafana-poller] Failed to post Slack control card:", e);
-  }
+  if (cfg.slackChannel)
+    try {
+      const card = await postSlackBlocks(
+        cfg.slackChannel,
+        `Investigating ${cfg.cardTitle} for ${failure.dedupValue}`,
+        controlCardBlocks(cfg, failure, bksId, true),
+      );
+      slackTs = card?.ts;
+    } catch (e) {
+      console.error("[grafana-poller] Failed to post Slack control card:", e);
+    }
   if (slackTs) writeDedup(automation.id, { ...base, slackTs });
 
   const eventContext = JSON.stringify(
@@ -291,7 +293,7 @@ async function investigate(
       // namespace / user_email / story_name / run_id …) at the top level.
       ...failure.labels,
       title: `${cfg.cardTitle} — ${failure.dedupValue}`,
-      slackChannelId: cfg.slackChannel,
+      slackChannelId: cfg.slackChannel || null,
       slackThreadTs: slackTs || null,
     },
     null,
