@@ -152,7 +152,7 @@ prompt: the whole opening prompt for that session (max ${MAX_REPORT_TASK_PROMPT}
               );
             return { path: rel, data: readFileSync(realPath) };
           });
-          const meta = publishReport({
+          const meta = await publishReport({
             automationId: ctx.automationId,
             automationName: ctx.automationName,
             sessionId: ctx.sessionId,

@@ -405,13 +405,13 @@ describe("session social card", () => {
       socialSessionIdFromPath("/workspace/ws-1/session/sess-social-1"),
     ).toBe("sess-social-1");
     expect(socialSessionIdFromPath("/settings")).toBeNull();
-    expect(sessionSocialCardUrl("sess-social-1")).toMatch(
+    expect(await sessionSocialCardUrl("sess-social-1")).toMatch(
       /^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=26$/,
     );
   });
 
   test("signs ids containing Slack timestamp dots", async () => {
-    expect(sessionSocialCardUrl("slack-C123-1719860000.000000")).toMatch(
+    expect(await sessionSocialCardUrl("slack-C123-1719860000.000000")).toMatch(
       /^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=26$/,
     );
   });
@@ -428,7 +428,7 @@ describe("session social card", () => {
 
   test("answers 404 for a session with no screenshot to show", async () => {
     const route = sessionSocialCardPublicRoutes().get("GET /session-card/*")!;
-    const url = new URL(sessionSocialCardUrl(signedRouteSessionId));
+    const url = new URL(await sessionSocialCardUrl(signedRouteSessionId));
     const response = await route(new Request(url), url);
     expect(response.status).toBe(404);
   });
@@ -444,7 +444,7 @@ describe("session social card", () => {
       },
     ]);
     const route = sessionSocialCardPublicRoutes().get("GET /session-card/*")!;
-    const url = new URL(sessionSocialCardUrl(signedRouteSessionId));
+    const url = new URL(await sessionSocialCardUrl(signedRouteSessionId));
     const response = await route(new Request(url), url);
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("image/png");
@@ -455,7 +455,9 @@ describe("session social card", () => {
 
   test("ignores an unrecognized shape parameter", async () => {
     const route = sessionSocialCardPublicRoutes().get("GET /session-card/*")!;
-    const url = new URL(`${sessionSocialCardUrl(signedRouteSessionId)}&s=tall`);
+    const url = new URL(
+      `${await sessionSocialCardUrl(signedRouteSessionId)}&s=tall`,
+    );
     const response = await route(new Request(url), url);
     expect(response.status).toBe(200);
     const metadata = await sharp(await response.arrayBuffer()).metadata();
@@ -465,7 +467,7 @@ describe("session social card", () => {
 
   test("rejects an invalid HMAC before resolving the session", async () => {
     const route = sessionSocialCardPublicRoutes().get("GET /session-card/*")!;
-    const valid = new URL(sessionSocialCardUrl(signedRouteSessionId));
+    const valid = new URL(await sessionSocialCardUrl(signedRouteSessionId));
     const invalid = new URL(
       valid.href.replace(
         /[A-Za-z0-9_-]{32}\.png(?=\?)/,

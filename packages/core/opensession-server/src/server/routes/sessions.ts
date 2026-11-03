@@ -1392,7 +1392,7 @@ export async function handleSessionsRoutes(
         raw.trim(),
         pastedTextsFromWire(body?.pastedTexts),
       );
-      const images = parseImageDataUrls(body?.images);
+      const images = await parseImageDataUrls(body?.images);
       const imageUrls = asDataUrlList(body?.images);
       // An image-only send is a real message, so only reject an empty one.
       const files = Array.isArray(body?.files) ? body.files : undefined;

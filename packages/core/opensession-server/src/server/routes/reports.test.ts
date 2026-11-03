@@ -19,7 +19,7 @@ afterEach(() => {
 describe("report asset routes", () => {
   test("serves a published asset with its content type", async () => {
     const data = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
-    const report = publishReport({
+    const report = await publishReport({
       automationId,
       automationName: "Test",
       title: "Asset report",
@@ -119,7 +119,7 @@ describe("starting a session per task", () => {
   test("starts one isolated code session per selected task", async () => {
     const created: CreateSessionOpts[] = [];
     fakeControl(created);
-    const report = publishTasks(3);
+    const report = await publishTasks(3);
 
     const response = await post(report.id, { tasks: [2, 0, 0] });
 
@@ -149,7 +149,7 @@ describe("starting a session per task", () => {
   test("defaults to every task when none are named", async () => {
     const created: CreateSessionOpts[] = [];
     fakeControl(created);
-    const report = publishTasks(2);
+    const report = await publishTasks(2);
 
     await post(report.id, {});
 
@@ -162,7 +162,7 @@ describe("starting a session per task", () => {
   test("reports a failed create per task instead of losing the batch", async () => {
     const created: CreateSessionOpts[] = [];
     fakeControl(created, "thing-1");
-    const report = publishTasks(2);
+    const report = await publishTasks(2);
 
     const body = (await (await post(report.id, {}))!.json()) as {
       sessions: Array<{ id?: string; error?: string }>;
@@ -173,7 +173,7 @@ describe("starting a session per task", () => {
   });
 
   test("refuses a report that proposes no work, and an out-of-range pick", async () => {
-    const report = publishReport({
+    const report = await publishReport({
       automationId,
       automationName: "iOS parity check",
       title: "Nothing to do",
@@ -181,7 +181,7 @@ describe("starting a session per task", () => {
     });
     expect((await post(report.id, {}))?.status).toBe(400);
 
-    const withTasks = publishTasks(1);
+    const withTasks = await publishTasks(1);
     expect((await post(withTasks.id, { tasks: [7] }))?.status).toBe(400);
     expect((await post("2026-01-01-000000-none", {}))?.status).toBe(404);
   });

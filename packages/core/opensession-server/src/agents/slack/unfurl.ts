@@ -123,7 +123,7 @@ export async function unfurlForSession(
   if (await hasUsableSessionShot(card)) {
     blocks.push({
       type: "image",
-      image_url: sessionSocialCardUrl(s.id),
+      image_url: await sessionSocialCardUrl(s.id),
       alt_text: `${title}, Open Session preview`,
     });
   }
