@@ -45,7 +45,10 @@ import {
   suggestedTaskOf,
 } from "@tellahq/opensession-protocol/tool-presentation";
 import { z } from "zod";
-import { existsSync, readFileSync } from "fs";
+import {
+  readJsonOrUndefined,
+  readTextIfExists,
+} from "../../server/shared/async-fs";
 import {
   getSessionControl,
   type SessionControl,
@@ -410,19 +413,24 @@ export const MAX_SPAWN_DEPTH = 2;
 export interface SpawnTaskDeps {
   control: SessionControl;
   /** Read a opensession session file by id; null when absent/unreadable. */
-  readSessionFile: (id: string) => Partial<NativeSessionFile> | null;
+  readSessionFile: (
+    id: string,
+  ) =>
+    | Partial<NativeSessionFile>
+    | null
+    | Promise<Partial<NativeSessionFile> | null>;
   /** Persist spawnDepth onto the child's session file (async, best-effort). */
   stampSpawnDepth: (id: string, depth: number) => void | Promise<void>;
 }
 
-function defaultReadSessionFile(id: string): Partial<NativeSessionFile> | null {
-  try {
-    const path = `${OPENSESSION_SESSIONS_DIR}/${id}.json`;
-    if (!existsSync(path)) return null;
-    return JSON.parse(readFileSync(path, "utf-8"));
-  } catch {
-    return null;
-  }
+async function defaultReadSessionFile(
+  id: string,
+): Promise<Partial<NativeSessionFile> | null> {
+  return (
+    (await readJsonOrUndefined<Partial<NativeSessionFile>>(
+      `${OPENSESSION_SESSIONS_DIR}/${id}.json`,
+    )) ?? null
+  );
 }
 
 /**
@@ -439,9 +447,10 @@ async function defaultStampSpawnDepth(
 ): Promise<void> {
   const path = `${OPENSESSION_SESSIONS_DIR}/${id}.json`;
   for (let i = 0; i < 240; i++) {
-    if (existsSync(path)) {
+    const text = await readTextIfExists(path).catch(() => undefined);
+    if (text !== undefined) {
       try {
-        const data = JSON.parse(readFileSync(path, "utf-8"));
+        const data = JSON.parse(text);
         if (data?.id) {
           if (data.spawnDepth !== depth) {
             // Lazy: session-cache pulls in the run stack, which this MCP
@@ -482,12 +491,12 @@ function spawnDepthMap(): Map<string, number> {
 
 /** A session's spawn depth: session file first (authoritative + fresh), then
  *  the in-process map (pre-init window), then the control registry's summary. */
-export function resolveSpawnDepth(
+export async function resolveSpawnDepth(
   sessionId: string | undefined,
   deps: Pick<SpawnTaskDeps, "control" | "readSessionFile">,
-): number {
+): Promise<number> {
   if (!sessionId) return 0;
-  const file = deps.readSessionFile(sessionId);
+  const file = await deps.readSessionFile(sessionId);
   if (typeof file?.spawnDepth === "number") return file.spawnDepth;
   const mem = spawnDepthMap().get(sessionId);
   if (typeof mem === "number") return mem;
@@ -498,11 +507,11 @@ export function resolveSpawnDepth(
   return 0;
 }
 
-function isAutomationOwned(
+async function isAutomationOwned(
   sessionId: string,
   deps: Pick<SpawnTaskDeps, "control" | "readSessionFile">,
-): boolean {
-  const file = deps.readSessionFile(sessionId);
+): Promise<boolean> {
+  const file = await deps.readSessionFile(sessionId);
   if (file?.automation) return true;
   if (file?.createdBy?.endsWith(" (automation)")) return true;
   try {
@@ -555,14 +564,14 @@ export async function spawnTaskImpl(
     caller &&
     !ctx.automationSelf &&
     !ctx.humanResume &&
-    isAutomationOwned(caller, deps)
+    (await isAutomationOwned(caller, deps))
   ) {
     return {
       ok: false,
       error: "spawn_task is not available from automation sessions.",
     };
   }
-  const myDepth = resolveSpawnDepth(caller, deps);
+  const myDepth = await resolveSpawnDepth(caller, deps);
   if (myDepth >= MAX_SPAWN_DEPTH) {
     return {
       ok: false,
@@ -696,7 +705,7 @@ async function spawnedByCaller(
   if (!caller) return false;
   const parent =
     (await deps.control.getSession(taskId))?.parentSessionId ??
-    deps.readSessionFile(taskId)?.parentSessionId;
+    (await deps.readSessionFile(taskId))?.parentSessionId;
   return parent === caller;
 }
 

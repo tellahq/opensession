@@ -59,7 +59,7 @@ describe("opensession-schedule", () => {
       }),
     );
     expect(created).toContain("Scheduled [sched-");
-    const [prompt] = listScheduledPrompts("s1");
+    const [prompt] = await listScheduledPrompts("s1");
     expect(prompt?.prompt).toBe("check the release");
     expect(prompt?.user).toBe("Jaap");
     expect(store.timer("s1", prompt!.id)?.kind).toBe("scheduled_prompt");
@@ -76,7 +76,7 @@ describe("opensession-schedule", () => {
       }),
     );
     expect(cancelled).toBe(`Cancelled ${prompt!.id}.`);
-    expect(listScheduledPrompts("s1")).toHaveLength(0);
+    expect(await listScheduledPrompts("s1")).toHaveLength(0);
     expect(store.timer("s1", prompt!.id)).toBeUndefined();
   });
 
@@ -97,7 +97,7 @@ describe("opensession-schedule", () => {
         prompt: "mine",
       },
     });
-    const [prompt] = listScheduledPrompts("s1");
+    const [prompt] = await listScheduledPrompts("s1");
     const other = await connect("s2");
     const refused = textOf(
       await other.callTool({
@@ -106,7 +106,7 @@ describe("opensession-schedule", () => {
       }),
     );
     expect(refused).toContain("No scheduled prompt");
-    expect(listScheduledPrompts("s1")).toHaveLength(1);
+    expect(await listScheduledPrompts("s1")).toHaveLength(1);
   });
 
   test("takes a relative delay so the model never computes a timestamp", async () => {
@@ -119,7 +119,7 @@ describe("opensession-schedule", () => {
       }),
     );
     expect(created).toContain("Scheduled [sched-");
-    const [prompt] = listScheduledPrompts("s1");
+    const [prompt] = await listScheduledPrompts("s1");
     const delay = Date.parse(prompt!.at) - before;
     expect(delay).toBeGreaterThanOrEqual(20 * 60_000 - 1_000);
     expect(delay).toBeLessThan(20 * 60_000 + 5_000);

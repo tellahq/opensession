@@ -5,7 +5,7 @@
  * github-reviews, index) can read/write without circular imports.
  */
 import { completeAgentSessionCatalogSources } from "../../server/agent-session-catalog";
-import { existsSync, readFileSync } from "fs";
+import { readTextIfExists } from "../../server/shared/async-fs";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { configuredPaths, defaultRepo } from "../../server/config";
 import { statePath } from "../../server/paths";
@@ -88,12 +88,11 @@ function persistProcessedEvents(): void {
 }
 
 /** Load the persisted dedup set on boot, dropping any already-expired ids. */
-export function loadProcessedEvents(): void {
+export async function loadProcessedEvents(): Promise<void> {
   try {
-    if (!existsSync(PROCESSED_EVENTS_STORE)) return;
-    const entries = JSON.parse(
-      readFileSync(PROCESSED_EVENTS_STORE, "utf-8"),
-    ) as [string, number][];
+    const text = await readTextIfExists(PROCESSED_EVENTS_STORE);
+    if (text === undefined) return;
+    const entries = JSON.parse(text) as [string, number][];
     const now = Date.now();
     for (const [id, exp] of entries)
       if (exp > now) processedEventExpiry.set(id, exp);

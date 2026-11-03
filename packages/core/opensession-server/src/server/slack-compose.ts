@@ -1,15 +1,7 @@
 import type { SlackChannelOption } from "./routes/slack-channels";
 import { broadcastToSession } from "./ws-hub";
-import {
-  closeSync,
-  constants,
-  fstatSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { constants } from "node:fs";
+import { mkdir, open, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { UPLOADS_DIR } from "./uploads";
 import { validFeaturedScreenshot } from "../agents/github/shipped-change-notify";
@@ -89,50 +81,54 @@ export function forgetSentSlackComposerMessage(
   else sentSlackComposerMessages.delete(sessionId);
 }
 
-function snapshotImages(
+async function snapshotImages(
   sessionId: string,
   requestId: string,
   images: string[],
-): {
+): Promise<{
   dir: string;
   paths: string[];
-} {
+}> {
   const dir = join(UPLOADS_DIR, "slack-composer", sessionId, requestId);
-  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  await mkdir(dir, { recursive: true, mode: 0o700 });
   try {
-    const paths = [...new Set(images)].slice(0, 10).map((source, index) => {
-      if (!validFeaturedScreenshot(source)) {
+    const paths: string[] = [];
+    for (const [index, source] of [...new Set(images)].slice(0, 10).entries()) {
+      if (!(await validFeaturedScreenshot(source))) {
         throw new Error(
           `Slack image is unavailable: ${basename(source) || "image"}`,
         );
       }
       const target = join(dir, `${index + 1}-${basename(source)}`);
-      const fd = openSync(source, constants.O_RDONLY | constants.O_NOFOLLOW);
+      const handle = await open(
+        source,
+        constants.O_RDONLY | constants.O_NOFOLLOW,
+      );
       try {
-        const stat = fstatSync(fd);
+        const stat = await handle.stat();
         if (!stat.isFile() || !stat.size || stat.size > 20 * 1024 * 1024) {
           throw new Error(
             `Slack image is unavailable: ${basename(source) || "image"}`,
           );
         }
-        writeFileSync(target, readFileSync(fd), { mode: 0o600 });
+        await writeFile(target, await handle.readFile(), { mode: 0o600 });
       } finally {
-        closeSync(fd);
+        await handle.close();
       }
-      return target;
-    });
+      paths.push(target);
+    }
     return { dir, paths };
   } catch (error) {
-    rmSync(dir, { recursive: true, force: true });
+    await rm(dir, { recursive: true, force: true });
     throw error;
   }
 }
 
-export function snapshotPendingSlackImages(
+export async function snapshotPendingSlackImages(
   sessionId: string,
   requestId: string,
   images: string[],
-): string[] {
+): Promise<string[]> {
   const pending = pendingSlackComposers.get(sessionId);
   if (
     !pending ||
@@ -141,13 +137,19 @@ export function snapshotPendingSlackImages(
   ) {
     throw new Error("Slack composer is no longer open");
   }
-  const snapshot = snapshotImages(sessionId, `${requestId}/send`, images);
+  const snapshot = await snapshotImages(sessionId, `${requestId}/send`, images);
   return snapshot.paths;
 }
 
 function cleanup(pending: PendingSlackComposer): void {
-  rmSync(pending.snapshotDir, { recursive: true, force: true });
+  void rm(pending.snapshotDir, { recursive: true, force: true }).catch(
+    (error) => console.warn("[slack] composer snapshot cleanup failed:", error),
+  );
 }
+
+/** Sessions whose composer is still copying its images, so a second open
+ *  in that window is refused like one against an open composer. */
+const openingSlackComposers = new Set<string>();
 
 function broadcast(sessionId: string, request: SlackComposeRequest): void {
   broadcastToSession(sessionId, {
@@ -163,12 +165,15 @@ function broadcast(sessionId: string, request: SlackComposeRequest): void {
  * and `result` settles then. Nothing that happens to the caller (an agent's
  * MCP call timing out or its turn ending) closes it.
  */
-export function openSlackComposer(
+export async function openSlackComposer(
   sessionId: string,
   input: { message?: string; channel?: string; images?: string[] },
-): { request: SlackComposeRequest; result: Promise<SlackComposeResult> } {
+): Promise<{
+  request: SlackComposeRequest;
+  result: Promise<SlackComposeResult>;
+}> {
   const existing = pendingSlackComposers.get(sessionId);
-  if (existing) {
+  if (existing || openingSlackComposers.has(sessionId)) {
     throw new Error("this session already has a Slack composer open");
   }
   const request: SlackComposeRequest = {
@@ -177,7 +182,13 @@ export function openSlackComposer(
     ...(input.channel?.trim() ? { channel: input.channel.trim() } : {}),
     images: [],
   };
-  const snapshot = snapshotImages(sessionId, request.id, input.images || []);
+  openingSlackComposers.add(sessionId);
+  let snapshot: { dir: string; paths: string[] };
+  try {
+    snapshot = await snapshotImages(sessionId, request.id, input.images || []);
+  } finally {
+    openingSlackComposers.delete(sessionId);
+  }
   request.images = snapshot.paths;
   const result = new Promise<SlackComposeResult>((resolve) => {
     pendingSlackComposers.set(sessionId, {

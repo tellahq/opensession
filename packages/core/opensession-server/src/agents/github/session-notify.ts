@@ -17,9 +17,9 @@
  * the preview URL + Ready state, so a session notification would just be redundant.)
  */
 import { stateDir } from "../../server/paths";
-import { existsSync, readFileSync } from "fs";
 import { readFile } from "node:fs/promises";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
+import { writeJsonAtomicAsync } from "../../server/shared/atomic-write";
+import { keyedOrder } from "../../server/shared/async-fs";
 import {
   tryGetSessionControl,
   type SessionControl,
@@ -68,11 +68,13 @@ interface PendingDeploy {
 /** merge_commit_sha → the merge we're waiting on a deploy for. */
 type PendingDeploys = Record<string, PendingDeploy>;
 
-function readPending(): PendingDeploys {
-  if (!existsSync(PENDING_PATH)) return {};
+/** Serializes read-modify-write cycles of the pending-deploys file. */
+const pendingOrder = keyedOrder();
+
+async function readPending(): Promise<PendingDeploys> {
   try {
     const all = JSON.parse(
-      readFileSync(PENDING_PATH, "utf-8"),
+      await readFile(PENDING_PATH, "utf-8"),
     ) as PendingDeploys;
     const cutoff = Date.now() - PENDING_TTL_MS;
     for (const [sha, p] of Object.entries(all)) {
@@ -312,18 +314,20 @@ export async function notifyMergedPrSessions(payload: any): Promise<void> {
   );
 
   if (trackDeploy) {
-    const pending = readPending();
-    pending[pr.merge_commit_sha] = {
-      prNumber,
-      title,
-      headRef,
-      sessionIds,
-      recordedAt: new Date().toISOString(),
-      ...(ghRepo ? { ghRepo } : {}),
-      ...(author ? { author } : {}),
-      mergedBy,
-    };
-    writeJsonAtomic(PENDING_PATH, pending);
+    await pendingOrder(PENDING_PATH, async () => {
+      const pending = await readPending();
+      pending[pr.merge_commit_sha] = {
+        prNumber,
+        title,
+        headRef,
+        sessionIds,
+        recordedAt: new Date().toISOString(),
+        ...(ghRepo ? { ghRepo } : {}),
+        ...(author ? { author } : {}),
+        mergedBy,
+      };
+      await writeJsonAtomicAsync(PENDING_PATH, pending);
+    });
   }
 }
 
@@ -334,11 +338,15 @@ export async function handleDeployWorkflowRun(payload: any): Promise<void> {
   if (!run || (run.path !== DEPLOY_WORKFLOW_PATH && run.name !== "Deploy"))
     return;
 
-  const pending = readPending();
-  const entry = pending[run.head_sha];
+  const entry = await pendingOrder(PENDING_PATH, async () => {
+    const pending = await readPending();
+    const found = pending[run.head_sha];
+    if (!found) return undefined;
+    delete pending[run.head_sha];
+    await writeJsonAtomicAsync(PENDING_PATH, pending);
+    return found;
+  });
   if (!entry) return;
-  delete pending[run.head_sha];
-  writeJsonAtomic(PENDING_PATH, pending);
 
   const control = tryGetSessionControl();
   if (!control) return;

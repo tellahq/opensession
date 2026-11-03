@@ -7,11 +7,12 @@
  * and reductions are never persisted here.
  */
 
-import { existsSync, readFileSync, rmSync } from "fs";
+import { readFile, rm } from "fs/promises";
+import { pathExists } from "./shared/async-fs";
 import { oneShot } from "./one-shot";
 import { stateDir } from "./paths";
 import { listReports } from "./reports";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 
 export interface AutomationInputWindow {
   mode?: "since_last_success" | "rolling";
@@ -86,7 +87,7 @@ interface CollectedInput {
 
 export interface PreparedAutomationInputs {
   note: string;
-  commit: () => void;
+  commit: () => Promise<void>;
 }
 
 interface InputDeps {
@@ -107,9 +108,9 @@ function stateFile(automationId: string): string {
   return `${INPUTS_ROOT}/${automationId}.json`;
 }
 
-function readState(automationId: string): InputState {
+async function readState(automationId: string): Promise<InputState> {
   try {
-    const parsed = JSON.parse(readFileSync(stateFile(automationId), "utf8"));
+    const parsed = JSON.parse(await readFile(stateFile(automationId), "utf8"));
     return parsed && typeof parsed.inputs === "object"
       ? { inputs: parsed.inputs }
       : { inputs: {} };
@@ -118,9 +119,11 @@ function readState(automationId: string): InputState {
   }
 }
 
-export function deleteAutomationInputState(automationId: string): void {
+export async function deleteAutomationInputState(
+  automationId: string,
+): Promise<void> {
   if (!SEGMENT_RE.test(automationId)) return;
-  rmSync(stateFile(automationId), { force: true });
+  await rm(stateFile(automationId), { force: true });
 }
 
 function numberInRange(
@@ -500,8 +503,8 @@ export async function prepareAutomationInputs(
   },
   depsOverride?: InputDeps,
 ): Promise<PreparedAutomationInputs> {
-  if (!opts.inputs?.length) return { note: "", commit: () => {} };
-  const state = readState(opts.automationId);
+  if (!opts.inputs?.length) return { note: "", commit: async () => {} };
+  const state = await readState(opts.automationId);
   const deps = depsOverride || (await defaultDeps());
   const sections: string[] = [
     "## Automation inputs",
@@ -543,16 +546,18 @@ export async function prepareAutomationInputs(
   }
   return {
     note: sections.join("\n"),
-    commit: () => {
+    commit: async () => {
       if (!Object.keys(pending).length) return;
-      const latest = readState(opts.automationId);
-      writeJsonAtomic(stateFile(opts.automationId), {
+      const latest = await readState(opts.automationId);
+      await writeJsonAtomicAsync(stateFile(opts.automationId), {
         inputs: { ...latest.inputs, ...pending },
       });
     },
   };
 }
 
-export function automationInputStateExists(automationId: string): boolean {
-  return existsSync(stateFile(automationId));
+export function automationInputStateExists(
+  automationId: string,
+): Promise<boolean> {
+  return pathExists(stateFile(automationId));
 }

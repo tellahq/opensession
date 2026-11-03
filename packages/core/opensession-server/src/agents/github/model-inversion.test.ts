@@ -119,7 +119,7 @@ test("a session that linked the PR owns it; the PR's own runs never do", async (
 
 test("autofix author model comes from one catalog row, not a session file", async () => {
   store.upsert(row("bks-ghpr-1-autofix", "pi/openai/gpt-6-astra"));
-  updatePrState(
+  await updatePrState(
     1,
     "feature",
     (state) => {

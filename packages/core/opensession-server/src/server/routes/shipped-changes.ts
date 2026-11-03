@@ -104,7 +104,7 @@ export async function handleShippedChangeRoutes(
       );
     }
     if (share.announcementKey)
-      forgetShippedChangeAnnouncement(share.announcementKey);
+      await forgetShippedChangeAnnouncement(share.announcementKey);
     await updateSessionFile(session.id, (data) => ({
       ...data,
       slackShares: (data.slackShares || []).filter(

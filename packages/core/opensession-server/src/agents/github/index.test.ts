@@ -29,12 +29,12 @@ describe("webhook route ownership", () => {
     );
   });
 
-  test("Slack-only registration uses the GitHub compatibility handler", () => {
+  test("Slack-only registration uses the GitHub compatibility handler", async () => {
     process.env.ENABLE_GITHUB_AGENT = "false";
     process.env.ENABLE_SLACK_AGENT = "true";
     process.env.GITHUB_WEBHOOK_SECRET = "configured";
     expect(new SlackAgent().getRoutes().has("POST /github/webhook")).toBe(true);
-    expect(new SlackAgent().health()).toMatchObject({
+    expect(await new SlackAgent().health()).toMatchObject({
       githubWebhookConfigured: true,
       githubCredentialMode: "app",
       githubWebhooksReceived: expect.any(Number),

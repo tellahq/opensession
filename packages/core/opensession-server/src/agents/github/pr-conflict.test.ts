@@ -60,9 +60,9 @@ function sweep(mergeable: string, overrides: Partial<PrInfo> = {}) {
 describe("scanConflictTransitions", () => {
   beforeEach(() => resetConflictWatch());
 
-  test("fires on MERGEABLE → CONFLICTING", () => {
-    expect(sweep("MERGEABLE")).toEqual([]);
-    const events = sweep("CONFLICTING");
+  test("fires on MERGEABLE → CONFLICTING", async () => {
+    expect(await sweep("MERGEABLE")).toEqual([]);
+    const events = await sweep("CONFLICTING");
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
       repoId: "tella-fusion",
@@ -71,111 +71,111 @@ describe("scanConflictTransitions", () => {
     });
   });
 
-  test("a PR first seen as CONFLICTING never fires", () => {
+  test("a PR first seen as CONFLICTING never fires", async () => {
     // Restart safety: pre-existing conflicts are adopted silently rather than
     // waking every session at once.
-    expect(sweep("CONFLICTING")).toEqual([]);
-    expect(sweep("CONFLICTING")).toEqual([]);
+    expect(await sweep("CONFLICTING")).toEqual([]);
+    expect(await sweep("CONFLICTING")).toEqual([]);
   });
 
-  test("fires once, not on every following sweep", () => {
-    sweep("MERGEABLE");
-    const [event] = sweep("CONFLICTING");
+  test("fires once, not on every following sweep", async () => {
+    await sweep("MERGEABLE");
+    const [event] = await sweep("CONFLICTING");
     expect(event).toBeDefined();
     settleConflictIntent(event!);
-    expect(sweep("CONFLICTING")).toEqual([]);
-    expect(sweep("CONFLICTING")).toEqual([]);
+    expect(await sweep("CONFLICTING")).toEqual([]);
+    expect(await sweep("CONFLICTING")).toEqual([]);
   });
 
-  test("retries a transition until durable delivery admission", () => {
-    sweep("MERGEABLE");
-    const [first] = sweep("CONFLICTING");
-    const [retry] = sweep("CONFLICTING");
+  test("retries a transition until durable delivery admission", async () => {
+    await sweep("MERGEABLE");
+    const [first] = await sweep("CONFLICTING");
+    const [retry] = await sweep("CONFLICTING");
     expect(retry?.conflictId).toBe(first?.conflictId);
   });
 
-  test("a delayed old settlement cannot delete a newer transition", () => {
-    sweep("MERGEABLE");
-    const [first] = sweep("CONFLICTING");
+  test("a delayed old settlement cannot delete a newer transition", async () => {
+    await sweep("MERGEABLE");
+    const [first] = await sweep("CONFLICTING");
     expect(isCurrentConflictIntent(first!)).toBe(true);
-    sweep("MERGEABLE");
+    await sweep("MERGEABLE");
     expect(isCurrentConflictIntent(first!)).toBe(false);
-    const [second] = sweep("CONFLICTING");
+    const [second] = await sweep("CONFLICTING");
     settleConflictIntent(first!);
-    const [retry] = sweep("CONFLICTING");
+    const [retry] = await sweep("CONFLICTING");
     expect(retry?.conflictId).toBe(second?.conflictId);
   });
 
-  test("a flicker through UNKNOWN does not hide the transition", () => {
+  test("a flicker through UNKNOWN does not hide the transition", async () => {
     // GitHub reports UNKNOWN whenever its background merge test is still
     // running, which is common on the sweep right after a base push.
-    sweep("MERGEABLE");
-    expect(sweep("UNKNOWN")).toEqual([]);
-    expect(sweep("CONFLICTING")).toHaveLength(1);
+    await sweep("MERGEABLE");
+    expect(await sweep("UNKNOWN")).toEqual([]);
+    expect(await sweep("CONFLICTING")).toHaveLength(1);
   });
 
-  test("UNKNOWN alone never fires", () => {
-    expect(sweep("UNKNOWN")).toEqual([]);
-    expect(sweep("UNKNOWN")).toEqual([]);
+  test("UNKNOWN alone never fires", async () => {
+    expect(await sweep("UNKNOWN")).toEqual([]);
+    expect(await sweep("UNKNOWN")).toEqual([]);
   });
 
-  test("re-fires after a conflict is resolved and returns", () => {
-    sweep("MERGEABLE");
-    const first = sweep("CONFLICTING");
+  test("re-fires after a conflict is resolved and returns", async () => {
+    await sweep("MERGEABLE");
+    const first = await sweep("CONFLICTING");
     expect(first).toHaveLength(1);
-    sweep("MERGEABLE");
-    const second = sweep("CONFLICTING");
+    await sweep("MERGEABLE");
+    const second = await sweep("CONFLICTING");
     expect(second).toHaveLength(1);
     expect(second[0]?.conflictId).not.toBe(first[0]?.conflictId);
   });
 
-  test("carries the PR body's session ref when it has one", () => {
-    sweep("MERGEABLE", { sessionRef: "os-abc" });
-    expect(sweep("CONFLICTING", { sessionRef: "os-abc" })[0]?.sessionRef).toBe(
-      "os-abc",
-    );
+  test("carries the PR body's session ref when it has one", async () => {
+    await sweep("MERGEABLE", { sessionRef: "os-abc" });
+    expect(
+      (await sweep("CONFLICTING", { sessionRef: "os-abc" }))[0]?.sessionRef,
+    ).toBe("os-abc");
   });
 
-  test("ignores PRs that are no longer open", () => {
-    sweep("MERGEABLE");
-    expect(sweep("CONFLICTING", { state: "MERGED" })).toEqual([]);
+  test("ignores PRs that are no longer open", async () => {
+    await sweep("MERGEABLE");
+    expect(await sweep("CONFLICTING", { state: "MERGED" })).toEqual([]);
   });
 
-  test("ignores repos the sweep did not refresh", () => {
+  test("ignores repos the sweep did not refresh", async () => {
     const data = new Map([
       ["tella-fusion", new Map([["fix/test", pr({ mergeable: "MERGEABLE" })]])],
     ]);
     // A repo whose open-PR query failed is carried forward untouched, so its
     // rows must not be compared against.
-    expect(scanConflictTransitions(data, new Set())).toEqual([]);
+    expect(await scanConflictTransitions(data, new Set())).toEqual([]);
     data.get("tella-fusion")!.set("fix/test", pr({ mergeable: "CONFLICTING" }));
-    expect(scanConflictTransitions(data, new Set())).toEqual([]);
-    expect(scanConflictTransitions(data, new Set(["tella-fusion"]))).toEqual(
-      [],
-    );
+    expect(await scanConflictTransitions(data, new Set())).toEqual([]);
+    expect(
+      await scanConflictTransitions(data, new Set(["tella-fusion"])),
+    ).toEqual([]);
   });
 
-  test("forgets a PR that leaves the open set, so a reopen starts clean", () => {
-    sweep("MERGEABLE");
+  test("forgets a PR that leaves the open set, so a reopen starts clean", async () => {
+    await sweep("MERGEABLE");
     // Sweep with the PR gone entirely (merged and aged out of the window).
     expect(
-      scanConflictTransitions(
+      await scanConflictTransitions(
         new Map([["tella-fusion", new Map()]]),
         new Set(["tella-fusion"]),
       ),
     ).toEqual([]);
-    expect(sweep("CONFLICTING")).toEqual([]);
+    expect(await sweep("CONFLICTING")).toEqual([]);
   });
 
-  test("tracks the same PR number in two repos independently", () => {
+  test("tracks the same PR number in two repos independently", async () => {
     const data = (fusion: string, backstage: string) =>
       new Map([
         ["tella-fusion", new Map([["fix/test", pr({ mergeable: fusion })]])],
         ["opensession", new Map([["fix/test", pr({ mergeable: backstage })]])],
       ]);
     const fresh = new Set(["tella-fusion", "opensession"]);
-    scanConflictTransitions(data("MERGEABLE", "CONFLICTING"), fresh);
-    const events = scanConflictTransitions(
+    await scanConflictTransitions(data("MERGEABLE", "CONFLICTING"), fresh);
+    const events = await scanConflictTransitions(
       data("CONFLICTING", "CONFLICTING"),
       fresh,
     );

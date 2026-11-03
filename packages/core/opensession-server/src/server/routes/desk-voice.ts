@@ -204,11 +204,11 @@ export async function handleDeskVoiceRoutes(
         : {};
     try {
       const result = await executeVoiceTool(user, body.name, args);
-      mirrorVoiceToolCall(user, body.callId, body.name, args, result);
+      await mirrorVoiceToolCall(user, body.callId, body.name, args, result);
       return Response.json({ result });
     } catch (e: any) {
       const message = e?.message || String(e);
-      mirrorVoiceToolCall(user, body.callId, body.name, args, {
+      await mirrorVoiceToolCall(user, body.callId, body.name, args, {
         error: message,
       });
       return Response.json({ error: message }, { status: 400 });
@@ -238,7 +238,7 @@ export async function handleDeskVoiceRoutes(
         },
       )
       .slice(0, 20);
-    mirrorVoiceEntries(user, entries);
+    await mirrorVoiceEntries(user, entries);
     return Response.json({ ok: true });
   }
 

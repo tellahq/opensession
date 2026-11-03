@@ -67,7 +67,7 @@ export async function reconcileOpenPrs(): Promise<Set<string>> {
       () => [] as OpenPrSummary[],
     );
     for (const pr of prs) listedOpen.add(prKey(pr.number, repo.ghRepo));
-    const repoOpts = loadReviewOptions(repo.repo);
+    const repoOpts = await loadReviewOptions(repo.repo);
     for (const pr of prs) {
       if (fires >= MAX_FIRES_PER_CYCLE) break;
       if (titleHasSkipKeyword(pr.title, repoOpts)) continue;
@@ -79,7 +79,7 @@ export async function reconcileOpenPrs(): Promise<Set<string>> {
         !!pr.headRepoFullName &&
         pr.headRepoFullName.toLowerCase() !== repo.ghRepo.toLowerCase();
 
-      const state = readPrState(pr.number, repo.ghRepo);
+      const state = await readPrState(pr.number, repo.ghRepo);
       // Anything in flight (or already scheduled) owns this PR — never race it.
       const busy =
         isLockHeld("review", pr.number, repo.ghRepo) ||
@@ -119,7 +119,7 @@ export async function reconcileOpenPrs(): Promise<Set<string>> {
             ? state.reconcile.autofixAttempts || 0
             : 0;
         if (attempts >= MAX_ATTEMPTS_PER_SHA) continue;
-        updatePrState(
+        await updatePrState(
           pr.number,
           pr.headRef,
           (s) => {
@@ -176,7 +176,7 @@ export async function reconcileOpenPrs(): Promise<Set<string>> {
           ? state.reconcile.reviewAttempts || 0
           : 0;
       if (attempts >= MAX_ATTEMPTS_PER_SHA) continue;
-      updatePrState(
+      await updatePrState(
         pr.number,
         pr.headRef,
         (s) => {

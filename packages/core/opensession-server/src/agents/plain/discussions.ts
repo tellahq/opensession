@@ -296,7 +296,7 @@ export function triageDiscussionThread(input: {
 export async function openTriageDiscussion(
   threadId: string,
   existingId?: string,
-  onCreated?: (id: string) => void,
+  onCreated?: (id: string) => unknown,
 ): Promise<string | undefined> {
   if (!discussionAgentConfigured()) return undefined;
   try {
@@ -308,7 +308,7 @@ export async function openTriageDiscussion(
       }));
     if (id !== existingId) {
       try {
-        onCreated?.(id);
+        await onCreated?.(id);
       } catch (e) {
         // The run still reports into the discussion; only a replay after a
         // crash could open a second one.

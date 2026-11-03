@@ -11,7 +11,7 @@ import {
   personaName,
 } from "../../server/config";
 import { githubConfiguredCredential } from "../../server/github-app";
-import { mkdirSync, existsSync, unlinkSync } from "fs";
+import { mkdir, unlink } from "fs/promises";
 import { timingSafeEqual } from "crypto";
 import type { AgentModule } from "../types";
 import { fetchWithTimeout } from "../../server/shared/fetch-with-timeout";
@@ -183,7 +183,7 @@ export async function dispatchSlackEvent(payload: any): Promise<void> {
   // Handle message.im events (DMs)
   if (shouldHandleDirectMessage(event)) {
     const eventId = `${event.channel}-${event.ts}`;
-    const result = slackEventInbox.enqueue("direct_message", event);
+    const result = await slackEventInbox.enqueue("direct_message", event);
     if (result === "processed") {
       console.log(`[slack] Duplicate event: ${eventId}`);
     } else if (result === "pending") {
@@ -229,7 +229,7 @@ export async function dispatchSlackEvent(payload: any): Promise<void> {
   // Handle app_mention events
   if (shouldHandleAppMention(event)) {
     const eventId = `${event.channel}-${event.ts}`;
-    const result = slackEventInbox.enqueue("mention", event);
+    const result = await slackEventInbox.enqueue("mention", event);
     if (result === "processed") {
       console.log(`[slack] Duplicate mention event: ${eventId}`);
     } else if (result === "pending") {
@@ -855,7 +855,7 @@ export class SlackAgent implements AgentModule {
         if (session) {
           activeSessions.delete(sessionKey);
           try {
-            unlinkSync(`${SESSION_DIR}/${sessionKey}.json`);
+            await unlink(`${SESSION_DIR}/${sessionKey}.json`);
           } catch {}
         }
 
@@ -875,14 +875,12 @@ export class SlackAgent implements AgentModule {
 
   async startup(): Promise<void> {
     // Ensure session directory exists
-    if (!existsSync(SESSION_DIR)) {
-      mkdirSync(SESSION_DIR, { recursive: true });
-    }
+    await mkdir(SESSION_DIR, { recursive: true });
 
     await loadActiveSessionsOnStartup();
     await loadWorktreeChannels();
     await loadQueueFromDisk();
-    loadProcessedEvents();
+    await loadProcessedEvents();
 
     // Fetch team ID and bot user ID for streaming APIs
     try {
@@ -906,7 +904,7 @@ export class SlackAgent implements AgentModule {
       console.warn("[slack] Failed to fetch Slack team info:", e);
     }
 
-    const pendingEvents = slackEventInbox.pendingCount();
+    const pendingEvents = await slackEventInbox.pendingCount();
     void slackEventInbox.start().catch((error) => {
       console.error("[slack] Failed to start durable event replay:", error);
     });
@@ -938,7 +936,7 @@ export class SlackAgent implements AgentModule {
     );
   }
 
-  health(): Record<string, unknown> {
+  async health(): Promise<Record<string, unknown>> {
     const queueDetails: Record<
       string,
       { queueLength: number; processing: boolean }
@@ -966,7 +964,7 @@ export class SlackAgent implements AgentModule {
       ...(this.socketMode ? { socketMode: this.socketMode.health() } : {}),
       activeSessions: activeSessions.size,
       activeQueues: sessionQueues.size,
-      pendingInboundEvents: slackEventInbox.pendingCount(),
+      pendingInboundEvents: await slackEventInbox.pendingCount(),
       inFlightInboundEvents: slackEventInbox.inFlightCount(),
       pendingQuestions: pendingAnswers.size,
       ...githubWebhookHealth,

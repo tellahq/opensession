@@ -63,7 +63,7 @@ describe("SlackEventInbox", () => {
     const { store, handled, processed, deps } = setup();
     const inbox = new SlackEventInbox(store, deps);
 
-    expect(inbox.enqueue("mention", event())).toBe("enqueued");
+    expect(await inbox.enqueue("mention", event())).toBe("enqueued");
     expect(handled).toEqual([]);
     expect(JSON.parse(readFileSync(store, "utf8"))).toMatchObject([
       {
@@ -83,14 +83,14 @@ describe("SlackEventInbox", () => {
   test("replays an unfinished event in a new process", async () => {
     const { store, handled, deps } = setup();
     const first = new SlackEventInbox(store, deps);
-    first.enqueue("mention", event());
+    await first.enqueue("mention", event());
 
     const replay = new SlackEventInbox(store, deps);
-    expect(replay.pendingCount()).toBe(1);
+    expect(await replay.pendingCount()).toBe(1);
     await replay.start();
 
     expect(handled).toEqual(["mention:1787752607.643009"]);
-    expect(replay.pendingCount()).toBe(0);
+    expect(await replay.pendingCount()).toBe(0);
   });
 
   test("keeps a failed event durable for a later retry", async () => {
@@ -102,7 +102,7 @@ describe("SlackEventInbox", () => {
     const first = new SlackEventInbox(setupState.store, setupState.deps, {
       retryDelayMs: 60_000,
     });
-    first.enqueue("mention", event());
+    await first.enqueue("mention", event());
     await first.start();
     first.stop();
 
@@ -126,18 +126,20 @@ describe("SlackEventInbox", () => {
     expect(JSON.parse(readFileSync(setupState.store, "utf8"))).toEqual([]);
   });
 
-  test("deduplicates retries while an event is pending", () => {
+  test("deduplicates retries while an event is pending", async () => {
     const { store, deps } = setup();
     const inbox = new SlackEventInbox(store, deps);
-    expect(inbox.enqueue("direct_message", event("1.1"))).toBe("enqueued");
-    expect(inbox.enqueue("direct_message", event("1.1"))).toBe("pending");
-    expect(inbox.pendingCount()).toBe(1);
+    expect(await inbox.enqueue("direct_message", event("1.1"))).toBe(
+      "enqueued",
+    );
+    expect(await inbox.enqueue("direct_message", event("1.1"))).toBe("pending");
+    expect(await inbox.pendingCount()).toBe(1);
   });
 
   test("cleans up a stale inbox record already marked processed", async () => {
     const { store, handled, processed, deps } = setup();
     const first = new SlackEventInbox(store, deps);
-    first.enqueue("mention", event());
+    await first.enqueue("mention", event());
     processed.add("C0A77HH0XPT-1787752607.643009");
 
     const replay = new SlackEventInbox(store, deps);

@@ -54,7 +54,7 @@ import {
 } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import { readFileSync } from "fs";
+import { readFile } from "fs/promises";
 import { filterMcpServers, STRIPE_CONFIRM_TOOLS } from "./runner-shared";
 import { sessionLink } from "./run-instructions";
 import { WORKFLOW_LIMITS } from "./workflow-types";
@@ -80,10 +80,12 @@ function confirmGatedServers(): Set<string> {
  * Best-effort: a missing/failed lookup just means the call 401s with the
  * server's own message.
  */
-function piAuthHeader(server: string): Record<string, string> | undefined {
+async function piAuthHeader(
+  server: string,
+): Promise<Record<string, string> | undefined> {
   try {
     const store = JSON.parse(
-      readFileSync(`${HOME}/.local/share/pi/mcp-auth.json`, "utf-8"),
+      await readFile(`${HOME}/.local/share/pi/mcp-auth.json`, "utf-8"),
     ) as Record<string, { tokens?: { accessToken?: string } }>;
     const token = store?.[server]?.tokens?.accessToken;
     if (token) return { Authorization: `Bearer ${token}` };
@@ -413,7 +415,7 @@ export function createWorkflowMcpHost(
         ...(cfg.headers || {}),
       };
       if (!headers.Authorization && !headers.authorization) {
-        Object.assign(headers, piAuthHeader(server) || {});
+        Object.assign(headers, (await piAuthHeader(server)) || {});
       }
       const init = { requestInit: { headers } };
       try {

@@ -27,7 +27,7 @@ export async function handleTodosRoutes(
         { status: 400 },
       );
     return Response.json({
-      todos: listTodos({
+      todos: await listTodos({
         user: user || undefined,
         status: status as TodoStatus | "all",
       }),
@@ -44,7 +44,7 @@ export async function handleTodosRoutes(
     const user = requestUser(ctx, body.user);
     if (!user) return Response.json({ error: "missing user" }, { status: 400 });
     try {
-      const todo = addTodo({
+      const todo = await addTodo({
         user,
         text: body.text,
         note: typeof body.note === "string" ? body.note : undefined,
@@ -69,7 +69,7 @@ export async function handleTodosRoutes(
         { status: 400 },
       );
     try {
-      const todo = updateTodo(
+      const todo = await updateTodo(
         patchMatch[1],
         {
           status: body.status as TodoStatus | undefined,
@@ -99,7 +99,7 @@ export async function handleTodosRoutes(
     const body = await req.json().catch(() => null);
     const user = requestUser(ctx, body?.user);
     if (!user) return Response.json({ error: "missing user" }, { status: 400 });
-    const { sessionId, clearedAt } = ensureDeskSession(user);
+    const { sessionId, clearedAt } = await ensureDeskSession(user);
     return Response.json({
       sessionId,
       clearedAt: clearedAt ?? null,
@@ -112,7 +112,7 @@ export async function handleTodosRoutes(
   if (path === "/api/desk/state" && req.method === "GET") {
     const user = requestUser(ctx, url.searchParams.get("user"));
     if (!user) return Response.json({ error: "missing user" }, { status: 400 });
-    return Response.json(buildDeskState(user));
+    return Response.json(await buildDeskState(user));
   }
 
   // Hide the transcript before now in the overlay (display marker only — the full
@@ -121,7 +121,7 @@ export async function handleTodosRoutes(
     const body = await req.json().catch(() => null);
     const user = requestUser(ctx, body?.user);
     if (!user) return Response.json({ error: "missing user" }, { status: 400 });
-    return Response.json(clearDesk(user));
+    return Response.json(await clearDesk(user));
   }
 
   return undefined;
