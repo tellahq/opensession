@@ -37,7 +37,6 @@
   "packages/core/opensession-server/src/server/automation-inputs.ts": 3,
   "packages/core/opensession-server/src/server/automation-outputs.ts": 2,
   "packages/core/opensession-server/src/server/automations.ts": 12,
-  "packages/core/opensession-server/src/server/aws-creds.ts": 3,
   "packages/core/opensession-server/src/server/claude-accounts.ts": 7,
   "packages/core/opensession-server/src/server/claude-oauth-login.ts": 2,
   "packages/core/opensession-server/src/server/codestorage/auth.ts": 2,

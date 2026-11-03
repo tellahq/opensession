@@ -23,8 +23,8 @@
  *
  * The baseline (scripts/gateway-sync-io-baseline.json) records the calls that
  * remain. A file may never go above its count, a new file may not add one,
- * and a count that dropped must be written back with `--update`, so the
- * baseline only ever shrinks. A call that genuinely must stay synchronous,
+ * and `--update` writes a count that dropped back into the baseline, so it
+ * only ever shrinks (the check reports a drop but does not fail on it). A call that genuinely must stay synchronous,
  * such as a `process.on("exit")` flush, carries a `gateway-sync-ok: <reason>`
  * comment on its line or the line above.
  *
@@ -232,16 +232,19 @@ export function compareWithBaseline(
         `Use node:fs/promises or Bun.spawn instead.${where ? `\n${where}` : ""}`,
     );
   }
-  const stale = Object.entries(baseline).filter(
-    ([file, allowed]) => (counts[file] ?? 0) < allowed,
-  );
-  if (stale.length)
-    problems.push(
-      `The baseline is above the current count for ${stale.length} file(s) ` +
-        `(${stale.map(([file]) => file).join(", ")}). ` +
-        "Run `bun scripts/check-gateway-sync-io.ts --update` to lock in the improvement.",
-    );
   return problems;
+}
+
+/** Pure: files whose count dropped below the baseline. Not a failure, so a
+ * commit that removes calls without knowing about this guard cannot break
+ * everyone's check; `--update` locks the improvement in. */
+export function staleBaselineFiles(
+  counts: Record<string, number>,
+  baseline: Record<string, number>,
+): string[] {
+  return Object.entries(baseline)
+    .filter(([file, allowed]) => (counts[file] ?? 0) < allowed)
+    .map(([file]) => file);
 }
 
 if (import.meta.main) {
@@ -265,6 +268,13 @@ if (import.meta.main) {
   const problems = compareWithBaseline(counts, readBaseline(), sites);
   for (const problem of problems) console.error(problem);
   if (problems.length) process.exit(1);
+  const stale = staleBaselineFiles(counts, readBaseline());
+  if (stale.length)
+    console.log(
+      `${stale.length} file(s) now have fewer sync calls than the baseline ` +
+        `(${stale.join(", ")}). ` +
+        "Run `bun scripts/check-gateway-sync-io.ts --update` to lock in the improvement.",
+    );
   console.log(
     `gateway sync I/O: ${sites.length} remaining call sites, none new`,
   );

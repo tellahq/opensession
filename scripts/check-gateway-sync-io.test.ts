@@ -5,6 +5,7 @@ import {
   readBaseline,
   scanGateway,
   scanSource,
+  staleBaselineFiles,
 } from "./check-gateway-sync-io";
 
 describe("gateway sync I/O scan", () => {
@@ -60,9 +61,13 @@ describe("gateway sync I/O scan", () => {
     expect(compareWithBaseline({ "b.ts": 1 }, {})[0]).toContain(
       "baseline allows 0",
     );
-    expect(compareWithBaseline({ "a.ts": 1 }, { "a.ts": 2 })[0]).toContain(
-      "--update",
-    );
+    expect(compareWithBaseline({ "a.ts": 1 }, { "a.ts": 2 })).toEqual([]);
+    expect(
+      staleBaselineFiles(
+        { "a.ts": 1, "b.ts": 1 },
+        { "a.ts": 2, "b.ts": 1, "c.ts": 1 },
+      ),
+    ).toEqual(["a.ts", "c.ts"]);
   });
 
   test("gateway modules add no synchronous filesystem or subprocess calls", () => {
