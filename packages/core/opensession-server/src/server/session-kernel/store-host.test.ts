@@ -699,6 +699,33 @@ describe("per-session session kernel storage", () => {
     host.close();
   });
 
+  test("releases a failed delivery snapshot read despite a pending timer", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    const sessionId = "delivery-snapshot-repair-session";
+    host.call("scheduleTimer", [
+      {
+        sessionId,
+        timerId: "check-back",
+        kind: "scheduled_prompt",
+        dueAt: Date.now() - 1,
+        payload: null,
+      },
+    ]);
+    host.central.quarantineSession(
+      sessionId,
+      "database is locked",
+      "delivery:snapshot",
+    );
+
+    expect(host.quarantinedSession(sessionId)).toMatchObject({
+      repairable: true,
+    });
+    expect(host.call("releaseQuarantine", [sessionId])).toBe(true);
+    expect(host.quarantinedSession(sessionId)).toBeUndefined();
+    host.close();
+  });
+
   test("releases a quarantine caused by a read-only quarantine check", () => {
     const path = paths();
     const host = new SessionKernelStoreHost(path.central, path.isolated);

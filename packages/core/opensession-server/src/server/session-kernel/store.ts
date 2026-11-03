@@ -207,10 +207,18 @@ export interface DurableOutboxItem {
 const json = (value: unknown): string => JSON.stringify(value ?? null);
 const CHANGE_HISTORY_PER_SESSION = 5_000;
 const MAINTENANCE_CHANGE_DELETE_BATCH = 250;
+// Actor reducer reads (`<kind>:<op>`, the same set isReadReducer routes as
+// reads) only SELECT. One that failed, e.g. on a transient "database is
+// locked", left nothing half-applied, so pending timers or work must not keep
+// the session fenced.
 const READ_ONLY_QUARANTINE_COMMANDS: ReadonlySet<string> = new Set([
   "storage:quarantine-read",
   "runtime:scan",
   "turn:snapshot",
+  "ask:snapshot",
+  "ask:entries",
+  "delivery:snapshot",
+  "delivery:entries",
 ]);
 
 export function isRepairableReadQuarantine(commandKind: string): boolean {
