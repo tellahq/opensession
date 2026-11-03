@@ -380,7 +380,8 @@ type SessionListRuntimeSignals = {
 
 const RUNTIME_SIGNALS_TTL_MS = 250;
 let runtimeSignalsCache:
-  { value: SessionListRuntimeSignals; expiresAt: number } | undefined;
+  | { value: SessionListRuntimeSignals; expiresAt: number }
+  | undefined;
 let runtimeSignalsRefresh: Promise<SessionListRuntimeSignals> | undefined;
 
 async function sessionListRuntimeSignals(): Promise<SessionListRuntimeSignals> {
@@ -819,7 +820,12 @@ export function archivedIndexRow(
  * very long file list can't overflow the argv limit.
  */
 type StoredTranscriptSearchExhaustion =
-  "sessions" | "rows" | "time" | "matches" | "error" | null;
+  | "sessions"
+  | "rows"
+  | "time"
+  | "matches"
+  | "error"
+  | null;
 
 interface StoredTranscriptSearchResult {
   matches: Array<{ id: string; snippet: string }>;

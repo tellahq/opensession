@@ -66,7 +66,12 @@ import {
 import type { UnifiedSession } from "./types";
 
 export type PortalState =
-  "starting" | "awake" | "sleeping" | "waking" | "failed" | "stopped";
+  | "starting"
+  | "awake"
+  | "sleeping"
+  | "waking"
+  | "failed"
+  | "stopped";
 export type PortalRecord = {
   name: string;
   key: string;

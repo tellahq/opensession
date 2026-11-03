@@ -52,7 +52,8 @@ function notifyAppendListener(
 ) {
   if (!sessionId || entries.length === 0) return;
   const fn = (globalThis as any).__transcriptAppendListener as
-    AppendListener | undefined;
+    | AppendListener
+    | undefined;
   if (!fn) return;
   try {
     void Promise.resolve(fn(sessionId, entries)).catch((error) => {

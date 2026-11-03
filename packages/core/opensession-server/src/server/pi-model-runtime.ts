@@ -1585,7 +1585,8 @@ async function* runSdkAttempt(
     let reachedResult = false;
     let cappedStopReason: "toolUse" | "length" | undefined;
     let checkpoint:
-      { assistantUuid: string; toolCallIds: string[] } | undefined;
+      | { assistantUuid: string; toolCallIds: string[] }
+      | undefined;
     const earlyStop = createEarlyStopTracker();
     // The live-query facade supplies the synthetic blocked-result boundary.
     // These names remain in the stream parser so its message ordering stays

@@ -470,7 +470,13 @@ export async function requestRunnerPortal(
     repo: string;
     workspacePath: string;
     operation:
-      "allocate" | "start" | "list" | "stop" | "restart" | "path" | "http";
+      | "allocate"
+      | "start"
+      | "list"
+      | "stop"
+      | "restart"
+      | "path"
+      | "http";
     payload?: Record<string, unknown>;
     user?: string;
   },

@@ -98,7 +98,8 @@ export interface PackageManifest {
 }
 
 export type ManifestResult =
-  { manifest: PackageManifest } | { errors: string[] };
+  | { manifest: PackageManifest }
+  | { errors: string[] };
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);

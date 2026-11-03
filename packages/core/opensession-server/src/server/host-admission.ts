@@ -102,7 +102,8 @@ async function readProcFile(path: string): Promise<string> {
 }
 
 export type AdmissionDecision =
-  { admit: true } | { admit: false; reason: string };
+  | { admit: true }
+  | { admit: false; reason: string };
 
 /** Pure decision: admit unless a *present* signal says the machine is full. */
 export function decideRunHostAdmission(

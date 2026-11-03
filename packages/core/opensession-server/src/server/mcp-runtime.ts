@@ -430,7 +430,8 @@ export async function createMcpRuntime(opts: {
   };
   const connectInProcess = async (
     instance:
-      InProcessMcpServer["instance"] | ReturnType<RelayMcpMount["server"]>,
+      | InProcessMcpServer["instance"]
+      | ReturnType<RelayMcpMount["server"]>,
   ): Promise<ServerConn> => {
     const client = new Client({
       name: "opensession-mcp-runtime",

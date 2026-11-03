@@ -68,7 +68,11 @@ import { listInstalledPackages } from "./plugins";
 import { readMcpConfig } from "./connections";
 
 export type LibraryEntryType =
-  "tool" | "automation" | "integration" | "connection" | "package";
+  | "tool"
+  | "automation"
+  | "integration"
+  | "connection"
+  | "package";
 
 /**
  * How an entry gets installed — which decides what the card's button does and

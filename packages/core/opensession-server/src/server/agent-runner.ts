@@ -492,7 +492,8 @@ export function registerSandboxSessionPredicate(
 
 function sessionWorkspaceIsSandbox(sessionId: string): boolean {
   const predicate = (globalThis as any).__opensessionSandboxSessionPredicate as
-    ((sessionId: string) => boolean) | undefined;
+    | ((sessionId: string) => boolean)
+    | undefined;
   try {
     return predicate?.(sessionId) === true;
   } catch {

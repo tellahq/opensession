@@ -2551,7 +2551,8 @@ export async function handleCreateSessionMessage(
   // real engine conversation via SDK forkSession; backends without clone
   // support get a transcript handoff in the opening prompt instead.
   const forkFrom = msg.forkFrom as
-    { sourceId?: string; messageId?: string } | undefined;
+    | { sourceId?: string; messageId?: string }
+    | undefined;
   let fork: ForkContext | undefined;
   try {
     fork = resolveForkContext(forkFrom);

@@ -1495,7 +1495,12 @@ export function createSessionsMcpServer(
             standalone?: boolean;
             isolatedWorktree?: boolean;
             sandbox?:
-              boolean | "daytona" | "box" | "tart" | "usecomputer" | "modal";
+              | boolean
+              | "daytona"
+              | "box"
+              | "tart"
+              | "usecomputer"
+              | "modal";
             sandboxGpu?: "T4" | "L4";
             accountId?: string;
             forkFrom?: { sourceId: string; messageId?: string };

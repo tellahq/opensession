@@ -31,7 +31,11 @@ const LEASE_TTL_MS = 24 * 60 * 60 * 1_000;
 const MAX_LEASES = 10_000;
 
 export type WorkloadLifecycle =
-  "setup" | "resume" | "preview" | "run" | "prewarm";
+  | "setup"
+  | "resume"
+  | "preview"
+  | "run"
+  | "prewarm";
 
 export interface WorkloadIdentityContext {
   sandboxId: string;

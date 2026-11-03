@@ -29,7 +29,8 @@ import { runnerTailnetOrigin, type PeerServer } from "../runner-origin";
 /** The Runner's tailnet origin, from the one resolver `/runner-ws` uses. */
 function tailnetOrigin(ctx: RouteContext): string | undefined {
   const server = (globalThis as any).__opensessionServer as
-    PeerServer | undefined;
+    | PeerServer
+    | undefined;
   return runnerTailnetOrigin(ctx.req, server);
 }
 

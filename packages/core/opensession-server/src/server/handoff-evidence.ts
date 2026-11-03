@@ -444,7 +444,11 @@ async function defaultBeaconDeps(): Promise<BeaconDeps> {
 }
 
 export type BeaconOutcome =
-  "sent" | "no-parent" | "already-reported" | "throttled" | "failed";
+  | "sent"
+  | "no-parent"
+  | "already-reported"
+  | "throttled"
+  | "failed";
 
 /**
  * Tell a worker's parent that a run died here. Fire-and-forget from
