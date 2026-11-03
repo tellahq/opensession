@@ -823,12 +823,12 @@ export async function getSandboxPreviewStatus(
       const entry = (await sandbox.ports([port]))[port];
       const published = typeof entry === "number" ? entry : entry?.hostPort;
       if (published) {
-        const httpsPort = sandboxHttpsPortFor(sandbox.id, port);
+        const httpsPort = await sandboxHttpsPortFor(sandbox.id, port);
         if (await ensurePreviewRoute(httpsPort, `127.0.0.1:${published}`, host))
           previewUrl = `https://${host}:${httpsPort}`;
       }
     } else {
-      const allocated = lookupSandboxHttpsPort(sandbox.id, port);
+      const allocated = await lookupSandboxHttpsPort(sandbox.id, port);
       if (allocated != null) await removePreviewRoute(allocated);
     }
     // PIDs are sandbox-internal — meaningless to the host UI; leave empty.
@@ -849,7 +849,7 @@ export async function getSandboxPreviewStatus(
     });
   }
   const status: PreviewStatus = { services, portalRecipes };
-  if (sessionId) cacheSandboxPortals(sessionId, sandbox.id, services);
+  if (sessionId) await cacheSandboxPortals(sessionId, sandbox.id, services);
   return status;
 }
 
@@ -862,8 +862,8 @@ export async function dropSandboxPreviewRoutes(
 ): Promise<void> {
   revokeSandboxPortalGrants(sandboxId);
   forgetRemoteSandboxPortalAgents(sandboxId);
-  dropCachedSandboxPortals(sandboxId);
-  for (const httpsPort of releaseSandboxPreviewPorts(sandboxId)) {
+  await dropCachedSandboxPortals(sandboxId);
+  for (const httpsPort of await releaseSandboxPreviewPorts(sandboxId)) {
     // removePreviewRoute only touches routes this process cached — a destroy
     // right after a restart may miss the cache, so delete unconditionally.
     previewRoutes.delete(httpsPort);
@@ -887,11 +887,13 @@ export async function dropSandboxPreviewRoutes(
  * (src/server/sandbox-portal-recovery.ts). Dropping the servers instead
  * would turn every sleeping Portal into a refused connection.
  */
-export function suspendSandboxPreviewRoutes(sandboxId: string): void {
+export async function suspendSandboxPreviewRoutes(
+  sandboxId: string,
+): Promise<void> {
   revokeSandboxPortalGrants(sandboxId);
   forgetRemoteSandboxPortalAgents(sandboxId);
   for (const [httpsPort] of previewRoutes) {
-    const allocation = sandboxAllocationForHttpsPort(httpsPort);
+    const allocation = await sandboxAllocationForHttpsPort(httpsPort);
     if (allocation?.sandboxId === sandboxId) previewRoutes.delete(httpsPort);
   }
 }

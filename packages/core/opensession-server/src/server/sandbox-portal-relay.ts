@@ -390,7 +390,9 @@ export async function sandboxPortalLocalUrls(
 function dropPortalRoute(id: string, sandboxId: string, port: number): void {
   void queueRouteOperation(id, async () => {
     const { dropAuthenticatedPortalRoute } = await import("./preview");
-    await dropAuthenticatedPortalRoute(sandboxHttpsPortFor(sandboxId, port));
+    await dropAuthenticatedPortalRoute(
+      await sandboxHttpsPortFor(sandboxId, port),
+    );
   }).catch((error) =>
     console.warn(
       `[sandbox-portal] could not drop route for ${sandboxId}:${port}:`,
@@ -859,7 +861,7 @@ async function reconnectSandboxPortal(input: {
   if (failedAt !== undefined && Date.now() - failedAt < RECONNECT_RETRY_MS)
     return undefined;
   try {
-    const httpsPort = lookupSandboxHttpsPort(input.sandboxId, input.port);
+    const httpsPort = await lookupSandboxHttpsPort(input.sandboxId, input.port);
     if (httpsPort !== null) {
       const { recoverSandboxPortalRoute } =
         await import("./sandbox-portal-recovery");
@@ -1123,7 +1125,7 @@ export async function ensureSandboxPortalRelay(input: {
   return queueRouteOperation(id, async () => {
     const { ensureAuthenticatedPortalRoute } = await import("./preview");
     return ensureAuthenticatedPortalRoute(
-      sandboxHttpsPortFor(input.sandboxId, input.port),
+      await sandboxHttpsPortFor(input.sandboxId, input.port),
       upstream,
     );
   });

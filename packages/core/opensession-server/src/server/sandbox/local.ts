@@ -16,7 +16,7 @@
  */
 
 import { $ } from "bun";
-import { existsSync } from "fs";
+import { pathExists } from "./async-fs";
 import { providerFor } from "../models";
 import {
   getRepo,
@@ -77,7 +77,7 @@ function makeLocalSandbox(cwd: string): Sandbox {
     // A local sandbox is "running" as long as its workspace dir exists —
     // there is no stopped state on the host.
     async status(): Promise<SandboxStatus> {
-      return existsSync(cwd) ? "running" : "gone";
+      return (await pathExists(cwd)) ? "running" : "gone";
     },
   };
 }
@@ -97,7 +97,7 @@ export class LocalProvider implements SandboxProvider {
    */
   async ensure(spec: SandboxSessionSpec): Promise<Sandbox> {
     if (spec.cwd) {
-      if (existsSync(spec.cwd)) return makeLocalSandbox(spec.cwd);
+      if (await pathExists(spec.cwd)) return makeLocalSandbox(spec.cwd);
       const repo = spec.repo ? getRepo(spec.repo) : repoForPath(spec.cwd);
       if (spec.branch) {
         try {
@@ -134,7 +134,7 @@ export class LocalProvider implements SandboxProvider {
   async get(sandboxId: string): Promise<Sandbox | null> {
     const cwd = cwdFromId(sandboxId);
     if (!cwd) return null;
-    return existsSync(cwd) ? makeLocalSandbox(cwd) : null;
+    return (await pathExists(cwd)) ? makeLocalSandbox(cwd) : null;
   }
 
   /**

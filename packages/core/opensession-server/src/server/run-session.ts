@@ -2391,13 +2391,15 @@ export async function maybeLaunchSandboxedRun(
       // the idle sweep puts it to sleep instead of leaving it billing.
       const machineId =
         session.sandbox.sandboxId ||
-        (() => {
+        (await (async () => {
           try {
-            return getSandboxProvider(sbProvider).machineFor?.(session.id);
+            return await getSandboxProvider(sbProvider).machineFor?.(
+              session.id,
+            );
           } catch {
             return undefined;
           }
-        })();
+        })());
       touchNativeSession(session.id, {
         sandbox: {
           ...session.sandbox,

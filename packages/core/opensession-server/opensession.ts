@@ -844,15 +844,22 @@ if (!g.__opensessionBooted) {
   // devInstanceBootError guard at the top of this file enforces it).
   const devInstance = isDevInstance();
   startSessionListRuntimeSync();
+  // Read the sandbox kill switch once before serving; it refreshes itself
+  // asynchronously after that.
+  await import("./src/server/sandbox/config").then(
+    ({ refreshSandboxKillSwitch }) => refreshSandboxKillSwitch(),
+  );
   if (!devInstance) {
     startLiveActivitySync();
 
     // Restore completed sandbox prewarms and maintain any explicit keep-ready
     // targets. This is a boot hook rather than a module-scope side effect.
     void import("./src/server/sandbox/prewarm")
-      .then(async ({ startPrewarmPool }) => {
-        // Restoration happens synchronously before the first sweep await. Do not
-        // make snapshot maintenance wait behind slow provider orphan cleanup.
+      .then(async ({ restoreReadyPrewarms, startPrewarmPool }) => {
+        // Restore ready prewarms before maintenance can request new ones. Do
+        // not make snapshot maintenance wait behind slow provider orphan
+        // cleanup: the first sweep runs alongside it.
+        await restoreReadyPrewarms();
         const poolStartup = startPrewarmPool();
         const { startSandboxEnvironmentMaintenance } =
           await import("./src/server/sandbox/environments");

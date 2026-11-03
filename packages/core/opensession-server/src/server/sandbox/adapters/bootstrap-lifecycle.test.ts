@@ -319,7 +319,7 @@ describe("remote repo lifecycle", () => {
 });
 
 describe("remote workspace private seed files", () => {
-  test("uses the remote-tracking default branch instead of a parked checkout branch", () => {
+  test("uses the remote-tracking default branch instead of a parked checkout branch", async () => {
     const root = seedRepo([".env.local"]);
     writeFileSync(join(root, ".gitignore"), ".env.local\nother.env\n");
     writeFileSync(join(root, ".env.local"), "SOURCE=default\n");
@@ -357,7 +357,7 @@ describe("remote workspace private seed files", () => {
     writeFileSync(join(root, "other.env"), "SOURCE=parked-branch\n");
 
     expect(
-      loadRemoteWorkspaceSeedFiles({
+      await loadRemoteWorkspaceSeedFiles({
         id: "app",
         repo: root,
         defaultBranch: "main",
@@ -365,7 +365,7 @@ describe("remote workspace private seed files", () => {
     ).toEqual([{ path: ".env.local", content: "SOURCE=default\n" }]);
   });
 
-  test("loads declared gitignored text files from the registered checkout", () => {
+  test("loads declared gitignored text files from the registered checkout", async () => {
     const root = seedRepo(["packages/web/.env.local", ".envrc"]);
     writeFileSync(
       join(root, ".gitignore"),
@@ -379,7 +379,9 @@ describe("remote workspace private seed files", () => {
       writeFileSync(join(root, path), content);
     }
 
-    expect(loadRemoteWorkspaceSeedFiles({ id: "app", repo: root })).toEqual([
+    expect(
+      await loadRemoteWorkspaceSeedFiles({ id: "app", repo: root }),
+    ).toEqual([
       {
         path: "packages/web/.env.local",
         content: "API_URL=https://example.test\n",
@@ -388,27 +390,27 @@ describe("remote workspace private seed files", () => {
     ]);
   });
 
-  test("refuses traversal and files that are not gitignored", () => {
+  test("refuses traversal and files that are not gitignored", async () => {
     const traversal = seedRepo(["../outside.env"]);
-    expect(() =>
+    await expect(
       loadRemoteWorkspaceSeedFiles({ id: "app", repo: traversal }),
-    ).toThrow("unsafe path");
+    ).rejects.toThrow("unsafe path");
 
     const tracked = seedRepo([".env.local"]);
     writeFileSync(join(tracked, ".env.local"), "SECRET=value\n");
-    expect(() =>
+    await expect(
       loadRemoteWorkspaceSeedFiles({ id: "app", repo: tracked }),
-    ).toThrow("must be gitignored");
+    ).rejects.toThrow("must be gitignored");
   });
 
-  test("refuses symlinks even when the path is ignored", () => {
+  test("refuses symlinks even when the path is ignored", async () => {
     const root = seedRepo([".env.local"]);
     writeFileSync(join(root, ".gitignore"), ".env.local\n");
     writeFileSync(join(root, "actual.env"), "SECRET=value\n");
     symlinkSync("actual.env", join(root, ".env.local"));
-    expect(() =>
+    await expect(
       loadRemoteWorkspaceSeedFiles({ id: "app", repo: root }),
-    ).toThrow("regular file");
+    ).rejects.toThrow("regular file");
   });
 });
 

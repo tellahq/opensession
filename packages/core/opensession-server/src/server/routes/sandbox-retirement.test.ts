@@ -51,8 +51,8 @@ mock.module("../audit", () => ({ audit: () => {} }));
 const { handleSandboxRoutes } = await import("./sandbox");
 const { writeRemoteState, withRemoteEnsureLock } =
   await import("../sandbox/adapters/bootstrap");
-function mapping() {
-  writeRemoteState({
+async function mapping() {
+  await writeRemoteState({
     provider: "daytona",
     sessionId: "failed-session",
     sandboxId: "failed-vm",
@@ -96,14 +96,14 @@ afterAll(() => {
   rmSync(root, { force: true, recursive: true });
 });
 test("detach retires a failed provision before switching the session to the host", async () => {
-  mapping();
+  await mapping();
   const response = await detach();
   expect(response?.status).toBe(200);
   expect(events).toEqual(["restore", "destroy:failed-vm", "persist:local"]);
   expect(session.sandbox.provider).toBe("local");
 });
 test("detach keeps the provider selection if retiring its hidden machine fails", async () => {
-  mapping();
+  await mapping();
   destroyError = new Error("provider refused deletion");
   const response = await detach();
   expect(response?.status).toBe(500);
@@ -117,7 +117,7 @@ test("detach waits for an in-flight ensure to make its machine discoverable", as
   const release = Promise.withResolvers<void>();
   const ensure = withRemoteEnsureLock("daytona", "failed-session", async () => {
     await release.promise;
-    mapping();
+    await mapping();
   });
   const response = detach();
   release.resolve();

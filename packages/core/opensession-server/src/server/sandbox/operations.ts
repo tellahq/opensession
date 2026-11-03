@@ -1,13 +1,15 @@
 /** Persisted long-running sandbox setup operations. */
 
-import { existsSync, readFileSync } from "fs";
+import { readFile } from "fs/promises";
 import { stateDir } from "../paths";
-import { writeJsonAtomic } from "../shared/atomic-write";
+import { writeJsonAtomicAsync } from "../shared/atomic-write";
 import { broadcastToAll } from "../ws-hub";
 
-const liveOperations: Set<string> = ((
+/** Operations running in this process, by id. Only these can be running: a
+ *  stored "running" operation from an earlier process reads as interrupted. */
+const liveOperations: Map<string, SandboxOperation> = ((
   globalThis as any
-).__sandboxLiveOperations ??= new Set());
+).__sandboxLiveOperationRecords ??= new Map());
 
 export type SandboxOperationStatus = "running" | "succeeded" | "failed";
 
@@ -33,28 +35,52 @@ function storePath(): string {
   );
 }
 
-function readOperations(): SandboxOperation[] {
+async function readOperations(): Promise<SandboxOperation[]> {
   try {
-    if (!existsSync(storePath())) return [];
-    const raw = JSON.parse(readFileSync(storePath(), "utf-8"));
+    const raw = JSON.parse(await readFile(storePath(), "utf-8"));
     return Array.isArray(raw?.operations) ? raw.operations : [];
   } catch {
     return [];
   }
 }
 
+// Store writes run one at a time, in the order the operations changed.
+let writeTail: Promise<unknown> = Promise.resolve();
+
 function persist(operation: SandboxOperation): void {
-  const all = readOperations().filter(
-    (candidate) => candidate.id !== operation.id,
-  );
-  all.push(operation);
-  all.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
-  writeJsonAtomic(storePath(), { version: 1, operations: all.slice(0, 100) });
+  const snapshot = { ...operation };
+  const path = storePath();
+  writeTail = writeTail
+    .then(async () => {
+      const all = (await readOperations()).filter(
+        (candidate) => candidate.id !== snapshot.id,
+      );
+      all.push(snapshot);
+      all.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+      await writeJsonAtomicAsync(path, {
+        version: 1,
+        operations: all.slice(0, 100),
+      });
+    })
+    .catch((error) =>
+      console.warn(
+        `[sandbox-operations] persist(${snapshot.id}) failed:`,
+        error,
+      ),
+    );
   broadcastToAll({ type: "sandbox_operation", operation });
 }
 
-export function listSandboxOperations(): SandboxOperation[] {
-  return readOperations().map((operation) =>
+/** Operations running in this process right now (no I/O). */
+export function runningSandboxOperations(): SandboxOperation[] {
+  return [...liveOperations.values()].filter(
+    (operation) => operation.status === "running",
+  );
+}
+
+export async function listSandboxOperations(): Promise<SandboxOperation[]> {
+  await writeTail;
+  return (await readOperations()).map((operation) =>
     operation.status === "running" && !liveOperations.has(operation.id)
       ? {
           ...operation,
@@ -90,7 +116,7 @@ export function startSandboxOperation(
     updatedAt: now,
   };
   persist(operation);
-  liveOperations.add(operation.id);
+  liveOperations.set(operation.id, operation);
   const update = (
     patch: Pick<SandboxOperation, "stage"> &
       Partial<Pick<SandboxOperation, "detail" | "progress">>,

@@ -15,7 +15,7 @@ beforeEach(async () => {
     process.env.OPENSESSION_SANDBOX_CONFIG,
     JSON.stringify({ runnerSha: "abc" }),
   );
-  connectSandboxProvider("daytona", {
+  await connectSandboxProvider("daytona", {
     secret: "test-daytona-key",
     settings: { snapshot: "base-v1" },
   });
@@ -33,19 +33,24 @@ describe("remote repo template index", () => {
     const mod = await import(
       `./remote-repo-template?roundtrip=${Math.random()}`
     );
-    mod.writeRemoteRepoTemplate("daytona", "app", "im-1", 1_000);
+    await mod.writeRemoteRepoTemplate("daytona", "app", "im-1", 1_000);
     expect(
-      mod.readRemoteRepoTemplate("daytona", "app", 2_000)?.artifactId,
+      (await mod.readRemoteRepoTemplate("daytona", "app", 2_000))?.artifactId,
     ).toBe("im-1");
     expect(
-      mod.readRemoteRepoTemplate("daytona", "app", 365 * 24 * 60 * 60_000)
-        ?.artifactId,
+      (
+        await mod.readRemoteRepoTemplate(
+          "daytona",
+          "app",
+          365 * 24 * 60 * 60_000,
+        )
+      )?.artifactId,
     ).toBe("im-1");
   });
 
   test("refreshes source snapshots every 30 minutes without expiring the old mapping", async () => {
     const mod = await import(`./remote-repo-template?refresh=${Math.random()}`);
-    const { current } = mod.writeRemoteRepoTemplate(
+    const { current } = await mod.writeRemoteRepoTemplate(
       "daytona",
       "app",
       "im-1",
@@ -58,7 +63,7 @@ describe("remote repo template index", () => {
       mod.remoteRepoTemplateNeedsRefresh(current, 1_000 + 30 * 60_000),
     ).toBe(true);
     expect(
-      mod.readRemoteRepoTemplate("daytona", "app", 1_000 + 30 * 60_000)
+      (await mod.readRemoteRepoTemplate("daytona", "app", 1_000 + 30 * 60_000))
         ?.artifactId,
     ).toBe("im-1");
   });
@@ -67,7 +72,7 @@ describe("remote repo template index", () => {
     const mod = await import(
       `./remote-repo-template?box-refresh=${Math.random()}`
     );
-    const { current } = mod.writeRemoteRepoTemplate(
+    const { current } = await mod.writeRemoteRepoTemplate(
       "box",
       "app",
       "snapshot-1",
@@ -86,47 +91,59 @@ describe("remote repo template index", () => {
 
   test("a runner commit pin bump alone keeps the artifact mapping", async () => {
     const mod = await import(`./remote-repo-template?pin=${Math.random()}`);
-    mod.writeRemoteRepoTemplate("daytona", "app", "im-1");
+    await mod.writeRemoteRepoTemplate("daytona", "app", "im-1");
     // Every deploy bumps runnerSha; the template must survive it — adoption's
     // bootstrap reconciles the pin inside the restored filesystem instead.
     // (Read-modify-write: connectSandboxProvider persists into this same file.)
     const cfgPath = process.env.OPENSESSION_SANDBOX_CONFIG!;
     const cfg = JSON.parse(await Bun.file(cfgPath).text());
     await Bun.write(cfgPath, JSON.stringify({ ...cfg, runnerSha: "def" }));
-    expect(mod.readRemoteRepoTemplate("daytona", "app")?.artifactId).toBe(
-      "im-1",
-    );
+    expect(
+      (await mod.readRemoteRepoTemplate("daytona", "app"))?.artifactId,
+    ).toBe("im-1");
   });
 
   test("create-shape changes invalidate the local artifact mapping", async () => {
     const mod = await import(`./remote-repo-template?shape=${Math.random()}`);
-    mod.writeRemoteRepoTemplate("daytona", "app", "im-1");
-    updateSandboxConnection("daytona", { settings: { snapshot: "base-v2" } });
-    expect(mod.readRemoteRepoTemplate("daytona", "app")).toBeNull();
+    await mod.writeRemoteRepoTemplate("daytona", "app", "im-1");
+    await updateSandboxConnection("daytona", {
+      settings: { snapshot: "base-v2" },
+    });
+    expect(await mod.readRemoteRepoTemplate("daytona", "app")).toBeNull();
     // The stale artifact is still reported so the provider copy gets deleted.
-    expect(mod.readRemoteRepoTemplate("daytona", "app")).toBeNull();
-    const { previous } = mod.writeRemoteRepoTemplate("daytona", "app", "im-2");
-    expect(previous?.artifactId).toBe("im-1");
-    expect(mod.readRemoteRepoTemplate("daytona", "app")?.artifactId).toBe(
+    expect(await mod.readRemoteRepoTemplate("daytona", "app")).toBeNull();
+    const { previous } = await mod.writeRemoteRepoTemplate(
+      "daytona",
+      "app",
       "im-2",
     );
+    expect(previous?.artifactId).toBe("im-1");
+    expect(
+      (await mod.readRemoteRepoTemplate("daytona", "app"))?.artifactId,
+    ).toBe("im-2");
   });
 
   test("invalidation still reports a stale artifact for cleanup", async () => {
     const mod = await import(`./remote-repo-template?stale=${Math.random()}`);
-    mod.writeRemoteRepoTemplate("daytona", "app", "im-1");
-    updateSandboxConnection("daytona", { settings: { snapshot: "base-v3" } });
-    expect(mod.readRemoteRepoTemplate("daytona", "app")).toBeNull();
-    expect(mod.invalidateRemoteRepoTemplate("daytona", "app")?.artifactId).toBe(
-      "im-1",
-    );
-    expect(mod.invalidateRemoteRepoTemplate("daytona", "app")).toBeNull();
+    await mod.writeRemoteRepoTemplate("daytona", "app", "im-1");
+    await updateSandboxConnection("daytona", {
+      settings: { snapshot: "base-v3" },
+    });
+    expect(await mod.readRemoteRepoTemplate("daytona", "app")).toBeNull();
+    expect(
+      (await mod.invalidateRemoteRepoTemplate("daytona", "app"))?.artifactId,
+    ).toBe("im-1");
+    expect(await mod.invalidateRemoteRepoTemplate("daytona", "app")).toBeNull();
   });
 
   test("replacements report the old artifact for provider cleanup", async () => {
     const mod = await import(`./remote-repo-template?replace=${Math.random()}`);
-    mod.writeRemoteRepoTemplate("daytona", "app", "snap-1");
-    const result = mod.writeRemoteRepoTemplate("daytona", "app", "snap-2");
+    await mod.writeRemoteRepoTemplate("daytona", "app", "snap-1");
+    const result = await mod.writeRemoteRepoTemplate(
+      "daytona",
+      "app",
+      "snap-2",
+    );
     expect(result.previous?.artifactId).toBe("snap-1");
     const stored = JSON.parse(
       readFileSync(
@@ -184,7 +201,7 @@ describe("repo-declared preparation inputs", () => {
       JSON.stringify({ preparationInputs: ["Cargo.lock", "bun.lock"] }),
     );
     // No HEAD yet: falls back to working-tree bytes.
-    expect(mod.declaredPreparationInputs(repoDir, false)).toEqual([
+    expect(await mod.declaredPreparationInputs(repoDir, false)).toEqual([
       "Cargo.lock",
     ]);
     sh("git", "init", "-q");
@@ -200,7 +217,7 @@ describe("repo-declared preparation inputs", () => {
       "-m",
       "init",
     );
-    expect(mod.declaredPreparationInputs(repoDir, true)).toEqual([
+    expect(await mod.declaredPreparationInputs(repoDir, true)).toEqual([
       "Cargo.lock",
     ]);
     // A dirty edit must not change what the committed signature sees.
@@ -208,7 +225,7 @@ describe("repo-declared preparation inputs", () => {
       join(repoDir, ".agents/sandbox-environment.json"),
       JSON.stringify({ preparationInputs: ["patches"] }),
     );
-    expect(mod.declaredPreparationInputs(repoDir, true)).toEqual([
+    expect(await mod.declaredPreparationInputs(repoDir, true)).toEqual([
       "Cargo.lock",
     ]);
   });

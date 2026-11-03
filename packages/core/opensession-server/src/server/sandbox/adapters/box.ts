@@ -41,7 +41,8 @@
  *    deletion, so destroy releases compute and forgets the local association.
  */
 
-import { chmodSync, existsSync, mkdirSync, readFileSync } from "fs";
+import { chmod, mkdir, readFile } from "fs/promises";
+import { pathExists } from "../async-fs";
 import { dirname } from "path";
 import { stateDir } from "../../paths";
 import { getRepo, worktreePathFor } from "../../worktree";
@@ -577,12 +578,12 @@ export function parseBoxSshEndpoint(
   return { host: value.slice(0, separator), port };
 }
 
-function existingBoxSshTarget(
+async function existingBoxSshTarget(
   box: BoxRecord,
   user = "user",
-): BoxSshTarget | null {
+): Promise<BoxSshTarget | null> {
   const endpoint = parseBoxSshEndpoint(box.sshEndpoint);
-  if (!endpoint || !existsSync(boxSshPrivateKey)) return null;
+  if (!endpoint || !(await pathExists(boxSshPrivateKey))) return null;
   return { ...endpoint, user, privateKeyPath: boxSshPrivateKey };
 }
 
@@ -612,7 +613,7 @@ async function forgetBoxSshHostKey(
   target: Pick<BoxSshTarget, "host" | "port">,
 ): Promise<void> {
   const knownHosts = `${boxSshKeyDir}/known_hosts`;
-  if (!existsSync(knownHosts)) return;
+  if (!(await pathExists(knownHosts))) return;
   const process = Bun.spawn(
     ["ssh-keygen", "-q", "-R", boxKnownHostsKey(target), "-f", knownHosts],
     { stdin: "ignore", stdout: "ignore", stderr: "ignore" },
@@ -982,7 +983,7 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
       // and durable disk are healthy. Reuse the installed key and the current
       // IPv4 endpoint after coordinator restarts and archive/resume rotations.
       const existingSsh =
-        boxSshTargets().get(boxId) || existingBoxSshTarget(box);
+        boxSshTargets().get(boxId) || (await existingBoxSshTarget(box));
       if (existingSsh) {
         const probe = await boxSshExec(existingSsh, "true", 20_000);
         if (probe.exitCode === 0) {
@@ -1048,11 +1049,11 @@ async function ensureBoxSshKey(): Promise<{
     }>;
   };
   g.__opensessionBoxSshKey ??= (async () => {
-    mkdirSync(boxSshKeyDir, { recursive: true, mode: 0o700 });
-    chmodSync(boxSshKeyDir, 0o700);
+    await mkdir(boxSshKeyDir, { recursive: true, mode: 0o700 });
+    await chmod(boxSshKeyDir, 0o700);
     if (
-      !existsSync(boxSshPrivateKey) ||
-      !existsSync(`${boxSshPrivateKey}.pub`)
+      !(await pathExists(boxSshPrivateKey)) ||
+      !(await pathExists(`${boxSshPrivateKey}.pub`))
     ) {
       const process = Bun.spawn(
         [
@@ -1079,10 +1080,10 @@ async function ensureBoxSshKey(): Promise<{
         );
       }
     }
-    chmodSync(boxSshPrivateKey, 0o600);
+    await chmod(boxSshPrivateKey, 0o600);
     return {
       privateKeyPath: boxSshPrivateKey,
-      publicKey: readFileSync(`${boxSshPrivateKey}.pub`, "utf-8").trim(),
+      publicKey: (await readFile(`${boxSshPrivateKey}.pub`, "utf-8")).trim(),
     };
   })();
   try {
@@ -1174,7 +1175,7 @@ export class BoxProvider implements SandboxProvider {
       );
     }
     const cfg = boxClientConfig();
-    const prevState = findRemoteStateBySession(this.id, spec.sessionId);
+    const prevState = await findRemoteStateBySession(this.id, spec.sessionId);
     const trust = resolveTrustPolicy(spec, prevState);
     // Boat installs no outbound policy, and its images may carry a prebuilt
     // Portal cache with the app's dev secrets (portal-prebuild.ts).
@@ -1229,10 +1230,10 @@ export class BoxProvider implements SandboxProvider {
     }
     if (!box) {
       console.log(`[sandbox:box] creating box for ${spec.sessionId}`);
-      const template = readRemoteRepoTemplate("box", repo.id);
+      const template = await readRemoteRepoTemplate("box", repo.id);
       const { sandboxEnvironmentSettings } = await import("../environments");
       const machineType = boxMachineType(
-        sandboxEnvironmentSettings(repo.id, "box"),
+        await sandboxEnvironmentSettings(repo.id, "box"),
       );
       // noEnv: never inject the Boat account's dashboard secrets — every
       // credential a run needs is uploaded scoped per launch (bootstrap.ts).
@@ -1283,7 +1284,7 @@ export class BoxProvider implements SandboxProvider {
       } catch {}
     }
 
-    writeRemoteState({
+    await writeRemoteState({
       sandboxId: box.id,
       provider: this.id,
       sessionId: spec.sessionId,
@@ -1351,7 +1352,7 @@ export class BoxProvider implements SandboxProvider {
       });
       mark("resume hook ran");
     }
-    writeRemoteState({
+    await writeRemoteState({
       sandboxId: box.id,
       provider: this.id,
       sessionId: spec.sessionId,
@@ -1424,8 +1425,8 @@ export class BoxProvider implements SandboxProvider {
           return "gone";
         }
       },
-      touchActivity: () => {
-        touchRemoteState(providerId, boxId);
+      touchActivity: async () => {
+        await touchRemoteState(providerId, boxId);
         // Reset the archival countdown (their TTL is a hard deadline, not an
         // idle timer) — same keepalive shape as E2B's setTimeout extension.
         void boxApi(cfg, "PATCH", `/sandboxes/${boxId}`, {
@@ -1438,7 +1439,7 @@ export class BoxProvider implements SandboxProvider {
   }
 
   async get(sandboxId: string): Promise<Sandbox | null> {
-    const state = readRemoteState(this.id, sandboxId);
+    const state = await readRemoteState(this.id, sandboxId);
     if (!state) return null;
     try {
       const cfg = boxClientConfig();
@@ -1498,7 +1499,7 @@ export class BoxProvider implements SandboxProvider {
   }
 
   async resume(sandboxId: string): Promise<Sandbox | null> {
-    const state = readRemoteState(this.id, sandboxId);
+    const state = await readRemoteState(this.id, sandboxId);
     if (!state) return null;
     const cfg = boxClientConfig();
     const box = await getBox(cfg, sandboxId);
@@ -1539,7 +1540,7 @@ export class BoxProvider implements SandboxProvider {
         throw e;
       }
     }
-    removeRemoteState(this.id, sandboxId);
+    await removeRemoteState(this.id, sandboxId);
   }
 }
 
@@ -1610,8 +1611,8 @@ export function boxSnapshotsOfFamily<T extends NamedSnapshot>(
     );
 }
 
-function boxSnapshotFamilyFor(repoId: string): string {
-  return boxSnapshotFamily(remoteRepoTemplateName("box", repoId));
+async function boxSnapshotFamilyFor(repoId: string): Promise<string> {
+  return boxSnapshotFamily(await remoteRepoTemplateName("box", repoId));
 }
 
 async function listNamedSnapshots(
@@ -1646,7 +1647,7 @@ async function discardBoxRepoTemplate(
   artifactId: string,
   error: unknown,
 ): Promise<void> {
-  invalidateRemoteRepoTemplate("box", repoId);
+  await invalidateRemoteRepoTemplate("box", repoId);
   console.warn(
     `[sandbox:box] repo template ${artifactId} is unusable (${error instanceof Error ? error.message : String(error)}); retrying cold`,
   );
@@ -1726,13 +1727,16 @@ async function findBoxFamilySnapshot(
 }
 
 async function recoverBoxRepoTemplate(cfg: BoxClientConfig, repoId: string) {
-  const stored = readRemoteRepoTemplate("box", repoId);
+  const stored = await readRemoteRepoTemplate("box", repoId);
   if (stored) return stored;
-  const name = await findBoxFamilySnapshot(cfg, boxSnapshotFamilyFor(repoId));
+  const name = await findBoxFamilySnapshot(
+    cfg,
+    await boxSnapshotFamilyFor(repoId),
+  );
   if (!name) return null;
   await recordBoxRepoTemplate(cfg, repoId, name);
   console.log(`[sandbox:box] recovered completed repo template ${name}`);
-  return readRemoteRepoTemplate("box", repoId);
+  return await readRemoteRepoTemplate("box", repoId);
 }
 
 /** Point the local mapping at `name` and drop the snapshot it replaced. Box
@@ -1744,7 +1748,7 @@ async function recordBoxRepoTemplate(
   repoId: string,
   name: string,
 ): Promise<void> {
-  const { previous } = writeRemoteRepoTemplate("box", repoId, name);
+  const { previous } = await writeRemoteRepoTemplate("box", repoId, name);
   if (!previous?.artifactId || previous.artifactId === name) return;
   try {
     await deleteNamedSnapshot(cfg, previous.artifactId);
@@ -1866,10 +1870,10 @@ export const boxPrewarmAdapter: PrewarmAdapter = {
 
   async publishTemplate(sandboxId, repo) {
     const cfg = boxClientConfig();
-    const family = boxSnapshotFamilyFor(repo.id);
+    const family = await boxSnapshotFamilyFor(repo.id);
     const driver = boxDriver(cfg, sandboxId);
     await sealRemoteRepoTemplate(driver, "box", repo);
-    const current = readRemoteRepoTemplate("box", repo.id)?.artifactId;
+    const current = (await readRemoteRepoTemplate("box", repo.id))?.artifactId;
     const siblings = boxSnapshotsOfFamily(
       await listNamedSnapshots(cfg),
       family,
