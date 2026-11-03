@@ -6,13 +6,18 @@
  * audit-read-client.ts.
  */
 import { cachedAuditRollup } from "./analytics-rollup";
-import {
-  buildAuditDigestIn,
-  readAuditEventsIn,
-  type AuditEventQuery,
-} from "./audit";
+import type { AuditEventQuery } from "./audit";
 
 declare const self: Worker;
+
+// Bun drops a message posted before the worker installs its handler, and the
+// state-path module below finishes loading asynchronously. Queue the
+// parent's first frames until the real handler is installed, then replay.
+const startupMessages: MessageEvent[] = [];
+self.onmessage = (event: MessageEvent) => {
+  startupMessages.push(event);
+};
+const { buildAuditDigestIn, readAuditEventsIn } = await import("./audit");
 
 export type AuditReadRequest = { id: number } & (
   | { kind: "rollup"; date: string; auditDir: string; cacheDir: string }
@@ -40,3 +45,6 @@ self.onmessage = (event: MessageEvent<AuditReadRequest>) => {
     });
   }
 };
+
+for (const event of startupMessages) self.onmessage!.call(self, event);
+startupMessages.length = 0;

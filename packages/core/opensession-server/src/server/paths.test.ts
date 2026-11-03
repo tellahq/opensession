@@ -37,58 +37,60 @@ describe("resolveLegacySessionsPath", () => {
     rmSync(home, { recursive: true, force: true });
   });
 
-  it("remaps the previous Open Session path onto the active store", () => {
+  it("remaps the previous Open Session path onto the active store", async () => {
     const stored = `${home}/.opensession-sessions/uploads/walkthrough/os-1/after.png`;
-    expect(resolveLegacySessionsPath(stored)).toBe(
+    expect(await resolveLegacySessionsPath(stored)).toBe(
       `${sessions}/uploads/walkthrough/os-1/after.png`,
     );
   });
 
-  it("remaps a path under a former store name onto the active store", () => {
+  it("remaps a path under a former store name onto the active store", async () => {
     const stored = `${home}/.opensession-chats/uploads/walkthrough/os-1/after.png`;
-    expect(resolveLegacySessionsPath(stored)).toBe(
+    expect(await resolveLegacySessionsPath(stored)).toBe(
       `${sessions}/uploads/walkthrough/os-1/after.png`,
     );
   });
 
-  it("remaps the older backstage name too", () => {
+  it("remaps the older backstage name too", async () => {
     const stored = `${home}/.backstage-chats/uploads/walkthrough/os-1/after.png`;
-    expect(resolveLegacySessionsPath(stored)).toBe(
+    expect(await resolveLegacySessionsPath(stored)).toBe(
       `${sessions}/uploads/walkthrough/os-1/after.png`,
     );
   });
 
-  it("leaves a legacy path alone when the file isn't in the active store", () => {
+  it("leaves a legacy path alone when the file isn't in the active store", async () => {
     const stored = `${home}/.opensession-chats/uploads/walkthrough/os-1/gone.png`;
-    expect(resolveLegacySessionsPath(stored)).toBe(stored);
+    expect(await resolveLegacySessionsPath(stored)).toBe(stored);
   });
 
-  it("prefers a legacy dir that still has the file itself", () => {
+  it("prefers a legacy dir that still has the file itself", async () => {
     mkdirSync(`${home}/.opensession-chats/uploads/walkthrough/os-1`, {
       recursive: true,
     });
     const stored = `${home}/.opensession-chats/uploads/walkthrough/os-1/live.png`;
     writeFileSync(stored, "png");
     writeFileSync(`${sessions}/uploads/walkthrough/os-1/live.png`, "other");
-    expect(resolveLegacySessionsPath(stored)).toBe(stored);
+    expect(await resolveLegacySessionsPath(stored)).toBe(stored);
   });
 
-  it("passes through paths that are not under the store", () => {
-    expect(resolveLegacySessionsPath("/tmp/demo.mp4")).toBe("/tmp/demo.mp4");
-    expect(resolveLegacySessionsPath(`${sessions}/uploads/a.png`)).toBe(
+  it("passes through paths that are not under the store", async () => {
+    expect(await resolveLegacySessionsPath("/tmp/demo.mp4")).toBe(
+      "/tmp/demo.mp4",
+    );
+    expect(await resolveLegacySessionsPath(`${sessions}/uploads/a.png`)).toBe(
       `${sessions}/uploads/a.png`,
     );
-    expect(resolveLegacySessionsPath("")).toBe("");
+    expect(await resolveLegacySessionsPath("")).toBe("");
   });
 
-  it("keeps traversal segments in the path for the caller to reject", () => {
+  it("keeps traversal segments in the path for the caller to reject", async () => {
     const stored = `${home}/.opensession-chats/uploads/../../etc/passwd`;
-    expect(resolveLegacySessionsPath(stored)).toContain("..");
+    expect(await resolveLegacySessionsPath(stored)).toContain("..");
   });
 });
 
 describe("isClientSessionId", () => {
-  it("accepts only client-minted os uuidv7 ids", () => {
+  it("accepts only client-minted os uuidv7 ids", async () => {
     expect(isClientSessionId("os-019f0000-0000-7000-8000-000000000001")).toBe(
       true,
     );
@@ -131,9 +133,9 @@ describe("resolveLegacySessionsPath under a repointed state root", () => {
     rmSync(stateRoot, { recursive: true, force: true });
   });
 
-  it("remaps into the isolated store, not the load-time one", () => {
+  it("remaps into the isolated store, not the load-time one", async () => {
     const stored = `${stateRoot}/.opensession-chats/uploads/walkthrough/os-2/after.png`;
-    expect(resolveLegacySessionsPath(stored)).toBe(
+    expect(await resolveLegacySessionsPath(stored)).toBe(
       `${stateRoot}/.opensession-sessions/uploads/walkthrough/os-2/after.png`,
     );
   });

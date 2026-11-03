@@ -33,7 +33,9 @@ import type {
   LinearSessionSource,
   SlackSessionSource,
 } from "./agent-session-catalog";
-import { OPENSESSION_SESSIONS_DIR } from "./paths";
+// paths.ts finishes loading asynchronously, which a require()d module may
+// not import; it registers its store binding in state-root.ts instead.
+import { registeredSessionsDir } from "./state-root";
 import type { SessionMetadataSeedRow } from "./session-kernel";
 import type { SessionSourceDocuments } from "./sessions";
 import type { NativeSessionFile } from "./types";
@@ -95,7 +97,7 @@ export function scanNativeSessionFiles(): NativeSessionFileScan {
     unreadable: [],
     unversioned: 0,
   };
-  const dir = OPENSESSION_SESSIONS_DIR;
+  const dir = registeredSessionsDir();
   if (!existsSync(dir)) return scan;
   for (const file of readdirSync(dir)) {
     if (!file.endsWith(".json") || AGENT_SESSION_STORE_SKIP_FILES.has(file))

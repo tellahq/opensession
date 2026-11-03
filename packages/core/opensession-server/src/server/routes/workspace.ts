@@ -464,12 +464,12 @@ export async function handleWorkspaceRoutes(
       );
     }
     await withConfigMutationLock(async () => {
-      const config = rawConfig();
+      const config = await rawConfig();
       // "" clears the setting rather than storing an empty choice, so the
       // key's absence keeps meaning "fall back" everywhere that reads it.
       if (value) config.newSessionRepo = value;
       else delete config.newSessionRepo;
-      persistRawConfig(config);
+      await persistRawConfig(config);
     });
     return Response.json({ newSessionRepo: newSessionRepoDefault() });
   }

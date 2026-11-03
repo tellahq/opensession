@@ -1,5 +1,5 @@
 /** ChatGPT subscription account selection and Pi credential seeding. */
-import { existsSync, readFileSync } from "fs";
+import { readFile } from "fs/promises";
 import {
   codexAccountPlan,
   getCodexAccountById,
@@ -126,22 +126,21 @@ export interface SeededOpenaiAuth {
  * Remote sandboxes receive a rotation-proof per-account seed directory rather
  * than the host's CODEX_HOME path. The launcher points this process at that
  * directory with OPENSESSION_OPENAI_SEED_DIR. */
-export function buildSeededOpenaiAuth(
+export async function buildSeededOpenaiAuth(
   account: CodexAccount,
   seedRoot = process.env.OPENSESSION_OPENAI_SEED_DIR?.trim(),
-): { seeded: SeededOpenaiAuth } | { error: string } {
+): Promise<{ seeded: SeededOpenaiAuth } | { error: string }> {
   const srcPath = seedRoot
     ? openaiSeedAuthPath(seedRoot, account.id)
     : `${account.value}/auth.json`;
-  if (!existsSync(srcPath)) {
-    return {
-      error: `ChatGPT account "${account.name}" has no auth.json at ${srcPath}`,
-    };
-  }
   let src: any;
   try {
-    src = JSON.parse(readFileSync(srcPath, "utf-8"));
+    src = JSON.parse(await readFile(srcPath, "utf-8"));
   } catch (error: any) {
+    if (error?.code === "ENOENT")
+      return {
+        error: `ChatGPT account "${account.name}" has no auth.json at ${srcPath}`,
+      };
     return { error: `failed to read ${srcPath}: ${error?.message || error}` };
   }
   // Host CODEX_HOME files use tokens.*, while remote sandbox seed files use

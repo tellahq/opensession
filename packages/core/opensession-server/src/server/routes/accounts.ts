@@ -137,7 +137,7 @@ export async function handleAccountsRoutes(
 
   const accountDelMatch = path.match(/^\/api\/claude-accounts\/([^/]+)$/);
   if (accountDelMatch && req.method === "DELETE") {
-    return removeAccount(decodeURIComponent(accountDelMatch[1]))
+    return (await removeAccount(decodeURIComponent(accountDelMatch[1])))
       ? Response.json({ ok: true })
       : Response.json({ error: "Not found" }, { status: 404 });
   }
@@ -146,10 +146,13 @@ export async function handleAccountsRoutes(
     const body = await req.json().catch(() => null);
     if (isRename(body)) {
       return foundOr404(
-        setAccountLabel(decodeURIComponent(accountDelMatch[1]), body.label),
+        await setAccountLabel(
+          decodeURIComponent(accountDelMatch[1]),
+          body.label,
+        ),
       );
     }
-    const updated = setAccountOwner(
+    const updated = await setAccountOwner(
       decodeURIComponent(accountDelMatch[1]),
       typeof body?.owner === "string" ? body.owner : undefined,
       typeof body?.credentialsPath === "string"
@@ -186,7 +189,7 @@ export async function handleAccountsRoutes(
         { status: 400 },
       );
     }
-    const result = addCodexAccount(
+    const result = await addCodexAccount(
       body.name,
       body.kind,
       body.value,
@@ -231,7 +234,7 @@ export async function handleAccountsRoutes(
   // ── Device-code sign-in (browser-free `codex login --device-auth`) ──
   if (path === "/api/codex-accounts/device-login" && req.method === "POST") {
     const body = await req.json().catch(() => null);
-    let result = startDeviceLogin(
+    let result = await startDeviceLogin(
       typeof body?.name === "string" ? body.name : "",
       typeof body?.owner === "string" ? body.owner : undefined,
     );
@@ -264,7 +267,9 @@ export async function handleAccountsRoutes(
 
   const codexAccountDelMatch = path.match(/^\/api\/codex-accounts\/([^/]+)$/);
   if (codexAccountDelMatch && req.method === "DELETE") {
-    return removeCodexAccount(decodeURIComponent(codexAccountDelMatch[1]))
+    return (await removeCodexAccount(
+      decodeURIComponent(codexAccountDelMatch[1]),
+    ))
       ? Response.json({ ok: true })
       : Response.json({ error: "Not found" }, { status: 404 });
   }
@@ -273,13 +278,13 @@ export async function handleAccountsRoutes(
     const body = await req.json().catch(() => null);
     if (isRename(body)) {
       return foundOr404(
-        setCodexAccountLabel(
+        await setCodexAccountLabel(
           decodeURIComponent(codexAccountDelMatch[1]),
           body.label,
         ),
       );
     }
-    const updated = setCodexAccountOwner(
+    const updated = await setCodexAccountOwner(
       decodeURIComponent(codexAccountDelMatch[1]),
       typeof body?.owner === "string" ? body.owner : undefined,
     );
@@ -329,7 +334,7 @@ export async function handleAccountsRoutes(
 
   const xaiAccountMatch = path.match(/^\/api\/xai-accounts\/([^/]+)$/);
   if (xaiAccountMatch && req.method === "DELETE") {
-    return removeXaiAccount(decodeURIComponent(xaiAccountMatch[1]))
+    return (await removeXaiAccount(decodeURIComponent(xaiAccountMatch[1])))
       ? Response.json({ ok: true })
       : Response.json({ error: "Not found" }, { status: 404 });
   }
@@ -338,10 +343,13 @@ export async function handleAccountsRoutes(
     const body = await req.json().catch(() => null);
     if (isRename(body)) {
       return foundOr404(
-        setXaiAccountLabel(decodeURIComponent(xaiAccountMatch[1]), body.label),
+        await setXaiAccountLabel(
+          decodeURIComponent(xaiAccountMatch[1]),
+          body.label,
+        ),
       );
     }
-    const updated = setXaiAccountOwner(
+    const updated = await setXaiAccountOwner(
       decodeURIComponent(xaiAccountMatch[1]),
       typeof body?.owner === "string" ? body.owner : undefined,
     );

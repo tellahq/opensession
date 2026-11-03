@@ -25,14 +25,18 @@
  * the document this instance serves on its public ingress (Oneleet, e.g.,
  * disables dynamic registration).
  */
-import { readFileSync, writeFileSync, existsSync } from "fs";
 import { randomBytes, createHash } from "crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { discoverMcpOauth, OauthDiscoveryError } from "./mcp-oauth-discovery";
 import { configuredIngress, configuredServer, productName } from "./config";
 import { statePath } from "./paths";
 import { resolveTeammate } from "./shared/user-mappings";
-import { readJsonFileCopy } from "./shared/json-file-cache";
+import {
+  cachedJsonFileCopy,
+  loadJsonFileCopy,
+  loadJsonFileShared,
+  publishJsonFile,
+} from "./shared/json-file-cache";
 
 const STORE_PATH = statePath(".opensession-mcp-oauth.json");
 
@@ -105,18 +109,43 @@ function writeGrant(entry: ServerAuth, slot: GrantSlot, grant: Grant): void {
   else entry.users = { ...(entry.users || {}), [slot.teamName]: grant };
 }
 
+/** The loaded grant store, without I/O. Loaded at import and refreshed in
+ * the background (see shared/json-file-cache.ts). */
 function readStore(): Store {
   try {
-    return readJsonFileCopy<Store>(STORE_PATH) ?? {};
+    return cachedJsonFileCopy<Store>(STORE_PATH) ?? {};
   } catch {
     return {};
   }
 }
 
-function writeStore(store: Store): void {
-  writeFileSync(STORE_PATH, JSON.stringify(store, null, 2) + "\n", {
+async function readStoreFresh(): Promise<Store> {
+  try {
+    return (await loadJsonFileCopy<Store>(STORE_PATH)) ?? {};
+  } catch {
+    return {};
+  }
+}
+
+async function writeStore(store: Store): Promise<void> {
+  await writeFile(STORE_PATH, JSON.stringify(store, null, 2) + "\n", {
     mode: 0o600,
   });
+  publishJsonFile(STORE_PATH, store);
+}
+
+// Each change reads the store fresh, applies `fn` and writes it back, one at
+// a time, so two concurrent grant updates cannot drop each other's change.
+let storeUpdate: Promise<unknown> = Promise.resolve();
+function updateStore<T>(fn: (store: Store) => T): Promise<T> {
+  const run = storeUpdate.then(async () => {
+    const store = await readStoreFresh();
+    const result = fn(store);
+    if (result !== (false as T)) await writeStore(store);
+    return result;
+  });
+  storeUpdate = run.catch(() => {});
+  return run;
 }
 
 /**
@@ -284,7 +313,7 @@ async function ensureServerAuth(
   name: string,
   serverUrl: string,
 ): Promise<ServerAuth> {
-  const store = readStore();
+  const store = await readStoreFresh();
   const cur = store[name];
   if (cur?.clientInfo?.clientId && cur.serverUrl === serverUrl) return cur;
   const { resource, scopes, endpoints, clientIdMetadataDocument } =
@@ -317,9 +346,9 @@ async function ensureServerAuth(
     clientInfo: { clientId },
     ...(cur ? { shared: cur.shared, users: cur.users } : {}),
   };
-  const fresh = readStore();
-  fresh[name] = next;
-  writeStore(fresh);
+  await updateStore((fresh) => {
+    fresh[name] = next;
+  });
   return next;
 }
 
@@ -376,13 +405,13 @@ export async function startMcpOauthFlow(
     for (const [k, v] of Object.entries(preset.authorizeParams))
       url.searchParams.set(k, v);
     // Ensure a store entry exists so grants have a home.
-    const store = readStore();
-    store[name] = store[name] || {
-      serverUrl,
-      endpoints: { authorize: preset.authorize, token: preset.token },
-      clientInfo: { clientId: process.env[preset.clientIdEnv]! },
-    };
-    writeStore(store);
+    await updateStore((store) => {
+      store[name] = store[name] || {
+        serverUrl,
+        endpoints: { authorize: preset.authorize, token: preset.token },
+        clientInfo: { clientId: process.env[preset.clientIdEnv]! },
+      };
+    });
     return { url: url.toString() };
   }
   const auth = await ensureServerAuth(name, serverUrl);
@@ -449,14 +478,14 @@ export async function completeMcpOauthFlow(
       updatedAt: new Date().toISOString(),
       ...(completedBy ? { connectedBy: completedBy } : {}),
     };
-    const fresh = readStore();
-    const entry = fresh[flow.name];
-    if (!entry) throw new Error(`Registration for ${flow.name} vanished`);
-    writeGrant(entry, slotFor(flow.teamName), grant);
-    writeStore(fresh);
+    await updateStore((fresh) => {
+      const entry = fresh[flow.name];
+      if (!entry) throw new Error(`Registration for ${flow.name} vanished`);
+      writeGrant(entry, slotFor(flow.teamName), grant);
+    });
     return { name: flow.name, teamName: flow.teamName };
   }
-  const store = readStore();
+  const store = await readStoreFresh();
   const auth = store[flow.name];
   if (!auth) throw new Error(`No pending registration for ${flow.name}`);
   const body = new URLSearchParams({
@@ -496,11 +525,11 @@ export async function completeMcpOauthFlow(
     updatedAt: new Date().toISOString(),
     ...(completedBy ? { connectedBy: completedBy } : {}),
   };
-  const fresh = readStore();
-  const entry = fresh[flow.name];
-  if (!entry) throw new Error(`Registration for ${flow.name} vanished`);
-  writeGrant(entry, slotFor(flow.teamName), grant);
-  writeStore(fresh);
+  await updateStore((fresh) => {
+    const entry = fresh[flow.name];
+    if (!entry) throw new Error(`Registration for ${flow.name} vanished`);
+    writeGrant(entry, slotFor(flow.teamName), grant);
+  });
   return { name: flow.name, teamName: flow.teamName };
 }
 
@@ -544,11 +573,11 @@ async function refreshGrant(
       },
       updatedAt: new Date().toISOString(),
     };
-    const store = readStore();
-    const entry = store[name];
-    if (!entry) return;
-    writeGrant(entry, ref, next);
-    writeStore(store);
+    await updateStore((store) => {
+      const entry = store[name];
+      if (!entry) return false;
+      writeGrant(entry, ref, next);
+    });
   } catch (e) {
     console.error(
       `[mcp-oauth] refresh failed for ${name}/${slotLabel(ref)}:`,
@@ -558,7 +587,7 @@ async function refreshGrant(
 }
 
 async function refreshExpiring(): Promise<void> {
-  const store = readStore();
+  const store = await readStoreFresh();
   for (const [name, auth] of Object.entries(store)) {
     const slots: GrantSlot[] = [
       ...(auth.shared ? [{ kind: "shared" } as const] : []),
@@ -777,20 +806,23 @@ export function hasMcpOauthGrant(name: string, user?: string): boolean {
 }
 
 /** Drop a grant (Disconnect in the UI). */
-export function removeMcpOauthGrant(name: string, forUser?: string): boolean {
-  const store = readStore();
-  const auth = store[name];
-  if (!auth) return false;
-  if (forUser) {
-    const teamName = resolveTeammate(forUser)?.name;
-    if (!teamName || !auth.users?.[teamName]) return false;
-    delete auth.users[teamName];
-  } else {
-    if (!auth.shared) return false;
-    delete auth.shared;
-  }
-  writeStore(store);
-  return true;
+export function removeMcpOauthGrant(
+  name: string,
+  forUser?: string,
+): Promise<boolean> {
+  return updateStore((store) => {
+    const auth = store[name];
+    if (!auth) return false;
+    if (forUser) {
+      const teamName = resolveTeammate(forUser)?.name;
+      if (!teamName || !auth.users?.[teamName]) return false;
+      delete auth.users[teamName];
+    } else {
+      if (!auth.shared) return false;
+      delete auth.shared;
+    }
+    return true;
+  });
 }
 
 // ── Manual token connect ──────────────────────────────────────────────────
@@ -904,18 +936,26 @@ export async function saveManualMcpGrant(
     throw new Error(
       `"${opts.forUser}" doesn't resolve to a configured teammate`,
     );
-  const store = readStore();
-  const entry = store[name] ?? {
-    serverUrl,
-    endpoints: { authorize: "", token: "" },
-    clientInfo: { clientId: "manual-token" },
-  };
-  entry.serverUrl = serverUrl;
-  store[name] = entry;
-  writeGrant(entry, slotFor(teamName), {
-    tokens: { accessToken: token },
-    updatedAt: new Date().toISOString(),
-    ...(opts.connectedBy ? { connectedBy: opts.connectedBy } : {}),
+  await updateStore((store) => {
+    const entry = store[name] ?? {
+      serverUrl,
+      endpoints: { authorize: "", token: "" },
+      clientInfo: { clientId: "manual-token" },
+    };
+    entry.serverUrl = serverUrl;
+    store[name] = entry;
+    writeGrant(entry, slotFor(teamName), {
+      tokens: { accessToken: token },
+      updatedAt: new Date().toISOString(),
+      ...(opts.connectedBy ? { connectedBy: opts.connectedBy } : {}),
+    });
   });
-  writeStore(store);
 }
+
+/** Load the grant store. Runs at import; a caller that wrote the file
+ * outside this module awaits it before reading. */
+export async function loadMcpOauthStore(): Promise<void> {
+  await loadJsonFileShared(STORE_PATH).catch(() => undefined);
+}
+
+await loadMcpOauthStore();

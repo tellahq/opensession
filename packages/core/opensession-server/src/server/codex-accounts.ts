@@ -18,8 +18,16 @@
 
 import { withLabel } from "./provider-account-label";
 import { homeDir } from "./paths";
-import { chmodSync, existsSync, readFileSync, readdirSync } from "fs";
-import { writeFileAtomic } from "./shared/atomic-write";
+import { existsSync, readdirSync } from "fs";
+import { chmod, readdir, stat } from "fs/promises";
+import { writeFileAtomicAsync } from "./shared/atomic-write";
+import {
+  cachedJsonFileCopy,
+  cachedJsonFileShared,
+  loadJsonFileCopy,
+  loadJsonFileShared,
+  publishJsonFile,
+} from "./shared/json-file-cache";
 import { stateDir } from "./paths";
 import { userMatchesAny } from "./shared/user-mappings";
 import { chatgptPlanFromJwt } from "./openai-service-tier";
@@ -97,37 +105,79 @@ const lastPickedAt = new Map<string, number>();
 let STATE_PATH = STORE_PATH.replace(/\.json$/, "-state.json");
 
 /** Test seam: isolate the account and sideline stores from the live pool. */
-export function __setCodexAccountsPathForTest(path: string): string {
+export async function __setCodexAccountsPathForTest(
+  path: string,
+): Promise<string> {
+  await exhaustedWrite;
   const previous = STORE_PATH;
   STORE_PATH = path;
   STATE_PATH = path.replace(/\.json$/, "-state.json");
   exhaustedUntil.clear();
   lastPickedAt.clear();
+  await loadCodexAccounts();
   return previous;
 }
 
+// The in-memory map is authoritative; the file follows it. Writes run one at
+// a time, and a change made while one is in flight is written right after it.
+let exhaustedWrite: Promise<void> | null = null;
+let exhaustedDirty = false;
+
 function persistExhausted(): void {
-  try {
-    const out: Record<string, number> = {};
-    const now = Date.now();
-    for (const [k, until] of exhaustedUntil) if (until > now) out[k] = until;
-    writeFileAtomic(STATE_PATH, JSON.stringify({ exhaustedUntil: out }) + "\n");
-    chmodSync(STATE_PATH, 0o600);
-  } catch (e) {
-    console.warn("[codex-accounts] sideline persist failed:", e);
-  }
+  exhaustedDirty = true;
+  if (exhaustedWrite) return;
+  exhaustedWrite = (async () => {
+    while (exhaustedDirty) {
+      exhaustedDirty = false;
+      try {
+        const out: Record<string, number> = {};
+        const now = Date.now();
+        for (const [k, until] of exhaustedUntil)
+          if (until > now) out[k] = until;
+        const path = STATE_PATH;
+        const value = { exhaustedUntil: out };
+        await writeFileAtomicAsync(path, JSON.stringify(value) + "\n", 0o600);
+        await chmod(path, 0o600);
+        publishJsonFile(path, value);
+      } catch (e) {
+        console.warn("[codex-accounts] sideline persist failed:", e);
+      }
+    }
+  })().finally(() => {
+    exhaustedWrite = null;
+  });
 }
 
-try {
-  if (existsSync(STATE_PATH)) {
-    const parsed = JSON.parse(readFileSync(STATE_PATH, "utf-8"));
-    const now = Date.now();
-    for (const [k, until] of Object.entries(parsed?.exhaustedUntil || {})) {
-      if (typeof until === "number" && until > now)
-        exhaustedUntil.set(k, until);
-    }
+/** Test seam: wait for queued sideline writes to land on disk. */
+export async function __flushCodexSidelinesForTest(): Promise<void> {
+  await exhaustedWrite;
+}
+
+/**
+ * Load the account store, the persisted sidelines and every ChatGPT login's
+ * auth.json. Runs at import; a test that writes the store file itself awaits
+ * it again before reading.
+ */
+export async function loadCodexAccounts(): Promise<void> {
+  const [, parsed] = await Promise.all([
+    loadJsonFileShared(STORE_PATH).catch(() => undefined),
+    loadJsonFileShared<{ exhaustedUntil?: Record<string, unknown> }>(
+      STATE_PATH,
+    ).catch(() => undefined),
+  ]);
+  const now = Date.now();
+  for (const [k, until] of Object.entries(parsed?.exhaustedUntil || {})) {
+    if (typeof until === "number" && until > now && !exhaustedUntil.has(k))
+      exhaustedUntil.set(k, until);
   }
-} catch {}
+  await Promise.all(
+    readStore()
+      .filter((a) => a.kind === "home")
+      .map((a) =>
+        loadJsonFileShared(`${a.value}/auth.json`).catch(() => undefined),
+      ),
+  );
+}
 
 /** Rendezvous (HRW) score — FNV-1a 32-bit over sessionKey + accountId.
  *  Deterministic and dependency-free, so session→account affinity survives
@@ -146,20 +196,47 @@ export function hrwScore(sessionKey: string, accountId: string): number {
   return h >>> 0;
 }
 
+/** The loaded account store, without I/O (see loadCodexAccounts). */
 function readStore(): CodexAccount[] {
-  if (!existsSync(STORE_PATH)) return [];
   try {
-    const parsed = JSON.parse(readFileSync(STORE_PATH, "utf-8"));
-    return Array.isArray(parsed.accounts) ? parsed.accounts : [];
+    const parsed = cachedJsonFileCopy<{ accounts?: unknown }>(STORE_PATH);
+    return Array.isArray(parsed?.accounts) ? parsed.accounts : [];
   } catch (e) {
     console.error("[codex-accounts] Failed to read store:", e);
     return [];
   }
 }
 
-function writeStore(accounts: CodexAccount[]): void {
-  writeFileAtomic(STORE_PATH, JSON.stringify({ accounts }, null, 2) + "\n");
-  chmodSync(STORE_PATH, 0o600);
+/** The account store fresh from disk, for read-modify-write. */
+async function readStoreFresh(): Promise<CodexAccount[]> {
+  try {
+    const parsed = await loadJsonFileCopy<{ accounts?: unknown }>(STORE_PATH);
+    return Array.isArray(parsed?.accounts) ? parsed.accounts : [];
+  } catch (e) {
+    console.error("[codex-accounts] Failed to read store:", e);
+    return [];
+  }
+}
+
+async function writeStore(accounts: CodexAccount[]): Promise<void> {
+  const path = STORE_PATH;
+  const value = { accounts };
+  await writeFileAtomicAsync(
+    path,
+    JSON.stringify(value, null, 2) + "\n",
+    0o600,
+  );
+  await chmod(path, 0o600);
+  publishJsonFile(path, value);
+}
+
+// Store mutations read, patch and write the file across awaits; one at a time
+// so two concurrent edits cannot drop each other's change.
+let storeMutation: Promise<unknown> = Promise.resolve();
+function mutateStore<T>(fn: () => Promise<T>): Promise<T> {
+  const run = storeMutation.then(fn, fn);
+  storeMutation = run.catch(() => {});
+  return run;
 }
 
 function maskValue(account: CodexAccount): string {
@@ -179,7 +256,31 @@ function identityFromAuthPath(path: string): {
   plan?: string;
 } {
   try {
-    const tokens = JSON.parse(readFileSync(path, "utf-8"))?.tokens;
+    // Loaded with the store (loadCodexAccounts) and refreshed in the
+    // background, so a token refresh by the Codex CLI is picked up.
+    return identityFromAuth(cachedJsonFileShared(path));
+  } catch {
+    return {};
+  }
+}
+
+async function identityFromAuthPathAsync(path: string): Promise<{
+  email?: string;
+  plan?: string;
+}> {
+  try {
+    return identityFromAuth(await loadJsonFileShared(path));
+  } catch {
+    return {};
+  }
+}
+
+function identityFromAuth(auth: unknown): {
+  email?: string;
+  plan?: string;
+} {
+  try {
+    const tokens = (auth as { tokens?: any } | undefined)?.tokens;
     const payload =
       typeof tokens?.id_token === "string"
         ? tokens.id_token.split(".")[1]
@@ -199,10 +300,6 @@ function identityFromAuthPath(path: string): {
   } catch {
     return {};
   }
-}
-
-function emailFromAuthPath(path: string): string | undefined {
-  return identityFromAuthPath(path).email;
 }
 
 /** ChatGPT plan of a subscription account ("promax" is Pro $500). */
@@ -283,12 +380,12 @@ export function hasCodexAccounts(): boolean {
   return readStore().length > 0;
 }
 
-export function addCodexAccount(
+export async function addCodexAccount(
   name = "",
   kind: "api_key" | "home",
   value: string,
   owner?: string,
-): CodexAccountPublic | { error: string } {
+): Promise<CodexAccountPublic | { error: string }> {
   const trimmedValue = value.trim();
   if (!trimmedValue) return { error: "Value is required" };
 
@@ -298,7 +395,7 @@ export function addCodexAccount(
     };
   }
   if (kind === "home") {
-    if (!existsSync(`${trimmedValue}/auth.json`)) {
+    if (!(await stat(`${trimmedValue}/auth.json`).catch(() => null))) {
       return {
         error:
           `No auth.json found in "${trimmedValue}". Run \`CODEX_HOME=${trimmedValue} codex login\` ` +
@@ -309,7 +406,7 @@ export function addCodexAccount(
 
   const trimmedName =
     (kind === "home"
-      ? emailFromAuthPath(`${trimmedValue}/auth.json`)
+      ? (await identityFromAuthPathAsync(`${trimmedValue}/auth.json`)).email
       : undefined) || name.trim();
   if (!trimmedName) {
     return {
@@ -320,32 +417,40 @@ export function addCodexAccount(
     };
   }
 
-  const accounts = readStore();
-  if (accounts.some((a) => a.name === trimmedName)) {
-    return { error: `An account named "${trimmedName}" already exists` };
-  }
-  if (accounts.some((a) => a.value === trimmedValue)) {
-    return { error: "This credential is already registered" };
-  }
+  const added = await mutateStore(async () => {
+    const accounts = await readStoreFresh();
+    if (accounts.some((a) => a.name === trimmedName)) {
+      return { error: `An account named "${trimmedName}" already exists` };
+    }
+    if (accounts.some((a) => a.value === trimmedValue)) {
+      return { error: "This credential is already registered" };
+    }
 
-  const account: CodexAccount = {
-    id: crypto.randomUUID(),
-    name: trimmedName,
-    kind,
-    value: trimmedValue,
-    ...(owner?.trim() ? { owner: owner.trim() } : {}),
-    createdAt: new Date().toISOString(),
-  };
-  writeStore([...accounts, account]);
+    const account: CodexAccount = {
+      id: crypto.randomUUID(),
+      name: trimmedName,
+      kind,
+      value: trimmedValue,
+      ...(owner?.trim() ? { owner: owner.trim() } : {}),
+      createdAt: new Date().toISOString(),
+    };
+    await writeStore([...accounts, account]);
+    return account;
+  });
+  if ("error" in added) return added;
   console.log(`[codex-accounts] Added ${kind} account ${trimmedName}`);
-  return toPublic(account);
+  return toPublic(added);
 }
 
-export function removeCodexAccount(id: string): boolean {
-  const accounts = readStore();
-  const next = accounts.filter((a) => a.id !== id);
-  if (next.length === accounts.length) return false;
-  writeStore(next);
+export async function removeCodexAccount(id: string): Promise<boolean> {
+  const removed = await mutateStore(async () => {
+    const accounts = await readStoreFresh();
+    const next = accounts.filter((a) => a.id !== id);
+    if (next.length === accounts.length) return false;
+    await writeStore(next);
+    return true;
+  });
+  if (!removed) return false;
   exhaustedUntil.delete(id);
   lastPickedAt.delete(id);
   clearCodexUsage(id);
@@ -356,31 +461,35 @@ export function removeCodexAccount(id: string): boolean {
 export function setCodexAccountOwner(
   id: string,
   owner: string | undefined,
-): CodexAccountPublic | null {
-  const accounts = readStore();
-  const idx = accounts.findIndex((a) => a.id === id);
-  if (idx === -1) return null;
-  const next = { ...accounts[idx] };
-  const trimmed = owner?.trim() || undefined;
-  if (trimmed) next.owner = trimmed;
-  else delete next.owner;
-  accounts[idx] = next;
-  writeStore(accounts);
-  return toPublic(next);
+): Promise<CodexAccountPublic | null> {
+  return mutateStore(async () => {
+    const accounts = await readStoreFresh();
+    const idx = accounts.findIndex((a) => a.id === id);
+    if (idx === -1) return null;
+    const next = { ...accounts[idx] };
+    const trimmed = owner?.trim() || undefined;
+    if (trimmed) next.owner = trimmed;
+    else delete next.owner;
+    accounts[idx] = next;
+    await writeStore(accounts);
+    return toPublic(next);
+  });
 }
 
 /** Set or clear (empty) the display name shown instead of the email. */
 export function setCodexAccountLabel(
   id: string,
   label: string,
-): CodexAccountPublic | null {
-  const accounts = readStore();
-  const idx = accounts.findIndex((a) => a.id === id);
-  if (idx === -1) return null;
-  const next = withLabel(accounts[idx], label);
-  accounts[idx] = next;
-  writeStore(accounts);
-  return toPublic(next);
+): Promise<CodexAccountPublic | null> {
+  return mutateStore(async () => {
+    const accounts = await readStoreFresh();
+    const idx = accounts.findIndex((a) => a.id === id);
+    if (idx === -1) return null;
+    const next = withLabel(accounts[idx], label);
+    accounts[idx] = next;
+    await writeStore(accounts);
+    return toPublic(next);
+  });
 }
 
 /**
@@ -496,6 +605,37 @@ export function findCodexRollout(
   return null;
 }
 
+/** findCodexRollout without blocking the thread on directory reads. */
+export async function findCodexRolloutAsync(
+  threadId: string,
+): Promise<{ path: string; account?: CodexAccount } | null> {
+  const ms = uuidv7Ms(threadId);
+  if (!ms) return null;
+  const days: string[] = [];
+  for (const delta of [0, -1, 1]) {
+    const d = new Date(ms + delta * 86_400_000);
+    days.push(
+      `${d.getUTCFullYear()}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${String(d.getUTCDate()).padStart(2, "0")}`,
+    );
+  }
+  for (const { home, account } of codexHomes()) {
+    for (const day of days) {
+      const dir = `${home}/sessions/${day}`;
+      let files: string[];
+      try {
+        files = await readdir(dir);
+      } catch {
+        continue;
+      }
+      for (const f of files) {
+        if (f.endsWith(`-${threadId}.jsonl`))
+          return { path: `${dir}/${f}`, account };
+      }
+    }
+  }
+  return null;
+}
+
 /** Sideline an account after a run hit a rate/usage limit. */
 export function markCodexExhausted(id: string, model?: string): void {
   const account = readStore().find((a) => a.id === id);
@@ -535,3 +675,5 @@ export function clearCodexWedge(id: string): void {
   exhaustedUntil.delete(exhaustionKey(id));
   persistExhausted();
 }
+
+await loadCodexAccounts();

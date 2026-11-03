@@ -65,14 +65,14 @@ beforeEach(async () => {
   process.env.OPENSESSION_ENV_FILE = envPath;
   delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
   delete process.env.OPENSESSION_GITHUB_APP_KEY;
-  __setGithubAppKeyPathForTest(keyPath);
+  await __setGithubAppKeyPathForTest(keyPath);
   __resetGithubManifestStatesForTest();
   globalThis.fetch = originalFetch;
 });
 
 afterEach(async () => {
   globalThis.fetch = originalFetch;
-  __setGithubAppKeyPathForTest(undefined);
+  await __setGithubAppKeyPathForTest(undefined);
   __resetGithubManifestStatesForTest();
   if (saved.config === undefined) delete process.env.OPENSESSION_CONFIG;
   else {

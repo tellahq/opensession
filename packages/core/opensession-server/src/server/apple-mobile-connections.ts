@@ -180,16 +180,16 @@ export function buildAppleMobileUpdates(
   };
 }
 
-export function configureAppleMobileConnections(
+export async function configureAppleMobileConnections(
   input: AppleMobileSetupInput,
-): AppleMobileSetupStatus {
+): Promise<AppleMobileSetupStatus> {
   const releaseCapable =
     process.platform === "darwin" && Boolean(findExecutable("xcodebuild"));
   const updates = buildAppleMobileUpdates(input, existingEnv(RELEASE_SERVER), {
     releaseCapable,
     stateDir: stateDir("apple-mobile"),
   });
-  const result = replaceMcpServerEntries(updates);
+  const result = await replaceMcpServerEntries(updates);
   if ("error" in result) throw new Error(result.error);
   return appleMobileSetupStatus();
 }

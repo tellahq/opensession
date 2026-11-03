@@ -154,7 +154,7 @@ test("a successful settings write publishes immediately and fences an older in-f
   const pending = getConfigAsync();
   try {
     await captured.promise;
-    persistRawConfig({ persona: { name: "committed settings" } });
+    await persistRawConfig({ persona: { name: "committed settings" } });
     expect(personaName()).toBe("committed settings");
     gate.resolve();
     expect((await pending).persona?.name).toBe("committed settings");

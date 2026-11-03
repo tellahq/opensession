@@ -73,3 +73,5 @@ export function isUnread(
   if (Number.isNaN(a) || Number.isNaN(m)) return false;
   return a > m;
 }
+
+await store.load();

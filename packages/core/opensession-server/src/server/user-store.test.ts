@@ -9,7 +9,12 @@ import {
 import { mkdirSync, mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { writeJsonAtomic } from "./shared/atomic-write";
-import { NAME_KEYED_STORES, renameUserState } from "./shared/user-store";
+import {
+  __resetUserStoresForTest,
+  loadUserStoreDir,
+  NAME_KEYED_STORES,
+  renameUserState,
+} from "./shared/user-store";
 import { canonicalName } from "./shared/user-store-key";
 import { mergeMapDelta } from "./shared/map-delta";
 import {
@@ -59,6 +64,7 @@ beforeEach(() => {
   ]) {
     rmSync(`${root}/.opensession-${name}`, { recursive: true, force: true });
   }
+  __resetUserStoresForTest();
   store = new SessionKernelStore(":memory:");
   previousStore = __setSessionKernelStoreForTest(store);
 });
@@ -149,6 +155,7 @@ describe("per-user catalog stores", () => {
 
   test("personal prompts still read their identity-keyed legacy file", async () => {
     seedLegacy("personal-prompts", "user-kentaro", { prompt: "be terse" });
+    await loadUserStoreDir(`${root}/.opensession-personal-prompts`);
     await importApplicationCatalog();
     expect(await getPersonalPrompt("Kentaro")).toBe("be terse");
     await setPersonalPrompt("Kentaro", "be terser");

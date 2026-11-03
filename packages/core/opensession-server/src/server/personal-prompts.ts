@@ -79,3 +79,5 @@ export function personalPromptNoteFor(user: string | undefined | null): string {
     return "";
   }
 }
+
+await store.load();

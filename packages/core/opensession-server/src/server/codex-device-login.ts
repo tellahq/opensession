@@ -16,7 +16,8 @@
 
 import { homeDir } from "./paths";
 import { spawn, type ChildProcess } from "child_process";
-import { existsSync, mkdirSync } from "fs";
+import { mkdir, stat } from "fs/promises";
+import { whichAsync } from "./shared/which";
 import {
   addCodexAccount,
   listCodexAccounts,
@@ -116,10 +117,10 @@ function prune(): void {
  * the caller polls getDeviceLogin until the URL + code appear, then until the
  * flow completes. One in-flight attempt per account name.
  */
-export function startDeviceLogin(
+export async function startDeviceLogin(
   name = "",
   owner?: string,
-): DeviceLoginPublic | { error: string } {
+): Promise<DeviceLoginPublic | { error: string }> {
   prune();
   const loginId = crypto.randomUUID();
   // A subscription needs no user-authored label. The temporary value only
@@ -134,25 +135,34 @@ export function startDeviceLogin(
   if (listCodexAccounts().some((a) => a.name === trimmed)) {
     return { error: `An account named "${trimmed}" already exists` };
   }
-  for (const l of logins.values()) {
-    if (
-      l.name === trimmed &&
-      (l.state === "starting" || l.state === "awaiting_code")
-    ) {
-      return toPublic(l); // already in flight — hand back the same attempt
+  const inFlight = () => {
+    for (const l of logins.values()) {
+      if (
+        l.name === trimmed &&
+        (l.state === "starting" || l.state === "awaiting_code")
+      ) {
+        return l;
+      }
     }
-  }
+    return undefined;
+  };
+  // Already in flight: hand back the same attempt.
+  const running = inFlight();
+  if (running) return toPublic(running);
   const dir = `${ACCOUNTS_DIR}/${slug}`;
-  if (existsSync(`${dir}/auth.json`)) {
+  if (await stat(`${dir}/auth.json`).catch(() => null)) {
     return {
       error: `${dir} already holds a login — register it directly as a CODEX_HOME account instead.`,
     };
   }
   try {
-    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    await mkdir(dir, { recursive: true, mode: 0o700 });
   } catch (e: any) {
     return { error: `Could not create ${dir}: ${e?.message || e}` };
   }
+  // A concurrent start for the same name may have registered meanwhile.
+  const raced = inFlight();
+  if (raced) return toPublic(raced);
 
   const l: DeviceLogin = {
     id: loginId,
@@ -170,7 +180,7 @@ export function startDeviceLogin(
   // The installer adds Codex by default, but CLI installs are best-effort and
   // can be opted out of. Keep a missing binary actionable rather than surfacing
   // ENOENT from spawn.
-  if (!Bun.which("codex")) {
+  if (!(await whichAsync("codex"))) {
     finish(
       l,
       "error",
@@ -217,10 +227,10 @@ export function startDeviceLogin(
   proc.on("error", (e) =>
     finish(l, "error", `codex login failed to run: ${e.message}`),
   );
-  proc.on("exit", (exitCode) => {
+  proc.on("exit", async (exitCode) => {
     if (l.state === "cancelled") return;
-    if (existsSync(`${dir}/auth.json`)) {
-      const result = addCodexAccount(l.name, "home", dir, l.owner);
+    if (await stat(`${dir}/auth.json`).catch(() => null)) {
+      const result = await addCodexAccount(l.name, "home", dir, l.owner);
       if ("error" in result) {
         finish(
           l,

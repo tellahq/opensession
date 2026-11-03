@@ -9,7 +9,7 @@
  * thread's own environment, so a repointed OPENSESSION_STATE_DIR on the
  * gateway always names the store it expects.
  */
-import { statePathIn, type StateContext } from "./paths";
+import type { StateContext } from "./paths";
 import {
   SESSION_LIST_DB_FILE,
   isSessionListStoreMethod,
@@ -19,6 +19,15 @@ import {
 import { SessionListStore } from "./session-list-sqlite";
 
 declare const self: Worker;
+
+// Bun drops a message posted before the worker installs its handler, and the
+// state-path module below finishes loading asynchronously. Queue the
+// parent's first frames until the real handler is installed, then replay.
+const startupMessages: MessageEvent[] = [];
+self.onmessage = (event: MessageEvent) => {
+  startupMessages.push(event);
+};
+const { statePathIn } = await import("./paths");
 
 let context: StateContext | undefined;
 let store: SessionListStore | undefined;
@@ -86,3 +95,6 @@ self.onmessage = (event: MessageEvent<SessionListWorkerRequest>) => {
     });
   }
 };
+
+for (const event of startupMessages) self.onmessage!.call(self, event);
+startupMessages.length = 0;

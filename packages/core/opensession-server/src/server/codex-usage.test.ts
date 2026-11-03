@@ -187,23 +187,25 @@ describe("codexAccessTokenNeedsRefresh", () => {
   const now = Date.parse("2026-08-11T12:00:00.000Z");
   const hour = 3600;
 
-  test("true when the access token is expired or within a day of it", () => {
+  test("true when the access token is expired or within a day of it", async () => {
     const expired = join(dir, "expired");
     writeAuth(expired, jwtExpiringAt(now / 1000 - hour));
-    expect(codexAccessTokenNeedsRefresh(expired, now)).toBe(true);
+    expect(await codexAccessTokenNeedsRefresh(expired, now)).toBe(true);
     const soon = join(dir, "soon");
     writeAuth(soon, jwtExpiringAt(now / 1000 + 6 * hour));
-    expect(codexAccessTokenNeedsRefresh(soon, now)).toBe(true);
+    expect(await codexAccessTokenNeedsRefresh(soon, now)).toBe(true);
   });
 
-  test("false for a fresh token, an API-key login, or no auth.json", () => {
+  test("false for a fresh token, an API-key login, or no auth.json", async () => {
     const fresh = join(dir, "fresh");
     writeAuth(fresh, jwtExpiringAt(now / 1000 + 9 * 24 * hour));
-    expect(codexAccessTokenNeedsRefresh(fresh, now)).toBe(false);
+    expect(await codexAccessTokenNeedsRefresh(fresh, now)).toBe(false);
     const apiKey = join(dir, "api-key");
     writeAuth(apiKey, undefined);
-    expect(codexAccessTokenNeedsRefresh(apiKey, now)).toBe(false);
-    expect(codexAccessTokenNeedsRefresh(join(dir, "missing"), now)).toBe(false);
+    expect(await codexAccessTokenNeedsRefresh(apiKey, now)).toBe(false);
+    expect(await codexAccessTokenNeedsRefresh(join(dir, "missing"), now)).toBe(
+      false,
+    );
   });
 });
 

@@ -61,9 +61,8 @@
  */
 
 import { stateDir } from "./paths";
-import { existsSync, readFileSync, chmodSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { writeJsonAtomic, writeJsonAtomicAsync } from "./shared/atomic-write";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import { audit, auditAsync } from "./audit";
 import { resolveTeammate } from "./shared/user-mappings";
 import { broadcastToSession } from "./ws-hub";
@@ -261,21 +260,22 @@ function snapshot(): Stored {
   };
 }
 
+/** Persist from a synchronous caller. The in-memory store is authoritative;
+ * the write is queued behind persistAsync's and never blocks the thread. */
 function persist(): void {
-  revision++;
-  const path = storePath();
-  writeJsonAtomic(path, snapshot());
-  try {
-    chmodSync(path, 0o600);
-  } catch {
-    // best-effort — the file holds secrets, but a chmod failure must not
-    // lose the write (the box is single-tenant either way)
-  }
+  void persistAsync().catch((e) =>
+    console.error("[keychain] failed to persist store:", e),
+  );
 }
 
 let asyncWrites: Promise<void> = Promise.resolve();
 
 let credentialMutations: Promise<unknown> = Promise.resolve();
+
+/** Test seam: wait for queued store writes to land on disk. */
+export function __flushKeychainForTest(): Promise<void> {
+  return asyncWrites;
+}
 
 /**
  * Run an async credential change (add, update, delete) as one transaction:
@@ -328,21 +328,16 @@ function ingest(data: Stored): void {
   }
 }
 
+/** The store is loaded at import (ensureKeychainLoaded below). A store path
+ * repointed afterwards is loaded in the background; synchronous readers see
+ * the in-memory store meanwhile. */
 function load(): void {
-  const path = storePath();
-  if (loadedFrom === path) return;
-  loadedFrom = path;
-  if (!existsSync(path)) return;
-  try {
-    ingest(JSON.parse(readFileSync(path, "utf-8")));
-  } catch (e) {
-    console.error("[keychain] failed to load store:", e);
-  }
+  if (loadedFrom === storePath()) return;
+  void ensureKeychainLoaded();
 }
 
-/** Async counterpart of load(), for request handlers on the gateway. After
- *  it resolves, the synchronous load() inside the store's functions is a
- *  no-op. */
+/** Load the store for the current path. Runs at import; awaiting it again
+ *  after the path changed makes the synchronous readers current. */
 export async function ensureKeychainLoaded(): Promise<void> {
   const path = storePath();
   if (loadedFrom === path) return;
@@ -2889,3 +2884,5 @@ function startWindowOnceComplete(
  *  that's the point: the newest code answers). Registered here, next to the
  *  handler, so importing the keychain anywhere wires the resolution path. */
 registerAskDomainHandler(KEYCHAIN_ASK_DOMAIN, resolveKeychainAsk);
+
+await ensureKeychainLoaded();

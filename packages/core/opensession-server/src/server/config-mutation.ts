@@ -12,11 +12,10 @@
  * config.ts — so a targeted mutation preserves unknown keys verbatim.
  */
 
-import { chmodSync, copyFileSync, existsSync, readFileSync } from "fs";
 import { configPath, configuredRepos, publishConfigSnapshot } from "./config";
-import { readFile, copyFile } from "node:fs/promises";
+import { chmod, copyFile, readFile } from "node:fs/promises";
 import { constants } from "node:fs";
-import { writeJsonAtomic, writeFileAtomicAsync } from "./shared/atomic-write";
+import { writeFileAtomicAsync } from "./shared/atomic-write";
 
 const mutationState: { chain: Promise<unknown> } = ((
   globalThis as any
@@ -32,15 +31,10 @@ export function withConfigMutationLock<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
-/** The raw config.json object, unknown keys preserved. Missing file = {}. */
-export function rawConfig(): Record<string, unknown> {
-  const path = configPath();
-  if (!existsSync(path)) return {};
-  const parsed = JSON.parse(readFileSync(path, "utf-8"));
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("Local config must contain a JSON object");
-  }
-  return parsed as Record<string, unknown>;
+/** The raw config.json object, unknown keys preserved. Missing file = {}.
+ * Fails closed on unreadable or malformed configuration. */
+export function rawConfig(): Promise<Record<string, unknown>> {
+  return rawConfigAsync();
 }
 
 /** Request-path reader: fail closed on unreadable or malformed configuration. */
@@ -65,17 +59,7 @@ export async function persistRawConfigAsync(
   config: Record<string, unknown>,
 ): Promise<void> {
   const path = configPath();
-  for (let n = 1; ; n++) {
-    try {
-      await copyFile(path, `${path}.bak-${n}`, constants.COPYFILE_EXCL);
-      break;
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code === "EEXIST") continue;
-      if (code === "ENOENT") break;
-      throw error;
-    }
-  }
+  await backupFile(path);
   const contents = JSON.stringify(config, null, 2) + "\n";
   await writeFileAtomicAsync(path, contents, 0o600);
   publishConfigSnapshot(path, contents);
@@ -83,13 +67,19 @@ export async function persistRawConfigAsync(
 
 /** Back up rather than clobber (same `.bak-<n>` scheme as scripts/lib/
  *  config-edit.ts), so a bad write can never lose a working config. */
-export function backupFile(path: string): string | undefined {
-  if (!existsSync(path)) return undefined;
-  let n = 1;
-  while (existsSync(`${path}.bak-${n}`)) n++;
-  const dest = `${path}.bak-${n}`;
-  copyFileSync(path, dest);
-  return dest;
+export async function backupFile(path: string): Promise<string | undefined> {
+  for (let n = 1; ; n++) {
+    const dest = `${path}.bak-${n}`;
+    try {
+      await copyFile(path, dest, constants.COPYFILE_EXCL);
+      return dest;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "EEXIST") continue;
+      if (code === "ENOENT") return undefined;
+      throw error;
+    }
+  }
 }
 
 /**
@@ -97,13 +87,16 @@ export function backupFile(path: string): string | undefined {
  * the config carries the team identity table and OAuth client settings, not
  * just ports. Call only from inside withConfigMutationLock.
  */
-export function persistRawConfig(config: Record<string, unknown>): void {
+export async function persistRawConfig(
+  config: Record<string, unknown>,
+): Promise<void> {
   const path = configPath();
-  backupFile(path);
-  writeJsonAtomic(path, config);
-  publishConfigSnapshot(path, JSON.stringify(config));
+  await backupFile(path);
+  const contents = JSON.stringify(config, null, 2);
+  await writeFileAtomicAsync(path, contents);
+  publishConfigSnapshot(path, contents);
   try {
-    chmodSync(path, 0o600);
+    await chmod(path, 0o600);
   } catch {}
 }
 

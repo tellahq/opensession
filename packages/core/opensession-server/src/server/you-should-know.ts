@@ -395,3 +395,5 @@ async function checkOnce(
 export function __resetYouShouldKnowForTest(): void {
   states.clear();
 }
+
+await Promise.all([preferenceStore.load(), knownStore.load()]);

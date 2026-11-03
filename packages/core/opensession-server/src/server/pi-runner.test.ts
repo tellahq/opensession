@@ -51,7 +51,11 @@ import {
   steerPiRun,
 } from "./pi-runner";
 import type { PiBashAuditEvent } from "./pi-runner";
-import { __setCodexAccountsPathForTest } from "./codex-accounts";
+import {
+  __setCodexAccountsPathForTest,
+  loadCodexAccounts,
+} from "./codex-accounts";
+import { loadPiConfig } from "./pi-config";
 
 describe("acceptSteerOnce", () => {
   test("records only successful acceptance and deduplicates retries", () => {
@@ -716,16 +720,17 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
   const storePath = join(dir, "codex-accounts.json");
   let prevCfg: string | undefined;
   let prevStore = "";
-  beforeAll(() => {
+  beforeAll(async () => {
     writeFileSync(cfgPath, JSON.stringify({ enabled: true, pickerModels: [] }));
     prevCfg = process.env.OPENSESSION_PI_CONFIG;
     process.env.OPENSESSION_PI_CONFIG = cfgPath;
-    prevStore = __setCodexAccountsPathForTest(storePath);
+    await loadPiConfig();
+    prevStore = await __setCodexAccountsPathForTest(storePath);
   });
-  afterAll(() => {
+  afterAll(async () => {
     if (prevCfg === undefined) delete process.env.OPENSESSION_PI_CONFIG;
     else process.env.OPENSESSION_PI_CONFIG = prevCfg;
-    __setCodexAccountsPathForTest(prevStore);
+    await __setCodexAccountsPathForTest(prevStore);
     rmSync(dir, { recursive: true, force: true });
   });
 
@@ -790,6 +795,7 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
         ],
       }),
     );
+    await loadCodexAccounts();
 
     const runtimeKeys: Array<[string, string]> = [];
     const fakeSdk = {
@@ -891,6 +897,7 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
         ],
       }),
     );
+    await loadCodexAccounts();
     const sessionKey = `pi-late-steer-${crypto.randomUUID()}`;
     const scratchDir = join(dir, `scratch-${sessionKey}`);
     mkdirSync(scratchDir, { recursive: true });
@@ -1036,6 +1043,7 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
         ],
       }),
     );
+    await loadCodexAccounts();
     const sdk = await import("@earendil-works/pi-coding-agent");
     const transcriptSessionId = `pi-resume-${crypto.randomUUID()}`;
     const sessionDir = join(PI_STATE_DIR, "sessions", transcriptSessionId);
@@ -1183,6 +1191,7 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
       join(codexHome, "auth.json"),
       JSON.stringify({ tokens: { access_token: `h.${payload}.s` } }),
     );
+    await loadCodexAccounts();
     writeFileSync(
       storePath,
       JSON.stringify({
@@ -1197,6 +1206,7 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
         ],
       }),
     );
+    await loadCodexAccounts();
     const events = await collect("pi/openai/gpt-6.1-sol");
     const err = events.find((e) => e.type === "error")!;
     expect(err).toBeDefined();
@@ -1236,6 +1246,7 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
         accounts: ids.map(expiringHomeAccount),
       }),
     );
+    await loadCodexAccounts();
     // Non-strict pin: attempt 1 is deterministically rot-a. Burning it adds
     // it to the walk's exclusion, which makes the picker skip its pin branch,
     // so attempt 2 falls to the pool and lands on rot-b.
@@ -1313,6 +1324,7 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
           ],
         }),
       );
+      await loadCodexAccounts();
 
       const prompts: string[] = [];
       const managers: Array<{ completedActions: number }> = [];
@@ -1532,6 +1544,7 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
         accounts: [expiringHomeAccount("pin-a"), expiringHomeAccount("pin-b")],
       }),
     );
+    await loadCodexAccounts();
     const events = await collect("pi/openai/gpt-6.1-sol", {
       accountId: "pin-a",
       accountStrict: true,
@@ -1546,6 +1559,7 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
 
   test("a transcript alias admits only one run and is cleaned up", async () => {
     writeFileSync(storePath, JSON.stringify({ accounts: [] }));
+    await loadCodexAccounts();
     const transcriptSessionId = `pi-shared-transcript-${crypto.randomUUID()}`;
     const firstRunKey = `pi-first-${crypto.randomUUID()}`;
     const secondRunKey = `pi-second-${crypto.randomUUID()}`;
@@ -2021,6 +2035,7 @@ describe("runPiSmokeTurn with the engine disabled", () => {
     // documented test seam and pi-config reads it fresh per call).
     const prev = process.env.OPENSESSION_PI_CONFIG;
     process.env.OPENSESSION_PI_CONFIG = "/nonexistent/opensession-pi-test.json";
+    await loadPiConfig();
     try {
       const res = await runPiSmokeTurn({ timeoutMs: 5_000 });
       expect(res.ok).toBe(false);

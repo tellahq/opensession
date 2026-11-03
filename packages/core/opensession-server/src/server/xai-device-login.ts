@@ -102,12 +102,12 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-function register(
+async function register(
   l: XaiDeviceLogin,
   tokens: XaiOAuthTokens,
   email: string | undefined,
-): void {
-  const result = addXaiAccount({
+): Promise<void> {
+  const result = await addXaiAccount({
     tokens,
     ...(email ? { email } : {}),
     ...(l.owner ? { owner: l.owner } : {}),
@@ -157,7 +157,7 @@ async function run(l: XaiDeviceLogin): Promise<void> {
         // Best effort: the id token also carries the email when /user is down.
         email = (await fetchXaiUser(poll.tokens.access)).email;
       } catch {}
-      register(l, poll.tokens, email);
+      await register(l, poll.tokens, email);
       return;
     }
   } catch (error) {

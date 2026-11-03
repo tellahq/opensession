@@ -32,10 +32,14 @@
  * invariant if the file ever grows one).
  */
 
-import { chmodSync, existsSync, readFileSync } from "fs";
+import { chmod, readFile } from "fs/promises";
 import { stateDir } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
-import { readJsonFileCopy } from "./shared/json-file-cache";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
+import {
+  cachedJsonFileCopy,
+  loadJsonFileShared,
+  publishJsonFile,
+} from "./shared/json-file-cache";
 
 /** Pi-config file path (env override is a test seam, not the feature flag). */
 export function piConfigPath(): string {
@@ -91,10 +95,18 @@ export function normalizePiConfig(raw: unknown): PiEngineConfig {
   };
 }
 
+/** Load the pi config for the current path. Runs at import; a test that
+ * repoints OPENSESSION_PI_CONFIG or writes the file itself awaits it again. */
+export async function loadPiConfig(): Promise<void> {
+  await loadJsonFileShared(piConfigPath()).catch(() => undefined);
+}
+
+/** The loaded config, without I/O; refreshed in the background, so an edit
+ * by hand or by another process is seen within a second. */
 export function readPiEngineConfig(): PiEngineConfig | null {
   const path = piConfigPath();
   try {
-    const raw = readJsonFileCopy(path);
+    const raw = cachedJsonFileCopy(path);
     return raw === undefined ? null : normalizePiConfig(raw);
   } catch (e) {
     console.warn(`[pi-config] Failed to parse ${path}:`, e);
@@ -129,12 +141,18 @@ export function piAnthropicTransport(): PiAnthropicTransport {
 // drops/renames fields, so writes always go through the raw object to preserve
 // everything we don't own. Atomic rename + 0600.
 
-function readRawPiConfig(): Record<string, unknown> {
+async function readRawPiConfig(): Promise<Record<string, unknown>> {
   const path = piConfigPath();
-  if (!existsSync(path)) return {};
+  let text: string;
+  try {
+    text = await readFile(path, "utf-8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+    throw error;
+  }
   // Unlike the read path (fail-soft null), a write built on `{}` would clobber
   // a config that's merely unparseable — fail loudly instead.
-  const raw = JSON.parse(readFileSync(path, "utf-8"));
+  const raw = JSON.parse(text);
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     throw new Error(
       `Cannot update ${path}: existing content is not a JSON object`,
@@ -143,10 +161,20 @@ function readRawPiConfig(): Record<string, unknown> {
   return raw as Record<string, unknown>;
 }
 
-function writeRawPiConfig(raw: Record<string, unknown>): void {
+async function writeRawPiConfig(raw: Record<string, unknown>): Promise<void> {
   const path = piConfigPath();
-  writeJsonAtomic(path, raw);
-  chmodSync(path, 0o600);
+  await writeJsonAtomicAsync(path, raw);
+  await chmod(path, 0o600);
+  publishJsonFile(path, raw);
+}
+
+// Read-modify-write cycles span awaits; run them one at a time so two
+// concurrent saves cannot drop each other's change.
+let mutation: Promise<unknown> = Promise.resolve();
+function mutatePiConfig<T>(fn: () => Promise<T>): Promise<T> {
+  const run = mutation.then(fn, fn);
+  mutation = run.catch(() => {});
+  return run;
 }
 
 function rawPiPickerModels(raw: Record<string, unknown>): string[] {
@@ -158,36 +186,42 @@ function rawPiPickerModels(raw: Record<string, unknown>): string[] {
 }
 
 /** Turn the pi engine on or off. */
-export function setPiEnabled(enabled: boolean): void {
-  const raw = readRawPiConfig();
-  raw.enabled = enabled;
-  writeRawPiConfig(raw);
+export function setPiEnabled(enabled: boolean): Promise<void> {
+  return mutatePiConfig(async () => {
+    const raw = await readRawPiConfig();
+    raw.enabled = enabled;
+    await writeRawPiConfig(raw);
+  });
 }
 
 /** Add a `pi/<provider>/<model>` id to pickerModels (idempotent). Throws on a
  *  malformed id — matching normalizePiConfig's drop rule, so a UI add can't
  *  write an id the reader would silently discard. Returns the stored list. */
-export function addPiPickerModel(id: string): string[] {
+export async function addPiPickerModel(id: string): Promise<string[]> {
   if (!isPiModelId(id)) {
     throw new Error(
       `Invalid pi model id "${id}" (expected pi/<provider>/<model>)`,
     );
   }
-  const raw = readRawPiConfig();
-  const list = rawPiPickerModels(raw);
-  if (!list.includes(id)) list.push(id);
-  raw.pickerModels = list;
-  writeRawPiConfig(raw);
-  return list;
+  return mutatePiConfig(async () => {
+    const raw = await readRawPiConfig();
+    const list = rawPiPickerModels(raw);
+    if (!list.includes(id)) list.push(id);
+    raw.pickerModels = list;
+    await writeRawPiConfig(raw);
+    return list;
+  });
 }
 
 /** Remove an id from pickerModels. Returns the stored list. */
-export function removePiPickerModel(id: string): string[] {
-  const raw = readRawPiConfig();
-  const list = rawPiPickerModels(raw).filter((x) => x !== id);
-  raw.pickerModels = list;
-  writeRawPiConfig(raw);
-  return list;
+export function removePiPickerModel(id: string): Promise<string[]> {
+  return mutatePiConfig(async () => {
+    const raw = await readRawPiConfig();
+    const list = rawPiPickerModels(raw).filter((x) => x !== id);
+    raw.pickerModels = list;
+    await writeRawPiConfig(raw);
+    return list;
+  });
 }
 
 /** Replace pickerModels wholesale in one read-modify-write. Validates every
@@ -195,7 +229,7 @@ export function removePiPickerModel(id: string): string[] {
  *  remove-then-add loop over the NORMALIZED view — assigns the raw field
  *  directly, so malformed entries hand-written into the file are swept out
  *  by a save instead of surviving invisibly. */
-export function setPiPickerModels(ids: string[]): string[] {
+export async function setPiPickerModels(ids: string[]): Promise<string[]> {
   for (const id of ids) {
     if (!isPiModelId(id)) {
       throw new Error(
@@ -203,8 +237,12 @@ export function setPiPickerModels(ids: string[]): string[] {
       );
     }
   }
-  const raw = readRawPiConfig();
-  raw.pickerModels = [...new Set(ids)];
-  writeRawPiConfig(raw);
-  return raw.pickerModels as string[];
+  return mutatePiConfig(async () => {
+    const raw = await readRawPiConfig();
+    raw.pickerModels = [...new Set(ids)];
+    await writeRawPiConfig(raw);
+    return raw.pickerModels as string[];
+  });
 }
+
+await loadPiConfig();

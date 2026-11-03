@@ -1,4 +1,5 @@
 import { getConfigAsync } from "../config";
+import { loadGithubAuthStore } from "../github-auth";
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
@@ -54,6 +55,7 @@ async function writeConfig(): Promise<string> {
     }),
   );
   process.env.OPENSESSION_GITHUB_AUTH_STORE = store;
+  await loadGithubAuthStore();
   return path;
 }
 

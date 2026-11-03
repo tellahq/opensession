@@ -1,8 +1,8 @@
 /** Process-local Git credential wiring for trusted server-owned Git calls. */
 
-import { existsSync } from "fs";
+import { stat } from "fs/promises";
 import { resolve } from "path";
-import { SHIM_PATH } from "../../../../../scripts/lib/paths";
+import { SHIM_PATH } from "../../../../../scripts/lib/shim-path";
 import { isCompiledBinary } from "../runner-host/exe";
 
 const GH_CREDENTIAL_SCRIPT = resolve(
@@ -23,15 +23,48 @@ function shellQuoteWord(word: string): string {
  * source-tree fallback keeps direct development runs useful before install.sh
  * creates the shim.
  */
+// Whether the shim is installed, checked asynchronously at import and again
+// in the background at most every SHIM_RECHECK_MS, so the synchronous callers
+// below never probe the disk.
+const SHIM_RECHECK_MS = 30_000;
+let shimState: { exists: boolean; at: number; pending?: Promise<boolean> } = {
+  exists: false,
+  at: -Infinity,
+};
+
+function recheckShim(): Promise<boolean> {
+  if (shimState.pending) return shimState.pending;
+  const pending = stat(SHIM_PATH).then(
+    () => true,
+    () => false,
+  );
+  shimState.pending = pending;
+  return pending.then((exists) => {
+    shimState = { exists, at: performance.now() };
+    return exists;
+  });
+}
+
+function installedShimExists(): boolean {
+  if (performance.now() - shimState.at >= SHIM_RECHECK_MS) void recheckShim();
+  return shimState.exists;
+}
+
 export function githubCredentialHelperCommand(
   shimPath = SHIM_PATH,
-  shimExists = existsSync(shimPath),
+  shimExists = shimPath === SHIM_PATH && installedShimExists(),
   compiled = isCompiledBinary(),
   execPath = process.execPath,
 ): string {
   if (shimExists) return `!${shellQuoteWord(shimPath)} github-credential`;
   if (compiled) return `!${shellQuoteWord(execPath)} github-credential`;
   return `!bun ${shellQuoteWord(GH_CREDENTIAL_SCRIPT)}`;
+}
+
+/** githubCredentialHelperCommand for this install, checking for the shim
+ * without blocking the thread. */
+export async function installedGithubCredentialHelperCommand(): Promise<string> {
+  return githubCredentialHelperCommand(SHIM_PATH, await recheckShim());
 }
 
 /**
@@ -127,3 +160,5 @@ export function withReadRepoCredentials(
   out.GIT_CONFIG_COUNT = String(merged.length);
   return out;
 }
+
+await recheckShim();

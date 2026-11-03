@@ -10,15 +10,12 @@
  * up matching its own state root but writing into the live store.
  */
 
-import { existsSync } from "fs";
+import { readdir, stat } from "fs/promises";
 import { dirname, join } from "path";
-import { homedir } from "os";
+import { homeDir, registerSessionsDirBinding } from "./state-root";
 import { randomUUIDv7 } from "bun";
 
-/** The current user's home directory ($HOME wins so tests can repoint it). */
-export function homeDir(): string {
-  return process.env.HOME || homedir();
-}
+export { homeDir };
 
 /** The historical top-level name for a state entry. */
 function legacyStateName(base: string): string {
@@ -59,20 +56,65 @@ export function stateContext(): StateContext {
   };
 }
 
-/** Resolved legacy-vs-current choices. Hot stores resolve their path on every
- * read, and the two existence probes per call added up to hundreds of
- * synchronous syscalls a second on the gateway thread. A store that lives at
- * the current location stays there, so that answer is memoized outright. A
- * legacy answer still probes the current location (one syscall instead of
- * two), so a migration takes effect at once. "Neither exists yet" is never
- * memoized: the first write decides. */
-const resolvedStatePaths = new Map<string, { at: number; path: string }>();
-const STATE_PATH_MEMO_MS = 10_000;
+/** Which names exist in the two directories statePath chooses between: the
+ * home directory (legacy `.opensession-<name>` entries) and `~/.opensession`.
+ * Hot stores resolve their path on every read, so the choice is answered from
+ * these listings, never from a synchronous probe. Each listing is read
+ * asynchronously (at import for the process's home) and re-read in the
+ * background once it is older than LISTING_REFRESH_MS, so a migration made by
+ * another process takes effect within about a second. A home that has not
+ * been listed yet answers "neither exists", which resolves to the current
+ * layout, and is listed in the background. */
+const LISTING_REFRESH_MS = 1_000;
+const listings = new Map<
+  string,
+  { names: Set<string>; at: number; pending?: Promise<void> }
+>();
 
-/** Test seam: forget memoized legacy/current resolutions. */
-export function __clearStatePathMemoForTest(): void {
-  resolvedStatePaths.clear();
+function refreshListing(dir: string): Promise<void> {
+  const current = listings.get(dir);
+  if (current?.pending) return current.pending;
+  const entry = current ?? { names: new Set<string>(), at: -Infinity };
+  listings.set(dir, entry);
+  entry.pending = readdir(dir)
+    .then(
+      (names) => new Set(names),
+      () => new Set<string>(),
+    )
+    .then((names) => {
+      entry.names = names;
+      entry.at = performance.now();
+      entry.pending = undefined;
+    });
+  return entry.pending;
 }
+
+function listed(dir: string, name: string): boolean {
+  const entry = listings.get(dir);
+  if (!entry || performance.now() - entry.at >= LISTING_REFRESH_MS)
+    void refreshListing(dir);
+  return entry?.names.has(name) ?? false;
+}
+
+/** Read the state-path listings for `home` now. Runs at import for the
+ * process's home; a caller that repoints HOME, or creates or moves a state
+ * entry and needs the next statePath to see it at once, awaits it. */
+export async function loadStatePaths(home = homeDir()): Promise<void> {
+  await Promise.all([
+    refreshListing(home),
+    refreshListing(join(home, ".opensession")),
+  ]);
+}
+
+/** Test seam: forget every listing and re-read the current home's. */
+export async function __clearStatePathMemoForTest(): Promise<void> {
+  listings.clear();
+  await loadStatePaths();
+}
+
+// Before anything below resolves a state path (OPENSESSION_SESSIONS_DIR is
+// snapshotted at load), so a legacy install keeps its legacy store.
+await loadStatePaths();
 
 /** statePath for an explicit context. Same rules, no environment reads. */
 export function statePathIn(rel: string, context: StateContext): string {
@@ -84,24 +126,10 @@ export function statePathIn(rel: string, context: StateContext): string {
   const home = context.home;
   if (!standardBase) return join(home, rel);
 
-  const key = `${home}\0${standardBase}`;
-  const now = Date.now();
-  const hit = resolvedStatePaths.get(key);
   const current = join(home, ".opensession", standardBase);
-  const legacy = join(home, rel);
-  if (hit && now - hit.at < STATE_PATH_MEMO_MS) {
-    if (hit.path === current || !existsSync(current)) return hit.path;
-    resolvedStatePaths.set(key, { at: now, path: current });
-    return current;
-  }
-  const path = existsSync(current)
-    ? current
-    : existsSync(legacy)
-      ? legacy
-      : null;
-  if (!path) return current;
-  resolvedStatePaths.set(key, { at: now, path });
-  return path;
+  if (listed(join(home, ".opensession"), standardBase)) return current;
+  if (listed(home, rel)) return join(home, rel);
+  return current;
 }
 
 /** Sugar for standard state: `stateDir("audit")` → `~/.opensession/audit`.
@@ -125,6 +153,7 @@ function resolveSessionsDir(): string {
 
 /** The active session-store dir, snapshotted at load. */
 export let OPENSESSION_SESSIONS_DIR = resolveSessionsDir();
+registerSessionsDirBinding(() => OPENSESSION_SESSIONS_DIR);
 
 /**
  * The active session-store dir, resolved per call. Shaped like
@@ -179,7 +208,7 @@ const LEGACY_SESSIONS_DIR_NAMES = [
  * and a path outside the store is returned untouched. Callers keep doing their
  * own scoping checks — this resolves a name, it does not grant access.
  */
-export function resolveLegacySessionsPath(p: string): string {
+export async function resolveLegacySessionsPath(p: string): Promise<string> {
   if (!p.startsWith("/")) return p;
   // Both sides come from the same sessionsDir() call: the former store sat
   // where the active one sits, so the prefix to match is derived from it
@@ -196,12 +225,19 @@ export function resolveLegacySessionsPath(p: string): string {
       const prefix = `${root}/${name}/`;
       if (!p.startsWith(prefix)) continue;
       const remapped = `${active}/${p.slice(prefix.length)}`;
-      if (remapped !== p && !existsSync(p) && existsSync(remapped))
+      if (remapped !== p && !(await exists(p)) && (await exists(remapped)))
         return remapped;
       return p;
     }
   }
   return p;
+}
+
+function exists(path: string): Promise<boolean> {
+  return stat(path).then(
+    () => true,
+    () => false,
+  );
 }
 
 /**

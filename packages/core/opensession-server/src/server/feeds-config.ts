@@ -25,8 +25,14 @@
  *   }
  * }
  */
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { writeFile } from "fs/promises";
 import { statePath } from "./paths";
+import {
+  cachedJsonFileCopy,
+  loadJsonFileCopy,
+  loadJsonFileShared,
+  publishJsonFile,
+} from "./shared/json-file-cache";
 
 const STORE_PATH = statePath(".opensession-feeds.json");
 
@@ -84,19 +90,41 @@ export interface ConfigFeed {
   filters?: unknown[];
 }
 
+/** The loaded feeds file, without I/O. Loaded at import and refreshed in the
+ * background, so a hand edit applies within a second without a restart. */
 export function readConfigFeeds(): ConfigFeed[] {
   try {
-    const raw = JSON.parse(readFileSync(STORE_PATH, "utf8"));
-    return Array.isArray(raw?.feeds) ? raw.feeds : [];
+    const raw = cachedJsonFileCopy<{ feeds?: unknown }>(STORE_PATH);
+    return Array.isArray(raw?.feeds) ? (raw.feeds as ConfigFeed[]) : [];
   } catch {
     return [];
   }
 }
 
-function writeConfigFeeds(feeds: ConfigFeed[]): void {
-  writeFileSync(STORE_PATH, JSON.stringify({ feeds }, null, 2) + "\n", {
+async function readConfigFeedsFresh(): Promise<ConfigFeed[]> {
+  try {
+    const raw = await loadJsonFileCopy<{ feeds?: unknown }>(STORE_PATH);
+    return Array.isArray(raw?.feeds) ? (raw.feeds as ConfigFeed[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeConfigFeeds(feeds: ConfigFeed[]): Promise<void> {
+  const value = { feeds };
+  await writeFile(STORE_PATH, JSON.stringify(value, null, 2) + "\n", {
     mode: 0o600,
   });
+  publishJsonFile(STORE_PATH, value);
+}
+
+// Read-modify-write cycles span awaits; one at a time so two concurrent
+// edits cannot drop each other's change.
+let mutation: Promise<unknown> = Promise.resolve();
+function mutateFeeds<T>(fn: () => Promise<T>): Promise<T> {
+  const run = mutation.then(fn, fn);
+  mutation = run.catch(() => {});
+  return run;
 }
 
 const ID_RE = /^[a-z0-9][a-z0-9_-]{0,40}$/;
@@ -160,23 +188,31 @@ export function validateConfigFeed(
   };
 }
 
-export function upsertConfigFeed(
+export async function upsertConfigFeed(
   input: unknown,
-): { ok: true } | { error: string } {
+): Promise<{ ok: true } | { error: string }> {
   const feed = validateConfigFeed(input);
   if ("error" in feed) return feed;
-  const feeds = readConfigFeeds().filter((f) => f.id !== feed.id);
-  feeds.push(feed);
-  writeConfigFeeds(feeds);
-  return { ok: true };
+  return mutateFeeds(async () => {
+    const feeds = (await readConfigFeedsFresh()).filter(
+      (f) => f.id !== feed.id,
+    );
+    feeds.push(feed);
+    await writeConfigFeeds(feeds);
+    return { ok: true as const };
+  });
 }
 
-export function removeConfigFeed(id: string): { ok: true } | { error: string } {
-  const feeds = readConfigFeeds();
-  const next = feeds.filter((f) => f.id !== id);
-  if (next.length === feeds.length) return { error: `No feed "${id}"` };
-  writeConfigFeeds(next);
-  return { ok: true };
+export function removeConfigFeed(
+  id: string,
+): Promise<{ ok: true } | { error: string }> {
+  return mutateFeeds(async () => {
+    const feeds = await readConfigFeedsFresh();
+    const next = feeds.filter((f) => f.id !== id);
+    if (next.length === feeds.length) return { error: `No feed "${id}"` };
+    await writeConfigFeeds(next);
+    return { ok: true as const };
+  });
 }
 
 /** `a.b.c` getter over a raw tool-result object. */
@@ -189,3 +225,5 @@ export function dotGet(obj: unknown, path?: string): unknown {
   }
   return cur;
 }
+
+await loadJsonFileShared(STORE_PATH).catch(() => undefined);

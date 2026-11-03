@@ -60,10 +60,10 @@ export async function discoverProviderModels(
     provider.apiKey,
     fetchImpl,
   );
-  setProviderDiscovered(id, { at: new Date().toISOString(), models });
+  await setProviderDiscovered(id, { at: new Date().toISOString(), models });
   const ids = Object.keys(models).map((m) => `pi/${id}/${m}`);
   const before = new Set(configuredPickerModels());
-  addPickerModels(ids);
+  await addPickerModels(ids);
   return {
     models: Object.keys(models),
     added: ids.filter((m) => !before.has(m)).length,

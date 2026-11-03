@@ -14,11 +14,18 @@
 import { withLabel } from "./provider-account-label";
 import { registerMemoryProbe } from "./memory-probes";
 import { homeDir } from "./paths";
-import { chmodSync, existsSync, readFileSync } from "fs";
-import { writeFileAtomic } from "./shared/atomic-write";
+import { chmod, readFile } from "fs/promises";
+import { writeFileAtomicAsync } from "./shared/atomic-write";
 import { userMatchesAny } from "./shared/user-mappings";
 import { stateDir } from "./paths";
-import { readJsonFileCopy } from "./shared/json-file-cache";
+import {
+  cachedJsonFileCopy,
+  cachedJsonFileShared,
+  JsonFileNotLoadedError,
+  loadJsonFileCopy,
+  loadJsonFileShared,
+  publishJsonFile,
+} from "./shared/json-file-cache";
 
 const HOME = homeDir();
 // The env override is a test seam — bun tests point it at a temp store so they
@@ -166,37 +173,76 @@ let sidelinesHydratedFrom: string | null = null;
 function sidelines(): Map<string, number> {
   const path = sidelineStatePath();
   if (sidelinesHydratedFrom === path) return exhaustedUntil;
-  sidelinesHydratedFrom = path;
   exhaustedUntil.clear();
+  let parsed: { exhaustedUntil?: Record<string, unknown> } | undefined;
   try {
-    if (existsSync(path)) {
-      const parsed = JSON.parse(readFileSync(path, "utf-8"));
-      const now = Date.now();
-      for (const [k, until] of Object.entries(parsed?.exhaustedUntil || {})) {
-        if (typeof until === "number" && until > now)
-          exhaustedUntil.set(k, until);
-      }
-    }
-  } catch {}
+    parsed = cachedJsonFileShared(path);
+  } catch (e) {
+    // Not loaded yet (loadClaudeAccounts starts it): hydrate on a later call.
+    if (e instanceof JsonFileNotLoadedError) return exhaustedUntil;
+  }
+  sidelinesHydratedFrom = path;
+  const now = Date.now();
+  for (const [k, until] of Object.entries(parsed?.exhaustedUntil || {})) {
+    if (typeof until === "number" && until > now) exhaustedUntil.set(k, until);
+  }
   return exhaustedUntil;
 }
 
+// The in-memory map is authoritative; the file follows it. Writes run one at
+// a time, and a change made while one is in flight is written right after it.
+let sidelineWrite: Promise<void> | null = null;
+let sidelineDirty = false;
+
 function persistSidelines(): void {
-  try {
-    const out: Record<string, number> = {};
-    const now = Date.now();
-    for (const [k, until] of sidelines()) if (until > now) out[k] = until;
-    const path = sidelineStatePath();
-    writeFileAtomic(path, JSON.stringify({ exhaustedUntil: out }) + "\n");
-    chmodSync(path, 0o600);
-  } catch (e) {
-    console.warn("[claude-accounts] sideline persist failed:", e);
-  }
+  sidelineDirty = true;
+  if (sidelineWrite) return;
+  sidelineWrite = (async () => {
+    while (sidelineDirty) {
+      sidelineDirty = false;
+      try {
+        const out: Record<string, number> = {};
+        const now = Date.now();
+        for (const [k, until] of sidelines()) if (until > now) out[k] = until;
+        const path = sidelineStatePath();
+        const value = { exhaustedUntil: out };
+        await writeFileAtomicAsync(path, JSON.stringify(value) + "\n", 0o600);
+        await chmod(path, 0o600);
+        publishJsonFile(path, value);
+      } catch (e) {
+        console.warn("[claude-accounts] sideline persist failed:", e);
+      }
+    }
+  })().finally(() => {
+    sidelineWrite = null;
+  });
+}
+
+/**
+ * Load the account store and its sidelines for the current store path. Runs
+ * at import; a test that repoints OPENSESSION_CLAUDE_ACCOUNTS_PATH, or writes
+ * the store file itself, awaits it again before reading.
+ */
+export async function loadClaudeAccounts(): Promise<void> {
+  await sidelineWrite;
+  await Promise.all([
+    loadJsonFileShared(storePath()).catch(() => {}),
+    loadJsonFileShared(sidelineStatePath()).catch(() => {}),
+  ]);
+  if (sidelinesHydratedFrom !== sidelineStatePath()) sidelines();
+  // The picker checks OAuth accounts' credentials files on every pick.
+  await Promise.all(
+    readStore()
+      .filter((a) => a.credentialsPath)
+      .map((a) => loadJsonFileShared(a.credentialsPath!).catch(() => {})),
+  );
 }
 
 /** Test seam: drop the in-memory sidelines and re-read them from disk, which
  *  is what a process restart does. */
-export function __reloadSidelinesForTest(): void {
+export async function __reloadSidelinesForTest(): Promise<void> {
+  await sidelineWrite;
+  await loadJsonFileShared(sidelineStatePath()).catch(() => {});
   sidelinesHydratedFrom = null;
   sidelines();
 }
@@ -305,9 +351,10 @@ function fetchWithTimeout(
   });
 }
 
+/** The loaded account store, without I/O (see loadClaudeAccounts). */
 function readStore(): ClaudeAccount[] {
   try {
-    const parsed = readJsonFileCopy<{ accounts?: unknown }>(storePath());
+    const parsed = cachedJsonFileCopy<{ accounts?: unknown }>(storePath());
     return Array.isArray(parsed?.accounts) ? parsed.accounts : [];
   } catch (e) {
     console.error("[claude-accounts] Failed to read store:", e);
@@ -315,9 +362,36 @@ function readStore(): ClaudeAccount[] {
   }
 }
 
-function writeStore(accounts: ClaudeAccount[]): void {
-  writeFileAtomic(storePath(), JSON.stringify({ accounts }, null, 2) + "\n");
-  chmodSync(storePath(), 0o600);
+/** The account store fresh from disk, for read-modify-write. */
+async function readStoreFresh(): Promise<ClaudeAccount[]> {
+  try {
+    const parsed = await loadJsonFileCopy<{ accounts?: unknown }>(storePath());
+    return Array.isArray(parsed?.accounts) ? parsed.accounts : [];
+  } catch (e) {
+    console.error("[claude-accounts] Failed to read store:", e);
+    return [];
+  }
+}
+
+async function writeStore(accounts: ClaudeAccount[]): Promise<void> {
+  const path = storePath();
+  const value = { accounts };
+  await writeFileAtomicAsync(
+    path,
+    JSON.stringify(value, null, 2) + "\n",
+    0o600,
+  );
+  await chmod(path, 0o600);
+  publishJsonFile(path, value);
+}
+
+// Store mutations read, patch and write the file across awaits; one at a time
+// so two concurrent edits cannot drop each other's change.
+let storeMutation: Promise<unknown> = Promise.resolve();
+function mutateStore<T>(fn: () => Promise<T>): Promise<T> {
+  const run = storeMutation.then(fn, fn);
+  storeMutation = run.catch(() => {});
+  return run;
 }
 
 export function maskToken(token: string): string {
@@ -539,16 +613,33 @@ interface OauthCreds {
   refreshTokenExpiresAt?: number;
 }
 
-function readCredsFile(path: string): OauthCreds | null {
+function credsFromFile(raw: any): OauthCreds | null {
+  const o = raw?.claudeAiOauth;
+  if (!o?.accessToken || !o?.refreshToken) return null;
+  return {
+    accessToken: o.accessToken,
+    refreshToken: o.refreshToken,
+    expiresAt: Number(o.expiresAt) || 0,
+    refreshTokenExpiresAt: Number(o.refreshTokenExpiresAt) || undefined,
+  };
+}
+
+/** The loaded credentials file, without I/O, for the picker. Loaded with the
+ * store (loadClaudeAccounts) and refreshed in the background, so a rotation
+ * by another writer is seen; an unloaded file reads as no credentials. */
+function cachedCredsFile(path: string): OauthCreds | null {
   try {
-    const o = JSON.parse(readFileSync(path, "utf-8"))?.claudeAiOauth;
-    if (!o?.accessToken || !o?.refreshToken) return null;
-    return {
-      accessToken: o.accessToken,
-      refreshToken: o.refreshToken,
-      expiresAt: Number(o.expiresAt) || 0,
-      refreshTokenExpiresAt: Number(o.refreshTokenExpiresAt) || undefined,
-    };
+    return credsFromFile(cachedJsonFileShared(path));
+  } catch {
+    return null;
+  }
+}
+
+async function readCredsFile(path: string): Promise<OauthCreds | null> {
+  try {
+    const raw = await loadJsonFileShared(path);
+    if (raw === undefined) throw new Error(`ENOENT: no such file ${path}`);
+    return credsFromFile(raw);
   } catch (e) {
     console.warn(
       `[claude-accounts] Failed to read credentials file ${path}:`,
@@ -592,7 +683,7 @@ async function doRefreshCredsFile(
 ): Promise<OauthCreds | null> {
   const blockedUntil = credentialsRefreshBlockedUntil.get(path) ?? 0;
   if (Date.now() < blockedUntil) return null;
-  const creds = readCredsFile(path) ?? staleCreds;
+  const creds = (await readCredsFile(path)) ?? staleCreds;
   if (creds.expiresAt > Date.now() + TOKEN_REFRESH_SLACK_MS) return creds;
   try {
     const res = await fetch(TOKEN_URL, {
@@ -630,11 +721,12 @@ async function doRefreshCredsFile(
         ? now + Number(body.refresh_token_expires_in) * 1000
         : creds.refreshTokenExpiresAt,
     };
-    const raw = JSON.parse(readFileSync(path, "utf-8"));
+    const raw = JSON.parse(await readFile(path, "utf-8"));
     raw.claudeAiOauth = { ...raw.claudeAiOauth, ...next };
-    writeFileAtomic(path, JSON.stringify(raw, null, 2) + "\n");
-    chmodSync(path, 0o600);
-    syncOauthRunToken(path, next.accessToken);
+    await writeFileAtomicAsync(path, JSON.stringify(raw, null, 2) + "\n");
+    await chmod(path, 0o600);
+    publishJsonFile(path, raw);
+    await syncOauthRunToken(path, next.accessToken);
     credentialsRefreshBlockedUntil.delete(path);
     return next;
   } catch (e) {
@@ -648,21 +740,23 @@ async function doRefreshCredsFile(
 }
 
 /** Keep the account-pool token current after rotating an OAuth credential file. */
-function syncOauthRunToken(path: string, accessToken: string): void {
-  const accounts = readStore();
-  let changed = false;
-  for (let i = 0; i < accounts.length; i++) {
-    const account = accounts[i];
-    if (
-      account.authKind === "oauth" &&
-      account.credentialsPath === path &&
-      account.token !== accessToken
-    ) {
-      accounts[i] = { ...account, token: accessToken };
-      changed = true;
+function syncOauthRunToken(path: string, accessToken: string): Promise<void> {
+  return mutateStore(async () => {
+    const accounts = await readStoreFresh();
+    let changed = false;
+    for (let i = 0; i < accounts.length; i++) {
+      const account = accounts[i];
+      if (
+        account.authKind === "oauth" &&
+        account.credentialsPath === path &&
+        account.token !== accessToken
+      ) {
+        accounts[i] = { ...account, token: accessToken };
+        changed = true;
+      }
     }
-  }
-  if (changed) writeStore(accounts);
+    if (changed) await writeStore(accounts);
+  });
 }
 
 /**
@@ -679,7 +773,7 @@ async function usageToken(
   | null
 > {
   if (account.credentialsPath) {
-    const creds = readCredsFile(account.credentialsPath);
+    const creds = await readCredsFile(account.credentialsPath);
     if (creds) {
       if (creds.expiresAt > Date.now() + TOKEN_REFRESH_SLACK_MS) {
         return { token: creds.accessToken, source: "credentials" };
@@ -723,15 +817,17 @@ async function usageToken(
 }
 
 /** Persist that this account's token can't read the usage endpoint. */
-function markUsageScopeMissing(id: string): void {
-  const accounts = readStore();
-  const idx = accounts.findIndex((a) => a.id === id);
-  if (idx === -1 || accounts[idx].usageScope === "missing") return;
-  accounts[idx] = { ...accounts[idx], usageScope: "missing" };
-  writeStore(accounts);
-  console.log(
-    `[claude-accounts] ${accounts[idx].name} token lacks user:profile scope; usage polling disabled`,
-  );
+function markUsageScopeMissing(id: string): Promise<void> {
+  return mutateStore(async () => {
+    const accounts = await readStoreFresh();
+    const idx = accounts.findIndex((a) => a.id === id);
+    if (idx === -1 || accounts[idx].usageScope === "missing") return;
+    accounts[idx] = { ...accounts[idx], usageScope: "missing" };
+    await writeStore(accounts);
+    console.log(
+      `[claude-accounts] ${accounts[idx].name} token lacks user:profile scope; usage polling disabled`,
+    );
+  });
 }
 
 /** Refresh cached usage for one account; clears exhausted state once reset has passed. */
@@ -765,7 +861,7 @@ async function refreshAccountUsage(
     // Only a setup-token 403 means the scope is permanently missing; a 403
     // on login credentials would be an anomaly worth surfacing, not latching.
     if (tok.source === "setup-token") {
-      markUsageScopeMissing(account.id);
+      await markUsageScopeMissing(account.id);
       usageCache.delete(account.id);
       return null;
     }
@@ -933,7 +1029,7 @@ function isAccountUsableFor(
   // expired token, but the picker must not hand out its stale mirror in the
   // small window before that refresh finishes.
   if (a.authKind === "oauth") {
-    const creds = a.credentialsPath ? readCredsFile(a.credentialsPath) : null;
+    const creds = a.credentialsPath ? cachedCredsFile(a.credentialsPath) : null;
     if (
       !creds ||
       creds.expiresAt <= Date.now() ||
@@ -1058,7 +1154,7 @@ export async function addAccount(
         "Token doesn't look like a Claude OAuth token (expected sk-ant-…). Generate one with `claude setup-token`.",
     };
   }
-  const accounts = readStore();
+  const accounts = await readStoreFresh();
   if (accounts.some((a) => a.name === trimmedName)) {
     return { error: `An account named "${trimmedName}" already exists` };
   }
@@ -1094,7 +1190,7 @@ export async function addAccount(
       : {}),
     ...(usage.errorStatus === 403 ? { usageScope: "missing" as const } : {}),
   };
-  writeStore([...accounts, account]);
+  await mutateStore(() => writeStore([...accounts, account]));
   if (!usage.error) usageCache.set(account.id, usage);
   console.log(
     `[claude-accounts] Added account ${trimmedName} (${profile.email || "unknown email"})${trimmedOwner ? ` — personal sub of ${trimmedOwner}` : " — shared pool"}`,
@@ -1107,43 +1203,47 @@ export function setAccountOwner(
   id: string,
   owner: string | undefined,
   credentialsPath?: string | undefined,
-): ClaudeAccountPublic | null {
-  const accounts = readStore();
-  const idx = accounts.findIndex((a) => a.id === id);
-  if (idx === -1) return null;
-  const trimmed = owner?.trim() || undefined;
-  const next = { ...accounts[idx] };
-  if (trimmed) next.owner = trimmed;
-  else delete next.owner;
-  if (credentialsPath !== undefined) {
-    const trimmedPath = credentialsPath.trim();
-    if (trimmedPath) next.credentialsPath = trimmedPath;
-    else delete next.credentialsPath;
-    usageCache.delete(id);
-    if (accounts[idx].credentialsPath)
-      credentialsRefreshBlockedUntil.delete(accounts[idx].credentialsPath);
-    if (trimmedPath) credentialsRefreshBlockedUntil.delete(trimmedPath);
-  }
-  accounts[idx] = next;
-  writeStore(accounts);
-  console.log(
-    `[claude-accounts] ${next.name} is now ${trimmed ? `the personal sub of ${trimmed}` : "a shared pool account"}`,
-  );
-  return toPublic(next);
+): Promise<ClaudeAccountPublic | null> {
+  return mutateStore(async () => {
+    const accounts = await readStoreFresh();
+    const idx = accounts.findIndex((a) => a.id === id);
+    if (idx === -1) return null;
+    const trimmed = owner?.trim() || undefined;
+    const next = { ...accounts[idx] };
+    if (trimmed) next.owner = trimmed;
+    else delete next.owner;
+    if (credentialsPath !== undefined) {
+      const trimmedPath = credentialsPath.trim();
+      if (trimmedPath) next.credentialsPath = trimmedPath;
+      else delete next.credentialsPath;
+      usageCache.delete(id);
+      if (accounts[idx].credentialsPath)
+        credentialsRefreshBlockedUntil.delete(accounts[idx].credentialsPath);
+      if (trimmedPath) credentialsRefreshBlockedUntil.delete(trimmedPath);
+    }
+    accounts[idx] = next;
+    await writeStore(accounts);
+    console.log(
+      `[claude-accounts] ${next.name} is now ${trimmed ? `the personal sub of ${trimmed}` : "a shared pool account"}`,
+    );
+    return toPublic(next);
+  });
 }
 
 /** Set or clear (empty) the display name shown instead of the email. */
 export function setAccountLabel(
   id: string,
   label: string,
-): ClaudeAccountPublic | null {
-  const accounts = readStore();
-  const idx = accounts.findIndex((a) => a.id === id);
-  if (idx === -1) return null;
-  const next = withLabel(accounts[idx], label);
-  accounts[idx] = next;
-  writeStore(accounts);
-  return toPublic(next);
+): Promise<ClaudeAccountPublic | null> {
+  return mutateStore(async () => {
+    const accounts = await readStoreFresh();
+    const idx = accounts.findIndex((a) => a.id === id);
+    if (idx === -1) return null;
+    const next = withLabel(accounts[idx], label);
+    accounts[idx] = next;
+    await writeStore(accounts);
+    return toPublic(next);
+  });
 }
 
 /**
@@ -1153,32 +1253,40 @@ export function setAccountLabel(
  * endpoint), adopt the sign-in email when the account had none, and kick an
  * immediate usage refresh so the UI fills in without waiting for the poller.
  */
-export function setAccountUsageCredentials(
+export async function setAccountUsageCredentials(
   id: string,
   path: string,
   email?: string,
-): ClaudeAccountPublic | null {
-  const accounts = readStore();
-  const idx = accounts.findIndex((a) => a.id === id);
-  if (idx === -1) return null;
-  const next: ClaudeAccount = { ...accounts[idx], credentialsPath: path };
-  const creds = readCredsFile(path);
-  if (next.authKind === "oauth" && creds) next.token = creds.accessToken;
-  delete next.usageScope;
-  if (email && !next.email) next.email = email;
-  accounts[idx] = next;
-  writeStore(accounts);
+): Promise<ClaudeAccountPublic | null> {
+  const creds = await readCredsFile(path);
+  const next = await mutateStore(async () => {
+    const accounts = await readStoreFresh();
+    const idx = accounts.findIndex((a) => a.id === id);
+    if (idx === -1) return null;
+    const next: ClaudeAccount = { ...accounts[idx], credentialsPath: path };
+    if (next.authKind === "oauth" && creds) next.token = creds.accessToken;
+    delete next.usageScope;
+    if (email && !next.email) next.email = email;
+    accounts[idx] = next;
+    await writeStore(accounts);
+    return next;
+  });
+  if (!next) return null;
   usageCache.delete(id);
   credentialsRefreshBlockedUntil.delete(path);
   void refreshAccountUsage(next);
   return toPublic(next);
 }
 
-export function removeAccount(id: string): boolean {
-  const accounts = readStore();
-  const next = accounts.filter((a) => a.id !== id);
-  if (next.length === accounts.length) return false;
-  writeStore(next);
+export async function removeAccount(id: string): Promise<boolean> {
+  const removed = await mutateStore(async () => {
+    const accounts = await readStoreFresh();
+    const next = accounts.filter((a) => a.id !== id);
+    if (next.length === accounts.length) return false;
+    await writeStore(next);
+    return true;
+  });
+  if (!removed) return false;
   usageCache.delete(id);
   const map = sidelines();
   map.delete(exhaustionKey(id));
@@ -1694,3 +1802,5 @@ export async function waitForUsableAccount(opts: {
   }
   return null;
 }
+
+await loadClaudeAccounts();

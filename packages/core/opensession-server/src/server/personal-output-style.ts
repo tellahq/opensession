@@ -51,3 +51,5 @@ export function personalOutputStyleNoteFor(
     return "";
   }
 }
+
+await store.load();

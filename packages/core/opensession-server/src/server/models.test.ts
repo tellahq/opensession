@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { loadPiConfig } from "./pi-config";
+import { loadModelProviders } from "./model-providers";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -27,7 +29,7 @@ const originalModelProvidersConfig =
   process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG;
 const originalHaikuFallbackModel = process.env.OPENSESSION_HAIKU_FALLBACK_MODEL;
 let pickerConfigDir = "";
-afterEach(() => {
+afterEach(async () => {
   if (originalPiConfig === undefined) delete process.env.OPENSESSION_PI_CONFIG;
   else process.env.OPENSESSION_PI_CONFIG = originalPiConfig;
   if (originalModelProvidersConfig === undefined)
@@ -39,6 +41,7 @@ afterEach(() => {
     delete process.env.OPENSESSION_HAIKU_FALLBACK_MODEL;
   else
     process.env.OPENSESSION_HAIKU_FALLBACK_MODEL = originalHaikuFallbackModel;
+  await Promise.all([loadPiConfig(), loadModelProviders()]);
   refreshPickerModels();
   if (pickerConfigDir)
     rmSync(pickerConfigDir, { recursive: true, force: true });
@@ -46,13 +49,13 @@ afterEach(() => {
 });
 
 describe("Pi-only model routing", () => {
-  test("maps native model ids to Pi", () => {
+  test("maps native model ids to Pi", async () => {
     expect(toPiModel("claude-opus-5-5")).toBe("pi/anthropic/claude-opus-5-5");
     expect(toPiModel("gpt-6-astra")).toBe("pi/openai/gpt-6-astra");
     expect(toPiModel("gpt-6.1-sol")).toBe("pi/openai/gpt-6.1-sol");
   });
 
-  test("upgrades old Opus selections without changing historical labels", () => {
+  test("upgrades old Opus selections without changing historical labels", async () => {
     for (const old of ["claude-opus-5", "claude-opus-4-8"]) {
       for (const prefix of [
         "",
@@ -79,7 +82,7 @@ describe("Pi-only model routing", () => {
     expect(fallbackTier("pi/anthropic/claude-opus-5-5")).toBe(3);
   });
 
-  test("upgrades old Sonnet selections without changing historical labels", () => {
+  test("upgrades old Sonnet selections without changing historical labels", async () => {
     for (const old of ["claude-sonnet-5", "claude-sonnet-4-6"]) {
       for (const prefix of [
         "",
@@ -106,7 +109,7 @@ describe("Pi-only model routing", () => {
     expect(fallbackTier("pi/anthropic/claude-sonnet-5-5")).toBe(1);
   });
 
-  test("upgrades old Haiku selections without changing historical labels", () => {
+  test("upgrades old Haiku selections without changing historical labels", async () => {
     for (const prefix of [
       "",
       "anthropic/",
@@ -133,7 +136,7 @@ describe("Pi-only model routing", () => {
     expect(fallbackTier("pi/anthropic/claude-haiku-5-5")).toBe(0);
   });
 
-  test("preserves explicit Pi ids and case-sensitive model suffixes", () => {
+  test("preserves explicit Pi ids and case-sensitive model suffixes", async () => {
     expect(toPiModel("pi/wafer/glm-5.2")).toBe("pi/wafer/glm-5.2");
     expect(toPiModel(" pi/My-Gateway/Qwen/Qwen3-Coder ")).toBe(
       "pi/my-gateway/Qwen/Qwen3-Coder",
@@ -144,7 +147,7 @@ describe("Pi-only model routing", () => {
     expect(explicitEngineFor("pi/openai/gpt-6.1-sol")).toBe("pi");
   });
 
-  test("reroutes retired OpenAI slugs", () => {
+  test("reroutes retired OpenAI slugs", async () => {
     expect(toPiModel("gpt-5.5")).toBe("pi/openai/gpt-6.1-sol");
     expect(toPiModel("openai/gpt-5.5")).toBe("pi/openai/gpt-6.1-sol");
     expect(toPiModel("pi/openai/gpt-5.4-mini")).toBe("pi/openai/gpt-6-luna");
@@ -152,7 +155,7 @@ describe("Pi-only model routing", () => {
     expect(resolveModel("pi/openai/gpt-5.5")?.id).toBe("pi/openai/gpt-6.1-sol");
   });
 
-  test("upgrades GPT-6 Sol to GPT-6.1 Sol", () => {
+  test("upgrades GPT-6 Sol to GPT-6.1 Sol", async () => {
     expect(toPiModel("gpt-6-sol")).toBe("pi/openai/gpt-6.1-sol");
     expect(toPiModel("pi/openai/gpt-6-sol")).toBe("pi/openai/gpt-6.1-sol");
     expect(resolveModel("sol")?.id).toBe("gpt-6.1-sol");
@@ -160,7 +163,7 @@ describe("Pi-only model routing", () => {
     expect(modelLabel("pi/openai/gpt-6-sol")).toBe("GPT-6 Sol");
   });
 
-  test("upgrades retired Fable 5 ids to Fable 5.1", () => {
+  test("upgrades retired Fable 5 ids to Fable 5.1", async () => {
     expect(resolveModel("claude-fable-5")?.id).toBe("claude-fable-5-1");
     expect(toPiModel("anthropic/claude-fable-5")).toBe(
       "pi/anthropic/claude-fable-5-1",
@@ -170,7 +173,7 @@ describe("Pi-only model routing", () => {
     );
   });
 
-  test("routes every accepted id to Pi", () => {
+  test("routes every accepted id to Pi", async () => {
     expect(routeModel("claude-fable-5-1")).toEqual({
       engine: "pi",
       model: "pi/anthropic/claude-fable-5-1",
@@ -181,12 +184,12 @@ describe("Pi-only model routing", () => {
     });
   });
 
-  test("resolves provider paths and Pi ids", () => {
+  test("resolves provider paths and Pi ids", async () => {
     expect(resolveModel("pi/anthropic/claude-opus-5-5")?.provider).toBe("pi");
     expect(resolveModel("wafer/glm-5.2")?.id).toBe("pi/wafer/glm-5.2");
   });
 
-  test("resolves an unambiguous provider model by its visible slug", () => {
+  test("resolves an unambiguous provider model by its visible slug", async () => {
     pickerConfigDir = mkdtempSync(join(tmpdir(), "pi-provider-alias-"));
     process.env.OPENSESSION_PI_CONFIG = join(pickerConfigDir, "pi.json");
     process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = join(
@@ -207,13 +210,14 @@ describe("Pi-only model routing", () => {
         providers: { openrouter: { apiKey: "test-key" } },
       }),
     );
+    await Promise.all([loadPiConfig(), loadModelProviders()]);
     refreshPickerModels();
 
     expect(resolveModel("glm-5.3")?.id).toBe("pi/openrouter/z-ai/glm-5.3");
     expect(resolveModel("GLM 5.3")?.id).toBe("pi/openrouter/z-ai/glm-5.3");
   });
 
-  test("routes GLM-5.3's pre-release id to the official model", () => {
+  test("routes GLM-5.3's pre-release id to the official model", async () => {
     expect(toPiModel("pi/openrouter/stealth/ox-alpha")).toBe(
       "pi/openrouter/z-ai/glm-5.3",
     );
@@ -225,7 +229,7 @@ describe("Pi-only model routing", () => {
     ]);
   });
 
-  test("selects the account pool from Pi's upstream provider", () => {
+  test("selects the account pool from Pi's upstream provider", async () => {
     expect(accountProviderForModel("pi/anthropic/claude-opus-5-5")).toBe(
       "claude",
     );
@@ -233,13 +237,13 @@ describe("Pi-only model routing", () => {
     expect(accountProviderForModel("pi/wafer/glm-5.2")).toBeUndefined();
   });
 
-  test("keeps engine keys provider-neutral", () => {
+  test("keeps engine keys provider-neutral", async () => {
     expect(modelEngineKey("pi/anthropic/claude-opus-5-5")).toBe(
       "claude-opus-5-5",
     );
   });
 
-  test("builds a Pi-only fallback chain", () => {
+  test("builds a Pi-only fallback chain", async () => {
     const first = nextFallbackModel(
       "pi/anthropic/claude-fable-5-1",
       new Set(),
@@ -251,7 +255,7 @@ describe("Pi-only model routing", () => {
     ).toSatisfy((hops) => hops.every((hop) => hop.id.startsWith("pi/")));
   });
 
-  test("falls back from Fable to Astra before configured Sol or Opus", () => {
+  test("falls back from Fable to Astra before configured Sol or Opus", async () => {
     for (const primary of [
       "claude-fable-5-1",
       "pi/anthropic/claude-fable-5-1",
@@ -269,7 +273,7 @@ describe("Pi-only model routing", () => {
     }
   });
 
-  test("keeps Sol available when Astra is exhausted", () => {
+  test("keeps Sol available when Astra is exhausted", async () => {
     expect(
       nextFallbackModel(
         "pi/anthropic/claude-fable-5-1",
@@ -279,14 +283,14 @@ describe("Pi-only model routing", () => {
     ).toEqual({ id: "pi/openai/gpt-6.1-sol", mode: "auto" });
   });
 
-  test("keeps automatic fallback disabled when requested", () => {
+  test("keeps automatic fallback disabled when requested", async () => {
     expect(fallbackPlan("pi/anthropic/claude-fable-5-1", "none")).toEqual([]);
     expect(fallbackPlan("pi/anthropic/claude-fable-5-1", undefined)).toEqual(
       [],
     );
   });
 
-  test("crosses exhausted Haiku sessions to OpenAI", () => {
+  test("crosses exhausted Haiku sessions to OpenAI", async () => {
     expect(automaticFallbackModel("claude-haiku-4-5")).toBe(
       "pi/openai/gpt-6-luna",
     );
@@ -303,12 +307,12 @@ describe("Pi-only model routing", () => {
     );
   });
 
-  test("labels Pi models without an engine prefix", () => {
+  test("labels Pi models without an engine prefix", async () => {
     expect(modelLabel("pi/openai/gpt-6-astra")).toBe("GPT-6 Astra");
     expect(modelLabel("pi/openai/gpt-6.1-sol")).toBe("GPT-6.1 Sol");
   });
 
-  test("exposes Astra's reasoning efforts and aliases", () => {
+  test("exposes Astra's reasoning efforts and aliases", async () => {
     expect(resolveModel("astra")?.id).toBe("gpt-6-astra");
     expect(resolveModel("gpt6")?.id).toBe("gpt-6-astra");
     expect(modelEfforts("pi/openai/gpt-6-astra")).toEqual([
@@ -320,7 +324,7 @@ describe("Pi-only model routing", () => {
     ]);
   });
 
-  test("upgrades Sol, Terra and Luna without changing historical labels", () => {
+  test("upgrades Sol, Terra and Luna without changing historical labels", async () => {
     for (const name of ["sol", "terra", "luna"]) {
       const current = name === "luna" ? "gpt-6-luna" : `gpt-6.1-${name}`;
       const previous = `gpt-5.6-${name}`;
@@ -352,12 +356,13 @@ describe("Pi-only model routing", () => {
     }
   });
 
-  test("seeds subscription models without the retired pickerModels setting", () => {
+  test("seeds subscription models without the retired pickerModels setting", async () => {
     pickerConfigDir = mkdtempSync(join(tmpdir(), "pi-picker-models-"));
     const path = join(pickerConfigDir, "pi.json");
     writeFileSync(path, JSON.stringify({ enabled: true, pickerModels: [] }));
     process.env.OPENSESSION_PI_CONFIG = path;
 
+    await Promise.all([loadPiConfig(), loadModelProviders()]);
     refreshPickerModels();
 
     const pickerIds = KNOWN_MODELS.filter(
@@ -372,7 +377,7 @@ describe("Pi-only model routing", () => {
     expect(pickerIds).toContain("pi/anthropic/claude-fable-5-1");
   });
 
-  test("deduplicates retired pickerModels after routing", () => {
+  test("deduplicates retired pickerModels after routing", async () => {
     pickerConfigDir = mkdtempSync(join(tmpdir(), "pi-picker-models-"));
     const path = join(pickerConfigDir, "pi.json");
     writeFileSync(
@@ -390,6 +395,7 @@ describe("Pi-only model routing", () => {
     );
     process.env.OPENSESSION_PI_CONFIG = path;
 
+    await Promise.all([loadPiConfig(), loadModelProviders()]);
     refreshPickerModels();
 
     expect(
@@ -409,7 +415,7 @@ describe("Pi-only model routing", () => {
   });
 });
 
-test("interactive fallback is on by default and a session can opt out", () => {
+test("interactive fallback is on by default and a session can opt out", async () => {
   const model = "pi/anthropic/claude-fable-5-1";
   expect(interactiveFallbackModel(model)).toBe(automaticFallbackModel(model));
   expect(interactiveFallbackModel(model, true)).toBe(
@@ -423,7 +429,7 @@ test("interactive fallback is on by default and a session can opt out", () => {
   }
 });
 
-test("retired preset ids resolve to the model they led", () => {
+test("retired preset ids resolve to the model they led", async () => {
   expect(resolveModel("pi/dial/high")?.id).toBe("gpt-6.1-sol");
   expect(resolveModel("dial/opus-fable")?.id).toBe("claude-opus-5-5");
   expect(toPiModel("pi/orchestrator/fable")).toBe(

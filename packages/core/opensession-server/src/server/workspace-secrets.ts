@@ -6,7 +6,6 @@
  * are never listed or projected into a run/sandbox.
  */
 
-import { chmodSync, existsSync, readFileSync } from "fs";
 import { readFile } from "fs/promises";
 import { stateDir } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
@@ -52,9 +51,11 @@ function readStore(): WorkspaceSecretStore {
   }
 }
 
+// The temp file is created 0600 and renamed over the store, so the store is
+// 0600 without a separate chmod. Still a synchronous write until the sandbox
+// connection callers can await it.
 function persist(store: WorkspaceSecretStore): void {
-  writeJsonAtomic(storePath(), store);
-  chmodSync(storePath(), 0o600);
+  writeJsonAtomic(storePath(), store, true, 0o600);
 }
 
 export function putWorkspaceSecret(

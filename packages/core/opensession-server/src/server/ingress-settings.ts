@@ -526,19 +526,21 @@ export async function verifyPrivateAppDomain(): Promise<PrivateAppDomainStatus> 
 export async function savePrivateAppOrigin(value: string): Promise<string> {
   const publicBaseUrl = normalizePrivateAppOrigin(value);
   await withConfigMutationLock(async () => {
-    const raw = rawConfig();
+    const raw = await rawConfig();
     const server =
       raw.server && typeof raw.server === "object" && !Array.isArray(raw.server)
         ? (raw.server as Record<string, unknown>)
         : {};
     raw.server = server;
     server.publicBaseUrl = publicBaseUrl;
-    const envEdit = prepareEnvFileEdits({ OPENSESSION_UI_BASE: publicBaseUrl });
-    envEdit.commit();
+    const envEdit = await prepareEnvFileEdits({
+      OPENSESSION_UI_BASE: publicBaseUrl,
+    });
+    await envEdit.commit();
     try {
-      persistRawConfig(raw);
+      await persistRawConfig(raw);
     } catch (error) {
-      envEdit.rollback();
+      await envEdit.rollback();
       throw error;
     }
   });
@@ -568,7 +570,7 @@ export async function savePublicIngress(input: {
     throw new Error("Enter a publicly routable IPv4 or IPv6 address");
   }
   await withConfigMutationLock(async () => {
-    const raw = rawConfig();
+    const raw = await rawConfig();
     raw.ingress = {
       publicBaseUrl,
       exposure: input.exposure,
@@ -588,15 +590,15 @@ export async function savePublicIngress(input: {
       publicIpFamily === 4
         ? "OPENSESSION_PUBLIC_IPV4"
         : "OPENSESSION_PUBLIC_IPV6";
-    const envEdit = prepareEnvFileEdits({
+    const envEdit = await prepareEnvFileEdits({
       OPENSESSION_INGRESS_BASE: publicBaseUrl,
       ...(publicIp ? { [envKey]: publicIp } : {}),
     });
-    envEdit.commit();
+    await envEdit.commit();
     try {
-      persistRawConfig(raw);
+      await persistRawConfig(raw);
     } catch (error) {
-      envEdit.rollback();
+      await envEdit.rollback();
       throw error;
     }
   });

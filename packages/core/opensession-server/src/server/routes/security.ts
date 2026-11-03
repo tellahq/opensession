@@ -34,8 +34,8 @@ export async function handleSecurityRoutes(
   // ── Security (deepsec scans + profiles) ──
   if (path === "/api/security" && req.method === "GET") {
     return Response.json({
-      scans: listScans(),
-      profiles: listProfiles(),
+      scans: await listScans(),
+      profiles: await listProfiles(),
       repos: scannableRepos().map((r) => ({
         id: r.id,
         defaultBranch: r.defaultBranch,
@@ -67,7 +67,7 @@ export async function handleSecurityRoutes(
         : "Anonymous";
     const profile =
       typeof body.profileId === "string" && body.profileId
-        ? getProfile(body.profileId)
+        ? await getProfile(body.profileId)
         : null;
     const instructions =
       typeof body.instructions === "string" ? body.instructions : undefined;
@@ -121,7 +121,7 @@ export async function handleSecurityRoutes(
         user: createdBy,
         createdByLogin: ctx.authUser?.login,
       });
-      const scan = createScanRecord({
+      const scan = await createScanRecord({
         repos,
         profileId: profile?.id,
         instructions,
@@ -132,7 +132,7 @@ export async function handleSecurityRoutes(
       return Response.json({ scan, sessionId: id });
     }
 
-    const scan = createScanRecord({
+    const scan = await createScanRecord({
       repos,
       profileId: profile?.id,
       instructions,
@@ -148,7 +148,7 @@ export async function handleSecurityRoutes(
 
   const scanMatch = path.match(/^\/api\/security\/scans\/([^/]+)$/);
   if (scanMatch && req.method === "DELETE") {
-    return deleteScan(scanMatch[1])
+    return (await deleteScan(scanMatch[1]))
       ? Response.json({ ok: true })
       : Response.json({ error: "Not found" }, { status: 404 });
   }
@@ -156,7 +156,7 @@ export async function handleSecurityRoutes(
   if (path === "/api/security/profiles" && req.method === "POST") {
     const body = await req.json().catch(() => null);
     if (!body) return Response.json({ error: "Invalid JSON" }, { status: 400 });
-    const result = createProfile(body);
+    const result = await createProfile(body);
     if ("error" in result) return Response.json(result, { status: 400 });
     return Response.json(result);
   }
@@ -165,13 +165,13 @@ export async function handleSecurityRoutes(
   if (profileMatch && req.method === "PUT") {
     const body = await req.json().catch(() => null);
     if (!body) return Response.json({ error: "Invalid JSON" }, { status: 400 });
-    const result = updateProfile(profileMatch[1], body);
+    const result = await updateProfile(profileMatch[1], body);
     if ("error" in result) return Response.json(result, { status: 400 });
     return Response.json(result);
   }
 
   if (profileMatch && req.method === "DELETE") {
-    return deleteProfile(profileMatch[1])
+    return (await deleteProfile(profileMatch[1]))
       ? Response.json({ ok: true })
       : Response.json({ error: "Not found" }, { status: 404 });
   }
