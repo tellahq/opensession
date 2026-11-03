@@ -18,6 +18,17 @@ describe("host resource-limit deployment", () => {
     expect(workloads).toContain("IOWeight=100");
   });
 
+  test("system-scope Open Session outweighs the user manager's workloads", async () => {
+    const parent = await Bun.file(
+      resolve(import.meta.dir, "systemd/opensession.slice"),
+    ).text();
+
+    // user.slice keeps systemd's default weight 100; the user-scope agents
+    // slice's own weight only ranks it against its idle siblings.
+    expect(parent).toContain("CPUWeight=1000");
+    expect(parent).toContain("IOWeight=1000");
+  });
+
   test("the aggregate user slice reserves host headroom", async () => {
     const slice = await Bun.file(
       resolve(import.meta.dir, "systemd/user/opensession.slice"),
@@ -72,6 +83,9 @@ describe("host resource-limit deployment", () => {
     const installer = await Bun.file(
       resolve(import.meta.dir, "install-resource-control.sh"),
     ).text();
+    expect(installer).toContain(
+      "for name in opensession.slice opensession-control.slice opensession-workloads.slice",
+    );
     expect(installer).toContain("opensession-control.slice");
     expect(installer).toContain("opensession-workloads.slice");
     expect(installer).toContain("systemctl daemon-reload");
@@ -81,11 +95,21 @@ describe("host resource-limit deployment", () => {
     ).text();
     expect(serviceInstaller).toContain("install-resource-control.sh");
 
+    // build-compile.ts copies RELEASE_SERVICE_TEMPLATES into the artefact.
     const compiler = await Bun.file(
       resolve(repoRoot, "scripts/build-compile.ts"),
     ).text();
-    expect(compiler).toContain("deploy/install-resource-control.sh");
-    expect(compiler).toContain("deploy/systemd/opensession-control.slice");
-    expect(compiler).toContain("deploy/systemd/opensession-workloads.slice");
+    expect(compiler).toContain("RELEASE_SERVICE_TEMPLATES");
+    const { RELEASE_SERVICE_TEMPLATES } =
+      await import("../scripts/lib/release-artefact");
+    expect(RELEASE_SERVICE_TEMPLATES).toContain(
+      "deploy/install-resource-control.sh",
+    );
+    for (const slice of [
+      "opensession.slice",
+      "opensession-control.slice",
+      "opensession-workloads.slice",
+    ])
+      expect(RELEASE_SERVICE_TEMPLATES).toContain(`deploy/systemd/${slice}`);
   });
 });

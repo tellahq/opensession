@@ -167,7 +167,9 @@ HTTP/WebSocket gateway thread, including in background callbacks. Use async
 filesystem APIs for migrations and exports, and async RPC to worker-owned
 catalogs for application state. An `async` function that calls `readFileSync`,
 `Bun.spawnSync`, or synchronous SQLite still violates this rule. Never add a
-synchronous fallback when a worker is unavailable. Cross-session views belong
+synchronous fallback when a worker is unavailable.
+`scripts/check-gateway-sync-io.ts` (run by `bun run check`) scans every module
+the gateway imports; its baseline of remaining calls may only shrink. Cross-session views belong
 in the central catalog, not in directory scans or per-session database reads. PR/branch
 ownership lookups must use indexed catalog projections (including attached
 repos), not a full session list followed by checkout/HEAD probes. Missing

@@ -64,7 +64,13 @@ nested agent starts. Commands already inside a detached host remain in that
 host's system unit so cancellation still reaches every descendant. CPU and I/O
 weights let agent builds consume idle capacity while yielding promptly to
 control-plane requests during contention. Preview scopes use a lower-priority
-slice inside the user manager. The weights do not impose a fixed CPU quota.
+slice inside the user manager. Weights only rank sibling cgroups, so the
+system-scope parent `opensession.slice` carries `CPUWeight=1000` against the
+default 100 of `user.slice`, which holds the user manager's script runs,
+worktree setup, sccache, previews and agent shell commands. The weights do not
+impose a fixed CPU quota. `IOWeight` takes effect only on a disk with an I/O
+scheduler or `io.cost` that honours it; with the `none` scheduler common on
+NVMe and EBS it is inert.
 
 Before persisting a detached launch, the gateway checks the active and pending
 host count, Linux `MemAvailable`, and CPU PSI `some avg10`. A launch waits with

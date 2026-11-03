@@ -20,7 +20,7 @@ safe_regular_destination() {
   exit 2
 }
 
-for name in opensession-control.slice opensession-workloads.slice; do
+for name in opensession.slice opensession-control.slice opensession-workloads.slice; do
   source="$script_dir/systemd/$name"
   destination="$unit_dir/$name"
   [ -f "$source" ] || {
@@ -39,4 +39,4 @@ for name in opensession-control.slice opensession-workloads.slice; do
 done
 
 systemctl daemon-reload
-systemctl start opensession-control.slice opensession-workloads.slice
+systemctl start opensession.slice opensession-control.slice opensession-workloads.slice
