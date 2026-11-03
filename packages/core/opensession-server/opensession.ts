@@ -192,7 +192,9 @@ import {
 import { recoverInterruptedWorkflows } from "./src/server/workflow-runner";
 import { ensureSlackLinkIndex } from "./src/server/session-control-wiring"; // opensession-sessions MCP + Slack-link bridge
 import "./src/server/keychain"; // registers the keychain human-ask domain handler
-import { websocketHandlers } from "./src/server/ws-handlers";
+import { loadLastRestartBy, websocketHandlers } from "./src/server/ws-handlers";
+import { loadTitleOverrides } from "./src/server/title-overrides";
+import { loadStatusOverrides } from "./src/server/status-overrides";
 import { routeHandlers, type RouteContext } from "./src/server/routes";
 import { isRetiredKeychainBrokerPath } from "./src/server/routes/keychain";
 
@@ -321,6 +323,14 @@ if (!g.__opensessionBooted) {
 // the catalogs first, because the list is primed from the catalogs alone.
 if (!g.__opensessionBooted && process.env.OPENSESSION_DEMO === "1")
   await (await import("./src/server/demo")).seedDemoDataset();
+// Small registries the list overlays and the hello frame read synchronously:
+// load them into memory before the first reader (also after a hot reload,
+// which resets module state).
+await Promise.all([
+  loadTitleOverrides(),
+  loadStatusOverrides(),
+  loadLastRestartBy(),
+]);
 if (!g.__opensessionBooted) await primeSessionListIndex();
 void ensureSlackLinkIndex();
 

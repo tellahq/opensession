@@ -117,16 +117,9 @@ import {
 } from "../workspaces";
 import { NO_REPO, removeWorktree, repoForPath } from "../worktree";
 import { preparingWorkspaces } from "../ws-hub";
-import {
-  existsSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "fs";
+import { readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { statePath } from "../paths";
-import { writeFileAtomic } from "../shared/atomic-write";
+import { writeFileAtomicAsync } from "../shared/atomic-write";
 import { githubMutationCredential } from "./github-credential";
 import { defaultRepo } from "../config";
 import type { UnifiedSession } from "../types";
@@ -266,16 +259,33 @@ const LIVE_LIST_DISK_PATH = statePath(
   `.opensession-session-list-v${LIVE_LIST_DISK_VERSION}.json`,
 );
 const LIVE_LIST_DISK_GZIP_PATH = `${LIVE_LIST_DISK_PATH}.gz`;
-let triedDiskLiveList = false;
+let diskLiveListRead: Promise<SessionsResponseSnapshot | null> | null = null;
+let diskLiveListSettled = false;
 
-function readDiskLiveList(): SessionsResponseSnapshot | null {
-  if (triedDiskLiveList) return null;
-  triedDiskLiveList = true;
+/** One-shot: the first caller reads the persisted list; callers that arrive
+ * while that read is in flight share its result; later callers get null. */
+function readDiskLiveList(): Promise<SessionsResponseSnapshot | null> {
+  if (diskLiveListSettled) return Promise.resolve(null);
+  diskLiveListRead ??= readDiskLiveListOnce().finally(() => {
+    diskLiveListSettled = true;
+  });
+  return diskLiveListRead;
+}
+
+async function mtimeMsOrNull(path: string): Promise<number | null> {
   try {
-    if (!existsSync(LIVE_LIST_DISK_PATH)) return null;
-    const sourceMtime = statSync(LIVE_LIST_DISK_PATH).mtimeMs;
+    return (await stat(path)).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
+async function readDiskLiveListOnce(): Promise<SessionsResponseSnapshot | null> {
+  try {
+    const sourceMtime = await mtimeMsOrNull(LIVE_LIST_DISK_PATH);
+    if (sourceMtime === null) return null;
     if (Date.now() - sourceMtime > LIVE_LIST_DISK_MAX_AGE_MS) return null;
-    let text = readFileSync(LIVE_LIST_DISK_PATH, "utf8");
+    let text = await readFile(LIVE_LIST_DISK_PATH, "utf8");
     if (!text.startsWith("[")) return null;
     // The snapshot can predate an archive whose refresh never ran — e.g. the
     // archive landed in the previous process's shutdown window, or between
@@ -293,10 +303,10 @@ function readDiskLiveList(): SessionsResponseSnapshot | null {
         rewrote = true;
       }
     } catch {}
-    const haveMatchingGzip =
-      !rewrote &&
-      existsSync(LIVE_LIST_DISK_GZIP_PATH) &&
-      statSync(LIVE_LIST_DISK_GZIP_PATH).mtimeMs >= sourceMtime;
+    const gzipMtime = rewrote
+      ? null
+      : await mtimeMsOrNull(LIVE_LIST_DISK_GZIP_PATH);
+    const haveMatchingGzip = gzipMtime !== null && gzipMtime >= sourceMtime;
     return {
       text,
       hash: Bun.hash(text).toString(16),
@@ -310,23 +320,21 @@ function readDiskLiveList(): SessionsResponseSnapshot | null {
   }
 }
 
-function persistDiskLiveList(text: string): void {
+let diskLiveListPersist: Promise<void> = Promise.resolve();
+
+async function persistDiskLiveList(text: string): Promise<void> {
   try {
-    writeFileAtomic(LIVE_LIST_DISK_PATH, text, 0o600);
+    await writeFileAtomicAsync(LIVE_LIST_DISK_PATH, text, 0o600);
     // CompressionStream competes with the cold scan on the server thread. Do
     // this once when the fresh snapshot lands, not on the next process's first
     // response, so a warm boot can send ready bytes straight from disk.
     const tmp = `${LIVE_LIST_DISK_GZIP_PATH}.tmp.${process.pid}`;
     try {
-      writeFileSync(tmp, Bun.gzipSync(Buffer.from(text)), { mode: 0o600 });
-      renameSync(tmp, LIVE_LIST_DISK_GZIP_PATH);
+      await writeFile(tmp, Bun.gzipSync(Buffer.from(text)), { mode: 0o600 });
+      await rename(tmp, LIVE_LIST_DISK_GZIP_PATH);
     } catch (error) {
-      try {
-        rmSync(tmp);
-      } catch {}
-      try {
-        rmSync(LIVE_LIST_DISK_GZIP_PATH);
-      } catch {}
+      await rm(tmp).catch(() => {});
+      await rm(LIVE_LIST_DISK_GZIP_PATH).catch(() => {});
       throw error;
     }
   } catch (error) {
@@ -1044,7 +1052,13 @@ function refreshSessionsResponse(
   })
     .then((snapshot) => {
       sessionsResponseSnapshots.set(variant, snapshot);
-      if (variant === "exclude") persistDiskLiveList(snapshot.text);
+      if (variant === "exclude") {
+        // Serialized, so an older snapshot never lands over a newer one.
+        const text = snapshot.text;
+        diskLiveListPersist = diskLiveListPersist.then(() =>
+          persistDiskLiveList(text),
+        );
+      }
       return snapshot;
     })
     .finally(() => {
@@ -1324,7 +1338,7 @@ export async function handleSessionsRoutes(
     // cache refresh catches up in the background. In-process invalidations do
     // not reuse disk because readDiskLiveList is intentionally one-shot.
     if (variant === "exclude" && !cached) {
-      const disk = readDiskLiveList();
+      const disk = await readDiskLiveList();
       if (disk) {
         sessionsResponseSnapshots.set(variant, disk);
         // Starting the cooperative scan still does some synchronous index
@@ -1759,7 +1773,7 @@ export async function handleSessionsRoutes(
       if (
         session.transcriptPath &&
         !byPath.has(session.transcriptPath) &&
-        existsSync(session.transcriptPath)
+        (await mtimeMsOrNull(session.transcriptPath)) !== null
       )
         byPath.set(session.transcriptPath, session.id);
     }
@@ -1767,7 +1781,7 @@ export async function handleSessionsRoutes(
       for (const file of await ripgrepFiles(q, [...byPath.keys()])) {
         const id = byPath.get(file);
         if (!id || matchedIds.has(id)) continue;
-        const snippet = transcriptMatchSnippet(file, q);
+        const snippet = await transcriptMatchSnippet(file, q);
         if (snippet) {
           matches.push({ id, snippet });
           matchedIds.add(id);

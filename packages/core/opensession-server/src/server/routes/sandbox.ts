@@ -438,7 +438,7 @@ async function attachSandbox(
         { status: fresh.status },
       );
   } else {
-    const target = resolveWorktreeTarget(session);
+    const target = await resolveWorktreeTarget(session);
     if (target && existsSync(target.dir)) {
       let outcome: CheckpointOutcome = { state: "skipped", reason: "unknown" };
       try {

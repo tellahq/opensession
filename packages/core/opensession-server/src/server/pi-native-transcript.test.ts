@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 describe("readPiNativeTranscript", () => {
-  test("recovers a missed engine id from the journal prompt and timing", () => {
+  test("recovers a missed engine id from the journal prompt and timing", async () => {
     dir = mkdtempSync(join(tmpdir(), "opensession-pi-transcript-"));
     const root = join(dir, "pi");
     const sessionDir = join(root, "sessions", "worker");
@@ -64,7 +64,7 @@ describe("readPiNativeTranscript", () => {
     );
 
     expect(
-      findPiNativeTranscriptByPrompt(
+      await findPiNativeTranscriptByPrompt(
         {
           prompt,
           startedAt: "2026-08-31T12:00:00.000Z",
@@ -75,7 +75,7 @@ describe("readPiNativeTranscript", () => {
     ).toBe(expected);
   });
 
-  test("places assistant media markers and leaves user prose alone", () => {
+  test("places assistant media markers and leaves user prose alone", async () => {
     dir = mkdtempSync(join(tmpdir(), "opensession-pi-transcript-"));
     const path = join(dir, "session.jsonl");
     const row = (id: string, role: string, text: string) =>
@@ -99,7 +99,7 @@ describe("readPiNativeTranscript", () => {
 
     const a = "/media?path=%2Ftmp%2Fa.png";
     const b = "/media?path=%2Ftmp%2Fb.png";
-    expect(readPiNativeTranscript(path)).toEqual([
+    expect(await readPiNativeTranscript(path)).toEqual([
       {
         id: "user-1",
         type: "user",
@@ -117,7 +117,7 @@ describe("readPiNativeTranscript", () => {
     ]);
   });
 
-  test("keeps assistant thinking and text visible in provider order", () => {
+  test("keeps assistant thinking and text visible in provider order", async () => {
     dir = mkdtempSync(join(tmpdir(), "opensession-pi-transcript-"));
     const path = join(dir, "session.jsonl");
     writeFileSync(
@@ -142,7 +142,7 @@ describe("readPiNativeTranscript", () => {
       }) + "\n",
     );
 
-    expect(readPiNativeTranscript(path)).toEqual([
+    expect(await readPiNativeTranscript(path)).toEqual([
       {
         id: "message-1",
         type: "assistant",

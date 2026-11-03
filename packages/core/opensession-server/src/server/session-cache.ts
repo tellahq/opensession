@@ -23,6 +23,8 @@ import {
   readAgentSessionListRowAsync,
   readNativeSession,
   readSlackSession,
+  readSlackSessionAsync,
+  readNativeSessionFileAsync,
   resolveSessionTranscriptPath,
   resolveSessionTranscriptPathAsync,
   sessionListSourcesFromDocuments,
@@ -863,7 +865,8 @@ export async function readNativeSessionAsync(
       const stored = await sessionMetadata({ op: "catalog_get", sessionId });
       if (stored) {
         const data = JSON.parse(stored.doc) as NativeSessionFile;
-        if (data?.id === sessionId) return nativeSessionDetailFromData(data);
+        if (data?.id === sessionId)
+          return await nativeSessionDetailFromData(data);
       }
     } catch (error) {
       console.warn(
@@ -872,7 +875,7 @@ export async function readNativeSessionAsync(
       );
     }
   }
-  return readNativeSession(sessionId);
+  return readNativeSessionFileAsync(sessionId);
 }
 
 export async function findSessionAsync(
@@ -883,7 +886,8 @@ export async function findSessionAsync(
   // before the materialized list projection has observed it. Historical
   // aliases still need the merged list.
   const direct =
-    (await readNativeSessionAsync(sessionId)) ?? readSlackSession(sessionId);
+    (await readNativeSessionAsync(sessionId)) ??
+    (await readSlackSessionAsync(sessionId));
   if (direct) return enrichSessionRuntime([direct])[0];
   const listed = (await getCachedSessionsAsync()).find(
     (s) => s.id === sessionId || s.aliasIds?.includes(sessionId),

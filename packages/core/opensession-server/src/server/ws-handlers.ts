@@ -156,7 +156,8 @@ import {
   setClientAway,
   setClientTyping,
 } from "./ws-hub";
-import { existsSync, readFileSync, statSync, watch } from "fs";
+import { watch } from "fs";
+import { readFile, stat } from "node:fs/promises";
 import { stateDir } from "./paths";
 import {
   isInternalKernelDispatch,
@@ -185,17 +186,29 @@ import { TRANSCRIPT_ACTOR_RANGE_PAGE_LIMIT } from "./session-kernel/transcript-p
 // the marker the previous process wrote in gracefulShutdown, and only trusted
 // when the shutdown was recent (a stale marker from days ago means this boot
 // wasn't that restart). Parked on globalThis so hot reloads keep the value.
+// Boot awaits loadLastRestartBy before the server accepts connections.
 function lastRestartBy(): string {
+  return (globalThis as any).__lastRestartBy ?? "";
+}
+
+export async function loadLastRestartBy(): Promise<void> {
   const g = globalThis as any;
-  if (g.__lastRestartBy === undefined) {
-    g.__lastRestartBy = "";
-    try {
-      const d = JSON.parse(readFileSync(stateDir("last-restart.json"), "utf8"));
-      if (d?.by && Date.now() - Date.parse(d.at) < 10 * 60_000)
-        g.__lastRestartBy = String(d.by);
-    } catch {}
+  if (g.__lastRestartBy !== undefined) return;
+  let by = "";
+  try {
+    const d = JSON.parse(await readFile(stateDir("last-restart.json"), "utf8"));
+    if (d?.by && Date.now() - Date.parse(d.at) < 10 * 60_000) by = String(d.by);
+  } catch {}
+  g.__lastRestartBy ??= by;
+}
+
+/** The transcript file's size, or null when it cannot be stat'd. */
+async function transcriptFileSize(path: string): Promise<number | null> {
+  try {
+    return (await stat(path)).size;
+  } catch {
+    return null;
   }
-  return g.__lastRestartBy;
 }
 
 /** A message sent while the run waits on its question skips the question. */
@@ -249,7 +262,8 @@ async function sendWatchExtras(
       steered: steeredPrompts,
       pendingDeliveryIds,
     } = queueState;
-    if (queuedPrompts.length > 0 || steeredPrompts.length > 0) persistQueues();
+    if (queuedPrompts.length > 0 || steeredPrompts.length > 0)
+      await persistQueues();
     ws.send(
       JSON.stringify({
         type: "queue_update",
@@ -402,7 +416,7 @@ async function v2ImportSession(
   // Deliberately id-less ref: guarantees the legacy merge — an id-carrying
   // ref would route mergedSessionTranscript back into the v2 store path,
   // which on a drift re-import is exactly what we're refreshing.
-  const entries = mergedSessionTranscript({
+  const entries = await mergedSessionTranscript({
     transcriptPath: session.transcriptPath ?? null,
   });
   await v2FinishImport(session, entries);
@@ -423,11 +437,11 @@ async function v2ImportSessionAsync(
 
 async function v2FinishImport(
   session: NonNullable<Awaited<ReturnType<typeof findSessionAsync>>>,
-  entries: ReturnType<typeof mergedSessionTranscript>,
+  entries: Awaited<ReturnType<typeof mergedSessionTranscript>>,
 ): Promise<void> {
   let watermark: number | null = null;
   try {
-    const files = v2MirrorFiles(session);
+    const files = await v2MirrorFiles(session);
     if (files.length) watermark = files.reduce((sum, f) => sum + f.size, 0);
   } catch {}
   await importLegacyTranscript(
@@ -506,7 +520,7 @@ async function serveTranscriptV2(
       // the mirror.
       let mirrorSize = 0;
       try {
-        for (const f of v2MirrorFiles(session)) mirrorSize += f.size;
+        for (const f of await v2MirrorFiles(session)) mirrorSize += f.size;
       } catch {}
       if (mirrorSize > V2_SYNC_IMPORT_MAX_BYTES) {
         v2QueueBackgroundImport(sessionId);
@@ -1112,8 +1126,8 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
             typeof msg.sinceRev === "string" &&
             session.transcriptPath &&
             msg.sinceRev === transcriptRev(session.transcriptPath) &&
-            existsSync(session.transcriptPath) &&
-            sinceOffset <= statSync(session.transcriptPath).size
+            sinceOffset <=
+              ((await transcriptFileSize(session.transcriptPath)) ?? -1)
           ) {
             startWatching(session.transcriptPath, ws, sinceOffset, sessionId);
             await sendWatchExtras(ws, sessionId, session);
@@ -1130,7 +1144,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
           // "load earlier".
           let { entries, truncated, endOffset, startOffset } =
             session.transcriptPath
-              ? parseTranscriptTail(session.transcriptPath)
+              ? await parseTranscriptTail(session.transcriptPath)
               : { entries: [], truncated: false, endOffset: 0, startOffset: 0 };
           if (!entries.length) {
             // No mirror file yet — a fresh session, or an engine-id rotation
@@ -1309,14 +1323,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
               : null;
           if (before !== null) {
             const rev = transcriptRev(session.transcriptPath);
-            let fileSize: number | null = null;
-            try {
-              if (existsSync(session.transcriptPath)) {
-                fileSize = statSync(session.transcriptPath).size;
-              }
-            } catch {
-              fileSize = null;
-            }
+            const fileSize = await transcriptFileSize(session.transcriptPath);
             if (
               msg.beforeRev !== rev ||
               fileSize === null ||
@@ -1333,7 +1340,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
                 });
                 break;
               }
-              const tail = parseTranscriptTail(session.transcriptPath);
+              const tail = await parseTranscriptTail(session.transcriptPath);
               sendTranscriptFrame(ws, {
                 type: "transcript_init",
                 sessionId: msg.sessionId,
@@ -1350,7 +1357,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
             // guarantees ≥10 entries per page (see parseTranscriptWindow) —
             // 2-entry pages made "load earlier" feel broken and kept the
             // infinite-scroll sentinel in range, chaining loads every ~1.6s.
-            const page = parseTranscriptWindow(
+            const page = await parseTranscriptWindow(
               session.transcriptPath,
               before,
               undefined,

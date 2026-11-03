@@ -10,8 +10,8 @@
  * getAllSessions. Slack/Linear session files are read-only for opensession and the
  * lane is computed at scan time, so the override can't live in the session file.
  */
-import { readFileSync, existsSync } from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { readFile } from "node:fs/promises";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 
 /** The manual lanes a session can be pinned into — mirrors the frontend's MineStatus. */
@@ -37,22 +37,35 @@ export function isManualStatus(v: unknown): v is ManualStatus {
 const REGISTRY_PATH = `${OPENSESSION_SESSIONS_DIR}/status-overrides.json`;
 
 let cache: Record<string, ManualStatus> | null = null;
+let loading: Promise<Record<string, ManualStatus>> | null = null;
+let writes: Promise<void> = Promise.resolve();
+
+/** Read the registry once, asynchronously. Boot awaits this before serving,
+ * so the synchronous getters below answer from memory. */
+export function loadStatusOverrides(): Promise<Record<string, ManualStatus>> {
+  if (cache) return Promise.resolve(cache);
+  return (loading ??= readFile(REGISTRY_PATH, "utf-8")
+    .then((text) => JSON.parse(text) as Record<string, ManualStatus>)
+    .catch(() => ({}))
+    .then((registry) => (cache ??= registry)));
+}
 
 function load(): Record<string, ManualStatus> {
   if (cache) return cache;
-  try {
-    cache = existsSync(REGISTRY_PATH)
-      ? JSON.parse(readFileSync(REGISTRY_PATH, "utf-8"))
-      : {};
-  } catch {
-    cache = {};
-  }
-  return cache!;
+  // Not hydrated yet (a test or a script that skipped boot): answer empty and
+  // read the file in the background rather than block on it.
+  void loadStatusOverrides();
+  return {};
 }
 
-function save(registry: Record<string, ManualStatus>): void {
+/** Replace the registry in memory now and on disk in call order. */
+async function save(registry: Record<string, ManualStatus>): Promise<void> {
   cache = registry;
-  writeJsonAtomic(REGISTRY_PATH, registry);
+  const write = writes.then(() =>
+    writeJsonAtomicAsync(REGISTRY_PATH, registry),
+  );
+  writes = write.catch(() => {});
+  await write;
 }
 
 export function getStatusOverride(id: string): ManualStatus | undefined {
@@ -60,12 +73,13 @@ export function getStatusOverride(id: string): ManualStatus | undefined {
 }
 
 /** Set (a valid lane) or clear (null/invalid) the manual lane for a session id. */
-export function setStatusOverride(
+export async function setStatusOverride(
   id: string,
   status: ManualStatus | null,
-): void {
-  const registry = { ...load() };
+): Promise<void> {
+  await loadStatusOverrides();
+  const registry = { ...cache! };
   if (status && isManualStatus(status)) registry[id] = status;
   else delete registry[id];
-  save(registry);
+  await save(registry);
 }

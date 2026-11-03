@@ -158,7 +158,7 @@ describe("migrateSessionEngine", async () => {
   });
 
   test("rejects sessions with an in-flight journaled run", async () => {
-    expect(sessionHasJournaledRun("bks-mig-busy")).toBe(true);
+    expect(await sessionHasJournaledRun("bks-mig-busy")).toBe(true);
     const res = await migrateSessionEngine(
       "bks-mig-busy",
       "pi/anthropic/claude-haiku-5-5",

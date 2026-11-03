@@ -1,4 +1,4 @@
-import { existsSync } from "fs";
+import { pathExists } from "../shared/path-exists";
 import { resolve } from "path";
 import type { GithubCredential } from "../github-auth";
 import type { Sandbox, SandboxSessionSpec } from "../sandbox/provider";
@@ -151,7 +151,7 @@ type BranchExecutorDependencies = {
     gitEnv?: Record<string, string>,
   ) => Promise<string>;
   resolveCredential?: (principal: string) => Promise<GithubCredential | null>;
-  destinationExists?: (path: string) => boolean;
+  destinationExists?: (path: string) => boolean | Promise<boolean>;
   isSharedCheckoutDestination?: (
     project: string,
     path: string,
@@ -215,7 +215,7 @@ const defaultBranchDependencies: BranchExecutorDependencies = {
     (await import("../worktree")).createWorktree(branch, project, options),
   createWorktreeForExistingBranch: createExistingWorktree,
   resolveCredential: resolveCurrentCredential,
-  destinationExists: existsSync,
+  destinationExists: pathExists,
   isSharedCheckoutDestination,
   result: defaultBranchResult,
 };
@@ -249,7 +249,7 @@ export async function executeCreationBranchPrepare(
   if (
     !byPath &&
     !sharedCheckout &&
-    (dependencies.destinationExists ?? existsSync)(payload.worktreePath)
+    (await (dependencies.destinationExists ?? pathExists)(payload.worktreePath))
   )
     throw new CreationEffectIndeterminateError(
       `Worktree destination ${payload.worktreePath} exists without a registered branch`,

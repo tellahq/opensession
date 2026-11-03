@@ -36,7 +36,7 @@ import {
 
 import type { ServerWebSocket } from "bun";
 import { randomUUIDv7 } from "bun";
-import { existsSync } from "node:fs";
+import { pathExists } from "./shared/path-exists";
 import {
   activeAgentRecoveryRecord,
   currentAgentRunToken,
@@ -706,7 +706,7 @@ export async function actorCreationSetupPlan(
   const state = await ensureCreationPlanned(sessionId, identity);
   if (state.setupPlan || !["planned", "preparing"].includes(state.state))
     return (state.setupPlan ?? {}) as CreationSetupPlan;
-  const legacy = readCreatePlan(sessionId, identity);
+  const legacy = await readCreatePlan(sessionId, identity);
   if (!legacy) return {};
   return await patchCreationSetupPlan(sessionId, identity, {
     ...(legacy.branch ? { branch: legacy.branch } : {}),
@@ -1125,7 +1125,7 @@ async function restorePlannedOpening(sessionId: string): Promise<{
     (creation?.setupPlan?.resolved as Record<string, unknown> | undefined);
   const legacyPlan = actorPlan
     ? undefined
-    : readCreatePlanForRecovery(sessionId);
+    : await readCreatePlanForRecovery(sessionId);
   const openingPlan = actorPlan ?? legacyPlan?.resolved;
   const identity = actorPlan ? creation!.identity : legacyPlan?.identity;
   if (!openingPlan || !identity) return null;
@@ -1263,7 +1263,7 @@ export async function settleStoppedCreationOpening(
     item.sessionId,
     item.payload.openingPromptEntryId,
   );
-  clearCreatePlan(item.sessionId);
+  await clearCreatePlan(item.sessionId);
   return true;
 }
 
@@ -1286,7 +1286,7 @@ export async function executeCreationOpeningEffect(
       item.payload.openingPromptEntryId,
     );
     if (state.state === "ready" || state.state === "cancelled")
-      clearCreatePlan(item.sessionId);
+      await clearCreatePlan(item.sessionId);
     return;
   }
   if (await settleStoppedCreationOpening(item)) return;
@@ -1344,7 +1344,7 @@ export async function executeCreationOpeningEffect(
           item.payload.openingPromptEntryId,
         );
         if (recovered.state === "ready" || recovered.state === "cancelled")
-          clearCreatePlan(item.sessionId);
+          await clearCreatePlan(item.sessionId);
         return;
       }
       if (await settleStoppedCreationOpening(item)) return;
@@ -1413,7 +1413,7 @@ export async function executeCreationOpeningEffect(
             item.sessionId,
             item.payload.openingPromptEntryId,
           );
-          if (run.state !== "failed") clearCreatePlan(item.sessionId);
+          if (run.state !== "failed") await clearCreatePlan(item.sessionId);
           return;
         }
       }
@@ -1447,7 +1447,7 @@ export async function executeCreationOpeningEffect(
   );
   const settled = await sessionKernel(item.sessionId).creationState();
   if (settled?.state === "ready" || settled?.state === "cancelled")
-    clearCreatePlan(item.sessionId);
+    await clearCreatePlan(item.sessionId);
   else if (settled?.state !== "failed")
     throw new Error(
       "Opening effect returned without terminal actor settlement",
@@ -1457,7 +1457,7 @@ export async function executeCreationOpeningEffect(
 export async function resumePlannedCreate(sessionId: string): Promise<boolean> {
   const state = await sessionKernel(sessionId).creationState();
   if (state?.state === "ready" || state?.state === "cancelled") {
-    clearCreatePlan(sessionId);
+    await clearCreatePlan(sessionId);
     return true;
   }
   if (
@@ -2501,7 +2501,7 @@ export async function handleCreateSessionMessage(
       durableCreation.state === "ready" ||
       durableCreation.state === "cancelled"
     )
-      clearCreatePlan(bksId);
+      await clearCreatePlan(bksId);
     const response = replayedSessionCreatedResult(
       bksId,
       recoveringSession.workspaceId,
@@ -2515,7 +2515,7 @@ export async function handleCreateSessionMessage(
     recoveringSession?.codexThreadId ||
     recoveringSession?.piSessionId
   ) {
-    clearCreatePlan(bksId);
+    await clearCreatePlan(bksId);
     const response = replayedSessionCreatedResult(
       recoveringSession.id,
       recoveringSession.workspaceId,
@@ -2864,7 +2864,7 @@ export async function handleCreateSessionMessage(
         !selectedRunner &&
         !isAsk &&
         !isScratch &&
-        !existsSync(wtPath);
+        !(await pathExists(wtPath));
     } else if (selectedRunner) {
       if (!branch)
         branch =
@@ -3370,7 +3370,7 @@ export async function handleCreateSessionMessage(
     }
     // Setup failed before anything was persisted or announced. Every socket
     // that replayed this create receives the same terminal response.
-    clearCreatePlan(bksId);
+    await clearCreatePlan(bksId);
     failCreate(e.message || String(e));
     return;
   }

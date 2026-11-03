@@ -24,9 +24,9 @@
  * and how far the cursor is allowed to move.
  */
 
-import { existsSync, readFileSync } from "fs";
+import { readFile } from "node:fs/promises";
 import { stateDir } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import { transcript } from "./actor-transcript";
 
 export interface CommitRef {
@@ -82,30 +82,31 @@ function indexFile(): string {
 
 /** The index lives in memory once read: this process is its only writer, so
  *  the file is a restart's copy of it rather than the authority. */
-let cached: StoredIndex | null = null;
+let cached: Promise<StoredIndex> | null = null;
 
-function load(): StoredIndex {
-  if (cached) return cached;
+function load(): Promise<StoredIndex> {
+  return (cached ??= readIndex());
+}
+
+async function readIndex(): Promise<StoredIndex> {
   try {
-    const file = indexFile();
-    if (!existsSync(file)) return (cached = emptyIndex());
-    const data = JSON.parse(readFileSync(file, "utf8")) as StoredIndex;
-    if (data?.v !== 2 || !data.links || !data.cursors)
-      return (cached = emptyIndex());
-    return (cached = data);
+    const data = JSON.parse(await readFile(indexFile(), "utf8")) as StoredIndex;
+    if (data?.v !== 2 || !data.links || !data.cursors) return emptyIndex();
+    return data;
   } catch {
-    return (cached = emptyIndex());
+    // Missing or unreadable: start a fresh index.
+    return emptyIndex();
   }
 }
 
-function save(index: StoredIndex): void {
+async function save(index: StoredIndex): Promise<void> {
   const floor = Date.now() - KEEP_DAYS * 86_400_000;
   for (const [sha, link] of Object.entries(index.links))
     if (link.at < floor) delete index.links[sha];
   for (const [id, cursor] of Object.entries(index.cursors))
     if (cursor.at < floor) delete index.cursors[id];
   try {
-    writeJsonAtomic(indexFile(), index, false);
+    await writeJsonAtomicAsync(indexFile(), index, false);
   } catch {
     // An index that cannot be written is a slower feed, not a failure.
   }
@@ -258,14 +259,14 @@ export async function commitSessions(
     if (Number.isFinite(at))
       wanted.set(commit.sha.slice(0, 7), { sha: commit.sha, at });
   }
-  const index = load();
+  const index = await load();
   if (wanted.size) {
     // One sweep at a time: two feed loads at once would read the same rows
     // twice and race the cursors they write.
     sweeping ??= sweep(index, wanted, commitsReadAt)
       .catch(() => {})
-      .finally(() => {
-        save(index);
+      .finally(async () => {
+        await save(index);
         sweeping = null;
       });
     await sweeping;

@@ -45,8 +45,8 @@ function text(body: string) {
 
 /** Where clones land: the session's swept scratch when there is one, else a
  *  shared cache dir. Never the worktree — a clone is not the run's work. */
-function cloneRoot(sessionId?: string): string {
-  const scratch = sessionId ? ensureSessionScratch(sessionId) : undefined;
+async function cloneRoot(sessionId?: string): Promise<string> {
+  const scratch = sessionId ? await ensureSessionScratch(sessionId) : undefined;
   const root = scratch ? `${scratch}/repos` : `${stateDir("web-cache")}/repos`;
   if (!existsSync(root)) mkdirSync(root, { recursive: true, mode: 0o700 });
   return root;
@@ -80,7 +80,7 @@ async function cloneRepo(
   repo: string,
   sessionId?: string,
 ): Promise<string> {
-  const dir = `${cloneRoot(sessionId)}/${owner}-${repo}`;
+  const dir = `${await cloneRoot(sessionId)}/${owner}-${repo}`;
   if (existsSync(`${dir}/.git`)) {
     const summary = await describeClone(dir);
     return `Already cloned at ${dir} (reused).\n\n${summary}`;
