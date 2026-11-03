@@ -21,7 +21,7 @@
  */
 
 import { createSdkMcpServer, tool } from "../../server/inprocess-mcp";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
 import { z } from "zod";
 import {
   cancelWorkflow,
@@ -214,7 +214,7 @@ export function createWorkflowsMcpServer(ctx: WorkflowsToolContext) {
           );
         }
         try {
-          const { runId } = startWorkflow({
+          const { runId } = await startWorkflow({
             script: args.script,
             args: parsedArgs,
             sessionId: ctx.sessionId,
@@ -250,7 +250,7 @@ export function createWorkflowsMcpServer(ctx: WorkflowsToolContext) {
           ),
       },
       async (args: { run_id: string; include_result?: boolean }) => {
-        const run = getWorkflowRun(args.run_id);
+        const run = await getWorkflowRun(args.run_id);
         if (!run) return text(`No workflow run ${args.run_id}.`);
         const lines: string[] = [];
         const livePhaseStats = workflowPhaseStats(run);
@@ -330,9 +330,9 @@ export function createWorkflowsMcpServer(ctx: WorkflowsToolContext) {
             let spillPath = "";
             try {
               const dir = "/tmp/pi/workflow-results";
-              mkdirSync(dir, { recursive: true });
+              await mkdir(dir, { recursive: true });
               spillPath = `${dir}/${run.runId}.txt`;
-              writeFileSync(spillPath, result);
+              await writeFile(spillPath, result);
             } catch {
               spillPath = "";
             }
@@ -437,7 +437,7 @@ export function createWorkflowsMcpServer(ctx: WorkflowsToolContext) {
         args_json?: string;
         repo?: string;
       }) => {
-        const old = getWorkflowRun(args.run_id);
+        const old = await getWorkflowRun(args.run_id);
         if (!old) return text(`No workflow run ${args.run_id}.`);
         if (old.status === "running")
           return text(
@@ -455,7 +455,7 @@ export function createWorkflowsMcpServer(ctx: WorkflowsToolContext) {
           return text(
             `${args.run_id} is paused — resume it unchanged, or cancel it before relaunching with edits.`,
           );
-        const script = args.script ?? readWorkflowScript(args.run_id);
+        const script = args.script ?? (await readWorkflowScript(args.run_id));
         if (!script)
           return text(
             `Couldn't read the original script for ${args.run_id} — pass one explicitly via the script param.`,
@@ -479,7 +479,7 @@ export function createWorkflowsMcpServer(ctx: WorkflowsToolContext) {
         if (args.repo && !workspace)
           return text(`Repo "${args.repo}" is not attached to this session.`);
         try {
-          const { runId } = startWorkflow({
+          const { runId } = await startWorkflow({
             script,
             args: parsedArgs,
             sessionId: ctx.sessionId,

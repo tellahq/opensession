@@ -6,7 +6,7 @@
  * model turn can outlive a service restart; the GitHub recovery marker resumes
  * the surrounding posting workflow.
  */
-import { existsSync, readFileSync } from "fs";
+import { readJsonOrUndefined } from "../../server/shared/async-fs";
 import { OPENSESSION_SESSIONS_DIR } from "../../server/paths";
 import {
   invalidateSessionsCache,
@@ -276,13 +276,14 @@ export function finalSummary(text: string): string {
     : text.slice(idx + SUMMARY_SENTINEL.length).trim();
 }
 
-function readSessionFile(bksId: string): NativeSessionFile | null {
-  const path = `${SESSIONS_DIR}/${bksId}.json`;
-  if (!existsSync(path)) return null;
-  try {
-    return JSON.parse(readFileSync(path, "utf-8")) as NativeSessionFile;
-  } catch {}
-  return null;
+async function readSessionFile(
+  bksId: string,
+): Promise<NativeSessionFile | null> {
+  return (
+    (await readJsonOrUndefined<NativeSessionFile>(
+      `${SESSIONS_DIR}/${bksId}.json`,
+    )) ?? null
+  );
 }
 
 function readEngineSessionId(
@@ -416,7 +417,7 @@ export async function runGithubAgent(
     repoId,
   );
 
-  const existingSessionFile = readSessionFile(bksId);
+  const existingSessionFile = await readSessionFile(bksId);
   // Engine sessions are scoped to their directory; a session started under a
   // different cwd (e.g. a review from before reviews got per-PR worktrees)
   // won't resolve there — start fresh rather than resuming across cwds.

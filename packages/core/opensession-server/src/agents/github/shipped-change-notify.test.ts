@@ -35,19 +35,19 @@ function session(
 }
 
 describe("shipped visual change selection", () => {
-  test("uses the session's after screenshot", () => {
+  test("uses the session's after screenshot", async () => {
     const visual = session("preferred", "2026-08-10T10:00:00Z", [
       { before: "/tmp/before.png", after: "/tmp/preferred.png" },
     ]);
 
-    expect(selectShippedVisualChange(visual, () => true)).toEqual({
+    expect(await selectShippedVisualChange(visual, () => true)).toEqual({
       sessionId: "preferred",
       screenshots: ["/tmp/preferred.png"],
       summary: "Why preferred matters.",
     });
   });
 
-  test("requires a valid after screenshot", () => {
+  test("requires a valid after screenshot", async () => {
     const textOnly = session("text-only", "2026-08-12T10:00:00Z", [
       { before: "/tmp/before.png" },
     ]);
@@ -55,18 +55,18 @@ describe("shipped visual change selection", () => {
       { after: "/tmp/missing.png" },
     ]);
 
-    expect(selectShippedVisualChange(textOnly, () => true)).toBeNull();
-    expect(selectShippedVisualChange(missing, () => false)).toBeNull();
+    expect(await selectShippedVisualChange(textOnly, () => true)).toBeNull();
+    expect(await selectShippedVisualChange(missing, () => false)).toBeNull();
   });
 
-  test("falls back to a featured transcript screenshot", () => {
+  test("falls back to a featured transcript screenshot", async () => {
     const root = mkdtempSync(join(tmpdir(), "shipped-featured-selection-"));
     scratch.push(root);
     const image = join(root, "after.png");
     writeFileSync(image, "png");
 
     expect(
-      selectShippedVisualChange(
+      await selectShippedVisualChange(
         session("featured", "2026-08-12T10:00:00Z", []),
         () => false,
         [image],
@@ -78,15 +78,15 @@ describe("shipped visual change selection", () => {
     });
   });
 
-  test("keeps an explicitly empty attachment list empty", () => {
+  test("keeps an explicitly empty attachment list empty", async () => {
     const visual = session("removed", "2026-08-12T10:00:00Z", [
       { after: "/tmp/removed.png" },
     ]);
 
-    expect(selectShippedVisualChange(visual, () => true, [])).toBeNull();
+    expect(await selectShippedVisualChange(visual, () => true, [])).toBeNull();
   });
 
-  test("accepts only bounded images inside the session walkthrough directory", () => {
+  test("accepts only bounded images inside the session walkthrough directory", async () => {
     const root = mkdtempSync(join(tmpdir(), "shipped-change-assets-"));
     scratch.push(root);
     const sessionDir = join(root, "walkthrough", "safe-session");
@@ -96,18 +96,20 @@ describe("shipped visual change selection", () => {
     writeFileSync(inside, "png");
     writeFileSync(outside, "png");
 
-    expect(validWalkthroughScreenshot(inside, "safe-session", root)).toBe(true);
-    expect(validWalkthroughScreenshot(outside, "safe-session", root)).toBe(
-      false,
+    expect(await validWalkthroughScreenshot(inside, "safe-session", root)).toBe(
+      true,
     );
+    expect(
+      await validWalkthroughScreenshot(outside, "safe-session", root),
+    ).toBe(false);
   });
 
-  test("accepts bounded featured screenshots from temporary storage", () => {
+  test("accepts bounded featured screenshots from temporary storage", async () => {
     const root = mkdtempSync(join(tmpdir(), "shipped-featured-"));
     scratch.push(root);
     const image = join(root, "after.png");
     writeFileSync(image, "png");
-    expect(validFeaturedScreenshot(image)).toBe(true);
+    expect(await validFeaturedScreenshot(image)).toBe(true);
   });
 });
 
@@ -148,7 +150,7 @@ describe("shipped change copy", () => {
 });
 
 describe("shipped change announcement receipts", () => {
-  test("deduplicates identical posts but permits a changed attachment set", () => {
+  test("deduplicates identical posts but permits a changed attachment set", async () => {
     const original = shippedChangeAnnouncementKey(
       "tellahq/example",
       12,
@@ -169,20 +171,34 @@ describe("shipped change announcement receipts", () => {
     ).not.toBe(original);
   });
 
-  test("deduplicates a sent merge and releases failed claims", () => {
+  test("deduplicates a sent merge and releases failed claims", async () => {
     const root = mkdtempSync(join(tmpdir(), "shipped-change-state-"));
     scratch.push(root);
     const statePath = join(root, "state.json");
     const key = "tellahq/example#12@abc";
-    const claim = claimShippedChangeAnnouncement(key, statePath, 1_000);
+    const claim = await claimShippedChangeAnnouncement(key, statePath, 1_000);
     expect(claim).toBeString();
-    expect(claimShippedChangeAnnouncement(key, statePath, 1_001)).toBeNull();
-    settleShippedChangeAnnouncement(key, claim!, true, "session-1", statePath);
-    expect(claimShippedChangeAnnouncement(key, statePath, 2_000)).toBeNull();
+    expect(
+      await claimShippedChangeAnnouncement(key, statePath, 1_001),
+    ).toBeNull();
+    await settleShippedChangeAnnouncement(
+      key,
+      claim!,
+      true,
+      "session-1",
+      statePath,
+    );
+    expect(
+      await claimShippedChangeAnnouncement(key, statePath, 2_000),
+    ).toBeNull();
 
     const retryKey = "tellahq/example#13@def";
-    const failed = claimShippedChangeAnnouncement(retryKey, statePath, 3_000)!;
-    settleShippedChangeAnnouncement(
+    const failed = (await claimShippedChangeAnnouncement(
+      retryKey,
+      statePath,
+      3_000,
+    ))!;
+    await settleShippedChangeAnnouncement(
       retryKey,
       failed,
       false,
@@ -190,13 +206,13 @@ describe("shipped change announcement receipts", () => {
       statePath,
     );
     expect(
-      claimShippedChangeAnnouncement(retryKey, statePath, 3_001),
+      await claimShippedChangeAnnouncement(retryKey, statePath, 3_001),
     ).toBeString();
   });
 });
 
 describe("slackText", () => {
-  test("escapes markup but keeps user mentions", () => {
+  test("escapes markup but keeps user mentions", async () => {
     expect(slackText("<@U02ALEXK> fixed a < b & <!channel>")).toBe(
       "<@U02ALEXK> fixed a &lt; b &amp; &lt;!channel&gt;",
     );

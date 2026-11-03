@@ -21,7 +21,7 @@ import {
   createWorktree as createRepoWorktree,
   removeWorktree,
 } from "../../server/worktree";
-import { unlinkSync } from "fs";
+import { unlink } from "fs/promises";
 import { homeDir } from "../../server/paths";
 import {
   gitIdentityFor,
@@ -287,7 +287,7 @@ export async function loadSessionInfo(
 
 export async function deleteSessionFile(branch: string): Promise<void> {
   try {
-    unlinkSync(`${SESSION_DIR}/${branch}.json`);
+    await unlink(`${SESSION_DIR}/${branch}.json`);
     console.log(`[linear] Deleted session file: ${SESSION_DIR}/${branch}.json`);
   } catch {
     // File might not exist

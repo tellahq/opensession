@@ -7,7 +7,7 @@
  */
 
 import { randomUUIDv7 } from "bun";
-import { existsSync } from "fs";
+import { pathExists } from "./shared/async-fs";
 import { createHumansMcpServer } from "../agents/slack/humans-tools";
 import { createGoalSelfMcpServer } from "../agents/slack/goal-tools";
 import { runAgent, isAgentSessionBusy } from "./agent-runner";
@@ -102,7 +102,7 @@ export async function runGoal(goal: Goal): Promise<void> {
     if (goal.mode === "code") {
       const repo = getRepo(goal.repo);
       branch = goal.branch || `goal-${goal.id.slice(-8)}`;
-      if (goal.worktreePath && existsSync(goal.worktreePath)) {
+      if (goal.worktreePath && (await pathExists(goal.worktreePath))) {
         cwd = goal.worktreePath;
       } else {
         try {
@@ -113,7 +113,7 @@ export async function runGoal(goal: Goal): Promise<void> {
       }
     }
 
-    saveGoal({
+    await saveGoal({
       ...goal,
       osSessionId: bksId,
       branch: branch || undefined,
@@ -211,8 +211,8 @@ export async function runGoal(goal: Goal): Promise<void> {
           effectiveProvider = providerFor(to);
           if (shouldPersistModelSwitch(event)) {
             selectedModel = to;
-            const current = getGoal(goal.id) || goal;
-            saveGoal({ ...current, model: to });
+            const current = (await getGoal(goal.id)) || goal;
+            await saveGoal({ ...current, model: to });
           }
         }
       }
@@ -228,7 +228,7 @@ export async function runGoal(goal: Goal): Promise<void> {
     // The run may have rescheduled / paused / finished itself via
     // opensession-goal-self — reload so we don't clobber those, then apply
     // bookkeeping and a 24h fallback if it left no next wake.
-    const fresh = getGoal(goal.id) || goal;
+    const fresh = (await getGoal(goal.id)) || goal;
     const next: Goal = {
       ...fresh,
       osSessionId: bksId,
@@ -252,15 +252,15 @@ export async function runGoal(goal: Goal): Promise<void> {
         `[goals] "${goal.name}" set no next wake — defaulting to +24h`,
       );
     }
-    saveGoal(next);
+    await saveGoal(next);
     console.log(
       `[goals] "${goal.name}" wake #${wake} ${errorMsg ? `error: ${errorMsg}` : "ok"} (status ${next.status})`,
     );
   } catch (e: any) {
     console.error(`[goals] "${goal.name}" wake failed:`, e);
-    const fresh = getGoal(goal.id);
+    const fresh = await getGoal(goal.id);
     if (fresh) {
-      saveGoal({
+      await saveGoal({
         ...fresh,
         lastRunAt: startedAt.toISOString(),
         lastRunStatus: "error",
@@ -287,28 +287,39 @@ export async function runGoal(goal: Goal): Promise<void> {
  */
 export function startGoalTicker(): void {
   if (g.__goalTicker || isDevInstance()) return;
+  let ticking = false;
   g.__goalTicker = setInterval(() => {
-    const now = Date.now();
-    for (const goal of listGoals()) {
-      if (goal.status !== "active") continue;
-      if (Date.parse(goal.nextWakeAt) > now) continue;
-      if (runningGoals.has(goal.id)) continue;
-      // A prior process's run may still be resuming from the journal — don't
-      // double-drive the same engine session.
-      if (isAgentSessionBusy(goal.engineSessionId, goal.osSessionId)) continue;
-      // Safety cap: stop an out-of-control mission until a human resumes it.
-      if (goal.maxWakes && goal.wakeCount >= goal.maxWakes) {
-        saveGoal({
-          ...goal,
-          status: "paused",
-          pauseReason: `Hit safety cap of ${goal.maxWakes} wakes — resume to continue.`,
-        });
-        console.log(
-          `[goals] "${goal.name}" hit maxWakes ${goal.maxWakes}; paused`,
-        );
-        continue;
-      }
-      void runGoal(goal);
-    }
+    if (ticking) return;
+    ticking = true;
+    void wakeDueGoals()
+      .catch((error) => console.error("[goals] tick failed:", error))
+      .finally(() => {
+        ticking = false;
+      });
   }, 60_000);
+}
+
+async function wakeDueGoals(): Promise<void> {
+  const now = Date.now();
+  for (const goal of await listGoals()) {
+    if (goal.status !== "active") continue;
+    if (Date.parse(goal.nextWakeAt) > now) continue;
+    if (runningGoals.has(goal.id)) continue;
+    // A prior process's run may still be resuming from the journal — don't
+    // double-drive the same engine session.
+    if (isAgentSessionBusy(goal.engineSessionId, goal.osSessionId)) continue;
+    // Safety cap: stop an out-of-control mission until a human resumes it.
+    if (goal.maxWakes && goal.wakeCount >= goal.maxWakes) {
+      await saveGoal({
+        ...goal,
+        status: "paused",
+        pauseReason: `Hit safety cap of ${goal.maxWakes} wakes — resume to continue.`,
+      });
+      console.log(
+        `[goals] "${goal.name}" hit maxWakes ${goal.maxWakes}; paused`,
+      );
+      continue;
+    }
+    void runGoal(goal);
+  }
 }

@@ -60,7 +60,7 @@ export async function runSimplify(
     });
     onSessionCreated?.(bksId);
 
-    const prior = readPrState(pr.number, pr.ghRepo);
+    const prior = await readPrState(pr.number, pr.ghRepo);
     // Reuse this run's comment only when recovering an interrupted run; a fresh
     // trigger (no activeRun) posts a new comment.
     const reuseId =
@@ -73,7 +73,7 @@ export async function runSimplify(
       `${SIMPLIFY_MARKER}\n✨ **${personaName()} simplify** — working on PR #${pr.number}… · ${link}`,
       pr.ghRepo,
     );
-    updatePrState(
+    await updatePrState(
       pr.number,
       pr.headRef,
       (s) => {
@@ -114,7 +114,7 @@ export async function runSimplify(
       pr.ghRepo,
     );
 
-    updatePrState(
+    await updatePrState(
       pr.number,
       pr.headRef,
       (s) => {
@@ -153,7 +153,7 @@ export async function runSimplify(
     // github agent re-runs it on startup.
     // Kind-scoped: the re-review above may own activeRun by now, and clearing
     // its marker would lose that run's crash recovery.
-    updatePrState(
+    await updatePrState(
       pr.number,
       pr.headRef,
       (s) => {

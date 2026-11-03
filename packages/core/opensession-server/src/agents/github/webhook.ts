@@ -270,7 +270,7 @@ export async function handleGithubPrEvent(
         );
       }
       // Persists the request synchronously, then runs in the background.
-      if (command === "start") handleIssueLabel(payload);
+      if (command === "start") await handleIssueLabel(payload);
       return;
     }
 
@@ -316,7 +316,7 @@ export async function handleGithubPrEvent(
       const label: string = payload.label?.name || "";
       const requestedBy: string = payload.sender?.login || "";
       if (labelMatches(label, LABEL_REVIEW)) {
-        desiredReviews.cancel(ref);
+        await desiredReviews.cancel(ref);
         void fireReview(ref, true);
       } else if (externalFork) {
         console.warn(
@@ -325,7 +325,7 @@ export async function handleGithubPrEvent(
       } else if (labelMatches(label, LABEL_AUTOFIX)) {
         // A human re-applying the label is a fresh mandate — reset the sweep's
         // per-SHA retry budget so it can babysit this new attempt too.
-        updatePrState(
+        await updatePrState(
           pr.number,
           ref.headRef,
           (s) => {
@@ -357,8 +357,8 @@ export async function handleGithubPrEvent(
     // Its own review/mention/auto-fix sessions are done too: archive them as
     // `auto` (never one with a run in flight), and restore them on reopen.
     if (action === "closed") {
-      desiredReviews.cancel(ref);
-      clearHandoff(pr.number, ghRepo);
+      await desiredReviews.cancel(ref);
+      await clearHandoff(pr.number, ghRepo);
       // Enqueued synchronously (static import) so a later reopen always runs
       // after this archive, never interleaved with it.
       archiveClosedPrSessions(pr.number, ghRepo || defaultRepo().ghRepo).catch(
@@ -400,7 +400,12 @@ export async function handleGithubPrEvent(
           const threads = await m.listReviewThreads(pr.number, ghRepo);
           const { harvestThreadOutcomes, harvestReplySignals } =
             await import("./feedback");
-          harvestThreadOutcomes(ghRepo, pr.number, threads, /*prClosed*/ true);
+          await harvestThreadOutcomes(
+            ghRepo,
+            pr.number,
+            threads,
+            /*prClosed*/ true,
+          );
           await harvestReplySignals(ghRepo, pr.number, threads);
         })
         .catch((e) =>
@@ -477,7 +482,9 @@ export async function handleGithubPrEvent(
       // Opt-out keyword in the title (per-repo .os-review.json; read from the
       // repo's main checkout — no PR worktree exists yet). Label-forced and
       // manual reviews still run; only the automatic path honors it.
-      const skipOpts = loadReviewOptions(eventRepo?.repo || defaultRepo().repo);
+      const skipOpts = await loadReviewOptions(
+        eventRepo?.repo || defaultRepo().repo,
+      );
       if (titleHasSkipKeyword(pr.title || "", skipOpts)) {
         console.log(
           `[github] PR #${pr.number} title carries a skip keyword — no auto review`,
@@ -500,8 +507,9 @@ export async function handleGithubPrEvent(
           senderIsBot,
           action,
           codeLockHeld: isLockHeld("code", pr.number, ghRepo),
-          autoFixActive: !!readPrState(pr.number, ghRepo)?.autoFix?.active,
-          handoffActive: isHandoffActive(pr.number, ghRepo),
+          autoFixActive: !!(await readPrState(pr.number, ghRepo))?.autoFix
+            ?.active,
+          handoffActive: await isHandoffActive(pr.number, ghRepo),
         })
       ) {
         console.log(
@@ -517,9 +525,9 @@ export async function handleGithubPrEvent(
         // Pushes debounce (hot PRs got one review per push — #4913: 20 pushes
         // ≈ $131/day of review spend on 2026-07-17); first reviews of a PR
         // stay immediate.
-        if (action === "synchronize") desiredReviews.admit(ref);
+        if (action === "synchronize") await desiredReviews.admit(ref);
         else {
-          desiredReviews.cancel(ref);
+          await desiredReviews.cancel(ref);
           void fireReview(ref, false);
         }
       }
@@ -561,7 +569,8 @@ async function reviewSkippedByRule(
   preflightDetails?: PrAutomationDetails,
 ): Promise<boolean> {
   const repo = ref.ghRepo ? repoForFullName(ref.ghRepo) : null;
-  const rules = loadReviewOptions(repo?.repo || defaultRepo().repo).rules;
+  const rules = (await loadReviewOptions(repo?.repo || defaultRepo().repo))
+    .rules;
   if (!rules.some((r) => r.then?.skipReview)) return false;
   try {
     const details =
@@ -649,8 +658,8 @@ const desiredReviews = new DesiredReviewScheduler(
   },
 );
 
-export function restoreDesiredReviews(states: GithubPrState[]): void {
-  desiredReviews.restore(states);
+export function restoreDesiredReviews(states: GithubPrState[]): Promise<void> {
+  return desiredReviews.restore(states);
 }
 
 export async function fireAutoFix(

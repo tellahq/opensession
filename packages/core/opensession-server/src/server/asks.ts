@@ -6,7 +6,8 @@
  * whole time, so whoever answers first (web or Slack) wins.
  */
 
-import { existsSync, readFileSync, rmSync } from "fs";
+import { rm } from "fs/promises";
+import { readTextIfExists } from "./shared/async-fs";
 import { personaName, productName } from "./config";
 import {
   awaitBlockingAnswer,
@@ -132,9 +133,11 @@ export function pendingAskStorePath(): string {
   return `${sessionsDir()}/pending-asks.json`;
 }
 
-function removeLegacyAskStore(storePath = pendingAskStorePath()): void {
+async function removeLegacyAskStore(
+  storePath = pendingAskStorePath(),
+): Promise<void> {
   try {
-    rmSync(storePath, { force: true });
+    await rm(storePath, { force: true });
   } catch (error) {
     console.error(
       `[ask] Failed to remove migrated ask store ${storePath}:`,
@@ -618,7 +621,7 @@ export async function restorePendingAsks(
     askMigrationState.complete = actorAuthority;
   let stored: { asks?: PersistedPendingAsk[] };
   if (actorAuthority) {
-    removeLegacyAskStore(storePath);
+    await removeLegacyAskStore(storePath);
     const entries = (await sessionAsk({ op: "entries" })) as Array<
       [string, PendingAsk]
     >;
@@ -647,16 +650,23 @@ export async function restorePendingAsks(
       })),
     };
   } else {
-    if (!existsSync(storePath)) {
+    let text: string | undefined;
+    try {
+      text = await readTextIfExists(storePath);
+    } catch (e) {
+      console.error("[ask] Failed to restore pending asks:", e);
+      return 0;
+    }
+    if (text === undefined) {
       if (storePath === pendingAskStorePath()) {
         await markSessionAskMigrationComplete();
         askMigrationState.complete = true;
-        removeLegacyAskStore(storePath);
+        await removeLegacyAskStore(storePath);
       }
       return 0;
     }
     try {
-      stored = JSON.parse(readFileSync(storePath, "utf8"));
+      stored = JSON.parse(text);
     } catch (e) {
       console.error("[ask] Failed to restore pending asks:", e);
       return 0;
@@ -725,7 +735,7 @@ export async function restorePendingAsks(
   if (storePath === pendingAskStorePath()) {
     await markSessionAskMigrationComplete();
     askMigrationState.complete = true;
-    removeLegacyAskStore(storePath);
+    await removeLegacyAskStore(storePath);
   }
   persistPendingAsks(storePath);
   if (restored > 0) {

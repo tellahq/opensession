@@ -17,11 +17,12 @@
  * next to the review worktree; node_modules are symlinked in from the repo's
  * dependency-installed main checkout.
  */
-import { cpSync, existsSync, mkdirSync, symlinkSync } from "node:fs";
+import { cp, mkdir, symlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { audit } from "../../server/audit";
 import { runCommand } from "../../server/run-command";
 import { removeTree } from "../../server/workload-scope";
+import { pathExists } from "../../server/shared/async-fs";
 
 export interface TestOnBaseResult {
   /** Changed test files run against the merge base. */
@@ -113,23 +114,23 @@ export async function runTestOnBaseCheck(opts: {
       for (let dir = dirname(file); ; dir = dirname(dir)) {
         const rel = dir === "." ? "node_modules" : join(dir, "node_modules");
         if (
-          existsSync(join(opts.mainCheckout, rel)) &&
-          !existsSync(join(baseDir, rel))
+          (await pathExists(join(opts.mainCheckout, rel))) &&
+          !(await pathExists(join(baseDir, rel)))
         ) {
           try {
-            symlinkSync(join(opts.mainCheckout, rel), join(baseDir, rel));
+            await symlink(join(opts.mainCheckout, rel), join(baseDir, rel));
           } catch {}
         }
         if (dir === ".") break;
       }
-      mkdirSync(dirname(join(baseDir, file)), { recursive: true });
-      cpSync(join(opts.cwd, file), join(baseDir, file));
+      await mkdir(dirname(join(baseDir, file)), { recursive: true });
+      await cp(join(opts.cwd, file), join(baseDir, file));
 
       // Run from the nearest package dir so workspace-relative config applies.
       let pkgDir = dirname(file);
       while (
         pkgDir !== "." &&
-        !existsSync(join(baseDir, pkgDir, "package.json"))
+        !(await pathExists(join(baseDir, pkgDir, "package.json")))
       )
         pkgDir = dirname(pkgDir);
       const cwd = pkgDir === "." ? baseDir : join(baseDir, pkgDir);

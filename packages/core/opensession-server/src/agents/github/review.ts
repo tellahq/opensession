@@ -255,7 +255,7 @@ export async function runReview(
   let preserveRecovery = false;
   try {
     const prRepo = pr.ghRepo ? repoForFullName(pr.ghRepo) : null;
-    const state = getOrInitPrState(pr.number, pr.headRef, pr.ghRepo);
+    const state = await getOrInitPrState(pr.number, pr.headRef, pr.ghRepo);
     const priorRun =
       state.activeRun?.kind === "review" ? state.activeRun : undefined;
     const recovering = Boolean(priorRun);
@@ -287,7 +287,7 @@ export async function runReview(
     const recoveredReviewResult = sameHeadRecovery
       ? priorRun?.reviewResult
       : undefined;
-    updatePrState(
+    await updatePrState(
       pr.number,
       pr.headRef,
       (s) => {
@@ -346,7 +346,7 @@ export async function runReview(
       );
       return null;
     }
-    if (cancellationRequested()) return finishCancelled();
+    if (await cancellationRequested()) return finishCancelled();
     const title = `Review · PR #${pr.number} ${details.title}`.slice(0, 100);
     const bksId = publicReview
       ? bksIdFor(pr.number, "review", pr.ghRepo)
@@ -392,7 +392,7 @@ export async function runReview(
     );
     if (placeholderId) {
       let ownsRun = false;
-      updatePrState(
+      await updatePrState(
         pr.number,
         pr.headRef,
         (s) => {
@@ -411,7 +411,7 @@ export async function runReview(
         await supersedeReviewComment(prevId, pr.ghRepo).catch(() => {});
       }
     }
-    if (cancellationRequested())
+    if (await cancellationRequested())
       return finishCancelled(placeholderId || undefined);
 
     // Internal PRs keep the rich local agent worktree. A fork is never placed
@@ -440,12 +440,12 @@ export async function runReview(
         };
       }
     }
-    if (cancellationRequested())
+    if (await cancellationRequested())
       return finishCancelled(placeholderId || undefined);
 
     // Public contributors cannot change review policy. Their options come from
     // the configured base checkout and deterministic host-side execution stays off.
-    const reviewOpts = loadReviewOptions(
+    const reviewOpts = await loadReviewOptions(
       publicReview ? prRepo?.repo || DEFAULT_REPO_DIR : cwd,
     );
     const summaryOnly = details.changedFiles > reviewOpts.summaryOnlyOverFiles;
@@ -496,7 +496,7 @@ export async function runReview(
       ? priorReviewSection({
           lastReview: state.lastReview,
           priorFindings: classifyPriorFindings(
-            readFeedback(pr.ghRepo),
+            await readFeedback(pr.ghRepo),
             pr.number,
             preThreads,
             isGithubBotLogin,
@@ -523,7 +523,7 @@ export async function runReview(
           REVIEW_MARKER,
         ),
         priorReview,
-        learnedRules: learnedRulesSection(pr.ghRepo),
+        learnedRules: await learnedRulesSection(pr.ghRepo),
         lastReviewedSha:
           isUpdate &&
           state.lastReviewedSha &&
@@ -555,8 +555,8 @@ export async function runReview(
       });
     }
 
-    const persistReviewResult = (result: GithubRunResult) => {
-      updatePrState(
+    const persistReviewResult = async (result: GithubRunResult) => {
+      await updatePrState(
         pr.number,
         pr.headRef,
         (s) => {
@@ -575,7 +575,7 @@ export async function runReview(
       );
     };
 
-    if (cancellationRequested())
+    if (await cancellationRequested())
       return finishCancelled(placeholderId || undefined);
     if (isShuttingDown()) {
       preserveRecovery = true;
@@ -760,7 +760,7 @@ export async function runReview(
             error: message,
           };
         }
-        const admission = admitPublicReview({
+        const admission = await admitPublicReview({
           repo: baseGhRepo,
           prNumber: pr.number,
           headSha: pr.headSha,
@@ -846,10 +846,10 @@ export async function runReview(
           );
         }
       }
-      persistReviewResult(finalResult);
+      await persistReviewResult(finalResult);
     }
 
-    if (cancellationRequested())
+    if (await cancellationRequested())
       return finishCancelled(placeholderId || undefined);
     let parsed = parseReviewOutput(
       finalResult.text,
@@ -895,8 +895,8 @@ export async function runReview(
           finalResult.error || "Detached review ownership is uncertain",
         );
       }
-      persistReviewResult(finalResult);
-      if (cancellationRequested())
+      await persistReviewResult(finalResult);
+      if (await cancellationRequested())
         return finishCancelled(placeholderId || undefined);
       parsed = parseReviewOutput(finalResult.text, cwd);
     }
@@ -911,7 +911,7 @@ export async function runReview(
     const secrets = await secretScan;
     const risk = await mergeRisk;
     const plan = await monitoringPlan;
-    if (cancellationRequested())
+    if (await cancellationRequested())
       return finishCancelled(placeholderId || undefined);
 
     // Never publish an assessment against a different commit from the one the
@@ -966,7 +966,7 @@ export async function runReview(
         );
         for (const [key, outcome] of late) promptOutcomes.set(key, outcome);
       }
-      if (cancellationRequested())
+      if (await cancellationRequested())
         return finishCancelled(placeholderId || undefined);
       ruleEval = applyReviewRules(reviewOpts.rules, ruleCtx, promptOutcomes);
       if (ruleEval.applied.length) {
@@ -1068,7 +1068,7 @@ export async function runReview(
     if (!reviewError && pr.headSha) {
       // The verdict is kept alongside the SHA so the sidebar can show the score
       // without reading the PR's comments back off GitHub.
-      recordReviewed(
+      await recordReviewed(
         pr.number,
         pr.headRef,
         pr.headSha,
@@ -1090,7 +1090,7 @@ export async function runReview(
       void refreshApprovalGate(pr.number, pr.ghRepo || defaultRepo().ghRepo);
       if (plan && !isEmptyPlan(plan)) {
         const { model: _model, ...stored } = plan;
-        updatePrState(
+        await updatePrState(
           pr.number,
           pr.headRef,
           (s) => {
@@ -1125,7 +1125,7 @@ export async function runReview(
           );
       }
       if (!preserveRecovery)
-        clearActiveRun(pr.number, pr.headRef, "review", pr.ghRepo);
+        await clearActiveRun(pr.number, pr.headRef, "review", pr.ghRepo);
     }
     releaseLock("review", pr.number, pr.ghRepo);
   }
@@ -1186,10 +1186,8 @@ async function postReview(
   mergeRisk: MergeRiskResult | null = null,
   rules: ReviewRuleEvaluation | null = null,
 ): Promise<void> {
-  const knownCommentId = getOrInitPrState(
-    pr.number,
-    pr.headRef,
-    pr.ghRepo,
+  const knownCommentId = (
+    await getOrInitPrState(pr.number, pr.headRef, pr.ghRepo)
   ).summaryCommentId;
   const shortSha = (pr.headSha || "").slice(0, 7);
 
@@ -1210,21 +1208,32 @@ async function postReview(
   // the learned feedback filter (recurring-nit suppression — never P0/P1).
   const allFindings = parsed?.findings || [];
   let withheld = 0;
-  const findings = allFindings.filter((f) => {
-    if (pathIgnored(f.path, opts)) return (withheld++, false);
-    if (severityRank(f.severity) > severityRank(opts.minInlineSeverity))
-      return (withheld++, false);
-    if (summaryOnly && severityRank(f.severity) > 1) return (withheld++, false);
+  const findings: typeof allFindings = [];
+  for (const f of allFindings) {
+    if (pathIgnored(f.path, opts)) {
+      withheld++;
+      continue;
+    }
+    if (severityRank(f.severity) > severityRank(opts.minInlineSeverity)) {
+      withheld++;
+      continue;
+    }
+    if (summaryOnly && severityRank(f.severity) > 1) {
+      withheld++;
+      continue;
+    }
     if (
-      shouldSuppressFinding(pr.ghRepo, {
+      await shouldSuppressFinding(pr.ghRepo, {
         severity: f.severity,
         title: f.title,
         body: f.body,
       })
-    )
-      return (withheld++, false);
-    return true;
-  });
+    ) {
+      withheld++;
+      continue;
+    }
+    findings.push(f);
+  }
   if (withheld > 0) {
     console.log(
       `[github] withheld ${withheld} finding(s) on PR #${pr.number} (config/feedback filters)`,
@@ -1284,7 +1293,7 @@ async function postReview(
   }
   if (id && id !== knownCommentId) {
     const postedId = id;
-    updatePrState(
+    await updatePrState(
       pr.number,
       pr.headRef,
       (s) => {
@@ -1308,7 +1317,7 @@ async function postReview(
   // on our comments and mark outdated/resolved ones "addressed" (the author
   // acted). The "ignored" verdict only lands at PR close (webhook.ts).
   try {
-    harvestThreadOutcomes(pr.ghRepo, pr.number, existingThreads, false);
+    await harvestThreadOutcomes(pr.ghRepo, pr.number, existingThreads, false);
   } catch (e) {
     console.warn(`[github] feedback harvest failed for PR #${pr.number}:`, e);
   }
@@ -1373,7 +1382,7 @@ async function postReview(
       // back to it (the feedback filter's training data).
       if (ok) {
         try {
-          recordPostedFindings(pr.ghRepo, pr.number, fresh);
+          await recordPostedFindings(pr.ghRepo, pr.number, fresh);
         } catch (e) {
           console.warn(
             `[github] recording findings failed for PR #${pr.number}:`,

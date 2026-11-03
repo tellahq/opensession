@@ -346,7 +346,7 @@ export async function handlePrefsRoutes(
   // drafts.
   if (path === "/api/drafts" && req.method === "GET") {
     const user = requestUser(ctx, url.searchParams.get("user")) || "Anonymous";
-    return conditionalJsonResponse(req, { drafts: getDrafts(user) });
+    return conditionalJsonResponse(req, { drafts: await getDrafts(user) });
   }
 
   if (path === "/api/drafts" && req.method === "PUT") {
@@ -380,7 +380,12 @@ export async function handlePrefsRoutes(
     const updatedAt = new Date(
       Math.min(parsedAt, Date.now() + 5 * 60_000),
     ).toISOString();
-    const result = upsertDraft(user, body.sessionId, body.text, updatedAt);
+    const result = await upsertDraft(
+      user,
+      body.sessionId,
+      body.text,
+      updatedAt,
+    );
     return Response.json(result);
   }
 

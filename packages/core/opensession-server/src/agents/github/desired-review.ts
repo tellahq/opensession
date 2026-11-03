@@ -17,19 +17,22 @@ interface DesiredReviewTimer {
 }
 
 export interface DesiredReviewDependencies {
-  readState: (prNumber: number, ghRepo?: string) => GithubPrState | null;
+  readState: (
+    prNumber: number,
+    ghRepo?: string,
+  ) => GithubPrState | null | Promise<GithubPrState | null>;
   updateState: (
     prNumber: number,
     headRef: string,
     patch: (state: GithubPrState) => void,
     ghRepo?: string,
-  ) => GithubPrState;
+  ) => GithubPrState | Promise<GithubPrState>;
   updateStateIf: (
     prNumber: number,
     headRef: string,
     patch: (state: GithubPrState) => boolean,
     ghRepo?: string,
-  ) => GithubPrState;
+  ) => GithubPrState | Promise<GithubPrState>;
   resolvePr: (
     prNumber: number,
     ghRepo?: string,
@@ -143,12 +146,12 @@ export class DesiredReviewScheduler {
       deps.logError ?? ((message, error) => console.error(message, error));
   }
 
-  admit(ref: PrRef): void {
+  async admit(ref: PrRef): Promise<void> {
     const key = prKey(ref.number, ref.ghRepo);
     const timer = this.timers.get(key);
     const persisted = timer
       ? undefined
-      : this.deps.readState(ref.number, ref.ghRepo)?.pendingReview;
+      : (await this.deps.readState(ref.number, ref.ghRepo))?.pendingReview;
     const parsedFirstPushAt = Date.parse(persisted?.firstPushAt || "");
     const now = this.now();
     const firstPushAt = reviewBurstStart(
@@ -177,7 +180,7 @@ export class DesiredReviewScheduler {
       timing.firstPushAt,
       timing.dueAt,
     );
-    this.deps.updateState(
+    await this.deps.updateState(
       ref.number,
       ref.headRef,
       (state) => {
@@ -188,9 +191,9 @@ export class DesiredReviewScheduler {
     this.arm(ref, marker, timing.dueAt);
   }
 
-  cancel(ref: PrRef): void {
+  async cancel(ref: PrRef): Promise<void> {
     this.removeTimer(prKey(ref.number, ref.ghRepo));
-    this.deps.updateStateIf(
+    await this.deps.updateStateIf(
       ref.number,
       ref.headRef,
       (state) => {
@@ -202,17 +205,17 @@ export class DesiredReviewScheduler {
     );
   }
 
-  restore(states: GithubPrState[]): void {
+  async restore(states: GithubPrState[]): Promise<void> {
     const now = this.now();
     let restored = 0;
     for (const state of states) {
       const raw = state.pendingReview;
       if (!raw) continue;
-      const marker = this.normalize(state, raw);
+      const marker = await this.normalize(state, raw);
       if (!marker || marker.phase === "exhausted") continue;
       const ref = this.refFor(state, marker);
       if (state.reviewedShas.includes(marker.headSha)) {
-        this.clear(ref, marker.generation!);
+        await this.clear(ref, marker.generation!);
         continue;
       }
       const parsedDueAt = Date.parse(marker.dueAt);
@@ -232,10 +235,10 @@ export class DesiredReviewScheduler {
     }
   }
 
-  private normalize(
+  private async normalize(
     state: GithubPrState,
     raw: PendingReviewState,
-  ): PendingReviewState | undefined {
+  ): Promise<PendingReviewState | undefined> {
     const legacy = raw as PendingReviewState & {
       claimedAt?: string;
       exhaustedAt?: string;
@@ -304,7 +307,7 @@ export class DesiredReviewScheduler {
         legacy.exhaustedAt !== normalized.exhaustedAt);
     if (!needsWrite) return normalized;
     let stored = false;
-    this.deps.updateStateIf(
+    await this.deps.updateStateIf(
       state.prNumber,
       normalized.headRef,
       (current) => {
@@ -338,7 +341,12 @@ export class DesiredReviewScheduler {
             `[github] desired review crashed for PR #${ref.number}`,
             error,
           );
-          this.defer(ref, generation, error);
+          void this.defer(ref, generation, error).catch((deferError) =>
+            this.logError(
+              `[github] desired review retry failed for PR #${ref.number}`,
+              deferError,
+            ),
+          );
         });
       },
       reviewDebounceDelay(dueAt, this.now()),
@@ -355,7 +363,8 @@ export class DesiredReviewScheduler {
 
   private async run(ref: PrRef, generation: string): Promise<void> {
     const key = prKey(ref.number, ref.ghRepo);
-    const marker = this.deps.readState(ref.number, ref.ghRepo)?.pendingReview;
+    const marker = (await this.deps.readState(ref.number, ref.ghRepo))
+      ?.pendingReview;
     if (marker?.generation !== generation || marker.phase === "exhausted") {
       this.removeTimer(key, generation);
       return;
@@ -366,11 +375,16 @@ export class DesiredReviewScheduler {
     }
     const knownBackoff = await this.deps.restBackoffUntil(ref.ghRepo);
     if (knownBackoff > this.now()) {
-      this.defer(ref, generation, "GitHub REST is rate limited", knownBackoff);
+      await this.defer(
+        ref,
+        generation,
+        "GitHub REST is rate limited",
+        knownBackoff,
+      );
       return;
     }
 
-    const running = this.claim(ref, generation);
+    const running = await this.claim(ref, generation);
     if (!running) return;
     this.removeTimer(key, generation);
 
@@ -378,7 +392,7 @@ export class DesiredReviewScheduler {
     try {
       details = await this.deps.resolvePr(ref.number, ref.ghRepo);
     } catch (error) {
-      this.defer(
+      await this.defer(
         ref,
         generation,
         error,
@@ -392,7 +406,7 @@ export class DesiredReviewScheduler {
       details.isDraft ||
       !details.headRefOid
     ) {
-      this.clear(ref, generation);
+      await this.clear(ref, generation);
       return;
     }
 
@@ -403,14 +417,14 @@ export class DesiredReviewScheduler {
       title: details.title || ref.title,
       ...(ref.ghRepo ? { ghRepo: ref.ghRepo } : {}),
     };
-    const latest = this.deps.readState(ref.number, ref.ghRepo);
+    const latest = await this.deps.readState(ref.number, ref.ghRepo);
     if (latest?.pendingReview?.generation !== generation) return;
     if (latest.reviewedShas.includes(current.headSha)) {
-      this.clear(current, generation);
+      await this.clear(current, generation);
       return;
     }
     if (current.headSha !== running.headSha) {
-      this.replaceHead(ref, generation, current);
+      await this.replaceHead(ref, generation, current);
       return;
     }
 
@@ -418,28 +432,28 @@ export class DesiredReviewScheduler {
     try {
       result = await this.deps.runReview(current, details);
     } catch (error) {
-      this.defer(current, generation, error);
+      await this.defer(current, generation, error);
       return;
     }
-    const after = this.deps.readState(current.number, current.ghRepo);
+    const after = await this.deps.readState(current.number, current.ghRepo);
     if (after?.pendingReview?.generation !== generation) return;
     if (after.reviewedShas.includes(current.headSha)) {
-      this.clear(current, generation);
+      await this.clear(current, generation);
       return;
     }
-    this.defer(
+    await this.defer(
       current,
       generation,
       result?.error || "Review finished without recording the requested head",
     );
   }
 
-  private claim(
+  private async claim(
     ref: PrRef,
     generation: string,
-  ): PendingReviewState | undefined {
+  ): Promise<PendingReviewState | undefined> {
     let running: PendingReviewState | undefined;
-    this.deps.updateStateIf(
+    await this.deps.updateStateIf(
       ref.number,
       ref.headRef,
       (state) => {
@@ -465,19 +479,19 @@ export class DesiredReviewScheduler {
     return running;
   }
 
-  private defer(
+  private async defer(
     ref: PrRef,
     generation: string,
     error: unknown,
     notBefore = 0,
-  ): void {
+  ): Promise<void> {
     const now = this.now();
     const message =
       error instanceof Error
         ? error.message
         : String(error || "Review did not complete");
     let next: PendingReviewState | undefined;
-    this.deps.updateStateIf(
+    await this.deps.updateStateIf(
       ref.number,
       ref.headRef,
       (state) => {
@@ -528,7 +542,11 @@ export class DesiredReviewScheduler {
     this.arm(ref, next, Date.parse(next.dueAt));
   }
 
-  private replaceHead(ref: PrRef, generation: string, current: PrRef): void {
+  private async replaceHead(
+    ref: PrRef,
+    generation: string,
+    current: PrRef,
+  ): Promise<void> {
     const now = this.now();
     const timing = nextReviewDebounce(
       now,
@@ -543,7 +561,7 @@ export class DesiredReviewScheduler {
       timing.dueAt,
     );
     let replaced = false;
-    this.deps.updateStateIf(
+    await this.deps.updateStateIf(
       ref.number,
       current.headRef,
       (state) => {
@@ -561,9 +579,9 @@ export class DesiredReviewScheduler {
     );
   }
 
-  private clear(ref: PrRef, generation: string): void {
+  private async clear(ref: PrRef, generation: string): Promise<void> {
     this.removeTimer(prKey(ref.number, ref.ghRepo), generation);
-    this.deps.updateStateIf(
+    await this.deps.updateStateIf(
       ref.number,
       ref.headRef,
       (state) => {

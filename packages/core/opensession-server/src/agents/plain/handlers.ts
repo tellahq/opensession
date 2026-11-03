@@ -694,7 +694,9 @@ async function gateAndFireThreadCreated(
   // "basic" → run triage on the router's cheaper model; "full"/no-verdict →
   // the automation's own model (fail open, never downgrade on router errors).
   const modelOverride =
-    verdict?.route === "basic" ? getRouterConfig().basicModel : undefined;
+    verdict?.route === "basic"
+      ? (await getRouterConfig()).basicModel
+      : undefined;
   if (modelOverride) {
     console.log(
       `[plain] Routing thread ${thread.id} to ${modelOverride} — basic: ${verdict!.reason}`,

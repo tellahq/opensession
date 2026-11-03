@@ -1,7 +1,11 @@
 import { readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { recoverWorkflow, startWorkflow } from "../workflow-runner";
-import { getWorkflowRun, markInterruptedWorkflows } from "../workflow-store";
+import {
+  flushWorkflowRun,
+  getWorkflowRun,
+  markInterruptedWorkflows,
+} from "../workflow-store";
 import type {
   WorkflowSessionController,
   WorkflowSessionStatus,
@@ -63,16 +67,18 @@ const executor = {
   },
 };
 
-async function waitFor(predicate: () => boolean): Promise<void> {
+async function waitFor(
+  predicate: () => boolean | Promise<boolean>,
+): Promise<void> {
   const deadline = Date.now() + 8_000;
-  while (!predicate()) {
+  while (!(await predicate())) {
     if (Date.now() >= deadline) throw new Error("fixture timed out");
     await Bun.sleep(5);
   }
 }
 
 if (stage === "start") {
-  const { runId } = startWorkflow({
+  const { runId } = await startWorkflow({
     sessionId: "crash-parent",
     cwd: root,
     script: [
@@ -84,7 +90,12 @@ if (stage === "start") {
     sessionController: controller,
   });
   writeFileSync(join(root, "run-id"), runId);
-  await waitFor(() => Boolean(getWorkflowRun(runId)?.sessionWaits?.length));
+  await waitFor(async () =>
+    Boolean((await getWorkflowRun(runId))?.sessionWaits?.length),
+  );
+  // run.json is written asynchronously; let the last snapshot land so the
+  // "crash" happens after it, as it did when the write was synchronous.
+  await flushWorkflowRun(runId);
   process.exit(86);
 } else if (stage === "recover") {
   const oldRunId = readFileSync(join(root, "run-id"), "utf8");
@@ -95,11 +106,11 @@ if (stage === "start") {
     inProcessMcp: () => ({}),
   });
   if (!recoveredId) throw new Error("workflow was not recoverable");
-  await waitFor(() => {
-    const snapshot = getWorkflowRun(recoveredId);
+  await waitFor(async () => {
+    const snapshot = await getWorkflowRun(recoveredId);
     return Boolean(snapshot && snapshot.status !== "running");
   });
-  const recovered = getWorkflowRun(recoveredId)!;
+  const recovered = (await getWorkflowRun(recoveredId))!;
   process.stdout.write(
     JSON.stringify({
       oldRunId,

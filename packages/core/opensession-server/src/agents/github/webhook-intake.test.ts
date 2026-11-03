@@ -88,7 +88,7 @@ if (!isIsolatedChild) {
     test("returns retryable failure while the same delivery is still admitting", async () => {
       const body = "{}";
       const deliveryId = "in-flight-delivery";
-      expect(claimGithubDelivery(deliveryId)).toBe("claimed");
+      expect(await claimGithubDelivery(deliveryId)).toBe("claimed");
       const response = await handleGithubWebhook(
         new Request("http://localhost/github/webhook", {
           method: "POST",
@@ -113,7 +113,7 @@ if (!isIsolatedChild) {
         [[deliveryId, Date.now() + 60_000]],
         false,
       );
-      loadGithubDeliveries(true);
+      await loadGithubDeliveries(true);
 
       const response = await handleGithubWebhook(
         new Request("http://localhost/github/webhook", {

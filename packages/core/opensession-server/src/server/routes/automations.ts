@@ -184,7 +184,7 @@ export async function handleAutomationsRoutes(
     const { listScheduledPrompts } =
       await import("../../server/scheduled-prompts");
     return Response.json({
-      prompts: listScheduledPrompts(schedListMatch[1]),
+      prompts: await listScheduledPrompts(schedListMatch[1]),
     });
   }
 
@@ -193,7 +193,7 @@ export async function handleAutomationsRoutes(
     if (!body) return Response.json({ error: "Invalid JSON" }, { status: 400 });
     const { createScheduledPrompt } =
       await import("../../server/scheduled-prompts");
-    const result = createScheduledPrompt({
+    const result = await createScheduledPrompt({
       sessionId: schedListMatch[1],
       prompt: body.prompt,
       at: body.at,

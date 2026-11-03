@@ -11,9 +11,9 @@
  * that a passive event digest gets skipped. The Desk only ever speaks when
  * spoken to; the pull is the persistent todo list.
  */
-import { existsSync, readFileSync } from "node:fs";
 import { newSessionId, stateDir } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
+import { keyedOrder, readTextIfExists } from "./shared/async-fs";
 import {
   findSession,
   touchNativeSession,
@@ -28,10 +28,13 @@ interface DeskStore {
 const CONFIG_DIR = stateDir("desk");
 const CONFIG_PATH = `${CONFIG_DIR}/config.json`;
 
-function readStore(): DeskStore {
+/** Serializes read-modify-write cycles of the Desk config. */
+const deskOrder = keyedOrder();
+
+async function readStore(): Promise<DeskStore> {
   try {
-    if (existsSync(CONFIG_PATH))
-      return JSON.parse(readFileSync(CONFIG_PATH, "utf-8")) as DeskStore;
+    const text = await readTextIfExists(CONFIG_PATH);
+    if (text !== undefined) return JSON.parse(text) as DeskStore;
   } catch (e) {
     console.error("[desk] failed to read config:", e);
   }
@@ -45,11 +48,18 @@ const DESK_MODEL = "pi/anthropic/claude-sonnet-5-5";
 const DESK_EFFORT = "low";
 
 /** Get or create the user's repo-less Desk session. */
-export function ensureDeskSession(user: string): {
+export function ensureDeskSession(user: string): Promise<{
   sessionId: string;
   clearedAt?: string;
-} {
-  const store = readStore();
+}> {
+  return deskOrder(CONFIG_PATH, () => ensureDeskSessionNow(user));
+}
+
+async function ensureDeskSessionNow(user: string): Promise<{
+  sessionId: string;
+  clearedAt?: string;
+}> {
+  const store = await readStore();
   const st = store.users[user] ?? (store.users[user] = {});
   const existing = st.sessionId ? findSession(st.sessionId) : undefined;
   if (st.sessionId && existing) {
@@ -109,7 +119,7 @@ export function ensureDeskSession(user: string): {
     console.error(`[desk] failed to write Desk session ${id}:`, e),
   );
   st.sessionId = id;
-  writeJsonAtomic(CONFIG_PATH, store);
+  await writeJsonAtomicAsync(CONFIG_PATH, store);
   console.log(`[desk] created Desk session ${id} for ${user}`);
   return { sessionId: id, clearedAt: st.clearedAt };
 }
@@ -117,12 +127,15 @@ export function ensureDeskSession(user: string): {
 /** "Clear" in the Desk overlay: hide everything before now from the modal's
  *  transcript view. A display marker only — the transcript itself is untouched and
  *  fully visible in the expanded session view. */
-export function clearDesk(user: string): { clearedAt: string } {
-  const store = readStore();
-  const st = store.users[user] ?? (store.users[user] = {});
-  st.clearedAt = new Date().toISOString();
-  writeJsonAtomic(CONFIG_PATH, store);
-  return { clearedAt: st.clearedAt };
+export function clearDesk(user: string): Promise<{ clearedAt: string }> {
+  return deskOrder(CONFIG_PATH, async () => {
+    const store = await readStore();
+    const st = store.users[user] ?? (store.users[user] = {});
+    const clearedAt = new Date().toISOString();
+    st.clearedAt = clearedAt;
+    await writeJsonAtomicAsync(CONFIG_PATH, store);
+    return { clearedAt };
+  });
 }
 
 /** The role charter prepended to every Desk-session prompt (run-session.ts). */

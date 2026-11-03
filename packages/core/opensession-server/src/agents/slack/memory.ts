@@ -15,13 +15,13 @@
  */
 
 import { randomUUID } from "crypto";
-import { existsSync } from "fs";
+import { unlink } from "fs/promises";
 import {
   writeFileAtomic,
   writeJsonAtomic,
 } from "../../server/shared/atomic-write";
 import { join } from "path";
-import { unlinkSync } from "fs";
+import { pathExists } from "../../server/shared/async-fs";
 import { stateDir } from "../../server/paths";
 
 export const MEMORY_DIR = stateDir("memory");
@@ -56,16 +56,20 @@ export function markMemoryImportDirty(): void {
   );
 }
 
-export function memoryImportIsDirty(sourceDirs: string[]): boolean {
-  return sourceDirs.some((directory) =>
-    existsSync(join(directory, MEMORY_V2_DIRTY_MARKER)),
-  );
+export async function memoryImportIsDirty(
+  sourceDirs: string[],
+): Promise<boolean> {
+  for (const directory of sourceDirs)
+    if (await pathExists(join(directory, MEMORY_V2_DIRTY_MARKER))) return true;
+  return false;
 }
 
-export function clearMemoryImportDirty(sourceDirs: string[]): void {
+export async function clearMemoryImportDirty(
+  sourceDirs: string[],
+): Promise<void> {
   for (const directory of sourceDirs) {
     try {
-      unlinkSync(join(directory, MEMORY_V2_DIRTY_MARKER));
+      await unlink(join(directory, MEMORY_V2_DIRTY_MARKER));
     } catch {}
   }
 }

@@ -379,23 +379,29 @@ describe("durable inbox seam", () => {
     dir = mkdtempSync(join(tmpdir(), "slack-socket-test-"));
     const path = join(dir, "inbox.json");
     const inbox = new SlackEventInbox(path, inboxDeps);
+    let dispatched: Promise<unknown> = Promise.resolve();
     const h = harness({
       dispatchEvent: async () => {
-        inbox.enqueue("direct_message", event.payload.event);
+        dispatched = inbox.enqueue("direct_message", event.payload.event);
+        await dispatched;
       },
     });
     const socket = await h.start();
     socket.message(event);
     await flush();
+    await dispatched;
+    await flush();
     expect(socket.sent).toHaveLength(1);
     const recovered = new SlackEventInbox(path, inboxDeps);
-    expect(recovered.pendingCount()).toBe(1);
-    expect(recovered.enqueue("direct_message", event.payload.event)).toBe(
+    expect(await recovered.pendingCount()).toBe(1);
+    expect(await recovered.enqueue("direct_message", event.payload.event)).toBe(
       "pending",
     );
     socket.message(event);
     await flush();
-    expect(inbox.pendingCount()).toBe(1);
+    await dispatched;
+    await flush();
+    expect(await inbox.pendingCount()).toBe(1);
     expect(socket.sent).toHaveLength(2);
     h.client.stop();
   });
@@ -405,16 +411,20 @@ describe("durable inbox seam", () => {
     const file = join(dir, "not-a-directory");
     writeFileSync(file, "synthetic");
     const inbox = new SlackEventInbox(join(file, "inbox.json"), inboxDeps);
+    let dispatched: Promise<unknown> = Promise.resolve();
     const h = harness({
       dispatchEvent: async () => {
-        inbox.enqueue("direct_message", event.payload.event);
+        dispatched = inbox.enqueue("direct_message", event.payload.event);
+        await dispatched;
       },
     });
     const socket = await h.start();
     socket.message(event);
     await flush();
+    await dispatched.catch(() => {});
+    await flush();
     expect(socket.sent).toEqual([]);
-    expect(inbox.pendingCount()).toBe(0);
+    expect(await inbox.pendingCount()).toBe(0);
     h.client.stop();
   });
 });

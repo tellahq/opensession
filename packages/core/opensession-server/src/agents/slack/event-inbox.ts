@@ -8,8 +8,8 @@
  * eventual enqueue by Slack message timestamp.
  */
 
-import { existsSync, readFileSync } from "fs";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
+import { writeJsonAtomicAsync } from "../../server/shared/atomic-write";
+import { readTextIfExists } from "../../server/shared/async-fs";
 
 export type SlackEventInboxKind = "direct_message" | "mention";
 
@@ -51,7 +51,10 @@ export class SlackEventInbox {
   private readonly records = new Map<string, SlackEventInboxRecord>();
   private readonly inFlight = new Set<string>();
   private readonly retryDelayMs: number;
-  private loaded = false;
+  private loading: Promise<void> | undefined;
+  /** Writes run one at a time and each renders the records when it starts,
+   *  so the file always ends on the newest state. */
+  private persistChain: Promise<void> = Promise.resolve();
   private started = false;
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -64,8 +67,11 @@ export class SlackEventInbox {
   }
 
   /** Persist before returning so the webhook may safely acknowledge Slack. */
-  enqueue(kind: SlackEventInboxKind, event: any): SlackEventInboxEnqueueResult {
-    this.ensureLoaded();
+  async enqueue(
+    kind: SlackEventInboxKind,
+    event: any,
+  ): Promise<SlackEventInboxEnqueueResult> {
+    await this.load();
     const id = eventId(event);
     if (this.deps.isProcessed(id)) return "processed";
     if (this.records.has(id)) {
@@ -82,7 +88,7 @@ export class SlackEventInbox {
     };
     this.records.set(id, record);
     try {
-      this.persist();
+      await this.persist();
     } catch (error) {
       this.records.delete(id);
       throw error;
@@ -92,8 +98,8 @@ export class SlackEventInbox {
   }
 
   /** Start replay after Slack's sessions, worktree map, and identity are ready. */
-  start(): Promise<void> {
-    this.ensureLoaded();
+  async start(): Promise<void> {
+    await this.load();
     this.started = true;
     return this.drain();
   }
@@ -104,8 +110,8 @@ export class SlackEventInbox {
     this.retryTimer = undefined;
   }
 
-  pendingCount(): number {
-    this.ensureLoaded();
+  async pendingCount(): Promise<number> {
+    await this.load();
     return this.records.size;
   }
 
@@ -115,7 +121,7 @@ export class SlackEventInbox {
 
   /** Exposed for deterministic tests and operational drains. */
   async drain(): Promise<void> {
-    this.ensureLoaded();
+    await this.load();
     if (!this.started) return;
     const work: Promise<void>[] = [];
     for (const record of this.records.values()) {
@@ -124,12 +130,19 @@ export class SlackEventInbox {
     await Promise.all(work);
   }
 
-  private ensureLoaded(): void {
-    if (this.loaded) return;
-    this.loaded = true;
-    if (!existsSync(this.storePath)) return;
+  private load(): Promise<void> {
+    this.loading ??= this.readStore().catch((error) => {
+      this.loading = undefined;
+      throw error;
+    });
+    return this.loading;
+  }
+
+  private async readStore(): Promise<void> {
     try {
-      const parsed = JSON.parse(readFileSync(this.storePath, "utf8"));
+      const text = await readTextIfExists(this.storePath);
+      if (text === undefined) return;
+      const parsed = JSON.parse(text);
       if (!Array.isArray(parsed)) throw new Error("expected an array");
       for (const value of parsed) {
         const record = value as Partial<SlackEventInboxRecord>;
@@ -148,13 +161,21 @@ export class SlackEventInbox {
         } as SlackEventInboxRecord);
       }
     } catch (error) {
-      this.loaded = false;
       throw new Error(`Failed to load Slack event inbox: ${errorText(error)}`);
     }
   }
 
-  private persist(): void {
-    writeJsonAtomic(this.storePath, [...this.records.values()], false, 0o600);
+  private persist(): Promise<void> {
+    const write = this.persistChain.then(() =>
+      writeJsonAtomicAsync(
+        this.storePath,
+        [...this.records.values()],
+        false,
+        0o600,
+      ),
+    );
+    this.persistChain = write.catch(() => {});
+    return write;
   }
 
   private kick(): void {
@@ -169,7 +190,7 @@ export class SlackEventInbox {
     this.inFlight.add(record.id);
     try {
       if (this.deps.isProcessed(record.id)) {
-        this.remove(record.id);
+        await this.remove(record.id);
         return;
       }
 
@@ -183,12 +204,12 @@ export class SlackEventInbox {
       // dies between these writes, replay sees the processed id and only
       // cleans up the stale inbox entry.
       this.deps.markProcessed(record.id);
-      this.remove(record.id);
+      await this.remove(record.id);
     } catch (error) {
       record.attempts += 1;
       record.lastError = errorText(error);
       try {
-        this.persist();
+        await this.persist();
       } catch (persistError) {
         console.error(
           "[slack] Failed to persist event inbox failure:",
@@ -205,12 +226,12 @@ export class SlackEventInbox {
     }
   }
 
-  private remove(id: string): void {
+  private async remove(id: string): Promise<void> {
     const record = this.records.get(id);
     if (!record) return;
     this.records.delete(id);
     try {
-      this.persist();
+      await this.persist();
     } catch (error) {
       this.records.set(id, record);
       throw error;

@@ -69,7 +69,7 @@ export async function runAdversarial(
     });
     onSessionCreated?.(bksId);
 
-    const prior = readPrState(pr.number, pr.ghRepo);
+    const prior = await readPrState(pr.number, pr.ghRepo);
     const reuseId =
       prior?.activeRun?.kind === "adversarial"
         ? prior.activeRun.progressCommentId
@@ -80,7 +80,7 @@ export async function runAdversarial(
       `${ADVERSARIAL_MARKER}\n🔍 **${personaName()} adversarial review** — running two independent review passes on PR #${pr.number}… · ${link}`,
       pr.ghRepo,
     );
-    updatePrState(
+    await updatePrState(
       pr.number,
       details.headRefName,
       (s) => {
@@ -125,7 +125,7 @@ export async function runAdversarial(
   } finally {
     // Clear the recovery flag on completion; a killed process leaves it set so the
     // github agent re-runs it on startup.
-    clearActiveRun(pr.number, pr.headRef, "adversarial", pr.ghRepo);
+    await clearActiveRun(pr.number, pr.headRef, "adversarial", pr.ghRepo);
     for (const name of labelAliases(LABEL_ADVERSARIAL)) {
       await removeLabel(pr.number, name, pr.ghRepo).catch(() => {});
     }

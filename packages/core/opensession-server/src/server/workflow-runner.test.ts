@@ -19,7 +19,7 @@ import {
   readWorkflowJournal,
   readWorkflowScript,
   unregisterLiveWorkflow,
-  updateWorkflowRun,
+  updateStoredWorkflowRun,
 } from "./workflow-store";
 import {
   WORKFLOW_LIMITS,
@@ -84,12 +84,17 @@ function echoExecutor(tokens?: { input: number; output: number }) {
 }
 
 async function waitUntil<T>(
-  fn: () => T | undefined | false | null,
+  fn: () =>
+    | T
+    | undefined
+    | false
+    | null
+    | Promise<T | undefined | false | null>,
   timeoutMs = 8_000,
 ): Promise<T> {
   const start = Date.now();
   for (;;) {
-    const value = fn();
+    const value = await fn();
     if (value) return value;
     if (Date.now() - start > timeoutMs) throw new Error("waitUntil timed out");
     await new Promise((r) => setTimeout(r, 10));
@@ -97,8 +102,8 @@ async function waitUntil<T>(
 }
 
 function waitForFinished(runId: string): Promise<WorkflowRunSnapshot> {
-  return waitUntil(() => {
-    const s = getWorkflowRun(runId);
+  return waitUntil(async () => {
+    const s = await getWorkflowRun(runId);
     return s && s.status !== "running" ? s : undefined;
   });
 }
@@ -174,7 +179,7 @@ describe("parseWorkflowMeta", () => {
 describe("workflow runner", () => {
   test("happy path: phases, agents, logs, journal, result", async () => {
     const executor = echoExecutor({ input: 5, output: 7 });
-    const { runId } = start({
+    const { runId } = await start({
       script: [
         'export const meta = { name: "happy", phases: [{ title: "Gather" }, { title: "Summarize" }] };',
         'phase("Gather");',
@@ -215,7 +220,9 @@ describe("workflow runner", () => {
     expect(executor.calls[0].ctx.user).toBe("alex");
     expect(executor.calls[0].ctx.defaultModel).toBe("claude-sonnet-5");
 
-    const journal = readWorkflowJournal(runId) as WorkflowJournalEntry[];
+    const journal = (await readWorkflowJournal(
+      runId,
+    )) as WorkflowJournalEntry[];
     expect(journal.length).toBe(2);
     expect(journal[0].prompt).toBe("list things");
     expect(journal[0].outcome.text).toBe("R:list things");
@@ -224,7 +231,7 @@ describe("workflow runner", () => {
 
   test("parallel: a thrown thunk resolves to null, others land", async () => {
     const executor = echoExecutor();
-    const { runId } = start({
+    const { runId } = await start({
       script: [
         'export const meta = { name: "par" };',
         "return await parallel([",
@@ -249,7 +256,7 @@ describe("workflow runner", () => {
       if (req.prompt === "s1:B") return holdS1B.promise;
       return { ok: true, text: `R:${req.prompt}` };
     });
-    const { runId } = start({
+    const { runId } = await start({
       script: [
         'export const meta = { name: "pipe" };',
         "return await pipeline(args.items,",
@@ -265,7 +272,7 @@ describe("workflow runner", () => {
     // that's the no-barrier property.
     await waitUntil(() => seen.includes("s2:A:R:s1:A"));
     expect(seen).toContain("s1:B");
-    expect(getWorkflowRun(runId)?.status).toBe("running");
+    expect((await getWorkflowRun(runId))?.status).toBe("running");
     holdS1B.resolve({ ok: true, text: "R:s1:B" });
 
     const s = await waitForFinished(runId);
@@ -275,7 +282,7 @@ describe("workflow runner", () => {
 
   test("pipeline: a throwing stage drops the item to null and skips its remaining stages", async () => {
     const executor = echoExecutor();
-    const { runId } = start({
+    const { runId } = await start({
       script: [
         'export const meta = { name: "pipe-throw" };',
         'return await pipeline(["A", "B"],',
@@ -301,7 +308,7 @@ describe("workflow runner", () => {
       text: '{"answer":42}',
       structured: { answer: 42 },
     }));
-    const { runId } = start({
+    const { runId } = await start({
       script: [
         'export const meta = { name: "schema" };',
         'const r = await agent("q", { schema: { type: "object" } });',
@@ -318,7 +325,7 @@ describe("workflow runner", () => {
 
   test("agent error: script receives null, snapshot marks error, run completes", async () => {
     const executor = fakeExecutor(() => ({ ok: false, error: "boom" }));
-    const { runId } = start({
+    const { runId } = await start({
       script: [
         'export const meta = { name: "err" };',
         'const r = await agent("bad");',
@@ -343,7 +350,7 @@ describe("workflow runner", () => {
       inFlight--;
       return { ok: true, text: `R:${req.prompt}` };
     });
-    const { runId } = start({
+    const { runId } = await start({
       script: [
         'export const meta = { name: "sem" };',
         "const thunks = [];",
@@ -365,7 +372,7 @@ describe("workflow runner", () => {
 
   test("Date.now / argless new Date / Math.random throw inside scripts; new Date(ms) works", async () => {
     const executor = echoExecutor();
-    const { runId } = start({
+    const { runId } = await start({
       script: [
         'export const meta = { name: "poison" };',
         "const out = [];",
@@ -389,7 +396,7 @@ describe("workflow runner", () => {
 
   test("script throw → run status error with the message", async () => {
     const executor = echoExecutor();
-    const { runId } = start({
+    const { runId } = await start({
       script:
         'export const meta = { name: "throws" };\nthrow new Error("script exploded");',
       executor,
@@ -401,7 +408,7 @@ describe("workflow runner", () => {
 
   test("budget: total/spent/remaining track executor output tokens", async () => {
     const executor = echoExecutor({ input: 10, output: 250 });
-    const { runId } = start({
+    const { runId } = await start({
       script: [
         'export const meta = { name: "budget" };',
         "const before = budget.remaining();",
@@ -423,7 +430,7 @@ describe("workflow runner", () => {
 
   test("budget: unbounded when no total given", async () => {
     const executor = echoExecutor();
-    const { runId } = start({
+    const { runId } = await start({
       script: [
         'export const meta = { name: "budget-unbounded" };',
         "return { total: budget.total, unbounded: budget.remaining() === Infinity };",
@@ -445,7 +452,7 @@ describe("workflow runner", () => {
           );
         }),
     );
-    const { runId } = start({
+    const { runId } = await start({
       script: [
         'export const meta = { name: "cancel-me" };',
         'await agent("block forever");',
@@ -466,15 +473,15 @@ describe("workflow runner", () => {
     expect(cancelWorkflow(runId)).toBe(false);
   });
 
-  test("startWorkflow validates script size", () => {
-    expect(() =>
+  test("startWorkflow validates script size", async () => {
+    await expect(
       start({
         script:
           'export const meta = { name: "big" };\n' +
           "//".padEnd(WORKFLOW_LIMITS.maxScriptChars, "x"),
         executor: echoExecutor(),
       }),
-    ).toThrow(/too large/);
+    ).rejects.toThrow(/too large/);
   });
 
   test("journal replay: identical resume answers every call from the journal", async () => {
@@ -485,13 +492,13 @@ describe("workflow runner", () => {
       "return [a, b];",
     ].join("\n");
     const executor1 = echoExecutor();
-    const { runId } = start({ script, executor: executor1 });
+    const { runId } = await start({ script, executor: executor1 });
     const first = await waitForFinished(runId);
     expect(first.status).toBe("done");
     expect(executor1.calls.length).toBe(2);
 
     const executor2 = echoExecutor();
-    const { runId: resumedId } = start({
+    const { runId: resumedId } = await start({
       script,
       executor: executor2,
       resumeFromRunId: runId,
@@ -502,7 +509,7 @@ describe("workflow runner", () => {
     expect(executor2.calls.length).toBe(0);
     expect(resumed.agents.map((a) => a.cached)).toEqual([true, true]);
     // Cached entries were re-journaled, so resuming the resumed run works too.
-    expect(readWorkflowJournal(resumedId).length).toBe(2);
+    expect((await readWorkflowJournal(resumedId)).length).toBe(2);
   });
 
   test("journal replay: a changed prompt re-executes from the changed call, unrelated calls stay cached", async () => {
@@ -514,13 +521,13 @@ describe("workflow runner", () => {
       "return [a, b, c];",
     ].join("\n");
     const executor1 = echoExecutor();
-    const { runId } = start({ script: scriptV1, executor: executor1 });
+    const { runId } = await start({ script: scriptV1, executor: executor1 });
     await waitForFinished(runId);
     expect(executor1.calls.length).toBe(3);
 
     const scriptV2 = scriptV1.replace('"alpha"', '"alpha-v2"');
     const executor2 = echoExecutor();
-    const { runId: resumedId } = start({
+    const { runId: resumedId } = await start({
       script: scriptV2,
       executor: executor2,
       resumeFromRunId: runId,
@@ -608,13 +615,13 @@ describe("journal replay determinism", () => {
       if (req.prompt === "a1") await new Promise((r) => setTimeout(r, 120));
       return { ok: true, text: `R:${req.prompt}` };
     });
-    const { runId } = start({ script: RACY_SCRIPT, executor: executor1 });
+    const { runId } = await start({ script: RACY_SCRIPT, executor: executor1 });
     const first = await waitForFinished(runId);
     expect(first.status).toBe("done");
     expect(executor1.calls.length).toBe(4);
 
     const executor2 = echoExecutor();
-    const { runId: resumedId } = start({
+    const { runId: resumedId } = await start({
       script: RACY_SCRIPT,
       executor: executor2,
       resumeFromRunId: runId,
@@ -637,14 +644,16 @@ describe("journal replay determinism", () => {
       const current = invocation++;
       return current === 0 ? firstResult.promise : { ok: true, text: "second" };
     });
-    const { runId } = start({ script, executor: executor1 });
-    await waitUntil(() => readWorkflowJournal(runId).length === 1);
+    const { runId } = await start({ script, executor: executor1 });
+    await waitUntil(
+      async () => (await readWorkflowJournal(runId)).length === 1,
+    );
     firstResult.resolve({ ok: true, text: "first" });
     const first = await waitForFinished(runId);
     expect(first.result).toEqual(["first", "second"]);
     // The faster second call is physically appended first.
     expect(
-      readWorkflowJournal(runId)
+      (await readWorkflowJournal(runId))
         .filter(
           (entry): entry is WorkflowJournalEntry => !isMcpJournalEntry(entry),
         )
@@ -652,7 +661,7 @@ describe("journal replay determinism", () => {
     ).toEqual([1, 0]);
 
     const executor2 = echoExecutor();
-    const { runId: resumedId } = start({
+    const { runId: resumedId } = await start({
       script,
       executor: executor2,
       resumeFromRunId: runId,
@@ -674,15 +683,15 @@ describe("journal replay determinism", () => {
         ? { ok: false, error: "transient" }
         : { ok: true, text: `R:${req.prompt}` },
     );
-    const { runId } = start({ script, executor: executor1 });
+    const { runId } = await start({ script, executor: executor1 });
     const first = await waitForFinished(runId);
     expect(first.result).toEqual([null, "R:solid"]);
     // Both outcomes are journaled (audit trail)…
-    expect(readWorkflowJournal(runId).length).toBe(2);
+    expect((await readWorkflowJournal(runId)).length).toBe(2);
 
     // …but only the ok one replays; the failure gets a fresh execution.
     const executor2 = echoExecutor();
-    const { runId: resumedId } = start({
+    const { runId: resumedId } = await start({
       script,
       executor: executor2,
       resumeFromRunId: runId,
@@ -700,12 +709,16 @@ describe("journal replay determinism", () => {
       "return budget.spent();",
     ].join("\n");
     const executor1 = echoExecutor({ input: 10, output: 100 });
-    const { runId } = start({ script, executor: executor1, budgetTotal: 1000 });
+    const { runId } = await start({
+      script,
+      executor: executor1,
+      budgetTotal: 1000,
+    });
     const first = await waitForFinished(runId);
     expect(first.result).toBe(200);
 
     const executor2 = echoExecutor();
-    const { runId: resumedId } = start({
+    const { runId: resumedId } = await start({
       script,
       executor: executor2,
       resumeFromRunId: runId,
@@ -725,7 +738,7 @@ describe("worker containment & lifecycle", () => {
       'export const meta = { name: "scrubbed" };',
       "return [typeof Bun, typeof process, typeof fetch, typeof WebSocket, typeof XMLHttpRequest, typeof globalThis].join(',');",
     ].join("\n");
-    const { runId } = start({ script, executor: echoExecutor() });
+    const { runId } = await start({ script, executor: echoExecutor() });
     const snap = await waitForFinished(runId);
     expect(snap.status).toBe("done");
     expect(snap.result).toBe(
@@ -741,7 +754,7 @@ describe("worker containment & lifecycle", () => {
       'try { process.exit(0); } catch (e) { return "blocked:" + e.constructor.name; }',
       'return "escaped";',
     ].join("\n");
-    const { runId } = start({ script, executor: echoExecutor() });
+    const { runId } = await start({ script, executor: echoExecutor() });
     const snap = await waitForFinished(runId);
     expect(snap.status).toBe("done");
     expect(String(snap.result)).toMatch(/^blocked:TypeError/);
@@ -760,7 +773,7 @@ describe("snapshot payload bounds", () => {
       ok: false,
       error: "E".repeat(50_000),
     }));
-    const { runId } = start({ script, executor });
+    const { runId } = await start({ script, executor });
     const snap = await waitForFinished(runId);
     expect(snap.logs[0].message.length).toBeLessThanOrEqual(501);
     expect(snap.agents[0].label.length).toBeLessThanOrEqual(201);
@@ -771,7 +784,7 @@ describe("snapshot payload bounds", () => {
 // ── Script syntax pre-check (2026-07-11: truncated scripts failed cryptically) ─
 
 describe("checkScriptSyntax", () => {
-  test("valid body passes", () => {
+  test("valid body passes", async () => {
     expect(
       checkScriptSyntax('phase("x"); return await agent("hi");'),
     ).toBeNull();
@@ -785,7 +798,7 @@ describe("checkScriptSyntax", () => {
     expect(msg).toMatch(/truncated/i);
   });
 
-  test("unbalanced brace is flagged", () => {
+  test("unbalanced brace is flagged", async () => {
     const msg = checkScriptSyntax('if (x) { log("a")');
     expect(msg).toMatch(/syntax error/i);
   });
@@ -796,8 +809,8 @@ describe("checkScriptSyntax", () => {
     expect(msg).not.toMatch(/truncated/i);
   });
 
-  test("startWorkflow throws synchronously on a truncated script (no run created)", () => {
-    expect(() =>
+  test("startWorkflow rejects a truncated script (no run created)", async () => {
+    await expect(
       startWorkflow({
         sessionId: "bks-x",
         cwd: "/tmp",
@@ -805,7 +818,7 @@ describe("checkScriptSyntax", () => {
         script:
           'export const meta = { name: "broken" };\nconst r = await parallel([() => agent("hi"',
       }),
-    ).toThrow(/truncated/i);
+    ).rejects.toThrow(/truncated/i);
   });
 });
 
@@ -841,7 +854,7 @@ function fakeMcpHost(
 describe("workflow mcp.*", () => {
   test("mcp.<server>.<tool>(args) reaches the host and resolves its value", async () => {
     const mcpHost = fakeMcpHost(() => [{ id: 1 }, { id: 2 }]);
-    const { runId } = start({
+    const { runId } = await start({
       executor: echoExecutor(),
       mcpHost,
       script: [
@@ -866,7 +879,7 @@ describe("workflow mcp.*", () => {
       if (tool === "boom") throw new Error("upstream 500");
       return "fine";
     });
-    const { runId } = start({
+    const { runId } = await start({
       executor: echoExecutor(),
       mcpHost,
       script: [
@@ -894,7 +907,7 @@ describe("workflow mcp.*", () => {
 
   test("calls are journaled as kind:mcp, with args and value", async () => {
     const mcpHost = fakeMcpHost(() => ({ status: "ok" }));
-    const { runId } = start({
+    const { runId } = await start({
       executor: echoExecutor(),
       mcpHost,
       script: [
@@ -904,7 +917,9 @@ describe("workflow mcp.*", () => {
       ].join("\n"),
     });
     const snapshot = await waitForFinished(runId);
-    const entries = readWorkflowJournal(runId).filter(isMcpJournalEntry);
+    const entries = (await readWorkflowJournal(runId)).filter(
+      isMcpJournalEntry,
+    );
     expect(entries.length).toBe(1);
     expect(entries[0].server).toBe("linear");
     expect(entries[0].tool).toBe("list_issues");
@@ -922,7 +937,7 @@ describe("workflow mcp.*", () => {
       'return await mcp.linear.create_issue({ title: "once" });',
     ].join("\n");
     const first = fakeMcpHost(() => "ISSUE-1");
-    const { runId } = start({
+    const { runId } = await start({
       executor: echoExecutor(),
       mcpHost: first,
       script,
@@ -932,7 +947,7 @@ describe("workflow mcp.*", () => {
 
     // A host that would answer differently — it must never be asked.
     const second = fakeMcpHost(() => "ISSUE-2");
-    const { runId: resumedId } = start({
+    const { runId: resumedId } = await start({
       executor: echoExecutor(),
       mcpHost: second,
       script,
@@ -945,7 +960,7 @@ describe("workflow mcp.*", () => {
     // The replayed record carries into the new run's journal, so resuming
     // the resumed run replays too.
     expect(
-      readWorkflowJournal(resumedId).filter(isMcpJournalEntry).length,
+      (await readWorkflowJournal(resumedId)).filter(isMcpJournalEntry).length,
     ).toBe(1);
   });
 
@@ -963,23 +978,25 @@ describe("workflow mcp.*", () => {
       const current = invocation++;
       return current === 0 ? firstResult.promise : "ISSUE-2";
     });
-    const { runId } = start({
+    const { runId } = await start({
       executor: echoExecutor(),
       mcpHost: firstHost,
       script,
     });
-    await waitUntil(() => readWorkflowJournal(runId).length === 1);
+    await waitUntil(
+      async () => (await readWorkflowJournal(runId)).length === 1,
+    );
     firstResult.resolve("ISSUE-1");
     const first = await waitForFinished(runId);
     expect(first.result).toEqual(["ISSUE-1", "ISSUE-2"]);
     expect(
-      readWorkflowJournal(runId)
+      (await readWorkflowJournal(runId))
         .filter(isMcpJournalEntry)
         .map((entry) => entry.seq),
     ).toEqual([1, 0]);
 
     const secondHost = fakeMcpHost(() => "must not run");
-    const { runId: resumedId } = start({
+    const { runId: resumedId } = await start({
       executor: echoExecutor(),
       mcpHost: secondHost,
       script,
@@ -998,7 +1015,7 @@ describe("workflow mcp.*", () => {
     const failing = fakeMcpHost(() => {
       throw new Error("timeout");
     });
-    const { runId } = start({
+    const { runId } = await start({
       executor: echoExecutor(),
       mcpHost: failing,
       script,
@@ -1006,7 +1023,7 @@ describe("workflow mcp.*", () => {
     expect((await waitForFinished(runId)).result).toBe("failed: timeout");
 
     const healthy = fakeMcpHost(() => "recovered");
-    const { runId: resumedId } = start({
+    const { runId: resumedId } = await start({
       executor: echoExecutor(),
       mcpHost: healthy,
       script,
@@ -1018,7 +1035,7 @@ describe("workflow mcp.*", () => {
 
   test("mcp.servers() and mcp.tools(server) enumerate without journaling", async () => {
     const mcpHost = fakeMcpHost(() => null, ["grafana", "plain"]);
-    const { runId } = start({
+    const { runId } = await start({
       executor: echoExecutor(),
       mcpHost,
       script: [
@@ -1034,13 +1051,15 @@ describe("workflow mcp.*", () => {
       first: "grafana_probe",
     });
     // Discovery is config, not an observation — nothing to replay.
-    expect(readWorkflowJournal(runId).filter(isMcpJournalEntry).length).toBe(0);
+    expect(
+      (await readWorkflowJournal(runId)).filter(isMcpJournalEntry).length,
+    ).toBe(0);
     expect(snap.totals.mcpCalls).toBeUndefined();
   });
 
   test("the proxy is thenable-safe: awaiting mcp or a server does not hang", async () => {
     const mcpHost = fakeMcpHost(() => "ok");
-    const { runId } = start({
+    const { runId } = await start({
       executor: echoExecutor(),
       mcpHost,
       script: [
@@ -1064,7 +1083,7 @@ describe("workflow mcp.*", () => {
 
   test("the host is closed when the run finishes (stdio servers are processes)", async () => {
     const mcpHost = fakeMcpHost(() => "ok");
-    const { runId } = start({
+    const { runId } = await start({
       executor: echoExecutor(),
       mcpHost,
       script: [
@@ -1083,7 +1102,7 @@ describe("workflow mcp.*", () => {
       // Never resolves until the run is cancelled out from under it.
       return gate.promise.then(() => "late");
     });
-    const { runId } = start({
+    const { runId } = await start({
       executor: echoExecutor(),
       mcpHost,
       script: [
@@ -1115,17 +1134,20 @@ describe("workflow live control and recovery", () => {
       });
       return { ok: false, error: "cancelled" };
     });
-    const { runId } = start({
+    const { runId } = await start({
       executor,
       script:
         'export const meta = { name: "pause" }; return await agent("hold");',
     });
     await waitUntil(
-      () => getWorkflowRun(runId)?.agents[0]?.status === "running",
+      async () =>
+        (await getWorkflowRun(runId))?.agents[0]?.status === "running",
     );
     expect(pauseWorkflow(runId, "test pause")).toBe(true);
-    await waitUntil(() => getWorkflowRun(runId)?.status === "paused");
-    expect(getWorkflowRun(runId)?.pauseReason).toBe("test pause");
+    await waitUntil(
+      async () => (await getWorkflowRun(runId))?.status === "paused",
+    );
+    expect((await getWorkflowRun(runId))?.pauseReason).toBe("test pause");
     expect(resumeWorkflow(runId)).toBe(true);
     const done = await waitForFinished(runId);
     expect(done.status).toBe("done");
@@ -1144,13 +1166,14 @@ describe("workflow live control and recovery", () => {
       );
       return { ok: false, error: "cancelled" };
     });
-    const retryRun = start({
+    const retryRun = await start({
       executor: retrying,
       script:
         'export const meta = { name: "retry" }; return await agent("retry me");',
     });
     await waitUntil(
-      () => getWorkflowRun(retryRun.runId)?.agents[0]?.status === "running",
+      async () =>
+        (await getWorkflowRun(retryRun.runId))?.agents[0]?.status === "running",
     );
     expect(controlWorkflowAgent(retryRun.runId, 0, "retry")).toBe(true);
     const retried = await waitForFinished(retryRun.runId);
@@ -1163,13 +1186,14 @@ describe("workflow live control and recovery", () => {
       );
       return { ok: false, error: "cancelled" };
     });
-    const skipRun = start({
+    const skipRun = await start({
       executor: skipping,
       script:
         'export const meta = { name: "skip" }; return await agent("skip me");',
     });
     await waitUntil(
-      () => getWorkflowRun(skipRun.runId)?.agents[0]?.status === "running",
+      async () =>
+        (await getWorkflowRun(skipRun.runId))?.agents[0]?.status === "running",
     );
     expect(controlWorkflowAgent(skipRun.runId, 0, "skip")).toBe(true);
     const skipped = await waitForFinished(skipRun.runId);
@@ -1178,7 +1202,7 @@ describe("workflow live control and recovery", () => {
   });
 
   test("restart recovery creates a journal-replaying lineage", async () => {
-    const original = start({
+    const original = await start({
       executor: echoExecutor(),
       script:
         'export const meta = { name: "recover" }; return await agent("once");',
@@ -1187,7 +1211,7 @@ describe("workflow live control and recovery", () => {
     });
     await waitForFinished(original.runId);
     unregisterLiveWorkflow(original.runId);
-    updateWorkflowRun(original.runId, (snapshot) => {
+    await updateStoredWorkflowRun(original.runId, (snapshot) => {
       snapshot.status = "interrupted";
       snapshot.endedAt = new Date().toISOString();
     });
@@ -1202,7 +1226,9 @@ describe("workflow live control and recovery", () => {
     expect(recovered.replayRootRunId).toBe(original.runId);
     expect(recovered.agents[0].cached).toBe(true);
     expect(executor.calls).toHaveLength(0);
-    expect(getWorkflowRun(original.runId)?.recoveredAsRunId).toBe(recoveredId);
+    expect((await getWorkflowRun(original.runId))?.recoveredAsRunId).toBe(
+      recoveredId,
+    );
   });
 });
 
@@ -1307,7 +1333,7 @@ describe("workflow durable session API", () => {
 
   test("spawns, supervises, messages, waits and cancels a real-session adapter", async () => {
     const sessions = fakeSessionController();
-    const { runId } = start({
+    const { runId } = await start({
       executor: echoExecutor(),
       sessionController: sessions,
       script,
@@ -1332,13 +1358,15 @@ describe("workflow durable session API", () => {
     ]);
     expect(sessions.cancelCalls).toEqual(["child-1"]);
     expect(
-      readWorkflowJournal(runId).filter((entry) => entry.kind === "session"),
+      (await readWorkflowJournal(runId)).filter(
+        (entry) => entry.kind === "session",
+      ),
     ).toHaveLength(5);
   });
 
   test("resume replays completed calls and adopts the original child", async () => {
     const original = fakeSessionController();
-    const first = start({
+    const first = await start({
       executor: echoExecutor(),
       sessionController: original,
       script,
@@ -1346,7 +1374,7 @@ describe("workflow durable session API", () => {
     await waitForFinished(first.runId);
 
     const resumed = fakeSessionController();
-    const second = start({
+    const second = await start({
       executor: echoExecutor(),
       sessionController: resumed,
       script,
@@ -1366,7 +1394,7 @@ describe("workflow durable session API", () => {
       'const child = await spawnSession({ prompt: "one", repo: "renderer", admission: { tokens: 500, costUsd: 2 } });',
       'return await waitSession(child.id, { until: "pr_checks_passed", timeout: 60000 });',
     ].join("\n");
-    const original = start({
+    const original = await start({
       executor: echoExecutor(),
       sessionController: originalSessions,
       script: source,
@@ -1384,7 +1412,7 @@ describe("workflow durable session API", () => {
       `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`,
     );
     const deadline = Date.now() + 1_000;
-    updateWorkflowRun(original.runId, (snapshot) => {
+    await updateStoredWorkflowRun(original.runId, (snapshot) => {
       snapshot.status = "interrupted";
       snapshot.endedAt = new Date().toISOString();
       snapshot.sessionWaits = [
@@ -1414,7 +1442,7 @@ describe("workflow durable session API", () => {
     expect((await waitForFinished(recoveredId!)).status).toBe("done");
     expect(recoveredSessions.spawnCalls).toBe(0);
     expect(recoveredTimeout).toBeLessThanOrEqual(1_000);
-    expect(getWorkflowRun(recoveredId!)?.sessions?.[0]).toMatchObject({
+    expect((await getWorkflowRun(recoveredId!))?.sessions?.[0]).toMatchObject({
       reservedTokens: 10_000,
       reservedCostUsd: 2,
     });
@@ -1432,17 +1460,17 @@ describe("workflow durable session API", () => {
         `  waitSession(${second}.id, { until: "done", timeout: 60000 }),`,
         "]);",
       ].join("\n");
-    const original = start({
+    const original = await start({
       executor: echoExecutor(),
       sessionController: sessions,
       script: source("a", "b"),
     });
     await waitForFinished(original.runId);
-    const waitEntries = readWorkflowJournal(original.runId)
+    const waitEntries = (await readWorkflowJournal(original.runId))
       .filter(isSessionJournalEntry)
       .filter((entry) => entry.operation === "wait");
     const journalPath = `${process.env.OPENSESSION_WORKFLOWS_DIR}/${original.runId}/journal.jsonl`;
-    const retained = readWorkflowJournal(original.runId).filter(
+    const retained = (await readWorkflowJournal(original.runId)).filter(
       (entry) => !(entry.kind === "session" && entry.operation === "wait"),
     );
     writeFileSync(
@@ -1450,7 +1478,7 @@ describe("workflow durable session API", () => {
       `${retained.map((entry) => JSON.stringify(entry)).join("\n")}\n`,
     );
     const deadlines = [Date.now() + 1_000, Date.now() + 4_000];
-    updateWorkflowRun(original.runId, (snapshot) => {
+    await updateStoredWorkflowRun(original.runId, (snapshot) => {
       snapshot.status = "interrupted";
       snapshot.endedAt = new Date().toISOString();
       snapshot.sessionWaits = waitEntries.map((entry, index) => ({
@@ -1503,7 +1531,7 @@ describe("workflow durable session API", () => {
         `  spawnSession({ prompt: "${second}", repo: "renderer", branch: "${second}" }),`,
         "]);",
       ].join("\n");
-    const original = start({
+    const original = await start({
       executor: echoExecutor(),
       sessionController: sessions,
       script: source("alpha", "beta"),
@@ -1516,7 +1544,7 @@ describe("workflow durable session API", () => {
       `${process.env.OPENSESSION_WORKFLOWS_DIR}/${original.runId}/script.mjs`,
       source("beta", "alpha"),
     );
-    updateWorkflowRun(original.runId, (snapshot) => {
+    await updateStoredWorkflowRun(original.runId, (snapshot) => {
       snapshot.status = "interrupted";
       snapshot.endedAt = new Date().toISOString();
     });
@@ -1537,7 +1565,7 @@ describe("workflow durable session API", () => {
       'export const meta = { name: "row-crash" };',
       'return await spawnSession({ prompt: "one", repo: "renderer" });',
     ].join("\n");
-    const original = start({
+    const original = await start({
       executor: echoExecutor(),
       sessionController: sessions,
       script: source,
@@ -1546,7 +1574,7 @@ describe("workflow durable session API", () => {
     await waitForFinished(original.runId);
     const journalPath = `${process.env.OPENSESSION_WORKFLOWS_DIR}/${original.runId}/journal.jsonl`;
     writeFileSync(journalPath, "");
-    updateWorkflowRun(original.runId, (snapshot) => {
+    await updateStoredWorkflowRun(original.runId, (snapshot) => {
       snapshot.status = "interrupted";
       snapshot.endedAt = new Date().toISOString();
     });
@@ -1557,7 +1585,7 @@ describe("workflow durable session API", () => {
     });
     expect((await waitForFinished(recoveredId!)).status).toBe("done");
     expect(sessions.spawnCalls).toBe(1);
-    expect(getWorkflowRun(recoveredId!)?.sessions).toHaveLength(1);
+    expect((await getWorkflowRun(recoveredId!))?.sessions).toHaveLength(1);
   });
 
   test("a failed late-child cancel remains durable and retries on recovery", async () => {
@@ -1580,7 +1608,7 @@ describe("workflow durable session API", () => {
       'export const meta = { name: "cancel-recovery" };',
       'return await spawnSession({ prompt: "one", repo: "renderer" });',
     ].join("\n");
-    const original = start({
+    const original = await start({
       executor: echoExecutor(),
       sessionController: sessions,
       script: source,
@@ -1589,11 +1617,12 @@ describe("workflow durable session API", () => {
     cancelWorkflow(original.runId);
     release.resolve();
     await waitUntil(
-      () => getWorkflowRun(original.runId)?.sessions?.[0]?.cancelPending,
+      async () =>
+        (await getWorkflowRun(original.runId))?.sessions?.[0]?.cancelPending,
     );
-    expect(getWorkflowRun(original.runId)?.status).toBe("cancelled");
+    expect((await getWorkflowRun(original.runId))?.status).toBe("cancelled");
     await markInterruptedWorkflows();
-    expect(getWorkflowRun(original.runId)?.status).toBe("interrupted");
+    expect((await getWorkflowRun(original.runId))?.status).toBe("interrupted");
     failCancel = false;
     const recoveredId = await recoverWorkflow(original.runId, {
       executor: echoExecutor(),
@@ -1602,15 +1631,15 @@ describe("workflow durable session API", () => {
     });
     await waitForFinished(recoveredId!);
     expect(sessions.cancelCalls).toEqual(["child-1"]);
-    expect(getWorkflowRun(recoveredId!)?.sessions?.[0]?.cancelPending).toBe(
-      false,
-    );
+    expect(
+      (await getWorkflowRun(recoveredId!))?.sessions?.[0]?.cancelPending,
+    ).toBe(false);
   });
 
   test("explicit workflow cancellation propagates to active children", async () => {
     const sessions = fakeSessionController();
     const gate = deferred<WorkflowAgentOutcome>();
-    const { runId } = start({
+    const { runId } = await start({
       executor: fakeExecutor(() => gate.promise),
       sessionController: sessions,
       script: [
@@ -1631,7 +1660,7 @@ describe("workflow durable session API", () => {
     const sessions = fakeSessionController();
     const wait = deferred<WorkflowSessionStatus>();
     sessions.wait = async () => wait.promise;
-    const run = start({
+    const run = await start({
       executor: echoExecutor(),
       sessionController: sessions,
       script: [
@@ -1640,10 +1669,10 @@ describe("workflow durable session API", () => {
         'return await waitSession(child.id, { until: "pr_checks_passed", timeout: 10000 });',
       ].join("\n"),
     });
-    await waitUntil(() =>
-      Boolean(getWorkflowRun(run.runId)?.sessionWaits?.length),
+    await waitUntil(async () =>
+      Boolean((await getWorkflowRun(run.runId))?.sessionWaits?.length),
     );
-    expect(getWorkflowRun(run.runId)?.sessionWaits?.[0]).toMatchObject({
+    expect((await getWorkflowRun(run.runId))?.sessionWaits?.[0]).toMatchObject({
       sessionId: "child-1",
       until: "pr_checks_passed",
     });
@@ -1668,7 +1697,7 @@ describe("workflow durable session API", () => {
       }
       return normalWait(id, opts, signal);
     };
-    const run = start({
+    const run = await start({
       executor: echoExecutor(),
       sessionController: sessions,
       sessionLimits: { maxConcurrent: 1, maxSessions: 3 },
@@ -1695,7 +1724,7 @@ describe("workflow durable session API", () => {
       { id: "child-1", message: "Retry transient failure" },
     ]);
     expect(
-      readWorkflowJournal(run.runId).some(
+      (await readWorkflowJournal(run.runId)).some(
         (entry) =>
           entry.kind === "session" &&
           entry.operation === "wait" &&
@@ -1705,10 +1734,10 @@ describe("workflow durable session API", () => {
     ).toBe(true);
 
     const replaySessions = fakeSessionController();
-    const replay = start({
+    const replay = await start({
       executor: echoExecutor(),
       sessionController: replaySessions,
-      script: readWorkflowScript(run.runId)!,
+      script: (await readWorkflowScript(run.runId))!,
       resumeFromRunId: run.runId,
       sessionLimits: { maxConcurrent: 1, maxSessions: 3 },
     });
@@ -1726,7 +1755,7 @@ describe("workflow durable session API", () => {
       await release.promise;
       return physicalSpawn(opts, requestId);
     };
-    const run = start({
+    const run = await start({
       executor: echoExecutor(),
       sessionController: sessions,
       script: [
@@ -1743,7 +1772,7 @@ describe("workflow durable session API", () => {
 
   test("reconcile validates retry bounds before spawning", async () => {
     const sessions = fakeSessionController();
-    const run = start({
+    const run = await start({
       executor: echoExecutor(),
       sessionController: sessions,
       script: [
@@ -1773,7 +1802,7 @@ describe("workflow durable session API", () => {
       if (current.branch === "fail") throw new Error("policy denied");
       return normalWait(id, opts, signal);
     };
-    const run = start({
+    const run = await start({
       executor: echoExecutor(),
       sessionController: sessions,
       sessionLimits: { maxConcurrent: 2 },
@@ -1787,7 +1816,7 @@ describe("workflow durable session API", () => {
     });
     await waitUntil(() => entered === 2);
     await Bun.sleep(20);
-    expect(getWorkflowRun(run.runId)?.status).toBe("running");
+    expect((await getWorkflowRun(run.runId))?.status).toBe("running");
     delayed.resolve();
     const snap = await waitForFinished(run.runId);
     expect(snap.error).toContain("policy denied");
@@ -1796,7 +1825,7 @@ describe("workflow durable session API", () => {
   });
 
   test("caps workflow state calls per run", async () => {
-    const run = start({
+    const run = await start({
       executor: echoExecutor(),
       sessionController: fakeSessionController(),
       script: [
@@ -1815,7 +1844,7 @@ describe("workflow durable session API", () => {
 
   test("server admission supplies a conservative floor when caller omits it", async () => {
     const sessions = fakeSessionController();
-    const run = start({
+    const run = await start({
       executor: echoExecutor(),
       sessionController: sessions,
       sessionLimits: {
@@ -1835,7 +1864,7 @@ describe("workflow durable session API", () => {
 
   test("active-session and lifetime limits reject excess spawns", async () => {
     const active = fakeSessionController();
-    const activeRun = start({
+    const activeRun = await start({
       executor: echoExecutor(),
       sessionController: active,
       sessionLimits: { maxConcurrent: 1, maxSessions: 2 },
@@ -1855,7 +1884,7 @@ describe("workflow durable session API", () => {
     expect(active.spawnCalls).toBe(1);
 
     const lifetime = fakeSessionController();
-    const lifetimeRun = start({
+    const lifetimeRun = await start({
       executor: echoExecutor(),
       sessionController: lifetime,
       sessionLimits: { maxConcurrent: 3, maxSessions: 1 },
@@ -1878,7 +1907,7 @@ describe("workflow durable session API", () => {
       tokens: 101,
       costUsd: 1,
     });
-    const budgetRun = start({
+    const budgetRun = await start({
       executor: echoExecutor(),
       sessionController: budgeted,
       sessionLimits: {
@@ -1899,7 +1928,7 @@ describe("workflow durable session API", () => {
     expect(budgeted.spawnCalls).toBe(1);
 
     const admission = fakeSessionController();
-    const admissionRun = start({
+    const admissionRun = await start({
       executor: echoExecutor(),
       sessionController: admission,
       sessionLimits: { maxTokens: 100, maxCostUsd: 5 },
@@ -1922,7 +1951,7 @@ describe("workflow durable session API", () => {
       await raceGate.promise;
       return physicalRaceSpawn(opts, requestId);
     };
-    const raceRun = start({
+    const raceRun = await start({
       executor: echoExecutor(),
       sessionController: racing,
       sessionLimits: { maxConcurrent: 3, maxTokens: 100 },
@@ -1951,7 +1980,7 @@ describe("workflow durable session API", () => {
       tokens: 10,
       costUsd: 0.1,
     });
-    const refillRun = start({
+    const refillRun = await start({
       executor: echoExecutor(),
       sessionController: refill,
       sessionLimits: { maxConcurrent: 1, maxTokens: 100, maxCostUsd: 2 },

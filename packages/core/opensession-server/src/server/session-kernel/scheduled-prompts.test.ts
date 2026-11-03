@@ -32,7 +32,7 @@ afterEach(() => {
 
 describe("scheduled prompt kernel timers", () => {
   test("creation and deletion update the durable timer", async () => {
-    const created = createScheduledPrompt({
+    const created = await createScheduledPrompt({
       sessionId: "s1",
       prompt: "continue",
       user: "Jaap",
@@ -40,13 +40,13 @@ describe("scheduled prompt kernel timers", () => {
     });
     if ("error" in created) throw new Error(created.error);
     expect(store.timer("s1", created.id)?.kind).toBe("scheduled_prompt");
-    expect(listScheduledPrompts("s1")).toHaveLength(1);
+    expect(await listScheduledPrompts("s1")).toHaveLength(1);
     expect(await deleteScheduledPrompt(created.id)).toBe(true);
     expect(store.timer("s1", created.id)).toBeUndefined();
   });
 
-  test("boot hydration reconstructs missing timer rows", () => {
-    const created = createScheduledPrompt({
+  test("boot hydration reconstructs missing timer rows", async () => {
+    const created = await createScheduledPrompt({
       sessionId: "s1",
       prompt: "continue",
       user: "Jaap",
@@ -54,7 +54,7 @@ describe("scheduled prompt kernel timers", () => {
     });
     if ("error" in created) throw new Error(created.error);
     store.cancelTimer("s1", created.id);
-    expect(hydrateScheduledPromptTimers()).toBe(1);
+    expect(await hydrateScheduledPromptTimers()).toBe(1);
     expect(store.timer("s1", created.id)).toBeDefined();
   });
 });

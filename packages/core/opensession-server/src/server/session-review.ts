@@ -104,7 +104,7 @@ export async function acceptSessionReview(
   const existing = getReviewRequest(session.id, aliases);
   if (!existing)
     return { ok: false, status: 400, error: "No review request to accept" };
-  setReviewAccepted(
+  await setReviewAccepted(
     session.id,
     accept ? { by: by || "someone", at: new Date().toISOString() } : null,
     aliases,

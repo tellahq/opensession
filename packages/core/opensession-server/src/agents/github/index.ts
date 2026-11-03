@@ -198,7 +198,7 @@ async function fireRecovery(
     console.warn(
       `[github] Refusing ${kind} recovery for PR #${s.prNumber} from untrusted @${recoveryRequester(s, kind) || "unknown"}`,
     );
-    clearRecoveryMarker(s, kind);
+    await clearRecoveryMarker(s, kind);
     return;
   }
 
@@ -367,7 +367,7 @@ async function retryPendingMentions(): Promise<void> {
     if (await ghRateLimited("rest", { repo: s.ghRepo || undefined })) continue;
     const p = s.pendingMention;
     if (!isTrustedGithubLogin(p.author)) {
-      clearPendingMention(s.prNumber, s.ghRepo);
+      await clearPendingMention(s.prNumber, s.ghRepo);
       continue;
     }
     const { dispatchMention } = await import("./mention");
@@ -382,7 +382,8 @@ async function retryPendingMentions(): Promise<void> {
       ghRepo: s.ghRepo,
     }).then(
       async () => {
-        const stillPending = readPrState(s.prNumber, s.ghRepo)?.pendingMention;
+        const stillPending = (await readPrState(s.prNumber, s.ghRepo))
+          ?.pendingMention;
         if (stillPending?.progressCommentId) {
           const { editIssueComment, REPLY_MARKER } =
             await import("./github-rest");
@@ -393,7 +394,7 @@ Request accepted.`,
             s.ghRepo,
           ).catch(() => {});
         }
-        clearPendingMention(s.prNumber, s.ghRepo);
+        await clearPendingMention(s.prNumber, s.ghRepo);
       },
       (error) =>
         console.warn(
@@ -420,12 +421,12 @@ async function recoverInterrupted(): Promise<void> {
       console.log(
         `[github] Clearing stale ${label} recovery flag for PR #${s.prNumber} (from ${recoveryMarkerAt(s, kind) || "unknown"})`,
       );
-      clearRecoveryMarker(s, kind);
+      await clearRecoveryMarker(s, kind);
     }
     if (!fire) continue;
     // The fired run owns the PR; its mention receipt is bookkeeping it supersedes.
     if (fire !== "pending-mention" && s.pendingMention)
-      clearPendingMention(s.prNumber, s.ghRepo);
+      await clearPendingMention(s.prNumber, s.ghRepo);
     await fireRecovery(s, fire);
   }
 }
@@ -523,7 +524,7 @@ export class GithubAgent implements AgentModule {
     // lazily on first touch; this keeps it warm when no delivery arrives. A
     // GitHub-only install has no Slack startup to warm it, so this agent loads
     // the store itself.
-    loadGithubDeliveries();
+    await loadGithubDeliveries();
     if (!githubConfigured()) {
       console.warn(
         "[github] GitHub App identity is incomplete — review/fix/simplify can't post; agent idle",
@@ -538,7 +539,7 @@ export class GithubAgent implements AgentModule {
         "[github] GITHUB_WEBHOOK_SECRET unset — PR webhooks won't be verified",
       );
     }
-    loadGithubDeliveries();
+    await loadGithubDeliveries();
     if (this.onSessionInvalidate)
       setGithubSessionInvalidate(this.onSessionInvalidate);
     await ensureReviewAutomation();
@@ -546,7 +547,7 @@ export class GithubAgent implements AgentModule {
     await recoverInterrupted();
     const states = await listPrStatesAsync();
     indexPendingMentions(states);
-    restoreDesiredReviews(states);
+    await restoreDesiredReviews(states);
     startPendingMentionRetry();
     // Safety net under all of the above: the webhook path is fire-once, so
     // reviews that die on dry pools or whose delivery never arrives are
@@ -576,7 +577,7 @@ export class GithubAgent implements AgentModule {
       reviewAutomationEnabled: autoEnabled,
       pendingMentions: pendingMentionRefs().length,
       activeCodeLoops: activeCodeLoops(),
-      reviewFeedback: feedbackStats(),
+      reviewFeedback: await feedbackStats(),
       webhookConfigured: !!GITHUB_WEBHOOK_SECRET,
       webhooksReceived: githubWebhookCount(),
     };
