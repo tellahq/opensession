@@ -22,6 +22,7 @@ import {
   cancelLiveWorkflow,
   controlLiveWorkflowAgent,
   createWorkflowRun,
+  flushWorkflowRun,
   getWorkflowRun,
   listWorkflowRunsForSession,
   markInterruptedWorkflows,
@@ -89,15 +90,16 @@ function journalEntry(
 }
 
 describe("workflow store", () => {
-  test("createWorkflowRun persists run.json + script.mjs and is readable back", () => {
+  test("createWorkflowRun persists run.json + script.mjs and is readable back", async () => {
     const snapshot = makeRun({ description: "a test", user: "alex" });
+    await flushWorkflowRun(snapshot.runId);
     const dir = join(process.env.OPENSESSION_WORKFLOWS_DIR!, snapshot.runId);
     expect(existsSync(join(dir, "run.json"))).toBe(true);
     expect(readFileSync(join(dir, "script.mjs"), "utf-8")).toContain(
       "test-workflow",
     );
 
-    const live = getWorkflowRun(snapshot.runId);
+    const live = await getWorkflowRun(snapshot.runId);
     expect(live?.name).toBe("test-workflow");
     expect(live?.status).toBe("running");
     expect(live?.description).toBe("a test");
@@ -107,7 +109,7 @@ describe("workflow store", () => {
 
     // Still readable from disk once no longer live.
     unregisterLiveWorkflow(snapshot.runId);
-    expect(getWorkflowRun(snapshot.runId)?.name).toBe("test-workflow");
+    expect((await getWorkflowRun(snapshot.runId))?.name).toBe("test-workflow");
   });
 
   test("overlapping workflows hold their session busy until the last one finishes", () => {
@@ -123,7 +125,7 @@ describe("workflow store", () => {
     expect(hasSessionRunningHold(sessionId)).toBe(false);
   });
 
-  test("updateWorkflowRun mutates, persists, and returns the snapshot", () => {
+  test("updateWorkflowRun mutates, persists, and returns the snapshot", async () => {
     const snapshot = makeRun();
     const updated = updateWorkflowRun(snapshot.runId, (s) => {
       s.currentPhase = "Phase 1";
@@ -131,14 +133,14 @@ describe("workflow store", () => {
     });
     expect(updated?.currentPhase).toBe("Phase 1");
     unregisterLiveWorkflow(snapshot.runId);
-    const fromDisk = getWorkflowRun(snapshot.runId);
+    const fromDisk = await getWorkflowRun(snapshot.runId);
     expect(fromDisk?.logs).toEqual([
       { ts: "2026-07-10T00:00:00.000Z", message: "hello" },
     ]);
     expect(updateWorkflowRun("wf-does-not-exist", () => {})).toBeUndefined();
   });
 
-  test("updateWorkflowRun truncates previews and caps log lines", () => {
+  test("updateWorkflowRun truncates previews and caps log lines", async () => {
     const snapshot = makeRun();
     updateWorkflowRun(snapshot.runId, (s) => {
       s.agents.push({
@@ -152,7 +154,7 @@ describe("workflow store", () => {
         s.logs.push({ ts: "2026-07-10T00:00:00.000Z", message: `line ${i}` });
       }
     });
-    const s = getWorkflowRun(snapshot.runId)!;
+    const s = (await getWorkflowRun(snapshot.runId))!;
     expect(s.agents[0].promptPreview.length).toBeLessThanOrEqual(
       WORKFLOW_LIMITS.previewChars + 1,
     );
@@ -165,10 +167,10 @@ describe("workflow store", () => {
     );
   });
 
-  test("journal append/read roundtrip tolerates a corrupt trailing line", () => {
+  test("journal append/read roundtrip tolerates a corrupt trailing line", async () => {
     const snapshot = makeRun();
-    appendWorkflowJournal(snapshot.runId, journalEntry(0));
-    appendWorkflowJournal(snapshot.runId, journalEntry(1));
+    await appendWorkflowJournal(snapshot.runId, journalEntry(0));
+    await appendWorkflowJournal(snapshot.runId, journalEntry(1));
     // Simulate a crash mid-append: torn, unparsable trailing line.
     appendFileSync(
       join(
@@ -178,13 +180,13 @@ describe("workflow store", () => {
       ),
       '{"seq":2,"hash":"tru',
     );
-    const entries = readWorkflowJournal(
+    const entries = (await readWorkflowJournal(
       snapshot.runId,
-    ) as WorkflowJournalEntry[];
+    )) as WorkflowJournalEntry[];
     expect(entries.length).toBe(2);
     expect(entries[0].prompt).toBe("prompt 0");
     expect(entries[1].outcome.text).toBe("result 1");
-    expect(readWorkflowJournal("wf-none")).toEqual([]);
+    expect(await readWorkflowJournal("wf-none")).toEqual([]);
   });
 
   test("listWorkflowRunsForSession filters by session, newest first", async () => {
@@ -241,22 +243,22 @@ describe("workflow store", () => {
 
     await markInterruptedWorkflows();
 
-    const deadNow = getWorkflowRun(dead.runId)!;
+    const deadNow = (await getWorkflowRun(dead.runId))!;
     expect(deadNow.status).toBe("interrupted");
     expect(deadNow.endedAt).toBeTruthy();
     expect(deadNow.agents[0].status).toBe("cancelled");
     expect(await recoverableWorkflowRunIds()).toContain(dead.runId);
-    expect(getWorkflowRun(live.runId)?.status).toBe("running");
-    expect(getWorkflowRun(finished.runId)?.status).toBe("done");
+    expect((await getWorkflowRun(live.runId))?.status).toBe("running");
+    expect((await getWorkflowRun(finished.runId))?.status).toBe("done");
   });
 });
 
-test("workflow state compare-and-set has one winner and persists", () => {
+test("workflow state compare-and-set has one winner and persists", async () => {
   const run = makeRun();
-  const first = compareAndSetWorkflowState(run.runId, "queue.cursor", 0, {
+  const first = await compareAndSetWorkflowState(run.runId, "queue.cursor", 0, {
     next: 1,
   });
-  const stale = compareAndSetWorkflowState(run.runId, "queue.cursor", 0, {
+  const stale = await compareAndSetWorkflowState(run.runId, "queue.cursor", 0, {
     next: 2,
   });
   expect(first).toMatchObject({ swapped: true, version: 1 });
@@ -265,23 +267,23 @@ test("workflow state compare-and-set has one winner and persists", () => {
     version: 1,
     value: { next: 1 },
   });
-  expect(readWorkflowState(run.runId, "queue.cursor")).toEqual({
+  expect(await readWorkflowState(run.runId, "queue.cursor")).toEqual({
     key: "queue.cursor",
     version: 1,
     value: { next: 1 },
   });
 });
 
-test("workflow state CAS replays the original result by stable operation id", () => {
+test("workflow state CAS replays the original result by stable operation id", async () => {
   const run = makeRun();
-  const first = compareAndSetWorkflowState(
+  const first = await compareAndSetWorkflowState(
     run.runId,
     "queue.cursor",
     0,
     { next: 1 },
     "stable-op",
   );
-  const replay = compareAndSetWorkflowState(
+  const replay = await compareAndSetWorkflowState(
     run.runId,
     "queue.cursor",
     0,
@@ -292,33 +294,37 @@ test("workflow state CAS replays the original result by stable operation id", ()
   expect(replay).toMatchObject({ swapped: true, version: 1 });
 });
 
-test("workflow state enforces key and aggregate byte caps", () => {
+test("workflow state enforces key and aggregate byte caps", async () => {
   const keys = makeRun();
   for (let index = 0; index < WORKFLOW_LIMITS.maxStateKeys; index++) {
     expect(
-      compareAndSetWorkflowState(keys.runId, `key-${index}`, 0, null).swapped,
+      (await compareAndSetWorkflowState(keys.runId, `key-${index}`, 0, null))
+        .swapped,
     ).toBe(true);
   }
-  expect(() =>
+  await expect(
     compareAndSetWorkflowState(keys.runId, "one-too-many", 0, null),
-  ).toThrow(/key limit/);
+  ).rejects.toThrow(/key limit/);
 
   const bytes = makeRun();
   const chunk = "x".repeat(249_000);
   for (let index = 0; index < 4; index++)
-    compareAndSetWorkflowState(bytes.runId, `chunk-${index}`, 0, chunk);
-  expect(() =>
+    await compareAndSetWorkflowState(bytes.runId, `chunk-${index}`, 0, chunk);
+  await expect(
     compareAndSetWorkflowState(bytes.runId, "chunk-4", 0, chunk),
-  ).toThrow(/byte limit/);
+  ).rejects.toThrow(/byte limit/);
 });
 
-test("workflow state reports corruption instead of widening to empty", () => {
+test("workflow state reports corruption instead of widening to empty", async () => {
   const run = makeRun();
+  await flushWorkflowRun(run.runId);
   writeFileSync(
     `${process.env.OPENSESSION_WORKFLOWS_DIR}/${run.runId}/state.json`,
     "{not-json",
   );
-  expect(() => readWorkflowState(run.runId, "cursor")).toThrow(/corrupt JSON/);
+  await expect(readWorkflowState(run.runId, "cursor")).rejects.toThrow(
+    /corrupt JSON/,
+  );
 
   writeFileSync(
     `${process.env.OPENSESSION_WORKFLOWS_DIR}/${run.runId}/state.json`,
@@ -327,11 +333,15 @@ test("workflow state reports corruption instead of widening to empty", () => {
       operations: {},
     }),
   );
-  expect(() => readWorkflowState(run.runId, "cursor")).toThrow(/is corrupt/);
+  await expect(readWorkflowState(run.runId, "cursor")).rejects.toThrow(
+    /is corrupt/,
+  );
 
   writeFileSync(
     `${process.env.OPENSESSION_WORKFLOWS_DIR}/${run.runId}/state.json`,
     " ".repeat(WORKFLOW_LIMITS.maxStateBytes + 1),
   );
-  expect(() => readWorkflowState(run.runId, "cursor")).toThrow(/byte limit/);
+  await expect(readWorkflowState(run.runId, "cursor")).rejects.toThrow(
+    /byte limit/,
+  );
 });

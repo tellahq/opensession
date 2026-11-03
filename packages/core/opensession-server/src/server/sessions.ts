@@ -44,7 +44,10 @@ import {
   sessionPrBranch,
   shareWorkspacePrRefs,
 } from "./session-pr-target";
-import { readPrState, readPrStateAsync } from "../agents/github/state";
+import {
+  readPrStateAsync,
+  readPrStateForOfflineAssembly,
+} from "../agents/github/state";
 import {
   getPrsByRepo,
   prsBySessionRef,
@@ -1486,7 +1489,10 @@ function* assembleSessionSteps(
   // The last review summary of each primary PR lives in a state file. Read
   // the distinct ones ahead, asynchronously, instead of one synchronous read
   // per row inside the enrichment loop.
-  const prStates = new Map<string, ReturnType<typeof readPrState>>();
+  const prStates = new Map<
+    string,
+    ReturnType<typeof readPrStateForOfflineAssembly>
+  >();
   if (cooperative) {
     const wanted = new Map<string, [number, string | undefined]>();
     for (const session of selectedSessions) {
@@ -1509,7 +1515,7 @@ function* assembleSessionSteps(
   const prState = (prNumber: number, ghRepo: string | undefined) =>
     cooperative
       ? (prStates.get(prStateKey(prNumber, ghRepo)) ?? null)
-      : readPrState(prNumber, ghRepo);
+      : readPrStateForOfflineAssembly(prNumber, ghRepo);
   for (const session of selectedSessions) {
     yield;
     const primaryBranch = sessionPrBranch(session, workspaceOf(session));
@@ -1762,7 +1768,7 @@ async function removeSessionArtifacts(session: UnifiedSession): Promise<void> {
     );
   }
   // Nobody's unsent draft should outlive the session it was typed into.
-  purgeDraftsForSessions([session.id, ...(session.aliasIds || [])]);
+  await purgeDraftsForSessions([session.id, ...(session.aliasIds || [])]);
   // Neither should its scratch dir (session-scratch.ts). Best-effort and
   // async: a scratch hiccup must never block deletion.
   for (const id of [session.id, ...(session.aliasIds || [])])

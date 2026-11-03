@@ -29,7 +29,7 @@
  * runs — same privilege boundary as opensession-sessions/opensession-admin: untrusted
  * ticket text must not be able to DM the team as the bot.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { readTextIfExists } from "./shared/async-fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { homeDir, OPENSESSION_SESSIONS_DIR } from "./paths";
 import { audit } from "./audit";
@@ -160,10 +160,16 @@ async function enqueueAskDelivery(a: HumanAsk, skipUi = false): Promise<void> {
     `${a.id}:${skipUi || !a.uiFirst ? "slack" : "ui"}`,
   );
 }
-export function initHumanAsks(): void {
-  if (existsSync(STORE)) {
+export async function initHumanAsks(): Promise<void> {
+  let text: string | undefined;
+  try {
+    text = await readTextIfExists(STORE);
+  } catch (e) {
+    console.error("[human-asks] load failed:", e);
+  }
+  if (text !== undefined) {
     try {
-      const data: Stored = JSON.parse(readFileSync(STORE, "utf-8"));
+      const data: Stored = JSON.parse(text);
       const cutoff = Date.now() - TERMINAL_RETENTION_MS;
       for (const a of data.asks || []) {
         if (isTerminal(a)) {

@@ -22,7 +22,7 @@ export async function handlePapercutsRoutes(
     const limit =
       parseInt(url.searchParams.get("limit") || "", 10) || undefined;
     return Response.json({
-      entries: listPapercuts({ repo, days, limit }),
+      entries: await listPapercuts({ repo, days, limit }),
       repos: papercutsRepoConfigs(),
     });
   }
@@ -40,7 +40,7 @@ export async function handlePapercutsRoutes(
       );
     }
     try {
-      setPapercutsEnabled(body.repo, body.enabled);
+      await setPapercutsEnabled(body.repo, body.enabled);
     } catch (e: any) {
       return Response.json({ error: e?.message || String(e) }, { status: 400 });
     }

@@ -92,7 +92,7 @@ export async function ensureMemoryV2Ready(): Promise<{
       };
       if (
         parsed.migrationVersion === LEGACY_MIGRATION_VERSION &&
-        !memoryImportIsDirty(sourceDirs)
+        !(await memoryImportIsDirty(sourceDirs))
       ) {
         return { ...parsed, complete: true, errors: [] };
       }
@@ -154,7 +154,7 @@ export async function ensureMemoryV2Ready(): Promise<{
       );
     }
 
-    if (result.complete) clearMemoryImportDirty(sourceDirs);
+    if (result.complete) await clearMemoryImportDirty(sourceDirs);
 
     audit({
       kind: "memory_v2_migration",

@@ -25,7 +25,7 @@ afterAll(() => {
 });
 
 describe("GitHub delivery replay protection", () => {
-  test("hydrates a persisted delivery before explicit startup", () => {
+  test("hydrates a persisted delivery before explicit startup", async () => {
     const deliveryId = "github-delivery-before-startup";
     writeJsonAtomic(
       githubDeliveriesStore(),
@@ -33,40 +33,40 @@ describe("GitHub delivery replay protection", () => {
       false,
     );
 
-    // The check itself performs the one-time synchronous hydration.
-    expect(isGithubDeliveryProcessed(deliveryId)).toBe(true);
+    // The check itself performs the one-time hydration.
+    expect(await isGithubDeliveryProcessed(deliveryId)).toBe(true);
   });
 
   test("persists delivery ids at the legacy Slack-store path and restores them after a reload", async () => {
     const deliveryId = "github-delivery-persists";
-    markGithubDeliveryProcessed(deliveryId);
+    await markGithubDeliveryProcessed(deliveryId);
     await flushGithubDeliveries();
     expect(githubDeliveriesStore()).toBe(
       `${scratch}/.slack-sessions/github-deliveries.json`,
     );
-    expect(isGithubDeliveryProcessed(deliveryId)).toBe(true);
+    expect(await isGithubDeliveryProcessed(deliveryId)).toBe(true);
 
     // A forced load clears the in-memory map first, mirroring a restart.
-    loadGithubDeliveries(true);
-    expect(isGithubDeliveryProcessed(deliveryId)).toBe(true);
+    await loadGithubDeliveries(true);
+    expect(await isGithubDeliveryProcessed(deliveryId)).toBe(true);
   });
 
-  test("drops expired delivery ids when restoring the persistent store", () => {
+  test("drops expired delivery ids when restoring the persistent store", async () => {
     writeJsonAtomic(githubDeliveriesStore(), [["expired-delivery", 0]], false);
-    loadGithubDeliveries(true);
-    expect(isGithubDeliveryProcessed("expired-delivery")).toBe(false);
+    await loadGithubDeliveries(true);
+    expect(await isGithubDeliveryProcessed("expired-delivery")).toBe(false);
   });
 
-  test("deduplicates in-flight admission but releases a failed claim", () => {
+  test("deduplicates in-flight admission but releases a failed claim", async () => {
     const deliveryId = "github-delivery-in-flight";
-    expect(claimGithubDelivery(deliveryId)).toBe("claimed");
-    expect(claimGithubDelivery(deliveryId)).toBe("in_flight");
-    expect(isGithubDeliveryProcessed(deliveryId)).toBe(false);
+    expect(await claimGithubDelivery(deliveryId)).toBe("claimed");
+    expect(await claimGithubDelivery(deliveryId)).toBe("in_flight");
+    expect(await isGithubDeliveryProcessed(deliveryId)).toBe(false);
 
     releaseGithubDelivery(deliveryId);
-    expect(claimGithubDelivery(deliveryId)).toBe("claimed");
-    markGithubDeliveryProcessed(deliveryId);
-    expect(isGithubDeliveryProcessed(deliveryId)).toBe(true);
-    expect(claimGithubDelivery(deliveryId)).toBe("processed");
+    expect(await claimGithubDelivery(deliveryId)).toBe("claimed");
+    await markGithubDeliveryProcessed(deliveryId);
+    expect(await isGithubDeliveryProcessed(deliveryId)).toBe(true);
+    expect(await claimGithubDelivery(deliveryId)).toBe("processed");
   });
 });

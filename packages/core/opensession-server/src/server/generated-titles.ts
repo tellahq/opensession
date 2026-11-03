@@ -11,12 +11,12 @@
  * cheap model whether the conversation moved on to an unrelated task and only
  * then replaces the title (a manual rename always wins).
  *
- * Reads stay on the legacy synchronous registry cache (getAllSessions calls
- * getGeneratedTitle once per row). Every mutation is asynchronous.
+ * Reads stay on an in-memory registry cache (getAllSessions calls
+ * getGeneratedTitle once per row), refreshed asynchronously. Every mutation
+ * is asynchronous.
  */
 import { catalogNativeSessions } from "./session-catalog-read";
-import { readFileSync, existsSync, statSync } from "fs";
-import { readFile } from "fs/promises";
+import { readFile, stat } from "fs/promises";
 import { writeGeneratedTitleRegistry } from "./generated-title-registry";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { oneShot as runOneShot, type OneShotOpts } from "./one-shot";
@@ -43,28 +43,50 @@ export function __setGeneratedTitleOneShotForTest(fn: OneShotFn): () => void {
 let cache: Record<string, string> | null = null;
 let cacheMtimeMs = 0;
 let lastStatAt = 0;
+let refreshing: Promise<void> | undefined;
+
+/** Re-read the registry when it changed on disk, off the caller's stack. */
+async function refreshRegistry(): Promise<void> {
+  try {
+    let mtime = 0;
+    try {
+      mtime = (await stat(REGISTRY_PATH)).mtimeMs;
+    } catch {}
+    if (cache && mtime === cacheMtimeMs) return;
+    cache = mtime ? JSON.parse(await readFile(REGISTRY_PATH, "utf-8")) : {};
+    cacheMtimeMs = mtime;
+  } catch {
+    cache ??= {};
+  }
+}
+
+function startRefresh(): Promise<void> {
+  refreshing ??= refreshRegistry().finally(() => {
+    refreshing = undefined;
+  });
+  return refreshing;
+}
+
+/** Load the registry before the first session list (boot). */
+export function warmGeneratedTitles(): Promise<void> {
+  lastStatAt = Date.now();
+  return startRefresh();
+}
 
 function load(): Record<string, string> {
   // Re-read when the file changed underneath us. A restart overlaps two
   // processes (the outgoing one keeps finishing title calls while draining),
   // and this module used to cache the map for the process lifetime — so a
   // sibling's titles stayed invisible until the next restart, and our next
-  // whole-map write silently dropped them. Stat at most once a second:
+  // whole-map write silently dropped them. Check at most once a second:
   // getAllSessions calls this once per session, thousands of times a scan.
+  // The check runs in the background; this read answers from the cache.
   const now = Date.now();
-  if (cache && now - lastStatAt < 1000) return cache;
-  lastStatAt = now;
-  try {
-    const mtime = existsSync(REGISTRY_PATH)
-      ? statSync(REGISTRY_PATH).mtimeMs
-      : 0;
-    if (cache && mtime === cacheMtimeMs) return cache;
-    cache = mtime ? JSON.parse(readFileSync(REGISTRY_PATH, "utf-8")) : {};
-    cacheMtimeMs = mtime;
-  } catch {
-    cache ??= {};
+  if (now - lastStatAt >= 1000) {
+    lastStatAt = now;
+    void startRefresh();
   }
-  return cache!;
+  return cache ?? {};
 }
 
 export function getGeneratedTitle(id: string): string | undefined {
@@ -90,8 +112,10 @@ function setGeneratedTitle(id: string, title: string): Promise<void> {
     await writeGeneratedTitleRegistry(REGISTRY_PATH, id, title);
     // Another process may have merged more titles too. Reload rather than
     // installing a snapshot from before the cross-process write.
-    cache = null;
-    lastStatAt = 0;
+    if (refreshing) await refreshing;
+    cacheMtimeMs = -1;
+    lastStatAt = Date.now();
+    await startRefresh();
   });
   writeChain = write.catch(() => {});
   return write;

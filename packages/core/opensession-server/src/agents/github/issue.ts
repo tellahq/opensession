@@ -78,11 +78,11 @@ export interface IssueRunArgs {
 }
 
 /**
- * `os` label applied. Persists the request synchronously (a shutdown between
- * the webhook ack and the run's own marker is replayed by startup recovery),
+ * `os` label applied. Persists the request before the webhook acks (a shutdown
+ * between the ack and the run's own marker is replayed by startup recovery),
  * then runs in the background.
  */
-export function handleIssueLabel(payload: any): void {
+export async function handleIssueLabel(payload: any): Promise<void> {
   const issueNumber: number | undefined = payload?.issue?.number;
   const author: string = payload?.sender?.login || "";
   if (typeof issueNumber !== "number" || !author) return;
@@ -91,7 +91,7 @@ export function handleIssueLabel(payload: any): void {
     : null;
   if (payload?.repository?.full_name && !eventRepo) return;
   const ghRepo = eventRepo?.ghRepo;
-  setPendingMention(
+  await setPendingMention(
     issueNumber,
     {
       kind: "issue",
@@ -132,9 +132,9 @@ export async function runIssueSession(
     );
     // Nothing queues behind a running turn: say so instead of silently
     // dropping it, and drop the receipt so recovery does not replay it.
-    const receiptId = readPrState(issueNumber, ghRepo)?.pendingMention
+    const receiptId = (await readPrState(issueNumber, ghRepo))?.pendingMention
       ?.progressCommentId;
-    clearPendingMention(issueNumber, ghRepo);
+    await clearPendingMention(issueNumber, ghRepo);
     await postOrEditComment(
       issueNumber,
       receiptId,
@@ -167,7 +167,7 @@ export async function runIssueSession(
       mode: "code",
     });
 
-    const prior = readPrState(issueNumber, ghRepo);
+    const prior = await readPrState(issueNumber, ghRepo);
     // Reuse the progress comment only when recovering an interrupted run.
     const reuseId = recovering
       ? prior?.activeMention?.progressCommentId
@@ -182,7 +182,7 @@ export async function runIssueSession(
       `${REPLY_MARKER}\n🔄 On it — ${doing}… · ${link}`,
       ghRepo,
     );
-    updatePrState(
+    await updatePrState(
       issueNumber,
       branch,
       (s) => {
@@ -250,7 +250,7 @@ export async function runIssueSession(
     // the retry path replays it. Once owned, recovery semantics apply.
     if (!runOwnsRecovery) throw e;
   } finally {
-    updatePrState(
+    await updatePrState(
       issueNumber,
       branch,
       (s) => {

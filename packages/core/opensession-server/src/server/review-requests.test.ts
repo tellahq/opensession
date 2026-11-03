@@ -21,22 +21,22 @@ afterAll(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-test("clearing a canonical session also clears an alias-keyed request", () => {
-  reviewRequests.setReviewRequest("old-id", request);
+test("clearing a canonical session also clears an alias-keyed request", async () => {
+  await reviewRequests.setReviewRequest("old-id", request);
 
   expect(reviewRequests.getReviewRequest("canonical-id", ["old-id"])).toEqual(
     request,
   );
 
-  reviewRequests.setReviewRequest("canonical-id", null, ["old-id"]);
+  await reviewRequests.setReviewRequest("canonical-id", null, ["old-id"]);
 
   expect(reviewRequests.getReviewRequest("canonical-id")).toBeUndefined();
   expect(reviewRequests.getReviewRequest("old-id")).toBeUndefined();
 });
 
-test("accepting an alias-keyed request migrates it to the canonical id", () => {
-  reviewRequests.setReviewRequest("old-id", request);
-  reviewRequests.setReviewAccepted(
+test("accepting an alias-keyed request migrates it to the canonical id", async () => {
+  await reviewRequests.setReviewRequest("old-id", request);
+  await reviewRequests.setReviewAccepted(
     "canonical-id",
     { by: "Kent", at: "2026-08-28T10:05:00.000Z" },
     ["old-id"],

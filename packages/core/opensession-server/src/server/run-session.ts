@@ -3050,7 +3050,7 @@ async function runSessionPromptInner(
   // message after a call gets a Desk that's amnesiac about the conversation
   // it apparently just had (see desk-voice.ts).
   if (session.desk) {
-    const voiceHandoff = takeVoiceHandoff(sessionId);
+    const voiceHandoff = await takeVoiceHandoff(sessionId);
     if (voiceHandoff)
       prompt = `${wrapContext(voiceHandoff, "handoff")}\n\n${prompt}`;
   }

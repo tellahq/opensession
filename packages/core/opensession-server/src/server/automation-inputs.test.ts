@@ -12,8 +12,8 @@ import { publishReport, REPORTS_ROOT } from "./reports";
 
 const automationId = `test-automation-inputs-${process.pid}`;
 
-afterEach(() => {
-  deleteAutomationInputState(automationId);
+afterEach(async () => {
+  await deleteAutomationInputState(automationId);
   rmSync(join(REPORTS_ROOT, automationId), { recursive: true, force: true });
 });
 
@@ -113,9 +113,9 @@ describe("prepareAutomationInputs", () => {
     );
     expect(prepared.note).toContain("untrusted data");
     expect(prepared.note).toContain("concrete claim");
-    expect(automationInputStateExists(automationId)).toBe(false);
-    prepared.commit();
-    expect(automationInputStateExists(automationId)).toBe(true);
+    expect(await automationInputStateExists(automationId)).toBe(false);
+    await prepared.commit();
+    expect(await automationInputStateExists(automationId)).toBe(true);
 
     await prepareAutomationInputs(
       {

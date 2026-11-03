@@ -62,10 +62,12 @@ function status(state: WorkflowSessionStatus["status"]): WorkflowSessionStatus {
   return { ...child, status: state, branchPushed: state === "done" };
 }
 
-async function waitFor<T>(read: () => T | undefined): Promise<T> {
+async function waitFor<T>(
+  read: () => T | undefined | Promise<T | undefined>,
+): Promise<T> {
   const deadline = Date.now() + 8_000;
   for (;;) {
-    const value = read();
+    const value = await read();
     if (value !== undefined) return value;
     if (Date.now() >= deadline) throw new Error("restart fixture timed out");
     await Bun.sleep(5);
@@ -103,7 +105,7 @@ if (phase === "before") {
       throw new Error("the crashing process must not clean up the child");
     },
   };
-  const { runId } = workflows.startWorkflow({
+  const { runId } = await workflows.startWorkflow({
     sessionId: "parent",
     cwd: root,
     script: [
@@ -114,8 +116,8 @@ if (phase === "before") {
     executor,
     sessionController: controller,
   });
-  const snapshot = await waitFor(() => {
-    const current = store.getWorkflowRun(runId);
+  const snapshot = await waitFor(async () => {
+    const current = await store.getWorkflowRun(runId);
     return current?.sessions?.length && current.sessionWaits?.length
       ? current
       : undefined;
@@ -125,7 +127,7 @@ if (phase === "before") {
     if (!row) throw new Error("spawn row missing");
     row.cancelPending = true;
   });
-  store.compareAndSetWorkflowState(
+  await store.compareAndSetWorkflowState(
     runId,
     "claim",
     0,
@@ -156,6 +158,9 @@ if (phase === "before") {
   });
   if (exports !== 1 || snapshot.status !== "running")
     throw new Error("crash fixture setup failed");
+  // run.json is written asynchronously; let the last snapshot land so the
+  // "crash" happens after it, as it did when the write was synchronous.
+  await store.flushWorkflowRun(runId);
   process.exit(86);
 } else if (phase === "after") {
   let cancelCalls = 0;
@@ -187,13 +192,13 @@ if (phase === "before") {
     inProcessMcp: () => ({}),
   });
   if (!recoveredId) throw new Error("boot recovery found no workflow");
-  const recovered = await waitFor(() => {
-    const current = store.getWorkflowRun(recoveredId);
+  const recovered = await waitFor(async () => {
+    const current = await store.getWorkflowRun(recoveredId);
     return current && current.status !== "running" ? current : undefined;
   });
   const oldRunId = recovered.replayRootRunId!;
-  const state = store.readWorkflowState(oldRunId, "claim");
-  const nextCas = store.compareAndSetWorkflowState(
+  const state = await store.readWorkflowState(oldRunId, "claim");
+  const nextCas = await store.compareAndSetWorkflowState(
     oldRunId,
     "claim",
     state.version,
@@ -220,7 +225,7 @@ if (phase === "before") {
     `RESULT:${JSON.stringify({
       oldRunId,
       recoveredId,
-      old: store.getWorkflowRun(oldRunId),
+      old: await store.getWorkflowRun(oldRunId),
       recovered,
       state,
       nextCas,

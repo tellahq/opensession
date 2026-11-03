@@ -27,8 +27,9 @@
  */
 
 import { createHash } from "crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync } from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { readdir } from "fs/promises";
+import { keyedOrder, readTextIfExists } from "./shared/async-fs";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import { stateDir } from "./paths";
 
 /** Resolved per call, not at load, so a test can repoint the state root. */
@@ -119,30 +120,34 @@ function enforceCap(map: DraftMap): DraftMap {
 }
 
 /** A user's unsent drafts: session id → { text, updatedAt }. */
-export function getDrafts(user: string): DraftMap {
-  let stored = read(fileFor(user));
-  if (!Object.keys(stored).length) stored = read(legacyFileFor(user));
+export async function getDrafts(user: string): Promise<DraftMap> {
+  let stored = await read(fileFor(user));
+  if (!Object.keys(stored).length) stored = await read(legacyFileFor(user));
   return visibleDrafts(stored);
 }
 
-function read(file: string): DraftMap {
+async function read(file: string): Promise<DraftMap> {
   try {
-    if (!existsSync(file)) return {};
-    return cleanStored(JSON.parse(readFileSync(file, "utf8"))?.drafts);
+    const text = await readTextIfExists(file);
+    if (text === undefined) return {};
+    return cleanStored(JSON.parse(text)?.drafts);
   } catch {
     return {};
   }
 }
 
-function writeFile(file: string, drafts: DraftMap): DraftMap {
+/** Serializes read-modify-write cycles of one draft file. */
+const fileOrder = keyedOrder();
+
+async function writeFile(file: string, drafts: DraftMap): Promise<DraftMap> {
   try {
-    if (!existsSync(draftsDir())) mkdirSync(draftsDir(), { recursive: true });
-    writeJsonAtomic(file, { drafts });
+    // The atomic write creates the drafts directory.
+    await writeJsonAtomicAsync(file, { drafts });
   } catch {}
   return drafts;
 }
 
-function write(user: string, drafts: DraftMap): DraftMap {
+function write(user: string, drafts: DraftMap): Promise<DraftMap> {
   return writeFile(fileFor(user), drafts);
 }
 
@@ -164,10 +169,21 @@ export function upsertDraft(
   sessionId: string,
   text: string,
   updatedAt: string,
-): UpsertResult {
+): Promise<UpsertResult> {
+  return fileOrder(fileFor(user), () =>
+    upsertDraftNow(user, sessionId, text, updatedAt),
+  );
+}
+
+async function upsertDraftNow(
+  user: string,
+  sessionId: string,
+  text: string,
+  updatedAt: string,
+): Promise<UpsertResult> {
   const target = fileFor(user);
-  let drafts = read(target);
-  if (!Object.keys(drafts).length) drafts = read(legacyFileFor(user));
+  let drafts = await read(target);
+  if (!Object.keys(drafts).length) drafts = await read(legacyFileFor(user));
   const current = drafts[sessionId] ?? null;
 
   const incoming = Date.parse(updatedAt);
@@ -184,7 +200,7 @@ export function upsertDraft(
     // Keep an empty-text tombstone so an earlier non-empty request that
     // arrives after this delete cannot resurrect the sent draft.
     drafts[sessionId] = { text: "", updatedAt };
-    write(user, enforceCap(drafts));
+    await write(user, enforceCap(drafts));
     return { draft: null, applied: true };
   }
 
@@ -201,26 +217,28 @@ export function upsertDraft(
 
   const next: StoredDraft = { text, updatedAt };
   drafts[sessionId] = next;
-  write(user, enforceCap(drafts));
+  await write(user, enforceCap(drafts));
   return { draft: next, applied: true };
 }
 
 /** Drop these sessions' drafts for every user, when a session is deleted. */
-export function purgeDraftsForSessions(ids: string[]): void {
-  if (!ids.length || !existsSync(draftsDir())) return;
+export async function purgeDraftsForSessions(ids: string[]): Promise<void> {
+  if (!ids.length) return;
   try {
-    for (const name of readdirSync(draftsDir())) {
+    for (const name of await readdir(draftsDir())) {
       if (!name.endsWith(".json")) continue;
       const file = `${draftsDir()}/${name}`;
-      const drafts = read(file);
-      let changed = false;
-      for (const id of ids) {
-        if (drafts[id]) {
-          delete drafts[id];
-          changed = true;
+      await fileOrder(file, async () => {
+        const drafts = await read(file);
+        let changed = false;
+        for (const id of ids) {
+          if (drafts[id]) {
+            delete drafts[id];
+            changed = true;
+          }
         }
-      }
-      if (changed) writeFile(file, drafts);
+        if (changed) await writeFile(file, drafts);
+      });
     }
   } catch {}
 }

@@ -1115,7 +1115,7 @@ export async function handlePrRoutes(
       ]);
       const bksId = bksIdFor(details.number, "review", target.ghRepo);
       const reviewSession = await findSessionAsync(bksId);
-      const requested = requestActiveRunCancellation(
+      const requested = await requestActiveRunCancellation(
         details.number,
         target.branch,
         "review",

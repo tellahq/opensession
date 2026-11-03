@@ -11,8 +11,8 @@ import { publishReport, REPORTS_ROOT } from "./reports";
 
 const automationId = `test-automation-outputs-${process.pid}`;
 
-afterEach(() => {
-  deleteAutomationOutputState(automationId);
+afterEach(async () => {
+  await deleteAutomationOutputState(automationId);
   rmSync(join(REPORTS_ROOT, automationId), { recursive: true, force: true });
 });
 

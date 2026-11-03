@@ -60,7 +60,7 @@ export async function handleGithubWebhook(req: Request): Promise<Response> {
   const event = req.headers.get("x-github-event") || "";
   const deliveryId = req.headers.get("x-github-delivery");
   const deliveryClaim = deliveryId
-    ? claimGithubDelivery(deliveryId)
+    ? await claimGithubDelivery(deliveryId)
     : "claimed";
   if (deliveryClaim === "processed") {
     console.log(`[github] Duplicate GitHub delivery ${deliveryId} - skipping`);
@@ -150,7 +150,7 @@ export async function handleGithubWebhook(req: Request): Promise<Response> {
       // finish before both the delivery receipt and HTTP success are committed.
       await handleGithubPrEvent(event, payload);
     }
-    if (deliveryId) markGithubDeliveryProcessed(deliveryId);
+    if (deliveryId) await markGithubDeliveryProcessed(deliveryId);
     return Response.json({ ok: true });
   } catch (error) {
     if (deliveryId) releaseGithubDelivery(deliveryId);

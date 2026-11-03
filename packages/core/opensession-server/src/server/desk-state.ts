@@ -188,7 +188,7 @@ const newestFirst = (a: DeskWorkItem, b: DeskWorkItem) =>
  * The user's live state. Cheap: one cached sessions read (2s TTL, the same
  * one the sessions list uses), one reads file, one todos file.
  */
-export function buildDeskState(user: string): DeskState {
+export async function buildDeskState(user: string): Promise<DeskState> {
   const now = Date.now();
   const reads = getReads(user);
   const waiting: DeskWorkItem[] = [];
@@ -250,7 +250,7 @@ export function buildDeskState(user: string): DeskState {
   running.sort(newestFirst);
   review.sort(newestFirst);
 
-  const allTodos = listTodos({ user, status: "open", limit: 50 });
+  const allTodos = await listTodos({ user, status: "open", limit: 50 });
   const todos = allTodos.slice(0, MAX_PER_BUCKET).map((t) => ({
     id: t.id,
     text: t.text,
@@ -348,10 +348,12 @@ export function renderDeskBriefing(state: DeskState): string {
 
 /** The briefing for a user, or undefined when it can't be built — a state
  *  failure must never block a Desk turn. */
-export function deskBriefingFor(user: string | undefined): string | undefined {
+export async function deskBriefingFor(
+  user: string | undefined,
+): Promise<string | undefined> {
   if (!user) return undefined;
   try {
-    return renderDeskBriefing(buildDeskState(user));
+    return renderDeskBriefing(await buildDeskState(user));
   } catch (e) {
     console.warn("[desk] failed to build the live-state briefing:", e);
     return undefined;

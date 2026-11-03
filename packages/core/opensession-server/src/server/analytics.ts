@@ -628,7 +628,7 @@ function outcomeBucket(
 }
 
 /** Feedback records across every configured repo (default first). */
-function loadAllFeedbackRecords(): FeedbackRecord[] {
+async function loadAllFeedbackRecords(): Promise<FeedbackRecord[]> {
   const targets: Array<string | undefined> = [undefined];
   for (const repo of Object.values(configuredRepos())) {
     if (
@@ -641,7 +641,7 @@ function loadAllFeedbackRecords(): FeedbackRecord[] {
   const out: FeedbackRecord[] = [];
   for (const t of targets) {
     try {
-      out.push(...readFeedback(t));
+      out.push(...(await readFeedback(t)));
     } catch {}
   }
   return out;
@@ -1363,7 +1363,7 @@ export async function buildAnalytics(
     };
   });
   const reviewDayIndex = new Map(reviewQualityDays.map((d) => [d.date, d]));
-  for (const rec of loadAllFeedbackRecords()) {
+  for (const rec of await loadAllFeedbackRecords()) {
     const d = reviewDayIndex.get((rec.postedAt || "").slice(0, 10));
     if (!d) continue;
     if (rec.falseNegative) {

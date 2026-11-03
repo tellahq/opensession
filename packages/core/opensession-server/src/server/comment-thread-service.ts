@@ -163,7 +163,7 @@ async function addAssigneeTodo(
       () => undefined,
     );
     const root = thread.comments[0]!;
-    const item = addTodo({
+    const item = await addTodo({
       user: assignee,
       text: `Reply to ${root.user}'s comment: ${mentionPreview(root.text.replace(/\s+/g, " "))}`,
       note: `${session?.title || "Session"} ${threadUrl(thread.sessionId, thread.id)}`,
@@ -187,8 +187,9 @@ async function setTodoStatus(
   if (!todoId) return;
   try {
     const { getTodo, updateTodo } = await todos();
-    const item = getTodo(todoId);
-    if (item && item.status !== status) updateTodo(todoId, { status }, by);
+    const item = await getTodo(todoId);
+    if (item && item.status !== status)
+      await updateTodo(todoId, { status }, by);
   } catch (error) {
     console.warn(
       "[comment-threads] could not update the assignee's todo:",

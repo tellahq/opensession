@@ -15,12 +15,14 @@
  * Config (Settings → Papercuts): `~/.opensession-papercuts/config.json`
  *   { "repos": { "<repoId>": { "enabled": false } } }
  * Per-repo, default ON — a repo that opts out neither carries the tool nor
- * gets the "log papercuts" nudge in its runs. Read fresh per call.
+ * gets the "log papercuts" nudge in its runs. Cached in memory, loaded at
+ * boot and re-read in the background at most every few seconds.
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "fs";
+import { appendFile, mkdir, readFile } from "fs/promises";
 import { audit } from "./audit";
 import { stateDir } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
+import { readTextIfExists } from "./shared/async-fs";
 import { REPOS } from "./worktree";
 
 const PAPERCUTS_DIR = stateDir("papercuts");
@@ -44,7 +46,9 @@ function dayFile(date: string): string {
   return `${PAPERCUTS_DIR}/papercuts-${date}.jsonl`;
 }
 
-export function logPapercut(entry: Omit<PapercutEntry, "ts">): PapercutEntry {
+export async function logPapercut(
+  entry: Omit<PapercutEntry, "ts">,
+): Promise<PapercutEntry> {
   const message = (entry.message || "").trim().slice(0, MAX_MESSAGE_CHARS);
   if (!message) throw new Error("papercut message is empty");
   const full: PapercutEntry = {
@@ -52,8 +56,8 @@ export function logPapercut(entry: Omit<PapercutEntry, "ts">): PapercutEntry {
     message,
     ts: new Date().toISOString(),
   };
-  mkdirSync(PAPERCUTS_DIR, { recursive: true });
-  appendFileSync(dayFile(full.ts.slice(0, 10)), JSON.stringify(full) + "\n");
+  await mkdir(PAPERCUTS_DIR, { recursive: true });
+  await appendFile(dayFile(full.ts.slice(0, 10)), JSON.stringify(full) + "\n");
   // Mirror into the audit log so buildAuditDigest (and through it the nightly
   // Dreaming automation) picks papercuts up alongside errors and tool stats.
   audit({
@@ -69,11 +73,11 @@ export function logPapercut(entry: Omit<PapercutEntry, "ts">): PapercutEntry {
 }
 
 /** Recent papercuts, newest first. Scans at most `days` daily files back. */
-export function listPapercuts(opts?: {
+export async function listPapercuts(opts?: {
   repo?: string;
   days?: number;
   limit?: number;
-}): PapercutEntry[] {
+}): Promise<PapercutEntry[]> {
   const days = Math.min(120, Math.max(1, opts?.days || 14));
   const limit = Math.min(1000, Math.max(1, opts?.limit || 200));
   const out: PapercutEntry[] = [];
@@ -81,10 +85,10 @@ export function listPapercuts(opts?: {
     const date = new Date(Date.now() - i * 86_400_000)
       .toISOString()
       .slice(0, 10);
-    const path = dayFile(date);
-    if (!existsSync(path)) continue;
+    const text = await readTextIfExists(dayFile(date));
+    if (text === undefined) continue;
     const dayEntries: PapercutEntry[] = [];
-    for (const line of readFileSync(path, "utf-8").split("\n")) {
+    for (const line of text.split("\n")) {
       if (!line) continue;
       try {
         const e = JSON.parse(line) as PapercutEntry;
@@ -104,12 +108,39 @@ interface PapercutsConfigFile {
   repos?: Record<string, { enabled?: boolean }>;
 }
 
-function readConfig(): PapercutsConfigFile {
+const CONFIG_PATH = `${PAPERCUTS_DIR}/config.json`;
+const CONFIG_REFRESH_MS = 5_000;
+let configCache: PapercutsConfigFile = {};
+let configReadAt = 0;
+let configRefresh: Promise<void> | undefined;
+
+async function readConfigFile(): Promise<PapercutsConfigFile> {
   try {
-    return JSON.parse(readFileSync(`${PAPERCUTS_DIR}/config.json`, "utf-8"));
+    return JSON.parse(await readFile(CONFIG_PATH, "utf-8"));
   } catch {
     return {};
   }
+}
+
+/** Re-read the config file; boot awaits the first load. */
+export function warmPapercutsConfig(): Promise<void> {
+  configReadAt = Date.now();
+  configRefresh ??= readConfigFile()
+    .then((cfg) => {
+      configCache = cfg;
+    })
+    .finally(() => {
+      configRefresh = undefined;
+    });
+  return configRefresh;
+}
+
+/** The cached config; a stale cache starts a background re-read so an edit
+ *  made outside this process shows up within a few seconds. */
+function readConfig(): PapercutsConfigFile {
+  if (Date.now() - configReadAt >= CONFIG_REFRESH_MS)
+    void warmPapercutsConfig().catch(() => {});
+  return configCache;
 }
 
 /** Default ON: only an explicit `enabled: false` turns a repo off, and an
@@ -130,10 +161,15 @@ export function papercutsRepoConfigs(): Array<{
   }));
 }
 
-export function setPapercutsEnabled(repoId: string, enabled: boolean): void {
+export async function setPapercutsEnabled(
+  repoId: string,
+  enabled: boolean,
+): Promise<void> {
   if (!REPOS[repoId]) throw new Error(`unknown repo "${repoId}"`);
-  const cfg = readConfig();
+  if (configRefresh) await configRefresh;
+  const cfg = await readConfigFile();
   cfg.repos = { ...cfg.repos, [repoId]: { ...cfg.repos?.[repoId], enabled } };
-  mkdirSync(PAPERCUTS_DIR, { recursive: true });
-  writeJsonAtomic(`${PAPERCUTS_DIR}/config.json`, cfg);
+  await writeJsonAtomicAsync(CONFIG_PATH, cfg);
+  configCache = cfg;
+  configReadAt = Date.now();
 }

@@ -914,7 +914,7 @@ async function createLiveVoiceCallNow(
   navigationLogin?: string,
 ): Promise<LiveCallStarted> {
   const key = await requireVoiceApiKey();
-  const { sessionId } = ensureDeskSession(user);
+  const { sessionId } = await ensureDeskSession(user);
 
   // One call per user: a reload or a second tab must not leave the old call
   // (and its per-second billing) running headless.
@@ -976,7 +976,7 @@ async function createLiveVoiceCallNow(
       // browser's captions (frontend/lib/voice-captions.ts) can take down
       // exactly the fragments this row covers without matching its text.
       onRow: (row) =>
-        mirrorVoiceEntries(user, [
+        void mirrorVoiceEntries(user, [
           {
             id: `${row.id}-end-${row.endMs}`,
             role: row.role,
@@ -991,7 +991,7 @@ async function createLiveVoiceCallNow(
       send: (event) => sendEvent(call, event),
       onFailure: (message) => {
         call.rows.flushAll();
-        mirrorVoiceEntries(user, [
+        void mirrorVoiceEntries(user, [
           {
             id: `voice-${liveId}-backend-error`,
             role: "assistant",
@@ -1010,7 +1010,7 @@ async function createLiveVoiceCallNow(
         } catch (e) {
           result = { error: e instanceof Error ? e.message : String(e) };
         }
-        mirrorVoiceToolCall(user, callId, name, args, result);
+        void mirrorVoiceToolCall(user, callId, name, args, result);
         ledger.collect(name, args, result, knownRepos());
         return result;
       },
@@ -1081,7 +1081,7 @@ export function sendLiveVoiceText(
   // Acknowledge only what the backend actually received: a false here keeps
   // the browser's draft instead of mirroring a message nobody heard.
   if (!call.loop.sendText(trimmed)) return false;
-  mirrorVoiceEntries(user, [
+  void mirrorVoiceEntries(user, [
     { id: `voice-typed-${crypto.randomUUID()}`, role: "user", text: trimmed },
   ]);
   touch(call);

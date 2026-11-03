@@ -6,9 +6,9 @@
  * schedule id is also the prompt delivery id.
  */
 import { randomUUIDv7 } from "bun";
-import { existsSync, readFileSync } from "fs";
 import { scheduledPromptMessage } from "@tellahq/opensession-protocol/notices";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
+import { keyedOrder, readTextIfExists } from "./shared/async-fs";
 import { stateDir } from "./paths";
 import { registerSessionTimerHandler, sessionKernel } from "./session-kernel";
 import { getSessionControl } from "./session-control";
@@ -36,27 +36,33 @@ interface Store {
   prompts: ScheduledPrompt[];
 }
 
-function readStore(): Store {
+async function readStore(): Promise<Store> {
   try {
-    if (existsSync(STORE_PATH)) {
-      const stored = JSON.parse(readFileSync(STORE_PATH, "utf-8"));
+    const text = await readTextIfExists(STORE_PATH);
+    if (text !== undefined) {
+      const stored = JSON.parse(text);
       if (Array.isArray(stored.prompts)) return stored;
     }
   } catch {}
   return { prompts: [] };
 }
 
-function writeStore(store: Store): void {
-  writeJsonAtomic(STORE_PATH, store);
+function writeStore(store: Store): Promise<void> {
+  return writeJsonAtomicAsync(STORE_PATH, store);
 }
 
-function removeFromListing(id: string): boolean {
-  const store = readStore();
-  const before = store.prompts.length;
-  store.prompts = store.prompts.filter((prompt) => prompt.id !== id);
-  if (store.prompts.length === before) return false;
-  writeStore(store);
-  return true;
+/** Serializes read-modify-write cycles of the listing file. */
+const storeOrder = keyedOrder();
+
+function removeFromListing(id: string): Promise<boolean> {
+  return storeOrder(STORE_PATH, async () => {
+    const store = await readStore();
+    const before = store.prompts.length;
+    store.prompts = store.prompts.filter((prompt) => prompt.id !== id);
+    if (store.prompts.length === before) return false;
+    await writeStore(store);
+    return true;
+  });
 }
 
 async function schedule(prompt: ScheduledPrompt): Promise<void> {
@@ -87,31 +93,33 @@ registerSessionTimerHandler(TIMER_KIND, async (timer) => {
     { deliveryId: prompt.id },
   );
   if (result.status === "error") throw new Error(result.message);
-  removeFromListing(prompt.id);
+  await removeFromListing(prompt.id);
   console.log(
     `[scheduled-prompts] ${prompt.id} -> ${prompt.sessionId}: ${result.status}`,
   );
 });
 
-export function hydrateScheduledPromptTimers(): number {
-  const prompts = readStore().prompts;
+export async function hydrateScheduledPromptTimers(): Promise<number> {
+  const prompts = (await readStore()).prompts;
   for (const prompt of prompts) schedule(prompt);
   return prompts.length;
 }
 
-export function listScheduledPrompts(sessionId?: string): ScheduledPrompt[] {
-  const all = readStore().prompts;
+export async function listScheduledPrompts(
+  sessionId?: string,
+): Promise<ScheduledPrompt[]> {
+  const all = (await readStore()).prompts;
   return (
     sessionId ? all.filter((prompt) => prompt.sessionId === sessionId) : all
   ).sort((a, b) => a.at.localeCompare(b.at));
 }
 
-export function createScheduledPrompt(input: {
+export async function createScheduledPrompt(input: {
   sessionId: string;
   prompt: string;
   at: string;
   user: string;
-}): ScheduledPrompt | { error: string } {
+}): Promise<ScheduledPrompt | { error: string }> {
   if (!input.sessionId?.trim()) return { error: "sessionId required" };
   if (!input.prompt?.trim()) return { error: "Prompt is required" };
   const time = Date.parse(input.at || "");
@@ -125,22 +133,30 @@ export function createScheduledPrompt(input: {
     at: new Date(time).toISOString(),
     createdAt: new Date().toISOString(),
   };
-  const store = readStore();
-  store.prompts.push(prompt);
-  writeStore(store);
+  await storeOrder(STORE_PATH, async () => {
+    const store = await readStore();
+    store.prompts.push(prompt);
+    await writeStore(store);
+  });
   schedule(prompt);
   return prompt;
 }
 
 export async function deleteScheduledPrompt(id: string): Promise<boolean> {
-  const prompt = readStore().prompts.find((candidate) => candidate.id === id);
+  const prompt = (await readStore()).prompts.find(
+    (candidate) => candidate.id === id,
+  );
   if (!prompt) return false;
-  const removed = removeFromListing(id);
+  const removed = await removeFromListing(id);
   if (removed) await sessionKernel(prompt.sessionId).cancelTimer(prompt.id);
   return removed;
 }
 
 /** Compatibility read for old callers. Delivery is no longer destructive. */
-export function takeDuePrompts(now = Date.now()): ScheduledPrompt[] {
-  return readStore().prompts.filter((prompt) => Date.parse(prompt.at) <= now);
+export async function takeDuePrompts(
+  now = Date.now(),
+): Promise<ScheduledPrompt[]> {
+  return (await readStore()).prompts.filter(
+    (prompt) => Date.parse(prompt.at) <= now,
+  );
 }

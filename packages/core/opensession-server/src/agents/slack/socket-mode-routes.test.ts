@@ -33,5 +33,5 @@ test("Socket Mode keeps both HTTP routes registered and rejects even an empty-ke
       expect(response.status).toBe(401);
     }
   }
-  expect(agent.health().transport).toBe("socket");
+  expect((await agent.health()).transport).toBe("socket");
 });

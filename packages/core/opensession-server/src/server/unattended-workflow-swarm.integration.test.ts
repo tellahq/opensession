@@ -47,7 +47,7 @@ afterAll(() => {
 async function finished(runId: string) {
   const deadline = Date.now() + 8_000;
   for (;;) {
-    const snapshot = getWorkflowRun(runId);
+    const snapshot = await getWorkflowRun(runId);
     if (snapshot && snapshot.status !== "running") return snapshot;
     if (Date.now() >= deadline) throw new Error("workflow did not finish");
     await Bun.sleep(5);
@@ -263,7 +263,7 @@ describe("unattended workflow swarm integration", () => {
       "}",
       "return completed.map((child) => child.id);",
     ].join("\n");
-    const { runId } = startWorkflow({
+    const { runId } = await startWorkflow({
       sessionId: "automation-parent",
       cwd: "/repo/renderer",
       script,

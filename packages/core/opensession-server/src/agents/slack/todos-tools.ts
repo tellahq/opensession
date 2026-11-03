@@ -83,7 +83,7 @@ export function createTodosMcpServer(ctx: TodosToolContext) {
         remindAt?: string;
       }) => {
         try {
-          const item = addTodo({
+          const item = await addTodo({
             user: ctx.user,
             text: args.text,
             note: args.note,
@@ -111,7 +111,7 @@ export function createTodosMcpServer(ctx: TodosToolContext) {
           .describe("Filter by status (default open)."),
       },
       async (args: { status?: TodoStatus | "all" }) => {
-        const items = listTodos({
+        const items = await listTodos({
           user: ctx.user,
           status: args.status || "open",
           limit: 50,
@@ -131,7 +131,7 @@ export function createTodosMcpServer(ctx: TodosToolContext) {
       },
       async (args: { id: string }) => {
         try {
-          const item = updateTodo(args.id, { status: "done" }, ctx.user);
+          const item = await updateTodo(args.id, { status: "done" }, ctx.user);
           return text(`Done: ${item.text}`);
         } catch (e: any) {
           return text(`Couldn't complete todo: ${e?.message || String(e)}`);
@@ -146,7 +146,11 @@ export function createTodosMcpServer(ctx: TodosToolContext) {
       },
       async (args: { id: string }) => {
         try {
-          const item = updateTodo(args.id, { status: "dropped" }, ctx.user);
+          const item = await updateTodo(
+            args.id,
+            { status: "dropped" },
+            ctx.user,
+          );
           return text(`Dropped: ${item.text}`);
         } catch (e: any) {
           return text(`Couldn't drop todo: ${e?.message || String(e)}`);
@@ -187,8 +191,9 @@ export function createTodosMcpServer(ctx: TodosToolContext) {
         status?: TodoStatus;
       }) => {
         try {
-          if (!getTodo(args.id)) return text(`Unknown todo "${args.id}".`);
-          const item = updateTodo(
+          if (!(await getTodo(args.id)))
+            return text(`Unknown todo "${args.id}".`);
+          const item = await updateTodo(
             args.id,
             {
               text: args.text,

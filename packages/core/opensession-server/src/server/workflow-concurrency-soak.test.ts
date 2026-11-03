@@ -29,7 +29,7 @@ afterAll(() => {
 async function waitForDone(runId: string) {
   const deadline = Date.now() + 10_000;
   for (;;) {
-    const snapshot = getWorkflowRun(runId);
+    const snapshot = await getWorkflowRun(runId);
     if (snapshot && snapshot.status !== "running") return snapshot;
     if (Date.now() >= deadline) throw new Error("soak workflow timed out");
     await Bun.sleep(2);
@@ -112,7 +112,7 @@ describe("workflow concurrency soak without provider spend", () => {
     ].join("\n");
 
     for (let wave = 0; wave < 10; wave++) {
-      const { runId } = startWorkflow({
+      const { runId } = await startWorkflow({
         sessionId: "soak-parent",
         cwd: "/tmp/local-only",
         script,
