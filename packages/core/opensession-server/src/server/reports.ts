@@ -22,19 +22,18 @@
  */
 
 import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "fs";
-import { readdir, readFile, stat } from "fs/promises";
+  access,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "fs/promises";
 import { dirname, join, normalize, resolve } from "path";
 import { catalogDocuments } from "./catalog-documents";
 import { stateDir } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import { broadcastToAll } from "./ws-hub";
 
 /**
@@ -206,14 +205,27 @@ function reportAssetsDir(automationId: string, reportId: string): string {
   return join(groupDir(automationId), `${reportId}.assets`);
 }
 
-function removeOrphanAssets(automationId: string): void {
+function pathExists(path: string): Promise<boolean> {
+  return access(path).then(
+    () => true,
+    () => false,
+  );
+}
+
+async function removeOrphanAssets(automationId: string): Promise<void> {
   const dir = groupDir(automationId);
-  if (!existsSync(dir)) return;
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return;
+    throw error;
+  }
+  for (const entry of entries) {
     if (!entry.isDirectory() || !entry.name.endsWith(".assets")) continue;
     const reportId = entry.name.slice(0, -".assets".length);
-    if (!existsSync(join(dir, `${reportId}.json`)))
-      rmSync(join(dir, entry.name), { recursive: true, force: true });
+    if (!(await pathExists(join(dir, `${reportId}.json`))))
+      await rm(join(dir, entry.name), { recursive: true, force: true });
   }
 }
 
@@ -250,18 +262,26 @@ function resolveReportAssetPath(
 }
 
 /** Sidecar filenames in a group dir, newest first (ids sort chronologically). */
-function sidecarsFor(automationId: string): string[] {
-  const dir = groupDir(automationId);
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir)
+async function sidecarsFor(automationId: string): Promise<string[]> {
+  let files: string[];
+  try {
+    files = await readdir(groupDir(automationId));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return [];
+    throw error;
+  }
+  return files
     .filter((f) => f.endsWith(".json"))
     .sort()
     .reverse();
 }
 
-function readMeta(automationId: string, sidecar: string): ReportMeta | null {
+async function readMeta(
+  automationId: string,
+  sidecar: string,
+): Promise<ReportMeta | null> {
   try {
-    const raw = readFileSync(join(groupDir(automationId), sidecar), "utf8");
+    const raw = await readFile(join(groupDir(automationId), sidecar), "utf8");
     const meta = JSON.parse(raw) as ReportMeta;
     return meta && typeof meta.id === "string" ? meta : null;
   } catch {
@@ -269,7 +289,7 @@ function readMeta(automationId: string, sidecar: string): ReportMeta | null {
   }
 }
 
-export function publishReport(input: {
+export async function publishReport(input: {
   automationId: string;
   automationName: string;
   sessionId?: string;
@@ -281,7 +301,7 @@ export function publishReport(input: {
   highlights?: ReportHighlight[];
   tasks?: ReportTask[];
   assets?: ReportAsset[];
-}): ReportMeta {
+}): Promise<ReportMeta> {
   if (!safeSegment(input.automationId)) {
     throw new Error(`Invalid automation id "${input.automationId}"`);
   }
@@ -397,8 +417,8 @@ export function publishReport(input: {
     ...(tasks?.length ? { tasks } : {}),
   };
   const dir = groupDir(input.automationId);
-  mkdirSync(dir, { recursive: true });
-  removeOrphanAssets(input.automationId);
+  await mkdir(dir, { recursive: true });
+  await removeOrphanAssets(input.automationId);
   try {
     for (const asset of validatedAssets) {
       const { abs } = resolveReportAssetPath(
@@ -406,16 +426,16 @@ export function publishReport(input: {
         id,
         asset.path,
       );
-      mkdirSync(dirname(abs), { recursive: true });
-      writeFileSync(abs, asset.data);
+      await mkdir(dirname(abs), { recursive: true });
+      await writeFile(abs, asset.data);
     }
-    writeFileSync(join(dir, `${id}.html`), input.html, "utf8");
+    await writeFile(join(dir, `${id}.html`), input.html, "utf8");
     // The sidecar is written last: its presence makes the report discoverable.
-    writeJsonAtomic(join(dir, `${id}.json`), meta);
+    await writeJsonAtomicAsync(join(dir, `${id}.json`), meta);
   } catch (error) {
-    rmSync(join(dir, `${id}.html`), { force: true });
-    rmSync(join(dir, `${id}.json`), { force: true });
-    rmSync(reportAssetsDir(input.automationId, id), {
+    await rm(join(dir, `${id}.html`), { force: true });
+    await rm(join(dir, `${id}.json`), { force: true });
+    await rm(reportAssetsDir(input.automationId, id), {
       recursive: true,
       force: true,
     });
@@ -423,7 +443,7 @@ export function publishReport(input: {
   }
   projectSessionReport(meta);
   // Prune beyond the cap (both files) — newest first, drop the tail.
-  const sidecars = sidecarsFor(input.automationId);
+  const sidecars = await sidecarsFor(input.automationId);
   trackProjection(
     catalogDocuments(REPORT_GROUPS_NAMESPACE).set(input.automationId, {
       automationName: meta.automationName,
@@ -434,14 +454,14 @@ export function publishReport(input: {
   );
   for (const stale of sidecars.slice(MAX_REPORTS_PER_GROUP)) {
     try {
-      const staleMeta = readMeta(input.automationId, stale);
+      const staleMeta = await readMeta(input.automationId, stale);
       unprojectSessionReport(staleMeta);
-      rmSync(join(dir, stale));
-      rmSync(join(dir, stale.replace(/\.json$/, ".html")), {
+      await rm(join(dir, stale));
+      await rm(join(dir, stale.replace(/\.json$/, ".html")), {
         force: true,
       });
       const staleId = stale.replace(/\.json$/, "");
-      rmSync(reportAssetsDir(input.automationId, staleId), {
+      await rm(reportAssetsDir(input.automationId, staleId), {
         recursive: true,
         force: true,
       });
@@ -469,20 +489,21 @@ export async function listReportGroups(): Promise<ReportGroup[]> {
 }
 
 /** One report's metadata, or null when it doesn't exist. */
-export function getReport(
+export async function getReport(
   automationId: string,
   reportId: string,
-): ReportMeta | null {
+): Promise<ReportMeta | null> {
   if (!safeSegment(automationId) || !safeSegment(reportId)) return null;
   return readMeta(automationId, `${reportId}.json`);
 }
 
 /** A group's full history, newest first. */
-export function listReports(automationId: string): ReportMeta[] {
+export async function listReports(automationId: string): Promise<ReportMeta[]> {
   if (!safeSegment(automationId)) return [];
-  return sidecarsFor(automationId)
-    .map((s) => readMeta(automationId, s))
-    .filter((m): m is ReportMeta => !!m);
+  const metas = await Promise.all(
+    (await sidecarsFor(automationId)).map((s) => readMeta(automationId, s)),
+  );
+  return metas.filter((m): m is ReportMeta => !!m);
 }
 
 /** Every report produced by one session, newest first, from the catalog. */
@@ -611,32 +632,31 @@ export async function reconcileReportCatalog(since: number): Promise<void> {
 }
 
 /** The report HTML itself, or null when it doesn't exist. */
-export function readReportHtml(
+export async function readReportHtml(
   automationId: string,
   reportId: string,
-): string | null {
+): Promise<string | null> {
   if (!safeSegment(automationId) || !safeSegment(reportId)) return null;
   const file = join(groupDir(automationId), `${reportId}.html`);
-  if (!existsSync(file)) return null;
   try {
-    return readFileSync(file, "utf8");
+    return await readFile(file, "utf8");
   } catch {
     return null;
   }
 }
 
 /** A durable report asset's absolute path, or null when it doesn't exist. */
-export function readReportAsset(
+export async function readReportAsset(
   automationId: string,
   reportId: string,
   path: string,
-): { path: string; rel: string } | null {
+): Promise<{ path: string; rel: string } | null> {
   try {
     if (!safeSegment(automationId) || !safeSegment(reportId)) return null;
-    if (!existsSync(join(groupDir(automationId), `${reportId}.json`)))
+    if (!(await pathExists(join(groupDir(automationId), `${reportId}.json`))))
       return null;
     const { abs, rel } = resolveReportAssetPath(automationId, reportId, path);
-    if (!existsSync(abs) || !statSync(abs).isFile()) return null;
+    if (!(await stat(abs)).isFile()) return null;
     return { path: abs, rel };
   } catch {
     return null;

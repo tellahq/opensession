@@ -91,7 +91,7 @@ export async function handleReportsRoutes(
   // the response is the document as the agent published it.
   const rawMatch = path.match(/^\/api\/reports\/([^/]+)\/([^/]+)\/raw$/);
   if (rawMatch) {
-    const stored = readReportHtml(
+    const stored = await readReportHtml(
       decodeURIComponent(rawMatch[1]),
       decodeURIComponent(rawMatch[2]),
     );
@@ -115,7 +115,7 @@ export async function handleReportsRoutes(
     /^\/api\/reports\/([^/]+)\/([^/]+)\/assets\/(.+)$/,
   );
   if (assetMatch) {
-    const asset = readReportAsset(
+    const asset = await readReportAsset(
       decodeURIComponent(assetMatch[1]),
       decodeURIComponent(assetMatch[2]),
       decodeURIComponent(assetMatch[3]),
@@ -137,7 +137,7 @@ export async function handleReportsRoutes(
   const groupMatch = path.match(/^\/api\/reports\/([^/]+)$/);
   if (groupMatch) {
     return Response.json({
-      reports: listReports(decodeURIComponent(groupMatch[1])),
+      reports: await listReports(decodeURIComponent(groupMatch[1])),
     });
   }
 
