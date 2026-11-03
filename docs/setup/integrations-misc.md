@@ -180,11 +180,12 @@ investigation automations with a Slack control card per fresh failure.
 | `GRAFANA_SERVICE_ACCOUNT_TOKEN` | —       | bearer token for the datasource proxy                                                                |
 | `LOKI_DATASOURCE_UID`           | `loki`  | queried via `/api/datasources/proxy/uid/<uid>/loki/api/v1/query`                                     |
 
-The Slack integration and bot token must also work because each investigation
-uses a Slack control card. Configure each enabled automation with a
-`grafanaPoll` object. Required fields are `lokiQuery` (an instant LogQL query;
-`$LOOKBACK` is replaced), `dedupLabel`, `slackChannel` (a channel ID), and
-`cardTitle`. Optional defaults are `lookback: "20m"`, `pollMinutes: 15`,
+Configure each enabled automation with a `grafanaPoll` object. Required fields
+are `lokiQuery` (an instant LogQL query; `$LOOKBACK` is replaced),
+`dedupLabel`, and `cardTitle`. `slackChannel` (a channel ID) posts a Slack
+control card per investigation, which needs a working Slack integration and bot
+token; leave it empty for no card, and the run gets a null `slackThreadTs` and
+decides in its prompt what is worth posting. Optional defaults are `lookback: "20m"`, `pollMinutes: 15`,
 `dedupDays: 7`, and `namespace: "prod"`; set `namespace: ""` to accept every
 namespace. The engine wakes every minute and polls each automation when due.
 Adding or changing a poll is configuration, not a code edit or restart.

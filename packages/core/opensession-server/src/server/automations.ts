@@ -153,7 +153,9 @@ export interface GrafanaPollConfig {
   lokiQuery: string;
   /** Label whose distinct values define one failure (e.g. "story_id", "streaming_upload_id"). */
   dedupLabel: string;
-  /** Slack channel id for the control card + investigation thread. */
+  /** Slack channel id for the control card + investigation thread. Empty
+   *  string posts no card: the run gets a null slackThreadTs and decides
+   *  itself what, if anything, to post. */
   slackChannel: string;
   /** Human label for the card, e.g. "export failure" / "upload processing failure". */
   cardTitle: string;
@@ -538,10 +540,9 @@ function sanitizeGrafanaPoll(
   const dedupLabel = str(c.dedupLabel);
   const slackChannel = str(c.slackChannel);
   const cardTitle = str(c.cardTitle);
-  if (!lokiQuery || !dedupLabel || !slackChannel || !cardTitle) {
+  if (!lokiQuery || !dedupLabel || !cardTitle) {
     return {
-      error:
-        "grafanaPoll requires lokiQuery, dedupLabel, slackChannel, and cardTitle",
+      error: "grafanaPoll requires lokiQuery, dedupLabel, and cardTitle",
     };
   }
   const out: GrafanaPollConfig = {
