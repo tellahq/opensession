@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
+import { mkdir, readFile, rm, stat, writeFile } from "fs/promises";
 import { join } from "path";
 
 const WAIT_MS = 15 * 60_000;
@@ -23,24 +23,24 @@ export async function acquireMacDeployLock(
   state: string,
   waitMs = WAIT_MS,
   pollMs = 1000,
-): Promise<() => void> {
+): Promise<() => Promise<void>> {
   const lock = join(state, ".macos-deploy-lock");
   const owner = join(lock, "owner.json");
   const deadline = Date.now() + waitMs;
 
   while (true) {
     try {
-      mkdirSync(lock, { mode: 0o700 });
+      await mkdir(lock, { mode: 0o700 });
       const token = crypto.randomUUID();
-      writeFileSync(
+      await writeFile(
         owner,
         `${JSON.stringify({ pid: process.pid, token, startedAt: new Date().toISOString() })}\n`,
         { mode: 0o600 },
       );
-      return () => {
+      return async () => {
         try {
-          const current = JSON.parse(readFileSync(owner, "utf8"));
-          if (current.token === token) rmSync(lock, { recursive: true });
+          const current = JSON.parse(await readFile(owner, "utf8"));
+          if (current.token === token) await rm(lock, { recursive: true });
         } catch {}
       };
     } catch (error: any) {
@@ -48,16 +48,16 @@ export async function acquireMacDeployLock(
     }
 
     try {
-      const age = Date.now() - statSync(owner).mtimeMs;
-      const current = JSON.parse(readFileSync(owner, "utf8"));
+      const age = Date.now() - (await stat(owner)).mtimeMs;
+      const current = JSON.parse(await readFile(owner, "utf8"));
       if (!processIsAlive(Number(current.pid)) && age > ORPHAN_GRACE_MS) {
-        rmSync(lock, { recursive: true });
+        await rm(lock, { recursive: true });
         continue;
       }
     } catch {
       try {
-        if (Date.now() - statSync(lock).mtimeMs > ORPHAN_GRACE_MS) {
-          rmSync(lock, { recursive: true });
+        if (Date.now() - (await stat(lock)).mtimeMs > ORPHAN_GRACE_MS) {
+          await rm(lock, { recursive: true });
           continue;
         }
       } catch {}

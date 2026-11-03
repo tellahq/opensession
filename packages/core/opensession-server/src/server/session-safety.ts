@@ -87,9 +87,13 @@ export function automaticSafetyReconciliationRunning(
   );
 }
 
+/** @param orphanedRunRepairable the gateway holds `orphanedRunProof` for this
+ * session, so a person can release it even though the fence alone is not
+ * repairable: the release settles the unowned run first. */
 export function publicSessionSafety(
   quarantine: DurableSessionQuarantine,
   claimedJournalSessions?: ReadonlySet<string>,
+  orphanedRunRepairable = false,
 ): SessionSafetyState {
   return {
     status: "paused_for_safety",
@@ -104,6 +108,7 @@ export function publicSessionSafety(
     operation: safetyOperationLabel(quarantine.commandKind),
     repairAvailable:
       quarantine.repairable ||
+      orphanedRunRepairable ||
       automaticallyRecoverableSessionSafety(quarantine),
   };
 }

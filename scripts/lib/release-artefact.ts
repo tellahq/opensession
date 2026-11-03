@@ -22,6 +22,7 @@ export const RELEASE_SERVICE_TEMPLATES: readonly string[] = [
   "deploy/install-session-kernel-credential.sh",
   "deploy/install-run-host-helper.sh",
   "deploy/opensession-run-host",
+  "deploy/systemd/opensession.slice",
   "deploy/systemd/opensession-control.slice",
   "deploy/systemd/opensession-workloads.slice",
 ];

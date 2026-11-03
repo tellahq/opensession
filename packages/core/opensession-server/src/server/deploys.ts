@@ -33,21 +33,15 @@
  */
 
 import { homeDir } from "./paths";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  cpSync,
-  readdirSync,
-} from "node:fs";
+import { cp, mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import { audit } from "./audit";
 import { stateDir } from "./paths";
 import { workloadArgv, workloadScopingActive } from "./workload-scope";
 import { stopUserScopeAndWait } from "./systemd-scopes";
+import { pathExists } from "./shared/path-exists";
 
 const DEPLOYS_DIR = stateDir("deploys");
 const REGISTRY = join(DEPLOYS_DIR, "registry.json");
@@ -112,7 +106,8 @@ const crashes: Map<string, number[]> = (g.__deployCrashes ??= new Map());
  * object is the one thing both closures agree on.
  */
 const intentionalKills = new WeakSet<Subprocess>();
-let loaded = false;
+let loaded: Promise<void> | null = null;
+let persistChain: Promise<void> = Promise.resolve();
 
 function registryPath(): string {
   return process.env.OPENSESSION_DEPLOYS_REGISTRY || REGISTRY;
@@ -132,32 +127,53 @@ export function dataDir(id: string): string {
   return join(deployDir(id), "data");
 }
 
-function persist(): void {
-  mkdirSync(rootDir(), { recursive: true });
-  writeJsonAtomic(registryPath(), {
-    deploys: [...deploys.values()],
-  } satisfies Stored);
+/** Write the registry. Writes are serialized and each one snapshots the
+ *  in-memory registry when it runs, so the last write always wins. Failures
+ *  are logged, never thrown: a callback that fires and forgets must not leak
+ *  an unhandled rejection. */
+function persist(): Promise<void> {
+  persistChain = persistChain
+    .then(async () => {
+      await mkdir(rootDir(), { recursive: true });
+      await writeJsonAtomicAsync(registryPath(), {
+        deploys: [...deploys.values()],
+      } satisfies Stored);
+    })
+    .catch((e) => console.error("[deploys] failed to write registry:", e));
+  return persistChain;
 }
 
-function load(): void {
-  if (loaded) return;
-  loaded = true;
-  if (!existsSync(registryPath())) return;
-  try {
-    const data: Stored = JSON.parse(readFileSync(registryPath(), "utf-8"));
-    for (const d of data.deploys || []) deploys.set(d.id, d);
-  } catch (e) {
-    console.error("[deploys] failed to read registry:", e);
-  }
+function load(): Promise<void> {
+  loaded ??= (async () => {
+    let raw: string;
+    try {
+      raw = await readFile(registryPath(), "utf-8");
+    } catch (e: any) {
+      if (e?.code !== "ENOENT")
+        console.error("[deploys] failed to read registry:", e);
+      return;
+    }
+    try {
+      const data: Stored = JSON.parse(raw);
+      for (const d of data.deploys || []) deploys.set(d.id, d);
+    } catch (e) {
+      console.error("[deploys] failed to read registry:", e);
+    }
+  })();
+  return loaded;
 }
 
-export function listDeploys(): Deploy[] {
-  load();
+export async function listDeploys(): Promise<Deploy[]> {
+  await load();
   return [...deploys.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function getDeploy(ref: string): Deploy | undefined {
-  load();
+export async function getDeploy(ref: string): Promise<Deploy | undefined> {
+  await load();
+  return findDeploy(ref);
+}
+
+function findDeploy(ref: string): Deploy | undefined {
   return (
     deploys.get(ref) ||
     [...deploys.values()].find((d) => d.name === ref.toLowerCase())
@@ -168,8 +184,8 @@ export function isValidDeployName(name: string): boolean {
   return /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/.test(name);
 }
 
+/** Callers must have awaited load(). */
 function allocatePort(): number {
-  load();
   const taken = new Set([...deploys.values()].map((d) => d.port));
   for (let p = PORT_MIN; p <= PORT_MAX; p++) if (!taken.has(p)) return p;
   throw new Error("no free deploy port — stop an unused deploy first");
@@ -246,7 +262,7 @@ export async function launchDeploy(
   id: string,
   opts?: { force?: boolean },
 ): Promise<Deploy | undefined> {
-  load();
+  await load();
   const d = deploys.get(id);
   if (!d) return undefined;
   const existing = procs.get(id);
@@ -257,17 +273,17 @@ export async function launchDeploy(
   if (!version) {
     d.state = "crashed";
     d.lastError = `version ${d.currentVersion} is missing from disk`;
-    persist();
+    await persist();
     return d;
   }
   const cwd = versionDir(id, d.currentVersion);
-  if (!existsSync(cwd)) {
+  if (!(await pathExists(cwd))) {
     d.state = "crashed";
     d.lastError = `snapshot for version ${d.currentVersion} is missing`;
-    persist();
+    await persist();
     return d;
   }
-  mkdirSync(dataDir(id), { recursive: true });
+  await mkdir(dataDir(id), { recursive: true });
 
   let proc: Subprocess;
   try {
@@ -310,7 +326,7 @@ export async function launchDeploy(
           current.lastError = `exited (code ${exitCode ?? "null"}${signalCode ? `, signal ${signalCode}` : ""})`;
           if (crashLooping(id)) {
             current.state = "crashed";
-            persist();
+            void persist();
             audit({
               kind: "deploy_crash_looping",
               deploy: current.name,
@@ -321,7 +337,7 @@ export async function launchDeploy(
             );
             return;
           }
-          persist();
+          void persist();
           setTimeout(() => {
             if (deploys.get(id)?.state !== "stopped")
               void launchDeploy(id, { force: true });
@@ -332,7 +348,7 @@ export async function launchDeploy(
   } catch (e: any) {
     d.state = "crashed";
     d.lastError = `spawn failed: ${e?.message || String(e)}`;
-    persist();
+    await persist();
     return d;
   }
 
@@ -340,7 +356,7 @@ export async function launchDeploy(
   d.state = "running";
   delete d.lastError;
   d.updatedAt = new Date().toISOString();
-  persist();
+  await persist();
   audit({
     kind: "deploy_launched",
     deploy: d.name,
@@ -351,7 +367,7 @@ export async function launchDeploy(
 }
 
 export async function stopDeploy(id: string): Promise<Deploy | undefined> {
-  load();
+  await load();
   const d = deploys.get(id);
   if (!d) return undefined;
   // Set the state BEFORE killing: the onExit handler reads it to decide
@@ -360,20 +376,20 @@ export async function stopDeploy(id: string): Promise<Deploy | undefined> {
   d.updatedAt = new Date().toISOString();
   await killProcess(id);
   crashes.delete(id);
-  persist();
+  await persist();
   audit({ kind: "deploy_stopped", deploy: d.name });
   return d;
 }
 
 export async function deleteDeploy(id: string): Promise<boolean> {
-  load();
+  await load();
   const d = deploys.get(id);
   if (!d) return false;
   await stopDeploy(id);
   deploys.delete(id);
-  persist();
+  await persist();
   try {
-    rmSync(deployDir(id), { recursive: true, force: true });
+    await rm(deployDir(id), { recursive: true, force: true });
   } catch (e) {
     console.error(`[deploys] failed to remove ${d.name}'s files:`, e);
   }
@@ -383,7 +399,7 @@ export async function deleteDeploy(id: string): Promise<boolean> {
 
 /** Relaunch everything that should be running. Called once at boot. */
 export async function relaunchDeploys(): Promise<void> {
-  load();
+  await load();
   for (const d of deploys.values()) {
     if (d.state === "stopped") continue;
     await launchDeploy(d.id, { force: true });
@@ -442,8 +458,10 @@ export function compoundEntrypointError(entrypoint: string): string | null {
   );
 }
 
-export function publishDeploy(input: PublishInput): PublishResult {
-  load();
+export async function publishDeploy(
+  input: PublishInput,
+): Promise<PublishResult> {
+  await load();
   const name = input.name.trim().toLowerCase();
   if (!isValidDeployName(name)) {
     throw new Error(
@@ -453,13 +471,15 @@ export function publishDeploy(input: PublishInput): PublishResult {
   if (!input.entrypoint.trim()) throw new Error("entrypoint is required");
   const compound = compoundEntrypointError(input.entrypoint.trim());
   if (compound) throw new Error(compound);
-  if (!existsSync(input.dir))
+  if (!(await pathExists(input.dir)))
     throw new Error(`directory does not exist: ${input.dir}`);
 
-  let d = input.renameFrom ? getDeploy(input.renameFrom) : getDeploy(name);
+  // Everything from the lookup to deploys.set runs without an await, so two
+  // concurrent publishes cannot claim the same name or port.
+  let d = input.renameFrom ? findDeploy(input.renameFrom) : findDeploy(name);
   if (input.renameFrom && !d)
     throw new Error(`no deploy named "${input.renameFrom}" to rename`);
-  const clash = getDeploy(name);
+  const clash = findDeploy(name);
   if (clash && d && clash.id !== d.id)
     throw new Error(`the name "${name}" is already taken`);
 
@@ -487,8 +507,8 @@ export function publishDeploy(input: PublishInput): PublishResult {
 
   const version = d.currentVersion + 1;
   const dest = versionDir(d.id, version);
-  mkdirSync(dest, { recursive: true });
-  cpSync(input.dir, dest, {
+  await mkdir(dest, { recursive: true });
+  await cp(input.dir, dest, {
     recursive: true,
     dereference: true,
     filter: snapshotFilter,
@@ -512,14 +532,14 @@ export function publishDeploy(input: PublishInput): PublishResult {
   );
   for (const v of prunable) {
     try {
-      rmSync(versionDir(d.id, v.version), { recursive: true, force: true });
+      await rm(versionDir(d.id, v.version), { recursive: true, force: true });
     } catch {
       // a snapshot we can't remove is disk we leak, not a failed publish
     }
   }
   d.versions = d.versions.slice(-MAX_VERSIONS);
 
-  persist();
+  await persist();
   audit({
     kind: "deploy_published",
     deploy: d.name,
@@ -532,9 +552,12 @@ export function publishDeploy(input: PublishInput): PublishResult {
   return { deploy: deploys.get(d.id)!, version, url: deployUrl(d.name) };
 }
 
-export function rollbackDeploy(ref: string, toVersion: number): Deploy {
-  load();
-  const d = getDeploy(ref);
+export async function rollbackDeploy(
+  ref: string,
+  toVersion: number,
+): Promise<Deploy> {
+  await load();
+  const d = findDeploy(ref);
   if (!d) throw new Error(`no deploy named "${ref}"`);
   if (!d.versions.some((v) => v.version === toVersion)) {
     throw new Error(
@@ -543,7 +566,7 @@ export function rollbackDeploy(ref: string, toVersion: number): Deploy {
   }
   d.currentVersion = toVersion;
   d.updatedAt = new Date().toISOString();
-  persist();
+  await persist();
   audit({ kind: "deploy_rolled_back", deploy: d.name, version: toVersion });
   crashes.delete(d.id);
   void launchDeploy(d.id, { force: true });
@@ -582,5 +605,5 @@ export function __resetDeploysForTest(): void {
   deploys.clear();
   procs.clear();
   crashes.clear();
-  loaded = false;
+  loaded = null;
 }

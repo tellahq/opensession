@@ -297,7 +297,7 @@ export async function handleStaticAssetsRoutes(
     // its config or an avatar fetched into the state dir from Settings →
     // Setup. No icon, no tile art: the letter tile is the default.
     const repo = configuredRepos()[id];
-    const configured = resolveRepoIcon(repo?.icon, repo?.repo);
+    const configured = await resolveRepoIcon(repo?.icon, repo?.repo);
     if (configured) {
       const served = await localIcon(configured);
       if (served) return served;

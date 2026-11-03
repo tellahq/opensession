@@ -16,7 +16,7 @@ import {
   resumeGoal,
   updateGoal,
 } from "../goals";
-import { existsSync, readFileSync } from "fs";
+import { readFile } from "fs/promises";
 
 export async function handleGoalsRoutes(
   ctx: RouteContext,
@@ -78,8 +78,7 @@ export async function handleGoalsRoutes(
     if (!goal) return Response.json({ error: "Not found" }, { status: 404 });
     let ledger = "";
     try {
-      if (existsSync(goal.stateFile))
-        ledger = readFileSync(goal.stateFile, "utf-8");
+      ledger = await readFile(goal.stateFile, "utf-8");
     } catch {}
     return Response.json({
       ...goal,

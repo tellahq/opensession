@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "crypto";
 import { Database } from "bun:sqlite";
-import { existsSync, mkdirSync } from "fs";
+import { mkdir } from "fs/promises";
 import { dirname } from "path";
 import { neutralizeContextSentinels } from "../prompt-context";
 import { retrieveMemory } from "./retrieval";
@@ -71,18 +71,22 @@ interface RecordRow {
   path?: string | null;
 }
 
+/** Create the database's directory, then open the store. */
+export async function openMemoryStore(dbPath: string): Promise<MemoryStore> {
+  if (dbPath !== ":memory:") await mkdir(dirname(dbPath), { recursive: true });
+  return new MemoryStore(dbPath);
+}
+
 /**
  * Transactional memory store. Construct it from a runtime-owned start/ensure
  * function; importing this module does not open a database or create files.
+ * The constructor expects the database's directory to exist; openMemoryStore
+ * creates it first.
  */
 export class MemoryStore {
   private readonly db: Database;
 
   constructor(public readonly dbPath: string) {
-    if (dbPath !== ":memory:") {
-      const dir = dirname(dbPath);
-      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    }
     this.db = new Database(dbPath);
     this.db.exec("PRAGMA busy_timeout = 5000;");
     this.db.exec("PRAGMA journal_mode = WAL;");

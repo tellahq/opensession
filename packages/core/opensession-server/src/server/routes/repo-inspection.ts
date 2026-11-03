@@ -1,4 +1,4 @@
-import { realpathSync } from "fs";
+import { realpath } from "fs/promises";
 import { basename, isAbsolute, resolve } from "path";
 import { fileURLToPath } from "url";
 import { parseCsRemote } from "../codestorage/remote";
@@ -41,13 +41,16 @@ function remotePathIdentity(path: string): string {
     .replace(/\.git$/i, "");
 }
 
-function localOriginIdentity(path: string, cwd?: string): string {
+async function localOriginIdentity(
+  path: string,
+  cwd?: string,
+): Promise<string> {
   const resolved = isAbsolute(path)
     ? path
     : resolve(cwd || process.cwd(), path);
   let canonical = resolved;
   try {
-    canonical = realpathSync(resolved);
+    canonical = await realpath(resolved);
   } catch {
     // Missing remotes still get a stable absolute identity.
   }
@@ -55,7 +58,10 @@ function localOriginIdentity(path: string, cwd?: string): string {
 }
 
 /** Protocol- and credential-free origin identity used only for duplicate checks. */
-export function normalizeRepoOrigin(remote: string, cwd?: string): string {
+export async function normalizeRepoOrigin(
+  remote: string,
+  cwd?: string,
+): Promise<string> {
   const value = remote.trim();
   if (!value) return "";
 
@@ -104,7 +110,7 @@ export async function repoOriginIdentity(
   try {
     const origin = await git(["remote", "get-url", "origin"], repoPath);
     if (origin.exitCode !== 0 || !origin.stdout) return null;
-    return normalizeRepoOrigin(origin.stdout, repoPath) || null;
+    return (await normalizeRepoOrigin(origin.stdout, repoPath)) || null;
   } catch {
     return null;
   }
@@ -120,7 +126,7 @@ export async function inspectRepo(repoPath: string): Promise<{
   const root = await git(["rev-parse", "--show-toplevel"], repoPath);
   if (root.exitCode !== 0 || !root.stdout)
     throw new Error("Path is not a Git repository");
-  const path = realpathSync(root.stdout);
+  const path = await realpath(root.stdout);
   const [origin, remoteSymref, remoteHead, localHead] = await Promise.all([
     git(["remote", "get-url", "origin"], path),
     git(["ls-remote", "--symref", "origin", "HEAD"], path),
@@ -176,7 +182,7 @@ export async function inspectRepo(repoPath: string): Promise<{
   return {
     path,
     defaultBranch,
-    originIdentity: normalizeRepoOrigin(origin.stdout, path),
+    originIdentity: await normalizeRepoOrigin(origin.stdout, path),
     ghRepo: githubRepoFromRemote(origin.stdout),
     ...(cs ? { cs } : {}),
   };

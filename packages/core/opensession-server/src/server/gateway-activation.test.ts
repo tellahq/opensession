@@ -105,7 +105,7 @@ describe("gateway activation preload barrier", () => {
       "startRunRpcServer()",
       "startMcpHttpServer()",
       "startTimerPoisonHeartbeat()",
-      "mkdirSync(SESSIONS_DIR",
+      "await mkdir(SESSIONS_DIR",
       "await startSessionKernelActor()",
       "await ensureFrontendBuilt()",
     ]) {

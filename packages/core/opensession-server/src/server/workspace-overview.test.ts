@@ -12,45 +12,47 @@ const none = new Set<string>();
 const mediaSrc = (path: string) => `/media?path=${encodeURIComponent(path)}`;
 
 describe("isWorkspaceArtifact (what the overview filmstrip shows)", () => {
-  it("keeps bytes the server holds", () => {
-    expect(isWorkspaceArtifact("data:image/png;base64,AAAA", none)).toBe(true);
-    expect(isWorkspaceArtifact("os-blob:abc/0", none)).toBe(true);
+  it("keeps bytes the server holds", async () => {
+    expect(await isWorkspaceArtifact("data:image/png;base64,AAAA", none)).toBe(
+      true,
+    );
+    expect(await isWorkspaceArtifact("os-blob:abc/0", none)).toBe(true);
     expect(
-      isWorkspaceArtifact("/api/sessions/s1/transcript-image/e1/0", none),
+      await isWorkspaceArtifact("/api/sessions/s1/transcript-image/e1/0", none),
     ).toBe(true);
   });
 
-  it("keeps a local file that still exists, drops one that doesn't", () => {
+  it("keeps a local file that still exists, drops one that doesn't", async () => {
     const path = join(dir, "shot.png");
     writeFileSync(path, "x");
-    expect(isWorkspaceArtifact(mediaSrc(path), none)).toBe(true);
+    expect(await isWorkspaceArtifact(mediaSrc(path), none)).toBe(true);
     // Scratch under /tmp gets swept; the tile would be a broken image.
-    expect(isWorkspaceArtifact(mediaSrc(join(dir, "gone.png")), none)).toBe(
-      false,
-    );
+    expect(
+      await isWorkspaceArtifact(mediaSrc(join(dir, "gone.png")), none),
+    ).toBe(false);
     // Pre-rename srcs are still stored with the old path prefix; they redirect.
     expect(
-      isWorkspaceArtifact(
+      await isWorkspaceArtifact(
         `/backstage/media?path=${encodeURIComponent(path)}`,
         none,
       ),
     ).toBe(true);
   });
 
-  it("drops a remote URL a tool merely mentioned", () => {
-    expect(isWorkspaceArtifact("https://example.com/image.png", none)).toBe(
-      false,
-    );
+  it("drops a remote URL a tool merely mentioned", async () => {
     expect(
-      isWorkspaceArtifact("https://avatars.slack-edge.com/a.png", none),
+      await isWorkspaceArtifact("https://example.com/image.png", none),
     ).toBe(false);
     expect(
-      isWorkspaceArtifact("https://cdn.tella.tv/renders/demo.mp4", none),
+      await isWorkspaceArtifact("https://avatars.slack-edge.com/a.png", none),
+    ).toBe(false);
+    expect(
+      await isWorkspaceArtifact("https://cdn.tella.tv/renders/demo.mp4", none),
     ).toBe(false);
   });
 
-  it("keeps a remote URL the agent explicitly featured", () => {
+  it("keeps a remote URL the agent explicitly featured", async () => {
     const src = "https://cdn.tella.tv/renders/demo.mp4";
-    expect(isWorkspaceArtifact(src, new Set([src]))).toBe(true);
+    expect(await isWorkspaceArtifact(src, new Set([src]))).toBe(true);
   });
 });
