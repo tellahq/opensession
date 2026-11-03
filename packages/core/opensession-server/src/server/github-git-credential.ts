@@ -71,6 +71,17 @@ export function githubGitCredentialEnv(
 export const INLINE_GITHUB_READ_CREDENTIAL_HELPER =
   '!f() { test "$1" = get || exit 0; echo username=x-access-token; echo "password=$GH_READ_TOKEN"; }; f';
 
+/** The readRepos that keep read-token routing: a repo the run also attached
+ *  is covered by its write token, and a read helper for it would answer
+ *  first and make every push to it fail. GitHub names are case-insensitive. */
+export function readOnlyRepos(
+  readRepos: readonly string[] | undefined,
+  writable: readonly string[] | undefined,
+): string[] {
+  const covered = new Set((writable ?? []).map((r) => r.toLowerCase()));
+  return (readRepos ?? []).filter((r) => !covered.has(r.toLowerCase()));
+}
+
 /**
  * Let git fetch `readRepos` (`owner/name`) with the read token: one helper per
  * repository URL, placed after the helper reset and before the run's own

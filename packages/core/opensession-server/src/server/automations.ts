@@ -64,7 +64,7 @@ import { recordRunOutcome, updateSessionFile } from "./session-cache";
 import { sessionKernel } from "./session-kernel";
 import { resolvePlainWorkspace } from "./workspace-resolve";
 import { getWorkspace } from "./workspaces";
-import type { NativeSessionFile } from "./types";
+import type { AttachedRepo, NativeSessionFile } from "./types";
 import { stateDir } from "./paths";
 import { linkThreadInIndex, createSlackPostScanner } from "./slack-links";
 import {
@@ -247,6 +247,17 @@ export interface Automation {
    * to a wider one. Validated by {@link sanitizeReadRepos}.
    */
   readRepos?: string[];
+  /**
+   * Other registered repos (worktree.ts REPOS ids) each code-mode run works
+   * in beside its own: the run attaches them on its branch exactly as an
+   * interactive session's attach_repo does (session-repos.ts attachRepo), so
+   * it gets an isolated worktree of each, its write token covers them, and
+   * its prompt lists their paths. For an automation whose job spans repos,
+   * e.g. a fix in one and its reproduction in another. Host code mode only:
+   * a sandbox run has no attached worktrees. Validated by
+   * {@link sanitizeAttachRepos}.
+   */
+  attachRepos?: string[];
   /**
    * The person accountable for this automation. A person key in the same
    * space as a session's `startedBy` (a display name or a verified login), so
@@ -740,6 +751,44 @@ function readReposShape(
   return value;
 }
 
+/**
+ * Normalize the repos an automation's runs attach (Automation.attachRepos):
+ * registered repo ids, deduped, without the automation's own repo. A run
+ * that can attach must check one out, so the field needs host code mode;
+ * an unknown id fails at config time rather than on every run.
+ */
+export function sanitizeAttachRepos(
+  input: unknown,
+  automation: Pick<Automation, "repo" | "mode" | "sandbox">,
+  registered: (id: string) => boolean = (id) => id in REPOS,
+): string[] | { error: string } | undefined {
+  if (input === undefined || input === null || input === "") return undefined;
+  if (!Array.isArray(input) || input.some((v) => typeof v !== "string"))
+    return { error: "attachRepos must be a list of registered repo ids" };
+  const own = (() => {
+    try {
+      return getRepo(automation.repo).id;
+    } catch {
+      return automation.repo;
+    }
+  })();
+  const ids: string[] = [];
+  for (const raw of input as string[]) {
+    const id = raw.trim();
+    if (!id || id === own || ids.includes(id)) continue;
+    if (!registered(id))
+      return { error: `Unknown repo "${id}" in attachRepos` };
+    ids.push(id);
+  }
+  if (!ids.length) return undefined;
+  if (automation.mode !== "code" || automation.sandbox)
+    return {
+      error:
+        "attachRepos needs a code-mode automation that runs on the host (not in a sandbox)",
+    };
+  return ids;
+}
+
 const GITHUB_REPO_NAME_RE =
   /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\/[A-Za-z0-9_.](?:[A-Za-z0-9._-]*)?$/;
 
@@ -881,6 +930,10 @@ const AUTOMATION_FIELDS: Record<string, AutomationFieldValidator> = {
   // non-list is an error, not a clear: the HTTP routes pass raw JSON here,
   // and a mistyped value must not silently drop an existing allowlist.
   readRepos: (v) => readReposShape(v),
+  attachRepos: (v) =>
+    v === undefined || v === null || v === "" || Array.isArray(v)
+      ? v || undefined
+      : { error: "attachRepos must be a list of registered repo ids" },
   owner: (v) => sanitizeOwner(v),
   workspaceId: (v) => sanitizeAutomationWorkspace(v),
   selfImprove: (v) => v === true || undefined,
@@ -958,6 +1011,11 @@ function normalizeAutomation(
     const readRepos = sanitizeReadRepos(next.readRepos, ownGhRepo);
     if (isFieldError(readRepos)) return readRepos;
     next.readRepos = readRepos;
+  }
+  if (next.attachRepos !== undefined) {
+    const attachRepos = sanitizeAttachRepos(next.attachRepos, next);
+    if (isFieldError(attachRepos)) return attachRepos;
+    next.attachRepos = attachRepos;
   }
   const sandboxValidation = validateSandboxAutomation(next);
   if (sandboxValidation) return sandboxValidation;
@@ -1052,6 +1110,7 @@ export async function createAutomation(
     repo?: string;
     prReviewer?: string;
     readRepos?: string[];
+    attachRepos?: string[];
     owner?: string;
     workspaceId?: string;
     selfImprove?: boolean;
@@ -1165,6 +1224,7 @@ export async function updateAutomation(
       | "repo"
       | "prReviewer"
       | "readRepos"
+      | "attachRepos"
       | "owner"
       | "workspaceId"
       | "selfImprove"
@@ -2513,6 +2573,32 @@ export async function runAutomation(
     // cleanup window that requires terminal settlement inside the event loop.
     await persistSession("");
 
+    // Automation.attachRepos: the same attach an interactive session makes,
+    // on this run's branch, so the write token and the prompt cover them.
+    let attachedGhRepos: string[] = [];
+    if (automation.attachRepos?.length && cwd && !sandbox) {
+      const { attachRepo, attachedGithubRepos } =
+        await import("./session-repos");
+      let all: AttachedRepo[] = [];
+      // A repo that can't be attached leaves the run on its own repo, which
+      // the missing prompt section tells it, rather than failing the run.
+      for (const id of automation.attachRepos) {
+        try {
+          ({ all } = await attachRepo(bksId, id, branch));
+        } catch (err) {
+          console.warn(
+            `[automations] ${bksId}: could not attach ${id}: ${String(err)}`,
+          );
+        }
+      }
+      attachedGhRepos = attachedGithubRepos({ attachedRepos: all });
+      const lines = all.map(
+        (r) => `- **${r.repo}**: ${r.dir} — branch \`${r.branch}\``,
+      );
+      if (lines.length)
+        prompt += `\n\n## Repos in this run\n\nThis run works in \`${repo.id}\` at ${cwd} (branch \`${branch}\`) and also in these isolated worktrees, each on its own copy of the branch. \`cd\` into one to work there; commit, push and open its pull request there independently. Your GitHub token covers all of them.\n${lines.join("\n")}`;
+    }
+
     console.log(
       `[automations] Running "${automation.name}" → ${bksId}${runModel ? ` (${runModel})` : ""}${options?.modelOverride ? " [routed]" : ""}`,
     );
@@ -2629,8 +2715,10 @@ export async function runAutomation(
         fallbackModel,
         prReviewer: automation.prReviewer,
         // Sibling repositories the run may read through GH_READ_TOKEN
-        // (pi-runner runGithubEnv); the write token stays one-repository.
+        // (pi-runner runGithubEnv); the write token covers only the run's
+        // own repo and the ones it attached (Automation.attachRepos).
         readRepos: automation.readRepos,
+        attachedRepos: attachedGhRepos,
         // The automation is the commit author. Nobody sent this prompt, so the
         // instance identity would otherwise collapse every routine into one.
         author: labelIdentity(automation.name),
