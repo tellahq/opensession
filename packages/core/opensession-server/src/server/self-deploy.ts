@@ -17,7 +17,7 @@
  * control surface that untrusted event/ticket text must never reach.
  */
 
-import { existsSync, mkdirSync, readFileSync } from "fs";
+import { mkdir, readFile } from "fs/promises";
 import { platform, userInfo } from "os";
 import { resolve as resolvePath } from "path";
 import { z } from "zod";
@@ -32,6 +32,7 @@ import {
 } from "./frontend-build";
 import { writeFileAtomic } from "./shared/atomic-write";
 import { broadcastToAll } from "./ws-hub";
+import { pathExists } from "./shared/path-exists";
 
 const g = globalThis as any;
 
@@ -97,21 +98,32 @@ export interface DeployState {
 }
 
 /** Read the script's state files (best-effort — every file is optional). */
-export function readDeployState(
+export async function readDeployState(
   stateDir: string = deployStateDir(),
   nowMs: number = Date.now(),
-): DeployState {
-  const readText = (p: string): string | null => {
+): Promise<DeployState> {
+  const readText = async (p: string): Promise<string | null> => {
     try {
-      return readFileSync(p, "utf-8");
+      return await readFile(p, "utf-8");
     } catch {
       return null;
     }
   };
-  const marker = readText(`${stateDir}/last-deploy-marker`);
-  const resultRaw = readText(`${stateDir}/last-result.json`);
-  const frontendRaw = readText(`${stateDir}/frontend-current.json`);
-  const frontendResultRaw = readText(`${stateDir}/last-frontend-result.json`);
+  const [
+    marker,
+    resultRaw,
+    frontendRaw,
+    frontendResultRaw,
+    backendRaw,
+    pinRaw,
+  ] = await Promise.all([
+    readText(`${stateDir}/last-deploy-marker`),
+    readText(`${stateDir}/last-result.json`),
+    readText(`${stateDir}/frontend-current.json`),
+    readText(`${stateDir}/last-frontend-result.json`),
+    readText(`${stateDir}/current/.opensession-release`),
+    readText(`${stateDir}/last-known-good`),
+  ]);
   let frontend: FrontendReleasePointer | null = null;
   try {
     const parsed = frontendRaw ? JSON.parse(frontendRaw) : null;
@@ -124,12 +136,10 @@ export function readDeployState(
       frontend = parsed as FrontendReleasePointer;
     }
   } catch {}
-  const backendSha = readText(
-    `${stateDir}/current/.opensession-release`,
-  )?.trim();
+  const backendSha = backendRaw?.trim();
   if (frontend && frontend.baseSha !== backendSha) frontend = null;
   return {
-    pin: readText(`${stateDir}/last-known-good`)?.trim() || null,
+    pin: pinRaw?.trim() || null,
     markerAgeMs: marker === null ? null : markerAgeMs(marker, nowMs),
     result: resultRaw === null ? null : parseDeployResult(resultRaw),
     frontend,
@@ -302,11 +312,8 @@ async function run(
 }
 
 async function acquireDeployLock(state: string): Promise<() => Promise<void>> {
-  mkdirSync(state, { recursive: true });
-  if (platform() === "darwin") {
-    const release = await acquireMacDeployLock(state);
-    return async () => release();
-  }
+  await mkdir(state, { recursive: true });
+  if (platform() === "darwin") return acquireMacDeployLock(state);
   const proc = Bun.spawn(
     [
       "flock",
@@ -368,7 +375,7 @@ async function promoteFrontendRelease(
       releaseRoot,
       promotedAt: new Date().toISOString(),
     };
-    const version = activateFrontendRelease(pointer);
+    const version = await activateFrontendRelease(pointer);
     const result: SelfDeployResult = {
       ok: true,
       action: "frontend-promote",
@@ -480,11 +487,11 @@ async function launchDeployUnit(
 ): Promise<void> {
   const checkout = deployCheckout();
   const stateDir = deployStateDir();
-  mkdirSync(stateDir, { recursive: true });
+  await mkdir(stateDir, { recursive: true });
   let args: string[];
   if (platform() === "darwin") {
     const controller = `${REPO_ROOT}/scripts/self-deploy-macos.ts`;
-    if (!existsSync(controller))
+    if (!(await pathExists(controller)))
       throw new Error(`macOS deploy controller not found at ${controller}`);
     args = macDeployLaunchArgs({
       unit,
@@ -498,12 +505,13 @@ async function launchDeployUnit(
     });
   } else {
     const controller = `${REPO_ROOT}/deploy/self-deploy.sh`;
-    if (!existsSync(RUN_HOST_HELPER) && userInfo().uid === 0) {
+    const hasRunHostHelper = await pathExists(RUN_HOST_HELPER);
+    if (!hasRunHostHelper && userInfo().uid === 0) {
       throw new Error(
         "legacy self-deploy refuses to launch from a root service",
       );
     }
-    args = existsSync(RUN_HOST_HELPER)
+    args = hasRunHostHelper
       ? ["sudo", "-n", RUN_HOST_HELPER, "self-deploy", unit, targetSha]
       : [
           // Migration path for instances upgrading through the old in-product
@@ -617,7 +625,7 @@ export function createSelfDeployMcpServer(ctx: SelfDeployToolContext) {
         const checkout = deployCheckout();
         const stateDir = deployStateDir();
         const script = `${REPO_ROOT}/deploy/self-deploy.sh`;
-        if (!existsSync(script)) {
+        if (!(await pathExists(script))) {
           return text(
             `Refusing: pinned deploy controller not found at ${script}.`,
           );
@@ -642,7 +650,7 @@ export function createSelfDeployMcpServer(ctx: SelfDeployToolContext) {
           const targetSha = rev.out;
           const runtime = `${stateDir}/current`;
           let currentSha: string | null = null;
-          if (existsSync(runtime)) {
+          if (await pathExists(runtime)) {
             const current = await git(runtime, ["rev-parse", "HEAD"]);
             if (current.code === 0) currentSha = current.out;
             if (currentSha === targetSha) {
@@ -733,7 +741,9 @@ export function createSelfDeployMcpServer(ctx: SelfDeployToolContext) {
       async () => {
         try {
           const stateDir = deployStateDir();
-          return text(formatDeployStatus(readDeployState(stateDir), stateDir));
+          return text(
+            formatDeployStatus(await readDeployState(stateDir), stateDir),
+          );
         } catch (e: any) {
           return text(`deploy_status failed: ${e?.message || String(e)}`);
         }

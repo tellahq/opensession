@@ -6,7 +6,7 @@
  * next handler (see routes/index.ts for the dispatch order).
  */
 
-import { existsSync, statSync } from "fs";
+import { stat } from "fs/promises";
 import type { RouteContext } from "./context";
 import {
   configuredIntegration,
@@ -121,7 +121,10 @@ async function localIcon(
     ? frontendStaticFile(staticName, iconPath)
     : Bun.file(iconPath);
   if (!file || !(await file.exists())) return undefined;
-  const mtimeMs = existsSync(iconPath) ? statSync(iconPath).mtimeMs : 0;
+  const mtimeMs = await stat(iconPath).then(
+    (info) => info.mtimeMs,
+    () => 0,
+  );
   const cacheKey = staticName ? `static:${staticName}` : iconPath;
   let entry = trimmedIcons.get(cacheKey);
   if (!entry || entry.mtimeMs !== mtimeMs) {
@@ -343,7 +346,7 @@ export async function handleStaticAssetsRoutes(
   // WebAssembly.instantiateStreaming happy. Stable (unhashed) name — the
   // shell requests a fixed path — so revalidate instead of immutable.
   if (path === "/ghostty-vt.wasm") {
-    const wasm = frontendDistFile("ghostty-vt.wasm");
+    const wasm = await frontendDistFile("ghostty-vt.wasm");
     if (wasm && (await wasm.exists())) {
       return new Response(wasm, {
         headers: {
@@ -362,7 +365,7 @@ export async function handleStaticAssetsRoutes(
     path.match(/^\/([\w.-]+\.(?:js|css|map|webp|png|jpe?g|svg|woff2))$/);
   if (assetMatch && frontend) {
     const name = assetMatch[1];
-    const file = frontendDistFile(name);
+    const file = await frontendDistFile(name);
     const type = builtAssetContentType(name);
     if (file && type && (await file.exists())) {
       const compress = /\.(?:js|css|map)$/.test(name);

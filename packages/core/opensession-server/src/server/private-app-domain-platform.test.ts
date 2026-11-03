@@ -16,6 +16,7 @@ import {
   privateAppDomainStatus,
   renewPrivateAppCertificate,
 } from "./private-app-domain";
+import * as executableLookup from "./shared/executable-lookup";
 
 const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
 const originalStateDir = process.env.OPENSESSION_STATE_DIR;
@@ -28,7 +29,7 @@ const input = {
 };
 let scratch: string;
 let lego: string;
-let which: ReturnType<typeof spyOn<typeof Bun, "which">>;
+let which: ReturnType<typeof spyOn<typeof executableLookup, "findExecutable">>;
 let fetchSpy: ReturnType<typeof spyOn<typeof globalThis, "fetch">>;
 
 beforeEach(async () => {
@@ -36,8 +37,8 @@ beforeEach(async () => {
   process.env.OPENSESSION_STATE_DIR = join(scratch, "state");
   lego = join(scratch, "lego");
   Object.defineProperty(process, "platform", { value: "linux" });
-  which = spyOn(Bun, "which").mockImplementation((name) =>
-    name === "lego" ? lego : `/synthetic/${name}`,
+  which = spyOn(executableLookup, "findExecutable").mockImplementation(
+    async (name) => (name === "lego" ? lego : `/synthetic/${name}`),
   );
   fetchSpy = spyOn(globalThis, "fetch").mockRejectedValue(
     new Error("synthetic DNS boundary"),
@@ -176,7 +177,7 @@ describe("automatic private-domain setup on macOS", () => {
     Object.defineProperty(process, "platform", { value: "darwin" });
     caddyfile = join(scratch, "homebrew", "etc", "Caddyfile");
     await installTools();
-    which.mockImplementation((name) => tools[name] ?? null);
+    which.mockImplementation(async (name) => tools[name] ?? null);
     fetchSpy.mockImplementation((async (url: string | URL | Request) => {
       const path = String(url);
       const result = path.includes("/zones?")

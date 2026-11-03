@@ -581,6 +581,14 @@ export class SessionKernelActorClient {
     return result;
   }
 
+  /** Adopt an authoritative run state read from the actor, unless a newer
+   * decision already reached this projection. */
+  adoptRunStateSnapshot(sessionId: string, state: DurableRunState): void {
+    const current = this.runStateCache.get(sessionId);
+    if (current && current.changeSeq > state.changeSeq) return;
+    this.noteRunState(sessionId, state);
+  }
+
   private noteRunState(sessionId: string, state: DurableRunState): void {
     this.runStateCache.set(sessionId, state);
   }

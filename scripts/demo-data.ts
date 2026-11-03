@@ -44,7 +44,7 @@ if (stateRoot) {
 const { generateDemoData } =
   await import("../packages/core/opensession-server/src/server/demo/generate");
 
-const result = generateDemoData({ homeStores: !!stateRoot });
+const result = await generateDemoData({ homeStores: !!stateRoot });
 if (!stateRoot && result.created) {
   console.log(
     "demo-data: OPENSESSION_SESSIONS_DIR-only run — skipped the HOME-rooted stores " +

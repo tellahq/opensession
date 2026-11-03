@@ -57,7 +57,10 @@ export function validateFrontendBuild(
 }
 
 if (import.meta.main) {
-  const validated = validateFrontendBuild(FRONTEND_DIST, frontendInputsHash());
+  const validated = validateFrontendBuild(
+    FRONTEND_DIST,
+    await frontendInputsHash(),
+  );
   console.log(
     `frontend bundle validated (${validated.assets.length} assets, inputs ${validated.inputsHash})`,
   );

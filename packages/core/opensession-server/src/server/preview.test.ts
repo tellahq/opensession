@@ -33,7 +33,7 @@ describe("seedHostEnvFiles", () => {
     };
   }
 
-  test("copies the main checkout's gitignored env files into a fresh worktree", () => {
+  test("copies the main checkout's gitignored env files into a fresh worktree", async () => {
     const root = mkdtempSync(join(tmpdir(), "os-seed-env-"));
     try {
       const main = join(root, "main");
@@ -41,11 +41,11 @@ describe("seedHostEnvFiles", () => {
       mkdirSync(dirname(join(main, envRel)), { recursive: true });
       writeFileSync(join(main, envRel), "SECRET=1\n");
       mkdirSync(worktree);
-      expect(seedHostEnvFiles(worktree, repoAt(main))).toEqual([envRel]);
+      expect(await seedHostEnvFiles(worktree, repoAt(main))).toEqual([envRel]);
       expect(readFileSync(join(worktree, envRel), "utf8")).toBe("SECRET=1\n");
       // A second start finds the file and leaves it alone.
       writeFileSync(join(worktree, envRel), "SECRET=edited\n");
-      expect(seedHostEnvFiles(worktree, repoAt(main))).toEqual([]);
+      expect(await seedHostEnvFiles(worktree, repoAt(main))).toEqual([]);
       expect(readFileSync(join(worktree, envRel), "utf8")).toBe(
         "SECRET=edited\n",
       );
@@ -54,13 +54,15 @@ describe("seedHostEnvFiles", () => {
     }
   });
 
-  test("never seeds the main checkout into itself or without a repo", () => {
+  test("never seeds the main checkout into itself or without a repo", async () => {
     const root = mkdtempSync(join(tmpdir(), "os-seed-env-"));
     try {
       mkdirSync(dirname(join(root, envRel)), { recursive: true });
       writeFileSync(join(root, envRel), "SECRET=1\n");
-      expect(seedHostEnvFiles(root, repoAt(root))).toEqual([]);
-      expect(seedHostEnvFiles(join(root, "missing"), undefined)).toEqual([]);
+      expect(await seedHostEnvFiles(root, repoAt(root))).toEqual([]);
+      expect(await seedHostEnvFiles(join(root, "missing"), undefined)).toEqual(
+        [],
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -127,9 +129,9 @@ describe("repoLifecycle", () => {
     return root;
   }
 
-  test("reports each committed lifecycle file", () => {
+  test("reports each committed lifecycle file", async () => {
     expect(
-      repoLifecycle(
+      await repoLifecycle(
         repoWith({
           ".agents/setup": "",
           ".agents/resume": "",
@@ -141,16 +143,16 @@ describe("repoLifecycle", () => {
     ).toEqual({ dir: ".agents", setup: true, resume: true, portals: true });
   });
 
-  test("an empty portals.json declares nothing", () => {
+  test("an empty portals.json declares nothing", async () => {
     expect(
-      repoLifecycle(
+      await repoLifecycle(
         repoWith({ ".agents/setup": "", ".agents/portals.json": "{}" }),
       ),
     ).toEqual({ dir: ".agents", setup: true, resume: false, portals: false });
   });
 
-  test("a repo with no lifecycle dir reports nothing", () => {
-    expect(repoLifecycle(repoWith({ "package.json": "{}" }))).toEqual({
+  test("a repo with no lifecycle dir reports nothing", async () => {
+    expect(await repoLifecycle(repoWith({ "package.json": "{}" }))).toEqual({
       dir: null,
       setup: false,
       resume: false,
@@ -158,9 +160,9 @@ describe("repoLifecycle", () => {
     });
   });
 
-  test("the retired .opensession/ dir contributes nothing", () => {
+  test("the retired .opensession/ dir contributes nothing", async () => {
     expect(
-      repoLifecycle(
+      await repoLifecycle(
         repoWith({ ".opensession/start.sh": "", ".opensession/setup.sh": "" }),
       ),
     ).toEqual({ dir: null, setup: false, resume: false, portals: false });

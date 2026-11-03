@@ -21,9 +21,9 @@ afterEach(() => {
 });
 
 describe("preview path leases", () => {
-  test("keeps a mutable staging record exclusive across sessions", () => {
+  test("keeps a mutable staging record exclusive across sessions", async () => {
     const file = fixture();
-    const first = claimPreviewPathLease(
+    const first = await claimPreviewPathLease(
       {
         key: "video:vid_fixture",
         sessionId: "session-a",
@@ -32,7 +32,7 @@ describe("preview path leases", () => {
       },
       { file, now: 1_000 },
     );
-    const conflict = claimPreviewPathLease(
+    const conflict = await claimPreviewPathLease(
       {
         key: "video:vid_fixture",
         sessionId: "session-b",
@@ -45,9 +45,9 @@ describe("preview path leases", () => {
     expect(conflict).toEqual({ ok: false, reason: "in_use" });
   });
 
-  test("renews one session idempotently and replaces its previous record", () => {
+  test("renews one session idempotently and replaces its previous record", async () => {
     const file = fixture();
-    const first = claimPreviewPathLease(
+    const first = await claimPreviewPathLease(
       {
         key: "video:first",
         sessionId: "session-a",
@@ -55,7 +55,7 @@ describe("preview path leases", () => {
       },
       { file, now: 1_000 },
     );
-    const renewed = claimPreviewPathLease(
+    const renewed = await claimPreviewPathLease(
       {
         key: "video:first",
         sessionId: "session-a",
@@ -63,7 +63,7 @@ describe("preview path leases", () => {
       },
       { file, now: 2_000 },
     );
-    const replacement = claimPreviewPathLease(
+    const replacement = await claimPreviewPathLease(
       {
         key: "video:second",
         sessionId: "session-a",
@@ -84,9 +84,9 @@ describe("preview path leases", () => {
     });
   });
 
-  test("reclaims expired records and fences release by lease id", () => {
+  test("reclaims expired records and fences release by lease id", async () => {
     const file = fixture();
-    const first = claimPreviewPathLease(
+    const first = await claimPreviewPathLease(
       {
         key: "video:fixture",
         sessionId: "session-a",
@@ -95,7 +95,7 @@ describe("preview path leases", () => {
       },
       { file, now: 1_000 },
     );
-    const second = claimPreviewPathLease(
+    const second = await claimPreviewPathLease(
       {
         key: "video:fixture",
         sessionId: "session-b",
@@ -107,14 +107,14 @@ describe("preview path leases", () => {
     expect(first.ok).toBe(true);
     expect(second.ok).toBe(true);
     expect(
-      releasePreviewPathLease("session-b", {
+      await releasePreviewPathLease("session-b", {
         file,
         now: 602_000,
         leaseId: "stale-lease",
       }),
     ).toBe(false);
     expect(
-      releasePreviewPathLease("session-b", {
+      await releasePreviewPathLease("session-b", {
         file,
         now: 602_000,
         leaseId: second.ok ? second.lease.id : "",
@@ -122,9 +122,9 @@ describe("preview path leases", () => {
     ).toBe(true);
   });
 
-  test("validates keys and bounded reservation time", () => {
+  test("validates keys and bounded reservation time", async () => {
     const file = fixture();
-    expect(() =>
+    await expect(
       claimPreviewPathLease(
         {
           key: "\n",
@@ -133,8 +133,8 @@ describe("preview path leases", () => {
         },
         { file },
       ),
-    ).toThrow("Exclusive preview key");
-    expect(() =>
+    ).rejects.toThrow("Exclusive preview key");
+    await expect(
       claimPreviewPathLease(
         {
           key: "video:fixture",
@@ -144,6 +144,19 @@ describe("preview path leases", () => {
         },
         { file },
       ),
-    ).toThrow("between 10 minutes and 30 days");
+    ).rejects.toThrow("between 10 minutes and 30 days");
+  });
+
+  test("concurrent claims for one key admit exactly one session", async () => {
+    const file = fixture();
+    const claims = await Promise.all(
+      ["session-a", "session-b", "session-c"].map((sessionId) =>
+        claimPreviewPathLease(
+          { key: "video:race", sessionId, path: "/video/race/edit" },
+          { file, now: 1_000 },
+        ),
+      ),
+    );
+    expect(claims.filter((claim) => claim.ok)).toHaveLength(1);
   });
 });

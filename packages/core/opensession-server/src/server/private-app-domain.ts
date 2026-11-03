@@ -3,17 +3,11 @@ import { CADDY_STREAM_CLOSE_DELAY } from "./caddy-stream";
 import { X509Certificate, randomBytes } from "crypto";
 import { resolve4 } from "dns/promises";
 import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-} from "fs";
-import {
+  access,
   chmod,
   copyFile,
   mkdir,
+  mkdtemp,
   readFile,
   rename,
   rm,
@@ -22,7 +16,8 @@ import {
 import { dirname, join } from "path";
 import { tmpdir } from "os";
 import { stateDir } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
+import { findExecutable } from "./shared/executable-lookup";
 import { isTailnetIpv4 } from "./shared/network-address";
 
 export type PrivateAppDnsProvider = "cloudflare" | "vercel";
@@ -70,9 +65,26 @@ const runtime = globalThis as typeof globalThis & {
   __opensessionPrivateAppRenewing?: boolean;
 };
 
-function safeCredential(): PrivateAppCredential | null {
+function pathExists(path: string): Promise<boolean> {
+  return access(path).then(
+    () => true,
+    () => false,
+  );
+}
+
+/** The file's bytes, or null when it is absent. */
+async function readIfPresent(path: string): Promise<Buffer | null> {
   try {
-    const parsed = JSON.parse(readFileSync(CREDENTIAL_PATH(), "utf8"));
+    return await readFile(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+async function safeCredential(): Promise<PrivateAppCredential | null> {
+  try {
+    const parsed = JSON.parse(await readFile(CREDENTIAL_PATH(), "utf8"));
     if (
       parsed?.version !== 1 ||
       (parsed?.provider !== "cloudflare" && parsed?.provider !== "vercel") ||
@@ -116,7 +128,7 @@ function legoCertificatePaths(domain: string): {
   };
 }
 
-function certificateExpiry(domain: string): string {
+async function certificateExpiry(domain: string): Promise<string> {
   const candidates = [
     certificatePaths(domain).certificate,
     `/etc/lego/certificates/${domain}.crt`,
@@ -124,7 +136,7 @@ function certificateExpiry(domain: string): string {
   for (const path of candidates) {
     try {
       return new Date(
-        new X509Certificate(readFileSync(path)).validTo,
+        new X509Certificate(await readFile(path)).validTo,
       ).toISOString();
     } catch {}
   }
@@ -378,15 +390,15 @@ async function upsertVercelPrivateRecord(
   );
 }
 
-function validateCredentialInput(input: {
+async function validateCredentialInput(input: {
   domain: string;
   provider: PrivateAppDnsProvider;
   email?: string;
   apiToken?: string;
   teamId?: string;
   upstream?: string;
-}): PrivateAppCredential {
-  const saved = safeCredential();
+}): Promise<PrivateAppCredential> {
+  const saved = await safeCredential();
   const canReuse =
     saved?.domain === input.domain && saved.provider === input.provider;
   const email = (input.email || (canReuse ? saved.email : "")).trim();
@@ -649,7 +661,7 @@ export async function privateAppCaddyfile(
   if (process.env.OPENSESSION_CADDYFILE)
     return process.env.OPENSESSION_CADDYFILE;
   if (platform === "linux") return "/etc/caddy/Caddyfile";
-  const brew = Bun.which("brew");
+  const brew = await findExecutable("brew");
   if (brew) {
     const prefix = await runCommand([brew, "--prefix"], commandEnvironment());
     if (prefix.code === 0 && prefix.stdout.trim().startsWith("/"))
@@ -661,7 +673,7 @@ export async function privateAppCaddyfile(
 }
 
 async function requireLego(): Promise<string> {
-  const lego = Bun.which("lego");
+  const lego = await findExecutable("lego");
   if (!lego) throw new Error("lego is not installed on this server");
   const version = await runCommand([lego, "--version"], commandEnvironment());
   if (version.code !== 0 || !/^lego version (?:v)?4\./m.test(version.stdout)) {
@@ -677,12 +689,10 @@ async function issueCertificate(
   lego: string,
   renew = false,
 ): Promise<boolean> {
-  mkdirSync(ACME_PATH(), { recursive: true, mode: 0o700 });
-  chmodSync(ACME_PATH(), 0o700);
+  await mkdir(ACME_PATH(), { recursive: true, mode: 0o700 });
+  await chmod(ACME_PATH(), 0o700);
   const certificatePath = legoCertificatePaths(credential.domain).certificate;
-  const before = existsSync(certificatePath)
-    ? readFileSync(certificatePath)
-    : null;
+  const before = await readIfPresent(certificatePath);
   const args = [
     lego,
     "--path",
@@ -712,14 +722,12 @@ async function issueCertificate(
         "Let’s Encrypt certificate request failed",
     );
   }
-  const after = existsSync(certificatePath)
-    ? readFileSync(certificatePath)
-    : null;
+  const after = await readIfPresent(certificatePath);
   return Boolean(after && (!before || !before.equals(after)));
 }
 
 async function caddyGroup(): Promise<string> {
-  const id = Bun.which("id");
+  const id = await findExecutable("id");
   if (!id) return "caddy";
   const caddy = await runCommand([id, "-gn", "caddy"], commandEnvironment());
   if (caddy.code === 0 && /^[a-z_][a-z0-9_-]*$/i.test(caddy.stdout.trim()))
@@ -759,9 +767,9 @@ async function installDarwinCaddy(
   tailnetIpv4: string,
   upstream: string,
 ): Promise<void> {
-  const caddy = Bun.which("caddy");
+  const caddy = await findExecutable("caddy");
   if (!caddy) throw new Error("Caddy is not installed on this server");
-  const brew = Bun.which("brew") || undefined;
+  const brew = (await findExecutable("brew")) || undefined;
   const source = legoCertificatePaths(domain);
   if (
     !(await Bun.file(source.certificate).exists()) ||
@@ -843,14 +851,17 @@ async function installLinuxCaddy(
   tailnetIpv4: string,
   upstream: string,
 ): Promise<void> {
-  const caddy = Bun.which("caddy");
-  const sudo = Bun.which("sudo");
+  const caddy = await findExecutable("caddy");
+  const sudo = await findExecutable("sudo");
   if (!caddy || !sudo)
     throw new Error(
       "Caddy and passwordless sudo are required for automatic setup",
     );
   const source = legoCertificatePaths(domain);
-  if (!existsSync(source.certificate) || !existsSync(source.key)) {
+  if (
+    !(await pathExists(source.certificate)) ||
+    !(await pathExists(source.key))
+  ) {
     throw new Error(
       "Let’s Encrypt did not produce the expected certificate files",
     );
@@ -858,7 +869,7 @@ async function installLinuxCaddy(
   const caddyfile = await privateAppCaddyfile("linux");
   let current: string;
   try {
-    current = readFileSync(caddyfile, "utf8");
+    current = await readFile(caddyfile, "utf8");
   } catch {
     throw new Error(`Could not read ${caddyfile}`);
   }
@@ -869,7 +880,7 @@ async function installLinuxCaddy(
     upstream,
     "linux",
   );
-  const scratch = mkdtempSync(
+  const scratch = await mkdtemp(
     join(
       tmpdir(),
       `opensession-private-domain-${randomBytes(4).toString("hex")}-`,
@@ -964,7 +975,7 @@ async function installLinuxCaddy(
       throw new Error(reload.stderr.trim() || "Caddy reload failed");
     }
   } finally {
-    rmSync(scratch, { recursive: true, force: true });
+    await rm(scratch, { recursive: true, force: true });
   }
 }
 
@@ -999,15 +1010,20 @@ export async function privateAppDomainStatus(
   try {
     domain = new URL(origin).hostname;
   } catch {}
-  const credential = safeCredential();
+  const [credential, health, certificateExpiresAt, lego] = await Promise.all([
+    safeCredential(),
+    appHealth(origin, tailnetIpv4),
+    domain ? certificateExpiry(domain) : "",
+    findExecutable("lego"),
+  ]);
   return {
-    health: await appHealth(origin, tailnetIpv4),
+    health,
     dnsProvider: credential?.domain === domain ? credential.provider : null,
     credentialConfigured: credential?.domain === domain,
     certificateEmailConfigured:
       credential?.domain === domain && Boolean(credential.email),
-    certificateExpiresAt: domain ? certificateExpiry(domain) : "",
-    legoInstalled: Bun.which("lego") !== null,
+    certificateExpiresAt,
+    legoInstalled: lego !== null,
   };
 }
 
@@ -1025,10 +1041,10 @@ export async function configurePrivateAppDomain(input: {
     throw new Error(
       "Connect this server to Tailscale before setting up a private domain",
     );
-  if (!Bun.which("caddy"))
+  if (!(await findExecutable("caddy")))
     throw new Error("Caddy is not installed on this server");
   const lego = await requireLego();
-  const credential = validateCredentialInput(input);
+  const credential = await validateCredentialInput(input);
   if (credential.provider === "cloudflare") {
     await upsertCloudflarePrivateRecord(
       credential.apiToken,
@@ -1046,14 +1062,14 @@ export async function configurePrivateAppDomain(input: {
   await issueCertificate(
     credential,
     lego,
-    existsSync(legoCertificatePaths(credential.domain).certificate),
+    await pathExists(legoCertificatePaths(credential.domain).certificate),
   );
   await installCertificateAndCaddy(
     credential.domain,
     input.tailnetIpv4,
     credential.upstream,
   );
-  writeJsonAtomic(CREDENTIAL_PATH(), credential, true, 0o600);
+  await writeJsonAtomicAsync(CREDENTIAL_PATH(), credential, true, 0o600);
 }
 
 export async function testPrivateAppDomain(
@@ -1076,10 +1092,15 @@ async function ownsCaddySite(platform: PrivateAppPlatform): Promise<boolean> {
 export async function renewPrivateAppCertificate(): Promise<boolean> {
   const platform = supportedPrivateAppPlatform();
   if (!platform || runtime.__opensessionPrivateAppRenewing) return false;
-  const credential = safeCredential();
-  if (!credential || !Bun.which("lego") || !Bun.which("caddy")) return false;
   runtime.__opensessionPrivateAppRenewing = true;
   try {
+    const credential = await safeCredential();
+    if (
+      !credential ||
+      !(await findExecutable("lego")) ||
+      !(await findExecutable("caddy"))
+    )
+      return false;
     if (!(await ownsCaddySite(platform))) return false;
     const changed = await issueCertificate(
       credential,

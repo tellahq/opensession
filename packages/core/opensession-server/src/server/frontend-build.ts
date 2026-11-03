@@ -6,19 +6,19 @@
  */
 
 import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  renameSync,
-  statSync,
-  unlinkSync,
-} from "node:fs";
+  access,
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  stat,
+  unlink,
+} from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "path";
 import type { BunFile, BunPlugin } from "bun";
 import { EMBEDDED_FRONTEND } from "./embedded-frontend";
 import { activeRunRecords } from "./run-journal";
-import { writeFileAtomic } from "./shared/atomic-write";
+import { writeFileAtomicAsync } from "./shared/atomic-write";
 import { publishStableFrontendSnapshot } from "./stable-frontend";
 import { stateDir } from "./paths";
 import { gitIdentityFor } from "./shared/user-mappings";
@@ -74,6 +74,24 @@ export function activeFrontendDist(): string {
   return join(activeFrontendReleaseRoot(), ".frontend-dist");
 }
 
+function pathExists(path: string): Promise<boolean> {
+  return access(path).then(
+    () => true,
+    () => false,
+  );
+}
+
+/** The first entry of `assets` missing from `dist`, or undefined. */
+async function firstMissingAsset(
+  dist: string,
+  assets: readonly string[],
+): Promise<string | undefined> {
+  const present = await Promise.all(
+    assets.map((asset) => pathExists(join(dist, asset))),
+  );
+  return assets[present.indexOf(false)];
+}
+
 function frontendAssetRoots(): string[] {
   return [
     activeFrontendReleaseRoot(),
@@ -96,14 +114,14 @@ export type FrontendBundle = {
  * Null when the compiled binary has no such asset (source mode returns a
  * BunFile whose `.exists()` the caller still checks).
  */
-export function frontendDistFile(name: string): BunFile | null {
+export async function frontendDistFile(name: string): Promise<BunFile | null> {
   if (EMBEDDED_FRONTEND) {
     const path = EMBEDDED_FRONTEND.assets[name];
     return path ? Bun.file(path) : null;
   }
   for (const root of frontendAssetRoots()) {
-    const path = join(root, ".frontend-dist", name);
-    if (existsSync(path)) return Bun.file(path);
+    const file = Bun.file(join(root, ".frontend-dist", name));
+    if (await file.exists()) return file;
   }
   return Bun.file(join(activeFrontendDist(), name));
 }
@@ -130,14 +148,14 @@ export function frontendStaticFile(
  * the rest of the bundle state, and seeded from disk on first use so the
  * fallback survives a server restart as well as a hot reload.
  */
-function lastGoodTailwind(): string | null {
+async function lastGoodTailwind(): Promise<string | null> {
   if (g.__opensessionLastGoodTailwind === undefined) {
     let newest: string | null = null;
     let newestAt = 0;
     try {
-      for (const f of readdirSync(FRONTEND_DIST)) {
+      for (const f of await readdir(FRONTEND_DIST)) {
         if (!/^tailwind-.+\.css$/.test(f)) continue;
-        const at = statSync(join(FRONTEND_DIST, f)).mtimeMs;
+        const at = (await stat(join(FRONTEND_DIST, f))).mtimeMs;
         if (at >= newestAt) [newest, newestAt] = [f, at];
       }
     } catch {}
@@ -156,7 +174,7 @@ function lastGoodTailwind(): string | null {
  * Throws on a failed compile; callers decide how to fail soft.
  */
 async function compileTailwind(outPath: string): Promise<string> {
-  mkdirSync(dirname(outPath), { recursive: true });
+  await mkdir(dirname(outPath), { recursive: true });
   const proc = Bun.spawn(
     [
       `${REPO_ROOT}/node_modules/.bin/tailwindcss`,
@@ -206,11 +224,11 @@ const RELEASE_MANIFEST = join(REPO_ROOT, "release.json");
 /** True when the frontend is served from a fixed prebuilt bundle rather than
  *  built in-process: the compiled binary's embedded assets, or a release
  *  tarball's shipped .frontend-dist. Either way there is no source rebuild. */
-export function isPrebuiltFrontend(): boolean {
+export async function isPrebuiltFrontend(): Promise<boolean> {
   if (EMBEDDED_FRONTEND) return true;
   if (process.env.OPENSESSION_PREBUILT_FRONTEND === "1") return true;
   if (process.env.OPENSESSION_PREBUILT_FRONTEND === "0") return false;
-  return existsSync(RELEASE_MANIFEST);
+  return pathExists(RELEASE_MANIFEST);
 }
 
 /**
@@ -269,11 +287,11 @@ function reactCompilerPlugin(
   return {
     name: "oxc-react-compiler",
     setup(build) {
-      build.onLoad({ filter: /\.[jt]sx?$/ }, (args) => {
+      build.onLoad({ filter: /\.[jt]sx?$/ }, async (args) => {
         // Only our own sources: vendored deps ship pre-built and must keep
         // their exact published output.
         if (!args.path.startsWith(FRONTEND_SRC)) return undefined;
-        const sourceText = readFileSync(args.path, "utf8");
+        const sourceText = await Bun.file(args.path).text();
         const lang = args.path.endsWith(".tsx")
           ? "tsx"
           : args.path.endsWith(".ts")
@@ -327,7 +345,7 @@ export async function compileAssets(): Promise<BundleMeta> {
   const { transformSync } = await import("oxc-transform-react");
   // Stamped before the build so edits landing mid-build hash as "changed" on
   // the next boot rather than being masked by a post-build stamp.
-  const inputsHash = frontendInputsHash();
+  const inputsHash = await frontendInputsHash();
   compilerCount.n = 0;
   const result = await Bun.build({
     entrypoints: [`${FRONTEND_SRC}/App.tsx`],
@@ -362,7 +380,7 @@ export async function compileAssets(): Promise<BundleMeta> {
   if (!entry) throw new Error("frontend build produced no entry point");
   const entryName = entry.path.split("/").pop()!;
   const outputNames = result.outputs.map((o) => o.path.split("/").pop()!);
-  const preload = staticImportClosure(entryName, new Set(outputNames));
+  const preload = await staticImportClosure(entryName, new Set(outputNames));
 
   // Bun 1.3.14's CSS minifier strips the space after var(...) and breaks the
   // .panel-overlay / .sidebar-overlay inset (and a few color-mix percentages),
@@ -399,7 +417,7 @@ export async function compileAssets(): Promise<BundleMeta> {
   const cssName = `global-${cssHash}.css`;
   // Atomic: a mid-write bundle file has shipped corrupt before ("useState is
   // not defined") — never serve a torn asset.
-  writeFileAtomic(`${FRONTEND_DIST}/${cssName}`, cssSrc);
+  await writeFileAtomicAsync(`${FRONTEND_DIST}/${cssName}`, cssSrc);
 
   // ghostty-web's WASM VT engine (the Shell tab's terminal) rides along too:
   // the bundled chunk can't resolve the package-relative wasm, so it's copied
@@ -411,7 +429,7 @@ export async function compileAssets(): Promise<BundleMeta> {
       tmp,
       Bun.file(`${REPO_ROOT}/node_modules/ghostty-web/dist/ghostty-vt.wasm`),
     );
-    renameSync(tmp, `${FRONTEND_DIST}/ghostty-vt.wasm`);
+    await rename(tmp, `${FRONTEND_DIST}/ghostty-vt.wasm`);
   } catch (e) {
     console.error(
       "[frontend] ghostty-vt.wasm copy failed — Shell falls back to xterm.js:",
@@ -435,11 +453,11 @@ export async function compileAssets(): Promise<BundleMeta> {
   try {
     const twCss = await compileTailwind(`${FRONTEND_DIST}/.tailwind-build.css`);
     twName = `tailwind-${Bun.hash(twCss).toString(36)}.css`;
-    writeFileAtomic(`${FRONTEND_DIST}/${twName}`, twCss);
+    await writeFileAtomicAsync(`${FRONTEND_DIST}/${twName}`, twCss);
     g.__opensessionLastGoodTailwind = twName;
   } catch (e) {
-    const prev = lastGoodTailwind();
-    if (prev && existsSync(`${FRONTEND_DIST}/${prev}`)) {
+    const prev = await lastGoodTailwind();
+    if (prev && (await pathExists(`${FRONTEND_DIST}/${prev}`))) {
       twName = prev;
       console.error(
         `[frontend] Tailwind build FAILED — reusing last good sheet (${prev}):`,
@@ -463,11 +481,11 @@ export async function compileAssets(): Promise<BundleMeta> {
     bunVersion: Bun.version,
     builtAt: new Date().toISOString(),
   };
-  writeFileAtomic(BUNDLE_META, JSON.stringify(meta));
+  await writeFileAtomicAsync(BUNDLE_META, JSON.stringify(meta));
   console.log(
     `Frontend compiled: ${result.outputs.length} files → ${FRONTEND_DIST} (v=${bundleVersion(meta)})`,
   );
-  pruneFrontendDist(meta.assets);
+  await pruneFrontendDist(meta.assets);
   return meta;
 }
 
@@ -480,11 +498,11 @@ export async function compileAssets(): Promise<BundleMeta> {
 // `import("/x.js")` has the parenthesis and never matches.
 const STATIC_IMPORT_RE = /(?:from|import)\s*"\/([\w.-]+\.js)"/g;
 
-export function staticImportClosure(
+export async function staticImportClosure(
   entryName: string,
   outputNames: Set<string>,
   dist: string = FRONTEND_DIST,
-): string[] {
+): Promise<string[]> {
   const seen = new Set<string>();
   const queue = [entryName];
   while (queue.length) {
@@ -493,7 +511,7 @@ export function staticImportClosure(
     seen.add(name);
     let source: string;
     try {
-      source = readFileSync(join(dist, name), "utf8");
+      source = await readFile(join(dist, name), "utf8");
     } catch {
       continue;
     }
@@ -531,17 +549,17 @@ function frontendInstance() {
   };
 }
 
-export function renderIndexHtml(
+export async function renderIndexHtml(
   meta: BundleMeta,
   sourceRoot: string = join(activeFrontendReleaseRoot(), FRONTEND_REL),
-): string {
+): Promise<string> {
   // A compiled binary has no src tree, so the neutral index.html shell is
   // embedded and parked here at boot; otherwise read it from src/frontend.
   // Either way the instance blob below is stitched from the LIVE config, so
   // the served page reflects THIS install, not the machine that built it.
   const embeddedShell = g.__opensessionFrontendShell as string | undefined;
   let indexHtml =
-    embeddedShell ?? readFileSync(join(sourceRoot, "index.html"), "utf8");
+    embeddedShell ?? (await readFile(join(sourceRoot, "index.html"), "utf8"));
   const instance = JSON.stringify(frontendInstance()).replace(/</g, "\\u003c");
   const htmlProductName = productName()
     .replaceAll("&", "&amp;")
@@ -587,18 +605,21 @@ export function renderIndexHtml(
 
 /** Point the served bundle at `meta`: render index.html and swap the store
  *  contents in place (never reassigned; routes hold the one reference). */
-function publishStableShell(activated = false): void {
+async function publishStableShell(activated = false): Promise<void> {
   if (process.env.OPENSESSION_GATEWAY_ROLE === "standby" && !activated) return;
   const store = frontendStore();
   if (!store.indexHtml || !store.version) return;
   try {
-    const published = publishStableFrontendSnapshot(frontendDeployStateDir(), {
-      releaseRoot: activeFrontendReleaseRoot(),
-      fallbackRoots:
-        (g.__opensessionFrontendFallbackRoots as string[] | undefined) ?? [],
-      version: store.version,
-      indexHtml: store.indexHtml,
-    });
+    const published = await publishStableFrontendSnapshot(
+      frontendDeployStateDir(),
+      {
+        releaseRoot: activeFrontendReleaseRoot(),
+        fallbackRoots:
+          (g.__opensessionFrontendFallbackRoots as string[] | undefined) ?? [],
+        version: store.version,
+        indexHtml: store.indexHtml,
+      },
+    );
     // Full backend deploys start a fresh process, so their in-memory fallback
     // list is empty. The stable snapshot carries the preceding release chain
     // across that restart and keeps old content-hashed chunks lazy-loadable.
@@ -608,21 +629,37 @@ function publishStableShell(activated = false): void {
   }
 }
 
-function applyBundle(meta: BundleMeta): string {
+/** Swaps of the served bundle (build, identity re-render, promotion) run one
+ * at a time: each reads its inputs asynchronously, and a slower earlier swap
+ * must never land over a newer one. */
+let bundleSwaps: Promise<unknown> = Promise.resolve();
+function serializedSwap<T>(swap: () => Promise<T>): Promise<T> {
+  const next = bundleSwaps.then(swap, swap);
+  bundleSwaps = next.catch(() => {});
+  return next;
+}
+
+/** Render index.html for `meta`, then swap the store contents in place in one
+ * synchronous step. Callers hold the swap queue. */
+async function applyBundleNow(meta: BundleMeta): Promise<string> {
+  const indexHtml = await renderIndexHtml(meta);
   const store = frontendStore();
-  store.indexHtml = renderIndexHtml(meta);
+  store.indexHtml = indexHtml;
   store.gzip.clear(); // stale gzipped blobs were keyed by the old hashed names
   store.version = bundleVersion(meta);
   g.__opensessionFrontendMeta = meta;
-  publishStableShell();
+  await publishStableShell();
   return store.version;
 }
 
-function readReleaseSha(releaseRoot: string): string | null {
+function applyBundle(meta: BundleMeta): Promise<string> {
+  return serializedSwap(() => applyBundleNow(meta));
+}
+
+async function readReleaseSha(releaseRoot: string): Promise<string | null> {
   try {
-    const sha = readFileSync(
-      join(releaseRoot, ".opensession-release"),
-      "utf8",
+    const sha = (
+      await readFile(join(releaseRoot, ".opensession-release"), "utf8")
     ).trim();
     return /^[0-9a-f]{40,64}$/i.test(sha) ? sha : null;
   } catch {
@@ -648,11 +685,13 @@ function parseFrontendReleasePointer(
   }
 }
 
-function validatedFrontendRelease(pointer: FrontendReleasePointer): {
+async function validatedFrontendRelease(
+  pointer: FrontendReleasePointer,
+): Promise<{
   root: string;
   meta: BundleMeta;
   indexHtml: string;
-} {
+}> {
   const root = resolve(pointer.releaseRoot);
   const releases = resolve(frontendDeployStateDir(), "releases");
   if (
@@ -663,34 +702,40 @@ function validatedFrontendRelease(pointer: FrontendReleasePointer): {
       "frontend release path is outside the immutable releases directory",
     );
   }
-  if (readReleaseSha(root) !== pointer.sha) {
+  if ((await readReleaseSha(root)) !== pointer.sha) {
     throw new Error(
       `frontend release ${pointer.sha.slice(0, 10)} is not prepared`,
     );
   }
   const dist = join(root, ".frontend-dist");
-  const meta = readBundleMeta(dist);
+  const meta = await readBundleMeta(dist);
   if (!meta) throw new Error(`frontend bundle metadata is missing in ${dist}`);
-  const missing = meta.assets.filter((asset) => !existsSync(join(dist, asset)));
-  if (missing.length)
-    throw new Error(`frontend bundle is incomplete (missing ${missing[0]})`);
-  const indexHtml = renderIndexHtml(meta, join(root, FRONTEND_REL));
+  const missing = await firstMissingAsset(dist, meta.assets);
+  if (missing)
+    throw new Error(`frontend bundle is incomplete (missing ${missing})`);
+  const indexHtml = await renderIndexHtml(meta, join(root, FRONTEND_REL));
   return { root, meta, indexHtml };
 }
 
 /** Atomically publish a bundle that was compiled in a prepared immutable
  * release. The pointer is persisted before the synchronous in-memory swap, so
  * a crash sees either the old complete release or the new complete release. */
-export function activateFrontendRelease(
+export async function activateFrontendRelease(
   pointer: FrontendReleasePointer,
-): string {
+): Promise<string> {
   if (EMBEDDED_FRONTEND || IS_DEV) {
     throw new Error(
       "frontend release promotion is unavailable in this install mode",
     );
   }
-  const prepared = validatedFrontendRelease(pointer);
-  writeFileAtomic(
+  return serializedSwap(() => activateFrontendReleaseNow(pointer));
+}
+
+async function activateFrontendReleaseNow(
+  pointer: FrontendReleasePointer,
+): Promise<string> {
+  const prepared = await validatedFrontendRelease(pointer);
+  await writeFileAtomicAsync(
     frontendReleasePointerPath(),
     `${JSON.stringify(pointer, null, 2)}\n`,
     0o600,
@@ -708,7 +753,7 @@ export function activateFrontendRelease(
   store.gzip.clear();
   store.version = bundleVersion(prepared.meta);
   g.__opensessionFrontendMeta = prepared.meta;
-  publishStableShell();
+  await publishStableShell();
   console.log(
     `[frontend] promoted immutable release ${pointer.sha.slice(0, 10)} (v=${store.version})`,
   );
@@ -740,25 +785,27 @@ export function __setFrontendReleaseRootForTest(root: string): () => void {
 /** Load a restart-free frontend promotion only while its backend base is still
  * the running release. A later full deploy or rollback changes that base and
  * automatically reunifies the frontend with the backend release. */
-function tryLoadPromotedFrontend(): boolean {
+async function tryLoadPromotedFrontend(): Promise<boolean> {
+  let raw: string;
   try {
-    const pointer = parseFrontendReleasePointer(
-      readFileSync(frontendReleasePointerPath(), "utf8"),
-    );
+    raw = await readFile(frontendReleasePointerPath(), "utf8");
+  } catch {
+    return false;
+  }
+  try {
+    const pointer = parseFrontendReleasePointer(raw);
     if (!pointer) return false;
-    const backendSha = readReleaseSha(REPO_ROOT);
+    const backendSha = await readReleaseSha(REPO_ROOT);
     if (
       !backendSha ||
       pointer.baseSha !== backendSha ||
       pointer.sha === backendSha
     )
       return false;
-    activateFrontendRelease(pointer);
+    await activateFrontendRelease(pointer);
     return true;
   } catch (error) {
-    if (existsSync(frontendReleasePointerPath())) {
-      console.warn("[frontend] ignoring invalid promoted release:", error);
-    }
+    console.warn("[frontend] ignoring invalid promoted release:", error);
     return false;
   }
 }
@@ -770,7 +817,7 @@ function tryLoadPromotedFrontend(): boolean {
 // restart` that would interrupt every in-flight Claude run. `version` changes
 // whenever the entry or CSS hash changes, so clients know to refresh.
 export async function buildFrontend(): Promise<string> {
-  if (isPrebuiltFrontend()) {
+  if (await isPrebuiltFrontend()) {
     throw new Error(
       "frontend is prebuilt (release.json / OPENSESSION_PREBUILT_FRONTEND): rebuilding is not available",
     );
@@ -789,12 +836,17 @@ export async function buildFrontend(): Promise<string> {
  * so no rebuild: the served shell is swapped in place. No-op in dev (Bun's
  * HMR server serves the source shell) and before the first build.
  */
-export function refreshIndexHtml(reason: string): void {
+export async function refreshIndexHtml(reason: string): Promise<void> {
   if (!frontend) return;
-  const meta = currentMeta();
-  if (!meta) return;
-  applyBundle(meta);
-  console.log(`[frontend] index.html re-rendered (${reason})`);
+  // Read the meta inside the swap queue so a rebuild that is still landing
+  // is the one re-rendered, not the bundle it replaces.
+  const rendered = await serializedSwap(async () => {
+    const meta = currentMeta();
+    if (!meta) return false;
+    await applyBundleNow(meta);
+    return true;
+  });
+  if (rendered) console.log(`[frontend] index.html re-rendered (${reason})`);
 }
 
 // Hashed bundles accumulate forever without this (the dist hit 8.6 GB /
@@ -803,15 +855,15 @@ export function refreshIndexHtml(reason: string): void {
 // only fails into a page refresh, which those tabs need anyway.
 const DIST_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
 
-function pruneFrontendDist(keep: string[]): void {
+async function pruneFrontendDist(keep: string[]): Promise<void> {
   try {
     const cutoff = Date.now() - DIST_RETENTION_MS;
-    for (const name of readdirSync(FRONTEND_DIST)) {
+    for (const name of await readdir(FRONTEND_DIST)) {
       if (keep.includes(name)) continue;
       if (!/\.(js|css|map)$/.test(name)) continue;
       try {
         const p = join(FRONTEND_DIST, name);
-        if (statSync(p).mtimeMs < cutoff) unlinkSync(p);
+        if ((await stat(p)).mtimeMs < cutoff) await unlink(p);
       } catch {}
     }
   } catch (e) {
@@ -832,39 +884,53 @@ function pruneFrontendDist(keep: string[]): void {
 // same hash on any machine, which is what lets a release artefact ship the
 // dist compiled elsewhere (compileAssets) and have boot accept it as current.
 
-export function frontendInputsHash(): string {
+export async function frontendInputsHash(): Promise<string> {
   const parts: string[] = [
     `bun:${Bun.version}`,
     `define:${JSON.stringify(FRONTEND_BUILD_DEFINE)}`,
   ];
   try {
     parts.push(
-      `lock:${Bun.hash(readFileSync(join(REPO_ROOT, "bun.lock"))).toString(36)}`,
+      `lock:${Bun.hash(await readFile(join(REPO_ROOT, "bun.lock"))).toString(36)}`,
     );
   } catch {}
-  const entries = readdirSync(FRONTEND_SRC, {
+  const entries = await readdir(FRONTEND_SRC, {
     recursive: true,
     withFileTypes: true,
   });
-  for (const e of entries) {
-    if (!e.isFile()) continue;
-    const dir =
-      (e as { parentPath?: string }).parentPath ??
-      String((e as { path?: string }).path ?? FRONTEND_SRC);
-    const p = join(dir, e.name);
-    try {
-      const rel = relative(FRONTEND_SRC, p).split(sep).join("/");
-      parts.push(`${rel}:${Bun.hash(readFileSync(p)).toString(36)}`);
-    } catch {}
+  const files = entries
+    .filter((e) => e.isFile())
+    .map((e) => {
+      const dir =
+        (e as { parentPath?: string }).parentPath ??
+        String((e as { path?: string }).path ?? FRONTEND_SRC);
+      return join(dir, e.name);
+    });
+  // Bounded batches: enough reads in flight to keep the disk busy without
+  // opening every source file at once.
+  for (let start = 0; start < files.length; start += 64) {
+    const batch = await Promise.all(
+      files.slice(start, start + 64).map(async (p) => {
+        try {
+          const rel = relative(FRONTEND_SRC, p).split(sep).join("/");
+          return `${rel}:${Bun.hash(await readFile(p)).toString(36)}`;
+        } catch {
+          return null;
+        }
+      }),
+    );
+    for (const part of batch) if (part) parts.push(part);
   }
   parts.sort();
   return Bun.hash(parts.join("\n")).toString(36);
 }
 
-function readBundleMeta(dist: string = FRONTEND_DIST): BundleMeta | null {
+async function readBundleMeta(
+  dist: string = FRONTEND_DIST,
+): Promise<BundleMeta | null> {
   try {
     const meta = JSON.parse(
-      readFileSync(join(dist, ".bundle-meta.json"), "utf8"),
+      await readFile(join(dist, ".bundle-meta.json"), "utf8"),
     ) as Partial<BundleMeta>;
     if (
       !meta.inputsHash ||
@@ -881,14 +947,12 @@ function readBundleMeta(dist: string = FRONTEND_DIST): BundleMeta | null {
 
 /** Rehydrate the served bundle from an unchanged .frontend-dist. False on any
  *  doubt (missing meta, hash drift, missing asset file) → caller rebuilds. */
-function tryReuseFrontendDist(): boolean {
-  const meta = readBundleMeta();
+async function tryReuseFrontendDist(): Promise<boolean> {
+  const meta = await readBundleMeta();
   if (!meta) return false;
-  if (meta.inputsHash !== frontendInputsHash()) return false;
-  for (const a of meta.assets) {
-    if (!existsSync(join(FRONTEND_DIST, a))) return false;
-  }
-  const version = applyBundle(meta);
+  if (meta.inputsHash !== (await frontendInputsHash())) return false;
+  if (await firstMissingAsset(FRONTEND_DIST, meta.assets)) return false;
+  const version = await applyBundle(meta);
   console.log(
     `Frontend bundle unchanged, reusing ${FRONTEND_DIST} (v=${version})`,
   );
@@ -901,8 +965,8 @@ function tryReuseFrontendDist(): boolean {
  * missing meta or assets fail boot with a pointer at the fix, since nothing
  * here can rebuild.
  */
-function loadPrebuiltFrontendDist(): void {
-  const meta = readBundleMeta();
+async function loadPrebuiltFrontendDist(): Promise<void> {
+  const meta = await readBundleMeta();
   if (!meta) {
     throw new Error(
       `Prebuilt frontend expected but ${BUNDLE_META} is missing or invalid. ` +
@@ -910,21 +974,25 @@ function loadPrebuiltFrontendDist(): void {
         "reinstall the release, or unset OPENSESSION_PREBUILT_FRONTEND / remove release.json to build from source.",
     );
   }
-  const missing = meta.assets.filter(
-    (a) => !existsSync(join(FRONTEND_DIST, a)),
-  );
+  const missing = (
+    await Promise.all(
+      meta.assets.map(async (a) =>
+        (await pathExists(join(FRONTEND_DIST, a))) ? null : a,
+      ),
+    )
+  ).filter((a): a is string => a !== null);
   if (missing.length) {
     throw new Error(
       `Prebuilt frontend is incomplete: ${missing.length} asset(s) listed in ${BUNDLE_META} are missing ` +
         `(first: ${missing[0]}). Reinstall the release.`,
     );
   }
-  if (meta.inputsHash !== frontendInputsHash()) {
+  if (meta.inputsHash !== (await frontendInputsHash())) {
     console.warn(
       "[frontend] Prebuilt bundle does not match src/frontend on this box (sources edited after the release was built); serving the shipped bundle anyway",
     );
   }
-  const version = applyBundle(meta);
+  const version = await applyBundle(meta);
   console.log(
     `Frontend prebuilt: serving ${FRONTEND_DIST} as shipped (v=${version})`,
   );
@@ -955,27 +1023,25 @@ export const frontend: FrontendBundle | null = IS_DEV ? null : frontendStore();
  * dist, which fails the boot loudly rather than serving an app with no JS.
  * In prebuilt mode it never builds: the shipped dist is served or boot fails.
  */
-export function preloadPreparedFrontend(): void {
+export async function preloadPreparedFrontend(): Promise<void> {
   if (!frontend || frontend.version) return;
-  const meta = readBundleMeta(FRONTEND_DIST);
+  const meta = await readBundleMeta(FRONTEND_DIST);
   if (!meta) throw new Error("prepared frontend metadata is missing");
-  const missing = meta.assets.find(
-    (asset) => !existsSync(join(FRONTEND_DIST, asset)),
-  );
+  const missing = await firstMissingAsset(FRONTEND_DIST, meta.assets);
   if (missing)
     throw new Error(`prepared frontend asset is missing: ${missing}`);
-  applyBundle(meta);
+  await applyBundle(meta);
 }
 
-export function ensureFrontendBuilt(): Promise<void> {
-  if (!frontend) return Promise.resolve();
+export async function ensureFrontendBuilt(): Promise<void> {
+  if (!frontend) return;
   // A coordinated gateway handoff keeps this process and its built frontend
   // store alive while loading the next release. Republish the stable ingress
   // snapshot for that release even though there is nothing left to build.
   if (frontend.version) {
     // Standby gateways reach this point only after their activation fence.
-    publishStableShell(true);
-    return Promise.resolve();
+    await publishStableShell(true);
+    return;
   }
   if (!g.__opensessionFrontendBuild) {
     g.__opensessionFrontendBuild = (async () => {
@@ -987,29 +1053,29 @@ export function ensureFrontendBuilt(): Promise<void> {
         // public URL, default repo, bot logins…) at boot instead of the
         // build machine's, exactly as the on-disk prebuilt path does.
         g.__opensessionFrontendShell = EMBEDDED_FRONTEND.shell;
-        applyBundle(EMBEDDED_FRONTEND.meta);
+        await applyBundle(EMBEDDED_FRONTEND.meta);
         console.log(
           `Frontend served from embedded assets (v=${EMBEDDED_FRONTEND.version}); instance stitched at boot`,
         );
         return;
       }
-      if (tryLoadPromotedFrontend()) return;
+      if (await tryLoadPromotedFrontend()) return;
       // A promotion is tied to one exact backend base. A later full deploy
       // changes that base and reunifies the UI with the backend release.
       g.__opensessionFrontendReleaseRoot = REPO_ROOT;
       // Release tarball: the prebuilt .frontend-dist is on disk.
-      if (isPrebuiltFrontend()) {
-        loadPrebuiltFrontendDist();
+      if (await isPrebuiltFrontend()) {
+        await loadPrebuiltFrontendDist();
         return;
       }
-      if (tryReuseFrontendDist()) return;
+      if (await tryReuseFrontendDist()) return;
       console.log("Building frontend (split + minified)…");
       await buildFrontend();
     })().finally(() => {
       g.__opensessionFrontendBuild = undefined;
     });
   }
-  return g.__opensessionFrontendBuild as Promise<void>;
+  await (g.__opensessionFrontendBuild as Promise<void>);
 }
 
 export const SPA_HEADERS = {
@@ -1162,19 +1228,19 @@ export function scheduleFrontendRebuild(
     return;
   }
   if (!frontend) return;
-  if (isPrebuiltFrontend()) {
-    // A shipped dist has no compiler behind it; say so once and move on.
-    if (!g.__opensessionPrebuiltRebuildNoted) {
-      g.__opensessionPrebuiltRebuildNoted = true;
-      console.log(
-        `[frontend] Rebuild requested (${reason}) but the frontend is prebuilt; ignoring this and later requests`,
-      );
-    }
-    return;
-  }
   if (rebuildTimer) clearTimeout(rebuildTimer);
   rebuildTimer = setTimeout(async () => {
     rebuildTimer = null;
+    if (await isPrebuiltFrontend()) {
+      // A shipped dist has no compiler behind it; say so once and move on.
+      if (!g.__opensessionPrebuiltRebuildNoted) {
+        g.__opensessionPrebuiltRebuildNoted = true;
+        console.log(
+          `[frontend] Rebuild requested (${reason}) but the frontend is prebuilt; ignoring this and later requests`,
+        );
+      }
+      return;
+    }
     if (rebuildInFlight) return scheduleFrontendRebuild(reason, 300); // coalesce
     rebuildInFlight = true;
     const before = frontend.version;
