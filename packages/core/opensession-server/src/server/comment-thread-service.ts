@@ -329,7 +329,8 @@ export async function deleteComment(
     return applyDeleteComment(threads, threadId, commentId, user);
   });
   if (!result.ok) return result;
-  for (const comment of result.removed) removeStagedImages(comment.images);
+  for (const comment of result.removed)
+    await removeStagedImages(comment.images);
   if (result.thread) emit(result.thread);
   else {
     emitDeleted(sessionId, threadId, anchored);

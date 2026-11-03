@@ -458,7 +458,7 @@ registerSessionControl({
         // on a turn that carries the slackReplyTo, and a steered message can't
         // (it folds into a turn that's already running).
         if (opts?.busy !== "queue" && !opts?.slackReplyTo && !hasFiles) {
-          const steerItem = durableQueueItem(id, {
+          const steerItem = await durableQueueItem(id, {
             id: deliveryId,
             content,
             user,
@@ -828,7 +828,7 @@ registerSessionControl({
     const createPstackMode = fork
       ? fork.source.pstackMode === true
       : pstackModeInput === true;
-    const images = parseImageDataUrls(imageUrls);
+    const images = await parseImageDataUrls(imageUrls);
     const parentSession = parentSessionId ? findSession(parentSessionId) : null;
     // Pinned provider account: validated exactly like the web palette
     // (mismatched/unknown/foreign ids drop to the pool). A session created
@@ -1245,7 +1245,7 @@ registerSessionControl({
     const createMentionsNote = sessionMentionsNote(prompt);
     const attachmentSources =
       createPlan.attachments ??
-      prepareCreationAttachmentSources(bksId, rawFiles);
+      (await prepareCreationAttachmentSources(bksId, rawFiles));
     if (!createPlan.attachments && attachmentSources.length)
       createPlan = await patchCreationSetupPlan(bksId, createIdentity, {
         attachments: attachmentSources,

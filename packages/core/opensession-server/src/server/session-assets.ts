@@ -15,15 +15,14 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  renameSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { join, normalize, resolve } from "node:path";
 import { configuredAssetStorage, type ResolvedAssetStorage } from "./config";
 import { stateDir } from "./paths";
@@ -125,24 +124,23 @@ export function resolveAssetPath(
   return { abs, rel };
 }
 
-/** Legacy local-path lookup retained while callers migrate to backend-neutral reads. */
-export function findAssetPath(
-  sessionIds: string[],
-  relPath: string,
-): { abs: string; rel: string; sessionId: string } | null {
-  for (const sessionId of new Set(sessionIds)) {
-    const candidate = resolveAssetPath(sessionId, relPath);
-    if (existsSync(candidate.abs) && statSync(candidate.abs).isFile()) {
-      return { ...candidate, sessionId };
-    }
+/** A regular file's stats, or null when nothing (or a directory) is there. */
+async function fileStat(path: string) {
+  try {
+    const st = await stat(path);
+    return st.isFile() ? st : null;
+  } catch {
+    return null;
   }
-  return null;
 }
 
-function readAssetMetadata(sessionId: string): AssetMetadata {
+async function readAssetMetadata(sessionId: string): Promise<AssetMetadata> {
   try {
     const metadata = JSON.parse(
-      readFileSync(join(assetsDirFor(sessionId), ASSET_METADATA_FILE), "utf8"),
+      await readFile(
+        join(assetsDirFor(sessionId), ASSET_METADATA_FILE),
+        "utf8",
+      ),
     ) as unknown;
     if (!metadata || typeof metadata !== "object" || Array.isArray(metadata))
       throw new Error("metadata is not an object");
@@ -155,16 +153,39 @@ function readAssetMetadata(sessionId: string): AssetMetadata {
   }
 }
 
-function writeAssetMetadata(sessionId: string, metadata: AssetMetadata): void {
+async function writeAssetMetadata(
+  sessionId: string,
+  metadata: AssetMetadata,
+): Promise<void> {
   const path = join(assetsDirFor(sessionId), ASSET_METADATA_FILE);
   if (!Object.keys(metadata).length) {
-    rmSync(path, { force: true });
+    await rm(path, { force: true });
     return;
   }
-  mkdirSync(assetsDirFor(sessionId), { recursive: true });
+  await mkdir(assetsDirFor(sessionId), { recursive: true });
   const tempPath = join(assetsDirFor(sessionId), ASSET_METADATA_TEMP);
-  writeFileSync(tempPath, JSON.stringify(metadata, null, 2));
-  renameSync(tempPath, path);
+  await writeFile(tempPath, JSON.stringify(metadata, null, 2));
+  await rename(tempPath, path);
+}
+
+/** Writers and deleters of one session's local assets run one at a time: each
+ *  reads, edits and rewrites the shared descriptions file through one fixed
+ *  temp name, so interleaved calls would drop an edit or race the rename. */
+const localAssetLocks = new Map<string, Promise<unknown>>();
+
+function withLocalAssetLock<T>(
+  sessionId: string,
+  work: () => Promise<T>,
+): Promise<T> {
+  const previous = localAssetLocks.get(sessionId) ?? Promise.resolve();
+  const next = previous.then(work, work);
+  const settled = next.catch(() => {});
+  localAssetLocks.set(sessionId, settled);
+  void settled.then(() => {
+    if (localAssetLocks.get(sessionId) === settled)
+      localAssetLocks.delete(sessionId);
+  });
+  return next;
 }
 
 class LocalAssetStore implements AssetStore {
@@ -181,34 +202,46 @@ class LocalAssetStore implements AssetStore {
     description?: string,
   ): Promise<SessionAssetFile> {
     const { abs, rel } = resolveAssetPath(sessionId, relPath);
-    const metadata = readAssetMetadata(sessionId);
-    mkdirSync(join(abs, ".."), { recursive: true });
-    writeFileSync(abs, data);
-    if (description !== undefined) {
-      const clean = description.trim().slice(0, 500);
-      if (clean) metadata[rel] = { description: clean };
-      else delete metadata[rel];
-      writeAssetMetadata(sessionId, metadata);
-    }
-    const st = statSync(abs);
-    return {
-      path: rel,
-      size: st.size,
-      mtime: st.mtime.toISOString(),
-      description: metadata[rel]?.description,
-    };
+    return withLocalAssetLock(sessionId, async () => {
+      const metadata = await readAssetMetadata(sessionId);
+      await mkdir(join(abs, ".."), { recursive: true });
+      await writeFile(abs, data);
+      if (description !== undefined) {
+        const clean = description.trim().slice(0, 500);
+        if (clean) metadata[rel] = { description: clean };
+        else delete metadata[rel];
+        await writeAssetMetadata(sessionId, metadata);
+      }
+      const st = await stat(abs);
+      return {
+        path: rel,
+        size: st.size,
+        mtime: st.mtime.toISOString(),
+        description: metadata[rel]?.description,
+      };
+    });
   }
 
   async list(sessionId: string): Promise<SessionAssetFile[]> {
     const dir = assetsDirFor(sessionId);
-    if (!existsSync(dir)) return [];
-    const metadata = readAssetMetadata(sessionId);
+    let top;
+    try {
+      top = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return [];
+    }
+    const metadata = await readAssetMetadata(sessionId);
     const out: SessionAssetFile[] = [];
-    const walk = (d: string, prefix: string, depth: number) => {
+    const walk = async (
+      d: string,
+      prefix: string,
+      depth: number,
+      listed?: typeof top,
+    ): Promise<void> => {
       if (depth > MAX_DEPTH || out.length >= MAX_FILES) return;
       let entries;
       try {
-        entries = readdirSync(d, { withFileTypes: true });
+        entries = listed ?? (await readdir(d, { withFileTypes: true }));
       } catch {
         return;
       }
@@ -221,10 +254,11 @@ class LocalAssetStore implements AssetStore {
         )
           continue;
         const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
-        if (entry.isDirectory()) walk(join(d, entry.name), rel, depth + 1);
+        if (entry.isDirectory())
+          await walk(join(d, entry.name), rel, depth + 1);
         else if (entry.isFile()) {
           try {
-            const st = statSync(join(d, entry.name));
+            const st = await stat(join(d, entry.name));
             out.push({
               path: rel,
               size: st.size,
@@ -235,7 +269,7 @@ class LocalAssetStore implements AssetStore {
         }
       }
     };
-    walk(dir, "", 0);
+    await walk(dir, "", 0, top);
     return out.sort((a, b) => a.path.localeCompare(b.path));
   }
 
@@ -244,15 +278,14 @@ class LocalAssetStore implements AssetStore {
     relPath: string,
   ): Promise<SessionAssetStream | null> {
     const { abs, rel } = resolveAssetPath(sessionId, relPath);
-    if (!existsSync(abs)) return null;
-    const st = statSync(abs);
-    if (!st.isFile()) return null;
+    const st = await fileStat(abs);
+    if (!st) return null;
     return {
       sessionId,
       path: rel,
       size: st.size,
       mtime: st.mtime.toISOString(),
-      description: readAssetMetadata(sessionId)[rel]?.description,
+      description: (await readAssetMetadata(sessionId))[rel]?.description,
       body: Bun.file(abs),
       type: assetMime(rel),
     };
@@ -263,30 +296,35 @@ class LocalAssetStore implements AssetStore {
     relPath: string,
   ): Promise<SessionAssetContent | null> {
     const { abs, rel } = resolveAssetPath(sessionId, relPath);
-    if (!existsSync(abs)) return null;
-    const st = statSync(abs);
-    if (!st.isFile()) return null;
+    const st = await fileStat(abs);
+    if (!st) return null;
     return {
       sessionId,
       path: rel,
       size: st.size,
       mtime: st.mtime.toISOString(),
-      description: readAssetMetadata(sessionId)[rel]?.description,
-      data: readFileSync(abs),
+      description: (await readAssetMetadata(sessionId))[rel]?.description,
+      data: await readFile(abs),
       type: assetMime(rel),
     };
   }
 
   async delete(sessionId: string, relPath: string): Promise<boolean> {
     const { abs, rel } = resolveAssetPath(sessionId, relPath);
-    if (!existsSync(abs)) return false;
-    rmSync(abs, { recursive: true, force: true });
-    const metadata = readAssetMetadata(sessionId);
-    for (const path of Object.keys(metadata)) {
-      if (path === rel || path.startsWith(`${rel}/`)) delete metadata[path];
-    }
-    writeAssetMetadata(sessionId, metadata);
-    return true;
+    return withLocalAssetLock(sessionId, async () => {
+      try {
+        await stat(abs);
+      } catch {
+        return false;
+      }
+      await rm(abs, { recursive: true, force: true });
+      const metadata = await readAssetMetadata(sessionId);
+      for (const path of Object.keys(metadata)) {
+        if (path === rel || path.startsWith(`${rel}/`)) delete metadata[path];
+      }
+      await writeAssetMetadata(sessionId, metadata);
+      return true;
+    });
   }
 }
 

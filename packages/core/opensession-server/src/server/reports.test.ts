@@ -103,7 +103,7 @@ describe("listReportsForSession", () => {
   });
 
   test("publishing updates the session and group projections", async () => {
-    const report = publishReport({
+    const report = await publishReport({
       automationId,
       automationName: "Published",
       sessionId: "bks-published",
@@ -126,9 +126,9 @@ describe("listReportsForSession", () => {
 });
 
 describe("report assets", () => {
-  test("publishes nested assets beside the report", () => {
+  test("publishes nested assets beside the report", async () => {
     const data = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
-    const report = publishReport({
+    const report = await publishReport({
       automationId,
       automationName: "Test",
       title: "Asset report",
@@ -136,7 +136,7 @@ describe("report assets", () => {
       assets: [{ path: "evidence/frame.jpg", data }],
     });
 
-    const asset = readReportAsset(
+    const asset = await readReportAsset(
       automationId,
       report.id,
       "evidence/frame.jpg",
@@ -146,10 +146,10 @@ describe("report assets", () => {
 
     unlinkSync(join(REPORTS_ROOT, automationId, `${report.id}.json`));
     expect(
-      readReportAsset(automationId, report.id, "evidence/frame.jpg"),
+      await readReportAsset(automationId, report.id, "evidence/frame.jpg"),
     ).toBeNull();
 
-    publishReport({
+    await publishReport({
       automationId,
       automationName: "Test",
       title: "Next report",
@@ -160,7 +160,7 @@ describe("report assets", () => {
     ).toBe(false);
   });
 
-  test("rejects asset traversal and duplicate paths", () => {
+  test("rejects asset traversal and duplicate paths", async () => {
     const input = {
       automationId,
       automationName: "Test",
@@ -168,13 +168,13 @@ describe("report assets", () => {
       html: "<p>unsafe</p>",
     };
 
-    expect(() =>
+    await expect(
       publishReport({
         ...input,
         assets: [{ path: "../secret", data: Buffer.from("no") }],
       }),
-    ).toThrow("asset path must be relative");
-    expect(() =>
+    ).rejects.toThrow("asset path must be relative");
+    await expect(
       publishReport({
         ...input,
         assets: [
@@ -182,13 +182,13 @@ describe("report assets", () => {
           { path: "same.jpg", data: Buffer.from("two") },
         ],
       }),
-    ).toThrow("Duplicate report asset");
+    ).rejects.toThrow("Duplicate report asset");
   });
 });
 
 describe("report signals", () => {
-  test("persists urgency, confidence, and bounded structured highlights", () => {
-    const report = publishReport({
+  test("persists urgency, confidence, and bounded structured highlights", async () => {
+    const report = await publishReport({
       automationId,
       automationName: "Test",
       title: "Signal report",
@@ -215,20 +215,22 @@ describe("report signals", () => {
       confidence: "medium",
       sourceRefs: ["slack://C123456/1"],
     });
-    expect(listReports(automationId)[0]?.highlights).toEqual(report.highlights);
+    expect((await listReports(automationId))[0]?.highlights).toEqual(
+      report.highlights,
+    );
   });
 
-  test("rejects invalid and oversized signal metadata", () => {
+  test("rejects invalid and oversized signal metadata", async () => {
     const base = {
       automationId,
       automationName: "Test",
       title: "Invalid signal report",
       html: "<p>signal</p>",
     };
-    expect(() => publishReport({ ...base, urgency: "soon" as any })).toThrow(
-      "Invalid report urgency",
-    );
-    expect(() =>
+    await expect(
+      publishReport({ ...base, urgency: "soon" as any }),
+    ).rejects.toThrow("Invalid report urgency");
+    await expect(
       publishReport({
         ...base,
         highlights: Array.from({ length: 21 }, () => ({
@@ -238,13 +240,13 @@ describe("report signals", () => {
           confidence: "low" as const,
         })),
       }),
-    ).toThrow("Too many report highlights");
+    ).rejects.toThrow("Too many report highlights");
   });
 });
 
 describe("report tasks", () => {
-  test("persists the work a report proposes, separately from its findings", () => {
-    const report = publishReport({
+  test("persists the work a report proposes, separately from its findings", async () => {
+    const report = await publishReport({
       automationId,
       automationName: "Test",
       title: "21 native parity gaps",
@@ -270,20 +272,22 @@ describe("report tasks", () => {
       { title: "Decode reply_suggestions", prompt: "Add the case." },
       { title: "Show the mentions badge", prompt: "Read /api/mentions." },
     ]);
-    expect(getReport(automationId, report.id)?.tasks).toEqual(report.tasks);
+    expect((await getReport(automationId, report.id))?.tasks).toEqual(
+      report.tasks,
+    );
   });
 
-  test("rejects a task that could not be handed to a session on its own", () => {
+  test("rejects a task that could not be handed to a session on its own", async () => {
     const base = {
       automationId,
       automationName: "Test",
       title: "Invalid task report",
       html: "<p>tasks</p>",
     };
-    expect(() =>
+    await expect(
       publishReport({ ...base, tasks: [{ title: "No prompt", prompt: "  " }] }),
-    ).toThrow("Report task 1 needs a title and a prompt");
-    expect(() =>
+    ).rejects.toThrow("Report task 1 needs a title and a prompt");
+    await expect(
       publishReport({
         ...base,
         tasks: Array.from({ length: MAX_REPORT_TASKS + 1 }, () => ({
@@ -291,15 +295,15 @@ describe("report tasks", () => {
           prompt: "Do it.",
         })),
       }),
-    ).toThrow("Too many report tasks");
+    ).rejects.toThrow("Too many report tasks");
     // Truncating would hand an agent an instruction that stops mid-sentence.
-    expect(() =>
+    await expect(
       publishReport({
         ...base,
         tasks: [
           { title: "Long", prompt: "x".repeat(MAX_REPORT_TASK_PROMPT + 1) },
         ],
       }),
-    ).toThrow("prompt is too long");
+    ).rejects.toThrow("prompt is too long");
   });
 });
