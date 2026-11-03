@@ -11,17 +11,16 @@
 
 import { createHash } from "crypto";
 import {
-  existsSync,
-  linkSync,
-  mkdirSync,
-  readFileSync,
-  realpathSync,
-  renameSync,
-  statSync,
-  unlinkSync,
-  writeFileSync,
-} from "fs";
-import { mkdir, readFile, stat, writeFile } from "fs/promises";
+  access,
+  link,
+  mkdir,
+  readFile,
+  realpath,
+  rename,
+  stat,
+  unlink,
+  writeFile,
+} from "fs/promises";
 import { MAX_PROMPT_IMAGES } from "@tellahq/opensession-protocol/session";
 import {
   INLINE_IMAGE_EXTENSIONS,
@@ -69,7 +68,9 @@ export function asDataUrlList(urls?: unknown): string[] | undefined {
  * the same staged file. A ref that no longer resolves drops out of the list;
  * callers that must not silently lose an attachment compare the counts.
  */
-export function parseImageDataUrls(urls?: unknown): ImageInput[] | undefined {
+export async function parseImageDataUrls(
+  urls?: unknown,
+): Promise<ImageInput[] | undefined> {
   if (!Array.isArray(urls)) return undefined;
   const out: ImageInput[] = [];
   for (const u of urls) {
@@ -79,7 +80,7 @@ export function parseImageDataUrls(urls?: unknown): ImageInput[] | undefined {
       out.push({ mediaType: m[1], data: m[2] });
       continue;
     }
-    const staged = readStagedImage(u);
+    const staged = await readStagedImage(u);
     if (staged) out.push(staged);
   }
   return out.length ? out : undefined;
@@ -99,9 +100,9 @@ export function countImageRefs(urls?: unknown): number {
 /** Resolve a `/media?path=` image ref to the file it names. Returns undefined
  *  for anything that isn't an existing image of a supported type inside the
  *  uploads dir, so a stale or forged ref never reaches a run. */
-export function stagedImageRef(
+export async function stagedImageRef(
   url: string,
-): { path: string; mediaType: string; size: number } | undefined {
+): Promise<{ path: string; mediaType: string; size: number } | undefined> {
   if (!url.startsWith("/media?")) return undefined;
   let path: string | null = null;
   try {
@@ -109,7 +110,7 @@ export function stagedImageRef(
   } catch {
     return undefined;
   }
-  if (!path || !isWithinUploads(path)) return undefined;
+  if (!path || !(await isWithinUploads(path))) return undefined;
   const dot = path.lastIndexOf(".");
   const mediaType =
     dot > 0
@@ -117,7 +118,7 @@ export function stagedImageRef(
       : undefined;
   if (!mediaType) return undefined;
   try {
-    const { size } = statSync(path);
+    const { size } = await stat(path);
     if (!size || size > MAX_UPLOAD_BYTES) return undefined;
     return { path, mediaType, size };
   } catch {
@@ -126,13 +127,13 @@ export function stagedImageRef(
 }
 
 /** Read a staged image ref back into vision-channel bytes. */
-function readStagedImage(url: string): ImageInput | undefined {
-  const ref = stagedImageRef(url);
+async function readStagedImage(url: string): Promise<ImageInput | undefined> {
+  const ref = await stagedImageRef(url);
   if (!ref) return undefined;
   try {
     return {
       mediaType: ref.mediaType,
-      data: readFileSync(ref.path).toString("base64"),
+      data: (await readFile(ref.path)).toString("base64"),
     };
   } catch {
     return undefined;
@@ -199,11 +200,11 @@ export function parseFileUploads(raw?: unknown): ParsedUpload[] | undefined {
 /** Persist inline composer images for a non-agent surface such as team notes.
  * Returns media-route URLs so the owning JSON stays small and the same images
  * remain readable after a server restart. */
-export function stageInlineImages(
+export async function stageInlineImages(
   sessionId: string,
   urls?: unknown,
   subdir = "images",
-): string[] {
+): Promise<string[]> {
   if (urls === undefined) return [];
   if (!Array.isArray(urls))
     throw new InvalidUploadError("images must be an array");
@@ -218,11 +219,7 @@ export function stageInlineImages(
       // The web composer stages an image at attach time and sends the ref. It
       // already lives under the uploads dir and /media already serves it, so a
       // note keeps the ref instead of rewriting the same bytes to a second file.
-      if (url.startsWith("/media?")) {
-        if (!stagedImageRef(url))
-          throw new InvalidUploadError("unsupported image type");
-        return { url };
-      }
+      if (url.startsWith("/media?")) return { url };
       const match = url.match(/^data:([^;]+);base64,(.+)$/s);
       const extension = match && INLINE_IMAGE_EXTENSIONS[match[1]];
       if (!match || !extension)
@@ -231,11 +228,18 @@ export function stageInlineImages(
     },
   );
   if (!images.length) return [];
+  const refSizes = new Map<string, number>();
+  for (const image of images) {
+    if (!("url" in image)) continue;
+    const ref = await stagedImageRef(image.url);
+    if (!ref) throw new InvalidUploadError("unsupported image type");
+    refSizes.set(image.url, ref.size);
+  }
   let totalBytes = 0;
   for (const image of images) {
     totalBytes +=
       "url" in image
-        ? (stagedImageRef(image.url)?.size ?? 0)
+        ? (refSizes.get(image.url) ?? 0)
         : Buffer.byteLength(image.data, "base64");
     if (totalBytes > MAX_UPLOAD_BYTES)
       throw new InvalidUploadError(
@@ -243,7 +247,7 @@ export function stageInlineImages(
       );
   }
   const dir = `${UPLOADS_DIR}/${sanitizeFilename(subdir)}/${sanitizeFilename(sessionId)}`;
-  mkdirSync(dir, { recursive: true });
+  await mkdir(dir, { recursive: true });
   const staged: string[] = [];
   try {
     for (const [index, image] of images.entries()) {
@@ -255,36 +259,38 @@ export function stageInlineImages(
       }
       const data = Buffer.from(image.data, "base64");
       if (!data.length) throw new InvalidUploadError("empty image");
-      const path = uniqueUploadPath(
+      const path = await uniqueUploadPath(
         dir,
         `${Date.now()}-${index + 1}${image.extension}`,
       );
-      writeFileSync(path, data);
+      await writeFile(path, data);
       staged.push(`/media?path=${encodeURIComponent(path)}`);
     }
     return staged;
   } catch (error) {
-    removeStagedImages(staged);
+    await removeStagedImages(staged);
     throw error;
   }
 }
 
 /** Remove media files previously returned by stageInlineImages. */
-export function removeStagedImages(urls?: string[]): void {
+export async function removeStagedImages(urls?: string[]): Promise<void> {
   for (const url of urls || []) {
     try {
       const path = new URL(url, "http://local").searchParams.get("path");
-      if (path && isWithinUploads(path)) unlinkSync(path);
+      if (path && (await isWithinUploads(path))) await unlink(path);
     } catch {}
   }
 }
 
 /** Resolve `p` and confirm it lives inside UPLOADS_DIR — guards against a
  *  client-supplied {name,path} ref pointing the agent at an arbitrary file. */
-export function isWithinUploads(p: string): boolean {
+export async function isWithinUploads(p: string): Promise<boolean> {
   try {
-    const real = realpathSync(p);
-    const base = realpathSync(UPLOADS_DIR);
+    const [real, base] = await Promise.all([
+      realpath(p),
+      realpath(UPLOADS_DIR),
+    ]);
     return real === base || real.startsWith(base + "/");
   } catch {
     return false;
@@ -292,14 +298,14 @@ export function isWithinUploads(p: string): boolean {
 }
 
 /** Pick a collision-free absolute path under `dir` for the sanitized `wanted`. */
-function uniqueUploadPath(
+async function uniqueUploadPath(
   dir: string,
   wanted: string,
   used?: Set<string>,
-): string {
+): Promise<string> {
   let fname = wanted;
   let i = 1;
-  while (used?.has(fname) || existsSync(`${dir}/${fname}`)) {
+  while (used?.has(fname) || (await pathExists(`${dir}/${fname}`))) {
     const dot = wanted.lastIndexOf(".");
     fname =
       dot > 0
@@ -309,6 +315,13 @@ function uniqueUploadPath(
   }
   used?.add(fname);
   return `${dir}/${fname}`;
+}
+
+function pathExists(path: string): Promise<boolean> {
+  return access(path).then(
+    () => true,
+    () => false,
+  );
 }
 
 /**
@@ -334,7 +347,7 @@ export async function stageHttpUpload(
   // create claims the name and writes it in one step.
   const used = new Set<string>();
   for (;;) {
-    const p = uniqueUploadPath(STAGED_UPLOADS_DIR, wanted, used);
+    const p = await uniqueUploadPath(STAGED_UPLOADS_DIR, wanted, used);
     try {
       await writeFile(p, buf, { flag: "wx" });
       return { name: name || wanted, path: p };
@@ -355,22 +368,22 @@ function uploadDigest(bytes: Buffer): string {
  * inode, so device, inode, size and mtime pin the exact bytes without reading
  * them. Same `sha256:` shape as a content digest, which the kernel requires.
  */
-function identityDigest(path: string): string {
-  const s = statSync(path);
+async function identityDigest(path: string): Promise<string> {
+  const s = await stat(path);
   return `sha256:${createHash("sha256")
     .update(`file\0${s.dev}\0${s.ino}\0${s.size}\0${s.mtimeMs}`)
     .digest("hex")}`;
 }
 
-function sourceRefForPath(path: string): string {
-  if (!isWithinUploads(path))
+async function sourceRefForPath(path: string): Promise<string> {
+  if (!(await isWithinUploads(path)))
     throw new Error("Attachment source is outside uploads");
-  const base = realpathSync(UPLOADS_DIR);
-  const real = realpathSync(path);
+  const base = await realpath(UPLOADS_DIR);
+  const real = await realpath(path);
   return `uploads:${encodeURIComponent(real.slice(base.length + 1))}`;
 }
 
-function pathForSourceRef(sourceRef: string): string {
+async function pathForSourceRef(sourceRef: string): Promise<string> {
   if (!sourceRef.startsWith("uploads:"))
     throw new Error("Unsupported creation attachment source");
   const relative = decodeURIComponent(sourceRef.slice("uploads:".length));
@@ -381,7 +394,7 @@ function pathForSourceRef(sourceRef: string): string {
   )
     throw new Error("Invalid creation attachment source");
   const path = `${UPLOADS_DIR}/${relative}`;
-  if (!isWithinUploads(path))
+  if (!(await isWithinUploads(path)))
     throw new Error("Attachment source crossed uploads");
   return path;
 }
@@ -397,10 +410,10 @@ export function creationAttachmentPath(
 }
 
 /** Durably spool inline bodies and reduce all create inputs to bounded source refs. */
-export function prepareCreationAttachmentSources(
+export async function prepareCreationAttachmentSources(
   sessionId: string,
   raw?: unknown,
-): CreationAttachmentSource[] {
+): Promise<CreationAttachmentSource[]> {
   if (raw === undefined) return [];
   if (!Array.isArray(raw)) throw new Error("files must be an array");
   const uploads = parseFileUploads(raw) ?? [];
@@ -410,35 +423,42 @@ export function prepareCreationAttachmentSources(
     throw new Error(
       `too many creation attachments (max ${MAX_CREATION_ATTACHMENTS})`,
     );
-  mkdirSync(STAGED_UPLOADS_DIR, { recursive: true });
+  await mkdir(STAGED_UPLOADS_DIR, { recursive: true });
   let totalBytes = 0;
-  return uploads.map((upload, index) => {
+  const sources: CreationAttachmentSource[] = [];
+  for (const [index, upload] of uploads.entries()) {
     let bytes: Buffer;
     let sourcePath: string;
     if (upload.kind === "staged") {
-      if (!isWithinUploads(upload.path) || !existsSync(upload.path))
+      const size = (await isWithinUploads(upload.path))
+        ? await stat(upload.path).then(
+            (st) => st.size,
+            () => null,
+          )
+        : null;
+      if (size === null)
         throw new Error(
           `Creation attachment source is unavailable: ${upload.name}`,
         );
-      const size = statSync(upload.path).size;
       if (size > MAX_UPLOAD_BYTES) {
         // Too large to read here: fence it by identity and hard-link it.
         if (size > MAX_FILE_UPLOAD_BYTES)
           throw new Error(
             `Creation attachment has invalid size: ${upload.name}`,
           );
-        const digest = identityDigest(upload.path);
-        return {
+        const digest = await identityDigest(upload.path);
+        sources.push({
           attachmentId: createHash("sha256")
             .update(`${sessionId}\0${index}\0${upload.name}\0${digest}`)
             .digest("hex")
             .slice(0, 32),
           name: upload.name || "file",
-          sourceRef: sourceRefForPath(upload.path),
+          sourceRef: await sourceRefForPath(upload.path),
           digest,
-        };
+        });
+        continue;
       }
-      bytes = readFileSync(upload.path);
+      bytes = await readFile(upload.path);
       sourcePath = upload.path;
     } else {
       bytes = Buffer.from(upload.data, "base64");
@@ -458,54 +478,61 @@ export function prepareCreationAttachmentSources(
       .slice(0, 32);
     if (!sourcePath) {
       sourcePath = `${STAGED_UPLOADS_DIR}/creation-${attachmentId}`;
-      if (existsSync(sourcePath)) {
-        if (uploadDigest(readFileSync(sourcePath)) !== digest)
+      const existing = await readFile(sourcePath).catch((error) => {
+        if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return null;
+        throw error;
+      });
+      if (existing) {
+        if (uploadDigest(existing) !== digest)
           throw new Error(`Creation attachment source ${attachmentId} changed`);
       } else {
-        writeFileSync(sourcePath, bytes, { mode: 0o600 });
+        await writeFile(sourcePath, bytes, { mode: 0o600 });
       }
     }
-    return {
+    sources.push({
       attachmentId,
       name: upload.name || "file",
-      sourceRef: sourceRefForPath(sourcePath),
+      sourceRef: await sourceRefForPath(sourcePath),
       digest,
-    };
-  });
+    });
+  }
+  return sources;
 }
 
 /** Copy or adopt one exact actor-owned destination after validating its source. */
-export function stageCreationAttachment(
+export async function stageCreationAttachment(
   sessionId: string,
   source: CreationAttachmentSource,
-): { name: string; path: string } {
+): Promise<{ name: string; path: string }> {
   const path = creationAttachmentPath(
     sessionId,
     source.attachmentId,
     source.name,
   );
-  mkdirSync(path.slice(0, path.lastIndexOf("/")), { recursive: true });
-  const large = existsSync(path)
-    ? statSync(path).size > MAX_UPLOAD_BYTES
-    : (() => {
-        try {
-          return (
-            statSync(pathForSourceRef(source.sourceRef)).size > MAX_UPLOAD_BYTES
+  await mkdir(path.slice(0, path.lastIndexOf("/")), { recursive: true });
+  const destinationSize = await stat(path).then(
+    (st) => st.size,
+    () => null,
+  );
+  const large =
+    destinationSize !== null
+      ? destinationSize > MAX_UPLOAD_BYTES
+      : await pathForSourceRef(source.sourceRef)
+          .then((sourcePath) => stat(sourcePath))
+          .then(
+            (st) => st.size > MAX_UPLOAD_BYTES,
+            () => false,
           );
-        } catch {
-          return false;
-        }
-      })();
   if (large) return stageLargeCreationAttachment(path, source);
-  if (existsSync(path)) {
-    if (uploadDigest(readFileSync(path)) !== source.digest)
+  if (destinationSize !== null) {
+    if (uploadDigest(await readFile(path)) !== source.digest)
       throw new Error(
         `Creation attachment ${source.attachmentId} destination changed`,
       );
     return { name: source.name, path };
   }
-  const sourcePath = pathForSourceRef(source.sourceRef);
-  const bytes = readFileSync(sourcePath);
+  const sourcePath = await pathForSourceRef(source.sourceRef);
+  const bytes = await readFile(sourcePath);
   if (!bytes.length || bytes.length > MAX_UPLOAD_BYTES)
     throw new Error(
       `Creation attachment ${source.attachmentId} has invalid size`,
@@ -516,40 +543,38 @@ export function stageCreationAttachment(
     );
   const temp = `${path}.tmp-${process.pid}-${crypto.randomUUID()}`;
   try {
-    writeFileSync(temp, bytes, { mode: 0o600 });
-    renameSync(temp, path);
+    await writeFile(temp, bytes, { mode: 0o600 });
+    await rename(temp, path);
   } finally {
-    try {
-      unlinkSync(temp);
-    } catch {}
+    await unlink(temp).catch(() => {});
   }
   return { name: source.name, path };
 }
 
 /** A file past MAX_UPLOAD_BYTES is hard-linked, never read or copied: a
  *  multi-gigabyte video would otherwise be buffered whole. */
-function stageLargeCreationAttachment(
+async function stageLargeCreationAttachment(
   path: string,
   source: CreationAttachmentSource,
-): { name: string; path: string } {
-  if (existsSync(path)) {
-    if (identityDigest(path) !== source.digest)
+): Promise<{ name: string; path: string }> {
+  if (await pathExists(path)) {
+    if ((await identityDigest(path)) !== source.digest)
       throw new Error(
         `Creation attachment ${source.attachmentId} destination changed`,
       );
     return { name: source.name, path };
   }
-  const sourcePath = pathForSourceRef(source.sourceRef);
-  if (statSync(sourcePath).size > MAX_FILE_UPLOAD_BYTES)
+  const sourcePath = await pathForSourceRef(source.sourceRef);
+  if ((await stat(sourcePath)).size > MAX_FILE_UPLOAD_BYTES)
     throw new Error(
       `Creation attachment ${source.attachmentId} has invalid size`,
     );
-  if (identityDigest(sourcePath) !== source.digest)
+  if ((await identityDigest(sourcePath)) !== source.digest)
     throw new Error(
       `Creation attachment ${source.attachmentId} digest changed`,
     );
   try {
-    linkSync(sourcePath, path);
+    await link(sourcePath, path);
   } catch (error) {
     if ((error as NodeJS.ErrnoException)?.code !== "EEXIST") throw error;
   }
@@ -562,17 +587,17 @@ function stageLargeCreationAttachment(
  * cap) and passed through; inline base64 is written to a per-session dir (outside
  * any repo, so it never pollutes git). Collisions de-duped, oversized skipped.
  */
-function stageUploads(
+async function stageUploads(
   sessionId: string,
   uploads: ParsedUpload[],
-): { name: string; path: string }[] {
+): Promise<{ name: string; path: string }[]> {
   const dir = `${UPLOADS_DIR}/${sessionId}`;
-  mkdirSync(dir, { recursive: true });
+  await mkdir(dir, { recursive: true });
   const staged: { name: string; path: string }[] = [];
   const used = new Set<string>();
   for (const up of uploads) {
     if (up.kind === "staged") {
-      if (!isWithinUploads(up.path) || !existsSync(up.path)) {
+      if (!(await isWithinUploads(up.path))) {
         console.warn(
           `[uploads] Dropping staged ref outside uploads dir: ${up.path}`,
         );
@@ -580,7 +605,7 @@ function stageUploads(
       }
       let sz = 0;
       try {
-        sz = statSync(up.path).size;
+        sz = (await stat(up.path)).size;
       } catch {
         continue;
       }
@@ -602,8 +627,8 @@ function stageUploads(
       continue;
     }
     const wanted = sanitizeFilename(up.name);
-    const p = uniqueUploadPath(dir, wanted, used);
-    writeFileSync(p, buf);
+    const p = await uniqueUploadPath(dir, wanted, used);
+    await writeFile(p, buf);
     staged.push({ name: up.name || wanted, path: p });
   }
   return staged;
@@ -669,10 +694,10 @@ export async function readPromptFiles(
 }
 
 /** Parse + stage composer file attachments in one step; returns the prompt note-augmenter. */
-export function stageFileAttachments(
+export async function stageFileAttachments(
   sessionId: string,
   raw?: unknown,
-): { name: string; path: string }[] {
+): Promise<{ name: string; path: string }[]> {
   const uploads = parseFileUploads(raw);
   if (!uploads) return [];
   return stageUploads(sessionId, uploads);

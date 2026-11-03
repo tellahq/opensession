@@ -388,15 +388,18 @@ async function collectSlack(
   };
 }
 
-function collectReports(
+async function collectReports(
   input: ReportHistoryAutomationInput,
   automationId: string,
-): CollectedInput {
+): Promise<CollectedInput> {
   const sourceId =
     input.source.automationId === "self"
       ? automationId
       : input.source.automationId;
-  const reports = listReports(sourceId).slice(0, input.source.limit || 3);
+  const reports = (await listReports(sourceId)).slice(
+    0,
+    input.source.limit || 3,
+  );
   const records = reports.map((report) =>
     JSON.stringify({
       id: report.id,
@@ -514,7 +517,7 @@ export async function prepareAutomationInputs(
             opts.startedAt,
             deps,
           )
-        : collectReports(input, opts.automationId);
+        : await collectReports(input, opts.automationId);
       const reduced = await reduceInput(input, collected, deps);
       sections.push(
         "",

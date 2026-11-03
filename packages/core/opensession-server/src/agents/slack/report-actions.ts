@@ -51,7 +51,7 @@ export async function handleReportFixAction(
     ids = {};
   }
   if (!ids.automationId || !ids.reportId) return;
-  const report = getReport(ids.automationId, ids.reportId);
+  const report = await getReport(ids.automationId, ids.reportId);
   if (!report?.tasks?.length) {
     await updateSlackBlocks(
       channel,
