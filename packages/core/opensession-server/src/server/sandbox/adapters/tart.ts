@@ -347,7 +347,7 @@ export async function tartHostForVm(
   vmName: string,
   settings: TartSettings = tartSettings(),
 ): Promise<TartHost> {
-  const state = readRemoteState("tart", vmName);
+  const state = await readRemoteState("tart", vmName);
   const recorded = state?.host || vmHosts.get(vmName);
   const hosts = await onlineTartHosts(settings);
   if (recorded) {
@@ -368,7 +368,7 @@ export async function tartHostForVm(
     if ((await vmState(host, vmName)) !== "gone") {
       vmHosts.set(vmName, host.runnerId);
       if (state && !state.host)
-        writeRemoteState({ ...state, host: host.runnerId });
+        await writeRemoteState({ ...state, host: host.runnerId });
       return host;
     }
   }
@@ -1132,7 +1132,7 @@ export class TartProvider implements SandboxProvider {
         "Mac VM sandboxes do not enforce an outbound network policy; automations stay on Daytona",
       );
     const settings = tartSettings();
-    const prevState = findRemoteStateBySession(this.id, spec.sessionId);
+    const prevState = await findRemoteStateBySession(this.id, spec.sessionId);
     const trust = resolveTrustPolicy(spec, prevState);
     const repo = getRepo(spec.repo || prevState?.repoId);
     const branch = spec.branch || prevState?.branch || repo.defaultBranch;
@@ -1140,7 +1140,7 @@ export class TartProvider implements SandboxProvider {
     const { sandboxEnvironmentSettings } = await import("../environments");
     const machine = machineFor(
       settings,
-      sandboxEnvironmentSettings(repo.id, "tart"),
+      await sandboxEnvironmentSettings(repo.id, "tart"),
     );
 
     // The VM's Mac: the one that holds the session's VM, a prewarm's, or
@@ -1168,7 +1168,7 @@ export class TartProvider implements SandboxProvider {
     }
     let bootMode: "fresh" | "snapshot-restore" = "fresh";
     if (!vmName || !host) {
-      const template = readRemoteRepoTemplate("tart", repo.id);
+      const template = await readRemoteRepoTemplate("tart", repo.id);
       const placed = await pickTartHost(settings, {
         preferVm: template?.artifactId,
         sessionId: spec.sessionId,
@@ -1212,7 +1212,7 @@ export class TartProvider implements SandboxProvider {
       lastActivityAt: new Date().toISOString(),
       ...trust,
     };
-    writeRemoteState(state);
+    await writeRemoteState(state);
     const driver = tartDriver(host, vmName, {
       machine,
       sessionId: spec.sessionId,
@@ -1251,7 +1251,10 @@ export class TartProvider implements SandboxProvider {
       });
       mark("resume hook ran");
     }
-    writeRemoteState({ ...state, lastActivityAt: new Date().toISOString() });
+    await writeRemoteState({
+      ...state,
+      lastActivityAt: new Date().toISOString(),
+    });
     return Object.assign(
       this.makeHandle(
         host,
@@ -1295,7 +1298,7 @@ export class TartProvider implements SandboxProvider {
   }
 
   private async handleFor(sandboxId: string): Promise<Sandbox | null> {
-    const state = readRemoteState(this.id, sandboxId);
+    const state = await readRemoteState(this.id, sandboxId);
     if (!state) return null;
     const settings = tartSettings();
     const host = await locateVm(sandboxId, settings);
@@ -1304,7 +1307,7 @@ export class TartProvider implements SandboxProvider {
     const machine = machineFor(
       settings,
       state.repoId
-        ? sandboxEnvironmentSettings(state.repoId, "tart")
+        ? await sandboxEnvironmentSettings(state.repoId, "tart")
         : undefined,
     );
     return this.makeHandle(host, sandboxId, state, machine);
@@ -1349,12 +1352,12 @@ export class TartProvider implements SandboxProvider {
 
   async pause(sandboxId: string): Promise<void> {
     const host = await tartHostForVm(sandboxId);
-    const state = readRemoteState(this.id, sandboxId);
+    const state = await readRemoteState(this.id, sandboxId);
     await stopVm(host, sandboxId, { sessionId: state?.sessionId });
   }
 
   async resume(sandboxId: string): Promise<Sandbox | null> {
-    const state = readRemoteState(this.id, sandboxId);
+    const state = await readRemoteState(this.id, sandboxId);
     if (!state) return null;
     const settings = tartSettings();
     const host = await locateVm(sandboxId, settings);
@@ -1364,7 +1367,7 @@ export class TartProvider implements SandboxProvider {
     const machine = machineFor(
       settings,
       state.repoId
-        ? sandboxEnvironmentSettings(state.repoId, "tart")
+        ? await sandboxEnvironmentSettings(state.repoId, "tart")
         : undefined,
     );
     const driver = tartDriver(host, sandboxId, {
@@ -1382,19 +1385,19 @@ export class TartProvider implements SandboxProvider {
     sandboxId: string,
     options: { strict?: boolean } = {},
   ): Promise<void> {
-    const state = readRemoteState(this.id, sandboxId);
+    const state = await readRemoteState(this.id, sandboxId);
     try {
       const host = await tartHostForVm(sandboxId);
       await deleteVm(host, sandboxId, { sessionId: state?.sessionId });
       if (options.strict && (await vmState(host, sandboxId)) !== "gone")
         throw new Error(`Mac VM ${sandboxId} still exists after deletion`);
       vmHosts.delete(sandboxId);
-      removeRemoteState(this.id, sandboxId);
+      await removeRemoteState(this.id, sandboxId);
     } catch (error) {
       if (options.strict) throw error;
       console.warn(`[sandbox:tart] destroy(${sandboxId}):`, error);
       vmHosts.delete(sandboxId);
-      removeRemoteState(this.id, sandboxId);
+      await removeRemoteState(this.id, sandboxId);
     }
   }
 }
@@ -1437,7 +1440,7 @@ export function parseTartVncUrl(
 }
 
 async function runningVm(sandboxId: string) {
-  const state = readRemoteState("tart", sandboxId);
+  const state = await readRemoteState("tart", sandboxId);
   if (!state) throw new Error(`Unknown Mac VM ${sandboxId}`);
   const host = await tartHostForVm(sandboxId);
   if ((await vmState(host, sandboxId)) !== "running")
@@ -1461,7 +1464,7 @@ export async function tartTerminalTarget(sandboxId: string): Promise<{
   sessionId: string;
   vm: RunnerVmTerminal;
 }> {
-  const state = readRemoteState("tart", sandboxId);
+  const state = await readRemoteState("tart", sandboxId);
   if (!state) throw new Error(`Unknown Mac VM ${sandboxId}`);
   const host = await tartHostForVm(sandboxId);
   if ((await vmState(host, sandboxId)) !== "running") {
@@ -1481,7 +1484,7 @@ export async function sweepIdleTartVms(now = Date.now()): Promise<string[]> {
   if (!settings.hosts.length) return [];
   const idleMs =
     (sandboxConfig().idleStopMinutes || DEFAULT_IDLE_STOP_MINUTES) * 60_000;
-  const stale = listRemoteStates("tart").filter(
+  const stale = (await listRemoteStates("tart")).filter(
     (state) =>
       now - Date.parse(state.lastActivityAt || state.createdAt) > idleMs,
   );
@@ -1543,8 +1546,11 @@ export function startTartIdleSweep(): void {
 
 // ── Project templates + prewarm ──────────────────────────────────────────────
 
-function templateVmName(repoId: string): string {
-  return tartTemplateVmName(repoId, remoteRepoTemplateName("tart", repoId));
+async function templateVmName(repoId: string): Promise<string> {
+  return tartTemplateVmName(
+    repoId,
+    await remoteRepoTemplateName("tart", repoId),
+  );
 }
 
 /** A template may have been sealed on more than one Mac over time; delete
@@ -1581,7 +1587,7 @@ export const tartPrewarmAdapter: PrewarmAdapter = {
     if (!repoId)
       throw new Error(`invalid tart prewarm key: ${key || "(missing)"}`);
     const settings = tartSettings();
-    const template = readRemoteRepoTemplate("tart", repoId);
+    const template = await readRemoteRepoTemplate("tart", repoId);
     const placed = await pickTartHost(settings, {
       preferVm: template?.artifactId,
     });
@@ -1617,14 +1623,14 @@ export const tartPrewarmAdapter: PrewarmAdapter = {
     });
     await driver.ensureStarted();
     await sealRemoteRepoTemplate(driver, "tart", repo);
-    const name = templateVmName(repo.id);
+    const name = await templateVmName(repo.id);
     await stopVm(host, sandboxId);
     const exists = (await listVms(host)).some(
       (vm) => vm.source !== "oci" && vm.name === name,
     );
     if (exists && options?.replace) await deleteVm(host, name);
     if (!exists || options?.replace) await cloneVm(host, sandboxId, name);
-    writeRemoteRepoTemplate("tart", repo.id, name);
+    await writeRemoteRepoTemplate("tart", repo.id, name);
     console.log(
       `[sandbox:tart] published post-setup repo template ${name} on ${host.runnerName}`,
     );

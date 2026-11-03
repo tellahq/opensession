@@ -2107,8 +2107,7 @@ export async function maybeLaunchSandboxedRun(
   // Hoisted so the catch below can dispose a sandbox when launch fails after
   // ensure but before the event stream exists.
   let disposableResumeSandbox:
-    | { provider: ReturnType<typeof getSandboxProvider>; id: string }
-    | undefined;
+    { provider: ReturnType<typeof getSandboxProvider>; id: string } | undefined;
   const disposeResumeSandbox = async () => {
     const owned = disposableResumeSandbox;
     if (!owned) return;
@@ -2391,13 +2390,15 @@ export async function maybeLaunchSandboxedRun(
       // the idle sweep puts it to sleep instead of leaving it billing.
       const machineId =
         session.sandbox.sandboxId ||
-        (() => {
+        (await (async () => {
           try {
-            return getSandboxProvider(sbProvider).machineFor?.(session.id);
+            return await getSandboxProvider(sbProvider).machineFor?.(
+              session.id,
+            );
           } catch {
             return undefined;
           }
-        })();
+        })());
       touchNativeSession(session.id, {
         sandbox: {
           ...session.sandbox,

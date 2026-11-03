@@ -1,8 +1,8 @@
 /** Persistent per-repository sandbox environment readiness. */
 
-import { readFileSync } from "fs";
+import { readFile } from "fs/promises";
 import { stateDir } from "../paths";
-import { writeJsonAtomic } from "../shared/atomic-write";
+import { writeJsonAtomicAsync } from "../shared/atomic-write";
 import { REPOS } from "../worktree";
 import {
   sandboxConnectionReady,
@@ -22,7 +22,7 @@ import {
   requestPrewarm,
   type SandboxMachineSettings,
 } from "./prewarm";
-import { listSandboxOperations, startSandboxOperation } from "./operations";
+import { runningSandboxOperations, startSandboxOperation } from "./operations";
 
 const invalidationTimers: Map<string, ReturnType<typeof setTimeout>> = ((
   globalThis as any
@@ -61,10 +61,10 @@ function storePath(): string {
   );
 }
 
-function readStored(): SandboxEnvironment[] {
+async function readStored(): Promise<SandboxEnvironment[]> {
   try {
     const raw = JSON.parse(
-      readFileSync(storePath(), "utf-8"),
+      await readFile(storePath(), "utf-8"),
     ) as StoredEnvironments;
     return Array.isArray(raw?.environments) ? raw.environments : [];
   } catch {
@@ -72,36 +72,43 @@ function readStored(): SandboxEnvironment[] {
   }
 }
 
-function writeEnvironment(environment: SandboxEnvironment): void {
-  const all = readStored().filter(
-    (candidate) =>
-      candidate.repo !== environment.repo ||
-      candidate.provider !== environment.provider,
-  );
-  all.push(environment);
-  writeJsonAtomic(storePath(), {
-    version: 1,
-    environments: all,
-  } satisfies StoredEnvironments);
+let storeWriteTail: Promise<unknown> = Promise.resolve();
+
+/** Replace one repo/provider record. Writes are serialized and each re-reads
+ *  the store, so concurrent preparations never drop each other's records. */
+function writeEnvironment(environment: SandboxEnvironment): Promise<void> {
+  const run = storeWriteTail.then(async () => {
+    const all = (await readStored()).filter(
+      (candidate) =>
+        candidate.repo !== environment.repo ||
+        candidate.provider !== environment.provider,
+    );
+    all.push(environment);
+    await writeJsonAtomicAsync(storePath(), {
+      version: 1,
+      environments: all,
+    } satisfies StoredEnvironments);
+  });
+  storeWriteTail = run.catch(() => {});
+  return run;
 }
 
-function storedEnvironment(
+async function storedEnvironment(
   repo: string,
   provider: WorkspaceSandboxProvider,
-): SandboxEnvironment | undefined {
-  return readStored().find(
+): Promise<SandboxEnvironment | undefined> {
+  return (await readStored()).find(
     (environment) =>
       environment.repo === repo && environment.provider === provider,
   );
 }
 
-export function sandboxEnvironmentSettings(
+export async function sandboxEnvironmentSettings(
   repo: string,
   provider: string,
-): SandboxMachineSettings | undefined {
-  const settings = storedEnvironment(
-    repo,
-    provider as WorkspaceSandboxProvider,
+): Promise<SandboxMachineSettings | undefined> {
+  const settings = (
+    await storedEnvironment(repo, provider as WorkspaceSandboxProvider)
   )?.settings;
   return settings ? { ...settings } : undefined;
 }
@@ -173,7 +180,7 @@ function interruptedPreparation(
   stored: SandboxEnvironment | undefined,
 ): SandboxEnvironment | undefined {
   if (!stored || stored.state !== "preparing") return stored;
-  const running = listSandboxOperations().some(
+  const running = runningSandboxOperations().some(
     (operation) =>
       operation.kind === "environment_rebuild" &&
       operation.repo === stored.repo &&
@@ -193,7 +200,7 @@ async function derivedEnvironment(
   repo: string,
   provider: WorkspaceSandboxProvider,
 ): Promise<SandboxEnvironment> {
-  const stored = storedEnvironment(repo, provider);
+  const stored = await storedEnvironment(repo, provider);
   const now = new Date().toISOString();
   if (!sandboxConnectionReady(provider)) {
     return {
@@ -203,7 +210,7 @@ async function derivedEnvironment(
       updatedAt: stored?.updatedAt || now,
     };
   }
-  const template = readRemoteRepoTemplate(provider, repo);
+  const template = await readRemoteRepoTemplate(provider, repo);
   if (template) {
     return {
       repo,
@@ -270,7 +277,7 @@ export async function setSandboxEnvironmentKeepReady(
   enabled: boolean,
 ): Promise<void> {
   if (!(repo in REPOS)) throw new Error(`Unknown repo "${repo}"`);
-  setKeepReadyTarget(provider, repo, enabled);
+  await setKeepReadyTarget(provider, repo, enabled);
   if (!enabled) return;
   void requestPrewarm(provider, repo, "workspace-admin").catch((error) => {
     console.warn(
@@ -288,7 +295,7 @@ async function removeTemplate(
   repo: string,
   provider: WorkspaceSandboxProvider,
 ): Promise<void> {
-  const previous = invalidateRemoteRepoTemplate(provider, repo);
+  const previous = await invalidateRemoteRepoTemplate(provider, repo);
   if (previous?.artifactId) {
     if (provider === "daytona") {
       const { deleteDaytonaTemplateArtifact } =
@@ -321,14 +328,14 @@ export async function invalidateSandboxEnvironmentsForRepo(
 ): Promise<void> {
   if (!(repo in REPOS)) return;
   for (const provider of ["daytona", "box", "usecomputer", "modal"] as const) {
-    const stored = storedEnvironment(repo, provider);
+    const stored = await storedEnvironment(repo, provider);
     if (!stored) continue;
     // Remote repo templates contain a credential-free warm clone. Adoption
     // fetches the current default branch before creating the session branch,
     // so deleting a multi-gigabyte provider snapshot on every push creates a
     // minutes-long cold-start gap without improving source freshness.
     const current = await derivedEnvironment(repo, provider);
-    writeEnvironment(
+    await writeEnvironment(
       current.state === "ready"
         ? current
         : {
@@ -380,7 +387,7 @@ export async function prepareSandboxEnvironment(
       code: "CONNECTION_NOT_READY",
     });
   }
-  const previousSettings = storedEnvironment(repo, provider)?.settings;
+  const previousSettings = (await storedEnvironment(repo, provider))?.settings;
   const settings = normalizeMachineSettings(
     provider,
     options.settings === undefined ? previousSettings : options.settings,
@@ -390,7 +397,7 @@ export async function prepareSandboxEnvironment(
     await removeTemplate(repo, provider);
   }
   const now = new Date().toISOString();
-  writeEnvironment({
+  await writeEnvironment({
     repo,
     provider,
     state: "preparing",
@@ -434,7 +441,7 @@ export async function prepareSandboxEnvironment(
             },
           );
         }
-        writeEnvironment(derived);
+        await writeEnvironment(derived);
         return;
       }
       if (requested.state === "failed" || entry?.state === "failed") {
@@ -495,7 +502,7 @@ export async function prepareSandboxEnvironment(
         : {}),
       ...(settings ? { settings } : {}),
     };
-    writeEnvironment(failure);
+    await writeEnvironment(failure);
     throw Object.assign(new Error(failure.failureSummary), { code });
   }
 }
@@ -511,8 +518,8 @@ let maintenanceTimer: ReturnType<typeof setInterval> | undefined = (
  * changed or whose provider artifact disappeared. A stored record means a
  * human opted this repo/provider pair into transient preparation; this never
  * enables a new provider or keeps idle compute alive. */
-function maintainSandboxEnvironments(): void {
-  for (const environment of readStored()) {
+async function maintainSandboxEnvironments(): Promise<void> {
+  for (const environment of await readStored()) {
     if (
       !["daytona", "box", "usecomputer", "modal"].includes(
         environment.provider,
@@ -531,7 +538,7 @@ function maintainSandboxEnvironments(): void {
           : Number.NaN;
       if (!Number.isFinite(retryAt) || retryAt > Date.now()) continue;
     }
-    const template = readRemoteRepoTemplate(
+    const template = await readRemoteRepoTemplate(
       environment.provider,
       environment.repo,
     );
@@ -593,8 +600,20 @@ function maintainSandboxEnvironments(): void {
 
 export function startSandboxEnvironmentMaintenance(): void {
   if (maintenanceTimer) return;
-  maintainSandboxEnvironments();
-  maintenanceTimer = setInterval(maintainSandboxEnvironments, 60_000);
+  let running = false;
+  const tick = () => {
+    if (running) return;
+    running = true;
+    void maintainSandboxEnvironments()
+      .catch((error) =>
+        console.warn("[sandbox-environments] maintenance failed:", error),
+      )
+      .finally(() => {
+        running = false;
+      });
+  };
+  tick();
+  maintenanceTimer = setInterval(tick, 60_000);
   maintenanceTimer.unref?.();
   (globalThis as any).__sandboxEnvironmentMaintenanceTimer = maintenanceTimer;
 }
@@ -609,7 +628,7 @@ export function scheduleSandboxEnvironment(
     settings?: SandboxMachineSettings;
   } = {},
 ) {
-  const existing = listSandboxOperations().find(
+  const existing = runningSandboxOperations().find(
     (operation) =>
       operation.kind === "environment_rebuild" &&
       operation.repo === repo &&

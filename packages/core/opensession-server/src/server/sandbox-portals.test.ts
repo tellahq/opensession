@@ -21,8 +21,8 @@ afterAll(() => {
 });
 
 describe("cachedSandboxPortalService", () => {
-  test("maps a sandbox service port back to its Portal", () => {
-    cacheSandboxPortals("bks-test", "sbx-test", [
+  test("maps a sandbox service port back to its Portal", async () => {
+    await cacheSandboxPortals("bks-test", "sbx-test", [
       {
         name: "web",
         key: "WEB_PORT",
@@ -40,15 +40,17 @@ describe("cachedSandboxPortalService", () => {
         state: "awake",
       },
     ]);
-    expect(cachedSandboxPortalService("sbx-test", 4001)?.name).toBe("api");
-    expect(cachedSandboxPortalService("sbx-test", 4002)).toBeNull();
-    expect(cachedSandboxPortalService("sbx-other", 4000)).toBeNull();
+    expect((await cachedSandboxPortalService("sbx-test", 4001))?.name).toBe(
+      "api",
+    );
+    expect(await cachedSandboxPortalService("sbx-test", 4002)).toBeNull();
+    expect(await cachedSandboxPortalService("sbx-other", 4000)).toBeNull();
   });
 });
 
 describe("sleeping Sandbox Portal cache", () => {
-  test("keeps metadata readable without retaining a live URL", () => {
-    cacheSandboxPortals("bks-test", "sbx-test", [
+  test("keeps metadata readable without retaining a live URL", async () => {
+    await cacheSandboxPortals("bks-test", "sbx-test", [
       {
         name: "Demo",
         key: "PORTAL_DEMO_PORT",
@@ -61,7 +63,7 @@ describe("sleeping Sandbox Portal cache", () => {
         managed: true,
       },
     ]);
-    const status = sleepingSandboxPortalStatus("bks-test", "sbx-test");
+    const status = await sleepingSandboxPortalStatus("bks-test", "sbx-test");
     expect(status?.services).toEqual([
       {
         name: "Demo",
@@ -75,7 +77,7 @@ describe("sleeping Sandbox Portal cache", () => {
         managed: true,
       },
     ]);
-    expect(cachedSandboxPortalOwner("sbx-test", 4400)).toBe("bks-test");
-    expect(cachedSandboxPortalOwner("sbx-test", 4401)).toBeNull();
+    expect(await cachedSandboxPortalOwner("sbx-test", 4400)).toBe("bks-test");
+    expect(await cachedSandboxPortalOwner("sbx-test", 4401)).toBeNull();
   });
 });

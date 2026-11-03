@@ -448,7 +448,7 @@ async function waitForPrewarm(
 
 async function cleanupCertificationTemplate(entry: Entry): Promise<void> {
   if (entry.providerId !== "daytona" && entry.providerId !== "box") return;
-  const template = readRemoteRepoTemplate(entry.providerId, entry.repoId);
+  const template = await readRemoteRepoTemplate(entry.providerId, entry.repoId);
   if (!template) return;
   try {
     if (entry.providerId === "daytona") {
@@ -466,7 +466,7 @@ async function cleanupCertificationTemplate(entry: Entry): Promise<void> {
         },
       );
     }
-    invalidateRemoteRepoTemplate(entry.providerId, entry.repoId);
+    await invalidateRemoteRepoTemplate(entry.providerId, entry.repoId);
     ok(
       "certification repo-template artifact removed",
       true,
@@ -495,7 +495,7 @@ async function runEntry(entry: Entry): Promise<void> {
   const { connectSandboxProvider, setSandboxConnectionQualification } =
     await import("../../packages/core/opensession-server/src/server/sandbox/connections");
   if (entry.providerId === "daytona") {
-    connectSandboxProvider("daytona", {
+    await connectSandboxProvider("daytona", {
       secret: daytonaKey,
       settings: {
         apiUrl:
@@ -509,13 +509,13 @@ async function runEntry(entry: Entry): Promise<void> {
           liveCfg?.daytona?.snapshot,
       },
     });
-    setSandboxConnectionQualification("daytona", { status: "ready" });
+    await setSandboxConnectionQualification("daytona", { status: "ready" });
   } else if (entry.providerId === "box") {
-    connectSandboxProvider("box", {
+    await connectSandboxProvider("box", {
       secret: boxKey,
       settings: { apiUrl: boxApiUrl },
     });
-    setSandboxConnectionQualification("box", { status: "ready" });
+    await setSandboxConnectionQualification("box", { status: "ready" });
   }
   const provider = getSandboxProvider(entry.providerId);
   const sessionId = `sbxtest-conf-${entry.name}-${RUN_TS}`;

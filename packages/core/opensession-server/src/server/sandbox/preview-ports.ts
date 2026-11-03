@@ -29,9 +29,9 @@
  * separate process cleans its own sbxtest-* entries.
  */
 
-import { existsSync, readFileSync } from "fs";
+import { readFile } from "fs/promises";
 import { OPENSESSION_SESSIONS_DIR } from "../paths";
-import { writeJsonAtomic } from "../shared/atomic-write";
+import { writeJsonAtomicAsync } from "../shared/atomic-write";
 
 export const SANDBOX_HTTPS_BASE = 20000;
 export const SANDBOX_HTTPS_RANGE = 8000;
@@ -44,10 +44,9 @@ function allocationsPath(): string {
   return `${OPENSESSION_SESSIONS_DIR}/sandbox-preview-ports.json`;
 }
 
-function readAllocations(): AllocationMap {
+async function readAllocationsNow(): Promise<AllocationMap> {
   try {
-    if (!existsSync(allocationsPath())) return {};
-    const raw = JSON.parse(readFileSync(allocationsPath(), "utf-8"));
+    const raw = JSON.parse(await readFile(allocationsPath(), "utf-8"));
     const out: AllocationMap = {};
     for (const [k, v] of Object.entries(raw)) {
       if (typeof v === "number" && Number.isInteger(v)) out[k] = v;
@@ -56,6 +55,29 @@ function readAllocations(): AllocationMap {
   } catch {
     return {};
   }
+}
+
+// Allocation changes run one at a time (read, decide, write), so two
+// concurrent first uses can never pick the same port. Reads wait for the
+// changes queued before them.
+let changeTail: Promise<unknown> = Promise.resolve();
+
+function changeAllocations<T>(
+  change: (map: AllocationMap) => { result: T; write: boolean },
+): Promise<T> {
+  const run = changeTail.then(async () => {
+    const map = await readAllocationsNow();
+    const { result, write } = change(map);
+    if (write) await writeJsonAtomicAsync(allocationsPath(), map);
+    return result;
+  });
+  changeTail = run.catch(() => {});
+  return run;
+}
+
+async function readAllocations(): Promise<AllocationMap> {
+  await changeTail;
+  return readAllocationsNow();
 }
 
 function keyFor(sandboxId: string, containerPort: number): string {
@@ -79,39 +101,39 @@ function fnv1a(s: string): number {
 export function sandboxHttpsPortFor(
   sandboxId: string,
   containerPort: number,
-): number {
-  const map = readAllocations();
-  const key = keyFor(sandboxId, containerPort);
-  const existing = map[key];
-  if (existing != null) return existing;
-  const used = new Set(Object.values(map));
-  const start = fnv1a(key) % SANDBOX_HTTPS_RANGE;
-  for (let i = 0; i < SANDBOX_HTTPS_RANGE; i++) {
-    const port = SANDBOX_HTTPS_BASE + ((start + i) % SANDBOX_HTTPS_RANGE);
-    if (used.has(port)) continue;
-    map[key] = port;
-    writeJsonAtomic(allocationsPath(), map);
-    return port;
-  }
-  throw new Error(
-    "sandbox preview https-port range exhausted (20000-27999 all allocated)",
-  );
+): Promise<number> {
+  return changeAllocations((map) => {
+    const key = keyFor(sandboxId, containerPort);
+    const existing = map[key];
+    if (existing != null) return { result: existing, write: false };
+    const used = new Set(Object.values(map));
+    const start = fnv1a(key) % SANDBOX_HTTPS_RANGE;
+    for (let i = 0; i < SANDBOX_HTTPS_RANGE; i++) {
+      const port = SANDBOX_HTTPS_BASE + ((start + i) % SANDBOX_HTTPS_RANGE);
+      if (used.has(port)) continue;
+      map[key] = port;
+      return { result: port, write: true };
+    }
+    throw new Error(
+      "sandbox preview https-port range exhausted (20000-27999 all allocated)",
+    );
+  });
 }
 
 /** Existing allocation only, never allocates (stop/teardown paths). */
-export function lookupSandboxHttpsPort(
+export async function lookupSandboxHttpsPort(
   sandboxId: string,
   containerPort: number,
-): number | null {
-  return readAllocations()[keyFor(sandboxId, containerPort)] ?? null;
+): Promise<number | null> {
+  return (await readAllocations())[keyFor(sandboxId, containerPort)] ?? null;
 }
 
 /** Reverse an existing allocation so the authenticated Portal route can
  * rebuild its process-local relay after an Open Session restart. */
-export function sandboxAllocationForHttpsPort(
+export async function sandboxAllocationForHttpsPort(
   httpsPort: number,
-): { sandboxId: string; containerPort: number } | null {
-  for (const [key, allocated] of Object.entries(readAllocations())) {
+): Promise<{ sandboxId: string; containerPort: number } | null> {
+  for (const [key, allocated] of Object.entries(await readAllocations())) {
     if (allocated !== httpsPort) continue;
     const split = key.lastIndexOf(":");
     const sandboxId = key.slice(0, split);
@@ -127,15 +149,17 @@ export function sandboxAllocationForHttpsPort(
  * cleanup). Returns the released https ports so the caller can remove their
  * Caddy routes.
  */
-export function releaseSandboxPreviewPorts(sandboxId: string): number[] {
-  const map = readAllocations();
-  const released: number[] = [];
-  for (const [k, v] of Object.entries(map)) {
-    if (k.startsWith(`${sandboxId}:`)) {
-      released.push(v);
-      delete map[k];
+export function releaseSandboxPreviewPorts(
+  sandboxId: string,
+): Promise<number[]> {
+  return changeAllocations((map) => {
+    const released: number[] = [];
+    for (const [k, v] of Object.entries(map)) {
+      if (k.startsWith(`${sandboxId}:`)) {
+        released.push(v);
+        delete map[k];
+      }
     }
-  }
-  if (released.length) writeJsonAtomic(allocationsPath(), map);
-  return released;
+    return { result: released, write: released.length > 0 };
+  });
 }

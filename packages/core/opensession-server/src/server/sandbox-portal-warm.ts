@@ -152,7 +152,7 @@ export async function warmSandboxPortal(input: {
       input.defaultPath,
     );
     if (!routes.length) return;
-    const host = `${configuredServer().previewHost}:${sandboxHttpsPortFor(input.sandbox.id, input.port)}`;
+    const host = `${configuredServer().previewHost}:${await sandboxHttpsPortFor(input.sandbox.id, input.port)}`;
     const script = portalWarmScript({
       port: input.port,
       host,

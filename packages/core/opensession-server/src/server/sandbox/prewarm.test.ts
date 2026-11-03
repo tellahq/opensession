@@ -47,6 +47,7 @@ import {
   sessionOwnedSandboxIds,
   startPrewarmPool,
   sweepPrewarms,
+  _prewarmFilesSettledForTest,
   _prewarmPoolForTest,
   _resetPrewarmForTest,
   _setPrewarmAdapterForTest,
@@ -103,6 +104,7 @@ beforeAll(async () => {
 afterAll(async () => {
   _stopPrewarmSweepForTest();
   _resetPrewarmForTest();
+  await _prewarmFilesSettledForTest();
   __setSessionsDirForTest(prevSessionsDir);
   if (prevInstanceConfig === undefined) delete process.env.OPENSESSION_CONFIG;
   else {
@@ -122,19 +124,20 @@ afterAll(async () => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   _resetPrewarmForTest();
+  await _prewarmFilesSettledForTest();
   rmSync(prewarmDir(), { recursive: true, force: true });
   rmSync(environmentsPath(), { force: true });
-  writeConfig({});
+  await writeConfig({});
 });
 
-afterEach(() => {
+afterEach(async () => {
   _stopPrewarmSweepForTest();
   _resetPrewarmForTest();
 });
 
-function writeConfig(overrides: Record<string, unknown>): void {
+async function writeConfig(overrides: Record<string, unknown>): Promise<void> {
   const snapshot =
     typeof overrides.connectionSnapshot === "string"
       ? overrides.connectionSnapshot
@@ -149,11 +152,11 @@ function writeConfig(overrides: Record<string, unknown>): void {
       ...runtimeOverrides,
     }),
   );
-  connectSandboxProvider("daytona", {
+  await connectSandboxProvider("daytona", {
     secret: "test-key",
     settings: { snapshot },
   });
-  setSandboxConnectionQualification("daytona", { status: "ready" });
+  await setSandboxConnectionQualification("daytona", { status: "ready" });
 }
 
 /** Fake adapter whose driver satisfies the real dial-back + bootstrap-marker
@@ -259,6 +262,7 @@ describe("requestPrewarm", () => {
       expect(done.state).toBe("ready");
       expect(done.sandboxId).toBe(fake.created[0]);
       // State file persisted for restart reaping.
+      await _prewarmFilesSettledForTest();
       expect(existsSync(join(prewarmDir(), "daytona-tella-fusion.json"))).toBe(
         true,
       );
@@ -284,7 +288,9 @@ describe("requestPrewarm", () => {
 
       await sweepPrewarms(Date.now() + 24 * 60 * 60_000);
       expect(fake.destroyed).toEqual([]);
-      expect(claimPrewarm("daytona", "tella-fusion", "session-1")).toEqual({
+      expect(
+        await claimPrewarm("daytona", "tella-fusion", "session-1"),
+      ).toEqual({
         sandboxId: "pw-1",
       });
       await until(() => fake.created.length === 2);
@@ -351,7 +357,7 @@ describe("requestPrewarm", () => {
 
   test.skipIf(killSwitch)("prewarm disabled by config → disabled", async () => {
     makeFakeAdapter();
-    writeConfig({ prewarm: { enabled: false } });
+    await writeConfig({ prewarm: { enabled: false } });
     expect((await requestPrewarm("daytona", "tella-fusion")).state).toBe(
       "disabled",
     );
@@ -390,16 +396,22 @@ describe("claimPrewarm (adoption)", () => {
       await requestPrewarm("daytona", "tella-fusion");
       await until(() => readyEntry()?.state === "ready");
 
-      const claim = claimPrewarm("daytona", "tella-fusion", "bks-session-1");
+      const claim = await claimPrewarm(
+        "daytona",
+        "tella-fusion",
+        "bks-session-1",
+      );
       expect(claim?.sandboxId).toBe(fake.created[0]);
       // Second concurrent claimant loses.
       expect(
-        claimPrewarm("daytona", "tella-fusion", "bks-session-2"),
+        await claimPrewarm("daytona", "tella-fusion", "bks-session-2"),
       ).toBeNull();
       // State file renamed to the .claimed tombstone.
+      await _prewarmFilesSettledForTest();
       expect(existsSync(join(prewarmDir(), "daytona-tella-fusion.json"))).toBe(
         false,
       );
+      await _prewarmFilesSettledForTest();
       expect(
         existsSync(join(prewarmDir(), "daytona-tella-fusion.json.claimed")),
       ).toBe(true);
@@ -433,9 +445,9 @@ describe("claimPrewarm (adoption)", () => {
       ).toBe("bootstrapping");
       await until(() => readyEntry()?.state === "ready");
       expect(fake.created).toHaveLength(2);
-      expect(claimPrewarm("daytona", "tella-fusion", "bks-s")?.sandboxId).toBe(
-        fake.created[1],
-      );
+      expect(
+        (await claimPrewarm("daytona", "tella-fusion", "bks-s"))?.sandboxId,
+      ).toBe(fake.created[1]);
     },
   );
 
@@ -447,10 +459,10 @@ describe("claimPrewarm (adoption)", () => {
       await until(() => readyEntry()?.state === "ready");
       // The retired runner pin used to invalidate every prewarm per deploy;
       // a Sandbox now carries only the base runtime, which names no commit.
-      writeConfig({ runnerSha: "sha-B" });
-      expect(claimPrewarm("daytona", "tella-fusion", "bks-s")?.sandboxId).toBe(
-        fake.created[0],
-      );
+      await writeConfig({ runnerSha: "sha-B" });
+      expect(
+        (await claimPrewarm("daytona", "tella-fusion", "bks-s"))?.sandboxId,
+      ).toBe(fake.created[0]);
       expect(fake.destroyed).not.toContain(fake.created[0]);
     },
   );
@@ -461,8 +473,8 @@ describe("claimPrewarm (adoption)", () => {
       const fake = makeFakeAdapter();
       await requestPrewarm("daytona", "tella-fusion");
       await until(() => readyEntry()?.state === "ready");
-      writeConfig({ connectionSnapshot: "snap-B" });
-      expect(claimPrewarm("daytona", "tella-fusion", "bks-s")).toBeNull();
+      await writeConfig({ connectionSnapshot: "snap-B" });
+      expect(await claimPrewarm("daytona", "tella-fusion", "bks-s")).toBeNull();
       await until(() => fake.destroyed.includes(fake.created[0]));
     },
   );
@@ -477,7 +489,7 @@ describe("claimPrewarm (adoption)", () => {
       const fake = makeFakeAdapter({ destroyGate });
       await requestPrewarm("daytona", "tella-fusion");
       await until(() => readyEntry()?.state === "ready");
-      const claim = claimPrewarm("daytona", "tella-fusion", "bks-s")!;
+      const claim = (await claimPrewarm("daytona", "tella-fusion", "bks-s"))!;
       discardClaimedPrewarm("daytona", claim.sandboxId);
       discardClaimedPrewarm("daytona", claim.sandboxId);
       await until(() => fake.destroyed.includes(claim.sandboxId));
@@ -489,6 +501,7 @@ describe("claimPrewarm (adoption)", () => {
           (entry) => entry.sandboxId === claim.sandboxId,
         )?.state,
       ).toBe("destroying");
+      await _prewarmFilesSettledForTest();
       expect(
         existsSync(join(prewarmDir(), "daytona-tella-fusion.json.destroying")),
       ).toBe(true);
@@ -499,9 +512,11 @@ describe("claimPrewarm (adoption)", () => {
       finishDestroy();
       await until(() => _prewarmPoolForTest().size === 0);
       expect(_prewarmPoolForTest().size).toBe(0);
+      await _prewarmFilesSettledForTest();
       expect(
         existsSync(join(prewarmDir(), "daytona-tella-fusion.json.claimed")),
       ).toBe(false);
+      await _prewarmFilesSettledForTest();
       expect(
         existsSync(join(prewarmDir(), "daytona-tella-fusion.json.destroying")),
       ).toBe(false);
@@ -513,7 +528,7 @@ describe("keep-ready prewarms", () => {
   test.skipIf(killSwitch)(
     "starts eagerly, replenishes after claim, and survives TTL",
     async () => {
-      writeConfig({
+      await writeConfig({
         prewarm: {
           enabled: true,
           ttlMinutes: 10,
@@ -538,7 +553,7 @@ describe("keep-ready prewarms", () => {
       expect(readyEntry()?.parked).toBe(true);
       const first = readyEntry()!.sandboxId!;
       expect(
-        claimPrewarm("daytona", "tella-fusion", "bks-first")?.sandboxId,
+        (await claimPrewarm("daytona", "tella-fusion", "bks-first"))?.sandboxId,
       ).toBe(first);
 
       await until(
@@ -729,6 +744,7 @@ describe("sweepPrewarms", () => {
       await sweepPrewarms(Date.now() + 11 * 60_000);
       expect(readyEntry()).toBeUndefined();
       await until(() => fake.destroyed.includes(fake.created[0]));
+      await _prewarmFilesSettledForTest();
       expect(existsSync(join(prewarmDir(), "daytona-tella-fusion.json"))).toBe(
         false,
       );
@@ -756,6 +772,7 @@ describe("sweepPrewarms", () => {
       const sandboxId = readyEntry()!.sandboxId;
 
       // Simulate a fresh coordinator process while preserving the durable file.
+      await _prewarmFilesSettledForTest();
       _resetPrewarmForTest();
       _setPrewarmAdapterForTest("daytona", fake.adapter);
       await sweepPrewarms();
@@ -763,7 +780,8 @@ describe("sweepPrewarms", () => {
       expect(readyEntry()?.sandboxId).toBe(sandboxId);
       expect(fake.destroyed).toEqual([]);
       expect(
-        claimPrewarm("daytona", "tella-fusion", "bks-after-restart")?.sandboxId,
+        (await claimPrewarm("daytona", "tella-fusion", "bks-after-restart"))
+          ?.sandboxId,
       ).toBe(sandboxId);
     },
   );
@@ -788,6 +806,7 @@ describe("sweepPrewarms", () => {
       );
       await sweepPrewarms();
       await until(() => fake.destroyed.includes("pw-interrupted"));
+      await _prewarmFilesSettledForTest();
       expect(existsSync(join(prewarmDir(), "daytona-tella-fusion.json"))).toBe(
         false,
       );
@@ -807,6 +826,7 @@ describe("sweepPrewarms", () => {
       const old = new Date(Date.now() - 20 * 60_000);
       utimesSync(tomb, old, old);
       await sweepPrewarms();
+      await _prewarmFilesSettledForTest();
       expect(existsSync(tomb)).toBe(false);
       expect(fake.destroyed).toEqual([]);
     },
@@ -824,6 +844,7 @@ describe("sweepPrewarms", () => {
       );
       await sweepPrewarms();
       await until(() => fake.destroyed.includes("pw-discarded"));
+      await _prewarmFilesSettledForTest();
       expect(existsSync(tomb)).toBe(false);
     },
   );
@@ -856,8 +877,8 @@ describe("sweepPrewarms", () => {
   test.skipIf(killSwitch)(
     "a provider whose destroy hangs does not hold another's audit",
     async () => {
-      connectSandboxProvider("modal", { secret: "ak-test:as-test" });
-      setSandboxConnectionQualification("modal", { status: "ready" });
+      await connectSandboxProvider("modal", { secret: "ak-test:as-test" });
+      await setSandboxConnectionQualification("modal", { status: "ready" });
       const modalDestroyed: string[] = [];
       _setPrewarmAdapterForTest("daytona", {
         async create() {

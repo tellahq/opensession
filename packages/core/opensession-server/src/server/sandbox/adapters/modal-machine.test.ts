@@ -10,11 +10,11 @@ const { ModalProvider, modalSandboxId } = await import("./modal");
 
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
-test("a session's Modal machine is found even when its start failed", () => {
+test("a session's Modal machine is found even when its start failed", async () => {
   const provider = new ModalProvider();
-  expect(provider.machineFor("s-none")).toBeUndefined();
+  expect(await provider.machineFor("s-none")).toBeUndefined();
   const now = new Date().toISOString();
-  writeRemoteState({
+  await writeRemoteState({
     sandboxId: modalSandboxId("s-failed"),
     remoteId: "sb-123",
     provider: "modal",
@@ -28,12 +28,14 @@ test("a session's Modal machine is found even when its start failed", () => {
     trustProfile: "interactive",
     egressAllowlist: [],
   });
-  expect(provider.machineFor("s-failed")).toBe(modalSandboxId("s-failed"));
+  expect(await provider.machineFor("s-failed")).toBe(
+    modalSandboxId("s-failed"),
+  );
 });
 
-test("state files from the retired Modal provider are not machines", () => {
+test("state files from the retired Modal provider are not machines", async () => {
   const now = new Date().toISOString();
-  writeRemoteState({
+  await writeRemoteState({
     sandboxId: "sb-legacy",
     provider: "modal",
     sessionId: "s-legacy",
@@ -45,5 +47,5 @@ test("state files from the retired Modal provider are not machines", () => {
     trustProfile: "interactive",
     egressAllowlist: [],
   });
-  expect(new ModalProvider().machineFor("s-legacy")).toBeUndefined();
+  expect(await new ModalProvider().machineFor("s-legacy")).toBeUndefined();
 });

@@ -18,7 +18,7 @@ let scratch = "";
 let oldConfig: string | undefined;
 let oldSecrets: string | undefined;
 
-beforeEach(() => {
+beforeEach(async () => {
   scratch = mkdtempSync(join(tmpdir(), "opensession-sandbox-connections-"));
   oldConfig = process.env.OPENSESSION_SANDBOX_CONFIG;
   oldSecrets = process.env.OPENSESSION_WORKSPACE_SECRETS_STORE;
@@ -29,7 +29,7 @@ beforeEach(() => {
   );
 });
 
-afterEach(() => {
+afterEach(async () => {
   if (oldConfig === undefined) delete process.env.OPENSESSION_SANDBOX_CONFIG;
   else process.env.OPENSESSION_SANDBOX_CONFIG = oldConfig;
   if (oldSecrets === undefined)
@@ -39,11 +39,11 @@ afterEach(() => {
 });
 
 describe("Mac VM hosts", () => {
-  test("a Mac VM connection needs at least one host and keeps them in order", () => {
-    expect(() => connectSandboxProvider("tart", { settings: {} })).toThrow(
-      /at least one paired macOS Runner/,
-    );
-    const connection = connectSandboxProvider("tart", {
+  test("a Mac VM connection needs at least one host and keeps them in order", async () => {
+    await expect(
+      connectSandboxProvider("tart", { settings: {} }),
+    ).rejects.toThrow(/at least one paired macOS Runner/);
+    const connection = await connectSandboxProvider("tart", {
       settings: {
         hosts: [
           { runner: "mini-1", maxVms: 2 },
@@ -62,14 +62,14 @@ describe("Mac VM hosts", () => {
     );
   });
 
-  test("the single-host form still reads as one host and a host list replaces it", () => {
-    const single = connectSandboxProvider("tart", {
+  test("the single-host form still reads as one host and a host list replaces it", async () => {
+    const single = await connectSandboxProvider("tart", {
       settings: { runner: "mini-1", maxVms: 2 },
     });
     expect(sandboxHostSettings(single.settings)).toEqual([
       { runner: "mini-1", maxVms: 2 },
     ]);
-    const listed = updateSandboxConnection("tart", {
+    const listed = await updateSandboxConnection("tart", {
       settings: { hosts: [{ runner: "mini-2" }] },
     });
     expect(listed.settings.runner).toBeUndefined();
@@ -81,11 +81,11 @@ describe("Mac VM hosts", () => {
 });
 
 describe("use.computer", () => {
-  test("needs an account key and keeps the reservation setting", () => {
-    expect(() =>
-      connectSandboxProvider("usecomputer", { settings: {} }),
+  test("needs an account key and keeps the reservation setting", async () => {
+    expect(
+      async () => await connectSandboxProvider("usecomputer", { settings: {} }),
     ).toThrow(/use.computer API key is required/);
-    const connection = connectSandboxProvider("usecomputer", {
+    const connection = await connectSandboxProvider("usecomputer", {
       secret: "uc_live_secret",
       settings: { reservation: " 00000000-0000-4000-8000-000000000001 " },
     });
@@ -102,8 +102,8 @@ describe("use.computer", () => {
 });
 
 describe("workspace sandbox connections", () => {
-  test("stores Daytona credentials behind an opaque reference and never returns it", () => {
-    connectSandboxProvider("daytona", {
+  test("stores Daytona credentials behind an opaque reference and never returns it", async () => {
+    await connectSandboxProvider("daytona", {
       secret: "daytona-secret-value",
       settings: {
         apiUrl: "https://daytona.example.test",
@@ -130,8 +130,8 @@ describe("workspace sandbox connections", () => {
     expect(JSON.stringify(safe)).not.toContain("daytona-secret-value");
   });
 
-  test("stores Box credentials behind an opaque reference and exposes only readiness", () => {
-    connectSandboxProvider("box", {
+  test("stores Box credentials behind an opaque reference and exposes only readiness", async () => {
+    await connectSandboxProvider("box", {
       secret: "box-secret-value",
       settings: { apiUrl: "https://box.example.test/v1" },
     });
@@ -152,26 +152,26 @@ describe("workspace sandbox connections", () => {
     });
   });
 
-  test("rotates Box credentials in place and disconnect deletes the secret", () => {
-    const first = connectSandboxProvider("box", { secret: "box_one" });
+  test("rotates Box credentials in place and disconnect deletes the secret", async () => {
+    const first = await connectSandboxProvider("box", { secret: "box_one" });
     const ref = first.credentialRef;
-    const second = connectSandboxProvider("box", { secret: "box_two" });
+    const second = await connectSandboxProvider("box", { secret: "box_two" });
     expect(second.id).toBe(first.id);
     expect(second.credentialRef).toBe(ref);
     expect(sandboxProviderCredential("box")).toEqual({ apiKey: "box_two" });
 
-    expect(disconnectSandboxProvider("box")).toBe(true);
+    expect(await disconnectSandboxProvider("box")).toBe(true);
     expect(getSandboxConnection("box")).toBeUndefined();
     expect(sandboxProviderCredential("box")).toBeUndefined();
   });
 
-  test("only enabled, successfully qualified connections become Ready", () => {
-    connectSandboxProvider("daytona", {
+  test("only enabled, successfully qualified connections become Ready", async () => {
+    await connectSandboxProvider("daytona", {
       secret: "daytona-secret",
       settings: { cpu: 4, memoryMb: 8192 },
     });
     expect(sandboxConnectionReady("daytona")).toBe(false);
-    setSandboxConnectionQualification("daytona", {
+    await setSandboxConnectionQualification("daytona", {
       status: "ready",
       checkedAt: "2026-08-11T00:00:00.000Z",
     });
@@ -182,9 +182,9 @@ describe("workspace sandbox connections", () => {
     ).toBe("ready");
   });
 
-  test("a runner pin change does not invalidate provider qualification", () => {
-    connectSandboxProvider("daytona", { secret: "daytona-secret" });
-    setSandboxConnectionQualification("daytona", {
+  test("a runner pin change does not invalidate provider qualification", async () => {
+    await connectSandboxProvider("daytona", { secret: "daytona-secret" });
+    await setSandboxConnectionQualification("daytona", {
       status: "ready",
       checkedAt: "2026-08-11T00:00:00.000Z",
     });
@@ -201,9 +201,9 @@ describe("workspace sandbox connections", () => {
     ).toBe("ready");
   });
 
-  test("an adapter signature change makes a previous qualification stale", () => {
-    connectSandboxProvider("box", { secret: "box_key" });
-    setSandboxConnectionQualification("box", {
+  test("an adapter signature change makes a previous qualification stale", async () => {
+    await connectSandboxProvider("box", { secret: "box_key" });
+    await setSandboxConnectionQualification("box", {
       status: "ready",
       checkedAt: "2026-08-11T00:00:00.000Z",
     });

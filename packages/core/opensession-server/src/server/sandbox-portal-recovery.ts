@@ -44,10 +44,12 @@ export function sandboxPortalRouteRecovering(httpsPort: number): boolean {
 /** Whether the Portal behind this route is being started right now (a
  * start, restart, or wake-restore holds its operation lock), from durable
  * presentation metadata; false for host/runner routes. */
-export function sandboxPortalRouteStarting(httpsPort: number): boolean {
-  const allocation = sandboxAllocationForHttpsPort(httpsPort);
+export async function sandboxPortalRouteStarting(
+  httpsPort: number,
+): Promise<boolean> {
+  const allocation = await sandboxAllocationForHttpsPort(httpsPort);
   if (!allocation) return false;
-  const service = cachedSandboxPortalService(
+  const service = await cachedSandboxPortalService(
     allocation.sandboxId,
     allocation.containerPort,
   );
@@ -59,24 +61,31 @@ export function sandboxPortalRouteStarting(httpsPort: number): boolean {
 
 /** The session that last registered the Portal behind this route, from the
  * durable presentation metadata; null for host/runner routes. */
-export function sandboxPortalRouteSession(httpsPort: number): string | null {
-  const allocation = sandboxAllocationForHttpsPort(httpsPort);
+export async function sandboxPortalRouteSession(
+  httpsPort: number,
+): Promise<string | null> {
+  const allocation = await sandboxAllocationForHttpsPort(httpsPort);
   if (!allocation) return null;
   return (
-    cachedSandboxPortalOwner(allocation.sandboxId, allocation.containerPort) ??
+    (await cachedSandboxPortalOwner(
+      allocation.sandboxId,
+      allocation.containerPort,
+    )) ??
     // The Portal on this port may be gone from the cache (replaced by one
     // on another port); the Sandbox still names the session to go back to.
-    cachedSandboxPortalOwner(allocation.sandboxId)
+    (await cachedSandboxPortalOwner(allocation.sandboxId))
   );
 }
 
 /** Whether the process-local relay behind a durable remote Portal route is
  * connected. Host/runner routes have no sandbox allocation and are already
  * covered by portalRouteAuthorized. */
-export function sandboxPortalRouteConnected(httpsPort: number): boolean {
-  const allocation = sandboxAllocationForHttpsPort(httpsPort);
+export async function sandboxPortalRouteConnected(
+  httpsPort: number,
+): Promise<boolean> {
+  const allocation = await sandboxAllocationForHttpsPort(httpsPort);
   if (!allocation) return portalRouteAuthorized(httpsPort);
-  const sessionId = cachedSandboxPortalOwner(
+  const sessionId = await cachedSandboxPortalOwner(
     allocation.sandboxId,
     allocation.containerPort,
   );
@@ -129,12 +138,12 @@ async function recoverSandboxPortalRouteInner(
 ): Promise<boolean> {
   if (
     portalRouteAuthorized(httpsPort) &&
-    sandboxPortalRouteConnected(httpsPort)
+    (await sandboxPortalRouteConnected(httpsPort))
   )
     return true;
-  const allocation = sandboxAllocationForHttpsPort(httpsPort);
+  const allocation = await sandboxAllocationForHttpsPort(httpsPort);
   if (!allocation) return false;
-  const sessionId = cachedSandboxPortalOwner(
+  const sessionId = await cachedSandboxPortalOwner(
     allocation.sandboxId,
     allocation.containerPort,
   );

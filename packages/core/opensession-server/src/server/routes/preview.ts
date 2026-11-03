@@ -275,7 +275,7 @@ export async function handlePreviewRoutes(
         // gets a fresh sidecar before Caddy proxies to a dead loopback socket.
         if (
           !portalRouteAuthorized(httpsPort) ||
-          !sandboxPortalRouteConnected(httpsPort)
+          !(await sandboxPortalRouteConnected(httpsPort))
         ) {
           // Only a person's navigation may wake a sleeping Sandbox: it is an
           // explicit action, where a fetch from an old tab is not.
@@ -299,12 +299,12 @@ export async function handlePreviewRoutes(
             recoveredNow = await recovery;
           }
           if (!recoveredNow)
-            return notActive(sandboxPortalRouteSession(httpsPort));
+            return notActive(await sandboxPortalRouteSession(httpsPort));
         }
         // The route is live but its service may still be booting (a start the
         // agent or a wake kicked off). Proxying now would reach a port nobody
         // listens on and show a bare 502; keep the person on the waiting page.
-        if (navigation && sandboxPortalRouteStarting(httpsPort))
+        if (navigation && (await sandboxPortalRouteStarting(httpsPort)))
           return portalWaitingResponse({
             state: "waking",
             retrySeconds: PORTAL_WAITING_RETRY_SECONDS,
@@ -370,7 +370,7 @@ export async function handlePreviewRoutes(
           ? session.portalSandbox
           : undefined;
       if (recorded?.sandboxId) {
-        const sleeping = sleepingSandboxPortalStatus(
+        const sleeping = await sleepingSandboxPortalStatus(
           session.id,
           recorded.sandboxId,
         );

@@ -25,23 +25,14 @@
  * short-lived workload identity leases.
  */
 
-import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  unlinkSync,
-} from "fs";
 import { randomUUID } from "crypto";
-import { readdir, readFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, rm, unlink } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve } from "path";
 import { OPENSESSION_SESSIONS_DIR } from "../../paths";
 import { authedRemoteUrl } from "../../codestorage/auth";
 import { parseCsRemote } from "../../codestorage/remote";
 import { redactUrl } from "../../shared/redact";
-import { writeJsonAtomic } from "../../shared/atomic-write";
+import { writeJsonAtomicAsync } from "../../shared/atomic-write";
 import {
   createWorkloadIdentityEnv,
   type WorkloadIdentityContext,
@@ -350,11 +341,11 @@ export function resolveTrustPolicy(
  * re-enter ensure() AFTER destroy() has deleted the state file (the recreate
  * route). Null when the provider keeps no state here (local, docker).
  */
-export function recordedTrustPolicy(
+export async function recordedTrustPolicy(
   provider: string,
   sessionId: string,
-): SandboxTrustPolicy | null {
-  const state = findRemoteStateBySession(provider, sessionId);
+): Promise<SandboxTrustPolicy | null> {
+  const state = await findRemoteStateBySession(provider, sessionId);
   if (!state) return null;
   return {
     trustProfile: state.trustProfile,
@@ -387,14 +378,8 @@ export async function readRemoteStateAsync(
 export function readRemoteState(
   provider: string,
   sandboxId: string,
-): RemoteSandboxState | null {
-  try {
-    const p = statePath(provider, sandboxId);
-    if (!existsSync(p)) return null;
-    return withTrustPolicy(JSON.parse(readFileSync(p, "utf-8")));
-  } catch {
-    return null;
-  }
+): Promise<RemoteSandboxState | null> {
+  return readRemoteStateAsync(provider, sandboxId);
 }
 
 /** State files written before the policy was recorded carry none. They can
@@ -404,43 +389,48 @@ function withTrustPolicy(state: RemoteSandboxState): RemoteSandboxState {
   return { ...state, ...resolveTrustPolicy({}, state) };
 }
 
-export function writeRemoteState(state: RemoteSandboxState): void {
-  mkdirSync(STATE_DIR, { recursive: true });
-  writeJsonAtomic(statePath(state.provider, state.sandboxId), state);
+export async function writeRemoteState(
+  state: RemoteSandboxState,
+): Promise<void> {
+  await mkdir(STATE_DIR, { recursive: true });
+  await writeJsonAtomicAsync(statePath(state.provider, state.sandboxId), state);
 }
 
-export function removeRemoteState(provider: string, sandboxId: string): void {
-  const state = readRemoteState(provider, sandboxId);
-  try {
-    unlinkSync(statePath(provider, sandboxId));
-  } catch {}
+export async function removeRemoteState(
+  provider: string,
+  sandboxId: string,
+): Promise<void> {
+  const state = await readRemoteState(provider, sandboxId);
+  await unlink(statePath(provider, sandboxId)).catch(() => {});
   if (state) {
-    try {
-      rmSync(`${RUNS_BASE}/${sanitizeName(state.sessionId)}`, {
-        recursive: true,
-        force: true,
-      });
-    } catch {}
+    await rm(`${RUNS_BASE}/${sanitizeName(state.sessionId)}`, {
+      recursive: true,
+      force: true,
+    }).catch(() => {});
   }
 }
 
-export function touchRemoteState(provider: string, sandboxId: string): void {
-  const s = readRemoteState(provider, sandboxId);
+export async function touchRemoteState(
+  provider: string,
+  sandboxId: string,
+): Promise<void> {
+  const s = await readRemoteState(provider, sandboxId);
   if (s) {
     s.lastActivityAt = new Date().toISOString();
-    writeRemoteState(s);
+    await writeRemoteState(s);
   }
 }
 
 /** Find a provider's state file by session id (the reverse index ensure needs
  *  when the provider-side label lookup fails). */
-export function findRemoteStateBySession(
+export async function findRemoteStateBySession(
   provider: string,
   sessionId: string,
-): RemoteSandboxState | null {
+): Promise<RemoteSandboxState | null> {
   return (
-    listRemoteStates(provider).find((state) => state.sessionId === sessionId) ||
-    null
+    (await listRemoteStates(provider)).find(
+      (state) => state.sessionId === sessionId,
+    ) || null
   );
 }
 
@@ -481,15 +471,16 @@ export async function findRemoteStateBySessionAsync(
 
 /** Enumerate a provider's persisted sandboxes. Used by provider-side orphan
  * audits (notably local MicroVM prewarms); malformed files fail closed. */
-export function listRemoteStates(provider: string): RemoteSandboxState[] {
+export async function listRemoteStates(
+  provider: string,
+): Promise<RemoteSandboxState[]> {
   const states: RemoteSandboxState[] = [];
   try {
-    if (!existsSync(STATE_DIR)) return states;
-    for (const f of readdirSync(STATE_DIR)) {
+    for (const f of await readdir(STATE_DIR)) {
       if (!f.startsWith(`${provider}-`) || !f.endsWith(".json")) continue;
       try {
         const s: RemoteSandboxState = JSON.parse(
-          readFileSync(`${STATE_DIR}/${f}`, "utf-8"),
+          await readFile(`${STATE_DIR}/${f}`, "utf-8"),
         );
         if (s.provider === provider && s.sandboxId && s.sessionId)
           states.push(withTrustPolicy(s));
@@ -1158,11 +1149,25 @@ export interface RemoteWorkspaceSeedFile {
  *
  *   { "seedFiles": ["packages/web/.env.local"] }
  */
-export function loadRemoteWorkspaceSeedFiles(repo: {
+/** Run git without blocking the event loop; stdout only when `capture`. */
+async function gitQuiet(
+  cmd: string[],
+  capture = false,
+): Promise<{ exitCode: number; stdout: string }> {
+  const proc = Bun.spawn({
+    cmd,
+    stdout: capture ? "pipe" : "ignore",
+    stderr: "ignore",
+  });
+  const stdout = capture ? await new Response(proc.stdout).text() : "";
+  return { exitCode: await proc.exited, stdout };
+}
+
+export async function loadRemoteWorkspaceSeedFiles(repo: {
   id: string;
   repo: string;
   defaultBranch?: string;
-}): RemoteWorkspaceSeedFile[] {
+}): Promise<RemoteWorkspaceSeedFile[]> {
   // Registered checkouts can legitimately be parked on another session's
   // branch. Prefer the trusted remote-tracking default branch so a freshly
   // merged environment manifest applies immediately and an old branch cannot
@@ -1170,33 +1175,32 @@ export function loadRemoteWorkspaceSeedFiles(repo: {
   let manifestText: string | null = null;
   if (repo.defaultBranch) {
     const ref = `refs/remotes/origin/${repo.defaultBranch}`;
-    const refExists = Bun.spawnSync({
-      cmd: [
-        "git",
-        "-C",
-        repo.repo,
-        "rev-parse",
-        "--verify",
-        "--quiet",
-        `${ref}^{commit}`,
-      ],
-      stdout: "ignore",
-      stderr: "ignore",
-    });
+    const refExists = await gitQuiet([
+      "git",
+      "-C",
+      repo.repo,
+      "rev-parse",
+      "--verify",
+      "--quiet",
+      `${ref}^{commit}`,
+    ]);
     if (refExists.exitCode === 0) {
-      const shown = Bun.spawnSync({
-        cmd: ["git", "-C", repo.repo, "show", `${ref}:${REMOTE_SEED_MANIFEST}`],
-        stdout: "pipe",
-        stderr: "ignore",
-      });
+      const shown = await gitQuiet(
+        ["git", "-C", repo.repo, "show", `${ref}:${REMOTE_SEED_MANIFEST}`],
+        true,
+      );
       if (shown.exitCode !== 0) return [];
-      manifestText = shown.stdout.toString("utf-8");
+      manifestText = shown.stdout;
     }
   }
   if (manifestText == null) {
     const manifestPath = resolve(repo.repo, REMOTE_SEED_MANIFEST);
-    if (!existsSync(manifestPath)) return [];
-    manifestText = readFileSync(manifestPath, "utf-8");
+    try {
+      manifestText = await readFile(manifestPath, "utf-8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw error;
+    }
   }
   let raw: unknown;
   try {
@@ -1237,22 +1241,28 @@ export function loadRemoteWorkspaceSeedFiles(repo: {
     if (!within || within.startsWith("..") || isAbsolute(within)) {
       throw new Error(`${repo.id} seed file escapes the checkout: ${path}`);
     }
-    if (!existsSync(source)) {
+    let stat: Awaited<ReturnType<typeof lstat>>;
+    try {
+      stat = await lstat(source);
+    } catch {
       throw new Error(
         `${repo.id} requires local seed file ${path}; create it in ${repo.repo} before preparing a sandbox`,
       );
     }
-    const stat = lstatSync(source);
     if (!stat.isFile() || stat.isSymbolicLink()) {
       throw new Error(
         `${repo.id} seed file must be a regular file, not a symlink: ${path}`,
       );
     }
-    const ignored = Bun.spawnSync({
-      cmd: ["git", "-C", repo.repo, "check-ignore", "-q", "--", path],
-      stdout: "ignore",
-      stderr: "ignore",
-    });
+    const ignored = await gitQuiet([
+      "git",
+      "-C",
+      repo.repo,
+      "check-ignore",
+      "-q",
+      "--",
+      path,
+    ]);
     if (ignored.exitCode !== 0) {
       throw new Error(
         `${repo.id} seed file must be gitignored before upload: ${path}`,
@@ -1265,7 +1275,7 @@ export function loadRemoteWorkspaceSeedFiles(repo: {
     if (total > MAX_REMOTE_SEED_TOTAL_BYTES) {
       throw new Error(`${repo.id} seed files exceed the 4 MiB workspace limit`);
     }
-    const content = readFileSync(source, "utf-8");
+    const content = await readFile(source, "utf-8");
     if (content.includes("\0")) {
       throw new Error(`${repo.id} seed file must be text: ${path}`);
     }
@@ -1283,7 +1293,7 @@ async function materializeRemoteWorkspaceSeedFiles(
   const { configuredRepos } = await import("../../config");
   const repo = configuredRepos()[repoId];
   if (!repo) throw new Error(`Unknown repo ${repoId}`);
-  const files = loadRemoteWorkspaceSeedFiles(repo);
+  const files = await loadRemoteWorkspaceSeedFiles(repo);
   for (const file of files) {
     const target = `${cwd}/${file.path}`;
     await driver.exec(`mkdir -p ${shellQuoteWord(dirname(target))}`);
@@ -2068,7 +2078,8 @@ export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
   const touch = () => {
     touchedAt = Date.now();
     try {
-      void parts.touchActivity();
+      // Best effort: a failed activity stamp must not fail the call.
+      void Promise.resolve(parts.touchActivity()).catch(() => {});
     } catch {}
   };
   /** A burst caller (assumeStarted) re-checks the machine and refreshes its

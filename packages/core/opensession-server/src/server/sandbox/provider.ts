@@ -16,12 +16,7 @@
  *  and came back with GPU support (adapters/modal.ts). `tart` is a
  *  macOS VM on a paired Mac Runner (adapters/tart.ts). */
 export type SandboxProviderId =
-  | "local"
-  | "daytona"
-  | "box"
-  | "tart"
-  | "usecomputer"
-  | "modal";
+  "local" | "daytona" | "box" | "tart" | "usecomputer" | "modal";
 
 /** Selection authority for starting new work on a configured provider. */
 export type SandboxProviderUsability =
@@ -251,7 +246,7 @@ export interface SandboxProvider {
   /** The machine this provider holds for a session, awake or asleep, also
    *  when `ensure` failed after creating it (a failed setup). The run path
    *  records it so the session can pause it and the idle sweep sleeps it. */
-  machineFor?(sessionId: string): string | undefined;
+  machineFor?(sessionId: string): Promise<string | undefined>;
   /** Persist a session-owned filesystem checkpoint after a clean turn.
    * Providers whose stopped sandboxes retain disk do not need this hook. */
   checkpoint?(sandboxId: string): Promise<void>;
