@@ -34,7 +34,7 @@
  * Webhook routes bind at boot: changes here need a real restart.
  */
 
-import { existsSync, mkdirSync, copyFileSync, statSync } from "fs";
+import { copyFile, mkdir, stat } from "fs/promises";
 import { basename } from "path";
 import { randomBytes } from "crypto";
 import { UPLOADS_DIR } from "./uploads";
@@ -107,7 +107,9 @@ function safeName(localPath: string): string {
  * public URLs. Pure local work — no GitHub API involved, so it works for any
  * repo and never touches any git branch.
  */
-export function uploadPrImages(images: PrImageInput[]): UploadedPrImage[] {
+export async function uploadPrImages(
+  images: PrImageInput[],
+): Promise<UploadedPrImage[]> {
   if (!images.length) throw new Error("no images given");
   for (const img of images) {
     const p = (img.path || "").trim();
@@ -119,24 +121,30 @@ export function uploadPrImages(images: PrImageInput[]): UploadedPrImage[] {
       throw new Error(
         `image must be one of ${[...IMAGE_EXTS].join(" ")}: ${p}`,
       );
-    if (!existsSync(p)) throw new Error(`image file not found: ${p}`);
-    if (statSync(p).size > MAX_IMAGE_BYTES)
+    const size = await stat(p).then(
+      (st) => st.size,
+      () => null,
+    );
+    if (size === null) throw new Error(`image file not found: ${p}`);
+    if (size > MAX_IMAGE_BYTES)
       throw new Error(
         `image too large (max ${MAX_IMAGE_BYTES / 1024 / 1024}MB — GitHub's camo proxy won't serve bigger): ${p}`,
       );
   }
-  return images.map((img) => {
+  const uploaded: UploadedPrImage[] = [];
+  for (const img of images) {
     const token = randomBytes(16).toString("hex");
     const name = safeName(img.path.trim());
     const dir = `${PR_IMAGES_DIR}/${token}`;
-    mkdirSync(dir, { recursive: true });
-    copyFileSync(img.path.trim(), `${dir}/${name}`);
-    return {
+    await mkdir(dir, { recursive: true });
+    await copyFile(img.path.trim(), `${dir}/${name}`);
+    uploaded.push({
       alt: img.alt?.trim() || basename(img.path).replace(/\.[^.]+$/, ""),
       url: `${PUBLIC_BASE}/pr-images/${token}/${name}`,
       stagedPath: `${dir}/${name}`,
-    };
-  });
+    });
+  }
+  return uploaded;
 }
 
 /** Markdown for one uploaded image. */
@@ -196,9 +204,10 @@ export function prImagePublicRoutes(): Map<
     const m = url.pathname.match(PUBLIC_PATH_RE);
     if (!m) return Response.json({ error: "Not found" }, { status: 404 });
     const path = `${PR_IMAGES_DIR}/${m[1]}/${m[2]}`;
-    if (!existsSync(path))
+    const file = Bun.file(path);
+    if (!(await file.exists()))
       return Response.json({ error: "Not found" }, { status: 404 });
-    return new Response(Bun.file(path), {
+    return new Response(file, {
       headers: {
         "Content-Type": CONTENT_TYPES[ext(m[2])] || "application/octet-stream",
         "Cache-Control": "public, max-age=31536000, immutable",

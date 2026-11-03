@@ -27,19 +27,18 @@ import {
   type DatabasesWorkerRequest,
   type DatabasesWorkerResponse,
 } from "./databases-protocol";
+import type { DatabasesStore } from "./databases-sqlite";
 import {
   DatabaseLimitError,
   DatabaseNotFoundError,
-  DatabasesStore,
   type DatabaseMeta,
   type DatabaseParams,
-} from "./databases-sqlite";
+} from "./databases-shared";
 import { DatabaseSqlError } from "./database-sql-guard";
 import { broadcastToAll } from "./ws-hub";
 
 export { DatabaseSqlError };
 export {
-  DatabasesStore,
   DatabaseNotFoundError,
   DatabaseLimitError,
   isDatabaseId,
@@ -57,7 +56,7 @@ export {
   type ExecuteResult,
   type QueryResult,
   type RowsPage,
-} from "./databases-sqlite";
+} from "./databases-shared";
 
 /** The store root, resolved per call so a repointed state root wins. */
 export function databasesRoot(): string {

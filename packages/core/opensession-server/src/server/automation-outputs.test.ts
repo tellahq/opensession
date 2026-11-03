@@ -154,7 +154,7 @@ describe("deliverAutomationOutputs", () => {
 
   test("accepts a current report as the required durable output", async () => {
     const startedAt = new Date(Date.now() - 1000);
-    publishReport({
+    await publishReport({
       automationId,
       automationName: "Test",
       sessionId: "os-with-report",

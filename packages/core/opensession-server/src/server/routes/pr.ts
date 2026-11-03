@@ -32,7 +32,8 @@ import {
 } from "../sessions";
 import { githubLoginToPersonKey } from "../shared/user-mappings";
 import { getRepo } from "../worktree";
-import { existsSync, watch } from "fs";
+import { watch } from "fs";
+import { pathExists } from "../shared/path-exists";
 import {
   githubCredentialRequiredResponse,
   githubMutationCredential,
@@ -838,7 +839,7 @@ export async function handlePrRoutes(
       );
     // `gh stack link` reads its remote from the working directory and has no
     // --repo flag, so it must run inside the session's own worktree.
-    if (!existsSync(session.worktreeDir))
+    if (!(await pathExists(session.worktreeDir)))
       return Response.json(
         { error: "This session's worktree is gone — nothing to link from" },
         { status: 400 },
@@ -915,7 +916,7 @@ export async function handlePrRoutes(
       );
     // `gh stack merge` reads its remote from the working directory and has no
     // --repo flag, so it must run inside a checkout of the repo.
-    if (!session.worktreeDir || !existsSync(session.worktreeDir))
+    if (!session.worktreeDir || !(await pathExists(session.worktreeDir)))
       return Response.json(
         { error: "This session's worktree is gone — nothing to merge from" },
         { status: 400 },

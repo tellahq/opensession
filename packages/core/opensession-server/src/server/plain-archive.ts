@@ -11,7 +11,7 @@
  */
 import { catalogNativeSessions } from "./session-catalog-read";
 import { executeSessionProjection } from "./session-projection-executor";
-import { readFileSync, existsSync } from "fs";
+import { readFile } from "fs/promises";
 import { plainApiUrl } from "./config";
 import {
   discussionAgentConfigured,
@@ -60,9 +60,8 @@ export async function activePlainSessions(): Promise<PlainSessionCandidate[]> {
  */
 export async function clearSessionFileArchive(id: string): Promise<boolean> {
   const path = `${SESSIONS_DIR}/${id}.json`;
-  if (!existsSync(path)) return false;
   try {
-    const data = JSON.parse(readFileSync(path, "utf-8")) as NativeSessionFile;
+    const data = JSON.parse(await readFile(path, "utf-8")) as NativeSessionFile;
     if (!data.archived && !data.archivedAt) return false;
     return await executeSessionProjection(
       id,

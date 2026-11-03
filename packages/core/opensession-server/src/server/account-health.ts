@@ -26,7 +26,7 @@
  * is never alerted.
  */
 
-import { existsSync, readFileSync } from "fs";
+import { readFile } from "fs/promises";
 import { accountDisplayName } from "./provider-account-label";
 import { listAccountsPublic } from "./claude-accounts";
 import { listCodexAccountsPublic } from "./codex-accounts";
@@ -34,7 +34,7 @@ import { refreshIdleCodexTokens } from "./codex-token-refresh";
 import { xaiRefreshFailures } from "./xai-accounts";
 import { stateDir } from "./paths";
 import { resolveTeammate } from "./shared/user-mappings";
-import { writeFileAtomic } from "./shared/atomic-write";
+import { writeFileAtomicAsync } from "./shared/atomic-write";
 import { openDirectMessage, sendSlackMessage } from "../agents/slack/slack-api";
 import { audit } from "./audit";
 import {
@@ -72,9 +72,9 @@ interface HealthState {
   alerts: Record<string, { lastSentAt: string }>;
 }
 
-function readState(): HealthState {
+async function readState(): Promise<HealthState> {
   try {
-    const parsed = JSON.parse(readFileSync(STATE_PATH, "utf-8"));
+    const parsed = JSON.parse(await readFile(STATE_PATH, "utf-8"));
     return {
       alerts:
         parsed?.alerts && typeof parsed.alerts === "object"
@@ -86,8 +86,8 @@ function readState(): HealthState {
   }
 }
 
-function writeState(state: HealthState): void {
-  writeFileAtomic(STATE_PATH, JSON.stringify(state, null, 2) + "\n");
+async function writeState(state: HealthState): Promise<void> {
+  await writeFileAtomicAsync(STATE_PATH, JSON.stringify(state, null, 2) + "\n");
 }
 
 /** ms-epoch expiry from a JWT's `exp` claim, or null if unparseable. */
@@ -155,7 +155,7 @@ function claudeIssues(): Issue[] {
   return issues;
 }
 
-function codexIssues(): Issue[] {
+async function codexIssues(): Promise<Issue[]> {
   const issues: Issue[] = [];
   for (const a of listCodexAccountsPublic()) {
     if (a.kind !== "home") continue; // API keys don't expire on a clock.
@@ -163,18 +163,25 @@ function codexIssues(): Issue[] {
     const home = a.valueMasked; // for kind=home this is the CODEX_HOME path
     const fix = `Fix on the VPS: \`CODEX_HOME=${home} codex login\` (or copy a fresh ~/.codex/auth.json into ${home}/).`;
     const authPath = `${home}/auth.json`;
-    if (!existsSync(authPath)) {
-      issues.push({
-        key: `codex:${a.id}:auth-missing`,
-        message: `It's ${personaName()} — codex account "${identity}" has no auth.json at ${authPath}; OpenAI-model runs on it will fail. ${fix}`,
-        notify: FALLBACK_TEAMMATE,
-      });
-      continue;
+    let raw: string | null = null;
+    try {
+      raw = await readFile(authPath, "utf-8");
+    } catch (e: any) {
+      // A file that exists but cannot be read falls through to the
+      // "unreadable" alert below.
+      if (e?.code === "ENOENT" || e?.code === "ENOTDIR") {
+        issues.push({
+          key: `codex:${a.id}:auth-missing`,
+          message: `It's ${personaName()} — codex account "${identity}" has no auth.json at ${authPath}; OpenAI-model runs on it will fail. ${fix}`,
+          notify: FALLBACK_TEAMMATE,
+        });
+        continue;
+      }
     }
     let access: string | undefined;
     try {
-      access = JSON.parse(readFileSync(authPath, "utf-8"))?.tokens
-        ?.access_token;
+      if (raw === null) throw new Error("unreadable");
+      access = JSON.parse(raw)?.tokens?.access_token;
     } catch {
       issues.push({
         key: `codex:${a.id}:auth-unreadable`,
@@ -240,8 +247,8 @@ async function dmTeammate(
 }
 
 /** Detection only, no DMs/state — for dry runs and tests. */
-export function detectAccountIssues(): Issue[] {
-  return [...claudeIssues(), ...codexIssues(), ...xaiIssues()];
+export async function detectAccountIssues(): Promise<Issue[]> {
+  return [...claudeIssues(), ...(await codexIssues()), ...xaiIssues()];
 }
 
 /**
@@ -281,10 +288,10 @@ export async function sweepAccountHealth(): Promise<Issue[]> {
     console.warn("[account-health] codex token refresh failed:", e),
   );
   const issues = [
-    ...detectAccountIssues(),
+    ...(await detectAccountIssues()),
     ...(await selectedGithubCredentialIssues()),
   ];
-  const state = readState();
+  const state = await readState();
   const now = Date.now();
   const live = new Set(issues.map((i) => i.key));
   // Drop cleared issues so a relapse re-alerts immediately.
@@ -308,7 +315,7 @@ export async function sweepAccountHealth(): Promise<Issue[]> {
         `[account-health] failed to DM ${issue.notify} about ${issue.key}`,
       );
   }
-  writeState(state);
+  await writeState(state);
   return issues;
 }
 

@@ -95,14 +95,14 @@ describe("deployStateDir / deployCheckout", () => {
 });
 
 describe("readDeployState", () => {
-  test("empty state dir degrades to nulls", () => {
-    const s = readDeployState(dir);
+  test("empty state dir degrades to nulls", async () => {
+    const s = await readDeployState(dir);
     expect(s.pin).toBeNull();
     expect(s.markerAgeMs).toBeNull();
     expect(s.result).toBeNull();
   });
 
-  test("reads pin + marker + result together", () => {
+  test("reads pin + marker + result together", async () => {
     const now = 1_700_000_600_000;
     writeFileSync(join(dir, "last-known-good"), "abc123def456\n");
     writeFileSync(join(dir, "last-deploy-marker"), "1700000000\n");
@@ -110,7 +110,7 @@ describe("readDeployState", () => {
       join(dir, "last-result.json"),
       '{"ok":false,"action":"rollback-needed","sha":"badbadbad1","previousSha":"abc123def456","message":"unhealthy; tree left"}',
     );
-    const s = readDeployState(dir, now);
+    const s = await readDeployState(dir, now);
     expect(s.pin).toBe("abc123def456");
     expect(s.markerAgeMs).toBe(600_000);
     expect(s.result!.action).toBe("rollback-needed");
@@ -289,9 +289,9 @@ describe("macOS self-deploy launcher", () => {
     await expect(acquireMacDeployLock(dir, 5, 1)).rejects.toThrow(
       "timed out waiting for the active macOS deploy",
     );
-    release();
+    await release();
     const nextRelease = await acquireMacDeployLock(dir, 20, 1);
-    nextRelease();
+    await nextRelease();
   });
 
   test("submits a detached launchd job without sudo or shell interpolation", () => {

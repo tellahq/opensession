@@ -15,7 +15,7 @@ import {
 } from "./config";
 import { $ } from "bun";
 import { createHash } from "node:crypto";
-import { readFileSync } from "fs";
+import { readFile } from "fs/promises";
 import { coalescedWriter } from "./shared/coalesced-write";
 import { audited } from "./audit";
 import { PR_DIFF_CACHE_LIMITS, setBounded } from "./bounded-cache";
@@ -527,11 +527,14 @@ export function shouldRefreshPrDetails(
 const DETAILS_CACHE_FILE = statePath(".opensession-pr-details-cache.json");
 /** Seed the details cache from disk. Also exported for demo instances, whose
  *  snapshot is written at the end of boot — see loadPrCacheSnapshot(). */
-export function loadPrDetailsSnapshot(): void {
+export async function loadPrDetailsSnapshot(): Promise<void> {
   try {
     const raw: Record<string, { data: PrDetails | null; ts: number }> =
-      JSON.parse(readFileSync(DETAILS_CACHE_FILE, "utf8"));
+      JSON.parse(await readFile(DETAILS_CACHE_FILE, "utf8"));
     for (const [k, v] of Object.entries(raw)) {
+      // The read is asynchronous: never replace an entry fetched meanwhile.
+      const live = cache.get(k);
+      if (live && live.ts > v.ts) continue;
       cache.set(k, v);
       if (v.data?.state === "OPEN" && Number.isInteger(v.data.number))
         numberByBranch.set(k, v.data.number);
@@ -629,7 +632,7 @@ async function resolvePrNumber(
   }
 }
 
-loadPrDetailsSnapshot();
+void loadPrDetailsSnapshot();
 
 // Debounced and written asynchronously: the snapshot only seeds the cache
 // after a restart, and a missing entry is simply fetched again. It is still

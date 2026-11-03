@@ -91,7 +91,7 @@ function offerDemoAsk(state: DemoState): void {
 export async function seedDemoDataset(): Promise<void> {
   if (!process.env.OPENSESSION_STATE_DIR) return;
   try {
-    const result = generateDemoData();
+    const result = await generateDemoData();
     console.log(
       result.created
         ? `[demo] dataset generated into ${result.sessionsDir} (${result.sessionIds.length} sessions)`
@@ -161,8 +161,8 @@ export async function startDemo(): Promise<void> {
   try {
     const [{ loadPrCacheSnapshot }, { loadPrDetailsSnapshot, seedPrDiff }] =
       await Promise.all([import("../sessions"), import("../pr-info")]);
-    loadPrCacheSnapshot();
-    loadPrDetailsSnapshot();
+    await loadPrCacheSnapshot();
+    await loadPrDetailsSnapshot();
     // The Review page's Files-changed tab renders GitHub's patch, which no
     // amount of local git can stand in for — pin the synthetic one.
     const { demoPrDiff, DEMO_BRANCH, DEMO_GH_REPO } =

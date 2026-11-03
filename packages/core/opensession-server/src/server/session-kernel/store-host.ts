@@ -6,6 +6,8 @@ import {
   type DurableOutboxItem,
   type DurableSessionQuarantine,
   type DurableTimer,
+  type OrphanedRunProof,
+  parseOrphanedRunProof,
   type SessionKernelStoreApi,
 } from "./store";
 import { sessionKernelStoreRoute } from "./store-routing";
@@ -433,6 +435,21 @@ export class SessionKernelStoreHost {
     return route.central ?? route.isolated;
   }
 
+  private settleOrphanedRun(sessionId: string, proof: OrphanedRunProof): void {
+    if (!this.isIsolated(sessionId)) {
+      this.centralOperation(() =>
+        this.central.settleOrphanedRun(sessionId, proof),
+      );
+      return;
+    }
+    this.centralOperation(() =>
+      this.central.markIsolatedSessionProjectionDirty(sessionId),
+    );
+    this.containIsolated(sessionId, "storage:orphaned-run-repair", () =>
+      this.openIsolated(sessionId).settleOrphanedRun(sessionId, proof),
+    );
+  }
+
   call(method: string, args: unknown[]): unknown {
     if (method === "quarantinedSession")
       return this.quarantinedSession(String(args[0] ?? ""));
@@ -444,6 +461,11 @@ export class SessionKernelStoreHost {
       );
     if (method === "releaseQuarantine") {
       const sessionId = String(args[0] ?? "");
+      const orphanedRun = parseOrphanedRunProof(args[1]);
+      // Settle a proven-unowned run first; the release below then re-derives
+      // every other piece of evidence on its own unmodified merits.
+      if (orphanedRun && this.quarantinedSession(sessionId))
+        this.settleOrphanedRun(sessionId, orphanedRun);
       const quarantine = this.quarantinedSession(sessionId);
       if (!quarantine?.repairable) return false;
       const committedOutboxSettlement = this.committedOutboxSettlementEvidence(

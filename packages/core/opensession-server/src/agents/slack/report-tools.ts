@@ -153,7 +153,7 @@ prompt: the whole opening prompt for that session (max ${MAX_REPORT_TASK_PROMPT}
               );
             assets.push({ path: rel, data: await readFile(realPath) });
           }
-          const meta = publishReport({
+          const meta = await publishReport({
             automationId: ctx.automationId,
             automationName: ctx.automationName,
             sessionId: ctx.sessionId,

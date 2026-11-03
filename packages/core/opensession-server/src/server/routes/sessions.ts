@@ -95,6 +95,7 @@ import {
   removeTombstonedSessionArtifacts,
 } from "../sessions";
 import { publicSessionSafety } from "../session-safety";
+import { orphanedRunProof, orphanedRunRepairable } from "../orphaned-run-proof";
 import type { DurableSessionQuarantine } from "../session-kernel/store";
 import {
   getStatusOverride,
@@ -511,7 +512,11 @@ function enrichSession(
   });
   const quarantine = signals?.quarantines.get(s.id);
   const safety = quarantine
-    ? publicSessionSafety(quarantine, signals?.runtime.claimedJournalSessions)
+    ? publicSessionSafety(
+        quarantine,
+        signals?.runtime.claimedJournalSessions,
+        orphanedRunRepairable(quarantine, [s.claudeSessionId, s.codexThreadId]),
+      )
     : undefined;
   return {
     ...prSession,
@@ -571,6 +576,17 @@ export async function sessionDetail(
   const signals = await sessionListRuntimeSignals();
   const context = sessionEnrichmentContext();
   const enriched = enrichSession(session, signals, context);
+  // List rows use a cheap projection check; the detail view can afford the
+  // durable one, which also sees runs left unsettled before a restart.
+  if (
+    enriched.safety &&
+    !enriched.safety.repairAvailable &&
+    (await orphanedRunProof(enriched.id, [
+      enriched.claudeSessionId,
+      enriched.codexThreadId,
+    ]))
+  )
+    enriched.safety = { ...enriched.safety, repairAvailable: true };
   if (!enriched.workspaceId) return enriched;
   return projectWorkspacePrRefs(
     enriched,
@@ -1392,7 +1408,7 @@ export async function handleSessionsRoutes(
         raw.trim(),
         pastedTextsFromWire(body?.pastedTexts),
       );
-      const images = parseImageDataUrls(body?.images);
+      const images = await parseImageDataUrls(body?.images);
       const imageUrls = asDataUrlList(body?.images);
       // An image-only send is a real message, so only reject an empty one.
       const files = Array.isArray(body?.files) ? body.files : undefined;

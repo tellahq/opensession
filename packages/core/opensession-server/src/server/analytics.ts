@@ -20,14 +20,13 @@ import { catalogNativeSessions } from "./session-catalog-read";
 import { completeAgentSessionCatalogSources } from "./agent-session-catalog";
 import { getConfigAsync } from "./config";
 import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  statSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+  mkdir,
+  readdir,
+  readFile,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { $ } from "bun";
 import { stateDir } from "./paths";
 import { configuredRepos, defaultRepo, githubBotLogins } from "./config";
@@ -121,10 +120,10 @@ async function cachedRollup(date: string): Promise<DayRollup> {
 
 let lastCachePrune = 0;
 
-function writeDiskCache(name: string, data: unknown): void {
+async function writeDiskCache(name: string, data: unknown): Promise<void> {
   try {
-    mkdirSync(CACHE_DIR, { recursive: true });
-    writeFileSync(
+    await mkdir(CACHE_DIR, { recursive: true });
+    await writeFile(
       `${CACHE_DIR}/${name}.json`,
       JSON.stringify({ at: Date.now(), data }),
     );
@@ -134,19 +133,21 @@ function writeDiskCache(name: string, data: unknown): void {
   if (Date.now() - lastCachePrune < 86_400_000) return;
   lastCachePrune = Date.now();
   try {
-    for (const f of readdirSync(CACHE_DIR)) {
+    for (const f of await readdir(CACHE_DIR)) {
       if (!f.startsWith("gh-") && !f.startsWith("summary-")) continue;
       const p = `${CACHE_DIR}/${f}`;
-      if (Date.now() - statSync(p).mtimeMs > 7 * 86_400_000) unlinkSync(p);
+      if (Date.now() - (await stat(p)).mtimeMs > 7 * 86_400_000)
+        await unlink(p);
     }
   } catch {}
 }
 
-function readDiskCache<T>(name: string): { at: number; data: T } | null {
+async function readDiskCache<T>(
+  name: string,
+): Promise<{ at: number; data: T } | null> {
   try {
     const p = `${CACHE_DIR}/${name}.json`;
-    if (!existsSync(p)) return null;
-    const parsed = JSON.parse(readFileSync(p, "utf-8"));
+    const parsed = JSON.parse(await readFile(p, "utf-8"));
     if (typeof parsed?.at !== "number" || parsed.data === undefined)
       return null;
     return parsed;
@@ -328,7 +329,7 @@ async function fetchRepoPrs(
   const diskName = `gh-prs-${repoId}-${fromDate}`;
   let cached = prCache.get(key);
   if (!cached) {
-    const disk = readDiskCache<AnalyticsPr[]>(diskName);
+    const disk = await readDiskCache<AnalyticsPr[]>(diskName);
     if (disk) prCache.set(key, (cached = { at: disk.at, prs: disk.data }));
   }
   if (cached && Date.now() - cached.at < PR_CACHE_TTL_MS) return cached.prs;
@@ -387,7 +388,7 @@ async function fetchRepoPrs(
   if (failed) return cached?.prs ?? [...seen.values()];
   const prs = [...seen.values()];
   prCache.set(key, { at: Date.now(), prs });
-  writeDiskCache(diskName, prs);
+  await writeDiskCache(diskName, prs);
   return prs;
 }
 
@@ -467,7 +468,7 @@ async function fetchRepoFactoryPrs(
   const diskName = `gh-factory-${repoId}-${fromDate}`;
   let cached = factoryCache.get(key);
   if (!cached) {
-    const disk = readDiskCache<FactoryPr[]>(diskName);
+    const disk = await readDiskCache<FactoryPr[]>(diskName);
     if (disk) factoryCache.set(key, (cached = { at: disk.at, prs: disk.data }));
   }
   if (cached && Date.now() - cached.at < FACTORY_CACHE_TTL_MS)
@@ -547,7 +548,7 @@ async function fetchRepoFactoryPrs(
     return cached?.prs ?? [];
   }
   factoryCache.set(key, { at: Date.now(), prs });
-  writeDiskCache(diskName, prs);
+  await writeDiskCache(diskName, prs);
   return prs;
 }
 
@@ -1429,7 +1430,7 @@ async function buildAndStore(
 ): Promise<AnalyticsSummary> {
   const summary = await buildAnalytics(from, to);
   summaryCache.set(key, { at: Date.now(), summary });
-  writeDiskCache(summaryDiskName(from, to), summary);
+  await writeDiskCache(summaryDiskName(from, to), summary);
   // Bound the map under arbitrary custom ranges (entries are ~100KB).
   if (summaryCache.size > 24) {
     const oldest = [...summaryCache.entries()].sort(
@@ -1447,7 +1448,9 @@ export async function getAnalytics(
   const key = `${from}:${to}`;
   let cached = summaryCache.get(key);
   if (!cached) {
-    const disk = readDiskCache<AnalyticsSummary>(summaryDiskName(from, to));
+    const disk = await readDiskCache<AnalyticsSummary>(
+      summaryDiskName(from, to),
+    );
     if (disk)
       summaryCache.set(key, (cached = { at: disk.at, summary: disk.data }));
   }
