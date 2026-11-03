@@ -366,6 +366,12 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   those states for screenshots. With `OS1_OPEN_PR=1`, `OS1_OPEN_PR_REVIEW=1`
   opens the Review sheet and `OS1_OPEN_PR_FINISH_REVIEW=1` the pending-review
   sheet with one fixture note (DEBUG).
+- **PR links in GitHub** (iOS) — Settings → Personal → Preferences → Links →
+  Open pull requests in GitHub (device-local, `os1.links.prsInGitHubApp`, off
+  by default) sends PR chips and github.com PR URLs in a transcript to the
+  GitHub app through its universal link, instead of the Review panel or the
+  in-app browser. Without the app installed they fall back to the in-app
+  browser (`GitHubAppLinks`).
 - **PR panel** — sessions with a pull request expose a row in the title-opened
   workspace sheet and the overflow menu; it opens a panel with state, review
   decision, conflicts, every check with its status, and reviewers, via

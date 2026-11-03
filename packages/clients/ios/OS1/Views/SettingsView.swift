@@ -22,6 +22,8 @@ struct SettingsView: View {
         ProcessInfo.processInfo.environment["OS1_OPEN_SETTINGS"] == "notifications"
     @State private var opensMemoryFixture =
         ProcessInfo.processInfo.environment["OS1_OPEN_SETTINGS"] == "memory"
+    @State private var opensPreferencesFixture =
+        ProcessInfo.processInfo.environment["OS1_OPEN_SETTINGS"] == "preferences"
     #endif
 
     private var signIn: GitHubSignIn { .shared }
@@ -62,6 +64,10 @@ struct SettingsView: View {
             // `OS1_MEMORY_COMMIT` / `OS1_MEMORY_FILE` to go deeper).
             .navigationDestination(isPresented: $opensMemoryFixture) {
                 MemorySettingsView()
+            }
+            // And `OS1_OPEN_SETTINGS=preferences`.
+            .navigationDestination(isPresented: $opensPreferencesFixture) {
+                PreferencesSettingsView()
             }
             #endif
             #if os(macOS)
