@@ -375,7 +375,7 @@ async function promoteFrontendRelease(
       releaseRoot,
       promotedAt: new Date().toISOString(),
     };
-    const version = activateFrontendRelease(pointer);
+    const version = await activateFrontendRelease(pointer);
     const result: SelfDeployResult = {
       ok: true,
       action: "frontend-promote",

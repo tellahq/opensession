@@ -1,7 +1,7 @@
-import { existsSync, readFileSync } from "fs";
+import { readFile } from "fs/promises";
 import { randomUUID } from "crypto";
 import { stateDir } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 
 const DEFAULT_TTL_MS = 7 * 24 * 60 * 60_000;
 const MAX_TTL_MS = 30 * 24 * 60 * 60_000;
@@ -67,9 +67,16 @@ function parseLease(value: unknown): PreviewPathLease {
   };
 }
 
-function readStore(file: string): PreviewPathLeaseStore {
-  if (!existsSync(file)) return { version: 1, leases: [] };
-  const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+async function readStore(file: string): Promise<PreviewPathLeaseStore> {
+  let text: string;
+  try {
+    text = await readFile(file, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT")
+      return { version: 1, leases: [] };
+    throw error;
+  }
+  const parsed: unknown = JSON.parse(text);
   if (
     !parsed ||
     typeof parsed !== "object" ||
@@ -82,8 +89,18 @@ function readStore(file: string): PreviewPathLeaseStore {
   return { version: 1, leases: parsed.leases.map(parseLease) };
 }
 
-function writeStore(file: string, leases: PreviewPathLease[]): void {
-  writeJsonAtomic(file, { version: 1, leases }, true, 0o600);
+function writeStore(file: string, leases: PreviewPathLease[]): Promise<void> {
+  return writeJsonAtomicAsync(file, { version: 1, leases }, true, 0o600);
+}
+
+/** Store transactions (read, conflict check, atomic replacement) run one at a
+ *  time in this process, so two tool calls in the gateway cannot interleave
+ *  and both claim the same key. */
+let storeQueue: Promise<unknown> = Promise.resolve();
+function serialized<T>(transaction: () => Promise<T>): Promise<T> {
+  const next = storeQueue.then(transaction, transaction);
+  storeQueue = next.catch(() => {});
+  return next;
 }
 
 function normalizedKey(value: string): string {
@@ -103,11 +120,11 @@ function ttlMs(minutes?: number): number {
 }
 
 /**
- * Reserve one mutable staging record for one session. This is synchronous on
- * purpose: read, conflict check and atomic replacement run without an await,
- * so two tool calls in the active gateway cannot both claim the same key.
+ * Reserve one mutable staging record for one session. Read, conflict check
+ * and atomic replacement run as one serialized transaction, so two tool calls
+ * in the active gateway cannot both claim the same key.
  */
-export function claimPreviewPathLease(
+export async function claimPreviewPathLease(
   input: {
     key: string;
     sessionId: string;
@@ -116,61 +133,66 @@ export function claimPreviewPathLease(
     ttlMinutes?: number;
   },
   options: LeaseStoreOptions = {},
-): PreviewPathLeaseClaim {
+): Promise<PreviewPathLeaseClaim> {
   const file = options.file ?? leaseFile();
   const now = options.now ?? Date.now();
   const key = normalizedKey(input.key);
-  const store = readStore(file);
-  const live = store.leases.filter(
-    (lease) => Date.parse(lease.expiresAt) > now,
-  );
-  const conflict = live.find(
-    (lease) => lease.key === key && lease.sessionId !== input.sessionId,
-  );
-  if (conflict) {
-    if (live.length !== store.leases.length) writeStore(file, live);
-    return { ok: false, reason: "in_use" };
-  }
+  const ttl = ttlMs(input.ttlMinutes);
+  return serialized(async () => {
+    const store = await readStore(file);
+    const live = store.leases.filter(
+      (lease) => Date.parse(lease.expiresAt) > now,
+    );
+    const conflict = live.find(
+      (lease) => lease.key === key && lease.sessionId !== input.sessionId,
+    );
+    if (conflict) {
+      if (live.length !== store.leases.length) await writeStore(file, live);
+      return { ok: false, reason: "in_use" } as const;
+    }
 
-  const existing = live.find(
-    (lease) => lease.key === key && lease.sessionId === input.sessionId,
-  );
-  const lease: PreviewPathLease = {
-    id: existing?.id ?? randomUUID(),
-    key,
-    sessionId: input.sessionId,
-    path: input.path,
-    sourceLeaseId: input.sourceLeaseId,
-    acquiredAt: existing?.acquiredAt ?? new Date(now).toISOString(),
-    expiresAt: new Date(now + ttlMs(input.ttlMinutes)).toISOString(),
-  };
-  writeStore(file, [
-    ...live.filter((candidate) => candidate.sessionId !== input.sessionId),
-    lease,
-  ]);
-  return { ok: true, lease };
+    const existing = live.find(
+      (lease) => lease.key === key && lease.sessionId === input.sessionId,
+    );
+    const lease: PreviewPathLease = {
+      id: existing?.id ?? randomUUID(),
+      key,
+      sessionId: input.sessionId,
+      path: input.path,
+      sourceLeaseId: input.sourceLeaseId,
+      acquiredAt: existing?.acquiredAt ?? new Date(now).toISOString(),
+      expiresAt: new Date(now + ttl).toISOString(),
+    };
+    await writeStore(file, [
+      ...live.filter((candidate) => candidate.sessionId !== input.sessionId),
+      lease,
+    ]);
+    return { ok: true, lease } as const;
+  });
 }
 
-export function releasePreviewPathLease(
+export async function releasePreviewPathLease(
   sessionId: string,
   options: LeaseStoreOptions & { leaseId?: string } = {},
-): boolean {
+): Promise<boolean> {
   const file = options.file ?? leaseFile();
   const now = options.now ?? Date.now();
-  const store = readStore(file);
-  let released = false;
-  const leases = store.leases.filter((lease) => {
-    if (Date.parse(lease.expiresAt) <= now) return false;
-    if (
-      lease.sessionId === sessionId &&
-      (!options.leaseId || options.leaseId === lease.id)
-    ) {
-      released = true;
-      return false;
-    }
-    return true;
+  return serialized(async () => {
+    const store = await readStore(file);
+    let released = false;
+    const leases = store.leases.filter((lease) => {
+      if (Date.parse(lease.expiresAt) <= now) return false;
+      if (
+        lease.sessionId === sessionId &&
+        (!options.leaseId || options.leaseId === lease.id)
+      ) {
+        released = true;
+        return false;
+      }
+      return true;
+    });
+    if (released || leases.length !== store.leases.length)
+      await writeStore(file, leases);
+    return released;
   });
-  if (released || leases.length !== store.leases.length)
-    writeStore(file, leases);
-  return released;
 }

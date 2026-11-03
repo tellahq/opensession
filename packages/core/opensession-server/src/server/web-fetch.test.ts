@@ -204,14 +204,14 @@ describe("fetch → handle → read", () => {
       fetchWeb("https://example.com/docs2", { refresh: true, headChars: 300 }),
     );
     expect(page.head).not.toContain("needle");
-    const slice = readFetched(page.handle, { find: "needle" });
+    const slice = await readFetched(page.handle, { find: "needle" });
     expect(slice.matches).toBe(1);
     expect(slice.text).toContain("The needle is here.");
   });
 
-  test("a search that misses says so instead of returning the page", () => {
+  test("a search that misses says so instead of returning the page", async () => {
     const handle = "web_0000000000000000";
-    expect(() => readFetched(handle)).toThrow(/expired|never fetched/i);
+    await expect(readFetched(handle)).rejects.toThrow(/expired|never fetched/i);
   });
 
   test("offset reads walk the body without re-fetching", async () => {
@@ -224,7 +224,7 @@ describe("fetch → handle → read", () => {
           headChars: 200,
         }),
     );
-    const slice = readFetched(page.handle, { offset: 500, limit: 200 });
+    const slice = await readFetched(page.handle, { offset: 500, limit: 200 });
     expect(slice.offset).toBe(500);
     expect(slice.text.length).toBe(200);
     expect(slice.truncated).toBe(true);

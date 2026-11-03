@@ -1760,7 +1760,7 @@ async function removeSessionArtifacts(session: UnifiedSession): Promise<void> {
   }
   await removeIndexedSession(session.id);
   try {
-    releasePreviewPathLease(session.id);
+    await releasePreviewPathLease(session.id);
   } catch (error) {
     console.error(
       `Failed to release preview reservation for ${session.id}:`,
