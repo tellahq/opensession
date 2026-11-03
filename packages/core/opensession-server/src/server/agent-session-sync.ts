@@ -51,7 +51,27 @@ export interface EngineSessionPatch {
   model?: string;
 }
 
-async function patchFile(
+/** The latest patch queued per file. */
+const patchQueues = new Map<string, Promise<boolean>>();
+
+/** Apply `patch` to `path` after every patch already queued for that file,
+ * so two read-modify-writes never read the same old document and one never
+ * overwrites the other's change. */
+function patchFile(
+  path: string,
+  patch: EngineSessionPatch,
+  activityField: string,
+): Promise<boolean> {
+  const previous = patchQueues.get(path) ?? Promise.resolve(false);
+  const done = previous.then(() => patchFileNow(path, patch, activityField));
+  patchQueues.set(path, done);
+  void done.then(() => {
+    if (patchQueues.get(path) === done) patchQueues.delete(path);
+  });
+  return done;
+}
+
+async function patchFileNow(
   path: string,
   patch: EngineSessionPatch,
   activityField: string,
