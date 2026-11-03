@@ -1071,9 +1071,9 @@ export function PrStatusBar({
   // own subtext. One row for all of it, including the preview deploy, which
   // leads the row as a mark instead of taking a line of its own to say a name
   // the globe already says. Where the work stands is the line that matters, so
-  // the headline follows the mark and the PR number sits under it as secondary.
-  // The PR title is gone: it restates the session title the card already hangs
-  // from, and it cost the card a whole row to do it.
+  // the headline follows the mark, with the check count beside it, and the PR
+  // number and title sit under it as secondary, in the same order as the series
+  // rows below. The title is the part that gives way on a narrow card.
   //
   // The row is a div holding two targets rather than one row-wide button,
   // which is the card's only departure from "the whole row is the target". It
@@ -1091,26 +1091,27 @@ export function PrStatusBar({
     const externalHint = provider
       ? `${isApple ? "⌘" : "Ctrl"}-click opens in ${provider.name}`
       : undefined;
-    // Two lines inside the one target: the state, then which PR it is about.
+    // Two lines inside the one target: the state and its checks, then which PR
+    // it is about.
     // The provider mark makes the modified-click destination visible without
     // competing with the state or the primary action.
     const labelBody = (
       <>
-        <span className="block truncate text-item-title text-fg">
-          {headlineLabel}
+        <span className="flex min-w-0 items-baseline gap-1.5">
+          <span className="min-w-0 truncate text-item-title text-fg">
+            {headlineLabel}
+          </span>
+          {checksPr && (
+            <span className={cn("shrink-0 text-meta", checksTone)}>
+              {checksLabel}
+            </span>
+          )}
         </span>
         {pr && provider && (
-          <span className="flex items-center gap-1 truncate text-meta text-faint group-hover/prsum:text-dim">
+          <span className="flex min-w-0 items-center gap-1 text-meta text-faint group-hover/prsum:text-dim">
             <BrandMark name={provider.key} size={12} className="shrink-0" />
             <span className="shrink-0">#{pr.number}</span>
-            {checksPr && (
-              <>
-                <span aria-hidden="true">·</span>
-                <span className={cn("truncate", checksTone)}>
-                  {checksLabel}
-                </span>
-              </>
-            )}
+            {pr.title && <span className="min-w-0 truncate">{pr.title}</span>}
             <IconArrowUpRight
               dense
               size={12}
