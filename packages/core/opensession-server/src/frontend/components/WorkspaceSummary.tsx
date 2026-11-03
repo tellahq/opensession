@@ -23,6 +23,7 @@ import {
   useSessionPrResource,
   useWorkspaceOverviewResource,
 } from "../hooks/useApiResources";
+import { useSessionPendingCreation } from "../hooks/useSessionPendingCreation";
 import { PatchDiffs, PatchFileDiff } from "./DeferredDiff";
 import { patchFileNames } from "../lib/patch-file-names";
 import { assetPreviewKind, isVisualAsset } from "../lib/asset-preview";
@@ -489,12 +490,14 @@ export function WorkspaceSummaryBody({
   // the workspace_status socket event and wins when it is available.
   const workspaceIsPreparing =
     workspacePreparing ?? Boolean(session.workspacePreparing);
+  // A new tab's id is unknown to the server until its create lands.
+  const pendingCreation = useSessionPendingCreation();
   const prResource = useSessionPrResource(
     session.id,
     session.repo || undefined,
     undefined,
     {
-      enabled: !workspaceIsPreparing,
+      enabled: !workspaceIsPreparing && !pendingCreation,
       refreshInterval: PR_WEBHOOK_FALLBACK_POLL_MS,
       revision: refreshTick,
     },
@@ -503,7 +506,7 @@ export function WorkspaceSummaryBody({
     session.id,
     session.repo || undefined,
     {
-      enabled: !workspaceIsPreparing,
+      enabled: !workspaceIsPreparing && !pendingCreation,
       refreshInterval: PR_WEBHOOK_FALLBACK_POLL_MS,
       revision: refreshTick,
     },

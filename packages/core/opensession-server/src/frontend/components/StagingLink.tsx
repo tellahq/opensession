@@ -15,6 +15,7 @@ import { CopyCheck, useCopy } from "../ui/copy";
 import { ContextMenu, MENU_ICON } from "../ui/menu";
 import { IconArrowUpRight, IconCheck, IconCopy, IconGlobe } from "./icons";
 import { checkClass, isDeployment } from "../lib/pr-status-derive";
+import { useSessionPendingCreation } from "../hooks/useSessionPendingCreation";
 import { useShortcutLabel } from "../hooks/useShortcutBindings";
 
 // The open-preview chord's handler lives in SessionViewer: this component
@@ -146,12 +147,13 @@ export function StagingLink({
     ? (target.state ??
         (target.source === "primary" ? session.prState : undefined)) === "OPEN"
     : !!session.prUrl && session.prState === "OPEN";
+  const pendingCreation = useSessionPendingCreation();
   const prResource = useSessionPrResource(
     session.id,
     target?.repo || session.repo || undefined,
     target?.branch,
     {
-      enabled: relevant,
+      enabled: relevant && !pendingCreation,
       refreshInterval: PR_WEBHOOK_FALLBACK_POLL_MS,
       revision: refreshTick,
     },

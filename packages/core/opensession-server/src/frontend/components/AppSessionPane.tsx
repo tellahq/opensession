@@ -188,6 +188,7 @@ export function AppSessionPane({
       key={viewerSession.id}
       repo={viewerSession.repo}
       socket={sessionSocket}
+      pendingCreation={pendingSocket}
     >
       <SessionViewer
         key={viewerSession.id}
