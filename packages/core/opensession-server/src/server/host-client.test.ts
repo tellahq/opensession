@@ -1927,6 +1927,14 @@ describe("HostHandle model recovery", () => {
     const events = handle.events();
     let steerFailures = 0;
     (handle as any).cb.onSteerFailed = () => steerFailures++;
+    const sent: Array<{ t: string }> = [];
+    (handle as any).conn = {
+      send: (msg: { t: string }) => {
+        sent.push(msg);
+        return true;
+      },
+      close: () => {},
+    };
     try {
       (handle as any).handleMsg({
         t: "transcript",
@@ -1935,6 +1943,9 @@ describe("HostHandle model recovery", () => {
       });
       await (handle as any).projectionTail;
       expect((handle as any).projectionTail).toBeUndefined();
+      // Nothing the host does from here can be shown, so it is stopped
+      // instead of running on invisibly as the session's owner.
+      expect(sent).toContainEqual({ t: "cancel" });
 
       // The failure is permanent even after the active tail has drained.
       (handle as any).handleMsg({ t: "steer_failed", text: "late frame" });

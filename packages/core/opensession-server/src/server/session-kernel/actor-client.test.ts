@@ -218,6 +218,72 @@ describe("asynchronous session kernel actor boundary", () => {
     ).toEqual(["stable-command", "stable-command"]);
   });
 
+  test("an ambiguous transcript append replays the same receipted request", async () => {
+    let attempts = 0;
+    const worker = new FakeWorker((message, emit) => {
+      attempts += 1;
+      if (attempts === 1) {
+        queueMicrotask(() =>
+          emit({
+            t: "error",
+            rpcId: message.rpcId,
+            error:
+              "Session kernel service request failed: The operation timed out.",
+            retryable: true,
+          }),
+        );
+      } else
+        queueMicrotask(() =>
+          emit(
+            callResult(message.rpcId, {
+              result: null,
+              wakeCursor: 0,
+              replay: true,
+            }),
+          ),
+        );
+    });
+    const host = new SessionKernelActorClient(worker as unknown as Worker);
+    client = host;
+    await host.decideTranscriptAsync({
+      op: "append",
+      sessionId: "slow-kernel",
+      requestId: "stable-append",
+      entries: [],
+    });
+    expect(
+      worker.posts.map(
+        (post) =>
+          (post.command as { request?: { requestId?: string } } | undefined)
+            ?.request?.requestId,
+      ),
+    ).toEqual(["stable-append", "stable-append"]);
+  });
+
+  test("an ambiguous destructive transcript mutation is not replayed", async () => {
+    const worker = new FakeWorker((message, emit) => {
+      queueMicrotask(() =>
+        emit({
+          t: "error",
+          rpcId: message.rpcId,
+          error:
+            "Session kernel service request failed: The operation timed out.",
+          retryable: true,
+        }),
+      );
+    });
+    const host = new SessionKernelActorClient(worker as unknown as Worker);
+    client = host;
+    await expect(
+      host.decideTranscriptAsync({
+        op: "delete",
+        sessionId: "slow-kernel",
+        requestId: "stable-delete",
+      }),
+    ).rejects.toBeInstanceOf(SessionKernelActorError);
+    expect(worker.posts).toHaveLength(1);
+  });
+
   test("classifies a session quarantine without killing the client", async () => {
     let quarantine = true;
     const worker = new FakeWorker((message, emit) => {

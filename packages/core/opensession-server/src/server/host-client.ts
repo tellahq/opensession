@@ -1642,6 +1642,11 @@ export class HostHandle {
           type: "error",
           content: `Run host projection failed: ${error instanceof Error ? error.message : String(error)}`,
         });
+        // Every later frame is fenced, so a host left running would keep
+        // working where nobody can see it and hold the session's owner
+        // until it ended on its own, with the person's next message queued
+        // behind it. Stop it; the engine session resumes on the next turn.
+        this.requestCancel();
       }
     });
     this.projectionTail = observed;
