@@ -19,7 +19,7 @@ import {
 } from "./worktree";
 import { hasRemoteWorkspace } from "./sandbox";
 import type { WorkspaceExecSession } from "./sandbox/workspace-exec";
-import { existsSync } from "fs";
+import { pathExists } from "./shared/path-exists";
 import {
   findWorkspaceByWorktree,
   getWorkspace,
@@ -671,7 +671,8 @@ export async function resolveWorktreeTarget(
     dir,
     primary,
     defaultBranch: getRepo(id).defaultBranch,
-    reachable: existsSync(dir) || (primary && hasRemoteWorkspace(session)),
+    reachable:
+      (await pathExists(dir)) || (primary && hasRemoteWorkspace(session)),
   };
 }
 

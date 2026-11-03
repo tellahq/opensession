@@ -148,7 +148,8 @@ import {
   githubCredentialForPrincipal,
   githubCredentialForRun,
 } from "./github-auth";
-import { existsSync, watch } from "fs";
+import { watch } from "fs";
+import { pathExists } from "./shared/path-exists";
 import { branchNameFromPrompt } from "./suggest-branch";
 import {
   getRunner,
@@ -761,7 +762,7 @@ registerSessionControl({
         durableCreation.state === "ready" ||
         durableCreation.state === "cancelled"
       )
-        clearCreatePlan(bksId);
+        await clearCreatePlan(bksId);
       return {
         id: bksId,
         createdBy:
@@ -779,7 +780,7 @@ registerSessionControl({
       completedCreate?.codexThreadId ||
       completedCreate?.piSessionId
     ) {
-      clearCreatePlan(bksId);
+      await clearCreatePlan(bksId);
       return {
         id: completedCreate.id,
         createdBy:
@@ -991,7 +992,7 @@ registerSessionControl({
       parentSession.mode !== "ask" &&
       parentSession.mode !== "scratch" &&
       parentRepoContext?.repo === repo.id &&
-      existsSync(parentRepoContext.dir)
+      (await pathExists(parentRepoContext.dir))
         ? parentRepoContext
         : null;
     if (selectedRunner) {
@@ -1045,7 +1046,7 @@ registerSessionControl({
               contextWorkspace?.worktreeDir &&
               (await repoForPath(contextWorkspace.worktreeDir)).id ===
                 repo.id &&
-              existsSync(contextWorkspace.worktreeDir)
+              (await pathExists(contextWorkspace.worktreeDir))
             ? {
                 dir: contextWorkspace.worktreeDir,
                 branch: contextWorkspace.branch,
@@ -1054,7 +1055,7 @@ registerSessionControl({
                 parentSession?.worktreeDir &&
                 parentSession.mode !== "ask" &&
                 (await repoForPath(parentSession.worktreeDir)).id === repo.id &&
-                existsSync(parentSession.worktreeDir)
+                (await pathExists(parentSession.worktreeDir))
               ? { dir: parentSession.worktreeDir, branch: parentSession.branch }
               : null;
       if (shared) {

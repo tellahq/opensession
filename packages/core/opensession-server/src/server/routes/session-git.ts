@@ -23,7 +23,7 @@ import { sessionTouchedPaths } from "../session-touched";
 import { getRepo, isSharedCheckoutDir, sessionRepoId } from "../worktree";
 import { defaultRepo } from "../config";
 import { $ } from "bun";
-import { existsSync } from "fs";
+import { pathExists } from "../shared/path-exists";
 import { resolve } from "path";
 import { githubMutationCredential } from "./github-credential";
 
@@ -310,7 +310,7 @@ export async function handleSessionGitRoutes(
     // Reachable but host-invisible (volume-mode sandbox / runner): image
     // bytes are read straight off the host fs, so say that plainly instead
     // of claiming the session has no worktree.
-    if (!existsSync(dir))
+    if (!(await pathExists(dir)))
       return new Response("Worktree is not readable on the host", {
         status: 400,
       });
@@ -384,7 +384,7 @@ export async function handleSessionGitRoutes(
     // Reachable but host-invisible (volume-mode sandbox / runner): both the
     // read and the edit-mode write go through the host fs, so say that
     // plainly instead of claiming the session has no worktree.
-    if (!existsSync(dir))
+    if (!(await pathExists(dir)))
       return Response.json(
         { error: "Worktree is not readable on the host" },
         { status: 400 },

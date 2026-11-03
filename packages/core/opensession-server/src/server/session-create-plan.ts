@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, rmSync } from "fs";
+import { readFile, readdir, rm } from "node:fs/promises";
 import { join } from "path";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import type { SessionKernelStoreApi } from "./session-kernel/store";
@@ -25,22 +25,31 @@ function planPath(sessionId: string): string {
   return join(planDir(), `${sessionId.replace(/[^a-zA-Z0-9._-]/g, "_")}.json`);
 }
 
-export function readCreatePlanForRecovery(
+function isMissing(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException)?.code === "ENOENT";
+}
+
+export async function readCreatePlanForRecovery(
   sessionId: string,
-): DurableCreatePlan | undefined {
-  const path = planPath(sessionId);
-  if (!existsSync(path)) return undefined;
-  const plan = JSON.parse(readFileSync(path, "utf8")) as DurableCreatePlan;
+): Promise<DurableCreatePlan | undefined> {
+  let text: string;
+  try {
+    text = await readFile(planPath(sessionId), "utf8");
+  } catch (error) {
+    if (isMissing(error)) return undefined;
+    throw error;
+  }
+  const plan = JSON.parse(text) as DurableCreatePlan;
   if (plan.version !== 1 || plan.sessionId !== sessionId)
     throw new Error(`Invalid durable create plan for ${sessionId}`);
   return plan;
 }
 
-export function readCreatePlan(
+export async function readCreatePlan(
   sessionId: string,
   identity: string,
-): DurableCreatePlan | undefined {
-  const plan = readCreatePlanForRecovery(sessionId);
+): Promise<DurableCreatePlan | undefined> {
+  const plan = await readCreatePlanForRecovery(sessionId);
   if (!plan) return undefined;
   if (plan.identity !== identity) {
     throw new Error(
@@ -50,23 +59,31 @@ export function readCreatePlan(
   return plan;
 }
 
-export function clearCreatePlan(sessionId: string): void {
-  rmSync(planPath(sessionId), { force: true });
+export async function clearCreatePlan(sessionId: string): Promise<void> {
+  await rm(planPath(sessionId), { force: true });
 }
 
-export function pruneCreatePlans(
+export async function pruneCreatePlans(
   store: SessionKernelStoreApi,
   now = Date.now(),
   terminalRetentionMs = 24 * 60 * 60_000,
-): number {
+): Promise<number> {
   const dir = planDir();
-  if (!existsSync(dir)) return 0;
+  let entries: string[];
+  try {
+    entries = await readdir(dir);
+  } catch (error) {
+    if (isMissing(error)) return 0;
+    throw error;
+  }
   let removed = 0;
-  for (const entry of readdirSync(dir)) {
+  for (const entry of entries) {
     if (!entry.endsWith(".json")) continue;
     const path = join(dir, entry);
     try {
-      const plan = JSON.parse(readFileSync(path, "utf8")) as DurableCreatePlan;
+      const plan = JSON.parse(
+        await readFile(path, "utf8"),
+      ) as DurableCreatePlan;
       const age = now - Date.parse(plan.createdAt);
       const receipt = store.command(plan.sessionId, plan.identity);
       const terminal =
@@ -74,7 +91,7 @@ export function pruneCreatePlans(
         receipt?.status === "indeterminate" ||
         (receipt?.status === "failed" && !receipt.retryable);
       if (terminal && age >= terminalRetentionMs) {
-        rmSync(path, { force: true });
+        await rm(path, { force: true });
         removed += 1;
       }
     } catch {

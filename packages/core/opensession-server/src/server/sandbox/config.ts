@@ -14,27 +14,29 @@
  * new runs regardless of config — mirroring host-client's disable-run-hosts.
  */
 
-import { existsSync, mkdirSync, readFileSync } from "fs";
-import { dirname } from "path";
+import { stat } from "fs/promises";
 import { configuredIngress } from "../config";
 import { getDefaultModel, providerFor, resolveModel } from "../models";
 import { OPENSESSION_SESSIONS_DIR } from "../paths";
-import { stateDir } from "../paths";
-import { writeJsonAtomic } from "../shared/atomic-write";
 import { workspaceSecretExists } from "../workspace-secrets";
 import {
   sandboxAdapterSignatureCurrent,
   sandboxProviderNeedsCredential,
 } from "./adapter-signature";
 import type { SandboxProviderId, SandboxProviderUsability } from "./provider";
-import { readJsonFileCopy } from "../shared/json-file-cache";
+import {
+  readJsonFileCopy,
+  readJsonFileShared,
+} from "../shared/json-file-cache";
+import { pathExists } from "./async-fs";
+import { sandboxConfigFilePath, updateSandboxConfigFile } from "./config-file";
 
 // Env-overridable so the verify suite (and unit tests) can point a scratch
 // config at a scratch setup without touching the live file (which is read
 // fresh per run). Read per call, not at module load, so a test can flip the
 // env var without re-importing this module.
 function configPath(): string {
-  return process.env.OPENSESSION_SANDBOX_CONFIG || stateDir("sandbox.json");
+  return sandboxConfigFilePath();
 }
 
 export function sandboxConfigPath(): string {
@@ -214,9 +216,38 @@ function asProviderId(v: unknown): SandboxProviderId | undefined {
     : undefined;
 }
 
+// The kill switch is consulted on hot, synchronous paths (run start, provider
+// resolution, status), so its presence is cached and re-checked off the event
+// loop: a call older than KILL_SWITCH_MAX_AGE_MS answers from the cache and
+// starts one async stat. Boot primes it via refreshSandboxKillSwitch().
+const KILL_SWITCH_MAX_AGE_MS = 1000;
+let killSwitchOn = false;
+let killSwitchCheckedAt = 0;
+let killSwitchRefresh: Promise<boolean> | null = null;
+
+/** Re-check the kill-switch file now; resolves with sandboxesEnabled(). */
+export function refreshSandboxKillSwitch(): Promise<boolean> {
+  killSwitchRefresh ??= stat(DISABLE_FILE)
+    .then(
+      () => true,
+      () => false,
+    )
+    .then((on) => {
+      killSwitchOn = on;
+      killSwitchCheckedAt = Date.now();
+      return !on;
+    })
+    .finally(() => {
+      killSwitchRefresh = null;
+    });
+  return killSwitchRefresh;
+}
+
 /** False while the kill-switch file exists — new runs must stay local. */
 export function sandboxesEnabled(): boolean {
-  return !existsSync(DISABLE_FILE);
+  if (Date.now() - killSwitchCheckedAt > KILL_SWITCH_MAX_AGE_MS)
+    void refreshSandboxKillSwitch();
+  return !killSwitchOn;
 }
 
 /** Current config, read fresh per call. Never throws; falls back to local. */
@@ -429,13 +460,13 @@ function validatedSettingsScript(value: string | null): string | null {
 }
 
 /** Store (or clear, with null or blank) a project's pre-setup script. */
-export function setRepoPreSetupScript(
+export async function setRepoPreSetupScript(
   repoId: string,
   value: string | null,
-): string | null {
+): Promise<string | null> {
   const script = validatedSettingsScript(value);
-  if (!script && !existsSync(configPath())) return null;
-  updateSandboxConfigFile((raw) => {
+  if (!script && !(await pathExists(configPath()))) return null;
+  await updateSandboxConfigFile((raw) => {
     const perRepo =
       raw.perRepo &&
       typeof raw.perRepo === "object" &&
@@ -457,10 +488,12 @@ export function setRepoPreSetupScript(
 }
 
 /** Store (or clear) the workspace-wide resume script. */
-export function setWorkspaceResumeScript(value: string | null): string | null {
+export async function setWorkspaceResumeScript(
+  value: string | null,
+): Promise<string | null> {
   const script = validatedSettingsScript(value);
-  if (!script && !existsSync(configPath())) return null;
-  updateSandboxConfigFile((raw) => {
+  if (!script && !(await pathExists(configPath()))) return null;
+  await updateSandboxConfigFile((raw) => {
     if (script) raw.workspaceResumeScript = script;
     else delete raw.workspaceResumeScript;
   });
@@ -661,9 +694,9 @@ export function sandboxProviderCertified(
 
 /** Persist the Workspace-wide default without rewriting any provider secrets
  * or other sandbox configuration. "none" is both the UI and storage default. */
-export function setWorkspaceSandboxDefault(
+export async function setWorkspaceSandboxDefault(
   value: string,
-): RunnableSandboxProviderId | "none" {
+): Promise<RunnableSandboxProviderId | "none"> {
   const normalized = value.trim().toLowerCase();
   if (normalized !== "none" && !isRunnableSandboxProvider(normalized)) {
     throw new Error(`Unknown sandbox provider "${value}"`);
@@ -678,36 +711,19 @@ export function setWorkspaceSandboxDefault(
   }
   // Absence already means None; do not create a config file merely to record
   // the default, because config-file presence is the sandbox feature gate.
-  if (normalized === "none" && !existsSync(configPath())) return "none";
-  updateSandboxConfigFile((raw) => {
+  if (normalized === "none" && !(await pathExists(configPath()))) return "none";
+  await updateSandboxConfigFile((raw) => {
     raw.sessionDefault = normalized;
   });
   return normalized as RunnableSandboxProviderId | "none";
 }
 
-/** Rewrite one key of the config file in place, keeping every other key
- * (provider secrets, connections, operator settings) byte-for-byte. */
-function updateSandboxConfigFile(
-  mutate: (raw: Record<string, unknown>) => void,
-): void {
-  const path = configPath();
-  let raw: Record<string, unknown> = {};
-  try {
-    const parsed = JSON.parse(readFileSync(path, "utf-8"));
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
-      raw = parsed;
-  } catch {}
-  mutate(raw);
-  mkdirSync(dirname(path), { recursive: true });
-  writeJsonAtomic(path, raw);
-}
-
 /** Persist where new sessions on one repo run. `null` or "workspace" removes
  * the override so the workspace and personal defaults apply again. */
-export function setRepoSandboxDefault(
+export async function setRepoSandboxDefault(
   repoId: string,
   value: string | null,
-): RunnableSandboxProviderId | "none" | null {
+): Promise<RunnableSandboxProviderId | "none" | null> {
   // "modal:T4": Modal with a GPU, as the Machine menu names it.
   const [choice = "", gpuName] = (value?.trim() || "").split(":");
   const normalized = choice.toLowerCase() || "workspace";
@@ -730,8 +746,9 @@ export function setRepoSandboxDefault(
       `Sandbox provider "${normalized}" is not currently available`,
     );
   }
-  if (normalized === "workspace" && !existsSync(configPath())) return null;
-  updateSandboxConfigFile((raw) => {
+  if (normalized === "workspace" && !(await pathExists(configPath())))
+    return null;
+  await updateSandboxConfigFile((raw) => {
     const perRepo =
       raw.perRepo &&
       typeof raw.perRepo === "object" &&
@@ -758,10 +775,10 @@ export function setRepoSandboxDefault(
 
 /** Run `repoId`'s Portals for host sessions in a Sandbox on `provider`, or
  * stop doing so (`null`). Persists `perRepo[repoId].portalSandbox`. */
-export function setRepoPortalSandbox(
+export async function setRepoPortalSandbox(
   repoId: string,
   value: string | null,
-): RunnableSandboxProviderId | null {
+): Promise<RunnableSandboxProviderId | null> {
   const normalized = value?.trim().toLowerCase() || "none";
   if (normalized !== "none" && !isRunnableSandboxProvider(normalized))
     throw new Error(`Unknown sandbox provider "${value}"`);
@@ -772,8 +789,8 @@ export function setRepoPortalSandbox(
     throw new Error(
       `Sandbox provider "${normalized}" is not currently available`,
     );
-  if (normalized === "none" && !existsSync(configPath())) return null;
-  updateSandboxConfigFile((raw) => {
+  if (normalized === "none" && !(await pathExists(configPath()))) return null;
+  await updateSandboxConfigFile((raw) => {
     const perRepo =
       raw.perRepo &&
       typeof raw.perRepo === "object" &&
@@ -830,20 +847,20 @@ export function repoSandboxGpu(
 
 /** Keep one prepared Sandbox waiting for `repoId` on `provider`, or stop
  * doing so. Persists `prewarm.keepReady`; the prewarm sweep acts on it. */
-export function setKeepReadyTarget(
+export async function setKeepReadyTarget(
   provider: string,
   repoId: string,
   enabled: boolean,
-): Array<{ provider: string; repoId: string }> {
+): Promise<Array<{ provider: string; repoId: string }>> {
   if (!isRunnableSandboxProvider(provider))
     throw new Error(`Unknown sandbox provider "${provider}"`);
   if (enabled && sandboxProviderUsability(provider).state !== "usable")
     throw new Error(
       `Sandbox provider "${provider}" is not currently available`,
     );
-  if (!enabled && !existsSync(configPath())) return [];
+  if (!enabled && !(await pathExists(configPath()))) return [];
   let next: Array<{ provider: string; repoId: string }> = [];
-  updateSandboxConfigFile((raw) => {
+  await updateSandboxConfigFile((raw) => {
     const prewarm =
       raw.prewarm &&
       typeof raw.prewarm === "object" &&
@@ -897,10 +914,8 @@ export function usesOutboundSandboxPortalRelay(v: unknown): boolean {
  *  sandboxing up at all. Without it every provider is unconfigured. */
 function sandboxConfigPresent(): boolean {
   try {
-    const path = configPath();
-    if (!existsSync(path)) return false;
-    JSON.parse(readFileSync(path, "utf-8"));
-    return true;
+    // Same cached parse sandboxConfig() reads on every call.
+    return readJsonFileShared(configPath()) !== undefined;
   } catch {
     return false;
   }
@@ -923,7 +938,7 @@ function normalizedConnectionSelection(
   id: RunnableSandboxProviderId,
 ): NormalizedConnectionSelection | undefined {
   try {
-    const raw = JSON.parse(readFileSync(configPath(), "utf-8"));
+    const raw = readJsonFileShared<any>(configPath());
     const values = Array.isArray(raw?.connections)
       ? raw.connections
       : raw?.connections && typeof raw.connections === "object"

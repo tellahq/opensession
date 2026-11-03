@@ -41,8 +41,12 @@ const {
   findRemoteStateBySessionAsync,
 } = await import("./sandbox/adapters/bootstrap");
 
-function record(sessionId: string, sandboxId: string, provider = "daytona") {
-  writeRemoteState({
+async function record(
+  sessionId: string,
+  sandboxId: string,
+  provider = "daytona",
+) {
+  await writeRemoteState({
     provider: provider as "daytona" | "box",
     sessionId,
     sandboxId,
@@ -68,9 +72,9 @@ afterAll(() => {
 });
 
 test("retiring a failed provisioning finds the exact provider/session and revokes before destroying", async () => {
-  record("another-session", "other");
-  record("failed", "box-other", "box");
-  record("failed", "failed-vm");
+  await record("another-session", "other");
+  await record("failed", "box-other", "box");
+  await record("failed", "failed-vm");
   expect(await teardownRecordedSandbox("failed", { provider: "daytona" })).toBe(
     "failed-vm",
   );
@@ -85,7 +89,7 @@ test("waits for a queued create to persist its mapping, even when ensure fails",
   const release = Promise.withResolvers<void>();
   const ensure = withRemoteEnsureLock("daytona", "pending", async () => {
     await release.promise;
-    record("pending", "late-vm");
+    await record("pending", "late-vm");
     throw new Error("bootstrap failed");
   });
   const failed = ensure.catch((error) => error);
@@ -98,7 +102,7 @@ test("waits for a queued create to persist its mapping, even when ensure fails",
 });
 
 test("uses a recorded machine id without choosing an unrelated provider mapping", async () => {
-  record("ready", "other-vm");
+  await record("ready", "other-vm");
   expect(
     await teardownRecordedSandbox("ready", {
       provider: "daytona",
@@ -109,7 +113,7 @@ test("uses a recorded machine id without choosing an unrelated provider mapping"
 });
 
 test("propagates retirement failure so moves cannot forget the source", async () => {
-  record("failed", "kept-vm");
+  await record("failed", "kept-vm");
   destroyError = new Error("provider unavailable");
   await expect(
     teardownRecordedSandbox("failed", { provider: "daytona" }),
@@ -133,7 +137,7 @@ test("no machine and local sessions are no-ops", async () => {
 });
 
 test("session deletion retires a failed workspace provision without sandboxId", async () => {
-  record("deleted", "failed-vm");
+  await record("deleted", "failed-vm");
   const destroyed = Promise.withResolvers<void>();
   onDestroy = destroyed.resolve;
   destroySessionSandbox(
@@ -149,8 +153,8 @@ test("session deletion retires a failed workspace provision without sandboxId", 
 });
 
 test("Portal deletion uses its provider session suffix, not the workspace mapping", async () => {
-  record("deleted", "workspace");
-  record("deleted--portals", "portal");
+  await record("deleted", "workspace");
+  await record("deleted--portals", "portal");
   const destroyed = Promise.withResolvers<void>();
   onDestroy = destroyed.resolve;
   destroySessionSandbox(
@@ -172,7 +176,7 @@ test("Portal deletion uses its provider session suffix, not the workspace mappin
 test("recovery skips malformed provider mapping files", async () => {
   mkdirSync(join(root, "sandboxes"), { recursive: true });
   writeFileSync(join(root, "sandboxes/daytona-bad.json"), "{");
-  record("failed", "good-vm");
+  await record("failed", "good-vm");
   expect(
     (await findRemoteStateBySessionAsync("daytona", "failed"))?.sandboxId,
   ).toBe("good-vm");

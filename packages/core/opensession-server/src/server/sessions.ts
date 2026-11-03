@@ -1,7 +1,8 @@
 import { executeSessionProjection } from "./session-projection-executor";
-import { readFileSync, statSync, unlinkSync, writeFileSync } from "fs";
-import { opendir, readFile, stat } from "fs/promises";
+import { readFileSync, statSync } from "fs";
+import { opendir, readFile, rm, stat } from "fs/promises";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
+import { pathExists } from "./shared/path-exists";
 import { statePath } from "./paths";
 import { existsSync } from "fs";
 import {
@@ -146,24 +147,6 @@ export function getEngineTranscriptPath(
   return getTranscriptPath(worktreeDir, engineSessionId);
 }
 
-/**
- * A session's engine transcript as entries, whatever the engine: claude jsonl
- * and codex rollouts parse from their transcript file; pi reads straight
- * out of Pi's SQLite store. This is the source for cross-engine handoff
- * notes (buildEngineSwitchHandoffNote) in BOTH directions — including the
- * previously-stubbed pi→claude/codex direction.
- */
-export function readEngineTranscript(
-  worktreeDir: string,
-  engineSessionId: string,
-  provider: "claude" | "codex" | "pi",
-): TranscriptEntry[] {
-  if (provider === "pi") return engineStoreTranscript(engineSessionId);
-  const path = getEngineTranscriptPath(worktreeDir, engineSessionId, provider);
-  if (!path || !existsSync(path)) return engineStoreTranscript(engineSessionId);
-  return parseTranscript(path);
-}
-
 /** Read legacy files or the owned store asynchronously. Store-backed reads
  * must resolve the owning session through the canonical access boundary. */
 export async function readEngineTranscriptAsync(
@@ -173,7 +156,7 @@ export async function readEngineTranscriptAsync(
 ): Promise<TranscriptEntry[]> {
   if (provider === "pi") return engineStoreTranscriptAsync(engineSessionId);
   const path = getEngineTranscriptPath(worktreeDir, engineSessionId, provider);
-  if (!path || !existsSync(path))
+  if (!path || !(await pathExists(path)))
     return engineStoreTranscriptAsync(engineSessionId);
   return parseTranscriptAsync(path);
 }
@@ -191,7 +174,7 @@ export async function readEngineHandoffTranscriptAsync(
   if (provider === "pi")
     return engineStoreHandoffTranscriptAsync(engineSessionId);
   const path = getEngineTranscriptPath(worktreeDir, engineSessionId, provider);
-  if (!path || !existsSync(path))
+  if (!path || !(await pathExists(path)))
     return engineStoreHandoffTranscriptAsync(engineSessionId);
   return parseTranscriptAsync(path);
 }
@@ -236,7 +219,8 @@ async function engineStoreOwner(
     (record) =>
       record.claudeSessionId === engineSessionId && record.osSessionId,
   );
-  const id = journaled?.osSessionId ?? sessionForEngineId(engineSessionId);
+  const id =
+    journaled?.osSessionId ?? (await sessionForEngineId(engineSessionId));
   if (id) return cache.findSessionAsync(id);
   const hint = cache
     .peekCachedSessions()
@@ -247,12 +231,6 @@ async function engineStoreOwner(
         session.claudeSessionId === engineSessionId,
     );
   return hint ? cache.findSessionAsync(hint.id) : undefined;
-}
-
-function engineStoreTranscript(engineSessionId: string): TranscriptEntry[] {
-  throw new Error(
-    "Synchronous engine-store reads cannot authorize session scope; use readEngineTranscriptAsync",
-  );
 }
 
 async function engineStoreTranscriptAsync(
@@ -285,12 +263,13 @@ type TranscriptSessionRef = Pick<UnifiedSession, "transcriptPath"> & {
   id?: string;
 };
 
-/** Full UI transcript, preferring the owned store and falling back to an
- * external engine transcript file while legacy imports finish. */
-export function mergedSessionTranscript(
+/** The external engine transcript file alone, parsed in one pass. */
+export async function mergedSessionTranscript(
   session: TranscriptSessionRef,
-): TranscriptEntry[] {
-  return session.transcriptPath ? parseTranscript(session.transcriptPath) : [];
+): Promise<TranscriptEntry[]> {
+  return session.transcriptPath
+    ? await parseTranscript(session.transcriptPath)
+    : [];
 }
 
 export async function mergedSessionTranscriptAsync(
@@ -313,15 +292,15 @@ export async function mergedSessionTranscriptAsync(
 }
 
 /** External transcript files whose growth can require a store re-import. */
-export function v2MirrorFiles(
+export async function v2MirrorFiles(
   session: TranscriptSessionRef,
-): { path: string; size: number }[] {
+): Promise<{ path: string; size: number }[]> {
   if (!session.transcriptPath) return [];
   try {
     return [
       {
         path: session.transcriptPath,
-        size: statSync(session.transcriptPath).size,
+        size: (await stat(session.transcriptPath)).size,
       },
     ];
   } catch {
@@ -376,7 +355,7 @@ export async function v2TranscriptHasDrift(
   session: TranscriptSessionRef,
 ): Promise<boolean> {
   if (isTranscriptStoreDegraded(sessionId)) return true;
-  const files = v2MirrorFiles(session);
+  const files = await v2MirrorFiles(session);
   // No legacy files at all (every post-retirement session) → nothing to
   // drift against; the store is the only source.
   if (!files.length) return false;
@@ -401,9 +380,12 @@ async function v2StoreTranscript(
   // repeat) and serve legacy for THIS call. Watermark = candidate-set size
   // measured BEFORE the legacy parse — lines appended during the parse then
   // read as growth next time instead of being silently covered.
-  const totalSize = v2MirrorFiles(session).reduce((sum, f) => sum + f.size, 0);
+  const totalSize = (await v2MirrorFiles(session)).reduce(
+    (sum, f) => sum + f.size,
+    0,
+  );
   const legacy = session.transcriptPath
-    ? parseTranscript(session.transcriptPath)
+    ? await parseTranscript(session.transcriptPath)
     : [];
   const importInfo = await transcript.getImportInfo(sessionId);
   void importLegacyTranscript(
@@ -848,6 +830,28 @@ export function readSlackSession(sessionId: string): UnifiedSession | null {
   return session;
 }
 
+/** readSlackSession without blocking: the Slack file, its sidecar and the
+ * transcript candidates are all read asynchronously. */
+export async function readSlackSessionAsync(
+  sessionId: string,
+): Promise<UnifiedSession | null> {
+  const ref = agentSessionSource(sessionId);
+  if (!ref || ref.kind !== "slack") return null;
+  const observed = await readAgentSessionSourceAsync(ref);
+  if (!observed) return null;
+  const session = applySidecarExtras(
+    slackSessionRowFromData(
+      observed.file,
+      observed.data as SlackSessionFile,
+      () => observed.mtime,
+    ),
+    await readJsonSafeAsync<NativeSessionFile>(
+      `${SESSIONS_DIR}/${sessionId}.json`,
+    ),
+  );
+  return resolveSessionTranscriptPathAsync(session);
+}
+
 /** The list row for one Slack- or Linear-owned session with the sidebar
  * overlays applied and no transcript resolution: the Slack/Linear counterpart
  * of readNativeSessionListRow, for the targeted index write a publish makes.
@@ -1246,12 +1250,25 @@ export function readNativeSession(
   return session ? withTranscriptPath(session) : undefined;
 }
 
+/** readNativeSession without blocking: the session file and its transcript
+ * candidates are read asynchronously. */
+export async function readNativeSessionFileAsync(
+  sessionId: string,
+): Promise<UnifiedSession | undefined> {
+  if (!isNativeSessionId(sessionId)) return undefined;
+  const data = await readJsonSafeAsync<NativeSessionFile>(
+    `${SESSIONS_DIR}/${sessionId}.json`,
+  );
+  if (!data?.id || data.id !== sessionId) return undefined;
+  return nativeSessionDetailFromData(data);
+}
+
 /** Detail shape of a native session document: the list row plus its resolved
  * transcript path. */
 export function nativeSessionDetailFromData(
   data: NativeSessionFile,
-): UnifiedSession {
-  return withTranscriptPath(nativeSessionListRowFromData(data));
+): Promise<UnifiedSession> {
+  return resolveSessionTranscriptPathAsync(nativeSessionListRowFromData(data));
 }
 
 function withTranscriptPath(session: UnifiedSession): UnifiedSession {
@@ -1725,8 +1742,7 @@ async function removeSessionArtifacts(session: UnifiedSession): Promise<void> {
     case "slack": {
       // ID format: slack-{filename}
       const filename = session.id.replace(/^slack-/, "") + ".json";
-      const path = `${SLACK_SESSIONS_DIR}/${filename}`;
-      if (existsSync(path)) unlinkSync(path);
+      await rm(`${SLACK_SESSIONS_DIR}/${filename}`, { force: true });
       // Record the deletion after the unlink, so a read that saw the file
       // just before cannot resurrect it in the catalog projection.
       await mirrorAgentSessionSource("slack", filename, {
@@ -1738,8 +1754,7 @@ async function removeSessionArtifacts(session: UnifiedSession): Promise<void> {
     case "linear": {
       // ID format: linear-{branch}
       const branch = session.id.replace(/^linear-/, "");
-      const path = `${LINEAR_SESSIONS_DIR}/${branch}.json`;
-      if (existsSync(path)) unlinkSync(path);
+      await rm(`${LINEAR_SESSIONS_DIR}/${branch}.json`, { force: true });
       await mirrorAgentSessionSource("linear", `${branch}.json`, {
         source: null,
         observedAt: Date.now(),
@@ -1747,8 +1762,7 @@ async function removeSessionArtifacts(session: UnifiedSession): Promise<void> {
       break;
     }
     case "opensession": {
-      const path = `${SESSIONS_DIR}/${session.id}.json`;
-      if (existsSync(path)) unlinkSync(path);
+      await rm(`${SESSIONS_DIR}/${session.id}.json`, { force: true });
       break;
     }
   }

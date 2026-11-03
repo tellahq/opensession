@@ -8,7 +8,7 @@ function idleSleepsAtIso(sandboxId: string): string | undefined {
   const at = sandboxSleepsAt(sandboxId);
   return at ? new Date(at).toISOString() : undefined;
 }
-import { existsSync } from "node:fs";
+import { pathExists } from "../sandbox/async-fs";
 import { isAgentSessionBusy } from "../agent-runner";
 import { audit } from "../audit";
 import { getGitStatus, type GitStatusInfo } from "../git-status";
@@ -439,7 +439,7 @@ async function attachSandbox(
       );
   } else {
     const target = await resolveWorktreeTarget(session);
-    if (target && existsSync(target.dir)) {
+    if (target && (await pathExists(target.dir))) {
       let outcome: CheckpointOutcome = { state: "skipped", reason: "unknown" };
       try {
         outcome = await checkpointHostWorkspace(session, target.dir);
@@ -891,7 +891,7 @@ async function runSandboxLifecycleAction(
         ),
       );
       // The Portal URLs stay up through sleep; opening one wakes the Sandbox.
-      suspendSandboxPreviewRoutes(recorded.sandboxId);
+      await suspendSandboxPreviewRoutes(recorded.sandboxId);
       touchNativeSession(session.id, {
         sandbox: {
           ...recorded,
@@ -959,7 +959,7 @@ async function runSandboxLifecycleAction(
       // recorded trust policy has to be read before it.
       const spec = recreateSandboxSpec(
         current,
-        recordedTrustPolicy(recorded.provider, session.id),
+        await recordedTrustPolicy(recorded.provider, session.id),
       );
       touchNativeSession(session.id, {
         sandbox: {

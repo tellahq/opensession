@@ -42,20 +42,12 @@
  * sandbox/adapters/bootstrap.ts and reads the same config.
  */
 import { $ } from "bun";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  renameSync,
-  statSync,
-  unlinkSync,
-  writeFileSync,
-} from "fs";
+import { mkdir, readdir, rename, stat, unlink, writeFile } from "fs/promises";
 import { dirname, join } from "path";
 import { configuredPaths, configuredRepos, type Repo } from "./config";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { pathExists, readTextOrNull } from "./sandbox/async-fs";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import { removeTree } from "./workload-scope";
 import { workloadArgv } from "./workload-scope";
 
@@ -88,8 +80,10 @@ function configFile(): string {
  *  warmRoutes precedence: explicit instance config → the repo's committed
  *  `.agents/preview.json` (read from the template worktree, so the repo
  *  itself declares which routes to pre-compile) → defaults. */
-export function warmTemplateConfig(repoId: string): WarmTemplateRepoConfig {
-  const raw = readWarmConfigRaw()[repoId];
+export async function warmTemplateConfig(
+  repoId: string,
+): Promise<WarmTemplateRepoConfig> {
+  const raw = (await readWarmConfigRaw())[repoId];
   const explicitRoutes =
     Array.isArray(raw?.warmRoutes) && raw.warmRoutes.length
       ? raw.warmRoutes.filter(
@@ -103,19 +97,23 @@ export function warmTemplateConfig(repoId: string): WarmTemplateRepoConfig {
         ? Math.floor(raw.intervalHours)
         : WARM_DEFAULTS.intervalHours,
     warmRoutes:
-      explicitRoutes || repoWarmRoutes(repoId) || WARM_DEFAULTS.warmRoutes,
+      explicitRoutes ||
+      (await repoWarmRoutes(repoId)) ||
+      WARM_DEFAULTS.warmRoutes,
   };
 }
 
 /** `warmRoutes` from the repo's committed `.agents/preview.json`, read out of
  *  the template worktree when it exists. Null = the repo doesn't declare any. */
-function repoWarmRoutes(repoId: string): string[] | null {
+async function repoWarmRoutes(repoId: string): Promise<string[] | null> {
   const repo = configuredRepos()[repoId];
   if (!repo) return null;
   try {
-    const f = join(warmTemplateDir(repo), ".agents", "preview.json");
-    if (!existsSync(f)) return null;
-    const routes = JSON.parse(readFileSync(f, "utf-8"))?.warmRoutes;
+    const text = await readTextOrNull(
+      join(warmTemplateDir(repo), ".agents", "preview.json"),
+    );
+    if (text === null) return null;
+    const routes = JSON.parse(text)?.warmRoutes;
     if (Array.isArray(routes)) {
       const out = routes.filter(
         (r: unknown): r is string => typeof r === "string",
@@ -126,11 +124,11 @@ function repoWarmRoutes(repoId: string): string[] | null {
   return null;
 }
 
-function readWarmConfigRaw(): Record<string, any> {
+async function readWarmConfigRaw(): Promise<Record<string, any>> {
   try {
-    const f = configFile();
-    if (!existsSync(f)) return {};
-    const parsed = JSON.parse(readFileSync(f, "utf-8"));
+    const text = await readTextOrNull(configFile());
+    if (text === null) return {};
+    const parsed = JSON.parse(text);
     return parsed?.repos && typeof parsed.repos === "object"
       ? parsed.repos
       : {};
@@ -139,17 +137,17 @@ function readWarmConfigRaw(): Record<string, any> {
   }
 }
 
-export function setWarmTemplateConfig(
+export async function setWarmTemplateConfig(
   repoId: string,
   patch: Partial<
     Pick<WarmTemplateRepoConfig, "enabled" | "intervalHours" | "warmRoutes">
   >,
-): WarmTemplateRepoConfig {
-  mkdirSync(warmDir(), { recursive: true });
-  const repos = readWarmConfigRaw();
+): Promise<WarmTemplateRepoConfig> {
+  await mkdir(warmDir(), { recursive: true });
+  const repos = await readWarmConfigRaw();
   repos[repoId] = { ...repos[repoId], ...patch };
-  writeJsonAtomic(configFile(), { repos });
-  const cfg = warmTemplateConfig(repoId);
+  await writeJsonAtomicAsync(configFile(), { repos });
+  const cfg = await warmTemplateConfig(repoId);
   // Turning a repo on shouldn't wait for the next sweep tick.
   if (patch.enabled) void refreshWarmTemplate(repoId).catch(() => {});
   return cfg;
@@ -180,20 +178,22 @@ function manifestFile(repoId: string): string {
   return join(warmDir(), `${repoId}.manifest`);
 }
 
-function warmTemplateState(repoId: string): WarmTemplateState | null {
+async function warmTemplateState(
+  repoId: string,
+): Promise<WarmTemplateState | null> {
   try {
-    const f = stateFile(repoId);
-    if (!existsSync(f)) return null;
-    return JSON.parse(readFileSync(f, "utf-8")) as WarmTemplateState;
+    const text = await readTextOrNull(stateFile(repoId));
+    if (text === null) return null;
+    return JSON.parse(text) as WarmTemplateState;
   } catch {
     return null;
   }
 }
 
-function writeState(state: WarmTemplateState): void {
+async function writeState(state: WarmTemplateState): Promise<void> {
   try {
-    mkdirSync(warmDir(), { recursive: true });
-    writeJsonAtomic(stateFile(state.repoId), state);
+    await mkdir(warmDir(), { recursive: true });
+    await writeJsonAtomicAsync(stateFile(state.repoId), state);
   } catch (e) {
     console.warn(`[warm-template] persist(${state.repoId}) failed:`, e);
   }
@@ -225,12 +225,13 @@ function refreshLockFile(repoId: string): string {
   return join(warmDir(), `${repoId}.refresh.lock`);
 }
 
-function refreshLockHeld(repoId: string): boolean {
+async function refreshLockHeld(repoId: string): Promise<boolean> {
   try {
-    const f = refreshLockFile(repoId);
-    if (!existsSync(f)) return false;
+    // Missing lock file → stat throws → not held.
     // A crashed refresh must not wedge seeding forever — stale locks expire.
-    return Date.now() - statSync(f).mtimeMs < 20 * 60_000;
+    return (
+      Date.now() - (await stat(refreshLockFile(repoId))).mtimeMs < 20 * 60_000
+    );
   } catch {
     return false;
   }
@@ -298,18 +299,18 @@ export type TemplateStatus =
   | { kind: "stale"; reason: string }
   | { kind: "absent" };
 
-export function templateStatus(repoId: string): TemplateStatus {
-  if (refreshing.has(repoId) || refreshLockHeld(repoId))
+export async function templateStatus(repoId: string): Promise<TemplateStatus> {
+  if (refreshing.has(repoId) || (await refreshLockHeld(repoId)))
     return { kind: "refreshing" };
   return templateWarmth(repoId);
 }
 
 /** templateStatus minus the refresh guards, for doRefresh: it holds both of
  *  them itself and still needs to know whether the tree is already warm. */
-function templateWarmth(
+async function templateWarmth(
   repoId: string,
-): Exclude<TemplateStatus, { kind: "refreshing" }> {
-  const state = warmTemplateState(repoId);
+): Promise<Exclude<TemplateStatus, { kind: "refreshing" }>> {
+  const state = await warmTemplateState(repoId);
   if (!state) return { kind: "absent" };
   if (!state.ok || !state.sha) {
     return {
@@ -317,13 +318,13 @@ function templateWarmth(
       reason: state.lastError || "last refresh did not complete",
     };
   }
-  if (!existsSync(state.dir))
+  if (!(await pathExists(state.dir)))
     return { kind: "stale", reason: "template worktree missing" };
   const mf = manifestFile(repoId);
-  if (!existsSync(mf)) return { kind: "stale", reason: "no manifest" };
+  if (!(await pathExists(mf))) return { kind: "stale", reason: "no manifest" };
   let entries: string[];
   try {
-    entries = seedableManifest(readFileSync(mf, "utf-8").split("\n"));
+    entries = seedableManifest((await Bun.file(mf).text()).split("\n"));
   } catch (e) {
     return {
       kind: "stale",
@@ -332,9 +333,13 @@ function templateWarmth(
   }
   if (!entries.length)
     return { kind: "stale", reason: "manifest lists no dep trees" };
-  const missing = entries.find(
-    (e) => !existsSync(join(state.dir, e.replace(/\/$/, ""))),
-  );
+  let missing: string | undefined;
+  for (const e of entries) {
+    if (!(await pathExists(join(state.dir, e.replace(/\/$/, ""))))) {
+      missing = e;
+      break;
+    }
+  }
   if (missing)
     return { kind: "stale", reason: `dep tree ${missing} missing on disk` };
   return { kind: "warm", dir: state.dir, sha: state.sha, entries };
@@ -372,14 +377,14 @@ async function doRefresh(repoId: string, force: boolean): Promise<void> {
   const repo = configuredRepos()[repoId];
   if (!repo) return;
   if (repo.sharedCheckout) return; // opensession self-hosts; nothing to warm
-  const cfg = warmTemplateConfig(repoId);
+  const cfg = await warmTemplateConfig(repoId);
   if (!cfg.enabled && !force) return;
   const dir = warmTemplateDir(repo);
   const started = Date.now();
-  const prev = warmTemplateState(repoId);
+  const prev = await warmTemplateState(repoId);
   const fail = async (msg: string) => {
     console.warn(`[warm-template] ${repoId}: ${msg}`);
-    writeState({
+    await writeState({
       ...(prev || {}),
       repoId,
       dir,
@@ -390,8 +395,8 @@ async function doRefresh(repoId: string, force: boolean): Promise<void> {
   };
 
   try {
-    mkdirSync(warmDir(), { recursive: true });
-    writeFileSync(
+    await mkdir(warmDir(), { recursive: true });
+    await writeFile(
       refreshLockFile(repoId),
       `${process.pid} ${new Date().toISOString()}\n`,
     );
@@ -400,13 +405,13 @@ async function doRefresh(repoId: string, force: boolean): Promise<void> {
     const { withGitLock, installWorktreeDeps } = await import("./worktree");
 
     // 1. Ensure the detached template worktree exists.
-    if (!existsSync(dir)) {
+    if (!(await pathExists(dir))) {
       console.log(
         `[warm-template] ${repoId}: creating template worktree at ${dir}`,
       );
       await withGitLock(async () => {
         await $`git -C ${repo.repo} worktree prune`.quiet().nothrow();
-        if (existsSync(dir)) return;
+        if (await pathExists(dir)) return;
         await $`${workloadArgv(["git", "-C", repo.repo, "fetch", "origin", repo.defaultBranch, "--quiet"], "git")}`.nothrow();
         await $`${workloadArgv(["git", "-C", repo.repo, "worktree", "add", "--detach", dir, `origin/${repo.defaultBranch}`], "git")}`;
       });
@@ -422,7 +427,7 @@ async function doRefresh(repoId: string, force: boolean): Promise<void> {
     ).trim();
     if (!sha)
       return void (await fail(`can't resolve origin/${repo.defaultBranch}`));
-    const current = templateWarmth(repoId); // not templateStatus: we hold both guards
+    const current = await templateWarmth(repoId); // not templateStatus: we hold both guards
     if (!force && current.kind === "warm" && current.sha === sha) {
       return; // already warm at this sha
     }
@@ -483,9 +488,9 @@ async function doRefresh(repoId: string, force: boolean): Promise<void> {
     const manifest = seedableManifest(raw.split("\n"));
     if (!manifest.length)
       return void (await fail("refresh produced no node_modules to seed"));
-    writeFileSync(manifestFile(repoId), manifest.join("\n") + "\n");
+    await writeFile(manifestFile(repoId), manifest.join("\n") + "\n");
 
-    writeState({
+    await writeState({
       repoId,
       dir,
       sha,
@@ -503,9 +508,7 @@ async function doRefresh(repoId: string, force: boolean): Promise<void> {
   } catch (e) {
     await fail(String((e as any)?.message || e));
   } finally {
-    try {
-      unlinkSync(refreshLockFile(repoId));
-    } catch {}
+    await unlink(refreshLockFile(repoId)).catch(() => {});
   }
 }
 
@@ -524,7 +527,7 @@ export async function seedWorktreeFromWarmTemplate(
   wtPath: string,
 ): Promise<boolean> {
   try {
-    const cfg = warmTemplateConfig(repo.id);
+    const cfg = await warmTemplateConfig(repo.id);
     if (!cfg.enabled) return false;
     if (wtPath === warmTemplateDir(repo)) return false; // never seed the template itself
 
@@ -538,10 +541,10 @@ export async function seedWorktreeFromWarmTemplate(
 
       // Fast path: adopt a spare. Spares own their links (independent of the
       // template tree), so a template mid-refresh doesn't matter here.
-      const spare = claimSpare(repo);
+      const spare = await claimSpare(repo);
       if (spare) {
         try {
-          const rels = readFileSync(join(spare, SPARE_PATHS_FILE), "utf-8")
+          const rels = (await Bun.file(join(spare, SPARE_PATHS_FILE)).text())
             .split("\n")
             .map((l) => l.trim())
             .filter(Boolean);
@@ -549,9 +552,9 @@ export async function seedWorktreeFromWarmTemplate(
           for (const rel of rels) {
             const src = join(spare, rel);
             const dst = join(wtPath, rel);
-            if (!existsSync(src) || existsSync(dst)) continue;
-            mkdirSync(dirname(dst), { recursive: true });
-            renameSync(src, dst);
+            if (!(await pathExists(src)) || (await pathExists(dst))) continue;
+            await mkdir(dirname(dst), { recursive: true });
+            await rename(src, dst);
             moved++;
           }
           console.log(
@@ -572,7 +575,7 @@ export async function seedWorktreeFromWarmTemplate(
       // process is visible only via the lock file — wait briefly, then bail
       // to a cold install rather than link from a tree being reset (that
       // race aborted a seed live on 2026-07-09).
-      let status = templateStatus(repo.id);
+      let status = await templateStatus(repo.id);
       if (status.kind === "refreshing") {
         const inflight = refreshing.get(repo.id);
         if (inflight) {
@@ -580,12 +583,12 @@ export async function seedWorktreeFromWarmTemplate(
         }
         for (
           let waited = 0;
-          refreshLockHeld(repo.id) && waited < 90_000;
+          (await refreshLockHeld(repo.id)) && waited < 90_000;
           waited += 5000
         ) {
           await Bun.sleep(5000);
         }
-        status = templateStatus(repo.id);
+        status = await templateStatus(repo.id);
       }
       if (status.kind !== "warm") {
         console.log(
@@ -602,8 +605,8 @@ export async function seedWorktreeFromWarmTemplate(
       for (const entry of status.entries) {
         const src = join(status.dir, entry).replace(/\/$/, "");
         const dst = join(wtPath, entry).replace(/\/$/, "");
-        if (!existsSync(src) || existsSync(dst)) continue;
-        mkdirSync(dirname(dst), { recursive: true });
+        if (!(await pathExists(src)) || (await pathExists(dst))) continue;
+        await mkdir(dirname(dst), { recursive: true });
         const r = await $`${workloadArgv(["cp", "-al", src, dst], "deps")}`
           .quiet()
           .nothrow();
@@ -651,9 +654,9 @@ function sparesDir(repo: Repo): string {
   return join(configuredPaths().worktreesDir, ".warm-spares", repo.wtPrefix);
 }
 
-function listSpares(repo: Repo): string[] {
+async function listSpares(repo: Repo): Promise<string[]> {
   try {
-    return readdirSync(sparesDir(repo))
+    return (await readdir(sparesDir(repo)))
       .filter((n) => n.startsWith("spare-") && !n.includes(".claimed-"))
       .map((n) => join(sparesDir(repo), n));
   } catch {
@@ -662,23 +665,27 @@ function listSpares(repo: Repo): string[] {
 }
 
 /** A spare is intact when every tree its .spare-paths lists is present. */
-function spareIntact(spare: string): boolean {
+async function spareIntact(spare: string): Promise<boolean> {
   try {
-    const rels = readFileSync(join(spare, SPARE_PATHS_FILE), "utf-8")
+    const rels = (await Bun.file(join(spare, SPARE_PATHS_FILE)).text())
       .split("\n")
       .map((l) => l.trim())
       .filter(Boolean);
-    return rels.length > 0 && rels.every((rel) => existsSync(join(spare, rel)));
+    if (!rels.length) return false;
+    for (const rel of rels) {
+      if (!(await pathExists(join(spare, rel)))) return false;
+    }
+    return true;
   } catch {
     return false;
   }
 }
 
-function claimSpare(repo: Repo): string | null {
-  for (const spare of listSpares(repo)) {
+async function claimSpare(repo: Repo): Promise<string | null> {
+  for (const spare of await listSpares(repo)) {
     const claimed = `${spare}.claimed-${Math.random().toString(36).slice(2, 8)}`;
     try {
-      renameSync(spare, claimed);
+      await rename(spare, claimed);
       return claimed;
     } catch {} // lost the race to a concurrent create — try the next one
   }
@@ -700,40 +707,40 @@ function replenishSpares(repo: Repo): Promise<void> {
 }
 
 async function doReplenish(repo: Repo): Promise<void> {
-  if (!warmTemplateConfig(repo.id).enabled) return;
+  if (!(await warmTemplateConfig(repo.id)).enabled) return;
   const dir = sparesDir(repo);
-  mkdirSync(dir, { recursive: true });
+  await mkdir(dir, { recursive: true });
   // Sweep leftovers: half-built spares and claimed dirs that were never
   // consumed (consumption deletes its claim within seconds) are junk after
   // an hour.
-  for (const n of readdirSync(dir)) {
+  for (const n of await readdir(dir)) {
     if (!n.startsWith(".building-") && !n.includes(".claimed-")) continue;
     const p = join(dir, n);
     try {
-      if (Date.now() - statSync(p).mtimeMs > 3_600_000) await removeTree(p);
+      if (Date.now() - (await stat(p)).mtimeMs > 3_600_000) await removeTree(p);
     } catch {}
   }
   for (;;) {
     // One predicate for everything: last refresh good, trees actually there,
     // and no refresh (this process or another) rewriting them under us — the
     // post-refresh rotate, or the next sweep tick, picks that back up.
-    const status = templateStatus(repo.id);
+    const status = await templateStatus(repo.id);
     if (status.kind !== "warm") return;
     // Unclaimed spares from an older template link outdated deps, and husk
     // spares (built while the template was missing its trees) seed nothing —
     // drop both so sessions start current; the loop below rebuilds fresh ones.
-    for (const p of listSpares(repo)) {
-      if (!p.includes(`spare-${status.sha}-`) || !spareIntact(p)) {
+    for (const p of await listSpares(repo)) {
+      if (!p.includes(`spare-${status.sha}-`) || !(await spareIntact(p))) {
         // Rename out of the pool first (instant) so the count below and a
         // concurrent claim never see it, then delete it off the event loop.
         const discarded = `${p}.claimed-stale`;
         try {
-          renameSync(p, discarded);
+          await rename(p, discarded);
           await removeTree(discarded);
         } catch {}
       }
     }
-    if (listSpares(repo).length >= SPARE_TARGET) return;
+    if ((await listSpares(repo)).length >= SPARE_TARGET) return;
     const entries = status.entries.map((e) => e.replace(/\/$/, ""));
     const building = join(
       dir,
@@ -741,21 +748,21 @@ async function doReplenish(repo: Repo): Promise<void> {
     );
     const buildStarted = Date.now();
     try {
-      mkdirSync(building, { recursive: true });
+      await mkdir(building, { recursive: true });
       for (const rel of entries) {
         // templateStatus verified every tree at the top of this iteration; a
         // tree that vanishes mid-build fails its cp and aborts the spare, and
         // the sweep's own templateStatus check forces a re-refresh.
         const src = join(status.dir, rel);
         const dst = join(building, rel);
-        mkdirSync(dirname(dst), { recursive: true });
+        await mkdir(dirname(dst), { recursive: true });
         await $`${workloadArgv(["cp", "-al", src, dst], "deps")}`.quiet();
       }
-      writeFileSync(
+      await writeFile(
         join(building, SPARE_PATHS_FILE),
         entries.join("\n") + "\n",
       );
-      renameSync(
+      await rename(
         building,
         join(
           dir,
@@ -780,15 +787,15 @@ const SWEEP_INTERVAL_MS = 5 * 60_000;
 async function sweepWarmTemplates(): Promise<void> {
   for (const repo of Object.values(configuredRepos())) {
     if (repo.sharedCheckout) continue;
-    const cfg = warmTemplateConfig(repo.id);
+    const cfg = await warmTemplateConfig(repo.id);
     if (!cfg.enabled) continue;
-    const status = templateStatus(repo.id);
+    const status = await templateStatus(repo.id);
     // Age is a freshness policy, not a usability question, so the state file
     // owns it. Everything else (including ok-but-gutted, i.e. the template
     // deleted/recreated externally) comes from templateStatus, so a gutted
     // template refreshes now rather than serving cold seeds until the
     // interval elapses. A refresh already in flight is left alone.
-    const refreshedAt = warmTemplateState(repo.id)?.refreshedAt;
+    const refreshedAt = (await warmTemplateState(repo.id))?.refreshedAt;
     const ageMs = refreshedAt ? Date.now() - Date.parse(refreshedAt) : Infinity;
     const due =
       status.kind === "absent" ||
@@ -840,20 +847,22 @@ export interface WarmTemplateStatusEntry {
   state: WarmTemplateState | null;
 }
 
-export function warmTemplateStatus(): WarmTemplateStatusEntry[] {
-  return Object.values(configuredRepos())
-    .filter((r) => !r.sharedCheckout)
-    .map((r) => {
-      const cfg = warmTemplateConfig(r.id);
-      const status = templateStatus(r.id);
-      return {
-        repoId: r.id,
-        enabled: cfg.enabled,
-        intervalHours: cfg.intervalHours,
-        refreshing: status.kind === "refreshing",
-        warm: status.kind === "warm",
-        spares: listSpares(r).length,
-        state: warmTemplateState(r.id),
-      };
-    });
+export function warmTemplateStatus(): Promise<WarmTemplateStatusEntry[]> {
+  return Promise.all(
+    Object.values(configuredRepos())
+      .filter((r) => !r.sharedCheckout)
+      .map(async (r) => {
+        const cfg = await warmTemplateConfig(r.id);
+        const status = await templateStatus(r.id);
+        return {
+          repoId: r.id,
+          enabled: cfg.enabled,
+          intervalHours: cfg.intervalHours,
+          refreshing: status.kind === "refreshing",
+          warm: status.kind === "warm",
+          spares: (await listSpares(r)).length,
+          state: await warmTemplateState(r.id),
+        };
+      }),
+  );
 }

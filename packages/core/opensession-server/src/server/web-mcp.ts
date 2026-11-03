@@ -46,7 +46,7 @@ function text(body: string) {
 /** Where clones land: the session's swept scratch when there is one, else a
  *  shared cache dir. Never the worktree — a clone is not the run's work. */
 async function cloneRoot(sessionId?: string): Promise<string> {
-  const scratch = sessionId ? ensureSessionScratch(sessionId) : undefined;
+  const scratch = sessionId ? await ensureSessionScratch(sessionId) : undefined;
   const root = scratch ? `${scratch}/repos` : `${stateDir("web-cache")}/repos`;
   await mkdir(root, { recursive: true, mode: 0o700 });
   return root;

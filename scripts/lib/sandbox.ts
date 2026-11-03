@@ -247,7 +247,7 @@ export async function sandbox(args: string[]): Promise<number> {
       fail(`${provider} is not connected`);
       return 1;
     }
-    updateSandboxConnection(provider, { enabled: false });
+    await updateSandboxConnection(provider, { enabled: false });
     ok(
       `${provider} is disabled`,
       "configuration and existing sandboxes were preserved",

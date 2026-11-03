@@ -50,7 +50,7 @@ function errorResponse(error: unknown, status = 400): Response {
 async function connectionPayload(ctx: Pick<RouteContext, "authUser">) {
   return {
     connections: safeSandboxConnections(),
-    operations: listSandboxOperations(),
+    operations: await listSandboxOperations(),
     ingress: await sandboxIngressStatus(),
   };
 }
@@ -171,7 +171,7 @@ export async function handleSandboxesRoutes(
     if (!body || (body.script !== null && typeof body.script !== "string"))
       return errorResponse("script must be a string or null");
     try {
-      setWorkspaceResumeScript(body.script);
+      await setWorkspaceResumeScript(body.script);
       return Response.json(sandboxLifecyclePayload());
     } catch (error) {
       return errorResponse(error);
@@ -190,7 +190,7 @@ export async function handleSandboxesRoutes(
     if (!body || (body.script !== null && typeof body.script !== "string"))
       return errorResponse("script must be a string or null");
     try {
-      setRepoPreSetupScript(repo, body.script);
+      await setRepoPreSetupScript(repo, body.script);
       // The script is a setup input: the project snapshot refreshes.
       forgetProjectPreparationSignature(repo);
       return Response.json(sandboxLifecyclePayload());
@@ -211,17 +211,17 @@ export async function handleSandboxesRoutes(
     const user = requestUser(ctx, body.user) || "Anonymous";
     try {
       if (body.scope === "workspace") {
-        saveWorkspaceSandboxDefault(body.value);
+        await saveWorkspaceSandboxDefault(body.value);
       } else if (body.scope === "personal") {
         savePersonalSandboxDefault(user, body.value);
       } else if (body.scope === "repo") {
         if (typeof body.repo !== "string" || !(body.repo in REPOS))
           return errorResponse("repo must name a registered repository");
-        saveRepoSandboxDefault(body.repo, body.value);
+        await saveRepoSandboxDefault(body.repo, body.value);
       } else if (body.scope === "repo-portals") {
         if (typeof body.repo !== "string" || !(body.repo in REPOS))
           return errorResponse("repo must name a registered repository");
-        saveRepoPortalSandbox(body.repo, body.value);
+        await saveRepoPortalSandbox(body.repo, body.value);
       } else {
         return errorResponse(
           "scope must be workspace, personal, repo, or repo-portals",
@@ -257,7 +257,7 @@ export async function handleSandboxesRoutes(
         unknown
       >;
       try {
-        connectSandboxProvider(provider, {
+        await connectSandboxProvider(provider, {
           secret:
             typeof body.secret === "string"
               ? body.secret
@@ -286,7 +286,7 @@ export async function handleSandboxesRoutes(
       > | null;
       if (!body) return errorResponse("expected a JSON body");
       try {
-        updateSandboxConnection(provider, {
+        await updateSandboxConnection(provider, {
           enabled: typeof body.enabled === "boolean" ? body.enabled : undefined,
           settings:
             body.settings && typeof body.settings === "object"
@@ -316,7 +316,7 @@ export async function handleSandboxesRoutes(
       if (body.confirm !== true) {
         return errorResponse("Disconnect confirmation is required");
       }
-      disconnectSandboxProvider(provider);
+      await disconnectSandboxProvider(provider);
       return Response.json(await connectionPayload(ctx));
     }
   }

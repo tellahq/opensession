@@ -1,4 +1,4 @@
-import { existsSync } from "fs";
+import { pathExists } from "./shared/path-exists";
 import type { TranscriptEntry } from "./types";
 
 /**
@@ -307,6 +307,95 @@ const REMOTE_MEDIA_RE =
   /(https?:\/\/[^\s"'`)\]}>,;]+\.(?:png|jpe?g|gif|webp|mp4|webm|mov|m4v)(?:\?[^\s"'`)\]}>,;]*)?)/gi;
 const IMPLICIT_MEDIA_CAP = 6;
 
+// Local media renders only for a file that exists, and that check is a disk
+// read. The parsers that call into this module are synchronous, so the check
+// cannot happen inside them: their asynchronous callers first stat every
+// candidate path (resolveLocalMedia) and run the parse inside withLocalMedia.
+// Outside such a scope no local file counts as present.
+let resolvedLocalMedia: ReadonlySet<string> | undefined;
+
+function localMediaExists(path: string): boolean {
+  return resolvedLocalMedia?.has(path) ?? false;
+}
+
+/** Run a synchronous build with `existing` as the local files on disk. */
+export function withLocalMedia<T>(
+  existing: ReadonlySet<string>,
+  build: () => T,
+): T {
+  const previous = resolvedLocalMedia;
+  resolvedLocalMedia = existing;
+  try {
+    return build();
+  } finally {
+    resolvedLocalMedia = previous;
+  }
+}
+
+const JSON_ESCAPE = /\\(u[0-9a-fA-F]{4}|["\\/bfnrt])/g;
+const JSON_ESCAPED: Record<string, string> = {
+  '"': '"',
+  "\\": "\\",
+  "/": "/",
+  b: "\b",
+  f: "\f",
+  n: "\n",
+  r: "\r",
+  t: "\t",
+};
+
+/** Absolute local media paths `text` could name: every path the implicit and
+ * markdown rules would check on disk. `text` may be a raw jsonl line; its
+ * string escapes are decoded first so a path after an escaped newline or
+ * quote is still seen. A superset is fine: it only costs a stat. */
+export function localMediaCandidates(text: string): string[] {
+  if (!text || !text.includes("/")) return [];
+  const plain = text.includes("\\")
+    ? text.replace(JSON_ESCAPE, (_, escape: string) =>
+        escape.length === 5
+          ? String.fromCharCode(parseInt(escape.slice(1), 16))
+          : JSON_ESCAPED[escape]!,
+      )
+    : text;
+  const paths: string[] = [];
+  for (const m of plain.matchAll(LOCAL_MEDIA_RE)) paths.push(m[1]!);
+  for (const m of plain.matchAll(LOCAL_MARKDOWN_IMAGE_RE))
+    if (!m[2]!.includes("..")) paths.push(m[2]!);
+  return paths;
+}
+
+const RESOLVE_BATCH = 32;
+
+/** The candidate paths in `texts` that exist, stat'ed asynchronously. */
+export async function resolveLocalMedia(
+  texts: Iterable<string>,
+): Promise<ReadonlySet<string>> {
+  const candidates = new Set<string>();
+  let scanned = 0;
+  for (const text of texts) {
+    for (const path of localMediaCandidates(text)) candidates.add(path);
+    // A whole transcript is scanned here; let other work run meanwhile.
+    if (++scanned % 1000 === 0) await Bun.sleep(0);
+  }
+  const existing = new Set<string>();
+  const paths = [...candidates];
+  for (let i = 0; i < paths.length; i += RESOLVE_BATCH)
+    await Promise.all(
+      paths.slice(i, i + RESOLVE_BATCH).map(async (path) => {
+        if (await pathExists(path)) existing.add(path);
+      }),
+    );
+  return existing;
+}
+
+/** resolveLocalMedia over `texts`, then `build` inside that scope. */
+export async function withLocalMediaFor<T>(
+  texts: Iterable<string>,
+  build: () => T,
+): Promise<T> {
+  return withLocalMedia(await resolveLocalMedia(texts), build);
+}
+
 export function extractImplicitMedia(text: string): {
   images: string[];
   videos: string[];
@@ -331,11 +420,7 @@ export function extractImplicitMedia(text: string): {
   };
   for (const m of text.matchAll(LOCAL_MEDIA_RE)) {
     const p = m[1];
-    try {
-      if (!existsSync(p)) continue;
-    } catch {
-      continue;
-    }
+    if (!localMediaExists(p)) continue;
     add(`/media?path=${encodeURIComponent(p)}`, p);
   }
   // Reserved documentation/testing names serve nothing, wherever they turn up.
@@ -374,11 +459,7 @@ export function placeLocalMarkdownImages(text: string): {
     return line.replace(
       LOCAL_MARKDOWN_IMAGE_RE,
       (whole, open: string, path: string, close: string) => {
-        try {
-          if (path.includes("..") || !existsSync(path)) return whole;
-        } catch {
-          return whole;
-        }
+        if (path.includes("..") || !localMediaExists(path)) return whole;
         const url = mediaUrlFor(path);
         (IMAGE_EXT.test(path) ? images : videos).push(url);
         return `${open}${url}${close}`;

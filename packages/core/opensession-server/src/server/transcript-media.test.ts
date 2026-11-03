@@ -9,6 +9,10 @@ import {
   isCaptionLine,
   mediaUrlFor,
   placeLocalMarkdownImages,
+  withLocalMediaFor,
+  localMediaCandidates,
+  resolveLocalMedia,
+  extractImplicitMedia,
   placeMediaMarkers,
   stripMediaMarkers,
 } from "./transcript-media";
@@ -223,9 +227,10 @@ describe("placeLocalMarkdownImages", () => {
   writeFileSync(svg, "<svg/>");
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-  it("points markdown images at existing local files through /media", () => {
-    const out = placeLocalMarkdownImages(
-      `Old ![a](${png}) new ![b](${svg} "t")![c](${png})`,
+  it("points markdown images at existing local files through /media", async () => {
+    const text = `Old ![a](${png}) new ![b](${svg} "t")![c](${png})`;
+    const out = await withLocalMediaFor([text], () =>
+      placeLocalMarkdownImages(text),
     );
     expect(out.content).toBe(
       `Old ![a](${mediaUrlFor(png)}) new ![b](${mediaUrlFor(svg)} "t")![c](${mediaUrlFor(png)})`,
@@ -252,8 +257,11 @@ describe("placeLocalMarkdownImages", () => {
     });
   });
 
-  it("renders a raw SVG path in an assistant message in place", () => {
-    const out = extractAssistantVideos(`Here: ![icon](${svg})`);
+  it("renders a raw SVG path in an assistant message in place", async () => {
+    const text = `Here: ![icon](${svg})`;
+    const out = await withLocalMediaFor([text], () =>
+      extractAssistantVideos(text),
+    );
     expect(out.content).toBe(`Here: ![icon](${mediaUrlFor(svg)})`);
     expect(out.images).toEqual([mediaUrlFor(svg)]);
   });
@@ -287,5 +295,31 @@ describe("compare in the Slack grammar", () => {
     expect(
       stripMediaMarkers("a\nOPENSESSION_COMPARE: /tmp/b.png /tmp/c.png\nd"),
     ).toBe("a\n\nd");
+  });
+});
+
+describe("local media resolution", () => {
+  const dir = mkdtempSync(join(tmpdir(), "transcript-media-resolve-"));
+  const png = join(dir, "found.png");
+  writeFileSync(png, "");
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("finds candidates inside raw jsonl string escapes", () => {
+    const line = JSON.stringify({ text: `see\n![x](${png})\n"${png}"` });
+    expect(localMediaCandidates(line)).toContain(png);
+  });
+
+  it("keeps only the candidates that exist on disk", async () => {
+    const existing = await resolveLocalMedia([
+      `${png} and /tmp/definitely-missing-resolve.png`,
+    ]);
+    expect([...existing]).toEqual([png]);
+  });
+
+  it("treats every local path as absent outside a resolved scope", () => {
+    expect(extractImplicitMedia(`Saved ${png}`)).toEqual({
+      images: [],
+      videos: [],
+    });
   });
 });

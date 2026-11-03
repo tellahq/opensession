@@ -693,7 +693,7 @@ async function startPortal(
     allocatePort: (records: PortalRecord[]) => Promise<number>;
     /** Extra, side-specific qualification of the chosen port (published Sandbox ports). */
     qualifyPort?: (port: number, records: PortalRecord[]) => Promise<void>;
-    urlFor: (port: number) => string;
+    urlFor: (port: number) => string | Promise<string>;
     /** Where the service's stdout/stderr land. Named in failure messages so
      *  an agent can read why a Portal died; the tail is inlined when the file
      *  is readable from here (host Portals). */
@@ -724,7 +724,7 @@ async function startPortal(
       current.key === key &&
       (input.port == null || current.port === input.port);
     if (current.state === "awake" && sameService)
-      return { ...current, url: input.urlFor(current.port) };
+      return { ...current, url: await input.urlFor(current.port) };
     throw new Error(`Portal '${name}' already exists. Restart it instead.`);
   }
   // A dead record can leave its process group behind (a crashed dev server's
@@ -753,7 +753,7 @@ async function startPortal(
   )
     throw new Error(`Port ${port} is already in use.`);
   await input.qualifyPort?.(port, records);
-  const url = input.urlFor(port);
+  const url = await input.urlFor(port);
   const base: PortalRecord = {
     name,
     key: validateKey(input.key) ?? portalKey(name),
@@ -1886,7 +1886,8 @@ function sandboxPortalOps(sandbox: Sandbox, sessionId?: string): PortalOps {
       (await readSandboxPortalRegistry(sandbox)).records,
     writeRegistry: async (records) => {
       await writeSandboxPortalRegistry(sandbox, records);
-      if (sessionId) cacheSandboxPortalRecords(sessionId, sandbox.id, records);
+      if (sessionId)
+        await cacheSandboxPortalRecords(sessionId, sandbox.id, records);
     },
     probePort: async (port) =>
       (await probeSandboxPort(sandbox, port)) === "listening",
@@ -2313,8 +2314,8 @@ async function startSandboxPortalServiceInner(
         if (Object.keys(published).length && !(port in published))
           throw new Error(`Port ${port} is not published for this Sandbox.`);
       },
-      urlFor: (port) =>
-        `https://${configuredServer().previewHost}:${sandboxHttpsPortFor(input.sandbox.id, port)}`,
+      urlFor: async (port) =>
+        `https://${configuredServer().previewHost}:${await sandboxHttpsPortFor(input.sandbox.id, port)}`,
       logPath: `${sandboxRuntimeDir}/${input.name}.log`,
       launch: async ({ name, command, port, url }) => {
         const runtimeDir = sandboxRuntimeDir;

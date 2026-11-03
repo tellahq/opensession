@@ -43,7 +43,7 @@
  * real restart (routes don't hot-apply at all — CLAUDE.md).
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
 import { cpus, loadavg } from "node:os";
 import { audit } from "./audit";
 import { dispatchRunRpc, timingSafeEqStr } from "./run-rpc";
@@ -647,7 +647,13 @@ export function timerPoisonRequestCheck(): void {
   const hb = g.__timerPoisonHeartbeat as
     | { at: number; armed: boolean }
     | undefined;
-  if (!hb?.armed || g.__timerPoisonExiting || g.__timerPoisonHalted) return;
+  if (
+    !hb?.armed ||
+    g.__timerPoisonExiting ||
+    g.__timerPoisonHalted ||
+    g.__timerPoisonEscalating
+  )
+    return;
   if (Date.now() - hb.at < POISON_STALE_MS) {
     g.__timerPoisonSuspicion = undefined;
     return;
@@ -670,11 +676,16 @@ export function timerPoisonRequestCheck(): void {
     g.__timerPoisonSuspicion = undefined;
     return;
   }
-  if (Date.now() - s.since >= POISON_CONFIRM_MS)
-    escalateTimerPoison(Date.now() - hb.at);
+  if (Date.now() - s.since >= POISON_CONFIRM_MS) {
+    // One escalation at a time: its restart-guard file I/O is asynchronous.
+    g.__timerPoisonEscalating = true;
+    void escalateTimerPoison(Date.now() - hb.at).finally(() => {
+      g.__timerPoisonEscalating = false;
+    });
+  }
 }
 
-function escalateTimerPoison(staleMs: number): void {
+async function escalateTimerPoison(staleMs: number): Promise<void> {
   const load1 = loadavg()[0];
   const cores = cpus().length || 1;
   if (shouldDeferTimerPoisonForStarvation(load1, cores, staleMs)) {
@@ -707,7 +718,7 @@ function escalateTimerPoison(staleMs: number): void {
   const guardPath = stateDir("timer-poison.json");
   let exits: string[] = [];
   try {
-    exits = (JSON.parse(readFileSync(guardPath, "utf8")).exits ??
+    exits = (JSON.parse(await readFile(guardPath, "utf8")).exits ??
       []) as string[];
   } catch {}
   const cutoff = Date.now() - 30 * 60_000;
@@ -731,7 +742,7 @@ function escalateTimerPoison(staleMs: number): void {
   }
   exits.push(new Date().toISOString());
   try {
-    writeFileSync(guardPath, JSON.stringify({ exits }));
+    await writeFile(guardPath, JSON.stringify({ exits }));
   } catch {}
   g.__timerPoisonExiting = true;
   audit({

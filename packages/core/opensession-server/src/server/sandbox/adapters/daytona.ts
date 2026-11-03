@@ -307,9 +307,9 @@ async function getDaytonaSnapshot(
 }
 
 async function recoverDaytonaRepoTemplate(client: Daytona, repoId: string) {
-  const stored = readRemoteRepoTemplate("daytona", repoId);
+  const stored = await readRemoteRepoTemplate("daytona", repoId);
   if (stored) return stored;
-  const name = remoteRepoTemplateName("daytona", repoId);
+  const name = await remoteRepoTemplateName("daytona", repoId);
   let snapshot = await getDaytonaSnapshot(client, name);
   if (
     snapshot &&
@@ -329,9 +329,9 @@ async function recoverDaytonaRepoTemplate(client: Daytona, repoId: string) {
     }
   }
   if (!snapshot || !daytonaSnapshotIsRecoverable(snapshot)) return null;
-  writeRemoteRepoTemplate("daytona", repoId, name);
+  await writeRemoteRepoTemplate("daytona", repoId, name);
   console.log(`[sandbox:daytona] recovered completed repo template ${name}`);
-  return readRemoteRepoTemplate("daytona", repoId);
+  return await readRemoteRepoTemplate("daytona", repoId);
 }
 
 async function waitForDaytonaSnapshotGone(
@@ -616,7 +616,7 @@ export class DaytonaProvider implements SandboxProvider {
     }
     const cfg = daytonaConfig();
     const client = await daytonaClient();
-    const prevState = findRemoteStateBySession(this.id, spec.sessionId);
+    const prevState = await findRemoteStateBySession(this.id, spec.sessionId);
     const trust = resolveTrustPolicy(spec, prevState);
     const sourceVerification = spec.sourceVerification === true;
     if (
@@ -725,7 +725,10 @@ export class DaytonaProvider implements SandboxProvider {
       // fallback must use the same per-project profile; Daytona's default
       // 3 GiB disk cannot even install the OpenSession runner for real repos.
       const { sandboxEnvironmentSettings } = await import("../environments");
-      const projectResources = sandboxEnvironmentSettings(repo.id, "daytona");
+      const projectResources = await sandboxEnvironmentSettings(
+        repo.id,
+        "daytona",
+      );
       const create = (snapshot?: string) => {
         const resources = daytonaCreateResources(cfg, projectResources);
         return client.create(
@@ -766,7 +769,7 @@ export class DaytonaProvider implements SandboxProvider {
         // Provider artifacts can be deleted independently of the local index.
         // Drop only a confirmed-missing mapping. A timeout, conflict, or rate
         // limit must not destroy a valid fleet-wide fast path.
-        invalidateRemoteRepoTemplate("daytona", repo.id);
+        await invalidateRemoteRepoTemplate("daytona", repo.id);
         console.warn(
           `[sandbox:daytona] repo template ${template.artifactId} is unavailable; retrying cold`,
         );
@@ -780,7 +783,7 @@ export class DaytonaProvider implements SandboxProvider {
     // Persist the provider id before any optional setup. A coordinator restart
     // can now recover directly instead of scanning provider labels or creating
     // a duplicate sandbox after a partially completed launch.
-    writeRemoteState({
+    await writeRemoteState({
       sandboxId: sbx.id,
       provider: this.id,
       sessionId: spec.sessionId,
@@ -875,7 +878,7 @@ export class DaytonaProvider implements SandboxProvider {
         });
         mark("resume hook ran");
       }
-      writeRemoteState({
+      await writeRemoteState({
         sandboxId: sbx.id,
         provider: this.id,
         sessionId: spec.sessionId,
@@ -962,7 +965,7 @@ export class DaytonaProvider implements SandboxProvider {
   }
 
   async get(sandboxId: string): Promise<Sandbox | null> {
-    const state = readRemoteState(this.id, sandboxId);
+    const state = await readRemoteState(this.id, sandboxId);
     if (!state) return null;
     try {
       const client = await daytonaClient();
@@ -1017,7 +1020,7 @@ export class DaytonaProvider implements SandboxProvider {
   }
 
   async resume(sandboxId: string): Promise<Sandbox | null> {
-    const state = readRemoteState(this.id, sandboxId);
+    const state = await readRemoteState(this.id, sandboxId);
     if (!state) return null;
     const client = await daytonaClient();
     const sbx = await client.get(sandboxId);
@@ -1055,10 +1058,10 @@ export class DaytonaProvider implements SandboxProvider {
           );
         }
       }
-      removeRemoteState(this.id, sandboxId);
+      await removeRemoteState(this.id, sandboxId);
     } catch (error) {
       if (daytonaNotFound(error)) {
-        removeRemoteState(this.id, sandboxId);
+        await removeRemoteState(this.id, sandboxId);
         return;
       }
       // A timeout or refused delete may leave paid compute alive. Keep its
@@ -1109,7 +1112,7 @@ export const daytonaPrewarmAdapter: PrewarmAdapter = {
       sbx = await create(template?.artifactId || cfg.daytona?.snapshot);
     } catch (error) {
       if (!template || !daytonaNotFound(error)) throw error;
-      invalidateRemoteRepoTemplate("daytona", repoId);
+      await invalidateRemoteRepoTemplate("daytona", repoId);
       restoredFromTemplate = false;
       sbx = await create(cfg.daytona?.snapshot);
     }
@@ -1122,7 +1125,7 @@ export const daytonaPrewarmAdapter: PrewarmAdapter = {
 
   async publishTemplate(sandboxId, repo, _label, options) {
     const client = await daytonaClient();
-    const name = remoteRepoTemplateName("daytona", repo.id);
+    const name = await remoteRepoTemplateName("daytona", repo.id);
     const sbx = await client.get(sandboxId);
     await sealRemoteRepoTemplate(daytonaDriver(sbx), "daytona", repo);
     const recovered = options?.replace
@@ -1137,7 +1140,11 @@ export const daytonaPrewarmAdapter: PrewarmAdapter = {
     // Full repository templates are materially larger than Daytona's base
     // images; the live Open Session template takes about six minutes to seal.
     await sbx._experimental_createSnapshot(name, 900);
-    const { previous } = writeRemoteRepoTemplate("daytona", repo.id, name);
+    const { previous } = await writeRemoteRepoTemplate(
+      "daytona",
+      repo.id,
+      name,
+    );
     if (previous?.artifactId && previous.artifactId !== name) {
       try {
         const stale = await client.snapshot.get(previous.artifactId);

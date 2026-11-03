@@ -287,13 +287,17 @@ export function modalSandboxId(sessionId: string): string {
 /** Only states this adapter wrote. Files from the retired Modal provider
  *  name a container id (`sb-…`) and point at images two providers old: they
  *  read as gone, and the session continues from its last checkpoint. */
-function readState(sandboxId: string): RemoteSandboxState | null {
+async function readState(
+  sandboxId: string,
+): Promise<RemoteSandboxState | null> {
   if (!sandboxId.startsWith(SANDBOX_PREFIX)) return null;
-  return readRemoteState(PROVIDER, sandboxId);
+  return await readRemoteState(PROVIDER, sandboxId);
 }
 
-function findState(sessionId: string): RemoteSandboxState | null {
-  const state = findRemoteStateBySession(PROVIDER, sessionId);
+async function findState(
+  sessionId: string,
+): Promise<RemoteSandboxState | null> {
+  const state = await findRemoteStateBySession(PROVIDER, sessionId);
   return state?.sandboxId.startsWith(SANDBOX_PREFIX) ? state : null;
 }
 
@@ -566,12 +570,12 @@ async function sandboxStatus(
 
 /** Sleep: save the filesystem as an image, then terminate the container. */
 export async function pauseModalSandbox(sandboxId: string): Promise<void> {
-  const state = readState(sandboxId);
+  const state = await readState(sandboxId);
   if (!state?.remoteId) return;
   const c = await modalClient();
   const container = await liveContainer(c, state.remoteId);
   if (!container) {
-    writeRemoteState({ ...state, remoteId: undefined });
+    await writeRemoteState({ ...state, remoteId: undefined });
     return;
   }
   // The agent dies with the container; a wake launches a fresh one on the
@@ -583,7 +587,7 @@ export async function pauseModalSandbox(sandboxId: string): Promise<void> {
   });
   await terminateContainer(c, state.remoteId);
   const previous = state.checkpointArtifactId;
-  writeRemoteState({
+  await writeRemoteState({
     ...state,
     remoteId: undefined,
     remoteStartedAt: undefined,
@@ -616,9 +620,9 @@ async function releaseFailedContainer(
         terminateError,
       ),
     );
-    const state = readState(sandboxId);
+    const state = await readState(sandboxId);
     if (state)
-      writeRemoteState({
+      await writeRemoteState({
         ...state,
         remoteId: undefined,
         remoteStartedAt: undefined,
@@ -675,7 +679,7 @@ export class ModalProvider implements SandboxProvider {
         "Modal Sandboxes do not run automations yet; automations stay on Daytona",
       );
     const c = await modalClient();
-    let prevState = findState(spec.sessionId);
+    let prevState = await findState(spec.sessionId);
     const trust = resolveTrustPolicy(spec, prevState);
     const repo = getRepo(spec.repo || prevState?.repoId);
     const branch = spec.branch || prevState?.branch || repo.defaultBranch;
@@ -687,7 +691,7 @@ export class ModalProvider implements SandboxProvider {
     // The machine a session asked for: its GPU choice, else the one its
     // container was created with, else the project's Modal machine size.
     const { sandboxEnvironmentSettings } = await import("../environments");
-    const project = sandboxEnvironmentSettings(repo.id, PROVIDER);
+    const project = await sandboxEnvironmentSettings(repo.id, PROVIDER);
     const resources: SandboxMachineSettings = {
       ...(project || {}),
       ...(prevState?.resources || {}),
@@ -707,7 +711,7 @@ export class ModalProvider implements SandboxProvider {
       if (tooOld || otherGpu) {
         mark(tooOld ? "recycling a container near 24 hours" : "changing GPU");
         await pauseModalSandbox(sandboxId);
-        prevState = readState(sandboxId);
+        prevState = await readState(sandboxId);
       }
     }
 
@@ -740,7 +744,7 @@ export class ModalProvider implements SandboxProvider {
       }
     }
     if (!container) {
-      const template = readRemoteRepoTemplate(this.id, repo.id);
+      const template = await readRemoteRepoTemplate(this.id, repo.id);
       if (template) {
         try {
           container = await createContainer(c, {
@@ -750,7 +754,7 @@ export class ModalProvider implements SandboxProvider {
           bootMode = "snapshot-restore";
         } catch (error) {
           if (!notFound(error)) throw error;
-          invalidateRemoteRepoTemplate(this.id, repo.id);
+          await invalidateRemoteRepoTemplate(this.id, repo.id);
           console.warn(
             `[sandbox:modal] project snapshot ${template.artifactId} is gone; starting from the base image`,
           );
@@ -788,7 +792,7 @@ export class ModalProvider implements SandboxProvider {
       lastActivityAt: new Date().toISOString(),
       ...trust,
     };
-    writeRemoteState(state);
+    await writeRemoteState(state);
 
     try {
       return await this.prepareContainer(c, spec, {
@@ -919,13 +923,13 @@ export class ModalProvider implements SandboxProvider {
       async ports(): Promise<PortMap> {
         return {};
       },
-      status: () => sandboxStatus(c, readState(sandboxId)),
+      status: async () => sandboxStatus(c, await readState(sandboxId)),
       touchActivity: () => touchRemoteState(providerId, sandboxId),
     });
   }
 
   async get(sandboxId: string): Promise<Sandbox | null> {
-    const state = readState(sandboxId);
+    const state = await readState(sandboxId);
     if (!state) return null;
     try {
       const c = await modalClient();
@@ -941,20 +945,20 @@ export class ModalProvider implements SandboxProvider {
     await pauseModalSandbox(sandboxId);
   }
 
-  machineFor(sessionId: string): string | undefined {
-    return findState(sessionId)?.sandboxId;
+  async machineFor(sessionId: string): Promise<string | undefined> {
+    return (await findState(sessionId))?.sandboxId;
   }
 
   /** Any exec resets Modal's own idle timer. */
   async keepAlive(sandboxId: string): Promise<void> {
-    const state = readState(sandboxId);
+    const state = await readState(sandboxId);
     if (!state?.remoteId) return;
     const c = await modalClient();
     await modalDriver(c, state.remoteId).exec("true", { timeoutMs: 30_000 });
   }
 
   async resume(sandboxId: string): Promise<Sandbox | null> {
-    const state = readState(sandboxId);
+    const state = await readState(sandboxId);
     if (!state) return null;
     // ensure() owns every path back to a running container, including the
     // repository hooks a wake runs.
@@ -974,7 +978,7 @@ export class ModalProvider implements SandboxProvider {
     sandboxId: string,
     options: { strict?: boolean } = {},
   ): Promise<void> {
-    const state = readState(sandboxId);
+    const state = await readState(sandboxId);
     try {
       const c = await modalClient();
       // Prewarms and qualification containers carry Modal's own id.
@@ -985,7 +989,7 @@ export class ModalProvider implements SandboxProvider {
           `Modal container ${remoteId} still runs after terminate`,
         );
       deleteImage(c, state?.checkpointArtifactId);
-      if (state) removeRemoteState(this.id, sandboxId);
+      if (state) await removeRemoteState(this.id, sandboxId);
     } catch (error) {
       console.warn(`[sandbox:modal] destroy(${sandboxId}):`, error);
       throw error;
@@ -1014,7 +1018,7 @@ export async function modalPtySession(
   resize: (cols: number, rows: number) => void;
   close: () => void;
 }> {
-  const state = readState(sandboxId);
+  const state = await readState(sandboxId);
   if (!state?.remoteId) throw new Error("Wake the Sandbox first");
   const c = await modalClient();
   const container = await liveContainer(c, state.remoteId);
@@ -1074,7 +1078,7 @@ export async function sweepIdleModalSandboxes(
   if (!getSandboxConnection(PROVIDER)) return [];
   const idleMs =
     (sandboxConfig().idleStopMinutes || DEFAULT_IDLE_STOP_MINUTES) * 60_000;
-  const stale = listRemoteStates(PROVIDER).filter(
+  const stale = (await listRemoteStates(PROVIDER)).filter(
     (state) =>
       state.sandboxId.startsWith(SANDBOX_PREFIX) &&
       state.remoteId &&
@@ -1136,7 +1140,7 @@ export const modalPrewarmAdapter: PrewarmAdapter = {
     const c = await modalClient();
     // A prewarm never holds a GPU: it may wait unused for minutes.
     const { gpu: _gpu, ...resources } = opts.resources || {};
-    const template = readRemoteRepoTemplate(PROVIDER, repoId);
+    const template = await readRemoteRepoTemplate(PROVIDER, repoId);
     let container: ModalSandbox | null = null;
     let restoredFromTemplate = false;
     if (template) {
@@ -1149,7 +1153,7 @@ export const modalPrewarmAdapter: PrewarmAdapter = {
         restoredFromTemplate = true;
       } catch (error) {
         if (!notFound(error)) throw error;
-        invalidateRemoteRepoTemplate(PROVIDER, repoId);
+        await invalidateRemoteRepoTemplate(PROVIDER, repoId);
       }
     }
     container ??= await createContainer(c, {
@@ -1174,7 +1178,7 @@ export const modalPrewarmAdapter: PrewarmAdapter = {
       timeoutMs: SNAPSHOT_TIMEOUT_MS,
       ttlMs: TEMPLATE_IMAGE_TTL_MS,
     });
-    const { previous } = writeRemoteRepoTemplate(
+    const { previous } = await writeRemoteRepoTemplate(
       PROVIDER,
       repo.id,
       image.imageId,

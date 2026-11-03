@@ -394,7 +394,7 @@ export async function maybeLaunchRunnerRun(
       // Once launch admission may have crossed the Runner connection, absence
       // is not proof of non-execution. Remove the record from boot recovery but
       // retain it for operator inspection beside the actor's terminal failure.
-      journalQuarantine([
+      await journalQuarantine([
         { run, reason: "ambiguous_runner_launch", notify: false },
       ]);
     }

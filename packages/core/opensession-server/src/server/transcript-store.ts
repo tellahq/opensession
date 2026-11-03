@@ -48,7 +48,8 @@ import {
   executeSessionProjection,
 } from "./session-projection-executor";
 import { Database } from "bun:sqlite";
-import { existsSync, mkdirSync } from "fs";
+import { mkdirSync } from "fs";
+import { mkdir } from "node:fs/promises";
 import { tmpdir } from "os";
 import { dirname } from "path";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
@@ -320,13 +321,27 @@ export function transcriptDbPath(): string {
  */
 export function transcriptStore(): TranscriptStore {
   if (g.__osTranscriptStore) return g.__osTranscriptStore;
-  const path =
-    isTestRunner() && !sessionsDirRedirected()
-      ? scratchTranscriptDbPath()
-      : transcriptDbPath();
-  return (g.__osTranscriptStore = new TranscriptStore(path, {
+  return (g.__osTranscriptStore = new TranscriptStore(singletonDbPath(), {
     actorOwned: true,
   }));
+}
+
+/** transcriptStore for the gateway thread: the database directory is created
+ * asynchronously before the store opens. */
+export async function transcriptStoreAsync(): Promise<TranscriptStore> {
+  if (g.__osTranscriptStore) return g.__osTranscriptStore;
+  const path = singletonDbPath();
+  await mkdir(dirname(path), { recursive: true });
+  return (g.__osTranscriptStore ??= new TranscriptStore(path, {
+    actorOwned: true,
+    directoryReady: true,
+  }));
+}
+
+function singletonDbPath(): string {
+  return isTestRunner() && !sessionsDirRedirected()
+    ? scratchTranscriptDbPath()
+    : transcriptDbPath();
 }
 
 function isTestRunner(): boolean {
@@ -463,11 +478,15 @@ export class TranscriptStore {
 
   constructor(
     public readonly dbPath: string,
-    private readonly options: { actorOwned?: boolean } = {},
+    private readonly options: {
+      actorOwned?: boolean;
+      /** The caller already created the parent directory (asynchronously). */
+      directoryReady?: boolean;
+    } = {},
   ) {
-    if (dbPath !== ":memory:") {
-      const dir = dirname(dbPath);
-      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    if (dbPath !== ":memory:" && !options.directoryReady) {
+      // gateway-sync-ok: the gateway opens its store through transcriptStoreAsync, which creates the directory first; this runs in the kernel worker, offline migrations and tests
+      mkdirSync(dirname(dbPath), { recursive: true });
     }
     this.db = new Database(dbPath);
     // Install the busy handler before any other statement. Opening a WAL

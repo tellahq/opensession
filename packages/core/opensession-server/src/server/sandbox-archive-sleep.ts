@@ -130,7 +130,7 @@ export function sleepSessionSandboxes(
             error instanceof Error ? error.message : String(error),
           ),
         );
-      suspendSandboxPreviewRoutes(sandboxId);
+      await suspendSandboxPreviewRoutes(sandboxId);
       touchNativeSession(sessionId, {
         sandbox: {
           ...workspace,
@@ -166,7 +166,7 @@ export function sleepSessionSandboxes(
       (await activePortalSandboxFor(session).catch(() => null))
     ) {
       const sandboxId = portal.sandboxId;
-      suspendSandboxPreviewRoutes(sandboxId);
+      await suspendSandboxPreviewRoutes(sandboxId);
       touchNativeSession(sessionId, {
         portalSandbox: {
           ...portal,

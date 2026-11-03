@@ -5,9 +5,9 @@
  * Keep only presentation metadata here. Live URLs are deliberately discarded
  * from the sleeping view, and reopening requires an explicit wake.
  */
-import { existsSync, readFileSync } from "fs";
+import { readFile } from "fs/promises";
 import { statePath } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import type { PreviewService, PreviewStatus } from "./preview";
 
 /** `state` is optional on the wire of this durable store: entries written
@@ -31,11 +31,9 @@ type Store = { portals: CachedEntry[] };
 function storePath(): string {
   return statePath(".opensession-sandbox-portals.json");
 }
-function load(): Store {
+async function readStore(): Promise<Store> {
   try {
-    const parsed = existsSync(storePath())
-      ? JSON.parse(readFileSync(storePath(), "utf8"))
-      : null;
+    const parsed = JSON.parse(await readFile(storePath(), "utf8"));
     return Array.isArray(parsed?.portals)
       ? { portals: parsed.portals }
       : { portals: [] };
@@ -43,15 +41,28 @@ function load(): Store {
     return { portals: [] };
   }
 }
-function save(store: Store): void {
-  writeJsonAtomic(storePath(), store);
+
+// Store changes run one at a time (read, change, write); reads wait for the
+// changes queued before them, so a read always sees every earlier write.
+let changeTail: Promise<unknown> = Promise.resolve();
+function change(mutate: (store: Store) => Store | null): Promise<void> {
+  const run = changeTail.then(async () => {
+    const next = mutate(await readStore());
+    if (next) await writeJsonAtomicAsync(storePath(), next);
+  });
+  changeTail = run.catch(() => {});
+  return run;
+}
+async function load(): Promise<Store> {
+  await changeTail;
+  return readStore();
 }
 
 function cacheSandboxPortalMetadata(
   sessionId: string,
   sandboxId: string,
   services: CachedPortalInput[],
-): void {
+): Promise<void> {
   const entry: CachedEntry = {
     sessionId,
     sandboxId,
@@ -68,19 +79,22 @@ function cacheSandboxPortalMetadata(
       }),
     ),
   };
-  const store = load();
-  const index = store.portals.findIndex((item) => item.sessionId === sessionId);
-  if (index < 0) store.portals.push(entry);
-  else store.portals[index] = entry;
-  save(store);
+  return change((store) => {
+    const index = store.portals.findIndex(
+      (item) => item.sessionId === sessionId,
+    );
+    if (index < 0) store.portals.push(entry);
+    else store.portals[index] = entry;
+    return store;
+  });
 }
 
 export function cacheSandboxPortals(
   sessionId: string,
   sandboxId: string,
   services: PreviewService[],
-): void {
-  cacheSandboxPortalMetadata(sessionId, sandboxId, services);
+): Promise<void> {
+  return cacheSandboxPortalMetadata(sessionId, sandboxId, services);
 }
 
 /** Persist supervisor state at each transition, before a later status probe.
@@ -90,8 +104,8 @@ export function cacheSandboxPortalRecords(
   sessionId: string,
   sandboxId: string,
   records: CachedPortalInput[],
-): void {
-  cacheSandboxPortalMetadata(
+): Promise<void> {
+  return cacheSandboxPortalMetadata(
     sessionId,
     sandboxId,
     records.map((record) => ({ ...record, managed: true })),
@@ -99,11 +113,11 @@ export function cacheSandboxPortalRecords(
 }
 
 /** A non-waking status for the sidebar. There is intentionally no live URL. */
-export function sleepingSandboxPortalStatus(
+export async function sleepingSandboxPortalStatus(
   sessionId: string,
   sandboxId?: string,
-): PreviewStatus | null {
-  const entry = load().portals.find(
+): Promise<PreviewStatus | null> {
+  const entry = (await load()).portals.find(
     (item) =>
       item.sessionId === sessionId &&
       (!sandboxId || item.sandboxId === sandboxId),
@@ -124,11 +138,11 @@ export function sleepingSandboxPortalStatus(
 
 /** Find the session that last registered this sandbox service. The caller
  * still verifies the live session and sandbox before restoring authority. */
-export function cachedSandboxPortalOwner(
+export async function cachedSandboxPortalOwner(
   sandboxId: string,
   port?: number,
-): string | null {
-  const entry = load().portals.find(
+): Promise<string | null> {
+  const entry = (await load()).portals.find(
     (item) =>
       item.sandboxId === sandboxId &&
       (port === undefined ||
@@ -138,11 +152,11 @@ export function cachedSandboxPortalOwner(
 }
 
 /** The cached Portal behind a sandbox service port, by name. */
-export function cachedSandboxPortalService(
+export async function cachedSandboxPortalService(
   sandboxId: string,
   port: number,
-): CachedPortal | null {
-  for (const entry of load().portals) {
+): Promise<CachedPortal | null> {
+  for (const entry of (await load()).portals) {
     if (entry.sandboxId !== sandboxId) continue;
     const service = entry.services.find((item) => item.port === port);
     if (service) return service;
@@ -150,10 +164,11 @@ export function cachedSandboxPortalService(
   return null;
 }
 
-export function dropCachedSandboxPortals(sandboxId: string): void {
-  const store = load();
-  const portals = store.portals.filter(
-    (entry) => entry.sandboxId !== sandboxId,
-  );
-  if (portals.length !== store.portals.length) save({ portals });
+export function dropCachedSandboxPortals(sandboxId: string): Promise<void> {
+  return change((store) => {
+    const portals = store.portals.filter(
+      (entry) => entry.sandboxId !== sandboxId,
+    );
+    return portals.length !== store.portals.length ? { portals } : null;
+  });
 }

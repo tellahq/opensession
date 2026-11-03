@@ -61,16 +61,16 @@ function session(
 
 describe("ensureSessionScratch / removeSessionScratch", () => {
   it("creates the dir under the store root and removes it", async () => {
-    const dir = ensureSessionScratch("os-test-ensure");
+    const dir = await ensureSessionScratch("os-test-ensure");
     expect(dir).toBe(join(sessionScratchRoot(), "os-test-ensure"));
     expect(existsSync(dir!)).toBe(true);
     await removeSessionScratch("os-test-ensure");
     expect(existsSync(dir!)).toBe(false);
   });
 
-  it("refuses ids that sanitize to nothing or to a path step", () => {
-    expect(ensureSessionScratch("")).toBeUndefined();
-    expect(ensureSessionScratch("..")).toBeUndefined();
+  it("refuses ids that sanitize to nothing or to a path step", async () => {
+    expect(await ensureSessionScratch("")).toBeUndefined();
+    expect(await ensureSessionScratch("..")).toBeUndefined();
   });
 });
 
@@ -161,8 +161,8 @@ describe("scratchDirsToSweep", () => {
 
 describe("sweepSessionScratch", () => {
   it("removes doomed dirs from disk and keeps live ones", async () => {
-    const keep = ensureSessionScratch("os-live")!;
-    const gone = ensureSessionScratch("os-dead")!;
+    const keep = (await ensureSessionScratch("os-live"))!;
+    const gone = (await ensureSessionScratch("os-dead"))!;
     const old = (Date.now() - 10 * DAY) / 1000;
     utimesSync(gone, old, old);
     const removed = await sweepSessionScratch([

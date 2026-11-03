@@ -24,7 +24,10 @@ import {
   MAX_REPORT_TASKS,
 } from "../../server/reports";
 import { safeAssetPath } from "../../server/session-assets";
-import { ensureSessionScratch } from "../../server/session-scratch";
+import {
+  ensureSessionScratch,
+  sessionScratchPath,
+} from "../../server/session-scratch";
 import { lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 
@@ -38,8 +41,10 @@ export function createReportMcpServer(ctx: {
   sessionId?: string;
 }) {
   const stagingDir = ctx.sessionId
-    ? ensureSessionScratch(ctx.sessionId)
+    ? sessionScratchPath(ctx.sessionId)
     : undefined;
+  // Created ahead of the first publish; the handler awaits it again.
+  if (ctx.sessionId) void ensureSessionScratch(ctx.sessionId);
   const tools = [
     tool(
       "publish_report",
@@ -125,7 +130,10 @@ prompt: the whole opening prompt for that session (max ${MAX_REPORT_TASK_PROMPT}
         try {
           if (args.assets?.length && !ctx.sessionId)
             throw new Error("Report assets require a session id");
-          if (args.assets?.length && !stagingDir)
+          if (
+            args.assets?.length &&
+            !(stagingDir && (await ensureSessionScratch(ctx.sessionId!)))
+          )
             throw new Error("Report assets require session scratch");
           const realStagingDir = args.assets?.length
             ? realpathSync(stagingDir!)

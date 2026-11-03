@@ -487,7 +487,7 @@ export async function requestTurnCancel(
     await settleCreationOpeningForStop(sessionId);
   } finally {
     stoppedSessions.add(sessionId);
-    persistQueues();
+    await persistQueues();
     await broadcastQueue(sessionId);
   }
   return {
@@ -661,7 +661,7 @@ export async function enqueuePrompt(
     item: owned,
     front: opts?.front,
   });
-  persistQueues();
+  await persistQueues();
   await broadcastQueue(sessionId);
   // Queueing is a delivery promise, not just a UI state. Arm the idle
   // watcher only after the durable queue write commits.
@@ -754,7 +754,7 @@ export async function steerQueuedPrompt(
       throw error;
     }
     stoppedSessions.delete(sessionId);
-    persistQueues();
+    await persistQueues();
     await broadcastQueue(sessionId);
     const files =
       Array.isArray(item.files) && item.files.length > 0
@@ -888,7 +888,7 @@ export async function interruptQueuedPrompt(
     item = queueItem(item);
     queue[index] = item;
     await promptQueues.set(sessionId, queue);
-    persistQueues();
+    await persistQueues();
   }
   const attributed =
     item.user && !isContextOnly(item.content)
@@ -1190,7 +1190,7 @@ export async function recordRecoveredRunEvent(
     if (event.type === "model_switch" && event.toModel) {
       if (
         shouldPersistModelSwitch(event) &&
-        syncAgentSessionEngine(session, { model: event.toModel })
+        (await syncAgentSessionEngine(session, { model: event.toModel }))
       ) {
         await publishSessionChange(session.id);
       }
@@ -1201,7 +1201,7 @@ export async function recordRecoveredRunEvent(
       const provider =
         event.provider || providerFor(event.model || session.model);
       if (
-        syncAgentSessionEngine(
+        await syncAgentSessionEngine(
           session,
           provider === "pi"
             ? { piSessionId: event.sessionId }
@@ -2396,13 +2396,15 @@ export async function maybeLaunchSandboxedRun(
       // the idle sweep puts it to sleep instead of leaving it billing.
       const machineId =
         session.sandbox.sandboxId ||
-        (() => {
+        (await (async () => {
           try {
-            return getSandboxProvider(sbProvider).machineFor?.(session.id);
+            return await getSandboxProvider(sbProvider).machineFor?.(
+              session.id,
+            );
           } catch {
             return undefined;
           }
-        })();
+        })());
       touchNativeSession(session.id, {
         sandbox: {
           ...session.sandbox,
@@ -3666,7 +3668,7 @@ async function runSessionPromptInner(
             // 2026-07-16). Pi ids take their own patch slot: shape-ambiguous
             // in the claude slot, the next turn's run-start arm couldn't
             // tell them from a claude id and minted a fresh pi session.
-            syncAgentSessionEngine(
+            await syncAgentSessionEngine(
               session,
               effectiveProvider === "pi"
                 ? { piSessionId: finalSessionId }
@@ -3732,7 +3734,7 @@ async function runSessionPromptInner(
           lastPersistedModel = to;
         } else if (
           persistSwitch &&
-          syncAgentSessionEngine(session, { model: to })
+          (await syncAgentSessionEngine(session, { model: to }))
         ) {
           // Keep the slack/linear store's model in step so the next turn
           // (from the loop or the UI) resumes on the fallback, not the
@@ -3964,7 +3966,7 @@ async function runSessionPromptInner(
         : {}),
     });
   } else if (finalSessionId) {
-    syncAgentSessionEngine(
+    await syncAgentSessionEngine(
       session,
       effectiveProvider === "pi"
         ? { piSessionId: finalSessionId }

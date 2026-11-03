@@ -100,7 +100,7 @@ export async function handleModelsRoutes(
       ? Math.min(90, Math.max(1, Math.floor(requested)))
       : 30;
     const { readSandboxScorecard } = await import("../sandbox/scorecard");
-    return Response.json(readSandboxScorecard(days));
+    return Response.json(await readSandboxScorecard(days));
   }
 
   // Warm-on-typing sandbox prewarm (src/server/sandbox/prewarm.ts):

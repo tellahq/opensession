@@ -20,11 +20,14 @@ export interface WatchState {
   lastDev: number;
   lastIno: number;
   viewers: Set<any>; // WebSocket connections
-  interval: ReturnType<typeof setInterval> | null;
+  /** Viewers still being sent their gap fill; polls skip them until it
+   *  reaches the shared offset, so their entries stay in order. */
+  catchingUp?: Set<any>;
+  /** A poll's asynchronous read is in flight; the next tick waits for it. */
+  polling?: boolean;
   /** Settles once the initial stat filled the cursor fields above. */
   ready?: Promise<void>;
-  /** A poll is in flight; the interval skips a tick rather than overlap. */
-  polling?: boolean;
+  interval: ReturnType<typeof setInterval> | null;
 }
 
 // Parked on globalThis so a `bun --hot` reload keeps the live watch map: the
@@ -122,8 +125,13 @@ async function feedTranscriptStore(
   }
 }
 
+type ParseFromResult = Awaited<ReturnType<typeof parseTranscriptFrom>>;
+
 export interface FilePollDeps {
-  parseFrom: typeof parseTranscriptFrom;
+  parseFrom(
+    path: string,
+    byteOffset: number,
+  ): ParseFromResult | Promise<ParseFromResult>;
   notify(sessionId: string | undefined, entries: TranscriptEntry[]): void;
   feed(
     sessionId: string | undefined,
@@ -144,6 +152,19 @@ export async function pollTranscriptFile(
   state: WatchState,
   deps: FilePollDeps = pollDeps,
 ): Promise<void> {
+  if (state.polling) return;
+  state.polling = true;
+  try {
+    await pollTranscriptFileOnce(state, deps);
+  } finally {
+    state.polling = false;
+  }
+}
+
+async function pollTranscriptFileOnce(
+  state: WatchState,
+  deps: FilePollDeps,
+): Promise<void> {
   let stat: Stats;
   try {
     stat = await statFile(state.path);
@@ -163,7 +184,7 @@ export async function pollTranscriptFile(
     return;
 
   const offset = replaced || truncated ? 0 : state.lastByteOffset;
-  const { entries, newOffset, ok } = deps.parseFrom(state.path, offset);
+  const { entries, newOffset, ok } = await deps.parseFrom(state.path, offset);
   // A transient read failure must not consume either change detector. The
   // exact range is retried even when no later write bumps mtime.
   if (!ok) return;
@@ -204,6 +225,7 @@ export async function pollTranscriptFile(
     rev: revOf(`${state.path}:${stat.dev}:${stat.ino}`),
   });
   for (const ws of state.viewers) {
+    if (state.catchingUp?.has(ws)) continue;
     try {
       ws.send(msg);
     } catch {
@@ -235,33 +257,31 @@ function sendTranscriptAppend(
   }
 }
 
+/** Resolves once a joining viewer's gap fill (if any) has been sent. */
 export async function startWatching(
   path: string,
   ws: any,
   initialOffset?: number,
   sessionId?: string,
 ): Promise<void> {
-  let state = watches.get(path);
+  const state = watches.get(path);
   if (state) {
     await state.ready;
     // A shared watch has one global byte offset. A new viewer may have just
     // parsed an older tail (or, for a fresh session, no transcript at all) and
     // ask to stream from that offset. Fill that viewer's gap without rewinding
     // the global watch for everyone else.
+    let filled = Promise.resolve();
     if (initialOffset !== undefined && initialOffset < state.lastByteOffset) {
-      const rev = await transcriptRev(path);
-      const { entries, newOffset } = parseTranscriptFrom(path, initialOffset);
-      sendTranscriptAppend(
-        ws,
-        entries,
-        sessionId || state.sessionId,
-        newOffset,
-        rev,
+      (state.catchingUp ??= new Set()).add(ws);
+      filled = fillViewerGap(state, ws, initialOffset, sessionId).catch(
+        (error) =>
+          console.warn(`[file-watcher] gap fill failed for ${path}:`, error),
       );
     }
     state.viewers.add(ws);
     if (sessionId && !state.sessionId) state.sessionId = sessionId;
-    return;
+    return filled;
   }
 
   // Registered before the first await, so a second viewer of the same path
@@ -299,18 +319,45 @@ export async function startWatching(
     // The last viewer may have left while the stat ran.
     if (watches.get(path) !== created) return;
     created.interval = setInterval(() => {
-      if (created.polling) return;
-      created.polling = true;
-      void pollTranscriptFile(created)
-        .catch((error) =>
-          console.warn(`[file-watcher] poll failed for ${path}:`, error),
-        )
-        .finally(() => {
-          created.polling = false;
-        });
+      void pollTranscriptFile(created).catch((error) =>
+        console.warn(`[file-watcher] poll failed for ${path}:`, error),
+      );
     }, 1000);
   })();
   await created.ready;
+}
+
+/** Send one viewer the entries between its offset and the shared watch's,
+ * then let the shared polls deliver to it. */
+async function fillViewerGap(
+  state: WatchState,
+  ws: any,
+  fromOffset: number,
+  sessionId: string | undefined,
+): Promise<void> {
+  try {
+    let offset = fromOffset;
+    for (;;) {
+      const { entries, newOffset } = await parseTranscriptFrom(
+        state.path,
+        offset,
+      );
+      if (!state.viewers.has(ws)) return;
+      sendTranscriptAppend(
+        ws,
+        entries,
+        sessionId || state.sessionId,
+        newOffset,
+        await transcriptRev(state.path),
+      );
+      // A poll that advanced the shared offset meanwhile sent its batch to
+      // everyone else; read that range too before joining.
+      if (newOffset >= state.lastByteOffset || newOffset <= offset) return;
+      offset = newOffset;
+    }
+  } finally {
+    state.catchingUp?.delete(ws);
+  }
 }
 
 export function stopAllWatchesForClient(ws: any): void {

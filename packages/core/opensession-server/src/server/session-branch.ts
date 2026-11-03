@@ -1,14 +1,14 @@
 import {
-  chmodSync,
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readFileSync,
-  readlinkSync,
-  symlinkSync,
-  writeFileSync,
-} from "fs";
+  chmod,
+  lstat,
+  mkdir,
+  readFile,
+  readlink,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { dirname, join } from "path";
+import { pathExists } from "./shared/path-exists";
 import { findSessionAsync, touchNativeSession } from "./session-cache";
 import { sessionTouchedPaths } from "./session-touched";
 import { porcelainPaths } from "./git-status";
@@ -92,18 +92,20 @@ async function snapshotSessionChanges(
   )
     .split("\0")
     .filter(Boolean);
-  const untracked = untrackedPaths.map((path): UntrackedSnapshot => {
+  const untracked: UntrackedSnapshot[] = [];
+  for (const path of untrackedPaths) {
     const source = join(dir, path);
-    const stat = lstatSync(source);
+    const stat = await lstat(source);
     if (stat.isSymbolicLink())
-      return { path, kind: "symlink", target: readlinkSync(source) };
-    return {
-      path,
-      kind: "file",
-      data: readFileSync(source),
-      mode: stat.mode,
-    };
-  });
+      untracked.push({ path, kind: "symlink", target: await readlink(source) });
+    else
+      untracked.push({
+        path,
+        kind: "file",
+        data: await readFile(source),
+        mode: stat.mode,
+      });
+  }
   return { patch, untracked, paths };
 }
 
@@ -119,11 +121,11 @@ async function restoreSessionChanges(
     );
   for (const item of snapshot.untracked) {
     const target = join(dir, item.path);
-    mkdirSync(dirname(target), { recursive: true });
-    if (item.kind === "symlink") symlinkSync(item.target, target);
+    await mkdir(dirname(target), { recursive: true });
+    if (item.kind === "symlink") await symlink(item.target, target);
     else {
-      writeFileSync(target, item.data);
-      chmodSync(target, item.mode & 0o777);
+      await writeFile(target, item.data);
+      await chmod(target, item.mode & 0o777);
     }
   }
 }
@@ -150,7 +152,7 @@ export async function moveSessionToBranch(
     throw new Error("This session already uses an isolated worktree");
   const current = session.worktreeDir || repo.repo;
   if (!(await isSharedCheckoutDir(current))) {
-    if (session.branch && existsSync(current))
+    if (session.branch && (await pathExists(current)))
       return {
         branch: session.branch,
         worktreeDir: current,
