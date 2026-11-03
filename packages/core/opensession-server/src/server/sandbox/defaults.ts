@@ -133,35 +133,35 @@ function assertAvailable(
   }
 }
 
-export function saveWorkspaceSandboxDefault(
+export async function saveWorkspaceSandboxDefault(
   value: string,
-): SandboxDefaultsStatus {
+): Promise<SandboxDefaultsStatus> {
   const normalized = value.trim().toLowerCase();
   if (normalized !== "none") assertAvailable(normalized);
-  setWorkspaceSandboxDefault(normalized);
+  await setWorkspaceSandboxDefault(normalized);
   return sandboxDefaultsStatus("Anonymous");
 }
 
-export function saveRepoSandboxDefault(
+export async function saveRepoSandboxDefault(
   repoId: string,
   value: string,
-): SandboxDefaultsStatus {
+): Promise<SandboxDefaultsStatus> {
   const normalized = value.trim().toLowerCase();
   const provider = normalized.split(":")[0] || "";
   if (provider !== "workspace" && provider !== "none")
     assertAvailable(provider);
-  setRepoSandboxDefault(repoId, value.trim());
+  await setRepoSandboxDefault(repoId, value.trim());
   return sandboxDefaultsStatus("Anonymous", repoId);
 }
 
 /** `none` runs the repo's Portals beside the session again. */
-export function saveRepoPortalSandbox(
+export async function saveRepoPortalSandbox(
   repoId: string,
   value: string,
-): SandboxDefaultsStatus {
+): Promise<SandboxDefaultsStatus> {
   const normalized = value.trim().toLowerCase();
   if (normalized !== "none") assertAvailable(normalized);
-  setRepoPortalSandbox(repoId, normalized);
+  await setRepoPortalSandbox(repoId, normalized);
   return sandboxDefaultsStatus("Anonymous", repoId);
 }
 

@@ -13,7 +13,11 @@ import { handleAuthRoutes } from "./auth";
 import { handleSetupRoutes } from "./setup";
 import { connectedGithubAccounts } from "../github-auth";
 import * as configMutation from "../config-mutation";
-import { refreshWebIdentity, resolveWebAuth } from "../web-auth";
+import {
+  refreshWebIdentity,
+  resolveWebAuth,
+  webSessionWrites,
+} from "../web-auth";
 import type { RouteContext } from "./context";
 
 const savedConfig = process.env.OPENSESSION_CONFIG;
@@ -24,6 +28,7 @@ const savedGithubStore = process.env.OPENSESSION_GITHUB_AUTH_STORE;
 const savedSessionsStore = process.env.OPENSESSION_WEB_SESSIONS_STORE;
 
 afterEach(async () => {
+  await webSessionWrites();
   globalThis.fetch = originalFetch;
   Reflect.deleteProperty(globalThis, "__webAuthSessions");
   if (savedGithubStore === undefined)
@@ -216,7 +221,7 @@ test("any verified GitHub login enrolls before session issuance", async () => {
       authGeneration: expect.any(String),
     },
   ]);
-  expect(identityFor(body.token)).toMatchObject({
+  expect(await identityFor(body.token)).toMatchObject({
     login: "acme-member",
     name: "acme-member",
     authGeneration: storedTeam(dir)[1].authGeneration,
@@ -228,7 +233,7 @@ test("any verified GitHub login enrolls before session issuance", async () => {
     post(
       "/api/setup/team",
       { name: "Another Member" },
-      identityFor(body.token),
+      await identityFor(body.token),
     ),
   );
   expect(managed?.status).toBe(201);
@@ -243,7 +248,7 @@ test("any verified GitHub login enrolls before session issuance", async () => {
     url: statusUrl,
     path: statusUrl.pathname,
     publicPrefix: "",
-    authUser: identityFor(body.token),
+    authUser: await identityFor(body.token),
   });
   const statusBody = await status?.json();
   expect(statusBody.authenticated).toBe(true);
@@ -277,7 +282,7 @@ test("existing member profiles stay intact and every member can manage the works
       post(
         "/api/setup/team",
         { name: `Added by ${login}` },
-        identityFor(body.token),
+        await identityFor(body.token),
       ),
     );
     expect(managed?.status).toBe(201);
@@ -438,7 +443,7 @@ test("reenrollment never revives old sessions or sockets, even without a request
   const dir = await signInFixture();
   githubAnswers();
   const first = await (await poll())?.json();
-  const oldIdentity = identityFor(first.token)!;
+  const oldIdentity = (await identityFor(first.token))!;
   const removed = await handleSetupRoutes(
     post(
       "/api/setup/team/acme-member/remove",
@@ -452,14 +457,14 @@ test("reenrollment never revives old sessions or sockets, even without a request
   const second = await (await poll())?.json();
   expect(second).toMatchObject({ status: "ok" });
   expect(storedTeam(dir)).toHaveLength(2);
-  expect(identityFor(second.token)?.authGeneration).not.toBe(
+  expect((await identityFor(second.token))?.authGeneration).not.toBe(
     oldIdentity.authGeneration,
   );
   expect(refreshWebIdentity(oldIdentity)).toBeNull();
-  expect(identityFor(first.token)).toBeNull();
+  expect(await identityFor(first.token)).toBeNull();
   Reflect.deleteProperty(globalThis, "__webAuthSessions");
-  expect(identityFor(first.token)).toBeNull();
-  expect(identityFor(second.token)).not.toBeNull();
+  expect(await identityFor(first.token)).toBeNull();
+  expect(await identityFor(second.token)).not.toBeNull();
 });
 
 test("a cached verified flow can rejoin without reviving an old member session", async () => {
@@ -489,8 +494,8 @@ test("a cached verified flow can rejoin without reviving an old member session",
       await poll({ deviceCode: "synthetic-cached-flow" })
     )?.json();
     expect(second).toMatchObject({ status: "ok" });
-    expect(identityFor(first.token)).toBeNull();
-    expect(identityFor(second.token)).not.toBeNull();
+    expect(await identityFor(first.token)).toBeNull();
+    expect(await identityFor(second.token)).not.toBeNull();
   } finally {
     flows.delete("synthetic-cached-flow");
   }

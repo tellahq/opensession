@@ -30,11 +30,11 @@ mock.module("@daytonaio/sdk", () => ({
 const { DaytonaProvider } = await import("./daytona");
 const { writeRemoteState, readRemoteState } = await import("./bootstrap");
 const provider = new DaytonaProvider();
-beforeEach(() => {
+beforeEach(async () => {
   deleted = false;
   getError = undefined;
   deleteError = undefined;
-  writeRemoteState({
+  await writeRemoteState({
     provider: "daytona",
     sandboxId: "failed-vm",
     sessionId: "test-failed",
@@ -57,7 +57,7 @@ test("a refused delete propagates and retains the paid machine's recovery mappin
   await expect(provider.destroy("failed-vm")).rejects.toThrow(
     "provider timed out",
   );
-  expect(readRemoteState("daytona", "failed-vm")?.sessionId).toBe(
+  expect((await readRemoteState("daytona", "failed-vm"))?.sessionId).toBe(
     "test-failed",
   );
   expect(deleted).toBe(false);
@@ -68,24 +68,24 @@ test("a failed lookup is not treated as a missing machine", async () => {
   await expect(provider.destroy("failed-vm")).rejects.toThrow(
     "connection refused",
   );
-  expect(readRemoteState("daytona", "failed-vm")).not.toBeNull();
+  expect(await readRemoteState("daytona", "failed-vm")).not.toBeNull();
 });
 
 test("successful deletion forgets the mapping", async () => {
   await provider.destroy("failed-vm");
   expect(deleted).toBe(true);
-  expect(readRemoteState("daytona", "failed-vm")).toBeNull();
+  expect(await readRemoteState("daytona", "failed-vm")).toBeNull();
 });
 
 test("already-deleted machines are idempotent even in strict mode", async () => {
   getError = Object.assign(new Error("not found"), { statusCode: 404 });
   await provider.destroy("failed-vm", { strict: true });
-  expect(readRemoteState("daytona", "failed-vm")).toBeNull();
+  expect(await readRemoteState("daytona", "failed-vm")).toBeNull();
 });
 
 test("strict deletion retains the mapping if the machine still exists", async () => {
   await expect(provider.destroy("failed-vm", { strict: true })).rejects.toThrow(
     "still exists",
   );
-  expect(readRemoteState("daytona", "failed-vm")).not.toBeNull();
+  expect(await readRemoteState("daytona", "failed-vm")).not.toBeNull();
 });

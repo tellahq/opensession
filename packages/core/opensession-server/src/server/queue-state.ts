@@ -299,16 +299,16 @@ export function queueItemForClient<T extends QueueItem>(item: T): T {
 }
 
 /** Store attachment references, never inline attachment bodies, in actor state. */
-export function durableQueueItem(
+export async function durableQueueItem(
   sessionId: string,
   item: QueueItem,
-): QueueItem {
+): Promise<QueueItem> {
   const images = item.images?.length
-    ? stageInlineImages(sessionId, item.images, "prompt-queues")
+    ? await stageInlineImages(sessionId, item.images, "prompt-queues")
     : undefined;
   const files =
     Array.isArray(item.files) && item.files.length
-      ? stageFileAttachments(sessionId, item.files)
+      ? await stageFileAttachments(sessionId, item.files)
       : undefined;
   return {
     ...item,
@@ -317,14 +317,19 @@ export function durableQueueItem(
   };
 }
 
-export function queueWithIds(
+export function queueWithIds(items: QueueItem[] | undefined): QueueItem[] {
+  return (items || []).map((item) => (item.id ? item : queueItem(item)));
+}
+
+/** queueWithIds plus durableQueueItem: ids, and attachments staged on disk. */
+async function durableQueueItems(
   items: QueueItem[] | undefined,
-  sessionId?: string,
-): QueueItem[] {
-  return (items || []).map((item) => {
-    const owned = item.id ? item : queueItem(item);
-    return sessionId ? durableQueueItem(sessionId, owned) : owned;
-  });
+  sessionId: string,
+): Promise<QueueItem[]> {
+  const owned: QueueItem[] = [];
+  for (const item of queueWithIds(items))
+    owned.push(await durableQueueItem(sessionId, item));
+  return owned;
 }
 
 function removeLegacyQueueStore(storePath = QUEUE_STORE): void {
@@ -443,17 +448,23 @@ export async function hydratePersistedQueueState(
   await promptDispatches.clear();
   for (const [sessionId, items] of Object.entries(data.queued || {})) {
     if (items?.length)
-      await promptQueues.set(sessionId, queueWithIds(items, sessionId));
+      await promptQueues.set(
+        sessionId,
+        await durableQueueItems(items, sessionId),
+      );
   }
   for (const [sessionId, items] of Object.entries(data.steered || {})) {
     if (items?.length)
-      await steeredReceipts.set(sessionId, queueWithIds(items, sessionId));
+      await steeredReceipts.set(
+        sessionId,
+        await durableQueueItems(items, sessionId),
+      );
   }
   for (const [sessionId, dispatch] of Object.entries(data.dispatching || {})) {
     if (dispatch?.promptEntryId && dispatch.items?.length) {
       await promptDispatches.set(sessionId, {
         promptEntryId: dispatch.promptEntryId,
-        items: queueWithIds(dispatch.items, sessionId),
+        items: await durableQueueItems(dispatch.items, sessionId),
         ...(dispatch.kind === "create" ? { kind: "create" as const } : {}),
       });
     }
@@ -583,7 +594,7 @@ export async function restorePersistedQueueState(options: {
         continue;
       }
       const delivered = await options.deliveredUserTexts(sessionId);
-      const pending = queueWithIds(
+      const pending = await durableQueueItems(
         undeliveredSteers(items, delivered),
         sessionId,
       );
@@ -633,7 +644,7 @@ export async function restorePersistedQueueState(options: {
   const queued = new Map<string, QueueItem[]>();
   for (const [sessionId, items] of Object.entries(data.queued || {})) {
     if (options.sessionExists(sessionId) && items?.length) {
-      queued.set(sessionId, queueWithIds(items, sessionId));
+      queued.set(sessionId, await durableQueueItems(items, sessionId));
     }
   }
   for (const [sessionId, dispatch] of Object.entries(data.dispatching || {})) {
@@ -652,7 +663,7 @@ export async function restorePersistedQueueState(options: {
           ? live
           : {
               promptEntryId: dispatch.promptEntryId,
-              items: queueWithIds(dispatch.items, sessionId),
+              items: await durableQueueItems(dispatch.items, sessionId),
               kind: "create",
             };
       preservedDispatches.set(sessionId, createDispatch);
@@ -693,7 +704,7 @@ export async function restorePersistedQueueState(options: {
   for (const [sessionId, items] of Object.entries(data.steered || {})) {
     if (!options.sessionExists(sessionId) || !items?.length) continue;
     const delivered = await options.deliveredUserTexts(sessionId);
-    const pending = queueWithIds(
+    const pending = await durableQueueItems(
       undeliveredSteers(items, delivered),
       sessionId,
     );
@@ -821,7 +832,7 @@ export async function beginPromptDispatch(
   requireQueued = false,
 ): Promise<string> {
   const id = promptEntryId || crypto.randomUUID();
-  const durableItems = queueWithIds(items, sessionId);
+  const durableItems = await durableQueueItems(items, sessionId);
   await sessionDelivery({
     op: "claim_dispatch",
     sessionId,

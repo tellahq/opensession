@@ -92,11 +92,11 @@ await Bun.write(
 
 const { connectSandboxProvider, setSandboxConnectionQualification } =
   await import("../../packages/core/opensession-server/src/server/sandbox/connections");
-connectSandboxProvider(providerId, {
+await connectSandboxProvider(providerId, {
   secret: key,
   settings: connection?.settings || {},
 });
-setSandboxConnectionQualification(providerId, { status: "ready" });
+await setSandboxConnectionQualification(providerId, { status: "ready" });
 
 const { getSandboxProvider } =
   await import("../../packages/core/opensession-server/src/server/sandbox/index");
@@ -125,7 +125,7 @@ const ensureStarted = performance.now();
 const { listRemoteStates } =
   await import("../../packages/core/opensession-server/src/server/sandbox/adapters/bootstrap");
 async function destroyLeftovers(): Promise<void> {
-  for (const state of listRemoteStates(providerId))
+  for (const state of await listRemoteStates(providerId))
     await provider
       .destroy(state.sandboxId)
       .then(() => console.log(`destroyed ${state.sandboxId}`))

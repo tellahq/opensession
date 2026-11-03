@@ -465,7 +465,7 @@ async function prepareAndLaunch(
   // 2. The job's GPU machine: woken, created, or switched to this GPU.
   const provider = getSandboxProvider(GPU_JOB_PROVIDER);
   const machineSession = gpuJobMachine(job);
-  const existing = provider.machineFor?.(machineSession);
+  const existing = await provider.machineFor?.(machineSession);
   const sandbox = await ensureSandboxWaitingForCapacity(provider, {
     sessionId: machineSession,
     // The machine works for the owning session: its repository and its
@@ -662,7 +662,7 @@ async function checkJob(job: GpuJobRecord): Promise<void> {
     { sandboxId: sandbox.id, sessionId: job.sessionId },
     "agent",
   );
-  touchRemoteState(GPU_JOB_PROVIDER, sandbox.id);
+  await touchRemoteState(GPU_JOB_PROVIDER, sandbox.id);
   const dir = `${REMOTE_ROOT}/${job.id}`;
   const probe = await sandbox.exec(
     ["bash", "-c", `cat ${dir}/exit 2>/dev/null || echo running`],
@@ -892,7 +892,7 @@ export async function sleepGpuMachine(
   all.add(gpuMachineSessionId(sessionId));
   let slept = false;
   for (const machine of all) {
-    const id = provider.machineFor?.(machine);
+    const id = await provider.machineFor?.(machine);
     if (!id || (sandboxId && id !== sandboxId)) continue;
     if (busy.has(machine)) continue;
     await provider.pause(id);

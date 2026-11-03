@@ -15,7 +15,7 @@
  * standalone CLI must not drag in modules with tickers or socket binds.
  */
 
-import { mkdirSync, existsSync, readFileSync, writeFileSync } from "fs";
+import { access, mkdir, readFile, writeFile } from "fs/promises";
 import { dirname, join } from "path";
 import { OPENSESSION_SESSIONS_DIR } from "../paths";
 import { stateDir, statePath } from "../paths";
@@ -65,20 +65,20 @@ export interface DemoGenerateResult {
   sessionIds: string[];
 }
 
-function writeJson(path: string, value: unknown): void {
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
+async function writeJson(path: string, value: unknown): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-function writeText(path: string, text: string): void {
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, text);
+async function writeText(path: string, text: string): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, text);
 }
 
 /** Run git with author/committer pinned and host git config isolated, so the
  *  generated repo is reproducible and never inherits signing/hooks settings. */
-function git(cwd: string, ...args: string[]): void {
-  const proc = Bun.spawnSync(
+async function git(cwd: string, ...args: string[]): Promise<void> {
+  const proc = Bun.spawn(
     [
       "git",
       "-c",
@@ -101,9 +101,14 @@ function git(cwd: string, ...args: string[]): void {
       stderr: "pipe",
     },
   );
-  if (proc.exitCode !== 0) {
+  const [exitCode, stderr] = await Promise.all([
+    proc.exited,
+    new Response(proc.stderr).text(),
+    new Response(proc.stdout).text(),
+  ]);
+  if (exitCode !== 0) {
     throw new Error(
-      `[demo] git ${args.join(" ")} failed in ${cwd}: ${proc.stderr.toString().trim()}`,
+      `[demo] git ${args.join(" ")} failed in ${cwd}: ${stderr.trim()}`,
     );
   }
 }
@@ -143,31 +148,34 @@ function retryStill(build: "before" | "after"): Uint8Array {
   return encodePng(960, 540, bg, rects);
 }
 
-function buildDemoRepo(repoDir: string, worktreeDir: string): void {
-  mkdirSync(repoDir, { recursive: true });
-  mkdirSync(dirname(worktreeDir), { recursive: true });
-  git(repoDir, "init", "-b", "main");
+async function buildDemoRepo(
+  repoDir: string,
+  worktreeDir: string,
+): Promise<void> {
+  await mkdir(repoDir, { recursive: true });
+  await mkdir(dirname(worktreeDir), { recursive: true });
+  await git(repoDir, "init", "-b", "main");
   for (const [rel, content] of Object.entries(DEMO_REPO_FILES)) {
-    writeText(join(repoDir, rel), content);
+    await writeText(join(repoDir, rel), content);
   }
-  git(repoDir, "add", "-A");
-  git(repoDir, "commit", "-m", "acme-todo: initial import");
-  git(repoDir, "worktree", "add", worktreeDir, "-b", DEMO_BRANCH);
+  await git(repoDir, "add", "-A");
+  await git(repoDir, "commit", "-m", "acme-todo: initial import");
+  await git(repoDir, "worktree", "add", worktreeDir, "-b", DEMO_BRANCH);
   for (const [rel, content] of Object.entries(DEMO_COMMITTED_CHANGE)) {
-    writeText(join(worktreeDir, rel), content);
+    await writeText(join(worktreeDir, rel), content);
   }
-  git(worktreeDir, "add", "-A");
-  git(
+  await git(worktreeDir, "add", "-A");
+  await git(
     worktreeDir,
     "commit",
     "-m",
     "fix: honor the full retry budget in uploadChunk",
   );
   for (const [rel, content] of Object.entries(DEMO_UNCOMMITTED_CHANGE)) {
-    writeText(join(worktreeDir, rel), content);
+    await writeText(join(worktreeDir, rel), content);
   }
   for (const [rel, content] of Object.entries(DEMO_UNTRACKED_FILE)) {
-    writeText(join(worktreeDir, rel), content);
+    await writeText(join(worktreeDir, rel), content);
   }
 }
 
@@ -187,11 +195,17 @@ export function demoMarkerPath(): string {
  * for demo instances that own their state root (never the standalone CLI with
  * `homeStores: false`, which would write the invoking user's real config).
  */
-function registerDemoRepo(repoDir: string, worktreesDir: string): void {
+async function registerDemoRepo(
+  repoDir: string,
+  worktreesDir: string,
+): Promise<void> {
   const path = configPath();
   let config: Record<string, unknown> = {};
   try {
-    config = JSON.parse(readFileSync(path, "utf-8")) as Record<string, unknown>;
+    config = JSON.parse(await readFile(path, "utf-8")) as Record<
+      string,
+      unknown
+    >;
   } catch {}
   const repos = (config.repos as Record<string, unknown>) || {};
   const paths = (config.paths as Record<string, unknown>) || {};
@@ -214,13 +228,13 @@ function registerDemoRepo(repoDir: string, worktreesDir: string): void {
     },
     paths: { ...paths, worktreesDir },
   };
-  writeJson(path, next);
+  await writeJson(path, next);
   publishConfigSnapshot(path, JSON.stringify(next));
 }
 
-export function generateDemoData(
+export async function generateDemoData(
   opts: DemoGenerateOpts = {},
-): DemoGenerateResult {
+): Promise<DemoGenerateResult> {
   const homeStores = opts.homeStores !== false;
   const sessionsDir = OPENSESSION_SESSIONS_DIR;
   const transcriptsDir = statePath(".claude/projects/-demo-engine");
@@ -237,7 +251,11 @@ export function generateDemoData(
   );
   const now = Date.now();
 
-  if (existsSync(markerPath)) {
+  const markerExists = await access(markerPath).then(
+    () => true,
+    () => false,
+  );
+  if (markerExists) {
     return {
       created: false,
       sessionsDir,
@@ -248,27 +266,27 @@ export function generateDemoData(
     };
   }
 
-  mkdirSync(sessionsDir, { recursive: true });
-  mkdirSync(transcriptsDir, { recursive: true });
+  await mkdir(sessionsDir, { recursive: true });
+  await mkdir(transcriptsDir, { recursive: true });
 
-  buildDemoRepo(repoDir, worktreeDir);
+  await buildDemoRepo(repoDir, worktreeDir);
 
   // The stills the hero session shows in place (OPENSESSION_IMAGE and
   // OPENSESSION_COMPARE lines in its transcript). Real files, because the
   // /media route streams from disk; under the sessions dir so the demo's
   // state directory owns them.
   const mediaDir = join(demoRoot, "media");
-  mkdirSync(mediaDir, { recursive: true });
-  writeFileSync(join(mediaDir, "retry-before.png"), retryStill("before"));
-  writeFileSync(join(mediaDir, "retry-after.png"), retryStill("after"));
+  await mkdir(mediaDir, { recursive: true });
+  await writeFile(join(mediaDir, "retry-before.png"), retryStill("before"));
+  await writeFile(join(mediaDir, "retry-after.png"), retryStill("after"));
 
   // Sessions + their engine transcripts (claude-shape jsonl; the server
   // lazily imports these into transcripts.db on first watch).
   const sessions = demoSessions({ now, worktreeDir, repoDir, mediaDir });
   for (const s of sessions) {
-    writeJson(join(sessionsDir, `${s.id}.json`), s.file);
+    await writeJson(join(sessionsDir, `${s.id}.json`), s.file);
     if (s.engineSessionId && s.lines.length) {
-      writeText(
+      await writeText(
         join(transcriptsDir, `${s.engineSessionId}.jsonl`),
         `${s.lines.map((l) => JSON.stringify(l)).join("\n")}\n`,
       );
@@ -282,24 +300,24 @@ export function generateDemoData(
     DEMO_RENDER_SESSION_ID,
     DEMO_RENDER_ASSET,
   );
-  mkdirSync(dirname(renderPath), { recursive: true });
-  writeFileSync(renderPath, injectBootstrap(MONITOR_FIT_PAGE));
+  await mkdir(dirname(renderPath), { recursive: true });
+  await writeFile(renderPath, injectBootstrap(MONITOR_FIT_PAGE));
   const scriptRenderPath = join(
     stateDir("assets"),
     DEMO_SCRIPT_RENDER_SESSION_ID,
     DEMO_RENDER_ASSET,
   );
-  mkdirSync(dirname(scriptRenderPath), { recursive: true });
-  writeFileSync(scriptRenderPath, injectBootstrap(MONITOR_FIT_PAGE));
+  await mkdir(dirname(scriptRenderPath), { recursive: true });
+  await writeFile(scriptRenderPath, injectBootstrap(MONITOR_FIT_PAGE));
 
   if (homeStores) {
     // Repo registry first: everything below (and every repo-derived UI
     // surface) keys off the demo repo being a real registered repo.
-    registerDemoRepo(repoDir, worktreesDir);
+    await registerDemoRepo(repoDir, worktreesDir);
 
     // PR snapshot caches (v4 bulk + detail; both boot-seeded, served stale —
     // sessions.ts / pr-info.ts), keyed under the demo repo just registered.
-    writeJson(statePath(".opensession-pr-cache.json"), {
+    await writeJson(statePath(".opensession-pr-cache.json"), {
       version: 4,
       repos: {
         [DEMO_REPO_ID]: {
@@ -310,7 +328,7 @@ export function generateDemoData(
       probeEtags: {},
       lastFullRefresh: {},
     });
-    writeJson(statePath(".opensession-pr-details-cache.json"), {
+    await writeJson(statePath(".opensession-pr-details-cache.json"), {
       [`${DEMO_GH_REPO}\u0000${DEMO_BRANCH}`]: {
         data: demoPrDetails(now, DEMO_GH_REPO),
         ts: now,
@@ -320,12 +338,15 @@ export function generateDemoData(
     // Automations + run history.
     const automationsDir = stateDir("automations");
     for (const automation of demoAutomations(now)) {
-      writeJson(join(automationsDir, `${automation.id}.json`), automation);
+      await writeJson(
+        join(automationsDir, `${automation.id}.json`),
+        automation,
+      );
     }
 
     // Audit day file (today, UTC — the viewer's date picker defaults to today).
     const day = new Date(now).toISOString().slice(0, 10);
-    writeText(
+    await writeText(
       join(stateDir("audit"), `audit-${day}.jsonl`),
       `${demoAuditLines(now)
         .map((l) => JSON.stringify(l))
@@ -335,13 +356,13 @@ export function generateDemoData(
     // Goal + ledger (paused + far-future wake: never ticker-runnable).
     const goalsDir = stateDir("goals");
     const { goal, ledger } = demoGoal(now, goalsDir);
-    writeJson(join(goalsDir, `${goal.id}.json`), goal);
-    writeText(goal.stateFile, ledger);
+    await writeJson(join(goalsDir, `${goal.id}.json`), goal);
+    await writeText(goal.stateFile, ledger);
   }
 
   // Marker LAST — a partial failure above leaves no marker, so the next run
   // regenerates. Has no `id`, so the session scanner skips it.
-  writeJson(markerPath, {
+  await writeJson(markerPath, {
     demo: true,
     version: 1,
     generatedAt: new Date(now).toISOString(),

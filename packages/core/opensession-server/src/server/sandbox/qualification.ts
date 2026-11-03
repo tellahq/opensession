@@ -65,7 +65,7 @@ export async function qualifySandboxConnection(
     detail?: string;
   }) => void = () => undefined,
 ): Promise<void> {
-  setSandboxConnectionQualification(provider, { status: "checking" });
+  await setSandboxConnectionQualification(provider, { status: "checking" });
   try {
     // Prove ingress before allocating paid provider compute.
     update({ stage: "Checking public ingress", progress: 10 });
@@ -96,7 +96,7 @@ export async function qualifySandboxConnection(
         update({ stage, progress }),
       );
     }
-    setSandboxConnectionQualification(provider, {
+    await setSandboxConnectionQualification(provider, {
       status: "ready",
       checkedAt: new Date().toISOString(),
     });
@@ -109,7 +109,7 @@ export async function qualifySandboxConnection(
       code === "QUALIFICATION_FAILED" && detail
         ? `Qualification failed: ${detail}`
         : genericSummary;
-    setSandboxConnectionQualification(provider, {
+    await setSandboxConnectionQualification(provider, {
       status: "failed",
       checkedAt: new Date().toISOString(),
       failureCode: code,

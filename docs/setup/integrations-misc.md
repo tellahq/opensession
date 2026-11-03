@@ -97,8 +97,13 @@ never reach the Stripe server.
 The server also narrows the raw writer (`stripe-approvals.ts`): only
 `PostRefunds`, `DeleteSubscriptionsSubscriptionExposedId` and the requester's
 `PostV2CoreApprovalRequestsId` / `PostV2CoreApprovalRequestsIdCancel` go
-through, plus draft invoices; any other operation fails before it reaches
-Stripe. A run may create an invoice with `PostInvoices` only as a
+through, plus draft invoices and invoice voids; any other operation fails
+before it reaches Stripe. A void (`PostInvoicesInvoiceVoid`) runs immediately:
+Stripe approval rules cannot hold it, so nobody reviews it. It moves no money,
+and Stripe only voids `open` or `uncollectible` invoices. Runs are told to void
+only an open invoice they have a clear reason to void, such as one left open
+on a subscription they just had cancelled, and to report it done once Stripe
+returns status `void`. A run may create an invoice with `PostInvoices` only as a
 `send_invoice` draft (the server forces `auto_advance: false`), and add
 `PostInvoiceitems` only to a draft it created earlier in the same turn, so an
 item never lands on a subscription's next charge. Stripe neither sends nor
@@ -175,11 +180,12 @@ investigation automations with a Slack control card per fresh failure.
 | `GRAFANA_SERVICE_ACCOUNT_TOKEN` | —       | bearer token for the datasource proxy                                                                |
 | `LOKI_DATASOURCE_UID`           | `loki`  | queried via `/api/datasources/proxy/uid/<uid>/loki/api/v1/query`                                     |
 
-The Slack integration and bot token must also work because each investigation
-uses a Slack control card. Configure each enabled automation with a
-`grafanaPoll` object. Required fields are `lokiQuery` (an instant LogQL query;
-`$LOOKBACK` is replaced), `dedupLabel`, `slackChannel` (a channel ID), and
-`cardTitle`. Optional defaults are `lookback: "20m"`, `pollMinutes: 15`,
+Configure each enabled automation with a `grafanaPoll` object. Required fields
+are `lokiQuery` (an instant LogQL query; `$LOOKBACK` is replaced),
+`dedupLabel`, and `cardTitle`. `slackChannel` (a channel ID) posts a Slack
+control card per investigation, which needs a working Slack integration and bot
+token; leave it empty for no card, and the run gets a null `slackThreadTs` and
+decides in its prompt what is worth posting. Optional defaults are `lookback: "20m"`, `pollMinutes: 15`,
 `dedupDays: 7`, and `namespace: "prod"`; set `namespace: ""` to accept every
 namespace. The engine wakes every minute and polls each automation when due.
 Adding or changing a poll is configuration, not a code edit or restart.

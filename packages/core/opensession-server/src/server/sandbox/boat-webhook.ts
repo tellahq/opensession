@@ -234,7 +234,7 @@ async function markAsleep(sandboxId: string, owner: Owner): Promise<void> {
     // A wake may have started after the event was sent.
     if ((await machineStatus(sandboxId)) !== "stopped") return;
     const { suspendSandboxPreviewRoutes } = await import("../preview");
-    suspendSandboxPreviewRoutes(sandboxId);
+    await suspendSandboxPreviewRoutes(sandboxId);
     await persist(owner, current.record, "sleeping");
     console.log(
       `[sandbox:boat] ${owner.sessionId}: ${sandboxId} stopped by Boat, recorded asleep`,

@@ -9,7 +9,7 @@
  * decision documented in docs/self-hosting-sandboxes.md.
  */
 
-import { existsSync, readFileSync } from "fs";
+import { readFile } from "fs/promises";
 import { stateDir } from "../paths";
 
 export const SCORECARD_DEFAULT_DAYS = 30;
@@ -418,9 +418,9 @@ export function buildSandboxScorecard(
   };
 }
 
-export function readSandboxScorecard(
+export async function readSandboxScorecard(
   days = SCORECARD_DEFAULT_DAYS,
-): SandboxScorecard {
+): Promise<SandboxScorecard> {
   const boundedDays = Math.min(90, Math.max(1, Math.floor(days)));
   const now = new Date();
   const events: AuditEvent[] = [];
@@ -428,8 +428,14 @@ export function readSandboxScorecard(
   for (let offset = 0; offset < boundedDays; offset++) {
     const date = utcDate(offset, now);
     const path = `${auditDir}/audit-${date}.jsonl`;
-    if (!existsSync(path)) continue;
-    for (const line of readFileSync(path, "utf-8").split("\n")) {
+    let text: string;
+    try {
+      text = await readFile(path, "utf-8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw error;
+    }
+    for (const line of text.split("\n")) {
       if (!line) continue;
       try {
         const event = JSON.parse(line) as AuditEvent;

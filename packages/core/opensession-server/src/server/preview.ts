@@ -21,7 +21,7 @@
  */
 import { $ } from "bun";
 import { CADDY_STREAM_CLOSE_DELAY } from "./caddy-stream";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { access, mkdir, readFile, writeFile } from "fs/promises";
 import { basename, dirname, join, resolve } from "path";
 import type { Repo } from "./config";
 import { repoForPathOrNull } from "./worktree";
@@ -49,6 +49,13 @@ import { usesOutboundSandboxPortalRelay } from "./sandbox/config";
 import { configuredServer } from "./config";
 import type { WorkloadIdentityContext } from "./workload-identity";
 
+function pathExists(path: string): Promise<boolean> {
+  return access(path).then(
+    () => true,
+    () => false,
+  );
+}
+
 /** Gitignored files a repository's dev server needs to boot, carried from the
  *  operator-owned main checkout because git cannot. */
 export const SEED_ENV_FILES = ["packages/core/webapp/.env.local", ".envrc"];
@@ -61,19 +68,19 @@ export const SEED_ENV_FILES = ["packages/core/webapp/.env.local", ".envrc"];
  * for every fresh worktree. Only fills gaps: a worktree copy may carry
  * deliberate per-session edits, so an existing file is never overwritten.
  */
-export function seedHostEnvFiles(
+export async function seedHostEnvFiles(
   worktreeDir: string,
   repo: Repo | undefined = repoForPathOrNull(worktreeDir),
-): string[] {
+): Promise<string[]> {
   if (!repo?.repo || resolve(repo.repo) === resolve(worktreeDir)) return [];
   const seeded: string[] = [];
   for (const rel of SEED_ENV_FILES) {
     const dest = join(worktreeDir, rel);
     const src = join(repo.repo, rel);
-    if (existsSync(dest) || !existsSync(src)) continue;
+    if ((await pathExists(dest)) || !(await pathExists(src))) continue;
     try {
-      mkdirSync(dirname(dest), { recursive: true });
-      writeFileSync(dest, readFileSync(src), { mode: 0o600 });
+      await mkdir(dirname(dest), { recursive: true });
+      await writeFile(dest, await readFile(src), { mode: 0o600 });
       seeded.push(rel);
       console.log(`[portals] seeded ${rel} into ${basename(worktreeDir)}`);
     } catch (error) {
@@ -272,10 +279,12 @@ export function parsePreviewPortalRecipes(
 // (the services Open Session can supervise).
 const LIFECYCLE_DIR = ".agents";
 
-function hostPreviewPortalRecipes(worktreeDir: string): PreviewPortalRecipe[] {
+async function hostPreviewPortalRecipes(
+  worktreeDir: string,
+): Promise<PreviewPortalRecipe[]> {
   try {
     return parsePreviewPortalRecipes(
-      readFileSync(join(worktreeDir, LIFECYCLE_DIR, "portals.json"), "utf8"),
+      await readFile(join(worktreeDir, LIFECYCLE_DIR, "portals.json"), "utf8"),
     );
   } catch {
     return [];
@@ -314,14 +323,19 @@ export interface RepoLifecycle {
 }
 
 /** Inspect `repoRoot`'s lifecycle dir. */
-export function repoLifecycle(repoRoot: string): RepoLifecycle {
+export async function repoLifecycle(repoRoot: string): Promise<RepoLifecycle> {
   const base = `${repoRoot}/${LIFECYCLE_DIR}`;
-  if (existsSync(base)) {
+  if (await pathExists(base)) {
+    const [setup, resume, recipes] = await Promise.all([
+      pathExists(`${base}/setup`),
+      pathExists(`${base}/resume`),
+      hostPreviewPortalRecipes(repoRoot),
+    ]);
     return {
       dir: LIFECYCLE_DIR,
-      setup: existsSync(`${base}/setup`),
-      resume: existsSync(`${base}/resume`),
-      portals: hostPreviewPortalRecipes(repoRoot).length > 0,
+      setup,
+      resume,
+      portals: recipes.length > 0,
     };
   }
   return { dir: null, setup: false, resume: false, portals: false };
@@ -356,10 +370,17 @@ function parsePortsText(text: string): { key: string; port: number }[] {
 }
 
 /** Parse `<worktree>/.ports.conf` into ordered {key, port} entries. */
-function readPorts(worktreeDir: string): { key: string; port: number }[] {
-  const file = join(worktreeDir, ".ports.conf");
-  if (!existsSync(file)) return [];
-  return parsePortsText(readFileSync(file, "utf8"));
+async function readPorts(
+  worktreeDir: string,
+): Promise<{ key: string; port: number }[]> {
+  let text: string;
+  try {
+    text = await readFile(join(worktreeDir, ".ports.conf"), "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
+  return parsePortsText(text);
 }
 
 /**
@@ -646,8 +667,10 @@ export async function dropAuthenticatedPortalRoute(
 export async function getPreviewStatus(
   worktreeDir: string,
 ): Promise<PreviewStatus> {
-  const ports = readPorts(worktreeDir);
-  const portalRecipes = hostPreviewPortalRecipes(worktreeDir);
+  const [ports, portalRecipes] = await Promise.all([
+    readPorts(worktreeDir),
+    hostPreviewPortalRecipes(worktreeDir),
+  ]);
   const portalRecords = await listPortalServices(worktreeDir);
   const portalByKey = new Map(
     portalRecords.map((record) => [record.key, record]),
@@ -800,12 +823,12 @@ export async function getSandboxPreviewStatus(
       const entry = (await sandbox.ports([port]))[port];
       const published = typeof entry === "number" ? entry : entry?.hostPort;
       if (published) {
-        const httpsPort = sandboxHttpsPortFor(sandbox.id, port);
+        const httpsPort = await sandboxHttpsPortFor(sandbox.id, port);
         if (await ensurePreviewRoute(httpsPort, `127.0.0.1:${published}`, host))
           previewUrl = `https://${host}:${httpsPort}`;
       }
     } else {
-      const allocated = lookupSandboxHttpsPort(sandbox.id, port);
+      const allocated = await lookupSandboxHttpsPort(sandbox.id, port);
       if (allocated != null) await removePreviewRoute(allocated);
     }
     // PIDs are sandbox-internal — meaningless to the host UI; leave empty.
@@ -826,7 +849,7 @@ export async function getSandboxPreviewStatus(
     });
   }
   const status: PreviewStatus = { services, portalRecipes };
-  if (sessionId) cacheSandboxPortals(sessionId, sandbox.id, services);
+  if (sessionId) await cacheSandboxPortals(sessionId, sandbox.id, services);
   return status;
 }
 
@@ -839,8 +862,8 @@ export async function dropSandboxPreviewRoutes(
 ): Promise<void> {
   revokeSandboxPortalGrants(sandboxId);
   forgetRemoteSandboxPortalAgents(sandboxId);
-  dropCachedSandboxPortals(sandboxId);
-  for (const httpsPort of releaseSandboxPreviewPorts(sandboxId)) {
+  await dropCachedSandboxPortals(sandboxId);
+  for (const httpsPort of await releaseSandboxPreviewPorts(sandboxId)) {
     // removePreviewRoute only touches routes this process cached — a destroy
     // right after a restart may miss the cache, so delete unconditionally.
     previewRoutes.delete(httpsPort);
@@ -864,11 +887,13 @@ export async function dropSandboxPreviewRoutes(
  * (src/server/sandbox-portal-recovery.ts). Dropping the servers instead
  * would turn every sleeping Portal into a refused connection.
  */
-export function suspendSandboxPreviewRoutes(sandboxId: string): void {
+export async function suspendSandboxPreviewRoutes(
+  sandboxId: string,
+): Promise<void> {
   revokeSandboxPortalGrants(sandboxId);
   forgetRemoteSandboxPortalAgents(sandboxId);
   for (const [httpsPort] of previewRoutes) {
-    const allocation = sandboxAllocationForHttpsPort(httpsPort);
+    const allocation = await sandboxAllocationForHttpsPort(httpsPort);
     if (allocation?.sandboxId === sandboxId) previewRoutes.delete(httpsPort);
   }
 }

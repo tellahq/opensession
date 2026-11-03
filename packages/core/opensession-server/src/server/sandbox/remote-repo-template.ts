@@ -10,11 +10,10 @@
  */
 
 import { createHash, randomUUID } from "crypto";
-import { spawnSync } from "child_process";
-import { existsSync, mkdirSync, readFileSync, unlinkSync } from "fs";
+import { mkdir, readFile, unlink } from "fs/promises";
 import { join } from "path";
 import { OPENSESSION_SESSIONS_DIR } from "../paths";
-import { writeJsonAtomic } from "../shared/atomic-write";
+import { writeJsonAtomicAsync } from "../shared/atomic-write";
 import {
   REMOTE_HOME,
   remoteLayoutForProvider,
@@ -148,7 +147,7 @@ export async function sealRemoteRepoTemplate(
     provider,
     repoId: repo.id,
     signature: remoteRepoTemplateSignature(provider),
-    projectSignature: projectPreparationSignature(repo.id),
+    projectSignature: await projectPreparationSignature(repo.id),
     nonce,
     sealedAt: new Date().toISOString(),
   });
@@ -194,7 +193,7 @@ export async function validateRemoteRepoTemplate(
     parsed.provider !== provider ||
     parsed.repoId !== repo.id ||
     parsed.signature !== remoteRepoTemplateSignature(provider) ||
-    parsed.projectSignature !== projectPreparationSignature(repo.id) ||
+    parsed.projectSignature !== (await projectPreparationSignature(repo.id)) ||
     !parsed.nonce
   ) {
     throw new Error(
@@ -261,21 +260,22 @@ export function parsePreparationInputs(raw: unknown): string[] {
 /** The declared extras from the repo's committed environment file (never the
  * working tree when HEAD exists — same rule as the hashing below). Exported
  * for tests. */
-export function declaredPreparationInputs(
+export async function declaredPreparationInputs(
   repoDir: string,
   hasHead: boolean,
-): string[] {
+): Promise<string[]> {
   try {
     const raw = hasHead
-      ? (() => {
-          const shown = spawnSync(
-            "git",
-            ["-C", repoDir, "show", "HEAD:.agents/sandbox-environment.json"],
-            { encoding: "utf-8", maxBuffer: 1024 * 1024 },
-          );
+      ? await (async () => {
+          const shown = await git([
+            "-C",
+            repoDir,
+            "show",
+            "HEAD:.agents/sandbox-environment.json",
+          ]);
           return shown.status === 0 ? shown.stdout : "";
         })()
-      : readFileSync(
+      : await readFile(
           join(repoDir, ".agents/sandbox-environment.json"),
           "utf-8",
         );
@@ -289,11 +289,14 @@ export function declaredPreparationInputs(
 }
 
 /** Content hash for one preparation input of a repo with no commits yet (a
- * repo with HEAD uses git's own object id, see preparationSignatureSteps). */
-function uncommittedInputId(repoDir: string, relative: string): string {
+ * repo with HEAD uses git's own object id, see computePreparationSignature). */
+async function uncommittedInputId(
+  repoDir: string,
+  relative: string,
+): Promise<string> {
   try {
     return createHash("sha256")
-      .update(readFileSync(join(repoDir, relative)))
+      .update(await readFile(join(repoDir, relative)))
       .digest("hex");
   } catch {
     return "<absent>";
@@ -302,25 +305,36 @@ function uncommittedInputId(repoDir: string, relative: string): string {
 
 type GitResult = { status: number | null; stdout: string };
 
-/** The signature computation as a sequence of git queries, so the same logic
- *  runs synchronously (a cold cache) or off the gateway thread (the sweep). */
-function* preparationSignatureSteps(
-  repoId: string,
-): Generator<string[], string, GitResult> {
+async function git(args: string[]): Promise<GitResult> {
+  const proc = Bun.spawn(["git", ...args], {
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  const [stdout, status] = await Promise.all([
+    new Response(proc.stdout).text(),
+    proc.exited,
+  ]);
+  return { status, stdout };
+}
+
+/** The signature computation, off the gateway thread: a handful of git
+ *  queries against the registered checkout. */
+async function computePreparationSignature(repoId: string): Promise<string> {
   const repo = configuredRepos()[repoId];
   const hash = createHash("sha256");
   hash.update(`project-preparation-v3\0${repoId}\0`);
   if (!repo) return hash.update("<unregistered>").digest("hex");
   const hasHead =
-    (yield ["-C", repo.repo, "rev-parse", "--verify", "HEAD"]).status === 0;
+    (await git(["-C", repo.repo, "rev-parse", "--verify", "HEAD"])).status ===
+    0;
   let declared: string[] = [];
   if (hasHead) {
-    const shown = yield [
+    const shown = await git([
       "-C",
       repo.repo,
       "show",
       "HEAD:.agents/sandbox-environment.json",
-    ];
+    ]);
     try {
       declared =
         shown.status === 0 && shown.stdout
@@ -333,22 +347,22 @@ function* preparationSignatureSteps(
       declared = [];
     }
   } else {
-    declared = declaredPreparationInputs(repo.repo, false);
+    declared = await declaredPreparationInputs(repo.repo, false);
   }
   for (const relative of [...DEFAULT_PREPARATION_INPUTS, ...declared]) {
     hash.update(`${relative}\0`);
     if (hasHead) {
-      const r = yield [
+      const r = await git([
         "-C",
         repo.repo,
         "rev-parse",
         "--verify",
         "--quiet",
         `HEAD:${relative}`,
-      ];
+      ]);
       hash.update((r.status === 0 && r.stdout.trim()) || "<absent>");
     } else {
-      hash.update(uncommittedInputId(repo.repo, relative));
+      hash.update(await uncommittedInputId(repo.repo, relative));
     }
     hash.update("\0");
   }
@@ -356,33 +370,25 @@ function* preparationSignatureSteps(
 }
 
 /** Signatures are read on every prewarm claim, template lookup and sweep. Each
- *  computation runs about seven git processes, and doing that synchronously
- *  several times a second stalled the gateway's event loop. The sweep refreshes
- *  them asynchronously (every minute, inside this TTL); a cold or expired
- *  entry still computes inline. */
+ *  computation runs about seven git processes, so results are memoized; the
+ *  sweep refreshes them in the background (every minute, inside this TTL).
+ *  A cold or expired entry is computed once, shared by concurrent callers. */
 const SIGNATURE_TTL_MS = 90_000;
 const signatureCache = new Map<string, { at: number; value: string }>();
+const signatureInflight = new Map<string, Promise<string>>();
+let signatureGeneration = 0;
 
 /** Hash only committed content whose bytes affect the reusable prepared
  * filesystem: the defaults above plus whatever the repo itself declares.
  * Shared project images are built from repository commits, never from an
  * operator's dirty worktree. Reading working-tree bytes here made an
  * unrelated local bun.lock edit invalidate every provider artifact. */
-export function projectPreparationSignature(repoId: string): string {
+export async function projectPreparationSignature(
+  repoId: string,
+): Promise<string> {
   const hit = signatureCache.get(repoId);
   if (hit && Date.now() - hit.at < SIGNATURE_TTL_MS) return hit.value;
-  const steps = preparationSignatureSteps(repoId);
-  let step = steps.next();
-  while (!step.done) {
-    const r = spawnSync("git", step.value, {
-      encoding: "utf-8",
-      maxBuffer: 1024 * 1024,
-    });
-    step = steps.next({ status: r.status, stdout: r.stdout ?? "" });
-  }
-  const value = withPreSetupScript(repoId, step.value);
-  signatureCache.set(repoId, { at: Date.now(), value });
-  return value;
+  return refreshProjectPreparationSignature(repoId);
 }
 
 /** A settings-held pre-setup script (Workspace → Sandboxes → Projects) is a
@@ -400,29 +406,33 @@ export function withPreSetupScript(repoId: string, signature: string): string {
 /** Drop one repo's memoized signature (its pre-setup script changed). */
 export function forgetProjectPreparationSignature(repoId: string): void {
   signatureCache.delete(repoId);
+  signatureInflight.delete(repoId);
+  signatureGeneration++;
 }
 
 /** Recompute a repo's signature without blocking the event loop, so later
- *  synchronous reads hit a fresh cache entry. */
-export async function refreshProjectPreparationSignature(
+ *  reads hit a fresh cache entry. Concurrent calls share one computation. */
+export function refreshProjectPreparationSignature(
   repoId: string,
 ): Promise<string> {
-  const steps = preparationSignatureSteps(repoId);
-  let step = steps.next();
-  while (!step.done) {
-    const proc = Bun.spawn(["git", ...step.value], {
-      stdout: "pipe",
-      stderr: "ignore",
+  const inflight = signatureInflight.get(repoId);
+  if (inflight) return inflight;
+  const generation = signatureGeneration;
+  const run = computePreparationSignature(repoId)
+    .then((signature) => {
+      const value = withPreSetupScript(repoId, signature);
+      // A forget during the computation means its inputs changed: the
+      // result is still this caller's answer but must not be memoized.
+      if (generation === signatureGeneration)
+        signatureCache.set(repoId, { at: Date.now(), value });
+      return value;
+    })
+    .finally(() => {
+      if (signatureInflight.get(repoId) === run)
+        signatureInflight.delete(repoId);
     });
-    const [stdout, status] = await Promise.all([
-      new Response(proc.stdout).text(),
-      proc.exited,
-    ]);
-    step = steps.next({ status, stdout });
-  }
-  const value = withPreSetupScript(repoId, step.value);
-  signatureCache.set(repoId, { at: Date.now(), value });
-  return value;
+  signatureInflight.set(repoId, run);
+  return run;
 }
 
 /** Refresh every signature something has asked for, off the event loop. */
@@ -437,6 +447,8 @@ export async function refreshCachedProjectPreparationSignatures(): Promise<void>
 /** Test-only: drop memoized signatures after a fixture commit. */
 export function resetProjectPreparationSignaturesForTests(): void {
   signatureCache.clear();
+  signatureInflight.clear();
+  signatureGeneration++;
 }
 
 function dir(): string {
@@ -481,29 +493,33 @@ export function remoteRepoTemplateSignature(
 }
 
 /** Deterministic, provider-safe name used by Daytona and Box snapshot APIs. */
-export function remoteRepoTemplateName(
+export async function remoteRepoTemplateName(
   provider: RemoteTemplateProvider,
   repoId: string,
-): string {
+): Promise<string> {
+  const projectSignature = await projectPreparationSignature(repoId);
   const suffix = createHash("sha256")
-    .update(
-      `${remoteRepoTemplateSignature(provider)}|${projectPreparationSignature(repoId)}`,
-    )
+    .update(`${remoteRepoTemplateSignature(provider)}|${projectSignature}`)
     .digest("hex")
     .slice(0, 16);
   return `opensession-${clean(repoId).slice(0, 36)}-${suffix}`;
 }
 
-export function readRemoteRepoTemplate(
+export async function readRemoteRepoTemplate(
   provider: RemoteTemplateProvider,
   repoId: string,
   _now = Date.now(),
-): RemoteRepoTemplate | null {
+): Promise<RemoteRepoTemplate | null> {
   try {
     const path = file(provider, repoId);
-    if (!existsSync(path)) return null;
-    const entry = JSON.parse(readFileSync(path, "utf-8")) as RemoteRepoTemplate;
-    const projectSignature = projectPreparationSignature(repoId);
+    let text: string;
+    try {
+      text = await readFile(path, "utf-8");
+    } catch {
+      return null;
+    }
+    const entry = JSON.parse(text) as RemoteRepoTemplate;
+    const projectSignature = await projectPreparationSignature(repoId);
     if (
       entry.provider !== provider ||
       entry.repoId !== repoId ||
@@ -521,7 +537,7 @@ export function readRemoteRepoTemplate(
     }
     if (!entry.projectSignature) {
       entry.projectSignature = projectSignature;
-      writeJsonAtomic(path, entry);
+      await writeJsonAtomicAsync(path, entry);
     }
     return entry;
   } catch {
@@ -529,41 +545,43 @@ export function readRemoteRepoTemplate(
   }
 }
 
-export function writeRemoteRepoTemplate(
+export async function writeRemoteRepoTemplate(
   provider: RemoteTemplateProvider,
   repoId: string,
   artifactId: string,
   now = Date.now(),
-): { current: RemoteRepoTemplate; previous: RemoteRepoTemplate | null } {
+): Promise<{
+  current: RemoteRepoTemplate;
+  previous: RemoteRepoTemplate | null;
+}> {
   const path = file(provider, repoId);
+  const projectSignature = await projectPreparationSignature(repoId);
   let previous: RemoteRepoTemplate | null = null;
   try {
-    previous = JSON.parse(readFileSync(path, "utf-8")) as RemoteRepoTemplate;
+    previous = JSON.parse(await readFile(path, "utf-8")) as RemoteRepoTemplate;
   } catch {}
   const current: RemoteRepoTemplate = {
     provider,
     repoId,
     artifactId,
     signature: remoteRepoTemplateSignature(provider),
-    projectSignature: projectPreparationSignature(repoId),
+    projectSignature,
     createdAt: new Date(now).toISOString(),
   };
-  mkdirSync(dir(), { recursive: true });
-  writeJsonAtomic(path, current);
+  await mkdir(dir(), { recursive: true });
+  await writeJsonAtomicAsync(path, current);
   return { current, previous };
 }
 
-export function invalidateRemoteRepoTemplate(
+export async function invalidateRemoteRepoTemplate(
   provider: RemoteTemplateProvider,
   repoId: string,
-): RemoteRepoTemplate | null {
+): Promise<RemoteRepoTemplate | null> {
   const path = file(provider, repoId);
   let previous: RemoteRepoTemplate | null = null;
   try {
-    previous = JSON.parse(readFileSync(path, "utf-8")) as RemoteRepoTemplate;
+    previous = JSON.parse(await readFile(path, "utf-8")) as RemoteRepoTemplate;
   } catch {}
-  try {
-    unlinkSync(path);
-  } catch {}
+  await unlink(path).catch(() => {});
   return previous;
 }

@@ -120,7 +120,7 @@ function relayKey(record: RunnerPortalRecord): string {
 function relayScope(record: RunnerPortalRecord): string {
   return `runner-${record.runnerId}-${record.sessionId}`;
 }
-function relayHttpsPort(record: RunnerPortalRecord): number {
+function relayHttpsPort(record: RunnerPortalRecord): Promise<number> {
   return sandboxHttpsPortFor(relayScope(record), record.port);
 }
 
@@ -322,7 +322,7 @@ async function ensureRelay(record: RunnerPortalRecord): Promise<string | null> {
     relays.set(key, relay);
   }
   return ensureAuthenticatedPortalRoute(
-    relayHttpsPort(record),
+    await relayHttpsPort(record),
     `127.0.0.1:${relay.server.port}`,
   );
 }
@@ -335,7 +335,7 @@ async function dropRelay(record: RunnerPortalRecord): Promise<void> {
     } catch {}
     relays.delete(relayKey(record));
   }
-  await dropAuthenticatedPortalRoute(relayHttpsPort(record));
+  await dropAuthenticatedPortalRoute(await relayHttpsPort(record));
 }
 
 export async function runnerPortalUrl(
@@ -381,9 +381,9 @@ async function dropRecords(
     }
   }
   for (const record of records)
-    await dropAuthenticatedPortalRoute(relayHttpsPort(record));
+    await dropAuthenticatedPortalRoute(await relayHttpsPort(record));
   for (const scope of new Set(records.map(relayScope))) {
-    for (const httpsPort of releaseSandboxPreviewPorts(scope))
+    for (const httpsPort of await releaseSandboxPreviewPorts(scope))
       await dropAuthenticatedPortalRoute(httpsPort);
   }
 }

@@ -8,11 +8,11 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { publishStableFrontendSnapshot } from "./stable-frontend";
 import {
   createStableFrontendResponder,
-  publishStableFrontendSnapshot,
   stableFrontendHttpResponse,
-} from "./stable-frontend";
+} from "./stable-frontend-responder";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -20,7 +20,7 @@ afterEach(() => {
     rmSync(root, { recursive: true, force: true });
 });
 
-function fixture() {
+async function fixture() {
   const state = mkdtempSync(join(tmpdir(), "stable-frontend-"));
   roots.push(state);
   const sha = "a".repeat(40);
@@ -31,7 +31,7 @@ function fixture() {
     join(releaseRoot, ".frontend-dist", "App-hash.js"),
     "window.loaded = true;",
   );
-  publishStableFrontendSnapshot(state, {
+  await publishStableFrontendSnapshot(state, {
     releaseRoot,
     version: "App-hash.js|styles.css",
     indexHtml: '<!doctype html><script src="/App-hash.js"></script>',
@@ -54,8 +54,8 @@ function body(response: Buffer): string {
 }
 
 describe("stable frontend ingress", () => {
-  test("serves the last rendered SPA and immutable assets without a gateway", () => {
-    const { state } = fixture();
+  test("serves the last rendered SPA and immutable assets without a gateway", async () => {
+    const { state } = await fixture();
     const page = stableFrontendHttpResponse(state, request("/workspace/demo"));
     expect(page?.toString()).toContain("HTTP/1.1 200 OK");
     expect(body(page!)).toContain("App-hash.js");
@@ -70,8 +70,8 @@ describe("stable frontend ingress", () => {
     expect(body(asset!)).toBe("window.loaded = true;");
   });
 
-  test("serves HEAD metadata without reading an asset body into the response", () => {
-    const { state } = fixture();
+  test("serves HEAD metadata without reading an asset body into the response", async () => {
+    const { state } = await fixture();
     const result = stableFrontendHttpResponse(
       state,
       Buffer.from(
@@ -82,8 +82,8 @@ describe("stable frontend ingress", () => {
     expect(body(result!)).toBe("");
   });
 
-  test("refreshes an atomically published shell and drops the previous asset cache", () => {
-    const { state } = fixture();
+  test("refreshes an atomically published shell and drops the previous asset cache", async () => {
+    const { state } = await fixture();
     const respond = createStableFrontendResponder(state, { snapshotTtlMs: 0 });
     expect(body(respond(request("/workspace/demo"))!)).toContain("App-hash.js");
 
@@ -95,7 +95,7 @@ describe("stable frontend ingress", () => {
       join(releaseRoot, ".frontend-dist", "App-next.js"),
       "window.next = true;",
     );
-    publishStableFrontendSnapshot(state, {
+    await publishStableFrontendSnapshot(state, {
       releaseRoot,
       version: "App-next.js|styles.css",
       indexHtml: '<!doctype html><script src="/App-next.js"></script>',
@@ -110,8 +110,8 @@ describe("stable frontend ingress", () => {
     );
   });
 
-  test("carries old lazy chunks through consecutive release snapshots", () => {
-    const { state, releaseRoot: firstRoot } = fixture();
+  test("carries old lazy chunks through consecutive release snapshots", async () => {
+    const { state, releaseRoot: firstRoot } = await fixture();
     const respond = createStableFrontendResponder(state, { snapshotTtlMs: 0 });
 
     const secondSha = "b".repeat(40);
@@ -122,7 +122,7 @@ describe("stable frontend ingress", () => {
       join(secondRoot, ".frontend-dist", "Settings-next.js"),
       "window.settings = true;",
     );
-    publishStableFrontendSnapshot(state, {
+    await publishStableFrontendSnapshot(state, {
       releaseRoot: secondRoot,
       version: "App-next.js|styles.css",
       indexHtml: '<script src="/App-next.js"></script>',
@@ -137,8 +137,8 @@ describe("stable frontend ingress", () => {
     );
   });
 
-  test("owns liveness, publishes ingress telemetry, and leaves APIs to the backend", () => {
-    const { state } = fixture();
+  test("owns liveness, publishes ingress telemetry, and leaves APIs to the backend", async () => {
+    const { state } = await fixture();
     const respond = createStableFrontendResponder(state, {
       liveStatus: () => ({
         backendSelected: true,

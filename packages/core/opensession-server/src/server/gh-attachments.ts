@@ -26,7 +26,7 @@
  *   uses that result so Open Session can show PR media inline.
  */
 
-import { statSync } from "fs";
+import { stat as statFile } from "fs/promises";
 import { basename } from "path";
 import { configuredIntegration } from "./config";
 import { botGhToken } from "./github-limit";
@@ -143,7 +143,7 @@ export async function uploadUserAttachment(
   if (!format) return null;
   let stat: { size: number; mtimeMs: number; isFile: () => boolean };
   try {
-    stat = statSync(filePath);
+    stat = await statFile(filePath);
   } catch {
     return null;
   }

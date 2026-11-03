@@ -45,7 +45,7 @@ import {
   withClaimedBranchWorktree,
   type Repo,
 } from "../worktree";
-import { existsSync } from "node:fs";
+import { pathExists } from "./async-fs";
 import {
   checkpointRestoreScript,
   GIT_REFRESH_INDEX,
@@ -114,8 +114,10 @@ async function checkpointGitEnv(
 }
 
 /** Paths a checkpoint must leave out, repo-relative. */
-function excludedPaths(repo: Repo): string[] {
-  const seeded = loadRemoteWorkspaceSeedFiles(repo).map((file) => file.path);
+async function excludedPaths(repo: Repo): Promise<string[]> {
+  const seeded = (await loadRemoteWorkspaceSeedFiles(repo)).map(
+    (file) => file.path,
+  );
   return [".ports.conf", ...seeded];
 }
 
@@ -226,7 +228,7 @@ export async function landCheckpointInSandbox(
   const repo = getRepo(repoId);
   const env = await checkpointGitEnv(repo);
   if (!env) throw new Error("the workspace has no GitHub credential");
-  const land = () =>
+  const land = async () =>
     sandbox.exec(
       [
         "bash",
@@ -235,7 +237,7 @@ export async function landCheckpointInSandbox(
           checkpoint.ref,
           checkpoint.commit,
           checkpoint.branch,
-          excludedPaths(repo),
+          await excludedPaths(repo),
         ),
       ],
       { env, timeoutMs: CHECKPOINT_TIMEOUT_MS },
@@ -299,7 +301,7 @@ async function runCheckpoint(
   if (!env) return { state: "skipped", reason: "no GitHub credential" };
   const ref = checkpointRef(session.id);
   const last = session.sandboxCheckpoint;
-  const result = await run(checkpointScript(excludedPaths(repo)), {
+  const result = await run(checkpointScript(await excludedPaths(repo)), {
     ...env,
     OS_CWD: cwd,
     OS_REF: ref,
@@ -391,7 +393,8 @@ export function checkpointHostWorkspace(
   dir: string,
 ): Promise<CheckpointOutcome> {
   return withSessionLifecycleLane(session.id, async () => {
-    if (!existsSync(dir)) return { state: "skipped", reason: "no worktree" };
+    if (!(await pathExists(dir)))
+      return { state: "skipped", reason: "no worktree" };
     if (isSharedCheckoutDir(dir))
       return { state: "skipped", reason: "shared checkout" };
     const current = await findSessionAsync(session.id);

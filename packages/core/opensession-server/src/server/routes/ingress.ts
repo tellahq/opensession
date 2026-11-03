@@ -86,7 +86,7 @@ export async function handleIngressRoutes(
         publicBaseUrl: appBaseUrl,
         dnsProvider: provider,
       });
-      refreshIndexHtml("private app domain changed");
+      await refreshIndexHtml("private app domain changed");
       return Response.json({
         ...(await publicIngressStatus({ appBaseUrl })),
         restartRequired: true,
@@ -110,7 +110,7 @@ export async function handleIngressRoutes(
     try {
       const appBaseUrl = await savePrivateAppOrigin(String(body?.domain || ""));
       audit({ kind: "ingress_private_app_update", publicBaseUrl: appBaseUrl });
-      refreshIndexHtml("private app domain changed");
+      await refreshIndexHtml("private app domain changed");
       return Response.json({
         ...(await publicIngressStatus({ appBaseUrl })),
         restartRequired: true,
@@ -134,7 +134,7 @@ export async function handleIngressRoutes(
             ? body.cloudflareTunnelId
             : undefined,
       });
-      refreshIndexHtml("public ingress changed");
+      await refreshIndexHtml("public ingress changed");
       return Response.json(await changedIngressResponse());
     } catch (error) {
       return errorResponse(error);
@@ -151,7 +151,7 @@ export async function handleIngressRoutes(
         tunnelId: String(body?.tunnelId || ""),
         token: typeof body?.token === "string" ? body.token : undefined,
       });
-      refreshIndexHtml("public ingress changed");
+      await refreshIndexHtml("public ingress changed");
       return Response.json(await changedIngressResponse());
     } catch (error) {
       return errorResponse(error);
@@ -167,7 +167,7 @@ export async function handleIngressRoutes(
         String(body?.publicBaseUrl || ""),
         typeof body?.publicIp === "string" ? body.publicIp : undefined,
       );
-      refreshIndexHtml("public ingress changed");
+      await refreshIndexHtml("public ingress changed");
       return Response.json(await changedIngressResponse());
     } catch (error) {
       return errorResponse(error);

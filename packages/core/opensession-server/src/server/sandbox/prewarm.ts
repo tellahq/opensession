@@ -22,26 +22,20 @@
  *    its signature and TTL are revalidated; interrupted bootstraps are reaped
  *
  * Claiming is atomic: the in-process Map flip is synchronous (single-threaded
- * — no await between check and set) and the state file is renameSync'd to
+ * — no await between check and set) and the state file is renamed to
  * `*.claimed` as the on-disk arbiter, so two simultaneous session creates
- * can never adopt the same sandbox. A claim whose base runtime signature
+ * can never adopt the same sandbox. Every state-file operation runs through
+ * one async queue (fileOp), so writes, the claim rename and restart reaping
+ * land on disk in the order the pool decided them. A claim whose base runtime signature
  * no longer matches this release's is refused and the stale sandbox
  * destroyed — the caller cold-creates.
  */
 
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-  statSync,
-  unlinkSync,
-} from "fs";
+import { mkdir, readdir, readFile, rename, stat, unlink } from "fs/promises";
 import { OPENSESSION_SESSIONS_DIR } from "../paths";
 import { isDevInstance } from "../dev-mode";
 import { REPOS } from "../worktree";
-import { writeJsonAtomic } from "../shared/atomic-write";
+import { writeJsonAtomicAsync } from "../shared/atomic-write";
 import {
   sandboxConfig,
   sandboxesEnabled,
@@ -239,19 +233,39 @@ function fileFor(entry: Pick<PrewarmEntry, "provider" | "repoId">): string {
   return `${prewarmDir()}/${sanitize(entry.provider)}-${sanitize(entry.repoId)}.json`;
 }
 
+// One FIFO for every prewarm state-file operation. The pool decides
+// synchronously; the disk follows in the same order without blocking the
+// event loop. Ops must not await fileOp themselves (that would deadlock).
+let fileOpTail: Promise<unknown> = Promise.resolve();
+function fileOp<T>(op: () => Promise<T>): Promise<T> {
+  const run = fileOpTail.then(op, op);
+  fileOpTail = run.catch(() => {});
+  return run;
+}
+
+/** Resolves once every queued state-file operation has landed. */
+export function _prewarmFilesSettledForTest(): Promise<void> {
+  return fileOpTail.then(() => {});
+}
+
 function persist(entry: PrewarmEntry): void {
-  try {
-    mkdirSync(prewarmDir(), { recursive: true });
-    writeJsonAtomic(fileFor(entry), entry);
-  } catch (e) {
-    console.warn(`[sandbox-prewarm] persist(${entry.key}) failed:`, e);
-  }
+  // Snapshot now: the entry keeps mutating while the write waits its turn.
+  const dir = prewarmDir();
+  const file = fileFor(entry);
+  const json = JSON.parse(JSON.stringify(entry)) as PrewarmEntry;
+  void fileOp(async () => {
+    try {
+      await mkdir(dir, { recursive: true });
+      await writeJsonAtomicAsync(file, json);
+    } catch (e) {
+      console.warn(`[sandbox-prewarm] persist(${entry.key}) failed:`, e);
+    }
+  });
 }
 
 function removeFile(entry: Pick<PrewarmEntry, "provider" | "repoId">): void {
-  try {
-    unlinkSync(fileFor(entry));
-  } catch {}
+  const file = fileFor(entry);
+  void fileOp(() => unlink(file).catch(() => {}));
 }
 
 /** What must match between prewarm time and claim time for adoption to be
@@ -462,15 +476,22 @@ export async function requestPrewarm(
 
   const key = `${provider}:${repoId}`;
   const { sandboxEnvironmentSettings } = await import("./environments");
-  const resources = sandboxEnvironmentSettings(repoId, provider);
+  const resources = await sandboxEnvironmentSettings(repoId, provider);
   const p = pool();
+  // Read the (memoized) project signature before the pool decisions below,
+  // so no git query sits between the capacity check and the reservation.
+  const projectSignature =
+    options.standby || p.get(key)?.entry.standby
+      ? await projectPreparationSignature(repoId)
+      : undefined;
   let record = p.get(key);
   let entry = record?.entry;
   if (
     entry &&
     (entry.signature !== prewarmSignature(provider, resources) ||
       (entry.standby &&
-        entry.projectSignature !== projectPreparationSignature(repoId)))
+        entry.projectSignature !==
+          (projectSignature ?? (await projectPreparationSignature(repoId)))))
   ) {
     await invalidatePrewarm(provider, repoId);
     record = undefined;
@@ -519,9 +540,7 @@ export async function requestPrewarm(
     signature: prewarmSignature(provider, resources),
     user,
     ...(options.refreshTemplate ? { refreshTemplate: true } : {}),
-    ...(standby
-      ? { standby: true, projectSignature: projectPreparationSignature(repoId) }
-      : {}),
+    ...(standby ? { standby: true, projectSignature } : {}),
     ...(resources ? { resources } : {}),
     stage: "Creating sandbox",
     progress: 10,
@@ -707,7 +726,7 @@ async function runPrewarmBootstrap(
       // template publisher retain the old optional warm-deps behavior.
       try {
         const { warmTemplateConfig } = await import("../warm-template");
-        const warm = warmTemplateConfig(entry.repoId).enabled;
+        const warm = (await warmTemplateConfig(entry.repoId)).enabled;
         if (warm || adapter.publishTemplate) {
           setPrewarmStage(entry, "Cloning project and running setup", 55);
           const { warmRemoteWorkspace } = await import("./adapters/bootstrap");
@@ -879,18 +898,27 @@ async function runPrewarmBootstrap(
  * there isn't one worth adopting. On success the caller OWNS the sandbox:
  * relabel it to the session and continue with the workspace clone. A stale
  * bootstrap signature refuses the claim and destroys the sandbox (the
- * caller cold-creates). Synchronous — the Map flip plus a state-file rename
+ * caller cold-creates). The synchronous Map flip plus a state-file rename
  * are the whole arbitration, so two concurrent ensures can't both win.
  */
-export function claimPrewarm(
+export async function claimPrewarm(
   provider: string,
   repoId: string,
   sessionId: string,
-): { sandboxId: string } | null {
+): Promise<{ sandboxId: string } | null> {
   const key = `${provider}:${repoId}`;
   const p = pool();
+  // A standby is adoptable only while its project inputs are unchanged. Read
+  // that (memoized) signature first: everything from the pool lookup to the
+  // tombstone flip below must stay free of awaits.
+  const projectSignature = p.get(key)?.entry.standby
+    ? await projectPreparationSignature(repoId)
+    : undefined;
   const record = p.get(key);
   const entry = record?.entry;
+  // Became a standby while the signature was read: read it and start over.
+  if (entry?.standby && projectSignature === undefined)
+    return claimPrewarm(provider, repoId, sessionId);
   if (
     !entry ||
     entry.refreshTemplate ||
@@ -900,8 +928,7 @@ export function claimPrewarm(
     return null;
   if (
     entry.signature !== prewarmSignature(provider, entry.resources) ||
-    (entry.standby &&
-      entry.projectSignature !== projectPreparationSignature(repoId))
+    (entry.standby && entry.projectSignature !== projectSignature)
   ) {
     // Runner pin, provider create-shape, or project setup input changed since
     // this was warmed — never adopt stale payload or a wrong-sized sandbox.
@@ -910,21 +937,30 @@ export function claimPrewarm(
     void destroyRecord(record, "stale bootstrap signature");
     return null;
   }
-  // On-disk arbiter: the rename fails for everyone but the first claimant
-  // (and for a process whose in-memory state is somehow ahead of disk).
-  try {
-    renameSync(fileFor(entry), `${fileFor(entry)}.claimed`);
-  } catch {
-    p.delete(key);
-    return null;
-  }
+  // In-memory arbiter, before any await: no other in-process claim can see
+  // this record as ready from here on. The tombstone key frees `key` for a
+  // fresh prewarm while still protecting the adopted sandbox from the orphan
+  // audit and restart reaping until the grace passes.
+  const tombstone = `${key}#${entry.sandboxId}`;
+  p.delete(key);
+  p.set(tombstone, record);
   entry.state = "claimed";
   entry.claimedAt = new Date().toISOString();
   entry.claimedBy = sessionId;
-  // Tombstone key: frees `key` for a fresh prewarm while still protecting
-  // the adopted sandbox from the orphan audit until the grace passes.
-  p.delete(key);
-  p.set(`${key}#${entry.sandboxId}`, record);
+  // On-disk arbiter: the rename fails for everyone but the first claimant
+  // (and for a process whose in-memory state is somehow ahead of disk).
+  // Queued behind every pending write of this entry's file.
+  const file = fileFor(entry);
+  const renamed = await fileOp(() =>
+    rename(file, `${file}.claimed`).then(
+      () => true,
+      () => false,
+    ),
+  );
+  if (!renamed) {
+    if (p.get(tombstone) === record) p.delete(tombstone);
+    return null;
+  }
   if (isKeepReady(provider, repoId) || entry.standby) {
     void requestPrewarm(provider, repoId, entry.user, {
       standby: entry.standby,
@@ -959,7 +995,7 @@ export async function claimPrewarmOrWait(
   sessionId: string,
   opts?: { maxAgeMs?: number; maxWaitMs?: number },
 ): Promise<{ sandboxId: string } | null> {
-  const claimed = claimPrewarm(provider, repoId, sessionId);
+  const claimed = await claimPrewarm(provider, repoId, sessionId);
   if (claimed) return claimed;
   const key = `${provider}:${repoId}`;
   const record = pool().get(key);
@@ -1033,19 +1069,15 @@ export function discardClaimedPrewarm(
     const [key, record] = found;
     const wasClaimed = record.entry.state === "claimed";
     record.entry.state = "destroying";
+    const file = fileFor(record.entry);
     if (wasClaimed) {
-      try {
-        renameSync(
-          `${fileFor(record.entry)}.claimed`,
-          `${fileFor(record.entry)}.destroying`,
-        );
-      } catch {}
+      void fileOp(() =>
+        rename(`${file}.claimed`, `${file}.destroying`).catch(() => {}),
+      );
     }
     void destroyRecord(record, "claimed but unusable").finally(() => {
       if (pool().get(key) === record) pool().delete(key);
-      try {
-        unlinkSync(`${fileFor(record.entry)}.destroying`);
-      } catch {}
+      void fileOp(() => unlink(`${file}.destroying`).catch(() => {}));
     });
     return;
   }
@@ -1056,17 +1088,22 @@ export function discardClaimedPrewarm(
 
 /** Restore only completed, current prewarms. An interrupted bootstrap still
  * lacks a resumable promise and is reaped by the sweep below. */
-export function restoreReadyPrewarms(now = Date.now()): number {
+export async function restoreReadyPrewarms(now = Date.now()): Promise<number> {
   const dir = prewarmDir();
-  if (!existsSync(dir)) return 0;
+  let names: string[];
+  try {
+    names = await readdir(dir);
+  } catch {
+    return 0;
+  }
   const ttlMs = sandboxPrewarmConfig().ttlMinutes * 60_000;
   const p = pool();
   let restored = 0;
-  for (const name of readdirSync(dir)) {
+  for (const name of names) {
     if (!name.endsWith(".json")) continue;
     try {
       const entry = JSON.parse(
-        readFileSync(`${dir}/${name}`, "utf-8"),
+        await readFile(`${dir}/${name}`, "utf-8"),
       ) as PrewarmEntry;
       if (
         entry.state !== "ready" ||
@@ -1077,7 +1114,7 @@ export function restoreReadyPrewarms(now = Date.now()): number {
         entry.signature !== prewarmSignature(entry.provider, entry.resources) ||
         (entry.standby &&
           entry.projectSignature !==
-            projectPreparationSignature(entry.repoId)) ||
+            (await projectPreparationSignature(entry.repoId))) ||
         (!isKeepReady(entry.provider, entry.repoId) &&
           !(entry.standby && entry.parked) &&
           now - Date.parse(entry.lastTouchedAt) > ttlMs) ||
@@ -1097,7 +1134,7 @@ export function restoreReadyPrewarms(now = Date.now()): number {
 export function sessionOwnedSandboxIds(
   states: Array<
     Pick<
-      ReturnType<typeof listRemoteStates>[number],
+      Awaited<ReturnType<typeof listRemoteStates>>[number],
       "sessionId" | "sandboxId" | "remoteId"
     >
   >,
@@ -1117,7 +1154,7 @@ export function sessionOwnedSandboxIds(
   );
 }
 
-function knownSandboxIds(provider: string): Set<string> {
+async function knownSandboxIds(provider: string): Promise<Set<string>> {
   const known = new Set<string>();
   for (const { entry: e } of pool().values()) {
     if (e.provider === provider && e.sandboxId) known.add(e.sandboxId);
@@ -1127,18 +1164,18 @@ function knownSandboxIds(provider: string): Set<string> {
   // and the orphan audit subsequently deleted live session compute once the
   // claim tombstone expired. A durable session mapping is stronger evidence:
   // never reap an id that an ordinary remote-session state file still owns.
-  for (const sandboxId of sessionOwnedSandboxIds(listRemoteStates(provider)))
+  for (const sandboxId of sessionOwnedSandboxIds(
+    await listRemoteStates(provider),
+  ))
     known.add(sandboxId);
   try {
     const dir = prewarmDir();
-    if (existsSync(dir)) {
-      for (const f of readdirSync(dir)) {
-        if (!f.startsWith(`${sanitize(provider)}-`)) continue;
-        try {
-          const s = JSON.parse(readFileSync(`${dir}/${f}`, "utf-8"));
-          if (s?.sandboxId) known.add(String(s.sandboxId));
-        } catch {}
-      }
+    for (const f of await readdir(dir)) {
+      if (!f.startsWith(`${sanitize(provider)}-`)) continue;
+      try {
+        const s = JSON.parse(await readFile(`${dir}/${f}`, "utf-8"));
+        if (s?.sandboxId) known.add(String(s.sandboxId));
+      } catch {}
     }
   } catch {}
   return known;
@@ -1151,7 +1188,7 @@ function knownSandboxIds(provider: string): Set<string> {
  *  still labeled as prewarms that nothing tracks. */
 export async function sweepPrewarms(now = Date.now()): Promise<void> {
   await refreshCachedProjectPreparationSignatures();
-  restoreReadyPrewarms(now);
+  await restoreReadyPrewarms(now);
   const cfg = sandboxPrewarmConfig();
   const ttlMs = cfg.ttlMinutes * 60_000;
   const p = pool();
@@ -1213,72 +1250,18 @@ export async function sweepPrewarms(now = Date.now()): Promise<void> {
         CLAIMED_GRACE_MS
       ) {
         p.delete(key);
-        try {
-          unlinkSync(`${fileFor(entry)}.claimed`);
-        } catch {}
+        const file = fileFor(entry);
+        void fileOp(() => unlink(`${file}.claimed`).catch(() => {}));
       }
     }
   }
 
   // Restart reaping: ready entries were restored above. A restarted process
   // cannot resume an interrupted bootstrap, so every other unowned entry is
-  // destroyed rather than adopted.
-  try {
-    const dir = prewarmDir();
-    if (existsSync(dir)) {
-      const owned = new Set(
-        [...p.values()].map(({ entry }) => {
-          const base = fileFor(entry).split("/").pop()!;
-          if (entry.state === "claimed") return `${base}.claimed`;
-          if (entry.state === "destroying") return `${base}.destroying`;
-          return base;
-        }),
-      );
-      for (const f of readdirSync(dir)) {
-        const full = `${dir}/${f}`;
-        if (owned.has(f)) continue;
-        if (f.endsWith(".json.destroying")) {
-          try {
-            const s = JSON.parse(readFileSync(full, "utf-8"));
-            if (s?.sandboxId && typeof s.provider === "string") {
-              destroyUntrackedLater(
-                String(s.provider),
-                String(s.sandboxId),
-                "destroy interrupted by restart",
-              );
-            }
-          } catch {}
-          try {
-            unlinkSync(full);
-          } catch {}
-          continue;
-        }
-        if (f.endsWith(".json.claimed")) {
-          // Adopted before a restart — the session owns the sandbox. Unlink
-          // the tombstone once its orphan-audit protection window passed.
-          try {
-            if (now - statSync(full).mtimeMs > CLAIMED_GRACE_MS)
-              unlinkSync(full);
-          } catch {}
-          continue;
-        }
-        if (!f.endsWith(".json")) continue;
-        try {
-          const s = JSON.parse(readFileSync(full, "utf-8"));
-          if (s?.sandboxId && typeof s.provider === "string") {
-            destroyUntrackedLater(
-              String(s.provider),
-              String(s.sandboxId),
-              "orphaned by restart",
-            );
-          }
-        } catch {}
-        try {
-          unlinkSync(full);
-        } catch {}
-      }
-    }
-  } catch {}
+  // destroyed rather than adopted. Runs as one queued file operation, and
+  // decides ownership inside it, so a write or claim the pool made earlier
+  // has landed and a later one lands after it.
+  await fileOp(() => reapUnownedPrewarmFiles(now)).catch(() => {});
 
   for (const { provider, repoId } of keepReadyTargets()) {
     if (p.has(`${provider}:${repoId}`)) continue;
@@ -1291,6 +1274,66 @@ export async function sweepPrewarms(now = Date.now()): Promise<void> {
   }
 
   await auditProviderOrphans(now);
+}
+
+async function reapUnownedPrewarmFiles(now: number): Promise<void> {
+  const dir = prewarmDir();
+  let names: string[];
+  try {
+    names = await readdir(dir);
+  } catch {
+    return;
+  }
+  const p = pool();
+  const owned = new Set(
+    [...p.values()].flatMap(({ entry }) => {
+      const base = fileFor(entry).split("/").pop()!;
+      // A claim's rename is queued behind this reap, so its file may still
+      // carry the unclaimed name.
+      if (entry.state === "claimed") return [`${base}.claimed`, base];
+      if (entry.state === "destroying") return [`${base}.destroying`];
+      return [base];
+    }),
+  );
+  for (const f of names) {
+    const full = `${dir}/${f}`;
+    if (owned.has(f)) continue;
+    if (f.endsWith(".json.destroying")) {
+      try {
+        const s = JSON.parse(await readFile(full, "utf-8"));
+        if (s?.sandboxId && typeof s.provider === "string") {
+          destroyUntrackedLater(
+            String(s.provider),
+            String(s.sandboxId),
+            "destroy interrupted by restart",
+          );
+        }
+      } catch {}
+      await unlink(full).catch(() => {});
+      continue;
+    }
+    if (f.endsWith(".json.claimed")) {
+      // Adopted before a restart — the session owns the sandbox. Unlink
+      // the tombstone once its orphan-audit protection window passed.
+      try {
+        if (now - (await stat(full)).mtimeMs > CLAIMED_GRACE_MS)
+          await unlink(full);
+      } catch {}
+      continue;
+    }
+    if (!f.endsWith(".json")) continue;
+    try {
+      const s = JSON.parse(await readFile(full, "utf-8"));
+      if (s?.sandboxId && typeof s.provider === "string") {
+        destroyUntrackedLater(
+          String(s.provider),
+          String(s.sandboxId),
+          "orphaned by restart",
+        );
+      }
+    } catch {}
+    await unlink(full).catch(() => {});
+  }
 }
 
 /** Throttled provider-side audit: list sandboxes still carrying
@@ -1333,7 +1376,7 @@ async function auditOneProviderOrphans(
     return;
   }
   if (!listed.length) return;
-  const known = knownSandboxIds(provider);
+  const known = await knownSandboxIds(provider);
   for (const { id, key } of listed) {
     if (known.has(id)) continue;
     // Only reap keys whose repo THIS process's registry knows: a
@@ -1451,7 +1494,7 @@ export function _stopPrewarmSweepForTest(): void {
  * importing a sandbox helper from a test or script cannot start a live sweep. */
 export async function startPrewarmPool(): Promise<void> {
   if (isDevInstance()) return;
-  restoreReadyPrewarms();
+  await restoreReadyPrewarms();
   ensurePrewarmSweep();
   await sweepPrewarms();
 }

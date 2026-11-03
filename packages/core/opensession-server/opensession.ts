@@ -158,7 +158,8 @@ import {
 import { sweepArchivedWorktrees } from "./src/server/worktree";
 import { type WSClientData, broadcastToAll } from "./src/server/ws-hub";
 import { clientAcceptsCompressedFrames } from "./src/server/ws-compression";
-import { mkdirSync, watch, writeFileSync } from "fs";
+import { watch } from "fs";
+import { access, mkdir, writeFile } from "fs/promises";
 import { join } from "node:path";
 
 // Side-effect modules: these must be loaded even when the entry references
@@ -228,7 +229,7 @@ const precheckRuntimePeers =
 // must log, not exit the gateway (see process-guards.ts).
 installUnhandledRejectionGuard();
 if (process.env.OPENSESSION_GATEWAY_ROLE === "standby")
-  preloadPreparedFrontend();
+  await preloadPreparedFrontend();
 if (precheckRuntimePeers)
   await waitForRuntimePeerGeneration({ timeoutMs: 5_000 });
 // A supervised standby is allowed to preload this import graph, but it cannot
@@ -286,7 +287,7 @@ registerSandboxSessionPredicate((sessionId) =>
 // evaluation, which is exactly when a hot reload may have killed the timers.
 startTimerPoisonHeartbeat();
 
-mkdirSync(SESSIONS_DIR, { recursive: true });
+await mkdir(SESSIONS_DIR, { recursive: true });
 
 // --- Hot-reload support (bun --hot) ---------------------------------------
 // Under `bun --hot`, editing a module re-evaluates this entry file in the SAME
@@ -313,6 +314,9 @@ if (!g.__opensessionBooted) {
   const { warmWorkspacesAsync } = await import("./src/server/workspaces");
   await warmWorkspacesAsync();
 }
+// The archive registry backs synchronous session-row readers. Warmed on hot
+// reloads too: a reloaded module starts with an empty memory copy.
+await (await import("./src/server/archive")).warmArchiveRegistry();
 // The first list read fills the list index. With the actor up it can come
 // from the metadata catalog. An unavailable or unseeded catalog cannot fall
 // back to filesystem discovery. Prime the index before any list reader, then
@@ -544,7 +548,7 @@ const server: import("bun").Server<WSClientData> = hotServe({
     // reconnect instead of a sign-in it thinks it already did.
     let reconnectRequired = false;
     if (webAuthRequired()) {
-      authUser = resolveWebAuth(req);
+      authUser = await resolveWebAuth(req);
       // Server-local CDP/CLI traffic has its own machine principal. A
       // teammate's cookie must never let automation act as that person.
       if (hostedLoopback && authUser?.automation !== true) authUser = null;
@@ -779,11 +783,19 @@ if (!g.__opensessionBooted) {
   // restarting a dead server.
   {
     const { configuredPaths } = await import("./src/server/config");
-    const { existsSync } = await import("fs");
+    const { whichAsync } = await import("./src/server/shared/which-async");
     const configured = configuredPaths().claudeBin;
     const claudeBin =
-      configured && configured !== "claude" ? configured : Bun.which("claude");
-    if (!claudeBin || !existsSync(claudeBin)) {
+      configured && configured !== "claude"
+        ? configured
+        : await whichAsync("claude");
+    const claudeExists =
+      !!claudeBin &&
+      (await access(claudeBin).then(
+        () => true,
+        () => false,
+      ));
+    if (!claudeExists) {
       console.error(
         "[engine] the `claude` CLI is not installed — Anthropic turns cannot run.\n" +
           "[engine] install it: curl -fsSL https://claude.ai/install.sh | bash",
@@ -820,15 +832,22 @@ if (!g.__opensessionBooted) {
   // devInstanceBootError guard at the top of this file enforces it).
   const devInstance = isDevInstance();
   startSessionListRuntimeSync();
+  // Read the sandbox kill switch once before serving; it refreshes itself
+  // asynchronously after that.
+  await import("./src/server/sandbox/config").then(
+    ({ refreshSandboxKillSwitch }) => refreshSandboxKillSwitch(),
+  );
   if (!devInstance) {
     startLiveActivitySync();
 
     // Restore completed sandbox prewarms and maintain any explicit keep-ready
     // targets. This is a boot hook rather than a module-scope side effect.
     void import("./src/server/sandbox/prewarm")
-      .then(async ({ startPrewarmPool }) => {
-        // Restoration happens synchronously before the first sweep await. Do not
-        // make snapshot maintenance wait behind slow provider orphan cleanup.
+      .then(async ({ restoreReadyPrewarms, startPrewarmPool }) => {
+        // Restore ready prewarms before maintenance can request new ones. Do
+        // not make snapshot maintenance wait behind slow provider orphan
+        // cleanup: the first sweep runs alongside it.
+        await restoreReadyPrewarms();
         const poolStartup = startPrewarmPool();
         const { startSandboxEnvironmentMaintenance } =
           await import("./src/server/sandbox/environments");
@@ -874,7 +893,9 @@ if (!g.__opensessionBooted) {
     configureWebhookRoutes(agents, webhookRoutes);
     try {
       startPublicIngress();
-      ensureCloudflareTunnel();
+      void ensureCloudflareTunnel().catch((e) =>
+        console.error("[public-ingress] Cloudflare Tunnel failed to start:", e),
+      );
       startPrivateAppCertificateRenewal();
     } catch (e) {
       console.error("[public-ingress] failed to start:", e);
@@ -1382,7 +1403,7 @@ if (!g.__opensessionBooted) {
     try {
       // A dev instance must not overwrite the production restart marker.
       if (!devInstance) {
-        writeFileSync(
+        await writeFile(
           stateDir("last-restart.json"),
           JSON.stringify({
             by: restartBy || "",
@@ -1480,7 +1501,7 @@ if (!g.__opensessionBooted) {
   // (we're on 6.17) — fine here.
   // A prebuilt bundle (compiled binary's embedded assets, or a release
   // tarball's .frontend-dist) has no src/frontend tree to watch.
-  if (!IS_DEV && frontend && isPrebuiltFrontend()) {
+  if (!IS_DEV && frontend && (await isPrebuiltFrontend())) {
     console.log("[frontend] Prebuilt bundle: source rebuilds are off");
   } else if (!IS_DEV && frontend) {
     try {
@@ -1503,7 +1524,7 @@ if (!g.__opensessionBooted) {
   // (scripts/migrate-session-github-users.ts), never a boot-time fleet writer.
   try {
     if (!devInstance) {
-      ensureAutomationWebSession();
+      await ensureAutomationWebSession();
     }
   } catch (e) {
     console.error("[web-auth] automation identity initialization failed:", e);

@@ -3,8 +3,8 @@
  * owned by their agents (read-only for opensession), so archived-ness lives in
  * a backstage-owned registry keyed by unified session id.
  */
-import { readFileSync, existsSync } from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { readFile } from "fs/promises";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { unpinEverywhere } from "./pins";
 import type { UnifiedSession } from "./types";
@@ -37,27 +37,50 @@ interface Entry {
 type RawEntry = string | Entry;
 
 let cache: Record<string, RawEntry> | null = null;
+let warming: Promise<void> | null = null;
+let writes: Promise<void> = Promise.resolve();
 
+/** Read the registry file into memory. Boot awaits this before serving; the
+ *  synchronous readers below answer from the memory copy. */
+export function warmArchiveRegistry(): Promise<void> {
+  if (cache) return Promise.resolve();
+  warming ??= (async () => {
+    let loaded: Record<string, RawEntry> = {};
+    try {
+      loaded = JSON.parse(await readFile(REGISTRY_PATH, "utf-8"));
+    } catch {}
+    cache ??= loaded;
+  })().finally(() => {
+    warming = null;
+  });
+  return warming;
+}
+
+/** The in-memory registry. Before boot warmed it, nothing reads as archived
+ *  yet and a warm starts in the background; writers await the warm first. */
 function load(): Record<string, RawEntry> {
   if (cache) return cache;
-  try {
-    cache = existsSync(REGISTRY_PATH)
-      ? JSON.parse(readFileSync(REGISTRY_PATH, "utf-8"))
-      : {};
-  } catch {
-    cache = {};
-  }
+  void warmArchiveRegistry();
+  return {};
+}
+
+async function loadForWrite(): Promise<Record<string, RawEntry>> {
+  await warmArchiveRegistry();
   return cache!;
 }
 
-function save(registry: Record<string, RawEntry>): void {
+/** Update memory at once and persist in order, so the newest registry is
+ *  always the last one written. */
+async function save(registry: Record<string, RawEntry>): Promise<void> {
   cache = registry;
-  writeJsonAtomic(REGISTRY_PATH, registry);
+  const write = writes.then(() => writeJsonAtomicAsync(REGISTRY_PATH, cache));
+  writes = write.catch(() => {});
+  await write;
 }
 
-function releasePreviewLease(sessionId: string): void {
+async function releasePreviewLease(sessionId: string): Promise<void> {
   try {
-    releasePreviewPathLease(sessionId);
+    await releasePreviewPathLease(sessionId);
   } catch (error) {
     console.error(
       `Failed to release preview reservation for ${sessionId}:`,
@@ -180,17 +203,17 @@ export async function setArchived(
   archived: boolean,
   reason: ArchiveReason = "manual",
 ): Promise<void> {
-  const registry = { ...load() };
+  const registry = { ...(await loadForWrite()) };
   if (archived) registry[id] = { at: new Date().toISOString(), reason };
   else delete registry[id];
-  save(registry);
+  await save(registry);
   await setIndexedSessionArchived(id, archived, archived ? reason : undefined);
   publishSessionRow(id);
   // Archived work shouldn't stay pinned (for anyone) — it would resurface in
   // the Pinned band on unarchive. Callers that know more keys (alias ids, the
   // workspace pin) drop those on top of this.
   if (archived) {
-    releasePreviewLease(id);
+    await releasePreviewLease(id);
     await unpinEverywhere([id]);
     await stopArchivedSessionResources(id);
   }
@@ -202,7 +225,7 @@ export async function archiveOlderThan(
   days: number,
 ): Promise<number> {
   const cutoff = Date.now() - days * 86_400_000;
-  const registry = { ...load() };
+  const registry = { ...(await loadForWrite()) };
   let archived = 0;
   const now = new Date().toISOString();
 
@@ -217,9 +240,9 @@ export async function archiveOlderThan(
   }
 
   if (archived > 0) {
-    save(registry);
+    await save(registry);
     for (const session of justArchived) {
-      releasePreviewLease(session.id);
+      await releasePreviewLease(session.id);
       await setIndexedSessionArchived(session.id, true, "idle");
       publishSessionRow(session.id);
       await stopArchivedSessionResources(session.id, session.aliasIds);

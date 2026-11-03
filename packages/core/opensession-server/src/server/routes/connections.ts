@@ -198,7 +198,7 @@ export async function bootstrapUserAuthOnConnect(
   // (d) mint the session for the just-rostered login. getConfig() re-reads on
   // the file change (mtime+size guard), so teamMemberForLogin inside
   // createWebSession sees the fresh roster.
-  const session = createWebSession(login);
+  const session = await createWebSession(login);
   if (!session)
     return { error: "Signed in with GitHub but could not create a session" };
   return {
@@ -227,7 +227,7 @@ export async function handleConnectionsRoutes(
   }
 
   if (path === "/api/connections/apple-mobile" && req.method === "GET") {
-    return Response.json(appleMobileSetupStatus());
+    return Response.json(await appleMobileSetupStatus());
   }
 
   if (path === "/api/connections/apple-mobile" && req.method === "PUT") {

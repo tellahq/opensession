@@ -5,16 +5,12 @@
  * credentials are intentionally not part of this product surface.
  */
 
-import { existsSync, mkdirSync, readFileSync } from "fs";
-import { dirname } from "path";
 import { audit } from "../audit";
 import {
   sandboxAdapterSignature,
   sandboxAdapterSignatureCurrent,
   sandboxProviderNeedsCredential,
 } from "./adapter-signature";
-import { stateDir } from "../paths";
-import { writeJsonAtomic } from "../shared/atomic-write";
 import {
   deleteWorkspaceSecret,
   putWorkspaceSecret,
@@ -22,6 +18,7 @@ import {
   workspaceSecretExists,
 } from "../workspace-secrets";
 import { readJsonFileCopy } from "../shared/json-file-cache";
+import { sandboxConfigFilePath, updateSandboxConfigFile } from "./config-file";
 export { sandboxAdapterSignature } from "./adapter-signature";
 export const WORKSPACE_SANDBOX_PROVIDERS = [
   "daytona",
@@ -126,7 +123,7 @@ interface RawSandboxConfig extends Record<string, unknown> {
 }
 
 function configPath(): string {
-  return process.env.OPENSESSION_SANDBOX_CONFIG || stateDir("sandbox.json");
+  return sandboxConfigFilePath();
 }
 
 function readRaw(): RawSandboxConfig {
@@ -138,9 +135,15 @@ function readRaw(): RawSandboxConfig {
   }
 }
 
-function writeRaw(raw: RawSandboxConfig): void {
-  mkdirSync(dirname(configPath()), { recursive: true });
-  writeJsonAtomic(configPath(), raw);
+/** Replace the stored connection list (keyed by provider) inside one
+ * serialized sandbox.json update, re-read from disk so a concurrent settings
+ * save is never overwritten. */
+function writeConnections(
+  next: (current: SandboxConnection[]) => SandboxConnection[],
+): Promise<void> {
+  return updateSandboxConfigFile((raw) => {
+    raw.connections = next(parseConnections(raw.connections));
+  });
 }
 
 export function isWorkspaceSandboxProvider(
@@ -285,7 +288,10 @@ function parseConnection(value: unknown): SandboxConnection | undefined {
 }
 
 export function listStoredSandboxConnections(): SandboxConnection[] {
-  const raw = readRaw().connections;
+  return parseConnections(readRaw().connections);
+}
+
+function parseConnections(raw: unknown): SandboxConnection[] {
   const values = Array.isArray(raw)
     ? raw
     : raw && typeof raw === "object"
@@ -343,14 +349,13 @@ export function safeSandboxConnections(): SafeSandboxConnection[] {
   });
 }
 
-function replaceConnection(connection: SandboxConnection): void {
-  const raw = readRaw();
-  const all = listStoredSandboxConnections().filter(
-    (candidate) => candidate.provider !== connection.provider,
-  );
-  all.push(connection);
-  raw.connections = all;
-  writeRaw(raw);
+function replaceConnection(connection: SandboxConnection): Promise<void> {
+  return writeConnections((current) => [
+    ...current.filter(
+      (candidate) => candidate.provider !== connection.provider,
+    ),
+    connection,
+  ]);
 }
 
 export interface ConnectSandboxInput {
@@ -358,10 +363,10 @@ export interface ConnectSandboxInput {
   settings?: SandboxConnectionSettings;
 }
 
-export function connectSandboxProvider(
+export async function connectSandboxProvider(
   provider: WorkspaceSandboxProvider,
   input: ConnectSandboxInput,
-): SandboxConnection {
+): Promise<SandboxConnection> {
   const previous = getSandboxConnection(provider);
   let credentialRef = previous?.credentialRef;
   if (input.secret) {
@@ -399,13 +404,7 @@ export function connectSandboxProvider(
     createdAt: previous?.createdAt || now,
     updatedAt: now,
   };
-  const raw = readRaw();
-  const all = listStoredSandboxConnections().filter(
-    (candidate) => candidate.provider !== provider,
-  );
-  all.push(connection);
-  raw.connections = all;
-  writeRaw(raw);
+  await replaceConnection(connection);
   audit({
     kind: "sandbox_connection_connected",
     provider,
@@ -414,10 +413,10 @@ export function connectSandboxProvider(
   return connection;
 }
 
-export function updateSandboxConnection(
+export async function updateSandboxConnection(
   provider: WorkspaceSandboxProvider,
   patch: { enabled?: boolean; settings?: SandboxConnectionSettings },
-): SandboxConnection {
+): Promise<SandboxConnection> {
   const previous = getSandboxConnection(provider);
   if (!previous) throw new Error(`${provider} is not connected`);
   const next: SandboxConnection = {
@@ -426,13 +425,7 @@ export function updateSandboxConnection(
     settings: mergeSettings(previous.settings, settings(patch.settings)),
     updatedAt: new Date().toISOString(),
   };
-  const raw = readRaw();
-  const all = listStoredSandboxConnections().filter(
-    (candidate) => candidate.provider !== provider,
-  );
-  all.push(next);
-  raw.connections = all;
-  writeRaw(raw);
+  await replaceConnection(next);
   audit({
     kind: next.enabled
       ? "sandbox_connection_updated"
@@ -443,10 +436,10 @@ export function updateSandboxConnection(
   return next;
 }
 
-export function setSandboxConnectionQualification(
+export async function setSandboxConnectionQualification(
   provider: WorkspaceSandboxProvider,
   result: Omit<SandboxConnectionQualification, "adapterSignature">,
-): SandboxConnection {
+): Promise<SandboxConnection> {
   const previous = getSandboxConnection(provider);
   if (!previous) throw new Error(`${provider} is not connected`);
   const next: SandboxConnection = {
@@ -457,20 +450,18 @@ export function setSandboxConnectionQualification(
     },
     updatedAt: new Date().toISOString(),
   };
-  replaceConnection(next);
+  await replaceConnection(next);
   return next;
 }
 
-export function disconnectSandboxProvider(
+export async function disconnectSandboxProvider(
   provider: WorkspaceSandboxProvider,
-): boolean {
+): Promise<boolean> {
   const connection = getSandboxConnection(provider);
   if (!connection) return false;
-  const raw = readRaw();
-  raw.connections = listStoredSandboxConnections().filter(
-    (candidate) => candidate.provider !== provider,
+  await writeConnections((current) =>
+    current.filter((candidate) => candidate.provider !== provider),
   );
-  writeRaw(raw);
   if (connection.credentialRef) deleteWorkspaceSecret(connection.credentialRef);
   audit({
     kind: "sandbox_connection_disconnected",

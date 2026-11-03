@@ -1,7 +1,7 @@
 /** Public-ingress configuration, discovery and managed exposure helpers. */
 import { randomBytes } from "crypto";
 import { createSocket } from "dgram";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "fs";
+import { access, mkdtemp, readFile, rm } from "fs/promises";
 import { networkInterfaces, tmpdir } from "os";
 import { isIP } from "net";
 import { join } from "path";
@@ -23,7 +23,8 @@ import {
   upsertCaddyIngress,
 } from "./sandbox/caddy-ingress";
 import { stateDir } from "./paths";
-import { writeFileAtomic } from "./shared/atomic-write";
+import { writeFileAtomicAsync } from "./shared/atomic-write";
+import { findExecutable } from "./shared/executable-lookup";
 import { prepareEnvFileEdits } from "./env-file-edit";
 import {
   detectedTailnetIpv4,
@@ -49,8 +50,16 @@ const INGRESS_STARTING_GRACE_MS: Record<IngressExposure, number> = {
 const runtime = globalThis as typeof globalThis & {
   __opensessionCloudflared?: ReturnType<typeof Bun.spawn>;
   __opensessionCloudflaredRestart?: ReturnType<typeof setTimeout>;
+  __opensessionCloudflaredStarting?: Promise<boolean>;
   __opensessionIngressStartedAt?: Partial<Record<IngressExposure, number>>;
 };
+
+function pathExists(path: string): Promise<boolean> {
+  return access(path).then(
+    () => true,
+    () => false,
+  );
+}
 
 function markIngressStarting(exposure: IngressExposure): void {
   (runtime.__opensessionIngressStartedAt ??= {})[exposure] = Date.now();
@@ -426,11 +435,22 @@ export async function publicIngressStatus(
     hostname = new URL(configured.publicBaseUrl).hostname;
   } catch {}
   const tailnetIpv4 = detectedTailnetIpv4();
-  const [dns, probedHealth, serverAddresses, appDomain] = await Promise.all([
+  const [
+    dns,
+    probedHealth,
+    serverAddresses,
+    appDomain,
+    cloudflared,
+    caddy,
+    tokenConfigured,
+  ] = await Promise.all([
     currentDns(hostname),
     ingressHealth(configured.publicBaseUrl),
     publicServerAddresses(),
     privateAppDomainStatus(appBaseUrl, tailnetIpv4),
+    findExecutable("cloudflared"),
+    findExecutable("caddy"),
+    pathExists(CLOUDFLARE_TOKEN_PATH),
   ]);
   const connectorRunning = cloudflareConnectorRunning();
   const health = publicIngressHealth(
@@ -477,17 +497,17 @@ export async function publicIngressStatus(
       ],
     },
     cloudflare: {
-      installed: Bun.which("cloudflared") !== null,
+      installed: cloudflared !== null,
       tunnelId,
       cnameTarget: tunnelId
         ? `${tunnelId}.cfargotunnel.com`
         : "<tunnel-id>.cfargotunnel.com",
       connectorTarget: `http://127.0.0.1:${PUBLIC_INGRESS_PORT}`,
-      tokenConfigured: existsSync(CLOUDFLARE_TOKEN_PATH),
+      tokenConfigured,
       connectorRunning,
     },
     custom: {
-      caddyInstalled: Bun.which("caddy") !== null,
+      caddyInstalled: caddy !== null,
       generatedConfig: caddyIngressSnippet(
         configured.publicBaseUrl || "https://ingress.example.com",
       ),
@@ -623,12 +643,24 @@ function cloudflareConnectorRunning(): boolean {
 }
 
 /** Start or reuse the named Cloudflare connector. Called explicitly at boot
- * and after Settings stores a token; importing this module has no effects. */
-export function ensureCloudflareTunnel(): boolean {
+ * and after Settings stores a token; importing this module has no effects.
+ * Concurrent callers share one start, so a connector is never spawned twice. */
+export function ensureCloudflareTunnel(): Promise<boolean> {
+  runtime.__opensessionCloudflaredStarting ??= startCloudflareTunnel().finally(
+    () => {
+      runtime.__opensessionCloudflaredStarting = undefined;
+    },
+  );
+  return runtime.__opensessionCloudflaredStarting;
+}
+
+async function startCloudflareTunnel(): Promise<boolean> {
   if (configuredIngress().exposure !== "cloudflare") return false;
   if (cloudflareConnectorRunning()) return true;
-  const binary = Bun.which("cloudflared");
-  if (!binary || !existsSync(CLOUDFLARE_TOKEN_PATH)) return false;
+  const binary = await findExecutable("cloudflared");
+  if (!binary || !(await pathExists(CLOUDFLARE_TOKEN_PATH))) return false;
+  if (configuredIngress().exposure !== "cloudflare") return false;
+  if (cloudflareConnectorRunning()) return true;
   if (runtime.__opensessionCloudflaredRestart) {
     clearTimeout(runtime.__opensessionCloudflaredRestart);
     runtime.__opensessionCloudflaredRestart = undefined;
@@ -653,10 +685,14 @@ export function ensureCloudflareTunnel(): boolean {
       `[public-ingress] Cloudflare Tunnel connector exited (${code})`,
     );
     if (configuredIngress().exposure === "cloudflare") {
-      runtime.__opensessionCloudflaredRestart = setTimeout(
-        () => ensureCloudflareTunnel(),
-        5_000,
-      );
+      runtime.__opensessionCloudflaredRestart = setTimeout(() => {
+        void ensureCloudflareTunnel().catch((error) =>
+          console.error(
+            "[public-ingress] Cloudflare Tunnel restart failed:",
+            error,
+          ),
+        );
+      }, 5_000);
     }
   });
   return true;
@@ -670,18 +706,19 @@ export async function configureCloudflareTunnel(input: {
   const token = (input.token || "").trim();
   if (/\s/.test(token) || token.length > 4096)
     throw new Error("Cloudflare tunnel token is invalid");
-  if (!token && !existsSync(CLOUDFLARE_TOKEN_PATH)) {
+  if (!token && !(await pathExists(CLOUDFLARE_TOKEN_PATH))) {
     throw new Error("Cloudflare tunnel token is required");
   }
-  if (!Bun.which("cloudflared"))
+  if (!(await findExecutable("cloudflared")))
     throw new Error("cloudflared is not installed on this server");
-  if (token) writeFileAtomic(CLOUDFLARE_TOKEN_PATH, `${token}\n`, 0o600);
+  if (token)
+    await writeFileAtomicAsync(CLOUDFLARE_TOKEN_PATH, `${token}\n`, 0o600);
   await savePublicIngress({
     publicBaseUrl: input.publicBaseUrl,
     exposure: "cloudflare",
     cloudflareTunnelId: input.tunnelId,
   });
-  if (!ensureCloudflareTunnel())
+  if (!(await ensureCloudflareTunnel()))
     throw new Error("Could not start the Cloudflare Tunnel connector");
   markIngressStarting("cloudflare");
 }
@@ -707,17 +744,19 @@ export async function installManagedCaddy(
       "Could not determine the public-facing network interface for Caddy",
     );
   }
-  const caddy = Bun.which("caddy");
-  const sudo = Bun.which("sudo");
+  const [caddy, sudo] = await Promise.all([
+    findExecutable("caddy"),
+    findExecutable("sudo"),
+  ]);
   if (!caddy || !sudo)
     throw new Error("Caddy and sudo are required for managed custom domains");
   let current: string;
   try {
-    current = readFileSync(CADDYFILE, "utf8");
+    current = await readFile(CADDYFILE, "utf8");
   } catch {
     throw new Error(`Could not read ${CADDYFILE}`);
   }
-  const scratch = mkdtempSync(
+  const scratch = await mkdtemp(
     join(tmpdir(), `opensession-ingress-${randomBytes(4).toString("hex")}-`),
   );
   const staged = join(scratch, "Caddyfile");
@@ -775,6 +814,6 @@ export async function installManagedCaddy(
     // Do not roll back a valid listener merely because the public edge is not
     // reachable in the first few seconds.
   } finally {
-    rmSync(scratch, { recursive: true, force: true });
+    await rm(scratch, { recursive: true, force: true });
   }
 }

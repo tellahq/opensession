@@ -207,7 +207,7 @@ const CASES: Case[] = [
 
 describe("templateStatus", () => {
   for (const c of CASES) {
-    test(c.name, () => {
+    test(c.name, async () => {
       const root = mkdtempSync(join(tmpdir(), "warm-template-"));
       const warm = join(root, "warm-templates");
       const templateDir = join(root, "app-warm-template");
@@ -232,7 +232,7 @@ describe("templateStatus", () => {
       }
       const prev = __setSessionsDirForTest(root);
       try {
-        const status = templateStatus("app");
+        const status = await templateStatus("app");
         expect(status.kind).toBe(c.expect);
         if (c.reason && status.kind === "stale")
           expect(status.reason).toContain(c.reason);

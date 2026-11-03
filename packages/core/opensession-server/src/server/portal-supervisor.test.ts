@@ -1088,7 +1088,7 @@ describe("session Portal supervisor", () => {
       state: "awake",
     });
     expect(
-      sleepingSandboxPortalStatus("os-sandbox-portal-test", sandbox.id)
+      (await sleepingSandboxPortalStatus("os-sandbox-portal-test", sandbox.id))
         ?.services,
     ).toEqual([
       expect.objectContaining({
@@ -1106,7 +1106,7 @@ describe("session Portal supervisor", () => {
       "stopped",
     );
     expect(
-      sleepingSandboxPortalStatus("os-sandbox-portal-test", sandbox.id)
+      (await sleepingSandboxPortalStatus("os-sandbox-portal-test", sandbox.id))
         ?.services,
     ).toEqual([
       expect.objectContaining({

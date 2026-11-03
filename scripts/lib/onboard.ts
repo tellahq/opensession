@@ -426,14 +426,14 @@ export async function onboard(opts: OnboardOptions = {}): Promise<number> {
   // no code path created. Only seeded when absent — an operator who turned the
   // engine off deliberately keeps that choice through a re-run.
   if (!existsSync(engineConfigPath())) {
-    setPiEnabled(true);
+    await setPiEnabled(true);
     wrote(engineConfigPath(), "(engine enabled)");
   }
 
   // Offered after the config exists, since installing one appends to it.
   // A fresh install otherwise boots healthy and does nothing, which gives a new
   // operator no sense of what this is for.
-  const recommended = listRecipes().filter((r) => r.recommended);
+  const recommended = (await listRecipes()).filter((r) => r.recommended);
   if (recommended.length && canPrompt()) {
     heading("Suggested automations");
     info(

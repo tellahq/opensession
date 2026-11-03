@@ -251,7 +251,7 @@ export interface SandboxProvider {
   /** The machine this provider holds for a session, awake or asleep, also
    *  when `ensure` failed after creating it (a failed setup). The run path
    *  records it so the session can pause it and the idle sweep sleeps it. */
-  machineFor?(sessionId: string): string | undefined;
+  machineFor?(sessionId: string): Promise<string | undefined>;
   /** Persist a session-owned filesystem checkpoint after a clean turn.
    * Providers whose stopped sandboxes retain disk do not need this hook. */
   checkpoint?(sandboxId: string): Promise<void>;

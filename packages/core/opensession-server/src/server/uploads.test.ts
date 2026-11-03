@@ -49,111 +49,118 @@ function stage(name: string, bytes: Buffer = PNG): string {
 }
 
 describe("actor-owned creation attachments", () => {
-  test("spools inline input once and adopts one digest-fenced destination", () => {
+  test("spools inline input once and adopts one digest-fenced destination", async () => {
     const raw = [
       {
         name: "brief.txt",
         dataUrl: `data:text/plain;base64,${Buffer.from("hello").toString("base64")}`,
       },
     ];
-    const [source] = prepareCreationAttachmentSources("create-session", raw);
+    const [source] = await prepareCreationAttachmentSources(
+      "create-session",
+      raw,
+    );
     expect(source.name).toBe("brief.txt");
     expect(source.sourceRef).toStartWith("uploads:");
     expect(source.digest).toMatch(/^sha256:[0-9a-f]{64}$/);
-    expect(prepareCreationAttachmentSources("create-session", raw)).toEqual([
-      source,
-    ]);
-    const staged = stageCreationAttachment("create-session", source);
+    expect(
+      await prepareCreationAttachmentSources("create-session", raw),
+    ).toEqual([source]);
+    const staged = await stageCreationAttachment("create-session", source);
     expect(readFileSync(staged.path, "utf8")).toBe("hello");
     unlinkSync(
       `${UPLOADS_DIR}/${decodeURIComponent(source.sourceRef.slice("uploads:".length))}`,
     );
-    expect(stageCreationAttachment("create-session", source)).toEqual(staged);
+    expect(await stageCreationAttachment("create-session", source)).toEqual(
+      staged,
+    );
   });
 
-  test("hard-links a staged file too large to read whole", () => {
+  test("hard-links a staged file too large to read whole", async () => {
     const dir = `${UPLOADS_DIR}/staged`;
     mkdirSync(dir, { recursive: true });
     const path = `${dir}/huge.mov`;
     writeFileSync(path, "");
     // Sparse, so the test stays fast while still crossing the read cap.
     truncateSync(path, MAX_UPLOAD_BYTES + 1);
-    const [source] = prepareCreationAttachmentSources("large-session", [
+    const [source] = await prepareCreationAttachmentSources("large-session", [
       { name: "huge.mov", path },
     ]);
     expect(source.digest).toMatch(/^sha256:[0-9a-f]{64}$/);
-    const staged = stageCreationAttachment("large-session", source);
+    const staged = await stageCreationAttachment("large-session", source);
     expect(statSync(staged.path).ino).toBe(statSync(path).ino);
-    expect(stageCreationAttachment("large-session", source)).toEqual(staged);
+    expect(await stageCreationAttachment("large-session", source)).toEqual(
+      staged,
+    );
   });
 
-  test("rejects malformed input instead of silently dropping an intent", () => {
-    expect(() =>
+  test("rejects malformed input instead of silently dropping an intent", async () => {
+    await expect(
       prepareCreationAttachmentSources("invalid-session", [
         { name: "missing-body.txt" },
       ]),
-    ).toThrow("invalid file attachment");
+    ).rejects.toThrow("invalid file attachment");
   });
 
-  test("rejects destination crossover instead of overwriting", () => {
-    const [source] = prepareCreationAttachmentSources("cross-session", [
+  test("rejects destination crossover instead of overwriting", async () => {
+    const [source] = await prepareCreationAttachmentSources("cross-session", [
       {
         name: "brief.txt",
         dataUrl: `data:text/plain;base64,${Buffer.from("first").toString("base64")}`,
       },
     ]);
-    const staged = stageCreationAttachment("cross-session", source);
+    const staged = await stageCreationAttachment("cross-session", source);
     writeFileSync(staged.path, "changed");
-    expect(() => stageCreationAttachment("cross-session", source)).toThrow(
-      "destination changed",
-    );
+    await expect(
+      stageCreationAttachment("cross-session", source),
+    ).rejects.toThrow("destination changed");
   });
 });
 
 describe("composer image references", () => {
-  test("reads a staged ref back into vision bytes", () => {
-    const images = parseImageDataUrls([stage("shot.png")]);
+  test("reads a staged ref back into vision bytes", async () => {
+    const images = await parseImageDataUrls([stage("shot.png")]);
     expect(images).toEqual([
       { mediaType: "image/png", data: PNG.toString("base64") },
     ]);
   });
 
-  test("infers the media type from the staged extension", () => {
-    expect(parseImageDataUrls([stage("shot.JPG")])?.[0]?.mediaType).toBe(
-      "image/jpeg",
-    );
-    expect(parseImageDataUrls([stage("shot.webp")])?.[0]?.mediaType).toBe(
-      "image/webp",
-    );
+  test("infers the media type from the staged extension", async () => {
+    expect(
+      (await parseImageDataUrls([stage("shot.JPG")]))?.[0]?.mediaType,
+    ).toBe("image/jpeg");
+    expect(
+      (await parseImageDataUrls([stage("shot.webp")]))?.[0]?.mediaType,
+    ).toBe("image/webp");
   });
 
-  test("still takes inline data URLs, and mixes the two forms in order", () => {
+  test("still takes inline data URLs, and mixes the two forms in order", async () => {
     const inline = `data:image/gif;base64,${PNG.toString("base64")}`;
-    const images = parseImageDataUrls([inline, stage("second.png")]);
+    const images = await parseImageDataUrls([inline, stage("second.png")]);
     expect(images?.map((i) => i.mediaType)).toEqual(["image/gif", "image/png"]);
   });
 
-  test("drops a ref outside the uploads dir", () => {
+  test("drops a ref outside the uploads dir", async () => {
     const outside = `${SCRATCH}/escape.png`;
     writeFileSync(outside, PNG);
     expect(
-      parseImageDataUrls([`/media?path=${encodeURIComponent(outside)}`]),
+      await parseImageDataUrls([`/media?path=${encodeURIComponent(outside)}`]),
     ).toBeUndefined();
   });
 
-  test("drops a ref whose file is gone, or whose type has no name", () => {
+  test("drops a ref whose file is gone, or whose type has no name", async () => {
     expect(
-      parseImageDataUrls([
+      await parseImageDataUrls([
         `/media?path=${encodeURIComponent(`${UPLOADS_DIR}/staged/missing.png`)}`,
       ]),
     ).toBeUndefined();
-    expect(parseImageDataUrls([stage("notes.txt")])).toBeUndefined();
+    expect(await parseImageDataUrls([stage("notes.txt")])).toBeUndefined();
   });
 
   // The prompt route compares this against what actually resolved, so a stale
   // ref fails the send loudly instead of delivering a message without its
   // picture.
-  test("counts what was meant to be an image, resolvable or not", () => {
+  test("counts what was meant to be an image, resolvable or not", async () => {
     expect(
       countImageRefs([
         stage("counted.png"),
@@ -168,33 +175,33 @@ describe("composer image references", () => {
 });
 
 describe("staging images for a note", () => {
-  test("references an already-staged image where it lies", () => {
+  test("references an already-staged image where it lies", async () => {
     const ref = stage("note-shot.png");
-    expect(stageInlineImages("os-note", [ref])).toEqual([ref]);
+    expect(await stageInlineImages("os-note", [ref])).toEqual([ref]);
   });
 
-  test("writes an inline image to disk and returns its media URL", () => {
-    const [url] = stageInlineImages("os-note", [
+  test("writes an inline image to disk and returns its media URL", async () => {
+    const [url] = await stageInlineImages("os-note", [
       `data:image/png;base64,${PNG.toString("base64")}`,
     ]);
     expect(url).toStartWith("/media?path=");
-    expect(parseImageDataUrls([url])?.[0]?.mediaType).toBe("image/png");
+    expect((await parseImageDataUrls([url]))?.[0]?.mediaType).toBe("image/png");
   });
 
-  test("rejects a ref it cannot resolve", () => {
-    expect(() =>
+  test("rejects a ref it cannot resolve", async () => {
+    await expect(
       stageInlineImages("os-note", ["/media?path=%2Fetc%2Fpasswd"]),
-    ).toThrow("unsupported image type");
+    ).rejects.toThrow("unsupported image type");
   });
 
   // A seventh screenshot used to surface as a 500, which the browser outbox
   // reads as transient: the message retried every 30 seconds with no way to
   // edit or discard it. The error names its status so the route answers 400.
-  test("refuses a seventh image as a client error", () => {
+  test("refuses a seventh image as a client error", async () => {
     const refs = Array.from({ length: 7 }, (_, i) => stage(`shot-${i}.png`));
     let thrown: unknown;
     try {
-      stageInlineImages("os-note", refs);
+      await stageInlineImages("os-note", refs);
     } catch (error) {
       thrown = error;
     }
@@ -203,7 +210,9 @@ describe("staging images for a note", () => {
       status: 400,
       message: "Attach up to 6 images per message.",
     });
-    expect(stageInlineImages("os-note", refs.slice(0, 6))).toHaveLength(6);
+    expect(await stageInlineImages("os-note", refs.slice(0, 6))).toHaveLength(
+      6,
+    );
   });
 });
 

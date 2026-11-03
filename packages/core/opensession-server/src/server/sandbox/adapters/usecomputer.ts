@@ -37,7 +37,7 @@
 import { launchSandboxAgent, withSandboxAgent } from "../agent-driver";
 import { revokeSandboxAgent } from "../agent-channel";
 import { basename, resolve } from "path";
-import { existsSync, mkdirSync, readFileSync } from "fs";
+import { mkdir, readFile } from "fs/promises";
 import { getRepo, worktreePathFor } from "../../worktree";
 import {
   getSandboxConnection,
@@ -98,7 +98,7 @@ import {
 import { sandboxAgentEnabled, sandboxConfig } from "../config";
 import { OPENSESSION_SESSIONS_DIR } from "../../paths";
 import { REPO_ROOT } from "../../run-rpc-protocol";
-import { writeJsonAtomic } from "../../shared/atomic-write";
+import { writeJsonAtomicAsync } from "../../shared/atomic-write";
 
 const PROVIDER = "usecomputer" as const;
 export const DEFAULT_USE_COMPUTER_API_URL = "https://api.use.computer";
@@ -806,7 +806,7 @@ function forgetSleepSnapshot(c: UcClient, version: string | undefined): void {
 async function runningRemote(
   sandboxId: string,
 ): Promise<{ c: UcClient; state: RemoteSandboxState; remoteId: string }> {
-  const state = readRemoteState(PROVIDER, sandboxId);
+  const state = await readRemoteState(PROVIDER, sandboxId);
   if (!state) throw new Error(`Unknown use.computer sandbox ${sandboxId}`);
   const c = client();
   if (!state.remoteId || (await sandboxStatus(c, state)) !== "running")
@@ -818,12 +818,12 @@ async function runningRemote(
 export async function pauseUseComputerSandbox(
   sandboxId: string,
 ): Promise<void> {
-  const state = readRemoteState(PROVIDER, sandboxId);
+  const state = await readRemoteState(PROVIDER, sandboxId);
   if (!state?.remoteId) return;
   const c = client();
   const live = await getSandbox(c, state.remoteId);
   if (!live) {
-    writeRemoteState({ ...state, remoteId: undefined });
+    await writeRemoteState({ ...state, remoteId: undefined });
     return;
   }
   // The agent dies with this VM; a wake restores onto a new one and launches
@@ -839,7 +839,7 @@ export async function pauseUseComputerSandbox(
   );
   await deleteSandbox(c, state.remoteId);
   const previous = state.checkpointArtifactId;
-  writeRemoteState({
+  await writeRemoteState({
     ...state,
     remoteId: undefined,
     checkpointArtifactId: version,
@@ -872,7 +872,7 @@ export class UseComputerProvider implements SandboxProvider {
         "use.computer sandboxes do not enforce an outbound network policy; automations stay on Daytona",
       );
     const c = client();
-    const prevState = findRemoteStateBySession(this.id, spec.sessionId);
+    const prevState = await findRemoteStateBySession(this.id, spec.sessionId);
     const trust = resolveTrustPolicy(spec, prevState);
     const repo = getRepo(spec.repo || prevState?.repoId);
     const branch = spec.branch || prevState?.branch || repo.defaultBranch;
@@ -903,7 +903,7 @@ export class UseComputerProvider implements SandboxProvider {
         if (candidate?.state === "active") {
           remoteId = candidate.sandbox_id;
           preparedWorkspace = true;
-          forgetPrewarm(claim.sandboxId);
+          await forgetPrewarm(claim.sandboxId);
           console.log(
             `[sandbox:usecomputer] adopted prewarmed sandbox ${remoteId} for ${spec.sessionId}`,
           );
@@ -911,7 +911,7 @@ export class UseComputerProvider implements SandboxProvider {
       }
     }
     if (!remoteId) {
-      const template = readRemoteRepoTemplate(this.id, repo.id);
+      const template = await readRemoteRepoTemplate(this.id, repo.id);
       const create = (snapshot?: string) =>
         createSandbox(c, {
           snapshot,
@@ -926,7 +926,7 @@ export class UseComputerProvider implements SandboxProvider {
         }
       } catch (error) {
         if (!template || !snapshotUnusable(error)) throw error;
-        invalidateRemoteRepoTemplate(this.id, repo.id);
+        await invalidateRemoteRepoTemplate(this.id, repo.id);
         console.warn(
           `[sandbox:usecomputer] repo template ${template.artifactId} is unavailable; creating from the stock image`,
         );
@@ -948,7 +948,7 @@ export class UseComputerProvider implements SandboxProvider {
       lastActivityAt: new Date().toISOString(),
       ...trust,
     };
-    writeRemoteState(state);
+    await writeRemoteState(state);
     if (resuming) forgetSleepSnapshot(c, prevState?.checkpointArtifactId);
 
     const driver = useComputerDriver(c, remoteId);
@@ -1002,7 +1002,10 @@ export class UseComputerProvider implements SandboxProvider {
       });
       mark("resume hook ran");
     }
-    writeRemoteState({ ...state, lastActivityAt: new Date().toISOString() });
+    await writeRemoteState({
+      ...state,
+      lastActivityAt: new Date().toISOString(),
+    });
     return Object.assign(
       this.makeHandle(c, sandboxId, remoteId, {
         sessionId: spec.sessionId,
@@ -1031,13 +1034,14 @@ export class UseComputerProvider implements SandboxProvider {
       async ports(): Promise<PortMap> {
         return {};
       },
-      status: () => sandboxStatus(c, readRemoteState(providerId, sandboxId)),
+      status: async () =>
+        sandboxStatus(c, await readRemoteState(providerId, sandboxId)),
       touchActivity: () => touchRemoteState(providerId, sandboxId),
     });
   }
 
   async get(sandboxId: string): Promise<Sandbox | null> {
-    const state = readRemoteState(this.id, sandboxId);
+    const state = await readRemoteState(this.id, sandboxId);
     if (!state) return null;
     try {
       const c = client();
@@ -1089,7 +1093,7 @@ export class UseComputerProvider implements SandboxProvider {
   }
 
   async resume(sandboxId: string): Promise<Sandbox | null> {
-    const state = readRemoteState(this.id, sandboxId);
+    const state = await readRemoteState(this.id, sandboxId);
     if (!state) return null;
     const c = client();
     if (state.remoteId) {
@@ -1109,7 +1113,7 @@ export class UseComputerProvider implements SandboxProvider {
       checkpointCreatedAt: undefined,
       lastActivityAt: new Date().toISOString(),
     };
-    writeRemoteState(next);
+    await writeRemoteState(next);
     forgetSleepSnapshot(c, state.checkpointArtifactId);
     const driver = useComputerDriver(c, remoteId);
     await driver.ensureStarted();
@@ -1127,7 +1131,7 @@ export class UseComputerProvider implements SandboxProvider {
     sandboxId: string,
     options: { strict?: boolean } = {},
   ): Promise<void> {
-    const state = readRemoteState(this.id, sandboxId);
+    const state = await readRemoteState(this.id, sandboxId);
     const c = client();
     try {
       // Prewarms and qualification sandboxes carry the service's own id.
@@ -1141,8 +1145,8 @@ export class UseComputerProvider implements SandboxProvider {
       }
       if (state?.checkpointArtifactId)
         await deleteSnapshot(c, state.checkpointArtifactId);
-      forgetPrewarm(sandboxId);
-      removeRemoteState(this.id, sandboxId);
+      await forgetPrewarm(sandboxId);
+      await removeRemoteState(this.id, sandboxId);
     } catch (error) {
       if (options.strict) throw error;
       // A refused delete may leave a VM holding a slot. Keep the mapping and
@@ -1224,14 +1228,14 @@ export function useComputerTerminalArgv(input: {
 export async function useComputerTerminalTarget(
   sandboxId: string,
 ): Promise<UseComputerTerminalTarget> {
-  let state = readRemoteState(PROVIDER, sandboxId);
+  let state = await readRemoteState(PROVIDER, sandboxId);
   if (!state) throw new Error(`Unknown use.computer sandbox ${sandboxId}`);
   const c = client();
   if ((await sandboxStatus(c, state)) !== "running") {
     const { getSandboxProvider } = await import("../index");
     const woken = await getSandboxProvider(PROVIDER).resume?.(sandboxId);
     if (!woken) throw new Error("The use.computer sandbox could not be woken");
-    state = readRemoteState(PROVIDER, sandboxId) || state;
+    state = (await readRemoteState(PROVIDER, sandboxId)) || state;
   }
   if (!state.remoteId) throw new Error("The use.computer sandbox is asleep");
   const login = await ucApi<{
@@ -1272,7 +1276,7 @@ export async function sweepIdleUseComputerSandboxes(
   }
   const idleMs =
     (sandboxConfig().idleStopMinutes || DEFAULT_IDLE_STOP_MINUTES) * 60_000;
-  const stale = listRemoteStates(PROVIDER).filter(
+  const stale = (await listRemoteStates(PROVIDER)).filter(
     (state) =>
       state.remoteId &&
       now - Date.parse(state.lastActivityAt || state.createdAt) > idleMs,
@@ -1319,34 +1323,51 @@ function prewarmIndexPath(): string {
   return `${process.env.OPENSESSION_SESSIONS_DIR || OPENSESSION_SESSIONS_DIR}/sandboxes/usecomputer-prewarms.json`;
 }
 
-function readPrewarmIndex(): Record<string, Record<string, string>> {
+async function readPrewarmIndex(): Promise<
+  Record<string, Record<string, string>>
+> {
   try {
-    const path = prewarmIndexPath();
-    if (!existsSync(path)) return {};
-    const raw = JSON.parse(readFileSync(path, "utf-8"));
+    const raw = JSON.parse(await readFile(prewarmIndexPath(), "utf-8"));
     return raw && typeof raw === "object" ? raw : {};
   } catch {
     return {};
   }
 }
 
-function writePrewarmIndex(
-  index: Record<string, Record<string, string>>,
-): void {
-  const path = prewarmIndexPath();
-  mkdirSync(path.slice(0, path.lastIndexOf("/")), { recursive: true });
-  writeJsonAtomic(path, index);
+let prewarmIndexTail: Promise<unknown> = Promise.resolve();
+
+/** Serialized read-modify-write of the index; `mutate` returns false when it
+ *  changed nothing, which skips the write. */
+function updatePrewarmIndex(
+  mutate: (index: Record<string, Record<string, string>>) => boolean,
+): Promise<void> {
+  const run = prewarmIndexTail.then(async () => {
+    const index = await readPrewarmIndex();
+    if (!mutate(index)) return;
+    const path = prewarmIndexPath();
+    await mkdir(path.slice(0, path.lastIndexOf("/")), { recursive: true });
+    await writeJsonAtomicAsync(path, index);
+  });
+  prewarmIndexTail = run.catch(() => {});
+  return run;
 }
 
-function rememberPrewarm(id: string, labels: Record<string, string>): void {
-  writePrewarmIndex({ ...readPrewarmIndex(), [id]: labels });
+function rememberPrewarm(
+  id: string,
+  labels: Record<string, string>,
+): Promise<void> {
+  return updatePrewarmIndex((index) => {
+    index[id] = labels;
+    return true;
+  });
 }
 
-function forgetPrewarm(id: string): void {
-  const index = readPrewarmIndex();
-  if (!(id in index)) return;
-  delete index[id];
-  writePrewarmIndex(index);
+function forgetPrewarm(id: string): Promise<void> {
+  return updatePrewarmIndex((index) => {
+    if (!(id in index)) return false;
+    delete index[id];
+    return true;
+  });
 }
 
 export async function deleteUseComputerTemplateArtifact(
@@ -1366,7 +1387,7 @@ export const useComputerPrewarmAdapter: PrewarmAdapter = {
         `invalid use.computer prewarm key: ${key || "(missing)"}`,
       );
     const c = client();
-    const template = readRemoteRepoTemplate(PROVIDER, repoId);
+    const template = await readRemoteRepoTemplate(PROVIDER, repoId);
     const create = (snapshot?: string) =>
       createSandbox(c, {
         snapshot,
@@ -1379,10 +1400,10 @@ export const useComputerPrewarmAdapter: PrewarmAdapter = {
       restoredFromTemplate = Boolean(template);
     } catch (error) {
       if (!template || !snapshotUnusable(error)) throw error;
-      invalidateRemoteRepoTemplate(PROVIDER, repoId);
+      await invalidateRemoteRepoTemplate(PROVIDER, repoId);
       created = await create();
     }
-    rememberPrewarm(created.sandbox_id, labels);
+    await rememberPrewarm(created.sandbox_id, labels);
     const driver = useComputerDriver(c, created.sandbox_id);
     await driver.ensureStarted();
     await prepareGuest(driver);
@@ -1394,12 +1415,12 @@ export const useComputerPrewarmAdapter: PrewarmAdapter = {
     const driver = useComputerDriver(c, sandboxId);
     await driver.ensureStarted();
     await sealRemoteRepoTemplate(driver, PROVIDER, repo);
-    const version = remoteRepoTemplateName(PROVIDER, repo.id);
+    const version = await remoteRepoTemplateName(PROVIDER, repo.id);
     const exists = (await listSnapshotVersions(c)).includes(version);
     if (exists && options?.replace) await deleteSnapshot(c, version);
     if (!exists || options?.replace)
       await createSnapshot(c, sandboxId, version, `opensession-${repo.id}`);
-    writeRemoteRepoTemplate(PROVIDER, repo.id, version);
+    await writeRemoteRepoTemplate(PROVIDER, repo.id, version);
     console.log(
       `[sandbox:usecomputer] published post-setup repo template ${version}`,
     );
@@ -1407,23 +1428,26 @@ export const useComputerPrewarmAdapter: PrewarmAdapter = {
 
   async destroy(sandboxId) {
     await deleteSandbox(client(), sandboxId);
-    forgetPrewarm(sandboxId);
+    await forgetPrewarm(sandboxId);
   },
 
   async listPrewarmed() {
     const c = client();
-    const index = readPrewarmIndex();
+    const index = await readPrewarmIndex();
     const out: Array<{ id: string; key: string }> = [];
-    let changed = false;
+    const gone: string[] = [];
     for (const [id, labels] of Object.entries(index)) {
       if (!(await getSandbox(c, id))) {
-        delete index[id];
-        changed = true;
+        gone.push(id);
         continue;
       }
       out.push({ id, key: String(labels[PREWARM_KEY_LABEL] || "") });
     }
-    if (changed) writePrewarmIndex(index);
+    if (gone.length)
+      await updatePrewarmIndex((current) => {
+        for (const id of gone) delete current[id];
+        return true;
+      });
     return out;
   },
 };

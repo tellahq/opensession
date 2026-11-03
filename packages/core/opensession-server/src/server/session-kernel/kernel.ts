@@ -53,6 +53,7 @@ import {
   type DurableDeliveryState,
   type DurableRunState,
   type DurableTimer,
+  type OrphanedRunProof,
   type RunEventDecision,
   type RunEventDecisionResult,
 } from "./store";
@@ -920,8 +921,25 @@ export function sessionKernelDeadLetters(limit = 100, offset = 0) {
   );
 }
 
-export function releaseSessionQuarantine(sessionId: string): Promise<boolean> {
-  return sessionStoreAsync("releaseQuarantine", [sessionId]);
+/** Release a session's safety fence. Pass `orphanedRun` only with gateway
+ * proof that nothing owns its unsettled run; the actor then settles that run
+ * first, fenced by the same state and run id. */
+export async function releaseSessionQuarantine(
+  sessionId: string,
+  orphanedRun?: OrphanedRunProof,
+): Promise<boolean> {
+  const released = await sessionStoreAsync<boolean>(
+    "releaseQuarantine",
+    orphanedRun ? [sessionId, orphanedRun] : [sessionId],
+  );
+  // The actor settled the run inside the release, outside any decision this
+  // gateway made, so its projection still shows the unsettled state.
+  if (orphanedRun && state.actor)
+    state.actor.adoptRunStateSnapshot(
+      sessionId,
+      await sessionRunStateSnapshot(sessionId),
+    );
+  return released;
 }
 
 export function discardSessionDeadTimer(

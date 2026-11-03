@@ -49,7 +49,8 @@ export async function handleMediaRoutes(
     // Non-media extensions are servable ONLY from the composer-uploads dir
     // (as a download) — anything wider would make this a read-any-file-on-
     // the-box endpoint (tokens live in dotfiles and json configs).
-    const isUploadDownload = !mediaTypes[ext] && isWithinUploads(mediaPath);
+    const isUploadDownload =
+      !mediaTypes[ext] && (await isWithinUploads(mediaPath));
     if (
       !mediaPath.startsWith("/") ||
       mediaPath.includes("..") ||
