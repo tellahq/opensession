@@ -111,7 +111,11 @@ export interface SafeSandboxConnection extends Omit<
 > {
   hasCredentials: boolean;
   state:
-    "not_configured" | "checking" | "ready" | "needs_attention" | "disabled";
+    | "not_configured"
+    | "checking"
+    | "ready"
+    | "needs_attention"
+    | "disabled";
 }
 
 interface RawSandboxConfig extends Record<string, unknown> {

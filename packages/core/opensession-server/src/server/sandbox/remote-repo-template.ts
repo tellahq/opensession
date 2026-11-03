@@ -28,7 +28,11 @@ import { repoPreSetupScript } from "./config";
 import { MODAL_BASE_IMAGE_REVISION } from "./adapters/modal-image";
 
 export type RemoteTemplateProvider =
-  "daytona" | "box" | "tart" | "usecomputer" | "modal";
+  | "daytona"
+  | "box"
+  | "tart"
+  | "usecomputer"
+  | "modal";
 
 export interface RemoteRepoTemplate {
   provider: RemoteTemplateProvider;

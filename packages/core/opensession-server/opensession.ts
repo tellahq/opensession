@@ -369,7 +369,8 @@ function hotServe(
   options: Parameters<typeof Bun.serve<WSClientData>>[0],
 ): import("bun").Server<WSClientData> {
   const live = g.__opensessionServer as
-    import("bun").Server<WSClientData> | undefined;
+    | import("bun").Server<WSClientData>
+    | undefined;
   if (!live) return (g.__opensessionServer = Bun.serve<WSClientData>(options));
   try {
     // reload's declared type is narrower than the full serve options, but it
@@ -496,9 +497,12 @@ const server: import("bun").Server<WSClientData> = hotServe({
 
     // Refresh identity/policy before admission. Liveness must not wait for
     // configuration storage; nested getters otherwise share this snapshot.
-    if (!(
-      req.method === "GET" && ["/api/health", "/live", "/ready"].includes(path)
-    ))
+    if (
+      !(
+        req.method === "GET" &&
+        ["/api/health", "/live", "/ready"].includes(path)
+      )
+    )
       await getConfigAsync();
     const workloadIdentity = await handleWorkloadIdentityRequest(req);
     if (workloadIdentity) return workloadIdentity;

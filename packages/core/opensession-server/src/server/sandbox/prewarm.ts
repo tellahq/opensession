@@ -78,7 +78,11 @@ export const PREWARM_LABEL = "opensession.prewarm";
 export const PREWARM_KEY_LABEL = "opensession.prewarm.key";
 
 export type PrewarmEntryState =
-  "bootstrapping" | "ready" | "claimed" | "destroying" | "failed";
+  | "bootstrapping"
+  | "ready"
+  | "claimed"
+  | "destroying"
+  | "failed";
 
 export interface SandboxMachineSettings {
   cpu?: number;

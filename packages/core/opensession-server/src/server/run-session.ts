@@ -2107,7 +2107,8 @@ export async function maybeLaunchSandboxedRun(
   // Hoisted so the catch below can dispose a sandbox when launch fails after
   // ensure but before the event stream exists.
   let disposableResumeSandbox:
-    { provider: ReturnType<typeof getSandboxProvider>; id: string } | undefined;
+    | { provider: ReturnType<typeof getSandboxProvider>; id: string }
+    | undefined;
   const disposeResumeSandbox = async () => {
     const owned = disposableResumeSandbox;
     if (!owned) return;

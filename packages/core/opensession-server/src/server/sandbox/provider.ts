@@ -16,7 +16,12 @@
  *  and came back with GPU support (adapters/modal.ts). `tart` is a
  *  macOS VM on a paired Mac Runner (adapters/tart.ts). */
 export type SandboxProviderId =
-  "local" | "daytona" | "box" | "tart" | "usecomputer" | "modal";
+  | "local"
+  | "daytona"
+  | "box"
+  | "tart"
+  | "usecomputer"
+  | "modal";
 
 /** Selection authority for starting new work on a configured provider. */
 export type SandboxProviderUsability =
