@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   githubGitCredentialEnv,
   INLINE_GITHUB_READ_CREDENTIAL_HELPER,
+  readOnlyRepos,
   withReadRepoCredentials,
 } from "./github-git-credential";
 import {
@@ -51,6 +52,25 @@ describe("read-only repositories beside a run's own", () => {
     );
     expect(gitPassword(env, "https://github.com/acme/app.git")).toBe(
       "main-token",
+    );
+  });
+
+  test("a repo the run also attached keeps the write token", () => {
+    const env = withReadRepoCredentials(
+      {
+        ...githubGitCredentialEnv(
+          "main-token",
+          INLINE_GITHUB_CREDENTIAL_HELPER,
+        ),
+        GH_READ_TOKEN: "read-token",
+      },
+      readOnlyRepos(["acme/private-dep", "acme/evals"], ["Acme/Evals"]),
+    );
+    expect(gitPassword(env, "https://github.com/acme/evals.git")).toBe(
+      "main-token",
+    );
+    expect(gitPassword(env, "https://github.com/acme/private-dep.git")).toBe(
+      "read-token",
     );
   });
 

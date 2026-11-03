@@ -317,7 +317,9 @@ export function sessionRepoIds(session: UnifiedSession): string[] {
 /** `owner/name` of each attached repository hosted on GitHub. A run's App
  * token covers these beside its own repository, so a turn nobody typed (a
  * review handoff, a worker report) reaches them as an owner turn does. */
-export function attachedGithubRepos(session: UnifiedSession): string[] {
+export function attachedGithubRepos(
+  session: Pick<UnifiedSession, "attachedRepos">,
+): string[] {
   return githubNamesOf((session.attachedRepos || []).map((att) => att.repo));
 }
 

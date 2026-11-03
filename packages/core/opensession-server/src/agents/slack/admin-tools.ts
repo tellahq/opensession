@@ -295,6 +295,12 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             .describe(
               "Sibling GitHub repositories (owner/repo, same owner as the automation's repo) its runs may READ through a second read-only token, GH_READ_TOKEN. The App must be installed on each; otherwise the run gets no read token. GH_TOKEN stays scoped to the automation's own repo.",
             ),
+          attachRepos: z
+            .array(z.string())
+            .optional()
+            .describe(
+              "Other registered repos (ids as for repo) each code-mode run also works in: the run attaches them on its branch like attach_repo, gets an isolated worktree of each, and its GitHub token covers them, so it can open PRs there too. Host code mode only; [] clears it.",
+            ),
           owner: z
             .string()
             .optional()
@@ -322,6 +328,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           usageCredits?: boolean;
           prReviewer?: string;
           readRepos?: string[];
+          attachRepos?: string[];
           owner?: string;
           workspaceId?: string;
         }) => {
@@ -340,6 +347,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             usageCredits: args.usageCredits,
             prReviewer: args.prReviewer,
             readRepos: args.readRepos,
+            attachRepos: args.attachRepos,
             owner: args.owner,
             workspaceId: args.workspaceId,
           });
@@ -431,6 +439,12 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             .describe(
               "Sibling GitHub repositories (owner/repo, same owner as the automation's repo) its runs may READ through GH_READ_TOKEN; [] clears the list. The App must be installed on each one.",
             ),
+          attachRepos: z
+            .array(z.string())
+            .optional()
+            .describe(
+              "Other registered repos (ids as for repo) each code-mode run also works in: the run attaches them on its branch like attach_repo, gets an isolated worktree of each, and its GitHub token covers them, so it can open PRs there too. Host code mode only; [] clears it.",
+            ),
           owner: z
             .string()
             .optional()
@@ -480,6 +494,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           usageCredits?: boolean;
           prReviewer?: string;
           readRepos?: string[];
+          attachRepos?: string[];
           owner?: string;
           workspaceId?: string;
           webhookMaxConcurrent?: number;
