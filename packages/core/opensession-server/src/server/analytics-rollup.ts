@@ -2,19 +2,11 @@
  * Audit-day rollups for Analytics and Home: one pass over a day's audit log
  * (audit-YYYY-MM-DD.jsonl) into a compact per-day summary.
  *
- * Pure apart from cachedAuditRollup's file I/O, which only the analytics
- * read worker calls (audit-read-worker.ts): a day's file reaches
- * 100 MB, and reading or parsing it on the gateway thread blocked every
- * request behind it. Do not import server modules here; the worker loads
- * this file on its own.
+ * Pure. The cached file I/O lives in the analytics read worker
+ * (audit-read-worker.ts): a day's file reaches 100 MB, and reading or
+ * parsing it on the gateway thread blocked every request behind it. Do not
+ * import server modules here; the worker loads this file on its own.
  */
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
 
 // Bump when the rollup shape changes — stale disk caches recompute.
 export const ROLLUP_VERSION = 10;
@@ -344,39 +336,6 @@ export function rollupAuditContents(date: string, contents: string): DayRollup {
         rollup.cancelled++;
         break;
     }
-  }
-  return rollup;
-}
-
-/** The day's rollup, recomputed only when the audit file's size changed
- * since the cached one. Synchronous file I/O: worker only. */
-export function cachedAuditRollup(
-  date: string,
-  auditDir: string,
-  cacheDir: string,
-): DayRollup {
-  const src = `${auditDir}/audit-${date}.jsonl`;
-  const size = existsSync(src) ? statSync(src).size : 0;
-  const cachePath = `${cacheDir}/day-${date}.json`;
-  try {
-    if (existsSync(cachePath)) {
-      const cached = JSON.parse(readFileSync(cachePath, "utf-8"));
-      if (cached.v === ROLLUP_VERSION && cached.size === size)
-        return cached.rollup;
-    }
-  } catch {}
-  const rollup = rollupAuditContents(
-    date,
-    size ? readFileSync(src, "utf8") : "",
-  );
-  try {
-    mkdirSync(cacheDir, { recursive: true });
-    writeFileSync(
-      cachePath,
-      JSON.stringify({ v: ROLLUP_VERSION, size, rollup }),
-    );
-  } catch (e) {
-    console.error("[analytics] rollup cache write failed:", e);
   }
   return rollup;
 }

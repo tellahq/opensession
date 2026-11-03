@@ -51,7 +51,7 @@ import {
   type KernelActorClientRequest,
   type KernelActorClientResponse,
 } from "./actor-protocol";
-import { isReadReducer } from "./actor-routing";
+import { isReadReducer, isReceiptReplayableReducer } from "./actor-routing";
 import { READ_METHODS } from "./store-routing";
 
 export class SessionKernelActorError extends Error {
@@ -234,9 +234,10 @@ export class SessionKernelActorClient {
     large = false,
   ): Promise<TResult> {
     const deadline = Date.now() + ACTOR_RPC_TIMEOUT_MS;
-    const retryableRead =
+    const replaySafe =
       request.t === "reduce"
-        ? isReadReducer(request.command)
+        ? isReadReducer(request.command) ||
+          isReceiptReplayableReducer(request.command)
         : READ_METHODS.has(request.method);
     let delayMs = 10;
     while (true) {
@@ -248,13 +249,15 @@ export class SessionKernelActorClient {
           Math.max(1, deadline - Date.now()),
         );
       } catch (error) {
-        // Reads replay on any retryable failure. A mutation replays only when
-        // the actor never ran it: transport backpressure is a reason to wait,
-        // not to fail the caller (a run-host projection, a transcript append).
+        // Reads and receipt-backed transcript appends replay on any retryable
+        // failure. Another mutation replays only when the actor never ran it:
+        // transport backpressure is a reason to wait, not to fail the caller.
+        // An 8 s transport timeout under host load used to fail a run-host
+        // transcript projection outright and orphan the run.
         if (
           !(error instanceof SessionKernelActorError) ||
           !error.retryable ||
-          !(retryableRead || error.notExecuted) ||
+          !(replaySafe || error.notExecuted) ||
           Date.now() + delayMs >= deadline
         )
           throw error;

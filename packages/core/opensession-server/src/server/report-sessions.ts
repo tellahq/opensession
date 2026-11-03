@@ -60,7 +60,7 @@ export async function startReportSessions(input: {
   user?: string;
   createdByLogin?: string;
 }): Promise<StartedReportSession[]> {
-  const report = getReport(input.automationId, input.reportId);
+  const report = await getReport(input.automationId, input.reportId);
   if (!report) throw new ReportSessionsError("No such report", 404);
   const tasks = report.tasks || [];
   if (!tasks.length)

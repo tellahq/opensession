@@ -97,9 +97,9 @@ function harness(
 }
 
 describe("scoped session publication", () => {
-  test("routes Runner workspaces remotely and fails closed for unavailable providers", () => {
+  test("routes Runner workspaces remotely and fails closed for unavailable providers", async () => {
     expect(
-      publicationBundleProvider({
+      await publicationBundleProvider({
         ...descendant(),
         runner: {
           id: "runner-1",
@@ -108,12 +108,12 @@ describe("scoped session publication", () => {
         },
       }),
     ).toBe("runner");
-    expect(publicationBundleProvider(descendant())).toBe("unavailable");
+    expect(await publicationBundleProvider(descendant())).toBe("unavailable");
     const local = descendant();
     local.worktreeDir = mkdtempSync(join(tmpdir(), "publication-local-"));
-    expect(publicationBundleProvider(local)).toBe("local");
+    expect(await publicationBundleProvider(local)).toBe("local");
     expect(
-      publicationBundleProvider({
+      await publicationBundleProvider({
         ...local,
         sandbox: {
           provider: "daytona",

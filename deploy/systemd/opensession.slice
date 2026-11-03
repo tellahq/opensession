@@ -1,0 +1,13 @@
+[Unit]
+Description=Open Session system-scope services and run hosts
+
+[Slice]
+# CPU weights only compete among siblings. The control and workload slices
+# split this parent's share; this weight decides the parent's share against
+# the other top-level slices. Script runs, worktree setup, sccache, previews
+# and agent shell commands live under user.slice (the per-user systemd
+# manager), whose default weight 100 used to equal this whole slice, so a
+# burst of user-scope builds took as much CPU as the gateway and every run
+# host together. Idle capacity still flows to user.slice.
+CPUWeight=1000
+IOWeight=1000

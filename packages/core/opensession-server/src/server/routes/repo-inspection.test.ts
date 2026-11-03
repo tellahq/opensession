@@ -15,29 +15,31 @@ function git(...args: string[]): void {
 }
 
 describe("normalizeRepoOrigin", () => {
-  test("treats HTTPS and scp-style remotes as the same repository", () => {
-    expect(normalizeRepoOrigin("https://gitlab.com/acme/widget.git")).toBe(
-      "gitlab.com/acme/widget",
-    );
-    expect(normalizeRepoOrigin("git@gitlab.com:acme/widget.git")).toBe(
+  test("treats HTTPS and scp-style remotes as the same repository", async () => {
+    expect(
+      await normalizeRepoOrigin("https://gitlab.com/acme/widget.git"),
+    ).toBe("gitlab.com/acme/widget");
+    expect(await normalizeRepoOrigin("git@gitlab.com:acme/widget.git")).toBe(
       "gitlab.com/acme/widget",
     );
     expect(
-      normalizeRepoOrigin("https://token@gitlab.com/acme/widget.git"),
+      await normalizeRepoOrigin("https://token@gitlab.com/acme/widget.git"),
     ).toBe("gitlab.com/acme/widget");
   });
 
-  test("normalizes local paths, file URLs, and resolvable symlinks", () => {
+  test("normalizes local paths, file URLs, and resolvable symlinks", async () => {
     const dir = mkdtempSync(join(tmpdir(), "opensession-origin-identity-"));
     try {
       const remote = join(dir, "widget.git");
       const symlink = join(dir, "widget-link.git");
       mkdirSync(remote);
       symlinkSync(remote, symlink);
-      const expected = normalizeRepoOrigin(remote);
+      const expected = await normalizeRepoOrigin(remote);
 
-      expect(normalizeRepoOrigin(pathToFileURL(remote).href)).toBe(expected);
-      expect(normalizeRepoOrigin(symlink)).toBe(expected);
+      expect(await normalizeRepoOrigin(pathToFileURL(remote).href)).toBe(
+        expected,
+      );
+      expect(await normalizeRepoOrigin(symlink)).toBe(expected);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

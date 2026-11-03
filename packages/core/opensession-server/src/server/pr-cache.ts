@@ -10,7 +10,7 @@
  * Live state parks on globalThis (same keys as before the extraction) so hot
  * reloads keep it.
  */
-import { readFileSync } from "fs";
+import { readFile } from "fs/promises";
 import { statePath } from "./paths";
 import { githubLoginToPersonKey, githubLoginFor } from "./shared/user-mappings";
 import { configuredRepos, githubBotLogins } from "./config";
@@ -204,10 +204,23 @@ const lastFullRefresh = new Map<string, number>(); // repo id → epoch ms
  * boot (startDemo), long after this module was evaluated — without a reseed
  * the demo PR exists on disk but never in memory, so the PR panel and Home's
  * PR rows stay empty (2026-08-05).
+ *
+ * The read is asynchronous, so the boot load skips the snapshot when live
+ * data reached the cache while the file was being read; an explicit reseed
+ * always replaces it, as before.
  */
-export function loadPrCacheSnapshot(): void {
+export async function loadPrCacheSnapshot(
+  opts: { boot?: boolean } = {},
+): Promise<void> {
+  let text: string;
   try {
-    const parsed = JSON.parse(readFileSync(prCacheFile(), "utf8"));
+    text = await readFile(prCacheFile(), "utf8");
+  } catch {
+    return;
+  }
+  if (opts.boot && (prCache.ts > 0 || prCache.data.size > 0)) return;
+  try {
+    const parsed = JSON.parse(text);
     const raw: Record<string, Record<string, PrInfo>> = [
       2,
       3,
@@ -253,7 +266,7 @@ export function loadPrCacheSnapshot(): void {
     }
   } catch {}
 }
-loadPrCacheSnapshot();
+void loadPrCacheSnapshot({ boot: true });
 
 // The snapshot is only read at boot. Writes are async and coalesced so a
 // burst of webhook write-throughs never blocks the gateway on the disk.

@@ -44,7 +44,7 @@ export async function handleDeployRoutes(
   if (proxied) {
     const name = proxied[1]!;
     const rest = proxied[2] ?? "";
-    const deploy = getDeploy(name);
+    const deploy = await getDeploy(name);
     if (!deploy)
       return new Response(`No deploy named "${name}"`, { status: 404 });
     if (deploy.state !== "running") {
@@ -99,7 +99,7 @@ export async function handleDeployRoutes(
 
   // ── Management ───────────────────────────────────────────────────────────
   if (path === "/api/deploys" && req.method === "GET") {
-    return Response.json({ deploys: listDeploys() });
+    return Response.json({ deploys: await listDeploys() });
   }
 
   const m = path.match(
@@ -108,7 +108,7 @@ export async function handleDeployRoutes(
   if (!m) return undefined;
   const ref = decodeURIComponent(m[1]!);
   const action = m[2];
-  const deploy = getDeploy(ref);
+  const deploy = await getDeploy(ref);
   if (!deploy)
     return Response.json({ error: "no such deploy" }, { status: 404 });
 
@@ -133,7 +133,9 @@ export async function handleDeployRoutes(
       );
     }
     try {
-      return Response.json({ deploy: rollbackDeploy(deploy.id, version) });
+      return Response.json({
+        deploy: await rollbackDeploy(deploy.id, version),
+      });
     } catch (e: any) {
       return Response.json({ error: e?.message || String(e) }, { status: 400 });
     }

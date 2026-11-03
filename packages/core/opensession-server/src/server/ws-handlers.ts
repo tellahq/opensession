@@ -1399,7 +1399,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
             typeof msg.content === "string" ? msg.content : "",
             pastedTextsFromWire(msg.pastedTexts),
           );
-          const images = parseImageDataUrls(msg.images);
+          const images = await parseImageDataUrls(msg.images);
           const imageUrls = asDataUrlList(msg.images);
           const rawContextSessions = Array.isArray(msg.contextSessions)
             ? msg.contextSessions
@@ -1529,7 +1529,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
               break;
             }
             const attributed = user ? `[${user}] ${content}` : content;
-            const steerItem = durableQueueItem(
+            const steerItem = await durableQueueItem(
               sessionId,
               queueItem({
                 id: msg.requestId,
@@ -1647,7 +1647,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
             typeof msg.content === "string" ? msg.content : "",
             pastedTextsFromWire(msg.pastedTexts),
           );
-          const images = parseImageDataUrls(msg.images);
+          const images = await parseImageDataUrls(msg.images);
           const imageUrls = asDataUrlList(msg.images);
           const session = await findSessionAsync(sessionId);
           if (!session) {

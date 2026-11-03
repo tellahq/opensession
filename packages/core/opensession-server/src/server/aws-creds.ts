@@ -36,7 +36,9 @@
  */
 
 import { stateDir } from "./paths";
-import { mkdirSync, renameSync, writeFileSync } from "fs";
+import { randomUUID } from "crypto";
+import { mkdir, rename, rm, writeFile } from "fs/promises";
+import { dirname } from "path";
 import { userInfo } from "os";
 import { configuredIntegration } from "./config";
 
@@ -490,7 +492,7 @@ export async function ensureAgentAwsCredsFile(
 ): Promise<Record<string, string>> {
   const env = await getAgentAwsEnv(spawn, vend);
   if (!env.AWS_ACCESS_KEY_ID) return {};
-  writeCredsFile(env);
+  await writeAwsCredsFile(CREDS_FILE, env);
   startCredsFileRefresh();
   // A vended session carries its own region; the mint stamps the host's.
   const region = env.AWS_REGION || awsRegion();
@@ -501,7 +503,16 @@ export async function ensureAgentAwsCredsFile(
   };
 }
 
-function writeCredsFile(env: Record<string, string>) {
+/**
+ * Atomically replaces the shared credentials file. Runs and portals start
+ * concurrently (and several server processes share the state dir), so each
+ * write needs its own temp file: with one fixed `.tmp` name, the first rename
+ * moves it away and the next writer's rename fails with ENOENT.
+ */
+export async function writeAwsCredsFile(
+  file: string,
+  env: Record<string, string>,
+): Promise<void> {
   const body = [
     "[default]",
     `aws_access_key_id = ${env.AWS_ACCESS_KEY_ID}`,
@@ -509,10 +520,15 @@ function writeCredsFile(env: Record<string, string>) {
     `aws_session_token = ${env.AWS_SESSION_TOKEN}`,
     "",
   ].join("\n");
-  mkdirSync(CREDS_DIR, { recursive: true, mode: 0o700 });
-  const tmp = `${CREDS_FILE}.tmp`;
-  writeFileSync(tmp, body, { mode: 0o600 });
-  renameSync(tmp, CREDS_FILE);
+  await mkdir(dirname(file), { recursive: true, mode: 0o700 });
+  const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(tmp, body, { mode: 0o600 });
+    await rename(tmp, file);
+  } catch (err) {
+    await rm(tmp, { force: true });
+    throw err;
+  }
 }
 
 // Servers outlive any single mint, so the file must keep refreshing after the
@@ -524,8 +540,12 @@ function startCredsFileRefresh() {
   };
   if (g.__opensessionAwsCredsTicker) return;
   g.__opensessionAwsCredsTicker = setInterval(() => {
-    void getAgentAwsEnv().then((env) => {
-      if (env.AWS_ACCESS_KEY_ID) writeCredsFile(env);
-    });
+    void getAgentAwsEnv()
+      .then((env) =>
+        env.AWS_ACCESS_KEY_ID ? writeAwsCredsFile(CREDS_FILE, env) : undefined,
+      )
+      .catch((err) => {
+        console.warn("[aws-creds] credentials file refresh failed:", err);
+      });
   }, FILE_REFRESH_MS);
 }

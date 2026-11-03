@@ -1202,7 +1202,7 @@ async function restorePlannedOpening(sessionId: string): Promise<{
       ...(restored as ResolvedCreate),
       id: sessionId,
       openingPromptEntryId: dispatch.promptEntryId,
-      images: parseImageDataUrls(imageUrls),
+      images: await parseImageDataUrls(imageUrls),
       gitEnv: restoredGitEnv,
       materializeWorktree,
       needsWorktree: !!materializeWorktree,
@@ -2537,7 +2537,7 @@ export async function handleCreateSessionMessage(
   // name clashing with an existing `name/...` ref — or vice versa —
   // makes `git worktree add -b` fail, killing the session).
   let branch = recoveringSession?.branch || createPlan.branch || msg.branch;
-  const images = parseImageDataUrls(msg.images);
+  const images = await parseImageDataUrls(msg.images);
   // Session opened from a PR row (sidebar): `branch` is the PR's
   // EXISTING head branch — check it out instead of creating a new
   // branch off origin/default.
@@ -3096,7 +3096,7 @@ export async function handleCreateSessionMessage(
     // intake; only the actor can materialize their session-owned paths.
     const attachmentSources =
       createPlan.attachments ??
-      prepareCreationAttachmentSources(bksId, msg.files);
+      (await prepareCreationAttachmentSources(bksId, msg.files));
     if (!createPlan.attachments && attachmentSources.length)
       createPlan = await patchCreationSetupPlan(bksId, createIdentity, {
         attachments: attachmentSources,

@@ -53,9 +53,12 @@ function invalidSession(): Response {
   return Response.json({ error: "invalid session" }, { status: 400 });
 }
 
-function stageImages(sessionId: string, images: unknown): string[] | Response {
+async function stageImages(
+  sessionId: string,
+  images: unknown,
+): Promise<string[] | Response> {
   try {
-    return stageInlineImages(sessionId, images, "session-notes");
+    return await stageInlineImages(sessionId, images, "session-notes");
   } catch (error) {
     return Response.json(
       { error: error instanceof Error ? error.message : "invalid images" },
@@ -119,7 +122,7 @@ async function handleThreads(
     const anchor = body?.anchor === undefined ? null : cleanAnchor(body.anchor);
     if (body?.anchor !== undefined && !anchor)
       return Response.json({ error: "invalid anchor" }, { status: 400 });
-    const images = stageImages(sessionId, body?.images);
+    const images = await stageImages(sessionId, body?.images);
     if (images instanceof Response) return images;
     const result = await createThread({
       sessionId,
@@ -128,12 +131,12 @@ async function handleThreads(
       images,
       anchor,
       assignee: typeof body?.assignee === "string" ? body.assignee : null,
-    }).catch((error) => {
-      removeStagedImages(images);
+    }).catch(async (error) => {
+      await removeStagedImages(images);
       throw error;
     });
     if (!result.ok) {
-      removeStagedImages(images);
+      await removeStagedImages(images);
       return failure(result.reason);
     }
     return Response.json({ thread: result.thread });
@@ -201,18 +204,18 @@ async function handleThreads(
     const user = requestUser(ctx, body?.user);
     if (!user)
       return Response.json({ error: "user required" }, { status: 400 });
-    const images = stageImages(sessionId, body?.images);
+    const images = await stageImages(sessionId, body?.images);
     if (images instanceof Response) return images;
     const result = await addComment(sessionId, threadId, {
       user,
       text: typeof body?.text === "string" ? body.text : "",
       images,
-    }).catch((error) => {
-      removeStagedImages(images);
+    }).catch(async (error) => {
+      await removeStagedImages(images);
       throw error;
     });
     if (!result.ok) {
-      removeStagedImages(images);
+      await removeStagedImages(images);
       return failure(result.reason);
     }
     return Response.json({ thread: result.thread, comment: result.added });
@@ -262,7 +265,7 @@ async function handleLegacyNotes(
     const user = requestUser(ctx, body?.user);
     if (!user)
       return Response.json({ error: "user required" }, { status: 400 });
-    const images = stageImages(sessionId, body?.images);
+    const images = await stageImages(sessionId, body?.images);
     if (images instanceof Response) return images;
     const result = await createThread({
       sessionId,
@@ -271,7 +274,7 @@ async function handleLegacyNotes(
       images,
     });
     if (!result.ok) {
-      removeStagedImages(images);
+      await removeStagedImages(images);
       return failure(result.reason);
     }
     return Response.json({ note: asNote(result.thread) });

@@ -17,7 +17,7 @@
  * it's instance configuration, and a worktree is not ours to write into.
  */
 
-import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "fs";
+import { access, mkdir, rm, stat, writeFile } from "fs/promises";
 import { configuredRepos } from "./config";
 import {
   persistRawConfig,
@@ -35,10 +35,12 @@ export function repoIconPath(id: string): string {
 }
 
 /** A stored icon's mtime, for cache-busting the tile after a change. */
-export function repoIconRevision(iconPath: string | undefined): number | null {
-  if (!iconPath || !existsSync(iconPath)) return null;
+export async function repoIconRevision(
+  iconPath: string | undefined,
+): Promise<number | null> {
+  if (!iconPath) return null;
   try {
-    return Math.floor(statSync(iconPath).mtimeMs);
+    return Math.floor((await stat(iconPath)).mtimeMs);
   } catch {
     return null;
   }
@@ -135,7 +137,7 @@ function persistAppearance(
     persistRawConfig(config);
 
     const now = configuredRepos()[id];
-    const resolved = resolveRepoIcon(now?.icon, now?.repo);
+    const resolved = await resolveRepoIcon(now?.icon, now?.repo);
     const stored = now?.color as string | undefined;
     return {
       // Through currentTileColor for the same reason the repo list is: a
@@ -143,7 +145,7 @@ function persistAppearance(
       // replacement rather than as the old muted tone.
       color: stored ? currentTileColor(stored) : null,
       hasIcon: !!resolved,
-      iconRev: repoIconRevision(resolved),
+      iconRev: await repoIconRevision(resolved),
       iconSource: resolved
         ? ((now?.iconSource as "github" | "upload" | undefined) ?? null)
         : null,
@@ -180,10 +182,10 @@ export async function updateRepoAppearance(
 
   const iconPath = repoIconPath(id);
   if (fetched) {
-    mkdirSync(stateDir("repo-icons"), { recursive: true });
-    writeFileSync(iconPath, fetched);
-  } else if (patch.icon === null && existsSync(iconPath)) {
-    rmSync(iconPath, { force: true });
+    await mkdir(stateDir("repo-icons"), { recursive: true });
+    await writeFile(iconPath, fetched);
+  } else if (patch.icon === null) {
+    await rm(iconPath, { force: true });
   }
 
   return persistAppearance(id, {
@@ -228,17 +230,20 @@ export async function uploadRepoIcon(
     throw new RepoAppearanceError("An uploaded icon has to be a PNG");
   }
   const iconPath = repoIconPath(id);
-  mkdirSync(stateDir("repo-icons"), { recursive: true });
-  writeFileSync(iconPath, trimIconMargin(bytes) ?? bytes);
+  await mkdir(stateDir("repo-icons"), { recursive: true });
+  await writeFile(iconPath, trimIconMargin(bytes) ?? bytes);
   return persistAppearance(id, { icon: iconPath, iconSource: "upload" });
 }
 
 /** A repo's icon as an absolute path, or undefined when it has none. */
-export function resolveRepoIcon(
+export async function resolveRepoIcon(
   icon: string | undefined,
   checkout: string | undefined,
-): string | undefined {
+): Promise<string | undefined> {
   if (!icon) return undefined;
   const path = icon.startsWith("/") ? icon : `${checkout}/${icon}`;
-  return existsSync(path) ? path : undefined;
+  return access(path).then(
+    () => path,
+    () => undefined,
+  );
 }
