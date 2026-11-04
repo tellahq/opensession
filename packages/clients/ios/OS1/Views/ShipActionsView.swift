@@ -13,10 +13,11 @@ struct ShipActionsBand: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            FlowLayout(spacing: 8) {
-                ForEach(info.buttons) { button in
-                    shipButton(button)
-                }
+            // One row when it fits, else stacked: a wrapping layout proposes
+            // no width inside a List row and squeezes the buttons.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) { buttons }
+                VStack(alignment: .leading, spacing: 8) { buttons }
             }
             Text(isRunning ? Self.busyHint : info.destination)
                 .font(.caption)
@@ -26,17 +27,25 @@ struct ShipActionsBand: View {
         .padding(.vertical, 4)
     }
 
+    private var buttons: some View {
+        ForEach(info.buttons) { button in
+            shipButton(button).fixedSize()
+        }
+    }
+
     static let busyHint = "The agent is working. You can ship once the current run finishes."
 
     @ViewBuilder
     private func shipButton(_ button: ShipButton) -> some View {
-        let label = Label {
-            Text(title(button))
-        } icon: {
+        let label = HStack(spacing: 6) {
             if button.primary {
                 Image(systemName: info.isDirect ? "paperplane" : "arrow.trianglehead.pull")
             }
+            Text(title(button))
+                .lineLimit(1)
+                .fixedSize()
         }
+        .font(.subheadline.weight(button.primary ? .semibold : .regular))
         if button.primary {
             Button { run(button) } label: { label }
                 .buttonStyle(.borderedProminent)
