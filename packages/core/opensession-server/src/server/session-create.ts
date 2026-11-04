@@ -24,6 +24,7 @@ import { canJoinCreateWorkspace } from "../shared/session-create-workspace";
  * session-control-wiring.ts.
  */
 
+import { FinalReplyText } from "./final-reply";
 import { agentAwsCredsForUntrustedRuns } from "./aws-creds";
 import {
   mirrorSlackSessionReply,
@@ -1629,6 +1630,8 @@ export async function openCreatedSession(
   // The opening turn's reply and tool count, for the announce-then-stop
   // guard (finish: "auto-continue-guard").
   let assistantText = "";
+  // Only the answer after the last tool call goes to Slack and Plain.
+  const finalReply = new FinalReplyText();
   let toolUseCount = 0;
   // Actual worktree HEAD when it drifted from the recorded branch (the
   // agent switched/renamed branches during the opening turn).
@@ -2164,10 +2167,12 @@ export async function openCreatedSession(
         }
         if (event.type === "text_chunk") {
           assistantText += event.text;
+          finalReply.text(event.text);
           io.emit({ type: "stream_text", text: event.text });
         }
         if (event.type === "tool_use") {
           toolUseCount++;
+          finalReply.toolUse();
           plainDiscussionToolUse(spec.plainDiscussionId, event);
           const entry = {
             id: event.toolUseId || crypto.randomUUID(),
@@ -2273,11 +2278,11 @@ export async function openCreatedSession(
         !spec.remoteSandbox &&
         !spec.runnerTarget &&
         !spec.automationDescendantPolicy,
-      assistantText,
+      assistantText: finalReply.value,
       error: runFailure,
     });
     mirrorTurnToPlainDiscussion(spec.plainDiscussionId, {
-      assistantText,
+      assistantText: finalReply.value,
       endedWithError: !!runFailure,
       runFailure,
     });
@@ -2360,7 +2365,7 @@ export async function openCreatedSession(
       // handler cannot report this one: settle Plain from here or its
       // composer stays locked on IN_PROGRESS.
       mirrorTurnToPlainDiscussion(spec.plainDiscussionId, {
-        assistantText,
+        assistantText: finalReply.value,
         endedWithError: true,
         runFailure: e.message || String(e),
       });

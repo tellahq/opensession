@@ -348,7 +348,7 @@ describe("turn finalizer", () => {
     forgetPlainDiscussionRun("run-2");
   });
 
-  it("reads a recovered run's complete reply from the transcript", () => {
+  it("reads a recovered run's final reply from the transcript", () => {
     const entry = (
       type: "user" | "assistant" | "tool_use" | "tool_result" | "system",
       content: string,
@@ -366,7 +366,18 @@ describe("turn finalizer", () => {
         entry("assistant", "The refund went through."),
         entry("system", "turn ended"),
       ]),
-    ).toBe("Checking Stripe.\n\nThe refund went through.");
+    ).toBe("The refund went through.");
+    expect(
+      lastAssistantReply([
+        entry("user", "refund status?"),
+        entry("assistant", "Checking Stripe."),
+        entry("tool_use", "stripe"),
+        entry("assistant", "Refunded."),
+        entry("assistant", "Anything else?"),
+        entry("tool_use", "memory"),
+        entry("tool_result", "saved"),
+      ]),
+    ).toBe("Refunded.\n\nAnything else?");
     expect(lastAssistantReply([entry("user", "hi")])).toBe("");
     expect(lastAssistantReply([])).toBe("");
   });

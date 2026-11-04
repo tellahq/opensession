@@ -8,6 +8,7 @@
  * cache in session-cache.ts.
  */
 
+import { FinalReplyText } from "./final-reply";
 import { registerMemoryProbe } from "./memory-probes";
 import { localFoldersContextNote } from "./local-folders";
 import { portalAutostarting, portalsContextNote } from "./portal-autostart";
@@ -3541,6 +3542,8 @@ async function runSessionPromptInner(
   // the session posted to (slackReplyTo — e.g. a reply under an automation's
   // summary message lands here via deliverToSession).
   let assistantText = "";
+  // Only the answer after the last tool call goes to Slack and Plain.
+  const finalReply = new FinalReplyText();
   let firstEventMs: number | undefined;
   let firstTokenMs: number | undefined;
   // Tool calls seen this run — used to replenish the continuation budget only
@@ -3688,6 +3691,7 @@ async function runSessionPromptInner(
       case "text_chunk":
         firstTokenMs ??= Date.now() - turnMetricStartedAt;
         assistantText += event.text;
+        finalReply.text(event.text);
         broadcastToSession(sessionId, {
           type: "stream_text",
           sessionId,
@@ -3753,6 +3757,7 @@ async function runSessionPromptInner(
       }
       case "tool_use":
         toolUseCount++;
+        finalReply.toolUse();
         // Every sixth step of a watched turn, a side agent looks for the one
         // thing the person might miss, if they turned it on. Interactive
         // sessions only: an automation has nobody to tell.
@@ -4070,14 +4075,14 @@ async function runSessionPromptInner(
       !session.plainDiscussionId &&
       !session.sandbox?.provider &&
       !session.runner,
-    assistantText,
+    assistantText: finalReply.value,
     error: endedWithError ? runFailure || "Run failed" : null,
   });
 
   // A session answering a Plain discussion posts the turn there and reports
   // itself idle, whoever started the turn.
   settlePlainDiscussionTurn(session.plainDiscussionId, plainRunKey, {
-    assistantText,
+    assistantText: finalReply.value,
     endedWithError,
     runFailure,
   });
