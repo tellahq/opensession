@@ -86,6 +86,18 @@ struct ThreadComment: Decodable, Identifiable, Equatable, Hashable, Sendable {
     var date: Date { Date(timeIntervalSince1970: ts / 1_000) }
 }
 
+/// One teammate's read receipt on a thread: who, and when they last saw it.
+struct ThreadSeen: Decodable, Equatable, Hashable, Sendable {
+    let user: String
+    /// Milliseconds since 1970.
+    let ts: Double
+
+    init(user: String, ts: Double) {
+        self.user = user
+        self.ts = ts
+    }
+}
+
 struct CommentThread: Decodable, Identifiable, Equatable, Hashable, Sendable {
     enum Status: String, Sendable { case open, resolved }
 
@@ -106,6 +118,8 @@ struct CommentThread: Decodable, Identifiable, Equatable, Hashable, Sendable {
     /// Built from a legacy `session_note` by a client talking to a server that
     /// predates threads. Such a thread takes no replies or state changes.
     let legacy: Bool
+    /// Read receipts, one per person, newest sighting each.
+    let seenBy: [ThreadSeen]
 
     init(
         id: String,
@@ -120,7 +134,8 @@ struct CommentThread: Decodable, Identifiable, Equatable, Hashable, Sendable {
         assignee: String? = nil,
         agentPendingSince: Double? = nil,
         comments: [ThreadComment],
-        legacy: Bool = false
+        legacy: Bool = false,
+        seenBy: [ThreadSeen] = []
     ) {
         self.id = id
         self.sessionId = sessionId
@@ -135,6 +150,7 @@ struct CommentThread: Decodable, Identifiable, Equatable, Hashable, Sendable {
         self.agentPendingSince = agentPendingSince
         self.comments = comments
         self.legacy = legacy
+        self.seenBy = seenBy
     }
 
     /// A team note from the old notes API, as the session-level thread the
@@ -160,7 +176,20 @@ struct CommentThread: Decodable, Identifiable, Equatable, Hashable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id, sessionId, anchor, status, createdBy, ts, updatedAt
-        case resolvedBy, resolvedAt, assignee, agentPendingSince, comments
+        case resolvedBy, resolvedAt, assignee, agentPendingSince, comments, seenBy
+    }
+
+    private struct LossySeen: Decodable {
+        let seen: ThreadSeen?
+        init(from decoder: Decoder) throws {
+            guard let c = try? decoder.container(keyedBy: Keys.self),
+                  let user = (try? c.decodeIfPresent(String.self, forKey: .user)) ?? nil,
+                  !user.trimmingCharacters(in: .whitespaces).isEmpty,
+                  let ts = (try? c.decodeIfPresent(Double.self, forKey: .ts)) ?? nil
+            else { seen = nil; return }
+            seen = ThreadSeen(user: user, ts: ts)
+        }
+        private enum Keys: String, CodingKey { case user, ts }
     }
 
     private struct LossyComment: Decodable {
@@ -195,6 +224,8 @@ struct CommentThread: Decodable, Identifiable, Equatable, Hashable, Sendable {
         resolvedAt = number(.resolvedAt)
         assignee = string(.assignee)
         agentPendingSince = number(.agentPendingSince)
+        seenBy = (((try? c.decodeIfPresent([LossySeen].self, forKey: .seenBy)) ?? nil) ?? [])
+            .compactMap(\.seen)
         legacy = false
     }
 
@@ -240,6 +271,104 @@ struct CommentThread: Decodable, Identifiable, Equatable, Hashable, Sendable {
             "Please take care of this. When you're done, reply in the thread (opensession-comments reply_to_comment_thread, threadId `\(id)`) with what you did.",
         ]
         return parts.joined(separator: "\n")
+    }
+}
+
+/// A teammate tagged in a thread's newest comment, and when they saw it
+/// (web `TagReceipt`).
+struct TagReceipt: Equatable, Sendable {
+    let name: String
+    /// Milliseconds since 1970 they saw the newest comment; nil until they have.
+    var seenAt: Double?
+}
+
+/// Read receipts on a team note. Mirrors `taggedReceipts`, `needsSeenMark`
+/// and `seenByLabel` in src/frontend/lib/comment-threads.ts, with the web's
+/// `parseMentions` for which `@word` names somebody.
+enum NoteReceipts {
+    /// A roster entry: the first name the wire uses, and the full name.
+    struct Person: Equatable, Sendable {
+        let name: String
+        let fullName: String
+    }
+
+    @MainActor static var roster: [Person] {
+        let directory = TeamDirectory.shared
+        return directory.names.map { Person(name: $0, fullName: directory.fullName(for: $0)) }
+    }
+
+    /// The web's TOKEN_RE, JavaScript's ASCII `\w` included. A URL is matched
+    /// first so an `@` inside one is not a mention.
+    private static let regex = try? NSRegularExpression(
+        pattern: #"(@[A-Za-z][A-Za-z0-9_.-]*)|(https?://[^\s<>"')\]]+)"#
+    )
+
+    /// Roster names the text @-mentions, in order, repeats kept.
+    static func mentions(_ text: String, people: [Person]) -> [String] {
+        guard let regex, !text.isEmpty else { return [] }
+        var out: [String] = []
+        for match in regex.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+            guard let range = Range(match.range(at: 1), in: text) else { continue }
+            var typed = String(text[range].dropFirst())
+            while let last = typed.last, ".,;:!?".contains(last) { typed.removeLast() }
+            let lower = typed.lowercased()
+            if let person = people.first(where: { $0.name.lowercased() == lower || $0.fullName.lowercased() == lower }) {
+                out.append(person.name)
+            }
+        }
+        return out
+    }
+
+    private static func sameName(_ a: String, _ b: String) -> Bool {
+        a.trimmingCharacters(in: .whitespaces).lowercased() == b.trimmingCharacters(in: .whitespaces).lowercased()
+    }
+
+    /// Milliseconds since 1970 of the newest thing to read: a comment or an edit.
+    static func lastActivityAt(_ thread: CommentThread) -> Double {
+        thread.comments.reduce(0) { max($0, $1.editedAt ?? $1.ts, $1.ts) }
+    }
+
+    /// Receipts for the people the newest comment tags, in tag order, never
+    /// its author. Nobody tagged means no receipt.
+    static func tagged(_ thread: CommentThread, people: [Person]) -> [TagReceipt] {
+        guard let latest = thread.comments.last, !latest.agent else { return [] }
+        let since = lastActivityAt(thread)
+        var out: [TagReceipt] = []
+        for name in mentions(latest.text, people: people) {
+            if sameName(name, latest.user) || out.contains(where: { sameName($0.name, name) }) { continue }
+            let person = people.first { sameName($0.name, name) }
+            let seen = thread.seenBy.first { seen in
+                seen.ts >= since
+                    && (sameName(seen.user, name) || (person.map { sameName(seen.user, $0.fullName) } ?? false))
+            }
+            out.append(TagReceipt(name: name, seenAt: seen?.ts))
+        }
+        return out
+    }
+
+    /// Whether `me` still owes the thread a receipt: the newest comment tags
+    /// me and I have not seen it since.
+    static func needsSeenMark(_ thread: CommentThread, me: String, people: [Person]) -> Bool {
+        guard !me.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
+        return tagged(thread, people: people).contains { sameName($0.name, me) && $0.seenAt == nil }
+    }
+
+    /// "Ada", "Ada and Bob", "Ada, Bob and 2 others".
+    static func label(_ names: [String]) -> String {
+        if names.count <= 2 { return names.joined(separator: " and ") }
+        if names.count == 3 { return "\(names[0]), \(names[1]) and \(names[2])" }
+        return "\(names[0]), \(names[1]) and \(names.count - 2) others"
+    }
+
+    /// "Seen by Ada · Not seen by Bob", or nil when nobody is tagged.
+    static func line(_ receipts: [TagReceipt]) -> String? {
+        let seen = receipts.filter { $0.seenAt != nil }.map(\.name)
+        let waiting = receipts.filter { $0.seenAt == nil }.map(\.name)
+        let parts = [
+            seen.isEmpty ? nil : "Seen by \(label(seen))",
+            waiting.isEmpty ? nil : "Not seen by \(label(waiting))",
+        ].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " \u{00b7} ")
     }
 }
 

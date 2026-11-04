@@ -41,6 +41,10 @@ struct TimelineThreadCard: View {
     var context: CommentsContext?
 
     @State private var expanded = false
+    @State private var onScreen = false
+    /// The newest comment a receipt went out for, so one is sent per comment
+    /// even while its echo is in flight.
+    @State private var seenSentFor: String?
     /// Replies shown in the timeline before the rest fold behind a button.
     private static let inlineReplies = 3
 
@@ -78,6 +82,7 @@ struct TimelineThreadCard: View {
                     CommentItemView(thread: thread, comment: comment, sessionId: sessionId, context: context)
                 }
                 if thread.agentIsAnswering() { AgentAnsweringRow() }
+                NoteSeenRow(receipts: NoteReceipts.tagged(thread, people: NoteReceipts.roster))
                 if let context, !thread.legacy {
                     HStack(spacing: 14) {
                         Button {
@@ -111,6 +116,46 @@ struct TimelineThreadCard: View {
             in: RoundedRectangle(cornerRadius: 16, style: .continuous)
         )
         .accessibilityElement(children: .contain)
+        .onScrollVisibilityChange(threshold: 0.5) { onScreen = $0 }
+        .task(id: seenOwedKey) { await markSeenAfterDwell() }
+    }
+
+    /// How long a note must stay on screen before it counts as seen.
+    private static let seenDwell: Duration = .seconds(1)
+
+    private var latestKey: String {
+        "\(live.comments.last?.id ?? ""):\(live.comments.count)"
+    }
+
+    /// Set while my receipt is owed and the note is on screen; nil otherwise,
+    /// which cancels a pending dwell.
+    private var seenOwedKey: String? {
+        let thread = live
+        guard context != nil, !thread.legacy, onScreen,
+              !(thread.isResolved && !expanded),
+              seenSentFor != latestKey,
+              NoteReceipts.needsSeenMark(thread, me: ServerConfig.shared.userName, people: NoteReceipts.roster)
+        else { return nil }
+        return "\(thread.id)|\(latestKey)"
+    }
+
+    private func markSeenAfterDwell() async {
+        guard seenOwedKey != nil, let context else { return }
+        do { try await Task.sleep(for: Self.seenDwell) } catch { return }
+        // Read at the end of the dwell rather than observed: a scene-phase
+        // environment read here would invalidate every note row.
+        guard AppLifecycle.isActive else { return }
+        let key = latestKey
+        let thread = live
+        // Clearing the key cancels this task, so the request runs on its own.
+        seenSentFor = key
+        Task {
+            do {
+                try await context.viewModel.markThreadSeen(thread)
+            } catch {
+                if seenSentFor == key { seenSentFor = nil }
+            }
+        }
     }
 
     private func folded(_ thread: CommentThread) -> some View {
@@ -134,6 +179,45 @@ struct TimelineThreadCard: View {
                 .buttonStyle(.borderless)
                 .frame(minHeight: 32)
         }
+    }
+}
+
+// MARK: - Read receipt
+
+/// Under a note: which of the people its newest comment tags have seen it.
+/// Faded faces have not yet. Nothing when nobody is tagged (web `NoteSeen`).
+struct NoteSeenRow: View {
+    let receipts: [TagReceipt]
+
+    var body: some View {
+        if let line = NoteReceipts.line(receipts) {
+            HStack(spacing: 6) {
+                HStack(spacing: -4) {
+                    ForEach(receipts.prefix(3), id: \.name) { receipt in
+                        UserAvatar(person: receipt.name, size: 14)
+                            .opacity(receipt.seenAt == nil ? 0.4 : 1)
+                    }
+                }
+                Text(line)
+                    .font(.caption2)
+                    .foregroundStyle(OS1VisualStyle.textFaint)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .padding(.leading, 25)
+            .help(detail)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(line.replacingOccurrences(of: " \u{00b7} ", with: ". "))
+        }
+    }
+
+    private var detail: String {
+        receipts.map { receipt in
+            "\(receipt.name) \u{00b7} " + (receipt.seenAt.map {
+                commentTime(Date(timeIntervalSince1970: $0 / 1_000))
+            } ?? "not seen")
+        }
+        .joined(separator: "\n")
     }
 }
 
