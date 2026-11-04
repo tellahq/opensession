@@ -1702,10 +1702,25 @@ enum OS1API {
         /// Changes when that art does — hung off the icon URL so a replaced
         /// icon isn't served from the cache the old one is sitting in.
         let iconRev: Double?
+        /// How a new workspace here reaches the default branch unless the
+        /// composer overrides it: "pull-request" or "direct". Absent on older
+        /// servers, which only ever open pull requests.
+        let publicationMode: String?
+        /// "codestorage" for a Code Storage repo, which has no pull requests
+        /// and never ships directly. Absent for an ordinary git host.
+        let host: String?
+
+        /// The ship mode a new session gets when the composer sends none.
+        var defaultShipMode: String {
+            publicationMode == "direct" ? "direct" : "pull-request"
+        }
+
+        var isCodeStorage: Bool { host == "codestorage" }
 
         private enum CodingKeys: String, CodingKey {
             case id, ghRepo, label, defaultBranch, sharedCheckout, color
             case colorChosen, autoColor, iconSource, hasIcon, iconRev
+            case publicationMode, host
             case isDefault = "default"
         }
     }
@@ -2137,6 +2152,7 @@ enum OS1API {
         sandbox: String? = nil,
         forkFrom: ForkFrom? = nil,
         branch: String? = nil,
+        shipMode: String? = nil,
         requestId: String? = nil
     ) async throws -> String {
         struct CreateResponse: Decodable { let id: String }
@@ -2154,6 +2170,7 @@ enum OS1API {
             sandbox: sandbox,
             forkFrom: forkFrom,
             branch: branch,
+            shipMode: shipMode,
             user: ServerConfig.shared.userName,
             requestId: requestId
         )
@@ -2186,6 +2203,7 @@ enum OS1API {
         sandbox: String? = nil,
         forkFrom: ForkFrom? = nil,
         branch: String? = nil,
+        shipMode: String? = nil,
         user: String,
         requestId: String? = nil
     ) -> [String: Any] {
@@ -2211,6 +2229,11 @@ enum OS1API {
         // A named branch for a code session (a suggested task can carry
         // one); omitted, the server suggests one from the prompt.
         if mode == "code", let branch, !branch.isEmpty { body["branch"] = branch }
+        // Only an explicit override from the composer; omitted, the
+        // repository's own publicationMode decides how the session ships.
+        if mode == "code", shipMode == "pull-request" || shipMode == "direct" {
+            body["shipMode"] = shipMode
+        }
         if let model, !model.isEmpty { body["model"] = model }
         if let effort, !effort.isEmpty { body["effort"] = effort }
         // `fastMode` for servers that predate `speed`; a newer one reads
