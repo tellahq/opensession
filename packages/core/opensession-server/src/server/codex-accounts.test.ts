@@ -7,6 +7,7 @@ import {
   addCodexAccount,
   clearCodexWedge,
   hrwScore,
+  loadCodexAccounts,
   listCodexAccountsPublic,
   markCodexExhausted,
   markCodexWedged,
@@ -66,8 +67,8 @@ describe("pickOpenaiAccount pins", () => {
   const chatgptHome = join(dir, "chatgpt-home");
   let previousStore: string;
 
-  beforeAll(() => {
-    previousStore = __setCodexAccountsPathForTest(store);
+  beforeAll(async () => {
+    previousStore = await __setCodexAccountsPathForTest(store);
     mkdirSync(chatgptHome, { recursive: true });
     const claims = Buffer.from(
       JSON.stringify({ email: "person@example.com" }),
@@ -114,10 +115,11 @@ describe("pickOpenaiAccount pins", () => {
         ],
       }),
     );
+    await loadCodexAccounts();
   });
 
-  afterAll(() => {
-    __setCodexAccountsPathForTest(previousStore);
+  afterAll(async () => {
+    await __setCodexAccountsPathForTest(previousStore);
     rmSync(dir, { recursive: true, force: true });
   });
 
@@ -226,8 +228,8 @@ describe("pickOpenaiAccount pins", () => {
     expect("error" in picked).toBe(true);
   });
 
-  test("renames an account and clears the name back to its email", () => {
-    expect(setCodexAccountLabel("chatgpt", "  Work  ")).toMatchObject({
+  test("renames an account and clears the name back to its email", async () => {
+    expect(await setCodexAccountLabel("chatgpt", "  Work  ")).toMatchObject({
       label: "Work",
       email: "person@example.com",
       owner: "Grant",
@@ -236,11 +238,11 @@ describe("pickOpenaiAccount pins", () => {
       listCodexAccountsPublic().find((account) => account.id === "chatgpt")
         ?.label,
     ).toBe("Work");
-    expect(setCodexAccountLabel("chatgpt", " ")?.label).toBeUndefined();
-    expect(setCodexAccountLabel("missing", "Work")).toBeNull();
+    expect((await setCodexAccountLabel("chatgpt", " "))?.label).toBeUndefined();
+    expect(await setCodexAccountLabel("missing", "Work")).toBeNull();
   });
 
-  test("registers a ChatGPT login by email without a supplied name", () => {
+  test("registers a ChatGPT login by email without a supplied name", async () => {
     const home = join(dir, "new-chatgpt-home");
     mkdirSync(home, { recursive: true });
     const claims = Buffer.from(
@@ -250,7 +252,7 @@ describe("pickOpenaiAccount pins", () => {
       join(home, "auth.json"),
       JSON.stringify({ tokens: { id_token: `header.${claims}.signature` } }),
     );
-    expect(addCodexAccount("", "home", home)).toMatchObject({
+    expect(await addCodexAccount("", "home", home)).toMatchObject({
       name: "new@example.com",
       email: "new@example.com",
     });
@@ -290,8 +292,8 @@ describe("pickOpenaiAccount ultrafast routing", () => {
     };
   };
 
-  beforeAll(() => {
-    previousStore = __setCodexAccountsPathForTest(store);
+  beforeAll(async () => {
+    previousStore = await __setCodexAccountsPathForTest(store);
     writeFileSync(
       store,
       JSON.stringify({
@@ -306,10 +308,11 @@ describe("pickOpenaiAccount ultrafast routing", () => {
         ],
       }),
     );
+    await loadCodexAccounts();
   });
 
-  afterAll(() => {
-    __setCodexAccountsPathForTest(previousStore);
+  afterAll(async () => {
+    await __setCodexAccountsPathForTest(previousStore);
     rmSync(dir, { recursive: true, force: true });
   });
 

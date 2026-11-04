@@ -20,12 +20,12 @@
  * SSH credentials, or a connected human.
  */
 import { createSign } from "node:crypto";
-import { existsSync, rmSync } from "node:fs";
+import { readFile, rm, stat } from "node:fs/promises";
 import { githubAppIdentity, githubUserAuthSettings } from "./github-auth";
 import { stateDir } from "./paths";
 import { configuredIntegration } from "./config";
 import { githubGitCredentialEnv } from "./github-git-credential";
-import { writeFileAtomic } from "./shared/atomic-write";
+import { writeFileAtomicAsync } from "./shared/atomic-write";
 import {
   GITHUB_APP_CHECKS_PERMISSIONS as CHECKS_PERMISSIONS,
   GITHUB_APP_CODE_PERMISSIONS as CODE_PERMISSIONS,
@@ -45,8 +45,73 @@ function keyPath(): string {
 }
 
 /** Test seam: isolate key mutations from the operator's real key file. */
-export function __setGithubAppKeyPathForTest(path: string | undefined): void {
+export async function __setGithubAppKeyPathForTest(
+  path: string | undefined,
+): Promise<void> {
   keyPathOverride = path;
+  await loadGithubAppKeyState();
+}
+
+// Whether the private key file exists, per key path. Synchronous readers
+// (githubAppConfigured sits on hot request and run paths) get the last
+// answer without touching the disk; a read older than KEY_STATE_REFRESH_MS
+// re-checks in the background, so a key installed or removed by another
+// process is noticed within a second. This process's own writes update it
+// at once.
+const KEY_STATE_REFRESH_MS = 1_000;
+const keyState = new Map<
+  string,
+  { present: boolean; checkedAt: number; pending?: Promise<boolean> }
+>();
+
+function refreshKeyState(path: string): Promise<boolean> {
+  const current = keyState.get(path);
+  if (current?.pending) return current.pending;
+  const pending = stat(path).then(
+    () => true,
+    () => false,
+  );
+  const entry: {
+    present: boolean;
+    checkedAt: number;
+    pending?: Promise<boolean>;
+  } = {
+    present: current?.present ?? false,
+    checkedAt: current?.checkedAt ?? -Infinity,
+    pending,
+  };
+  keyState.set(path, entry);
+  return pending.then((present) => {
+    if (keyState.get(path) === entry) {
+      entry.present = present;
+      entry.checkedAt = performance.now();
+      entry.pending = undefined;
+    }
+    return keyState.get(path)!.present;
+  });
+}
+
+function setKeyState(path: string, present: boolean): void {
+  keyState.set(path, { present, checkedAt: performance.now() });
+}
+
+/** Re-check whether the App key exists, fresh from disk. Runs at import; a
+ * caller that just changed the key file outside this module awaits it. */
+export function loadGithubAppKeyState(): Promise<boolean> {
+  return refreshKeyState(keyPath());
+}
+
+/** The key's text, or null when no key file exists. */
+async function readKey(path: string): Promise<string | null> {
+  try {
+    const key = await readFile(path, "utf8");
+    setKeyState(path, true);
+    return key;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") throw error;
+    setKeyState(path, false);
+    return null;
+  }
 }
 
 type AppTokenCache = {
@@ -124,8 +189,9 @@ export interface GithubAppInstallationAccount {
 /** App-JWT headers, or null when the App identity or key is missing. */
 async function appAuthHeaders(): Promise<Record<string, string> | null> {
   const { clientId } = githubUserAuthSettings();
-  if (!clientId || !existsSync(keyPath())) return null;
-  const key = await Bun.file(keyPath()).text();
+  if (!clientId) return null;
+  const key = await readKey(keyPath());
+  if (key === null) return null;
   return {
     Authorization: `Bearer ${appJwt(clientId, key)}`,
     Accept: "application/vnd.github+json",
@@ -142,7 +208,7 @@ export async function listGithubAppInstallations(
   opts: { fresh?: boolean } = {},
 ): Promise<GithubAppInstallationAccount[] | null> {
   const { clientId } = githubUserAuthSettings();
-  if (!clientId || !existsSync(keyPath())) return null;
+  if (!clientId || !(await refreshKeyState(keyPath()))) return null;
   const cached = g.__ghAppInstallationsCache;
   if (
     !opts.fresh &&
@@ -467,7 +533,11 @@ export function githubAppCredentialHealth():
 
 /** Whether a private key is stored for the GitHub App. */
 export function githubAppPrivateKeyConfigured(): boolean {
-  return existsSync(keyPath());
+  const path = keyPath();
+  const state = keyState.get(path);
+  if (!state || performance.now() - state.checkedAt >= KEY_STATE_REFRESH_MS)
+    void refreshKeyState(path);
+  return state?.present ?? false;
 }
 
 /** Whether a GitHub App can mint installation tokens (client id + private key). */
@@ -491,10 +561,10 @@ export async function updateGithubAppWebhook(
     throw new Error("GitHub webhook secret is missing or invalid");
   }
   const { clientId } = githubUserAuthSettings();
-  if (!clientId || !existsSync(keyPath())) {
+  const key = clientId ? await readKey(keyPath()) : null;
+  if (!clientId || key === null) {
     throw new Error("GitHub App credentials are not configured");
   }
-  const key = await Bun.file(keyPath()).text();
   const response = await fetch("https://api.github.com/app/hook/config", {
     method: "PATCH",
     headers: {
@@ -522,22 +592,31 @@ export async function updateGithubAppWebhook(
  *  never mint. The App-manifest flow returns this PEM at creation. Drops any
  *  cached installation token, which belonged to a previous key. Honors the
  *  OPENSESSION_GITHUB_APP_KEY override so an ops-managed key is never clobbered. */
-export function writeGithubAppKey(pem: string): void {
+export async function writeGithubAppKey(pem: string): Promise<void> {
   if (process.env.OPENSESSION_GITHUB_APP_KEY)
     throw new Error(
       "OPENSESSION_GITHUB_APP_KEY is set; not overwriting an ops-managed key",
     );
-  writeFileAtomic(keyPath(), pem.endsWith("\n") ? pem : `${pem}\n`, 0o600);
+  const path = keyPath();
+  await writeFileAtomicAsync(
+    path,
+    pem.endsWith("\n") ? pem : `${pem}\n`,
+    0o600,
+  );
+  setKeyState(path, true);
   clearAppCaches();
 }
 
 /** Remove only a UI-managed key. An ops-managed path is external authority and
  * must never be mutated by the Settings removal flow. */
-export function removeGithubAppKey(): void {
+export async function removeGithubAppKey(): Promise<void> {
   // The App config may be UI-managed while its key path is ops-managed. In
   // that mixed mode, preserve the external file but still invalidate tokens.
-  if (!process.env.OPENSESSION_GITHUB_APP_KEY)
-    rmSync(keyPath(), { force: true });
+  if (!process.env.OPENSESSION_GITHUB_APP_KEY) {
+    const path = keyPath();
+    await rm(path, { force: true });
+    setKeyState(path, false);
+  }
   clearAppCaches();
 }
 
@@ -561,14 +640,15 @@ export async function commitGithubAppKeyMutation<T>(
     );
 
   const path = keyPath();
-  const previous = existsSync(path) ? await Bun.file(path).text() : null;
-  if (key === null) removeGithubAppKey();
-  else writeGithubAppKey(key);
+  const previous = await readKey(path);
+  if (key === null) await removeGithubAppKey();
+  else await writeGithubAppKey(key);
   try {
     return await commitConfig();
   } catch (error) {
-    if (previous === null) rmSync(path, { force: true });
-    else writeFileAtomic(path, previous, 0o600);
+    if (previous === null) await rm(path, { force: true });
+    else await writeFileAtomicAsync(path, previous, 0o600);
+    setKeyState(path, previous !== null);
     clearAppCaches();
     throw error;
   }
@@ -825,3 +905,5 @@ export async function githubBotGitIdentity(): Promise<{
   if (id) g.__ghBotIdentity = { login, identity };
   return identity;
 }
+
+await loadGithubAppKeyState();

@@ -27,7 +27,9 @@ export interface PapercutsToolContext {
   /** Who is driving: a user, or "<name> (automation)". */
   by?: string;
   /** Resolved lazily per call — the session's repo/model can change mid-run. */
-  defaults: () => { repo?: string; model?: string };
+  defaults: () =>
+    | { repo?: string; model?: string }
+    | Promise<{ repo?: string; model?: string }>;
 }
 
 function text(s: string) {
@@ -54,7 +56,7 @@ export function createPapercutsMcpServer(ctx: PapercutsToolContext) {
       },
       async (args: { message: string; repo?: string }) => {
         try {
-          const d = ctx.defaults();
+          const d = await ctx.defaults();
           const entry = await logPapercut({
             message: args.message,
             repo: args.repo || d.repo,

@@ -17,7 +17,7 @@
  */
 
 import { $ } from "bun";
-import { existsSync } from "fs";
+import { stat } from "fs/promises";
 import { resolve as resolvePath } from "path";
 import { codeStorageConfig, configuredRepos } from "../config";
 import { authedRemoteUrl, remoteUrl } from "./auth";
@@ -163,7 +163,8 @@ export async function adoptCsCheckouts(): Promise<void> {
   const cfg = codeStorageConfig();
   if (!cfg) return;
   for (const repo of Object.values(configuredRepos())) {
-    if (repo.host !== "codestorage" || !existsSync(repo.repo)) continue;
+    if (repo.host !== "codestorage") continue;
+    if (!(await stat(repo.repo).catch(() => null))) continue;
     try {
       const origin = (
         await $`git -C ${repo.repo} remote get-url origin`

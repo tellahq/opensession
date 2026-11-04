@@ -1,6 +1,7 @@
-import { existsSync, readFileSync, readdirSync } from "fs";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "path";
 import { parseTranscriptAsync } from "./jsonl-parser";
+import { pathExists } from "./run-fs";
 import type { TranscriptEntry } from "./types";
 
 // When a session spawns sub-agents (Task/Agent tool), the Claude Agent SDK writes
@@ -39,38 +40,43 @@ function subagentsDir(transcriptPath: string): string | null {
   return transcriptPath.replace(/\.jsonl$/, "") + "/subagents";
 }
 
-function readMeta(dir: string, agentId: string): SubagentMeta {
+async function readMeta(dir: string, agentId: string): Promise<SubagentMeta> {
   const metaPath = join(dir, `agent-${agentId}.meta.json`);
-  if (existsSync(metaPath)) {
-    try {
-      const m = JSON.parse(readFileSync(metaPath, "utf-8"));
-      return {
-        agentId,
-        agentType: m.agentType,
-        model: typeof m.model === "string" ? m.model : undefined,
-        description: m.description,
-        toolUseId: m.toolUseId,
-        spawnDepth: m.spawnDepth,
-      };
-    } catch {
-      // fall through to the bare id
-    }
+  try {
+    const m = JSON.parse(await readFile(metaPath, "utf-8"));
+    return {
+      agentId,
+      agentType: m.agentType,
+      model: typeof m.model === "string" ? m.model : undefined,
+      description: m.description,
+      toolUseId: m.toolUseId,
+      spawnDepth: m.spawnDepth,
+    };
+  } catch {
+    // Missing or unreadable: fall back to the bare id.
+    return { agentId };
   }
-  return { agentId };
 }
 
 /** List every sub-agent spawned under a session, newest meta first is not
  *  guaranteed — callers sort as needed. */
-export function listSubagents(transcriptPath: string): SubagentMeta[] {
+export async function listSubagents(
+  transcriptPath: string,
+): Promise<SubagentMeta[]> {
   const dir = subagentsDir(transcriptPath);
-  if (!dir || !existsSync(dir)) return [];
-  const out: SubagentMeta[] = [];
-  for (const name of readdirSync(dir)) {
-    const m = name.match(/^agent-(.+)\.jsonl$/);
-    if (!m) continue;
-    out.push(readMeta(dir, m[1]));
+  if (!dir) return [];
+  let names: string[];
+  try {
+    names = await readdir(dir);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") return [];
+    throw error;
   }
-  return out;
+  const ids = names.flatMap(
+    (name) => name.match(/^agent-(.+)\.jsonl$/)?.slice(1, 2) ?? [],
+  );
+  return Promise.all(ids.map((id) => readMeta(dir, id)));
 }
 
 /** Load a single sub-agent's conversation (meta + parsed transcript), or null if
@@ -83,20 +89,20 @@ export async function getSubagentTranscript(
   const dir = subagentsDir(transcriptPath);
   if (!dir) return null;
   const file = join(dir, `agent-${agentId}.jsonl`);
-  if (!existsSync(file)) return null;
+  if (!(await pathExists(file))) return null;
   return {
-    meta: readMeta(dir, agentId),
+    meta: await readMeta(dir, agentId),
     entries: await parseTranscriptAsync(file),
   };
 }
 
 /** Absolute path to a sub-agent's transcript file (for live file-watching). */
-export function subagentTranscriptPath(
+export async function subagentTranscriptPath(
   transcriptPath: string,
   agentId: string,
-): string | null {
+): Promise<string | null> {
   const dir = subagentsDir(transcriptPath);
   if (!dir) return null;
   const file = join(dir, `agent-${agentId}.jsonl`);
-  return existsSync(file) ? file : null;
+  return (await pathExists(file)) ? file : null;
 }

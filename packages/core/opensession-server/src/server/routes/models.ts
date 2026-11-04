@@ -136,7 +136,7 @@ export async function handleModelsRoutes(
       );
     }
     return Response.json({
-      autoFallback: setModelFallbackAuto(body.auto),
+      autoFallback: await setModelFallbackAuto(body.auto),
     });
   }
 
@@ -189,15 +189,15 @@ export async function handleModelsRoutes(
     }
     try {
       if ("model" in body) {
-        setDefaultModel(body.model ?? null);
+        await setDefaultModel(body.model ?? null);
         // The Settings control is the default for new sessions too. Keep the
         // historic interactive override only when an API caller explicitly
         // supplies one, so the two defaults cannot silently diverge.
         if (!("interactiveModel" in body))
-          setInteractiveDefaultModel(body.model ?? null);
+          await setInteractiveDefaultModel(body.model ?? null);
       }
       if ("interactiveModel" in body)
-        setInteractiveDefaultModel(body.interactiveModel ?? null);
+        await setInteractiveDefaultModel(body.interactiveModel ?? null);
       return Response.json({
         default: getDefaultModel(),
         interactiveDefault: interactiveDefaultModel(),

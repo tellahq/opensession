@@ -22,11 +22,10 @@ import { workerEntry } from "../../runner-host/exe";
 import { chooseSessionLane, type LaneLoad } from "./lane-placement";
 import { createLaneBudget, LANE_BUDGET_MAX_MS } from "./lane-budget";
 import type { SessionKernelStoreHostMetrics } from "./store-host";
-import { runtimeGeneration } from "../runtime-generation";
+import { currentRuntimeGeneration } from "../runtime-generation";
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 3849;
-const RUNTIME_GENERATION = runtimeGeneration();
 // Base budget for one actor turn. Under host IO pressure it stretches up to
 // LANE_BUDGET_MAX_MS (lane-budget.ts), which stays below the gateway RPC
 // client's 15 s deadline with room for quarantine/restart bookkeeping after an
@@ -1153,7 +1152,7 @@ export async function startSessionKernelService(
             ready,
             actorVersion: SESSION_KERNEL_ACTOR_VERSION,
             transportVersion: SESSION_KERNEL_TRANSPORT_VERSION,
-            generation: RUNTIME_GENERATION,
+            generation: await currentRuntimeGeneration(),
             component: "session-kernel",
             workers: {
               ready: sessionSlots.filter((slot) => slot.ready).length,

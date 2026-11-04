@@ -451,7 +451,7 @@ async function attachSandbox(
       }
       if (outcome.state === "skipped") {
         // A shared checkout holds every session's edits; count only this one's.
-        const ownPaths = isSharedCheckoutDir(target.dir)
+        const ownPaths = (await isSharedCheckoutDir(target.dir))
           ? await sessionTouchedPaths(session, target.dir)
           : undefined;
         const unpublished = unpublishedWorkSummary(

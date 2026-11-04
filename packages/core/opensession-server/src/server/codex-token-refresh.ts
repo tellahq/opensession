@@ -27,8 +27,9 @@
  *    a dead refresh token doesn't get hammered (account-health alerts on it).
  */
 
-import { chmodSync, existsSync, readFileSync } from "fs";
-import { writeFileAtomic } from "./shared/atomic-write";
+import { chmod, readFile } from "fs/promises";
+import { writeFileAtomicAsync } from "./shared/atomic-write";
+import { publishJsonFile } from "./shared/json-file-cache";
 import { listCodexAccounts } from "./codex-accounts";
 import { withCodexAuthLock } from "./codex-auth-lock";
 
@@ -56,11 +57,11 @@ function jwtExpMs(jwt: string): number | null {
   }
 }
 
-function readTokens(
+async function readTokens(
   path: string,
-): { access?: string; refresh?: string; raw: any } | null {
+): Promise<{ access?: string; refresh?: string; raw: any } | null> {
   try {
-    const raw = JSON.parse(readFileSync(path, "utf-8"));
+    const raw = JSON.parse(await readFile(path, "utf-8"));
     return {
       access: raw?.tokens?.access_token,
       refresh: raw?.tokens?.refresh_token,
@@ -83,7 +84,7 @@ async function doRefresh(path: string, name: string): Promise<void> {
   // sweep in another process) may have refreshed — and rotated the family —
   // since the caller looked. Spending a stale refresh token here would
   // invalidate the CLI's fresh one.
-  const current = readTokens(path);
+  const current = await readTokens(path);
   if (!current?.refresh) return;
   if (!needsRefresh(current.access)) return; // already refreshed elsewhere
   let res: Response;
@@ -122,7 +123,7 @@ async function doRefresh(path: string, name: string): Promise<void> {
     return;
   }
   // Merge onto yet another fresh read so only the token fields move.
-  const latest = readTokens(path);
+  const latest = await readTokens(path);
   const raw = latest?.raw ?? current.raw;
   raw.tokens = {
     ...raw.tokens,
@@ -131,8 +132,10 @@ async function doRefresh(path: string, name: string): Promise<void> {
     ...(body.refresh_token ? { refresh_token: body.refresh_token } : {}),
   };
   raw.last_refresh = new Date().toISOString();
-  writeFileAtomic(path, JSON.stringify(raw, null, 2) + "\n");
-  chmodSync(path, 0o600);
+  await writeFileAtomicAsync(path, JSON.stringify(raw, null, 2) + "\n");
+  await chmod(path, 0o600);
+  // The account list reads each login's identity from a cached auth.json.
+  publishJsonFile(path, raw);
   refreshBlockedUntil.delete(path);
   console.log(`[codex-refresh] ${name}: ChatGPT tokens refreshed`);
 }
@@ -148,9 +151,9 @@ export async function refreshIdleCodexTokens(): Promise<void> {
   for (const a of listCodexAccounts()) {
     if (a.kind !== "home") continue;
     const path = `${a.value}/auth.json`;
-    if (!existsSync(path)) continue;
     if (Date.now() < (refreshBlockedUntil.get(path) ?? 0)) continue;
-    const tokens = readTokens(path);
+    // A missing auth.json reads as null and is skipped.
+    const tokens = await readTokens(path);
     if (!tokens?.refresh || !needsRefresh(tokens.access)) continue;
     const existing = inFlight.get(path);
     if (existing) {

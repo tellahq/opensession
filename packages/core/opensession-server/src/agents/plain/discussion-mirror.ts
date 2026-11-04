@@ -192,9 +192,11 @@ export function settlePlainDiscussionTurn(
   return true;
 }
 
-/** The reply a run left in the transcript: the assistant text after the last
- *  user turn. A gateway restart loses the in-memory accumulation, and the
- *  chunks seen after the restart alone would post a truncated answer. */
+/** The reply a run left in the transcript: the assistant text after the
+ *  turn's last tool call (the same answer FinalReplyText keeps live), or the
+ *  last stretch of text when the turn ended on a tool call. A gateway restart
+ *  loses the in-memory accumulation, and the chunks seen after the restart
+ *  alone would post a truncated answer. */
 export function lastAssistantReply(
   entries: readonly Pick<TranscriptEntry, "type" | "content" | "isReasoning">[],
 ): string {
@@ -202,6 +204,10 @@ export function lastAssistantReply(
   for (let i = entries.length - 1; i >= 0; i--) {
     const entry = entries[i];
     if (entry.type === "user") break;
+    if (entry.type === "tool_use" || entry.type === "tool_result") {
+      if (parts.length) break;
+      continue;
+    }
     if (entry.type !== "assistant" || entry.isReasoning) continue;
     const text = entry.content.trim();
     if (text) parts.unshift(text);

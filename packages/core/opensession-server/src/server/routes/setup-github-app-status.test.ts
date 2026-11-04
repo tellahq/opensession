@@ -1,4 +1,6 @@
 import { getConfigAsync } from "../config";
+import { loadGithubAppKeyState } from "../github-app";
+import { loadStatePaths } from "../paths";
 import { afterEach, describe, expect, test } from "bun:test";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -59,8 +61,10 @@ describe("GitHub integration status", () => {
     );
     writeFileSync(envFile, "ENABLE_GITHUB_AGENT=true\n");
     process.env.HOME = dir;
+    await loadStatePaths();
     process.env.OPENSESSION_CONFIG = config;
     await getConfigAsync();
+    await loadGithubAppKeyState();
     process.env.OPENSESSION_ENV_FILE = envFile;
     process.env.ENABLE_GITHUB_AGENT = "true";
 

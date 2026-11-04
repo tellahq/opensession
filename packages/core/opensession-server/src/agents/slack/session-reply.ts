@@ -13,6 +13,7 @@ import type { SlackTurnProgress } from "./turn-progress";
 export const SLACK_SESSION_NOTE =
   "This turn came from Slack. Your final reply is delivered to that thread automatically; do not post it yourself. " +
   "Use the same session tools and repository workflow as in Open Session. " +
+  "Only the text after your last tool call is posted, so write the complete answer there, after any memory or bookkeeping tool calls. " +
   "Keep the reply concise. For sandbox artifacts, publish with opensession-assets and include the returned links in your reply.";
 
 export async function mirrorSlackSessionReply(

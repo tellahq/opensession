@@ -19,8 +19,8 @@
  * lose the PKCE verifier between "open this URL" and the code paste.
  */
 
-import { chmodSync, mkdirSync } from "fs";
-import { writeFileAtomic } from "./shared/atomic-write";
+import { chmod, mkdir } from "fs/promises";
+import { writeFileAtomicAsync } from "./shared/atomic-write";
 import { stateDir } from "./paths";
 import {
   getAccountById,
@@ -170,10 +170,10 @@ export async function completeClaudeLogin(
     };
   }
 
-  mkdirSync(stateDir("claude-oauth"), { recursive: true, mode: 0o700 });
+  await mkdir(stateDir("claude-oauth"), { recursive: true, mode: 0o700 });
   const path = claudeOauthCredentialsPath(login.accountId);
   const now = Date.now();
-  writeFileAtomic(
+  await writeFileAtomicAsync(
     path,
     JSON.stringify(
       {
@@ -192,10 +192,14 @@ export async function completeClaudeLogin(
       2,
     ) + "\n",
   );
-  chmodSync(path, 0o600);
+  await chmod(path, 0o600);
   pending.delete(id);
 
-  const updated = setAccountUsageCredentials(login.accountId, path, email);
+  const updated = await setAccountUsageCredentials(
+    login.accountId,
+    path,
+    email,
+  );
   if (!updated)
     return { error: "The account this sign-in was for no longer exists." };
   console.log(

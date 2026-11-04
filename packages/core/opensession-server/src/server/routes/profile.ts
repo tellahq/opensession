@@ -149,7 +149,7 @@ export async function handleProfileRoutes(
       );
 
     return withConfigMutationLock(async () => {
-      const config = rawConfig();
+      const config = await rawConfig();
       const identity =
         config.identity &&
         typeof config.identity === "object" &&
@@ -235,7 +235,7 @@ export async function handleProfileRoutes(
 
       team[idx] = merged;
       identity.team = team;
-      persistRawConfig(config);
+      await persistRawConfig(config);
 
       // Per-user state (pins, read marks, lanes, snoozes, hides, settlements,
       // tab colors, drafts, UI prefs) is filed under the short name, so carry it across
@@ -301,7 +301,7 @@ export async function handleProfileRoutes(
   if (path === "/api/profile/image" && req.method === "DELETE") {
     const currentName =
       memberFor(profileName, verifiedLogin)?.name ?? profileName;
-    clearProfileImage(verifiedLogin || profileName);
+    await clearProfileImage(verifiedLogin || profileName);
     audit({ kind: "profile_update", user: currentName, fields: ["image"] });
     return Response.json({ ok: true, image: "" });
   }

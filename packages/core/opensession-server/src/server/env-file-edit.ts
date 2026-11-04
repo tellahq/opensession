@@ -16,11 +16,21 @@
  * operator can still see what was there).
  */
 
-import { chmodSync, existsSync, readFileSync, rmSync } from "fs";
+import { chmod, readFile, rm } from "fs/promises";
 import { dirname } from "path";
 import { statePath } from "./paths";
 import { backupFile } from "./config-mutation";
-import { writeFileAtomic } from "./shared/atomic-write";
+import { writeFileAtomicAsync } from "./shared/atomic-write";
+
+/** The file's text, or null when it does not exist. */
+async function readIfExists(path: string): Promise<string | null> {
+  try {
+    return await readFile(path, "utf-8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
 
 /** Same resolution the CLI uses (scripts/lib/paths.ts): env override first,
  *  then the dual-read home path. Read per call so tests can repoint it. */
@@ -148,42 +158,43 @@ export function applyEnvEdits(
 /** A prepared env-file edit can be rolled back if a second file in the same
  * config mutation fails to commit. Call only while holding the shared lock. */
 export interface PreparedEnvFileEdit {
-  commit(): void;
-  rollback(): void;
+  commit(): Promise<void>;
+  rollback(): Promise<void>;
 }
 
-export function prepareEnvFileEdits(
+export async function prepareEnvFileEdits(
   edits: Record<string, string>,
-): PreparedEnvFileEdit {
+): Promise<PreparedEnvFileEdit> {
   const path = envFilePath();
-  const existed = existsSync(path);
-  const before = existed ? readFileSync(path, "utf-8") : "";
+  const current = await readIfExists(path);
+  const existed = current !== null;
+  const before = current ?? "";
   const after = applyEnvEdits(before, edits);
   let committed = false;
   return {
-    commit() {
+    async commit() {
       if (committed) return;
       try {
-        backupFile(path);
-        writeFileAtomic(path, after);
+        await backupFile(path);
+        await writeFileAtomicAsync(path, after);
       } catch (error) {
         if (isPermissionError(error)) throw new EnvFileWriteError(path, error);
         throw error;
       }
       committed = true;
       try {
-        chmodSync(path, 0o600);
+        await chmod(path, 0o600);
       } catch {}
     },
-    rollback() {
+    async rollback() {
       if (!committed) return;
       if (existed) {
-        writeFileAtomic(path, before);
+        await writeFileAtomicAsync(path, before);
         try {
-          chmodSync(path, 0o600);
+          await chmod(path, 0o600);
         } catch {}
       } else {
-        rmSync(path, { force: true });
+        await rm(path, { force: true });
       }
       committed = false;
     },
@@ -196,20 +207,22 @@ export function prepareEnvFileEdits(
  * under withConfigMutationLock (config-mutation.ts) like every other setup
  * mutation.
  */
-export function applyEnvFileEdits(edits: Record<string, string>): void {
-  prepareEnvFileEdits(edits).commit();
+export async function applyEnvFileEdits(
+  edits: Record<string, string>,
+): Promise<void> {
+  await (await prepareEnvFileEdits(edits)).commit();
 }
 
 /** Parse the env file's active definitions. With `includeUnset`, only a
  * web-setup tombstone is represented as an empty string, so example comments
  * remain inert while pending clears override boot-time process.env values. */
-export function readEnvFileValues(options?: {
+export async function readEnvFileValues(options?: {
   includeUnset?: boolean;
-}): Record<string, string> {
-  const path = envFilePath();
-  if (!existsSync(path)) return {};
+}): Promise<Record<string, string>> {
+  const text = await readIfExists(envFilePath());
+  if (text === null) return {};
   const values: Record<string, string> = {};
-  for (const line of readFileSync(path, "utf-8").split("\n")) {
+  for (const line of text.split("\n")) {
     const m = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/);
     if (m) {
       let value = m[2].trim();

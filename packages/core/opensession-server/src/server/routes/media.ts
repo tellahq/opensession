@@ -28,7 +28,7 @@ export async function handleMediaRoutes(
     // paths under its old name, and the URLs built from them outlive the
     // rename in PR descriptions and old transcripts — so resolve those onto
     // the active store before anything else looks at the path.
-    const mediaPath = resolveLegacySessionsPath(
+    const mediaPath = await resolveLegacySessionsPath(
       url.searchParams.get("path") || "",
     );
     const mediaTypes: Record<string, string> = {

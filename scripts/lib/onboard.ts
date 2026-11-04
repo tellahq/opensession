@@ -426,7 +426,7 @@ export async function onboard(opts: OnboardOptions = {}): Promise<number> {
   // no code path created. Only seeded when absent — an operator who turned the
   // engine off deliberately keeps that choice through a re-run.
   if (!existsSync(engineConfigPath())) {
-    setPiEnabled(true);
+    await setPiEnabled(true);
     wrote(engineConfigPath(), "(engine enabled)");
   }
 

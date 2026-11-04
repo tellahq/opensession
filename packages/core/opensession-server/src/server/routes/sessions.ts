@@ -1823,7 +1823,7 @@ export async function handleSessionsRoutes(
         return Response.json({ error: "Session not found" }, { status: 404 });
       return Response.json({
         subagents: session.transcriptPath
-          ? listSubagents(session.transcriptPath)
+          ? await listSubagents(session.transcriptPath)
           : [],
         sessionRunning: session.isRunning,
       });
@@ -2055,7 +2055,7 @@ export async function handleSessionsRoutes(
       if (cleanWorktree && session.worktreeDir && session.branch) {
         await removeWorktree(
           session.branch,
-          repoForPath(session.worktreeDir).id,
+          (await repoForPath(session.worktreeDir)).id,
         );
         // A session can span repos, and each one it spans has a checkout
         // of its own. Cleaning up only the first would leave the rest on

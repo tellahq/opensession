@@ -15,7 +15,7 @@
  */
 
 import { homedir } from "os";
-import { realpathSync } from "fs";
+import { realpath } from "fs/promises";
 import { basename, dirname, join, resolve } from "path";
 
 export const HOME = homedir();
@@ -24,11 +24,11 @@ export const HOME = homedir();
  *  checkout (two up from this file). In the compiled binary, `import.meta.dir`
  *  is a virtual path inside the executable, so use the directory the binary
  *  actually lives in (the release dir), following the shim symlink. */
-export const REPO_ROOT = (() => {
+export const REPO_ROOT = await (async () => {
   const compiled = !/^bun(\b|-|\.|$)/i.test(basename(process.execPath));
   if (compiled) {
     try {
-      return dirname(realpathSync(process.execPath));
+      return dirname(await realpath(process.execPath));
     } catch {
       return dirname(process.execPath);
     }
@@ -36,12 +36,8 @@ export const REPO_ROOT = (() => {
   return resolve(import.meta.dir, "..", "..");
 })();
 
-/** Everything a normal install owns, overridable for tests and side-by-side installs. */
-export const OPENSESSION_HOME =
-  process.env.OPENSESSION_HOME || join(HOME, ".opensession");
-
-export const BIN_DIR = join(OPENSESSION_HOME, "bin");
-export const SHIM_PATH = join(BIN_DIR, "opensession");
+import { BIN_DIR, OPENSESSION_HOME, SHIM_PATH } from "./shim-path";
+export { BIN_DIR, OPENSESSION_HOME, SHIM_PATH };
 export const CONFIG_PATH =
   process.env.OPENSESSION_CONFIG || join(OPENSESSION_HOME, "config.json");
 export const ENV_PATH =

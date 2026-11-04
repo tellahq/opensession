@@ -264,28 +264,30 @@ describe("the ledger", () => {
     expect(packagesCheckoutDir(root)).toBe(`${root}/.opensession-plugins`);
   });
 
-  test("an absent ledger reads as empty rather than throwing", () => {
-    expect(listInstalledPackages(root)).toEqual([]);
-    expect(readInstalledPackage("video-library", root)).toBeUndefined();
+  test("an absent ledger reads as empty rather than throwing", async () => {
+    expect(await listInstalledPackages(root)).toEqual([]);
+    expect(await readInstalledPackage("video-library", root)).toBeUndefined();
   });
 
-  test("recording twice replaces rather than duplicates", () => {
-    recordInstalledPackage(entry(), root);
-    recordInstalledPackage(
+  test("recording twice replaces rather than duplicates", async () => {
+    await recordInstalledPackage(entry(), root);
+    await recordInstalledPackage(
       entry({ version: "1.1.0", updatedAt: "2026-08-17T00:00:00.000Z" }),
       root,
     );
-    const all = listInstalledPackages(root);
+    const all = await listInstalledPackages(root);
     expect(all).toHaveLength(1);
     expect(all[0]!.version).toBe("1.1.0");
     expect(all[0]!.installedAt).toBe("2026-08-16T00:00:00.000Z");
   });
 
-  test("forget is idempotent and leaves other packages alone", () => {
-    recordInstalledPackage(entry(), root);
-    recordInstalledPackage(entry({ name: "other" }), root);
-    expect(forgetInstalledPackage("video-library", root)).toBe(true);
-    expect(forgetInstalledPackage("video-library", root)).toBe(false);
-    expect(listInstalledPackages(root).map((p) => p.name)).toEqual(["other"]);
+  test("forget is idempotent and leaves other packages alone", async () => {
+    await recordInstalledPackage(entry(), root);
+    await recordInstalledPackage(entry({ name: "other" }), root);
+    expect(await forgetInstalledPackage("video-library", root)).toBe(true);
+    expect(await forgetInstalledPackage("video-library", root)).toBe(false);
+    expect((await listInstalledPackages(root)).map((p) => p.name)).toEqual([
+      "other",
+    ]);
   });
 });

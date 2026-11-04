@@ -199,7 +199,7 @@ export async function openRunnerTerminal(input: {
   const connection = connections.get(input.runnerId);
   if (!connection || connection.protocolVersion !== PROTOCOL_VERSION)
     throw new Error(`Runner ${input.runnerId} is not connected`);
-  const runner = getRunner(input.runnerId);
+  const runner = await getRunner(input.runnerId);
   if (
     !runner ||
     !runnerAllowed(runner, {
@@ -348,7 +348,7 @@ export async function execRunnerWorkspace(
   const connection = connections.get(runnerId);
   if (!connection || connection.protocolVersion !== PROTOCOL_VERSION)
     throw new Error(`Runner ${runnerId} is not connected`);
-  const runner = getRunner(runnerId);
+  const runner = await getRunner(runnerId);
   if (
     !runner ||
     !runnerAllowed(runner, {
@@ -386,7 +386,7 @@ export async function cleanupRunnerWorkspace(input: {
   const connection = connections.get(input.runnerId);
   if (!connection || connection.protocolVersion !== PROTOCOL_VERSION)
     throw new Error(`Runner ${input.runnerId} is not connected`);
-  const runner = getRunner(input.runnerId);
+  const runner = await getRunner(input.runnerId);
   if (
     !runner ||
     !runnerAllowed(runner, {
@@ -484,7 +484,7 @@ export async function requestRunnerPortal(
   const connection = connections.get(runnerId);
   if (!connection || connection.protocolVersion !== PROTOCOL_VERSION)
     throw new Error(`Runner ${runnerId} is not connected`);
-  const runner = getRunner(runnerId);
+  const runner = await getRunner(runnerId);
   if (
     !runner ||
     !runnerAllowed(runner, {
@@ -627,7 +627,7 @@ export async function runnerHostStatus(
   const connection = connections.get(runnerId);
   if (!connection || connection.protocolVersion !== PROTOCOL_VERSION)
     return false;
-  const runner = getRunner(runnerId);
+  const runner = await getRunner(runnerId);
   if (
     !runner ||
     !runnerAllowed(runner, {
@@ -695,14 +695,14 @@ export function disconnectRunner(id: string, reason = "revoked"): boolean {
   return true;
 }
 
-export function handleRunnerWsUpgrade(
+export async function handleRunnerWsUpgrade(
   req: Request,
   server: {
     upgrade(req: Request, opts: any): boolean;
     requestIP?(req: Request): { address: string } | null;
   },
   path: string,
-): Response | undefined {
+): Promise<Response | undefined> {
   if (path !== "/runner-ws") return undefined;
   if (!runnerTailnetOrigin(req, server))
     return new Response("forbidden", { status: 403 });
@@ -712,21 +712,50 @@ export function handleRunnerWsUpgrade(
   const token = authorization.startsWith("Bearer ")
     ? authorization.slice(7)
     : "";
-  const runner = id && token ? authenticateRunner(id, token) : undefined;
+  const runner = id && token ? await authenticateRunner(id, token) : undefined;
   if (!runner) return new Response("unauthorized", { status: 401 });
   return server.upgrade(req, { data: { kind: "runner", runnerId: runner.id } })
     ? undefined
     : new Response("upgrade failed", { status: 400 });
 }
 
+/** The id of a Runner control socket, or undefined for any other socket. */
+function runnerSocketId(ws: any): string | undefined {
+  return ws.data?.kind === "runner" ? ws.data.runnerId : undefined;
+}
+
+/** Socket events for one Runner run in arrival order. Each handler reads the
+ * registry asynchronously, so without this a `hello` could be handled before
+ * the `open` that registers its connection. */
+function runnerSocketStep(ws: any, step: () => Promise<unknown>): void {
+  const data = ws.data as { runnerChain?: Promise<void> };
+  data.runnerChain = (data.runnerChain ?? Promise.resolve()).then(step).then(
+    () => {},
+    (error) => console.warn("[runners] socket event failed:", error),
+  );
+}
+
+/** Resolves once every event already delivered for this socket is handled. */
+export function runnerWsSettled(ws: any): Promise<void> {
+  return (
+    (ws.data?.runnerChain as Promise<void> | undefined) ?? Promise.resolve()
+  );
+}
+
+/** True when `ws` is a Runner control socket; its open is handled in order. */
 export function runnerWsOpen(ws: any): boolean {
-  const runnerId = ws.data?.kind === "runner" ? ws.data.runnerId : undefined;
+  const runnerId = runnerSocketId(ws);
   if (!runnerId) return false;
+  runnerSocketStep(ws, () => openRunnerSocket(ws, runnerId));
+  return true;
+}
+
+async function openRunnerSocket(ws: any, runnerId: string): Promise<void> {
   connections.get(runnerId)?.ws?.close?.(1000, "replaced by reconnect");
-  const runner = getRunner(runnerId);
+  const runner = await getRunner(runnerId);
   if (!runner) {
     ws.close(1008, "revoked");
-    return true;
+    return;
   }
   connections.set(runnerId, {
     ws,
@@ -737,14 +766,24 @@ export function runnerWsOpen(ws: any): boolean {
     resources: runner.resources,
     pending: new Map(),
   });
-  touchRunner(runnerId);
+  await touchRunner(runnerId);
   console.log(`[runners] ${runner.name} attached (${runnerId})`);
+}
+
+/** True when `ws` is a Runner control socket; the message is handled in
+ * order after the socket's earlier events. */
+export function runnerWsMessage(ws: any, raw: string | Buffer): boolean {
+  const runnerId = runnerSocketId(ws);
+  if (!runnerId) return false;
+  runnerSocketStep(ws, () => handleRunnerSocketMessage(ws, runnerId, raw));
   return true;
 }
 
-export function runnerWsMessage(ws: any, raw: string | Buffer): boolean {
-  const runnerId = ws.data?.kind === "runner" ? ws.data.runnerId : undefined;
-  if (!runnerId) return false;
+async function handleRunnerSocketMessage(
+  ws: any,
+  runnerId: string,
+  raw: string | Buffer,
+): Promise<boolean> {
   const connection = connections.get(runnerId);
   if (!connection) return true;
   let message: any;
@@ -761,7 +800,7 @@ export function runnerWsMessage(ws: any, raw: string | Buffer): boolean {
         ws.close(1008, "unsupported protocol");
         return true;
       }
-      const runner = getRunner(runnerId);
+      const runner = await getRunner(runnerId);
       if (!runner) {
         ws.close(1008, "revoked");
         return true;
@@ -778,7 +817,7 @@ export function runnerWsMessage(ws: any, raw: string | Buffer): boolean {
           : runner.resources;
       connection.capabilities = capabilities;
       connection.resources = resources;
-      touchRunner(runnerId, {
+      await touchRunner(runnerId, {
         capabilities,
         resources,
         softwareVersion:
@@ -789,7 +828,7 @@ export function runnerWsMessage(ws: any, raw: string | Buffer): boolean {
       return true;
     }
     case "heartbeat":
-      touchRunner(runnerId, {
+      await touchRunner(runnerId, {
         capabilities: message.capabilities,
         resources: message.resources,
         softwareVersion:
@@ -1006,7 +1045,7 @@ export async function requestRunnerBranchBundle(
   const connection = connections.get(runnerId);
   if (!connection || connection.protocolVersion !== PROTOCOL_VERSION)
     throw new Error(`Runner ${runnerId} is not connected`);
-  const runner = getRunner(runnerId);
+  const runner = await getRunner(runnerId);
   if (
     !runner ||
     !runnerAllowed(runner, {
@@ -1065,7 +1104,7 @@ export async function prepareRunnerWorkspace(
   const connection = connections.get(runnerId);
   if (!connection || connection.protocolVersion !== PROTOCOL_VERSION)
     throw new Error(`Runner ${runnerId} is not connected`);
-  const runner = getRunner(runnerId);
+  const runner = await getRunner(runnerId);
   const permission = request.automationDescendant
     ? "automationDescendants"
     : "fullSessions";
@@ -1177,7 +1216,7 @@ export async function launchRunnerHost(
     throw new RunnerHostLaunchRejectedError(
       `Runner ${runnerId} is not connected`,
     );
-  const runner = getRunner(runnerId);
+  const runner = await getRunner(runnerId);
   const permission =
     request.spec.trustProfile === "automation"
       ? "automationDescendants"
@@ -1279,11 +1318,18 @@ export async function launchRunnerHost(
   });
 }
 
+/** True when `ws` is a Runner control socket; the close is handled in order
+ * after the socket's earlier events. */
 export function runnerWsClose(ws: any): boolean {
-  const runnerId = ws.data?.kind === "runner" ? ws.data.runnerId : undefined;
+  const runnerId = runnerSocketId(ws);
   if (!runnerId) return false;
+  runnerSocketStep(ws, () => closeRunnerSocket(ws, runnerId));
+  return true;
+}
+
+async function closeRunnerSocket(ws: any, runnerId: string): Promise<void> {
   const connection = connections.get(runnerId);
-  if (!connection || connection.ws !== ws) return true;
+  if (!connection || connection.ws !== ws) return;
   for (const pending of connection.pending.values()) {
     clearTimeout(pending.timer);
     pending.resolve({
@@ -1294,9 +1340,8 @@ export function runnerWsClose(ws: any): boolean {
   }
   connections.delete(runnerId);
   console.log(
-    `[runners] ${getRunner(runnerId)?.name ?? runnerId} detached (${runnerId})`,
+    `[runners] ${(await getRunner(runnerId))?.name ?? runnerId} detached (${runnerId})`,
   );
-  return true;
 }
 
 export async function execOnRunner(
@@ -1307,7 +1352,7 @@ export async function execOnRunner(
   const connection = connections.get(runnerId);
   if (!connection || connection.protocolVersion !== PROTOCOL_VERSION)
     throw new Error(`Runner ${runnerId} is not connected`);
-  const runner = getRunner(runnerId);
+  const runner = await getRunner(runnerId);
   if (
     !runner ||
     !runnerAllowed(runner, {
@@ -1328,7 +1373,7 @@ export async function execOnRunner(
     ? await runnerCommandAwsEnv(runner, options.timeoutMs)
     : undefined;
   // Minting is asynchronous: a revocation or reconnect must not race dispatch.
-  const current = getRunner(runnerId);
+  const current = await getRunner(runnerId);
   if (
     connections.get(runnerId) !== connection ||
     !current ||

@@ -30,8 +30,9 @@
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
-import { open, rename, writeFile, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { constants } from "node:fs";
+import { access, open, rename, writeFile, readFile } from "node:fs/promises";
+import { delimiter, join } from "node:path";
 
 export interface ScriptHostSpec {
   id: string;
@@ -153,8 +154,9 @@ export async function runScriptHost(runDir: string): Promise<number> {
     });
     return 0;
   }
+  const shell = (await findOnPath("bash")) ?? "/bin/sh";
   try {
-    child = spawn(Bun.which("bash") ?? "/bin/sh", ["-c", spec.command], {
+    child = spawn(shell, ["-c", spec.command], {
       cwd: spec.cwd,
       env: env as NodeJS.ProcessEnv,
       // Its own process group, so a stop reaches everything it started.
@@ -303,3 +305,15 @@ export function scriptHostMain(runDir: string | undefined): void {
 }
 
 if (import.meta.main) scriptHostMain(process.argv[2]);
+
+/** An executable `bin` on PATH, looked up without blocking the thread. */
+async function findOnPath(bin: string): Promise<string | undefined> {
+  for (const dir of (process.env.PATH ?? "").split(delimiter)) {
+    if (!dir) continue;
+    try {
+      await access(join(dir, bin), constants.X_OK);
+      return join(dir, bin);
+    } catch {}
+  }
+  return undefined;
+}

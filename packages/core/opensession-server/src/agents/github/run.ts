@@ -396,7 +396,7 @@ export async function runGithubAgent(
   let repoId: string | null = null;
   let runGhRepo = opts.ghRepo;
   try {
-    const repo = repoForPath(opts.cwd);
+    const repo = await repoForPath(opts.cwd);
     repoId = repo.id;
     runGhRepo ||= repo.ghRepo;
   } catch {}

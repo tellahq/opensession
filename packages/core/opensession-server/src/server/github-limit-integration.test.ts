@@ -30,7 +30,7 @@ beforeAll(async () => {
   const key = join(dir, "key.pem");
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   await writeFile(key, privateKey.export({ format: "pem", type: "pkcs8" }));
-  __setGithubAppKeyPathForTest(key);
+  await __setGithubAppKeyPathForTest(key);
   process.env.OPENSESSION_CONFIG = join(dir, "config.json");
   delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
   await writeFile(
@@ -106,7 +106,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await __waitForGhProbesForTest();
   globalThis.fetch = originalFetch;
-  __setGithubAppKeyPathForTest(undefined);
+  await __setGithubAppKeyPathForTest(undefined);
   if (savedClient === undefined)
     delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
   else process.env.OPENSESSION_GITHUB_CLIENT_ID = savedClient;

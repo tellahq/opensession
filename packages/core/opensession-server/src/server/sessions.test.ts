@@ -663,6 +663,7 @@ describe("getAllSessions", () => {
         lastFullRefresh: {},
       }),
     );
+    await (await import("./paths")).loadStatePaths();
     writeSession("bks-review-cache", {
       title: "Review cache test",
       repo: "opensession",
@@ -726,6 +727,7 @@ describe("getAllSessions", () => {
         lastFullRefresh: {},
       }),
     );
+    await (await import("./paths")).loadStatePaths();
     writeSession("bks-review-clear", {
       title: "Review clear test",
       repo: "opensession",

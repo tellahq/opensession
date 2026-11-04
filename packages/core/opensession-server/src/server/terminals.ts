@@ -48,7 +48,7 @@
  */
 
 import { homeDir } from "./paths";
-import { existsSync } from "fs";
+import { pathExists } from "./run-fs";
 import type { RemotePtyHandle, RemotePtyIo } from "./sandbox/adapters/daytona";
 import type { RunnerVmTerminal } from "./runner-ws";
 import { workloadArgv } from "./workload-scope";
@@ -181,7 +181,7 @@ async function sharedSshAgentEnv(): Promise<Record<string, string>> {
   if (process.env.SSH_AUTH_SOCK) return {}; // service already has one — inherit
   const cur: { sock: string; pid: number } | undefined =
     g.__opensessionTermSshAgent;
-  if (cur && existsSync(cur.sock)) {
+  if (cur && (await pathExists(cur.sock))) {
     try {
       process.kill(cur.pid, 0);
       return { SSH_AUTH_SOCK: cur.sock, SSH_AGENT_PID: String(cur.pid) };
@@ -200,13 +200,13 @@ async function sharedSshAgentEnv(): Promise<Record<string, string>> {
   return { SSH_AUTH_SOCK: sock, SSH_AGENT_PID: String(pid) };
 }
 
-function hostShellTarget(
+async function hostShellTarget(
   session: TerminalSessionInfo | null | undefined,
   notice?: string,
-): SpawnTarget {
+): Promise<SpawnTarget> {
   const shell = process.env.SHELL || "/bin/zsh";
   const cwd =
-    session?.worktreeDir && existsSync(session.worktreeDir)
+    session?.worktreeDir && (await pathExists(session.worktreeDir))
       ? session.worktreeDir
       : HOME;
   return {
@@ -240,7 +240,7 @@ async function resolveTarget(
   }
   const sb = session?.sandbox;
   if (!sb?.sandboxId || !sb.provider || sb.provider === "local") {
-    return hostShellTarget(session);
+    return await hostShellTarget(session);
   }
   const cwd = session?.worktreeDir || HOME;
   // Opening a Terminal on the machine is an interaction (sandbox/idle.ts).
@@ -253,7 +253,7 @@ async function resolveTarget(
   try {
     const { sandboxesEnabled, sandboxProviderConfigured } =
       await import("./sandbox/config");
-    if (!sandboxesEnabled()) return hostShellTarget(session); // kill-switch
+    if (!sandboxesEnabled()) return await hostShellTarget(session); // kill-switch
 
     if (sb.provider === "daytona" && sandboxProviderConfigured("daytona")) {
       const { daytonaPtySession } = await import("./sandbox/adapters/daytona");
@@ -337,12 +337,12 @@ async function resolveTarget(
       };
     }
   } catch (e: any) {
-    return hostShellTarget(
+    return await hostShellTarget(
       session,
       `sandbox terminal unavailable (${String(e?.message || e).slice(0, 160)}) — opened a host shell instead`,
     );
   }
-  return hostShellTarget(session);
+  return await hostShellTarget(session);
 }
 
 /** A PTY the Runner owns: in its managed session workspace, or (with `vm`)
@@ -464,7 +464,7 @@ export async function startSessionTerminal(
         }
         // Same fail-open shape as resolveTarget: any connect failure
         // degrades to a host shell with a notice.
-        target = hostShellTarget(
+        target = await hostShellTarget(
           session,
           `sandbox terminal unavailable (${String(e?.message || e).slice(0, 160)}) — opened a host shell instead`,
         );

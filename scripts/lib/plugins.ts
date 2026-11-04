@@ -150,13 +150,15 @@ export function sameOrigin(a: string, b: string): boolean {
  * the rename renamed them too, it wrote a second ledger entry and left the
  * first one with nothing pointing at it and no way to remove it by name.
  */
-export function findInstalledPackage(
+export async function findInstalledPackage(
   name: string,
   source: string,
-): InstalledPackage | undefined {
+): Promise<InstalledPackage | undefined> {
   return (
-    readInstalledPackage(name) ??
-    listInstalledPackages().find((pkg) => sameOrigin(pkg.source, source))
+    (await readInstalledPackage(name)) ??
+    (await listInstalledPackages()).find((pkg) =>
+      sameOrigin(pkg.source, source),
+    )
   );
 }
 
@@ -437,10 +439,14 @@ export function planInstall(
 
 export interface InstanceStores {
   state(): Promise<InstanceState>;
-  addMcpServer(name: string, entry: unknown, allowedUsers?: string[]): void;
-  removeMcpServer(name: string): void;
-  upsertFeed(feed: unknown): void;
-  removeFeed(id: string): void;
+  addMcpServer(
+    name: string,
+    entry: unknown,
+    allowedUsers?: string[],
+  ): void | Promise<void>;
+  removeMcpServer(name: string): void | Promise<void>;
+  upsertFeed(feed: unknown): void | Promise<void>;
+  removeFeed(id: string): void | Promise<void>;
   addAutomation(recipe: Recipe, createdBy: string): Promise<void>;
   removeAutomation(recipe: Recipe): Promise<void>;
   /** Copies the skill directory in; returns the sha256 of its SKILL.md. */
@@ -479,11 +485,11 @@ export async function defaultStores(): Promise<InstanceStores> {
         skills: skillNames(),
       };
     },
-    addMcpServer(name, entry, allowedUsers) {
+    async addMcpServer(name, entry, allowedUsers) {
       // Replacing this package's own earlier copy is an update, so drop
       // the old entry first rather than failing the no-overwrite guard.
-      connections.removeMcpServer(name);
-      const result = connections.addMcpServerEntry(
+      await connections.removeMcpServer(name);
+      const result = await connections.addMcpServerEntry(
         name,
         entry as Record<string, unknown>,
         {
@@ -492,15 +498,15 @@ export async function defaultStores(): Promise<InstanceStores> {
       );
       if ("error" in result) throw new Error(result.error);
     },
-    removeMcpServer(name) {
-      connections.removeMcpServer(name);
+    async removeMcpServer(name) {
+      await connections.removeMcpServer(name);
     },
-    upsertFeed(feed) {
-      const result = feeds.upsertConfigFeed(feed);
+    async upsertFeed(feed) {
+      const result = await feeds.upsertConfigFeed(feed);
       if ("error" in result) throw new Error(result.error);
     },
-    removeFeed(id) {
-      feeds.removeConfigFeed(id);
+    async removeFeed(id) {
+      await feeds.removeConfigFeed(id);
     },
     async addAutomation(recipe, createdBy) {
       await installRecipe(recipe, createdBy);
@@ -555,9 +561,13 @@ export async function applyPlan(input: ApplyInput): Promise<InstalledPackage> {
     for (const action of sorted) {
       let artifact: InstalledArtifact = { kind: action.kind, ref: action.ref };
       if (action.kind === "mcp") {
-        stores.addMcpServer(action.ref, action.payload, input.allowedUsers);
+        await stores.addMcpServer(
+          action.ref,
+          action.payload,
+          input.allowedUsers,
+        );
       } else if (action.kind === "feed") {
-        stores.upsertFeed(action.payload);
+        await stores.upsertFeed(action.payload);
       } else if (action.kind === "automation") {
         await stores.addAutomation(
           recipeFor(manifest.name, action.payload as any),
@@ -611,10 +621,10 @@ async function removeArtifact(
 ): Promise<void> {
   switch (artifact.kind) {
     case "mcp":
-      stores.removeMcpServer(artifact.ref);
+      await stores.removeMcpServer(artifact.ref);
       return;
     case "feed":
-      stores.removeFeed(artifact.ref);
+      await stores.removeFeed(artifact.ref);
       return;
     case "skill":
       stores.removeSkill(artifact.ref);
@@ -696,7 +706,7 @@ function parseUsers(users?: string): string[] | undefined {
 }
 
 async function listPackages(): Promise<number> {
-  const packages = listInstalledPackages();
+  const packages = await listInstalledPackages();
   if (!packages.length) {
     heading("Packages");
     info(dim("none installed"));
@@ -820,7 +830,7 @@ async function addPackage(
   }
   const { manifest } = read;
 
-  const existing = findInstalledPackage(manifest.name, source);
+  const existing = await findInstalledPackage(manifest.name, source);
   // Same install, new name upstream. The plan below then treats the artifacts
   // as this package's own — an update, not a collision — and the ledger entry
   // moves to the new name instead of a second one appearing beside it.
@@ -875,12 +885,12 @@ async function addPackage(
       allowedUsers,
       installedAt: existing?.installedAt,
     });
-    recordInstalledPackage(record);
+    await recordInstalledPackage(record);
     if (renamedFrom) {
       // New entry first, then drop the old name: interrupted here the
       // package is listed twice, which a re-run settles. The other order
       // would leave it listed nowhere and unremovable.
-      forgetInstalledPackage(renamedFrom);
+      await forgetInstalledPackage(renamedFrom);
       if (
         existing?.dir &&
         existing.dir !== dir &&
@@ -918,7 +928,7 @@ async function updatePackage(
   name: string,
   opts: PluginsOptions,
 ): Promise<number> {
-  const existing = readInstalledPackage(name);
+  const existing = await readInstalledPackage(name);
   if (!existing) {
     fail(`'${name}' is not installed`, "opensession plugins");
     return 1;
@@ -927,13 +937,13 @@ async function updatePackage(
 }
 
 async function removePackage(name: string): Promise<number> {
-  const existing = readInstalledPackage(name);
+  const existing = await readInstalledPackage(name);
   if (!existing) {
     fail(`'${name}' is not installed`, "opensession plugins");
     return 1;
   }
   await removeInstalled(existing, await defaultStores());
-  forgetInstalledPackage(name);
+  await forgetInstalledPackage(name);
   ok(`removed ${name}`, `${existing.artifacts.length} artifacts reversed`);
   if (existing.artifacts.some((a) => a.kind === "automation")) {
     info(

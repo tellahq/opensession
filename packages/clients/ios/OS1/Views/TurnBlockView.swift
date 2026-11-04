@@ -604,6 +604,16 @@ private struct ToolRunView: View {
                         if !stats.isEmpty {
                             LineStatsView(stats: stats)
                         }
+                        // Folded, the count alone hides what the run is
+                        // waiting on, so a long build looked stalled. Name
+                        // the step still running.
+                        if let runningStep {
+                            Text(runningStep.presentation.stepLabel)
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(OS1VisualStyle.textFaint)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
                         Spacer(minLength: 4)
                         if mediaCount > 0 {
                             Text(mediaLabel)
@@ -673,6 +683,10 @@ private struct ToolRunView: View {
     }
 
     private var failureCount: Int { items.filter(\.isError).count }
+    private var runningStep: ToolCallItem? {
+        guard isLive, !state.expanded else { return nil }
+        return items.last(where: \.isPending)
+    }
     private var stats: ToolLineStats {
         items.reduce(ToolLineStats()) { $0 + ($1.presentation.lineStats ?? ToolLineStats()) }
     }
@@ -691,7 +705,9 @@ private struct ToolRunView: View {
         }
         if failureCount > 0 { parts.append("\(failureCount) failed") }
         if mediaCount > 0 { parts.append(mediaLabel) }
-        if isLive, items.contains(where: \.isPending) { parts.append("running") }
+        if isLive, let step = items.last(where: \.isPending) {
+            parts.append("running \(step.presentation.stepLabel)")
+        }
         return parts.joined(separator: ", ")
     }
 }

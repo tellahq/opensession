@@ -26,6 +26,13 @@ import {
   type ForceMergeOutcome,
 } from "../../server/force-merge";
 
+interface ReposSnapshot {
+  primaryRepo: string;
+  branch: string | null;
+  worktreeDir: string | null;
+  attached: AttachedRepo[];
+}
+
 export interface ReposToolContext {
   /** The session these tools act on. */
   sessionId: string;
@@ -42,12 +49,7 @@ export interface ReposToolContext {
     repo: string,
   ) => Promise<{ repo: string; branch: string; worktreeDir: string }>;
   /** Current repo layout for the session, or null if it can't be resolved. */
-  snapshot: () => {
-    primaryRepo: string;
-    branch: string | null;
-    worktreeDir: string | null;
-    attached: AttachedRepo[];
-  } | null;
+  snapshot: () => ReposSnapshot | null | Promise<ReposSnapshot | null>;
   /** All registered repos (id + default branch + whether shared-checkout). */
   repos: () => Array<{
     id: string;
@@ -114,7 +116,7 @@ export function createReposMcpServer(ctx: ReposToolContext) {
       "List the repos available to this session: which one is primary, which are already attached (with their worktree paths and branches), and which other repos you could attach. Use before attach_repo to see what's possible.",
       {},
       async () => {
-        const snap = ctx.snapshot();
+        const snap = await ctx.snapshot();
         const repos = ctx.repos();
         const lines: string[] = [];
         if (snap) {

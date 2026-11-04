@@ -42,7 +42,7 @@ export async function handleFeedsRoutes(
     const body = await req.json().catch(() => null);
     if (!body) return Response.json({ error: "Invalid JSON" }, { status: 400 });
     const { upsertConfigFeed } = await import("../feeds-config");
-    const result = upsertConfigFeed(body);
+    const result = await upsertConfigFeed(body);
     if ("error" in result) return Response.json(result, { status: 400 });
     return Response.json(result);
   }
@@ -81,7 +81,7 @@ export async function handleFeedsRoutes(
   const feedDelMatch = path.match(/^\/api\/feeds\/([^/]+)$/);
   if (feedDelMatch && req.method === "DELETE") {
     const { removeConfigFeed } = await import("../feeds-config");
-    const result = removeConfigFeed(decodeURIComponent(feedDelMatch[1]));
+    const result = await removeConfigFeed(decodeURIComponent(feedDelMatch[1]));
     if ("error" in result) return Response.json(result, { status: 404 });
     return Response.json(result);
   }

@@ -376,12 +376,12 @@ describe("Settings writes", () => {
     const prev = process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG;
     process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = path;
     try {
-      expect(() =>
+      await expect(
         setModelProvider("gw", {
           api: "openai-completions",
           baseURL: "",
         }),
-      ).toThrow(/needs a base URL/);
+      ).rejects.toThrow(/needs a base URL/);
       expect(readFileSync(path, "utf-8")).toBe(original);
     } finally {
       if (prev === undefined)
@@ -415,17 +415,17 @@ describe("Settings writes", () => {
     const prev = process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG;
     process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = path;
     try {
-      setModelProvider("gw", {
+      await setModelProvider("gw", {
         apiKey: "new",
         api: "openai-completions",
         name: "Gateway",
         discoverModels: true,
       });
-      setProviderDiscovered("gw", {
+      await setProviderDiscovered("gw", {
         at: "2026-09-01T00:00:00Z",
         models: { d: { id: "d" } },
       });
-      setModelProvider("gw", { api: "", discoverModels: false });
+      await setModelProvider("gw", { api: "", discoverModels: false });
       expect(JSON.parse(readFileSync(path, "utf-8")).providers.gw).toEqual({
         apiKey: "new",
         baseURL: "https://gw.test/v1",

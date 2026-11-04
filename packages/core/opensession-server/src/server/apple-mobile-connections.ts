@@ -193,7 +193,7 @@ export async function configureAppleMobileConnections(
       stateDir: stateDir("apple-mobile"),
     },
   );
-  const result = replaceMcpServerEntries(updates);
+  const result = await replaceMcpServerEntries(updates);
   if ("error" in result) throw new Error(result.error);
   return appleMobileSetupStatus();
 }

@@ -794,6 +794,8 @@ describe("updating and deleting a credential", () => {
       requestedBy: "Blair",
       mode: "standing",
     });
+    // Let the grant's own write land, so the gate below holds the update's.
+    await kc.__flushKeychainForTest();
     let failWrite!: (error: Error) => void;
     nextWriteGate = new Promise((_, reject) => (failWrite = reject));
     // A host change, so the update revokes the grant and its rollback

@@ -1,4 +1,6 @@
 import { getConfigAsync } from "../config";
+import { loadMcpConfig } from "../connections";
+import { loadGithubAuthStore } from "../github-auth";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { generateKeyPairSync } from "node:crypto";
 import {
@@ -47,12 +49,13 @@ beforeEach(async () => {
   process.env.OPENSESSION_CONFIG = join(dir, "config.json");
   await getConfigAsync();
   process.env.OPENSESSION_GITHUB_AUTH_STORE = join(dir, "github-auth.json");
+  await loadGithubAuthStore();
   process.env.OPENSESSION_WEB_SESSIONS_STORE = join(dir, "web-sessions.json");
-  __setGithubAppKeyPathForTest(join(dir, "github-app.pem"));
+  await __setGithubAppKeyPathForTest(join(dir, "github-app.pem"));
 });
 
-afterEach(() => {
-  __setGithubAppKeyPathForTest(undefined);
+afterEach(async () => {
+  await __setGithubAppKeyPathForTest(undefined);
   rmSync(dir, { recursive: true, force: true });
   for (const k of ENV_KEYS) {
     if (saved[k] === undefined) delete process.env[k];
@@ -128,6 +131,7 @@ async function enableSignInConnections(): Promise<string> {
   );
   process.env.OPENSESSION_CONFIG = config;
   await getConfigAsync();
+  await loadMcpConfig();
   return mcpConfig;
 }
 
@@ -662,6 +666,7 @@ describe("connect-time auth bootstrap", () => {
       }),
     );
     process.env.OPENSESSION_GITHUB_AUTH_STORE = storePath;
+    await loadGithubAuthStore();
     try {
       const boot = await bootstrapUserAuthOnConnect("alice", "Alice");
       expect("error" in boot).toBe(true);
@@ -737,6 +742,7 @@ describe("connect-time auth bootstrap", () => {
       }),
     );
     process.env.OPENSESSION_GITHUB_AUTH_STORE = storePath;
+    await loadGithubAuthStore();
     try {
       // First connect consumes authOnConnect: rosters @alice, flips the gate.
       const first = await bootstrapUserAuthOnConnect("alice", "Alice");

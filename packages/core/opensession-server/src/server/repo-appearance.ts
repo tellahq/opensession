@@ -113,7 +113,7 @@ function persistAppearance(
   },
 ): Promise<RepoAppearance> {
   return withConfigMutationLock(async () => {
-    const config = rawConfig();
+    const config = await rawConfig();
     const section = repoSectionForMutation(config, id);
     if (!section) throw new RepoAppearanceError(`Unknown repository: ${id}`);
 
@@ -134,7 +134,7 @@ function persistAppearance(
         else delete section.iconSource;
       }
     }
-    persistRawConfig(config);
+    await persistRawConfig(config);
 
     const now = configuredRepos()[id];
     const resolved = await resolveRepoIcon(now?.icon, now?.repo);

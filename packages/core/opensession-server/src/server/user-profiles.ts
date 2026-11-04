@@ -22,7 +22,7 @@
  * keeps a signed-out instance working.
  */
 
-import { existsSync, mkdirSync, readdirSync, unlinkSync } from "fs";
+import { mkdir, readdir, stat, unlink } from "fs/promises";
 import { stateDir } from "./paths";
 import { userStore } from "./shared/user-store";
 import { configuredIdentity, type TeamMember } from "./config";
@@ -96,6 +96,35 @@ interface Profile {
   image: string;
 }
 
+// Whether each stored picture still exists. clean() runs on every read, so it
+// asks this map rather than the disk; a stale answer re-checks in the
+// background. The pictures directory is listed at import.
+const IMAGE_RECHECK_MS = 5_000;
+const imageExists = new Map<string, { exists: boolean; at: number }>();
+
+function recheckImage(path: string): void {
+  void stat(path).then(
+    () => imageExists.set(path, { exists: true, at: performance.now() }),
+    () => imageExists.set(path, { exists: false, at: performance.now() }),
+  );
+}
+
+function imageStillExists(path: string): boolean {
+  const known = imageExists.get(path);
+  if (!known || performance.now() - known.at >= IMAGE_RECHECK_MS)
+    recheckImage(path);
+  return known?.exists ?? false;
+}
+
+async function loadImageDir(): Promise<void> {
+  const dir = profileImagesDir();
+  try {
+    const now = performance.now();
+    for (const entry of await readdir(dir))
+      imageExists.set(`${dir}/${entry}`, { exists: true, at: now });
+  } catch {}
+}
+
 const store = userStore<Profile>({
   name: "profiles",
   field: "profile",
@@ -108,7 +137,7 @@ const store = userStore<Profile>({
         : "";
     // A path that no longer resolves reads as "no picture" rather than as a
     // broken tile: the file can be deleted out from under the record.
-    return { image: image && existsSync(image) ? image : "" };
+    return { image: image && imageStillExists(image) ? image : "" };
   },
   identity: keyFor,
   extra: () => ({ updatedAt: new Date().toISOString() }),
@@ -165,24 +194,25 @@ export async function setProfileImage(
   const key = keyFor(user);
   if (!key) throw new Error("Unknown user");
   const dir = profileImagesDir();
-  mkdirSync(dir, { recursive: true });
+  await mkdir(dir, { recursive: true });
   // One file per person, named for the store key, so a replacement overwrites
   // in place and a stale record can never point at someone else's picture.
   const path = `${dir}/${fileStem(key)}.${ext}`;
-  removeStoredImages(key, path);
+  await removeStoredImages(key, path);
   await Bun.write(path, bytes);
+  imageExists.set(path, { exists: true, at: performance.now() });
   store.set(user, { image: path });
   return profileImageUrl(path);
 }
 
 /** Drop this user's picture. The avatar falls back to GitHub and then to their
  *  initial, exactly as it did before they set one. */
-export function clearProfileImage(user: string): void {
+export async function clearProfileImage(user: string): Promise<void> {
   const key = keyFor(user);
   const current = store.get(user).image;
   store.set(user, { image: "" });
-  if (key) removeStoredImages(key);
-  else if (current) tryUnlink(current);
+  if (key) await removeStoredImages(key);
+  else if (current) await tryUnlink(current);
 }
 
 function fileStem(key: string): string {
@@ -191,21 +221,23 @@ function fileStem(key: string): string {
 
 /** Delete this key's stored pictures, except `keep`. Extensions differ per
  *  upload, so a PNG replaced by a JPEG would otherwise leave the old file. */
-function removeStoredImages(key: string, keep?: string): void {
+async function removeStoredImages(key: string, keep?: string): Promise<void> {
   const dir = profileImagesDir();
-  if (!existsSync(dir)) return;
   const stem = `${fileStem(key)}.`;
   try {
-    for (const entry of readdirSync(dir)) {
+    for (const entry of await readdir(dir)) {
       if (!entry.startsWith(stem)) continue;
       const path = `${dir}/${entry}`;
-      if (path !== keep) tryUnlink(path);
+      if (path !== keep) await tryUnlink(path);
     }
   } catch {}
 }
 
-function tryUnlink(path: string): void {
+async function tryUnlink(path: string): Promise<void> {
   try {
-    unlinkSync(path);
+    await unlink(path);
+    imageExists.set(path, { exists: false, at: performance.now() });
   } catch {}
 }
+
+await Promise.all([store.load(), loadImageDir()]);

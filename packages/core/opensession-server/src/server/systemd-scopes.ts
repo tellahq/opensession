@@ -8,7 +8,8 @@
  * per-scope limits keep one user/server or preview from consuming that fuse.
  */
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { cachedWhich, pathExists } from "./run-fs";
 
 const UID = typeof process.getuid === "function" ? process.getuid() : 1000;
 export const SYSTEMD_USER_RUNTIME = `/run/user/${UID}`;
@@ -64,26 +65,21 @@ export function systemdUserEnv(
   };
 }
 
-export function systemdUserScopesAvailable(): boolean {
+export async function systemdUserScopesAvailable(): Promise<boolean> {
   return (
-    existsSync(`${SYSTEMD_USER_RUNTIME}/systemd/private`) &&
-    !!Bun.which("systemd-run")
+    (await pathExists(`${SYSTEMD_USER_RUNTIME}/systemd/private`)) &&
+    !!(await cachedWhich("systemd-run"))
   );
 }
 
 // A process never changes cgroup on its own, so read it once.
-let ownCgroup: string | undefined;
-function selfCgroup(): string {
-  if (ownCgroup !== undefined) return ownCgroup;
-  try {
-    ownCgroup = readFileSync("/proc/self/cgroup", "utf8");
-  } catch {
-    ownCgroup = "";
-  }
+let ownCgroup: Promise<string> | undefined;
+export function selfCgroup(): Promise<string> {
+  ownCgroup ??= readFile("/proc/self/cgroup", "utf8").catch(() => "");
   return ownCgroup;
 }
 
-export function processRunsInControlPlane(cgroup = selfCgroup()): boolean {
+export function processRunsInControlPlane(cgroup: string): boolean {
   return cgroup.includes("/opensession-control.slice/");
 }
 
@@ -92,7 +88,7 @@ export function processRunsInControlPlane(cgroup = selfCgroup()): boolean {
  * slice. Detached run hosts already live in opensession-workloads.slice and
  * must stay there so stopping their unit still kills every descendant.
  */
-export function controlPlaneWorkloadCommand(
+export async function controlPlaneWorkloadCommand(
   command: string[],
   unit: string,
   options: {
@@ -100,11 +96,11 @@ export function controlPlaneWorkloadCommand(
     cgroup?: string;
     scopesAvailable?: boolean;
   } = {},
-): { command: string[]; env: Record<string, string>; unit?: string } {
+): Promise<{ command: string[]; env: Record<string, string>; unit?: string }> {
   const env = options.env ?? process.env;
   const shouldScope =
-    processRunsInControlPlane(options.cgroup) &&
-    (options.scopesAvailable ?? systemdUserScopesAvailable());
+    processRunsInControlPlane(options.cgroup ?? (await selfCgroup())) &&
+    (options.scopesAvailable ?? (await systemdUserScopesAvailable()));
   if (!shouldScope) return { command, env: env as Record<string, string> };
   return {
     command: [
@@ -137,14 +133,14 @@ export function previewScopeUnit(
 }
 
 /** Put one host Portal in its own bounded, low-priority user scope. */
-export function previewScopeCommand(
+export async function previewScopeCommand(
   command: string[],
   worktreeDir: string,
   portalName: string,
   options: { env?: LimitEnv; scopesAvailable?: boolean } = {},
-): { command: string[]; env: Record<string, string>; unit?: string } {
+): Promise<{ command: string[]; env: Record<string, string>; unit?: string }> {
   const env = options.env ?? process.env;
-  if (!(options.scopesAvailable ?? systemdUserScopesAvailable()))
+  if (!(options.scopesAvailable ?? (await systemdUserScopesAvailable())))
     return { command, env: env as Record<string, string> };
   const unit = previewScopeUnit(worktreeDir, portalName);
   return {

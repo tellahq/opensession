@@ -54,7 +54,7 @@ let previousCodexStore: string;
 
 beforeAll(async () => {
   const codex = await import("./codex-accounts");
-  previousCodexStore = codex.__setCodexAccountsPathForTest(codexStore);
+  previousCodexStore = await codex.__setCodexAccountsPathForTest(codexStore);
   policy = await import("./fixed-subscription");
   accounts = await import("./claude-accounts");
   runInputs = await import("./session-run-inputs");
@@ -62,7 +62,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   const codex = await import("./codex-accounts");
-  codex.__setCodexAccountsPathForTest(previousCodexStore);
+  await codex.__setCodexAccountsPathForTest(previousCodexStore);
 });
 
 const usage = (fiveHourPct: number) => ({

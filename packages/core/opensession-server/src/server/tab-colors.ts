@@ -57,3 +57,5 @@ export function getTabColors(user: string): TabColors {
 export function setTabColors(user: string, colors: unknown): TabColors {
   return store.set(user, colors);
 }
+
+await store.load();

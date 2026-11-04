@@ -22,8 +22,15 @@
 
 import { withLabel } from "./provider-account-label";
 import { registerMemoryProbe } from "./memory-probes";
-import { accessSync, chmodSync, constants, existsSync, readFileSync } from "fs";
-import { writeFileAtomic } from "./shared/atomic-write";
+import { constants } from "fs";
+import { access, chmod } from "fs/promises";
+import { writeFileAtomicAsync } from "./shared/atomic-write";
+import {
+  cachedJsonFileCopy,
+  loadJsonFileCopy,
+  loadJsonFileShared,
+  publishJsonFile,
+} from "./shared/json-file-cache";
 import { stateDir } from "./paths";
 import { userMatchesAny } from "./shared/user-mappings";
 import { hrwScore } from "./codex-accounts";
@@ -100,10 +107,10 @@ export interface XaiAccountPublic {
 
 // ── Store ───────────────────────────────────────────────────────────────────
 
+/** The loaded account store, without I/O (see loadXaiAccounts). */
 function readStore(): XaiAccount[] {
-  if (!existsSync(STORE_PATH)) return [];
   try {
-    const parsed = JSON.parse(readFileSync(STORE_PATH, "utf-8"));
+    const parsed = cachedJsonFileCopy<{ accounts?: unknown }>(STORE_PATH);
     return Array.isArray(parsed?.accounts) ? parsed.accounts : [];
   } catch (e) {
     console.error("[xai-accounts] Failed to read store:", e);
@@ -111,13 +118,44 @@ function readStore(): XaiAccount[] {
   }
 }
 
-function writeStore(accounts: XaiAccount[]): void {
-  writeFileAtomic(STORE_PATH, JSON.stringify({ accounts }, null, 2) + "\n");
-  chmodSync(STORE_PATH, 0o600);
+/** The account store fresh from disk: before a token refresh (the executor
+ * shares the file) and for read-modify-write. */
+async function readStoreFresh(): Promise<XaiAccount[]> {
+  try {
+    const parsed = await loadJsonFileCopy<{ accounts?: unknown }>(STORE_PATH);
+    return Array.isArray(parsed?.accounts) ? parsed.accounts : [];
+  } catch (e) {
+    console.error("[xai-accounts] Failed to read store:", e);
+    return [];
+  }
+}
+
+async function writeStore(accounts: XaiAccount[]): Promise<void> {
+  const path = STORE_PATH;
+  const value = { accounts };
+  await writeFileAtomicAsync(
+    path,
+    JSON.stringify(value, null, 2) + "\n",
+    0o600,
+  );
+  await chmod(path, 0o600);
+  publishJsonFile(path, value);
+}
+
+// Store mutations read, patch and write the file across awaits; one at a time
+// so two concurrent edits cannot drop each other's change.
+let storeMutation: Promise<unknown> = Promise.resolve();
+function mutateStore<T>(fn: () => Promise<T>): Promise<T> {
+  const run = storeMutation.then(fn, fn);
+  storeMutation = run.catch(() => {});
+  return run;
 }
 
 /** Test seam: isolate the account, sideline and catalog stores. */
-export function __setXaiAccountsPathForTest(path: string): string {
+export async function __setXaiAccountsPathForTest(
+  path: string,
+): Promise<string> {
+  await exhaustedWrite;
   const previous = STORE_PATH;
   STORE_PATH = path;
   STATE_PATH = path.replace(/\.json$/, "-state.json");
@@ -128,6 +166,7 @@ export function __setXaiAccountsPathForTest(path: string): string {
   refreshBlockedUntil.clear();
   usageCache.clear();
   discovered = null;
+  await loadXaiAccounts();
   return previous;
 }
 
@@ -142,28 +181,77 @@ const refreshErrors = new Map<
 const refreshBlockedUntil = new Map<string, number>();
 const refreshInFlight = new Map<string, Promise<XaiAccount>>();
 
+// The in-memory map is authoritative; the file follows it. Writes run one at
+// a time, and a change made while one is in flight is written right after it.
+let exhaustedWrite: Promise<void> | null = null;
+let exhaustedDirty = false;
+
 function persistExhausted(): void {
-  try {
-    const out: Record<string, number> = {};
-    const now = Date.now();
-    for (const [k, until] of exhaustedUntil) if (until > now) out[k] = until;
-    writeFileAtomic(STATE_PATH, JSON.stringify({ exhaustedUntil: out }) + "\n");
-    chmodSync(STATE_PATH, 0o600);
-  } catch (e) {
-    console.warn("[xai-accounts] sideline persist failed:", e);
-  }
+  exhaustedDirty = true;
+  if (exhaustedWrite) return;
+  exhaustedWrite = (async () => {
+    while (exhaustedDirty) {
+      exhaustedDirty = false;
+      try {
+        const out: Record<string, number> = {};
+        const now = Date.now();
+        for (const [k, until] of exhaustedUntil)
+          if (until > now) out[k] = until;
+        const path = STATE_PATH;
+        const value = { exhaustedUntil: out };
+        await writeFileAtomicAsync(path, JSON.stringify(value) + "\n", 0o600);
+        await chmod(path, 0o600);
+        publishJsonFile(path, value);
+      } catch (e) {
+        console.warn("[xai-accounts] sideline persist failed:", e);
+      }
+    }
+  })().finally(() => {
+    exhaustedWrite = null;
+  });
 }
 
-try {
-  if (existsSync(STATE_PATH)) {
-    const parsed = JSON.parse(readFileSync(STATE_PATH, "utf-8"));
-    const now = Date.now();
-    for (const [k, until] of Object.entries(parsed?.exhaustedUntil || {})) {
-      if (typeof until === "number" && until > now)
-        exhaustedUntil.set(k, until);
-    }
+/** Test seam: wait for queued sideline writes to land on disk. */
+export async function __flushXaiSidelinesForTest(): Promise<void> {
+  await exhaustedWrite;
+}
+
+/**
+ * Load the account store, the persisted sidelines and the cached model
+ * catalog. Runs at import; a test that writes the store file itself awaits it
+ * again before reading.
+ */
+export async function loadXaiAccounts(): Promise<void> {
+  const [, state, catalog] = await Promise.all([
+    loadJsonFileShared(STORE_PATH).catch(() => undefined),
+    loadJsonFileShared<{ exhaustedUntil?: Record<string, unknown> }>(
+      STATE_PATH,
+    ).catch(() => undefined),
+    discovered
+      ? undefined
+      : loadJsonFileShared<any>(CATALOG_PATH).catch(() => undefined),
+  ]);
+  const now = Date.now();
+  for (const [k, until] of Object.entries(state?.exhaustedUntil || {})) {
+    if (typeof until === "number" && until > now && !exhaustedUntil.has(k))
+      exhaustedUntil.set(k, until);
   }
-} catch {}
+  if (
+    !discovered &&
+    typeof catalog?.fetchedAt === "number" &&
+    Array.isArray(catalog?.models)
+  ) {
+    discovered = {
+      fetchedAt: catalog.fetchedAt,
+      models: catalog.models.filter(
+        (row: unknown): row is XaiCatalogEntry =>
+          !!row &&
+          typeof row === "object" &&
+          typeof (row as { id?: unknown }).id === "string",
+      ),
+    };
+  }
+}
 
 function exhaustionKey(id: string, model?: string): string {
   return model ? `${id}:${model}` : id;
@@ -270,43 +358,49 @@ export function getXaiAccountById(id: string): XaiAccount | undefined {
   return readStore().find((account) => account.id === id);
 }
 
-export function addXaiAccount(input: {
+export async function addXaiAccount(input: {
   tokens: XaiOAuthTokens;
   email?: string;
   name?: string;
   owner?: string;
-}): XaiAccountPublic | { error: string } {
+}): Promise<XaiAccountPublic | { error: string }> {
   const email = input.email?.trim() || jwtEmail(input.tokens.idToken);
   const name = email || input.name?.trim();
   if (!name)
     return { error: "Could not read an email address from this xAI login" };
-  const accounts = readStore();
-  if (accounts.some((a) => a.name === name)) {
-    return { error: `An account named "${name}" already exists` };
-  }
-  if (accounts.some((a) => a.refresh === input.tokens.refresh)) {
-    return { error: "This login is already registered" };
-  }
-  const account: XaiAccount = {
-    id: crypto.randomUUID(),
-    name,
-    ...(email ? { email } : {}),
-    ...(input.owner?.trim() ? { owner: input.owner.trim() } : {}),
-    createdAt: new Date().toISOString(),
-    access: input.tokens.access,
-    refresh: input.tokens.refresh,
-    expires: input.tokens.expires,
-  };
-  writeStore([...accounts, account]);
-  console.log(`[xai-accounts] Added account ${name}`);
-  return toPublic(account);
+  return mutateStore(async () => {
+    const accounts = await readStoreFresh();
+    if (accounts.some((a) => a.name === name)) {
+      return { error: `An account named "${name}" already exists` };
+    }
+    if (accounts.some((a) => a.refresh === input.tokens.refresh)) {
+      return { error: "This login is already registered" };
+    }
+    const account: XaiAccount = {
+      id: crypto.randomUUID(),
+      name,
+      ...(email ? { email } : {}),
+      ...(input.owner?.trim() ? { owner: input.owner.trim() } : {}),
+      createdAt: new Date().toISOString(),
+      access: input.tokens.access,
+      refresh: input.tokens.refresh,
+      expires: input.tokens.expires,
+    };
+    await writeStore([...accounts, account]);
+    console.log(`[xai-accounts] Added account ${name}`);
+    return toPublic(account);
+  });
 }
 
-export function removeXaiAccount(id: string): boolean {
-  const accounts = readStore();
-  const next = accounts.filter((a) => a.id !== id);
-  if (next.length === accounts.length) return false;
-  writeStore(next);
+export async function removeXaiAccount(id: string): Promise<boolean> {
+  const removed = await mutateStore(async () => {
+    const accounts = await readStoreFresh();
+    const next = accounts.filter((a) => a.id !== id);
+    if (next.length === accounts.length) return false;
+    await writeStore(next);
+    return true;
+  });
+  if (!removed) return false;
   exhaustedUntil.delete(id);
   lastPickedAt.delete(id);
   refreshErrors.delete(id);
@@ -319,31 +413,35 @@ export function removeXaiAccount(id: string): boolean {
 export function setXaiAccountOwner(
   id: string,
   owner: string | undefined,
-): XaiAccountPublic | null {
-  const accounts = readStore();
-  const idx = accounts.findIndex((a) => a.id === id);
-  if (idx === -1) return null;
-  const next = { ...accounts[idx] };
-  const trimmed = owner?.trim() || undefined;
-  if (trimmed) next.owner = trimmed;
-  else delete next.owner;
-  accounts[idx] = next;
-  writeStore(accounts);
-  return toPublic(next);
+): Promise<XaiAccountPublic | null> {
+  return mutateStore(async () => {
+    const accounts = await readStoreFresh();
+    const idx = accounts.findIndex((a) => a.id === id);
+    if (idx === -1) return null;
+    const next = { ...accounts[idx] };
+    const trimmed = owner?.trim() || undefined;
+    if (trimmed) next.owner = trimmed;
+    else delete next.owner;
+    accounts[idx] = next;
+    await writeStore(accounts);
+    return toPublic(next);
+  });
 }
 
 /** Set or clear (empty) the display name shown instead of the email. */
 export function setXaiAccountLabel(
   id: string,
   label: string,
-): XaiAccountPublic | null {
-  const accounts = readStore();
-  const idx = accounts.findIndex((a) => a.id === id);
-  if (idx === -1) return null;
-  const next = withLabel(accounts[idx], label);
-  accounts[idx] = next;
-  writeStore(accounts);
-  return toPublic(next);
+): Promise<XaiAccountPublic | null> {
+  return mutateStore(async () => {
+    const accounts = await readStoreFresh();
+    const idx = accounts.findIndex((a) => a.id === id);
+    if (idx === -1) return null;
+    const next = withLabel(accounts[idx], label);
+    accounts[idx] = next;
+    await writeStore(accounts);
+    return toPublic(next);
+  });
 }
 
 // ── Picking ─────────────────────────────────────────────────────────────────
@@ -467,50 +565,55 @@ function needsRefresh(
 /** Why this copy of the store must not refresh: a guest projection holds no
  * grant, and a read-only mount (Docker) could not keep a rotated pair, which
  * would strand the host's copy. Null on the host. */
-function refreshRefusal(account: XaiAccount): string | null {
+async function refreshRefusal(account: XaiAccount): Promise<string | null> {
   if (account.refresh === XAI_REMOTE_SEED_REFRESH) {
     return "this sandbox copy holds an access token only; the host refreshes it before each launch";
   }
   try {
-    accessSync(STORE_PATH, constants.W_OK);
+    await access(STORE_PATH, constants.W_OK);
   } catch {
     return "the account store is read-only here; the host refreshes it on its own";
   }
   return null;
 }
 
-function persistTokens(id: string, tokens: XaiOAuthTokens): XaiAccount | null {
-  const accounts = readStore();
-  const idx = accounts.findIndex((a) => a.id === id);
-  if (idx === -1) return null;
-  const next: XaiAccount = {
-    ...accounts[idx],
-    access: tokens.access,
-    refresh: tokens.refresh,
-    expires: tokens.expires,
-    lastRefreshAt: new Date().toISOString(),
-  };
-  accounts[idx] = next;
-  try {
-    writeStore(accounts);
-  } catch (e) {
-    // A read-only store (a sandbox mount) still gets the fresh token for
-    // this process; the host copy refreshes on its own next pick.
-    console.warn(
-      `[xai-accounts] could not persist refreshed tokens for ${next.name}:`,
-      e,
-    );
-  }
-  return next;
+function persistTokens(
+  id: string,
+  tokens: XaiOAuthTokens,
+): Promise<XaiAccount | null> {
+  return mutateStore(async () => {
+    const accounts = await readStoreFresh();
+    const idx = accounts.findIndex((a) => a.id === id);
+    if (idx === -1) return null;
+    const next: XaiAccount = {
+      ...accounts[idx],
+      access: tokens.access,
+      refresh: tokens.refresh,
+      expires: tokens.expires,
+      lastRefreshAt: new Date().toISOString(),
+    };
+    accounts[idx] = next;
+    try {
+      await writeStore(accounts);
+    } catch (e) {
+      // A read-only store (a sandbox mount) still gets the fresh token for
+      // this process; the host copy refreshes on its own next pick.
+      console.warn(
+        `[xai-accounts] could not persist refreshed tokens for ${next.name}:`,
+        e,
+      );
+    }
+    return next;
+  });
 }
 
 async function refreshOnce(id: string, aheadMs: number): Promise<XaiAccount> {
   // Re-read right before the network call: the other host process may have
   // rotated the pair since the caller looked.
-  const current = readStore().find((a) => a.id === id);
+  const current = (await readStoreFresh()).find((a) => a.id === id);
   if (!current) throw new XaiOAuthError("account was removed", true);
   if (!needsRefresh(current, aheadMs)) return current;
-  const refusal = refreshRefusal(current);
+  const refusal = await refreshRefusal(current);
   if (refusal) {
     throw new XaiOAuthError(
       `access token has expired and cannot be refreshed: ${refusal}`,
@@ -520,12 +623,12 @@ async function refreshOnce(id: string, aheadMs: number): Promise<XaiAccount> {
     const tokens = await refreshXaiTokens(current.refresh);
     refreshErrors.delete(id);
     refreshBlockedUntil.delete(id);
-    const persisted = persistTokens(id, tokens);
+    const persisted = await persistTokens(id, tokens);
     console.log(`[xai-accounts] ${current.name}: tokens refreshed`);
     return persisted ?? { ...current, ...tokens };
   } catch (error) {
     // The other process may have won a race with the same refresh token.
-    const latest = readStore().find((a) => a.id === id);
+    const latest = (await readStoreFresh()).find((a) => a.id === id);
     if (latest && !needsRefresh(latest)) return latest;
     const message = error instanceof Error ? error.message : String(error);
     const reloginRequired =
@@ -769,27 +872,6 @@ export const XAI_FALLBACK_MODELS: readonly XaiModelConfig[] = [
 
 let discovered: { fetchedAt: number; models: XaiCatalogEntry[] } | null = null;
 
-function readCatalogCache(): void {
-  if (discovered || !existsSync(CATALOG_PATH)) return;
-  try {
-    const parsed = JSON.parse(readFileSync(CATALOG_PATH, "utf-8"));
-    if (
-      typeof parsed?.fetchedAt === "number" &&
-      Array.isArray(parsed?.models)
-    ) {
-      discovered = {
-        fetchedAt: parsed.fetchedAt,
-        models: parsed.models.filter(
-          (row: unknown): row is XaiCatalogEntry =>
-            !!row &&
-            typeof row === "object" &&
-            typeof (row as { id?: unknown }).id === "string",
-        ),
-      };
-    }
-  } catch {}
-}
-
 /** Pure: the proxy's list enriches the fallback (windows, names, new ids);
  * fallback rows the proxy omitted stay at the end. */
 export function mergeXaiCatalog(
@@ -836,14 +918,13 @@ export async function refreshXaiCatalog(access: string): Promise<void> {
   if (!models.length) return;
   discovered = { fetchedAt: Date.now(), models };
   try {
-    writeFileAtomic(CATALOG_PATH, JSON.stringify(discovered) + "\n");
+    await writeFileAtomicAsync(CATALOG_PATH, JSON.stringify(discovered) + "\n");
   } catch (e) {
     console.warn("[xai-accounts] catalog cache write failed:", e);
   }
 }
 
 export function xaiSubscriptionModels(): XaiModelConfig[] {
-  readCatalogCache();
   return mergeXaiCatalog(XAI_FALLBACK_MODELS, discovered?.models ?? []);
 }
 
@@ -965,3 +1046,5 @@ export function xaiProviderRegistration(modelId: string, sessionId: string) {
     })),
   };
 }
+
+await loadXaiAccounts();

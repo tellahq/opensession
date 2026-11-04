@@ -13,6 +13,7 @@ import {
   addXaiAccount,
   ensureFreshXaiAccount,
   listXaiAccountsPublic,
+  loadXaiAccounts,
   markXaiExhausted,
   mergeXaiCatalog,
   pickXaiAccount,
@@ -31,8 +32,8 @@ describe("xai account pool", () => {
   const store = join(dir, "accounts.json");
   let previousStore: string;
 
-  beforeAll(() => {
-    previousStore = __setXaiAccountsPathForTest(store);
+  beforeAll(async () => {
+    previousStore = await __setXaiAccountsPathForTest(store);
     writeFileSync(
       store,
       JSON.stringify({
@@ -69,10 +70,11 @@ describe("xai account pool", () => {
         ],
       }),
     );
+    await loadXaiAccounts();
   });
 
-  afterAll(() => {
-    __setXaiAccountsPathForTest(previousStore);
+  afterAll(async () => {
+    await __setXaiAccountsPathForTest(previousStore);
     rmSync(dir, { recursive: true, force: true });
   });
 
@@ -135,23 +137,23 @@ describe("xai account pool", () => {
     expect("error" in excluded ? excluded.error : excluded.id).toBe("shared");
   });
 
-  test("add, re-own and remove round-trip through the store", () => {
-    const added = addXaiAccount({
+  test("add, re-own and remove round-trip through the store", async () => {
+    const added = await addXaiAccount({
       tokens: { access: "x", refresh: "r-new", expires: FAR },
       email: "new@example.com",
       owner: " Sam ",
     });
     expect("error" in added ? added.error : added.owner).toBe("Sam");
-    const dupe = addXaiAccount({
+    const dupe = await addXaiAccount({
       tokens: { access: "x", refresh: "r-new", expires: FAR },
       email: "other@example.com",
     });
     expect("error" in dupe && dupe.error).toContain("already registered");
     const id = "error" in added ? "" : added.id;
-    expect(setXaiAccountOwner(id, "")?.mode).toBe("shared");
+    expect((await setXaiAccountOwner(id, ""))?.mode).toBe("shared");
     expect(JSON.parse(readFileSync(store, "utf-8")).accounts).toHaveLength(4);
-    expect(removeXaiAccount(id)).toBe(true);
-    expect(removeXaiAccount(id)).toBe(false);
+    expect(await removeXaiAccount(id)).toBe(true);
+    expect(await removeXaiAccount(id)).toBe(false);
   });
 
   test("a designated list is walked in order and fences the pin", () => {
@@ -183,9 +185,11 @@ describe("xai account pool", () => {
     );
   });
 
-  test("nameless login without an email is refused", () => {
+  test("nameless login without an email is refused", async () => {
     expect(
-      addXaiAccount({ tokens: { access: "x", refresh: "r-x", expires: FAR } }),
+      await addXaiAccount({
+        tokens: { access: "x", refresh: "r-x", expires: FAR },
+      }),
     ).toMatchObject({ error: expect.stringContaining("email") });
   });
 });
@@ -200,8 +204,8 @@ describe("xai sandbox copies", () => {
     hostOnlyFuture: "drop-me",
   };
 
-  beforeAll(() => {
-    previousStore = __setXaiAccountsPathForTest(store);
+  beforeAll(async () => {
+    previousStore = await __setXaiAccountsPathForTest(store);
     writeFileSync(
       store,
       JSON.stringify({
@@ -244,10 +248,11 @@ describe("xai sandbox copies", () => {
         ],
       }),
     );
+    await loadXaiAccounts();
   });
 
-  afterAll(() => {
-    __setXaiAccountsPathForTest(previousStore);
+  afterAll(async () => {
+    await __setXaiAccountsPathForTest(previousStore);
     rmSync(dir, { recursive: true, force: true });
   });
 

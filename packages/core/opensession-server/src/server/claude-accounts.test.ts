@@ -46,7 +46,7 @@ beforeAll(async () => {
 });
 
 describe("pickAccount usage-credits policy", () => {
-  test("skips a maxed account by default, even with credit headroom", () => {
+  test("skips a maxed account by default, even with credit headroom", async () => {
     accounts.__setUsageCacheForTest("fresh", usage(50));
     accounts.__setUsageCacheForTest(
       "maxed",
@@ -55,19 +55,19 @@ describe("pickAccount usage-credits policy", () => {
     expect(accounts.pickAccount(new Set(["fresh"]))?.id).toBeUndefined();
   });
 
-  test("allowExtraUsage picks a maxed account with credit headroom", () => {
+  test("allowExtraUsage picks a maxed account with credit headroom", async () => {
     expect(
       accounts.pickAccount(new Set(["fresh"]), undefined, undefined, true)?.id,
     ).toBe("maxed");
   });
 
-  test("prefers subscription capacity over credits when both are available", () => {
+  test("prefers subscription capacity over credits when both are available", async () => {
     expect(
       accounts.pickAccount(undefined, undefined, undefined, true)?.id,
     ).toBe("fresh");
   });
 
-  test("no headroom when extra usage is off or the monthly cap is spent", () => {
+  test("no headroom when extra usage is off or the monthly cap is spent", async () => {
     accounts.__setUsageCacheForTest(
       "maxed",
       usage(100, { enabled: false, usedCredits: 0, monthlyLimit: 100_000 }),
@@ -98,7 +98,7 @@ describe("pickAccount usage-credits policy", () => {
     ).toBeUndefined();
   });
 
-  test("getUsableAccountById honors allowExtraUsage the same way", () => {
+  test("getUsableAccountById honors allowExtraUsage the same way", async () => {
     accounts.__setUsageCacheForTest(
       "maxed",
       usage(100, { enabled: true, usedCredits: 50_000, monthlyLimit: 100_000 }),
@@ -109,12 +109,12 @@ describe("pickAccount usage-credits policy", () => {
     );
   });
 
-  test("getAccountById returns records regardless of usability", () => {
+  test("getAccountById returns records regardless of usability", async () => {
     expect(accounts.getAccountById("maxed")?.id).toBe("maxed");
     expect(accounts.getAccountById("nope")).toBeUndefined();
   });
 
-  test("does not preemptively sideline accounts from inferred Meridian usage", () => {
+  test("does not preemptively sideline accounts from inferred Meridian usage", async () => {
     accounts.__setUsageCacheForTest("fresh", usage(50));
     accounts.__setUsageCacheForTest("maxed", {
       ...usage(100),
@@ -128,13 +128,13 @@ describe("pickAccount usage-credits policy", () => {
     accounts.__setUsageCacheForTest("maxed", usage(100));
   });
 
-  test("allows a blind personal account for a singleton Fable requirement", () => {
+  test("allows a blind personal account for a singleton Fable requirement", async () => {
     expect(
       accounts.pickAccount(undefined, "Jaap", ["claude-fable-5-1"])?.id,
     ).toBe("blind-personal");
   });
 
-  test("requires capacity for every model in a preset", () => {
+  test("requires capacity for every model in a preset", async () => {
     accounts.__setUsageCacheForTest("fresh", {
       ...usage(20),
       scopedLimits: [
@@ -161,7 +161,7 @@ describe("pickAccount usage-credits policy", () => {
     accounts.__setUsageCacheForTest("fresh", usage(50));
   });
 
-  test("personal accounts stay off-limits to userless (automation) picks", () => {
+  test("personal accounts stay off-limits to userless (automation) picks", async () => {
     accounts.__setUsageCacheForTest("personal", usage(0));
     accounts.__setUsageCacheForTest(
       "maxed",
@@ -183,7 +183,7 @@ describe("resolveAccount owner gate", () => {
     accounts.__setUsageCacheForTest("personal", usage(0));
   };
 
-  test("a pinned foreign personal account is refused in pool mode", () => {
+  test("a pinned foreign personal account is refused in pool mode", async () => {
     seedUsable();
     const soft = accounts.resolveAccount({
       user: "Robin",
@@ -205,7 +205,7 @@ describe("resolveAccount owner gate", () => {
     });
   });
 
-  test("a pinned foreign personal account is refused in designated mode", () => {
+  test("a pinned foreign personal account is refused in designated mode", async () => {
     seedUsable();
     const soft = accounts.resolveAccount({
       user: "Robin",
@@ -223,7 +223,7 @@ describe("resolveAccount owner gate", () => {
     expect((strict as any).refusal.kind).toBe("pin-unusable");
   });
 
-  test("a designated personal account serves its owner only", () => {
+  test("a designated personal account serves its owner only", async () => {
     seedUsable();
     const other = accounts.resolveAccount({
       user: "Robin",
@@ -244,7 +244,7 @@ describe("resolveAccount owner gate", () => {
     });
   });
 
-  test("a foreign sticky account falls through to the pool", () => {
+  test("a foreign sticky account falls through to the pool", async () => {
     seedUsable();
     const resolved = accounts.resolveAccount({
       user: "Robin",
@@ -260,7 +260,7 @@ describe("resolveAccount owner gate", () => {
     expect((owner as any).reason).toBe("sticky");
   });
 
-  test("reports the reason for the path that produced the account", () => {
+  test("reports the reason for the path that produced the account", async () => {
     seedUsable();
     expect((accounts.resolveAccount({ pinnedId: "fresh" }) as any).reason).toBe(
       "pinned",
@@ -278,7 +278,7 @@ describe("resolveAccount owner gate", () => {
     expect((accounts.resolveAccount({}) as any).reason).toBe("pool");
   });
 
-  test("peek does not consume the round-robin turn", () => {
+  test("peek does not consume the round-robin turn", async () => {
     seedUsable();
     // Same utilization bucket: whoever was picked least recently wins, so a
     // peek must leave the next pick's answer unchanged.
@@ -301,7 +301,7 @@ describe("dry-pool backpressure", () => {
     extraUsage: null,
   });
 
-  test("a maxed account whose cached window already reset counts as usable", () => {
+  test("a maxed account whose cached window already reset counts as usable", async () => {
     // Window rolled 1 minute ago but the cache still says 100% — the stale
     // cache must not sideline the account until the next hourly poll.
     accounts.__setUsageCacheForTest("fresh", usage(50));
@@ -318,7 +318,7 @@ describe("dry-pool backpressure", () => {
     expect(accounts.pickAccount(new Set(["fresh"]))).toBeUndefined();
   });
 
-  test("earliestPoolReset reports the sidelined window's reset", () => {
+  test("earliestPoolReset reports the sidelined window's reset", async () => {
     const resetAt = Date.now() + 5 * 60_000;
     accounts.__setUsageCacheForTest(
       "fresh",
@@ -333,14 +333,14 @@ describe("dry-pool backpressure", () => {
     expect(Math.abs((earliest as number) - resetAt)).toBeLessThan(1000);
   });
 
-  test("earliestPoolReset is now-ish when something is usable", () => {
+  test("earliestPoolReset is now-ish when something is usable", async () => {
     accounts.__setUsageCacheForTest("fresh", usage(10));
     const earliest = accounts.earliestPoolReset();
     expect(earliest).not.toBeNull();
     expect((earliest as number) - Date.now()).toBeLessThan(1000);
   });
 
-  test("earliestPoolReset excludes accounts outside the designated bridge set", () => {
+  test("earliestPoolReset excludes accounts outside the designated bridge set", async () => {
     accounts.__setUsageCacheForTest("fresh", usage(10));
     expect(
       accounts.earliestPoolReset(undefined, undefined, "fresh", false, [
@@ -411,11 +411,13 @@ describe("pickBridgeAccount renders the owner-gate refusals", () => {
   const ocConfig = join(dir, "model-providers.json");
   const saved = process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG;
   let bridge: typeof import("./anthropic-bridge");
-  const designate = (ids: string[]) =>
+  const designate = async (ids: string[]) => {
     writeFileSync(
       ocConfig,
       JSON.stringify({ enabled: true, bridge: { accounts: ids } }),
     );
+    await (await import("./model-providers")).loadModelProviders();
+  };
 
   beforeAll(async () => {
     process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = ocConfig;
@@ -428,9 +430,9 @@ describe("pickBridgeAccount renders the owner-gate refusals", () => {
     else process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = saved;
   });
 
-  test("a designation of only someone else's personal account is dry", () => {
+  test("a designation of only someone else's personal account is dry", async () => {
     accounts.__setUsageCacheForTest("personal", usage(0));
-    designate(["personal"]);
+    await designate(["personal"]);
     const picked = bridge.pickBridgeAccount("claude-sonnet-5", {
       user: "Robin",
     });
@@ -445,11 +447,11 @@ describe("pickBridgeAccount renders the owner-gate refusals", () => {
     ).toBe("personal");
   });
 
-  test("a strict pin on someone else's personal account is refused in pool mode", () => {
+  test("a strict pin on someone else's personal account is refused in pool mode", async () => {
     accounts.__setUsageCacheForTest("personal", usage(0));
     accounts.__setUsageCacheForTest("fresh", usage(50));
     accounts.__setUsageCacheForTest("maxed", usage(90));
-    designate([]);
+    await designate([]);
     const picked = bridge.pickBridgeAccount("claude-sonnet-5", {
       user: "Robin",
       accountId: "personal",
@@ -538,7 +540,7 @@ describe("sidelines survive a restart", () => {
   });
   const originalStore = readFileSync(storePath, "utf-8");
 
-  beforeAll(() => {
+  beforeAll(async () => {
     const parsed = JSON.parse(originalStore);
     writeFileSync(
       storePath,
@@ -551,6 +553,7 @@ describe("sidelines survive a restart", () => {
         ],
       }),
     );
+    await accounts.loadClaudeAccounts();
     const fableSpent = {
       ...usage(10),
       scopedLimits: [{ label: "Fable", utilization: 100, resetsAt: null }],
@@ -566,12 +569,15 @@ describe("sidelines survive a restart", () => {
       Date.now() + 2 * 60 * 60 * 1000,
     );
     // What a `systemctl restart opensession` does to the in-memory map.
-    accounts.__reloadSidelinesForTest();
+    await accounts.__reloadSidelinesForTest();
   });
 
-  afterAll(() => writeFileSync(storePath, originalStore));
+  afterAll(async () => {
+    writeFileSync(storePath, originalStore);
+    await accounts.loadClaudeAccounts();
+  });
 
-  test("an account-level sideline is still in force after a reload", () => {
+  test("an account-level sideline is still in force after a reload", async () => {
     const publics = accounts.listAccountsPublic();
     const rebooted = publics.find((a) => a.id === "reboot");
     expect(rebooted?.exhaustedUntil).not.toBeNull();
@@ -583,7 +589,7 @@ describe("sidelines survive a restart", () => {
     ).toBeUndefined();
   });
 
-  test("a model-scoped sideline survives, and only for that model", () => {
+  test("a model-scoped sideline survives, and only for that model", async () => {
     const rebooted = accounts
       .listAccountsPublic()
       .find((a) => a.id === "reboot-model");
@@ -629,7 +635,7 @@ describe("model-scoped sidelines without a weekly cap of their own", () => {
     ...(scopedLimits ? { scopedLimits } : {}),
   });
 
-  beforeAll(() => {
+  beforeAll(async () => {
     const parsed = JSON.parse(originalStore);
     writeFileSync(
       storePath,
@@ -642,6 +648,7 @@ describe("model-scoped sidelines without a weekly cap of their own", () => {
         ],
       }),
     );
+    await accounts.loadClaudeAccounts();
     for (const id of ["sonnet-ok", "sonnet-spent", "fable-unknown"]) {
       accounts.__setUsageCacheForTest(id, usage(10));
     }
@@ -650,23 +657,26 @@ describe("model-scoped sidelines without a weekly cap of their own", () => {
     accounts.markExhausted("fable-unknown", "claude-fable-5-1", farFuture());
   });
 
-  afterAll(() => writeFileSync(storePath, originalStore));
+  afterAll(async () => {
+    writeFileSync(storePath, originalStore);
+    await accounts.loadClaudeAccounts();
+  });
 
   const pick = (id: string, model: string) =>
     accounts.getUsableAccountById(id, model)?.id;
 
-  test("7-day headroom releases a Sonnet sideline early", () => {
+  test("7-day headroom releases a Sonnet sideline early", async () => {
     expect(pick("sonnet-ok", "claude-sonnet-5-5")).toBeUndefined();
     accounts.__applyUsageRefreshForTest("sonnet-ok", snapshot(40));
     expect(pick("sonnet-ok", "claude-sonnet-5-5")).toBe("sonnet-ok");
   });
 
-  test("an exhausted 7-day window keeps the Sonnet sideline", () => {
+  test("an exhausted 7-day window keeps the Sonnet sideline", async () => {
     accounts.__applyUsageRefreshForTest("sonnet-spent", snapshot(100));
     expect(pick("sonnet-spent", "claude-sonnet-5-5")).toBeUndefined();
   });
 
-  test("a model with its own cap of unknown utilization stays sidelined", () => {
+  test("a model with its own cap of unknown utilization stays sidelined", async () => {
     accounts.__applyUsageRefreshForTest(
       "fable-unknown",
       snapshot(40, [{ label: "Fable", utilization: null, resetsAt: null }]),

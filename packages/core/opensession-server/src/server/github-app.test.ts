@@ -33,7 +33,7 @@ afterEach(async () => {
     delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
   else process.env.OPENSESSION_GITHUB_CLIENT_ID = savedClientId;
   globalThis.fetch = originalFetch;
-  __setGithubAppKeyPathForTest(undefined);
+  await __setGithubAppKeyPathForTest(undefined);
   const cache = globalThis as any;
   cache.__ghAppTokenCache = undefined;
   cache.__ghAppTokenWarned = undefined;
@@ -63,7 +63,7 @@ describe("GitHub App webhook", () => {
     process.env.OPENSESSION_CONFIG = config;
     await getConfigAsync();
     delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
-    __setGithubAppKeyPathForTest(keyPath);
+    await __setGithubAppKeyPathForTest(keyPath);
     globalThis.fetch = (async (input, init) => {
       expect(String(input)).toBe("https://api.github.com/app/hook/config");
       expect(init?.method).toBe("PATCH");
@@ -107,7 +107,7 @@ async function writeAppIdentity(
   process.env.OPENSESSION_CONFIG = config;
   await getConfigAsync();
   delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
-  __setGithubAppKeyPathForTest(keyPath);
+  await __setGithubAppKeyPathForTest(keyPath);
 }
 
 describe("App installation directory", () => {
@@ -232,7 +232,7 @@ describe("repository-scoped App installation identity", () => {
     process.env.OPENSESSION_CONFIG = config;
     await getConfigAsync();
     delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
-    __setGithubAppKeyPathForTest(keyPath);
+    await __setGithubAppKeyPathForTest(keyPath);
     (globalThis as any).__ghAppTokenCache = new Map([
       [
         "Iv-owner-test:1:read",
@@ -271,7 +271,7 @@ describe("repository-scoped App installation identity", () => {
     process.env.OPENSESSION_CONFIG = config;
     await getConfigAsync();
     delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
-    __setGithubAppKeyPathForTest(keyPath);
+    await __setGithubAppKeyPathForTest(keyPath);
     const requests: string[] = [];
     globalThis.fetch = twoInstallationFetch(requests);
 
@@ -329,7 +329,7 @@ describe("repository-scoped App installation identity", () => {
     process.env.OPENSESSION_CONFIG = config;
     await getConfigAsync();
     delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
-    __setGithubAppKeyPathForTest(keyPath);
+    await __setGithubAppKeyPathForTest(keyPath);
     globalThis.fetch = twoInstallationFetch([]);
 
     expect(await githubToken()).toBeNull();
@@ -348,7 +348,7 @@ describe("repository-scoped App installation identity", () => {
     process.env.OPENSESSION_CONFIG = config;
     await getConfigAsync();
     delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
-    __setGithubAppKeyPathForTest(keyPath);
+    await __setGithubAppKeyPathForTest(keyPath);
     const bodies: Array<{
       repositories?: string[];
       permissions: Record<string, string>;
@@ -394,7 +394,7 @@ describe("repository-scoped App installation identity", () => {
     process.env.OPENSESSION_CONFIG = config;
     await getConfigAsync();
     delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
-    __setGithubAppKeyPathForTest(keyPath);
+    await __setGithubAppKeyPathForTest(keyPath);
     const bodies: Array<{
       repositories?: string[];
       permissions: Record<string, string>;
@@ -463,7 +463,7 @@ describe("repository-scoped App installation identity", () => {
     process.env.OPENSESSION_CONFIG = config;
     await getConfigAsync();
     delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
-    __setGithubAppKeyPathForTest(keyPath);
+    await __setGithubAppKeyPathForTest(keyPath);
     const bodies: Array<{
       repositories?: string[];
       permissions: Record<string, string>;

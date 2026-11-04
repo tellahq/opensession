@@ -52,7 +52,8 @@ Two separate pieces:
    ```
 
    Use a restricted key with write on Refunds + Subscriptions (+ Invoices if
-   you want invoice voiding) only and read on core billing resources. Stripe
+   you want invoice voiding, + Customers if you want customer balance
+   adjustments) only and read on core billing resources. Stripe
    enforces that ceiling server-side. The MCP config path resolves from
    `OPENSESSION_MCP_CONFIG`, then `paths.mcpConfig`, then
    `<checkout>/mcp-config.json`.
@@ -97,8 +98,8 @@ never reach the Stripe server.
 The server also narrows the raw writer (`stripe-approvals.ts`): only
 `PostRefunds`, `DeleteSubscriptionsSubscriptionExposedId` and the requester's
 `PostV2CoreApprovalRequestsId` / `PostV2CoreApprovalRequestsIdCancel` go
-through, plus draft invoices and invoice voids; any other operation fails
-before it reaches Stripe. A void (`PostInvoicesInvoiceVoid`) runs immediately:
+through, plus draft invoices, invoice voids and customer balance adjustments;
+any other operation fails before it reaches Stripe. A void (`PostInvoicesInvoiceVoid`) runs immediately:
 Stripe approval rules cannot hold it, so nobody reviews it. It moves no money,
 and Stripe only voids `open` or `uncollectible` invoices. Runs are told to void
 only an open invoice they have a clear reason to void, such as one left open
@@ -109,7 +110,12 @@ returns status `void`. A run may create an invoice with `PostInvoices` only as a
 item never lands on a subscription's next charge. Stripe neither sends nor
 charges a draft: a person finalizes it in the Dashboard, then sends it or
 marks it paid outside Stripe (for example an invoice for a payment that
-Checkout already took). Runs are told to
+Checkout already took). A customer balance
+adjustment (`PostCustomersCustomerBalanceTransactions`) can grant or remove
+credit by any amount. Stripe cannot hold it either, so it runs at once and
+nobody reviews it; nothing is charged or paid out until the balance meets the
+customer's next invoice. Runs are told to read the balance first and adjust it
+only when their instructions or a teammate call for it. Runs are told to
 treat `approval_required` as queued for review, add a reason to the request,
 and share its Dashboard approval link with its expiry. The server appends the
 session link to that reason. A request nobody reviews before `expires_at`

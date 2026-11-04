@@ -678,7 +678,7 @@ async function launchHost(input: {
   env: Record<string, string>;
   unit: string;
 }): Promise<{ pid: number; scopeUnit?: string; exited: Promise<unknown> }> {
-  const scoped = systemdUserScopesAvailable();
+  const scoped = await systemdUserScopesAvailable();
   const cmd = scoped
     ? [
         "systemd-run",

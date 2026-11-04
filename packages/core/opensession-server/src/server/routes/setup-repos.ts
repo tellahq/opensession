@@ -13,15 +13,14 @@
 
 import { $ } from "bun";
 import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "fs";
-import { mkdir, rm, stat, writeFile } from "fs/promises";
+  chmod,
+  mkdir,
+  mkdtemp,
+  realpath,
+  rm,
+  stat,
+  writeFile,
+} from "fs/promises";
 import { tmpdir } from "os";
 import { basename, isAbsolute, join } from "path";
 import { audit } from "../audit";
@@ -55,7 +54,10 @@ import {
   serviceGithubCredential,
   type GithubCredential,
 } from "../github-auth";
-import { githubCredentialHelperCommand } from "../github-git-credential";
+import {
+  githubCredentialHelperCommand,
+  installedGithubCredentialHelperCommand,
+} from "../github-git-credential";
 import { homeDir } from "../paths";
 import { fetchWithTimeout } from "../shared/fetch-with-timeout";
 import { validNewRepoName } from "../../shared/repo-name";
@@ -436,17 +438,17 @@ async function cloneGithubRepo(
 ): Promise<void> {
   const cleanUrl = `https://github.com/${fullName}.git`;
   if (userToken) {
-    const askpassDir = mkdtempSync(join(tmpdir(), "os-gh-askpass-"));
+    const askpassDir = await mkdtemp(join(tmpdir(), "os-gh-askpass-"));
     const askpass = join(askpassDir, "askpass.sh");
     // The script body is static and secret-free: git passes the prompt text as
     // $1, and the helper echoes the username or the token from the environment
     // (which only this child and its git subprocess can read).
-    writeFileSync(
+    await writeFile(
       askpass,
       '#!/bin/sh\ncase "$1" in\n*[Uu]sername*) printf %s "$GIT_USERNAME" ;;\n*) printf %s "$GIT_PASSWORD" ;;\nesac\n',
       { mode: 0o700 },
     );
-    chmodSync(askpass, 0o700); // belt against a permissive umask on create
+    await chmod(askpass, 0o700); // belt against a permissive umask on create
     try {
       const result = await runCommand(
         [
@@ -476,7 +478,7 @@ async function cloneGithubRepo(
         30_000,
       );
     } finally {
-      rmSync(askpassDir, { recursive: true, force: true });
+      await rm(askpassDir, { recursive: true, force: true });
     }
     return;
   }
@@ -504,9 +506,9 @@ function statusForError(error: unknown, fallback = 500): number {
   return typeof status === "number" ? status : fallback;
 }
 
-function canonicalRepoPath(path: string): string {
+async function canonicalRepoPath(path: string): Promise<string> {
   try {
-    return realpathSync(path);
+    return await realpath(path);
   } catch {
     return path;
   }
@@ -531,16 +533,15 @@ function assertRepoSlotAvailable(
   }
 }
 
-function assertRepoPathAvailable(
+async function assertRepoPathAvailable(
   path: string,
   registered: Record<string, Repo>,
-): void {
-  const canonical = canonicalRepoPath(path);
-  if (
-    Object.values(registered).some(
-      (repo) => canonicalRepoPath(repo.repo) === canonical,
-    )
-  ) {
+): Promise<void> {
+  const canonical = await canonicalRepoPath(path);
+  const registeredPaths = await Promise.all(
+    Object.values(registered).map((repo) => canonicalRepoPath(repo.repo)),
+  );
+  if (registeredPaths.includes(canonical)) {
     throw setupRepoError(`Repository is already registered: ${canonical}`, 409);
   }
 }
@@ -592,7 +593,7 @@ function repoSectionsForMutation(
   return { ...(config.repos as Record<string, RepoSection>) };
 }
 
-function persistRepoRegistration(input: {
+async function persistRepoRegistration(input: {
   id: string;
   entry: RepoSection;
   registered: Record<string, Repo>;
@@ -600,8 +601,8 @@ function persistRepoRegistration(input: {
   adopted?: boolean;
   /** The checkout and its origin were made by this call, not found. */
   created?: boolean;
-}): RepoSection & { id: string } {
-  const config = rawConfig();
+}): Promise<RepoSection & { id: string }> {
+  const config = await rawConfig();
   const repos = repoSectionsForMutation(config, input.registered);
   const entry: RepoSection = {
     ...input.entry,
@@ -609,7 +610,7 @@ function persistRepoRegistration(input: {
   };
   repos[input.id] = entry;
   config.repos = repos;
-  persistRawConfig(config);
+  await persistRawConfig(config);
   // Registration changes the `registered` bit in both browse payloads. Do not
   // serve a stale Add button when the picker reopens after a background clone.
   repoListCache.clear();
@@ -653,7 +654,7 @@ async function createLocalRepo(input: {
   const root = checkoutsRoot();
   const dest = `${root}/${id}`;
   const origin = localOriginPath(id);
-  assertRepoPathAvailable(dest, registered);
+  await assertRepoPathAvailable(dest, registered);
   // This runs on the gateway thread, so every filesystem step here is async.
   const exists = (path: string) =>
     stat(path).then(
@@ -695,7 +696,7 @@ async function createLocalRepo(input: {
     await git(["-C", dest, "push", "--quiet", "-u", "origin", "main"]);
     await git(["-C", dest, "remote", "set-head", "origin", "main"]);
     const inspected = await inspectRepo(dest);
-    return persistRepoRegistration({
+    return await persistRepoRegistration({
       id,
       registered,
       auditRepo: inspected.path,
@@ -723,7 +724,7 @@ async function configureGithubCredentialHelper(
 ): Promise<void> {
   const helperKey = "credential.https://github.com.helper";
   await $`git -C ${checkoutPath} config --replace-all ${helperKey} ${""}`.quiet();
-  await $`git -C ${checkoutPath} config --add ${helperKey} ${githubCredentialHelperCommand()}`.quiet();
+  await $`git -C ${checkoutPath} config --add ${helperKey} ${await installedGithubCredentialHelperCommand()}`.quiet();
 }
 
 /**
@@ -748,7 +749,7 @@ export async function adoptExistingCheckout(
   dest: string,
   matches: (inspected: InspectedRepo) => boolean,
 ): Promise<InspectedRepo | null> {
-  if (!existsSync(dest)) return null;
+  if (!(await stat(dest).catch(() => null))) return null;
   const inspected = await inspectRepo(dest).catch(() => null);
   if (!inspected || !matches(inspected)) {
     throw new Error(`Clone destination already exists: ${dest}`);
@@ -778,7 +779,7 @@ async function registerGithubRepo(input: {
   }
   const root = checkoutsRoot();
   const dest = `${root}/${id}`;
-  assertRepoPathAvailable(dest, registered);
+  await assertRepoPathAvailable(dest, registered);
   await assertRepoOriginAvailable(
     await normalizeRepoOrigin(`https://github.com/${input.fullName}.git`),
     registered,
@@ -787,7 +788,7 @@ async function registerGithubRepo(input: {
     dest,
     (i) => (i.ghRepo || "").toLowerCase() === input.fullName.toLowerCase(),
   );
-  mkdirSync(root, { recursive: true });
+  await mkdir(root, { recursive: true });
   try {
     if (!adopted) {
       await (cloneForTest ?? cloneGithubRepo)(
@@ -804,7 +805,7 @@ async function registerGithubRepo(input: {
     const defaultBranch = await normalizeInspectedDefaultBranch(
       inspected.defaultBranch,
     );
-    return persistRepoRegistration({
+    return await persistRepoRegistration({
       id,
       registered,
       auditRepo: input.fullName,
@@ -852,7 +853,7 @@ async function registerLocalRepo(input: {
   const { inspected, name, id } = input;
   const registered = configuredRepos();
   assertRepoSlotAvailable(id, registered);
-  assertRepoPathAvailable(inspected.path, registered);
+  await assertRepoPathAvailable(inspected.path, registered);
   if (
     inspected.ghRepo &&
     Object.values(registered).some(
@@ -898,7 +899,7 @@ async function registerLocalRepo(input: {
   const defaultBranch = await normalizeInspectedDefaultBranch(
     inspected.defaultBranch,
   );
-  return persistRepoRegistration({
+  return await persistRepoRegistration({
     id,
     registered,
     auditRepo: inspected.path,
@@ -965,7 +966,7 @@ async function registerCodestorageRepo(input: {
   }
   const root = checkoutsRoot();
   const dest = `${root}/${id}`;
-  assertRepoPathAvailable(dest, registered);
+  await assertRepoPathAvailable(dest, registered);
   await assertRepoOriginAvailable(
     await normalizeRepoOrigin(csRemoteUrl(cfg.org, csRepo)),
     registered,
@@ -973,7 +974,7 @@ async function registerCodestorageRepo(input: {
   const adopted = await adoptExistingCheckout(dest, (i) =>
     matchesCodeStorageCheckout(i, cfg.org, csRepo),
   );
-  mkdirSync(root, { recursive: true });
+  await mkdir(root, { recursive: true });
   try {
     // Clones with a short-lived JWT, persists the credential-free remote, and
     // wires the URL-scoped credential helper for ambient git fetch/push. Boot
@@ -983,7 +984,7 @@ async function registerCodestorageRepo(input: {
     const defaultBranch = await normalizeInspectedDefaultBranch(
       inspected.defaultBranch,
     );
-    return persistRepoRegistration({
+    return await persistRepoRegistration({
       id,
       registered,
       auditRepo: csRepo,
@@ -1431,7 +1432,7 @@ export async function handleSetupRepoRoutes(
 
     try {
       const updated = await withConfigMutationLock(async () => {
-        const config = rawConfig();
+        const config = await rawConfig();
         if (changesWorktrees) migrateLegacySelfDev(config, repos);
         const section = repoSectionForMutation(config, id);
         if (!section) return null;
@@ -1439,7 +1440,7 @@ export async function handleSetupRepoRoutes(
         if (changesWorktrees) {
           section.sharedCheckout = !(body.isolatedWorktrees as boolean);
         }
-        persistRawConfig(config);
+        await persistRawConfig(config);
         const result = {
           id,
           defaultBranch: defaultBranch || repo.defaultBranch,

@@ -238,12 +238,12 @@ export async function handleSetupRoutes(
       await import("../config-mutation");
     const { ensureLocalOnboardingMember } = await import("./setup-team");
     return withConfigMutationLock(async () => {
-      const config = rawConfig();
+      const config = await rawConfig();
       // Older instances predate the flag and have already been in use. Only the
       // installer-written explicit false represents a first run. Materialize
       // the default local identity for incomplete configs created before the
       // installer began seeding it itself.
-      if (ensureLocalOnboardingMember(config)) persistRawConfig(config);
+      if (ensureLocalOnboardingMember(config)) await persistRawConfig(config);
       return Response.json({ completed: config.onboardingCompleted !== false });
     });
   }
@@ -264,7 +264,7 @@ export async function handleSetupRoutes(
     const { rawConfig, persistRawConfig, withConfigMutationLock } =
       await import("../config-mutation");
     return withConfigMutationLock(async () => {
-      const config = rawConfig();
+      const config = await rawConfig();
       if (config.onboardingCompleted !== true) {
         const { parseTeamMember } = await import("../config");
         const { connectedGithubAccounts, soleGithubLogin } =
@@ -308,7 +308,7 @@ export async function handleSetupRoutes(
           (config.identity as Record<string, unknown>).team = team;
         }
         config.onboardingCompleted = true;
-        persistRawConfig(config);
+        await persistRawConfig(config);
         audit({
           kind: "setup_onboarding_complete",
           by: ctx.authUser?.login || null,
@@ -329,7 +329,7 @@ export async function handleSetupRoutes(
     const { engineStatus } = await import("../engine-status");
     const { configuredPublicIngress } = await import("../ingress-settings");
     const { sharedCheckoutForNewSessions } = await import("../worktree");
-    const envValues = readEnvFileValues({ includeUnset: true });
+    const envValues = await readEnvFileValues({ includeUnset: true });
 
     const access = setupAccessSnapshot({ persistedEnv: envValues });
 
@@ -436,7 +436,7 @@ export async function handleSetupRoutes(
 
     return withConfigMutationLock(async () => {
       try {
-        applyEnvFileEdits(edits);
+        await applyEnvFileEdits(edits);
       } catch (error) {
         // A misplaced env file is an install problem, not a request problem.
         // Name the path and the fix instead of leaking a raw fs error as 500.
@@ -447,7 +447,7 @@ export async function handleSetupRoutes(
         throw error;
       }
       if (enabled !== undefined) {
-        const config = rawConfig();
+        const config = await rawConfig();
         const integrations =
           config.integrations &&
           typeof config.integrations === "object" &&
@@ -463,7 +463,7 @@ export async function handleSetupRoutes(
             : {};
         integrations[spec.id] = section;
         section.enabled = enabled;
-        persistRawConfig(config);
+        await persistRawConfig(config);
       }
       audit({
         kind: "setup_integration_update",
@@ -472,7 +472,7 @@ export async function handleSetupRoutes(
         ...(enabled !== undefined ? { enabled } : {}),
       });
       return Response.json({
-        integration: await integrationSnapshot(spec, readEnvFileValues()),
+        integration: await integrationSnapshot(spec, await readEnvFileValues()),
         restartRequired: true,
       });
     });
@@ -569,7 +569,7 @@ export async function handleSetupRoutes(
       await import("../config-mutation");
 
     return withConfigMutationLock(async () => {
-      const config = rawConfig();
+      const config = await rawConfig();
       const integrations =
         config.integrations &&
         typeof config.integrations === "object" &&

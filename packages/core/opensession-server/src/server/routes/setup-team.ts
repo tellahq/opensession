@@ -204,8 +204,8 @@ async function syncGithubOrganizationMembers(
   ctx: RouteContext,
 ): Promise<Response> {
   const organization = githubOrganization();
-  const currentMembers = () => {
-    const config = rawConfig();
+  const currentMembers = async () => {
+    const config = await rawConfig();
     return rawTeam(config)
       .map(parseTeamMember)
       .filter((member): member is TeamMember => !!member);
@@ -215,7 +215,7 @@ async function syncGithubOrganizationMembers(
       organization: null,
       synced: false,
       added: 0,
-      members: currentMembers(),
+      members: await currentMembers(),
     });
   }
   const importedOrganization =
@@ -229,7 +229,7 @@ async function syncGithubOrganizationMembers(
       synced: true,
       alreadyImported: true,
       added: 0,
-      members: currentMembers(),
+      members: await currentMembers(),
     });
   }
 
@@ -252,7 +252,7 @@ async function syncGithubOrganizationMembers(
       organization,
       synced: false,
       added: 0,
-      members: currentMembers(),
+      members: await currentMembers(),
       error: "Connect GitHub before importing organization members.",
     });
   }
@@ -273,7 +273,7 @@ async function syncGithubOrganizationMembers(
         organization,
         synced: false,
         added: 0,
-        members: currentMembers(),
+        members: await currentMembers(),
         error:
           importError instanceof Error
             ? importError.message
@@ -284,7 +284,7 @@ async function syncGithubOrganizationMembers(
   }
 
   return withConfigMutationLock(async () => {
-    const config = rawConfig();
+    const config = await rawConfig();
     const team = rawTeam(config);
     const githubLogins = new Set(team.map(memberGithub).filter(Boolean));
     const names = new Set(team.map(memberName).filter(Boolean));
@@ -313,7 +313,7 @@ async function syncGithubOrganizationMembers(
         : {};
     integrations.github = github;
     github.membersImportedOrganization = organization;
-    persistRawConfig(config);
+    await persistRawConfig(config);
     audit({
       kind: "setup_team_update",
       action: "sync_github_organization",
@@ -353,7 +353,7 @@ export async function handleSetupTeamRoutes(
       return Response.json({ error: "name is required" }, { status: 400 });
     }
     return withConfigMutationLock(async () => {
-      const config = rawConfig();
+      const config = await rawConfig();
       const team = rawTeam(config);
       const key = member.name.trim().toLowerCase();
       if (team.some((m) => memberName(m) === key)) {
@@ -371,7 +371,7 @@ export async function handleSetupTeamRoutes(
       }
       team.push({ ...body, name: member.name });
       (config.identity as Record<string, unknown>).team = team;
-      persistRawConfig(config);
+      await persistRawConfig(config);
       audit({
         kind: "setup_team_update",
         action: "add",
@@ -389,7 +389,7 @@ export async function handleSetupTeamRoutes(
 
     if (isRemove && req.method === "POST") {
       return withConfigMutationLock(async () => {
-        const config = rawConfig();
+        const config = await rawConfig();
         const team = rawTeam(config);
         const idx = team.findIndex((m) => memberName(m) === targetName);
         if (idx === -1) {
@@ -401,7 +401,7 @@ export async function handleSetupTeamRoutes(
         const removed = team[idx];
         team.splice(idx, 1);
         (config.identity as Record<string, unknown>).team = team;
-        persistRawConfig(config);
+        await persistRawConfig(config);
         audit({
           kind: "setup_team_update",
           action: "remove",
@@ -419,7 +419,7 @@ export async function handleSetupTeamRoutes(
       const invalid = validateMemberFields(body, true);
       if (invalid) return Response.json({ error: invalid }, { status: 400 });
       return withConfigMutationLock(async () => {
-        const config = rawConfig();
+        const config = await rawConfig();
         const team = rawTeam(config);
         const idx = team.findIndex((m) => memberName(m) === targetName);
         if (idx === -1) {
@@ -462,7 +462,7 @@ export async function handleSetupTeamRoutes(
         }
         team[idx] = merged;
         (config.identity as Record<string, unknown>).team = team;
-        persistRawConfig(config);
+        await persistRawConfig(config);
         audit({
           kind: "setup_team_update",
           action: "update",

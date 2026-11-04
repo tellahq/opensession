@@ -147,7 +147,7 @@ describe("MCP OAuth resource discovery", () => {
       const { url } = await startMcpOauthFlow("root-resource", serverUrl);
       expect(new URL(url).searchParams.get("resource")).toBe(identifier);
       expect(await isOauthCapable(serverUrl)).toBe(true);
-      addMcpServerEntry("acme-root", { type: "http", url: serverUrl });
+      await addMcpServerEntry("acme-root", { type: "http", url: serverUrl });
       expect(
         (await getConnections(true)).find((c) => c.name === "acme-root")
           ?.status,
@@ -287,8 +287,11 @@ describe("MCP OAuth resource discovery", () => {
     expect(await isOauthCapable(publicUrl)).toBe(false);
     expect(cachedOauthCapable(protectedUrl)).toBe(true);
     expect(cachedOauthCapable(publicUrl)).toBe(false);
-    addMcpServerEntry("acme-protected", { type: "http", url: protectedUrl });
-    addMcpServerEntry("acme-public", { type: "http", url: publicUrl });
+    await addMcpServerEntry("acme-protected", {
+      type: "http",
+      url: protectedUrl,
+    });
+    await addMcpServerEntry("acme-public", { type: "http", url: publicUrl });
     const connections = await getConnections(true);
     expect(connections.find((c) => c.name === "acme-protected")?.status).toBe(
       "needs-auth",

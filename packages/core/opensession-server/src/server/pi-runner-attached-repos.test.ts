@@ -94,7 +94,7 @@ test("attached repositories resolve to their GitHub names", () => {
   expect(attachedGithubRepos(session)).toEqual(["acme/ops"]);
 });
 
-test("the run token also reaches repositories of PRs the session opened", () => {
+test("the run token also reaches repositories of PRs the session opened", async () => {
   // The agent cloned acme/ops instead of attaching it and opened a PR there.
   // A later review handoff for that PR must be able to reply on it.
   const session = {
@@ -102,12 +102,14 @@ test("the run token also reaches repositories of PRs the session opened", () => 
     repo: "app",
     linkedPrs: [{ repo: "docs", branch: "b" }],
   } as Parameters<typeof sessionGithubRepos>[0];
-  expect(sessionGithubRepos(session)).toEqual(["acme/ops"]);
+  expect(await sessionGithubRepos(session)).toEqual(["acme/ops"]);
   // Automation sessions keep their attached repositories only.
-  expect(sessionGithubRepos({ ...session, automationId: "a1" })).toEqual([]);
+  expect(await sessionGithubRepos({ ...session, automationId: "a1" })).toEqual(
+    [],
+  );
   // The primary repository is the token's own; it is not listed twice.
   expect(
-    sessionGithubRepos({
+    await sessionGithubRepos({
       ...session,
       repo: "ops",
     } as Parameters<typeof sessionGithubRepos>[0]),

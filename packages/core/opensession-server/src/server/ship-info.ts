@@ -40,7 +40,7 @@ export async function sessionShipInfo(
 ): Promise<SessionShipInfo> {
   if (session.mode !== "code" || !session.worktreeDir || session.desk)
     return { available: false };
-  const repoId = sessionRepoId(session);
+  const repoId = await sessionRepoId(session);
   if (!repoId) return { available: false };
   let repo;
   try {
@@ -49,7 +49,8 @@ export async function sessionShipInfo(
     return { available: false };
   }
   const checkout: ShipCheckout =
-    canonicalPath(session.worktreeDir) === canonicalPath(repo.repo)
+    (await canonicalPath(session.worktreeDir)) ===
+    (await canonicalPath(repo.repo))
       ? "shared"
       : "worktree";
   // A session that predates its workspace's choice still ships the way the

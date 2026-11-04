@@ -11,7 +11,7 @@
  * (codeStorageConfig() returns non-null).
  */
 
-import { readFileSync, statSync } from "fs";
+import { readFile, stat } from "fs/promises";
 import { codeStorageConfig } from "../config";
 
 export type CsScope = "git:read" | "git:write" | "repo:write" | "org:read";
@@ -74,11 +74,11 @@ export async function importPkcs8Pem(pem: string): Promise<ImportedKey> {
 }
 
 async function importPrivateKey(path: string): Promise<ImportedKey> {
-  const st = statSync(path);
+  const st = await stat(path);
   if (keyCache && keyCache.path === path && keyCache.mtimeMs === st.mtimeMs) {
     return keyCache.imported;
   }
-  const imported = await importPkcs8Pem(readFileSync(path, "utf-8"));
+  const imported = await importPkcs8Pem(await readFile(path, "utf-8"));
   keyCache = { path, mtimeMs: st.mtimeMs, imported };
   return imported;
 }

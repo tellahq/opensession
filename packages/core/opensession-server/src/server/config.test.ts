@@ -391,7 +391,7 @@ describe("config loader", () => {
         futureSection: { keep: true },
       }),
     );
-    updateIdentityConfig({ personaName: " Ava ", productName: "OS¹" });
+    await updateIdentityConfig({ personaName: " Ava ", productName: "OS¹" });
     expect(personaName()).toBe("Ava");
     expect(productName()).toBe("OS¹");
     const raw = JSON.parse(readFileSync(configPath(), "utf-8"));
@@ -401,7 +401,7 @@ describe("config loader", () => {
     expect(raw.futureSection).toEqual({ keep: true });
 
     // Empty string deletes the key; an emptied section disappears entirely.
-    updateIdentityConfig({ personaName: "", productName: "" });
+    await updateIdentityConfig({ personaName: "", productName: "" });
     expect(personaName()).toBe("Assistant");
     expect(productName()).toBe("Open Session");
     expect(
@@ -411,11 +411,11 @@ describe("config loader", () => {
 
   test("updateIdentityConfig: creates a missing file, refuses a corrupt one", async () => {
     await withConfig(null);
-    updateIdentityConfig({ productName: "Fresh" });
+    await updateIdentityConfig({ productName: "Fresh" });
     expect(productName()).toBe("Fresh");
 
     await withConfig("{ not json");
-    expect(() => updateIdentityConfig({ personaName: "X" })).toThrow();
+    await expect(updateIdentityConfig({ personaName: "X" })).rejects.toThrow();
     // The broken hand-edited file is left untouched.
     expect(readFileSync(configPath(), "utf-8")).toBe("{ not json");
   });

@@ -16,11 +16,11 @@
  */
 
 import { homeDir } from "./paths";
-import { existsSync, readFileSync } from "fs";
 import { readFile, stat } from "node:fs/promises";
 import { resolve as resolvePath } from "path";
 import { statePath } from "./paths";
-import { writeFileAtomic } from "./shared/atomic-write";
+import { writeFileAtomicAsync } from "./shared/atomic-write";
+import { whichAsync, whichCached } from "./shared/which";
 import { shellSafeDefaultBranch } from "./repo-branch";
 import { parseShipActions, type ShipAction } from "./ship-actions";
 
@@ -743,7 +743,7 @@ export function publishConfigSnapshot(path: string, contents: string): void {
 
 // Imports can synchronously consume configuration, but initialization itself
 // must not block the gateway. No watcher, timer, socket or subprocess is started.
-await getConfigAsync();
+await Promise.all([getConfigAsync(), whichAsync("claude")]);
 
 // ---------------------------------------------------------------------------
 // Typed getters (env var → config.json → portable default)
@@ -798,13 +798,10 @@ export function configuredIngress(): ResolvedIngress {
 
 // PATH lookups walk ~10 directories with a syscall each, and configuredPaths
 // is called on hot paths that never use claudeBin. Resolve once per PATH.
-let claudeOnPath: { path: string | undefined; bin: string | null } | null =
-  null;
+// The lookup itself is async (shared/which.ts), awaited once at import and
+// renewed in the background when PATH changes.
 function claudeFromPath(): string | null {
-  const path = process.env.PATH;
-  if (!claudeOnPath || claudeOnPath.path !== path)
-    claudeOnPath = { path, bin: Bun.which("claude") };
-  return claudeOnPath.bin;
+  return whichCached("claude") ?? null;
 }
 
 export function configuredPaths(): ResolvedPaths {
@@ -1059,11 +1056,19 @@ export interface IdentityPatch {
  * a file that exists but doesn't parse: overwriting a hand-edited file with a
  * syntax error would silently destroy it.
  */
-export function updateIdentityConfig(patch: IdentityPatch): void {
+export async function updateIdentityConfig(
+  patch: IdentityPatch,
+): Promise<void> {
   const path = configPath();
   let raw: Record<string, unknown> = {};
-  if (existsSync(path)) {
-    const parsed = JSON.parse(readFileSync(path, "utf-8"));
+  let text: string | null = null;
+  try {
+    text = await readFile(path, "utf-8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  if (text !== null) {
+    const parsed = JSON.parse(text);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       throw new Error(`${path} is not a JSON object`);
     }
@@ -1086,7 +1091,7 @@ export function updateIdentityConfig(patch: IdentityPatch): void {
   setOrDelete("branding", "productName", patch.productName);
   setOrDelete("branding", "productMark", patch.productMark);
   const contents = JSON.stringify(raw, null, 2) + "\n";
-  writeFileAtomic(path, contents);
+  await writeFileAtomicAsync(path, contents);
   publishConfigSnapshot(path, contents);
 }
 

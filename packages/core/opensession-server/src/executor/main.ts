@@ -11,7 +11,7 @@ import { startExecutorServer } from "./server";
 export async function runExecutor(): Promise<void> {
   process.umask(0o077);
   await verifyRunHostHelper();
-  const token = readExecutorCredential();
+  const token = await readExecutorCredential();
   if (!token) throw new Error("executor credential is unavailable");
   const root = sessionsDir();
   const coordinator = new ExecutorCoordinator(root, token);
@@ -26,7 +26,7 @@ export async function runExecutor(): Promise<void> {
       readyFile,
       `${JSON.stringify({
         pid: process.pid,
-        generation: runtimeGeneration(),
+        generation: await runtimeGeneration(),
         component: "executor",
       })}\n`,
       { mode: 0o600 },

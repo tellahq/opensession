@@ -81,6 +81,8 @@ import {
 } from "./anthropic-bridge";
 import { isPiUsageLimitShape } from "./pi-runner";
 import * as accounts from "./claude-accounts";
+import { loadPiConfig } from "./pi-config";
+import { loadModelProviders } from "./model-providers";
 import * as sdk from "@anthropic-ai/claude-agent-sdk";
 import type { EffortLevel } from "@anthropic-ai/claude-agent-sdk";
 
@@ -97,13 +99,18 @@ const savedEnv = {
   accounts: process.env.OPENSESSION_CLAUDE_ACCOUNTS_PATH,
 };
 
-beforeAll(() => {
+beforeAll(async () => {
   process.env.OPENSESSION_PI_CONFIG = piConfigFile;
   process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = providerConfigFile;
   process.env.OPENSESSION_CLAUDE_ACCOUNTS_PATH = accountsFile;
+  await Promise.all([
+    loadPiConfig(),
+    loadModelProviders(),
+    accounts.loadClaudeAccounts(),
+  ]);
 });
 
-afterAll(() => {
+afterAll(async () => {
   for (const [envKey, value] of [
     ["OPENSESSION_PI_CONFIG", savedEnv.pi],
     ["OPENSESSION_MODEL_PROVIDERS_CONFIG", savedEnv.oc],
@@ -119,10 +126,12 @@ afterAll(() => {
  *  no designation (pool mode — the default in production); a non-empty list
  *  designates accounts through pi's bridgeAccountIds, the only
  *  designation path left (pi's own bridgeAccounts field is retired). */
-function designate(bridgeAccountIds: string[] | null): void {
+async function designate(bridgeAccountIds: string[] | null): Promise<void> {
   if (bridgeAccountIds === null) {
     writeFileSync(piConfigFile, JSON.stringify({ enabled: false }));
     rmSync(providerConfigFile, { force: true });
+    await loadPiConfig();
+    await loadModelProviders();
     return;
   }
   writeFileSync(piConfigFile, JSON.stringify({ enabled: true }));
@@ -134,11 +143,13 @@ function designate(bridgeAccountIds: string[] | null): void {
   } else {
     rmSync(providerConfigFile, { force: true });
   }
+  await loadPiConfig();
+  await loadModelProviders();
 }
 
-function seedAccounts(
+async function seedAccounts(
   entries: Array<string | { id: string; owner?: string }>,
-): void {
+): Promise<void> {
   writeFileSync(
     accountsFile,
     JSON.stringify({
@@ -155,6 +166,7 @@ function seedAccounts(
       }),
     }),
   );
+  await accounts.loadClaudeAccounts();
 }
 
 const freshUsage = {
@@ -186,7 +198,7 @@ const wire = (
 ): AnthropicMessage => ({ content: "", ...m }) as AnthropicMessage;
 
 describe("Meridian source dependency", () => {
-  test("tracks the same release as the published package", () => {
+  test("tracks the same release as the published package", async () => {
     const dependencyRoot = join(
       import.meta.dir,
       "../../../../../node_modules/@rynfar",
@@ -205,30 +217,30 @@ describe("Meridian source dependency", () => {
 });
 
 describe("ensureAnthropicBridgeCwd", () => {
-  test("creates a missing SDK cwd and is idempotent", () => {
+  test("creates a missing SDK cwd and is idempotent", async () => {
     const cwd = join(dir, "missing-state", "bridge-cwd");
     expect(existsSync(cwd)).toBe(false);
 
-    expect(ensureAnthropicBridgeCwd(cwd)).toBe(cwd);
-    expect(ensureAnthropicBridgeCwd(cwd)).toBe(cwd);
+    expect(await ensureAnthropicBridgeCwd(cwd)).toBe(cwd);
+    expect(await ensureAnthropicBridgeCwd(cwd)).toBe(cwd);
     expect(statSync(cwd).isDirectory()).toBe(true);
   });
 
-  test("recreates the SDK cwd after its state tree is removed", () => {
+  test("recreates the SDK cwd after its state tree is removed", async () => {
     const root = join(dir, "removed-state");
-    const cwd = ensureAnthropicBridgeCwd(join(root, "bridge-cwd"));
+    const cwd = await ensureAnthropicBridgeCwd(join(root, "bridge-cwd"));
     rmSync(root, { recursive: true, force: true });
 
     expect(existsSync(cwd)).toBe(false);
-    expect(ensureAnthropicBridgeCwd(cwd)).toBe(cwd);
+    expect(await ensureAnthropicBridgeCwd(cwd)).toBe(cwd);
     expect(statSync(cwd).isDirectory()).toBe(true);
   });
 
-  test("preserves the filesystem error when the cwd path is invalid", () => {
+  test("preserves the filesystem error when the cwd path is invalid", async () => {
     const cwd = join(dir, "cwd-is-a-file");
     writeFileSync(cwd, "not a directory");
 
-    expect(() => ensureAnthropicBridgeCwd(cwd)).toThrow();
+    await expect(ensureAnthropicBridgeCwd(cwd)).rejects.toThrow();
   });
 });
 
@@ -242,7 +254,7 @@ describe("planSdkTurn (continuation vs replay)", () => {
     wire({ role: "user", content: "second question" }),
   ];
 
-  test("no stored session → fresh full replay", () => {
+  test("no stored session → fresh full replay", async () => {
     const plan = planSdkTurn(undefined, messages);
     expect(plan.continuation).toBe(false);
     expect(plan.resume).toBeUndefined();
@@ -251,7 +263,7 @@ describe("planSdkTurn (continuation vs replay)", () => {
     expect(plan.prompt).toContain("[Your previous reply]");
   });
 
-  test("history strictly grew → resume with only the new tail", () => {
+  test("history strictly grew → resume with only the new tail", async () => {
     const plan = planSdkTurn(
       {
         sdkSessionId: "sdk-1",
@@ -267,7 +279,7 @@ describe("planSdkTurn (continuation vs replay)", () => {
     expect(plan.prompt).not.toContain("first question");
   });
 
-  test("same-length history (retry of a seen turn) → fresh replay, not resume", () => {
+  test("same-length history (retry of a seen turn) → fresh replay, not resume", async () => {
     const plan = planSdkTurn(
       {
         sdkSessionId: "sdk-1",
@@ -282,7 +294,7 @@ describe("planSdkTurn (continuation vs replay)", () => {
     expect(plan.prompt).toContain("first question");
   });
 
-  test("shrunk history (edit/compaction divergence) → fresh replay", () => {
+  test("shrunk history (edit/compaction divergence) → fresh replay", async () => {
     const plan = planSdkTurn(
       {
         sdkSessionId: "sdk-1",
@@ -296,7 +308,7 @@ describe("planSdkTurn (continuation vs replay)", () => {
     expect(plan.resume).toBeUndefined();
   });
 
-  test("checkpointed turn resumes at its assistant UUID with exact structured results", () => {
+  test("checkpointed turn resumes at its assistant UUID with exact structured results", async () => {
     const tail: AnthropicMessage[] = [
       wire({
         role: "user",
@@ -328,7 +340,7 @@ describe("planSdkTurn (continuation vs replay)", () => {
     ]);
   });
 
-  test("a live checkpoint keeps steering behind complete tool results", () => {
+  test("a live checkpoint keeps steering behind complete tool results", async () => {
     const stored = {
       sdkSessionId: "sdk-1",
       messageCount: 2,
@@ -355,7 +367,7 @@ describe("planSdkTurn (continuation vs replay)", () => {
     });
   });
 
-  test("checkpoint mismatch full-replays instead of resuming the hidden digest tail", () => {
+  test("checkpoint mismatch full-replays instead of resuming the hidden digest tail", async () => {
     const partial = [
       wire({
         role: "user",
@@ -383,7 +395,7 @@ describe("planSdkTurn (continuation vs replay)", () => {
 describe("SDK session store", () => {
   afterEach(() => piSdkSessionStore().clear());
 
-  test("rememberSdkTurn stores messageCount + 1 and its durable checkpoint", () => {
+  test("rememberSdkTurn stores messageCount + 1 and its durable checkpoint", async () => {
     rememberSdkTurn("pi:s1", "sdk-abc", 4, "acc-1", {
       assistantUuid: "assistant-uuid",
       toolCallIds: ["tool-1"],
@@ -397,7 +409,7 @@ describe("SDK session store", () => {
     });
   });
 
-  test("prunes the oldest entries past the cap", () => {
+  test("prunes the oldest entries past the cap", async () => {
     const store = piSdkSessionStore();
     for (let i = 0; i < MAX_PI_SDK_SESSIONS; i++) {
       store.set(`pi:old-${i}`, {
@@ -416,7 +428,7 @@ describe("SDK session store", () => {
 });
 
 describe("piMessagesToAnthropic", () => {
-  test("drops a reply cut off before it wrote anything", () => {
+  test("drops a reply cut off before it wrote anything", async () => {
     const messages: PiWireMessage[] = [
       { role: "user", content: "first" },
       {
@@ -438,7 +450,7 @@ describe("piMessagesToAnthropic", () => {
     ]);
   });
 
-  test("maps the three pi roles onto the bridge's wire shape", () => {
+  test("maps the three pi roles onto the bridge's wire shape", async () => {
     const messages: PiWireMessage[] = [
       { role: "user", content: "plain string" },
       {
@@ -515,7 +527,7 @@ describe("piMessagesToAnthropic", () => {
     ]);
   });
 
-  test("bridge flatten/replay reads the converted shapes (tool results unwrap raw)", () => {
+  test("bridge flatten/replay reads the converted shapes (tool results unwrap raw)", async () => {
     const converted = piMessagesToAnthropic([
       {
         role: "toolResult",
@@ -559,7 +571,7 @@ describe("images survive the turn", () => {
     mimeType,
   });
 
-  test("piImageBlockToAnthropic converts the four media types the API reads", () => {
+  test("piImageBlockToAnthropic converts the four media types the API reads", async () => {
     for (const mime of ["image/png", "image/jpeg", "image/gif", "image/webp"]) {
       expect(piImageBlockToAnthropic(img(mime))).toEqual({
         type: "image",
@@ -572,7 +584,7 @@ describe("images survive the turn", () => {
     });
   });
 
-  test("drops what the API cannot read rather than poisoning the request", () => {
+  test("drops what the API cannot read rather than poisoning the request", async () => {
     expect(piImageBlockToAnthropic(img("image/bmp"))).toBeNull();
     expect(piImageBlockToAnthropic(img("image/svg+xml"))).toBeNull();
     expect(piImageBlockToAnthropic({ type: "image", data: "AAAA" })).toBeNull();
@@ -582,7 +594,7 @@ describe("images survive the turn", () => {
     expect(piImageBlockToAnthropic({ type: "text", text: "hi" })).toBeNull();
   });
 
-  test("turnImages collects user images and keeps the newest past the cap", () => {
+  test("turnImages collects user images and keeps the newest past the cap", async () => {
     expect(turnImages([wire({ role: "user", content: "no blocks" })])).toEqual(
       [],
     );
@@ -611,7 +623,7 @@ describe("images survive the turn", () => {
     });
   });
 
-  test("planSdkTurn carries only the DELIVERED slice's images on a continuation", () => {
+  test("planSdkTurn carries only the DELIVERED slice's images on a continuation", async () => {
     const messages: AnthropicMessage[] = [
       wire({
         role: "user",
@@ -674,7 +686,7 @@ describe("images survive the turn", () => {
     wire({ role: "user", content: "and the tests?" }),
   ];
 
-  test("a replayed history with an old attachment attaches no image", () => {
+  test("a replayed history with an old attachment attaches no image", async () => {
     const plan = planSdkTurn(undefined, attachedOnce);
     expect(plan.continuation).toBe(false);
     expect(plan.images).toEqual([]);
@@ -690,7 +702,7 @@ describe("images survive the turn", () => {
     expect(flatSdkTurnText(turn)).toBe(plan.prompt);
   });
 
-  test("a fresh replay delivers the current turn's image after the history", () => {
+  test("a fresh replay delivers the current turn's image after the history", async () => {
     const messages = [
       ...attachedOnce.slice(0, 4),
       wire({
@@ -710,7 +722,7 @@ describe("images survive the turn", () => {
     }
   });
 
-  test("a continuation delivers only the new tail's images, tool results included", () => {
+  test("a continuation delivers only the new tail's images, tool results included", async () => {
     const messages: AnthropicMessage[] = [
       ...attachedOnce.slice(0, 4),
       wire({ role: "user", content: "take a screenshot" }),
@@ -757,7 +769,7 @@ describe("images survive the turn", () => {
     expect(bridgeSdkTurn(messages, 0).images).toEqual([png("tool")]);
   });
 
-  test("sdkPromptContent puts images before the text, and only for image turns", () => {
+  test("sdkPromptContent puts images before the text, and only for image turns", async () => {
     const plain = planSdkTurn(undefined, [
       wire({ role: "user", content: "just words" }),
     ]);
@@ -781,7 +793,7 @@ describe("images survive the turn", () => {
     expect(content[1]).toEqual({ type: "text", text: "look at this" });
   });
 
-  test("an image-only turn still gets a text block (an empty prompt reads as an empty turn)", () => {
+  test("an image-only turn still gets a text block (an empty prompt reads as an empty turn)", async () => {
     const plan = planSdkTurn(undefined, [
       wire({
         role: "user",
@@ -800,7 +812,7 @@ describe("images survive the turn", () => {
 });
 
 describe("Pi passthrough durable checkpoint", () => {
-  test("maps the synthetic facade boundary onto pi stop reasons", () => {
+  test("maps the synthetic facade boundary onto pi stop reasons", async () => {
     expect(recoverSyntheticSdkStopReason("error_max_turns", 1, 0)).toBe(
       "toolUse",
     );
@@ -813,13 +825,13 @@ describe("Pi passthrough durable checkpoint", () => {
     expect(recoverSyntheticSdkStopReason("success", 1, 1)).toBeUndefined();
   });
 
-  test("keeps the synthetic boundary text short", () => {
+  test("keeps the synthetic boundary text short", async () => {
     expect(PI_PASSTHROUGH_BLOCK_REASON).toBe(
       "This tool call has been forwarded to the client for execution.",
     );
   });
 
-  test("settles only after every parallel call and retains its assistant UUID", () => {
+  test("settles only after every parallel call and retains its assistant UUID", async () => {
     const tracker = createEarlyStopTracker();
     noteAssistantMessage(tracker, {
       type: "assistant",
@@ -844,7 +856,7 @@ describe("Pi passthrough durable checkpoint", () => {
     expect(shouldEarlyStop(tracker)).toBe(false);
   });
 
-  test("handles a blocked result arriving before its assistant envelope", () => {
+  test("handles a blocked result arriving before its assistant envelope", async () => {
     const tracker = createEarlyStopTracker();
     noteUserContent(tracker, [
       { type: "tool_result", tool_use_id: "tool-1", content: "blocked" },
@@ -860,7 +872,7 @@ describe("Pi passthrough durable checkpoint", () => {
     expect(shouldEarlyStop(tracker)).toBe(true);
   });
 
-  test("captures a new live tool batch after the previous result echo", () => {
+  test("captures a new live tool batch after the previous result echo", async () => {
     const tracker = createEarlyStopTracker();
     noteUserContent(tracker, [
       {
@@ -909,7 +921,7 @@ describe("Pi passthrough durable checkpoint", () => {
 });
 
 describe("buildPiAnthropicModels", () => {
-  test("carries the builtin catalog through untouched and appends a zero-cost fallback", () => {
+  test("carries the builtin catalog through untouched and appends a zero-cost fallback", async () => {
     const out = buildPiAnthropicModels([model], "claude-brand-new-9");
     expect(out).toHaveLength(2);
     expect(out[0]).toMatchObject({
@@ -927,7 +939,7 @@ describe("buildPiAnthropicModels", () => {
     });
   });
 
-  test("registers Opus 5.5 with its published limits and pricing", () => {
+  test("registers Opus 5.5 with its published limits and pricing", async () => {
     const [opus] = buildPiAnthropicModels([], "claude-opus-5-5");
     expect(opus).toMatchObject({
       id: "claude-opus-5-5",
@@ -940,7 +952,7 @@ describe("buildPiAnthropicModels", () => {
     expect(buildPiAnthropicModels([opus!], "claude-opus-5-5")).toHaveLength(1);
   });
 
-  test("registers Sonnet 5.5 with its published limits and pricing", () => {
+  test("registers Sonnet 5.5 with its published limits and pricing", async () => {
     const [sonnet] = buildPiAnthropicModels([], "claude-sonnet-5-5");
     expect(sonnet).toMatchObject({
       id: "claude-sonnet-5-5",
@@ -952,7 +964,7 @@ describe("buildPiAnthropicModels", () => {
     });
   });
 
-  test("applies the halved Sonnet 5.5 cache-read price over the builtin row", () => {
+  test("applies the halved Sonnet 5.5 cache-read price over the builtin row", async () => {
     const builtin = {
       ...model,
       id: "claude-sonnet-5-5",
@@ -968,7 +980,7 @@ describe("buildPiAnthropicModels", () => {
     expect(builtin.cost.cacheRead).toBe(0.2);
   });
 
-  test("registers Haiku 5.5 with tiered pricing and every effort level", () => {
+  test("registers Haiku 5.5 with tiered pricing and every effort level", async () => {
     const [haiku] = buildPiAnthropicModels([], "claude-haiku-5-5");
     expect(haiku).toMatchObject({
       id: "claude-haiku-5-5",
@@ -995,13 +1007,13 @@ describe("buildPiAnthropicModels", () => {
     });
   });
 
-  test("does not duplicate a model the catalog already has", () => {
+  test("does not duplicate a model the catalog already has", async () => {
     expect(buildPiAnthropicModels([model], "claude-sonnet-5")).toHaveLength(1);
   });
 });
 
 describe("SdkStepUsage", () => {
-  test("keeps the reported TTL split across a message_delta and sums it across requests", () => {
+  test("keeps the reported TTL split across a message_delta and sums it across requests", async () => {
     const step = new Map();
     recordSdkStepUsage(step, "msg_1", {
       input_tokens: 2,
@@ -1040,7 +1052,7 @@ describe("SdkStepUsage", () => {
     cache_creation_input_tokens: 6_139,
   };
 
-  test("counts one API request once even when the SDK repeats its usage per content block", () => {
+  test("counts one API request once even when the SDK repeats its usage per content block", async () => {
     const step = new Map();
     recordSdkStepUsage(step, "msg_1", request);
     recordSdkStepUsage(step, "msg_1", request);
@@ -1048,7 +1060,7 @@ describe("SdkStepUsage", () => {
     expect(sumSdkStepUsage(step)).toEqual(request);
   });
 
-  test("sums the requests of one step and lets a message_delta finish its request", () => {
+  test("sums the requests of one step and lets a message_delta finish its request", async () => {
     const step = new Map();
     recordSdkStepUsage(step, "msg_1", {
       input_tokens: 2,
@@ -1066,7 +1078,7 @@ describe("SdkStepUsage", () => {
     });
   });
 
-  test("ignores non-numeric fields and reports nothing for an empty step", () => {
+  test("ignores non-numeric fields and reports nothing for an empty step", async () => {
     const step = new Map();
     expect(sumSdkStepUsage(step)).toBeUndefined();
     recordSdkStepUsage(step, "msg_1", {
@@ -1084,7 +1096,7 @@ describe("SdkStepUsage", () => {
 });
 
 describe("usageFromSdkResult", () => {
-  test("maps SDK usage fields and prices from the model's cost table", () => {
+  test("maps SDK usage fields and prices from the model's cost table", async () => {
     const usage = usageFromSdkResult(model, {
       input_tokens: 1_000_000,
       output_tokens: 2_000_000,
@@ -1119,21 +1131,21 @@ describe("usageFromSdkResult", () => {
     cache_creation: { ephemeral_1h_input_tokens, ephemeral_5m_input_tokens },
   });
 
-  test("prices reported 1-hour writes at 2x base input", () => {
+  test("prices reported 1-hour writes at 2x base input", async () => {
     const usage = usageFromSdkResult(model, writes(1_000_000, 0));
     expect(usage.cacheWrite).toBe(1_000_000);
     expect(usage.cacheWrite1h).toBe(1_000_000);
     expect(usage.cost.cacheWrite).toBeCloseTo(6);
   });
 
-  test("prices reported 5-minute writes at the model's cacheWrite rate", () => {
+  test("prices reported 5-minute writes at the model's cacheWrite rate", async () => {
     const usage = usageFromSdkResult(model, writes(0, 1_000_000));
     expect(usage.cacheWrite).toBe(1_000_000);
     expect(usage.cacheWrite1h).toBe(0);
     expect(usage.cost.cacheWrite).toBeCloseTo(3.75);
   });
 
-  test("prices a mixed split per TTL", () => {
+  test("prices a mixed split per TTL", async () => {
     const usage = usageFromSdkResult(model, writes(1_000_000, 2_000_000));
     expect(usage.cacheWrite).toBe(3_000_000);
     expect(usage.cacheWrite1h).toBe(1_000_000);
@@ -1141,7 +1153,7 @@ describe("usageFromSdkResult", () => {
     expect(usage.cost.total).toBeCloseTo(13.5);
   });
 
-  test("prices 1-hour writes from the matched tier's input rate", () => {
+  test("prices 1-hour writes from the matched tier's input rate", async () => {
     const tiered = {
       ...model,
       cost: {
@@ -1161,7 +1173,7 @@ describe("usageFromSdkResult", () => {
     expect(usage.cost.cacheWrite).toBeCloseTo(12);
   });
 
-  test("applies the highest matching request-wide pricing tier", () => {
+  test("applies the highest matching request-wide pricing tier", async () => {
     const tiered = {
       ...model,
       cost: {
@@ -1191,7 +1203,7 @@ describe("usageFromSdkResult", () => {
     expect(usage.cost.cacheRead).toBeCloseTo((0.6 / 1_000_000) * 150_000);
   });
 
-  test("missing usage → zeros (never NaN)", () => {
+  test("missing usage → zeros (never NaN)", async () => {
     const usage = usageFromSdkResult(model, undefined);
     expect(usage.totalTokens).toBe(0);
     expect(usage.cost.total).toBe(0);
@@ -1199,7 +1211,7 @@ describe("usageFromSdkResult", () => {
 });
 
 describe("Claude account notice probe", () => {
-  test("holds short output until it can rule out a synthetic account notice", () => {
+  test("holds short output until it can rule out a synthetic account notice", async () => {
     expect(shouldDeferClaudeText("Replying normally")).toBe(true);
     expect(
       shouldDeferClaudeText(
@@ -1208,7 +1220,7 @@ describe("Claude account notice probe", () => {
     ).toBe(false);
   });
 
-  test("keeps observed limit notices hidden from the stream", () => {
+  test("keeps observed limit notices hidden from the stream", async () => {
     expect(
       shouldDeferClaudeText(
         "You've hit your weekly limit · resets Aug 20, 9am (UTC)",
@@ -1228,19 +1240,19 @@ describe("Claude account notice probe", () => {
 });
 
 describe("buildPiAnthropicProvider", () => {
-  test("throws the bridge's gate error when disabled or no accounts exist", () => {
-    designate(null);
+  test("throws the bridge's gate error when disabled or no accounts exist", async () => {
+    await designate(null);
     expect(() =>
       buildPiAnthropicProvider({ unifiedSessionId: "os-1" }),
     ).toThrow(/Anthropic bridge is disabled/);
     // Enabled but zero Claude accounts configured: the other wording.
-    designate([]);
-    seedAccounts([]);
+    await designate([]);
+    await seedAccounts([]);
     expect(() =>
       buildPiAnthropicProvider({ unifiedSessionId: "os-1" }),
     ).toThrow(/no accounts to serve on/);
     // Pool mode: an existing account is enough — no designation required.
-    seedAccounts(["pool-gate-a"]);
+    await seedAccounts(["pool-gate-a"]);
     expect(() =>
       buildPiAnthropicProvider({
         unifiedSessionId: "os-1",
@@ -1250,7 +1262,7 @@ describe("buildPiAnthropicProvider", () => {
   });
 
   test("builds a configured provider carrying the catalog under the builtin id", async () => {
-    designate(["pi-test-acc-1"]);
+    await designate(["pi-test-acc-1"]);
     const provider = buildPiAnthropicProvider({
       unifiedSessionId: "os-1",
       builtinModels: [model],
@@ -1276,8 +1288,8 @@ describe("buildPiAnthropicProvider", () => {
   });
 
   test("stream fails classifier-flagged when no designated account is usable", async () => {
-    designate(["pi-test-missing-acc"]);
-    seedAccounts([]); // the designated id does not exist in the store
+    await designate(["pi-test-missing-acc"]);
+    await seedAccounts([]); // the designated id does not exist in the store
     const provider = buildPiAnthropicProvider({
       unifiedSessionId: "os-1",
       builtinModels: [model],
@@ -1298,8 +1310,8 @@ describe("buildPiAnthropicProvider", () => {
   });
 
   test("reads the system prompt and tools from pi's transcript system messages", async () => {
-    designate(["transcript-account"]);
-    seedAccounts(["transcript-account"]);
+    await designate(["transcript-account"]);
+    await seedAccounts(["transcript-account"]);
     accounts.__setUsageCacheForTest("transcript-account", freshUsage);
     const query = spyOn(sdk, "query").mockImplementation(() => {
       throw new Error("test SDK reached");
@@ -1348,8 +1360,8 @@ describe("buildPiAnthropicProvider", () => {
 
   for (const ephemeral of [true, false]) {
     test(`a settled ${ephemeral ? "ephemeral" : "resumable"} run ${ephemeral ? "releases" : "keeps"} its live SDK conversation`, async () => {
-      designate(["settle-account"]);
-      seedAccounts(["settle-account"]);
+      await designate(["settle-account"]);
+      await seedAccounts(["settle-account"]);
       accounts.__setUsageCacheForTest("settle-account", freshUsage);
       const closed: string[] = [];
       const query = spyOn(sdk, "query").mockImplementation(() => {
@@ -1423,8 +1435,8 @@ describe("buildPiAnthropicProvider", () => {
   }
 
   test("more than 300 requests on one account still reach the SDK", async () => {
-    designate(["busy-account"]);
-    seedAccounts(["busy-account"]);
+    await designate(["busy-account"]);
+    await seedAccounts(["busy-account"]);
     accounts.__setUsageCacheForTest("busy-account", freshUsage);
     const query = spyOn(sdk, "query").mockImplementation(() => {
       throw new Error("test SDK reached");
@@ -1455,8 +1467,8 @@ describe("buildPiAnthropicProvider", () => {
     // More than the old four-account ceiling. SDK usage-limit responses
     // must walk the picker until the real pool is dry.
     const ids = ["cap-a", "cap-b", "cap-c", "cap-d", "cap-e", "cap-f"];
-    designate(ids);
-    seedAccounts(ids);
+    await designate(ids);
+    await seedAccounts(ids);
     for (const id of ids) {
       accounts.__setUsageCacheForTest(id, freshUsage);
     }
@@ -1495,8 +1507,8 @@ describe("buildPiAnthropicProvider", () => {
     // refused, that refusal was dropped on the floor, and the reader was shown
     // the LAST account's sentence, so a working rotation read as no rotation
     // at all (it misled two people for an afternoon).
-    designate(["dry-a", "dry-b"]);
-    seedAccounts(["dry-a", "dry-b"]);
+    await designate(["dry-a", "dry-b"]);
+    await seedAccounts(["dry-a", "dry-b"]);
     accounts.__setUsageCacheForTest("dry-a", freshUsage);
     accounts.__setUsageCacheForTest("dry-b", freshUsage);
     const query = spyOn(sdk, "query").mockImplementation((input) => {
@@ -1527,8 +1539,8 @@ describe("buildPiAnthropicProvider", () => {
   });
 
   test("a strict pin refuses instead of rotating off the pinned account", async () => {
-    designate(["pin-strict", "pin-other"]);
-    seedAccounts(["pin-strict", "pin-other"]);
+    await designate(["pin-strict", "pin-other"]);
+    await seedAccounts(["pin-strict", "pin-other"]);
     accounts.__setUsageCacheForTest("pin-strict", freshUsage);
     accounts.__setUsageCacheForTest("pin-other", freshUsage);
     const query = spyOn(sdk, "query").mockImplementation((input) => {
@@ -1560,7 +1572,7 @@ describe("buildPiAnthropicProvider", () => {
   });
 
   test("a pre-aborted signal ends with reason aborted before any SDK work", async () => {
-    designate(["pi-test-acc-1"]);
+    await designate(["pi-test-acc-1"]);
     const provider = buildPiAnthropicProvider({
       unifiedSessionId: "os-1",
       builtinModels: [model],
@@ -1582,9 +1594,9 @@ describe("buildPiAnthropicProvider", () => {
 });
 
 describe("pickBridgeAccount pins (in-process runs only; designation is the ceiling)", () => {
-  test("a designated, usable pin is picked first", () => {
-    designate(["des-a", "des-b"]);
-    seedAccounts(["des-a", "des-b"]);
+  test("a designated, usable pin is picked first", async () => {
+    await designate(["des-a", "des-b"]);
+    await seedAccounts(["des-a", "des-b"]);
     accounts.__setUsageCacheForTest("des-a", freshUsage);
     accounts.__setUsageCacheForTest("des-b", freshUsage);
     const picked = pickBridgeAccount("claude-sonnet-5", { accountId: "des-b" });
@@ -1592,9 +1604,9 @@ describe("pickBridgeAccount pins (in-process runs only; designation is the ceili
     expect((picked as any).id).toBe("des-b");
   });
 
-  test("strict pin outside the designation is a config error, not exhaustion", () => {
-    designate(["des-a"]);
-    seedAccounts(["des-a", "outsider"]);
+  test("strict pin outside the designation is a config error, not exhaustion", async () => {
+    await designate(["des-a"]);
+    await seedAccounts(["des-a", "outsider"]);
     accounts.__setUsageCacheForTest("des-a", freshUsage);
     const picked = pickBridgeAccount("claude-sonnet-5", {
       accountId: "outsider",
@@ -1608,9 +1620,9 @@ describe("pickBridgeAccount pins (in-process runs only; designation is the ceili
     expect(isPiUsageLimitShape(error, "anthropic")).toBe(false);
   });
 
-  test("non-strict pin outside the designation falls back to the designated walk", () => {
-    designate(["des-a"]);
-    seedAccounts(["des-a", "outsider"]);
+  test("non-strict pin outside the designation falls back to the designated walk", async () => {
+    await designate(["des-a"]);
+    await seedAccounts(["des-a", "outsider"]);
     accounts.__setUsageCacheForTest("des-a", freshUsage);
     const picked = pickBridgeAccount("claude-sonnet-5", {
       accountId: "outsider",
@@ -1618,9 +1630,9 @@ describe("pickBridgeAccount pins (in-process runs only; designation is the ceili
     expect((picked as any).id).toBe("des-a");
   });
 
-  test("strict pin on an exhausted designated account fails exhaustion-shaped", () => {
-    designate(["des-maxed", "des-a"]);
-    seedAccounts(["des-maxed", "des-a"]);
+  test("strict pin on an exhausted designated account fails exhaustion-shaped", async () => {
+    await designate(["des-maxed", "des-a"]);
+    await seedAccounts(["des-maxed", "des-a"]);
     accounts.__setUsageCacheForTest("des-maxed", maxedUsage);
     accounts.__setUsageCacheForTest("des-a", freshUsage);
     const picked = pickBridgeAccount("claude-sonnet-5", {
@@ -1638,9 +1650,9 @@ describe("pickBridgeAccount pins (in-process runs only; designation is the ceili
     expect((widened as any).id).toBe("des-a");
   });
 
-  test("no pin keeps the plain designated walk (bridge behavior unchanged)", () => {
-    designate(["des-maxed", "des-a"]);
-    seedAccounts(["des-maxed", "des-a"]);
+  test("no pin keeps the plain designated walk (bridge behavior unchanged)", async () => {
+    await designate(["des-maxed", "des-a"]);
+    await seedAccounts(["des-maxed", "des-a"]);
     accounts.__setUsageCacheForTest("des-maxed", maxedUsage);
     accounts.__setUsageCacheForTest("des-a", freshUsage);
     const picked = pickBridgeAccount("claude-sonnet-5");
@@ -1649,18 +1661,18 @@ describe("pickBridgeAccount pins (in-process runs only; designation is the ceili
 });
 
 describe("pickBridgeAccount pool mode (no designation — picks like pi)", () => {
-  test("picks the least-used usable account from the general pool", () => {
-    designate([]);
-    seedAccounts(["pool-a", "pool-b"]);
+  test("picks the least-used usable account from the general pool", async () => {
+    await designate([]);
+    await seedAccounts(["pool-a", "pool-b"]);
     accounts.__setUsageCacheForTest("pool-a", maxedUsage);
     accounts.__setUsageCacheForTest("pool-b", freshUsage);
     const picked = pickBridgeAccount("claude-sonnet-5");
     expect((picked as any).id).toBe("pool-b");
   });
 
-  test("exhausted pool fails usage-limit-shaped; empty pool is a config error", () => {
-    designate([]);
-    seedAccounts(["pool-maxed"]);
+  test("exhausted pool fails usage-limit-shaped; empty pool is a config error", async () => {
+    await designate([]);
+    await seedAccounts(["pool-maxed"]);
     accounts.__setUsageCacheForTest("pool-maxed", maxedUsage);
     const picked = pickBridgeAccount("claude-sonnet-5");
     const error = (picked as any).error as string;
@@ -1668,16 +1680,16 @@ describe("pickBridgeAccount pool mode (no designation — picks like pi)", () =>
     expect(isPiUsageLimitShape(error, "anthropic")).toBe(true);
     // Zero accounts configured: a config problem, not exhaustion — the
     // model-fallback walk must NOT engage (hopping models can't fix it).
-    seedAccounts([]);
+    await seedAccounts([]);
     const empty = pickBridgeAccount("claude-sonnet-5");
     const emptyError = (empty as any).error as string;
     expect(emptyError).toMatch(/no Claude accounts configured/);
     expect(isPiUsageLimitShape(emptyError, "anthropic")).toBe(false);
   });
 
-  test("pins are honored; a strict pin never widens to the pool", () => {
-    designate([]);
-    seedAccounts(["pool-pin-a", "pool-pin-maxed"]);
+  test("pins are honored; a strict pin never widens to the pool", async () => {
+    await designate([]);
+    await seedAccounts(["pool-pin-a", "pool-pin-maxed"]);
     accounts.__setUsageCacheForTest("pool-pin-a", freshUsage);
     accounts.__setUsageCacheForTest("pool-pin-maxed", maxedUsage);
     const pinned = pickBridgeAccount("claude-sonnet-5", {
@@ -1698,9 +1710,12 @@ describe("pickBridgeAccount pool mode (no designation — picks like pi)", () =>
     expect((widened as any).id).toBe("pool-pin-a");
   });
 
-  test("a user's personal account wins for their runs, never for others", () => {
-    designate([]);
-    seedAccounts(["pool-shared", { id: "pool-personal", owner: "alice" }]);
+  test("a user's personal account wins for their runs, never for others", async () => {
+    await designate([]);
+    await seedAccounts([
+      "pool-shared",
+      { id: "pool-personal", owner: "alice" },
+    ]);
     accounts.__setUsageCacheForTest("pool-shared", freshUsage);
     accounts.__setUsageCacheForTest("pool-personal", freshUsage);
     const alice = pickBridgeAccount("claude-sonnet-5", { user: "alice" });
@@ -1711,9 +1726,9 @@ describe("pickBridgeAccount pool mode (no designation — picks like pi)", () =>
     expect((anonymous as any).id).toBe("pool-shared");
   });
 
-  test("a sticky account beats the least-used round-robin while usable", () => {
-    designate([]);
-    seedAccounts(["pool-sticky-a", "pool-sticky-b", "pool-sticky-c"]);
+  test("a sticky account beats the least-used round-robin while usable", async () => {
+    await designate([]);
+    await seedAccounts(["pool-sticky-a", "pool-sticky-b", "pool-sticky-c"]);
     for (const id of ["pool-sticky-a", "pool-sticky-b", "pool-sticky-c"])
       accounts.__setUsageCacheForTest(id, freshUsage);
     // Consume the round-robin turn on the sticky account so the plain pick
@@ -1745,7 +1760,7 @@ describe("pickBridgeAccount pool mode (no designation — picks like pi)", () =>
 });
 
 describe("captureUnforwardedToolUses", () => {
-  test("a mangled tool name is forwarded to pi instead of ending the query empty", () => {
+  test("a mangled tool name is forwarded to pi instead of ending the query empty", async () => {
     const tracker = passthrough.createEarlyStopTracker();
     const captured: Parameters<typeof captureUnforwardedToolUses>[2] = [];
     const message = {
@@ -1785,7 +1800,7 @@ describe("captureUnforwardedToolUses", () => {
     expect(passthrough.settledToolCallAssistantUuid(tracker)).toBe("asst-1");
   });
 
-  test("passthrough names stay with the PreToolUse hook", () => {
+  test("passthrough names stay with the PreToolUse hook", async () => {
     const tracker = passthrough.createEarlyStopTracker();
     const captured: Parameters<typeof captureUnforwardedToolUses>[2] = [];
     const message = {
@@ -1813,13 +1828,13 @@ describe("sdkThinkingOptions", () => {
     effort,
   });
 
-  test("turns thinking off only when Pi sends no reasoning level for a reasoning model", () => {
+  test("turns thinking off only when Pi sends no reasoning level for a reasoning model", async () => {
     expect(sdkThinkingOptions({ reasoning: true }, {})).toEqual(off);
     expect(sdkThinkingOptions({ reasoning: true }, undefined)).toEqual(off);
     expect(sdkThinkingOptions({ reasoning: false }, {})).toEqual({});
   });
 
-  test("maps the thinking level to an effort with summarized thinking", () => {
+  test("maps the thinking level to an effort with summarized thinking", async () => {
     expect(
       sdkThinkingOptions({ reasoning: true }, { reasoning: "minimal" }),
     ).toEqual(adaptive("low"));
@@ -1831,7 +1846,7 @@ describe("sdkThinkingOptions", () => {
     ).toEqual(adaptive("xhigh"));
   });
 
-  test("prefers the model's thinking level map", () => {
+  test("prefers the model's thinking level map", async () => {
     const model = {
       reasoning: true,
       thinkingLevelMap: { high: "max", low: null, medium: "unknown" },

@@ -1,4 +1,5 @@
 import { getConfigAsync } from "./config";
+import { loadGithubAuthStore } from "./github-auth";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
@@ -36,6 +37,7 @@ beforeEach(async () => {
       },
     }),
   );
+  await loadGithubAuthStore();
 });
 
 afterEach(async () => {

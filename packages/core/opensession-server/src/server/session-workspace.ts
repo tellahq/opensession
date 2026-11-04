@@ -79,8 +79,10 @@ const pending: Map<string, string> = ((
  * The worktree this session *owns*, or null. Shared checkouts don't count —
  * ownership is meaningless there (see isSharedCheckoutDir / findWorkspaceByWorktree).
  */
-export function ownedWorktree(dir: string | null | undefined): string | null {
-  return dir && !isSharedCheckoutDir(dir) ? dir : null;
+export async function ownedWorktree(
+  dir: string | null | undefined,
+): Promise<string | null> {
+  return dir && !(await isSharedCheckoutDir(dir)) ? dir : null;
 }
 
 /**

@@ -3,8 +3,8 @@
  * Native and provider/model ids are normalized to pi/<provider>/<model> at dispatch.
  */
 
-import { existsSync, readFileSync } from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { readFile } from "fs/promises";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import {
   canonicalProviderPickerModelId,
   configuredCatalogModel,
@@ -586,45 +586,91 @@ let interactiveOverrideCache: string | null | undefined;
  *  OPENSESSION_STATE_DIR takes effect: `bun test` shares one process across
  *  files, so an earlier file's read would otherwise bake this host's real
  *  default-model store into the caches. */
-export function __resetModelCachesForTest(): void {
-  overrideCache = undefined;
-  interactiveOverrideCache = undefined;
+export async function __resetModelCachesForTest(): Promise<void> {
+  await loadModelDefaults();
 }
 
-function loadStoredDefault(field: "model" | "interactiveModel"): string | null {
+/** The parsed file, or undefined when it is missing or unreadable. */
+async function readJsonQuietly(path: string): Promise<any> {
   try {
-    if (existsSync(defaultModelStore())) {
-      const raw = JSON.parse(readFileSync(defaultModelStore(), "utf8"));
-      const id = typeof raw?.[field] === "string" ? raw[field].trim() : "";
-      return id && resolveModel(id) ? resolveModel(id)!.id : null;
-    }
+    return JSON.parse(await readFile(path, "utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
+// The stored defaults as last read from disk, keyed by the store path so a
+// repointed state root is never answered from another root's file.
+let storedDefaults: { path: string; raw: any } | undefined;
+let storedFallbackAuto: any;
+
+/**
+ * Read the persisted default-model and auto-fallback choices. Runs at import;
+ * a test that repoints the state root awaits it (via
+ * __resetModelCachesForTest) before reading.
+ */
+export async function loadModelDefaults(): Promise<void> {
+  const path = defaultModelStore();
+  const [raw, fallback] = await Promise.all([
+    readJsonQuietly(path),
+    readJsonQuietly(FALLBACK_AUTO_STORE),
+  ]);
+  storedDefaults = { path, raw };
+  storedFallbackAuto = fallback;
+  overrideCache = undefined;
+  interactiveOverrideCache = undefined;
+  fallbackAutoCache = undefined;
+}
+
+function loadStoredDefault(
+  field: "model" | "interactiveModel",
+): string | null | undefined {
+  if (storedDefaults?.path !== defaultModelStore()) {
+    // Not read for this state root yet: answer "no override" until it is.
+    void loadModelDefaults();
+    return undefined;
+  }
+  try {
+    const raw = storedDefaults.raw;
+    const id = typeof raw?.[field] === "string" ? raw[field].trim() : "";
+    return id && resolveModel(id) ? resolveModel(id)!.id : null;
   } catch {}
   return null;
 }
 
 function loadOverride(): string | null {
   if (overrideCache === undefined) overrideCache = loadStoredDefault("model");
-  return overrideCache;
+  return overrideCache ?? null;
 }
 
 function loadInteractiveOverride(): string | null {
   if (interactiveOverrideCache === undefined) {
     interactiveOverrideCache = loadStoredDefault("interactiveModel");
   }
-  return interactiveOverrideCache;
+  return interactiveOverrideCache ?? null;
 }
 
+// Read-modify-write cycles span awaits; one at a time so the two default
+// fields never clobber each other.
+let defaultStoreWrite: Promise<unknown> = Promise.resolve();
+
 /** Read-modify-write so the two default fields never clobber each other. */
-function patchDefaultModelStore(patch: Record<string, string | null>): void {
-  let raw: Record<string, unknown> = {};
-  try {
-    if (existsSync(defaultModelStore())) {
-      const parsed = JSON.parse(readFileSync(defaultModelStore(), "utf8"));
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
-        raw = parsed;
-    }
-  } catch {}
-  writeJsonAtomic(defaultModelStore(), { ...raw, ...patch });
+function patchDefaultModelStore(
+  patch: Record<string, string | null>,
+): Promise<void> {
+  const run = defaultStoreWrite.then(async () => {
+    const path = defaultModelStore();
+    const parsed = await readJsonQuietly(path);
+    const raw =
+      parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? parsed
+        : {};
+    const next = { ...raw, ...patch };
+    await writeJsonAtomicAsync(path, next);
+    storedDefaults = { path, raw: next };
+  });
+  defaultStoreWrite = run.catch(() => {});
+  return run;
 }
 
 /**
@@ -643,18 +689,18 @@ export function getDefaultModel(): string {
  * env/constant). Returns the resolved default after the change; throws on an
  * unknown model id.
  */
-export function setDefaultModel(input: string | null): string {
+export async function setDefaultModel(input: string | null): Promise<string> {
   if (input === null || input.trim() === "") {
     overrideCache = null;
     try {
-      patchDefaultModelStore({ model: null });
+      await patchDefaultModelStore({ model: null });
     } catch {}
     return getDefaultModel();
   }
   const m = resolveModel(input);
   if (!m) throw new Error(`Unknown model: ${input}`);
   overrideCache = m.id;
-  patchDefaultModelStore({ model: m.id });
+  await patchDefaultModelStore({ model: m.id });
   return m.id;
 }
 
@@ -664,18 +710,20 @@ export function setDefaultModel(input: string | null): string {
  * (Slack/Linear/Plain loops, workflows), stays untouched. null clears back to
  * the Pi-mapped global default.
  */
-export function setInteractiveDefaultModel(input: string | null): string {
+export async function setInteractiveDefaultModel(
+  input: string | null,
+): Promise<string> {
   if (input === null || input.trim() === "") {
     interactiveOverrideCache = null;
     try {
-      patchDefaultModelStore({ interactiveModel: null });
+      await patchDefaultModelStore({ interactiveModel: null });
     } catch {}
     return interactiveDefaultModel();
   }
   const m = resolveModel(input);
   if (!m) throw new Error(`Unknown model: ${input}`);
   interactiveOverrideCache = m.id;
-  patchDefaultModelStore({ interactiveModel: m.id });
+  await patchDefaultModelStore({ interactiveModel: m.id });
   return m.id;
 }
 
@@ -731,23 +779,17 @@ let fallbackAutoCache: boolean | undefined;
 
 export function getModelFallbackAuto(): boolean {
   if (fallbackAutoCache !== undefined) return fallbackAutoCache;
-  try {
-    if (existsSync(FALLBACK_AUTO_STORE)) {
-      const raw = JSON.parse(readFileSync(FALLBACK_AUTO_STORE, "utf8"));
-      fallbackAutoCache = raw?.auto !== false; // default on for anything but explicit false
-    } else {
-      fallbackAutoCache = true;
-    }
-  } catch {
-    fallbackAutoCache = true;
-  }
+  // Loaded at import (loadModelDefaults); default on for anything but an
+  // explicit false, including a missing or unreadable file.
+  fallbackAutoCache = storedFallbackAuto?.auto !== false;
   return fallbackAutoCache;
 }
 
-export function setModelFallbackAuto(auto: boolean): boolean {
+export async function setModelFallbackAuto(auto: boolean): Promise<boolean> {
   fallbackAutoCache = auto;
   try {
-    writeJsonAtomic(FALLBACK_AUTO_STORE, { auto });
+    await writeJsonAtomicAsync(FALLBACK_AUTO_STORE, { auto });
+    storedFallbackAuto = { auto };
   } catch {}
   return auto;
 }
@@ -1149,3 +1191,5 @@ export function formatModelList(current?: string | null): string {
     return `${marker}${m.id}${aliases} — ${m.label}`;
   }).join("\n");
 }
+
+await loadModelDefaults();

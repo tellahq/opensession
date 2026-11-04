@@ -101,7 +101,9 @@ export interface PiRuntimeBindingDependencies {
     excluded?: ReadonlySet<string>,
     preferPlan?: string,
   ) => OpenaiPick;
-  buildSeededOpenaiAuth: (account: CodexAccount) => SeededAuthResult;
+  buildSeededOpenaiAuth: (
+    account: CodexAccount,
+  ) => SeededAuthResult | Promise<SeededAuthResult>;
   anthropicTransport: () => "inprocess" | "bridge";
   buildAnthropicProvider: (input: {
     unifiedSessionId: string;
@@ -302,7 +304,7 @@ export async function createPiRuntimeBinding(
       openaiApiKeyCredential = picked.value;
       evidence.sidelineableOpenai = picked;
     } else {
-      const built = deps.buildSeededOpenaiAuth(picked);
+      const built = await deps.buildSeededOpenaiAuth(picked);
       if ("error" in built) {
         const error = new Error(`pi/openai: ${built.error}`) as Error & {
           usageLimitExhausted?: boolean;

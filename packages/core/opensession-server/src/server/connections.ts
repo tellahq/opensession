@@ -4,14 +4,13 @@
  * query strings (they can embed tokens) or env values.
  */
 import { homeDir } from "./paths";
+import { unwatchFile, watchFile } from "fs";
+import { copyFile, readFile, stat } from "fs/promises";
+import { writeFileAtomicAsync } from "./shared/atomic-write";
 import {
-  existsSync,
-  readFileSync,
-  copyFileSync,
-  unwatchFile,
-  watchFile,
-} from "fs";
-import { writeFileAtomic } from "./shared/atomic-write";
+  cachedJsonFileShared,
+  loadJsonFileShared,
+} from "./shared/json-file-cache";
 import { configuredPaths } from "./config";
 import { resolveTeammate } from "./shared/user-mappings";
 import {
@@ -39,8 +38,8 @@ function setupCacheWatcher(configPath: string) {
   watchedMcpConfigPath = configPath;
   try {
     watchFile(configPath, () => {
-      cachedMcpConfig = null;
-      console.log("[mcp-cache] config changed, invalidating cache");
+      console.log("[mcp-cache] config changed, reloading");
+      void loadMcpConfig(configPath);
     });
   } catch (e) {
     watchedMcpConfigPath = null;
@@ -48,21 +47,50 @@ function setupCacheWatcher(configPath: string) {
   }
 }
 
+// Bumped by every local write, so a disk read that started before the write
+// cannot replace the newer in-memory config when it lands.
+let mcpConfigRevision = 0;
+// Writes run one at a time in call order, so the last one to land carries the
+// latest config.
+let mcpConfigWrite: Promise<unknown> = Promise.resolve();
+
+/**
+ * Read mcp-config.json into the cache readMcpConfig serves. Runs at import
+ * and whenever the file watcher sees a change; a test that repoints or
+ * rewrites the file awaits it before reading.
+ */
+export async function loadMcpConfig(
+  configPath = configuredPaths().mcpConfig,
+): Promise<void> {
+  // A local write in flight is newer than whatever the file holds now, and
+  // one that starts while this read runs makes the read stale (revision).
+  const revision = mcpConfigRevision;
+  await mcpConfigWrite;
+  let config: { mcpServers: Record<string, any> };
+  try {
+    config = JSON.parse(await readFile(configPath, "utf-8")) as {
+      mcpServers: Record<string, any>;
+    };
+  } catch {
+    config = { mcpServers: {} };
+  }
+  // A newer local write, or a path that is no longer the configured one
+  // (a watcher event for a previous path), must not replace the cache.
+  if (revision !== mcpConfigRevision) return;
+  if (configPath !== configuredPaths().mcpConfig) return;
+  cachedMcpConfig = config;
+  cachedMcpConfigPath = configPath;
+}
+
+/** The loaded MCP config, without I/O (see loadMcpConfig). A configured path
+ * not loaded yet starts loading and reads as empty until it lands. */
 export function readMcpConfig(): { mcpServers: Record<string, any> } {
   const configPath = configuredPaths().mcpConfig;
   setupCacheWatcher(configPath);
   if (cachedMcpConfig && cachedMcpConfigPath === configPath)
     return cachedMcpConfig;
-
-  try {
-    cachedMcpConfig = JSON.parse(readFileSync(configPath, "utf-8")) as {
-      mcpServers: Record<string, any>;
-    };
-  } catch {
-    cachedMcpConfig = { mcpServers: {} };
-  }
-  cachedMcpConfigPath = configPath;
-  return cachedMcpConfig;
+  void loadMcpConfig(configPath);
+  return { mcpServers: {} };
 }
 
 const LINEAR_AGENT_TOKENS_PATH = `${HOME}/.linear-agent-tokens.json`;
@@ -85,9 +113,9 @@ export function withDynamicCredentials(
   const linear = servers.linear;
   if (linear?.url?.includes("mcp.linear.app")) {
     try {
-      const tokens = JSON.parse(
-        readFileSync(LINEAR_AGENT_TOKENS_PATH, "utf-8"),
-      );
+      // Rotated by the linear-agent service; loaded at import and refreshed
+      // in the background, at most a second behind the file.
+      const tokens: any = cachedJsonFileShared(LINEAR_AGENT_TOKENS_PATH);
       const t: any = Object.values(tokens)[0];
       if (
         t?.accessToken &&
@@ -168,16 +196,26 @@ export function withDynamicCredentials(
   return out;
 }
 
-function writeMcpConfig(config: { mcpServers: Record<string, any> }): void {
+function writeMcpConfig(config: {
+  mcpServers: Record<string, any>;
+}): Promise<void> {
   const configPath = configuredPaths().mcpConfig;
-  // Keep one backup so a bad edit is always recoverable
-  try {
-    copyFileSync(configPath, `${configPath}.bak`);
-  } catch {}
-  writeFileAtomic(configPath, JSON.stringify(config, null, 2) + "\n");
+  mcpConfigRevision++;
   cachedMcpConfig = config;
   cachedMcpConfigPath = configPath;
   cache = null;
+  const run = mcpConfigWrite.then(async () => {
+    // Keep one backup so a bad edit is always recoverable
+    try {
+      await copyFile(configPath, `${configPath}.bak`);
+    } catch {}
+    await writeFileAtomicAsync(
+      configPath,
+      JSON.stringify(config, null, 2) + "\n",
+    );
+  });
+  mcpConfigWrite = run.catch(() => {});
+  return run;
 }
 
 export interface AddMcpInput {
@@ -221,9 +259,9 @@ export function hasValidRequiredAllowedUsers(
   );
 }
 
-export function addMcpServer(
+export async function addMcpServer(
   input: AddMcpInput,
-): { ok: true } | { error: string } {
+): Promise<{ ok: true } | { error: string }> {
   const name = (input.name || "").trim();
   if (!/^[a-z0-9][a-z0-9_-]{0,40}$/i.test(name)) {
     return { error: "Name must be alphanumeric (dashes/underscores allowed)" };
@@ -266,7 +304,7 @@ export function addMcpServer(
   if (allowedUsers) entry.allowedUsers = allowedUsers;
 
   config.mcpServers[name] = entry;
-  writeMcpConfig(config);
+  await writeMcpConfig(config);
   return { ok: true };
 }
 
@@ -282,11 +320,11 @@ export function addMcpServer(
  * never the package's, so any allowlist on the incoming entry is discarded in
  * favour of the one passed here.
  */
-export function addMcpServerEntry(
+export async function addMcpServerEntry(
   name: string,
   entry: Record<string, unknown>,
   opts: { allowedUsers?: string[] } = {},
-): { ok: true } | { error: string } {
+): Promise<{ ok: true } | { error: string }> {
   const clean = (name || "").trim();
   if (!/^[a-z0-9][a-z0-9_-]{0,40}$/i.test(clean)) {
     return { error: "Name must be alphanumeric (dashes/underscores allowed)" };
@@ -303,7 +341,7 @@ export function addMcpServerEntry(
   }
   const { allowedUsers: _ignored, ...rest } = entry;
   config.mcpServers[clean] = allowedUsers ? { ...rest, allowedUsers } : rest;
-  writeMcpConfig(config);
+  await writeMcpConfig(config);
   return { ok: true };
 }
 
@@ -312,10 +350,10 @@ export function addMcpServerEntry(
  * existing MCP server. Lets you restrict a server after it's been added — e.g.
  * lock a sensitive server down to specific teammates — without re-entering its secrets.
  */
-export function setMcpAllowedUsers(
+export async function setMcpAllowedUsers(
   name: string,
   allowedUsers?: string[],
-): { ok: true; allowedUsers?: string[] } | { error: string } {
+): Promise<{ ok: true; allowedUsers?: string[] } | { error: string }> {
   const config = readMcpConfig();
   const entry = config.mcpServers[name];
   if (!entry) return { error: `Server "${name}" not found` };
@@ -327,13 +365,13 @@ export function setMcpAllowedUsers(
   }
   if (cleaned) entry.allowedUsers = cleaned;
   else delete entry.allowedUsers;
-  writeMcpConfig(config);
+  await writeMcpConfig(config);
   return { ok: true, allowedUsers: cleaned };
 }
 
-export function replaceMcpServerEntries(
+export async function replaceMcpServerEntries(
   updates: Record<string, Record<string, unknown> | undefined>,
-): { ok: true } | { error: string } {
+): Promise<{ ok: true } | { error: string }> {
   const config = readMcpConfig();
   for (const [name, entry] of Object.entries(updates)) {
     const allowedUsers = cleanAllowedUsers(
@@ -351,17 +389,17 @@ export function replaceMcpServerEntries(
     if (entry) config.mcpServers[name] = entry;
     else delete config.mcpServers[name];
   }
-  writeMcpConfig(config);
+  await writeMcpConfig(config);
   return { ok: true };
 }
 
-export function removeMcpServer(
+export async function removeMcpServer(
   name: string,
-): { ok: true } | { error: string } {
+): Promise<{ ok: true } | { error: string }> {
   const config = readMcpConfig();
   if (!config.mcpServers[name]) return { error: `Server "${name}" not found` };
   delete config.mcpServers[name];
-  writeMcpConfig(config);
+  await writeMcpConfig(config);
   return { ok: true };
 }
 
@@ -486,7 +524,15 @@ async function checkServer(name: string, cfg: any): Promise<McpConnection> {
   // Resolve what must exist on disk: absolute command, or first absolute arg
   // (covers "bun run /path/to/script.ts")
   const pathsToCheck = [command, ...args].filter((p) => p.startsWith("/"));
-  const missing = pathsToCheck.find((p) => !existsSync(p));
+  const exists = await Promise.all(
+    pathsToCheck.map((p) =>
+      stat(p).then(
+        () => true,
+        () => false,
+      ),
+    ),
+  );
+  const missing = pathsToCheck.find((_, i) => !exists[i]);
   if (missing) {
     return {
       name,
@@ -517,3 +563,8 @@ async function checkServer(name: string, cfg: any): Promise<McpConnection> {
 
   return { name, transport: "stdio", target, envKeys, status: "ready" };
 }
+
+await Promise.all([
+  loadMcpConfig(),
+  loadJsonFileShared(LINEAR_AGENT_TOKENS_PATH).catch(() => undefined),
+]);

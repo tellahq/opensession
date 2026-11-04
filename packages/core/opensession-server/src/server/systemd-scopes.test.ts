@@ -50,13 +50,13 @@ describe("systemd scope resource controls", () => {
     ).toContain("--property=TasksMax=2048");
   });
 
-  test("gateway-owned shell commands escape into the low-priority agent slice", () => {
+  test("gateway-owned shell commands escape into the low-priority agent slice", async () => {
     expect(
       processRunsInControlPlane(
         "0::/opensession.slice/opensession-control.slice/opensession.service",
       ),
     ).toBe(true);
-    const scoped = controlPlaneWorkloadCommand(
+    const scoped = await controlPlaneWorkloadCommand(
       ["setsid", "/bin/bash", "-c", "cargo test"],
       "opensession-agent-cmd-test",
       {
@@ -89,10 +89,10 @@ describe("systemd scope resource controls", () => {
     ]);
   });
 
-  test("commands already owned by a run host stay in its system workload unit", () => {
+  test("commands already owned by a run host stay in its system workload unit", async () => {
     const command = ["/bin/bash", "-c", "cargo test"];
     expect(
-      controlPlaneWorkloadCommand(command, "unused", {
+      await controlPlaneWorkloadCommand(command, "unused", {
         env: { PATH: "/bin" },
         cgroup:
           "0::/opensession.slice/opensession-workloads.slice/bks-run.service",
@@ -112,12 +112,17 @@ describe("systemd scope resource controls", () => {
     );
   });
 
-  test("host Portals get a bounded user scope outside the gateway cgroup", () => {
+  test("host Portals get a bounded user scope outside the gateway cgroup", async () => {
     const direct = ["setsid", "bash", "-lc", "exec bun dev"];
-    const scoped = previewScopeCommand(direct, "/srv/worktrees/a", "web", {
-      env: { PATH: "/bin", HOME: "/tmp" },
-      scopesAvailable: true,
-    });
+    const scoped = await previewScopeCommand(
+      direct,
+      "/srv/worktrees/a",
+      "web",
+      {
+        env: { PATH: "/bin", HOME: "/tmp" },
+        scopesAvailable: true,
+      },
+    );
     expect(scoped.unit).toBe(previewScopeUnit("/srv/worktrees/a", "web"));
     expect(scoped.command).toEqual([
       "systemd-run",

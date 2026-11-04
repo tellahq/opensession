@@ -51,7 +51,11 @@ import {
   steerPiRun,
 } from "./pi-runner";
 import type { PiBashAuditEvent } from "./pi-runner";
-import { __setCodexAccountsPathForTest } from "./codex-accounts";
+import {
+  __setCodexAccountsPathForTest,
+  loadCodexAccounts,
+} from "./codex-accounts";
+import { loadPiConfig } from "./pi-config";
 
 describe("acceptSteerOnce", () => {
   test("records only successful acceptance and deduplicates retries", () => {
@@ -716,16 +720,17 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
   const storePath = join(dir, "codex-accounts.json");
   let prevCfg: string | undefined;
   let prevStore = "";
-  beforeAll(() => {
+  beforeAll(async () => {
     writeFileSync(cfgPath, JSON.stringify({ enabled: true, pickerModels: [] }));
     prevCfg = process.env.OPENSESSION_PI_CONFIG;
     process.env.OPENSESSION_PI_CONFIG = cfgPath;
-    prevStore = __setCodexAccountsPathForTest(storePath);
+    await loadPiConfig();
+    prevStore = await __setCodexAccountsPathForTest(storePath);
   });
-  afterAll(() => {
+  afterAll(async () => {
     if (prevCfg === undefined) delete process.env.OPENSESSION_PI_CONFIG;
     else process.env.OPENSESSION_PI_CONFIG = prevCfg;
-    __setCodexAccountsPathForTest(prevStore);
+    await __setCodexAccountsPathForTest(prevStore);
     rmSync(dir, { recursive: true, force: true });
   });
 
@@ -790,6 +795,7 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
         ],
       }),
     );
+    await loadCodexAccounts();
 
     const runtimeKeys: Array<[string, string]> = [];
     const fakeSdk = {
@@ -891,6 +897,7 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
         ],
       }),
     );
+    await loadCodexAccounts();
     const sessionKey = `pi-late-steer-${crypto.randomUUID()}`;
     const scratchDir = join(dir, `scratch-${sessionKey}`);
     mkdirSync(scratchDir, { recursive: true });
@@ -1036,6 +1043,7 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
         ],
       }),
     );
+    await loadCodexAccounts();
     const sdk = await import("@earendil-works/pi-coding-agent");
     const transcriptSessionId = `pi-resume-${crypto.randomUUID()}`;
     const sessionDir = join(PI_STATE_DIR, "sessions", transcriptSessionId);
@@ -1183,6 +1191,7 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
       join(codexHome, "auth.json"),
       JSON.stringify({ tokens: { access_token: `h.${payload}.s` } }),
     );
+    await loadCodexAccounts();
     writeFileSync(
       storePath,
       JSON.stringify({
@@ -1197,6 +1206,7 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
         ],
       }),
     );
+    await loadCodexAccounts();
     const events = await collect("pi/openai/gpt-6.1-sol");
     const err = events.find((e) => e.type === "error")!;
     expect(err).toBeDefined();
@@ -1236,6 +1246,7 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
         accounts: ids.map(expiringHomeAccount),
       }),
     );
+    await loadCodexAccounts();
     // Non-strict pin: attempt 1 is deterministically rot-a. Burning it adds
     // it to the walk's exclusion, which makes the picker skip its pin branch,
     // so attempt 2 falls to the pool and lands on rot-b.
@@ -1313,6 +1324,7 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
           ],
         }),
       );
+      await loadCodexAccounts();
 
       const prompts: string[] = [];
       const managers: Array<{ completedActions: number }> = [];
@@ -1532,6 +1544,7 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
         accounts: [expiringHomeAccount("pin-a"), expiringHomeAccount("pin-b")],
       }),
     );
+    await loadCodexAccounts();
     const events = await collect("pi/openai/gpt-6.1-sol", {
       accountId: "pin-a",
       accountStrict: true,
@@ -1546,6 +1559,7 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
 
   test("a transcript alias admits only one run and is cleaned up", async () => {
     writeFileSync(storePath, JSON.stringify({ accounts: [] }));
+    await loadCodexAccounts();
     const transcriptSessionId = `pi-shared-transcript-${crypto.randomUUID()}`;
     const firstRunKey = `pi-first-${crypto.randomUUID()}`;
     const secondRunKey = `pi-second-${crypto.randomUUID()}`;
@@ -1599,47 +1613,47 @@ describe("local-tool path containment", () => {
   symlinkSync("/etc", join(ws, "esc"));
   afterAll(() => rmSync(ws, { recursive: true, force: true }));
 
-  test("assertContainedPiPath allows workspace paths, incl. not-yet-created ones", () => {
-    expect(assertContainedPiPath(join(ws, "sub", "inside.txt"), realWs)).toBe(
-      join(realWs, "sub", "inside.txt"),
-    );
-    expect(assertContainedPiPath(ws, realWs)).toBe(realWs);
+  test("assertContainedPiPath allows workspace paths, incl. not-yet-created ones", async () => {
+    expect(
+      await assertContainedPiPath(join(ws, "sub", "inside.txt"), realWs),
+    ).toBe(join(realWs, "sub", "inside.txt"));
+    expect(await assertContainedPiPath(ws, realWs)).toBe(realWs);
     // write/edit targets that don't exist yet are contained via their
     // nearest existing ancestor
-    expect(assertContainedPiPath(join(ws, "newdir", "new.txt"), realWs)).toBe(
-      join(realWs, "newdir", "new.txt"),
-    );
+    expect(
+      await assertContainedPiPath(join(ws, "newdir", "new.txt"), realWs),
+    ).toBe(join(realWs, "newdir", "new.txt"));
   });
 
-  test("rejects absolute escapes, /proc//sys//dev, and .. traversal", () => {
-    expect(() => assertContainedPiPath("/etc/passwd", realWs)).toThrow(
+  test("rejects absolute escapes, /proc//sys//dev, and .. traversal", async () => {
+    await expect(assertContainedPiPath("/etc/passwd", realWs)).rejects.toThrow(
       /outside the session workspace/,
     );
-    expect(() => assertContainedPiPath("/proc/self/environ", realWs)).toThrow(
+    await expect(
+      assertContainedPiPath("/proc/self/environ", realWs),
+    ).rejects.toThrow(/not accessible/);
+    await expect(assertContainedPiPath("/sys/kernel", realWs)).rejects.toThrow(
       /not accessible/,
     );
-    expect(() => assertContainedPiPath("/sys/kernel", realWs)).toThrow(
+    await expect(assertContainedPiPath("/dev/stdin", realWs)).rejects.toThrow(
       /not accessible/,
     );
-    expect(() => assertContainedPiPath("/dev/stdin", realWs)).toThrow(
-      /not accessible/,
-    );
-    expect(() =>
+    await expect(
       assertContainedPiPath(
         join(ws, "..", "..", "..", "..", "etc", "passwd"),
         realWs,
       ),
-    ).toThrow(/outside the session workspace|not accessible/);
+    ).rejects.toThrow(/outside the session workspace|not accessible/);
   });
 
-  test("rejects symlink escapes, existing and dangling targets", () => {
-    expect(() =>
+  test("rejects symlink escapes, existing and dangling targets", async () => {
+    await expect(
       assertContainedPiPath(join(ws, "esc", "passwd"), realWs),
-    ).toThrow(/outside the session workspace|not accessible/);
+    ).rejects.toThrow(/outside the session workspace|not accessible/);
     // non-existent path UNDER an escaping symlink still resolves out
-    expect(() =>
+    await expect(
       assertContainedPiPath(join(ws, "esc", "nope", "x.txt"), realWs),
-    ).toThrow(/outside the session workspace|not accessible/);
+    ).rejects.toThrow(/outside the session workspace|not accessible/);
   });
 
   test("guarded read/ls/write ops enforce containment; inside paths work", async () => {
@@ -2021,6 +2035,7 @@ describe("runPiSmokeTurn with the engine disabled", () => {
     // documented test seam and pi-config reads it fresh per call).
     const prev = process.env.OPENSESSION_PI_CONFIG;
     process.env.OPENSESSION_PI_CONFIG = "/nonexistent/opensession-pi-test.json";
+    await loadPiConfig();
     try {
       const res = await runPiSmokeTurn({ timeoutMs: 5_000 });
       expect(res.ok).toBe(false);

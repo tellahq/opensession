@@ -797,7 +797,7 @@ describe("single session ownership", () => {
     expect(runner).toContain('run.launchPhase === "prepared"');
     expect(runner).toContain('launchPhase: "launching"');
     const durableLaunching = runner.indexOf(
-      "writeJsonAtomic(launchStatePath, launchState)",
+      "writeJsonAtomicAsync(launchStatePath, launchState)",
       runner.indexOf('phase: "launching"'),
     );
     const physicalLaunch = runner.indexOf(

@@ -1,4 +1,6 @@
 import { getConfigAsync } from "../config";
+import { loadGithubAppKeyState } from "../github-app";
+import { loadGithubAuthStore } from "../github-auth";
 import { afterEach, describe, expect, test } from "bun:test";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
@@ -56,6 +58,7 @@ async function setupFiles(account?: { login: string; name?: string }) {
   await getConfigAsync();
   process.env.OPENSESSION_GITHUB_AUTH_STORE = authStore;
   process.env.OPENSESSION_GITHUB_APP_KEY = appKey;
+  await Promise.all([loadGithubAuthStore(), loadGithubAppKeyState()]);
   return config;
 }
 

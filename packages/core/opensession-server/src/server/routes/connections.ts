@@ -126,7 +126,7 @@ export async function bootstrapUserAuthOnConnect(
 
   const flip = await withConfigMutationLock(
     async (): Promise<{ ok: true } | { error: string }> => {
-      const config = rawConfig();
+      const config = await rawConfig();
       // (a) Re-check the intent INSIDE the lock. The route checked
       // githubAuthOnConnect() before acquiring it, but a concurrent device
       // poll may have already consumed authOnConnect (rostered its own member,
@@ -189,7 +189,7 @@ export async function bootstrapUserAuthOnConnect(
       github.userPrAuth = true;
       // Consumed — clear the intent so a later connect is a plain reconnect.
       delete github.authOnConnect;
-      persistRawConfig(config);
+      await persistRawConfig(config);
       return { ok: true };
     },
   );
@@ -250,7 +250,7 @@ export async function handleConnectionsRoutes(
     if (!body) return Response.json({ error: "Invalid JSON" }, { status: 400 });
     if (typeof body.name === "string" && requiresAllowedUsers(body.name)) {
     }
-    const result = addMcpServer(body);
+    const result = await addMcpServer(body);
     if ("error" in result) return Response.json(result, { status: 400 });
     return Response.json(result);
   }
@@ -372,7 +372,7 @@ export async function handleConnectionsRoutes(
   if (mcpOauthMatch && req.method === "DELETE") {
     const { removeMcpOauthGrant } = await import("../mcp-oauth");
     const me = url.searchParams.get("scope") === "me";
-    const ok = removeMcpOauthGrant(
+    const ok = await removeMcpOauthGrant(
       decodeURIComponent(mcpOauthMatch[1]),
       me ? ctx.authUser?.login || ctx.authUser?.name || undefined : undefined,
     );
@@ -466,7 +466,7 @@ export async function handleConnectionsRoutes(
     }
 
     if (req.method === "DELETE") {
-      const result = removeMcpServer(name);
+      const result = await removeMcpServer(name);
       if ("error" in result) return Response.json(result, { status: 404 });
       return Response.json(result);
     }
@@ -477,7 +477,7 @@ export async function handleConnectionsRoutes(
     const allowedUsers = Array.isArray(body?.allowedUsers)
       ? body.allowedUsers
       : undefined;
-    const result = setMcpAllowedUsers(name, allowedUsers);
+    const result = await setMcpAllowedUsers(name, allowedUsers);
     if ("error" in result) return Response.json(result, { status: 404 });
     return Response.json(result);
   }
@@ -574,7 +574,7 @@ export async function handleConnectionsRoutes(
       ? body.models.filter((m: unknown): m is string => typeof m === "string")
       : undefined;
     try {
-      setModelProvider(id, {
+      await setModelProvider(id, {
         apiKey,
         baseURL,
         api: api as ModelProviderConfig["api"] | "" | undefined,
@@ -593,14 +593,14 @@ export async function handleConnectionsRoutes(
         // `models` replaces this provider's picker entries wholesale.
         const prefix = `pi/${id}/`;
         for (const m of pickerModels) {
-          if (m.startsWith(prefix)) removePickerModel(m);
+          if (m.startsWith(prefix)) await removePickerModel(m);
         }
         for (const m of providerModels) {
           // Accept "grok-4", "xai/grok-4" or "pi/xai/grok-4".
           let tail = m.trim();
           if (tail.startsWith("pi/")) tail = tail.slice("pi/".length);
           if (tail.startsWith(`${id}/`)) tail = tail.slice(id.length + 1);
-          if (tail) addPickerModel(`${prefix}${tail}`);
+          if (tail) await addPickerModel(`${prefix}${tail}`);
         }
       }
       let discovery: { added: number; models: string[] } | undefined;
@@ -631,12 +631,12 @@ export async function handleConnectionsRoutes(
   if (modelProviderMatch && req.method === "DELETE") {
     const id = decodeURIComponent(modelProviderMatch[1]);
     try {
-      const removed = removeModelProvider(id);
+      const removed = await removeModelProvider(id);
       const prefix = `pi/${id}/`;
       let cleared = 0;
       for (const m of readModelProviderConfig()?.pickerModels || []) {
         if (m.startsWith(prefix)) {
-          removePickerModel(m);
+          await removePickerModel(m);
           cleared++;
         }
       }
@@ -707,10 +707,10 @@ export async function handleConnectionsRoutes(
       }
     }
     try {
-      if (typeof body.enabled === "boolean") setPiEnabled(body.enabled);
+      if (typeof body.enabled === "boolean") await setPiEnabled(body.enabled);
       // pickerModels is vestigial (the model list is engine-agnostic; every
       // entry routes to pi by prefix) but the write path stays tolerant.
-      if (pickerModels) setPiPickerModels(pickerModels);
+      if (pickerModels) await setPiPickerModels(pickerModels);
       return Response.json(
         readPiEngineConfig() ?? { enabled: false, pickerModels: [] },
       );
@@ -843,7 +843,7 @@ export async function handleConnectionsRoutes(
       const { rawConfig, persistRawConfig, withConfigMutationLock } =
         await import("../config-mutation");
       await withConfigMutationLock(async () => {
-        const config = rawConfig();
+        const config = await rawConfig();
         const github = githubIntegrationSection(config, true)!;
         if (!github.installationOwner && !github.appOrg) {
           github.installationOwner = result.login;
@@ -907,7 +907,7 @@ export async function handleConnectionsRoutes(
         );
       }
     }
-    const removed = removeGithubAccount(login);
+    const removed = await removeGithubAccount(login);
     if (!removed)
       return Response.json({ error: "Not connected" }, { status: 404 });
     // The child keeps a copied process environment. Stop it immediately
@@ -994,7 +994,7 @@ export async function handleConnectionsRoutes(
     const { rawConfig, persistRawConfig, withConfigMutationLock } =
       await import("../config-mutation");
     return withConfigMutationLock(async () => {
-      const config = rawConfig();
+      const config = await rawConfig();
       const github = githubIntegrationSection(config, true)!;
       const keyMutation =
         privateKey || (github.oauthClientId !== clientId ? null : undefined);
@@ -1058,7 +1058,7 @@ export async function handleConnectionsRoutes(
     const { rawConfig, persistRawConfig, withConfigMutationLock } =
       await import("../config-mutation");
     return withConfigMutationLock(async () => {
-      const config = rawConfig();
+      const config = await rawConfig();
       const github = githubIntegrationSection(config, false);
       if (
         github &&

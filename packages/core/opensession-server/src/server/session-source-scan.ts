@@ -34,7 +34,9 @@ import type {
   LinearSessionSource,
   SlackSessionSource,
 } from "./agent-session-catalog";
-import { OPENSESSION_SESSIONS_DIR } from "./paths";
+// paths.ts finishes loading asynchronously, which a require()d module may
+// not import; it registers its store binding in state-root.ts instead.
+import { registeredSessionsDir } from "./state-root";
 import type { SessionMetadataSeedRow } from "./session-kernel";
 import type { SessionSourceDocuments } from "./sessions";
 import type { NativeSessionFile } from "./types";
@@ -212,14 +214,14 @@ function nativeSessionFileScan(
 export function scanNativeSessionFiles(): NativeSessionFileScan {
   assertOfflineSessionSourceScan("scanNativeSessionFiles");
   return nativeSessionFileScan(
-    readSourceDirectorySync(OPENSESSION_SESSIONS_DIR, false),
+    readSourceDirectorySync(registeredSessionsDir(), false),
   );
 }
 
 export async function scanNativeSessionFilesAsync(): Promise<NativeSessionFileScan> {
   assertOfflineSessionSourceScan("scanNativeSessionFilesAsync");
   return nativeSessionFileScan(
-    await readSourceDirectory(OPENSESSION_SESSIONS_DIR, false),
+    await readSourceDirectory(registeredSessionsDir(), false),
   );
 }
 

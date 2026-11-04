@@ -28,7 +28,7 @@ async function syncGithubWebhook(
 ): Promise<GithubWebhookSync | undefined> {
   if (!githubAppConfigured()) return undefined;
   const secret =
-    readEnvFileValues().GITHUB_WEBHOOK_SECRET ||
+    (await readEnvFileValues()).GITHUB_WEBHOOK_SECRET ||
     process.env.GITHUB_WEBHOOK_SECRET ||
     "";
   if (!secret) {

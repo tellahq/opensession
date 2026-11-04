@@ -43,7 +43,7 @@ const restoreIdentities = __setIdentitiesForTest([
 // A stand-in for an OAuth-only MCP server that reports the Authorization it
 // received, reached through the same relay real runs use.
 let upstream: ReturnType<typeof Bun.serve>;
-beforeAll(() => {
+beforeAll(async () => {
   upstream = Bun.serve({
     port: 0,
     fetch: (req) =>
@@ -76,6 +76,8 @@ beforeAll(() => {
       },
     }),
   );
+  await (await import("./mcp-oauth")).loadMcpOauthStore();
+  await (await import("./connections")).loadMcpConfig();
 });
 afterAll(() => {
   upstream?.stop(true);
@@ -88,7 +90,7 @@ afterAll(() => {
 async function upstreamAuthorization(
   candidates: string[],
 ): Promise<string | null> {
-  const token = mintMcpRelayToken("acme", candidates);
+  const token = await mintMcpRelayToken("acme", candidates);
   const res = await handleMcpRelay(
     new Request("http://127.0.0.1/relay/acme", {
       method: "POST",

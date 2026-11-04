@@ -107,3 +107,5 @@ export function patchUiPrefs(
   }
   return store.set(user, current);
 }
+
+await store.load();

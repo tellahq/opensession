@@ -46,14 +46,19 @@
 
 import { stateDir } from "./paths";
 import { isDevInstance } from "./dev-mode";
-import { chmodSync, readFileSync, statSync } from "fs";
-import { readFile } from "node:fs/promises";
+import { chmod, readFile } from "node:fs/promises";
 import { audit } from "./audit";
 import { configuredIdentity, getConfig } from "./config";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import { fetchWithTimeout } from "./shared/fetch-with-timeout";
 import { githubGitCredentialEnv } from "./github-git-credential";
-import { readJsonFileCopy } from "./shared/json-file-cache";
+import {
+  cachedJsonFileCopy,
+  cachedJsonFileShared,
+  loadJsonFileCopy,
+  loadJsonFileShared,
+  publishJsonFile,
+} from "./shared/json-file-cache";
 
 /** Env override is for tests/sandboxes; read per call so it can change. */
 function storePath(): string {
@@ -252,22 +257,63 @@ export function githubAppInstallUrl(): string | null {
   return slug ? `https://github.com/apps/${slug}/installations/new` : null;
 }
 
+function storeFrom(raw: { users?: Store["users"] } | undefined): Store {
+  const users = raw?.users && typeof raw.users === "object" ? raw.users : {};
+  return { users };
+}
+
+/** The loaded store, without I/O. Refreshed in the background, so a write
+ * by another process is seen within a second (see loadGithubAuthStore). */
 function readStore(): Store {
   try {
-    const raw = readJsonFileCopy<{ users?: Store["users"] }>(storePath());
-    const users = raw?.users && typeof raw.users === "object" ? raw.users : {};
-    return { users };
+    return storeFrom(cachedJsonFileCopy(storePath()));
   } catch {
     return { users: {} };
   }
 }
 
-function writeStore(store: Store): void {
-  writeJsonAtomic(storePath(), store);
+/** The store fresh from disk, for read-modify-write. */
+async function readStoreFresh(): Promise<Store> {
+  try {
+    return storeFrom(await loadJsonFileCopy(storePath()));
+  } catch {
+    return { users: {} };
+  }
+}
+
+async function writeStore(store: Store): Promise<void> {
+  const path = storePath();
+  await writeJsonAtomicAsync(path, store);
+  publishJsonFile(path, store);
   invalidateReconnectCache();
   try {
-    chmodSync(storePath(), 0o600);
+    await chmod(path, 0o600);
   } catch {}
+}
+
+// Store mutations read, patch and write the file across awaits; one at a time
+// so two concurrent edits cannot drop each other's change.
+let storeMutation: Promise<unknown> = Promise.resolve();
+function mutateStore<T>(fn: () => Promise<T>): Promise<T> {
+  const run = storeMutation.then(fn, fn);
+  storeMutation = run.catch(() => {});
+  return run;
+}
+
+/**
+ * Load the connected-account store and, on a remote run host, the projected
+ * run credential. Runs at import; a test that writes either file itself, or
+ * repoints OPENSESSION_GITHUB_AUTH_STORE, awaits it again before reading.
+ */
+export async function loadGithubAuthStore(): Promise<void> {
+  const projected = process.env[GITHUB_RUN_AUTH_FILE_ENV];
+  await Promise.all([
+    loadJsonFileShared(storePath()).catch(() => undefined),
+    projected
+      ? loadJsonFileShared(projected).catch(() => undefined)
+      : undefined,
+  ]);
+  invalidateReconnectCache();
 }
 
 // ── Device flow ──────────────────────────────────────────────────────────────
@@ -584,27 +630,31 @@ async function identifyAndStoreToken(
   const ownership = validateGithubTokenLogin(login, expectedLogin);
   if (!ownership.ok) return { status: "error", error: ownership.error };
 
-  const store = readStore();
-  const record: StoredAccount = {
-    login,
-    token,
-    ...(typeof user.name === "string" && user.name ? { name: user.name } : {}),
-    ...(typeof scope === "string" && scope ? { scopes: scope } : {}),
-    source: "device",
-    connectedAt: new Date().toISOString(),
-    ...grantExpiryFields(grant),
-  };
-  // Simple mode holds exactly one account: soleGithubAccount()/soleGithubLogin()
-  // are one-account-or-nothing, so a reconnect that authorizes a DIFFERENT login
-  // must REPLACE the previous record, not accumulate. Two usable accounts strand
-  // both getters at null, which also leaves the DELETE route no way to recover.
-  // Operator mode keeps one record per signed-in team member.
-  if (githubUserAuthActive()) {
-    store.users[login.toLowerCase()] = record;
-  } else {
-    store.users = { [login.toLowerCase()]: record };
-  }
-  writeStore(store);
+  await mutateStore(async () => {
+    const store = await readStoreFresh();
+    const record: StoredAccount = {
+      login,
+      token,
+      ...(typeof user.name === "string" && user.name
+        ? { name: user.name }
+        : {}),
+      ...(typeof scope === "string" && scope ? { scopes: scope } : {}),
+      source: "device",
+      connectedAt: new Date().toISOString(),
+      ...grantExpiryFields(grant),
+    };
+    // Simple mode holds exactly one account: soleGithubAccount()/soleGithubLogin()
+    // are one-account-or-nothing, so a reconnect that authorizes a DIFFERENT login
+    // must REPLACE the previous record, not accumulate. Two usable accounts strand
+    // both getters at null, which also leaves the DELETE route no way to recover.
+    // Operator mode keeps one record per signed-in team member.
+    if (githubUserAuthActive()) {
+      store.users[login.toLowerCase()] = record;
+    } else {
+      store.users = { [login.toLowerCase()]: record };
+    }
+    await writeStore(store);
+  });
   audit({ kind: "github_auth_connect", login, scopes: scope });
   return { status: "ok", login, ...(user.name ? { name: user.name } : {}) };
 }
@@ -614,13 +664,18 @@ async function identifyAndStoreToken(
 /** Flag an account whose refresh grant is unrecoverable. The stored tokens stay
  *  put (the getters already fail closed on the expired access token) — this only
  *  stops the sweep from retrying and lets the UI surface the reconnect. */
-function markRefreshDead(key: string, error: string): void {
-  const store = readStore();
-  const account = store.users[key];
-  if (!account || account.refreshFailedAt) return;
-  store.users[key] = { ...account, refreshFailedAt: new Date().toISOString() };
-  writeStore(store);
-  audit({ kind: "github_auth_refresh_dead", login: account.login, error });
+function markRefreshDead(key: string, error: string): Promise<void> {
+  return mutateStore(async () => {
+    const store = await readStoreFresh();
+    const account = store.users[key];
+    if (!account || account.refreshFailedAt) return;
+    store.users[key] = {
+      ...account,
+      refreshFailedAt: new Date().toISOString(),
+    };
+    await writeStore(store);
+    audit({ kind: "github_auth_refresh_dead", login: account.login, error });
+  });
 }
 
 /** Refresh one account's token via the refresh-token grant. GitHub rotates
@@ -632,14 +687,14 @@ export async function refreshGithubToken(login: string): Promise<boolean> {
   const { clientId, clientSecret } = githubUserAuthSettings();
   if (!clientId || !clientSecret) return false;
   const key = login.toLowerCase();
-  const account = readStore().users[key];
+  const account = (await readStoreFresh()).users[key];
   if (!account?.refreshToken) return false;
   if (account.refreshFailedAt) return false; // already known dead — see markRefreshDead
   if (
     account.refreshTokenExpiresAt &&
     Date.parse(account.refreshTokenExpiresAt) <= Date.now()
   ) {
-    markRefreshDead(key, "refresh token expired");
+    await markRefreshDead(key, "refresh token expired");
     return false;
   }
   const res = await fetchWithTimeout(
@@ -667,21 +722,26 @@ export async function refreshGithubToken(login: string): Promise<boolean> {
     // amount of retrying brings it back (it was retried every 20 minutes for
     // four days before this existed). Record it so the sweep gives up and the
     // Connections UI can ask for a reconnect instead of failing silently.
-    if (body.error === "bad_refresh_token") markRefreshDead(key, error);
+    if (body.error === "bad_refresh_token") await markRefreshDead(key, error);
     return false;
   }
   // Re-read inside the write to keep the window for clobbering a concurrent
   // connect as small as possible (single-process, so this is belt only).
-  const store = readStore();
-  const current = store.users[key];
-  if (!current) return false;
-  const { refreshFailedAt: _cleared, ...kept } = current;
-  store.users[key] = {
-    ...kept,
-    token: body.access_token,
-    ...grantExpiryFields(body),
-  };
-  writeStore(store);
+  const accessToken = body.access_token;
+  const stored = await mutateStore(async () => {
+    const store = await readStoreFresh();
+    const current = store.users[key];
+    if (!current) return false;
+    const { refreshFailedAt: _cleared, ...kept } = current;
+    store.users[key] = {
+      ...kept,
+      token: accessToken,
+      ...grantExpiryFields(body),
+    };
+    await writeStore(store);
+    return true;
+  });
+  if (!stored) return false;
   audit({ kind: "github_auth_refresh", login });
   return true;
 }
@@ -698,7 +758,7 @@ export async function refreshExpiringGithubTokens(): Promise<void> {
   // soleGithubAccount() until a manual reconnect.
   const { clientId, clientSecret } = githubUserAuthSettings();
   if (!clientId || !clientSecret) return;
-  for (const account of Object.values(readStore().users)) {
+  for (const account of Object.values((await readStoreFresh()).users)) {
     if (!account.refreshToken || !account.expiresAt) continue;
     if (account.refreshFailedAt) continue; // dead grant — only a reconnect fixes it
     if (Date.parse(account.expiresAt) - Date.now() > REFRESH_SKEW_MS) continue;
@@ -753,7 +813,7 @@ export function connectedGithubAccounts(): GithubConnectedAccount[] {
  *  makes a reconnect take effect in the same breath rather than a beat later. */
 let reconnectCache: {
   path: string;
-  stamp: number;
+  source: unknown;
   logins: Set<string>;
 } | null = null;
 
@@ -763,18 +823,20 @@ function invalidateReconnectCache(): void {
 
 function refreshDeadLogins(): Set<string> {
   const path = storePath();
-  let stamp = 0;
+  // The loaded store is one shared object until the file changes, so its
+  // identity says whether the set below is still current.
+  let source: { users?: Store["users"] } | undefined;
   try {
-    stamp = statSync(path).mtimeMs;
+    source = cachedJsonFileShared(path);
   } catch {} // no store yet: nobody has connected, so nobody is dead
-  if (reconnectCache?.path === path && reconnectCache.stamp === stamp) {
+  if (reconnectCache?.path === path && reconnectCache.source === source) {
     return reconnectCache.logins;
   }
   const logins = new Set<string>();
-  for (const account of Object.values(readStore().users)) {
+  for (const account of Object.values(storeFrom(source).users)) {
     if (account.refreshFailedAt) logins.add(account.login.toLowerCase());
   }
-  reconnectCache = { path, stamp, logins };
+  reconnectCache = { path, source, logins };
   return logins;
 }
 
@@ -822,14 +884,17 @@ export async function githubSignInGrantUsable(login: string): Promise<boolean> {
   }
 }
 
-export function removeGithubAccount(login: string): boolean {
-  const store = readStore();
+export async function removeGithubAccount(login: string): Promise<boolean> {
   const key = login.toLowerCase();
-  if (!store.users[key]) return false;
-  delete store.users[key];
-  writeStore(store);
-  audit({ kind: "github_auth_disconnect", login });
-  return true;
+  const removed = await mutateStore(async () => {
+    const store = await readStoreFresh();
+    if (!store.users[key]) return false;
+    delete store.users[key];
+    await writeStore(store);
+    return true;
+  });
+  if (removed) audit({ kind: "github_auth_disconnect", login });
+  return removed;
 }
 
 /**
@@ -908,10 +973,9 @@ function readProjectedGithubAuth(): ProjectedGithubAuth {
   const path = process.env[GITHUB_RUN_AUTH_FILE_ENV];
   if (!path) return NO_PROJECTED_AUTH;
   try {
-    const parsed = JSON.parse(readFileSync(path, "utf-8")) as Record<
-      string,
-      unknown
-    >;
+    // Loaded at import (loadGithubAuthStore); the launcher writes it before
+    // the host process starts.
+    const parsed = cachedJsonFileShared(path) as Record<string, unknown>;
     const token =
       typeof parsed.GH_TOKEN === "string"
         ? parsed.GH_TOKEN
@@ -1107,3 +1171,5 @@ export function soleGithubLogin(): string | null {
   const usable = usableAccounts();
   return usable.length === 1 ? usable[0]!.login : null;
 }
+
+await loadGithubAuthStore();

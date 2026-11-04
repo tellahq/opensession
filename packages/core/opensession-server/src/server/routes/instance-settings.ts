@@ -235,8 +235,10 @@ export function assetStorageCandidate(
   };
 }
 
-function persistAssetStorage(config: ResolvedAssetStorage): void {
-  const raw = rawConfig();
+async function persistAssetStorage(
+  config: ResolvedAssetStorage,
+): Promise<void> {
+  const raw = await rawConfig();
   const storage =
     raw.storage &&
     typeof raw.storage === "object" &&
@@ -251,7 +253,7 @@ function persistAssetStorage(config: ResolvedAssetStorage): void {
     storage.assets = config;
     raw.storage = storage;
   }
-  persistRawConfig(raw);
+  await persistRawConfig(raw);
 }
 
 /** Optional string field: absent → undefined, otherwise a length-capped string. */
@@ -313,9 +315,9 @@ export async function handleInstanceSettingsRoutes(
     }
     const mode: SelfDevMode = body.mode;
     await withConfigMutationLock(async () => {
-      const config = rawConfig();
+      const config = await rawConfig();
       config.selfDev = mode;
-      persistRawConfig(config);
+      await persistRawConfig(config);
     });
     return Response.json(worktreeSettingsDto());
   }
@@ -345,9 +347,9 @@ export async function handleInstanceSettingsRoutes(
     try {
       const name = nameField(body.organizationName, "organizationName");
       await withConfigMutationLock(async () => {
-        const config = rawConfig();
+        const config = await rawConfig();
         setOrDelete(config, "organization", "name", name);
-        persistRawConfig(config);
+        await persistRawConfig(config);
       });
     } catch (error: any) {
       return Response.json(
@@ -448,11 +450,11 @@ export async function handleInstanceSettingsRoutes(
         productMark: nameField(body.productMark, "productMark"),
       };
       await withConfigMutationLock(async () => {
-        const config = rawConfig();
+        const config = await rawConfig();
         setOrDelete(config, "persona", "name", patch.personaName);
         setOrDelete(config, "branding", "productName", patch.productName);
         setOrDelete(config, "branding", "productMark", patch.productMark);
-        persistRawConfig(config);
+        await persistRawConfig(config);
       });
     } catch (e: any) {
       return Response.json({ error: e?.message || String(e) }, { status: 400 });

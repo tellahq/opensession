@@ -26,7 +26,7 @@
  */
 
 import { randomBytes } from "crypto";
-import { mkdirSync, renameSync, writeFileSync } from "fs";
+import { writeFileAtomicAsync } from "../shared/atomic-write";
 import { dirname } from "path";
 import { audit } from "../audit";
 import { importPkcs8Pem } from "../codestorage/auth";
@@ -152,12 +152,12 @@ async function ensureWebhookSecret(): Promise<void> {
   if (codeStorageConfig()?.webhookSecret) return;
   await withConfigMutationLock(async () => {
     if (codeStorageConfig()?.webhookSecret) return; // raced another caller
-    const config = rawConfig();
+    const config = await rawConfig();
     const { section } = integrationsSection(config);
     if (typeof section.webhookSecret === "string" && section.webhookSecret)
       return;
     section.webhookSecret = randomBytes(32).toString("hex");
-    persistRawConfig(config);
+    await persistRawConfig(config);
   });
 }
 
@@ -207,13 +207,12 @@ export async function handleSetupCodestorageRoutes(
     await withConfigMutationLock(async () => {
       // 0600 from birth (temp file created with the mode, then atomic rename)
       // — the key is the whole org credential.
-      mkdirSync(dirname(keyPath), { recursive: true });
-      const tmp = `${keyPath}.tmp.${process.pid}`;
-      writeFileSync(tmp, pem.endsWith("\n") ? pem : `${pem}\n`, {
-        mode: 0o600,
-      });
-      renameSync(tmp, keyPath);
-      const config = rawConfig();
+      await writeFileAtomicAsync(
+        keyPath,
+        pem.endsWith("\n") ? pem : `${pem}\n`,
+        0o600,
+      );
+      const config = await rawConfig();
       const { section } = integrationsSection(config);
       const prevOrg = typeof section.org === "string" ? section.org : undefined;
       section.enabled = true;
@@ -225,7 +224,7 @@ export async function handleSetupCodestorageRoutes(
       if (typeof section.webhookSecret !== "string" || !section.webhookSecret) {
         section.webhookSecret = randomBytes(32).toString("hex");
       }
-      persistRawConfig(config);
+      await persistRawConfig(config);
     });
     audit({ kind: "setup_codestorage_connect", org, keyPath });
     invalidateCsRepoListCache();
@@ -284,7 +283,7 @@ export async function handleSetupCodestorageRoutes(
     const cfg = codeStorageConfig();
     if (!cfg) return Response.json({ ok: true, wasConfigured: false });
     await withConfigMutationLock(async () => {
-      const config = rawConfig();
+      const config = await rawConfig();
       const integrations =
         config.integrations &&
         typeof config.integrations === "object" &&
@@ -293,7 +292,7 @@ export async function handleSetupCodestorageRoutes(
           : {};
       delete integrations.codestorage;
       delete integrations.codeStorage;
-      persistRawConfig(config);
+      await persistRawConfig(config);
     });
     statusProbeCache = null;
     invalidateCsRepoListCache();

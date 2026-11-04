@@ -22,9 +22,9 @@
  * the PKCE verifier between "open this URL" and the paste.
  */
 
-import { chmodSync, existsSync, mkdirSync } from "fs";
+import { chmod, mkdir, stat } from "fs/promises";
 import { homeDir } from "./paths";
-import { writeFileAtomic } from "./shared/atomic-write";
+import { writeFileAtomicAsync } from "./shared/atomic-write";
 import {
   addCodexAccount,
   listCodexAccounts,
@@ -103,7 +103,7 @@ export async function startCodexOauthLogin(
   if (listCodexAccounts().some((a) => a.name === trimmed)) {
     return { error: `An account named "${trimmed}" already exists` };
   }
-  if (existsSync(`${ACCOUNTS_DIR}/${slug}/auth.json`)) {
+  if (await stat(`${ACCOUNTS_DIR}/${slug}/auth.json`).catch(() => null)) {
     return {
       error: `${ACCOUNTS_DIR}/${slug} already holds a login — register it directly as a CODEX_HOME account instead.`,
     };
@@ -235,8 +235,8 @@ export async function completeCodexOauthLogin(
   }
 
   const dir = `${ACCOUNTS_DIR}/${login.slug}`;
-  mkdirSync(dir, { recursive: true, mode: 0o700 });
-  writeFileAtomic(
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  await writeFileAtomicAsync(
     `${dir}/auth.json`,
     JSON.stringify(
       {
@@ -254,10 +254,10 @@ export async function completeCodexOauthLogin(
       2,
     ) + "\n",
   );
-  chmodSync(`${dir}/auth.json`, 0o600);
+  await chmod(`${dir}/auth.json`, 0o600);
   pending.delete(id);
 
-  const result = addCodexAccount(login.name, "home", dir, login.owner);
+  const result = await addCodexAccount(login.name, "home", dir, login.owner);
   if ("error" in result) {
     return { error: `Signed in, but registering failed: ${result.error}` };
   }

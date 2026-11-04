@@ -192,7 +192,11 @@ export function createWalkthroughMcpServer(ctx: WalkthroughToolContext) {
             ghRepo = REPOS[args.repo].ghRepo;
             selector = String(args.pr_number);
           } else if (session) {
-            const target = resolvePrTarget(session, args.repo || null, null);
+            const target = await resolvePrTarget(
+              session,
+              args.repo || null,
+              null,
+            );
             if (!target)
               return text(
                 "Couldn't resolve a PR target from this session. Pass repo and pr_number explicitly.",

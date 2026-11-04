@@ -166,12 +166,12 @@ describe("GET /api/setup/github/repos with several App installations", () => {
   const originalFetch = globalThis.fetch;
   const originalClientId = process.env.OPENSESSION_GITHUB_CLIENT_ID;
 
-  afterEach(() => {
+  afterEach(async () => {
     globalThis.fetch = originalFetch;
     if (originalClientId === undefined)
       delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
     else process.env.OPENSESSION_GITHUB_CLIENT_ID = originalClientId;
-    __setGithubAppKeyPathForTest(undefined);
+    await __setGithubAppKeyPathForTest(undefined);
     const cache = globalThis as any;
     cache.__ghAppTokenCache = undefined;
     cache.__ghAppTokenWarned = undefined;
@@ -226,7 +226,7 @@ describe("GET /api/setup/github/repos with several App installations", () => {
     process.env.OPENSESSION_CONFIG = config;
     await getConfigAsync();
     delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
-    __setGithubAppKeyPathForTest(keyPath);
+    await __setGithubAppKeyPathForTest(keyPath);
     return config;
   }
 
@@ -1394,13 +1394,13 @@ describe("GitHub browser creation handoff", () => {
   const originalFetch = globalThis.fetch;
   const originalClientId = process.env.OPENSESSION_GITHUB_CLIENT_ID;
 
-  afterEach(() => {
+  afterEach(async () => {
     globalThis.fetch = originalFetch;
     __setGithubCloneForTest(null);
     if (originalClientId === undefined)
       delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
     else process.env.OPENSESSION_GITHUB_CLIENT_ID = originalClientId;
-    __setGithubAppKeyPathForTest(undefined);
+    await __setGithubAppKeyPathForTest(undefined);
     const cache = globalThis as any;
     cache.__ghAppTokenCache = undefined;
     cache.__ghAppTokenWarned = undefined;
@@ -1435,7 +1435,7 @@ describe("GitHub browser creation handoff", () => {
     process.env.OPENSESSION_CONFIG = configPath;
     await getConfigAsync();
     delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
-    __setGithubAppKeyPathForTest(keyPath);
+    await __setGithubAppKeyPathForTest(keyPath);
     return configPath;
   }
 

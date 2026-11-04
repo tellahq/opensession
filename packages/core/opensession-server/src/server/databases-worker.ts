@@ -8,7 +8,7 @@
  * repointed OPENSESSION_STATE_DIR on the gateway always names the store it
  * expects.
  */
-import { statePathIn, type StateContext } from "./paths";
+import type { StateContext } from "./paths";
 import { DATABASES_STATE_NAME } from "./databases-protocol";
 import {
   isDatabasesStoreMethod,
@@ -18,6 +18,15 @@ import {
 import { DatabasesStore } from "./databases-sqlite";
 
 declare const self: Worker;
+
+// Bun drops a message posted before the worker installs its handler, and the
+// state-path module below finishes loading asynchronously. Queue the
+// parent's first frames until the real handler is installed, then replay.
+const startupMessages: MessageEvent[] = [];
+self.onmessage = (event: MessageEvent) => {
+  startupMessages.push(event);
+};
+const { statePathIn } = await import("./paths");
 
 let context: StateContext | undefined;
 let store: DatabasesStore | undefined;
@@ -86,3 +95,6 @@ self.onmessage = (event: MessageEvent<DatabasesWorkerRequest>) => {
     });
   }
 };
+
+for (const event of startupMessages) self.onmessage!.call(self, event);
+startupMessages.length = 0;

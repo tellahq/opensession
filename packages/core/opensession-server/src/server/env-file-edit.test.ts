@@ -114,51 +114,53 @@ describe("applyEnvEdits", () => {
 });
 
 describe("applyEnvFileEdits (disk)", () => {
-  test("writes .bak-<n> backups, keeps 0600, and round-trips values", () => {
+  test("writes .bak-<n> backups, keeps 0600, and round-trips values", async () => {
     writeFileSync(file, "EXISTING=1\n");
-    applyEnvFileEdits({ NEW_KEY: "hello world" });
+    await applyEnvFileEdits({ NEW_KEY: "hello world" });
     expect(existsSync(`${file}.bak-1`)).toBe(true);
     expect(readFileSync(`${file}.bak-1`, "utf-8")).toBe("EXISTING=1\n");
     expect(statSync(file).mode & 0o777).toBe(0o600);
 
-    applyEnvFileEdits({ NEW_KEY: "second" });
+    await applyEnvFileEdits({ NEW_KEY: "second" });
     expect(existsSync(`${file}.bak-2`)).toBe(true);
 
-    const values = readEnvFileValues();
+    const values = await readEnvFileValues();
     expect(values.EXISTING).toBe("1");
     expect(values.NEW_KEY).toBe("second");
   });
 
-  test("creates the file when absent (no backup) and unquotes on read", () => {
-    applyEnvFileEdits({ KEY: 'with "quotes"' });
+  test("creates the file when absent (no backup) and unquotes on read", async () => {
+    await applyEnvFileEdits({ KEY: 'with "quotes"' });
     expect(existsSync(`${file}.bak-1`)).toBe(false);
-    expect(readEnvFileValues().KEY).toBe('with "quotes"');
+    expect((await readEnvFileValues()).KEY).toBe('with "quotes"');
   });
 
-  test("commented-out keys disappear unless unset values are requested", () => {
+  test("commented-out keys disappear unless unset values are requested", async () => {
     writeFileSync(file, "KEY=live\n");
-    applyEnvFileEdits({ KEY: "" });
-    expect(readEnvFileValues().KEY).toBeUndefined();
-    expect(readEnvFileValues({ includeUnset: true }).KEY).toBe("");
+    await applyEnvFileEdits({ KEY: "" });
+    expect((await readEnvFileValues()).KEY).toBeUndefined();
+    expect((await readEnvFileValues({ includeUnset: true })).KEY).toBe("");
   });
 
-  test("ordinary commented examples are not treated as pending clears", () => {
+  test("ordinary commented examples are not treated as pending clears", async () => {
     writeFileSync(file, "# KEY=example\n");
-    expect(readEnvFileValues({ includeUnset: true }).KEY).toBeUndefined();
+    expect(
+      (await readEnvFileValues({ includeUnset: true })).KEY,
+    ).toBeUndefined();
   });
 
-  test("prepared edits can roll back after a later config write fails", () => {
+  test("prepared edits can roll back after a later config write fails", async () => {
     writeFileSync(file, "KEY=before\n");
-    const edit = prepareEnvFileEdits({ KEY: "after" });
+    const edit = await prepareEnvFileEdits({ KEY: "after" });
 
-    edit.commit();
+    await edit.commit();
     expect(readFileSync(file, "utf-8")).toBe("KEY=after\n");
-    edit.rollback();
+    await edit.rollback();
 
     expect(readFileSync(file, "utf-8")).toBe("KEY=before\n");
   });
 
-  test("envFilePath honors the OPENSESSION_ENV_FILE override", () => {
+  test("envFilePath honors the OPENSESSION_ENV_FILE override", async () => {
     expect(envFilePath()).toBe(file);
   });
 
@@ -167,13 +169,15 @@ describe("applyEnvFileEdits (disk)", () => {
   // root-only /etc/opensession 500s on every Settings save.
   test.skipIf(process.getuid?.() === 0)(
     "explains the directory requirement when the env file's directory is read-only",
-    () => {
+    async () => {
       writeFileSync(file, "SLACK_BOT_TOKEN=old\n");
       chmodSync(root, 0o555);
       try {
         let caught: unknown;
         try {
-          prepareEnvFileEdits({ SLACK_BOT_TOKEN: "new" }).commit();
+          await (
+            await prepareEnvFileEdits({ SLACK_BOT_TOKEN: "new" })
+          ).commit();
         } catch (error) {
           caught = error;
         }
@@ -195,24 +199,24 @@ describe("applyEnvFileEdits (disk)", () => {
 });
 
 describe("validateEnvValue", () => {
-  test("accepts ordinary single-line strings", () => {
+  test("accepts ordinary single-line strings", async () => {
     expect(validateEnvValue("test-token-value")).toBeNull();
     expect(validateEnvValue("")).toBeNull();
   });
 
-  test("rejects non-strings", () => {
+  test("rejects non-strings", async () => {
     expect(validateEnvValue(42)).not.toBeNull();
     expect(validateEnvValue(null)).not.toBeNull();
     expect(validateEnvValue(undefined)).not.toBeNull();
   });
 
-  test("rejects newlines, carriage returns and NUL", () => {
+  test("rejects newlines, carriage returns and NUL", async () => {
     expect(validateEnvValue("a\nb")).not.toBeNull();
     expect(validateEnvValue("a\rb")).not.toBeNull();
     expect(validateEnvValue("a\0b")).not.toBeNull();
   });
 
-  test("rejects values over 4096 chars", () => {
+  test("rejects values over 4096 chars", async () => {
     expect(validateEnvValue("x".repeat(4096))).toBeNull();
     expect(validateEnvValue("x".repeat(4097))).not.toBeNull();
   });

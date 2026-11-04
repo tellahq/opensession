@@ -14,14 +14,8 @@
  * as automations too (single source of scheduling truth).
  */
 import { randomUUIDv7 } from "bun";
-import {
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  existsSync,
-  unlinkSync,
-} from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { readdir, readFile, unlink } from "fs/promises";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import { runAgent } from "./agent-runner";
 import { declaredRunFailure, hasRunStatusDeclaration } from "./runner-shared";
 import {
@@ -45,9 +39,6 @@ import { scanPublication } from "./ship-mode";
 const SECURITY_DIR = stateDir("security");
 const SCANS_DIR = `${SECURITY_DIR}/scans`;
 const PROFILES_DIR = `${SECURITY_DIR}/profiles`;
-
-mkdirSync(SCANS_DIR, { recursive: true });
-mkdirSync(PROFILES_DIR, { recursive: true });
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -89,65 +80,80 @@ export interface SecurityScan {
 
 // ── Stores ───────────────────────────────────────────────────
 
-function listDir<T>(dir: string): T[] {
+function isMissing(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException | null)?.code === "ENOENT";
+}
+
+async function listDir<T>(dir: string): Promise<T[]> {
+  let files: string[];
+  try {
+    files = await readdir(dir);
+  } catch (error) {
+    // The directory is created by the first write.
+    if (isMissing(error)) return [];
+    throw error;
+  }
   const out: T[] = [];
-  for (const file of readdirSync(dir)) {
+  for (const file of files) {
     if (!file.endsWith(".json")) continue;
     try {
-      out.push(JSON.parse(readFileSync(`${dir}/${file}`, "utf-8")) as T);
+      out.push(JSON.parse(await readFile(`${dir}/${file}`, "utf-8")) as T);
     } catch {}
   }
   return out;
 }
 
-export function listScans(): SecurityScan[] {
-  return listDir<SecurityScan>(SCANS_DIR).sort((a, b) =>
+async function readRecord<T>(path: string): Promise<T | null> {
+  try {
+    return JSON.parse(await readFile(path, "utf-8")) as T;
+  } catch {
+    return null;
+  }
+}
+
+async function removeRecord(path: string): Promise<boolean> {
+  try {
+    await unlink(path);
+    return true;
+  } catch (error) {
+    if (isMissing(error)) return false;
+    throw error;
+  }
+}
+
+export async function listScans(): Promise<SecurityScan[]> {
+  return (await listDir<SecurityScan>(SCANS_DIR)).sort((a, b) =>
     b.createdAt.localeCompare(a.createdAt),
   );
 }
 
-export function getScan(id: string): SecurityScan | null {
-  const path = `${SCANS_DIR}/${id}.json`;
-  if (!existsSync(path)) return null;
-  try {
-    return JSON.parse(readFileSync(path, "utf-8"));
-  } catch {
-    return null;
-  }
+export function getScan(id: string): Promise<SecurityScan | null> {
+  return readRecord<SecurityScan>(`${SCANS_DIR}/${id}.json`);
 }
 
-export function saveScan(s: SecurityScan): void {
-  writeJsonAtomic(`${SCANS_DIR}/${s.id}.json`, s);
+export function saveScan(s: SecurityScan): Promise<void> {
+  return writeJsonAtomicAsync(`${SCANS_DIR}/${s.id}.json`, s);
 }
 
-export function deleteScan(id: string): boolean {
-  const path = `${SCANS_DIR}/${id}.json`;
-  if (!existsSync(path)) return false;
-  unlinkSync(path);
-  return true;
+export function deleteScan(id: string): Promise<boolean> {
+  return removeRecord(`${SCANS_DIR}/${id}.json`);
 }
 
-export function listProfiles(): ScanProfile[] {
-  return listDir<ScanProfile>(PROFILES_DIR).sort((a, b) =>
+export async function listProfiles(): Promise<ScanProfile[]> {
+  return (await listDir<ScanProfile>(PROFILES_DIR)).sort((a, b) =>
     a.name.localeCompare(b.name),
   );
 }
 
-export function getProfile(id: string): ScanProfile | null {
-  const path = `${PROFILES_DIR}/${id}.json`;
-  if (!existsSync(path)) return null;
-  try {
-    return JSON.parse(readFileSync(path, "utf-8"));
-  } catch {
-    return null;
-  }
+export function getProfile(id: string): Promise<ScanProfile | null> {
+  return readRecord<ScanProfile>(`${PROFILES_DIR}/${id}.json`);
 }
 
-export function createProfile(input: {
+export async function createProfile(input: {
   name: string;
   prompt: string;
   createdBy: string;
-}): ScanProfile | { error: string } {
+}): Promise<ScanProfile | { error: string }> {
   if (!input.name?.trim()) return { error: "Name is required" };
   if (!input.prompt?.trim()) return { error: "Profile prompt is required" };
   const p: ScanProfile = {
@@ -157,30 +163,27 @@ export function createProfile(input: {
     createdBy: input.createdBy || "Anonymous",
     createdAt: new Date().toISOString(),
   };
-  writeJsonAtomic(`${PROFILES_DIR}/${p.id}.json`, p);
+  await writeJsonAtomicAsync(`${PROFILES_DIR}/${p.id}.json`, p);
   return p;
 }
 
-export function updateProfile(
+export async function updateProfile(
   id: string,
   patch: { name?: string; prompt?: string },
-): ScanProfile | { error: string } {
-  const p = getProfile(id);
+): Promise<ScanProfile | { error: string }> {
+  const p = await getProfile(id);
   if (!p) return { error: "Profile not found" };
   const next = {
     ...p,
     ...(patch.name?.trim() ? { name: patch.name.trim() } : {}),
     ...(patch.prompt?.trim() ? { prompt: patch.prompt.trim() } : {}),
   };
-  writeJsonAtomic(`${PROFILES_DIR}/${id}.json`, next);
+  await writeJsonAtomicAsync(`${PROFILES_DIR}/${id}.json`, next);
   return next;
 }
 
-export function deleteProfile(id: string): boolean {
-  const path = `${PROFILES_DIR}/${id}.json`;
-  if (!existsSync(path)) return false;
-  unlinkSync(path);
-  return true;
+export function deleteProfile(id: string): Promise<boolean> {
+  return removeRecord(`${PROFILES_DIR}/${id}.json`);
 }
 
 // ── Scan targets ─────────────────────────────────────────────
@@ -286,14 +289,14 @@ function slug(s: string): string {
     .slice(0, 30);
 }
 
-function updateScanSession(
+async function updateScanSession(
   scanId: string,
   repoId: string,
   patch: Partial<ScanSessionRef>,
-): void {
-  const fresh = getScan(scanId);
+): Promise<void> {
+  const fresh = await getScan(scanId);
   if (!fresh) return;
-  saveScan({
+  await saveScan({
     ...fresh,
     sessions: fresh.sessions.map((s) =>
       s.repo === repoId ? { ...s, ...patch } : s,
@@ -312,7 +315,7 @@ export async function executeScan(
 ): Promise<void> {
   const startedAt = new Date();
   const stamp = startedAt.toISOString().slice(0, 16).replace(/[-T:]/g, "");
-  const profile = scan.profileId ? getProfile(scan.profileId) : null;
+  const profile = scan.profileId ? await getProfile(scan.profileId) : null;
 
   for (const repoId of scan.repos) {
     const repo = getRepo(repoId);
@@ -364,7 +367,7 @@ export async function executeScan(
       };
       persistSession();
 
-      updateScanSession(scan.id, repo.id, {
+      await updateScanSession(scan.id, repo.id, {
         sessionId: bksId,
         status: "running",
       });
@@ -436,16 +439,16 @@ export async function executeScan(
       errorMsg = e?.message || String(e);
       console.error(`[security] Scan ${scan.id} failed on ${repo.id}:`, e);
     }
-    updateScanSession(scan.id, repo.id, {
+    await updateScanSession(scan.id, repo.id, {
       status: errorMsg ? "error" : "ok",
       error: errorMsg || undefined,
     });
   }
 
-  const fresh = getScan(scan.id);
+  const fresh = await getScan(scan.id);
   if (fresh) {
     const anyError = fresh.sessions.some((s) => s.status === "error");
-    saveScan({
+    await saveScan({
       ...fresh,
       status: anyError ? "error" : "done",
       error: anyError ? fresh.sessions.find((s) => s.error)?.error : undefined,
@@ -456,7 +459,7 @@ export async function executeScan(
 }
 
 /** Create the scan record for a headless scan (caller fires executeScan). */
-export function createScanRecord(input: {
+export async function createScanRecord(input: {
   repos: string[];
   profileId?: string;
   instructions?: string;
@@ -464,8 +467,8 @@ export function createScanRecord(input: {
   createdBy: string;
   /** For interactive scans: the pre-created session id. */
   sessionId?: string;
-}): SecurityScan {
-  const profile = input.profileId ? getProfile(input.profileId) : null;
+}): Promise<SecurityScan> {
+  const profile = input.profileId ? await getProfile(input.profileId) : null;
   const scan: SecurityScan = {
     id: `scan-${randomUUIDv7()}`,
     repos: input.repos,
@@ -490,6 +493,6 @@ export function createScanRecord(input: {
           status: "running" as const,
         })),
   };
-  saveScan(scan);
+  await saveScan(scan);
   return scan;
 }

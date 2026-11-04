@@ -84,7 +84,7 @@ const runners = await import("../runners");
 const runnerWs = await import("../runner-ws");
 const { WsFrameBuffer } = await import("../../runner-host/ws-buffer");
 const { code } = runners.createRunnerPairing("Renderer swarm (automation)");
-const registered = runners.registerRunner({
+const registered = await runners.registerRunner({
   code,
   name: "isolation-approved-macos",
   platform: "darwin",
@@ -94,7 +94,7 @@ const registered = runners.registerRunner({
 if (!registered.ok) throw new Error(registered.error);
 const runnerRoot = join(root, "runner-root");
 mkdirSync(runnerRoot, { recursive: true });
-runners.updateRunner(registered.runner.id, {
+await runners.updateRunner(registered.runner.id, {
   allowedUsers: ["Renderer swarm (automation)"],
   allowedRepos: ["renderer"],
   workspaceRoots: [runnerRoot],
@@ -179,7 +179,9 @@ const controlWs = {
   close() {},
 };
 runnerWs.runnerWsOpen(controlWs);
+await runnerWs.runnerWsSettled(controlWs);
 runnerWs.runnerWsMessage(controlWs, JSON.stringify({ t: "hello", version: 1 }));
+await runnerWs.runnerWsSettled(controlWs);
 
 const automations = await import("../automations");
 const requestScope = "renderer-swarm";
@@ -291,7 +293,8 @@ try {
       },
       runState,
       creationState,
-      runnerPermissions: runners.getRunner(registered.runner.id)?.permissions,
+      runnerPermissions: (await runners.getRunner(registered.runner.id))
+        ?.permissions,
       controlFrames: controlFrames.map((frame) => ({
         t: frame.t,
         automationDescendant: frame.automationDescendant,
@@ -315,6 +318,7 @@ try {
 } finally {
   runnerSocket?.close();
   runnerWs.runnerWsClose(controlWs);
+  await runnerWs.runnerWsSettled(controlWs);
   runWsServer.stop(true);
   kernelRuntime.stopSessionKernelRuntime();
   actorRuntime.stopSessionKernelActor();

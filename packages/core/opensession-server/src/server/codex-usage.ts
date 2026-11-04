@@ -10,7 +10,7 @@
  */
 
 import { registerMemoryProbe } from "./memory-probes";
-import { readFileSync } from "fs";
+import { readFile } from "fs/promises";
 import type { CodexAccount } from "./codex-accounts";
 import { withCodexAuthLock } from "./codex-auth-lock";
 import { homeDir } from "./paths";
@@ -141,12 +141,12 @@ function jwtExpMs(jwt: string): number | null {
  * probe should ask the app-server to refresh it before reading limits. An
  * unreadable auth.json or an API-key login answers false: there is nothing
  * for the app-server to refresh, and the read itself reports the real error. */
-export function codexAccessTokenNeedsRefresh(
+export async function codexAccessTokenNeedsRefresh(
   codexHome: string,
   now = Date.now(),
-): boolean {
+): Promise<boolean> {
   try {
-    const access = JSON.parse(readFileSync(`${codexHome}/auth.json`, "utf-8"))
+    const access = JSON.parse(await readFile(`${codexHome}/auth.json`, "utf-8"))
       ?.tokens?.access_token;
     if (typeof access !== "string" || !access) return false;
     const exp = jwtExpMs(access);
@@ -244,6 +244,7 @@ async function probeCodexUsageUnlocked(
   executable: string,
   timeoutMs: number,
 ): Promise<CodexAccountUsage> {
+  const refreshToken = await codexAccessTokenNeedsRefresh(codexHome);
   // Name the pipes in the type as well as the options: the bare spawn return
   // type describes the DEFAULT stdio, where stdin is an inherited fd rather
   // than the FileSink this writes to and stdout is not async-iterable.
@@ -324,7 +325,7 @@ async function probeCodexUsageUnlocked(
                 method: "account/read",
                 id: 2,
                 params: {
-                  refreshToken: codexAccessTokenNeedsRefresh(codexHome),
+                  refreshToken,
                 },
               });
             }

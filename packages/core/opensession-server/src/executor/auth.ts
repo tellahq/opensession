@@ -1,9 +1,9 @@
-import { readFileSync } from "fs";
+import { readFile } from "node:fs/promises";
 
 export const EXECUTOR_CREDENTIAL_NAME = "executor-token";
 let credential: string | null | undefined;
 
-export function readExecutorCredential(): string | null {
+export async function readExecutorCredential(): Promise<string | null> {
   const explicit = process.env.OPENSESSION_EXECUTOR_TOKEN?.trim();
   if (
     explicit &&
@@ -16,9 +16,8 @@ export function readExecutorCredential(): string | null {
   if (!credentialsDir) return (credential = null);
   try {
     credential =
-      readFileSync(
-        `${credentialsDir}/${EXECUTOR_CREDENTIAL_NAME}`,
-        "utf8",
+      (
+        await readFile(`${credentialsDir}/${EXECUTOR_CREDENTIAL_NAME}`, "utf8")
       ).trim() || null;
   } catch {
     credential = null;

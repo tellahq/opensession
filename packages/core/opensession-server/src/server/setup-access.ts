@@ -1,6 +1,7 @@
 import { networkInterfaces } from "os";
 import { configuredServer, getConfig } from "./config";
 import { isBlockedAddress, isTailnetIpv4 } from "./shared/network-address";
+import { whichAsync, whichCached } from "./shared/which";
 
 export { isTailnetIpv4 } from "./shared/network-address";
 
@@ -132,7 +133,8 @@ export function setupAccessSnapshot(
     publicBaseUrl: publicBaseUrl.replace(/\/$/, ""),
     port: server.port,
     tailnetIp: detectedTailnetIpv4(),
-    caddyInstalled: Bun.which("caddy") !== null,
+    // Resolved at import and re-checked in the background (shared/which.ts).
+    caddyInstalled: !!whichCached("caddy"),
   };
 }
 
@@ -148,3 +150,5 @@ export function detectedTailnetIpv4(): string | null {
   }
   return null;
 }
+
+await whichAsync("caddy");

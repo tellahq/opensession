@@ -56,7 +56,7 @@ export async function handleSessionGitRoutes(
     // Each carries its repo id so the panel can show a repo switcher and
     // route per-line feedback to the right checkout.
     const repoIds = [
-      sessionRepoId(session) ?? defaultRepo().id,
+      (await sessionRepoId(session)) ?? defaultRepo().id,
       ...(session.attachedRepos || []).map((r) => r.repo),
     ];
 
@@ -79,7 +79,7 @@ export async function handleSessionGitRoutes(
           const target = await resolveWorktreeTarget(session, repoId);
           if (target?.reachable) {
             try {
-              const ownPaths = isSharedCheckoutDir(target.dir)
+              const ownPaths = (await isSharedCheckoutDir(target.dir))
                 ? await sessionTouchedPaths(session, target.dir)
                 : undefined;
               diff = await getSessionDiff(
@@ -181,7 +181,7 @@ export async function handleSessionGitRoutes(
       patch?: string;
     };
     const repoIds = [
-      sessionRepoId(session) ?? defaultRepo().id,
+      (await sessionRepoId(session)) ?? defaultRepo().id,
       ...(session.attachedRepos || []).map((repo) => repo.repo),
     ];
     if (!body.repo || !repoIds.includes(body.repo))
@@ -270,7 +270,7 @@ export async function handleSessionGitRoutes(
     // A shared checkout holds every concurrent session's edits, so the raw
     // dirty count belongs to nobody. Scope it to the files this session's own
     // tool calls wrote.
-    const ownPaths = isSharedCheckoutDir(target.dir)
+    const ownPaths = (await isSharedCheckoutDir(target.dir))
       ? await sessionTouchedPaths(session, target.dir)
       : undefined;
     return Response.json(
@@ -489,7 +489,7 @@ export async function handleSessionGitRoutes(
     // Nobody owns a shared checkout's HEAD. Pulling it from one session can
     // rewrite the live tree under every other session, so fail closed even for
     // an old client that still offers the action.
-    if (isSharedCheckoutDir(target.dir))
+    if (await isSharedCheckoutDir(target.dir))
       return Response.json(
         {
           error:

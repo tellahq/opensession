@@ -255,7 +255,7 @@ export async function handleSetupGithubManifestRoutes(
         { status: 409 },
       );
     }
-    const current = integrationSection(rawConfig());
+    const current = integrationSection(await rawConfig());
     if (
       typeof current.oauthClientId === "string" &&
       current.oauthClientId.trim()
@@ -349,7 +349,7 @@ export async function handleSetupGithubManifestRoutes(
         pending.owner,
       );
       await withConfigMutationLock(async () => {
-        const config = rawConfig();
+        const config = await rawConfig();
         const github = integrationSection(config);
         github.oauthClientId = converted.clientId;
         github.oauthClientSecret = converted.clientSecret;
@@ -365,16 +365,16 @@ export async function handleSetupGithubManifestRoutes(
         } else {
           delete github.appOrg;
         }
-        const envEdit = prepareEnvFileEdits({
+        const envEdit = await prepareEnvFileEdits({
           GITHUB_WEBHOOK_SECRET: converted.webhookSecret,
         });
-        envEdit.commit();
+        await envEdit.commit();
         try {
           await commitGithubAppKeyMutation(converted.pem, () =>
             persistRawConfig(config),
           );
         } catch (error) {
-          envEdit.rollback();
+          await envEdit.rollback();
           throw error;
         }
       });

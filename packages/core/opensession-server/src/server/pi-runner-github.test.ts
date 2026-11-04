@@ -4,7 +4,11 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { GITHUB_RUN_AUTH_FILE_ENV, githubRunOwnerLogin } from "./github-auth";
+import {
+  GITHUB_RUN_AUTH_FILE_ENV,
+  githubRunOwnerLogin,
+  loadGithubAuthStore,
+} from "./github-auth";
 import { AUTO_CONTINUE_USER, githubCredentialUser } from "./auto-continue";
 import { mergeGuardDenyReason } from "./command-policy";
 import { humanPrompter } from "./session-actors";
@@ -217,9 +221,11 @@ describe("recovered GitHub code-run credentials", () => {
           },
         }),
       );
+      await loadGithubAuthStore();
       process.env.OPENSESSION_CONFIG = config;
       await getConfigAsync();
       process.env.OPENSESSION_GITHUB_AUTH_STORE = users;
+      await loadGithubAuthStore();
       delete process.env[GITHUB_RUN_AUTH_FILE_ENV];
 
       const env = await githubCodeRunEnv(cwd);
@@ -247,7 +253,9 @@ describe("recovered GitHub code-run credentials", () => {
         auth,
         JSON.stringify({ GH_TOKEN: "projected-service-token" }),
       );
+      await loadGithubAuthStore();
       process.env[GITHUB_RUN_AUTH_FILE_ENV] = auth;
+      await loadGithubAuthStore();
 
       const env = await githubCodeRunEnv("/remote/unregistered/repo");
       expect(env.GH_TOKEN).toBe("projected-service-token");
@@ -279,7 +287,9 @@ describe("recovered GitHub code-run credentials", () => {
           GH_READ_TOKEN: "projected-read-token",
         }),
       );
+      await loadGithubAuthStore();
       process.env[GITHUB_RUN_AUTH_FILE_ENV] = auth;
+      await loadGithubAuthStore();
 
       const env = await runGithubEnv({
         isCode: true,
@@ -349,9 +359,11 @@ describe("which credential a run's shell holds", () => {
         },
       }),
     );
+    await loadGithubAuthStore();
     process.env.OPENSESSION_CONFIG = config;
     await getConfigAsync();
     process.env.OPENSESSION_GITHUB_AUTH_STORE = users;
+    await loadGithubAuthStore();
     delete process.env[GITHUB_RUN_AUTH_FILE_ENV];
     return cwd;
   }
@@ -486,6 +498,7 @@ describe("which credential a run's shell holds", () => {
         process.env.OPENSESSION_GITHUB_AUTH_STORE!,
         JSON.stringify({ users: {} }),
       );
+      await loadGithubAuthStore();
       const disconnected = await runGithubEnv({
         isCode: true,
         ownerTurn: true,
@@ -508,7 +521,9 @@ describe("which credential a run's shell holds", () => {
       const cwd = await seed(dir);
       const auth = join(dir, "github-auth.json");
       writeFileSync(auth, JSON.stringify({ GH_TOKEN: "projected-token" }));
+      await loadGithubAuthStore();
       process.env[GITHUB_RUN_AUTH_FILE_ENV] = auth;
+      await loadGithubAuthStore();
       const env = await runGithubEnv({
         isCode: true,
         ownerTurn: true,
@@ -536,18 +551,21 @@ describe("which credential a run's shell holds", () => {
         });
       const auth = join(dir, "github-auth.json");
       process.env[GITHUB_RUN_AUTH_FILE_ENV] = auth;
+      await loadGithubAuthStore();
       // The launcher projected Alice's token and named her: the same
       // repository-policy outcome as her turn on the host.
       writeFileSync(
         auth,
         JSON.stringify({ GH_TOKEN: "projected-token", login: "alice" }),
       );
+      await loadGithubAuthStore();
       expect(guard(true)).toBeUndefined();
       // A machine sender's turn in that sandbox keeps the guard regardless.
       expect(guard(false)).toEqual({ baseBranch: "main" });
       // An App projection has no login: the approval guard stays, even with
       // a readable store that says Alice is connected.
       writeFileSync(auth, JSON.stringify({ GH_TOKEN: "projected-token" }));
+      await loadGithubAuthStore();
       expect(guard(true)).toEqual({ allowMerge: true });
     } finally {
       rmSync(dir, { recursive: true, force: true });

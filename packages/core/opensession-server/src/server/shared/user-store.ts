@@ -30,15 +30,93 @@
  */
 
 import { canonicalName, legacyNames } from "./user-store-key";
-import { existsSync, mkdirSync, readFileSync } from "fs";
-import { writeJsonAtomic } from "./atomic-write";
+import { writeJsonAtomicAsync } from "./atomic-write";
 import { stateDir } from "../paths";
-import { access, readFile, mkdir, writeFile } from "node:fs/promises";
+import { access, readFile, readdir, mkdir, writeFile } from "node:fs/promises";
+import {
+  cachedJsonFileShared,
+  forgetJsonFile,
+  jsonFileLoaded,
+  loadJsonFileShared,
+  publishJsonFile,
+} from "./json-file-cache";
 import {
   APPLICATION_CATALOG_NAMESPACES,
   catalogDocuments,
   legacyCatalogDirectory,
 } from "../catalog-documents";
+
+// ── Loaded store directories ────────────────────────────────────────────────
+//
+// get() is synchronous and sits on request and prompt-building paths, so it
+// answers from memory. Each store directory is read once, asynchronously,
+// with every file in it (one per person); after that each file refreshes in
+// the background (shared/json-file-cache.ts) and the directory is re-listed
+// at most every RESCAN_MS, so a file another process creates is found.
+// set() publishes the new value at once and writes it behind, in order.
+
+const RESCAN_MS = 5_000;
+const scannedRoots = new Map<
+  string,
+  { at: number; files: Set<string>; pending?: Promise<void> }
+>();
+
+/** Load every file in `root`. Resolves once they are all loaded. */
+export function loadUserStoreDir(root: string): Promise<void> {
+  const current = scannedRoots.get(root);
+  if (current?.pending) return current.pending;
+  const entry = current ?? { at: -Infinity, files: new Set<string>() };
+  scannedRoots.set(root, entry);
+  entry.pending = (async () => {
+    let names: string[] = [];
+    try {
+      names = (await readdir(root)).filter((name) => name.endsWith(".json"));
+    } catch {}
+    await Promise.all(
+      names.map((name) =>
+        jsonFileLoaded(`${root}/${name}`)
+          ? undefined
+          : loadJsonFileShared(`${root}/${name}`).catch(() => undefined),
+      ),
+    );
+    entry.files = new Set(names);
+    entry.at = performance.now();
+    entry.pending = undefined;
+  })();
+  return entry.pending;
+}
+
+function ensureScanned(root: string): void {
+  const entry = scannedRoots.get(root);
+  if (!entry || performance.now() - entry.at >= RESCAN_MS)
+    void loadUserStoreDir(root);
+}
+
+/** Test seam: forget every loaded store directory and its files. */
+export function __resetUserStoresForTest(): void {
+  for (const [root, entry] of scannedRoots)
+    for (const name of entry.files) forgetJsonFile(`${root}/${name}`);
+  scannedRoots.clear();
+}
+
+// Writes per file run in call order, so the last value set is the one left.
+const pendingWrites = new Map<string, Promise<unknown>>();
+
+function writeBehind(file: string, value: unknown): void {
+  const previous = pendingWrites.get(file) ?? Promise.resolve();
+  const write = previous.then(() => writeJsonAtomicAsync(file, value));
+  const settled = write.catch(() => {});
+  pendingWrites.set(file, settled);
+  void settled.then(() => {
+    if (pendingWrites.get(file) === settled) pendingWrites.delete(file);
+  });
+  publishJsonFile(file, value, write);
+}
+
+/** Test seam: wait for every queued store write to land on disk. */
+export async function __flushUserStoresForTest(): Promise<void> {
+  await Promise.all([...pendingWrites.values()]);
+}
 
 export interface UserStore<T> {
   /** The store's directory, resolved per call. */
@@ -47,6 +125,9 @@ export interface UserStore<T> {
   get(user: string): T;
   /** Replace this user's state. Returns what was stored. */
   set(user: string, value: unknown): T;
+  /** Load the store's directory for the current state root. Each store
+   *  module awaits this at import, so get() answers from memory at once. */
+  load(): Promise<void>;
 }
 
 /**
@@ -187,21 +268,26 @@ export function userStore<T>(options: {
 
   return {
     dir,
+    load: () => loadUserStoreDir(dir()),
     get(user) {
       const id = identity(user);
       if (id === null) return clean(undefined);
       const root = dir();
+      ensureScanned(root);
       // The first file that EXISTS answers, even when it holds an empty
       // value: a user who cleared their pins must not have the legacy
       // copy resurrect them.
       for (const stem of [canonicalName(id), ...legacyNames(id)]) {
         const file = `${root}/${stem}.json`;
-        if (!existsSync(file)) continue;
+        if (!jsonFileLoaded(file)) continue;
+        let raw: any;
         try {
-          return clean(JSON.parse(readFileSync(file, "utf8"))?.[field]);
+          raw = cachedJsonFileShared(file);
         } catch {
           return clean(undefined);
         }
+        if (raw === undefined) continue;
+        return clean(raw?.[field]);
       }
       return clean(undefined);
     },
@@ -210,13 +296,12 @@ export function userStore<T>(options: {
       if (id === null) return clean(undefined);
       const cleaned = clean(value);
       const root = dir();
-      try {
-        if (!existsSync(root)) mkdirSync(root, { recursive: true });
-        writeJsonAtomic(`${root}/${canonicalName(id)}.json`, {
-          [field]: cleaned,
-          ...extra?.(),
-        });
-      } catch {}
+      // The write lands behind this call (atomic, directory created as
+      // needed); a failed write is dropped, as a failed sync write was.
+      writeBehind(`${root}/${canonicalName(id)}.json`, {
+        [field]: cleaned,
+        ...extra?.(),
+      });
       return cleaned;
     },
   };

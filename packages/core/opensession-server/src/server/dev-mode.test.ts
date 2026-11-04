@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { devInstanceBootError, isDevInstance } from "./dev-mode";
-import { stateDir, statePath } from "./paths";
+import { loadStatePaths, stateDir, statePath } from "./paths";
 
 const SAVED_KEYS = [
   "OPENSESSION_DEV",
@@ -112,14 +112,16 @@ describe("statePath with OPENSESSION_STATE_DIR", () => {
     );
   });
 
-  test("keeps using a legacy home entry until it is migrated", () => {
+  test("keeps using a legacy home entry until it is migrated", async () => {
     const legacy = join(process.env.HOME!, ".opensession-baz");
     mkdirSync(legacy, { recursive: true });
+    await loadStatePaths();
     expect(stateDir("baz")).toBe(legacy);
 
     mkdirSync(join(process.env.HOME!, ".opensession", "baz"), {
       recursive: true,
     });
+    await loadStatePaths();
     expect(stateDir("baz")).toBe(
       join(process.env.HOME!, ".opensession", "baz"),
     );

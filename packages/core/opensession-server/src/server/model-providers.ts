@@ -6,10 +6,15 @@
 
 import { homeDir } from "./paths";
 import { stateDir } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
-import { chmodSync, existsSync, readFileSync } from "fs";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
+import { chmod, readFile } from "fs/promises";
 import { dirname, isAbsolute, resolve } from "path";
-import { readJsonFileCopy } from "./shared/json-file-cache";
+import {
+  cachedJsonFileCopy,
+  JsonFileNotLoadedError,
+  loadJsonFileShared,
+  publishJsonFile,
+} from "./shared/json-file-cache";
 
 const HOME = homeDir();
 
@@ -468,20 +473,54 @@ export function catalogFilePath(file: string): string {
   return isAbsolute(file) ? file : resolve(dirname(configPath()), file);
 }
 
+/** A provider's catalog file, from the snapshot loadModelProviders keeps. A
+ * file not loaded yet starts loading and reads as absent until it lands. */
 function readCatalogFile(
   file: string,
 ): Record<string, ProviderCatalogModel> | undefined {
   const path = catalogFilePath(file);
-  if (!existsSync(path)) {
+  let raw: unknown;
+  try {
+    raw = cachedJsonFileCopy(path);
+  } catch (e) {
+    if (e instanceof JsonFileNotLoadedError) return undefined;
+    console.warn(`[model-providers] Failed to parse ${path}:`, e);
+    return undefined;
+  }
+  if (raw === undefined) {
     console.warn(`[model-providers] Catalog file ${path} does not exist`);
     return undefined;
   }
   try {
-    return catalogRows(readJsonFileCopy(path));
+    return catalogRows(raw);
   } catch (e) {
     console.warn(`[model-providers] Failed to parse ${path}:`, e);
     return undefined;
   }
+}
+
+/** Catalog files the raw config names, for loading them with the config. */
+function catalogFilesIn(raw: unknown): string[] {
+  const providers = (raw as { providers?: unknown } | undefined)?.providers;
+  if (!providers || typeof providers !== "object") return [];
+  return Object.values(providers as Record<string, unknown>).flatMap((p) => {
+    const file = (p as { catalogFile?: unknown } | null)?.catalogFile;
+    return typeof file === "string" && file ? [catalogFilePath(file)] : [];
+  });
+}
+
+/**
+ * Load the provider config and the catalog files it names. Runs at import;
+ * a test that repoints OPENSESSION_MODEL_PROVIDERS_CONFIG or writes either
+ * file itself awaits it again before reading.
+ */
+export async function loadModelProviders(): Promise<void> {
+  const raw = await loadJsonFileShared(configPath()).catch(() => undefined);
+  await Promise.all(
+    catalogFilesIn(raw).map((path) =>
+      loadJsonFileShared(path).catch(() => undefined),
+    ),
+  );
 }
 
 function canonicalPickerModels(v: unknown): string[] | undefined {
@@ -632,10 +671,12 @@ export function configuredCatalogModel(
   );
 }
 
+/** The loaded config, without I/O; refreshed in the background, so a hand
+ * edit or another process's write is seen within a second. */
 export function readModelProviderConfig(): ModelProviderSettings | null {
   const path = configPath();
   try {
-    const raw = readJsonFileCopy(path);
+    const raw = cachedJsonFileCopy(path);
     return raw === undefined ? null : normalizeModelProviderConfig(raw);
   } catch (e) {
     console.warn(`[model-providers] Failed to parse ${path}:`, e);
@@ -662,12 +703,18 @@ export function configuredPickerModels(): string[] {
 // (bridge, legacy aliases), so writes always go through the raw object to
 // preserve everything we don't own. Atomic rename + 0600 — the file holds keys.
 
-function readRawModelProviderConfig(): Record<string, unknown> {
+async function readRawModelProviderConfig(): Promise<Record<string, unknown>> {
   const path = configPath();
-  if (!existsSync(path)) return {};
+  let text: string;
+  try {
+    text = await readFile(path, "utf-8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+    throw error;
+  }
   // Unlike the read path (fail-soft null), a write built on `{}` would clobber
   // a config that's merely unparseable — fail loudly instead.
-  const raw = JSON.parse(readFileSync(path, "utf-8"));
+  const raw = JSON.parse(text);
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     throw new Error(
       `Cannot update ${path}: existing content is not a JSON object`,
@@ -676,10 +723,28 @@ function readRawModelProviderConfig(): Record<string, unknown> {
   return raw as Record<string, unknown>;
 }
 
-function writeRawModelProviderConfig(raw: Record<string, unknown>): void {
+async function writeRawModelProviderConfig(
+  raw: Record<string, unknown>,
+): Promise<void> {
   const path = configPath();
-  writeJsonAtomic(path, raw);
-  chmodSync(path, 0o600);
+  await writeJsonAtomicAsync(path, raw);
+  await chmod(path, 0o600);
+  publishJsonFile(path, raw);
+  // A newly named catalog file must be loaded before the picker reads it.
+  await Promise.all(
+    catalogFilesIn(raw).map((file) =>
+      loadJsonFileShared(file).catch(() => undefined),
+    ),
+  );
+}
+
+// Read-modify-write cycles span awaits; run them one at a time so two
+// concurrent saves cannot drop each other's change.
+let mutation: Promise<unknown> = Promise.resolve();
+function mutateConfig<T>(fn: () => Promise<T>): Promise<T> {
+  const run = mutation.then(fn, fn);
+  mutation = run.catch(() => {});
+  return run;
 }
 
 function rawProviders(raw: Record<string, unknown>): Record<string, unknown> {
@@ -725,10 +790,10 @@ function rawProvider(
  * stored. Throws on invalid ids and on the bridge providers (anthropic/openai
  * run on subscriptions, not keys).
  */
-export function setModelProvider(
+export async function setModelProvider(
   id: string,
   cfg: ModelProviderSettingsInput,
-): void {
+): Promise<void> {
   if (!PROVIDER_ID_RE.test(id)) {
     throw new Error(
       `Invalid provider id "${id}" (lowercase letters, digits and dashes only)`,
@@ -739,31 +804,33 @@ export function setModelProvider(
       `"${id}" runs on the subscription bridge, not a raw API key`,
     );
   }
-  const raw = readRawModelProviderConfig();
-  const providers = rawProviders(raw);
-  const next: Record<string, unknown> = { ...rawProvider(providers, id) };
-  const setString = (key: "apiKey" | "baseURL" | "api" | "name") => {
-    const value = cfg[key];
-    if (value === undefined) return;
-    if (value) next[key] = value;
-    else delete next[key];
-  };
-  setString("apiKey");
-  setString("baseURL");
-  setString("api");
-  setString("name");
-  if (cfg.discoverModels !== undefined) {
-    if (cfg.discoverModels) next.discoverModels = true;
-    else delete next.discoverModels;
-  }
-  // Validate the effective provider before anything touches disk: a custom
-  // protocol without a base URL can never run, so it must not be stored.
-  if (next.api && !next.baseURL) {
-    throw new Error(`Provider "${id}" declares an api and needs a base URL`);
-  }
-  providers[id] = next;
-  raw.providers = providers;
-  writeRawModelProviderConfig(raw);
+  await mutateConfig(async () => {
+    const raw = await readRawModelProviderConfig();
+    const providers = rawProviders(raw);
+    const next: Record<string, unknown> = { ...rawProvider(providers, id) };
+    const setString = (key: "apiKey" | "baseURL" | "api" | "name") => {
+      const value = cfg[key];
+      if (value === undefined) return;
+      if (value) next[key] = value;
+      else delete next[key];
+    };
+    setString("apiKey");
+    setString("baseURL");
+    setString("api");
+    setString("name");
+    if (cfg.discoverModels !== undefined) {
+      if (cfg.discoverModels) next.discoverModels = true;
+      else delete next.discoverModels;
+    }
+    // Validate the effective provider before anything touches disk: a custom
+    // protocol without a base URL can never run, so it must not be stored.
+    if (next.api && !next.baseURL) {
+      throw new Error(`Provider "${id}" declares an api and needs a base URL`);
+    }
+    providers[id] = next;
+    raw.providers = providers;
+    await writeRawModelProviderConfig(raw);
+  });
 }
 
 /** Record what `/v1/models` discovery returned for a provider. Replaces the
@@ -771,49 +838,58 @@ export function setModelProvider(
 export function setProviderDiscovered(
   id: string,
   discovered: { at: string; models: Record<string, ProviderCatalogModel> },
-): void {
-  const raw = readRawModelProviderConfig();
-  const providers = rawProviders(raw);
-  if (!(id in providers)) throw new Error(`Provider "${id}" is not configured`);
-  providers[id] = { ...rawProvider(providers, id), discovered };
-  raw.providers = providers;
-  writeRawModelProviderConfig(raw);
+): Promise<void> {
+  return mutateConfig(async () => {
+    const raw = await readRawModelProviderConfig();
+    const providers = rawProviders(raw);
+    if (!(id in providers))
+      throw new Error(`Provider "${id}" is not configured`);
+    providers[id] = { ...rawProvider(providers, id), discovered };
+    raw.providers = providers;
+    await writeRawModelProviderConfig(raw);
+  });
 }
 
 /** Remove a third-party provider. Returns whether it existed. */
-export function removeModelProvider(id: string): boolean {
-  const raw = readRawModelProviderConfig();
-  const providers = rawProviders(raw);
-  if (!(id in providers)) return false;
-  delete providers[id];
-  if (Object.keys(providers).length) raw.providers = providers;
-  else delete raw.providers;
-  writeRawModelProviderConfig(raw);
-  return true;
+export function removeModelProvider(id: string): Promise<boolean> {
+  return mutateConfig(async () => {
+    const raw = await readRawModelProviderConfig();
+    const providers = rawProviders(raw);
+    if (!(id in providers)) return false;
+    delete providers[id];
+    if (Object.keys(providers).length) raw.providers = providers;
+    else delete raw.providers;
+    await writeRawModelProviderConfig(raw);
+    return true;
+  });
 }
 
 /** Add an id to pickerModels (idempotent). Returns the stored list. */
-export function addPickerModel(id: string): string[] {
+export function addPickerModel(id: string): Promise<string[]> {
   return addPickerModels([id]);
 }
 
 /** Add ids to pickerModels in one write (idempotent). Returns the stored list. */
-export function addPickerModels(ids: readonly string[]): string[] {
-  const raw = readRawModelProviderConfig();
-  const list = rawPickerModels(raw);
-  for (const id of ids) if (!list.includes(id)) list.push(id);
-  raw.pickerModels = list;
-  writeRawModelProviderConfig(raw);
-  return list;
+export function addPickerModels(ids: readonly string[]): Promise<string[]> {
+  return mutateConfig(async () => {
+    const raw = await readRawModelProviderConfig();
+    const list = rawPickerModels(raw);
+    for (const id of ids) if (!list.includes(id)) list.push(id);
+    raw.pickerModels = list;
+    await writeRawModelProviderConfig(raw);
+    return list;
+  });
 }
 
 /** Remove an id from pickerModels. Returns the stored list. */
-export function removePickerModel(id: string): string[] {
-  const raw = readRawModelProviderConfig();
-  const list = rawPickerModels(raw).filter((x) => x !== id);
-  raw.pickerModels = list;
-  writeRawModelProviderConfig(raw);
-  return list;
+export function removePickerModel(id: string): Promise<string[]> {
+  return mutateConfig(async () => {
+    const raw = await readRawModelProviderConfig();
+    const list = rawPickerModels(raw).filter((x) => x !== id);
+    raw.pickerModels = list;
+    await writeRawModelProviderConfig(raw);
+    return list;
+  });
 }
 
 /** Masked display form of a stored key ("sk-x…wxyz") — the full value never
@@ -823,3 +899,5 @@ export function maskProviderKey(key: string | undefined): string {
   if (key.length <= 8) return "…";
   return `${key.slice(0, 4)}…${key.slice(-4)}`;
 }
+
+await loadModelProviders();
