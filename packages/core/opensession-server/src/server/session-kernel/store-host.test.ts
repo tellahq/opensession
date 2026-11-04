@@ -948,11 +948,18 @@ describe("per-session session kernel storage", () => {
     });
     expect(host.call("releaseQuarantine", [sessionId])).toBe(true);
 
+    host.close();
+  });
+
+  test("a timer that has not started firing does not block release", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    const sessionId = "agent-wait-timer-session";
     host.call("scheduleTimer", [
       {
         sessionId,
-        timerId: "scheduled-prompt",
-        kind: "scheduled_prompt",
+        timerId: "agent-wait",
+        kind: "agent_wait",
         dueAt: Date.now(),
         payload: {},
       },
@@ -961,6 +968,113 @@ describe("per-session session kernel storage", () => {
       sessionId,
       "database or disk is full",
       "run_event:event",
+    );
+    expect(host.quarantinedSession(sessionId)).toMatchObject({
+      repairable: true,
+    });
+    expect(host.call("releaseQuarantine", [sessionId])).toBe(true);
+
+    // Once the timer starts firing, its open receipt is real uncertainty.
+    const store = host.storeForSession(sessionId);
+    const token = store.timer(sessionId, "agent-wait")?.token ?? "";
+    expect(
+      store.beginTimerExecution({ sessionId, timerId: "agent-wait", token }),
+    ).toBe("execute");
+    host.quarantineSession(
+      sessionId,
+      "database or disk is full",
+      "run_event:event",
+    );
+    expect(host.quarantinedSession(sessionId)).toMatchObject({
+      repairable: false,
+    });
+    expect(host.call("releaseQuarantine", [sessionId])).toBe(false);
+    host.close();
+  });
+
+  test("releases a disk-full fence over a settled run with a pending wait timer", () => {
+    // A disk-full write fenced the session centrally while the wedge detector
+    // fenced its run in the isolated store. Boot recovery then settled the run,
+    // leaving only the agent's own wait_for timer behind.
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    const sessionId = "settled-wedge-with-wait";
+    host.call("setRunState", [
+      { sessionId, state: "running", event: "prompt", currentRunId: "run-1" },
+    ]);
+    for (const [timerId, kind] of [
+      ["agent-wait", "agent_wait"],
+      ["session-history:distill", "session_history_index"],
+    ])
+      host.call("scheduleTimer", [
+        { sessionId, timerId, kind, dueAt: Date.now(), payload: {} },
+      ]);
+    host.quarantineSession(
+      sessionId,
+      "The active run no longer has a live execution owner or recovery claim",
+      "run_state:running",
+    );
+    host.quarantineSession(
+      sessionId,
+      "database is locked",
+      "store:quarantineSession",
+      true,
+    );
+    host
+      .storeForSession(sessionId)
+      .settleOrphanedRun(sessionId, { state: "running", runId: "run-1" });
+
+    expect(host.quarantinedSession(sessionId)).toMatchObject({
+      commandKind: "store:quarantineSession",
+      repairable: true,
+    });
+    expect(host.call("releaseQuarantine", [sessionId])).toBe(true);
+    expect(host.quarantinedSession(sessionId)).toBeUndefined();
+    // The wait timer survives to wake the session once the fence is gone.
+    expect(
+      host.storeForSession(sessionId).timer(sessionId, "agent-wait"),
+    ).toBeDefined();
+    host.close();
+  });
+
+  test("releases a disk-full fence over a settled run with a pending outcome projection", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    const sessionId = "settled-run-with-outcome";
+    host.call("setRunState", [
+      { sessionId, state: "failed", event: "run_failed" },
+    ]);
+    host.call("enqueueOutbox", [
+      sessionId,
+      "turn_outcome_project",
+      { projectionId: "outcome:run-1" },
+      "outcome:run-1",
+    ]);
+    host.quarantineSession(
+      sessionId,
+      "database or disk is full",
+      "metadata:put",
+      true,
+    );
+
+    expect(host.quarantinedSession(sessionId)).toMatchObject({
+      repairable: true,
+    });
+    expect(host.call("releaseQuarantine", [sessionId])).toBe(true);
+    expect(host.quarantinedSession(sessionId)).toBeUndefined();
+
+    // Externally delivered effects stay fail-closed.
+    host.call("enqueueOutbox", [
+      sessionId,
+      "human_ask_deliver",
+      { askId: "ask-one", skipUi: false },
+      "ask-one",
+    ]);
+    host.quarantineSession(
+      sessionId,
+      "database or disk is full",
+      "metadata:put",
+      true,
     );
     expect(host.quarantinedSession(sessionId)).toMatchObject({
       repairable: false,
