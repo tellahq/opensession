@@ -1726,7 +1726,9 @@ describe("per-session session kernel storage", () => {
       ).size,
     ).toBe(sessions);
     host.close();
-  }, 30_000);
+    // Creating hundreds of isolated per-session databases is fsync-bound: ~20 s
+    // on a busy shared host, so 30 s timed out under load.
+  }, 120_000);
 
   test("discovers recently dirtied actor work ahead of a historical scan backlog", () => {
     const path = paths();

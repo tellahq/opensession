@@ -182,28 +182,34 @@ If sessions do not need to edit the running checkout, use isolated worktrees.
 
 ## What cleans up automatically
 
-### Rust build-cache GC
+### Build-cache GC
 
 `packages/core/opensession-server/src/server/disk-gc.ts` starts five minutes
 after the server and runs hourly by default. It only finds Cargo `target/`
-directories marked by `CACHEDIR.TAG`, under host worktrees:
+directories marked by `CACHEDIR.TAG`, and ReScript `lib/` directories next to a
+`rescript.json` or `bsconfig.json` that hold only compiler output, under host
+worktrees:
 
 - Caches with no recent entry for more than 7 days are reclaimed unless an
   active build process is using their worktree.
 - At 80% usage on the root filesystem, remaining caches are reclaimed oldest
-  first until usage falls below 70%. The normal pressure pass protects caches touched in
-  the last 24 hours; if usage remains at least 80%, a final pass can reclaim
-  caches idle for more than 2 hours.
+  first until usage falls below 70%. Caches touched in the last 24 hours are
+  kept, even if usage stays above 80%.
+- Only at 92% usage, to keep the disk from filling, a last pass reclaims caches
+  idle for more than 2 hours, oldest first, and stops as soon as usage is back
+  under 92%.
 
 The sweep reads `/proc` on Linux and uses `ps` plus `lsof` on macOS. It skips
 everything if it cannot determine which worktrees contain live build
 processes. It protects Ask checkouts and warm infrastructure. It does not
-remove worktrees, branches, commits, `node_modules`, or non-Rust build output.
+remove worktrees, branches, commits, `node_modules`, or build output other
+than Rust `target/` and ReScript `lib/` directories.
 
 Disable it with `OPENSESSION_DISK_GC=0`. The thresholds and cadence can be
 overridden at startup with `OPENSESSION_DISK_GC_COLD_DAYS`,
 `OPENSESSION_DISK_GC_HOT_HOURS`, `OPENSESSION_DISK_GC_URGENT_HOT_HOURS`,
-`OPENSESSION_DISK_GC_PRESSURE_PCT`, `OPENSESSION_DISK_GC_RELIEF_PCT`, and
+`OPENSESSION_DISK_GC_PRESSURE_PCT`, `OPENSESSION_DISK_GC_RELIEF_PCT`,
+`OPENSESSION_DISK_GC_EMERGENCY_PCT`, and
 `OPENSESSION_DISK_GC_INTERVAL_MS`.
 
 ### Worktree reaping and parking

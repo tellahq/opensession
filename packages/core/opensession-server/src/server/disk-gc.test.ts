@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import {
   copyFileSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   rmSync,
@@ -14,8 +15,10 @@ import {
   diskUsagePct,
   findBuildCaches,
   hasEntryNewerThan,
+  sweepDiskGc,
   worktreesInUse,
 } from "./disk-gc";
+import { __setWorkloadScopingForTest } from "./workload-scope";
 
 const root = mkdtempSync(join(tmpdir(), "disk-gc-test-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -234,6 +237,100 @@ describe("worktreesInUse", () => {
     } finally {
       proc.kill();
       await proc.exited;
+    }
+  });
+});
+
+describe("sweepDiskGc under pressure", () => {
+  const HOUR = 3_600_000;
+  const ages = { "built-1h": 1, "idle-5h": 5, "idle-30h": 30 };
+
+  /** A fresh worktree root with one cargo cache per age, plus a fake disk. */
+  function fleet() {
+    const sweepRoot = mkdtempSync(join(tmpdir(), "disk-gc-sweep-"));
+    const targets = new Map<string, string>();
+    for (const [name, hours] of Object.entries(ages)) {
+      const target = join(sweepRoot, name, "target");
+      mkdirSync(join(target, "debug", "deps"), { recursive: true });
+      writeFileSync(join(target, "debug", "deps", "lib.rlib"), "x");
+      writeFileSync(
+        join(target, "CACHEDIR.TAG"),
+        "Signature: 8a477f597d28d172",
+      );
+      const t = new Date(Date.now() - hours * HOUR);
+      for (const path of [
+        join(target, "debug", "deps", "lib.rlib"),
+        join(target, "debug", "deps"),
+        join(target, "debug"),
+        join(target, "CACHEDIR.TAG"),
+        target,
+      ])
+        utimesSync(path, t, t);
+      targets.set(name, target);
+    }
+    return { sweepRoot, targets };
+  }
+
+  /** Usage that drops `perReclaim` points for each cache already removed. */
+  function fakeDisk(
+    targets: Map<string, string>,
+    start: number,
+    perReclaim: number,
+  ) {
+    return async () => {
+      const gone = [...targets.values()].filter((t) => !existsSync(t)).length;
+      return start - gone * perReclaim;
+    };
+  }
+
+  beforeAll(() => __setWorkloadScopingForTest(false));
+  afterAll(() => __setWorkloadScopingForTest(null));
+
+  it("keeps caches built in the last 24h however long the disk stays over the threshold", async () => {
+    const { sweepRoot, targets } = fleet();
+    try {
+      const result = await sweepDiskGc({
+        root: sweepRoot,
+        usagePct: fakeDisk(targets, 88, 0.5),
+      });
+      expect(result.reclaimed).toEqual([targets.get("idle-30h")!]);
+      expect(existsSync(targets.get("idle-5h")!)).toBe(true);
+      expect(existsSync(targets.get("built-1h")!)).toBe(true);
+    } finally {
+      rmSync(sweepRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("near a full disk reclaims recent idle caches only until back under the emergency line", async () => {
+    const { sweepRoot, targets } = fleet();
+    try {
+      // 95% -> 94% after the 30h cache, still >= 92%, so the 5h cache goes
+      // too. The cache built an hour ago is never a candidate.
+      const result = await sweepDiskGc({
+        root: sweepRoot,
+        usagePct: fakeDisk(targets, 95, 1),
+      });
+      expect(result.reclaimed).toEqual([
+        targets.get("idle-30h")!,
+        targets.get("idle-5h")!,
+      ]);
+      expect(existsSync(targets.get("built-1h")!)).toBe(true);
+    } finally {
+      rmSync(sweepRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("stops the emergency pass as soon as usage is under the emergency line", async () => {
+    const { sweepRoot, targets } = fleet();
+    try {
+      const result = await sweepDiskGc({
+        root: sweepRoot,
+        usagePct: fakeDisk(targets, 93, 2),
+      });
+      expect(result.reclaimed).toEqual([targets.get("idle-30h")!]);
+      expect(existsSync(targets.get("idle-5h")!)).toBe(true);
+    } finally {
+      rmSync(sweepRoot, { recursive: true, force: true });
     }
   });
 });

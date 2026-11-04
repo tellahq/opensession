@@ -51,9 +51,9 @@ function num(raw: string | undefined, fallback: number): number {
 
 /** Caches untouched this long are always reclaimed — they'd be rebuilt anyway. */
 const COLD_DAYS = num(process.env.OPENSESSION_DISK_GC_COLD_DAYS, 7);
-/** Never touch a cache built this recently, even under pressure. */
+/** Never touch a cache built this recently, short of a nearly full disk. */
 const HOT_HOURS = num(process.env.OPENSESSION_DISK_GC_HOT_HOURS, 24);
-/** Relaxed hot window for the last-resort pass, when HOT_HOURS spared everything. */
+/** Idle window for the emergency pass, which runs only at EMERGENCY_PCT. */
 const URGENT_HOT_HOURS = num(
   process.env.OPENSESSION_DISK_GC_URGENT_HOT_HOURS,
   2,
@@ -62,6 +62,11 @@ const URGENT_HOT_HOURS = num(
 const PRESSURE_PCT = num(process.env.OPENSESSION_DISK_GC_PRESSURE_PCT, 80);
 /** ...until back under this. */
 const RELIEF_PCT = num(process.env.OPENSESSION_DISK_GC_RELIEF_PCT, 70);
+/**
+ * Only at this usage may a cache built within HOT_HOURS be reclaimed, and only
+ * until usage is back under it: a full disk crash-loops the session kernel.
+ */
+const EMERGENCY_PCT = num(process.env.OPENSESSION_DISK_GC_EMERGENCY_PCT, 92);
 const SWEEP_INTERVAL_MS = num(
   process.env.OPENSESSION_DISK_GC_INTERVAL_MS,
   HOUR,
@@ -462,13 +467,20 @@ async function removeCache(dir: string): Promise<boolean> {
 
 /**
  * One GC pass: reclaim every cold cache, then — only if the disk is still
- * under pressure — the stalest remaining ones until back under RELIEF_PCT.
+ * under pressure — the stalest caches not built within HOT_HOURS until back
+ * under RELIEF_PCT. Recent caches go only to keep a nearly full disk
+ * (EMERGENCY_PCT) from filling. `root` and `usagePct` are test seams.
  */
 export async function sweepDiskGc(
-  opts: { dryRun?: boolean } = {},
+  opts: {
+    dryRun?: boolean;
+    root?: string;
+    usagePct?: () => Promise<number>;
+  } = {},
 ): Promise<DiskGcResult> {
-  const root = configuredPaths().worktreesDir;
-  const pctBefore = await diskUsagePct();
+  const root = opts.root ?? configuredPaths().worktreesDir;
+  const usage = opts.usagePct ?? (() => diskUsagePct());
+  const pctBefore = await usage();
   const result: DiskGcResult = {
     reclaimed: [],
     freedBytes: 0,
@@ -529,40 +541,47 @@ export async function sweepDiskGc(
   }
 
   // Pass 2 — disk pressure. Stalest first, and never a cache built recently.
-  if ((await diskUsagePct()) >= PRESSURE_PCT) {
+  if ((await usage()) >= PRESSURE_PCT) {
     console.log(
-      `[disk-gc] disk at ${(await diskUsagePct()).toFixed(1)}% — reclaiming stale caches`,
+      `[disk-gc] disk at ${(await usage()).toFixed(1)}% — reclaiming stale caches`,
     );
     for (const c of remaining.sort((a, b) => a.mtimeMs - b.mtimeMs)) {
-      if ((await diskUsagePct()) < RELIEF_PCT) break;
+      if ((await usage()) < RELIEF_PCT) break;
       if (await hasEntryNewerThan(c.path, hotCutoff)) {
         result.skippedHot++;
         continue;
       }
       await reclaim(c, "disk-pressure");
     }
-    // Pass 3 — still under pressure with every remaining cache inside the
-    // HOT_HOURS window. On a busy fleet that is the normal case, not an
-    // exception: caches are rebuilt constantly, so a 24h hot window spares all
-    // of them and the sweep frees nothing while the disk keeps climbing. Fall
-    // back to a much shorter window. Nothing has written to these in
-    // URGENT_HOT_HOURS, so no build is in flight; the cost is a rebuild on
-    // resume, cushioned by the shared sccache.
-    if ((await diskUsagePct()) >= PRESSURE_PCT) {
+    // Pass 3 — emergency only. A cache built within HOT_HOURS belongs to work
+    // that is still going, so reclaiming it only makes its session rebuild.
+    // On 2026-11-04 this pass fired at every sweep above PRESSURE_PCT and
+    // reclaimed ~480 caches idle just 2h in five hours; the rebuilds refilled
+    // the disk at 100-250 GB/h and kept the CPU saturated. A full disk is
+    // still worse, so near it reclaim the stalest caches idle
+    // URGENT_HOT_HOURS, and stop as soon as usage is back under EMERGENCY_PCT
+    // instead of going on to RELIEF_PCT.
+    const pressured = await usage();
+    if (pressured >= EMERGENCY_PCT) {
       const urgentCutoff = now - URGENT_HOT_HOURS * HOUR;
       console.warn(
-        `[disk-gc] still at ${(await diskUsagePct()).toFixed(1)}% with all caches inside the ` +
-          `${HOT_HOURS}h window — escalating to caches idle >${URGENT_HOT_HOURS}h`,
+        `[disk-gc] emergency: still at ${pressured.toFixed(1)}% — reclaiming caches ` +
+          `idle >${URGENT_HOT_HOURS}h until under ${EMERGENCY_PCT}%`,
       );
       for (const c of remaining.sort((a, b) => a.mtimeMs - b.mtimeMs)) {
-        if ((await diskUsagePct()) < RELIEF_PCT) break;
+        if ((await usage()) < EMERGENCY_PCT) break;
         if (result.reclaimed.includes(c.path)) continue;
         if (await hasEntryNewerThan(c.path, urgentCutoff)) continue;
-        await reclaim(c, `disk-pressure idle>${URGENT_HOT_HOURS}h`);
+        await reclaim(c, `disk-emergency idle>${URGENT_HOT_HOURS}h`);
       }
+    } else if (pressured >= PRESSURE_PCT && result.skippedHot > 0) {
+      console.log(
+        `[disk-gc] still at ${pressured.toFixed(1)}%; keeping ${result.skippedHot} ` +
+          `cache(s) built in the last ${HOT_HOURS}h (emergency reclaim starts at ${EMERGENCY_PCT}%)`,
+      );
     }
 
-    const pct = await diskUsagePct();
+    const pct = await usage();
     if (pct >= PRESSURE_PCT) {
       console.warn(
         `[disk-gc] still at ${pct.toFixed(1)}% after GC — look beyond worktrees ` +
@@ -571,7 +590,7 @@ export async function sweepDiskGc(
     }
   }
 
-  result.pctAfter = await diskUsagePct();
+  result.pctAfter = await usage();
   if (result.reclaimed.length) {
     audit({
       event: "disk_gc_sweep",
@@ -611,6 +630,7 @@ export function startDiskGc(): void {
   sweepTimer = setInterval(run, SWEEP_INTERVAL_MS);
   console.log(
     `[disk-gc] started (every ${Math.round(SWEEP_INTERVAL_MS / MINUTE)}m; ` +
-      `cold>${COLD_DAYS}d always, pressure at ${PRESSURE_PCT}% -> ${RELIEF_PCT}%)`,
+      `cold>${COLD_DAYS}d always, pressure at ${PRESSURE_PCT}% -> ${RELIEF_PCT}%, ` +
+      `recent caches only at ${EMERGENCY_PCT}%)`,
   );
 }

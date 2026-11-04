@@ -1,4 +1,11 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  setDefaultTimeout,
+  test,
+} from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,6 +13,10 @@ import { fileURLToPath } from "node:url";
 import { MemoryStore } from "../memory-v2/store";
 import { git, isolatedGitEnv } from "./git";
 import { MemoryRepoService } from "./service";
+
+// Each test drives real git repositories and the commit hook through dozens
+// of subprocesses: ~2 s on a quiet host, past bun's 5 s default under load.
+setDefaultTimeout(30_000);
 
 let base: string;
 let service: MemoryRepoService;
