@@ -7,8 +7,9 @@
  * Every agent run then keeps the tools Stripe can hold (runToolPolicy drops
  * them from both the confirm and deny catalogs), and this module narrows the
  * raw write tool to the operations Stripe actually holds, plus draft invoices
- * that cannot move money until a person finalizes them, and invoice voids,
- * which Stripe cannot hold but which move no money either.
+ * that cannot move money until a person finalizes them, invoice voids,
+ * which Stripe cannot hold but which move no money either, and customer
+ * credit balance adjustments, which Stripe cannot hold either.
  */
 import { configuredIntegration } from "./config";
 import type { McpRuntimeContent } from "./mcp-runtime";
@@ -51,6 +52,13 @@ const DRAFT_INVOICE_OPERATIONS: ReadonlySet<string> = new Set([
  *  waits on an approval request for it. */
 const INVOICE_VOID_OPERATION = "PostInvoicesInvoiceVoid";
 
+/** Adjusting a customer's credit balance in either direction, e.g. clearing
+ *  the proration credit a seat removal left behind after the charge was
+ *  refunded in full, or granting goodwill credit. Stripe cannot hold it for
+ *  approval, so it runs at once. Nothing is charged or paid out until the
+ *  balance meets the customer's next invoice. */
+const CUSTOMER_BALANCE_OPERATION = "PostCustomersCustomerBalanceTransactions";
+
 const RAW_WRITE_TOOLS = new Set(["stripe_api_write", "stripe_api_execute"]);
 
 /** Marker the server appends to an approval request's reason so the webhook
@@ -83,8 +91,8 @@ export function stripeApprovalsNote(unattended: boolean): string {
       : "Make one only when the person asks for it. ") +
     "Use the exact object and amount. Through stripe_api_write only " +
     "PostRefunds, DeleteSubscriptionsSubscriptionExposedId, the approval " +
-    "request update/cancel calls, draft invoices and invoice voids are " +
-    "allowed; anything " +
+    "request update/cancel calls, draft invoices, invoice voids and customer " +
+    "balance adjustments are allowed; anything " +
     "else, including subscription updates, is for a person to do in the " +
     "Dashboard. A draft invoice (for example a missing invoice for a payment " +
     "already taken) is PostInvoices with collection_method `send_invoice`, " +
@@ -95,7 +103,15 @@ export function stripeApprovalsNote(unattended: boolean): string {
     "no approval request, so void only an open invoice you have a clear " +
     "reason to void (for example one left open on a subscription you just " +
     "had cancelled), and report it as done once Stripe returns status " +
-    "`void`. An " +
+    "`void`. A customer balance adjustment " +
+    "(PostCustomersCustomerBalanceTransactions with the customer `id`, an " +
+    "`amount` in the smallest currency unit, the customer's `currency` and " +
+    "a `description` naming the reason) also runs right away with no " +
+    "approval request: a negative amount gives the customer credit, a " +
+    "positive one takes credit away (for example a proration credit left " +
+    "after you refunded the charge in full). Read the customer's `balance` " +
+    "first, make the adjustment only when your instructions or a teammate " +
+    "call for it, and report the new balance Stripe returns. An " +
     "`approval_required` error is not a failure: Stripe has queued the " +
     "action for review. Add a short reason to the approval request " +
     "(PostV2CoreApprovalRequestsId), then give its approval URL (the " +
@@ -168,9 +184,8 @@ function checkDraftItem(
 
 /**
  * MCP argument hook for the Stripe server while approvals are enforced.
- * Rejects raw writes outside `STRIPE_APPROVAL_OPERATIONS`, draft invoices and
- * invoice voids,
- * keeps invoices drafts, and stamps the session link onto approval-request
+ * Rejects raw writes outside `STRIPE_APPROVAL_OPERATIONS`, draft invoices,
+ * invoice voids and customer balance adjustments, keeps invoices drafts, and stamps the session link onto approval-request
  * reasons. `drafts` holds the draft invoices this run created (see
  * `recordStripeDraftInvoice`). Other servers pass through.
  */
@@ -183,7 +198,8 @@ export function guardStripeApprovalCall(
   if (!isRawWrite(tool)) return args;
   const op = args.stripe_api_operation_id;
   if (op === "PostInvoices") return draftInvoiceArgs(args);
-  if (op === INVOICE_VOID_OPERATION) return args;
+  if (op === INVOICE_VOID_OPERATION || op === CUSTOMER_BALANCE_OPERATION)
+    return args;
   if (op === "PostInvoiceitems") {
     checkDraftItem(args, drafts);
     return args;
@@ -195,8 +211,9 @@ export function guardStripeApprovalCall(
         "(DeleteSubscriptionsSubscriptionExposedId) and approval-request " +
         "updates/cancellations go through, because Stripe holds those for a " +
         "reviewer, plus draft invoices (PostInvoices, PostInvoiceitems) and " +
-        "invoice voids (PostInvoicesInvoiceVoid, which run right away with " +
-        "no approval). " +
+        "invoice voids (PostInvoicesInvoiceVoid) and customer balance " +
+        "adjustments (PostCustomersCustomerBalanceTransactions), which run " +
+        "right away with no approval. " +
         "State the exact action and ask a person to do it in the Stripe " +
         "Dashboard.",
     );
