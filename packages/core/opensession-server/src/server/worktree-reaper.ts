@@ -6,7 +6,8 @@
  * In-process port (2026-08-05) of the external `cleanup-closed-worktrees`
  * cron, generalized over every registered repo. The worktree-hygiene family:
  *  - sweepArchivedWorktrees (worktree.ts): session-driven — archived 14d+.
- *  - disk-gc.ts: reclaims rust target/ caches from worktrees we KEEP.
+ *  - disk-gc.ts: reclaims Rust target/ and ReScript lib/ caches from
+ *    worktrees we KEEP.
  *  - session-scratch.ts: per-session temp dirs (the shared-/tmp replacement),
  *    swept on this module's ticker with the same session snapshot.
  *  - this module: git/session-driven — done work is reaped; idle clean

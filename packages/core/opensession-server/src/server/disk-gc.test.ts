@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   diskUsagePct,
-  findTargetCaches,
+  findBuildCaches,
   hasEntryNewerThan,
   worktreesInUse,
 } from "./disk-gc";
@@ -67,17 +67,34 @@ worktree("tella-fusion-fresh", { targetAt: "target" });
 worktree("tella-fusion-notcargo", { targetAt: "target", cargo: false });
 worktree("tella-fusion-warm-template", { targetAt: "target", ageDays: 30 });
 worktree("tella-fusion-ask-checkout", { targetAt: "target", ageDays: 30 });
+/** A ReScript project at `rel` with build output in lib/ plus `extra` entries. */
+function rescriptProject(name: string, rel: string, extra: string[] = []) {
+  const project = join(root, name, rel);
+  mkdirSync(join(project, "lib", "bs", "src"), { recursive: true });
+  mkdirSync(join(project, "lib", "ocaml"), { recursive: true });
+  writeFileSync(join(project, "lib", "bs", "src", "App.cmj"), "x");
+  writeFileSync(join(project, "rescript.json"), "{}");
+  for (const entry of extra) writeFileSync(join(project, "lib", entry), "x");
+}
+
+rescriptProject("tella-fusion-rescript", "packages/core/webapp");
+// A lib/ that also holds hand-written files is source, not build output.
+rescriptProject("tella-fusion-rescript-src", "packages/app", ["index.js"]);
+// A lib/bs with no ReScript project beside it is not ours to judge.
+mkdirSync(join(root, "tella-fusion-rescript-src", "lib", "bs"), {
+  recursive: true,
+});
 // node_modules can contain a dir literally named "target" — must never match.
 mkdirSync(join(root, "tella-fusion-fresh", "node_modules", "pkg", "target"), {
   recursive: true,
 });
 
-describe("findTargetCaches", () => {
-  let found: Awaited<ReturnType<typeof findTargetCaches>>;
+describe("findBuildCaches", () => {
+  let found: Awaited<ReturnType<typeof findBuildCaches>>;
   let paths: string[];
 
   beforeAll(async () => {
-    found = await findTargetCaches(root);
+    found = await findBuildCaches(root);
     paths = found.map((cache) => cache.path.slice(root.length + 1));
   });
 
@@ -87,6 +104,22 @@ describe("findTargetCaches", () => {
       "tella-fusion-cold/packages/core/webapp/wasm-bindings/target",
     );
     expect(paths).toContain("tella-fusion-fresh/target");
+  });
+
+  it("finds ReScript lib/ output beside a rescript.json", () => {
+    const lib = found.find(
+      (c) =>
+        c.path === join(root, "tella-fusion-rescript/packages/core/webapp/lib"),
+    );
+    expect(lib?.kind).toBe("rescript");
+    expect(lib?.worktree).toBe(join(root, "tella-fusion-rescript"));
+    expect(found.find((c) => c.path.endsWith("/target"))?.kind).toBe("cargo");
+  });
+
+  it("ignores a lib/ holding anything but ReScript output, or with no project", () => {
+    expect(paths.some((p) => p.startsWith("tella-fusion-rescript-src"))).toBe(
+      false,
+    );
   });
 
   it("ignores a non-cargo dir named target (no CACHEDIR.TAG)", () => {
@@ -177,6 +210,23 @@ describe("worktreesInUse", () => {
     if (process.platform === "darwin") symlinkSync("/bin/sleep", fakeCargo);
     else copyFileSync("/bin/sleep", fakeCargo);
     const proc = Bun.spawn([fakeCargo, "30"], { cwd: wt });
+    try {
+      await Bun.sleep(150);
+      const inUse = await worktreesInUse(root);
+      if (inUse !== null) expect(inUse.has(wt)).toBe(true);
+    } finally {
+      proc.kill();
+      await proc.exited;
+    }
+  });
+
+  it("treats a running ReScript compiler as a build", async () => {
+    const wt = join(root, "wt-rescript");
+    mkdirSync(wt, { recursive: true });
+    const fakeBsc = join(root, "bsc.exe");
+    if (process.platform === "darwin") symlinkSync("/bin/sleep", fakeBsc);
+    else copyFileSync("/bin/sleep", fakeBsc);
+    const proc = Bun.spawn([fakeBsc, "30"], { cwd: wt });
     try {
       await Bun.sleep(150);
       const inUse = await worktreesInUse(root);

@@ -1,5 +1,6 @@
 /**
- * Disk GC — reclaims Rust `target/` build caches from worktrees we KEEP.
+ * Disk GC — reclaims build caches (Rust `target/`, ReScript `lib/`) from
+ * worktrees we KEEP.
  *
  * The hourly `cleanup-closed-worktrees` cron only removes worktrees whose work
  * is already merged into the default branch. A long-lived worktree with an
@@ -11,6 +12,11 @@
  *
  * Cost of a reclaim is one `cargo build` on resume, cushioned by the global
  * sccache rustc-wrapper (~92% hit rate), so this is cheap to run routinely.
+ *
+ * ReScript output is the same kind of cache: `lib/` beside a `rescript.json`
+ * holds only compiler output (`lib/bs`, `lib/ocaml`) and the next
+ * `rescript build` regenerates it. On 2026-11-04 the disk filled while 571
+ * kept worktrees each held ~2G of it (~1.1T) that this sweep never looked at.
  *
  * Deliberately NOT swept: `node_modules`. Bun hardlinks package files into a
  * shared global store, so deleting a worktree's copy frees almost nothing —
@@ -29,7 +35,7 @@ import {
   stat,
   statfs,
 } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { audit } from "./audit";
 import { configuredPaths } from "./config";
 import { workloadArgv } from "./workload-scope";
@@ -65,11 +71,12 @@ const FIRST_SWEEP_DELAY_MS = 5 * MINUTE;
 /** Worktrees that are infrastructure, not disposable session trees. */
 const PROTECTED_SUFFIXES = ["-warm-template", "-ask-checkout"];
 
-export interface TargetCache {
+export interface BuildCache {
   /** Worktree directory the cache belongs to. */
   worktree: string;
-  /** The `target/` directory itself. */
+  /** The cache directory itself: a cargo `target/` or a ReScript `lib/`. */
   path: string;
+  kind: "cargo" | "rescript";
   /** Newest mtime seen at bounded depth — when this cache was last built. */
   mtimeMs: number;
 }
@@ -97,7 +104,7 @@ export async function diskUsagePct(path = "/"): Promise<number> {
 }
 
 /**
- * Process names that actually write into a cargo `target/`. Only these pin a
+ * Process names that actually write into a build cache. Only these pin a
  * worktree — see `worktreesInUse`.
  */
 const BUILD_PROCESS_NAMES = new Set([
@@ -115,6 +122,11 @@ const BUILD_PROCESS_NAMES = new Set([
   "lld",
   "make",
   "ninja",
+  "rescript",
+  "rescript.exe",
+  "bsc",
+  "bsc.exe",
+  "rewatch",
 ]);
 
 /**
@@ -315,15 +327,59 @@ async function isCargoTarget(dir: string): Promise<boolean> {
   }
 }
 
+async function isFile(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/** Everything ReScript writes into `lib/`; anything else there is not ours. */
+const RESCRIPT_OUTPUT_ENTRIES = new Set([
+  "bs",
+  "ocaml",
+  "js",
+  "es6",
+  "es6_global",
+  ".compiler.log",
+  "rescript.lock",
+]);
+
 /**
- * Cargo target dirs under every worktree. Searches a few levels deep because
- * a repo can have a nested one, e.g. packages/core/webapp/wasm-bindings/target
- * alongside the workspace root's.
+ * A ReScript output dir: `lib/` next to a `rescript.json` (or the older
+ * `bsconfig.json`) that contains `lib/bs` and nothing but compiler output, so
+ * a source directory that happens to be named `lib` is never a candidate.
  */
-export async function findTargetCaches(
+async function isRescriptOutput(dir: string): Promise<boolean> {
+  const project = dirname(dir);
+  if (
+    !(await isFile(join(project, "rescript.json"))) &&
+    !(await isFile(join(project, "bsconfig.json")))
+  )
+    return false;
+  let entries: string[];
+  try {
+    entries = await readdir(dir);
+  } catch {
+    return false;
+  }
+  return (
+    entries.includes("bs") &&
+    entries.every((entry) => RESCRIPT_OUTPUT_ENTRIES.has(entry))
+  );
+}
+
+/**
+ * Build caches under every worktree: cargo target dirs and ReScript `lib/`
+ * dirs. Searches a few levels deep because a repo can have nested ones, e.g.
+ * packages/core/webapp/wasm-bindings/target alongside the workspace root's,
+ * or packages/core/webapp/lib.
+ */
+export async function findBuildCaches(
   root: string,
   maxDepth = 5,
-): Promise<TargetCache[]> {
+): Promise<BuildCache[]> {
   let worktrees: string[];
   try {
     worktrees = (await readdir(root, { withFileTypes: true }))
@@ -333,7 +389,7 @@ export async function findTargetCaches(
     return [];
   }
 
-  const found: TargetCache[] = [];
+  const found: BuildCache[] = [];
   for (const name of worktrees) {
     if (PROTECTED_SUFFIXES.some((suffix) => name.endsWith(suffix))) continue;
     const worktree = join(root, name);
@@ -353,13 +409,20 @@ export async function findTargetCaches(
         )
           continue;
         const path = join(dir, entry.name);
-        if (entry.name === "target" && (await isCargoTarget(path))) {
+        const kind =
+          entry.name === "target" && (await isCargoTarget(path))
+            ? "cargo"
+            : entry.name === "lib" && (await isRescriptOutput(path))
+              ? "rescript"
+              : null;
+        if (kind) {
           found.push({
             worktree,
             path,
+            kind,
             mtimeMs: await newestMtime(path),
           });
-          continue; // never descend into a target dir
+          continue; // never descend into a cache
         }
         if (depth < maxDepth) await walk(path, depth + 1);
       }
@@ -423,7 +486,7 @@ export async function sweepDiskGc(
     return result;
   }
 
-  const candidates = (await findTargetCaches(root)).filter((c) => {
+  const candidates = (await findBuildCaches(root)).filter((c) => {
     if (inUse.has(c.worktree)) {
       result.skippedInUse++;
       return false;
@@ -435,7 +498,7 @@ export async function sweepDiskGc(
   const coldCutoff = now - COLD_DAYS * DAY;
   const hotCutoff = now - HOT_HOURS * HOUR;
 
-  const reclaim = async (c: TargetCache, reason: string) => {
+  const reclaim = async (c: BuildCache, reason: string) => {
     const size = await dirSizeBytes(c.path);
     if (opts.dryRun) {
       console.log(
@@ -459,7 +522,7 @@ export async function sweepDiskGc(
 
   // Pass 1 — cold caches. Nothing has built against these in COLD_DAYS, so
   // they'd be rebuilt on resume regardless of what we do here.
-  const remaining: TargetCache[] = [];
+  const remaining: BuildCache[] = [];
   for (const c of candidates) {
     if (c.mtimeMs < coldCutoff) await reclaim(c, `cold>${COLD_DAYS}d`);
     else remaining.push(c);
