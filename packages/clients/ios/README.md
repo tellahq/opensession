@@ -422,7 +422,12 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   choices from `GET /api/sandbox/status` sit under More options, while dictation
   stays at the trailing edge. Sandbox names match the web palette, and the host
   is sent as an explicit `local` so the menu and session always agree. The Mac
-  keeps its mode and Sandbox chips where the wider footer has room. Choosing a
+  keeps its mode and Sandbox chips where the wider footer has room. A fresh
+  code session in a repo that can ship (not Code Storage, not a local checkout,
+  not joining a workspace) also offers **Ships as**: Pull request or Direct to
+  the default branch, seeded from the repo's `publicationMode` and reset on a
+  repo change. `shipMode` is sent only when it differs from that default, so a
+  repository keeps its configured behavior. Choosing a
   Runner is not offered because the web palette also dropped runner-at-create.
   On macOS, when the prompt is empty, **Start from a recipe** loads
   `/api/library` and prefills the editable prompt, mode, and any still-available

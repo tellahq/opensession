@@ -19,6 +19,8 @@ struct ChangesView: View {
     /// Open this file's diff straight away instead of the list — what the
     /// workspace sheet's file rows pass, since they are already the list.
     var focus: String?
+    /// The session is mid-run: the ship buttons wait for it to finish.
+    var isRunning = false
 
     @State private var repos: [OS1API.RepoDiff] = []
     /// repo id → path → that file's section of the repo's patch.
@@ -32,6 +34,12 @@ struct ChangesView: View {
     @State private var hashIndex: [String: [String: String]] = [:]
     /// repo id → this device's review marks for that repo's worktree.
     @State private var marksByRepo: [String: PrReviewMarks] = [:]
+    /// Ship, Create PR or Update PR and the repo's own actions; nil when the
+    /// session has nothing to ship to.
+    @State private var ship: SessionShipInfo.Details?
+    /// The ship button just pressed, held as sent for a few seconds.
+    @State private var sentShip: String?
+    @State private var shipError: String?
 
     /// Where the worktree diff comes from; the screenshot fixture swaps it.
     var loadDiff: @MainActor (String) async throws -> OS1API.SessionDiffResponse = {
@@ -41,6 +49,22 @@ struct ChangesView: View {
     /// this device, keyed by each file's diff: an agent edit to a reviewed
     /// file shows it as changed since review.
     var reviewStore = PrLocalReviewStore()
+    /// Where the ship buttons come from; the screenshot fixture swaps it.
+    var loadShip: @MainActor (String) async throws -> SessionShipInfo = {
+        try await OS1API.sessionShip(sessionId: $0)
+    }
+    /// Sends a ship button's prompt through the session's outbox, the same
+    /// path a typed message and the sidebar's PR actions take. False when the
+    /// outbox refused it.
+    var sendPrompt: @MainActor (String, String) -> Bool = { sessionId, prompt in
+        let busyMode = UserDefaults.standard.string(forKey: "os1.composer.busySend") ?? "queue"
+        return Outbox.shared.enqueue(
+            sessionId: sessionId,
+            content: prompt,
+            busyMode: busyMode,
+            user: ServerConfig.shared.userName
+        ) != nil
+    }
 
     var body: some View {
         Group {
@@ -83,6 +107,58 @@ struct ChangesView: View {
             FileDiffView(file: file)
         }
         .task(id: sessionId) { await load() }
+        // A run that just ended may have shipped or changed the worktree.
+        .onChange(of: isRunning) { _, running in
+            if !running {
+                sentShip = nil
+                if focus == nil { Task { await load() } }
+            }
+        }
+        .alert(
+            "Couldn't send",
+            isPresented: Binding(get: { shipError != nil }, set: { if !$0 { shipError = nil } })
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(shipError ?? "")
+        }
+    }
+
+    // MARK: - Ship
+
+    @ViewBuilder
+    private var shipSections: some View {
+        if let ship {
+            if let latest = ship.latestShip {
+                Section {
+                    DirectShipNoticeView(ship: latest)
+                }
+            }
+            if !ship.buttons.isEmpty {
+                Section {
+                    ShipActionsBand(
+                        info: ship,
+                        isRunning: isRunning,
+                        sent: sentShip,
+                        run: runShip
+                    )
+                }
+            }
+        }
+    }
+
+    private func runShip(_ button: ShipButton) {
+        guard !isRunning, sentShip != button.id else { return }
+        guard sendPrompt(sessionId, button.prompt) else {
+            shipError = "Too many unsent messages. Send or delete some first."
+            return
+        }
+        Haptics.play(.send)
+        sentShip = button.id
+        Task {
+            try? await Task.sleep(for: .seconds(6))
+            if sentShip == button.id { sentShip = nil }
+        }
     }
 
     // MARK: - The list
@@ -91,6 +167,7 @@ struct ChangesView: View {
     private var fileList: some View {
         if let diff = activeDiff {
             List {
+                shipSections
                 if changedRepos.count > 1 {
                     Section {
                         Picker("Repository", selection: repoSelection) {
@@ -264,12 +341,24 @@ struct ChangesView: View {
     // MARK: - Placeholders
 
     private var emptyPlaceholder: some View {
-        ListPlaceholder(
-            symbol: "checkmark.circle",
-            title: "No changes",
-            message: "This worktree matches its base branch."
-        ) {
-            EmptyView()
+        VStack(spacing: 0) {
+            // Shipping directly leaves the worktree level with its base, so
+            // the empty state is where the latest ship is usually read.
+            if let latest = ship?.latestShip {
+                DirectShipNoticeView(ship: latest)
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(OS1VisualStyle.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+            }
+            ListPlaceholder(
+                symbol: "checkmark.circle",
+                title: "No changes",
+                message: "This worktree matches its base branch."
+            ) {
+                EmptyView()
+            }
         }
     }
 
@@ -336,7 +425,13 @@ struct ChangesView: View {
     private func load() async {
         loading = true
         loadFailed = false
+        // The ship info moves with the diff (a new commit, a push, a PR), so
+        // every diff load refetches it alongside.
+        let shipFetch = focus == nil ? Task { try? await loadShip(sessionId) } : nil
         let response = try? await loadDiff(sessionId)
+        if let shipInfo = await shipFetch?.value {
+            ship = shipInfo.info
+        }
         guard !Task.isCancelled else { return }
         if let response {
             let loaded = response.repos

@@ -104,6 +104,62 @@ final class SessionTests: XCTestCase {
     }
 
     @MainActor
+    func testSessionCreationSendsShipModeOnlyWhenChanged() {
+        let byDefault = OS1API.createSessionBody(
+            prompt: "Build it", repo: "acme", mode: "code", user: "Alice"
+        )
+        XCTAssertNil(byDefault["shipMode"])
+
+        // The composer resolves nothing to send while the choice matches the
+        // repository's own mode, or was never offered.
+        XCTAssertNil(NewSessionView.shipModeToSend(
+            choice: nil, repoDefault: "pull-request", offered: true
+        ))
+        XCTAssertNil(NewSessionView.shipModeToSend(
+            choice: "direct", repoDefault: "direct", offered: true
+        ))
+        XCTAssertNil(NewSessionView.shipModeToSend(
+            choice: "direct", repoDefault: "pull-request", offered: false
+        ))
+
+        let direct = NewSessionView.shipModeToSend(
+            choice: "direct", repoDefault: "pull-request", offered: true
+        )
+        let changed = OS1API.createSessionBody(
+            prompt: "Build it", repo: "acme", mode: "code", shipMode: direct, user: "Alice"
+        )
+        XCTAssertEqual(changed["shipMode"] as? String, "direct")
+
+        let pullRequest = NewSessionView.shipModeToSend(
+            choice: "pull-request", repoDefault: "direct", offered: true
+        )
+        let backToPR = OS1API.createSessionBody(
+            prompt: "Build it", repo: "acme", mode: "code", shipMode: pullRequest, user: "Alice"
+        )
+        XCTAssertEqual(backToPR["shipMode"] as? String, "pull-request")
+
+        let ask = OS1API.createSessionBody(
+            prompt: "Look", repo: "acme", mode: "ask", shipMode: "direct", user: "Alice"
+        )
+        XCTAssertNil(ask["shipMode"])
+    }
+
+    func testRepoInfoDecodesPublicationModeAndHost() throws {
+        let json = Data("""
+        [{"id":"acme","publicationMode":"direct"},
+         {"id":"store","publicationMode":"pull-request","host":"codestorage"},
+         {"id":"old"}]
+        """.utf8)
+        let repos = try JSONDecoder().decode([OS1API.RepoInfo].self, from: json)
+        XCTAssertEqual(repos[0].defaultShipMode, "direct")
+        XCTAssertFalse(repos[0].isCodeStorage)
+        XCTAssertEqual(repos[1].defaultShipMode, "pull-request")
+        XCTAssertTrue(repos[1].isCodeStorage)
+        XCTAssertEqual(repos[2].defaultShipMode, "pull-request")
+        XCTAssertNil(repos[2].host)
+    }
+
+    @MainActor
     func testRepoLessAskPinsCreationToTheHost() {
         let body = OS1API.createSessionBody(
             prompt: "Check the incident queue",

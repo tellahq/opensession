@@ -11,6 +11,8 @@ import SwiftUI
 /// - `worktree`: the worktree Changes view (iOS) with one review mark whose
 ///   file was edited since; on the Mac, a PR on a host without viewed state,
 ///   which keeps marks on the device the same way.
+/// - `ship-pr`, `ship-direct`: the same Changes view with its Ship band, for
+///   a pull-request repo and a direct one with an earlier ship.
 struct PrReviewFreshnessFixture: View {
     let mode: String
     @State private var lens: PrReviewCanvas.Lens
@@ -31,7 +33,7 @@ struct PrReviewFreshnessFixture: View {
     private var title: String {
         switch mode {
         case "stale": "Review guide"
-        case "worktree": "Changes"
+        case "worktree", "ship-pr", "ship-direct": "Changes"
         default: "Files"
         }
     }
@@ -39,14 +41,17 @@ struct PrReviewFreshnessFixture: View {
     @ViewBuilder
     private var content: some View {
         #if os(iOS)
-        if mode == "worktree" {
+        if mode == "worktree" || mode.hasPrefix("ship-") {
+            let ship = Self.shipInfo(direct: mode == "ship-direct")
             ChangesView(
                 sessionId: "fixture",
                 loadDiff: { _ in Self.worktreeResponse },
                 reviewStore: Self.seededStore(
                     key: PrLocalReviewStore.worktreeKey(sessionId: "fixture", repo: "acme"),
                     hashes: PrReviewHash.hashes(of: PatchSplitter.split(Self.worktreePatch))
-                )
+                ),
+                loadShip: { _ in ship },
+                sendPrompt: { _, _ in true }
             )
         } else {
             canvas
@@ -100,6 +105,39 @@ struct PrReviewFreshnessFixture: View {
             "Sources/Review/ReviewStore.swift": "reviewed-before-edit",
         ])
         return store
+    }
+
+    static func shipInfo(direct: Bool) -> SessionShipInfo {
+        let buttons = [
+            ShipButton(
+                id: "ship",
+                label: direct ? "Ship" : "Create PR",
+                prompt: direct ? "Ship this change." : "Create a pull request.",
+                primary: true
+            ),
+            ShipButton(id: "changelog", label: "Write changelog", prompt: "Write the changelog entry."),
+        ]
+        let ships = direct ? [DirectShip(
+            repo: "acme",
+            branch: "feature/review",
+            target: "main",
+            sha: "9cc7c8a48d1e2f",
+            previousSha: nil,
+            commits: ["a1", "b2", "c3"],
+            pushedAt: "2026-11-04T09:12:00Z",
+            shippedAt: "2026-11-04T09:13:00Z"
+        )] : []
+        return SessionShipInfo(available: true, info: .init(
+            repo: "acme",
+            target: "main",
+            checkout: "worktree",
+            mode: direct ? "direct" : "pull-request",
+            requested: direct ? "direct" : "pull-request",
+            reason: "repository",
+            openPr: nil,
+            buttons: buttons,
+            ships: ships
+        ))
     }
 
     static let previousFiles = [

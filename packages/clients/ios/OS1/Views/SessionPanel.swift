@@ -119,7 +119,11 @@ struct SessionPanelView: View {
             // own, and the chevron replaces the Done button.
             PrPanelView(viewModel: viewModel, chrome: .pushed)
         case .changes(let sessionId, let path):
-            ChangesView(sessionId: sessionId, focus: path)
+            ChangesView(
+                sessionId: sessionId,
+                focus: path,
+                isRunning: viewModel.session.id == sessionId && viewModel.isRunning
+            )
         case .portals(let sessionId):
             PortalsListView(sessionId: sessionId)
         case .terminal(let sessionId):
