@@ -532,6 +532,11 @@ enum TranscriptGrouping {
     ) -> [TranscriptBlock] {
         var blocks: [TranscriptBlock] = []
         var turn: [TurnItem] = []
+        // Messages sent while a tool runs are written below it, but the turn
+        // running that call is still the one working. While the session is
+        // live, the turn before the trailing messages stays live if it holds
+        // an unanswered call (an interrupted call is closed with a result).
+        let trailingMessagesStart = live ? runningWorkMessagesStart(items) : nil
         // The current turn began at a message sent while the agent was working.
         var turnAnswersSteer = false
 
@@ -680,7 +685,12 @@ enum TranscriptGrouping {
                 )))
             case .entry(let entry):
                 let steer = entry.type == "user" && sentMidTurn(turn)
-                flush(isTrailing: false)
+                let stillRunning = index == trailingMessagesStart
+                    && turn.contains { item in
+                        if case .tool(let call) = item { return call.isPending }
+                        return false
+                    }
+                flush(isTrailing: stillRunning)
                 turnAnswersSteer = steer
                 blocks.append(.message(entry))
             }
@@ -695,6 +705,21 @@ enum TranscriptGrouping {
             live: live
         )
         return thinkingMessages.visibleBlocks(grouped)
+    }
+
+    /// Where the run of person and system messages closing the transcript
+    /// starts, when something precedes it (web: `runningWorkIndex`).
+    static func runningWorkMessagesStart(
+        _ items: [SessionViewModel.DisplayItem]
+    ) -> Int? {
+        var start = items.count
+        while start > 0,
+              case .entry(let entry) = items[start - 1],
+              entry.turnBoundary != true,
+              entry.isUser || entry.isSystem {
+            start -= 1
+        }
+        return start > 0 && start < items.count ? start : nil
     }
 
     /// Whether a user message was sent while the agent was still working. A
@@ -1064,11 +1089,9 @@ enum TranscriptGrouping {
         let start = items.first.flatMap(startTimestamp)
         let end = items.last.flatMap(endTimestamp)
         var preview: String?
-        if isLive, let last = tools.last {
-            let summary = last.presentation.summary
-            preview = summary.isEmpty
-                ? last.presentation.displayName
-                : "\(last.presentation.displayName): \(summary)"
+        // Name the step still running, else the latest one.
+        if isLive, let step = tools.last(where: \.isPending) ?? tools.last {
+            preview = step.presentation.stepLabel
         }
         return WorkTurn(
             id: firstId,

@@ -517,6 +517,90 @@ final class TranscriptGroupingTests: XCTestCase {
         }
     }
 
+    // MARK: - A message sent while a tool runs
+
+    private var runningTurn: [TranscriptEntry] {
+        [
+            TranscriptEntry(id: "ask", type: "user", content: "Measure it",
+                            timestamp: "2026-08-13T06:00:00Z"),
+            TranscriptEntry(id: "narration", type: "assistant",
+                            content: "Timing the typed reads now.",
+                            timestamp: "2026-08-13T06:00:01Z"),
+            toolUse("cargo", name: "Bash", input: [
+                "command": .string("cargo test --release zz_timing"),
+            ]),
+            TranscriptEntry(id: "steer", type: "user", content: "Are you on option B?",
+                            timestamp: "2026-08-13T06:05:00Z"),
+        ]
+    }
+
+    private func workTurns() -> [WorkTurn] {
+        viewModel.displayBlocks.compactMap { block in
+            if case .work(let turn) = block { return turn }
+            return nil
+        }
+    }
+
+    func testAMessageSentWhileAToolRunsKeepsTheTurnAboveItWorking() {
+        viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
+        append(runningTurn)
+
+        let ids: [String] = viewModel.displayBlocks.compactMap { block in
+            switch block {
+            case .message(let entry): entry.id
+            case .work: "work"
+            case .footer: "footer"
+            default: nil
+            }
+        }
+        XCTAssertEqual(ids, ["ask", "work", "steer"], "the call stays above the message, with no footer")
+        guard let turn = workTurns().first else { return XCTFail("expected a fold") }
+        XCTAssertTrue(turn.isLive, "the turn still running its call reads Working")
+        XCTAssertTrue(turn.defaultExpanded(preference: .standard))
+        XCTAssertEqual(turn.livePreview, "Bash: cargo test --release zz_timing")
+        guard case .tool(let call) = turn.items.last else { return XCTFail("expected the call") }
+        XCTAssertTrue(call.isPending, "the step keeps its spinner")
+    }
+
+    func testARunningTurnBeforeQueuedMessagesSettlesOnceTheSessionStops() {
+        append(runningTurn)
+
+        XCTAssertEqual(workTurns().map(\.isLive), [false], "not live: Worked")
+    }
+
+    func testARunningTurnBeforeQueuedMessagesSettlesOnceTheToolReturns() {
+        viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
+        append(runningTurn + [toolResult("cargo", text: "ok")])
+
+        XCTAssertEqual(workTurns().map(\.isLive), [false], "an answered call is not running")
+    }
+
+    func testAnUnansweredCallBeforeAnswerAndFollowUpStaysLiveOnlyAtTheTail() {
+        viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
+        append([
+            TranscriptEntry(id: "u1", type: "user", content: "fix it"),
+            toolUse("t1", name: "Bash", input: ["command": .string("cargo build")]),
+            TranscriptEntry(id: "u2", type: "user", content: "how long is left?"),
+            toolResult("t1", text: "ok"),
+            TranscriptEntry(id: "a1", type: "assistant", content: "About a minute."),
+            toolUse("t2", name: "Bash", input: ["command": .string("bun test")]),
+            TranscriptEntry(id: "u3", type: "user", content: "and the docs?"),
+            TranscriptEntry(id: "u4", type: "user", content: "also the changelog"),
+        ])
+
+        // The steer reply still leaves the fold; only the turn still running
+        // its call reads Working, with both queued messages below it.
+        let ids: [String] = viewModel.displayBlocks.compactMap { block in
+            switch block {
+            case .message(let entry): entry.id
+            case .work: "work"
+            default: nil
+            }
+        }
+        XCTAssertEqual(ids, ["u1", "work", "u2", "a1", "work", "u3", "u4"])
+        XCTAssertEqual(workTurns().map(\.isLive), [false, true])
+    }
+
     func testToolOnlyLiveTurnUsesOneClosedSummaryUntilOpened() {
         viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
         append([
