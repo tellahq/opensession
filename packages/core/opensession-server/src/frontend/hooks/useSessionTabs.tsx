@@ -1,6 +1,7 @@
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import { seedDuplicateTranscriptView } from "../components/session-viewer/transcript-cache";
 import { mutate as revalidateApiResources } from "swr";
 import type { SplitSide } from "../components/SessionSplit";
 import { SessionTabs } from "../components/SessionTabs";
@@ -814,10 +815,14 @@ export function useSessionTabs({
       createdAt: now,
       lastActivity: now,
       isRunning: false,
-      // This shell has no engine yet. A duplicate's copied transcript arrives
-      // with the create response, while an ordinary sibling stays blank.
+      // This shell has no engine yet. A duplicate shows the source's copied
+      // conversation from the transcript cache seeded below until its own
+      // watch replaces it, while an ordinary sibling stays blank.
       ran: false,
       transcriptPath: null,
+      // The server starts the sibling without the source's switch history, so
+      // its dividers would vanish from a duplicate once the create lands.
+      modelHistory: undefined,
       startedBy: user,
       archived: false,
       waitingForInput: false,
@@ -855,6 +860,9 @@ export function useSessionTabs({
       draft.worktreeDir = null;
       draft.mode = "ask";
     }
+    // A duplicate opens on the conversation it copies rather than a blank tab
+    // that fills in when the server answers.
+    if (duplicate) seedDuplicateTranscriptView(src.id, id, messageId);
     // Commit the local shell and the route in one synchronous render. Routing
     // first would render against the previous list and keep the old session's
     // conversation visible until the create response arrives. Routing after

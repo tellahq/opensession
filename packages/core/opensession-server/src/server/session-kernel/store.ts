@@ -1938,17 +1938,24 @@ export class SessionKernelStore {
       )
       .get(sessionId);
     if (ambiguousCommands && !recoverableSettlement) return false;
-    // A search-history index timer only rebuilds this session's derived
-    // history projection, idempotently, so firing it after release cannot
-    // repeat or contradict anything the session did.
-    const claimedTimer = this.db
+    // A timer only becomes uncertain once it starts firing: execution opens a
+    // `timer:<id>:<token>` receipt and settles it on completion or failure.
+    // A timer without an open receipt never started, so firing it after
+    // release is just the timer doing its job (a wait_for or scheduled prompt
+    // waking the session). Every timer row carries a token, so the token
+    // itself is no evidence of a claim.
+    const timerInFlight = this.db
       .query(
-        `SELECT 1 FROM session_kernel_timers
-         WHERE session_id = ? AND token IS NOT NULL AND kind != 'session_history_index'
+        `SELECT 1 FROM session_kernel_timers t
+         JOIN session_kernel_commands c
+           ON c.session_id = t.session_id
+          AND c.request_id = 'timer:' || t.timer_id || ':' || t.token
+         WHERE t.session_id = ? AND t.kind != 'session_history_index'
+           AND c.status IN ('pending', 'processing', 'indeterminate')
          LIMIT 1`,
       )
       .get(sessionId);
-    if (claimedTimer) return false;
+    if (timerInFlight) return false;
     const pendingEffects = this.db
       .query(
         `SELECT kind FROM session_kernel_outbox
@@ -1956,16 +1963,23 @@ export class SessionKernelStore {
       )
       .all(sessionId) as Array<{ kind: string }>;
     // Turn outcome and cancellation effects are actor-owned state machines with
-    // immutable run/dispatch identities. Keep them available to finish after
-    // releasing a proven gateway-restart fence; externally delivered effects
-    // and creation work remain fail-closed.
+    // immutable run/dispatch identities that replay idempotently. Keep them
+    // available to finish after releasing a proven gateway-restart fence, or
+    // any fence whose run has already settled. A fence raised by an outbox
+    // settlement itself still needs proof that the settlement committed,
+    // because the pending effect may be the one whose ownership is in doubt.
+    // Externally delivered effects and creation work remain fail-closed.
     const recoverableLifecycleEffects = new Set([
       "turn_outcome_project",
       "turn_cancel",
       "delivery_interrupt_cancel",
     ]);
+    const outboxSettlementFence =
+      commandKind === "core:ack_outbox" || commandKind === "core:fail_outbox";
     const onlyRecoverableLifecycleEffects =
-      (!!recoverableSettlement || recoverableOutboxSettlement) &&
+      (!!recoverableSettlement ||
+        recoverableOutboxSettlement ||
+        !outboxSettlementFence) &&
       pendingEffects.length > 0 &&
       pendingEffects.every((effect) =>
         recoverableLifecycleEffects.has(effect.kind),
