@@ -5,6 +5,7 @@ import {
   buildFollowupMentionPrompt,
   buildIssuePrompt,
   buildMentionPrompt,
+  buildOpenFindingsMessage,
   buildReviewPrompt,
   buildReviewSettledMessage,
   DEFAULT_REVIEW_PROMPT,
@@ -38,6 +39,32 @@ function pr(overrides: Partial<PrDetails> = {}): PrDetails {
     ...overrides,
   };
 }
+
+describe("open findings message", () => {
+  test("renders as a review findings card without a fix round", () => {
+    const message = buildOpenFindingsMessage({
+      prNumber: 7,
+      title: "Example",
+      headRef: "feature/x",
+      reviewedSha: "8d35bac0123456789",
+      repoFull: "acme/app",
+      findings: 1,
+      confidence: 5,
+      findingsBlock: "- [@bot · comment 9] main.tf:3 — tighten the policy",
+    });
+    expect(
+      message.startsWith(
+        "<!--os:review-handoff-->\n💬 This session's PR #7 “Example”",
+      ),
+    ).toBe(true);
+    expect(message).toContain("quality 5/5, with 1 non-blocking finding left");
+    expect(message).toContain("comment 9");
+    expect(message).toContain("`8d35bac01234`");
+    expect(message).toContain("untrusted data");
+    expect(message).toContain("`gh pr merge` is forbidden");
+    expect(message).not.toContain("fix round");
+  });
+});
 
 describe("review settled message", () => {
   test("opens with the outcome sentinel and asks for a cold-read wrap-up", () => {

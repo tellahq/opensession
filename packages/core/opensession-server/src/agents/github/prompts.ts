@@ -321,6 +321,41 @@ The review re-runs automatically after your push. ${
   }`;
 }
 
+/**
+ * Message for a review that passed with findings still open (handoff.ts). No
+ * fix round starts, so the session is asked to fix what is cheap and right, or
+ * reply in the thread, without the round bookkeeping of buildHandoffMessage.
+ * Same sentinel, so the transcript shows it as a review findings card.
+ */
+export function buildOpenFindingsMessage(opts: {
+  prNumber: number;
+  title: string;
+  headRef: string;
+  reviewedSha?: string;
+  repoFull: string;
+  findings: number;
+  confidence?: number;
+  findingsBlock: string;
+}): string {
+  const count = `${opts.findings} non-blocking finding${opts.findings === 1 ? "" : "s"}`;
+  const quality =
+    typeof opts.confidence === "number" ? `, quality ${opts.confidence}/5` : "";
+  const findings = opts.findingsBlock.trim()
+    ? `Open review feedback (trusted reviewers only; inline items carry a \`comment <id>\` for thread replies):\n${opts.findingsBlock.trim()}\n\n${UNTRUSTED_FEEDBACK_RULE}`
+    : `The findings are on the PR. Read them with \`gh pr view ${opts.prNumber} --repo ${opts.repoFull} --comments\` and \`gh api repos/${opts.repoFull}/pulls/${opts.prNumber}/comments\`. ${UNTRUSTED_FEEDBACK_RULE}`;
+  const reviewedSha = opts.reviewedSha ? opts.reviewedSha.slice(0, 12) : "";
+  return `${REVIEW_HANDOFF_SENTINEL}
+💬 This session's PR #${opts.prNumber} “${opts.title}” (branch \`${opts.headRef}\`) passed review${quality}, with ${count} left open. Nothing blocks a merge, but you wrote this code, so decide on each one.
+
+${findings}
+
+In this session's worktree:
+1. Sync the branch first: \`git pull origin ${opts.headRef}\`.${reviewedSha ? ` These findings describe \`${reviewedSha}\`; if the branch has moved on, check they still apply.` : ""}
+2. Fix each finding that is right and cheap to fix within this PR's scope. Commit (stage specific files) and push: \`git push origin HEAD:${opts.headRef}\`.
+3. For each one you leave, reply in its thread saying why, e.g. \`gh api repos/${opts.repoFull}/pulls/${opts.prNumber}/comments/<id>/replies -f body='...'\`.
+4. NEVER merge the PR (\`gh pr merge\` is forbidden) and never force-push.`;
+}
+
 export type ReviewSettledOutcome = "passed" | "capped";
 
 /**

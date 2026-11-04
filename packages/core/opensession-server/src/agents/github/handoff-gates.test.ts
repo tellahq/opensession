@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   handoffActive,
   handoffDecision,
+  openFindingsNoticeNeeded,
   pickHandoffOwner,
   reviewSatisfied,
 } from "./handoff-gates";
@@ -25,6 +26,41 @@ describe("review satisfaction gate", () => {
     expect(reviewSatisfied({ findings: 1, blocking: 1, confidence: 5 })).toBe(
       false,
     );
+  });
+});
+
+describe("open findings notice gate", () => {
+  test("a passing review with open findings notifies the owner", () => {
+    expect(
+      openFindingsNoticeNeeded(
+        { findings: 1, blocking: 0, confidence: 5 },
+        undefined,
+      ),
+    ).toBe(true);
+  });
+
+  test("a clean or unsatisfied review sends no notice", () => {
+    expect(
+      openFindingsNoticeNeeded(
+        { findings: 0, blocking: 0, confidence: 5 },
+        undefined,
+      ),
+    ).toBe(false);
+    expect(
+      openFindingsNoticeNeeded(
+        { findings: 1, blocking: 1, confidence: 5 },
+        undefined,
+      ),
+    ).toBe(false);
+  });
+
+  test("after fix rounds the settled message closes the loop instead", () => {
+    expect(
+      openFindingsNoticeNeeded(
+        { findings: 1, blocking: 0, confidence: 5 },
+        { rounds: 2 },
+      ),
+    ).toBe(false);
   });
 });
 
