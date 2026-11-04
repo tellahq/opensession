@@ -106,5 +106,11 @@ describe("review findings author trust", () => {
       findingsBlock: "- [@alice · comment 1] src/a.ts:10 — fix it",
     });
     expect(withFindings).toContain("untrusted data");
+    // The owner may be on another branch or in another repo: pick the PR's
+    // checkout before pulling or pushing.
+    expect(withFindings).toContain("origin is `acme/app`");
+    expect(withFindings.indexOf("leave this worktree untouched")).toBeLessThan(
+      withFindings.indexOf("git pull origin feature/x"),
+    );
   });
 });

@@ -63,6 +63,8 @@ describe("open findings message", () => {
     expect(message).toContain("untrusted data");
     expect(message).toContain("`gh pr merge` is forbidden");
     expect(message).not.toContain("fix round");
+    expect(message).toContain("leave this worktree untouched");
+    expect(message).toContain("`git worktree add <dir> feature/x`");
   });
 });
 
