@@ -4,7 +4,8 @@
  * findings are delivered straight into the live Open Session session that owns
  * the PR (named in its attribution footer, else working on its branch) — the agent that wrote the code fixes it with full context,
  * no `os-auto-fix` label needed. Its push re-triggers the normal review cycle,
- * closing the loop.
+ * closing the loop. A review that passes with non-blocking findings still open
+ * sends that session one notice for the reviewed commit, without a fix round.
  *
  * Bounds: SHA dedup + a per-PR round cap (state.handoff), a TTL on the active
  * window, and the shared "code" lock — a running label auto-fix/simplify wins
@@ -42,12 +43,14 @@ import { matchSessions, workspaceIdForRepo } from "./session-notify";
 import {
   handoffActive,
   handoffDecision,
+  openFindingsNoticeNeeded,
   pickHandoffOwner,
   reviewSatisfied,
 } from "./handoff-gates";
 import { canFixOwnPr } from "./pr-conflict";
 import {
   buildHandoffMessage,
+  buildOpenFindingsMessage,
   buildReviewSettledMessage,
   type ReviewSettledOutcome,
 } from "./prompts";
@@ -170,7 +173,10 @@ export async function maybeHandoffFindings(
     // null = the review was skipped (dedup/lock) or died before producing a result.
     if (!handoffEnabled() || !review || review.error) return;
     if (reviewSatisfied(review)) {
+      const prior = (await readPrState(pr.number, pr.ghRepo))?.handoff;
       await settleHandoff(pr, review, "passed");
+      if (openFindingsNoticeNeeded(review, prior))
+        await notifyOpenFindings(pr, review);
       return;
     }
     // A fixer (label auto-fix / simplify / mention reply) already owns the
@@ -282,6 +288,68 @@ export async function maybeHandoffFindings(
   } catch (e) {
     console.error(`[github] review handoff failed for PR #${pr.number}:`, e);
   }
+}
+
+/**
+ * Tell the owning session about findings a passing review left open. Not a fix
+ * round: no round state, no bot-push re-review carve-out, no round cap. One
+ * delivery per reviewed commit. PRs with no live owner get nothing extra, since
+ * nothing blocks them. Never throws past the caller's guard.
+ */
+async function notifyOpenFindings(
+  pr: PrRef,
+  review: ReviewResult,
+): Promise<void> {
+  // A fixer already owns the branch worktree and will see the same comments.
+  if (isLockHeld("code", pr.number, pr.ghRepo)) return;
+  const control = tryGetSessionControl();
+  if (!control) return;
+  const repoFull =
+    pr.ghRepo || defaultRepo(configuredRepos(await getConfigAsync())).ghRepo;
+  const workspaceId = await workspaceIdForRepo(repoFull);
+  if (!workspaceId) return;
+  const target = await resolveHandoffOwner(pr, workspaceId);
+  if (!target) return;
+
+  const state = await getOrInitPrState(pr.number, pr.headRef, pr.ghRepo);
+  const sha = state.lastReviewedSha || pr.headSha;
+  const findingsBlock = await fetchReviewFindings(pr.number, pr.ghRepo).catch(
+    () => "",
+  );
+  const message = buildOpenFindingsMessage({
+    prNumber: pr.number,
+    title: pr.title,
+    headRef: pr.headRef,
+    reviewedSha: sha,
+    repoFull,
+    findings: review.findings,
+    confidence: review.confidence,
+    findingsBlock,
+  });
+  const res = await control.deliverToSession(target.id, message, "GitHub", {
+    busy: "queue",
+    reviewHandoff: true,
+    deliveryId: `github-review-open-findings:${repoFull}:${pr.number}:${sha}`,
+  });
+  if (res.status === "error") {
+    console.error(
+      `[github] open findings → ${target.id} failed for PR #${pr.number}: ${res.message}`,
+    );
+    return;
+  }
+  audit({
+    msg: "review_open_findings_handoff",
+    pr_number: pr.number,
+    repo: repoFull,
+    session_id: target.id,
+    findings: review.findings,
+    deliver_status: res.status,
+  });
+  await appendToSummary(
+    pr,
+    state.summaryCommentId,
+    `💬 ${review.findings} non-blocking finding${review.findings === 1 ? "" : "s"} → [owning session](${uiSessionUrl(target.id)})`,
+  );
 }
 
 /**
