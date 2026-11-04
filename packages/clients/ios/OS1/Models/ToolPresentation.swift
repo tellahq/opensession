@@ -43,6 +43,9 @@ struct ToolPresentation: Equatable, Sendable {
 
     /// Full label used in rows, collapsed previews and accessibility.
     var displayName: String { labelParts.joined(separator: " · ") }
+
+    /// "Bash: bun test": what a folded row says a step is doing.
+    var stepLabel: String { summary.isEmpty ? displayName : "\(displayName): \(summary)" }
 }
 
 /// The icon buckets. One glyph per family is what makes a collapsed turn

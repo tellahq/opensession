@@ -1042,6 +1042,9 @@ struct SessionView: View {
                 if ProcessInfo.processInfo.environment["OS1_SHOW_MERMAID_FIXTURE"] == "1" {
                     Task { await viewModel.showMermaidFixturesForScreenshot() }
                 }
+                if ProcessInfo.processInfo.environment["OS1_SHOW_NOTE_RECEIPT"] == "1" {
+                    Task { await viewModel.showNoteReceiptForScreenshot() }
+                }
                 #endif
                 #if DEBUG && os(iOS)
                 // Install screenshot fixtures before network requests so a

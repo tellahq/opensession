@@ -326,6 +326,31 @@ final class SessionViewModel {
         isLoadingConversation = false
         rebuildDisplayItems()
     }
+
+    /// A team note tagging two teammates, one of whom has seen it, for
+    /// `OS1_SHOW_NOTE_RECEIPT`. Local only: nothing is posted.
+    func showNoteReceiptForScreenshot() async {
+        await TeamDirectory.shared.ensureLoaded()
+        // After the thread snapshot, which would drop a thread it does not know.
+        try? await Task.sleep(for: .seconds(8))
+        let names = TeamDirectory.shared.names
+        guard names.count >= 3 else { return }
+        let now = Date.now.timeIntervalSince1970 * 1_000
+        applyCommentThread(CommentThread(
+            id: "screenshot-note-receipt",
+            sessionId: session.id,
+            createdBy: names[0],
+            ts: now,
+            comments: [ThreadComment(
+                id: "screenshot-note-receipt",
+                user: names[0],
+                text: "@\(names[1]) @\(names[2]) can one of you sign off on the release notes?",
+                ts: now
+            )],
+            seenBy: [ThreadSeen(user: names[1], ts: now + 1)]
+        ))
+        sendSeq += 1
+    }
     #endif
 
     func resolveSlackComposer(_ receipt: SlackComposeReceipt) {
@@ -1104,6 +1129,15 @@ final class SessionViewModel {
         } else {
             removeCommentThread(id: thread.id)
         }
+    }
+
+    /// Post my read receipt on a note that tags me.
+    func markThreadSeen(_ thread: CommentThread) async throws {
+        applyCommentThread(try await OS1API.markThreadSeen(
+            sessionId: session.id,
+            threadId: thread.id,
+            user: ServerConfig.shared.userName
+        ))
     }
 
     func askAgentInThread(_ thread: CommentThread) async throws {

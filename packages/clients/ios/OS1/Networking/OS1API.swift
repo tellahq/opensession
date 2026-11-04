@@ -378,6 +378,20 @@ enum OS1API {
         )
     }
 
+    /// Record that `user` has seen the thread. A repeat is a no-op on the
+    /// server, and a receipt never bumps `updatedAt` or notifies anyone.
+    static func markThreadSeen(
+        sessionId: String,
+        threadId: String,
+        user: String
+    ) async throws -> CommentThread {
+        let response: ThreadResponse = try await post(
+            threadsPath(sessionId, threadId, "seen"),
+            body: ["user": user]
+        )
+        return response.thread
+    }
+
     struct WorkspaceDraft: Decodable, Equatable, Sendable {
         let text: String
         let updatedAt: String
