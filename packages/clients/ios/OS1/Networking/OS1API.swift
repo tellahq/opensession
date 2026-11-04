@@ -1320,6 +1320,15 @@ enum OS1API {
         try await get("/api/sessions/\(sessionId)/diff")
     }
 
+    /// Ship, Create PR or Update PR, the repository's own ship actions, and
+    /// the session's direct ships.
+    static func sessionShip(sessionId: String) async throws -> SessionShipInfo {
+        let encoded = sessionId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? sessionId
+        return try await get("/api/sessions/\(encoded)/ship")
+    }
+
     static func workspaceOverview(workspaceId: String) async throws -> WorkspaceOverview {
         try await get("/api/workspaces/\(workspaceId)/overview")
     }
