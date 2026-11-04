@@ -106,6 +106,9 @@ struct NewSessionView: View {
     /// answer that is true everywhere.
     @State private var sandbox = SandboxOffering.host
     @State private var sandboxStatus: InstanceSandboxStatus?
+    /// The Ships as override; nil follows the repository's publicationMode.
+    /// Cleared on every repo change so each repo starts from its own default.
+    @State private var shipChoice: String?
     @State private var showLibrary = false
     @State private var savingDraft = false
     /// Set before the save begins and kept through dismissal, so the sheet's
@@ -232,6 +235,7 @@ struct NewSessionView: View {
             .onChange(of: showLibrary) { _, shown in
                 if !shown { promptFocused = false }
             }
+            .onChange(of: repo) { _, _ in shipChoice = nil }
             // Swiping the sheet away is as much a "never mind" as Cancel; the
             // mic must not outlive either.
             .onDisappear { dictation.stop() }
@@ -764,6 +768,7 @@ struct NewSessionView: View {
             Spacer(minLength: 8)
             if !availableEfforts.isEmpty { effortChip }
             if fastSupported { speedChip }
+            if showShipChoice { shipChip }
             if !sandboxChoices.isEmpty { sandboxChip }
             modelChip
             #endif
@@ -802,6 +807,7 @@ struct NewSessionView: View {
     /// host, with Ask using the same green as the session composer.
     private var moreOptionsMenu: some View {
         let customized = mode == "ask" || sandbox != SandboxOffering.host
+            || shipModeToSend != nil
         return Menu {
             Toggle(isOn: askModeBinding) {
                 Label {
@@ -811,8 +817,20 @@ struct NewSessionView: View {
                     Image(systemName: "eye")
                 }
             }
+            if showShipChoice || !sandboxChoices.isEmpty { Divider() }
+            if showShipChoice {
+                Menu {
+                    shipOptions
+                } label: {
+                    Label {
+                        Text("Ships as")
+                        Text(shipLabel(effectiveShipMode))
+                    } icon: {
+                        Image(systemName: "paperplane")
+                    }
+                }
+            }
             if !sandboxChoices.isEmpty {
-                Divider()
                 Menu {
                     sandboxOptions
                 } label: {
@@ -846,6 +864,100 @@ struct NewSessionView: View {
         .menuStyle(.button)
         .accessibilityLabel("More options")
         .accessibilityValue(mode == "ask" ? "Ask on" : "Code")
+    }
+
+    // ── Ships as ──────────────────────────────────────────────────────────
+
+    private var selectedRepoInfo: OS1API.RepoInfo? {
+        repos.first(where: { $0.id == repo })
+    }
+
+    private var repoShipMode: String {
+        selectedRepoInfo?.defaultShipMode ?? "pull-request"
+    }
+
+    private var effectiveShipMode: String { shipChoice ?? repoShipMode }
+
+    private var shipTarget: String {
+        let branch = selectedRepoInfo?.defaultBranch ?? ""
+        return branch.isEmpty ? "main" : branch
+    }
+
+    /// Only a fresh code workspace on its own branch ships: a joined workspace
+    /// keeps its branch, a local checkout already is the default branch, and
+    /// Code Storage has no direct path. Matches the web composer.
+    private var showShipChoice: Bool {
+        guard mode == "code", initialWorkspaceId == nil,
+              let info = selectedRepoInfo, !info.isCodeStorage else { return false }
+        let checkout = NativePreferences.sessionCheckoutMode(for: repo, in: sessionCheckouts)
+        let local = checkout == "checkout"
+            || (checkout == "default" && info.sharedCheckout == true)
+        return !local
+    }
+
+    private var shipModeToSend: String? {
+        Self.shipModeToSend(
+            choice: shipChoice,
+            repoDefault: repoShipMode,
+            offered: showShipChoice
+        )
+    }
+
+    /// Sent only when the person picked something other than the repo's own
+    /// mode, so a repository keeps its configured behaviour by default.
+    static func shipModeToSend(
+        choice: String?,
+        repoDefault: String,
+        offered: Bool
+    ) -> String? {
+        guard offered, let choice, choice != repoDefault else { return nil }
+        return choice
+    }
+
+    private func shipLabel(_ mode: String) -> String {
+        mode == "direct" ? "Direct to \(shipTarget)" : "Pull request"
+    }
+
+    @ViewBuilder
+    private var shipOptions: some View {
+        shipOption(
+            "pull-request",
+            note: "Push the branch and open one PR to review."
+        )
+        shipOption(
+            "direct",
+            note: "Run the checks, integrate \(shipTarget), and push to it."
+        )
+    }
+
+    private func shipOption(_ option: String, note: String) -> some View {
+        Button {
+            shipChoice = option == repoShipMode ? nil : option
+        } label: {
+            Label {
+                Text(option == repoShipMode
+                     ? "\(shipLabel(option)) · default"
+                     : shipLabel(option))
+                Text(note)
+            } icon: {
+                if effectiveShipMode == option { Image(systemName: "checkmark") }
+            }
+        }
+    }
+
+    /// The Mac shows Ships as as a chip beside the others.
+    private var shipChip: some View {
+        Menu {
+            shipOptions
+        } label: {
+            chipLabel(
+                icon: "paperplane",
+                text: shipLabel(effectiveShipMode),
+                highlighted: shipModeToSend != nil
+            )
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
     }
 
     /// The Mac keeps Sandbox visible as a chip because it has the room.
@@ -1405,7 +1517,8 @@ struct NewSessionView: View {
                         ? SandboxOffering.createValue(SandboxOffering.host)
                         : (sandboxChoices.isEmpty
                             ? nil
-                            : SandboxOffering.createValue(sandbox))
+                            : SandboxOffering.createValue(sandbox)),
+                    shipMode: shipModeToSend
                 )
                 onResolved(pending.id, .success(id))
             } catch {
