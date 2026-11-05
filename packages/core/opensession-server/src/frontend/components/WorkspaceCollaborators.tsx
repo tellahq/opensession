@@ -15,8 +15,6 @@ import {
   INFO_LABEL_CLASS,
   INFO_LIST_CLASS,
   INFO_SECTION_CLASS,
-  VIEWER_PRESENCE,
-  VIEWER_PRESENCE_AVATAR,
 } from "../lib/session-viewer-classes";
 import {
   publishWorkspaceRecord,
@@ -24,16 +22,13 @@ import {
 } from "../lib/workspace-records";
 import { cn } from "../ui/cn";
 import { Menu, MENU_ICON } from "../ui/menu";
-import { Tooltip } from "../ui/tooltip";
-import { dedupeViewers, facepileAvatarStyle } from "../lib/presence";
-import { personKey } from "../lib/review-queue";
 import { IconChevronDown, IconChevronRight, IconPeople } from "./icons";
 import { UserAvatar } from "./UserAvatar";
 import { getCurrentUser, TEAM } from "./UserPicker";
 
 /**
  * Add/remove state for a workspace's collaborators, shared by the info
- * panel's row and the session header's pile and ⋯ menu. Null when there is no
+ * panel's row and the session header's ⋯ menu. Null when there is no
  * workspace record or nobody to add.
  */
 export function useWorkspaceCollaborators(
@@ -180,79 +175,8 @@ export function WorkspaceCollaborators({
 }
 
 /**
- * The session header's people pile: whoever else has the session open, and
- * the workspace's collaborators, as one row of faces before Share. A
- * collaborator who is not here is a dimmed face, so a full-strength face still
- * means presence. With a workspace record the pile opens the collaborator
- * picker; without one it is the plain presence pile.
- */
-export function HeaderPeople({
-  workspaceId,
-  sessionId,
-  viewers,
-}: {
-  workspaceId: string | null;
-  sessionId?: string;
-  /** Other people with the session open, one entry per socket. */
-  viewers: string[];
-}) {
-  const state = useWorkspaceCollaborators(workspaceId, sessionId);
-  const present = dedupeViewers(viewers).map((v) => v.name);
-  const presentKeys = new Set(present.map(personKey));
-  const away = (state?.collaborators ?? [])
-    .map((c) => c.name)
-    .filter((name) => !presentKeys.has(personKey(name)));
-  const faces = [
-    ...present.map((name) => ({ name, here: true })),
-    ...away.map((name) => ({ name, here: false })),
-  ];
-  if (!faces.length) return null;
-  const label = [
-    present.length > 0 && `Viewing: ${present.join(", ")}`,
-    state?.collaborators.length &&
-      `Collaborators: ${state.collaborators.map((c) => c.name).join(", ")}`,
-  ]
-    .filter(Boolean)
-    .join("\n");
-  const pile = faces.map((face, index) => (
-    <UserAvatar
-      key={face.name}
-      name={face.name}
-      size={24}
-      className={cn(VIEWER_PRESENCE_AVATAR, !face.here && "opacity-50")}
-      style={facepileAvatarStyle(index, faces.length, "var(--bg)")}
-    />
-  ));
-  if (!state)
-    return (
-      <div className={VIEWER_PRESENCE} title={label}>
-        {pile}
-      </div>
-    );
-  return (
-    <Menu.Root>
-      <Tooltip label={label} multiline>
-        <Menu.Trigger
-          className={cn(
-            VIEWER_PRESENCE,
-            "cursor-pointer rounded-control border-none bg-transparent p-0.5 hover:bg-hover",
-          )}
-          aria-label="Collaborators"
-        >
-          {pile}
-        </Menu.Trigger>
-      </Tooltip>
-      <Menu.Popup align="end" sideOffset={6} className="min-w-[200px]">
-        <CollaboratorMenuItems {...state} />
-      </Menu.Popup>
-    </Menu.Root>
-  );
-}
-
-/**
- * Collaborators in the header's ⋯ menu: the way to add the first one, since
- * an empty pile draws nothing, and the only way on a phone, whose header has
- * no pile.
+ * Collaborators in the header's ⋯ menu. The presence pile stays presence
+ * only, so this submenu is where collaborators are seen and changed.
  */
 export function CollaboratorsSubmenu({
   workspaceId,
