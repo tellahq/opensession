@@ -111,13 +111,12 @@ test("adding a reviewer is a + on the Review heading", () => {
   expect(summarySource).toContain('reviewEmpty && "hidden"');
 });
 
-test("collaborators live in the session header, not the summary card", () => {
+test("collaborators live in the header ⋯ menu, not the card or the presence pile", () => {
   expect(summarySource).not.toContain("Collaborators");
-  expect(collaboratorsSource).toContain("export function HeaderPeople(");
+  expect(collaboratorsSource).not.toContain("export function HeaderPeople(");
   expect(collaboratorsSource).toContain(
     "export function CollaboratorsSubmenu(",
   );
-  expect(collaboratorsSource).toContain('!face.here && "opacity-50"');
 });
 
 test("popup review heading keeps a small gap after a lone PR band", () => {
