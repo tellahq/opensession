@@ -6,6 +6,7 @@ import {
   useEffectEvent,
   useLayoutEffect,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { refWebPanel } from "../components/FeedWebPane";
 import { IconGlobe } from "../components/icons";
@@ -52,6 +53,13 @@ import {
 import type { useAppRoute } from "./useAppRoute";
 import type { useAppViewState } from "./useAppViewState";
 import { useOnDemandViewTabs } from "./useOnDemandViewTabs";
+import { useIsPhone } from "./useIsPhone";
+import {
+  getSidePanelState,
+  openSidePanelTab,
+  opensInSidePanel,
+  subscribeSidePanel,
+} from "../lib/side-panel-store";
 
 interface UseWorkspacePanesOptions {
   route: Route;
@@ -106,6 +114,16 @@ export function useWorkspacePanes({
     focusReviewPr,
     suppressWsSeedRef,
   } = viewState;
+  // Review opens in the side panel on desktop unless it was moved to the
+  // main strip (see lib/side-panel-store). Phones have no side panel.
+  const isPhone = useIsPhone();
+  const panelDock = useSyncExternalStore(
+    subscribeSidePanel,
+    () => getSidePanelState().dock,
+  );
+  const reviewInPanel = !isPhone && panelDock.review === "panel";
+  // Read at the moment a Review request lands, not a reason to re-run one.
+  const reviewInPanelNow = useEffectEvent(() => reviewInPanel);
   // Stable key the view-tab state (Review/Preview/Assets panes) is stored
   // under: the workspace id, the shared isolated worktree, or the lone session
   // id — the same grouping rule as the tab strip (tabOrderKey below), so a
@@ -164,6 +182,7 @@ export function useWorkspacePanes({
     closePortalTab,
   } = useOnDemandViewTabs({
     workspaceKey: wsKey,
+    sessionId: currentSession?.id,
     activeViewTab,
     setActiveViewTab,
   });
@@ -193,7 +212,8 @@ export function useWorkspacePanes({
   // consume the pulse. Runs after the reset effect above, so it wins.
   useEffect(() => {
     if (pendingReviewOpen && pendingReviewOpen === wsKey) {
-      setActiveViewTab("review");
+      if (reviewInPanelNow()) openSidePanelTab("review");
+      else setActiveViewTab("review");
       setPendingReviewOpen(null);
     }
   }, [wsKey, pendingReviewOpen, setActiveViewTab, setPendingReviewOpen]);
@@ -276,8 +296,6 @@ export function useWorkspacePanes({
       return first && !first.archived ? first : undefined;
     };
     if (tab === "review") {
-      addReviewTab(setReviewOpen, setReviewClosed, key);
-      setActiveViewTab("review");
       const first = firstLiveSession();
       // Something asked for a specific PR (a sidebar row, a `repo#123`
       // chip). The session this workspace normally opens with need not be
@@ -295,6 +313,14 @@ export function useWorkspacePanes({
             )
           : undefined;
       const landOn = carrier ?? first;
+      // Review opens beside the session in its side panel, unless it was
+      // moved to the main strip or there is no session to sit beside.
+      if (landOn && reviewInPanelNow()) {
+        openSidePanelTab("review");
+      } else {
+        addReviewTab(setReviewOpen, setReviewClosed, key);
+        setActiveViewTab("review");
+      }
       if (landOn)
         navigate({ view: "session", id: landOn.id }, { replace: true });
     } else if (tab === "conversation") {
@@ -501,7 +527,9 @@ export function useWorkspacePanes({
     sessionId: currentSession?.id,
     activeViewTab,
     reviewCapable,
-    reviewIsDefault: prBackedWorkspace,
+    // With Review opening in the side panel, a session's strip no longer
+    // carries it by default; a session-less PR workspace still leads with it.
+    reviewIsDefault: prBackedWorkspace && (!currentSession || !reviewInPanel),
     reviewOpen,
     reviewClosed,
     reviewDotClass,
@@ -562,6 +590,10 @@ export function useWorkspacePanes({
   // Foreground/dismiss the Review view-tab; onOpenReview re-adds a dismissed
   // one (fired by the PR status chip / "open PR" affordances in SessionViewer).
   function openReview() {
+    if (opensInSidePanel("review")) {
+      openSidePanelTab("review");
+      return;
+    }
     if (!wsKey) return;
     // Also un-dismisses a PR-backed workspace's default-present tab.
     addReviewTab(setReviewOpen, setReviewClosed, wsKey);

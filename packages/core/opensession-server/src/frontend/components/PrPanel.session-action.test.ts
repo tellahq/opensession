@@ -34,8 +34,10 @@ test("PR session actions open the workspace composer instead of a modal", () => 
   expect(workspace).toContain(
     "onStartSession={onNewSession ? () => onNewSession() : undefined}",
   );
-  expect(viewerMainRegion).toContain("onStartSession={openNewSession}");
-  expect(viewer).toContain('() => void openNewSession("share")');
+  // The viewer hands the workspace opener to Review's two hosts (the main
+  // region and the side panel), and each starts a session sharing it.
+  expect(viewer).toContain("openNewSession,");
+  expect(viewerMainRegion).toContain('() => void openNewSession("share")');
 
   expect(queuePreview).toContain("onStartSession={onStartSession}");
   expect(appContent).toContain("<PrRoutePreview");

@@ -198,7 +198,7 @@ interface PaneRegion {
   previewStatus: PreviewStatus | null;
 }
 
-interface ReviewRegion {
+export interface ReviewRegion {
   openPr: PrPanelProps["onOpenPr"];
   allSessions: SessionViewerProps["workspace"]["allSessions"];
   workspaceSessions: SessionViewerProps["workspace"]["workspaceSessions"];
@@ -207,7 +207,8 @@ interface ReviewRegion {
   isBusy: boolean;
   noEngine: boolean;
   openCurrentWorkspace: PrPanelProps["onOpenSession"];
-  openNewSession: PrPanelProps["onStartSession"];
+  /** Review's "New session": a session sharing this workspace. */
+  openNewSession?: (mode: "share") => Promise<void> | void;
   setComposerPrefill: Dispatch<SetStateAction<ComposerPrefill>>;
   panelReviewRepos: PrPanelProps["repos"];
   discoveredPrs: PrPanelProps["discoveredPrs"];
@@ -812,7 +813,9 @@ export function SessionViewerMainRegion({
             onOpenPr={openPr}
             sessionId={session.id}
             sessions={allSessions || workspaceSessions || []}
-            onStartSession={openNewSession}
+            onStartSession={
+              openNewSession ? () => void openNewSession("share") : undefined
+            }
             sessionActionTarget={
               isPhone ? undefined : reviewSessionActionTarget
             }

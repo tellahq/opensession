@@ -871,6 +871,7 @@ export function AppContent({
         openWsPanes: workspacePanes.openWsPanes,
         subagentStack: workspacePanes.subagentStack,
         currentPortalTarget: workspacePanes.currentPortalTarget,
+        currentBrowserUrl: workspacePanes.currentBrowserUrl,
       },
       actions: {
         setActiveViewTab: workspacePanes.setActiveViewTab,

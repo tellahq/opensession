@@ -64,7 +64,8 @@ import type { useSessions } from "./useSessions";
 import { useWorkspaceArchive } from "./useWorkspaceArchive";
 import { useWorkspaceMutations } from "./useWorkspaceMutations";
 import type { useWorkspacePanes } from "./useWorkspacePanes";
-import { requestPortalPin } from "../lib/portal-pin";
+import { requestPanelBrowser, requestPortalPin } from "../lib/portal-pin";
+import { openSidePanelTab, setSidePanelDock } from "../lib/side-panel-store";
 import type { TabDropTarget } from "../lib/tab-split-preview";
 
 class MissingWorkspaceSessionSourceError extends Error {}
@@ -150,6 +151,7 @@ interface UseSessionTabsOptions {
       | "openWsPanes"
       | "subagentStack"
       | "currentPortalTarget"
+      | "currentBrowserUrl"
     >;
     actions: Pick<
       ReturnType<typeof useWorkspacePanes>,
@@ -237,6 +239,7 @@ export function useSessionTabs({
       openWsPanes,
       subagentStack,
       currentPortalTarget,
+      currentBrowserUrl,
     },
     actions: {
       setActiveViewTab,
@@ -526,6 +529,31 @@ export function useSessionTabs({
   });
 
   /**
+   * Hand a Review, Browser or Portal tab to the side panel, and open that kind
+   * there from now on: the reverse of the panel tab's "Move to main tabs".
+   */
+  function moveViewToPanel(id: string) {
+    const kind = viewTabKind(id);
+    if (kind === "review") {
+      setSidePanelDock("review", "panel");
+      closeReviewTab();
+      openSidePanelTab("review");
+    } else if (kind === "staging") {
+      setSidePanelDock("browser", "panel");
+      requestPanelBrowser(
+        currentBrowserUrl
+          ? { kind: "url", url: currentBrowserUrl }
+          : { kind: "staging" },
+      );
+      closeStagingTab();
+    } else if (kind === "portal") {
+      setSidePanelDock("browser", "panel");
+      if (currentPortalTarget) requestPortalPin(currentPortalTarget);
+      closePortalTab();
+    }
+  }
+
+  /**
    * A Portal tab dragged over the right half (or onto the side panel itself)
    * moves into the side panel, beside the conversation. Every other drop is
    * a split.
@@ -722,8 +750,7 @@ export function useSessionTabs({
             setSplitDropSide(null);
             if (!target) return false;
             if (target === "panel") {
-              if (currentPortalTarget) requestPortalPin(currentPortalTarget);
-              closePortalTab();
+              moveViewToPanel(id);
               return true;
             }
             moveTabToSide(id, target);
@@ -733,6 +760,7 @@ export function useSessionTabs({
             ? (id) => moveTabToSide(id, otherSide(side))
             : undefined,
           selectView: selectViewTab,
+          moveToPanel: !isPhone && currentSession ? moveViewToPanel : undefined,
           closeView: (id) => {
             if (id.startsWith("subagent:"))
               closeSubagentTab(id.slice("subagent:".length));

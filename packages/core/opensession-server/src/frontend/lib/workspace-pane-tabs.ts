@@ -190,3 +190,9 @@ export function viewTabKind(id: string): Exclude<ActiveViewTab, null> | null {
   if (id.startsWith("review:")) return "review";
   return null;
 }
+
+/** View tabs that can move to the right side panel: Review and the browsers. */
+export function movesToPanel(id: string): boolean {
+  const kind = viewTabKind(id);
+  return kind === "review" || kind === "staging" || kind === "portal";
+}

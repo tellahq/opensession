@@ -150,9 +150,35 @@ export const PANEL_TABS =
 
 /** One tab: an icon, a word, and whatever that destination wants to report. */
 export const PANEL_TAB =
-  "focus-ring flex min-w-0 items-center gap-1.5 rounded-control px-2 py-1 " +
+  "focus-ring flex min-w-0 shrink-0 items-center gap-1 rounded-control px-2 py-1 " +
   "text-label text-dim transition-colors hover:bg-hover hover:text-fg " +
-  "@max-[380px]:flex-1 @max-[380px]:justify-center @max-[380px]:px-1";
+  "@max-[380px]:justify-center @max-[380px]:px-1";
+
+/** The selected tab keeps the hover wash, so the strip reads as one choice. */
+export const PANEL_TAB_ACTIVE = "bg-hover text-fg";
+
+/** The tab's own select button: everything but the close ×. */
+export const PANEL_TAB_SELECT =
+  "focus-ring flex min-w-0 max-w-[160px] items-center gap-1.5 rounded-sm";
+
+/**
+ * A tab's ×. It shows on the selected tab and on hover, like the main strip's,
+ * and keeps its slot otherwise so tabs do not shift under the pointer. A touch
+ * client has no hover, so it always shows there.
+ */
+export const PANEL_TAB_CLOSE =
+  "focus-ring -mr-1 grid size-5 shrink-0 place-items-center rounded-sm text-faint " +
+  "opacity-0 transition-opacity hover:bg-hover hover:text-fg focus-visible:opacity-100 " +
+  "group-hover/ptab:opacity-100 group-has-[[aria-selected=true]]/ptab:opacity-100 " +
+  "[@media(hover:none)]:opacity-100";
+
+/** The new-tab page's list: what the panel can open, one row each. */
+export const PANEL_NEW_ROWS =
+  "grid gap-px overflow-hidden rounded-lg bg-panel p-1";
+
+export const PANEL_NEW_ROW =
+  "focus-ring flex min-h-9 w-full items-center gap-2.5 rounded-md px-2 py-1.5 " +
+  "text-left text-label text-fg transition-colors hover:bg-hover";
 
 /**
  * The scrim behind the panel once it stops being a column and starts being an

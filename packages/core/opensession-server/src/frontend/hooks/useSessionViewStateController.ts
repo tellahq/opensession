@@ -63,7 +63,11 @@ import type { LiveTurnStore } from "../lib/live-turn-store";
 import type { TranscriptViewStore } from "../lib/transcript-view-store";
 import type { SessionPrRef } from "../lib/types";
 import type { PortalTarget } from "../lib/portals";
-import { onPortalPinRequest } from "../lib/portal-pin";
+import {
+  onPanelBrowserRequest,
+  type PanelBrowserTarget,
+} from "../lib/portal-pin";
+import { closeSidePanelTab, openSidePanelTab } from "../lib/side-panel-store";
 import type { SessionViewerProps } from "../lib/session-viewer-bindings";
 
 type WorkspaceSummaryStyle = CSSProperties & {
@@ -294,18 +298,29 @@ export function useSessionViewStateController({
   const [panelTerminalMounted, setPanelTerminalMounted] = useState(
     () => activePanelOpen && sidePanel.page === "terminal",
   );
-  const [pinnedPortal, setPinnedPortal] = useState<PortalTarget | null>(null);
+  // What the side panel's Browser tab shows for this session: a pinned Portal,
+  // a link, or the PR's preview. Review and Browser open here by default (see
+  // lib/side-panel-store), so a request from the app shell arrives as an event.
+  const [panelBrowser, setPanelBrowser] = useState<PanelBrowserTarget | null>(
+    null,
+  );
+  const pinnedPortal =
+    panelBrowser?.kind === "portal" ? panelBrowser.target : null;
   const handledSidebarPortalsRef = useRef(new Set<string>());
   useEffect(() => {
     handledSidebarPortalsRef.current.clear();
   }, [session.id]);
   const sidebarPortalIdentity = (target: PortalTarget) =>
     `${target.sessionId}\u0000${target.key}\u0000${target.name}`;
+  const showInPanelBrowser = (target: PanelBrowserTarget) => {
+    setPanelBrowser(target);
+    openSidePanelTab("browser");
+  };
   const pinPortal = (target: PortalTarget) => {
     if (target.sessionId !== session.id) return;
     const identity = sidebarPortalIdentity(target);
     handledSidebarPortalsRef.current.add(identity);
-    setPinnedPortal(target);
+    showInPanelBrowser({ kind: "portal", target });
   };
   const autoPinPortal = (target: PortalTarget) => {
     if (
@@ -316,24 +331,43 @@ export function useSessionViewStateController({
     const identity = sidebarPortalIdentity(target);
     if (handledSidebarPortalsRef.current.has(identity)) return false;
     handledSidebarPortalsRef.current.add(identity);
-    setPinnedPortal(target);
+    showInPanelBrowser({ kind: "portal", target });
     return true;
   };
-  // A Portal tab dropped on the side panel (see useSessionTabs) lands here.
-  const pinDroppedPortal = useEffectEvent((target: PortalTarget) => {
-    if (target.sessionId !== session.id) return;
-    pinPortal(target);
-    setActivePanelOpen(true);
-  });
-  useEffect(() => onPortalPinRequest(pinDroppedPortal), []);
+  // A Portal tab dropped on the side panel (see useSessionTabs), or a Browser
+  // request routed to the panel (see useOnDemandViewTabs), lands here. Only
+  // the focused viewer owns the panel on screen.
+  const takePanelBrowserRequest = useEffectEvent(
+    (target: PanelBrowserTarget) => {
+      if (target.kind === "portal") {
+        if (target.target.sessionId !== session.id) return;
+        pinPortal(target.target);
+      } else {
+        if (!identity.focused) return;
+        showInPanelBrowser(target);
+      }
+      setActivePanelOpen(true);
+    },
+  );
+  useEffect(() => onPanelBrowserRequest(takePanelBrowserRequest), []);
+  const closePanelBrowser = () => {
+    setPanelBrowser(null);
+    closeSidePanelTab("browser");
+  };
   const closePinnedPortal = () => {
     if (pinnedPortal?.sessionId !== session.id) return;
-    setPinnedPortal(null);
+    closePanelBrowser();
+  };
+  /** Hand the Browser tab's page over (to the main strip) and close the tab. */
+  const takePanelBrowser = () => {
+    const target = panelBrowser;
+    closePanelBrowser();
+    return target;
   };
   const expandPinnedPortal = () => {
     if (pinnedPortal?.sessionId !== session.id) return null;
     const target = pinnedPortal;
-    setPinnedPortal(null);
+    closePanelBrowser();
     return target;
   };
   const assets = useSessionAssets(session.id, addHandler);
@@ -482,6 +516,11 @@ export function useSessionViewStateController({
       setPanelTerminalMounted,
       pinnedPortal:
         pinnedPortal?.sessionId === session.id ? pinnedPortal : null,
+      panelBrowser,
+      closePanelBrowser,
+      takePanelBrowser,
+      panelTabs: sidePanel.tabs,
+      closePanelTab: sidePanel.closeTab,
       pinPortal,
       autoPinPortal,
       closePinnedPortal,
@@ -561,11 +600,7 @@ export function useSessionHeaderLayoutController(
   }, [activePanelOpen, desktopPanelPage, isPhone, setPanelTerminalMounted]);
   const summaryHasRoom = headerW === 0 || headerW >= WS_SUMMARY_ROOM_W;
   const summaryVisible =
-    summaryOpen &&
-    summaryHasRoom &&
-    !activePanelOpen &&
-    !isPhone &&
-    hasRepoWork;
+    summaryOpen && summaryHasRoom && !isPhone && hasRepoWork;
   const summaryStep = summaryVisible ? workspaceSummaryShift(headerW) : 0;
   const summaryStepStyle: WorkspaceSummaryStyle | undefined =
     summaryStep > 0 ? { "--ws-summary-step": `-${summaryStep}px` } : undefined;

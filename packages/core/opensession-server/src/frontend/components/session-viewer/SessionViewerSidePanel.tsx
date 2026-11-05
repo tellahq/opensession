@@ -1,7 +1,11 @@
 import { type ComponentProps, type CSSProperties, useState } from "react";
+import type { PanelBrowserTarget } from "../../lib/portal-pin";
 import { DiffPanel } from "../DiffPanel";
 import { PortalPane } from "../PortalPane";
 import { PortalsPage } from "../PortalsPanel";
+import { PrPanel } from "../PrPanel";
+import { SessionPreviewSurface } from "../session/SessionPreviewSurface";
+import type { ReviewRegion } from "./SessionViewerMainRegion";
 import { SidePanelHost } from "../session/SidePanelHost";
 import { WorkflowPanel } from "../WorkflowPanel";
 import { WorkspaceSummaryBody } from "../WorkspaceSummary";
@@ -29,6 +33,30 @@ interface SidePanelShell {
   runningAgents: HostProps["runningAgents"];
   terminalMounted: HostProps["terminalMounted"];
   onTerminalMount: HostProps["onTerminalMount"];
+}
+
+type PreviewSurface = ComponentProps<typeof SessionPreviewSurface>["surface"];
+type StagingSurface = Extract<PreviewSurface, { kind: "staging" }>;
+
+/** The Browser tab: what was handed to the panel, else the PR's preview. */
+export interface PanelBrowserContent {
+  target: PanelBrowserTarget | null;
+  sessionId: string;
+  staging: StagingSurface["deployment"];
+  stagingUrl: string | null | undefined;
+  shareLink: StagingSurface["shareLink"];
+  onClose: () => void;
+  /** Move the page to the main tab strip. */
+  onExpand: () => void;
+}
+
+/** The panel's own tab strip. */
+interface SidePanelTabs {
+  tabs: HostProps["tabs"];
+  availableTabs: HostProps["availableTabs"];
+  onCloseTab: HostProps["onCloseTab"];
+  onMoveToMain: HostProps["onMoveToMain"];
+  browserLabel: HostProps["browserLabel"];
 }
 
 interface WorkspaceSummaryContent {
@@ -76,10 +104,7 @@ interface PortalContent {
   onOpenPortal: PortalsProps["onOpenPortal"];
   onStartPortal: PortalsProps["onStartPortal"];
   onPortalAction: PortalsProps["onPortalAction"];
-  pinnedPortal: PortalsProps["activePortal"];
   onPinPortal?: PortalsProps["onPinPortal"];
-  onClosePinnedPortal: () => void;
-  onExpandPinnedPortal: () => void;
 }
 
 interface AgentContent {
@@ -94,20 +119,30 @@ interface AgentContent {
 
 interface SessionViewerSidePanelProps {
   shell: SidePanelShell;
+  tabs: SidePanelTabs;
   summary: WorkspaceSummaryContent;
   summaryRuntime: WorkspaceSummaryRuntime;
   changes: WorkspaceChangesContent;
   changesContainerRef: ComponentProps<"div">["ref"];
+  /** The header's summary card is up, so Changes need not repeat it. */
+  summaryCardVisible: boolean;
+  /** Review's inputs (the main region's); null where it cannot open. */
+  review: ReviewRegion | null;
+  browser: PanelBrowserContent;
   portals: PortalContent;
   agents: AgentContent;
 }
 
 export function SessionViewerSidePanel({
   shell,
+  tabs,
   summary,
   summaryRuntime,
   changes,
   changesContainerRef,
+  summaryCardVisible,
+  review,
+  browser,
   portals,
   agents,
 }: SessionViewerSidePanelProps) {
@@ -132,21 +167,46 @@ export function SessionViewerSidePanel({
         hasWorkspace={shell.hasWorkspace}
         page={shell.page}
         onPageChange={shell.onPageChange}
+        tabs={tabs.tabs}
+        availableTabs={tabs.availableTabs}
+        onCloseTab={tabs.onCloseTab}
+        onMoveToMain={tabs.onMoveToMain}
+        browserLabel={tabs.browserLabel}
         livePortals={shell.livePortals}
         runningAgents={shell.runningAgents}
         terminalMounted={shell.terminalMounted}
         onTerminalMount={shell.onTerminalMount}
         sessionId={changes.sessionId}
-        pinned={
-          portals.pinnedPortal ? (
-            <PortalPane
-              target={portals.pinnedPortal}
-              commentSessionId={changes.sessionId}
-              onClose={portals.onClosePinnedPortal}
-              onExpand={portals.onExpandPinnedPortal}
+        review={
+          review ? (
+            <PrPanel
+              onOpenPr={review.openPr}
+              sessionId={changes.sessionId}
+              sessions={review.allSessions || review.workspaceSessions || []}
+              onStartSession={
+                review.openNewSession
+                  ? () => void review.openNewSession?.("share")
+                  : undefined
+              }
+              editGate={review.connected && !review.isBusy && !review.noEngine}
+              onAddToInput={(text) =>
+                review.setComposerPrefill((p) => ({
+                  seq: (p?.seq ?? 0) + 1,
+                  text,
+                }))
+              }
+              repos={review.panelReviewRepos}
+              linkedPrs={summary.session.linkedPrs}
+              discoveredPrs={review.discoveredPrs}
+              focusTarget={review.reviewFocus}
+              linkable
+              walkthrough={summary.session.walkthrough}
+              page={review.reviewPage}
+              onPageChange={review.setReviewPage}
             />
           ) : undefined
         }
+        browser={<PanelBrowser content={browser} />}
         changes={
           // One box around the summary and the diff, so the pinned PR band
           // stays up for the whole scroll, and the diff's own sticky toolbar
@@ -154,34 +214,38 @@ export function SessionViewerSidePanel({
           <div style={changesStyle}>
             {/* `contents` lets the PR band pin against the box above rather
                 than ending its stick with the summary. */}
-            <section aria-label="Workspace summary" className="contents">
-              <WorkspaceSummaryBody
-                prGroupRef={measurePrBand}
-                session={summary.session}
-                onOpenPanelTab={summary.onOpenPanelTab}
-                onOpenPr={summary.onOpenPr}
-                onOpenStackPr={summary.onOpenStackPr}
-                onOpenChecks={summary.onOpenChecks}
-                onOpenAsset={summary.onOpenAsset}
-                onOpenAssets={summary.onOpenAssets}
-                onOpenSession={summary.onOpenSession}
-                onArchive={summary.onArchive}
-                reviewRequest={summary.reviewRequest}
-                reviewRequestSessionId={summary.reviewRequestSessionId}
-                onReviewChange={summary.onReviewChange}
-                prReviewRequested={summary.prReviewRequested}
-                running={summary.running}
-                workspacePreparing={summary.workspacePreparing}
-                send={summaryRuntime.send}
-                refreshTick={summaryRuntime.refreshTick}
-                liveMedia={summaryRuntime.liveMedia}
-                close={summaryRuntime.close}
-              />
-              <div
-                aria-hidden="true"
-                className="mt-2 border-b border-divider"
-              />
-            </section>
+            {/* The summary card in the header says the same, so the column
+                only carries it while the card is down. */}
+            {!summaryCardVisible && (
+              <section aria-label="Workspace summary" className="contents">
+                <WorkspaceSummaryBody
+                  prGroupRef={measurePrBand}
+                  session={summary.session}
+                  onOpenPanelTab={summary.onOpenPanelTab}
+                  onOpenPr={summary.onOpenPr}
+                  onOpenStackPr={summary.onOpenStackPr}
+                  onOpenChecks={summary.onOpenChecks}
+                  onOpenAsset={summary.onOpenAsset}
+                  onOpenAssets={summary.onOpenAssets}
+                  onOpenSession={summary.onOpenSession}
+                  onArchive={summary.onArchive}
+                  reviewRequest={summary.reviewRequest}
+                  reviewRequestSessionId={summary.reviewRequestSessionId}
+                  onReviewChange={summary.onReviewChange}
+                  prReviewRequested={summary.prReviewRequested}
+                  running={summary.running}
+                  workspacePreparing={summary.workspacePreparing}
+                  send={summaryRuntime.send}
+                  refreshTick={summaryRuntime.refreshTick}
+                  liveMedia={summaryRuntime.liveMedia}
+                  close={summaryRuntime.close}
+                />
+                <div
+                  aria-hidden="true"
+                  className="mt-2 border-b border-divider"
+                />
+              </section>
+            )}
             <div ref={changesContainerRef}>
               {changes.waitingForWorkspace ? (
                 <WorkspaceWaiting detail="This takes a moment." />
@@ -229,6 +293,41 @@ export function SessionViewerSidePanel({
         }
       />
     </>
+  );
+}
+
+/** The Browser tab's page. Not kept alive: the main strip's Browser tab owns
+ *  the workspace's kept frame, and the two can hold different pages. */
+function PanelBrowser({ content }: { content: PanelBrowserContent }) {
+  const { target, sessionId, staging, stagingUrl, shareLink } = content;
+  const { onClose, onExpand } = content;
+  if (target?.kind === "portal")
+    return (
+      <PortalPane
+        target={target.target}
+        commentSessionId={sessionId}
+        onClose={onClose}
+        onExpand={onExpand}
+      />
+    );
+  if (target?.kind === "url")
+    return (
+      <SessionPreviewSurface
+        surface={{ kind: "browser", url: target.url }}
+        commentSessionId={sessionId}
+      />
+    );
+  if (!stagingUrl) return null;
+  return (
+    <SessionPreviewSurface
+      surface={{
+        kind: "staging",
+        deployment: staging,
+        url: stagingUrl,
+        shareLink,
+      }}
+      commentSessionId={sessionId}
+    />
   );
 }
 

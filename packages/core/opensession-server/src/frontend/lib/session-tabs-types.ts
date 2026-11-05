@@ -97,6 +97,11 @@ export interface SessionTabsActions {
    * the cross-bar drag). Only set on a bar that is part of a split.
    */
   moveAcross?: (id: string) => void;
+  /**
+   * Hand a Review, Browser or Portal tab to the right side panel. Unset where
+   * there is no panel (phones, a session-less workspace).
+   */
+  moveToPanel?: (id: string) => void;
   /** Foreground a view tab (show its pane). */
   selectView: (id: string) => void;
   /** Dismiss a view tab from the strip. */

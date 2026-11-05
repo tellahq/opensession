@@ -56,6 +56,7 @@ import {
 import { useTabReorder } from "./session-tabs/useTabReorder";
 import { SessionDraftIndicator } from "./session-tabs/SessionDraftIndicator";
 import { shouldShowTabStrip } from "../lib/split-tabs";
+import { movesToPanel } from "../lib/workspace-pane-tabs";
 import { sessionNeverRan } from "../lib/landing-session";
 import type { SessionTabsProps, ViewTab } from "../lib/session-tabs-types";
 
@@ -189,6 +190,7 @@ export function SessionTabs({
     previewSplit: onSplitDrag,
     dropIntoSplit: onSplitDrop,
     moveAcross: onMoveAcross,
+    moveToPanel: onMoveToPanel,
     selectView: onSelectView,
     closeView: onCloseView,
     newSession: onNewSession,
@@ -477,37 +479,56 @@ export function SessionTabs({
                   onDragEnd={handleItemDragEnd}
                   onClickCapture={handleItemClickCapture}
                 >
-                  <div
-                    role="tab"
-                    aria-selected={v.active}
-                    className={`session-tab-view group/tab ${tabClass({ active: v.active, waiting: false, colored: false })}`}
-                    onClick={() => onSelectView(v.id)}
-                    title={v.label}
+                  <ContextMenu.Root
+                    disabled={!onMoveToPanel || !movesToPanel(v.id)}
                   >
-                    {v.dotClass && (
-                      <span className={`${PANEL_TAB_DOT} ${v.dotClass}`} />
-                    )}
-                    {v.icon && (
-                      <span className={TAB_VICON} aria-hidden="true">
-                        {v.icon}
-                      </span>
-                    )}
-                    <TabTitle>{v.label}</TabTitle>
-                    {v.closable !== false && (
-                      <button
-                        type="button"
-                        className={tabCloseClass(isPhone)}
-                        aria-label={`Close ${v.label}`}
-                        title={`Close ${v.label}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onCloseView(v.id);
-                        }}
+                    <ContextMenu.Trigger
+                      render={
+                        <div
+                          role="tab"
+                          aria-selected={v.active}
+                          className={`session-tab-view group/tab ${tabClass({ active: v.active, waiting: false, colored: false })}`}
+                          onClick={() => onSelectView(v.id)}
+                          title={v.label}
+                        />
+                      }
+                    >
+                      {v.dotClass && (
+                        <span className={`${PANEL_TAB_DOT} ${v.dotClass}`} />
+                      )}
+                      {v.icon && (
+                        <span className={TAB_VICON} aria-hidden="true">
+                          {v.icon}
+                        </span>
+                      )}
+                      <TabTitle>{v.label}</TabTitle>
+                      {v.closable !== false && (
+                        <button
+                          type="button"
+                          className={tabCloseClass(isPhone)}
+                          aria-label={`Close ${v.label}`}
+                          title={`Close ${v.label}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onCloseView(v.id);
+                          }}
+                        >
+                          <IconX size={16} dense aria-hidden="true" />
+                        </button>
+                      )}
+                    </ContextMenu.Trigger>
+                    {onMoveToPanel && (
+                      <ContextMenu.Popup
+                        className="min-w-[220px]"
+                        finalFocus={false}
                       >
-                        <IconX size={16} dense aria-hidden="true" />
-                      </button>
+                        <ContextMenu.Item onClick={() => onMoveToPanel(v.id)}>
+                          <IconSidebarRight size={20} className={MENU_ICON} />
+                          <span className="grow">Move to side panel</span>
+                        </ContextMenu.Item>
+                      </ContextMenu.Popup>
                     )}
-                  </div>
+                  </ContextMenu.Root>
                 </ReorderTabItem>
               );
             }

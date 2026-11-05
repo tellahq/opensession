@@ -138,9 +138,9 @@ test("the side panel shell stays mounted while another panel tab is active", asy
 
   expect(sidePanelHost).toContain("hasWorkspace && terminalMounted");
   expect(sidePanelHost).toMatch(
-    /page === "terminal"\s*\? "flex h-full min-h-0 flex-col"\s*: "hidden"/,
+    /current === "terminal"\s*\? "flex h-full min-h-0 flex-col"\s*: "hidden"/,
   );
-  expect(sidePanelHost).toContain('visible={page === "terminal"}');
+  expect(sidePanelHost).toContain('visible={current === "terminal"}');
 });
 
 test("PrPanel keeps explicit socket injection for other hosts", async () => {

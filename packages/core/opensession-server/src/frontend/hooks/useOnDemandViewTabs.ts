@@ -8,14 +8,19 @@ import {
   saveBrowserTabUrls,
 } from "../lib/browser-tab-urls";
 import { dropKeptFrame, keptFrameKey } from "../lib/kept-frames";
+import { requestPanelBrowser } from "../lib/portal-pin";
 import type { PortalTarget } from "../lib/portals";
+import { opensInSidePanel } from "../lib/side-panel-store";
 
 export function useOnDemandViewTabs({
   workspaceKey,
+  sessionId,
   activeViewTab,
   setActiveViewTab,
 }: {
   workspaceKey: string | null | undefined;
+  /** The open session, whose side panel can take a Portal of its own. */
+  sessionId?: string | null;
   activeViewTab: ActiveViewTab;
   setActiveViewTab: (tab: ActiveViewTab) => void;
 }) {
@@ -53,6 +58,10 @@ export function useOnDemandViewTabs({
   // Open/foreground this workspace's Preview environment view-tab (the Info
   // panel button). Adds the tab to the strip if absent.
   function openStaging() {
+    if (opensInSidePanel("browser")) {
+      requestPanelBrowser({ kind: "staging" });
+      return;
+    }
     if (!workspaceKey) return;
     const key = workspaceKey;
     setStagingOpen((prev) => {
@@ -63,6 +72,10 @@ export function useOnDemandViewTabs({
   }
   // Open a link in this workspace's Browser tab, adding the tab if absent.
   function openBrowser(url: string) {
+    if (opensInSidePanel("browser")) {
+      requestPanelBrowser({ kind: "url", url });
+      return;
+    }
     if (!workspaceKey) return;
     const key = workspaceKey;
     setBrowserUrls((prev) => {
@@ -77,6 +90,10 @@ export function useOnDemandViewTabs({
     setActiveViewTab("staging");
   }
   function openPortal(target: PortalTarget) {
+    if (target.sessionId === sessionId && opensInSidePanel("browser")) {
+      requestPanelBrowser({ kind: "portal", target });
+      return;
+    }
     if (!workspaceKey) return;
     setPortalTargets((prev) => ({ ...prev, [workspaceKey]: target }));
     setActiveViewTab("portal");
