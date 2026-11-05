@@ -11,6 +11,10 @@ import { resolveWorkspaceApi } from "../lib/api";
 import type { Route } from "../lib/app-route";
 import { resolveAnonymousUserPath } from "../lib/auth-ready";
 import { BASE_PATH } from "../lib/base";
+import {
+  endFocusComposerOnOpen,
+  setFocusComposerOnOpen,
+} from "../lib/composer-focus-pulse";
 import { findPrWorkspaceId } from "../lib/pr-workspace";
 import { onTabSplitChanged } from "../lib/split-tabs";
 import { onTabOrderChanged } from "../lib/tab-order";
@@ -203,8 +207,8 @@ export function useAppViewState({
   // clicking a session tab, so the session it lands on autofocuses its
   // composer (you picked it to type in it). Reset immediately after — a
   // one-shot pulse, not a mode — so sessions opened by any other means don't
-  // grab focus.
-  const [focusComposerOnOpen, setFocusComposerOnOpen] = useState(false);
+  // grab focus. The pulse is a store read by the session panes, so ending it
+  // does not re-render the app.
   const [sessionComposerPrefills, setSessionComposerPrefills] = useState<
     Record<string, { seq: number; text: string }>
   >({});
@@ -216,9 +220,11 @@ export function useAppViewState({
     setFocusComposerOnOpen(true);
     navigate({ view: "session", id: sessionId });
   };
+  // Runs after the session panes' effects, so a pane mounted in this commit
+  // has already read the pulse.
   useEffect(() => {
-    if (focusComposerOnOpen) setFocusComposerOnOpen(false);
-  }, [focusComposerOnOpen]);
+    endFocusComposerOnOpen();
+  });
 
   // The command menu owns its open/query state below App, so toggling it does
   // not reconcile the active route, viewer, and sidebar before the overlay can
@@ -295,7 +301,6 @@ export function useAppViewState({
     takePendingReviewFocus,
     focusReviewPr,
     suppressWsSeedRef,
-    focusComposerOnOpen,
     setFocusComposerOnOpen,
     sessionComposerPrefills,
     setSessionComposerPrefills,
