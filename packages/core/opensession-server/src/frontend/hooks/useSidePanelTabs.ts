@@ -3,7 +3,11 @@ import { useNavigation } from "./useNavigation";
 import type { ReviewRegion } from "../components/session-viewer/SessionViewerMainRegion";
 import type { PanelBrowserTarget } from "../lib/portal-pin";
 import type { PortalTarget } from "../lib/portals";
-import type { SidePanelDockable, SidePanelTab } from "../lib/side-panel-open";
+import {
+  withSidePanelTab,
+  type SidePanelDockable,
+  type SidePanelTab,
+} from "../lib/side-panel-open";
 import type { PanelBrowserContent } from "../components/session-viewer/SessionViewerSidePanel";
 import {
   registerSidePanelHost,
@@ -16,6 +20,8 @@ interface PanelState {
   takePanelBrowser: () => PanelBrowserTarget | null;
   panelTabs: SidePanelTab[];
   closePanelTab: (tab: SidePanelTab) => void;
+  /** An action just opened the panel, so it slides in. */
+  panelEntering: boolean;
   setPanelTerminalMounted: (mounted: boolean) => void;
 }
 
@@ -51,10 +57,19 @@ export function useSidePanelTabs({
 }: SidePanelTabsOptions) {
   const navigation = useNavigation();
   const { panelBrowser, closePanelBrowser, takePanelBrowser } = panel;
-  const { panelTabs, closePanelTab, setPanelTerminalMounted } = panel;
+  const { closePanelTab, setPanelTerminalMounted, panelEntering } = panel;
+  // A page attached to this session keeps its Browser tab in the strip, even
+  // after another session closed its own.
+  const panelTabs = panelBrowser
+    ? withSidePanelTab(panel.panelTabs, "browser")
+    : panel.panelTabs;
   // While this viewer's panel is on screen, Review and Browser requests from
   // anywhere in the app open in it (see opensInSidePanel).
-  useEffect(() => (canHost ? registerSidePanelHost() : undefined), [canHost]);
+  const hostKey = preview.sessionId;
+  useEffect(
+    () => (canHost ? registerSidePanelHost(hostKey) : undefined),
+    [canHost, hostKey],
+  );
 
   // Review needs a workspace to diff; the Browser tab needs a page, either one
   // handed to the panel or the PR's preview.
@@ -106,6 +121,7 @@ export function useSidePanelTabs({
       onMoveToMain: moveToMain,
       browserLabel:
         panelBrowser?.kind === "portal" ? panelBrowser.target.name : undefined,
+      entering: panelEntering,
     },
   };
 }

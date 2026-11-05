@@ -1930,7 +1930,7 @@ export function SessionViewer({
             send: connected ? send : undefined,
             refreshTick: gitRefreshTick,
             liveMedia: liveOverviewMedia,
-            close: () => setActivePanelOpen(false),
+            close: () => {}, // Not a popup: routing leaves the panel open.
           }}
           changes={{
             waitingForWorkspace,

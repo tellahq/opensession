@@ -67,7 +67,6 @@ import {
   onPanelBrowserRequest,
   type PanelBrowserTarget,
 } from "../lib/portal-pin";
-import { closeSidePanelTab, openSidePanelTab } from "../lib/side-panel-store";
 import type { SessionViewerProps } from "../lib/session-viewer-bindings";
 
 type WorkspaceSummaryStyle = CSSProperties & {
@@ -286,7 +285,7 @@ export function useSessionViewStateController({
     reviewConfidence,
     reviewStatus,
   ]);
-  const sidePanel = useSidePanel();
+  const sidePanel = useSidePanel(session.id);
   const [reviewPanelOpen, setReviewPanelOpen] = useState(false);
   const activePanelOpen = showReview ? reviewPanelOpen : sidePanel.open;
   const setActivePanelOpen = showReview
@@ -299,11 +298,11 @@ export function useSessionViewStateController({
     () => activePanelOpen && sidePanel.page === "terminal",
   );
   // What the side panel's Browser tab shows for this session: a pinned Portal,
-  // a link, or the PR's preview. Review and Browser open here by default (see
-  // lib/side-panel-store), so a request from the app shell arrives as an event.
-  const [panelBrowser, setPanelBrowser] = useState<PanelBrowserTarget | null>(
-    null,
-  );
+  // a link, or the PR's preview. It is the session's own and outlives the
+  // viewer (see lib/side-panel-store): coming back to a session with a page
+  // attached finds its panel open on it. Review and Browser open here by
+  // default, so a request from the app shell arrives as an event.
+  const panelBrowser = sidePanel.browser;
   const pinnedPortal =
     panelBrowser?.kind === "portal" ? panelBrowser.target : null;
   const handledSidebarPortalsRef = useRef(new Set<string>());
@@ -313,8 +312,7 @@ export function useSessionViewStateController({
   const sidebarPortalIdentity = (target: PortalTarget) =>
     `${target.sessionId}\u0000${target.key}\u0000${target.name}`;
   const showInPanelBrowser = (target: PanelBrowserTarget) => {
-    setPanelBrowser(target);
-    openSidePanelTab("browser");
+    sidePanel.setBrowser(target);
   };
   const pinPortal = (target: PortalTarget) => {
     if (target.sessionId !== session.id) return;
@@ -351,8 +349,8 @@ export function useSessionViewStateController({
   );
   useEffect(() => onPanelBrowserRequest(takePanelBrowserRequest), []);
   const closePanelBrowser = () => {
-    setPanelBrowser(null);
-    closeSidePanelTab("browser");
+    sidePanel.setBrowser(null);
+    sidePanel.closeTab("browser");
   };
   const closePinnedPortal = () => {
     if (pinnedPortal?.sessionId !== session.id) return;
@@ -520,6 +518,7 @@ export function useSessionViewStateController({
       closePanelBrowser,
       takePanelBrowser,
       panelTabs: sidePanel.tabs,
+      panelEntering: sidePanel.entering,
       closePanelTab: sidePanel.closeTab,
       pinPortal,
       autoPinPortal,
@@ -598,7 +597,11 @@ export function useSessionHeaderLayoutController(
       setPanelTerminalMounted(true);
     }
   }, [activePanelOpen, desktopPanelPage, isPhone, setPanelTerminalMounted]);
-  const summaryHasRoom = headerW === 0 || headerW >= WS_SUMMARY_ROOM_W;
+  // The open side panel narrows the conversation below the card's room, but
+  // the two are not either/or: a pinned card stays up beside the panel, over
+  // the conversation's edge, rather than the panel shutting it.
+  const summaryHasRoom =
+    headerW === 0 || headerW >= WS_SUMMARY_ROOM_W || activePanelOpen;
   const summaryVisible =
     summaryOpen && summaryHasRoom && !isPhone && hasRepoWork;
   const summaryStep = summaryVisible ? workspaceSummaryShift(headerW) : 0;

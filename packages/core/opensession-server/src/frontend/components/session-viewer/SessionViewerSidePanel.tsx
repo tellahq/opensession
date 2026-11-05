@@ -57,6 +57,7 @@ interface SidePanelTabs {
   onCloseTab: HostProps["onCloseTab"];
   onMoveToMain: HostProps["onMoveToMain"];
   browserLabel: HostProps["browserLabel"];
+  entering: HostProps["entering"];
 }
 
 interface WorkspaceSummaryContent {
@@ -172,6 +173,7 @@ export function SessionViewerSidePanel({
         onCloseTab={tabs.onCloseTab}
         onMoveToMain={tabs.onMoveToMain}
         browserLabel={tabs.browserLabel}
+        entering={tabs.entering}
         livePortals={shell.livePortals}
         runningAgents={shell.runningAgents}
         terminalMounted={shell.terminalMounted}

@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import {
-  SIDE_PANEL_OPEN_KEY,
   SIDE_PANEL_PAGE_KEY,
   SIDE_PANEL_TABS_KEY,
   sidePanelDock,
-  sidePanelOpen,
+  sidePanelViewFor,
+  sidePanelViews,
+  storeSidePanelViews,
   sidePanelPage,
   sidePanelTabs,
   storeSidePanelDock,
-  storeSidePanelOpen,
   storeSidePanelPage,
   withSidePanelTab,
   withoutSidePanelTab,
@@ -23,16 +23,36 @@ function memoryStorage(initial?: Record<string, string>) {
 }
 
 describe("workspace side panel preference", () => {
-  test("defaults to the summary card", () => {
-    expect(sidePanelOpen(memoryStorage())).toBe(false);
+  test("a session starts closed, on the summary card", () => {
+    expect(sidePanelViewFor(undefined, false, "changes")).toEqual({
+      open: false,
+      page: "changes",
+    });
   });
 
-  test("remembers an explicitly opened or closed panel", () => {
+  test("a session with a browser attached starts open on it", () => {
+    expect(sidePanelViewFor(undefined, true, "changes")).toEqual({
+      open: true,
+      page: "browser",
+    });
+    expect(sidePanelViewFor({ open: false }, true, "changes").open).toBe(false);
+  });
+
+  test("each session keeps its own open state and page", () => {
     const storage = memoryStorage();
-    storeSidePanelOpen(true, storage);
-    expect(sidePanelOpen(storage)).toBe(true);
-    storeSidePanelOpen(false, storage);
-    expect(sidePanelOpen(storage)).toBe(false);
+    storeSidePanelViews(
+      { a: { open: true, page: "review" }, b: { open: false } },
+      storage,
+    );
+    const views = sidePanelViews(storage);
+    expect(sidePanelViewFor(views.a, false, "changes")).toEqual({
+      open: true,
+      page: "review",
+    });
+    expect(sidePanelViewFor(views.b, false, "agents")).toEqual({
+      open: false,
+      page: "agents",
+    });
   });
 
   test("defaults to Changes and remembers the selected tool", () => {
@@ -44,11 +64,7 @@ describe("workspace side panel preference", () => {
   });
 
   test("ignores an unknown stored tool", () => {
-    const storage = memoryStorage({
-      [SIDE_PANEL_OPEN_KEY]: "true",
-      [SIDE_PANEL_PAGE_KEY]: "unknown",
-    });
-    expect(sidePanelOpen(storage)).toBe(true);
+    const storage = memoryStorage({ [SIDE_PANEL_PAGE_KEY]: "unknown" });
     expect(sidePanelPage(storage)).toBe("changes");
   });
 });

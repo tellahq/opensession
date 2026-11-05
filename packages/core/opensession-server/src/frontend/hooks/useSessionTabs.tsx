@@ -555,7 +555,7 @@ export function useSessionTabs({
     if (kind === "review") {
       setSidePanelDock("review", "panel");
       closeReviewTab();
-      openSidePanelTab("review");
+      openSidePanelTab("review", currentSession?.id);
     } else if (kind === "staging") {
       setSidePanelDock("browser", "panel");
       requestPanelBrowser(

@@ -68,12 +68,28 @@
 export const PANEL_SHELL =
   "viewer-panel @container relative flex min-h-0 w-[var(--panel-w,32%)] min-w-[320px] shrink-0 flex-col " +
   "max-w-[max(480px,calc(100vw-620px))] border-l border-divider bg-panel-surface [--bg-panel:var(--panel-plate)] " +
+  // A width change the person did not drag (opening Review or Browser, which
+  // take half the window, or going back to a tool tab) glides rather than
+  // jumps. The drag itself stays 1:1 with the pointer.
+  "transition-[width,min-width] duration-[var(--dur-lg)] ease-[var(--ease)] " +
+  "[body.resizing-panel_&]:transition-none " +
   // From 920px down it stops being a column in the layout and becomes an
   // overlay over the session, anchored under the top bar (--header-h is 0 on
   // desktop, the bar's height on a phone) with PANEL_OVERLAY dimming behind it.
   "max-[920px]:fixed max-[920px]:top-[var(--header-h)] max-[920px]:right-0 max-[920px]:bottom-0 " +
   "max-[920px]:z-30 max-[920px]:w-[min(480px,94vw)] max-[920px]:max-w-none max-[920px]:min-w-0 " +
   "max-[920px]:shadow-[-12px_0_32px_rgba(0,0,0,0.5)]";
+
+/**
+ * The panel sliding in when an action opens it: it grows from nothing at the
+ * window's right edge while the conversation gives way beside it. Only for an
+ * action (the toggle, a Review or Browser request), not for a panel that was
+ * already open in the session switched to. Reduced motion drops the
+ * transition in base-theme.css, so it simply appears.
+ */
+export const PANEL_ENTER =
+  "overflow-hidden starting:w-0 starting:min-w-0 starting:opacity-0 " +
+  "transition-[width,min-width,opacity]";
 
 /**
  * Left-edge drag handle — the mirror of the sidebar's. The hairline it paints

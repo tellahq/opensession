@@ -1,4 +1,11 @@
-import { useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import type { PanelBrowserTarget } from "../lib/portal-pin";
 import { PANEL_RESIZE } from "../lib/session-panel-classes";
 import {
   isWideSidePanelPage,
@@ -8,9 +15,12 @@ import {
 } from "../lib/side-panel-open";
 import {
   closeSidePanelTab,
+  finishSidePanelOpening,
   getSidePanelState,
   selectSidePanelPage,
+  setSidePanelBrowser,
   setSidePanelOpen,
+  sidePanelViewOf,
   subscribeSidePanel,
 } from "../lib/side-panel-store";
 import { suppressLayoutAnimations } from "../ui/motion";
@@ -19,10 +29,10 @@ import { suppressLayoutAnimations } from "../ui/motion";
  * The right side panel's open state, tabs and width, shared by every surface
  * that shows one: the session viewer and the session-less workspace route.
  *
- * Open state, tabs and the selected tab are browser-wide view choices kept in
- * one module store (lib/side-panel-store), so a Review or Browser request from
- * the app shell lands in whichever panel is on screen, and every host stays in
- * sync, across browser tabs too.
+ * Open state, the selected tab and the Browser tab's page are each session's
+ * own (`key`), kept in one module store (lib/side-panel-store) with the shared
+ * tab strip, so a Review or Browser request from the app shell lands in
+ * whichever panel is on screen, across browser tabs too.
  *
  * Width also remains in localStorage, once for the tool tabs and once for the
  * wide ones (Review, Browser), so opening a page beside the conversation makes
@@ -49,7 +59,12 @@ export interface SidePanel {
   setPage: (page: SidePanelPage) => void;
   tabs: SidePanelTab[];
   closeTab: (tab: SidePanelTab) => void;
+  /** The page this session's Browser tab shows, if one is attached. */
+  browser: PanelBrowserTarget | null;
+  setBrowser: (target: PanelBrowserTarget | null) => void;
   dock: SidePanelDock;
+  /** An action just opened the panel: slide it in (see PANEL_ENTER). */
+  entering: boolean;
   /** `--panel-w` for PANEL_SHELL; undefined while no width is stored. */
   style: React.CSSProperties | undefined;
   /** The panel's left-edge drag handle — render it inside PANEL_SHELL. */
@@ -61,11 +76,22 @@ function storedWidth(key: string): number {
   return stored >= MIN_W && stored <= MAX_W ? stored : 0;
 }
 
-export function useSidePanel(): SidePanel {
-  const { open, page, tabs, dock } = useSyncExternalStore(
-    subscribeSidePanel,
-    getSidePanelState,
-  );
+/** How long the panel takes to slide in or change width: `--dur-lg`. */
+const RESIZE_MS = 280;
+
+export function useSidePanel(key: string): SidePanel {
+  const current = useSyncExternalStore(subscribeSidePanel, getSidePanelState);
+  const { open, page } = sidePanelViewOf(current, key);
+  const { tabs, dock } = current;
+  const entering = current.opening === key;
+  useEffect(() => {
+    if (!entering) return;
+    const timer = window.setTimeout(
+      () => finishSidePanelOpening(key),
+      RESIZE_MS + 50,
+    );
+    return () => window.clearTimeout(timer);
+  }, [entering, key]);
   const wide = isWideSidePanelPage(page);
 
   const [widths, setWidths] = useState(() => ({
@@ -120,12 +146,15 @@ export function useSidePanel(): SidePanel {
 
   return {
     open,
-    setOpen: setSidePanelOpen,
+    setOpen: (next) => setSidePanelOpen(key, next),
     page,
-    setPage: selectSidePanelPage,
+    setPage: (next) => selectSidePanelPage(key, next),
     tabs,
-    closeTab: closeSidePanelTab,
+    closeTab: (tab) => closeSidePanelTab(key, tab),
+    browser: current.browsers[key] ?? null,
+    setBrowser: (target) => setSidePanelBrowser(key, target),
     dock,
+    entering,
     style,
     resizeHandle: (
       <div

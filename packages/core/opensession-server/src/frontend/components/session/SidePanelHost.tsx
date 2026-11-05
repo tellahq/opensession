@@ -16,6 +16,7 @@ import {
 import {
   PANEL_BODY,
   PANEL_DROP_PREVIEW,
+  PANEL_ENTER,
   PANEL_NEW_ROW,
   PANEL_NEW_ROWS,
   PANEL_OVERLAY,
@@ -62,6 +63,8 @@ interface SidePanelHostProps {
   onMoveToMain?: (tab: SidePanelDockable) => void;
   /** The Browser tab's name: the Portal it shows, else "Browser". */
   browserLabel?: string;
+  /** An action just opened the panel: slide it in (PANEL_ENTER). */
+  entering?: boolean;
   livePortals: number;
   runningAgents: number;
   terminalMounted: boolean;
@@ -127,6 +130,7 @@ export function SidePanelHost({
   onCloseTab,
   onMoveToMain,
   browserLabel,
+  entering = false,
   livePortals,
   runningAgents,
   terminalMounted,
@@ -287,7 +291,7 @@ export function SidePanelHost({
         <div className={PANEL_OVERLAY} onClick={() => onOpenChange(false)} />
       )}
       {!isPhone && available && open ? (
-        <div className={PANEL_SHELL} style={style}>
+        <div className={cn(PANEL_SHELL, entering && PANEL_ENTER)} style={style}>
           {resizeHandle}
           {dropHover && (
             <div className={PANEL_DROP_PREVIEW} aria-hidden="true" />

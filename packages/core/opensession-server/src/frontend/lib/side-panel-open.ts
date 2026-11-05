@@ -1,7 +1,14 @@
 import { z } from "zod";
+import type { PanelBrowserTarget } from "./portal-pin";
 
-/** The workspace side panel is a browser-wide view choice. */
-export const SIDE_PANEL_OPEN_KEY = "opensession-panel-open";
+/**
+ * Whether the panel is open, and on which page, is each session's own: one
+ * session can sit with the panel closed and only the summary card, another
+ * with its browser open beside the conversation. Tabs and where Review and
+ * Browser open stay browser-wide choices.
+ */
+export const SIDE_PANEL_VIEWS_KEY = "opensession-panel-views";
+export const SIDE_PANEL_BROWSERS_KEY = "opensession-panel-browsers";
 export const SIDE_PANEL_PAGE_KEY = "opensession-panel-page";
 export const SIDE_PANEL_TABS_KEY = "opensession-panel-tabs";
 export const SIDE_PANEL_DOCK_KEY = "opensession-panel-dock";
@@ -59,19 +66,106 @@ export function isWideSidePanelPage(page: SidePanelPage): boolean {
   return page === "review" || page === "browser";
 }
 
-/**
- * The summary card is the default workspace view. Once the person opens or
- * closes the side panel, keep that choice across workspaces and reloads.
- */
-export function sidePanelOpen(storage: Read = localStorage): boolean {
-  return storage.getItem(SIDE_PANEL_OPEN_KEY) === "true";
+/** One session's panel, as the person last left it. */
+export interface SidePanelView {
+  open: boolean;
+  page?: SidePanelPage;
 }
 
-export function storeSidePanelOpen(
-  open: boolean,
+/** Keep the stored maps to the sessions someone has touched recently. */
+const MAX_STORED_SESSIONS = 300;
+
+const storedViewsSchema = z.record(
+  z.string(),
+  z.object({
+    open: z.boolean(),
+    page: z.string().optional(),
+  }),
+);
+
+/** Only links and the PR preview survive a reload; a Portal target is live
+ *  state that the session finds again on its own. */
+const storedBrowsersSchema = z.record(
+  z.string(),
+  z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("url"), url: z.string().min(1) }),
+    z.object({ kind: z.literal("staging") }),
+  ]),
+);
+
+function newest<T>(map: Record<string, T>): Record<string, T> {
+  const entries = Object.entries(map);
+  return Object.fromEntries(entries.slice(-MAX_STORED_SESSIONS));
+}
+
+export function sidePanelViews(storage: Read = localStorage) {
+  const views = (stored: z.infer<typeof storedViewsSchema>) =>
+    Object.fromEntries(
+      Object.entries(stored).map(([key, { open, page }]) => {
+        const kept = page ?? null;
+        const view: SidePanelView = isSidePanelPage(kept)
+          ? { open, page: kept }
+          : { open };
+        return [key, view];
+      }),
+    );
+  try {
+    const parsed = storedViewsSchema.safeParse(
+      JSON.parse(storage.getItem(SIDE_PANEL_VIEWS_KEY) ?? "{}"),
+    );
+    return views(parsed.success ? parsed.data : {});
+  } catch {
+    return views({});
+  }
+}
+
+export function storeSidePanelViews(
+  views: Record<string, SidePanelView>,
   storage: Write = localStorage,
 ): void {
-  storage.setItem(SIDE_PANEL_OPEN_KEY, String(open));
+  storage.setItem(SIDE_PANEL_VIEWS_KEY, JSON.stringify(newest(views)));
+}
+
+export function sidePanelBrowsers(
+  storage: Read = localStorage,
+): Record<string, PanelBrowserTarget> {
+  try {
+    const parsed = storedBrowsersSchema.safeParse(
+      JSON.parse(storage.getItem(SIDE_PANEL_BROWSERS_KEY) ?? "{}"),
+    );
+    return parsed.success ? parsed.data : {};
+  } catch {
+    return {};
+  }
+}
+
+export function storeSidePanelBrowsers(
+  browsers: Record<string, PanelBrowserTarget>,
+  storage: Write = localStorage,
+): void {
+  const kept = Object.entries(browsers).filter(
+    ([, target]) => target.kind !== "portal",
+  );
+  storage.setItem(
+    SIDE_PANEL_BROWSERS_KEY,
+    JSON.stringify(newest(Object.fromEntries(kept))),
+  );
+}
+
+/**
+ * A session's panel right now. A session nobody has opened or closed the
+ * panel in starts closed, on the summary card, unless it has a browser
+ * attached: then the panel is open on it.
+ */
+export function sidePanelViewFor(
+  view: SidePanelView | undefined,
+  hasBrowser: boolean,
+  lastPage: SidePanelPage,
+): Required<SidePanelView> {
+  return {
+    open: view?.open ?? hasBrowser,
+    page: view?.page ?? (hasBrowser ? "browser" : lastPage),
+  };
 }
 
 /** The selected tab follows the panel while sessions change. */

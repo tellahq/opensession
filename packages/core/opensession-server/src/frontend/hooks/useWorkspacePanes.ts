@@ -124,6 +124,12 @@ export function useWorkspacePanes({
   const reviewInPanel = !isPhone && panelDock.review === "panel";
   // Read at the moment a Review request lands, not a reason to re-run one.
   const reviewInPanelNow = useEffectEvent(() => reviewInPanel);
+  /** Open Review in the current session's panel, when that is where it goes. */
+  const openReviewInPanelNow = useEffectEvent(() => {
+    if (!reviewInPanel) return false;
+    openSidePanelTab("review", currentSession?.id);
+    return true;
+  });
   // Stable key the view-tab state (Review/Preview/Assets panes) is stored
   // under: the workspace id, the shared isolated worktree, or the lone session
   // id — the same grouping rule as the tab strip (tabOrderKey below), so a
@@ -212,8 +218,7 @@ export function useWorkspacePanes({
   // consume the pulse. Runs after the reset effect above, so it wins.
   useEffect(() => {
     if (pendingReviewOpen && pendingReviewOpen === wsKey) {
-      if (reviewInPanelNow()) openSidePanelTab("review");
-      else setActiveViewTab("review");
+      if (!openReviewInPanelNow()) setActiveViewTab("review");
       setPendingReviewOpen(null);
     }
   }, [wsKey, pendingReviewOpen, setActiveViewTab, setPendingReviewOpen]);
@@ -316,7 +321,7 @@ export function useWorkspacePanes({
       // Review opens beside the session in its side panel, unless it was
       // moved to the main strip or there is no session to sit beside.
       if (landOn && reviewInPanelNow()) {
-        openSidePanelTab("review");
+        openSidePanelTab("review", landOn.id);
       } else {
         addReviewTab(setReviewOpen, setReviewClosed, key);
         setActiveViewTab("review");
@@ -591,7 +596,7 @@ export function useWorkspacePanes({
   // one (fired by the PR status chip / "open PR" affordances in SessionViewer).
   function openReview() {
     if (opensInSidePanel("review")) {
-      openSidePanelTab("review");
+      openSidePanelTab("review", currentSession?.id);
       return;
     }
     if (!wsKey) return;

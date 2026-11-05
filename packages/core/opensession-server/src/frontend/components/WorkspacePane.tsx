@@ -65,6 +65,7 @@ import {
 import {
   PANEL_BODY,
   PANEL_OVERLAY,
+  PANEL_ENTER,
   PANEL_SHELL,
 } from "../lib/session-panel-classes";
 import {
@@ -326,7 +327,7 @@ export function WorkspacePane({
   const [defaultModel, setDefaultModel] = useState("");
   const [model, setModel] = useState(""); // "" = default
   const isPhone = useIsPhone();
-  const sidePanel = useSidePanel();
+  const sidePanel = useSidePanel(`workspace:${workspace.id}`);
   // Review gets a quiet first paint without changing the browser-wide panel
   // preference. If someone opens it here, keep that choice while this pane stays
   // mounted, then restore the ordinary preference on the other tabs.
@@ -598,7 +599,10 @@ export function WorkspacePane({
   const infoPanel = !isPhone && panelOpen && (
     <>
       <div className={PANEL_OVERLAY} onClick={() => setPanelOpen(false)} />
-      <aside className={PANEL_SHELL} style={sidePanel.style}>
+      <aside
+        className={cn(PANEL_SHELL, sidePanel.entering && PANEL_ENTER)}
+        style={sidePanel.style}
+      >
         {sidePanel.resizeHandle}
         <div className={PANEL_BODY}>
           <div className="px-1">
