@@ -217,15 +217,32 @@ export function workspaceBacksOpenPr(
   openPrs: Array<{ repo: string; number: number; branch: string }>,
   defaultRepoId: string,
 ): boolean {
-  if (workspace.prNumber === undefined && !workspace.branch) return false;
-  const repo = workspace.repo || defaultRepoId;
-  return openPrs.some(
-    (pr) =>
-      pr.repo === repo &&
-      (workspace.prNumber !== undefined
-        ? pr.number === workspace.prNumber
-        : pr.branch === workspace.branch),
-  );
+  return openPrWorkspaceMatcher(openPrs, defaultRepoId)(workspace);
+}
+
+/**
+ * workspaceBacksOpenPr for many workspaces against one open-PR list: index
+ * the PRs once instead of scanning them per workspace. The sidebar's active
+ * workspace list asked this of every workspace without live sessions, and the
+ * nested scan held the gateway for 0.3-0.55 s per request (2026-11-05).
+ */
+export function openPrWorkspaceMatcher(
+  openPrs: Array<{ repo: string; number: number; branch: string }>,
+  defaultRepoId: string,
+): (workspace: Pick<Workspace, "repo" | "prNumber" | "branch">) => boolean {
+  const byNumber = new Set<string>();
+  const byBranch = new Set<string>();
+  for (const pr of openPrs) {
+    byNumber.add(`${pr.repo}\u0000${pr.number}`);
+    byBranch.add(`${pr.repo}\u0000${pr.branch}`);
+  }
+  return (workspace) => {
+    if (workspace.prNumber === undefined && !workspace.branch) return false;
+    const repo = workspace.repo || defaultRepoId;
+    return workspace.prNumber !== undefined
+      ? byNumber.has(`${repo}\u0000${workspace.prNumber}`)
+      : byBranch.has(`${repo}\u0000${workspace.branch}`);
+  };
 }
 
 /**

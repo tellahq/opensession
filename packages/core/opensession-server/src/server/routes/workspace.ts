@@ -79,7 +79,7 @@ import {
   resolveExternalWorkspace,
   resolvePlainWorkspace,
   resolvePrWorkspace,
-  workspaceBacksOpenPr,
+  openPrWorkspaceMatcher,
 } from "../workspace-resolve";
 import { resolveModel } from "../models";
 import {
@@ -564,14 +564,16 @@ export async function handleWorkspaceRoutes(
             .map((session) => session.workspaceId)
             .filter((id): id is string => typeof id === "string" && !!id),
       );
-      const openPrs = getOpenPrSummaries();
-      const defaultRepoId = defaultRepo().id;
+      const backsOpenPr = openPrWorkspaceMatcher(
+        getOpenPrSummaries(),
+        defaultRepo().id,
+      );
       workspaces = workspaces.filter(
         (workspace) =>
           workspace.id === includeWorkspaceId ||
           activeWorkspaceIds.has(workspace.id) ||
           !!workspace.draft ||
-          workspaceBacksOpenPr(workspace, openPrs, defaultRepoId),
+          backsOpenPr(workspace),
       );
     }
     return conditionalJsonResponse(
