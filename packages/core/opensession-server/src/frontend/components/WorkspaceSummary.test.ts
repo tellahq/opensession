@@ -39,6 +39,9 @@ test("commits and changed files share one row with a files or commits switch", (
   );
   expect(summarySource).toContain("aria-expanded={workOpen}");
   expect(summarySource).toContain('<SegmentedOption value="commits">');
+  expect(summarySource).toContain(
+    "<span className={WS_SUMMARY_LABEL}>Changes</span>",
+  );
   expect(summarySource).toContain("prCommits.map(prCommittedRow)");
   expect(summarySource).toContain("commits.map(committedRow)");
   expect(summarySource).not.toContain("<span>Committed</span>");
@@ -101,7 +104,7 @@ test("submitted review facts stay separate from the reviewer picker", () => {
 test("empty reviewers and collaborators become add chips, not rows", () => {
   expect(summarySource).not.toContain('"No reviewers"');
   expect(summarySource).toContain(
-    "const canAddReviewer = hasConnectedPr && !reviewHasRows",
+    "hasConnectedPr && !pickerReviewer && passiveReviewers.length === 0",
   );
   expect(summarySource).toContain(
     "<CollaboratorMenuItems {...collaboratorState} />",
