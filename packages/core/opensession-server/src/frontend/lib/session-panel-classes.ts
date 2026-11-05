@@ -168,15 +168,19 @@ export const PANEL_TAB_SELECT =
   "focus-ring flex min-w-0 max-w-[160px] items-center gap-1.5 rounded-sm";
 
 /**
- * A tab's ×. It shows on the selected tab and on hover, like the main strip's,
- * and keeps its slot otherwise so tabs do not shift under the pointer. A touch
- * client has no hover, so it always shows there.
+ * A tab's ×. It shows on hover, like the main strip's, and keeps its slot
+ * otherwise so tabs do not shift under the pointer. A touch client has no
+ * hover, so it always shows there. The selected tab adds PANEL_TAB_CLOSE_ACTIVE
+ * from JS rather than a group-has variant, which compiles to a `:has()` Chrome
+ * cannot scope (see styles/has-selectors.test.ts): every keystroke in the
+ * composer restyled the whole document.
  */
 export const PANEL_TAB_CLOSE =
   "focus-ring -mr-1 grid size-5 shrink-0 place-items-center rounded-sm text-faint " +
   "opacity-0 transition-opacity hover:bg-hover hover:text-fg focus-visible:opacity-100 " +
-  "group-hover/ptab:opacity-100 group-has-[[aria-selected=true]]/ptab:opacity-100 " +
-  "[@media(hover:none)]:opacity-100";
+  "group-hover/ptab:opacity-100 [@media(hover:none)]:opacity-100";
+
+export const PANEL_TAB_CLOSE_ACTIVE = "opacity-100";
 
 /** The new-tab page's list: what the panel can open, one row each. */
 export const PANEL_NEW_ROWS =
