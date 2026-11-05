@@ -47,7 +47,10 @@ export async function resolvePlainDiscussion(
 
 export async function activePlainSessions(): Promise<PlainSessionCandidate[]> {
   return (await catalogNativeSessions())
-    .filter((data) => data.plainThreadId && !data.archived)
+    .filter(
+      (data) =>
+        data.plainThreadId && !data.archived && !data.plainAutoArchiveDismissed,
+    )
     .map((data) => ({ data }));
 }
 
@@ -55,8 +58,10 @@ export async function activePlainSessions(): Promise<PlainSessionCandidate[]> {
  * Clear the file-level `archived` flag on a opensession session (set by the Plain
  * done-ticket path above). Manual unarchive only clears the archive registry, so
  * without this a Plain-archived session would stay archived and never return to
- * "My sessions". No-op for non-opensession sessions (no session file). Returns true
- * if a flag was cleared.
+ * "My sessions". A ticket-linked session is also marked
+ * `plainAutoArchiveDismissed` so the sweep leaves it alone from then on.
+ * No-op for non-opensession sessions (no session file). Returns true if a flag
+ * was cleared.
  */
 export async function clearSessionFileArchive(id: string): Promise<boolean> {
   const path = `${SESSIONS_DIR}/${id}.json`;
@@ -72,7 +77,13 @@ export async function clearSessionFileArchive(id: string): Promise<boolean> {
           if (!current.archived && !current.archivedAt) return current;
           cleared = true;
           const { archived, archivedAt, archivedReason, ...rest } = current;
-          return rest as NativeSessionFile;
+          // The ticket is usually still done, so without this the next sweep
+          // would archive the session again right after the person reopened it.
+          return (
+            current.plainThreadId
+              ? { ...rest, plainAutoArchiveDismissed: true }
+              : rest
+          ) as NativeSessionFile;
         });
         return cleared;
       },
@@ -137,6 +148,7 @@ export async function archivePlainSessionCandidates(
         updateSessionFile(data.id, (current) => {
           if (
             current.archived ||
+            current.plainAutoArchiveDismissed ||
             current.plainThreadId !== threadId ||
             current.plainDiscussionId !== data.plainDiscussionId
           )
