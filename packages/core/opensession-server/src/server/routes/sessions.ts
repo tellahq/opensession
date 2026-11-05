@@ -135,7 +135,11 @@ import {
   indexedWorkspaceMemberSessions,
   indexedWorkspaceSessions,
 } from "../session-list-store";
-import { buildAtCurrentSessionListRevision } from "../session-list-response-revision";
+import {
+  buildForSessionListRevision,
+  sessionListResponseRevision,
+  type SessionListBuildSlot,
+} from "../session-list-response-revision";
 import {
   loadSidebarSessionScopeContext,
   parseSidebarSessionScope,
@@ -150,8 +154,74 @@ interface SessionsResponseSnapshot {
   text: string;
   hash: string;
   expiresAt: number;
+  /** Session list revision its build started at; absent for the disk copy. */
+  revision?: number;
   gzip?: Promise<Blob>;
 }
+
+/** Unexpired, and no session mutation landed after its build started. */
+function snapshotFresh(snapshot: SessionsResponseSnapshot): boolean {
+  return (
+    snapshot.expiresAt > Date.now() &&
+    (snapshot.revision === undefined ||
+      snapshot.revision === sessionListResponseRevision())
+  );
+}
+
+/** Rows enriched or serialized between yields to the event loop. */
+const LIST_BUILD_CHUNK = 500;
+
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+/**
+ * `rows.map(fn)` that yields every LIST_BUILD_CHUNK rows. Enriching the whole
+ * live list in one pass held the gateway thread for hundreds of milliseconds.
+ */
+async function mapYielding<T, U>(
+  rows: readonly T[],
+  fn: (row: T) => U,
+): Promise<U[]> {
+  const out: U[] = [];
+  for (let start = 0; start < rows.length; start += LIST_BUILD_CHUNK) {
+    if (start > 0) await yieldToEventLoop();
+    const end = Math.min(rows.length, start + LIST_BUILD_CHUNK);
+    for (let index = start; index < end; index++) out.push(fn(rows[index]!));
+  }
+  return out;
+}
+
+/**
+ * The same text as `JSON.stringify(rows)`, serialized a chunk at a time with
+ * yields in between. One stringify of the ~60 MB unscoped live list blocked
+ * the gateway for ~350 ms. Exported for tests.
+ */
+export async function stringifyRowsYielding(
+  rows: readonly unknown[],
+): Promise<string> {
+  const parts: string[] = [];
+  for (let start = 0; start < rows.length; start += LIST_BUILD_CHUNK) {
+    if (start > 0) await yieldToEventLoop();
+    // An array of one chunk minus its brackets is that chunk's elements,
+    // comma-separated exactly as they are inside the whole array.
+    parts.push(
+      JSON.stringify(rows.slice(start, start + LIST_BUILD_CHUNK)).slice(1, -1),
+    );
+  }
+  return `[${parts.join(",")}]`;
+}
+
+/**
+ * Minimum gap between background rebuilds of the unscoped live list. The web
+ * sidebar reads its own scoped projection; this list serves the Chrome side
+ * panel (polled every few seconds), the command menu and older native
+ * clients, all of which tolerate a slightly old copy. Each rebuild enriches
+ * and serializes every live session (~37k rows, ~60 MB on 2026-11-05).
+ */
+const LIVE_LIST_REFRESH_MIN_MS = 15_000;
+let liveListRefreshStartedAt = 0;
+let liveListRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 /**
  * Which slice of the session list a request asked for.
  *
@@ -245,8 +315,8 @@ const sessionsResponseSnapshots: Map<string, SessionsResponseSnapshot> = ((
 ).__osSessionsResponseSnapshots ??= new Map());
 const sessionsResponseRefreshes: Map<
   string,
-  Promise<SessionsResponseSnapshot>
-> = ((globalThis as any).__osSessionsResponseRefreshes ??= new Map());
+  SessionListBuildSlot<SessionsResponseSnapshot>
+> = ((globalThis as any).__osSessionsResponseBuilds ??= new Map());
 
 // The live list is expensive to rebuild from thousands of source files after a
 // process restart. Keep its last complete response as the one cold-start
@@ -997,91 +1067,104 @@ function refreshSidebarSessionsResponse(
   compactPrs: boolean,
 ): Promise<SessionsResponseSnapshot> {
   const key = sidebarResponseKey(scope, compactPrs);
-  const current = sessionsResponseRefreshes.get(key);
-  if (current) return current;
-  const refresh = buildAtCurrentSessionListRevision(async () => {
-    const signals = await sessionListRuntimeSignals();
-    const context = sessionEnrichmentContext();
-    const indexed = await indexedSidebarSessions(scope.selectedSessionId);
-    const sliced = (indexed ?? (await getCachedSessionsAsync("exclude"))).map(
-      (session) => enrichSession(session, signals, context, "row"),
-    );
-    shareWorkspacePrRefs(sliced);
-    const bounded = indexed ? sliced : sidebarLiveSessions(sliced);
-    const scoped = scopeSessionsForSidebar(
-      bounded,
-      scope,
-      await loadSidebarSessionScopeContext(scope, bounded),
-    );
-    const rows = scoped.map(sessionListRow);
-    const text = JSON.stringify(compactPrs ? compactSharedPrs(rows) : rows);
-    return {
-      text,
-      hash: Bun.hash(text).toString(16),
-      expiresAt: Date.now() + SESSIONS_RESPONSE_TTL_MS,
-    };
-  })
-    .then((snapshot) => {
+  return buildForSessionListRevision(
+    sessionsResponseRefreshes,
+    key,
+    async (revision) => {
+      const signals = await sessionListRuntimeSignals();
+      const context = sessionEnrichmentContext();
+      const indexed = await indexedSidebarSessions(scope.selectedSessionId);
+      const sliced = await mapYielding(
+        indexed ?? (await getCachedSessionsAsync("exclude")),
+        (session) => enrichSession(session, signals, context, "row"),
+      );
+      shareWorkspacePrRefs(sliced);
+      const bounded = indexed ? sliced : sidebarLiveSessions(sliced);
+      const scoped = scopeSessionsForSidebar(
+        bounded,
+        scope,
+        await loadSidebarSessionScopeContext(scope, bounded),
+      );
+      const rows = scoped.map(sessionListRow);
+      const text = JSON.stringify(compactPrs ? compactSharedPrs(rows) : rows);
+      const snapshot: SessionsResponseSnapshot = {
+        text,
+        hash: Bun.hash(text).toString(16),
+        expiresAt: Date.now() + SESSIONS_RESPONSE_TTL_MS,
+        revision,
+      };
       sessionsResponseSnapshots.set(key, snapshot);
       return snapshot;
-    })
-    .finally(() => {
-      sessionsResponseRefreshes.delete(key);
-    });
-  sessionsResponseRefreshes.set(key, refresh);
-  return refresh;
+    },
+  );
 }
 
 function refreshSessionsResponse(
   variant: SessionsVariant,
 ): Promise<SessionsResponseSnapshot> {
-  const current = sessionsResponseRefreshes.get(variant);
-  if (current) return current;
-  const refresh = buildAtCurrentSessionListRevision(async () => {
-    const signals = await sessionListRuntimeSignals();
-    const context = sessionEnrichmentContext();
-    const slice =
-      variant === "exclude"
-        ? "exclude"
-        : variant === "include"
-          ? "include"
-          : "only";
-    const indexed = await (variant === "exclude"
-      ? indexedSidebarSessions()
-      : indexedSessions(slice));
-    const sliced = (indexed ?? (await getCachedSessionsAsync(slice))).map(
-      (session) => enrichSession(session, signals, context, "row"),
-    );
-    shareWorkspacePrRefs(sliced);
-    const listed =
-      variant === "exclude" && !indexed ? sidebarLiveSessions(sliced) : sliced;
-    const text = JSON.stringify(
-      variant === "only-slim"
-        ? listed.map(archivedIndexRow)
-        : listed.map(sessionListRow),
-    );
-    return {
-      text,
-      hash: Bun.hash(text).toString(16),
-      expiresAt: Date.now() + SESSIONS_RESPONSE_TTL_MS,
-    };
-  })
-    .then((snapshot) => {
+  return buildForSessionListRevision(
+    sessionsResponseRefreshes,
+    variant,
+    async (revision) => {
+      if (variant === "exclude") liveListRefreshStartedAt = Date.now();
+      const signals = await sessionListRuntimeSignals();
+      const context = sessionEnrichmentContext();
+      const slice =
+        variant === "exclude"
+          ? "exclude"
+          : variant === "include"
+            ? "include"
+            : "only";
+      const indexed = await (variant === "exclude"
+        ? indexedSidebarSessions()
+        : indexedSessions(slice));
+      const sliced = await mapYielding(
+        indexed ?? (await getCachedSessionsAsync(slice)),
+        (session) => enrichSession(session, signals, context, "row"),
+      );
+      shareWorkspacePrRefs(sliced);
+      const listed =
+        variant === "exclude" && !indexed
+          ? sidebarLiveSessions(sliced)
+          : sliced;
+      const text = await stringifyRowsYielding(
+        variant === "only-slim"
+          ? listed.map(archivedIndexRow)
+          : listed.map(sessionListRow),
+      );
+      const snapshot: SessionsResponseSnapshot = {
+        text,
+        hash: Bun.hash(text).toString(16),
+        expiresAt: Date.now() + SESSIONS_RESPONSE_TTL_MS,
+        revision,
+      };
       sessionsResponseSnapshots.set(variant, snapshot);
       if (variant === "exclude") {
         // Serialized, so an older snapshot never lands over a newer one.
-        const text = snapshot.text;
         diskLiveListPersist = diskLiveListPersist.then(() =>
           persistDiskLiveList(text),
         );
       }
       return snapshot;
-    })
-    .finally(() => {
-      sessionsResponseRefreshes.delete(variant);
-    });
-  sessionsResponseRefreshes.set(variant, refresh);
-  return refresh;
+    },
+  );
+}
+
+/** Rebuild the unscoped live list in the background, at most every
+ *  LIVE_LIST_REFRESH_MIN_MS, while its pollers keep the last copy. */
+function scheduleLiveListRefresh(minDelayMs: number): void {
+  if (liveListRefreshTimer || sessionsResponseRefreshes.has("exclude")) return;
+  const delay = Math.max(
+    minDelayMs,
+    liveListRefreshStartedAt + LIVE_LIST_REFRESH_MIN_MS - Date.now(),
+  );
+  liveListRefreshTimer = setTimeout(() => {
+    liveListRefreshTimer = null;
+    void refreshSessionsResponse("exclude").catch((error) =>
+      console.warn("[sessions] live-list background refresh failed:", error),
+    );
+  }, delay);
+  liveListRefreshTimer.unref?.();
 }
 
 export async function handleSessionsRoutes(
@@ -1286,7 +1369,7 @@ export async function handleSessionsRoutes(
       );
       return await sessionsListResponse(
         req,
-        cached && cached.expiresAt > Date.now()
+        cached && snapshotFresh(cached)
           ? cached
           : await refreshSidebarSessionsResponse(sidebarScope, compactPrs),
       );
@@ -1328,7 +1411,7 @@ export async function handleSessionsRoutes(
       });
     }
     const cached = sessionsResponseSnapshots.get(variant);
-    if (cached && cached.expiresAt > Date.now())
+    if (cached && snapshotFresh(cached))
       return await sessionsListResponse(req, cached);
     if (cached && variant === "exclude") {
       // Polling should never make the sidebar wait for a fresh scan of every
@@ -1336,16 +1419,7 @@ export async function handleSessionsRoutes(
       // one shared refresh catches up. Cache invalidation marks this snapshot
       // stale rather than deleting it for the same reason.
       cached.expiresAt = Date.now() + SESSIONS_RESPONSE_TTL_MS;
-      if (!sessionsResponseRefreshes.has(variant)) {
-        setTimeout(() => {
-          void refreshSessionsResponse(variant).catch((error) =>
-            console.warn(
-              "[sessions] live-list background refresh failed:",
-              error,
-            ),
-          );
-        }, 250).unref?.();
-      }
+      scheduleLiveListRefresh(250);
       return await sessionsListResponse(req, cached);
     }
 
@@ -1361,14 +1435,7 @@ export async function handleSessionsRoutes(
         // setup before its first yield. Keep boot quiet long enough for the
         // session, sidebar and workspace shell to finish their own requests;
         // the persisted response keeps the list useful in the meantime.
-        setTimeout(() => {
-          void refreshSessionsResponse(variant).catch((error) =>
-            console.warn(
-              "[sessions] live-list background refresh failed:",
-              error,
-            ),
-          );
-        }, 30_000).unref?.();
+        scheduleLiveListRefresh(30_000);
         return await sessionsListResponse(req, disk);
       }
     }
