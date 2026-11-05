@@ -24,6 +24,7 @@ import {
   PANEL_TAB,
   PANEL_TAB_ACTIVE,
   PANEL_TAB_CLOSE,
+  PANEL_TAB_CLOSE_ACTIVE,
   PANEL_TAB_SELECT,
   PANEL_TABS,
 } from "../../lib/session-panel-classes";
@@ -204,7 +205,10 @@ export function SidePanelHost({
                 </button>
                 <button
                   type="button"
-                  className={PANEL_TAB_CLOSE}
+                  className={cn(
+                    PANEL_TAB_CLOSE,
+                    active && PANEL_TAB_CLOSE_ACTIVE,
+                  )}
                   aria-label={`Close ${name}`}
                   onClick={() => onCloseTab(tab)}
                 >

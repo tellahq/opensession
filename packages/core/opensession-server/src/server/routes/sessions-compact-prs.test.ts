@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { restoreSharedPrs } from "../../frontend/lib/session-list-state";
 import type { SessionListRow } from "./sessions";
 
@@ -48,4 +48,19 @@ test("identical sibling PR lists travel once and restore exactly", async () => {
   // Restored lists are independent copies.
   restored[1].prs![0].number = 99;
   expect(restored[0].prs![0].number).toBe(1);
+});
+
+describe("stringifyRowsYielding", () => {
+  test("produces exactly JSON.stringify's text across chunk boundaries", async () => {
+    const { stringifyRowsYielding } = await import("./sessions");
+    for (const count of [0, 1, 499, 500, 501, 1234]) {
+      const rows = Array.from({ length: count }, (_, index) => ({
+        id: `s-${index}`,
+        title: index % 7 === 0 ? 'quote " and   line' : `t${index}`,
+        prs: index % 3 === 0 ? [] : [{ number: index, url: undefined }],
+        nested: { ok: index % 2 === 0, none: null },
+      }));
+      expect(await stringifyRowsYielding(rows)).toBe(JSON.stringify(rows));
+    }
+  });
 });

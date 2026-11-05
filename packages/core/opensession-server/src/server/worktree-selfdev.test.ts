@@ -248,7 +248,7 @@ describe("Ask checkout default branch invalidation", () => {
     let enteredLock!: () => void;
     const entered = new Promise<void>((resolve) => (enteredLock = resolve));
     const blocked = new Promise<void>((resolve) => (releaseLock = resolve));
-    const blocker = withGitLock(async () => {
+    const blocker = withGitLock(getRepo(repoId).repo, async () => {
       enteredLock();
       await blocked;
     });

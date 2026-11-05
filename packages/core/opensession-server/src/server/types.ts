@@ -722,6 +722,9 @@ export interface NativeSessionFile {
 
   plainThreadId?: string; // Plain thread this session is triaging
   plainDiscussionId?: string; // Plain discussion (Ask Sidekick) this session answers
+  /** Set when a person unarchives a session the Plain done-ticket sweep
+   *  archived, so the sweep never archives it again for the same ticket. */
+  plainAutoArchiveDismissed?: boolean;
   externalRefs?: ExternalRef[]; // generic feed-item linkage (the feeds design)
   model?: string; // model id for this session's runs; unset = default
   /** Original selection displaced by an automatic usage fallback. `null` means

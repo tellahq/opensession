@@ -110,6 +110,20 @@ describe("workspaceBacksOpenPr", () => {
     ).toBe(true);
   });
 
+  test("matches a branch-only workspace by branch, and the default repo", () => {
+    expect(
+      workspaceBacksOpenPr(
+        { branch: "skip-running-next-fallbacks" },
+        openPrs,
+        repoId,
+      ),
+    ).toBe(true);
+    expect(
+      workspaceBacksOpenPr({ repo: repoId, branch: "other" }, openPrs, repoId),
+    ).toBe(false);
+    expect(workspaceBacksOpenPr({ repo: repoId }, openPrs, repoId)).toBe(false);
+  });
+
   test("does not revive closed or cross-repo PR workspaces", () => {
     expect(
       workspaceBacksOpenPr(

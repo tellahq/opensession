@@ -936,6 +936,8 @@ export function useSessionTabs({
       setPendingSessionId(id);
       setPendingNewWorkspace(false);
       setNewTabMorph(morphOrigin ? { id, origin: morphOrigin } : null);
+      // A new tab is opened to type in: land the caret in its composer.
+      setFocusComposerOnOpen(true);
       navigate({ view: "session", id });
     });
     if (morphOrigin) startNewTabMorphTimer(id);

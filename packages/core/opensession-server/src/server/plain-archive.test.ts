@@ -93,6 +93,67 @@ describe("Plain archive sweep", () => {
     }
   });
 
+  test("a session a person unarchived is never archived again for its ticket", async () => {
+    const {
+      SessionKernelStore,
+      __setSessionKernelStoreForTest,
+      sessionMetadata,
+    } = await import("./session-kernel");
+    const store = new SessionKernelStore(":memory:");
+    const prior = __setSessionKernelStoreForTest(store);
+    try {
+      const current = {
+        id: "os-archive-dismissed",
+        plainThreadId: "done-ticket",
+        plainAutoArchiveDismissed: true,
+      };
+      await sessionMetadata({
+        op: "put",
+        sessionId: current.id,
+        expectedRev: null,
+        rev: 1,
+        requestId: "seed",
+        doc: JSON.stringify(current),
+        archived: false,
+        lastActivityMs: 0,
+      });
+      const failures: unknown[] = [];
+      const result = await archivePlainSessionCandidates(
+        "done-ticket",
+        [
+          {
+            data: {
+              id: current.id,
+              plainThreadId: "done-ticket",
+            } as NativeSessionFile,
+          },
+        ],
+        async (_id, _op, mutate) => await mutate(),
+        (_id, error) => failures.push(error),
+        () => {
+          throw new Error("Must not release a dismissed session lease");
+        },
+        undefined,
+        async () => {
+          throw new Error("Must not stop a dismissed session's Portals");
+        },
+      );
+      expect(result).toBe(0);
+      expect(String(failures[0])).toContain(
+        "changed since candidate selection",
+      );
+      expect(
+        JSON.parse(
+          (await sessionMetadata({ op: "catalog_get", sessionId: current.id }))!
+            .doc,
+        ),
+      ).toEqual(current);
+    } finally {
+      __setSessionKernelStoreForTest(prior);
+      store.close();
+    }
+  });
+
   test("continues after one session projection is quarantined", async () => {
     const projected: string[] = [];
     const released: string[] = [];

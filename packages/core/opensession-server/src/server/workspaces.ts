@@ -159,14 +159,6 @@ function parseWorkspace(value: unknown): Workspace | null {
   return fromStore(p);
 }
 
-function byOrder(a: Workspace, b: Workspace): number {
-  return (
-    (a.order ?? (Date.parse(a.createdAt) || 0)) -
-      (b.order ?? (Date.parse(b.createdAt) || 0)) ||
-    a.name.localeCompare(b.name)
-  );
-}
-
 // ── Memory projection ──────────────────────────────────────────────────────
 //
 // `docs` is null until the first warm finishes. Writers land in `docs` once
@@ -249,8 +241,23 @@ async function projection(): Promise<Map<string, Workspace>> {
 
 function sorted(all: Map<string, Workspace>): Workspace[] {
   if (sortedCache?.generation !== generation)
-    sortedCache = { generation, list: [...all.values()].sort(byOrder) };
+    sortedCache = { generation, list: sortByOrder([...all.values()]) };
   return sortedCache.list;
+}
+
+/** Sidebar order: explicit `order`, else creation time, then name. Each key
+ *  is computed once: every workspace write re-sorts the whole list, and
+ *  parsing createdAt inside the comparator did it O(n log n) times. */
+function sortByOrder(workspaces: Workspace[]): Workspace[] {
+  const keyed = workspaces.map((workspace) => ({
+    workspace,
+    order: workspace.order ?? (Date.parse(workspace.createdAt) || 0),
+  }));
+  keyed.sort(
+    (a, b) =>
+      a.order - b.order || a.workspace.name.localeCompare(b.workspace.name),
+  );
+  return keyed.map((entry) => entry.workspace);
 }
 
 /** Every workspace, sorted for the sidebar. */
