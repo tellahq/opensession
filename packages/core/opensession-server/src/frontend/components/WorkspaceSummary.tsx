@@ -42,10 +42,10 @@ import { PrStatusBar } from "./PrStatusBar";
 import { StagingLink } from "./StagingLink";
 import { UserAvatar } from "./UserAvatar";
 import {
-  CollaboratorMenuItems,
   useWorkspaceCollaborators,
   WorkspaceSummaryCollaborators,
 } from "./WorkspaceCollaborators";
+import { WorkspaceSummaryAdd } from "./WorkspaceSummaryAdd";
 import { usePeople, useReviewTeams } from "../lib/people";
 import { type ReviewLine, reviewLines } from "../lib/review-lines";
 import { Popover } from "../ui/popover";
@@ -92,10 +92,8 @@ import {
   IconFile,
   IconGitCommit,
   IconListCircles,
-  IconPeople,
   IconPlay,
   IconPlayRectangle,
-  IconPlus,
   IconRobot,
   IconStack,
 } from "./icons";
@@ -1264,21 +1262,6 @@ export function WorkspaceSummaryBody({
     );
   }
 
-  // An empty review or collaborator list is not worth a row and a heading.
-  // Until someone is added, each is a small add chip; then its rows return.
-  const reviewHasRows =
-    showOsReview ||
-    otherReviewers.length > 0 ||
-    Boolean(pickerReviewer) ||
-    passiveReviewers.length > 0;
-  // The automated review is always there, so it never stands in for a person:
-  // the chip stays until a human reviewer is asked.
-  const canAddReviewer =
-    hasConnectedPr && !pickerReviewer && passiveReviewers.length === 0;
-  const canAddCollaborator = Boolean(
-    collaboratorState && collaboratorState.collaborators.length === 0,
-  );
-
   // On a phone every group under the PR band shares one card. A card per
   // section stacked grey plates down the page and outweighed their rows.
   const groupClass = embedded ? "flex flex-col empty:hidden" : "contents";
@@ -1346,7 +1329,7 @@ export function WorkspaceSummaryBody({
           className={cn(
             groupClass,
             "ws-summary-review-group",
-            (!hasConnectedPr || !reviewHasRows) && "hidden!",
+            !hasConnectedPr && "hidden!",
           )}
         >
           {/* One review section for both the automated reading and the people asked
@@ -1355,7 +1338,7 @@ export function WorkspaceSummaryBody({
           <div
             className={cn(
               WS_SUMMARY_SECTION,
-              "ws-summary-review-heading",
+              "ws-summary-review-heading gap-2",
               embedded
                 ? "h-11"
                 : cn(
@@ -1382,6 +1365,11 @@ export function WorkspaceSummaryBody({
                   className="text-faint opacity-50 transition-[color,opacity,transform] group-hover/review:translate-x-0.5 group-hover/review:text-fg group-hover/review:opacity-100 phone:opacity-100"
                 />
               </Button>
+            )}
+            {!pickerReviewer && (
+              <WorkspaceSummaryAdd label="Ask for review" disabled={reviewBusy}>
+                {reviewerMenuItems()}
+              </WorkspaceSummaryAdd>
             )}
           </div>
           {showOsReview && (
@@ -1572,28 +1560,6 @@ export function WorkspaceSummaryBody({
               </span>
             </button>
           ))}
-          {!pickerReviewer && passiveReviewers.length > 0 && (
-            <Menu.Root>
-              <Menu.Trigger className={WS_SUMMARY_ROW} disabled={reviewBusy}>
-                <span className={WS_SUMMARY_RAIL}>
-                  <IconPeople size={20} className={WS_SUMMARY_ICON} />
-                </span>
-                <span className={WS_SUMMARY_LABEL}>Ask for review</span>
-                <span
-                  className={cn(
-                    WS_SUMMARY_ACTION,
-                    "inline-flex items-center gap-0.5",
-                  )}
-                >
-                  Add
-                  <IconChevronDown size={14} />
-                </span>
-              </Menu.Trigger>
-              <Menu.Popup align="end" sideOffset={6} className="min-w-[200px]">
-                {reviewerMenuItems()}
-              </Menu.Popup>
-            </Menu.Root>
-          )}
           {reviewError && (
             <div className="px-4 py-1 text-meta font-medium text-red">
               {reviewError}
@@ -1606,70 +1572,6 @@ export function WorkspaceSummaryBody({
             state={collaboratorState}
             groupClass={groupClass}
           />
-        )}
-
-        {(canAddReviewer || canAddCollaborator) && (
-          // On a phone the chips sit on the page between the cards: a card of
-          // its own for one button would outweigh it.
-          <div className={groupClass}>
-            <div className="mx-2 mt-1 flex shrink-0 flex-wrap items-center gap-1">
-              {canAddReviewer && (
-                <Menu.Root>
-                  <Menu.Trigger
-                    disabled={reviewBusy}
-                    render={
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        icon={<IconPlus size={20} />}
-                      >
-                        Reviewer
-                      </Button>
-                    }
-                  />
-                  <Menu.Popup
-                    align="start"
-                    sideOffset={6}
-                    className="min-w-[200px]"
-                  >
-                    {reviewerMenuItems()}
-                  </Menu.Popup>
-                </Menu.Root>
-              )}
-              {canAddCollaborator && collaboratorState && (
-                <Menu.Root>
-                  <Menu.Trigger
-                    render={
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        icon={<IconPlus size={20} />}
-                      >
-                        Collaborator
-                      </Button>
-                    }
-                  />
-                  <Menu.Popup
-                    align="start"
-                    sideOffset={6}
-                    className="min-w-[200px]"
-                  >
-                    <CollaboratorMenuItems {...collaboratorState} />
-                  </Menu.Popup>
-                </Menu.Root>
-              )}
-            </div>
-            {!reviewHasRows && reviewError && (
-              <div className="px-4 py-1 text-meta font-medium text-red">
-                {reviewError}
-              </div>
-            )}
-            {canAddCollaborator && collaboratorState?.error && (
-              <div className="px-4 py-1 text-meta font-medium text-red">
-                {collaboratorState.error}
-              </div>
-            )}
-          </div>
         )}
 
         {workRow()}

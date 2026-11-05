@@ -21,8 +21,6 @@ import {
   useWorkspaceRecord,
 } from "../lib/workspace-records";
 import {
-  WS_SUMMARY_ACTION,
-  WS_SUMMARY_ICON,
   WS_SUMMARY_LABEL,
   WS_SUMMARY_RAIL,
   WS_SUMMARY_ROW,
@@ -33,6 +31,7 @@ import { cn } from "../ui/cn";
 import { Menu } from "../ui/menu";
 import { IconChevronDown, IconPeople } from "./icons";
 import { UserAvatar } from "./UserAvatar";
+import { WorkspaceSummaryAdd } from "./WorkspaceSummaryAdd";
 import { getCurrentUser, TEAM } from "./UserPicker";
 
 /**
@@ -185,8 +184,8 @@ export function WorkspaceCollaborators({
 
 /**
  * The same control in the header's summary card, in that card's row grammar:
- * one row per collaborator, then an Add row that opens the picker. Nothing
- * when there are no collaborators yet: the card's add chips cover that case.
+ * a heading with a "+" that opens the picker, then one row per collaborator.
+ * With nobody added yet it is the heading alone.
  */
 export function WorkspaceSummaryCollaborators({
   state,
@@ -196,10 +195,14 @@ export function WorkspaceSummaryCollaborators({
   groupClass: string;
 }) {
   const { collaborators, error } = state;
-  if (!collaborators.length) return null;
   return (
     <div className={groupClass}>
-      <div className={WS_SUMMARY_SECTION}>Collaborators</div>
+      <div className={cn(WS_SUMMARY_SECTION, "gap-2")}>
+        <span>Collaborators</span>
+        <WorkspaceSummaryAdd label="Add collaborator">
+          <CollaboratorMenuItems {...state} />
+        </WorkspaceSummaryAdd>
+      </div>
       {collaborators.map((c) => (
         <div
           key={c.name}
@@ -213,26 +216,6 @@ export function WorkspaceSummaryCollaborators({
           <span className={cn(WS_SUMMARY_STATE, "text-dim")}>added</span>
         </div>
       ))}
-      <Menu.Root>
-        <Menu.Trigger className={WS_SUMMARY_ROW} aria-label="Add collaborator">
-          <span className={WS_SUMMARY_RAIL}>
-            <IconPeople size={20} className={WS_SUMMARY_ICON} />
-          </span>
-          <span className={WS_SUMMARY_LABEL}>Add another</span>
-          <span
-            className={cn(
-              WS_SUMMARY_ACTION,
-              "inline-flex items-center gap-0.5",
-            )}
-          >
-            Add
-            <IconChevronDown size={14} />
-          </span>
-        </Menu.Trigger>
-        <Menu.Popup align="end" sideOffset={6} className="min-w-[200px]">
-          <CollaboratorMenuItems {...state} />
-        </Menu.Popup>
-      </Menu.Root>
       {error && (
         <div className="px-4 py-1 text-meta font-medium text-red">{error}</div>
       )}

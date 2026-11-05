@@ -6,6 +6,9 @@ const summarySource = await Bun.file(
 const infoSource = await Bun.file(
   new URL("./WorkspaceInfo.tsx", import.meta.url),
 ).text();
+const collaboratorsSource = await Bun.file(
+  new URL("./WorkspaceCollaborators.tsx", import.meta.url),
+).text();
 const apiSource = await Bun.file(
   new URL("../lib/api/workspaces.ts", import.meta.url),
 ).text();
@@ -78,9 +81,7 @@ test("reviewers stay hidden until a pull request is connected", () => {
   expect(summarySource).toContain(
     "const hasConnectedPr = sessionHasConnectedPr(session)",
   );
-  expect(summarySource).toContain(
-    '(!hasConnectedPr || !reviewHasRows) && "hidden!"',
-  );
+  expect(summarySource).toContain('!hasConnectedPr && "hidden!"');
 });
 
 test("an assigned reviewer can be changed or cleared from the summary", () => {
@@ -96,19 +97,18 @@ test("an assigned reviewer can be changed or cleared from the summary", () => {
 test("submitted review facts stay separate from the reviewer picker", () => {
   expect(summarySource).toContain("const pickerReviewer =");
   expect(summarySource).toContain("{passiveReviewers.map((reviewer) => (");
-  expect(summarySource).toContain(
-    "{!pickerReviewer && passiveReviewers.length > 0 && (",
-  );
 });
 
-test("empty reviewers and collaborators become add chips, not rows", () => {
+test("adding a reviewer or collaborator is a + on the section heading", () => {
   expect(summarySource).not.toContain('"No reviewers"');
+  expect(summarySource).not.toContain(">Ask for review</span>");
   expect(summarySource).toContain(
-    "hasConnectedPr && !pickerReviewer && passiveReviewers.length === 0",
+    '<WorkspaceSummaryAdd label="Ask for review" disabled={reviewBusy}>',
   );
-  expect(summarySource).toContain(
-    "<CollaboratorMenuItems {...collaboratorState} />",
+  expect(collaboratorsSource).toContain(
+    '<WorkspaceSummaryAdd label="Add collaborator">',
   );
+  expect(collaboratorsSource).not.toContain("No collaborators");
 });
 
 test("popup review heading keeps a small gap after a lone PR band", () => {
