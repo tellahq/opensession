@@ -1,9 +1,5 @@
 import React, { useEffect, useEffectEvent, useRef } from "react";
-import type {
-  CommentThread,
-  SessionWalkthrough,
-  TranscriptEntry,
-} from "../lib/types";
+import type { CommentThread, TranscriptEntry } from "../lib/types";
 import type { TranscriptIndexEntry } from "@tellahq/opensession-protocol/session";
 import {
   buildTranscriptRanges,
@@ -29,8 +25,6 @@ import {
   VirtualTranscriptList,
   type VirtualTranscriptItem,
 } from "./VirtualTranscriptList";
-import { WalkthroughCard } from "./WalkthroughCard";
-import { walkthroughInsertIndex } from "./walkthrough-placement";
 import {
   mergeOptimisticTranscriptEntries,
   normalizeLegacyVoiceToolEntries,
@@ -69,7 +63,6 @@ type RenderBlock =
       files: TouchedFile[];
       assets: string[];
     }
-  | { kind: "walkthrough"; walkthrough: SessionWalkthrough }
   | { kind: "note"; note: CommentThread }
   | {
       kind: "review-loop";
@@ -109,9 +102,6 @@ interface Props {
   sessionId?: string;
   /** Older transcript rows are currently being fetched. */
   historyLoading?: boolean;
-  /** Agent-published walkthrough — rendered inline where it was published.
-   *  Pass a referentially stable object (see SessionViewer) so the memo holds. */
-  walkthrough?: SessionWalkthrough;
   /** Session-level comment threads (team notes; src/server/comment-threads.ts)
    *  interleaved into the timeline by timestamp. Agent-invisible; rendered as
    *  NoteBubbles. */
@@ -185,11 +175,11 @@ function reviewBlockRole(block: RenderBlock): ReviewBlockRole {
 }
 
 /** Whether the loop open at `from` goes on: its next round's findings or its
- * closing settle notice arrive before any human message, note or walkthrough. */
+ * closing settle notice arrive before any human message or note. */
 function reviewLoopContinues(blocks: RenderBlock[], from: number): boolean {
   for (let j = from; j < blocks.length; j++) {
     const block = blocks[j];
-    if (block.kind === "note" || block.kind === "walkthrough") return false;
+    if (block.kind === "note") return false;
     const role = reviewBlockRole(block);
     if (role.kind === "user-message") return false;
     if (role.kind === "handoff" || role.kind === "settled") return true;
@@ -217,9 +207,9 @@ function groupReviewLoops(blocks: RenderBlock[]): RenderBlock[] {
     while (i + 1 < blocks.length) {
       const next = blocks[i + 1];
       const nextRole = reviewBlockRole(next);
-      // Notes and walkthroughs have their own placement and must never vanish
-      // inside an automation disclosure.
-      if (next.kind === "note" || next.kind === "walkthrough") break;
+      // Notes have their own placement and must never vanish inside an
+      // automation disclosure.
+      if (next.kind === "note") break;
       // A normal user message is a new conversation phase. A second review
       // handoff belongs to this loop and starts its next round.
       if (nextRole.kind === "user-message") break;
@@ -255,16 +245,11 @@ function groupReviewLoops(blocks: RenderBlock[]): RenderBlock[] {
 }
 
 /** Whether the check-backs open at `from` go on: another one starts before
- * any human message, review loop, note or walkthrough. */
+ * any human message, review loop or note. */
 function checkBacksContinue(blocks: RenderBlock[], from: number): boolean {
   for (let j = from; j < blocks.length; j++) {
     const block = blocks[j]!;
-    if (
-      block.kind === "note" ||
-      block.kind === "walkthrough" ||
-      block.kind === "review-loop"
-    )
-      return false;
+    if (block.kind === "note" || block.kind === "review-loop") return false;
     const role = reviewBlockRole(block).kind;
     if (role === "user-message") return false;
     if (role === "check-back") return true;
@@ -290,12 +275,7 @@ function groupCheckBacks(blocks: RenderBlock[]): RenderBlock[] {
     let rounds = 1;
     while (i + 1 < blocks.length) {
       const next = blocks[i + 1]!;
-      if (
-        next.kind === "note" ||
-        next.kind === "walkthrough" ||
-        next.kind === "review-loop"
-      )
-        break;
+      if (next.kind === "note" || next.kind === "review-loop") break;
       const role = reviewBlockRole(next).kind;
       if (role === "user-message") break;
       if (
@@ -384,7 +364,6 @@ function renderBlockKey(
   turnMountScope?: string,
 ): string {
   if (block.kind === "turn") return turnMountKey(block.items, turnMountScope);
-  if (block.kind === "walkthrough") return "walkthrough";
   if (block.kind === "note") return `note:${block.note.id}`;
   if (block.kind === "footer") return `${block.entry.id}:footer`;
   if (block.kind === "review-loop") {
@@ -411,7 +390,6 @@ function renderBlockEstimate(block: RenderBlock): number {
   if (block.kind === "turn") return 40;
   if (block.kind === "footer") return 32;
   if (block.kind === "review-loop") return 120;
-  if (block.kind === "walkthrough") return 320;
   if (block.kind === "note") return 96;
   if (block.kind === "entry" && block.entry.type === "system") return 48;
   if (block.kind === "entry" && block.entry.type === "user") return 88;
@@ -472,7 +450,6 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
   onOpenSubagent,
   owner,
   sessionId,
-  walkthrough,
   notes,
   slackShare,
   reviewResult,
@@ -635,20 +612,12 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
   }
   flushTurn(true);
 
-  if (walkthrough)
-    blocks.splice(walkthroughInsertIndex(blocks, walkthrough), 0, {
-      kind: "walkthrough",
-      walkthrough,
-    });
-
   // Interleave team notes by timestamp: each note lands after the last block
   // whose time is at or before it (footers share their answer's time, so a
   // note never splits an answer from its footer). Notes newer than the whole
   // window append at the end.
   if (notes?.length) {
     const blockTime = (b: RenderBlock): number => {
-      if (b.kind === "walkthrough")
-        return new Date(b.walkthrough.publishedAt).getTime();
       if (b.kind === "note") return b.note.ts;
       if (b.kind === "review-loop") {
         const last = b.blocks[b.blocks.length - 1];
@@ -830,8 +799,6 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
             onOpenSubagent={onOpenSubagent}
             sessionId={sessionId}
           />
-        ) : block.kind === "walkthrough" ? (
-          <WalkthroughCard walkthrough={block.walkthrough} variant="session" />
         ) : block.kind === "note" ? (
           <NoteBubble thread={block.note} sessionId={sessionId} />
         ) : block.kind === "footer" ? (
@@ -910,15 +877,9 @@ type IndexedTimelineAtom =
       continuationEntryIds: string[];
       timestampMs: number;
       notes: CommentThread[];
-      walkthrough?: SessionWalkthrough;
     }
   | { kind: "entry"; entry: TranscriptEntry; timestampMs: number }
-  | { kind: "note"; note: CommentThread; timestampMs: number }
-  | {
-      kind: "walkthrough";
-      walkthrough: SessionWalkthrough;
-      timestampMs: number;
-    };
+  | { kind: "note"; note: CommentThread; timestampMs: number };
 
 type IndexedTimelineItem =
   | IndexedTimelineAtom
@@ -932,7 +893,7 @@ type IndexedTimelineItem =
     };
 
 function IndexedTranscriptBlocks(props: Props) {
-  const { entries, transcriptIndex = [], notes, walkthrough } = props;
+  const { entries, transcriptIndex = [], notes } = props;
   const [openedReviewKeys, setOpenedReviewKeys] = React.useState(
     () => new Set<string>(),
   );
@@ -1017,25 +978,6 @@ function IndexedTranscriptBlocks(props: Props) {
     );
     if (containing?.kind === "range") containing.notes.push(note);
     else atoms.push({ kind: "note", note, timestampMs: note.ts });
-  }
-  if (walkthrough) {
-    const publishedEntryId = walkthrough.publishedEntryId;
-    const publishedAt = Date.parse(walkthrough.publishedAt) || 0;
-    const containing = atoms.find(
-      (atom) =>
-        atom.kind === "range" &&
-        (publishedEntryId
-          ? indexedAtomEntryIds(atom).includes(publishedEntryId)
-          : publishedAt >= atom.range.startTimestampMs &&
-            publishedAt <= atom.timestampMs),
-    );
-    if (containing?.kind === "range") containing.walkthrough = walkthrough;
-    else
-      atoms.push({
-        kind: "walkthrough",
-        walkthrough,
-        timestampMs: publishedAt,
-      });
   }
   atoms = sortIndexedTimelineAtoms(atoms);
   const timeline = groupIndexedReviewLoops(atoms);
@@ -1200,8 +1142,6 @@ function IndexedTranscriptBlocks(props: Props) {
         content:
           item.kind === "note" ? (
             <NoteBubble thread={item.note} sessionId={props.sessionId} />
-          ) : item.kind === "walkthrough" ? (
-            <WalkthroughCard walkthrough={item.walkthrough} variant="session" />
           ) : item.kind === "entry" ? (
             <LoadedTranscriptBlocks
               {...props}
@@ -1209,7 +1149,6 @@ function IndexedTranscriptBlocks(props: Props) {
               entries={[item.entry]}
               transcriptIndex={undefined}
               notes={undefined}
-              walkthrough={undefined}
               virtualize={false}
               live={Boolean(props.live && (isLast || isRunning))}
               sharedToolResults={sharedToolResults}
@@ -1224,7 +1163,6 @@ function IndexedTranscriptBlocks(props: Props) {
               entries={itemEntries}
               transcriptIndex={undefined}
               notes={indexedItemNotes(item)}
-              walkthrough={indexedItemWalkthrough(item)}
               virtualize={false}
               turnMountScope={item.kind === "range" ? key : undefined}
               live={Boolean(props.live && (isLast || isRunning))}
@@ -1441,33 +1379,18 @@ function indexedItemNotes(
   return undefined;
 }
 
-function indexedItemWalkthrough(
-  item: IndexedTimelineItem,
-): SessionWalkthrough | undefined {
-  if (item.kind === "range") return item.walkthrough;
-  if (item.kind === "review") {
-    for (const atom of item.atoms) {
-      if (atom.kind === "walkthrough") return atom.walkthrough;
-      if (atom.kind === "range" && atom.walkthrough) return atom.walkthrough;
-    }
-  }
-  return undefined;
-}
-
 function indexedItemKey(item: IndexedTimelineItem, index: number): string {
   if (item.kind === "entry") return item.entry.id;
   if (item.kind === "range") return item.range.key;
   if (item.kind === "review")
     return `review-index:${item.ranges[0]?.key ?? index}`;
-  if (item.kind === "note") return `note:${item.note.id}`;
-  return "walkthrough";
+  return `note:${item.note.id}`;
 }
 
 function indexedItemEstimate(item: IndexedTimelineItem): number {
   if (item.kind === "range") return item.range.estimateSize;
   if (item.kind === "review") return 48;
   if (item.kind === "note") return 96;
-  if (item.kind === "walkthrough") return 320;
   return 48;
 }
 

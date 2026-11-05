@@ -259,39 +259,6 @@ export function useSessionViewStateController({
       onSubagentLabel?.(session.id, agentId, label),
     [onSubagentLabel, session.id],
   );
-  const wt = session.walkthrough;
-  const wtSummary = wt?.summary ?? "";
-  const wtVideo = wt?.video;
-  const wtVideoTitle = wt?.videoTitle;
-  const wtShots = wt?.shots;
-  const wtPublishedAt = wt?.publishedAt ?? "";
-  const wtPublishedBy = wt?.publishedBy;
-  const wtPublishedEntryId = wt?.publishedEntryId;
-  const hasWalkthrough = !!wt;
-  const sessionWalkthrough = useMemo(
-    () =>
-      hasWalkthrough
-        ? {
-            summary: wtSummary,
-            video: wtVideo,
-            videoTitle: wtVideoTitle,
-            shots: wtShots,
-            publishedAt: wtPublishedAt,
-            publishedBy: wtPublishedBy,
-            publishedEntryId: wtPublishedEntryId,
-          }
-        : undefined,
-    [
-      hasWalkthrough,
-      wtSummary,
-      wtVideo,
-      wtVideoTitle,
-      wtShots,
-      wtPublishedAt,
-      wtPublishedBy,
-      wtPublishedEntryId,
-    ],
-  );
   const reviewResultValue = reviewLoopResult(session);
   const reviewStatus = reviewResultValue?.status;
   const reviewConfidence = reviewResultValue?.confidence;
@@ -499,7 +466,7 @@ export function useSessionViewStateController({
       setInfoPageScrolled,
     },
     subagents: { openSubagent, nameSubagent },
-    presentation: { sessionWalkthrough, reviewResult },
+    presentation: { reviewResult },
     panel: {
       panelOpen: sidePanel.open,
       setPanelOpen: sidePanel.setOpen,

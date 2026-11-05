@@ -734,7 +734,7 @@ export function SessionViewer({
   const { infoPageScrolled, setInfoPageScrolled } = viewState.chrome;
   const infoPageSettersRef = useRef({ setInfoPageOpen, setInfoPageScrolled });
   const { openSubagent, nameSubagent } = viewState.subagents;
-  const { sessionWalkthrough, reviewResult } = viewState.presentation;
+  const { reviewResult } = viewState.presentation;
   const { panelOpen, setPanelOpen } = viewState.panel;
   const { desktopPanelPage, setDesktopPanelPage } = viewState.panel;
   const { panelStyle, panelResizeHandle } = viewState.panel;
@@ -1721,7 +1721,6 @@ export function SessionViewer({
               isBusy,
               shouldMaintainEnd,
               reviewResult,
-              sessionWalkthrough,
               comments,
               safety,
             },
