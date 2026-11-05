@@ -53,7 +53,11 @@ import { copySessionTranscript } from "../lib/transcript-copy";
 import type { UnifiedSession, Workspace } from "../lib/types";
 import { workspaceArchivedSessions } from "../lib/workspace-archive";
 import { saveWorkspaceLastSession } from "../lib/workspace-last-session";
-import { type WorkspacePaneTab, viewTabKind } from "../lib/workspace-pane-tabs";
+import {
+  type WorkspacePaneTab,
+  movesToPanel,
+  viewTabKind,
+} from "../lib/workspace-pane-tabs";
 import type { useAppRoute } from "./useAppRoute";
 import type { useAppViewState } from "./useAppViewState";
 import { useArchiveUndo } from "./useArchiveUndo";
@@ -65,7 +69,21 @@ import { useWorkspaceArchive } from "./useWorkspaceArchive";
 import { useWorkspaceMutations } from "./useWorkspaceMutations";
 import type { useWorkspacePanes } from "./useWorkspacePanes";
 import { requestPanelBrowser, requestPortalPin } from "../lib/portal-pin";
-import { openSidePanelTab, setSidePanelDock } from "../lib/side-panel-store";
+import {
+  openSidePanelTab,
+  setSidePanelDock,
+  setSidePanelDropHover,
+  sidePanelHostOnScreen,
+} from "../lib/side-panel-store";
+
+/** The side panel's box while it is open on screen (PANEL_SHELL's hook). */
+function openPanelRect(): DOMRect | null {
+  return (
+    document
+      .querySelector<HTMLElement>(".viewer-panel")
+      ?.getBoundingClientRect() ?? null
+  );
+}
 import type { TabDropTarget } from "../lib/tab-split-preview";
 
 class MissingWorkspaceSessionSourceError extends Error {}
@@ -554,26 +572,33 @@ export function useSessionTabs({
   }
 
   /**
-   * A Portal tab dragged over the right half (or onto the side panel itself)
-   * moves into the side panel, beside the conversation. Every other drop is
-   * a split.
+   * A Review, Browser or Portal tab dropped onto the open side panel, or onto
+   * the pane's right third while the panel is closed, moves into the panel
+   * beside the conversation. Every other drop is a split.
    */
   function tabDropAt(
     draggedId: string,
     point: { x: number; y: number },
   ): TabDropTarget | null {
-    if (
-      !isPhone &&
-      currentPortalTarget &&
-      viewTabKind(draggedId) === "portal"
-    ) {
+    if (!isPhone && movesToPanel(draggedId) && sidePanelHostOnScreen()) {
+      const panel = openPanelRect();
+      if (
+        panel &&
+        point.x >= panel.left &&
+        point.x <= panel.right &&
+        point.y >= panel.top &&
+        point.y <= panel.bottom
+      )
+        return "panel";
       const pane = detailPaneRef.current?.getBoundingClientRect();
       const strip = detailPaneRef.current
         ?.querySelector<HTMLElement>(".session-tabs")
         ?.getBoundingClientRect();
       if (
+        !panel &&
         pane &&
-        point.x > pane.left + pane.width / 2 &&
+        point.x > pane.left + (pane.width * 2) / 3 &&
+        point.x <= pane.right &&
         point.y > (strip?.bottom ?? pane.top) + 8 &&
         point.y < pane.bottom
       )
@@ -743,11 +768,17 @@ export function useSessionTabs({
           setColor: (key, color) => setTabColors(setTabColor(key, color)),
           reorder: (ids) => saveTabOrder(tabOrderKey, mergeBarOrder(ids)),
           previewSplit: (id, point) => {
-            setSplitDropSide(id && point ? tabDropAt(id, point) : null);
+            const target = id && point ? tabDropAt(id, point) : null;
+            // Over the open panel, the panel lights up itself; the pane's
+            // outline is for a panel that will open.
+            const overPanel = target === "panel" && !!openPanelRect();
+            setSidePanelDropHover(overPanel);
+            setSplitDropSide(overPanel ? null : target);
           },
           dropIntoSplit: (id, point) => {
             const target = tabDropAt(id, point);
             setSplitDropSide(null);
+            setSidePanelDropHover(false);
             if (!target) return false;
             if (target === "panel") {
               moveViewToPanel(id);

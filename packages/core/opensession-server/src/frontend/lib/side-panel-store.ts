@@ -33,6 +33,8 @@ export interface SidePanelState {
   page: SidePanelPage;
   tabs: SidePanelTab[];
   dock: SidePanelDock;
+  /** A main-strip tab is being dragged over the open panel. Never stored. */
+  dropHover: boolean;
 }
 
 let state: SidePanelState | null = null;
@@ -48,6 +50,7 @@ function load(): SidePanelState {
       page: page ?? "new",
       tabs,
       dock: sidePanelDock(),
+      dropHover: false,
     };
   } catch {
     return {
@@ -55,6 +58,7 @@ function load(): SidePanelState {
       page: "changes",
       tabs: ["changes"],
       dock: { review: "panel", browser: "panel" },
+      dropHover: false,
     };
   }
 }
@@ -156,6 +160,16 @@ export function registerSidePanelHost(): () => void {
     registered = false;
     hosts -= 1;
   };
+}
+
+/** Whether a viewer can show the panel right now (see registerSidePanelHost). */
+export function sidePanelHostOnScreen(): boolean {
+  return hosts > 0;
+}
+
+/** Light the open panel up as a drop target while a tab is dragged over it. */
+export function setSidePanelDropHover(dropHover: boolean): void {
+  if (getSidePanelState().dropHover !== dropHover) update({ dropHover });
 }
 
 /** Whether `kind` should open in the side panel rather than the main strip. */

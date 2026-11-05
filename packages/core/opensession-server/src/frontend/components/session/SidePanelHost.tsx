@@ -1,4 +1,8 @@
-import type { CSSProperties, ReactNode } from "react";
+import {
+  useSyncExternalStore,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import type {
   SidePanelDockable,
@@ -6,7 +10,12 @@ import type {
   SidePanelTab,
 } from "../../lib/side-panel-open";
 import {
+  getSidePanelState,
+  subscribeSidePanel,
+} from "../../lib/side-panel-store";
+import {
   PANEL_BODY,
+  PANEL_DROP_PREVIEW,
   PANEL_NEW_ROW,
   PANEL_NEW_ROWS,
   PANEL_OVERLAY,
@@ -129,6 +138,11 @@ export function SidePanelHost({
   portals,
   agents,
 }: SidePanelHostProps) {
+  const dropHover = useSyncExternalStore(
+    subscribeSidePanel,
+    () => getSidePanelState().dropHover,
+    () => false,
+  );
   if (hidden) return null;
 
   const shown = tabs.filter((tab) => availableTabs.includes(tab));
@@ -275,6 +289,9 @@ export function SidePanelHost({
       {!isPhone && available && open ? (
         <div className={PANEL_SHELL} style={style}>
           {resizeHandle}
+          {dropHover && (
+            <div className={PANEL_DROP_PREVIEW} aria-hidden="true" />
+          )}
           {strip}
           <div
             className={cn(
