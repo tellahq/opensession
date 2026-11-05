@@ -229,7 +229,6 @@ interface TranscriptState {
   isBusy: boolean;
   shouldMaintainEnd: TranscriptProps["shouldMaintainEnd"];
   reviewResult: TranscriptProps["reviewResult"];
-  sessionWalkthrough: TranscriptProps["walkthrough"];
   /** Every comment thread on the session, and the team notes among them
    *  (threads with no passage) that the timeline interleaves. */
   comments: SessionComments;
@@ -517,7 +516,6 @@ export function SessionViewerMainRegion({
     transcriptRangeRetryGeneration,
     shouldMaintainEnd,
     reviewResult,
-    sessionWalkthrough,
     comments: { threads, notes },
     safety,
   } = transcript.state;
@@ -1078,7 +1076,6 @@ export function SessionViewerMainRegion({
                         ? continueAfterFailure
                         : undefined
                     }
-                    walkthrough={sessionWalkthrough}
                     notes={notes}
                     slackShare={shippedChangeShare}
                     onFork={canForkSession ? handleFork : undefined}

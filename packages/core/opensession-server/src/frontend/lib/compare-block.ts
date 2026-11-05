@@ -188,8 +188,10 @@ function buildBar(box: HTMLElement): HTMLElement {
   const blend = document.createElement("div");
   blend.className = "md-compare-blend";
   const blendBefore = document.createElement("span");
+  blendBefore.className = "md-compare-blend-before";
   blendBefore.textContent = "Before";
   const blendAfter = document.createElement("span");
+  blendAfter.className = "md-compare-blend-after";
   blendAfter.textContent = "After";
   blend.append(
     blendBefore,
