@@ -41,12 +41,17 @@ import { PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { PrStatusBar } from "./PrStatusBar";
 import { StagingLink } from "./StagingLink";
 import { UserAvatar } from "./UserAvatar";
-import { WorkspaceSummaryCollaborators } from "./WorkspaceCollaborators";
+import {
+  CollaboratorMenuItems,
+  useWorkspaceCollaborators,
+  WorkspaceSummaryCollaborators,
+} from "./WorkspaceCollaborators";
 import { usePeople, useReviewTeams } from "../lib/people";
 import { type ReviewLine, reviewLines } from "../lib/review-lines";
 import { Popover } from "../ui/popover";
 import { Button } from "../ui/button";
 import { Menu } from "../ui/menu";
+import { Segmented, SegmentedOption } from "../ui/segmented";
 import { Tooltip } from "../ui/tooltip";
 import { cn } from "../ui/cn";
 import type {
@@ -90,6 +95,7 @@ import {
   IconPeople,
   IconPlay,
   IconPlayRectangle,
+  IconPlus,
   IconRobot,
   IconStack,
 } from "./icons";
@@ -483,7 +489,9 @@ export function WorkspaceSummaryBody({
   // Pictures or rows. One preference, shared with the Workspace panel's own
   // Assets section, so the same folder is not drawn two ways in one window.
   const [assetView, setAssetView] = useAssetViewMode();
-  const [changesOpen, setChangesOpen] = useState(false);
+  // Commits and changed files share one row. Open, it lists one or the other.
+  const [workOpen, setWorkOpen] = useState(false);
+  const [workTab, setWorkTab] = useState<"files" | "commits">("files");
   const [openCommit, setOpenCommit] = useState<OpenCommitDetails | null>(null);
   const diffTheme = useResolvedTheme();
   // `session` follows the session-list poll; the viewer's explicit value follows
@@ -544,7 +552,9 @@ export function WorkspaceSummaryBody({
     session.repo || undefined,
     undefined,
     {
-      enabled: (changesOpen || Boolean(openCommit)) && Boolean(pr),
+      enabled:
+        ((workOpen && workTab === "files") || Boolean(openCommit)) &&
+        Boolean(pr),
       revision: `${pr?.headRefOid || ""}\0${refreshTick || 0}`,
     },
   );
@@ -576,7 +586,6 @@ export function WorkspaceSummaryBody({
       { additions: 0, deletions: 0, files: 0 },
     ) ?? null;
   const [prompted, setPrompted] = useState(false);
-  const [commitsOpen, setCommitsOpen] = useState(false);
   const [selectedReview, setSelectedReview] = useState(reviewRequest ?? null);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewBusy, setReviewBusy] = useState(false);
@@ -671,6 +680,10 @@ export function WorkspaceSummaryBody({
   // re-render the card.
   const people = usePeople();
   const reviewTeams = useReviewTeams();
+  const collaboratorState = useWorkspaceCollaborators(
+    session.workspaceId || null,
+    session.id,
+  );
   const reviewers = reviewLines(
     pr,
     selectedReview,
@@ -924,37 +937,6 @@ export function WorkspaceSummaryBody({
     );
   }
 
-  function diffChangeRow(label: string) {
-    return (
-      <>
-        <button
-          className={WS_SUMMARY_ROW}
-          onClick={() => setChangesOpen((open) => !open)}
-          aria-expanded={changesOpen}
-        >
-          <span className={WS_SUMMARY_RAIL}>
-            <IconFile size={20} className={WS_SUMMARY_ICON} />
-          </span>
-          <span className={WS_SUMMARY_LABEL}>{label}</span>
-          <span className={WS_SUMMARY_COUNT}>
-            <span className="text-green">+{additions}</span>{" "}
-            <span className="text-red">−{deletions}</span>
-          </span>
-          <IconChevronDown
-            size={14}
-            className={cn(
-              "shrink-0 text-faint transition-transform motion-reduce:transition-none",
-              changesOpen && "rotate-180",
-            )}
-          />
-        </button>
-        {changesOpen && changeFiles.length > 0 ? (
-          <div className="pb-1">{changeFiles.map(fileChangeRow)}</div>
-        ) : null}
-      </>
-    );
-  }
-
   function setCommitDetailsOpen(open: boolean, sha: string, repo?: string) {
     if (!open) {
       setOpenCommit((current) => (current?.sha === sha ? null : current));
@@ -1166,11 +1148,11 @@ export function WorkspaceSummaryBody({
     );
   }
 
-  /** A long session can commit dozens of times. Keep the completed-work totals
-   *  folded, then let the section heading reveal every commit in this card. */
-  function committedSummaryRow() {
-    if (commits.length === 0) return null;
-    const stats = commits.reduce(
+  /** Everything this work changed, in one row: how many commits, how many
+   *  files, and the line totals. Open, it lists the files or the commits. */
+  function workRow() {
+    if (!hasCommitDetails && !showDiffChanges) return null;
+    const commitStats = commits.reduce(
       (sum, commit) => ({
         files: sum.files + commit.filesChanged,
         additions: sum.additions + commit.additions,
@@ -1178,34 +1160,126 @@ export function WorkspaceSummaryBody({
       }),
       { files: 0, additions: 0, deletions: 0 },
     );
-    const label = `${commits.length} commit${commits.length === 1 ? "" : "s"}`;
+    const files = showDiffChanges ? changedFiles : commitStats.files;
+    const added = showDiffChanges ? additions : commitStats.additions;
+    const removed = showDiffChanges ? deletions : commitStats.deletions;
+    const view = !hasCommitDetails
+      ? "files"
+      : !showDiffChanges
+        ? "commits"
+        : workTab;
+    const label = [
+      commitCount > 0 && `${commitCount} commit${commitCount === 1 ? "" : "s"}`,
+      files > 0 && `${files} file${files === 1 ? "" : "s"}`,
+    ]
+      .filter(Boolean)
+      .join(" · ");
     return (
-      <button
-        type="button"
-        className={WS_SUMMARY_ROW}
-        onClick={() => setCommitsOpen(true)}
-        aria-expanded={false}
-        title={`View ${label}`}
-      >
-        <span className={WS_SUMMARY_RAIL}>
-          <IconGitCommit size={20} className={WS_SUMMARY_ICON} />
-        </span>
-        <span className={WS_SUMMARY_LABEL}>{label}</span>
-        <span
-          className={cn(
-            WS_SUMMARY_STATE,
-            "flex items-baseline gap-2 text-dim tabular-nums",
-          )}
+      <div className={groupClass}>
+        <button
+          type="button"
+          className={WS_SUMMARY_ROW}
+          onClick={() => setWorkOpen((open) => !open)}
+          aria-expanded={workOpen}
         >
-          <span>
-            {stats.files} file{stats.files === 1 ? "" : "s"}
+          <span className={WS_SUMMARY_RAIL}>
+            {hasCommitDetails ? (
+              <IconGitCommit size={20} className={WS_SUMMARY_ICON} />
+            ) : (
+              <IconFile size={20} className={WS_SUMMARY_ICON} />
+            )}
           </span>
-          <span className="text-green">+{stats.additions}</span>
-          <span className="text-red">−{stats.deletions}</span>
-        </span>
-      </button>
+          <span className={WS_SUMMARY_LABEL}>{label}</span>
+          {(added > 0 || removed > 0) && (
+            <span className={WS_SUMMARY_COUNT}>
+              <span className="text-green">+{added}</span>{" "}
+              <span className="text-red">−{removed}</span>
+            </span>
+          )}
+          <IconChevronDown
+            size={14}
+            className={cn(
+              "shrink-0 text-faint transition-transform motion-reduce:transition-none",
+              workOpen && "rotate-180",
+            )}
+          />
+        </button>
+        {workOpen && hasCommitDetails && showDiffChanges && (
+          <div className="flex shrink-0 px-4 pt-1 pb-1.5">
+            <Segmented
+              label="Show files or commits"
+              size="sm"
+              value={workTab}
+              onValueChange={(next) =>
+                setWorkTab(next === "commits" ? "commits" : "files")
+              }
+            >
+              <SegmentedOption value="files">Files</SegmentedOption>
+              <SegmentedOption value="commits">Commits</SegmentedOption>
+            </Segmented>
+          </div>
+        )}
+        {workOpen &&
+          (view === "files" ? (
+            <div className="pb-1">{changeFiles.map(fileChangeRow)}</div>
+          ) : prCommits.length > 0 ? (
+            prCommits.map(prCommittedRow)
+          ) : (
+            commits.map(committedRow)
+          ))}
+      </div>
     );
   }
+
+  function reviewerMenuItems() {
+    return (
+      <>
+        {people.map((person) => (
+          <Menu.Item
+            key={person.name}
+            onClick={() => pickReviewer(person.name)}
+          >
+            <UserAvatar name={person.name} size={22} />
+            <span className="min-w-0 flex-1 truncate">{person.name}</span>
+            <Menu.Check
+              on={selectedReview?.to === person.name}
+              size={20}
+              className="text-dim"
+            />
+          </Menu.Item>
+        ))}
+        {reviewTeams.length > 0 && <Menu.Separator />}
+        {reviewTeams.map((team) => (
+          <Menu.Item
+            key={team.github}
+            onClick={() => pickReviewer(team.github, team.members)}
+          >
+            <span className="grid size-[22px] place-items-center text-dim">
+              <IconStack size={20} />
+            </span>
+            <span className="min-w-0 flex-1 truncate">{team.name}</span>
+            <Menu.Check
+              on={selectedReview?.to === team.github}
+              size={20}
+              className="text-dim"
+            />
+          </Menu.Item>
+        ))}
+      </>
+    );
+  }
+
+  // An empty review or collaborator list is not worth a row and a heading.
+  // Until someone is added, each is a small add chip; then its rows return.
+  const reviewHasRows =
+    showOsReview ||
+    otherReviewers.length > 0 ||
+    Boolean(pickerReviewer) ||
+    passiveReviewers.length > 0;
+  const canAddReviewer = hasConnectedPr && !reviewHasRows;
+  const canAddCollaborator = Boolean(
+    collaboratorState && collaboratorState.collaborators.length === 0,
+  );
 
   const groupClass = embedded
     ? "flex flex-col overflow-hidden rounded-2xl bg-raised py-2 empty:hidden"
@@ -1273,7 +1347,7 @@ export function WorkspaceSummaryBody({
         className={cn(
           groupClass,
           "ws-summary-review-group",
-          !hasConnectedPr && "hidden!",
+          (!hasConnectedPr || !reviewHasRows) && "hidden!",
         )}
       >
         {/* One review section for both the automated reading and the people asked
@@ -1469,37 +1543,7 @@ export function WorkspaceSummaryBody({
               <IconChevronDown size={14} className="shrink-0 text-faint" />
             </Menu.Trigger>
             <Menu.Popup align="end" sideOffset={6} className="min-w-[200px]">
-              {people.map((person) => (
-                <Menu.Item
-                  key={person.name}
-                  onClick={() => pickReviewer(person.name)}
-                >
-                  <UserAvatar name={person.name} size={22} />
-                  <span className="min-w-0 flex-1 truncate">{person.name}</span>
-                  <Menu.Check
-                    on={selectedReview?.to === person.name}
-                    size={20}
-                    className="text-dim"
-                  />
-                </Menu.Item>
-              ))}
-              {reviewTeams.length > 0 && <Menu.Separator />}
-              {reviewTeams.map((team) => (
-                <Menu.Item
-                  key={team.github}
-                  onClick={() => pickReviewer(team.github, team.members)}
-                >
-                  <span className="grid size-[22px] place-items-center text-dim">
-                    <IconStack size={20} />
-                  </span>
-                  <span className="min-w-0 flex-1 truncate">{team.name}</span>
-                  <Menu.Check
-                    on={selectedReview?.to === team.github}
-                    size={20}
-                    className="text-dim"
-                  />
-                </Menu.Item>
-              ))}
+              {reviewerMenuItems()}
               <Menu.Separator />
               <Menu.Item
                 className="text-dim"
@@ -1526,17 +1570,13 @@ export function WorkspaceSummaryBody({
             </span>
           </button>
         ))}
-        {!pickerReviewer && (
+        {!pickerReviewer && passiveReviewers.length > 0 && (
           <Menu.Root>
             <Menu.Trigger className={WS_SUMMARY_ROW} disabled={reviewBusy}>
               <span className={WS_SUMMARY_RAIL}>
                 <IconPeople size={20} className={WS_SUMMARY_ICON} />
               </span>
-              <span className={WS_SUMMARY_LABEL}>
-                {passiveReviewers.length > 0
-                  ? "Ask for review"
-                  : "No reviewers"}
-              </span>
+              <span className={WS_SUMMARY_LABEL}>Ask for review</span>
               <span
                 className={cn(
                   WS_SUMMARY_ACTION,
@@ -1548,37 +1588,7 @@ export function WorkspaceSummaryBody({
               </span>
             </Menu.Trigger>
             <Menu.Popup align="end" sideOffset={6} className="min-w-[200px]">
-              {people.map((person) => (
-                <Menu.Item
-                  key={person.name}
-                  onClick={() => pickReviewer(person.name)}
-                >
-                  <UserAvatar name={person.name} size={22} />
-                  <span className="min-w-0 flex-1 truncate">{person.name}</span>
-                  <Menu.Check
-                    on={selectedReview?.to === person.name}
-                    size={20}
-                    className="text-dim"
-                  />
-                </Menu.Item>
-              ))}
-              {reviewTeams.length > 0 && <Menu.Separator />}
-              {reviewTeams.map((team) => (
-                <Menu.Item
-                  key={team.github}
-                  onClick={() => pickReviewer(team.github, team.members)}
-                >
-                  <span className="grid size-[22px] place-items-center text-dim">
-                    <IconStack size={20} />
-                  </span>
-                  <span className="min-w-0 flex-1 truncate">{team.name}</span>
-                  <Menu.Check
-                    on={selectedReview?.to === team.github}
-                    size={20}
-                    className="text-dim"
-                  />
-                </Menu.Item>
-              ))}
+              {reviewerMenuItems()}
             </Menu.Popup>
           </Menu.Root>
         )}
@@ -1589,52 +1599,83 @@ export function WorkspaceSummaryBody({
         )}
       </div>
 
-      <WorkspaceSummaryCollaborators
-        workspaceId={session.workspaceId || null}
-        sessionId={session.id}
-        groupClass={groupClass}
-      />
-
-      {hasCommitDetails && (
-        <div className={groupClass}>
-          <Button
-            variant="ghost"
-            size="sm"
-            className={cn(
-              WS_SUMMARY_SECTION,
-              "w-full cursor-pointer justify-between gap-2 border-none bg-transparent text-left hover:bg-transparent hover:text-faint active:scale-100",
-            )}
-            onClick={() => setCommitsOpen((open) => !open)}
-            aria-expanded={commitsOpen}
-          >
-            <span className="flex items-baseline gap-1.5">
-              <span>Committed</span>
-              <span className="text-meta tabular-nums">{commitCount}</span>
-            </span>
-            <IconChevronRight
-              size={14}
-              className={cn(
-                "shrink-0 transition-transform motion-reduce:transition-none",
-                commitsOpen && "rotate-90",
-              )}
-            />
-          </Button>
-          {commitsOpen
-            ? prCommits.length > 0
-              ? prCommits.map(prCommittedRow)
-              : commits.map(committedRow)
-            : committedSummaryRow()}
-        </div>
+      {collaboratorState && (
+        <WorkspaceSummaryCollaborators
+          state={collaboratorState}
+          groupClass={groupClass}
+        />
       )}
 
-      {showDiffChanges && (
-        <div className={groupClass}>
-          <div className={WS_SUMMARY_SECTION}>Changes</div>
-          {diffChangeRow(
-            `${changedFiles} file${changedFiles === 1 ? "" : "s"} changed`,
+      {(canAddReviewer || canAddCollaborator) && (
+        // On a phone the chips sit on the page between the cards: a card of
+        // its own for one button would outweigh it.
+        <div className={embedded ? "flex flex-col" : groupClass}>
+          <div
+            className={cn(
+              "flex shrink-0 flex-wrap items-center gap-1.5",
+              embedded ? "px-1" : "mx-4 mt-2 mb-1",
+            )}
+          >
+            {canAddReviewer && (
+              <Menu.Root>
+                <Menu.Trigger
+                  disabled={reviewBusy}
+                  render={
+                    <Button
+                      variant="soft"
+                      size="sm"
+                      icon={<IconPlus size={20} />}
+                    >
+                      Reviewer
+                    </Button>
+                  }
+                />
+                <Menu.Popup
+                  align="start"
+                  sideOffset={6}
+                  className="min-w-[200px]"
+                >
+                  {reviewerMenuItems()}
+                </Menu.Popup>
+              </Menu.Root>
+            )}
+            {canAddCollaborator && collaboratorState && (
+              <Menu.Root>
+                <Menu.Trigger
+                  render={
+                    <Button
+                      variant="soft"
+                      size="sm"
+                      icon={<IconPlus size={20} />}
+                    >
+                      Collaborator
+                    </Button>
+                  }
+                />
+                <Menu.Popup
+                  align="start"
+                  sideOffset={6}
+                  className="min-w-[200px]"
+                >
+                  <CollaboratorMenuItems {...collaboratorState} />
+                </Menu.Popup>
+              </Menu.Root>
+            )}
+          </div>
+          {!reviewHasRows && reviewError && (
+            <div className="px-4 py-1 text-meta font-medium text-red">
+              {reviewError}
+            </div>
+          )}
+          {canAddCollaborator && collaboratorState?.error && (
+            <div className="px-4 py-1 text-meta font-medium text-red">
+              {collaboratorState.error}
+            </div>
           )}
         </div>
       )}
+
+      {workRow()}
 
       {dirty > 0 && (
         <div className={groupClass}>

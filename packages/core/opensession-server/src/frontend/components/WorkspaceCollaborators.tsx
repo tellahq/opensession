@@ -96,7 +96,11 @@ export function useWorkspaceCollaborators(
   };
 }
 
-function CollaboratorMenuItems({
+export type WorkspaceCollaboratorsState = NonNullable<
+  ReturnType<typeof useWorkspaceCollaborators>
+>;
+
+export function CollaboratorMenuItems({
   candidates,
   isOn,
   toggle,
@@ -181,20 +185,18 @@ export function WorkspaceCollaborators({
 
 /**
  * The same control in the header's summary card, in that card's row grammar:
- * one row per collaborator, then an Add row that opens the picker.
+ * one row per collaborator, then an Add row that opens the picker. Nothing
+ * when there are no collaborators yet: the card's add chips cover that case.
  */
 export function WorkspaceSummaryCollaborators({
-  workspaceId,
-  sessionId,
+  state,
   groupClass,
 }: {
-  workspaceId: string | null;
-  sessionId?: string;
+  state: WorkspaceCollaboratorsState;
   groupClass: string;
 }) {
-  const state = useWorkspaceCollaborators(workspaceId, sessionId);
-  if (!state) return null;
   const { collaborators, error } = state;
+  if (!collaborators.length) return null;
   return (
     <div className={groupClass}>
       <div className={WS_SUMMARY_SECTION}>Collaborators</div>
@@ -216,9 +218,7 @@ export function WorkspaceSummaryCollaborators({
           <span className={WS_SUMMARY_RAIL}>
             <IconPeople size={20} className={WS_SUMMARY_ICON} />
           </span>
-          <span className={WS_SUMMARY_LABEL}>
-            {collaborators.length ? "Add another" : "No collaborators"}
-          </span>
+          <span className={WS_SUMMARY_LABEL}>Add another</span>
           <span
             className={cn(
               WS_SUMMARY_ACTION,
