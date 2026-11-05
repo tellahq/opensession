@@ -409,7 +409,7 @@ async function doRefresh(repoId: string, force: boolean): Promise<void> {
       console.log(
         `[warm-template] ${repoId}: creating template worktree at ${dir}`,
       );
-      await withGitLock(async () => {
+      await withGitLock(repo.repo, async () => {
         await $`git -C ${repo.repo} worktree prune`.quiet().nothrow();
         if (await pathExists(dir)) return;
         await $`${workloadArgv(["git", "-C", repo.repo, "fetch", "origin", repo.defaultBranch, "--quiet"], "git")}`.nothrow();

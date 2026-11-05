@@ -273,17 +273,27 @@ export async function worktreeHeadBranch(
   }
 }
 
-// Serialize git operations that mutate the shared repo's worktrees. Concurrent
-// `git worktree add` race on `.git/config` ("could not lock config file") when two
-// runs create worktrees at once — e.g. two loops triggered together, or a loop plus
-// a PR action. This in-process mutex runs them one at a time.
-let gitOpChain: Promise<unknown> = Promise.resolve();
-export function withGitLock<T>(fn: () => Promise<T>): Promise<T> {
-  const run = gitOpChain.then(fn, fn);
-  gitOpChain = run.then(
+// Serialize git operations that mutate one shared repo's worktrees. Concurrent
+// `git worktree add` race on that repo's `.git/config` ("could not lock config
+// file") when two runs create worktrees at once, e.g. two loops triggered
+// together, or a loop plus a PR action. Each repository gets its own in-process
+// queue keyed by its checkout path: one queue for every repo let a burst of
+// automation worktrees in one large repo hold a session in another repo past
+// its 10-minute setup deadline before its `worktree add` even started.
+const gitOpChains = new Map<string, Promise<unknown>>();
+export function withGitLock<T>(
+  repoDir: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const run = (gitOpChains.get(repoDir) ?? Promise.resolve()).then(fn, fn);
+  const settled = run.then(
     () => {},
     () => {},
   );
+  gitOpChains.set(repoDir, settled);
+  void settled.then(() => {
+    if (gitOpChains.get(repoDir) === settled) gitOpChains.delete(repoDir);
+  });
   return run;
 }
 
@@ -581,7 +591,7 @@ function refreshAskCheckout(
   const existing = askCheckoutRefreshes.get(repo.id);
   if (existing && existing.version >= version) return existing.promise;
 
-  const promise = withGitLock(() =>
+  const promise = withGitLock(repo.repo, () =>
     refreshAskCheckoutLocked(repo, dir),
   ).finally(() => {
     if (askCheckoutRefreshes.get(repo.id)?.promise === promise) {
@@ -618,7 +628,7 @@ export async function ensureAskCheckout(repoId?: string): Promise<string> {
     }
     return dir;
   }
-  return withGitLock(async () => {
+  return withGitLock(repo.repo, async () => {
     if (await pathExists(dir)) {
       // A sibling may have created the checkout from the previous default
       // while this call was waiting for the Git lock. Apply the generation
@@ -775,7 +785,7 @@ export async function reviveWorktree(
   const wtPath = `${worktreesDir()}/${repo.wtPrefix}-${branch}`;
   if (await pathExists(wtPath)) return wtPath;
 
-  return withGitLock(async () => {
+  return withGitLock(repo.repo, async () => {
     await $`git -C ${repo.repo} worktree prune`.quiet();
     if (await pathExists(wtPath)) return wtPath;
     // A symlink whose target is gone reads as missing to pathExists but
@@ -876,7 +886,7 @@ export async function createWorktreeForPrBranch(
   const repo = getRepo(repoId);
   const wtPath = `${worktreesDir()}/${repo.wtPrefix}-${headRef}-os`;
 
-  const reused = await withGitLock(async () => {
+  const reused = await withGitLock(repo.repo, async () => {
     await fetchBranchesWithTracking(repo.repo, repo.ghRepo, headRef);
     if (await pathExists(wtPath)) {
       await $`${workloadArgv(["git", "-C", wtPath, "fetch", "origin", headRef, "--quiet"], "git")}`
@@ -916,7 +926,7 @@ export async function createReviewWorktreeForPrHead(
 ): Promise<string> {
   const repo = getRepo(repoId);
   const wtPath = `${worktreesDir()}/${repo.wtPrefix}-${headRef}-os-review`;
-  return withGitLock(async () => {
+  return withGitLock(repo.repo, async () => {
     await fetchBranchesWithTracking(
       repo.repo,
       repo.ghRepo,
@@ -972,7 +982,7 @@ export async function createWorktreeForFollowup(
   if (existing) return existing.path;
 
   const wtPath = `${worktreesDir()}/${repo.wtPrefix}-${branch}`;
-  await withGitLock(async () => {
+  await withGitLock(repo.repo, async () => {
     await $`git -C ${repo.repo} worktree prune`.quiet();
     if (await pathExists(wtPath)) return; // pruned stale registration; dir already usable
     await $`${workloadArgv(["git", "-C", repo.repo, "fetch", "origin", baseRef, "--quiet"], "git")}`.nothrow();
@@ -1016,7 +1026,7 @@ export async function createWorktreeForExistingBranch(
   if (existing) return existing.path;
 
   const wtPath = `${worktreesDir()}/${repo.wtPrefix}-${branch}`;
-  await withGitLock(async () => {
+  await withGitLock(repo.repo, async () => {
     await $`git -C ${repo.repo} worktree prune`.quiet();
     if (await pathExists(wtPath)) return; // pruned stale registration; dir already usable
     await shell`git -C ${repo.repo} fetch origin ${branch} --quiet`.nothrow();
@@ -1071,7 +1081,7 @@ export async function withClaimedBranchWorktree<T>(
 ): Promise<T> {
   const repo = getRepo(repoId);
   const shell = gitEnv ? $.env({ ...process.env, ...gitEnv }) : $;
-  return withGitLock(async () => {
+  return withGitLock(repo.repo, async () => {
     await $`git -C ${repo.repo} worktree prune`.quiet().nothrow();
     const existing = (await listWorktrees(repo.id)).find(
       (w) => w.branch === branch,
@@ -1294,7 +1304,7 @@ export async function createWorktree(
   const wtPath = `${worktreesDir()}/${repo.wtPrefix}-${branch}`;
   const base = opts?.base;
 
-  await withGitLock(async () => {
+  await withGitLock(repo.repo, async () => {
     await shell`git -C ${repo.repo} fetch origin ${repo.defaultBranch} --quiet`
       .quiet()
       .nothrow();
