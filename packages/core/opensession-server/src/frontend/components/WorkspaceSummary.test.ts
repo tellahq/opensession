@@ -99,20 +99,25 @@ test("submitted review facts stay separate from the reviewer picker", () => {
   expect(summarySource).toContain("{passiveReviewers.map((reviewer) => (");
 });
 
-test("adding a reviewer or collaborator is a + on the section heading", () => {
+test("adding a reviewer is a + on the Review heading", () => {
   expect(summarySource).not.toContain('"No reviewers"');
   expect(summarySource).not.toContain(">Ask for review</span>");
   expect(summarySource).toContain(
     '<WorkspaceSummaryAdd label="Ask for review" disabled={reviewBusy}>',
   );
-  expect(collaboratorsSource).toContain(
-    '<WorkspaceSummaryAdd label="Add collaborator">',
-  );
   expect(collaboratorsSource).not.toContain("No collaborators");
   // An empty section is one row with its own glyph, never a bare heading.
   expect(summarySource).toContain('action="Ask for review"');
   expect(summarySource).toContain('reviewEmpty && "hidden"');
-  expect(collaboratorsSource).toContain('action="Add collaborator"');
+});
+
+test("collaborators live in the session header, not the summary card", () => {
+  expect(summarySource).not.toContain("Collaborators");
+  expect(collaboratorsSource).toContain("export function HeaderPeople(");
+  expect(collaboratorsSource).toContain(
+    "export function CollaboratorsSubmenu(",
+  );
+  expect(collaboratorsSource).toContain('!face.here && "opacity-50"');
 });
 
 test("popup review heading keeps a small gap after a lone PR band", () => {

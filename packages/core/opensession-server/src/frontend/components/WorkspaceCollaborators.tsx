@@ -15,31 +15,25 @@ import {
   INFO_LABEL_CLASS,
   INFO_LIST_CLASS,
   INFO_SECTION_CLASS,
+  VIEWER_PRESENCE,
+  VIEWER_PRESENCE_AVATAR,
 } from "../lib/session-viewer-classes";
 import {
   publishWorkspaceRecord,
   useWorkspaceRecord,
 } from "../lib/workspace-records";
-import {
-  WS_SUMMARY_LABEL,
-  WS_SUMMARY_RAIL,
-  WS_SUMMARY_ROW,
-  WS_SUMMARY_SECTION,
-  WS_SUMMARY_STATE,
-} from "../lib/workspace-summary-classes";
 import { cn } from "../ui/cn";
-import { Menu } from "../ui/menu";
-import { IconChevronDown, IconPeople } from "./icons";
+import { Menu, MENU_ICON } from "../ui/menu";
+import { Tooltip } from "../ui/tooltip";
+import { dedupeViewers, facepileAvatarStyle } from "../lib/presence";
+import { personKey } from "../lib/review-queue";
+import { IconChevronDown, IconChevronRight, IconPeople } from "./icons";
 import { UserAvatar } from "./UserAvatar";
-import {
-  WorkspaceSummaryAdd,
-  WorkspaceSummaryAddRow,
-} from "./WorkspaceSummaryAdd";
 import { getCurrentUser, TEAM } from "./UserPicker";
 
 /**
  * Add/remove state for a workspace's collaborators, shared by the info
- * panel's row and the summary card's section. Null when there is no
+ * panel's row and the session header's pile and ⋯ menu. Null when there is no
  * workspace record or nobody to add.
  */
 export function useWorkspaceCollaborators(
@@ -186,55 +180,99 @@ export function WorkspaceCollaborators({
 }
 
 /**
- * The same control in the header's summary card, in that card's row grammar:
- * a heading with a "+" that opens the picker, then one row per collaborator.
- * With nobody added yet it is a single add row.
+ * The session header's people pile: whoever else has the session open, and
+ * the workspace's collaborators, as one row of faces before Share. A
+ * collaborator who is not here is a dimmed face, so a full-strength face still
+ * means presence. With a workspace record the pile opens the collaborator
+ * picker; without one it is the plain presence pile.
  */
-export function WorkspaceSummaryCollaborators({
-  state,
-  groupClass,
+export function HeaderPeople({
+  workspaceId,
+  sessionId,
+  viewers,
 }: {
-  state: WorkspaceCollaboratorsState;
-  groupClass: string;
+  workspaceId: string | null;
+  sessionId?: string;
+  /** Other people with the session open, one entry per socket. */
+  viewers: string[];
 }) {
-  const { collaborators, error } = state;
-  if (!collaborators.length)
+  const state = useWorkspaceCollaborators(workspaceId, sessionId);
+  const present = dedupeViewers(viewers).map((v) => v.name);
+  const presentKeys = new Set(present.map(personKey));
+  const away = (state?.collaborators ?? [])
+    .map((c) => c.name)
+    .filter((name) => !presentKeys.has(personKey(name)));
+  const faces = [
+    ...present.map((name) => ({ name, here: true })),
+    ...away.map((name) => ({ name, here: false })),
+  ];
+  if (!faces.length) return null;
+  const label = [
+    present.length > 0 && `Viewing: ${present.join(", ")}`,
+    state?.collaborators.length &&
+      `Collaborators: ${state.collaborators.map((c) => c.name).join(", ")}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const pile = faces.map((face, index) => (
+    <UserAvatar
+      key={face.name}
+      name={face.name}
+      size={24}
+      className={cn(VIEWER_PRESENCE_AVATAR, !face.here && "opacity-50")}
+      style={facepileAvatarStyle(index, faces.length, "var(--bg)")}
+    />
+  ));
+  if (!state)
     return (
-      <div className={groupClass}>
-        <WorkspaceSummaryAddRow label="Collaborators" action="Add collaborator">
-          <CollaboratorMenuItems {...state} />
-        </WorkspaceSummaryAddRow>
-        {error && (
-          <div className="px-4 py-1 text-meta font-medium text-red">
-            {error}
-          </div>
-        )}
+      <div className={VIEWER_PRESENCE} title={label}>
+        {pile}
       </div>
     );
   return (
-    <div className={groupClass}>
-      <div className={cn(WS_SUMMARY_SECTION, "gap-2")}>
-        <span>Collaborators</span>
-        <WorkspaceSummaryAdd label="Add collaborator">
-          <CollaboratorMenuItems {...state} />
-        </WorkspaceSummaryAdd>
-      </div>
-      {collaborators.map((c) => (
-        <div
-          key={c.name}
-          className={cn(WS_SUMMARY_ROW, "cursor-default hover:bg-transparent")}
-          title={`${c.name}, added by ${c.by}`}
+    <Menu.Root>
+      <Tooltip label={label} multiline>
+        <Menu.Trigger
+          className={cn(
+            VIEWER_PRESENCE,
+            "cursor-pointer rounded-control border-none bg-transparent p-0.5 hover:bg-hover",
+          )}
+          aria-label="Collaborators"
         >
-          <span className={WS_SUMMARY_RAIL}>
-            <UserAvatar name={c.name} size={16} edge={false} />
-          </span>
-          <span className={WS_SUMMARY_LABEL}>{c.name}</span>
-          <span className={cn(WS_SUMMARY_STATE, "text-dim")}>added</span>
-        </div>
-      ))}
-      {error && (
-        <div className="px-4 py-1 text-meta font-medium text-red">{error}</div>
-      )}
-    </div>
+          {pile}
+        </Menu.Trigger>
+      </Tooltip>
+      <Menu.Popup align="end" sideOffset={6} className="min-w-[200px]">
+        <CollaboratorMenuItems {...state} />
+      </Menu.Popup>
+    </Menu.Root>
+  );
+}
+
+/**
+ * Collaborators in the header's ⋯ menu: the way to add the first one, since
+ * an empty pile draws nothing, and the only way on a phone, whose header has
+ * no pile.
+ */
+export function CollaboratorsSubmenu({
+  workspaceId,
+  sessionId,
+}: {
+  workspaceId: string | null;
+  sessionId?: string;
+}) {
+  const state = useWorkspaceCollaborators(workspaceId, sessionId);
+  if (!state) return null;
+  return (
+    <Menu.SubmenuRoot>
+      <Menu.SubmenuTrigger title="Teammates who get this workspace in their sidebar">
+        <IconPeople size={20} className={MENU_ICON} />
+        <span className="grow">Collaborators</span>
+        <IconChevronRight size={16} className="text-faint" />
+      </Menu.SubmenuTrigger>
+      <Menu.Popup className="min-w-[200px]">
+        <CollaboratorMenuItems {...state} />
+      </Menu.Popup>
+    </Menu.SubmenuRoot>
   );
 }

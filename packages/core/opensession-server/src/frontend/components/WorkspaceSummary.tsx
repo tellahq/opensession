@@ -42,10 +42,6 @@ import { PrStatusBar } from "./PrStatusBar";
 import { StagingLink } from "./StagingLink";
 import { UserAvatar } from "./UserAvatar";
 import {
-  useWorkspaceCollaborators,
-  WorkspaceSummaryCollaborators,
-} from "./WorkspaceCollaborators";
-import {
   WorkspaceSummaryAdd,
   WorkspaceSummaryAddRow,
 } from "./WorkspaceSummaryAdd";
@@ -681,10 +677,6 @@ export function WorkspaceSummaryBody({
   // re-render the card.
   const people = usePeople();
   const reviewTeams = useReviewTeams();
-  const collaboratorState = useWorkspaceCollaborators(
-    session.workspaceId || null,
-    session.id,
-  );
   const reviewers = reviewLines(
     pr,
     selectedReview,
@@ -1583,13 +1575,6 @@ export function WorkspaceSummaryBody({
             </div>
           )}
         </div>
-
-        {collaboratorState && (
-          <WorkspaceSummaryCollaborators
-            state={collaboratorState}
-            groupClass={groupClass}
-          />
-        )}
 
         {workRow()}
 

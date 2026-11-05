@@ -46,6 +46,7 @@ import { UsageMeter } from "../UsageMeter";
 import { UserAvatar } from "../UserAvatar";
 import { WorkflowPanel } from "../WorkflowPanel";
 import { WorkspaceSummary, WorkspaceSummaryBody } from "../WorkspaceSummary";
+import { CollaboratorsSubmenu, HeaderPeople } from "../WorkspaceCollaborators";
 import { WorkspaceWaiting } from "./busy-indicators";
 import {
   IconArchive,
@@ -83,7 +84,6 @@ import {
 import { cn } from "../../ui/cn";
 import { toast } from "../../ui/toast";
 import { copySessionTranscript } from "../../lib/transcript-copy";
-import { dedupeViewers, facepileAvatarStyle } from "../../lib/presence";
 import { personKey } from "../../lib/review-queue";
 import { metadataModelLabel } from "./model-labels";
 import {
@@ -105,8 +105,6 @@ import {
   SESSION_LINK_PLAIN,
   VIEWER_MENU_SEP,
   VIEWER_OVERFLOW,
-  VIEWER_PRESENCE,
-  VIEWER_PRESENCE_AVATAR,
   infoTopbarClass,
   infoTopbarTitleClass,
 } from "../../lib/session-viewer-classes";
@@ -980,6 +978,10 @@ export function SessionViewerChrome({
                   {placementActions}
                   {isPhone && keepInSidebarAction(true)}
                   {(compactHeader || isPhone) && shareAction(true)}
+                  <CollaboratorsSubmenu
+                    workspaceId={session.workspaceId || null}
+                    sessionId={session.id}
+                  />
                   <Menu.Separator className={VIEWER_MENU_SEP} />
                   {newSessionAction}
                   {/* Fork always applies to the open session, even when the
@@ -1061,26 +1063,14 @@ export function SessionViewerChrome({
 					    presence pile must never do, since it reads as somebody
 					    standing behind you. You know you're here; this row is for
 					    the people you can't see. (The native app has always
-					    filtered its own name out — this matches it.) */}
-                  {!isPhone && others.length > 0 && (
-                    <div
-                      className={VIEWER_PRESENCE}
-                      title={`Viewing: ${others.join(", ")}`}
-                    >
-                      {dedupeViewers(others).map((v, index, viewers) => (
-                        <UserAvatar
-                          key={v.name}
-                          name={v.name}
-                          size={24}
-                          className={VIEWER_PRESENCE_AVATAR}
-                          style={facepileAvatarStyle(
-                            index,
-                            viewers.length,
-                            "var(--bg)",
-                          )}
-                        />
-                      ))}
-                    </div>
+					    filtered its own name out — this matches it.) The workspace's
+					    collaborators join the same pile, dimmed while away. */}
+                  {!isPhone && (
+                    <HeaderPeople
+                      workspaceId={session.workspaceId || null}
+                      sessionId={session.id}
+                      viewers={others}
+                    />
                   )}
                   {/* Share rides inline when there's room, else collapses into the ⋯
 					    menu so it never crowds the title. It sits before Workspace so
