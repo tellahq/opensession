@@ -31,7 +31,10 @@ import { cn } from "../ui/cn";
 import { Menu } from "../ui/menu";
 import { IconChevronDown, IconPeople } from "./icons";
 import { UserAvatar } from "./UserAvatar";
-import { WorkspaceSummaryAdd } from "./WorkspaceSummaryAdd";
+import {
+  WorkspaceSummaryAdd,
+  WorkspaceSummaryAddRow,
+} from "./WorkspaceSummaryAdd";
 import { getCurrentUser, TEAM } from "./UserPicker";
 
 /**
@@ -185,7 +188,7 @@ export function WorkspaceCollaborators({
 /**
  * The same control in the header's summary card, in that card's row grammar:
  * a heading with a "+" that opens the picker, then one row per collaborator.
- * With nobody added yet it is the heading alone.
+ * With nobody added yet it is a single add row.
  */
 export function WorkspaceSummaryCollaborators({
   state,
@@ -195,6 +198,19 @@ export function WorkspaceSummaryCollaborators({
   groupClass: string;
 }) {
   const { collaborators, error } = state;
+  if (!collaborators.length)
+    return (
+      <div className={groupClass}>
+        <WorkspaceSummaryAddRow label="Collaborators" action="Add collaborator">
+          <CollaboratorMenuItems {...state} />
+        </WorkspaceSummaryAddRow>
+        {error && (
+          <div className="px-4 py-1 text-meta font-medium text-red">
+            {error}
+          </div>
+        )}
+      </div>
+    );
   return (
     <div className={groupClass}>
       <div className={cn(WS_SUMMARY_SECTION, "gap-2")}>

@@ -109,6 +109,10 @@ test("adding a reviewer or collaborator is a + on the section heading", () => {
     '<WorkspaceSummaryAdd label="Add collaborator">',
   );
   expect(collaboratorsSource).not.toContain("No collaborators");
+  // An empty section is one row with its own glyph, never a bare heading.
+  expect(summarySource).toContain('action="Ask for review"');
+  expect(summarySource).toContain('reviewEmpty && "hidden"');
+  expect(collaboratorsSource).toContain('action="Add collaborator"');
 });
 
 test("popup review heading keeps a small gap after a lone PR band", () => {

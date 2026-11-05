@@ -45,7 +45,10 @@ import {
   useWorkspaceCollaborators,
   WorkspaceSummaryCollaborators,
 } from "./WorkspaceCollaborators";
-import { WorkspaceSummaryAdd } from "./WorkspaceSummaryAdd";
+import {
+  WorkspaceSummaryAdd,
+  WorkspaceSummaryAddRow,
+} from "./WorkspaceSummaryAdd";
 import { usePeople, useReviewTeams } from "../lib/people";
 import { type ReviewLine, reviewLines } from "../lib/review-lines";
 import { Popover } from "../ui/popover";
@@ -740,6 +743,10 @@ export function WorkspaceSummaryBody({
   const passiveReviewers = humanReviewers.filter(
     (_, index) => index !== pickerIndex,
   );
+  // With no automated review and nobody asked, Review is one add row rather
+  // than a heading with nothing under it.
+  const reviewEmpty =
+    !showOsReview && otherReviewers.length === 0 && humanReviewers.length === 0;
 
   // A capture is shown, not listed: `contact-dark.png` names a file without
   // saying what is in it. A report or a data file is the other way round, and
@@ -1335,10 +1342,20 @@ export function WorkspaceSummaryBody({
           {/* One review section for both the automated reading and the people asked
 				    to review. Its action opens the complete workspace review; the final row
 				    owns the picker, so neither action requires the workspace panel. */}
+          {reviewEmpty && (
+            <WorkspaceSummaryAddRow
+              label="Reviewers"
+              action="Ask for review"
+              disabled={reviewBusy}
+            >
+              {reviewerMenuItems()}
+            </WorkspaceSummaryAddRow>
+          )}
           <div
             className={cn(
               WS_SUMMARY_SECTION,
               "ws-summary-review-heading gap-2",
+              reviewEmpty && "hidden",
               embedded
                 ? "h-11"
                 : cn(
