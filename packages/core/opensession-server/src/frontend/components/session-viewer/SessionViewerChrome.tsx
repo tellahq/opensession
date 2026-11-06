@@ -1155,9 +1155,9 @@ export function SessionViewerChrome({
                     )}
                   {/* The compact Workspace summary keeps the card's quiet row grammar.
 					    Detailed comments, files and tools open in the full side panel. */}
-                  {/* The card stays toggleable with the side panel open: the
-					    panel holds tabs (Changes, Review, Browser, …), the card is
-					    the workspace at a glance, and they no longer overlap. */}
+                  {/* The card steps down while the side panel is open and
+					    returns when it closes; the button still opens it as an
+					    overlay meanwhile. */}
                   {!isPhone && hasRepoWork && (
                     <WorkspaceSummary
                       session={session}

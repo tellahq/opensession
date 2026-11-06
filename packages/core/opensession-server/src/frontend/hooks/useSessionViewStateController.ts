@@ -597,11 +597,12 @@ export function useSessionHeaderLayoutController(
       setPanelTerminalMounted(true);
     }
   }, [activePanelOpen, desktopPanelPage, isPhone, setPanelTerminalMounted]);
-  // The open side panel narrows the conversation below the card's room, but
-  // the two are not either/or: a pinned card stays up beside the panel, over
-  // the conversation's edge, rather than the panel shutting it.
+  // The open side panel takes the card's room: the card steps down while the
+  // panel is open (its Changes tab carries the same summary) and comes back
+  // when the panel closes. The stored preference is left alone, and the
+  // header button still opens the card as an overlay.
   const summaryHasRoom =
-    headerW === 0 || headerW >= WS_SUMMARY_ROOM_W || activePanelOpen;
+    (headerW === 0 || headerW >= WS_SUMMARY_ROOM_W) && !activePanelOpen;
   const summaryVisible =
     summaryOpen && summaryHasRoom && !isPhone && hasRepoWork;
   const summaryStep = summaryVisible ? workspaceSummaryShift(headerW) : 0;
