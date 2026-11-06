@@ -81,6 +81,12 @@ interface SidePanelHostProps {
 
 const ICON = 15;
 
+/** The new-tab page is a short list of names, so the panel stays at its
+ *  narrowest there whatever width the tabs were dragged to. */
+const NEW_TAB_STYLE: CSSProperties & { "--panel-w": string } = {
+  "--panel-w": "320px",
+};
+
 function tabIcon(tab: SidePanelTab) {
   switch (tab) {
     case "changes":
@@ -299,8 +305,11 @@ export function SidePanelHost({
         <div className={PANEL_OVERLAY} onClick={() => onOpenChange(false)} />
       )}
       {!isPhone && available && open ? (
-        <div className={cn(PANEL_SHELL, entering && PANEL_ENTER)} style={style}>
-          {resizeHandle}
+        <div
+          className={cn(PANEL_SHELL, entering && PANEL_ENTER)}
+          style={current === "new" ? NEW_TAB_STYLE : style}
+        >
+          {current !== "new" && resizeHandle}
           {dropHover && (
             <div className={PANEL_DROP_PREVIEW} aria-hidden="true" />
           )}

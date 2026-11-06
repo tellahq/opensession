@@ -66,3 +66,8 @@ test("the new-tab page lists what the panel can open", () => {
   expect(html).toContain("Terminal");
   expect(html).not.toContain("Changes page");
 });
+
+test("the new-tab page keeps the panel at its narrowest", () => {
+  const html = render("new", [], ["changes", "review"]);
+  expect(html).toContain("--panel-w:320px");
+});
