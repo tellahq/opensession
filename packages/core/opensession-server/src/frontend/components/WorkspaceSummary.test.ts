@@ -41,7 +41,9 @@ test("commits and changed files share one row with a files or commits switch", (
     "const commitCount = prCommits.length || commits.length",
   );
   expect(summarySource).toContain("aria-expanded={workOpen}");
-  expect(summarySource).toContain('<SegmentedOption value="commits">');
+  expect(summarySource).toContain('aria-label="Show files or commits"');
+  expect(summarySource).toContain('["commits", "Commits", commitCount]');
+  expect(summarySource).not.toContain("<Segmented");
   expect(summarySource).toContain(
     "<span className={WS_SUMMARY_LABEL}>Changes</span>",
   );

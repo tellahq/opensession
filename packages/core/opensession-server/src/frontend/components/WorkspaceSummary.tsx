@@ -50,7 +50,6 @@ import { type ReviewLine, reviewLines } from "../lib/review-lines";
 import { Popover } from "../ui/popover";
 import { Button } from "../ui/button";
 import { Menu } from "../ui/menu";
-import { Segmented, SegmentedOption } from "../ui/segmented";
 import { Tooltip } from "../ui/tooltip";
 import { cn } from "../ui/cn";
 import type {
@@ -1191,26 +1190,40 @@ export function WorkspaceSummaryBody({
             )}
           />
         </button>
-        {workOpen && hasCommitDetails && showDiffChanges && (
-          <div className="flex shrink-0 px-4 pt-1 pb-1.5">
-            <Segmented
-              label="Show files or commits"
-              size="sm"
-              value={workTab}
-              onValueChange={(next) =>
-                setWorkTab(next === "commits" ? "commits" : "files")
-              }
+        {workOpen &&
+          hasCommitDetails &&
+          showDiffChanges && (
+            // Two quiet words in the section-label style, not a pill: a
+            // raised control here outweighed the rows it chooses between.
+            <div
+              role="group"
+              aria-label="Show files or commits"
+              className="flex h-[26px] shrink-0 items-center gap-3 px-4 phone:h-9"
             >
-              <SegmentedOption value="files">
-                Files <span className="text-faint tabular-nums">{files}</span>
-              </SegmentedOption>
-              <SegmentedOption value="commits">
-                Commits{" "}
-                <span className="text-faint tabular-nums">{commitCount}</span>
-              </SegmentedOption>
-            </Segmented>
-          </div>
-        )}
+              {(
+                [
+                  ["files", "Files", files],
+                  ["commits", "Commits", commitCount],
+                ] as const
+              ).map(([value, label, count]) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={workTab === value}
+                  onClick={() => setWorkTab(value)}
+                  className={cn(
+                    "focus-ring inline-flex cursor-pointer items-baseline gap-1 rounded-sm border-none bg-transparent p-0 text-label font-medium transition-colors motion-reduce:transition-none",
+                    workTab === value ? "text-fg" : "text-faint hover:text-dim",
+                  )}
+                >
+                  {label}
+                  <span className="font-normal text-faint tabular-nums">
+                    {count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
         {workOpen &&
           (view === "files" ? (
             <div className="pb-1">{changeFiles.map(fileChangeRow)}</div>
