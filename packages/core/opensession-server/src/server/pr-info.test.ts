@@ -1,7 +1,8 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { PR_DIFF_CACHE_LIMITS } from "./bounded-cache";
 import {
   __prDiffCacheForTest,
+  __withEmbeddableForTest,
   cachedPrDetailsForSession,
   ghApiErrorMessage,
   isNoPrError,
@@ -358,5 +359,40 @@ describe("PR details snapshot", () => {
       "none",
       "open-old",
     ]);
+  });
+});
+
+describe("preview embed probe", () => {
+  const realFetch = globalThis.fetch;
+  const realUiBase = process.env.OPENSESSION_UI_BASE;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    if (realUiBase === undefined) delete process.env.OPENSESSION_UI_BASE;
+    else process.env.OPENSESSION_UI_BASE = realUiBase;
+  });
+
+  test("probes again once a building deploy turns ready", async () => {
+    process.env.OPENSESSION_UI_BASE = "https://ui.example.test";
+    const url = "https://preview-embed-probe.example.test";
+    let deployed = false;
+    globalThis.fetch = (async () =>
+      deployed
+        ? new Response(null, {
+            status: 307,
+            headers: {
+              "content-security-policy":
+                "frame-ancestors https://ui.example.test",
+            },
+          })
+        : new Response(null, { status: 404 })) as unknown as typeof fetch;
+    const details = (status: string) =>
+      ({ staging: { status, url } }) as unknown as PrDetails;
+
+    const building = await __withEmbeddableForTest(details("Building"));
+    expect(building?.staging).toMatchObject({ embeddable: false, live: false });
+
+    deployed = true;
+    const ready = await __withEmbeddableForTest(details("Ready"));
+    expect(ready?.staging).toMatchObject({ embeddable: true, live: true });
   });
 });
