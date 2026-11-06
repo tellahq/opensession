@@ -76,6 +76,7 @@ function Popup({
   sideOffset = 8,
   alignOffset = 0,
   collisionPadding = 8,
+  collisionBoundary,
   arrow = false,
   elevation = "md",
   ring = "default",
@@ -109,6 +110,11 @@ function Popup({
   collisionPadding?: React.ComponentProps<
     typeof BasePopover.Positioner
   >["collisionPadding"];
+  /** The area the popup must stay inside. Defaults to its clipping
+   * ancestors; pass an element to keep it within one region of the page. */
+  collisionBoundary?: React.ComponentProps<
+    typeof BasePopover.Positioner
+  >["collisionBoundary"];
   /** Draw a callout diamond pointing back at the anchor, bridging
    * `sideOffset`. Matches the sidebar's legacy hover card, so a popup that
    * sits beside one of those reads as the same object. */
@@ -145,6 +151,7 @@ function Popup({
         alignOffset={alignOffset}
         anchor={anchor}
         collisionPadding={collisionPadding}
+        collisionBoundary={collisionBoundary}
         // Keep the diamond clear of the popup's rounded corners.
         arrowPadding={14}
         className={cn(
