@@ -705,6 +705,10 @@ export function NewSession({
 
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const voiceControlRef = useRef<VoiceInputControl>(null);
+  // A phone footer has no room for the live dictation pill beside its other
+  // controls, so while dictating the pill takes the whole row.
+  const [dictating, setDictating] = useState(false);
+  const phoneDictating = isPhone && dictating;
   // Hidden <input type="file"> driven by the "Add file" button — the mobile
   // path, since there's no clipboard paste there.
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1670,7 +1674,7 @@ export function NewSession({
 
           {/* Footer toolbar */}
           <div className={cn(FOOTER, edges.bottom && EDGE_DIVIDER)}>
-            <div className={FOOTER_LEFT}>
+            <div className={cn(FOOTER_LEFT, phoneDictating && "hidden")}>
               <Tooltip label="Attach a file" shortcut={attachKeys ?? undefined}>
                 <button
                   type="button"
@@ -2059,40 +2063,44 @@ export function NewSession({
             </div>
 
             <div className={FOOTER_RIGHT}>
-              {/* Always visible — on phones too, so a non-default (dumber) model
-                is never silently in effect. */}
-              <ModelEffortSelect
-                selection={{
-                  models,
-                  defaultModel,
-                  model,
-                  preferredDefaultModel,
-                  preferredDefaultEffort,
-                  effort,
-                  autoFallback,
-                  speed,
-                  accounts,
-                  accountId,
-                }}
-                appearance={{
-                  className: MODEL_PILL,
-                  title: "Model and reasoning effort",
-                  disabled: busy,
-                }}
-                actions={{
-                  changeModel: setModel,
-                  setAsDefault: setPreferredDefaultModel,
-                  changeEffort: setEffort,
-                  changeAutoFallback: setAutoFallback,
-                  changeSpeed: setSpeed,
-                  changeAccount: setAccountId,
-                }}
-              />
+              {/* Visible on phones too, so a non-default (dumber) model is
+                never silently in effect. Only phone dictation covers it. */}
+              {!phoneDictating && (
+                <ModelEffortSelect
+                  selection={{
+                    models,
+                    defaultModel,
+                    model,
+                    preferredDefaultModel,
+                    preferredDefaultEffort,
+                    effort,
+                    autoFallback,
+                    speed,
+                    accounts,
+                    accountId,
+                  }}
+                  appearance={{
+                    className: MODEL_PILL,
+                    title: "Model and reasoning effort",
+                    disabled: busy,
+                  }}
+                  actions={{
+                    changeModel: setModel,
+                    setAsDefault: setPreferredDefaultModel,
+                    changeEffort: setEffort,
+                    changeAutoFallback: setAutoFallback,
+                    changeSpeed: setSpeed,
+                    changeAccount: setAccountId,
+                  }}
+                />
+              )}
               <VoiceInput
                 className={FOOTER_ICON_BTN}
                 disabled={busy}
                 editTargetRef={promptRef}
                 controlRef={voiceControlRef}
+                onActiveChange={setDictating}
+                wide={phoneDictating}
                 onText={(t) => {
                   promptHandle.current?.appendText(t);
                   promptRef.current?.focus();

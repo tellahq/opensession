@@ -16,6 +16,8 @@ interface VoiceControlProps {
   onTextSend: (text: string) => void;
   onActiveChange: (active: boolean) => void;
   disabled?: boolean;
+  /** Phone dictation: the live pill fills the toolbar row. */
+  wide?: boolean;
 }
 
 export function VoiceControl({
@@ -29,6 +31,7 @@ export function VoiceControl({
   onTextSend,
   onActiveChange,
   disabled,
+  wide,
 }: VoiceControlProps) {
   const callActive = useSyncExternalStore(
     sessionVoice.subscribe,
@@ -42,6 +45,7 @@ export function VoiceControl({
       className={cn(
         "pwa-composer-dictation inline-flex shrink-0 items-center",
         minimized && "order-3",
+        wide && "min-w-0 grow basis-0",
       )}
     >
       {/* The mic is one of the resting pill's circles, so it takes the
@@ -56,6 +60,7 @@ export function VoiceControl({
         controlRef={controlRef}
         onActiveChange={onActiveChange}
         disabled={disabled || callActive}
+        wide={wide}
       />
     </motion.div>
   );

@@ -8,7 +8,7 @@ import React, {
 } from "react";
 import { motion } from "motion/react";
 import { transcribeClip } from "../lib/api";
-import { IconMic, IconStopSquare } from "./icons";
+import { IconMic, IconStopSquare, IconX } from "./icons";
 import { Tooltip } from "../ui/tooltip";
 import { Spinner } from "../ui/spinner";
 import { PRODUCT_NAME } from "../lib/brand";
@@ -41,12 +41,19 @@ export interface VoiceInputControl {
 const MAX_SECONDS = 120;
 /** Bars in the inline meter. Few enough to keep the pill compact. */
 const BAR_COUNT = 12;
+/** Bars in the row-wide meter. Enough for any phone width; the row clips
+ *  the oldest on the left. */
+const WIDE_BAR_COUNT = 64;
 
 /* The live pill stands in for the mic, beside the host's send control. The
    field stays visible and editable above it: the transcript is appended to
    the draft when the clip ends. */
 const PILL =
   "inline-flex h-10 shrink-0 items-center gap-1 rounded-full border border-line pl-3.5 pr-1 phone:h-11";
+/** A phone has no room beside the model pill, so there the pill takes the
+ *  whole toolbar row instead (the host hides its other controls). */
+const PILL_WIDE =
+  "flex h-11 min-w-0 flex-1 items-center gap-1 rounded-full border border-line px-0.5";
 const PILL_STOP =
   "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-fg transition-colors hover:bg-hover disabled:cursor-default disabled:opacity-50 phone:size-11";
 
@@ -83,6 +90,7 @@ export function VoiceInput({
   onActiveChange,
   shortcutActive = false,
   controlRef,
+  wide = false,
 }: {
   onText: (text: string) => void;
   /** Take the text and send it straight away. Without one, the send key only
@@ -99,6 +107,9 @@ export function VoiceInput({
   shortcutActive?: boolean;
   /** Lets the host's own send control stop and send. */
   controlRef?: React.Ref<VoiceInputControl>;
+  /** Fill the host's row while live, with a cancel button: a phone has no
+   *  room for the compact pill beside its other controls, and no Escape. */
+  wide?: boolean;
 }) {
   const dictateKeys = useShortcutKeys("composer-dictate");
   const [storedSendKey, setStoredSendKey] = useState(getSendKeyPref);
@@ -324,7 +335,7 @@ export function VoiceInput({
             }
             const rms = Math.sqrt(sum / buf.length);
             setLevels((prev) => [
-              ...prev.slice(-(BAR_COUNT - 1)),
+              ...prev.slice(-(WIDE_BAR_COUNT - 1)),
               Math.min(1, rms * 4),
             ]);
           }, 90),
@@ -453,6 +464,7 @@ export function VoiceInput({
   }, [error]);
 
   const recording = phase === "recording";
+  const bars = wide ? WIDE_BAR_COUNT : BAR_COUNT;
   return (
     <>
       {phase === "idle" ? (
@@ -469,7 +481,7 @@ export function VoiceInput({
           </button>
         </Tooltip>
       ) : (
-        <motion.div className={PILL} {...PILL_MOTION}>
+        <motion.div className={wide ? PILL_WIDE : PILL} {...PILL_MOTION}>
           <span className="sr-only" role="status" aria-live="polite">
             {phase === "requesting"
               ? "Starting dictation"
@@ -477,14 +489,30 @@ export function VoiceInput({
                 ? "Transcribing"
                 : "Recording"}
           </span>
+          {wide && (
+            <button
+              type="button"
+              className={cn(PILL_STOP, "text-dim")}
+              onClick={() => stop(false)}
+              disabled={phase === "transcribing"}
+              aria-label="Discard dictation"
+            >
+              <IconX size={22} />
+            </button>
+          )}
           {/* Oldest samples on the left, the newest by the stop button. */}
           <span
-            className="mr-1.5 flex h-5 items-center gap-[3px]"
+            className={cn(
+              "flex h-5 items-center gap-[3px]",
+              wide
+                ? "min-w-0 flex-1 justify-end overflow-hidden px-2"
+                : "mr-1.5",
+            )}
             aria-hidden="true"
           >
-            {Array.from({ length: BAR_COUNT }, (_, i) => {
+            {Array.from({ length: bars }, (_, i) => {
               const l = recording
-                ? levels[levels.length - BAR_COUNT + i]
+                ? levels[levels.length - bars + i]
                 : undefined;
               return (
                 <span

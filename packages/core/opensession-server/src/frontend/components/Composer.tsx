@@ -621,6 +621,9 @@ export function Composer({
   const voiceChat =
     !!onToggleCall && !hasDraft && !dictating && !busy && !callActive;
   const callEnd = !!onToggleCall && callActive && !hasDraft && !dictating;
+  // A phone row has no room for the live pill beside + and the model pill,
+  // so while dictating it is only the pill and send.
+  const phoneDictating = isPhone && dictating;
   const sendVisible = dictating || (showSend && !voiceChat && !callEnd);
   function handleDictationActive(active: boolean) {
     setDictating(active);
@@ -1887,7 +1890,7 @@ export function Composer({
               a glyph instead of a name; in a menu they each get a real label
               and stay one tap away. State stays visible where it already was —
               a set goal shows above the composer. */}
-          {hasAddMenu && (
+          {hasAddMenu && !phoneDictating && (
             <ComposerAddMenu
               menu={menu}
               setMenu={setMenu}
@@ -1935,7 +1938,7 @@ export function Composer({
               hides rather than squeezing the model pill or clipping a word.
               On a phone it is a gesture, not a key, so it drops the key cap
               and with it the width a crowded phone row cannot spare. */}
-          {!minimized && (
+          {!minimized && !phoneDictating && (
             <div className="@container flex min-w-0 shrink-0 grow basis-0 items-center justify-end">
               {shownPrediction &&
                 (isPhone ? (
@@ -1962,32 +1965,34 @@ export function Composer({
               composerToolbarSelect). It stays out of the resting phone pill
               because that state is minimized, but returns when the installed
               PWA composer expands. */}
-          <ModelRow
-            minimized={minimized}
-            models={models}
-            defaultModel={defaultModel}
-            model={model}
-            onModelChange={onModelChange}
-            preferredDefaultModel={preferredDefaultModel}
-            preferredDefaultEffort={preferredDefaultEffort}
-            onSetAsDefault={setPreferredDefaultModel}
-            modelDisabled={modelDisabled}
-            modelTitle={modelTitle}
-            effort={effort}
-            onEffortChange={onEffortChange}
-            autoFallback={autoFallback}
-            onAutoFallbackChange={onAutoFallbackChange}
-            speed={speed}
-            onSpeedChange={onSpeedChange}
-            accounts={accounts}
-            accountId={accountId}
-            onAccountChange={onAccountChange}
-            usage={usage}
-            disabled={disabled || modelPillDisabled}
-            effortDownLabel={effortDownLabel}
-            effortUpLabel={effortUpLabel}
-            onOpenChange={setModelMenuOpen}
-          />
+          {!phoneDictating && (
+            <ModelRow
+              minimized={minimized}
+              models={models}
+              defaultModel={defaultModel}
+              model={model}
+              onModelChange={onModelChange}
+              preferredDefaultModel={preferredDefaultModel}
+              preferredDefaultEffort={preferredDefaultEffort}
+              onSetAsDefault={setPreferredDefaultModel}
+              modelDisabled={modelDisabled}
+              modelTitle={modelTitle}
+              effort={effort}
+              onEffortChange={onEffortChange}
+              autoFallback={autoFallback}
+              onAutoFallbackChange={onAutoFallbackChange}
+              speed={speed}
+              onSpeedChange={onSpeedChange}
+              accounts={accounts}
+              accountId={accountId}
+              onAccountChange={onAccountChange}
+              usage={usage}
+              disabled={disabled || modelPillDisabled}
+              effortDownLabel={effortDownLabel}
+              effortUpLabel={effortUpLabel}
+              onOpenChange={setModelMenuOpen}
+            />
+          )}
 
           {/* Wrapper around the dictation mic — gives Motion a layout box so it
               glides between rows during the morph without disturbing either. */}
@@ -2002,6 +2007,7 @@ export function Composer({
             controlRef={voiceControlRef}
             onActiveChange={handleDictationActive}
             disabled={disabled || call?.active}
+            wide={phoneDictating}
           />
 
           {/* A live call: its audio options and the red hang-up take the
