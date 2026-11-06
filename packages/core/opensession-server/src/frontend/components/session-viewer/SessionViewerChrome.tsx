@@ -28,6 +28,7 @@ import type { SessionSocketSend } from "../../hooks/useSessionSocket";
 import type { WorkflowRunSnapshot } from "../../../server/workflow-types";
 import { DiffPanel, type SessionDiffState } from "../DiffPanel";
 import { SessionHeader } from "../session/SessionHeader";
+import { SidePanelToggle } from "../session/SidePanelToggle";
 import { ArchivedSessionItems } from "../ArchivedSessionItems";
 import { ModelMenuRow } from "../ModelMenuRow";
 import { PortalsPage } from "../PortalsPanel";
@@ -64,7 +65,6 @@ import {
   IconPlus,
   IconPullRequest,
   IconRobot,
-  IconSidebarRight,
   IconTrash,
 } from "../icons";
 import { KeepInSidebarIcon } from "../sidebar/KeepInSidebarMark";
@@ -1199,29 +1199,11 @@ export function SessionViewerChrome({
                       hasRoom={summaryHasRoom}
                     />
                   )}
-                  {!isPhone && panelAvailable && (
-                    <Tooltip label="Toggle workspace panel">
-                      <Button
-                        variant="ghost"
-                        size="md"
-                        // No height/width overrides: the primitive's icon-only box is
-                        // already the 32px square the ⋯ and share buttons use.
-                        // text-dim, not text-faint: the share and ⋯ buttons beside it
-                        // are dim, and a lighter ink made this read as disabled.
-                        // No negative margin after the ⋯ either: that -4px pull dated
-                        // from when both were narrow padded controls, and now that all
-                        // three are equal squares it just made this gap 4px where the
-                        // share → ⋯ one is the row's 8px.
-                        className="rounded-control text-dim hover:bg-hover hover:text-fg phone:order-2 phone:h-[38px] phone:min-h-[38px] phone:w-[38px] phone:bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] phone:text-accent"
-                        onClick={() => setActivePanelOpen(!activePanelOpen)}
-                        aria-label="Toggle side panel"
-                        // Iconic sidebar-right glyph — reads as "right side panel".
-                        // Passed as `icon` (not children) so the primitive uses its
-                        // icon-only square; as a child it counts as a label and gets
-                        // the text button's px-3, which made it 50px wide.
-                        icon={<IconSidebarRight size={22} />}
-                      />
-                    </Tooltip>
+                  {/* Open, the panel's tab strip carries this toggle, so it
+					    stays in the window's top-right corner instead of moving
+					    to the main area's edge. */}
+                  {!isPhone && panelAvailable && !activePanelOpen && (
+                    <SidePanelToggle onClick={() => setActivePanelOpen(true)} />
                   )}
                 </>
               }

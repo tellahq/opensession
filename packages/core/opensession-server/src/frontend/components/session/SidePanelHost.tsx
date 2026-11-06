@@ -42,6 +42,7 @@ import {
   IconX,
 } from "../icons";
 import { ShellPanel } from "../TerminalPanel";
+import { SidePanelToggle } from "./SidePanelToggle";
 
 interface SidePanelHostProps {
   hidden: boolean;
@@ -266,6 +267,9 @@ export function SidePanelHost({
           </button>
         </Tooltip>
       )}
+      {/* The header's toggle moves here while the panel is open, so it keeps
+          its top-right spot instead of riding the main area's edge. */}
+      <SidePanelToggle inPanel onClick={() => onOpenChange(false)} />
     </div>
   );
 

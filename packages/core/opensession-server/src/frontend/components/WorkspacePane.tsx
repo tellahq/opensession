@@ -45,7 +45,6 @@ import {
   IconLink,
   IconPencil,
   IconPlus,
-  IconSidebarRight,
   IconTrash,
 } from "./icons";
 import { Button } from "../ui/button";
@@ -54,6 +53,7 @@ import { Menu, MENU_ICON } from "../ui/menu";
 import { CopyCheck, useCopy } from "../ui/copy";
 import { toast } from "../ui/toast";
 import { Tooltip } from "../ui/tooltip";
+import { SidePanelToggle } from "./session/SidePanelToggle";
 import { OverflowFadeText } from "../ui/overflow-fade-text";
 import { cn } from "../ui/cn";
 import {
@@ -64,6 +64,7 @@ import {
 } from "../ui/top-bar";
 import {
   PANEL_BODY,
+  PANEL_TABS,
   PANEL_OVERLAY,
   PANEL_ENTER,
   PANEL_SHELL,
@@ -604,6 +605,11 @@ export function WorkspacePane({
         style={sidePanel.style}
       >
         {sidePanel.resizeHandle}
+        {/* The header's toggle moves here while the panel is open, so it
+            keeps its top-right spot instead of riding the main area's edge. */}
+        <div className={cn(PANEL_TABS, "justify-end")}>
+          <SidePanelToggle inPanel onClick={() => setPanelOpen(false)} />
+        </div>
         <div className={PANEL_BODY}>
           <div className="px-1">
             <WorkspaceInfo
@@ -870,16 +876,7 @@ export function WorkspacePane({
             hasRoom={reviewSummaryHasRoom}
           />
         )}
-        <Tooltip label="Toggle side panel">
-          <Button
-            variant="ghost"
-            size="md"
-            className="rounded-control text-dim hover:bg-hover hover:text-fg"
-            onClick={() => setPanelOpen(!panelOpen)}
-            aria-label="Toggle side panel"
-            icon={<IconSidebarRight size={22} />}
-          />
-        </Tooltip>
+        {!panelOpen && <SidePanelToggle onClick={() => setPanelOpen(true)} />}
       </TopBarActions>
     </TopBar>
   );
