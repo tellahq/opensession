@@ -309,24 +309,30 @@ function parseStaging(
 // details cache lives for minutes and is persisted across restarts, so a
 // "false" computed before the first probe finished used to stick to the PR
 // long after the probe knew better.
+//
+// Each answer remembers the deploy status it was probed under. A branch alias
+// probed while its first deploy is still building 404s with no CSP; when the
+// status then flips to Ready, that answer is a miss and the serve probes again
+// instead of showing the launch panel until the TTL runs out.
 const EMBED_TTL = 300_000;
 const EMBED_PROBE_TIMEOUT_MS = 3000;
 const embedCache = new Map<
   string,
-  { ok: boolean; live: boolean; ts: number }
+  { status: string; ok: boolean; live: boolean; ts: number }
 >();
 const embedInflight = new Map<string, Promise<void>>();
 
-function probeEmbeddable(url: string): Promise<void> {
-  let probe = embedInflight.get(url);
+function probeEmbeddable(url: string, status: string): Promise<void> {
+  const key = `${status}\n${url}`;
+  let probe = embedInflight.get(key);
   if (!probe) {
-    probe = runEmbedProbe(url).finally(() => embedInflight.delete(url));
-    embedInflight.set(url, probe);
+    probe = runEmbedProbe(url, status).finally(() => embedInflight.delete(key));
+    embedInflight.set(key, probe);
   }
   return probe;
 }
 
-async function runEmbedProbe(url: string): Promise<void> {
+async function runEmbedProbe(url: string, status: string): Promise<void> {
   try {
     const res = await fetch(url, {
       method: "GET",
@@ -343,9 +349,9 @@ async function runEmbedProbe(url: string): Promise<void> {
     // A branch alias with no deploy behind it yet 404s. Anything else (a page,
     // an auth redirect, a 401) means an earlier deploy is already serving.
     const live = res.status !== 404;
-    embedCache.set(url, { ok, live, ts: Date.now() });
+    embedCache.set(url, { status, ok, live, ts: Date.now() });
   } catch {
-    embedCache.set(url, { ok: false, live: false, ts: Date.now() });
+    embedCache.set(url, { status, ok: false, live: false, ts: Date.now() });
   }
 }
 
@@ -360,11 +366,11 @@ async function withEmbeddable(
   const staging = data?.staging;
   if (!data || !staging) return data;
   let hit = embedCache.get(staging.url);
-  if (!hit) {
-    await probeEmbeddable(staging.url);
+  if (!hit || hit.status !== staging.status) {
+    await probeEmbeddable(staging.url, staging.status);
     hit = embedCache.get(staging.url);
   } else if (Date.now() - hit.ts >= EMBED_TTL) {
-    void probeEmbeddable(staging.url);
+    void probeEmbeddable(staging.url, staging.status);
   }
   const embeddable = hit?.ok ?? false;
   const live = hit?.live ?? false;
@@ -377,6 +383,8 @@ async function withEmbeddable(
     return data;
   return { ...data, staging: { ...staging, embeddable, live, defaultPath } };
 }
+
+export const __withEmbeddableForTest = withEmbeddable;
 
 // Where the preview link lands when the session has not recorded the route of
 // the feature under test (`integrations.github.previewDefaultPath`, e.g. the
