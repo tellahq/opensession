@@ -47,7 +47,9 @@ export const WS_SUMMARY_SURFACE =
  * without pressing against it.
  */
 export const WS_SUMMARY_CARD =
-  "flex max-h-[min(72vh,640px)] w-[300px] flex-col overflow-y-auto py-2 " +
+  // Narrower than 300px only when the conversation column is: the card stays
+  // inside it (WorkspaceSummary's collision boundary) and its rows truncate.
+  "flex max-h-[min(72vh,640px)] w-[300px] max-w-[var(--available-width,300px)] flex-col overflow-y-auto py-2 " +
   WS_SUMMARY_SURFACE;
 
 /** Wide Review keeps its scroller full width so the native scrollbar stays at

@@ -312,6 +312,13 @@ export function WorkspaceSummary({
    *  opposed to one that was already pinned open when the pane mounted. Only
    *  the first kind may take focus. */
   const openedByPerson = useRef(false);
+  /** The conversation column the card hangs in. The card stays inside it, so
+   *  it never reaches over a page open in the side panel: a framed page can
+   *  paint above the card once it loads. */
+  const [column, setColumn] = useState<Element | null>(null);
+  const findColumn = (trigger: HTMLElement | null) => {
+    if (trigger) setColumn(trigger.closest(".detail-pane"));
+  };
   // One report of what is actually on screen, so the viewer's copy follows
   // every route in: the preference changing in another tab, the person opening
   // the card by hand, the pane narrowing under it.
@@ -389,6 +396,7 @@ export function WorkspaceSummary({
     >
       <Tooltip label="Workspace summary">
         <Popover.Trigger
+          ref={findColumn}
           className={cn(
             "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-control",
             "border-none bg-transparent p-0 text-dim hover:bg-hover hover:text-fg",
@@ -418,6 +426,7 @@ export function WorkspaceSummary({
         // 12px edge gutter. Its quiet shadow does not need more clearance.
         alignOffset={-4}
         collisionPadding={12}
+        collisionBoundary={column ?? undefined}
         // The card hangs 12px below whatever chrome it clears, in both
         // positions: the same gutter it keeps at the window's right edge, so
         // it reads as inset into a corner. Offsets are measured from the
