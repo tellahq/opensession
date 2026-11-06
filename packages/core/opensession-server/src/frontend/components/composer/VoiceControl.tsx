@@ -1,24 +1,17 @@
-import {
-  useSyncExternalStore,
-  type CSSProperties,
-  type RefObject,
-} from "react";
+import { useSyncExternalStore, type Ref, type RefObject } from "react";
 import { sessionVoice } from "../../lib/session-voice-runtime";
 import { motion } from "motion/react";
 import { composerMorph } from "../../ui/motion";
 import { cn } from "../../ui/cn";
-import { VoiceInput } from "../VoiceInput";
-import { useIsPhone } from "../../hooks/useIsPhone";
+import { VoiceInput, type VoiceInputControl } from "../VoiceInput";
 
 interface VoiceControlProps {
   minimized: boolean;
   className: string;
-  cancelClassName: string;
   shortcutActive: boolean;
   focused: boolean;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
-  overlayTargetRef: RefObject<HTMLDivElement | null>;
-  overlayStyle?: CSSProperties;
+  controlRef: Ref<VoiceInputControl>;
   onText: (text: string) => void;
   onTextSend: (text: string) => void;
   onActiveChange: (active: boolean) => void;
@@ -28,18 +21,15 @@ interface VoiceControlProps {
 export function VoiceControl({
   minimized,
   className,
-  cancelClassName,
   shortcutActive,
   focused,
   textareaRef,
-  overlayTargetRef,
-  overlayStyle,
+  controlRef,
   onText,
   onTextSend,
   onActiveChange,
   disabled,
 }: VoiceControlProps) {
-  const isPhone = useIsPhone();
   const callActive = useSyncExternalStore(
     sessionVoice.subscribe,
     sessionVoice.isActive,
@@ -55,31 +45,17 @@ export function VoiceControl({
       )}
     >
       {/* The mic is one of the resting pill's circles, so it takes the
-          round variant with the "+". That pairing used to come from a
-          `.composer.composer-min .palette-icon-btn` descendant rule. */}
+          round variant with the "+". Recording swaps it for a compact live
+          pill in the same place; the draft above stays visible. */}
       <VoiceInput
         className={className}
         shortcutActive={shortcutActive || focused}
-        cancelClassName={cancelClassName}
-        cancelFromPlus
         onText={onText}
         onTextSend={onTextSend}
         editTargetRef={textareaRef}
-        overlayTargetRef={overlayTargetRef}
-        overlayStyle={overlayStyle}
+        controlRef={controlRef}
         onActiveChange={onActiveChange}
-        // The bar covers the whole composer, so it takes the composer's
-        // own corner. The resting phone pill is included, which is a
-        // capsule rather than the expanded box's radius.
-        overlayClassName={
-          minimized
-            ? "rounded-[999px] phone:pl-2 phone:pr-0.5 phone:pb-1"
-            : "rounded-[var(--composer-radius)]"
-        }
         disabled={disabled || callActive}
-        // On a phone the recording state is three floating pills (stop,
-        // timer, send) rather than one bar over the composer.
-        pills={isPhone}
       />
     </motion.div>
   );

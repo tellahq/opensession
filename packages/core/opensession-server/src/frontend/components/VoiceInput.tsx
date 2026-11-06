@@ -1,38 +1,24 @@
 import React, {
   useEffect,
   useEffectEvent,
+  useImperativeHandle,
   useLayoutEffect,
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 import { motion } from "motion/react";
 import { transcribeClip } from "../lib/api";
-import {
-  IconArrowUp,
-  IconCheck,
-  IconMic,
-  IconPlus,
-  IconStopSquare,
-  IconX,
-} from "./icons";
+import { IconMic, IconStopSquare } from "./icons";
 import { Tooltip } from "../ui/tooltip";
-import { Button } from "../ui/button";
+import { Spinner } from "../ui/spinner";
 import { PRODUCT_NAME } from "../lib/brand";
 import { cn } from "../ui/cn";
 import { duration, ease } from "../ui/motion";
 import { paletteIconBtn } from "../lib/palette-classes";
-import { composerSend, composerSendDefault } from "../lib/composer-classes";
-import { useIsPhone } from "../hooks/useIsPhone";
 import { useShortcutKeys } from "../hooks/useShortcutBindings";
 import { matchesShortcut } from "../lib/shortcuts";
-import {
-  effectiveSendKey,
-  isSendCombo,
-  MOD_ENTER_GLYPH,
-} from "../lib/send-key";
+import { effectiveSendKey, isSendCombo } from "../lib/send-key";
 import { getSendKeyPref, onSendKeyChanged } from "../lib/send-key-pref";
-import { isApple } from "../lib/platform";
 import {
   startBrowserDictation,
   type BrowserDictation,
@@ -40,172 +26,80 @@ import {
 import { errorMessage } from "../lib/error-message";
 import { DictationAudio } from "../lib/dictation-audio";
 import { os1Shell } from "../lib/os1-shell";
-import { VoiceAudioSplitButton } from "./composer/VoiceAudioSettings";
+import { VoiceAudioOptions } from "./composer/VoiceAudioSettings";
 
-type Phase =
-  | "idle"
-  | "requesting"
-  | "recording"
-  | "cancelling"
-  | "transcribing";
+type Phase = "idle" | "requesting" | "recording" | "transcribing";
+
+/** What a host can ask of a live dictation: its own send control stops the
+ *  clip and sends the transcript, as the send key does. */
+export interface VoiceInputControl {
+  /** Stops and sends. False when nothing is recording. */
+  send: () => boolean;
+}
 
 /** Dictation is capped. This is a session input, not a memo recorder. */
 const MAX_SECONDS = 120;
-const INITIAL_BAR_COUNT = 72;
-const INITIAL_PHONE_BAR_COUNT = 24;
-const MAX_BAR_COUNT = 160;
-const BAR_WIDTH = 3;
-const BAR_GAP = 4;
+/** Bars in the inline meter. Few enough to keep the pill compact. */
+const BAR_COUNT = 12;
 
-/* The recording bar's chrome. Every variant is written out in full rather than
-   composed from a fragment: Tailwind scans source text, so a class assembled
-   from a variable is never generated.
-
-   The bar covers the WHOLE input rather than parking on its bottom edge: while
-   a clip is recording there is nothing to read and nothing to edit in the
-   draft underneath, and a half-visible field invited a caret into text the
-   dictation was about to append to. It carries the host surface's own fill so
-   the waveform reads as drawn straight onto the container, not onto a second
-   raised slab inside it. */
-const OVERLAY =
-  "pointer-events-auto absolute inset-0 z-[6] flex items-end gap-1.5 bg-[var(--composer-surface)] px-3.5 pb-2.5 phone:px-3 phone:pb-[9px]";
-/** Default corner. A host whose container is rounded differently passes its
- *  own (the new-session card is `rounded-2xl`). */
-const OVERLAY_RADIUS = "rounded-[var(--composer-radius)]";
-
-/* Phone pill layout: three floating capsules (stop · timer and meter · send)
-   in place of the one bar. The overlay itself is clear; each pill carries the
-   composer's own surface, border and shadow so it reads as a piece of it. */
-const PILL_OVERLAY =
-  "pointer-events-auto absolute inset-0 z-[6] flex items-center gap-2.5";
+/* The live pill stands in for the mic, beside the host's send control. The
+   field stays visible and editable above it: the transcript is appended to
+   the draft when the clip ends. */
 const PILL =
-  "inline-flex h-12 min-w-0 items-center justify-center rounded-full border border-[color:color-mix(in_srgb,var(--composer-border)_35%,transparent)] bg-[var(--composer-surface)] shadow-[var(--composer-shadow)]";
-/** Geometry over Button's own: `cn` merges, so these win over the variant's
- *  size, radius and hover wash. */
-const PILL_BUTTON = "h-12 flex-1 rounded-full px-0 disabled:opacity-35";
-const PILL_STOP = "text-fg hover:bg-[var(--composer-surface)] hover:text-fg";
-const PILL_SEND = "border-transparent shadow-[var(--composer-shadow)]";
-const PILL_METER_BARS = 10;
-const PILL_BAR = "w-[3px] shrink-0 rounded-full bg-dim";
-
-function formatElapsed(seconds: number) {
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-}
+  "inline-flex h-10 shrink-0 items-center gap-1 rounded-full border border-line pl-3.5 pr-1 phone:h-11";
+const PILL_STOP =
+  "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-fg transition-colors hover:bg-hover disabled:cursor-default disabled:opacity-50 phone:size-11";
 
 /* Waveform bars. Colour lives on the variant, never alongside a second colour
    utility on the same element. Two of those don't compose, the sheet's order
-   decides the winner. Bars without a sample yet are a 2px baseline dot; live
-   ones get their height inline from the level meter. */
-const WAVE_BAR_IDLE = "h-0.5 w-[3px] shrink-0 rounded-full bg-faint";
+   decides the winner. Bars without a sample yet are a 3px dot; live ones get
+   their height inline from the level meter. */
+const WAVE_BAR_IDLE = "h-[3px] w-[3px] shrink-0 rounded-full bg-faint";
 const WAVE_BAR_LIVE =
-  "h-0.5 w-[3px] shrink-0 rounded-full bg-dim transition-[height] duration-[90ms] ease-linear";
+  "h-[3px] w-[3px] shrink-0 rounded-full bg-dim transition-[height] duration-[90ms] ease-linear";
 
-/* Hosts can match cancel to the control it replaces. This fallback keeps the
-   standalone VoiceInput target at the same 40px size as its idle mic. */
-const GLYPH_CANCEL =
-  "inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-dim transition-colors hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-35";
-
-/** Each period fades in after the one before it, then all three clear together.
- *  Their spans stay in layout while transparent so the label never shifts. */
-const TRANSCRIBING_DOT_STARTS = [0.06, 0.23, 0.4] as const;
-const TRANSCRIBING_DOT_MOTION = {
-  duration: 1.4,
-  repeat: Infinity,
-  ease: "linear",
-} as const;
-
-/** The recording row arrives through a short blur rather than sliding. The
- *  overlay's surface itself is not animated: it covers the field on the first
- *  frame, so text cannot remain visible while the controls settle in. */
-const ROW_MOTION = {
-  initial: { filter: "blur(4px)" },
-  animate: { filter: "blur(0px)" },
+/** The pill arrives through a short blur rather than sliding. */
+const PILL_MOTION = {
+  initial: { opacity: 0, filter: "blur(4px)" },
+  animate: { opacity: 1, filter: "blur(0px)" },
   transition: { type: "tween", duration: duration.base, ease },
-} as const;
-const GLYPH_MORPH = {
-  type: "spring",
-  duration: duration.large,
-  bounce: 0,
-} as const;
-const MIC_OUT = {
-  initial: { opacity: 1, filter: "blur(0px)", scale: 1 },
-  animate: { opacity: 0, filter: "blur(4px)", scale: 0.25 },
-  transition: GLYPH_MORPH,
-} as const;
-const CHECK_IN = {
-  initial: { opacity: 0, filter: "blur(4px)", scale: 0.25 },
-  animate: { opacity: 1, filter: "blur(0px)", scale: 1 },
-  transition: GLYPH_MORPH,
-} as const;
-const PLUS_TO_CANCEL = {
-  initial: { rotate: 0 },
-  animate: { rotate: 45 },
-  transition: GLYPH_MORPH,
 } as const;
 
 /**
- * Wispr-Flow-style dictation control shared by the session Composer and the
- * New-session palette. Idle it's just a mic button; tapping it takes over the
- * whole input surface with a recording bar (cancel × · live transcript · save
- * ✓ · save and send ↑), then hands the browser's final text to `onText` or,
- * when the send button asked for it, to `onTextSend`. Browsers without live
- * speech recognition keep the prior /api/transcribe fallback.
- *
- * ✓ and ↑ differ only in what happens after the text lands: ✓ leaves it in the
- * draft to read and edit (and dictating again appends to it), ↑ sends the
- * message as it stands.
- *
- * The bar renders as an absolutely-positioned overlay filling the nearest
- * positioned ancestor, so the host container must be positioned: `.composer`
- * in the session view, and the palette's Modal.Content, whose `variant="palette"`
- * carries `relative` for exactly this.
+ * Dictation control shared by the session Composer and the New-session
+ * palette. Idle it's a mic button; tapping it swaps the mic for a compact
+ * live pill (meter · stop) and leaves the field above it visible. Stop puts
+ * the browser's final text in the draft through `onText`; the send key, or
+ * the host's send control through `controlRef`, hands it to `onTextSend`
+ * instead. Escape discards the clip. Browsers without live speech
+ * recognition keep the /api/transcribe fallback.
  */
 export function VoiceInput({
   onText,
   onTextSend,
   disabled,
   className = paletteIconBtn,
-  overlayClassName,
-  overlayStyle,
-  overlayTargetRef,
   editTargetRef,
   onActiveChange,
   shortcutActive = false,
-  cancelClassName,
-  cancelFromPlus = false,
-  pills = false,
+  controlRef,
 }: {
   onText: (text: string) => void;
-  /** Take the text and send it straight away. Without one, the send button is
-   *  not drawn. A host with nothing to send to only offers ✓. */
+  /** Take the text and send it straight away. Without one, the send key only
+   *  stops the clip. */
   onTextSend?: (text: string) => void;
   disabled?: boolean;
-  /** Classes for the idle mic button. Both hosts pass their own: the
-   *  new-session footer so the mic keeps the sizing its neighbours get there,
-   *  the composer so it turns into a circle with the "+" in the resting
-   *  pill. */
+  /** Classes for the idle mic button, so it matches its neighbours. */
   className?: string;
-  /** Corner (and any surface override) for the recording bar, to match the
-   *  container it covers. */
-  overlayClassName?: string;
-  overlayStyle?: React.CSSProperties;
-  /** Optional full-input layer. The session Composer's mic lives inside its
-   *  toolbar, so its overlay is portaled to a box covering the Composer. */
-  overlayTargetRef?: React.RefObject<HTMLElement | null>;
   /** The draft field to restore after keeping, cancelling, or an error. */
   editTargetRef?: React.RefObject<HTMLElement | null>;
-  /** Lets a host collapse its container while dictation owns the input. */
+  /** Lets a host swap its send control while dictation is live. */
   onActiveChange?: (active: boolean) => void;
   /** Lets this visible Composer claim the app-wide dictate shortcut. */
   shortcutActive?: boolean;
-  /** Matches cancel to the add control it replaces in a full-surface host. */
-  cancelClassName?: string;
-  /** Rotate the host's add glyph into cancel instead of swapping to an X. */
-  cancelFromPlus?: boolean;
-  /** Draw the recording state as separate stop, timer and send pills. */
-  pills?: boolean;
+  /** Lets the host's own send control stop and send. */
+  controlRef?: React.Ref<VoiceInputControl>;
 }) {
-  const isPhone = useIsPhone();
   const dictateKeys = useShortcutKeys("composer-dictate");
   const [storedSendKey, setStoredSendKey] = useState(getSendKeyPref);
   useEffect(
@@ -213,20 +107,9 @@ export function VoiceInput({
     [],
   );
   const sendKey = effectiveSendKey(storedSendKey);
-  const sendKeyCaps =
-    sendKey === "mod-enter" ? [MOD_ENTER_GLYPH] : [isApple ? "↵" : "Enter"];
-  const [barCount, setBarCount] = useState(
-    isPhone ? INITIAL_PHONE_BAR_COUNT : INITIAL_BAR_COUNT,
-  );
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [levels, setLevels] = useState<number[]>([]);
-  const [liveTranscript, setLiveTranscript] = useState("");
-  const [elapsed, setElapsed] = useState(0);
-  const [overlayTarget, setOverlayTarget] = useState<HTMLElement | null>(null);
-  useLayoutEffect(() => {
-    setOverlayTarget(overlayTargetRef?.current ?? null);
-  }, [overlayTargetRef]);
   const recRef = useRef<MediaRecorder | null>(null);
   const speechRef = useRef<BrowserDictation | null>(null);
   const speechResultRef = useRef<Promise<string> | null>(null);
@@ -244,10 +127,9 @@ export function VoiceInput({
   const captureRef = useRef<DictationAudio | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const acceptRef = useRef(false);
-  /** Which button ended the clip: ↑ sends the result, ✓ just keeps it. */
+  /** Which control ended the clip: send sends the result, stop keeps it. */
   const sendRef = useRef(false);
   const timersRef = useRef<number[]>([]);
-  const waveformRef = useRef<HTMLDivElement | null>(null);
   const idleButtonRef = useRef<HTMLButtonElement | null>(null);
 
   function cleanup() {
@@ -266,12 +148,8 @@ export function VoiceInput({
   }
 
   function restoreEditorFocus() {
-    // The first frame lets React remove `inert`; the second restores the caret
-    // after that commit instead of trying to focus an inert textarea.
     requestAnimationFrame(() =>
-      requestAnimationFrame(() =>
-        returnFocusRef.current?.focus({ preventScroll: true }),
-      ),
+      returnFocusRef.current?.focus({ preventScroll: true }),
     );
   }
 
@@ -282,21 +160,14 @@ export function VoiceInput({
     speechRef.current = null;
     speechResultRef.current = null;
     cleanup();
-    setLiveTranscript("");
     setError(message);
     setPhase("idle");
     restoreEditorFocus();
   }
 
   function finishCancellation() {
-    setLiveTranscript("");
-    setPhase("cancelling");
-    timersRef.current.push(
-      window.setTimeout(() => {
-        setPhase("idle");
-        restoreEditorFocus();
-      }, duration.large * 1000),
-    );
+    setPhase("idle");
+    restoreEditorFocus();
   }
 
   function stop(accept: boolean, send = false) {
@@ -304,10 +175,10 @@ export function VoiceInput({
       requestRef.current++;
       cleanup();
       finishCancellation();
-      return;
+      return true;
     }
     const rec = recRef.current;
-    if (!rec || rec.state === "inactive") return;
+    if (!rec || rec.state === "inactive") return false;
     acceptRef.current = accept;
     sendRef.current = accept && send;
     const speech = speechRef.current;
@@ -320,7 +191,9 @@ export function VoiceInput({
       speechResultRef.current = null;
     }
     rec.stop();
+    return true;
   }
+  useImperativeHandle(controlRef, () => ({ send: () => stop(true, true) }));
 
   async function finish(
     blob: Blob,
@@ -354,7 +227,6 @@ export function VoiceInput({
       .finally(() => {
         if (request === requestRef.current) {
           sendRef.current = false;
-          setLiveTranscript("");
           setPhase("idle");
           if (restoreFocus) restoreEditorFocus();
         }
@@ -378,17 +250,14 @@ export function VoiceInput({
     speechRef.current?.cancel();
     speechRef.current = null;
     speechResultRef.current = null;
-    setLiveTranscript("");
     setPhase("requesting");
-    // The bar hides the field, so the caret must leave it too: a keystroke
-    // into text nobody can see is an edit made blind, and the dictation is
-    // about to append to that same draft.
-    const focused =
-      document.activeElement instanceof HTMLElement
+    // The field stays visible and editable while recording; the transcript
+    // is appended to it when the clip ends, and the caret returns there.
+    returnFocusRef.current =
+      editTargetRef?.current ??
+      (document.activeElement instanceof HTMLElement
         ? document.activeElement
-        : null;
-    returnFocusRef.current = editTargetRef?.current ?? focused;
-    focused?.blur?.();
+        : null);
 
     const capture = new DictationAudio((message) =>
       failRecording(message, request),
@@ -455,7 +324,7 @@ export function VoiceInput({
             }
             const rms = Math.sqrt(sum / buf.length);
             setLevels((prev) => [
-              ...prev.slice(-(MAX_BAR_COUNT - 1)),
+              ...prev.slice(-(BAR_COUNT - 1)),
               Math.min(1, rms * 4),
             ]);
           }, 90),
@@ -468,21 +337,16 @@ export function VoiceInput({
       if (request !== requestRef.current) return;
       const startedAt = Date.now();
       setLevels([]);
-      setElapsed(0);
       timersRef.current.push(
         window.setInterval(() => {
-          const ms = Date.now() - startedAt;
-          setElapsed(Math.min(MAX_SECONDS, Math.floor(ms / 1000)));
-          if (ms >= MAX_SECONDS * 1000) stop(true);
+          if (Date.now() - startedAt >= MAX_SECONDS * 1000) stop(true);
         }, 1000),
       );
       rec.start(250);
       // Browser speech recognition streams partial text while the clip is still
       // being recorded. The audio blob remains the accuracy-preserving fallback
       // when the browser service is absent or fails.
-      speechRef.current = startBrowserDictation((text) => {
-        if (request === requestRef.current) setLiveTranscript(text);
-      }, stream);
+      speechRef.current = startBrowserDictation(() => {}, stream);
       setPhase("recording");
     } catch (error) {
       capture.stop();
@@ -512,7 +376,6 @@ export function VoiceInput({
     speechRef.current = null;
     speechResultRef.current = null;
     cleanup();
-    setLiveTranscript("");
     setPhase("idle");
   });
   useEffect(() => {
@@ -527,28 +390,7 @@ export function VoiceInput({
     };
   }, []);
 
-  // The overlay is visually modal, so make it modal to keyboards and assistive
-  // technology too. The portal target remains interactive; its siblings are
-  // restored to exactly the inert state they had before recording.
   const active = phase !== "idle";
-  useLayoutEffect(() => {
-    const waveform = waveformRef.current;
-    if (!active || !waveform) return;
-    const measure = () => {
-      const count = Math.max(
-        1,
-        Math.min(
-          MAX_BAR_COUNT,
-          Math.floor((waveform.clientWidth + BAR_GAP) / (BAR_WIDTH + BAR_GAP)),
-        ),
-      );
-      setBarCount((current) => (current === count ? current : count));
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(waveform);
-    return () => observer.disconnect();
-  }, [active]);
   // The shortcut listener reads the live start closure through an effect
   // event, so the subscription keys stay the enablement state.
   const startFromShortcut = useEffectEvent(function onKeyDown(
@@ -579,40 +421,30 @@ export function VoiceInput({
     window.addEventListener("keydown", startFromShortcut);
     return () => window.removeEventListener("keydown", startFromShortcut);
   }, [disabled, editTargetRef, phase, shortcutActive]);
-  const stopOnSend = useEffectEvent(function onKeyDown(event: KeyboardEvent) {
-    if (event.defaultPrevented || event.repeat || !isSendCombo(event, sendKey))
-      return;
+  // Capture phase, ahead of the field's own handlers: while a clip records,
+  // the send key sends the clip (with the draft) and Escape discards it.
+  const keysWhileRecording = useEffectEvent(function onKeyDown(
+    event: KeyboardEvent,
+  ) {
+    if (event.defaultPrevented || event.repeat) return;
+    const cancel = event.key === "Escape";
+    if (!cancel && !(onTextSend && isSendCombo(event, sendKey))) return;
     event.preventDefault();
-    stop(true, true);
+    event.stopPropagation();
+    stop(!cancel, !cancel);
   });
   useEffect(() => {
-    if (phase !== "recording" || !onTextSend) return;
-    window.addEventListener("keydown", stopOnSend);
-    return () => window.removeEventListener("keydown", stopOnSend);
-  }, [onTextSend, phase, sendKey]);
+    if (phase !== "recording" && phase !== "requesting") return;
+    window.addEventListener("keydown", keysWhileRecording, true);
+    return () =>
+      window.removeEventListener("keydown", keysWhileRecording, true);
+  }, [phase]);
   useEffect(() => {
     activeChangeRef.current?.(active);
     return () => {
       if (active) activeChangeRef.current?.(false);
     };
   }, [active]);
-  useEffect(() => {
-    const target = overlayTarget;
-    const parent = target?.parentElement;
-    if (!active || !target || !parent) return;
-    const siblings = Array.from(parent.children).filter(
-      (child): child is HTMLElement =>
-        child instanceof HTMLElement && child !== target,
-    );
-    const previous = siblings.map(
-      (element) => [element, element.inert] as const,
-    );
-    for (const [element] of previous) element.inert = true;
-    return () => {
-      for (const [element, inert] of previous) element.inert = inert;
-    };
-  }, [active, overlayTarget]);
-
   // Errors show as a small bubble above the control; clear themselves.
   useEffect(() => {
     if (!error) return;
@@ -620,269 +452,71 @@ export function VoiceInput({
     return () => clearTimeout(t);
   }, [error]);
 
-  const pillOverlay = phase !== "idle" && (
-    <div className={PILL_OVERLAY}>
-      {phase === "transcribing" ? (
-        <motion.div
-          key="transcribing"
-          className={cn(PILL, "flex-1 px-5 text-label font-medium text-dim")}
-          style={overlayStyle}
-          role="status"
-          aria-live="polite"
-          {...ROW_MOTION}
-        >
-          Transcribing
-          <span className="inline-flex" aria-hidden="true">
-            {TRANSCRIBING_DOT_STARTS.map((start, index) => (
-              <motion.span
-                key={index}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: [0, 0, 1, 1, 0, 0] }}
-                transition={{
-                  ...TRANSCRIBING_DOT_MOTION,
-                  times: [0, start, start + 0.06, 0.72, 0.78, 1],
-                }}
-              >
-                .
-              </motion.span>
-            ))}
-          </span>
-        </motion.div>
-      ) : (
-        <motion.div
-          key="recording"
-          className="flex min-w-0 flex-1 items-center gap-2.5"
-          {...ROW_MOTION}
-        >
-          <span className="sr-only" role="status" aria-live="polite">
-            {phase === "requesting" ? "Starting dictation" : "Recording"}
-          </span>
-          <Button
-            variant="ghost"
-            className={cn(PILL, PILL_BUTTON, PILL_STOP)}
-            style={overlayStyle}
-            onClick={() => stop(true)}
-            disabled={phase !== "recording"}
-            aria-label="Stop and transcribe"
-          >
-            <IconStopSquare size={32} />
-          </Button>
-          <div
-            className={cn(PILL, "flex-[1.4] gap-3 pl-4 pr-6")}
-            style={overlayStyle}
-          >
-            <span className="text-section-title font-semibold tabular-nums text-fg">
-              {formatElapsed(elapsed)}
-            </span>
-            <span
-              className="flex h-5 items-center gap-[3px]"
-              aria-hidden="true"
-            >
-              {Array.from({ length: PILL_METER_BARS }, (_, i) => {
-                const l = levels[levels.length - PILL_METER_BARS + i] ?? 0;
-                return (
-                  <span
-                    key={i}
-                    className={PILL_BAR}
-                    style={{ height: `${40 + l * 60}%` }}
-                  />
-                );
-              })}
-            </span>
-          </div>
-          {onTextSend && (
-            <Button
-              variant="primary"
-              className={cn(PILL_BUTTON, PILL_SEND)}
-              onClick={() => stop(true, true)}
-              disabled={phase !== "recording"}
-              aria-label="Stop, transcribe and send"
-            >
-              <IconArrowUp size={26} className="[&_path]:[stroke-width:2.25]" />
-            </Button>
-          )}
-        </motion.div>
-      )}
-    </div>
-  );
-  const overlay = phase !== "idle" && (
-    <div
-      className={cn(OVERLAY, overlayClassName || OVERLAY_RADIUS)}
-      style={overlayStyle}
-    >
-      {phase === "recording" ||
-      phase === "requesting" ||
-      phase === "cancelling" ? (
-        <motion.div
-          key="recording"
-          className="flex h-10 min-w-0 flex-1 items-center gap-2 phone:gap-1.5"
-          {...ROW_MOTION}
-        >
-          <span className="sr-only" role="status" aria-live="polite">
-            {phase === "requesting" ? "Starting dictation" : "Recording"}
-          </span>
-          {/* Leading × puts the way out where a person's eye starts. The
-              two committing actions stay together on the right. */}
-          <Tooltip label="Cancel">
-            <button
-              type="button"
-              className={cancelClassName || GLYPH_CANCEL}
-              onClick={() => stop(false)}
-              disabled={phase === "cancelling"}
-              aria-label="Cancel dictation"
-            >
-              {cancelFromPlus ? (
-                <motion.span
-                  className="inline-flex"
-                  initial={PLUS_TO_CANCEL.initial}
-                  animate={
-                    phase === "cancelling"
-                      ? PLUS_TO_CANCEL.initial
-                      : PLUS_TO_CANCEL.animate
-                  }
-                  transition={PLUS_TO_CANCEL.transition}
-                >
-                  <IconPlus size={22} />
-                </motion.span>
-              ) : (
-                <IconX size={22} />
-              )}
-            </button>
-          </Tooltip>
-          {/* Full-width track: baseline dots on the quiet/older left, live
-              bars accumulating on the right by the accept buttons. */}
-          <div
-            ref={waveformRef}
-            className="relative mx-4 flex h-full min-w-0 flex-1 items-center justify-center gap-1 overflow-hidden phone:mx-[18px]"
-            aria-hidden="true"
-          >
-            <div
-              className={cn(
-                "absolute inset-0 flex items-center justify-center gap-1 transition-opacity",
-                liveTranscript && "opacity-15",
-              )}
-            >
-              {Array.from({ length: barCount }, (_, i) => {
-                const l = levels[levels.length - barCount + i];
-                const active = l !== undefined;
-                return (
-                  <span
-                    key={i}
-                    className={active ? WAVE_BAR_LIVE : WAVE_BAR_IDLE}
-                    style={{ height: active ? `${16 + l * 84}%` : undefined }}
-                  />
-                );
-              })}
-            </div>
-            {liveTranscript && (
-              <span className="relative z-[1] block min-w-0 truncate text-label text-fg">
-                {liveTranscript}
-              </span>
-            )}
-          </div>
-          <Tooltip label="Keep it. The text lands in the draft to edit.">
-            <button
-              type="button"
-              className={cn(className, "text-fg hover:text-accent")}
-              onClick={() => stop(true)}
-              disabled={phase === "requesting" || phase === "cancelling"}
-              aria-label="Stop and transcribe"
-            >
-              {/* Start with the mic at the checkmark's resting position,
-                  then blur the two glyphs through one another. */}
-              <motion.span
-                className="!absolute inset-0 inline-flex items-center justify-center"
-                {...MIC_OUT}
-                aria-hidden="true"
-              >
-                <IconMic size={22} />
-              </motion.span>
-              <motion.span
-                className="inline-flex"
-                {...CHECK_IN}
-                aria-hidden="true"
-              >
-                <IconCheck size={22} />
-              </motion.span>
-            </button>
-          </Tooltip>
-          {onTextSend && (
-            <Tooltip label="Send it" shortcut={sendKeyCaps}>
-              <button
-                type="button"
-                className={cn(composerSend, composerSendDefault)}
-                onClick={() => stop(true, true)}
-                disabled={phase === "requesting" || phase === "cancelling"}
-                aria-label="Stop, transcribe and send"
-              >
-                <IconArrowUp size={20} />
-              </button>
-            </Tooltip>
-          )}
-        </motion.div>
-      ) : (
-        <motion.div
-          key="transcribing"
-          className="flex h-10 min-w-0 flex-1 items-center gap-2.5 px-1"
-          role="status"
-          aria-live="polite"
-          {...ROW_MOTION}
-        >
-          <span className="sr-only">Transcribing</span>
-          {liveTranscript ? (
-            <span
-              className="min-w-0 truncate text-label text-fg"
-              aria-hidden="true"
-            >
-              {liveTranscript}
-            </span>
-          ) : (
-            <span
-              className="shrink-0 text-label font-medium text-dim"
-              aria-hidden="true"
-            >
-              Transcribing
-              <span className="inline-flex">
-                {TRANSCRIBING_DOT_STARTS.map((start, index) => (
-                  <motion.span
-                    key={index}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: [0, 0, 1, 1, 0, 0] }}
-                    transition={{
-                      ...TRANSCRIBING_DOT_MOTION,
-                      times: [0, start, start + 0.06, 0.72, 0.78, 1],
-                    }}
-                  >
-                    .
-                  </motion.span>
-                ))}
-              </span>
-            </span>
-          )}
-        </motion.div>
-      )}
-    </div>
-  );
-  const shownOverlay = pills ? pillOverlay : overlay;
+  const recording = phase === "recording";
   return (
     <>
-      <VoiceAudioSplitButton
-        mode="dictation"
-        disabled={disabled || phase !== "idle"}
-      >
+      {phase === "idle" ? (
         <Tooltip label="Dictate" shortcut={dictateKeys ?? undefined}>
           <button
             ref={idleButtonRef}
             type="button"
             className={className}
             onClick={start}
-            disabled={disabled || phase !== "idle"}
+            disabled={disabled}
             aria-label="Dictate"
           >
             <IconMic size={22} />
           </button>
         </Tooltip>
-      </VoiceAudioSplitButton>
+      ) : (
+        <motion.div className={PILL} {...PILL_MOTION}>
+          <span className="sr-only" role="status" aria-live="polite">
+            {phase === "requesting"
+              ? "Starting dictation"
+              : phase === "transcribing"
+                ? "Transcribing"
+                : "Recording"}
+          </span>
+          {/* Oldest samples on the left, the newest by the stop button. */}
+          <span
+            className="mr-1.5 flex h-5 items-center gap-[3px]"
+            aria-hidden="true"
+          >
+            {Array.from({ length: BAR_COUNT }, (_, i) => {
+              const l = recording
+                ? levels[levels.length - BAR_COUNT + i]
+                : undefined;
+              return (
+                <span
+                  key={i}
+                  className={l === undefined ? WAVE_BAR_IDLE : WAVE_BAR_LIVE}
+                  style={
+                    l === undefined ? undefined : { height: `${15 + l * 85}%` }
+                  }
+                />
+              );
+            })}
+          </span>
+          {phase === "transcribing" ? (
+            <span className="inline-flex size-8 items-center justify-center text-dim phone:size-11">
+              <Spinner size="md" />
+            </span>
+          ) : (
+            <Tooltip label="Stop. Esc discards it.">
+              <button
+                type="button"
+                className={PILL_STOP}
+                onClick={() => stop(true)}
+                disabled={!recording}
+                aria-label="Stop dictating"
+              >
+                <IconStopSquare size={20} />
+              </button>
+            </Tooltip>
+          )}
+          <VoiceAudioOptions mode="dictation" />
+        </motion.div>
+      )}
       {error && phase === "idle" && (
         <div
           role="alert"
@@ -891,9 +525,6 @@ export function VoiceInput({
           {error}
         </div>
       )}
-      {overlayTarget && shownOverlay
-        ? createPortal(shownOverlay, overlayTarget)
-        : shownOverlay}
     </>
   );
 }

@@ -5,15 +5,14 @@ test("a long phone prompt scrolls without moving the title bar or send button", 
   const source = await Bun.file(
     new URL("./NewSession.tsx", import.meta.url),
   ).text();
-  const motionStart = source.indexOf(
-    "<motion.div",
+  const layoutStart = source.indexOf(
+    '"relative flex min-h-0 flex-col"',
     source.indexOf("const card ="),
   );
-  const promptStart = source.indexOf("<NewSessionPrompt", motionStart);
-  const layout = source.slice(motionStart, promptStart);
+  const promptStart = source.indexOf("<NewSessionPrompt", layoutStart);
+  const layout = source.slice(layoutStart, promptStart);
 
-  expect(motionStart).toBeGreaterThan(-1);
-  expect(layout).toContain('"relative flex min-h-0 flex-col"');
+  expect(layoutStart).toBeGreaterThan(-1);
   expect(layout).toContain('"flex min-h-0 flex-1 flex-col"');
 });
 

@@ -1499,6 +1499,19 @@ export function IconCall(p: IconProps) {
   );
 }
 
+// Voice chat: five level bars, tallest in the middle, as distinct from
+// IconMic's dictation and IconCall's live handset.
+export function IconVoice(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path
+        {...stroke}
+        d="M4.75 10.5v3M8.375 7.75v8.5M12 4.75v14.5M15.625 7.75v8.5M19.25 10.5v3"
+      />
+    </Svg>
+  );
+}
+
 // Friendly machine face for automation-owned sessions. Kept geometric and
 // neutral so it reads as origin, not as a chat persona or assistant avatar.
 export function IconRobot(p: IconProps) {

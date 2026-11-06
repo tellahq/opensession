@@ -69,6 +69,7 @@ import {
   IconPencil,
   IconTrash,
   IconCall,
+  IconVoice,
 } from "./icons";
 import {
   composerBox,
@@ -137,7 +138,8 @@ import {
   type ComposerMenu,
 } from "./composer/ComposerControls";
 import { ModelRow } from "./composer/ModelRow";
-import { VoiceAudioSplitButton } from "./composer/VoiceAudioSettings";
+import { VoiceAudioOptions } from "./composer/VoiceAudioSettings";
+import type { VoiceInputControl } from "./VoiceInput";
 import { VoiceControl } from "./composer/VoiceControl";
 
 interface Props {
@@ -266,7 +268,7 @@ export function Composer({
   const textareaRef = externalRef ?? internalRef;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
-  const voiceOverlayRef = useRef<HTMLDivElement>(null);
+  const voiceControlRef = useRef<VoiceInputControl>(null);
   // Uncontrolled mode (no `value` prop): the draft lives here so keystrokes
   // re-render only the Composer, not the whole parent view. With a `draftKey`
   // it seeds from — and mirrors into — the draft store, so navigating away
@@ -522,17 +524,20 @@ export function Composer({
   const [focused, setFocused] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [dictating, setDictating] = useState(false);
-  const [dictationClipping, setDictationClipping] = useState(false);
   const hasAttached = !!attached || !!attachedAction;
-  const hasContent =
+  // What a send would carry. The attached rows above the field (a live call's
+  // status, queued messages) hold the composer open but are not a draft.
+  const hasDraft =
     !!text.trim() ||
     imgs.length > 0 ||
     fls.length > 0 ||
     isStaging(activeStaging) ||
     pastedTexts.length > 0 ||
-    !!quote ||
-    hasAttached;
-  const minimized = isPhone && !focused && !hasContent && !modelMenuOpen;
+    !!quote;
+  const hasContent = hasDraft || hasAttached;
+  // Dictation keeps the field in view: the transcript lands in it.
+  const minimized =
+    isPhone && !focused && !hasContent && !modelMenuOpen && !dictating;
   // A predicted next message stands in for the placeholder only where the
   // placeholder is the generic prompt: a team note or a quote has its own.
   const shownPrediction =
@@ -610,9 +615,15 @@ export function Composer({
     minimized ? "ml-0" : "-ml-1.5",
   );
   const showSend = !busy || hasContent;
+  const callActive = !!call?.active;
+  // The empty send circle doubles as the voice chat control: it starts a
+  // call, and while one is live it hangs up. Dictation needs the send circle.
+  const voiceChat =
+    !!onToggleCall && !hasDraft && !dictating && !busy && !callActive;
+  const callEnd = !!onToggleCall && callActive && !hasDraft && !dictating;
+  const sendVisible = dictating || (showSend && !voiceChat && !callEnd);
   function handleDictationActive(active: boolean) {
     setDictating(active);
-    if (active) setDictationClipping(true);
     onDictationActive?.(active);
   }
   // Whether the send button/plain send steers right now: each gesture has its
@@ -1432,12 +1443,6 @@ export function Composer({
   if (askMode) {
     surfaceStyle.backgroundColor = askSurface("var(--composer-surface)");
   }
-  const dictationSurfaceStyle: React.CSSProperties | undefined = noteMode
-    ? { backgroundColor: noteSurface("var(--composer-surface)") }
-    : askMode
-      ? { backgroundColor: askSurface("var(--composer-surface)") }
-      : undefined;
-
   return (
     <div className="mx-auto w-full max-w-[calc(var(--session-col)+40px)]">
       {/* Queued/steered messages fold out from behind the composer box —
@@ -1501,16 +1506,8 @@ export function Composer({
               : composerRadius(),
           borderBottomLeftRadius: minimized ? 999 : composerRadius(),
           borderBottomRightRadius: minimized ? 999 : composerRadius(),
-          // The controls stay in their toolbar positions while the top edge
-          // comes down to wrap them. Returning to auto reveals the draft.
-          height: dictating ? (minimized ? 50 : isPhone ? 60 : 62) : "auto",
         }}
         transition={composerMorph}
-        onAnimationComplete={() => {
-          // Keep the draft clipped until the top edge has finished expanding.
-          // Dropping overflow at the start would reveal text outside the box.
-          if (!dictating) setDictationClipping(false);
-        }}
         // `composer` and `composer-min` stay on the markup as hooks, not as
         // styling: `.composer.composer-min .palette-icon-btn` is styled from
         // the stylesheet, and VoiceInput's recording overlay fills `.composer`
@@ -1524,24 +1521,10 @@ export function Composer({
           minimized ? composerBoxMinimized : composerBoxExpanded,
           "isolate before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-[inherit] before:[corner-shape:inherit] before:bg-[var(--composer-note-bg)] before:opacity-0 before:transition-opacity before:duration-150 before:ease-[cubic-bezier(0.32,0.72,0,1)] [&>*]:relative [&>*]:z-[1]",
           noteMode && "before:opacity-100",
-          // The pills' shadows reach past the box, so phone dictation skips it.
-          dictationClipping && !(dictating && isPhone) && "overflow-hidden",
-          // Phone dictation draws its own pills, so the box steps out of the
-          // way: no surface, and the toolbar under the clear overlay hides.
-          dictating &&
-            isPhone &&
-            "!border-transparent !bg-transparent !shadow-none before:!opacity-0 [&>*:not(:first-child)]:invisible",
           disabled && "opacity-60",
         )}
         style={surfaceStyle}
       >
-        {/* The mic lives in the toolbar, but recording replaces this entire
-            surface. VoiceInput portals the active bar here so a positioned
-            toolbar cannot trap it at one-row height. */}
-        <div
-          ref={voiceOverlayRef}
-          className="pointer-events-none !absolute inset-0 !z-[6]"
-        />
         {/* Vim mode indicator — only surfaces outside insert mode, so plain
             typing looks identical with the pref on. Sits above the input wrap's
             scroll-fade mask. */}
@@ -2013,64 +1996,43 @@ export function Composer({
             className={composerIconButtonClass}
             shortcutActive={!!attachmentShortcutActive}
             focused={focused}
-            cancelClassName={addButtonClass}
             onText={insertDictation}
             onTextSend={sendDictation}
             textareaRef={textareaRef}
-            overlayTargetRef={voiceOverlayRef}
-            overlayStyle={dictationSurfaceStyle}
+            controlRef={voiceControlRef}
             onActiveChange={handleDictationActive}
             disabled={disabled || call?.active}
           />
 
-          {onToggleCall && (
+          {/* A live call: its audio options and the red hang-up take the
+              send circle's place while the draft is empty. */}
+          {callEnd && (
             <motion.div
               layout="position"
               transition={composerMorph}
               layoutDependency={minimized}
               className={cn(
-                "inline-flex shrink-0 items-center",
-                // Sits right after the dictation mic in the resting pill.
-                minimized && "order-3",
+                "inline-flex shrink-0 items-center gap-1",
+                minimized && "order-5",
               )}
             >
-              {/* The Mac shell attaches an audio options chevron to the
-                  handset (microphone, output, ducking for the next call);
-                  elsewhere the wrapper hands the handset back unchanged. */}
-              <VoiceAudioSplitButton
-                mode="conversation"
-                disabled={dictating || (disabled && !call?.active)}
+              <VoiceAudioOptions mode="conversation" />
+              <Tooltip
+                label={`End call${call?.status ? ` (${call.status})` : ""}`}
               >
-                <Tooltip
-                  label={
-                    call?.active
-                      ? `End call${call.status ? ` (${call.status})` : ""}`
-                      : "Start a voice call"
-                  }
+                <ComposerPressButton
+                  type="button"
+                  className={cn(
+                    composerSend,
+                    composerSendStop,
+                    minimized && composerSendMinimizedFill,
+                  )}
+                  onPress={() => onToggleCall?.()}
+                  aria-label="End call"
                 >
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className={cn(
-                      composerIconButtonClass,
-                      // The composer owns the inset ::before wash; suppress
-                      // Button's full-size ghost wash, including the open
-                      // tooltip state, so hover paints once like dictation.
-                      "hover:bg-transparent data-[popup-open]:bg-transparent phone:min-h-11 phone:min-w-11",
-                      // A live call reads as the universal red handset.
-                      call?.active && "text-red hover:text-red",
-                    )}
-                    onClick={onToggleCall}
-                    disabled={dictating || (disabled && !call?.active)}
-                    aria-pressed={!!call?.active}
-                    aria-label={
-                      call?.active ? "End call" : "Start a voice call"
-                    }
-                  >
-                    <IconCall size={22} />
-                  </Button>
-                </Tooltip>
-              </VoiceAudioSplitButton>
+                  <IconCall size={minimized ? 18 : 20} />
+                </ComposerPressButton>
+              </Tooltip>
             </motion.div>
           )}
 
@@ -2113,7 +2075,36 @@ export function Composer({
               Preferences, default queue) picks its busy action; holding
               Command/Ctrl switches to the ⌘/Ctrl+Enter preference (default
               steer). Niche actions such as scheduling live under the + menu. */}
-          {showSend && (
+          {/* An empty draft has nothing to send, so the send circle starts a
+              voice chat instead (ChatGPT-style), with no extra button. */}
+          {voiceChat && (
+            <motion.div
+              layout="position"
+              transition={composerMorph}
+              layoutDependency={minimized}
+              className={cn(
+                "relative inline-flex shrink-0",
+                minimized && "order-5",
+              )}
+            >
+              <Tooltip label="Start voice chat">
+                <ComposerPressButton
+                  type="button"
+                  className={cn(
+                    composerSend,
+                    composerSendDefault,
+                    minimized && composerSendMinimizedFill,
+                  )}
+                  onPress={() => onToggleCall?.()}
+                  disabled={disabled}
+                  aria-label="Start voice chat"
+                >
+                  <IconVoice size={minimized ? 20 : 24} />
+                </ComposerPressButton>
+              </Tooltip>
+            </motion.div>
+          )}
+          {sendVisible && (
             <motion.div
               layout="position"
               transition={composerMorph}
@@ -2163,13 +2154,19 @@ export function Composer({
                                 : composerSendDefault,
                           minimized && composerSendMinimizedFill,
                         )}
-                        onPress={() =>
+                        onPress={() => {
+                          // While dictating, send stops the clip and sends
+                          // the draft with its transcript.
+                          if (dictating) {
+                            voiceControlRef.current?.send();
+                            return;
+                          }
                           fireSend(
                             onSend,
                             steerSend ? { steer: true } : undefined,
-                          )
-                        }
-                        disabled={disabled || isSendDisabled}
+                          );
+                        }}
+                        disabled={disabled || (!dictating && isSendDisabled)}
                         aria-label={
                           noteMode
                             ? "Add note"

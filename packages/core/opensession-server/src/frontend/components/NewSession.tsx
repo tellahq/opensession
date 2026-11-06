@@ -118,7 +118,7 @@ import {
   getParkedNewSessionWorkspace,
   rememberParkedNewSessionWorkspace,
 } from "../lib/new-session-workspace-draft";
-import { VoiceInput } from "./VoiceInput";
+import { VoiceInput, type VoiceInputControl } from "./VoiceInput";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { handOffSoftKeyboard } from "../lib/soft-keyboard";
 import { PaletteSelect } from "./PaletteSelect";
@@ -129,7 +129,6 @@ import { displayName } from "../brand-logos";
 import { IconTile } from "./BrandTile";
 import { Tooltip } from "../ui/tooltip";
 import { Modal, useEnterOnMount } from "../ui/modal";
-import { composerMorph } from "../ui/motion";
 import { useShortcutKeys } from "../hooks/useShortcutBindings";
 import { matchesShortcut } from "../lib/shortcuts";
 import { foregroundFileComposerOwns, hasDraggedFiles } from "../lib/file-drag";
@@ -705,13 +704,7 @@ export function NewSession({
   }
 
   const promptRef = useRef<HTMLTextAreaElement>(null);
-  const voiceOverlayRef = useRef<HTMLDivElement>(null);
-  const [dictating, setDictating] = useState(false);
-  const [dictationClipping, setDictationClipping] = useState(false);
-  function handleDictationActive(active: boolean) {
-    setDictating(active);
-    if (active) setDictationClipping(true);
-  }
+  const voiceControlRef = useRef<VoiceInputControl>(null);
   // Hidden <input type="file"> driven by the "Add file" button — the mobile
   // path, since there's no clipboard paste there.
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1278,6 +1271,12 @@ export function NewSession({
    *  through the prompt's own state, so a closure captured at the moment of
    *  the press would still be looking at the draft as it was. */
   const createRef = useRef<() => void>(() => {});
+  /** Create, or while a clip is recording, stop it and create with its
+   *  transcript (the send key does the same). */
+  function createOrSendDictation() {
+    if (voiceControlRef.current?.send()) return;
+    void handleCreate();
+  }
   // Deliberate latest-value mirror: runs after every commit by design.
   useLayoutEffect(() => {
     createRef.current = handleCreate;
@@ -1440,9 +1439,7 @@ export function NewSession({
           project, commit. One row rather than two, because a sheet over an
           open keyboard has about half a screen to spend and an attachment
           takes its share of it. */}
-      <PhoneTopBar
-        className={cn(HEADER, !dictating && edges.top && EDGE_DIVIDER)}
-      >
+      <PhoneTopBar className={cn(HEADER, edges.top && EDGE_DIVIDER)}>
         {phoneBar && (
           <>
             <Modal.Close
@@ -1566,8 +1563,8 @@ export function NewSession({
         {phoneBar && (
           <button
             type="button"
-            className={cn(PHONE_SEND, dictating && "invisible")}
-            onClick={handleCreate}
+            className={PHONE_SEND}
+            onClick={createOrSendDictation}
             disabled={!canCreate}
             aria-label={CREATE_LABELS[createAction]}
           >
@@ -1576,31 +1573,8 @@ export function NewSession({
         )}
       </PhoneTopBar>
 
-      <motion.div
-        initial={false}
-        animate={{ height: dictating ? (isPhone ? 64 : 62) : "auto" }}
-        transition={composerMorph}
-        onAnimationComplete={() => {
-          if (!dictating) setDictationClipping(false);
-        }}
-        className={cn(
-          "relative flex min-h-0 flex-col",
-          dictationClipping && "overflow-hidden",
-        )}
-      >
-        {/* Dictation replaces everything below Project while the card itself
-            supplies the surface, border and shadow. Keeping this target inside
-            the card avoids drawing a second rounded container over the first. */}
-        <div
-          ref={voiceOverlayRef}
-          className="pointer-events-none !absolute inset-0 !z-[6]"
-        />
-        <div
-          className={cn(
-            "flex min-h-0 flex-1 flex-col",
-            dictating && "invisible",
-          )}
-        >
+      <div className="relative flex min-h-0 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col">
           {/* Picked services, above the field like every other thing attached to
           what you are about to send. The picker is two levels inside a menu,
           so without this the only trace of a pick is a count on the overflow
@@ -2118,8 +2092,7 @@ export function NewSession({
                 className={FOOTER_ICON_BTN}
                 disabled={busy}
                 editTargetRef={promptRef}
-                overlayTargetRef={voiceOverlayRef}
-                onActiveChange={handleDictationActive}
+                controlRef={voiceControlRef}
                 onText={(t) => {
                   promptHandle.current?.appendText(t);
                   promptRef.current?.focus();
@@ -2132,9 +2105,6 @@ export function NewSession({
                   // rather than captured now for the same reason.
                   setTimeout(() => createRef.current(), 0);
                 }}
-                // The parent card owns the only visible surface. This layer is
-                // just controls and waveform clipped by that card's outer edge.
-                overlayClassName="rounded-none bg-transparent [backdrop-filter:none]"
               />
 
               {!phoneBar && (
@@ -2144,7 +2114,7 @@ export function NewSession({
                       CREATE_MAIN,
                       inline ? CREATE_MAIN_WHOLE : CREATE_MAIN_SPLIT,
                     )}
-                    onClick={handleCreate}
+                    onClick={createOrSendDictation}
                     disabled={!canCreate}
                   >
                     {status.kind === "reconnecting"
@@ -2254,7 +2224,7 @@ export function NewSession({
             </div>
           </div>
         </div>
-      </motion.div>
+      </div>
     </>
   );
 

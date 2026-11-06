@@ -45,9 +45,8 @@ export function SessionVoiceStatus({
             </>
           )}
         </div>
-        {/* Audio routing for the call lives on the handset's chevron in the
-            composer, not here: a change reaches the next call, so the live
-            row only offers what acts on this one. */}
+        {/* Audio routing for the call sits beside the composer's hang-up
+            button, not here: this row only offers what acts on this call. */}
         {!error && state !== "idle" && (
           <SessionVoicePauseButton state={state} onToggle={onTogglePause} />
         )}
