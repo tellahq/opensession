@@ -23,7 +23,7 @@ Automations create fresh sessions from schedules or external events. Users inspe
 Preconditions:
 
 - Doctor passes for the isolated demo run.
-- The demo seed contains `Nightly dependency audit` and `Deploy notes on release webhook`.
+- The demo fixtures write `Nightly dependency audit` and `Deploy notes on release webhook` to the disposable automation store. Check `/api/automations` before treating them as reachable: if the API returns an empty list, the seeded detail, toggle, and edit routes cannot be proven. Record this as a product gap rather than claiming the list or seeded detail passed.
 
 - **Open the list.** Run `verify-opensession browser "$RUN_ID" open --route /automations --width 1440 --height 900`, then `verify-opensession browser "$RUN_ID" wait --role heading --name "Automations"`. A row for each seeded automation appears.
 - **Open details.** Run `verify-opensession browser "$RUN_ID" open --route /automations/auto-demo-nightly-audit --width 1440 --height 900`. The detail view shows `Nightly dependency audit`, its cron trigger, disabled state, and three seeded runs. Separately choose the seeded row from `/automations` when the list entry point is in scope.
