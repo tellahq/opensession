@@ -11,6 +11,7 @@ import { resolveWorkspaceApi } from "../lib/api";
 import type { Route } from "../lib/app-route";
 import { resolveAnonymousUserPath } from "../lib/auth-ready";
 import { BASE_PATH } from "../lib/base";
+import { setDeskOverlay } from "../lib/desk-overlay-store";
 import { findPrWorkspaceId } from "../lib/pr-workspace";
 import { onTabSplitChanged } from "../lib/split-tabs";
 import { onTabOrderChanged } from "../lib/tab-order";
@@ -224,13 +225,6 @@ export function useAppViewState({
   // not reconcile the active route, viewer, and sidebar before the overlay can
   // paint.
   const commandMenuRef = useRef<CommandMenuHandle>(null);
-  // The Desk overlay (⌘J / the floating desk button): a standing concierge
-  // session on top of whatever view is open. Its entrance origin follows the
-  // invocation: the corner launcher is spatial, while the shortcut is not.
-  const [deskOverlay, setDeskOverlay] = useState<{
-    open: boolean;
-    origin: "center" | "bottom-right";
-  }>({ open: false, origin: "bottom-right" });
   // The shortcut cheat sheet (⌘/): every chord on one card, over any view.
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   // Open-task count for the Tasks toolbar entry — refreshed on every
@@ -301,7 +295,6 @@ export function useAppViewState({
     setSessionComposerPrefills,
     addToSessionInput,
     commandMenuRef,
-    deskOverlay,
     setDeskOverlay,
     shortcutsOpen,
     setShortcutsOpen,
