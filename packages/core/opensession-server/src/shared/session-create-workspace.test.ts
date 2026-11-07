@@ -87,3 +87,18 @@ describe("create workspace compatibility", () => {
     );
   });
 });
+
+describe("space workspaces", () => {
+  const space = { repo: "acme-app", space: true as const };
+
+  test("take a Scratch coordinator even though they have a project", () => {
+    expect(canJoinCreateWorkspace(space, { mode: "scratch" })).toBe(true);
+  });
+
+  test("keep the repository boundary for every other mode", () => {
+    expect(
+      canJoinCreateWorkspace(space, { repo: "acme-docs", mode: "code" }),
+    ).toBe(false);
+    expect(canJoinCreateWorkspace(space, { mode: "ask" })).toBe(false);
+  });
+});

@@ -216,8 +216,11 @@ export function demoSessions(opts: {
   /** Where the generator wrote the stills the hero session shows
    *  (generate.ts retryStill); served by the /media route. */
   mediaDir: string;
+  /** The demo space's scratch directory, as a real coordinator gets one. */
+  spaceScratchDir?: string;
 }): DemoSessionFixture[] {
   const { now, worktreeDir, repoDir, mediaDir } = opts;
+  const spaceScratchDir = opts.spaceScratchDir ?? "";
   const min = 60_000;
   const sessions: DemoSessionFixture[] = [];
 
@@ -1385,8 +1388,10 @@ export function demoSessions(opts: {
       engineSessionId: "ses_demospace",
       file: base(DEMO_SPACE_SESSION_ID, "ses_demospace", 90, 8, {
         title: "Spaces v1 launch",
-        mode: "ask",
-        worktreeDir: repoDir,
+        // A coordinator is a Scratch session with no checkout (spaces.ts).
+        mode: "scratch",
+        repo: undefined,
+        worktreeDir: spaceScratchDir,
         workspaceId: DEMO_SPACE_WORKSPACE_ID,
         usage: usage(0.41, 12_400, 2_100, 3, iso(now - 8 * min)),
       }),

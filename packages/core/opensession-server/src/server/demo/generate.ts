@@ -30,6 +30,7 @@ import {
   DEMO_SCRIPT_RENDER_SESSION_ID,
   DEMO_SPACE_SESSION_ID,
   DEMO_SPACE_STATUSES,
+  DEMO_SPACE_WORKSPACE_ID,
   DEMO_REPO_FILES,
   DEMO_REPO_ID,
   DEMO_REPO_WT_PREFIX,
@@ -45,6 +46,7 @@ import {
 import { encodePng, type PngRect, type Rgb } from "./png";
 import { MONITOR_FIT_PAGE } from "./monitor-fit-page";
 import { injectBootstrap } from "../html-render/document";
+import { ensureScratchDir } from "../worktree";
 
 export interface DemoGenerateOpts {
   /**
@@ -284,7 +286,13 @@ export async function generateDemoData(
 
   // Sessions + their engine transcripts (claude-shape jsonl; the server
   // lazily imports these into transcripts.db on first watch).
-  const sessions = demoSessions({ now, worktreeDir, repoDir, mediaDir });
+  const sessions = demoSessions({
+    now,
+    worktreeDir,
+    repoDir,
+    mediaDir,
+    spaceScratchDir: await ensureScratchDir(DEMO_SPACE_WORKSPACE_ID),
+  });
   for (const s of sessions) {
     await writeJson(join(sessionsDir, `${s.id}.json`), s.file);
     if (s.engineSessionId && s.lines.length) {

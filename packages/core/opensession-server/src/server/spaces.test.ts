@@ -75,7 +75,7 @@ describe("spaceCoordinatorNote", () => {
 });
 
 describe("createSpace", () => {
-  test("creates a space workspace and an Ask coordinator inside it", async () => {
+  test("creates a space workspace and a Scratch coordinator inside it", async () => {
     const { deps, workspaces, sessions } = fakeDeps();
     const result = await createSpace(
       {
@@ -97,7 +97,7 @@ describe("createSpace", () => {
     expect(sessions).toEqual([
       {
         prompt: "Ship spaces",
-        mode: "ask",
+        mode: "scratch",
         repo: "acme",
         workspaceId: "ws-space",
         user: "Ada",
@@ -106,10 +106,10 @@ describe("createSpace", () => {
     ]);
   });
 
-  test("a space without a project starts a repo-less coordinator", async () => {
+  test("a space without a project starts a Scratch coordinator with no repo", async () => {
     const { deps, sessions } = fakeDeps();
     await createSpace({ title: "Ops", prompt: "Watch", user: "Ada" }, deps);
-    expect(sessions[0]).toMatchObject({ mode: "ask", repoLess: true });
+    expect(sessions[0]).toMatchObject({ mode: "scratch" });
     expect(sessions[0]?.repo).toBeUndefined();
   });
 

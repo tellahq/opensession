@@ -881,12 +881,20 @@ registerSessionControl({
     const parentRepoContext = parentSession
       ? await resolveSessionRepoContext(parentSession, repoInput, prompt)
       : null;
+    // A Scratch parent carries no repo. When it coordinates a space, its
+    // threads default to the space's project rather than the instance's
+    // default repo (spaces.ts).
+    const parentSpaceRepo =
+      parentSession?.mode === "scratch" && parentSession.workspaceId
+        ? (await getWorkspace(parentSession.workspaceId))?.repo
+        : undefined;
     // A joined workspace's repo outranks the global default: a caller that
     // names only a workspace means "a session in there", and defaulting to the
     // configured default repo would mint a foreign worktree inside it.
     const repo = getRepo(
       repoInput ||
         joinedWorkspace?.repo ||
+        parentSpaceRepo ||
         parentRepoContext?.repo ||
         parentSession?.repo,
     );

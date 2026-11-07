@@ -277,9 +277,10 @@ message; from then on you talk to the space and it splits the work into
 **threads**: child sessions it starts, follows, and summarizes back.
 
 Underneath, a space is a workspace marked as one. Its root session is the
-**coordinator**. It runs in read-only Ask mode on the project, so it can read
-the code and plan, while every change happens in a thread with its own branch
-and review. Each coordinator turn carries a standing briefing: delegate
+**coordinator**. It is a Scratch session: it has a writable scratch directory
+for notes and scripts but no checkout of the project, so reading and changing
+the code happens in threads, each with its own branch and review. Threads run
+in the space's project unless the coordinator names another repository. Each coordinator turn carries a standing briefing: delegate
 self-contained work with `spawn_task`, wait on threads instead of polling,
 and keep a `space-summary.md` asset current with the goal, the threads,
 decisions, and open questions.
