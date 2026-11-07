@@ -4,6 +4,7 @@ import React, {
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { RowCardPopup } from "../components/SidebarRowCards";
 import { WsCardBody, WsMobileSheet } from "../components/sidebar/HoverCards";
@@ -56,6 +57,82 @@ import {
   setRowColor,
   useRowColors,
 } from "../lib/row-colors";
+
+type WsHover = { row: WsRow; el: HTMLElement } | null;
+
+/**
+ * The hovered workspace row and the element its card anchors to. Held outside
+ * React state so that opening the card, or moving it to the next row, renders
+ * the card alone rather than the whole sidebar and every row in it.
+ */
+function createWsHoverStore() {
+  let hover: WsHover = null;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => hover,
+    set(next: WsHover) {
+      if (next === hover) return;
+      hover = next;
+      for (const listener of listeners) listener();
+    },
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+}
+
+type WsHoverStore = ReturnType<typeof createWsHoverStore>;
+
+/** One card for the whole workspace list, anchored to the hovered row. */
+function WorkspaceHoverCard({
+  store,
+  onClose,
+  onKeepOpen,
+  onLeave,
+  isSnoozed,
+  onToggleSnooze,
+  onOpenSession,
+}: {
+  store: WsHoverStore;
+  onClose: () => void;
+  onKeepOpen: () => void;
+  onLeave: () => void;
+  isSnoozed: (row: WsRow) => boolean;
+  onToggleSnooze: (row: WsRow) => void;
+  onOpenSession: (session: UnifiedSession) => void;
+}) {
+  const wsHover = useSyncExternalStore(store.subscribe, store.get);
+  return (
+    <Popover.Root
+      open={!!wsHover}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      {wsHover && (
+        <RowCardPopup anchor={wsHover.el}>
+          <div onMouseEnter={onKeepOpen} onMouseLeave={onLeave}>
+            <WsCardBody
+              row={wsHover.row}
+              snoozed={isSnoozed(wsHover.row)}
+              onToggleSnooze={() => {
+                onClose();
+                onToggleSnooze(wsHover.row);
+              }}
+              onOpen={(session) => {
+                onClose();
+                onOpenSession(session);
+              }}
+            />
+          </div>
+        </RowCardPopup>
+      )}
+    </Popover.Root>
+  );
+}
 
 interface WorkspaceControllerIdentity {
   currentUser: string;
@@ -364,10 +441,7 @@ export function useSidebarWorkspaceController({
   const wsHoverCloseT = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The row element itself is the anchor — the popover tracks it, so a
   // scrolling list repositions the card instead of dropping it.
-  const [wsHover, setWsHover] = useState<{
-    row: WsRow;
-    el: HTMLElement;
-  } | null>(null);
+  const [wsHoverStore] = useState(createWsHoverStore);
   // Mobile long-press sheet (the touch stand-in for the hover card).
   const [wsSheet, setWsSheet] = useState<{
     row: WsRow;
@@ -383,23 +457,23 @@ export function useSidebarWorkspaceController({
   function wsRowHoverEnter(row: WsRow, el: HTMLElement) {
     if (rowRenameEditing(row) || !pointerCanHover()) return;
     cancelWsHoverTimers();
-    if (wsHover) {
-      setWsHover({ row, el });
+    if (wsHoverStore.get()) {
+      wsHoverStore.set({ row, el });
       return;
     }
     wsHoverOpenT.current = setTimeout(() => {
-      setWsHover({ row, el });
+      wsHoverStore.set({ row, el });
     }, 380);
   }
   function scheduleWsHoverClose() {
     if (wsHoverOpenT.current) clearTimeout(wsHoverOpenT.current);
     wsHoverOpenT.current = null;
     if (wsHoverCloseT.current) clearTimeout(wsHoverCloseT.current);
-    wsHoverCloseT.current = setTimeout(() => setWsHover(null), 140);
+    wsHoverCloseT.current = setTimeout(() => wsHoverStore.set(null), 140);
   }
   function closeWsHover() {
     cancelWsHoverTimers();
-    setWsHover(null);
+    wsHoverStore.set(null);
   }
   useEffect(() => cancelWsHoverTimers, []);
 
@@ -484,6 +558,7 @@ export function useSidebarWorkspaceController({
   // exception, and editableOwnsCaretChord carries the reason. Alt is excluded
   // so ⌘⌥ arrows stay free for the reasoning-effort chord (SessionViewer);
   // Shift so ⌘⇧-arrow text selection keeps working.
+  const closeWsHoverFromKey = useEffectEvent(closeWsHover);
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.defaultPrevented) return;
@@ -513,7 +588,7 @@ export function useSidebarWorkspaceController({
           : candidates[(idx + dir + candidates.length) % candidates.length];
       if (!next) return;
       e.preventDefault();
-      closeWsHover();
+      closeWsHoverFromKey();
       next.scrollIntoView({ block: "nearest" });
       next.click();
     }
@@ -983,34 +1058,15 @@ export function useSidebarWorkspaceController({
       {/* One card for the whole workspace list: WorkspaceRow owns each row's
           DOM, while this controller owns the one shared hover state and popover.
           The hovered row is the anchor instead, with the same shell and card. */}
-      <Popover.Root
-        open={!!wsHover}
-        onOpenChange={(open) => {
-          if (!open) closeWsHover();
-        }}
-      >
-        {wsHover && (
-          <RowCardPopup anchor={wsHover.el}>
-            <div
-              onMouseEnter={cancelWsHoverTimers}
-              onMouseLeave={scheduleWsHoverClose}
-            >
-              <WsCardBody
-                row={wsHover.row}
-                snoozed={rowIsSnoozed(wsHover.row)}
-                onToggleSnooze={() => {
-                  closeWsHover();
-                  toggleWorkspaceSnooze(wsHover.row);
-                }}
-                onOpen={(session) => {
-                  closeWsHover();
-                  openSidebarSession(session);
-                }}
-              />
-            </div>
-          </RowCardPopup>
-        )}
-      </Popover.Root>
+      <WorkspaceHoverCard
+        store={wsHoverStore}
+        onClose={closeWsHover}
+        onKeepOpen={cancelWsHoverTimers}
+        onLeave={scheduleWsHoverClose}
+        isSnoozed={rowIsSnoozed}
+        onToggleSnooze={toggleWorkspaceSnooze}
+        onOpenSession={openSidebarSession}
+      />
       {wsSheet &&
         (() => {
           const { row, source } = wsSheet;
@@ -1124,7 +1180,6 @@ export function useSidebarWorkspaceController({
     rowColors,
     toggleWorkspaceSnooze,
     workspaceOverlays,
-    wsHover,
     wsSheet,
     closeWsHover,
     cancelWsHoverTimers,
