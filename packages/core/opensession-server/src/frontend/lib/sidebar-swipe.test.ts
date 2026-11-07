@@ -9,6 +9,7 @@
 
 import { describe, expect, test } from "bun:test";
 import {
+  createWsDragStore,
   editableOwnsCaretChord,
   editableSwallowsArchiveChord,
   swipeActionForOffset,
@@ -89,5 +90,35 @@ describe("editableSwallowsArchiveChord", () => {
 
   test("nothing editable in focus leaves the chord alone", () => {
     expect(editableSwallowsArchiveChord(nothing)).toBe(false);
+  });
+});
+
+describe("createWsDragStore", () => {
+  test("reports the drag only to the dragged row", () => {
+    const drag = createWsDragStore();
+    expect(drag.rowDrag("a")).toBe("idle");
+    drag.set("a", "archive");
+    expect(drag.rowDrag("a")).toBe("archive");
+    expect(drag.rowDrag("b")).toBe("idle");
+    drag.set("a", null);
+    expect(drag.rowDrag("a")).toBe("none");
+    drag.set(null, "star");
+    expect(drag.rowDrag("a")).toBe("idle");
+  });
+
+  test("notifies only when the drag changes", () => {
+    const drag = createWsDragStore();
+    let calls = 0;
+    const unsubscribe = drag.subscribe(() => calls++);
+    drag.set("a", "star");
+    drag.set("a", "star");
+    expect(calls).toBe(1);
+    drag.set("a", "archive");
+    drag.set(null, null);
+    drag.set(null, null);
+    expect(calls).toBe(3);
+    unsubscribe();
+    drag.set("b", "star");
+    expect(calls).toBe(3);
   });
 });

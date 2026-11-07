@@ -106,3 +106,39 @@ export function swipeCommitOffset(
 ): number {
   return action === "archive" ? -rowWidth : rowWidth;
 }
+
+/** One row's view of an in-flight drag: "idle" when the finger is not on this
+ * row, otherwise the side the drag reveals ("none" at offset 0). */
+export type WsRowDrag = SwipeAction | "none" | "idle";
+
+/** Which workspace row a finger is dragging and the side it reveals. Kept out
+ * of the sidebar's React state so drag start and side flips re-render only the
+ * dragged row (WorkspaceRow subscribes per key), not every row in the list. */
+export interface WsDragStore {
+  subscribe(listener: () => void): () => void;
+  rowDrag(rowKey: string): WsRowDrag;
+  set(key: string | null, side: SwipeAction | null): void;
+}
+
+export function createWsDragStore(): WsDragStore {
+  let dragKey: string | null = null;
+  let dragSide: SwipeAction | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    rowDrag(rowKey) {
+      if (dragKey !== rowKey) return "idle";
+      return dragSide ?? "none";
+    },
+    set(key, side) {
+      const nextSide = key === null ? null : side;
+      if (key === dragKey && nextSide === dragSide) return;
+      dragKey = key;
+      dragSide = nextSide;
+      for (const listener of listeners) listener();
+    },
+  };
+}
