@@ -456,7 +456,6 @@ export function AppContent({
     reviewFocusPr,
     focusReviewPr,
     suppressWsSeedRef,
-    focusComposerOnOpen,
     setFocusComposerOnOpen,
     sessionComposerPrefills,
     setSessionComposerPrefills,
@@ -1126,7 +1125,6 @@ export function AppContent({
       }}
       composer={{
         newSessionSeq: appViewState.newSessionSeq,
-        focusComposerOnOpen: appViewState.focusComposerOnOpen,
         sessionComposerPrefills: appViewState.sessionComposerPrefills,
         setSessionComposerPrefills: appViewState.setSessionComposerPrefills,
       }}
