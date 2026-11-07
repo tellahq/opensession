@@ -625,6 +625,26 @@ export async function handleWorkspaceRoutes(
     return Response.json({ workspace });
   }
 
+  // A space's catch-up since the reader last looked (space-recap.ts).
+  const recapMatch = path.match(/^\/api\/spaces\/([^/]+)\/recap$/);
+  if (recapMatch && req.method === "POST") {
+    const body = (await req.json().catch(() => ({}))) as {
+      since?: unknown;
+      user?: unknown;
+    };
+    const since = Number(body.since);
+    if (!Number.isFinite(since) || since <= 0)
+      return Response.json({ error: "since is required" }, { status: 400 });
+    const { spaceRecap } = await import("../space-recap");
+    return Response.json(
+      await spaceRecap(
+        decodeURIComponent(recapMatch[1]!),
+        since,
+        requestUser(ctx, body.user),
+      ),
+    );
+  }
+
   // A space and its coordinator in one request (spaces.ts): title, optional
   // project, and the first message. Responds with the coordinator's id so
   // the client opens the conversation it just started.
@@ -634,6 +654,8 @@ export async function handleWorkspaceRoutes(
       repo?: unknown;
       prompt?: unknown;
       user?: unknown;
+      goal?: unknown;
+      sharedWith?: unknown;
     };
     const repo =
       typeof body.repo === "string" && body.repo && body.repo !== NO_REPO
@@ -654,6 +676,10 @@ export async function handleWorkspaceRoutes(
         title: typeof body.title === "string" ? body.title : "",
         prompt: typeof body.prompt === "string" ? body.prompt : "",
         ...(repo ? { repo } : {}),
+        ...(typeof body.goal === "string" ? { goal: body.goal } : {}),
+        sharedWith: Array.isArray(body.sharedWith)
+          ? body.sharedWith.filter((n): n is string => typeof n === "string")
+          : [],
         user: requestUser(ctx, body.user) || "Anonymous",
         ...(ctx.authUser?.login ? { createdByLogin: ctx.authUser.login } : {}),
       });
@@ -778,6 +804,7 @@ export async function handleWorkspaceRoutes(
       color?: string;
       order?: number;
       draft?: unknown;
+      goal?: unknown;
     };
     if (body.repo === "auto")
       return Response.json(
@@ -800,6 +827,9 @@ export async function handleWorkspaceRoutes(
         color: body.color,
         order: body.order,
         ...(rawDraft !== undefined ? { draft } : {}),
+        ...(typeof body.goal === "string" || body.goal === null
+          ? { goal: body.goal }
+          : {}),
       });
     } catch (error) {
       if (error instanceof WorkspaceRepoConflictError)

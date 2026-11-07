@@ -52,6 +52,8 @@ function store() {
 
 /** A composer, not a document store. Mirrors MAX_DRAFT_LENGTH in drafts.ts. */
 const MAX_DRAFT_LENGTH = 32_000;
+/** A space's goal is a paragraph, not a brief. */
+export const MAX_GOAL_LENGTH = 2_000;
 
 /** An unsent composer prompt parked on a workspace before any session exists. */
 export interface WorkspaceDraft {
@@ -121,6 +123,9 @@ export interface Workspace {
    * toggled. Absent = an ordinary workspace.
    */
   space?: true;
+  /** A space's goal: what its work is for. The coordinator keeps its
+   *  threads pointed at it (spaces.ts). Absent = no goal set. */
+  goal?: string;
 }
 
 /** A teammate added to a workspace, keyed by picker first name. */
@@ -426,6 +431,7 @@ export async function createWorkspace(input: {
   draft?: WorkspaceDraft;
   /** Create a space (spaces.ts) rather than an ordinary workspace. */
   space?: boolean;
+  goal?: string;
   /** Reuse a caller-supplied id (e.g. migration wrapping an orphan session). */
   id?: string;
   createdAt?: string;
@@ -451,6 +457,9 @@ export async function createWorkspace(input: {
       ? { attachedRepos: input.attachedRepos }
       : {}),
     ...(input.space ? { space: true as const } : {}),
+    ...(input.goal?.trim()
+      ? { goal: input.goal.trim().slice(0, MAX_GOAL_LENGTH) }
+      : {}),
     ...(input.draft
       ? {
           draft: {
@@ -693,7 +702,7 @@ export async function updateWorkspace(
       | "attachedRepos"
       | "shipMode"
     >
-  > & { draft?: WorkspaceDraft | null },
+  > & { draft?: WorkspaceDraft | null; goal?: string | null },
   expectedName?: string,
 ): Promise<Workspace | null> {
   const repo = patch.repo === "auto" ? defaultRepo().id : patch.repo;
@@ -768,6 +777,9 @@ export async function updateWorkspace(
         ? { attachedRepos: patch.attachedRepos }
         : {}),
       ...(patch.shipMode !== undefined ? { shipMode: patch.shipMode } : {}),
+      ...(patch.goal !== undefined
+        ? { goal: patch.goal?.trim().slice(0, MAX_GOAL_LENGTH) || undefined }
+        : {}),
       draft: nextDraft,
     };
   });

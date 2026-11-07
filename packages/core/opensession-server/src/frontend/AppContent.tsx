@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { HuddleDock } from "./components/huddle/HuddleDock";
 import { AppMobileHeader } from "./components/AppMobileHeader";
 import { AppSessionPane } from "./components/AppSessionPane";
 import { AppShell } from "./components/AppShell";
@@ -1837,6 +1838,12 @@ export function AppContent({
                 {launchComplete && <DesktopLinkToast />}
               </div>
             )}
+
+            <HuddleDock
+              send={send}
+              addHandler={addHandler}
+              connected={connected}
+            />
 
             {/* Mobile-only floating + on your root list page. */}
             {!mobileDetail && !borrowedSidebar && (

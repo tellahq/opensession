@@ -1348,6 +1348,45 @@ export function IconMessage(p: IconProps) {
   );
 }
 
+export function IconReactionAdd(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path {...stroke} d="M19.1 12.75A7.25 7.25 0 1 1 11.25 4.79" />
+      <path {...stroke} d="M9 14.25c.75.9 1.8 1.5 3 1.5s2.25-.6 3-1.5" />
+      <path {...stroke} d="M9.25 10V9.75M14.75 10V9.75" />
+      <path {...stroke} d="M18.25 3.75v5M15.75 6.25h5" />
+    </Svg>
+  );
+}
+
+export function IconHeadphones(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path {...stroke} d="M4.75 16.25V12a7.25 7.25 0 0 1 14.5 0v4.25" />
+      <path
+        {...stroke}
+        d="M4.75 14.75c0-.83.67-1.5 1.5-1.5h1c.83 0 1.5.67 1.5 1.5v3c0 .83-.67 1.5-1.5 1.5h-1c-.83 0-1.5-.67-1.5-1.5v-3ZM15.25 14.75c0-.83.67-1.5 1.5-1.5h1c.83 0 1.5.67 1.5 1.5v3c0 .83-.67 1.5-1.5 1.5h-1c-.83 0-1.5-.67-1.5-1.5v-3Z"
+      />
+    </Svg>
+  );
+}
+
+export function IconMicOff(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path
+        {...stroke}
+        d="M15.25 10.5V8a3.25 3.25 0 0 0-6.17-1.43M8.75 10.25V12a3.25 3.25 0 0 0 5.4 2.44"
+      />
+      <path
+        {...stroke}
+        d="M18.25 11.75V12c0 .9-.19 1.76-.53 2.53M5.75 11.75V12a6.25 6.25 0 0 0 10.2 4.84"
+      />
+      <path {...stroke} d="M12 18.25v1M4.75 4.75l14.5 14.5" />
+    </Svg>
+  );
+}
+
 export function IconMessages(p: IconProps) {
   return (
     <Svg {...p}>

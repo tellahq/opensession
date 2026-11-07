@@ -92,7 +92,11 @@ export async function fetchWorkspaces(options?: {
 export async function createSpaceApi(input: {
   title: string;
   repo?: string;
+  /** Empty: the agent opens the space with a welcome. */
   prompt: string;
+  goal?: string;
+  /** Teammates who can see the space and chat in it. */
+  sharedWith?: string[];
   /** The picker identity; the server prefers the signed-in one. */
   user?: string;
 }): Promise<{ workspace: Workspace; sessionId: string }> {
@@ -126,6 +130,8 @@ export async function updateWorkspaceApi(
     order?: number;
     /** null clears the draft. */
     draft?: Workspace["draft"] | null;
+    /** A space's goal; null clears it. */
+    goal?: string | null;
   },
 ): Promise<Workspace> {
   const body = await request<{ workspace: Workspace }>(
@@ -233,4 +239,20 @@ export async function resolveWorkspaceApi(
     body,
     label: "Failed to resolve the workspace",
   });
+}
+
+/** A space's catch-up since `since` (ms epoch), written by a helper model. */
+export async function fetchSpaceRecapApi(
+  workspaceId: string,
+  since: number,
+  user: string,
+): Promise<{ text: string | null; threadIds: string[] }> {
+  return request<{ text: string | null; threadIds: string[] }>(
+    `/spaces/${encodeURIComponent(workspaceId)}/recap`,
+    {
+      method: "POST",
+      body: { since, user },
+      label: "Couldn't catch up on the space",
+    },
+  );
 }

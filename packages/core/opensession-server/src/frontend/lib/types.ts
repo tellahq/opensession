@@ -385,6 +385,10 @@ export interface TextAnchor {
   exact: string;
   prefix: string;
   suffix: string;
+  /** On the whole message (its hover Comment action), not a passage. */
+  whole?: true;
+  /** Who wrote that message, for the comment pane's quote. */
+  by?: string;
 }
 
 export interface ThreadComment {
@@ -746,6 +750,8 @@ export interface Workspace {
   collaborators?: Array<{ name: string; by: string; at: string }>;
   /** A space: its root session coordinates threads it spawns inside it. */
   space?: true;
+  /** A space's goal: what its work is for. */
+  goal?: string;
 }
 
 export interface DiffFile {
@@ -1102,7 +1108,44 @@ export type WSClientMessage =
     }
   | { type: "term_input"; termId: string; data: string }
   | { type: "term_resize"; termId: string; cols: number; rows: number }
-  | { type: "term_stop"; termId: string };
+  | { type: "term_stop"; termId: string }
+  // Huddles (server/huddles.ts): the switchboard for a voice call.
+  | { type: "huddles_subscribe" }
+  | { type: "huddle_join"; roomId: string; label: string; sessionId?: string }
+  | { type: "huddle_leave" }
+  | { type: "huddle_signal"; to: string; data: HuddleSignalData }
+  | { type: "huddle_mute"; muted: boolean }
+  | { type: "huddle_notes"; on: boolean }
+  | { type: "huddle_note"; text: string }
+  | { type: "huddle_invite"; to: string };
+
+/** What one peer hands another while setting up a call. */
+export interface HuddleSignalData {
+  sdp?: { type: "offer" | "answer"; sdp: string };
+  candidate?: {
+    candidate: string;
+    sdpMid?: string | null;
+    sdpMLineIndex?: number | null;
+  } | null;
+}
+
+export interface HuddleMember {
+  peerId: string;
+  user: string;
+  muted: boolean;
+  joinedAt: number;
+}
+
+export interface HuddleRoom {
+  /** `session:<id>` or `workspace:<id>`. */
+  roomId: string;
+  label: string;
+  sessionId: string | null;
+  startedAt: number;
+  /** Someone turned on notes: the call is transcribed and summarized. */
+  notes: boolean;
+  members: HuddleMember[];
+}
 
 export type WSServerMessage =
   // The protocol core: hello/pong/error/notice, the transcript frames (init/
@@ -1142,6 +1185,24 @@ export type WSServerMessage =
   // scope no longer shows (archived, hidden, or deleted).
   | { type: "session_row"; row: UnifiedSession }
   | { type: "session_row_removed"; id: string }
+  | { type: "huddles"; rooms: HuddleRoom[] }
+  | {
+      type: "huddle_joined";
+      roomId: string;
+      peerId: string;
+      peers: string[];
+      iceServers: RTCIceServer[];
+    }
+  | { type: "huddle_signal"; from: string; data: HuddleSignalData }
+  | {
+      type: "huddle_invite";
+      roomId: string;
+      label: string;
+      sessionId: string | null;
+      from: string;
+    }
+  | { type: "huddle_invite_result"; to: string; delivered: number }
+  | { type: "huddle_error"; message: string }
   // term_* frames carry the termId of the shell tab (PTY) they belong to;
   // absent on frames from servers that predate multi-tab shells.
   | { type: "term_data"; termId?: string; data: string }
@@ -1212,6 +1273,13 @@ export type WSServerMessage =
   // the session's watchers.
   | { type: "comment_thread"; sessionId: string; thread: CommentThread }
   | { type: "comment_thread_deleted"; sessionId: string; threadId: string }
+  // Reactions on a session's messages changed: the whole map, entry id →
+  // emoji → who reacted.
+  | {
+      type: "message_reactions";
+      sessionId: string;
+      reactions: Record<string, Record<string, string[]>>;
+    }
   // Somebody @-mentioned a teammate in a prompt or a note. Broadcast to
   // everyone and addressed by name — clients keep the ones for themselves
   // (lib/mentions.ts) and ignore the rest, the same way notifications are

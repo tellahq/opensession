@@ -124,3 +124,28 @@ export async function markThreadSeenApi(
   );
   return data.thread;
 }
+
+/** Entry id → emoji → who reacted. */
+export type MessageReactions = Record<string, Record<string, string[]>>;
+
+export async function fetchReactionsApi(
+  sessionId: string,
+): Promise<MessageReactions> {
+  const data = await request<{ reactions?: MessageReactions }>(
+    `/sessions/${encodeURIComponent(sessionId)}/reactions`,
+    { label: "Failed to load reactions" },
+  );
+  return data?.reactions ?? {};
+}
+
+/** Add the person's reaction, or take it back when they already reacted. */
+export async function toggleReactionApi(
+  sessionId: string,
+  input: { entryId: string; emoji: string; user: string },
+): Promise<MessageReactions> {
+  const data = await request<{ reactions: MessageReactions }>(
+    `/sessions/${encodeURIComponent(sessionId)}/reactions`,
+    { method: "POST", body: input, label: "Failed to react" },
+  );
+  return data.reactions;
+}

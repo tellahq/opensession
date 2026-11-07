@@ -6,6 +6,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { openMessageComments } from "../../lib/message-comments";
 import { motion } from "motion/react";
 import { createThreadApi } from "../../lib/api";
 import { rangeForAnchor, anchorEntryElement } from "../../lib/comment-anchor";
@@ -634,7 +635,15 @@ export function InlineComments({
         threads={threads}
         onOpen={(thread) => {
           setListOpen(false);
-          scrollToThread(thread);
+          // A comment on a whole message opens beside it, in its own pane.
+          if (thread.anchor?.whole)
+            openMessageComments({
+              sessionId,
+              entryId: thread.anchor.entryId,
+              excerpt: thread.anchor.exact,
+              author: thread.anchor.by ?? "Message",
+            });
+          else scrollToThread(thread);
         }}
       />
     </>

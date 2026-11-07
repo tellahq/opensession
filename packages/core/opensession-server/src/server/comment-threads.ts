@@ -48,6 +48,12 @@ export interface TextAnchor {
   exact: string;
   prefix: string;
   suffix: string;
+  /** The comment is on the whole message (its hover Comment action), not a
+   *  passage of it. `exact` then holds the message's opening text, so the
+   *  agent and the thread header can quote it. */
+  whole?: true;
+  /** Who wrote the message a whole-message comment is on, for its quote. */
+  by?: string;
 }
 
 export interface ThreadComment {
@@ -147,7 +153,71 @@ export function cleanAnchor(value: unknown): TextAnchor | null {
     exact: raw.exact.slice(0, MAX_EXACT_LEN),
     prefix: context(raw.prefix, true),
     suffix: context(raw.suffix, false),
+    ...(raw.whole === true ? { whole: true as const } : {}),
+    ...(raw.whole === true && typeof raw.by === "string" && raw.by.trim()
+      ? { by: raw.by.trim().slice(0, 64) }
+      : {}),
   };
+}
+
+// ── Reactions on messages ─────────────────────────────────────────────────
+//
+// Kept in the same per-session document as the threads (`reactions` beside
+// `threads`): entry id → emoji → the people who reacted, in order.
+
+export const REACTION_EMOJI = ["👍", "❤️", "🎉", "👀", "🚀", "✅"] as const;
+export type MessageReactions = Record<string, Record<string, string[]>>;
+
+const MAX_REACTED_ENTRIES = 2000;
+
+export function cleanReactions(value: unknown): MessageReactions {
+  const raw =
+    value && typeof value === "object"
+      ? (value as { reactions?: unknown }).reactions
+      : undefined;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: MessageReactions = {};
+  for (const [entryId, byEmoji] of Object.entries(raw)) {
+    if (!byEmoji || typeof byEmoji !== "object") continue;
+    const kept: Record<string, string[]> = {};
+    for (const [emoji, people] of Object.entries(byEmoji))
+      if (
+        (REACTION_EMOJI as readonly string[]).includes(emoji) &&
+        Array.isArray(people)
+      ) {
+        const names = people.filter(
+          (p): p is string => typeof p === "string" && !!p.trim(),
+        );
+        if (names.length) kept[emoji] = names;
+      }
+    if (Object.keys(kept).length) out[entryId] = kept;
+  }
+  return out;
+}
+
+/** Add `user`'s reaction, or take it back when they already reacted. */
+export function applyToggleReaction(
+  reactions: MessageReactions,
+  entryId: string,
+  emoji: string,
+  user: string,
+): MessageReactions | null {
+  if (!(REACTION_EMOJI as readonly string[]).includes(emoji)) return null;
+  const id = entryId.trim().slice(0, 200);
+  const name = cleanName(user);
+  if (!id || !name) return null;
+  const entry = { ...reactions[id] };
+  const people = entry[emoji] ?? [];
+  const next = people.some((p) => sameUser(p, name))
+    ? people.filter((p) => !sameUser(p, name))
+    : [...people, name];
+  if (next.length) entry[emoji] = next;
+  else delete entry[emoji];
+  const all = { ...reactions };
+  if (Object.keys(entry).length) all[id] = entry;
+  else delete all[id];
+  if (Object.keys(all).length > MAX_REACTED_ENTRIES) return null;
+  return all;
 }
 
 function isComment(value: unknown): value is ThreadComment {
@@ -511,14 +581,43 @@ export async function mutateThreads<
   let unchanged: CommentThread[] = [];
   await documents().update(sessionId, (value) => {
     const current = cleanThreads(value);
+    const reactions = cleanReactions(value);
+    const kept = Object.keys(reactions).length ? { reactions } : {};
     outcome = mutate(current);
-    if (outcome.ok) return { threads: outcome.threads };
+    if (outcome.ok) return { threads: outcome.threads, ...kept };
     unchanged = current;
     // Writing back what was read is a no-op put (the catalog compares the
     // encoded value); a missing document stays missing.
-    return value === null ? null : { threads: unchanged };
+    return value === null ? null : { threads: unchanged, ...kept };
   });
   return outcome!;
+}
+
+export async function listReactions(
+  sessionId: string,
+): Promise<MessageReactions> {
+  if (!isValidThreadSession(sessionId)) return {};
+  return cleanReactions(await documents().get(sessionId));
+}
+
+/** Toggle one reaction; null when the input is invalid. */
+export async function toggleReaction(
+  sessionId: string,
+  entryId: string,
+  emoji: string,
+  user: string,
+): Promise<MessageReactions | null> {
+  if (!isValidThreadSession(sessionId)) return null;
+  let result: MessageReactions | null = null;
+  await documents().update(sessionId, (value) => {
+    const threads = cleanThreads(value);
+    result = applyToggleReaction(cleanReactions(value), entryId, emoji, user);
+    if (!result) return value;
+    return Object.keys(result).length
+      ? { threads, reactions: result }
+      : { threads };
+  });
+  return result;
 }
 
 /** Remove a deleted session's threads. */

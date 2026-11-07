@@ -7,6 +7,11 @@ import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
 import { classifyEntry } from "@tellahq/opensession-protocol/notices";
 import type { NoticeIcon as NoticeIconName } from "@tellahq/opensession-protocol/notices";
 import { useCurrentUser } from "./UserPicker";
+import {
+  MessageActionButtons,
+  MessageThreadSummary,
+  type MessageRef,
+} from "./comments/MessageActions";
 import { Tooltip } from "../ui/tooltip";
 import { Button } from "../ui/button";
 import { CopyCheck, useCopy } from "../ui/copy";
@@ -458,8 +463,11 @@ function TeammateAvatar({ name }: { name: string }) {
   );
 }
 
-const bubbleActionClass =
-  "flex size-7 flex-none cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 text-faint select-none hover:bg-hover hover:text-dim [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-hover/bubble:opacity-100 [@media(hover:hover)]:group-focus-within/bubble:opacity-100";
+/** Hover reveal for a bubble's quiet actions; always shown on touch. */
+const bubbleReveal =
+  "[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-hover/bubble:opacity-100 [@media(hover:hover)]:group-focus-within/bubble:opacity-100";
+
+const bubbleActionClass = `flex size-7 flex-none cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 text-faint select-none hover:bg-hover hover:text-dim ${bubbleReveal}`;
 
 /** Put a message you already sent back into the composer, so a typo is a fix
  * and a re-send rather than a re-type.
@@ -571,17 +579,23 @@ function BubbleMeta({
   onEdit,
   copy,
   linkEntryId,
+  message,
 }: {
   ts?: string;
   onEdit?: () => void;
   copy?: { entry: TranscriptEntry; sessionId?: string };
   /** The entry a "Copy link" points at; omitted while it is not stored. */
   linkEntryId?: string;
+  /** Offers reacting and commenting; omitted while the entry is not stored. */
+  message?: MessageRef;
 }) {
   const label = ts ? fullTime(ts) : "";
-  if (!onEdit && !copy && !linkEntryId && !label) return null;
+  if (!onEdit && !copy && !linkEntryId && !label && !message) return null;
   return (
     <div className="absolute top-[calc(100%+2px)] right-0 flex items-center gap-1">
+      {message && (
+        <MessageActionButtons message={message} className={bubbleReveal} />
+      )}
       {copy && <CopyMessageButton {...copy} />}
       {linkEntryId && <CopyMessageLinkButton entryId={linkEntryId} />}
       {onEdit && <EditAgainButton onClick={onEdit} />}
@@ -1083,6 +1097,15 @@ export const MessageBubble = function MessageBubble({
               !fromOther && displayContent ? { entry: e, sessionId } : undefined
             }
             linkEntryId={optimistic ? undefined : e.id}
+            message={
+              optimistic
+                ? undefined
+                : {
+                    entryId: e.id,
+                    author: fromOther || owner || "You",
+                    text: displayContent || "",
+                  }
+            }
           />
           {displayContent && (
             <ClampedBody
@@ -1096,6 +1119,17 @@ export const MessageBubble = function MessageBubble({
           <EntryVideos videos={e.videos} right />
           <EntryFiles files={e.files} right />
           <EntryPastedTexts entry={e} sessionId={sessionId} right />
+          {!optimistic && (
+            <MessageThreadSummary
+              align="end"
+              className="mt-1"
+              message={{
+                entryId: e.id,
+                author: fromOther || owner || "You",
+                text: displayContent || "",
+              }}
+            />
+          )}
         </div>
       </div>
     );

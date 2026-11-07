@@ -3,6 +3,10 @@ import { z } from "zod";
 import type { TranscriptEntry } from "../lib/types";
 import { Menu } from "../ui/menu";
 import { Popover } from "../ui/popover";
+import {
+  MessageActionButtons,
+  MessageThreadSummary,
+} from "./comments/MessageActions";
 import { Tooltip } from "../ui/tooltip";
 import { cn } from "../ui/cn";
 import { CodeHighlight } from "./LazyCode";
@@ -208,8 +212,16 @@ export const TurnFooter = function TurnFooter({
             )}
           </Menu.Popup>
         </Menu.Root>
+        <MessageActionButtons
+          message={{ entryId: entry.id, author: "Agent", text: entry.content }}
+          className="size-6 min-h-6"
+        />
       </div>
       <TouchedFileChips files={files} max={isPhone ? 1 : MAX_CHIPS} />
+      <MessageThreadSummary
+        className="basis-full"
+        message={{ entryId: entry.id, author: "Agent", text: entry.content }}
+      />
     </div>
   );
 };

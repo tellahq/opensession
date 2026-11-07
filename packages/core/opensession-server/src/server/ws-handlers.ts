@@ -1,4 +1,5 @@
 import { registerMemoryProbe } from "./memory-probes";
+import { huddles } from "./huddles-live";
 import { noteSessionHumanActivity } from "./sandbox/idle";
 import {
   sandboxAgentClose,
@@ -989,6 +990,8 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
         }
         return;
       }
+
+      if (huddles().message(ws, msg)) return;
 
       switch (msg.type) {
         case "ping": {
@@ -2021,6 +2024,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
     stopAllWatchesForClient(ws);
     releaseTranscriptV2(ws);
     leaveSession(ws);
+    huddles().close(ws);
     stopAllTerminals(ws); // the Shell tabs' PTYs die with their socket
     // The close code tells a client that left (1001, 1005, 1006) from one
     // this server sent away, which is what separates a flaky network from a

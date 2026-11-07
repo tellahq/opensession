@@ -1,4 +1,8 @@
+import { useIsPhone } from "../../hooks/useIsPhone";
 import { useNavigation } from "../../hooks/useNavigation";
+import { useMessageCommentsSession } from "../../lib/message-comments";
+import { openSpaceThread } from "../../lib/space-thread-view";
+import { useWorkspaceRecord } from "../../lib/workspace-records";
 import { useSessionRecord } from "../../lib/session-records";
 import {
   THREAD_STATE_LABEL,
@@ -6,9 +10,14 @@ import {
   threadStatusLine,
 } from "../../lib/space-threads";
 import { cn } from "../../ui/cn";
+import {
+  MessageActionButtons,
+  MessageThreadSummary,
+} from "../comments/MessageActions";
 import { ListRow } from "../../ui/list-row";
 import { THREAD_DOT } from "./space-classes";
 import { useThreadGist } from "./ThreadRow";
+import { useThreadActivity } from "./useThreadActivity";
 
 /** A thread the turn started, and the prompt it was started on. */
 export interface SpawnedThread {
@@ -35,14 +44,52 @@ export function ThreadCards({ threads }: { threads: SpawnedThread[] }) {
 }
 
 function ThreadCard({ spawned }: { spawned: SpawnedThread }) {
-  const navigation = useNavigation();
   const thread = useSessionRecord(spawned.threadId);
   const fallbackTitle =
     spawned.prompt.split("\n")[0]?.trim().slice(0, 80) || "Thread";
+  const message = {
+    entryId: spawned.id,
+    author: "Agent",
+    text: `Thread: ${thread?.title || fallbackTitle}`,
+  };
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="group/card flex items-start gap-1">
+        <ThreadCardBody spawned={spawned} fallbackTitle={fallbackTitle} />
+        <div className="flex shrink-0 flex-col gap-0.5 pt-1 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-hover/card:opacity-100 [@media(hover:hover)]:group-focus-within/card:opacity-100">
+          <MessageActionButtons message={message} />
+        </div>
+      </div>
+      <MessageThreadSummary message={message} />
+    </div>
+  );
+}
+
+function ThreadCardBody({
+  spawned,
+  fallbackTitle,
+}: {
+  spawned: SpawnedThread;
+  fallbackTitle: string;
+}) {
+  const navigation = useNavigation();
+  const thread = useSessionRecord(spawned.threadId);
+  const hostId = useMessageCommentsSession();
+  const host = useSessionRecord(hostId);
+  const space = useWorkspaceRecord(host?.workspaceId ?? null);
+  // Only a space's own conversation has the Space tab to open it in.
+  const coordinatorId =
+    host && space?.space && !host.parentSessionId ? host.id : null;
+  const phone = useIsPhone();
   return (
     <ListRow
       variant="card"
-      onClick={() => navigation.openSession(spawned.threadId)}
+      onClick={() =>
+        // Beside the conversation on desktop; a phone has no room for two.
+        coordinatorId && !phone
+          ? openSpaceThread(coordinatorId, spawned.threadId)
+          : navigation.openSession(spawned.threadId)
+      }
     >
       {thread ? (
         <LiveThread thread={thread} />
@@ -72,6 +119,7 @@ function LiveThread({
   const state = threadState(thread);
   const gist = useThreadGist(thread, state);
   const line = threadStatusLine(thread);
+  const activity = useThreadActivity(thread.id, state === "working");
   return (
     <>
       <span
@@ -91,6 +139,15 @@ function LiveThread({
           {line !== THREAD_STATE_LABEL[state] && ` · ${line}`}
           {gist && <span className="text-faint"> · {gist}</span>}
         </span>
+        {activity && (
+          <span
+            className="truncate text-meta text-faint"
+            aria-live="polite"
+            title={activity}
+          >
+            {activity}
+          </span>
+        )}
       </span>
     </>
   );

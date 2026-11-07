@@ -450,3 +450,18 @@ ingress.example.com {
 
 See the maintained
 [`deploy/caddy/sandbox-ingress.caddy.example`](../../deploy/caddy/sandbox-ingress.caddy.example).
+
+## Huddle audio
+
+Huddles send audio directly between browsers over WebRTC; the server only
+relays the call setup over its WebSocket. Browsers on the same network, or on
+the same tailnet, find each other without any extra setup. When people are on
+networks that cannot reach each other directly, give the server a STUN and,
+for strict NATs, a TURN server as a JSON list of `RTCIceServer` entries:
+
+```sh
+OPENSESSION_HUDDLE_ICE_SERVERS='[{"urls":"stun:stun.example.test:3478"},{"urls":"turn:turn.example.test:3478","username":"acme","credential":"secret"}]'
+```
+
+The list is handed to each browser when it joins a call. It is empty by
+default, so no third-party server learns who is calling unless you add one.

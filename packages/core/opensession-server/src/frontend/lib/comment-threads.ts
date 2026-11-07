@@ -35,9 +35,15 @@ export function timelineThreads(threads: CommentThread[]): CommentThread[] {
   return threads.filter((t) => !t.anchor);
 }
 
-/** Threads attached to a passage of the transcript. */
+/** Threads attached to a passage of the transcript. A thread on a whole
+ *  message shows under that message instead (MessageThreadSummary). */
 export function inlineThreads(threads: CommentThread[]): CommentThread[] {
-  return threads.filter((t) => !!t.anchor);
+  return threads.filter((t) => !!t.anchor && !t.anchor.whole);
+}
+
+/** Threads on whole messages, in transcript order of their first comment. */
+export function messageThreads(threads: CommentThread[]): CommentThread[] {
+  return threads.filter((t) => !!t.anchor?.whole).sort((a, b) => a.ts - b.ts);
 }
 
 /** A side answer that has been "in progress" this long was cut off by a

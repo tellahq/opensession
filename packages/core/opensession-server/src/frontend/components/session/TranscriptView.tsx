@@ -1,6 +1,7 @@
 import React from "react";
 import { OpenAssetPathsProvider } from "../../lib/open-asset";
 import { MessageLinkProvider } from "../../lib/message-link";
+import { MessageCommentsSession } from "../../lib/message-comments";
 import { cn } from "../../ui/cn";
 import { SessionTranscript } from "../SessionTranscript";
 import {
@@ -46,7 +47,9 @@ export function TranscriptView({
             <LiveSubagentsProvider value={liveSubagents}>
               <OpenAssetProvider value={openAsset}>
                 <MessageLinkProvider value={messageLink}>
-                  <SessionTranscript {...transcript} />
+                  <MessageCommentsSession value={transcript.sessionId}>
+                    <SessionTranscript {...transcript} />
+                  </MessageCommentsSession>
                 </MessageLinkProvider>
               </OpenAssetProvider>
             </LiveSubagentsProvider>

@@ -7,13 +7,9 @@ import { useSessionRecords } from "../../lib/session-records";
 import {
   groupThreads,
   isSpaceCoordinator,
-  markSpaceSeen,
-  spaceRecap,
-  spaceSeenAt,
   spaceThreads,
   THREAD_STATE_LABEL,
   threadState,
-  type SpaceRecap,
 } from "../../lib/space-threads";
 import { shortTime } from "../../lib/time";
 import { useWorkspaceRecord } from "../../lib/workspace-records";
@@ -23,10 +19,17 @@ import { cn } from "../../ui/cn";
 import { ListRow } from "../../ui/list-row";
 import { Segmented, SegmentedOption } from "../../ui/segmented";
 import { EmptyState } from "../../ui/state";
-import { IconFile, IconMessage } from "../icons";
+import { IconFile, IconMessage, IconGear } from "../icons";
 import { RepoTile } from "../RepoTile";
 import { UserAvatar } from "../UserAvatar";
 import { SPACE_CAPTION } from "./space-classes";
+import { SpaceSettingsDialog } from "./SpaceSettingsDialog";
+import { ThreadPane } from "./ThreadPane";
+import { HuddleButton } from "../huddle/HuddleButton";
+import {
+  closeSpaceThread,
+  useOpenSpaceThread,
+} from "../../lib/space-thread-view";
 import { ThreadRow } from "./ThreadRow";
 
 type SpaceTab = "threads" | "comments" | "artifacts";
@@ -54,12 +57,46 @@ export function SpacePanel({
   /** Off where the page around it already names the space. */
   showTitle?: boolean;
 }) {
+  const openThread = useOpenSpaceThread(coordinatorId);
+  if (openThread)
+    return (
+      <ThreadPane
+        key={openThread}
+        threadId={openThread}
+        onBack={() => closeSpaceThread(coordinatorId)}
+        onOpenSession={onOpenSession}
+      />
+    );
+  return (
+    <SpaceOverview
+      workspace={workspace}
+      coordinatorId={coordinatorId}
+      onOpenSession={onOpenSession}
+      onOpenAsset={onOpenAsset}
+      showTitle={showTitle}
+    />
+  );
+}
+
+function SpaceOverview({
+  workspace,
+  coordinatorId,
+  onOpenSession,
+  onOpenAsset,
+  showTitle,
+}: {
+  workspace: Workspace;
+  coordinatorId: string;
+  onOpenSession?: (id: string) => void;
+  onOpenAsset?: (path: string) => void;
+  showTitle: boolean;
+}) {
   const sessions = useSessionRecords();
   const threads = spaceThreads(sessions, workspace.id);
   const [tab, setTab] = useState<SpaceTab>("threads");
+  const [editing, setEditing] = useState(false);
   const comments = useSpaceComments(coordinatorId);
   const artifacts = useSpaceArtifacts(coordinatorId, sessions);
-  const recap = useSpaceRecap(workspace.id, threads);
   const shipped = threads.filter((t) => threadState(t) === "shipped").length;
   const members = [
     workspace.createdBy,
@@ -69,10 +106,34 @@ export function SpacePanel({
   return (
     <div className="flex flex-col gap-3 px-3 pt-3 pb-6">
       <header className="flex flex-col gap-1.5 px-2">
-        {showTitle && (
-          <h2 className="m-0 truncate text-section-title font-semibold leading-tight text-fg">
-            {workspace.name}
-          </h2>
+        <div className="flex min-w-0 items-center gap-2">
+          {showTitle && (
+            <h2 className="m-0 min-w-0 flex-1 truncate text-section-title font-semibold leading-tight text-fg">
+              {workspace.name}
+            </h2>
+          )}
+          <HuddleButton
+            target={{
+              roomId: `workspace:${workspace.id}`,
+              label: workspace.name,
+              sessionId: coordinatorId,
+            }}
+          />
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<IconGear size={20} />}
+            aria-label="Space settings"
+            className={cn("phone:min-h-11", !showTitle && "ml-auto")}
+            onClick={() => setEditing(true)}
+          >
+            Settings
+          </Button>
+        </div>
+        {workspace.goal && (
+          <p className="m-0 whitespace-pre-line text-supporting text-fg">
+            {workspace.goal}
+          </p>
         )}
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-meta text-dim">
           <span className="flex min-w-0 items-center gap-1.5">
@@ -103,13 +164,11 @@ export function SpacePanel({
         )}
       </header>
 
-      {recap.value && (
-        <RecapCard
-          recap={recap.value}
-          onOpen={onOpenSession}
-          onDismiss={recap.dismiss}
-        />
-      )}
+      <SpaceSettingsDialog
+        workspace={workspace}
+        open={editing}
+        onOpenChange={setEditing}
+      />
 
       <Segmented
         label="Space"
@@ -197,73 +256,14 @@ function ThreadGroups({
   );
 }
 
-/**
- * "Since you were last here": only for this browser, and only when something
- * moved. Dismissing it, or coming back later, starts the count again.
- */
-function RecapCard({
-  recap,
-  onOpen,
-  onDismiss,
-}: {
-  recap: SpaceRecap;
-  onOpen?: (id: string) => void;
-  onDismiss: () => void;
-}) {
-  const lines: Array<{ label: string; threads: UnifiedSession[] }> = [
-    { label: "Needs you", threads: recap.blocked },
-    { label: "Ready to ship", threads: recap.ready },
-    { label: "Shipped", threads: recap.shipped },
-    { label: "Started", threads: recap.started },
-  ].filter((line) => line.threads.length > 0);
-  return (
-    <section
-      aria-label="Since you were last here"
-      className="flex flex-col gap-1 rounded-xl bg-panel p-2"
-    >
-      <div className="flex items-center justify-between gap-2 px-2 pt-1">
-        <span className="text-label font-semibold text-fg">
-          Since you were last here
-        </span>
-        <Button size="sm" variant="ghost" onClick={onDismiss}>
-          Dismiss
-        </Button>
-      </div>
-      {lines.map((line) => (
-        <div key={line.label} className="flex flex-col">
-          <div className="px-2 pt-1 text-meta font-medium text-faint">
-            {line.label}
-          </div>
-          {line.threads.slice(0, 4).map((thread) => (
-            <ListRow
-              key={thread.id}
-              className="py-1"
-              onClick={() => onOpen?.(thread.id)}
-            >
-              <span className="truncate text-label text-fg">
-                {thread.title}
-              </span>
-            </ListRow>
-          ))}
-          {line.threads.length > 4 && (
-            <div className="px-2 text-meta text-faint">
-              and {line.threads.length - 4} more
-            </div>
-          )}
-        </div>
-      ))}
-    </section>
-  );
-}
-
 /** Open threads first, then resolved, newest activity first in each. */
 function CommentList({ threads }: { threads: CommentThread[] | null }) {
   if (threads === null) return null;
   if (threads.length === 0)
     return (
       <EmptyState className="py-8">
-        No comments yet. Select text in the conversation to comment on it, or
-        reply to a message.
+        No comments yet. Hover a message and choose Comment, or select text to
+        comment on part of it.
       </EmptyState>
     );
   const ordered = [...threads].sort(
@@ -411,33 +411,6 @@ function useSpaceArtifacts(
     };
   }, [sessionId, activity]);
   return files;
-}
-
-/**
- * The recap against when this browser last had the space open. The time is
- * read once per space and stamped right away, so the recap stays put while
- * the panel is up and the next visit counts from this one.
- */
-function useSpaceRecap(workspaceId: string, threads: UnifiedSession[]) {
-  const [seen, setSeen] = useState(() => ({
-    workspaceId,
-    at: spaceSeenAt(workspaceId),
-  }));
-  if (seen.workspaceId !== workspaceId)
-    setSeen({ workspaceId, at: spaceSeenAt(workspaceId) });
-  useEffect(() => {
-    markSpaceSeen(workspaceId, Date.now());
-    const stamp = () => markSpaceSeen(workspaceId, Date.now());
-    window.addEventListener("pagehide", stamp);
-    return () => {
-      stamp();
-      window.removeEventListener("pagehide", stamp);
-    };
-  }, [workspaceId]);
-  return {
-    value: spaceRecap(threads, seen.at),
-    dismiss: () => setSeen({ workspaceId, at: Date.now() }),
-  };
 }
 
 /**

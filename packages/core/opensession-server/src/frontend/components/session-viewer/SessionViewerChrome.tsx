@@ -1,4 +1,5 @@
 import type { useSessionModelWorkflowController } from "../../hooks/useSessionModelWorkflowController";
+import { HuddleButton, huddleTarget } from "../huddle/HuddleButton";
 import type React from "react";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { createPortal } from "react-dom";
@@ -1068,6 +1069,9 @@ export function SessionViewerChrome({
 					    standing behind you. You know you're here; this row is for
 					    the people you can't see. (The native app has always
 					    filtered its own name out — this matches it.) */}
+                  {!session.desk && !isPhone && (
+                    <HuddleButton target={huddleTarget(session)} />
+                  )}
                   {!isPhone && others.length > 0 && (
                     <div
                       className={VIEWER_PRESENCE}

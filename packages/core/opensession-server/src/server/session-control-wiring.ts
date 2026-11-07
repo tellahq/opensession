@@ -737,6 +737,7 @@ registerSessionControl({
       invokingSessionId,
       plainDiscussionId,
       slackOrigin,
+      openingContext,
     } = ownedInput;
     const bksId = requestedId;
     const createIdentity = new Bun.CryptoHasher("sha256")
@@ -1284,6 +1285,15 @@ registerSessionControl({
       openingPrompt += `
 
 ${createMentionsNote}`;
+    if (openingContext) {
+      const { wrapContext } = await import("./prompt-context");
+      openingPrompt = [
+        openingPrompt,
+        wrapContext(openingContext.text, openingContext.source),
+      ]
+        .filter((part) => part.trim())
+        .join("\n\n");
+    }
     // A session joining a workspace opens with the workspace's own context, the
     // same as the web create: the feed item it hangs off, and the support
     // ticket it belongs to. Without this a "new tab" in a ticket workspace is

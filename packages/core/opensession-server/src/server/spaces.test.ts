@@ -13,7 +13,9 @@ type WorkspaceInput = Parameters<typeof createWorkspace>[0];
 function fakeDeps() {
   const workspaces: WorkspaceInput[] = [];
   const sessions: CreateSessionOpts[] = [];
+  const shared: string[] = [];
   return {
+    shared,
     workspaces,
     sessions,
     deps: {
@@ -27,6 +29,10 @@ function fakeDeps() {
           createdAt: "2026-11-07T00:00:00.000Z",
           ...(input.space ? { space: true as const } : {}),
         } satisfies Workspace;
+      },
+      share: async (_workspaceId: string, name: string) => {
+        shared.push(name);
+        return null;
       },
       createSession: async (opts: CreateSessionOpts) => {
         sessions.push(opts);
@@ -65,6 +71,13 @@ describe("spaceCoordinatorNote", () => {
     expect(note).toContain("spawn_task");
     expect(note).toContain("isolatedWorktree true");
     expect(note).toContain("space-summary.md");
+  });
+
+  test("points threads at the goal when there is one", () => {
+    expect(
+      spaceCoordinatorNote({ name: "Ops", goal: "Cut p95 latency" }),
+    ).toContain("The space's goal: Cut p95 latency");
+    expect(spaceCoordinatorNote({ name: "Ops" })).not.toContain("goal:");
   });
 
   test("tells a project-less space to pick a repo per thread", () => {
@@ -113,14 +126,37 @@ describe("createSpace", () => {
     expect(sessions[0]?.repo).toBeUndefined();
   });
 
-  test("rejects a missing title or first message before creating anything", async () => {
+  test("rejects a missing title before creating anything", async () => {
     const { deps, workspaces } = fakeDeps();
     await expect(
       createSpace({ title: " ", prompt: "x", user: "Ada" }, deps),
     ).rejects.toBeInstanceOf(SpaceInputError);
-    await expect(
-      createSpace({ title: "x", prompt: " ", user: "Ada" }, deps),
-    ).rejects.toBeInstanceOf(SpaceInputError);
     expect(workspaces).toEqual([]);
+  });
+
+  test("without a first message the agent opens with a model-only welcome", async () => {
+    const { deps, sessions } = fakeDeps();
+    await createSpace({ title: "Ops", prompt: " ", user: "Ada" }, deps);
+    expect(sessions[0]?.prompt).toBe("");
+    expect(sessions[0]?.openingContext?.source).toBe("space-coordinator");
+    expect(sessions[0]?.openingContext?.text).toContain(
+      "Ada just created this space",
+    );
+  });
+
+  test("stores the goal and shares with each teammate once", async () => {
+    const { deps, workspaces, shared } = fakeDeps();
+    await createSpace(
+      {
+        title: "Ops",
+        prompt: "Go",
+        goal: " Ship checkout v2 ",
+        sharedWith: ["Grace", "Grace", "Linus"],
+        user: "Ada",
+      },
+      deps,
+    );
+    expect(workspaces[0]?.goal).toBe("Ship checkout v2");
+    expect(shared).toEqual(["Grace", "Linus"]);
   });
 });

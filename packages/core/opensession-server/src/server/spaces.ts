@@ -23,6 +23,7 @@
  * The full model is in CONCEPTS.md.
  */
 
+import { addCollaborator, teammateName } from "./collaborators";
 import { getSessionControl } from "./session-control";
 import { createWorkspace, getWorkspace, type Workspace } from "./workspaces";
 import type { UnifiedSession } from "./types";
@@ -46,12 +47,20 @@ export function isSpaceCoordinator(
 export function spaceCoordinatorNote(space: {
   name: string;
   repo?: string;
+  goal?: string;
 }): string {
   const project = space.repo
     ? `Its project is the repository \`${space.repo}\`: threads run there unless you pass another \`repo\`.`
     : "It has no project. Pass `repo` when a thread's work belongs to a repository.";
   return [
     `You coordinate the space "${space.name}". A space is a shared conversation whose agent spawns and coordinates other sessions, called threads, for the people in it. ${project}`,
+    ...(space.goal
+      ? [
+          "",
+          `The space's goal: ${space.goal}`,
+          "Keep every thread pointed at this goal. Say so when a request pulls away from it.",
+        ]
+      : []),
     "",
     "- Delegate. Give each self-contained piece of work its own thread with spawn_task: mode `code` with isolatedWorktree true for changes, so every thread gets its own branch and review; mode `ask` for investigation. Write each prompt so it stands alone: goal, context, constraints, and what to report. Answer questions and plan yourself. You work in a scratch directory with no checkout of the project: use it for notes and scripts, and leave reading and changing the project's code to threads.",
     "- Track. Threads report back to this conversation. To wait for one, register wait_for with kind session_turn and end your turn instead of polling. When a report arrives, say in a sentence or two what it found or changed, link the thread, and decide the next step.",
@@ -77,8 +86,13 @@ export interface CreateSpaceInput {
   title: string;
   /** Registered repo id, or undefined for a space without a project. */
   repo?: string;
-  /** The first message to the coordinator. */
+  /** The first message to the coordinator. Empty: the agent opens the
+   *  space with a welcome instead. */
   prompt: string;
+  /** What the space's work is for (optional). */
+  goal?: string;
+  /** Teammates who can see the space and chat in it. */
+  sharedWith?: string[];
   /** Display name of the person creating the space. */
   user: string;
   /** Server-authenticated login, when there is one. */
@@ -96,23 +110,49 @@ export async function createSpace(
   deps: {
     createWorkspace: typeof createWorkspace;
     createSession: ReturnType<typeof getSessionControl>["createSession"];
+    /** Add a teammate; null when the name is not a teammate. */
+    share: (
+      workspaceId: string,
+      name: string,
+      by: string,
+    ) => Promise<Workspace | null>;
   } = {
     createWorkspace,
     createSession: (opts) => getSessionControl().createSession(opts),
+    share: async (workspaceId, name, by) => {
+      const teammate = teammateName(name);
+      if (!teammate) return null;
+      const result = await addCollaborator(workspaceId, teammate, by, null);
+      return result?.workspace ?? null;
+    },
   },
 ): Promise<{ workspace: Workspace; sessionId: string }> {
   const title = input.title.trim().slice(0, MAX_SPACE_TITLE_LENGTH);
   const prompt = input.prompt.trim();
   if (!title) throw new SpaceInputError("Give the space a title");
-  if (!prompt) throw new SpaceInputError("Tell the agent what to work on");
-  const workspace = await deps.createWorkspace({
+  const goal = input.goal?.trim();
+  let workspace = await deps.createWorkspace({
     name: title,
     ...(input.repo ? { repo: input.repo } : {}),
     createdBy: input.user || "Anonymous",
     space: true,
+    ...(goal ? { goal } : {}),
   });
+  for (const name of new Set(input.sharedWith ?? [])) {
+    const shared = await deps.share(
+      workspace.id,
+      name,
+      input.user || "Someone",
+    );
+    if (shared) workspace = shared;
+  }
   const { id } = await deps.createSession({
+    // A model-only kickoff renders no user bubble: the space opens on the
+    // agent's welcome, the way a new room opens on its host.
     prompt,
+    openingContext: prompt
+      ? undefined
+      : { text: spaceWelcomePrompt(input.user), source: "space-coordinator" },
     mode: "scratch",
     ...(input.repo ? { repo: input.repo } : {}),
     workspaceId: workspace.id,
@@ -120,4 +160,12 @@ export async function createSpace(
     ...(input.createdByLogin ? { createdByLogin: input.createdByLogin } : {}),
   });
   return { workspace, sessionId: id };
+}
+
+/** The coordinator's first turn when the space was created without a message. */
+export function spaceWelcomePrompt(creator: string): string {
+  return [
+    `${creator || "Someone"} just created this space and has not asked for anything yet.`,
+    "Open it with a short welcome addressed to the people in it: one or two sentences on what the space is for (its goal, when it has one), then two or three concrete first threads you could start, as a list. Do not start any thread yet; wait for someone to ask.",
+  ].join("\n");
 }

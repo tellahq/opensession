@@ -19,10 +19,13 @@
  */
 
 import { requestUser, type RouteContext } from "./context";
+import { broadcastToSession } from "../ws-hub";
 import {
   cleanAnchor,
   isValidThreadSession,
+  listReactions,
   listThreads,
+  toggleReaction,
   type CommentThread,
   type ThreadFailure,
 } from "../comment-threads";
@@ -84,6 +87,8 @@ export async function handleCommentThreadRoutes(
 ): Promise<Response | undefined> {
   const { path } = ctx;
   if (!path.startsWith("/api/sessions/")) return undefined;
+  const reactions = path.match(/^\/api\/sessions\/([^/]+)\/reactions$/);
+  if (reactions) return handleReactions(ctx, decodeURIComponent(reactions[1]!));
   const match = path.match(
     /^\/api\/sessions\/([^/]+)\/(threads|notes)(?:\/([^/]+))?(?:\/(comments|agent|seen))?(?:\/([^/]+))?$/,
   );
@@ -98,6 +103,35 @@ export async function handleCommentThreadRoutes(
       ? undefined
       : handleLegacyNotes(ctx, sessionId, threadId);
   return handleThreads(ctx, sessionId, threadId, sub, commentId);
+}
+
+/** Reactions on messages: GET the session's, POST toggles one. */
+async function handleReactions(
+  ctx: RouteContext,
+  sessionId: string,
+): Promise<Response | undefined> {
+  if (!isValidThreadSession(sessionId)) return invalidSession();
+  const { req } = ctx;
+  if (req.method === "GET")
+    return Response.json({ reactions: await listReactions(sessionId) });
+  if (req.method !== "POST") return undefined;
+  const body = await req.json().catch(() => null);
+  const user = requestUser(ctx, body?.user);
+  if (!user) return Response.json({ error: "user required" }, { status: 400 });
+  const reactions = await toggleReaction(
+    sessionId,
+    typeof body?.entryId === "string" ? body.entryId : "",
+    typeof body?.emoji === "string" ? body.emoji : "",
+    user,
+  );
+  if (!reactions)
+    return Response.json({ error: "invalid reaction" }, { status: 400 });
+  broadcastToSession(sessionId, {
+    type: "message_reactions",
+    sessionId,
+    reactions,
+  });
+  return Response.json({ reactions });
 }
 
 type ThreadSub = "comments" | "agent" | "seen";

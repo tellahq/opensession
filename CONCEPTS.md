@@ -272,28 +272,55 @@ feature branch or pull request.
 ## Spaces
 
 A space is a shared conversation with one agent whose job is to spawn and
-coordinate other sessions for you. You give it a title, a project, and a first
-message; from then on you talk to the space and it splits the work into
-**threads**: child sessions it starts, follows, and summarizes back.
+coordinate other sessions for you. You give it a name, an optional **goal**,
+a project, and who it is shared with; a first message is optional, and
+without one the agent opens the space with a welcome. From then on you talk
+to the space and it splits the work into **threads**: child sessions it
+starts, follows, and summarizes back. Name, goal, project and sharing can all
+be changed later from the space's settings.
 
 Underneath, a space is a workspace marked as one. Its root session is the
 **coordinator**. It is a Scratch session: it has a writable scratch directory
 for notes and scripts but no checkout of the project, so reading and changing
 the code happens in threads, each with its own branch and review. Threads run
-in the space's project unless the coordinator names another repository. Each coordinator turn carries a standing briefing: delegate
-self-contained work with `spawn_task`, wait on threads instead of polling,
-and keep a `space-summary.md` asset current with the goal, the threads,
-decisions, and open questions.
+in the space's project unless the coordinator names another repository. Each
+coordinator turn carries a standing briefing: keep threads pointed at the
+goal, delegate self-contained work with `spawn_task`, wait on threads instead
+of polling, and keep a `space-summary.md` asset current with the goal, the
+threads, decisions, and open questions.
 
 Threads are ordinary child sessions in the space's workspace. They nest under
 the space in the sidebar, report back to the coordinator, and can be opened
 and steered directly. The space's conversation shows each thread it starts as
-a live card, and its side panel (the top of the details page on a phone)
+a live card with what it is doing right now; clicking a card opens the thread
+beside the conversation, where you can read it and message its agent without
+leaving the space. The side panel (the top of the details page on a phone)
 groups every thread by where it stands: blocked, ready to ship, working, idle,
-shipped. The panel also lists the conversation's comments and artifacts, and
-opens with what changed since you last looked. Teammates join a space the same way they join any
-workspace, as collaborators; comments on the conversation work as they do
-everywhere else. Start one with the **+** in the sidebar's Spaces section.
+shipped, and lists the conversation's comments and artifacts. Coming back to
+a space after its threads moved, a **Since you were last here** card above
+the composer gives a short written catch-up. Teammates join a space the same
+way they join any workspace, as collaborators. Start one with the **+** in
+the sidebar's Spaces section.
+
+## Message comments and reactions
+
+Any message in a conversation (a person's, the agent's, a thread card) can be
+reacted to with an emoji or commented on as a whole. A comment opens a side
+conversation among people beside the transcript; the message then shows its
+reactions and comment count under it. The agent does not read these comments
+unless someone mentions `@agent` in one. Comments on a selected passage of a
+message work as before.
+
+## Huddles
+
+A huddle is a voice call that lives inside a workspace (a space is one) or a
+standalone session. Start it with the headphones in the header; while anyone
+is inside, the button turns into **Join huddle** with who is there. The call
+follows you as a small card in the corner while you move around, with mute,
+invite (a teammate gets a toast with **Join**), notes, and leave. Audio goes
+browser to browser; the server only connects people. With **Notes** on, each
+person's microphone is transcribed, and when the last person leaves a summary
+is posted as a team note on the session the huddle started from.
 
 ## Workflows
 

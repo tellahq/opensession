@@ -105,6 +105,8 @@ import {
 import type { UnifiedSession } from "../../lib/types";
 import type { SessionComments } from "../../lib/comment-threads";
 import { InlineComments } from "../comments/InlineComments";
+import { MessageCommentsPane } from "../comments/MessageCommentsPane";
+import { SpaceCatchUp } from "../space/SpaceCatchUp";
 import { anchorFromRange } from "../../lib/comment-anchor";
 import { requestCommentDraft } from "../../lib/comment-draft";
 import { toast as showToast } from "../../ui/toast";
@@ -1213,6 +1215,15 @@ export function SessionViewerMainRegion({
                 isPhone={isPhone}
               />
             )}
+            {/* Comments on a whole message (its hover Comment action). */}
+            {!loading && (
+              <MessageCommentsPane
+                sessionId={session.id}
+                threads={threads}
+                containerRef={messagesRef}
+                isPhone={isPhone}
+              />
+            )}
 
             {/* Sibling of the scroller, not a child: a press on the rail
 							    must never reach the transcript container, whose scroll hook
@@ -1417,6 +1428,7 @@ export function SessionViewerMainRegion({
                     </div>
                   </div>
                 )}
+                <SpaceCatchUp session={session} />
                 <TypingIndicator
                   presence={typingPresence}
                   className="mx-auto mb-1 w-full max-w-[calc(var(--session-col)+40px)] px-5"
