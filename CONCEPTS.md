@@ -40,6 +40,7 @@ And a third — _what starts or coordinates work when you are not there_:
 | **Automation** | a cron schedule or an external event       | none — every run is a fresh session                |
 | **Goal**       | its own self-set wake time                 | yes — wakes resume one session over days           |
 | **Workflow**   | a script fanning out agents and tool calls | successful calls replay when a workflow is resumed |
+| **Space**      | people talking to a coordinator agent      | yes — one shared conversation that spawns threads  |
 
 ## Projects
 
@@ -267,6 +268,27 @@ A goal has a mode like a session: `ask` for research and measurement, `code` for
 a persistent worktree across wakes. When the shared-checkout exception is
 active, a code goal instead works directly on the default branch, without a
 feature branch or pull request.
+
+## Spaces
+
+A space is a shared conversation with one agent whose job is to spawn and
+coordinate other sessions for you. You give it a title, a project, and a first
+message; from then on you talk to the space and it splits the work into
+**threads**: child sessions it starts, follows, and summarizes back.
+
+Underneath, a space is a workspace marked as one. Its root session is the
+**coordinator**. It runs in read-only Ask mode on the project, so it can read
+the code and plan, while every change happens in a thread with its own branch
+and review. Each coordinator turn carries a standing briefing: delegate
+self-contained work with `spawn_task`, wait on threads instead of polling,
+and keep a `space-summary.md` asset current with the goal, the threads,
+decisions, and open questions.
+
+Threads are ordinary child sessions in the space's workspace. They nest under
+the space in the sidebar, report back to the coordinator, and can be opened
+and steered directly. Teammates join a space the same way they join any
+workspace, as collaborators; comments on the conversation work as they do
+everywhere else. Start one with the **+** in the sidebar's Spaces section.
 
 ## Workflows
 

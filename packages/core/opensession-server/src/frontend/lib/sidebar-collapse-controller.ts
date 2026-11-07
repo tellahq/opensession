@@ -22,7 +22,8 @@ export function createSidebarCollapseController({
     key.startsWith("support:") ||
     key.startsWith("lifecycle:") ||
     key.startsWith("inbox:") ||
-    key.startsWith("person:")
+    key.startsWith("person:") ||
+    key.startsWith("spaces:")
       ? `collapsed:${key}`
       : key;
 
@@ -46,7 +47,8 @@ export function createSidebarCollapseController({
       key.startsWith("lifecycle:") ||
       key.startsWith("project:") ||
       key.startsWith("inbox:") ||
-      key.startsWith("person:")
+      key.startsWith("person:") ||
+      key.startsWith("spaces:")
     )
       return !expanded.has(`collapsed:${key}`);
     return expanded.has(key);

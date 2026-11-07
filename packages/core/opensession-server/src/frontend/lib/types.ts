@@ -744,6 +744,8 @@ export interface Workspace {
   draft?: { text: string; updatedAt: string; by?: string; autoName?: boolean };
   /** Teammates added besides the creator; each gets it in their sidebar. */
   collaborators?: Array<{ name: string; by: string; at: string }>;
+  /** A space: its root session coordinates threads it spawns inside it. */
+  space?: true;
 }
 
 export interface DiffFile {

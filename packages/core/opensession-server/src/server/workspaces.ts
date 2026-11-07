@@ -115,6 +115,12 @@ export interface Workspace {
   /** Ship-mode choice made when the workspace was created (ship-mode.ts).
    *  Absent = the repository's `publicationMode`. New sessions inherit it. */
   shipMode?: "pull-request" | "direct";
+  /**
+   * A space (spaces.ts): its root sessions coordinate, delegating work to
+   * child sessions that stay in this workspace. Set at creation, never
+   * toggled. Absent = an ordinary workspace.
+   */
+  space?: true;
 }
 
 /** A teammate added to a workspace, keyed by picker first name. */
@@ -418,6 +424,8 @@ export async function createWorkspace(input: {
   worktreeDir?: string;
   attachedRepos?: AttachedRepo[];
   draft?: WorkspaceDraft;
+  /** Create a space (spaces.ts) rather than an ordinary workspace. */
+  space?: boolean;
   /** Reuse a caller-supplied id (e.g. migration wrapping an orphan session). */
   id?: string;
   createdAt?: string;
@@ -442,6 +450,7 @@ export async function createWorkspace(input: {
     ...(input.attachedRepos && input.attachedRepos.length
       ? { attachedRepos: input.attachedRepos }
       : {}),
+    ...(input.space ? { space: true as const } : {}),
     ...(input.draft
       ? {
           draft: {

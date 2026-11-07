@@ -436,3 +436,38 @@ describe("sidebar row placement", () => {
     expect(rowAutoCreatedInLens(mixed, "me")).toBe(false);
   });
 });
+
+describe("space rows", () => {
+  const spaceRow = row("workspace:ws-space", [session("bks-coordinator")], {
+    workspace: {
+      id: "ws-space",
+      name: "Spaces v1",
+      createdBy: "Michiel",
+      createdAt: "2026-11-07T00:00:00Z",
+      space: true,
+    },
+  });
+
+  test("file into the Spaces band, even when snoozed", () => {
+    expect(classifySidebarPlacement(spaceRow, context)).toBe("space");
+    expect(
+      classifySidebarPlacement(spaceRow, { ...context, snoozed: true }),
+    ).toBe("space");
+  });
+
+  test("a claimed space shows even outside the status scope", () => {
+    expect(
+      classifySidebarPlacement(spaceRow, {
+        ...context,
+        inStatusScope: false,
+        claimed: true,
+      }),
+    ).toBe("space");
+  });
+
+  test("a space out of view stays out of every band", () => {
+    expect(
+      classifySidebarPlacement(spaceRow, { ...context, inStatusScope: false }),
+    ).toBe("outside");
+  });
+});

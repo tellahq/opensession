@@ -87,6 +87,22 @@ export async function fetchWorkspaces(options?: {
   }
 }
 
+/** Create a space and start its coordinator on the first message. `repo`
+ *  omitted is a space without a project. */
+export async function createSpaceApi(input: {
+  title: string;
+  repo?: string;
+  prompt: string;
+  /** The picker identity; the server prefers the signed-in one. */
+  user?: string;
+}): Promise<{ workspace: Workspace; sessionId: string }> {
+  return request<{ workspace: Workspace; sessionId: string }>("/spaces", {
+    method: "POST",
+    body: input,
+    label: "Couldn't create the space",
+  });
+}
+
 export async function createWorkspaceApi(input: {
   name: string;
   repo?: string;

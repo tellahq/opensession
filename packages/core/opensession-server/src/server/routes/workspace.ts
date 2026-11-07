@@ -82,6 +82,7 @@ import {
   openPrWorkspaceMatcher,
 } from "../workspace-resolve";
 import { resolveModel } from "../models";
+import { createSpace, SpaceInputError } from "../spaces";
 import {
   REPOS,
   createWorktree,
@@ -89,6 +90,7 @@ import {
   ensureScratchDir,
   getRepo,
   isSharedCheckoutDir,
+  NO_REPO,
   listWorktrees,
   repoForPath,
   resolveUniqueBranch,
@@ -621,6 +623,54 @@ export async function handleWorkspaceRoutes(
       ...(draft ? { draft } : {}),
     });
     return Response.json({ workspace });
+  }
+
+  // A space and its coordinator in one request (spaces.ts): title, optional
+  // project, and the first message. Responds with the coordinator's id so
+  // the client opens the conversation it just started.
+  if (path === "/api/spaces" && req.method === "POST") {
+    const body = (await req.json().catch(() => ({}))) as {
+      title?: unknown;
+      repo?: unknown;
+      prompt?: unknown;
+      user?: unknown;
+    };
+    const repo =
+      typeof body.repo === "string" && body.repo && body.repo !== NO_REPO
+        ? body.repo
+        : undefined;
+    if (repo) {
+      try {
+        getRepo(repo);
+      } catch {
+        return Response.json(
+          { error: "That project is not registered" },
+          { status: 400 },
+        );
+      }
+    }
+    try {
+      const { workspace, sessionId } = await createSpace({
+        title: typeof body.title === "string" ? body.title : "",
+        prompt: typeof body.prompt === "string" ? body.prompt : "",
+        ...(repo ? { repo } : {}),
+        user: requestUser(ctx, body.user) || "Anonymous",
+        ...(ctx.authUser?.login ? { createdByLogin: ctx.authUser.login } : {}),
+      });
+      return Response.json({ workspace, sessionId });
+    } catch (error) {
+      if (error instanceof SpaceInputError)
+        return Response.json({ error: error.message }, { status: 400 });
+      return Response.json(
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : "Couldn't create the space",
+        },
+        { status: 500 },
+      );
+    }
   }
 
   // Resolve-or-create the ONE workspace for a PR or a Plain support ticket
