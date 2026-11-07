@@ -4,6 +4,7 @@ import React, {
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { RowCardPopup } from "../components/SidebarRowCards";
 import { WsCardBody, WsMobileSheet } from "../components/sidebar/HoverCards";
@@ -56,6 +57,43 @@ import {
   setRowColor,
   useRowColors,
 } from "../lib/row-colors";
+
+type WsSheetTarget = { row: WsRow; source: HTMLButtonElement };
+
+/**
+ * The row the phone long-press sheet is open for. Held outside React state so
+ * that opening and closing the sheet renders the sheet alone rather than the
+ * whole sidebar and every row in it.
+ */
+function createWsSheetStore() {
+  let target: WsSheetTarget | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => target,
+    set(next: WsSheetTarget | null) {
+      if (next === target) return;
+      target = next;
+      for (const listener of listeners) listener();
+    },
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+}
+
+function WorkspaceSheetHost({
+  store,
+  renderSheet,
+}: {
+  store: ReturnType<typeof createWsSheetStore>;
+  renderSheet: (target: WsSheetTarget) => React.ReactNode;
+}) {
+  const target = useSyncExternalStore(store.subscribe, store.get);
+  return target ? renderSheet(target) : null;
+}
 
 interface WorkspaceControllerIdentity {
   currentUser: string;
@@ -369,10 +407,7 @@ export function useSidebarWorkspaceController({
     el: HTMLElement;
   } | null>(null);
   // Mobile long-press sheet (the touch stand-in for the hover card).
-  const [wsSheet, setWsSheet] = useState<{
-    row: WsRow;
-    source: HTMLButtonElement;
-  } | null>(null);
+  const [wsSheetStore] = useState(createWsSheetStore);
 
   const cancelWsHoverTimers = () => {
     if (wsHoverOpenT.current) clearTimeout(wsHoverOpenT.current);
@@ -598,7 +633,7 @@ export function useSidebarWorkspaceController({
       }
       // The touch stand-in for both the hover card AND right-click: a
       // bottom sheet with the overview block plus every workspace action.
-      setWsSheet({ row, source });
+      wsSheetStore.set({ row, source });
     }, LONG_PRESS_MS);
   }
   function wsRowTouchMove(row: WsRow, e: React.TouchEvent<HTMLButtonElement>) {
@@ -758,7 +793,7 @@ export function useSidebarWorkspaceController({
       // click so it can't land on the sheet (or its backdrop's close
       // handler) and immediately dismiss it.
       e.preventDefault();
-      if (liftSheet && lift && !lift.moved) setWsSheet(liftSheet);
+      if (liftSheet && lift && !lift.moved) wsSheetStore.set(liftSheet);
     }
   }
 
@@ -1011,9 +1046,9 @@ export function useSidebarWorkspaceController({
           </RowCardPopup>
         )}
       </Popover.Root>
-      {wsSheet &&
-        (() => {
-          const { row, source } = wsSheet;
+      <WorkspaceSheetHost
+        store={wsSheetStore}
+        renderSheet={({ row, source }) => {
           const ws = row.workspace;
           // Same pin resolution as the row's star and the right-click menu: a
           // row can be pinned via its own key or a legacy pin on any member
@@ -1035,7 +1070,7 @@ export function useSidebarWorkspaceController({
                 if (pinned) togglePinnedKeys(pinnedKeys);
                 else togglePinKey(pinKey);
               }}
-              onClose={() => setWsSheet(null)}
+              onClose={() => wsSheetStore.set(null)}
               onArchive={() => archiveWorkspaceWithNext(row, source)}
               onSetStatus={(status) => onSetStatus(row.sessions, status)}
               snoozeUntil={
@@ -1107,7 +1142,8 @@ export function useSidebarWorkspaceController({
               }
             />
           );
-        })()}
+        }}
+      />
     </>
   );
 
@@ -1125,10 +1161,8 @@ export function useSidebarWorkspaceController({
     toggleWorkspaceSnooze,
     workspaceOverlays,
     wsHover,
-    wsSheet,
     closeWsHover,
     cancelWsHoverTimers,
     scheduleWsHoverClose,
-    setWsSheet,
   };
 }
