@@ -49,6 +49,14 @@ export const DEMO_LIVE_ENGINE_SESSION_ID = "ses_demolive";
 export const DEMO_ASK_SESSION_ID = "bks-demo-ask";
 export const DEMO_ASK_ENGINE_SESSION_ID = "ses_demoask";
 export const DEMO_PR_NUMBER = 128;
+/** The demo space (server/spaces.ts): its workspace and coordinator. */
+export const DEMO_SPACE_WORKSPACE_ID = "ws-demo-space";
+export const DEMO_SPACE_SESSION_ID = "bks-demo-space";
+/** Thread lanes the demo space shows: one shipped, one waiting on a person. */
+export const DEMO_SPACE_STATUSES = {
+  "bks-demo-space-t2": "merged",
+  "bks-demo-space-t3": "needsinput",
+} as const;
 /** The session that shows an HTML render, and where its page is stored. */
 export const DEMO_RENDER_SESSION_ID = "bks-demo-render";
 export const DEMO_RENDER_ASSET = "html-renders/monitor-arm-clamp-fit-demo.html";
@@ -1320,6 +1328,132 @@ export function demoSessions(opts: {
         ),
       ],
     });
+  }
+
+  // 9. A space: a coordinator conversation and the threads it started, one in
+  // each state the space panel groups by (server/spaces.ts). The coordinator's
+  // spawn_task results are what the transcript turns into thread cards.
+  {
+    const t0 = now - 90 * min;
+    const threads = [
+      {
+        id: "bks-demo-space-t1",
+        title: "Fix the flaky upload retry",
+        prompt:
+          "Fix the flaky upload retry test in src/upload.ts. Open a PR and report back.",
+        file: { branch: DEMO_BRANCH, worktreeDir },
+        startedAgoMin: 85,
+        lastAgoMin: 40,
+        reply:
+          "The retry loop reused a stale offset after a timeout. I reset it per attempt and the PR is open with checks passing.",
+      },
+      {
+        id: "bks-demo-space-t2",
+        title: "Add empty-state copy to the todo list",
+        prompt:
+          "Add an empty state to the todo list with a short line and a New todo button.",
+        file: {},
+        startedAgoMin: 80,
+        lastAgoMin: 30,
+        reply: "Merged. The empty list now says what to do next.",
+      },
+      {
+        id: "bks-demo-space-t3",
+        title: "Choose the due-date picker",
+        prompt:
+          "Compare two date picker options for due dates and ask before picking one.",
+        file: { mode: "ask" as const, worktreeDir: repoDir },
+        startedAgoMin: 60,
+        lastAgoMin: 8,
+        reply:
+          "Both work on mobile. Do you want the native input or the calendar popover?",
+      },
+      {
+        id: "bks-demo-space-t4",
+        title: "Profile the slow list render",
+        prompt:
+          "Find out why the todo list renders slowly past 500 items and report the cause.",
+        file: { mode: "ask" as const, worktreeDir: repoDir },
+        startedAgoMin: 30,
+        lastAgoMin: 20,
+        reply:
+          "Each row re-renders on every keystroke because the filter is rebuilt inline.",
+      },
+    ];
+    sessions.push({
+      id: DEMO_SPACE_SESSION_ID,
+      engineSessionId: "ses_demospace",
+      file: base(DEMO_SPACE_SESSION_ID, "ses_demospace", 90, 8, {
+        title: "Spaces v1 launch",
+        mode: "ask",
+        worktreeDir: repoDir,
+        workspaceId: DEMO_SPACE_WORKSPACE_ID,
+        usage: usage(0.41, 12_400, 2_100, 3, iso(now - 8 * min)),
+      }),
+      lines: [
+        transcriptLineUser(
+          "Get the todo app ready for the launch. Split the work into threads and keep me posted.",
+          "demo-space-u1",
+          iso(t0),
+        ),
+        transcriptLineAssistantText(
+          "I'll start a thread for each piece and track them here.",
+          "demo-space-a1",
+          iso(t0 + 20_000),
+          MODEL_FABLE,
+        ),
+        ...threads.flatMap((thread, i) =>
+          tool(
+            "space",
+            i + 1,
+            "mcp__opensession-sessions__spawn_task",
+            { prompt: thread.prompt, mode: thread.file.mode ?? "code" },
+            `Spawned task \`${thread.id}\` — https://example.test/session/${thread.id}`,
+            t0 + 40_000 + i * 5_000,
+          ),
+        ),
+        transcriptLineAssistantText(
+          "Four threads are running: the upload fix, the empty state, the date picker choice and the list profile. I'll report as each one finishes.",
+          "demo-space-a2",
+          iso(t0 + 70_000),
+          MODEL_FABLE,
+        ),
+      ],
+    });
+    for (const thread of threads) {
+      const engineId = `ses_${thread.id.replaceAll("-", "_")}`;
+      sessions.push({
+        id: thread.id,
+        engineSessionId: engineId,
+        file: base(
+          thread.id,
+          engineId,
+          thread.startedAgoMin,
+          thread.lastAgoMin,
+          {
+            title: thread.title,
+            workspaceId: DEMO_SPACE_WORKSPACE_ID,
+            parentSessionId: DEMO_SPACE_SESSION_ID,
+            spawnDepth: 1,
+            agentStarted: true,
+            ...thread.file,
+          },
+        ),
+        lines: [
+          transcriptLineUser(
+            thread.prompt,
+            `${thread.id}-u1`,
+            iso(now - thread.startedAgoMin * min),
+          ),
+          transcriptLineAssistantText(
+            thread.reply,
+            `${thread.id}-a1`,
+            iso(now - thread.lastAgoMin * min),
+            MODEL_FABLE,
+          ),
+        ],
+      });
+    }
   }
 
   return sessions;

@@ -15,9 +15,11 @@ export const SIDE_PANEL_DOCK_KEY = "opensession-panel-dock";
 
 /**
  * What the side panel can hold, one tab each. Review and Browser are the two
- * that can also live in the main tab strip (see SidePanelDock).
+ * that can also live in the main tab strip (see SidePanelDock). Space shows
+ * only in a space's own conversation (components/space/SpacePanel.tsx).
  */
 export const SIDE_PANEL_TABS = [
+  "space",
   "changes",
   "review",
   "browser",

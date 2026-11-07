@@ -16,6 +16,7 @@ import {
   setSessionTitles,
 } from "../lib/markdown";
 import { registerServiceWorker } from "../lib/push";
+import { publishSessionRecords } from "../lib/session-records";
 import { sessionReferenceTitle } from "../lib/session-title";
 import type { UnifiedSession } from "../lib/types";
 
@@ -41,6 +42,7 @@ export function useAppRegistries({
   // which delegated task the chip opens, while their inherited workspace name
   // would incorrectly repeat the parent session's subject for every worker.
   useEffect(() => {
+    publishSessionRecords(sessions);
     setSessionTitles(
       sessions.map(
         (s) =>

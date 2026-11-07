@@ -286,7 +286,11 @@ decisions, and open questions.
 
 Threads are ordinary child sessions in the space's workspace. They nest under
 the space in the sidebar, report back to the coordinator, and can be opened
-and steered directly. Teammates join a space the same way they join any
+and steered directly. The space's conversation shows each thread it starts as
+a live card, and its side panel (the top of the details page on a phone)
+groups every thread by where it stands: blocked, ready to ship, working, idle,
+shipped. The panel also lists the conversation's comments and artifacts, and
+opens with what changed since you last looked. Teammates join a space the same way they join any
 workspace, as collaborators; comments on the conversation work as they do
 everywhere else. Start one with the **+** in the sidebar's Spaces section.
 

@@ -10,6 +10,8 @@ import { SidePanelHost } from "../session/SidePanelHost";
 import { WorkflowPanel } from "../WorkflowPanel";
 import { WorkspaceSummaryBody } from "../WorkspaceSummary";
 import { WorkspaceWaiting } from "./busy-indicators";
+import { SpacePanel } from "../space/SpacePanel";
+import type { SidePanelSpace } from "../../hooks/useSidePanelTabs";
 
 type HostProps = ComponentProps<typeof SidePanelHost>;
 type SummaryProps = ComponentProps<typeof WorkspaceSummaryBody>;
@@ -132,6 +134,8 @@ interface SessionViewerSidePanelProps {
   browser: PanelBrowserContent;
   portals: PortalContent;
   agents: AgentContent;
+  /** Set in a space's own conversation: the Space tab's page. */
+  space: SidePanelSpace | null;
 }
 
 export function SessionViewerSidePanel({
@@ -146,6 +150,7 @@ export function SessionViewerSidePanel({
   browser,
   portals,
   agents,
+  space,
 }: SessionViewerSidePanelProps) {
   const [prBandHeight, measurePrBand] = useBoxHeight();
   const changesStyle: CSSProperties & { "--diff-panel-top": string } = {
@@ -209,6 +214,16 @@ export function SessionViewerSidePanel({
           ) : undefined
         }
         browser={<PanelBrowser content={browser} />}
+        space={
+          space && (
+            <SpacePanel
+              workspace={space.workspace}
+              coordinatorId={space.coordinatorId}
+              onOpenSession={summary.onOpenSession}
+              onOpenAsset={summary.onOpenAsset}
+            />
+          )
+        }
         changes={
           // One box around the summary and the diff, so the pinned PR band
           // stays up for the whole scroll, and the diff's own sticky toolbar

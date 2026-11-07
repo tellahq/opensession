@@ -10,9 +10,21 @@ import {
 } from "../lib/side-panel-open";
 import type { PanelBrowserContent } from "../components/session-viewer/SessionViewerSidePanel";
 import {
+  getSidePanelState,
+  openSidePanelTab,
   registerSidePanelHost,
   setSidePanelDock,
 } from "../lib/side-panel-store";
+import { useSessionRecord } from "../lib/session-records";
+import { isSpaceCoordinator } from "../lib/space-threads";
+import { useWorkspaceRecord } from "../lib/workspace-records";
+import type { Workspace } from "../lib/types";
+
+/** The Space tab's inputs: the space and the conversation coordinating it. */
+export interface SidePanelSpace {
+  workspace: Workspace;
+  coordinatorId: string;
+}
 
 interface PanelState {
   panelBrowser: PanelBrowserTarget | null;
@@ -60,9 +72,19 @@ export function useSidePanelTabs({
   const { closePanelTab, setPanelTerminalMounted, panelEntering } = panel;
   // A page attached to this session keeps its Browser tab in the strip, even
   // after another session closed its own.
-  const panelTabs = panelBrowser
+  const withBrowser = panelBrowser
     ? withSidePanelTab(panel.panelTabs, "browser")
     : panel.panelTabs;
+  // A space's conversation always leads its strip with the Space tab.
+  const self = useSessionRecord(preview.sessionId);
+  const workspace = useWorkspaceRecord(self?.workspaceId ?? null);
+  const space: SidePanelSpace | null =
+    self && workspace && isSpaceCoordinator(self, workspace)
+      ? { workspace, coordinatorId: self.id }
+      : null;
+  const panelTabs: SidePanelTab[] = space
+    ? ["space", ...withBrowser.filter((tab) => tab !== "space")]
+    : withBrowser;
   // While this viewer's panel is on screen, Review and Browser requests from
   // anywhere in the app open in it (see opensInSidePanel).
   const hostKey = preview.sessionId;
@@ -70,11 +92,20 @@ export function useSidePanelTabs({
     () => (canHost ? registerSidePanelHost(hostKey) : undefined),
     [canHost, hostKey],
   );
+  // The first time a space's conversation opens here, its panel opens on the
+  // Space tab: the threads are half of what a space is. After that the
+  // person's own open or closed choice sticks, like any session's.
+  const isSpace = !!space;
+  useEffect(() => {
+    if (canHost && isSpace && !getSidePanelState().views[hostKey])
+      openSidePanelTab("space", hostKey);
+  }, [canHost, isSpace, hostKey]);
 
   // Review needs a workspace to diff; the Browser tab needs a page, either one
   // handed to the panel or the PR's preview.
   const reviewAvailable = !!openReview && hasWorkspace;
   const availableTabs: SidePanelTab[] = [
+    ...(space ? (["space"] as const) : []),
     "changes",
     ...(reviewAvailable ? (["review"] as const) : []),
     ...(panelBrowser || preview.stagingUrl ? (["browser"] as const) : []),
@@ -114,6 +145,7 @@ export function useSidePanelTabs({
   return {
     review: reviewAvailable ? review : null,
     browser,
+    space,
     tabs: {
       tabs: panelTabs,
       availableTabs,

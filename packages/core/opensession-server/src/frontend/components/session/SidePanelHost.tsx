@@ -35,6 +35,7 @@ import {
   IconExpand,
   IconFile,
   IconGlobe,
+  IconMessages,
   IconPlus,
   IconPullRequest,
   IconStack,
@@ -77,6 +78,8 @@ interface SidePanelHostProps {
   browser?: ReactNode;
   portals: ReactNode;
   agents: ReactNode;
+  /** The Space tab's page, in a space's conversation only. */
+  space?: ReactNode;
 }
 
 const ICON = 15;
@@ -89,6 +92,8 @@ const NEW_TAB_STYLE: CSSProperties & { "--panel-w": string } = {
 
 function tabIcon(tab: SidePanelTab) {
   switch (tab) {
+    case "space":
+      return <IconMessages size={ICON} className="shrink-0" />;
     case "changes":
       return <IconFile size={ICON} className="shrink-0" />;
     case "review":
@@ -104,6 +109,7 @@ function tabIcon(tab: SidePanelTab) {
 }
 
 const TAB_LABELS: Record<SidePanelTab, string> = {
+  space: "Space",
   changes: "Changes",
   review: "Review",
   browser: "Browser",
@@ -149,6 +155,7 @@ export function SidePanelHost({
   browser,
   portals,
   agents,
+  space,
 }: SidePanelHostProps) {
   const dropHover = useSyncExternalStore(
     subscribeSidePanel,
@@ -210,17 +217,20 @@ export function SidePanelHost({
                   <span className="truncate @max-[380px]:hidden">{name}</span>
                   {count(tab)}
                 </button>
-                <button
-                  type="button"
-                  className={cn(
-                    PANEL_TAB_CLOSE,
-                    active && PANEL_TAB_CLOSE_ACTIVE,
-                  )}
-                  aria-label={`Close ${name}`}
-                  onClick={() => onCloseTab(tab)}
-                >
-                  <IconX size={13} dense aria-hidden="true" />
-                </button>
+                {/* A space's own tab stays: it is the space, not a tool. */}
+                {tab !== "space" && (
+                  <button
+                    type="button"
+                    className={cn(
+                      PANEL_TAB_CLOSE,
+                      active && PANEL_TAB_CLOSE_ACTIVE,
+                    )}
+                    aria-label={`Close ${name}`}
+                    onClick={() => onCloseTab(tab)}
+                  >
+                    <IconX size={13} dense aria-hidden="true" />
+                  </button>
+                )}
               </ContextMenu.Trigger>
               <ContextMenu.Popup className="min-w-[220px]" finalFocus={false}>
                 {onMoveToMain && isDockable(tab) && (
@@ -324,17 +334,19 @@ export function SidePanelHost({
           >
             {current === "new"
               ? newTabPage
-              : current === "changes"
-                ? changes
-                : current === "review"
-                  ? review
-                  : current === "browser"
-                    ? browser
-                    : current === "portals"
-                      ? portals
-                      : current === "agents"
-                        ? agents
-                        : null}
+              : current === "space"
+                ? space
+                : current === "changes"
+                  ? changes
+                  : current === "review"
+                    ? review
+                    : current === "browser"
+                      ? browser
+                      : current === "portals"
+                        ? portals
+                        : current === "agents"
+                          ? agents
+                          : null}
             {/* Keep terminals mounted while switching panel tabs so their PTYs
                 survive. Closing the panel or its Terminal tab ends them. */}
             {hasWorkspace && terminalMounted && tabs.includes("terminal") && (

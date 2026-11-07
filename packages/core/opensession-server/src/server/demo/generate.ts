@@ -28,6 +28,8 @@ import {
   DEMO_RENDER_ASSET,
   DEMO_RENDER_SESSION_ID,
   DEMO_SCRIPT_RENDER_SESSION_ID,
+  DEMO_SPACE_SESSION_ID,
+  DEMO_SPACE_STATUSES,
   DEMO_REPO_FILES,
   DEMO_REPO_ID,
   DEMO_REPO_WT_PREFIX,
@@ -309,6 +311,31 @@ export async function generateDemoData(
   );
   await mkdir(dirname(scriptRenderPath), { recursive: true });
   await writeFile(scriptRenderPath, injectBootstrap(MONITOR_FIT_PAGE));
+
+  // The demo space: two threads in fixed lanes, and the summary its
+  // coordinator is told to keep (server/spaces.ts).
+  await writeJson(
+    join(sessionsDir, "status-overrides.json"),
+    DEMO_SPACE_STATUSES,
+  );
+  await writeText(
+    join(stateDir("assets"), DEMO_SPACE_SESSION_ID, "space-summary.md"),
+    [
+      "# Spaces v1 launch",
+      "",
+      "Goal: the todo app is ready for launch.",
+      "",
+      "| Thread | State |",
+      "| --- | --- |",
+      "| Fix the flaky upload retry | PR open, checks passing |",
+      "| Add empty-state copy | Merged |",
+      "| Choose the due-date picker | Waiting on a decision |",
+      "| Profile the slow list render | Cause found |",
+      "",
+      "Open question: native date input or calendar popover?",
+      "",
+    ].join("\n"),
+  );
 
   if (homeStores) {
     // Repo registry first: everything below (and every repo-derived UI

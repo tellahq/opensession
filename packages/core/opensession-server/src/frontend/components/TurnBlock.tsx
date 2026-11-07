@@ -34,6 +34,8 @@ import {
   type SuggestedTask,
 } from "@tellahq/opensession-protocol/tool-presentation";
 import { unplacedMedia } from "../lib/placed-media";
+import { spawnedThreadId, spawnedThreadPrompt } from "../lib/space-threads";
+import { ThreadCards, type SpawnedThread } from "./space/ThreadCards";
 import { IconChevronDown, IconStack } from "./icons";
 import { cn } from "../ui/cn";
 import { Fold } from "../ui/fold";
@@ -269,6 +271,8 @@ export const TurnBlock = function TurnBlock({
   // Pages the turn rendered with html_render: the answer itself, so like a
   // suggestion they stay put whether the fold is open or closed.
   const renders = turnHtmlRenders(items, toolResults);
+  // Threads the turn started: live cards, like suggestions, kept by the fold.
+  const threads = turnSpawnedThreads(items, toolResults);
 
   return (
     <div
@@ -432,6 +436,8 @@ export const TurnBlock = function TurnBlock({
       {suggested.length > 0 && (
         <SuggestedTasks suggested={suggested} sessionId={sessionId} />
       )}
+
+      {threads.length > 0 && <ThreadCards threads={threads} />}
     </div>
   );
 };
@@ -944,6 +950,38 @@ function turnHtmlRenders(
     htmlRendersFromResult(result.content).forEach((render, index) =>
       out.push({ id: index ? `${entry.id}:${index}` : entry.id, render }),
     );
+  }
+  return out;
+}
+
+/**
+ * The sessions a turn started with `spawn_task` or `create_session`, in call
+ * order. The id is in the result, so a call still running shows nothing yet
+ * and a refused one never does.
+ */
+function turnSpawnedThreads(
+  items: TranscriptEntry[],
+  toolResults: Map<string, TranscriptEntry>,
+): SpawnedThread[] {
+  const out: SpawnedThread[] = [];
+  for (const entry of items) {
+    if (entry.type !== "tool_use" || !entry.toolUseId) continue;
+    const name = entry.toolName || "";
+    if (
+      !name.includes("spawn_task") &&
+      !name.includes("create_session") &&
+      name.toLowerCase() !== "mcp_call"
+    )
+      continue;
+    const result = toolResults.get(entry.toolUseId);
+    if (!result || result.isError) continue;
+    const threadId = spawnedThreadId(name, entry.toolInput, result.content);
+    if (threadId)
+      out.push({
+        id: entry.id,
+        threadId,
+        prompt: spawnedThreadPrompt(name, entry.toolInput),
+      });
   }
   return out;
 }
