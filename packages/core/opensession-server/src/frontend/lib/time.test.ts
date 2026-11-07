@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { elapsedSince, formatDuration } from "./time";
+import { elapsedSince, formatDuration, shortDate } from "./time";
 
 describe("formatDuration", () => {
   test("nothing under a second", () => {
@@ -38,5 +38,16 @@ describe("elapsedSince", () => {
   test("counts up in formatDuration's units", () => {
     expect(elapsedSince(0, 7_000)).toBe("7s");
     expect(elapsedSince(0, 90_000)).toBe("1m");
+  });
+});
+
+describe("shortDate", () => {
+  test("matches toLocaleDateString with the same options", () => {
+    for (const iso of ["2026-01-05T00:00:00", "2026-07-12T13:45:00"]) {
+      const d = new Date(iso);
+      expect(shortDate(d)).toBe(
+        d.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+      );
+    }
   });
 });

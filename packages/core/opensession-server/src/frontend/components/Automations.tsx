@@ -55,7 +55,7 @@ import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 import { WorkingPill } from "../ui/status";
 import { Switch } from "../ui/switch";
-import { formatDuration } from "../lib/time";
+import { formatDuration, shortDate } from "../lib/time";
 import { errorMessage } from "../lib/error-message";
 import {
   FIELD_LABEL,
@@ -923,10 +923,10 @@ function TriggerGraph({
         />
         {buckets.map((b, i) => {
           const count = b.ok + b.error + b.running;
-          const label = b.date.toLocaleDateString(undefined, {
-            month: "short",
-            day: "numeric",
-          });
+          // One shared formatter: toLocaleDateString with options builds a
+          // new one per call, and this runs for every bar of every row on
+          // each 10 s poll.
+          const label = shortDate(b.date);
           if (count === 0) {
             return (
               <rect
