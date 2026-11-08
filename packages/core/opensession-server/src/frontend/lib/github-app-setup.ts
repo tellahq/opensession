@@ -108,3 +108,28 @@ export function githubAppCreateUrlForOwner(
     return value;
   }
 }
+
+/** `owner/name` from what a person pastes into the add-repository box: the
+ *  bare full name, or any github.com URL of the repository (web, clone, or
+ *  SSH form). Null when it names no single repository. */
+export function githubRepoFullNameFromInput(input: string): string | null {
+  const value = input.trim();
+  if (!value) return null;
+  const bare = value.match(/^([\w.-]+)\/([\w.-]+?)(?:\.git)?$/);
+  if (bare) return `${bare[1]}/${bare[2]}`;
+  const ssh = value.match(
+    /^(?:ssh:\/\/)?git@github\.com[:/]([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/i,
+  );
+  if (ssh) return `${ssh[1]}/${ssh[2]}`;
+  let url: URL;
+  try {
+    url = new URL(/^[a-z]+:\/\//i.test(value) ? value : `https://${value}`);
+  } catch {
+    return null;
+  }
+  if (!/^(www\.)?github\.com$/i.test(url.hostname)) return null;
+  const [owner, name] = url.pathname.split("/").filter(Boolean);
+  if (!owner || !name || !/^[\w.-]+$/.test(owner)) return null;
+  const repo = name.replace(/\.git$/i, "");
+  return /^[\w.-]+$/.test(repo) ? `${owner}/${repo}` : null;
+}

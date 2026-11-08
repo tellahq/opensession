@@ -19,7 +19,7 @@ function render(
 }
 
 describe("GitHub repository access", () => {
-  test("offers another installation even when an organization is already installed", () => {
+  test("links to the App's installation page and points other accounts to their own App", () => {
     const html = render([{ login: "acme", type: "Organization" }]);
     expect(html).toContain("Installed on");
     expect(html).toContain("acme");
@@ -27,9 +27,11 @@ describe("GitHub repository access", () => {
     expect(html).not.toContain("Personal account");
     expect(html).toContain(`href="${installUrl}"`);
     expect(html).toContain('target="_blank"');
-    expect(html).toContain("Add GitHub account");
+    expect(html).toContain("Choose repositories");
     expect(html).toContain("Refresh repositories");
-    expect(html).toContain("Existing installations stay connected.");
+    expect(html).toContain(
+      "A private App installs only on the account that owns it",
+    );
   });
 
   test("shows both installation types without inferring them from App ownership", () => {

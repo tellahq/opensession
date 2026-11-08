@@ -327,6 +327,58 @@ async function runPrimaryGithubEnv(input: {
   attachedRepos?: string[];
   hostLogin?: boolean;
 }): Promise<Record<string, string>> {
+  const env = await runPrimaryAppGithubEnv(input);
+  return withAdditionalAppsRunEnv(env, input);
+}
+
+/** Repositories under an account served by an additional per-account GitHub
+ * App get that App's credential beside the primary one
+ * (withAdditionalAppRunCredentials). No-op without additional Apps, on a
+ * remote host (its launcher projected the credential), and for host-login
+ * runs. */
+async function withAdditionalAppsRunEnv(
+  env: Record<string, string>,
+  input: {
+    isCode: boolean;
+    ownerTurn: boolean;
+    user?: string | null;
+    cwd: string;
+    attachedRepos?: string[];
+    hostLogin?: boolean;
+  },
+): Promise<Record<string, string>> {
+  if (input.hostLogin || process.env[GITHUB_RUN_AUTH_FILE_ENV]) return env;
+  const { additionalGithubApps } = await import("./github-app-registry");
+  if (!additionalGithubApps().length) return env;
+  const { repoForPathOrNull } = await import("./worktree");
+  const repo = await repoForPathOrNull(input.cwd).catch(() => null);
+  const ghRepo =
+    repo && repo.host !== "codestorage" ? repo.ghRepo || null : null;
+  const { withAdditionalAppRunCredentials } = await import("./github-app");
+  return withAdditionalAppRunCredentials(env, {
+    ghRepo,
+    attachedRepos: input.attachedRepos,
+    user: input.user,
+    // Only a turn that already acts as its person (runPrimaryAppGithubEnv
+    // picked githubUserRunEnv) may use that person's other sign-ins.
+    personal:
+      input.isCode &&
+      input.ownerTurn &&
+      !!githubUserRunEnv(input.user).GH_TOKEN,
+    readOnly: !input.isCode,
+  });
+}
+
+async function runPrimaryAppGithubEnv(input: {
+  isCode: boolean;
+  ownerTurn: boolean;
+  user?: string | null;
+  githubKindRun: boolean;
+  launcherEnv?: Record<string, string>;
+  cwd: string;
+  attachedRepos?: string[];
+  hostLogin?: boolean;
+}): Promise<Record<string, string>> {
   if (!input.isCode)
     return input.hostLogin
       ? {}

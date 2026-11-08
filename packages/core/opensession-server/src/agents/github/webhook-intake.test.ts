@@ -31,8 +31,37 @@ if (!isIsolatedChild) {
   process.env.GITHUB_WEBHOOK_SECRET = "webhook-intake-test-secret";
   process.env.ENABLE_GITHUB_AGENT = "true";
   process.env.ENABLE_SLACK_AGENT = "false";
+  const previousConfig = process.env.OPENSESSION_CONFIG;
+  const configPath = join(scratch, "config.json");
+  await Bun.write(
+    configPath,
+    JSON.stringify({
+      integrations: {
+        github: {
+          apps: [
+            {
+              id: "personal1",
+              owner: "octocat",
+              appSlug: "open-session-octocat",
+              oauthClientId: "Iv-personal",
+              webhookSecret: "personal-app-secret",
+            },
+            {
+              id: "nosecret",
+              owner: "other",
+              appSlug: "open-session-other",
+              oauthClientId: "Iv-other",
+            },
+          ],
+        },
+      },
+    }),
+  );
+  process.env.OPENSESSION_CONFIG = configPath;
+  await (await import("../../server/config")).getConfigAsync();
 
-  const { handleGithubWebhook } = await import("./webhook-intake");
+  const { handleAdditionalAppGithubWebhook, handleGithubWebhook } =
+    await import("./webhook-intake");
   const {
     claimGithubDelivery,
     githubDeliveriesStore,
@@ -53,6 +82,8 @@ if (!isIsolatedChild) {
     if (previousSlackEnabled === undefined)
       delete process.env.ENABLE_SLACK_AGENT;
     else process.env.ENABLE_SLACK_AGENT = previousSlackEnabled;
+    if (previousConfig === undefined) delete process.env.OPENSESSION_CONFIG;
+    else process.env.OPENSESSION_CONFIG = previousConfig;
     rmSync(scratch, { recursive: true, force: true });
   });
 
@@ -129,6 +160,57 @@ if (!isIsolatedChild) {
 
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({ ok: true, duplicate: true });
+    });
+  });
+
+  describe("handleAdditionalAppGithubWebhook", () => {
+    function appRequest(path: string, body: string, secret: string) {
+      const url = new URL(`http://localhost${path}`);
+      return {
+        url,
+        req: new Request(url, {
+          method: "POST",
+          body,
+          headers: {
+            "x-hub-signature-256": `sha256=${createHmac("sha256", secret).update(body).digest("hex")}`,
+            "x-github-delivery": `app-${path}-${secret}`,
+            "x-github-event": "ping",
+          },
+        }),
+      };
+    }
+
+    test("verifies an additional App's delivery with that App's own secret", async () => {
+      const ok = appRequest(
+        "/github/webhook/personal1",
+        "{}",
+        "personal-app-secret",
+      );
+      expect(
+        (await handleAdditionalAppGithubWebhook(ok.req, ok.url)).status,
+      ).toBe(200);
+      // The primary App's secret does not open another App's path.
+      const wrong = appRequest(
+        "/github/webhook/personal1",
+        "{}",
+        process.env.GITHUB_WEBHOOK_SECRET!,
+      );
+      expect(
+        (await handleAdditionalAppGithubWebhook(wrong.req, wrong.url)).status,
+      ).toBe(401);
+    });
+
+    test("answers 404 for an unknown App or one without a secret", async () => {
+      for (const path of [
+        "/github/webhook/unknown",
+        "/github/webhook/nosecret",
+        "/github/webhook/personal1/extra",
+      ]) {
+        const { req, url } = appRequest(path, "{}", "personal-app-secret");
+        expect((await handleAdditionalAppGithubWebhook(req, url)).status).toBe(
+          404,
+        );
+      }
     });
   });
 }

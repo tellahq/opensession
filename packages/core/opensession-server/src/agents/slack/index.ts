@@ -36,6 +36,7 @@ import { isTeamSlackId } from "../../server/shared/user-mappings";
 import { inviteRelevantUsersToChannel } from "./github-reviews";
 import {
   githubWebhookCompatibilityFallbackEnabled,
+  handleAdditionalAppGithubWebhook,
   handleGithubWebhook,
 } from "../github/webhook-intake";
 import { githubWebhookCount } from "../github/webhook-deliveries";
@@ -635,6 +636,7 @@ export class SlackAgent implements AgentModule {
     // configuration by registering the same handler only when GitHub is disabled.
     if (githubWebhookCompatibilityFallbackEnabled()) {
       routes.set("POST /github/webhook", handleGithubWebhook);
+      routes.set("POST /github/webhook/*", handleAdditionalAppGithubWebhook);
     }
 
     // ----- POST /slack/events -----

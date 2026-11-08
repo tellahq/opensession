@@ -47,11 +47,37 @@ async function syncGithubWebhook(
   }
 }
 
+/** Point each additional per-account App at its own webhook path. Best
+ * effort: a failure is logged and leaves that App's deliveries inactive,
+ * exactly like an App created before ingress existed. */
+async function syncAdditionalGithubAppWebhooks(
+  publicBaseUrl: string,
+): Promise<void> {
+  const { additionalGithubApps } = await import("../github-app-registry");
+  for (const app of additionalGithubApps()) {
+    if (!app.webhookSecret) continue;
+    try {
+      await updateGithubAppWebhook(publicBaseUrl, app.webhookSecret, app);
+      audit({
+        kind: "ingress_github_webhook_update",
+        publicBaseUrl,
+        app: app.id,
+      });
+    } catch (error) {
+      console.warn(
+        `[public-ingress] GitHub webhook update failed for ${app.owner}: ${String((error as Error)?.message || error).slice(0, 200)}`,
+      );
+    }
+  }
+}
+
 async function changedIngressResponse(): Promise<Record<string, unknown>> {
   const settings = await publicIngressStatus();
   const githubWebhook = settings.publicBaseUrl
     ? await syncGithubWebhook(settings.publicBaseUrl)
     : undefined;
+  if (settings.publicBaseUrl)
+    await syncAdditionalGithubAppWebhooks(settings.publicBaseUrl);
   return { ...settings, ...(githubWebhook ? { githubWebhook } : {}) };
 }
 

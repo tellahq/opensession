@@ -36,9 +36,9 @@ export function GithubRepoAccess({
         )}
       </div>
       <p className="m-0 text-supporting leading-snug text-dim">
-        Missing personal or organization repos? Install the same App on another
-        account, or grant it access to more repositories. Existing installations
-        stay connected.
+        Missing repos? Grant the App access to more repositories. A private App
+        installs only on the account that owns it, so to reach another account,
+        add it under Settings, Integrations, GitHub.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         {installUrl && (
@@ -48,7 +48,7 @@ export function GithubRepoAccess({
             icon={<IconArrowUpRight size={16} />}
             render={<a href={installUrl} target="_blank" rel="noreferrer" />}
           >
-            Add GitHub account
+            Choose repositories
           </Button>
         )}
         <Button

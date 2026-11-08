@@ -451,7 +451,7 @@ describe("GET /api/setup/github/repos with several App installations", () => {
     } as RouteContext);
     expect(response?.status).toBe(409);
     expect((await response?.json()).error).toContain(
-      "not installed for stranger",
+      "No Open Session GitHub App is installed for stranger",
     );
   });
 });

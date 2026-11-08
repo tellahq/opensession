@@ -125,6 +125,19 @@ function actingGithubCredential(ctx: RouteContext): GithubCredential | null {
  * being masked by a user's narrower token. Without a service configuration, a
  * signed-in teammate remains the compatibility path. Repository setup never
  * inherits the server user's ambient gh login. */
+/** Why a repository's owner has no usable App, in words a person can act
+ * on: a private App reaches only its own account, so another account needs
+ * its own App (Settings → Integrations → GitHub → Add GitHub account). */
+async function missingRepoAppError(fullName: string): Promise<string> {
+  const owner = fullName.split("/")[0] || fullName;
+  const { additionalGithubAppForOwner, missingGithubAppMessage } =
+    await import("../github-app-registry");
+  const app = additionalGithubAppForOwner(owner);
+  if (app)
+    return `The ${app.slug} GitHub App cannot reach ${fullName}. Install it on ${owner} and grant it this repository, then retry.`;
+  return `${missingGithubAppMessage(owner)} Then grant it ${fullName} and retry.`;
+}
+
 async function setupGithubCredential(
   ctx: RouteContext,
   repo?: string,
@@ -1060,11 +1073,11 @@ export async function handleSetupRepoRoutes(
     const {
       configuredGithubInstallationOwner,
       githubConfiguredCredential,
-      listGithubAppInstallations,
+      listEveryGithubAppInstallation,
     } = await import("../github-app");
     const appConfigured = githubConfiguredCredential();
     const installations = appConfigured
-      ? await listGithubAppInstallations()
+      ? await listEveryGithubAppInstallation()
       : null;
     const configuredOwner = configuredGithubInstallationOwner().toLowerCase();
     return Response.json({
@@ -1087,7 +1100,7 @@ export async function handleSetupRepoRoutes(
     const {
       configuredGithubInstallationOwner,
       githubConfiguredCredential,
-      listGithubAppInstallations,
+      listEveryGithubAppInstallation,
     } = await import("../github-app");
     const appConfigured = githubConfiguredCredential();
     const configuredOwner = configuredGithubInstallationOwner();
@@ -1097,11 +1110,11 @@ export async function handleSetupRepoRoutes(
     // and mark the configured default. A just-installed App can take a moment
     // to appear in GitHub's list; retry once so onboarding does not race it.
     let appInstallations = appConfigured
-      ? await listGithubAppInstallations({ fresh })
+      ? await listEveryGithubAppInstallation({ fresh })
       : null;
     if (appConfigured && !appInstallations?.length) {
       await Bun.sleep(750);
-      appInstallations = await listGithubAppInstallations({ fresh: true });
+      appInstallations = await listEveryGithubAppInstallation({ fresh: true });
     }
     const installationContext = {
       appConfigured,
@@ -1346,7 +1359,7 @@ export async function handleSetupRepoRoutes(
       if (githubConfiguredCredential()) {
         return Response.json(
           {
-            error: `The GitHub App is not installed for ${body.fullName.split("/")[0]}, or its installation is unavailable. Install the App on that account and grant it this repository, then retry.`,
+            error: await missingRepoAppError(body.fullName),
           },
           { status: 409 },
         );

@@ -31,6 +31,7 @@ import {
 import { RepoTile } from "./RepoTile";
 import { GithubRepoAccess } from "./GithubRepoAccess";
 import { newRepoRegistration } from "../lib/new-repo";
+import { githubRepoFullNameFromInput } from "../lib/github-app-setup";
 import { NewRepoForm } from "./NewRepoForm";
 import {
   REPO_TILE_COLORS,
@@ -1148,7 +1149,8 @@ function RemoteRepoPicker({
   const csFiltered = filterRepos(csBrowse?.repos ?? [], filter);
   const csConfigured = csBrowse?.source === "org";
 
-  const manualValid = /^[^/\s]+\/[^/\s]+$/.test(manual.trim());
+  const manualFullName = githubRepoFullNameFromInput(manual);
+  const manualValid = manualFullName !== null;
   const totalListed =
     (browse?.source ? browse.repos.length : 0) +
     (csConfigured ? (csBrowse?.repos.length ?? 0) : 0);
@@ -1288,18 +1290,19 @@ function RemoteRepoPicker({
               className={cn(settingsInputClass, "flex-1 font-mono")}
               value={manual}
               onChange={(e) => setManual(e.target.value)}
-              placeholder="owner/name"
-              aria-label="Repository full name"
+              placeholder="owner/name or GitHub URL"
+              aria-label="Repository full name or GitHub URL"
               autoCapitalize="none"
               spellCheck={false}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && manualValid) addRepo(manual.trim());
+                if (e.key === "Enter" && manualFullName)
+                  addRepo(manualFullName);
               }}
             />
             <Button
               variant="primary"
               disabled={!manualValid}
-              onClick={() => addRepo(manual.trim())}
+              onClick={() => manualFullName && addRepo(manualFullName)}
             >
               Add
             </Button>

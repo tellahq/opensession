@@ -1,4 +1,4 @@
-import { createPrivateKey, randomUUID } from "node:crypto";
+import { createPrivateKey, randomBytes, randomUUID } from "node:crypto";
 import { audit } from "../audit";
 import { configuredIngress } from "../config";
 import {
@@ -8,7 +8,14 @@ import {
 } from "../config-mutation";
 import { prepareEnvFileEdits } from "../env-file-edit";
 import { githubAppConfigSource } from "../github-auth";
-import { commitGithubAppKeyMutation } from "../github-app";
+import {
+  commitAdditionalGithubAppKeyMutation,
+  commitGithubAppKeyMutation,
+} from "../github-app";
+import {
+  additionalGithubApps,
+  githubWebhookPath,
+} from "../github-app-registry";
 import { GITHUB_APP_GRANT_PERMISSIONS } from "../../shared/github-app-permissions";
 import type { RouteContext } from "./context";
 
@@ -38,6 +45,10 @@ interface PendingManifest {
   returnTo: "welcome" | "settings";
   authLogin: string | null;
   used: boolean;
+  /** Set when this registration adds another per-account App beside the
+   *  primary one: its local id, chosen up front because the manifest's
+   *  webhook URL carries it. */
+  additionalAppId?: string;
 }
 
 interface ManifestConversion {
@@ -101,6 +112,8 @@ export function buildGithubAppManifest(input: {
   publicPrefix: string;
   appName?: string;
   ingressUrl?: string;
+  /** Additional per-account App: deliveries go to its own webhook path. */
+  additionalAppId?: string;
 }): Record<string, unknown> {
   const ingressUrl = input.ingressUrl?.trim().replace(/\/+$/, "") || "";
   const hookBaseUrl = ingressUrl || `${input.origin}${input.publicPrefix}`;
@@ -117,7 +130,7 @@ export function buildGithubAppManifest(input: {
     // private instance still supplies its own valid URL, but leaves delivery
     // inactive until public ingress is configured in Settings.
     hook_attributes: {
-      url: `${hookBaseUrl}/github/webhook`,
+      url: `${hookBaseUrl}${githubWebhookPath(input.additionalAppId)}`,
       active: Boolean(ingressUrl),
     },
   };
@@ -238,14 +251,74 @@ function callbackRedirect(
   return Response.redirect(target, 303);
 }
 
+function newAdditionalAppId(): string {
+  return randomBytes(6).toString("hex");
+}
+
+/** Why `login` cannot get another App, or null when it can: one App per
+ *  account, and the primary App's own account is already served by it. */
+function accountAlreadyServed(
+  login: string,
+  github: Record<string, unknown>,
+): string | null {
+  const wanted = login.toLowerCase();
+  const primaryOwner = String(
+    github.installationOwner || github.appOrg || "",
+  ).toLowerCase();
+  if (primaryOwner && primaryOwner === wanted)
+    return `${login} already uses the first GitHub App`;
+  if (additionalGithubApps().some((app) => app.owner.toLowerCase() === wanted))
+    return `${login} already has a GitHub App`;
+  return null;
+}
+
+/** Append the converted App to `integrations.github.apps` with its key in
+ *  github-apps/<id>.pem. Nothing about the primary App changes. */
+async function storeAdditionalApp(
+  pending: PendingManifest,
+  id: string,
+  converted: ReturnType<typeof validateConversion>,
+): Promise<void> {
+  await withConfigMutationLock(async () => {
+    const config = await rawConfig();
+    const github = integrationSection(config);
+    const taken = accountAlreadyServed(converted.ownerLogin, github);
+    if (taken) throw new Error(taken);
+    const apps = Array.isArray(github.apps) ? [...github.apps] : [];
+    apps.push({
+      id,
+      owner: converted.ownerLogin,
+      ownerType:
+        pending.owner.type === "organization" ? "Organization" : "User",
+      appSlug: converted.slug,
+      oauthClientId: converted.clientId,
+      oauthClientSecret: converted.clientSecret,
+      webhookSecret: converted.webhookSecret,
+      createdAt: new Date().toISOString(),
+    });
+    github.apps = apps;
+    await commitAdditionalGithubAppKeyMutation(id, converted.pem, () =>
+      persistRawConfig(config),
+    );
+  });
+}
+
 export async function handleSetupGithubManifestRoutes(
   ctx: RouteContext,
 ): Promise<Response | undefined> {
   const { req, url, path, publicPrefix } = ctx;
   if (path === "/api/setup/github/manifest" && req.method === "POST") {
+    const body = (await req.json().catch(() => null)) as {
+      owner?: unknown;
+      organization?: unknown;
+      returnTo?: unknown;
+      additional?: unknown;
+    } | null;
+    const additional = body?.additional === true;
     if (
-      githubAppConfigSource() === "env" ||
-      process.env.OPENSESSION_GITHUB_APP_KEY
+      !additional &&
+      (githubAppConfigSource() === "env" ||
+        process.env.OPENSESSION_GITHUB_APP_KEY)
     ) {
       return Response.json(
         {
@@ -256,20 +329,22 @@ export async function handleSetupGithubManifestRoutes(
       );
     }
     const current = integrationSection(await rawConfig());
-    if (
-      typeof current.oauthClientId === "string" &&
-      current.oauthClientId.trim()
-    ) {
+    const primaryConfigured =
+      githubAppConfigSource() !== null ||
+      (typeof current.oauthClientId === "string" &&
+        !!current.oauthClientId.trim());
+    if (!additional && primaryConfigured) {
       return Response.json(
         { error: "A GitHub App is already configured" },
         { status: 409 },
       );
     }
-    const body = (await req.json().catch(() => null)) as {
-      owner?: unknown;
-      organization?: unknown;
-      returnTo?: unknown;
-    } | null;
+    if (additional && !primaryConfigured) {
+      return Response.json(
+        { error: "Set up the first GitHub App before adding another account" },
+        { status: 409 },
+      );
+    }
     let owner: ManifestOwner;
     try {
       owner =
@@ -303,7 +378,12 @@ export async function handleSetupGithubManifestRoutes(
       returnTo: body?.returnTo === "settings" ? "settings" : "welcome",
       authLogin: ctx.authUser?.login ?? null,
       used: false,
+      ...(additional ? { additionalAppId: newAdditionalAppId() } : {}),
     };
+    if (owner.type === "organization" && additional) {
+      const taken = accountAlreadyServed(owner.login, current);
+      if (taken) return Response.json({ error: taken }, { status: 409 });
+    }
     pendingManifests().set(state, pending);
     const base =
       owner.type === "organization"
@@ -318,6 +398,9 @@ export async function handleSetupGithubManifestRoutes(
           origin: url.origin,
           publicPrefix,
           ingressUrl: configuredIngress().publicBaseUrl,
+          ...(pending.additionalAppId
+            ? { additionalAppId: pending.additionalAppId }
+            : {}),
         }),
       ),
     });
@@ -348,6 +431,17 @@ export async function handleSetupGithubManifestRoutes(
         await exchangeManifestCode(code),
         pending.owner,
       );
+      if (pending.additionalAppId) {
+        await storeAdditionalApp(pending, pending.additionalAppId, converted);
+        pendingManifests().delete(state);
+        audit({
+          kind: "setup_github_manifest_complete",
+          owner: converted.ownerLogin,
+          app: pending.additionalAppId,
+          by: ctx.authUser?.login || null,
+        });
+        return callbackRedirect(pending, "created");
+      }
       await withConfigMutationLock(async () => {
         const config = await rawConfig();
         const github = integrationSection(config);

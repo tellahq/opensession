@@ -20,11 +20,20 @@
  * SSH credentials, or a connected human.
  */
 import { createSign } from "node:crypto";
-import { readFile, rm, stat } from "node:fs/promises";
+import { mkdir, readFile, rm, stat } from "node:fs/promises";
+import { dirname } from "node:path";
 import { githubAppIdentity, githubUserAuthSettings } from "./github-auth";
 import { stateDir } from "./paths";
 import { configuredIntegration } from "./config";
 import { githubGitCredentialEnv } from "./github-git-credential";
+import {
+  additionalGithubAppForOwner,
+  additionalGithubAppKeyPath,
+  additionalGithubApps,
+  githubWebhookPath,
+  missingGithubAppMessage,
+  type AdditionalGithubApp,
+} from "./github-app-registry";
 import { writeFileAtomicAsync } from "./shared/atomic-write";
 import {
   GITHUB_APP_CHECKS_PERMISSIONS as CHECKS_PERMISSIONS,
@@ -137,7 +146,45 @@ const g = globalThis as {
     at: number;
     installations: GithubAppInstallationAccount[];
   } | null;
+  /** The same directory for each additional App, keyed by client id. */
+  __ghExtraAppInstallationsCache?: Map<
+    string,
+    { at: number; installations: GithubAppInstallationAccount[] }
+  >;
 };
+
+/** The App a call authenticates as: the primary App (`id` null, the classic
+ * `integrations.github` fields and github-app.pem) or one of the additional
+ * per-account Apps (github-app-registry.ts). */
+interface AppCredentials {
+  id: string | null;
+  clientId: string | null;
+  keyPath: string;
+}
+
+function primaryAppCredentials(): AppCredentials {
+  return {
+    id: null,
+    clientId: githubUserAuthSettings().clientId,
+    keyPath: keyPath(),
+  };
+}
+
+function additionalAppCredentials(app: AdditionalGithubApp): AppCredentials {
+  return {
+    id: app.id,
+    clientId: app.clientId,
+    keyPath: additionalGithubAppKeyPath(app.id),
+  };
+}
+
+/** The App that serves repositories under `owner`: the additional App that
+ * belongs to that account when one is configured, the primary App otherwise.
+ * With no additional Apps this is always the primary App, exactly as before. */
+function appForOwner(owner?: string | null): AppCredentials {
+  const extra = owner ? additionalGithubAppForOwner(owner) : null;
+  return extra ? additionalAppCredentials(extra) : primaryAppCredentials();
+}
 
 function tokenCache(): Map<string, AppTokenCache> {
   return (g.__ghAppTokenCache ??= new Map());
@@ -148,6 +195,7 @@ function tokenCache(): Map<string, AppTokenCache> {
 function clearAppCaches(): void {
   g.__ghAppTokenCache = new Map();
   g.__ghAppInstallationsCache = null;
+  g.__ghExtraAppInstallationsCache = new Map();
 }
 
 /** The owner half of `owner/name`, or null when the value is not exactly one
@@ -187,10 +235,12 @@ export interface GithubAppInstallationAccount {
 }
 
 /** App-JWT headers, or null when the App identity or key is missing. */
-async function appAuthHeaders(): Promise<Record<string, string> | null> {
-  const { clientId } = githubUserAuthSettings();
+async function appAuthHeaders(
+  app: AppCredentials = primaryAppCredentials(),
+): Promise<Record<string, string> | null> {
+  const { clientId } = app;
   if (!clientId) return null;
-  const key = await readKey(keyPath());
+  const key = await readKey(app.keyPath);
   if (key === null) return null;
   return {
     Authorization: `Bearer ${appJwt(clientId, key)}`,
@@ -207,19 +257,93 @@ async function appAuthHeaders(): Promise<Record<string, string> | null> {
 export async function listGithubAppInstallations(
   opts: { fresh?: boolean } = {},
 ): Promise<GithubAppInstallationAccount[] | null> {
-  const { clientId } = githubUserAuthSettings();
-  if (!clientId || !(await refreshKeyState(keyPath()))) return null;
-  const cached = g.__ghAppInstallationsCache;
-  if (
-    !opts.fresh &&
-    cached &&
-    cached.clientId === clientId &&
-    Date.now() - cached.at < 60_000
-  ) {
-    return cached.installations;
+  return listAppInstallations(primaryAppCredentials(), opts);
+}
+
+/** Every account any configured App reaches: the primary App's
+ * installations plus each additional App's own account. Null exactly when the
+ * primary App's directory is unknown, as with listGithubAppInstallations; with
+ * no additional Apps the two answer the same. Token minting for each listed
+ * login (githubToken({ owner })) picks the App that serves it. */
+export async function listEveryGithubAppInstallation(
+  opts: { fresh?: boolean } = {},
+): Promise<GithubAppInstallationAccount[] | null> {
+  const primary = await listGithubAppInstallations(opts);
+  const extras = additionalGithubApps();
+  if (!primary || !extras.length) return primary;
+  const byLogin = new Map(primary.map((i) => [i.login.toLowerCase(), i]));
+  const lists = await Promise.all(
+    extras.map((app) => listAdditionalGithubAppInstallations(app, opts)),
+  );
+  extras.forEach((app, index) => {
+    const own = lists[index]?.find(
+      (i) => i.login.toLowerCase() === app.owner.toLowerCase(),
+    );
+    if (own) byLogin.set(own.login.toLowerCase(), own);
+  });
+  return [...byLogin.values()];
+}
+
+/** The installation directory of one additional App (normally just its
+ * owner's account; a private App cannot be installed anywhere else). */
+export async function listAdditionalGithubAppInstallations(
+  app: AdditionalGithubApp,
+  opts: { fresh?: boolean } = {},
+): Promise<GithubAppInstallationAccount[] | null> {
+  return listAppInstallations(additionalAppCredentials(app), opts);
+}
+
+function cachedInstallations(
+  app: AppCredentials,
+): GithubAppInstallationAccount[] | null {
+  if (!app.clientId) return null;
+  const cached =
+    app.id === null
+      ? g.__ghAppInstallationsCache?.clientId === app.clientId
+        ? g.__ghAppInstallationsCache
+        : null
+      : g.__ghExtraAppInstallationsCache?.get(app.clientId);
+  return cached && Date.now() - cached.at < 60_000
+    ? cached.installations
+    : null;
+}
+
+function hasCachedInstallations(app: AppCredentials): boolean {
+  if (!app.clientId) return false;
+  return app.id === null
+    ? !!g.__ghAppInstallationsCache
+    : !!g.__ghExtraAppInstallationsCache?.has(app.clientId);
+}
+
+function cacheInstallations(
+  app: AppCredentials,
+  installations: GithubAppInstallationAccount[],
+): void {
+  if (!app.clientId) return;
+  if (app.id === null) {
+    g.__ghAppInstallationsCache = {
+      clientId: app.clientId,
+      at: Date.now(),
+      installations,
+    };
+  } else {
+    (g.__ghExtraAppInstallationsCache ??= new Map()).set(app.clientId, {
+      at: Date.now(),
+      installations,
+    });
   }
+}
+
+async function listAppInstallations(
+  app: AppCredentials,
+  opts: { fresh?: boolean },
+): Promise<GithubAppInstallationAccount[] | null> {
+  const { clientId } = app;
+  if (!clientId || !(await refreshKeyState(app.keyPath))) return null;
+  const cached = opts.fresh ? null : cachedInstallations(app);
+  if (cached) return cached;
   try {
-    const headers = await appAuthHeaders();
+    const headers = await appAuthHeaders(app);
     if (!headers) return null;
     const installations: GithubAppInstallationAccount[] = [];
     for (let page = 1; ; page++) {
@@ -252,8 +376,7 @@ export async function listGithubAppInstallations(
     }
     // An empty directory is not cached: a just-installed App can take a moment
     // to appear, and callers retry that edge.
-    if (installations.length)
-      g.__ghAppInstallationsCache = { clientId, at: Date.now(), installations };
+    if (installations.length) cacheInstallations(app, installations);
     return installations;
   } catch {
     return null;
@@ -273,7 +396,10 @@ export function configuredGithubInstallationOwner(): string {
  * of every cache key so a changed default never reuses another
  * installation's token. */
 function installationSelector(owner?: string): string {
-  if (owner) return `owner:${owner.toLowerCase()}`;
+  if (owner) {
+    const extra = additionalGithubAppForOwner(owner);
+    return `${extra ? `app:${extra.id}:` : ""}owner:${owner.toLowerCase()}`;
+  }
   const github = configuredIntegration("github");
   const configuredId =
     typeof github.installationId === "number" ? github.installationId : "";
@@ -288,7 +414,9 @@ type SelectedInstallation = { id: number; owner: string };
 async function selectInstallation(
   owner: string | undefined,
   headers: Record<string, string>,
+  app: AppCredentials = primaryAppCredentials(),
 ): Promise<SelectedInstallation> {
+  if (app.id !== null) return selectAdditionalAppInstallation(owner, app);
   const github = configuredIntegration("github");
   const configuredId =
     typeof github.installationId === "number"
@@ -327,10 +455,30 @@ async function selectInstallation(
   if (!selected) {
     throw new Error(
       wanted
-        ? `no GitHub App installation for ${wanted}`
+        ? missingGithubAppMessage(owner || wanted)
         : "multiple GitHub App installations; configure integrations.github.installationOwner",
     );
   }
+  return { id: selected.id, owner: selected.login };
+}
+
+/** An additional App serves exactly its owner's installation. */
+async function selectAdditionalAppInstallation(
+  owner: string | undefined,
+  app: AppCredentials,
+): Promise<SelectedInstallation> {
+  const wanted = owner?.toLowerCase();
+  if (!wanted) throw new Error("an additional GitHub App needs an owner");
+  const pick = (installs: GithubAppInstallationAccount[] | null) =>
+    installs?.find((i) => i.login.toLowerCase() === wanted);
+  let installs = await listAppInstallations(app, {});
+  let selected = pick(installs);
+  if (!selected && hasCachedInstallations(app)) {
+    installs = await listAppInstallations(app, { fresh: true });
+    selected = pick(installs);
+  }
+  if (!installs) throw new Error("cannot list GitHub App installations");
+  if (!selected) throw new Error(missingGithubAppMessage(owner!));
   return { id: selected.id, owner: selected.login };
 }
 
@@ -371,7 +519,8 @@ async function installationCredential(opts: {
   checks?: boolean;
   owner?: string;
 }): Promise<GithubInstallationCredential | null> {
-  const { clientId } = githubUserAuthSettings();
+  const app = appForOwner(opts.owner);
+  const { clientId } = app;
   const selector = installationSelector(opts.owner);
   const identity = `${clientId || ""}:${selector}`;
   // Health snapshots follow the default installation only: one organization
@@ -381,13 +530,13 @@ async function installationCredential(opts: {
     g.__ghAppLastMintOk = ok;
     g.__ghAppLastMintIdentity = identity;
   };
-  const headers = await appAuthHeaders().catch(() => null);
+  const headers = await appAuthHeaders(app).catch(() => null);
   if (!headers) {
     noteHealth(false);
     return null;
   }
   try {
-    const installation = await selectInstallation(opts.owner, headers);
+    const installation = await selectInstallation(opts.owner, headers, app);
     const rateLimitKey = `installation:${clientId}:${installation.id}`;
     const scope = mintScope(opts);
     const cacheKey = `${clientId}:${installation.id}:${scope}`;
@@ -552,6 +701,7 @@ export function githubAppConfigured(): boolean {
 export async function updateGithubAppWebhook(
   publicOrigin: string,
   secret: string,
+  extra?: AdditionalGithubApp,
 ): Promise<void> {
   const origin = new URL(publicOrigin);
   if (origin.protocol !== "https:" || origin.pathname !== "/") {
@@ -560,8 +710,9 @@ export async function updateGithubAppWebhook(
   if (!secret || /[\r\n\0]/.test(secret)) {
     throw new Error("GitHub webhook secret is missing or invalid");
   }
-  const { clientId } = githubUserAuthSettings();
-  const key = clientId ? await readKey(keyPath()) : null;
+  const app = extra ? additionalAppCredentials(extra) : primaryAppCredentials();
+  const { clientId } = app;
+  const key = clientId ? await readKey(app.keyPath) : null;
   if (!clientId || key === null) {
     throw new Error("GitHub App credentials are not configured");
   }
@@ -575,7 +726,7 @@ export async function updateGithubAppWebhook(
       "User-Agent": "opensession",
     },
     body: JSON.stringify({
-      url: `${origin.origin}/github/webhook`,
+      url: `${origin.origin}${githubWebhookPath(extra?.id)}`,
       content_type: "json",
       secret,
       insecure_ssl: "0",
@@ -654,6 +805,47 @@ export async function commitGithubAppKeyMutation<T>(
   }
 }
 
+/** Whether an additional App's private key is on disk, fresh from disk. */
+export function loadAdditionalGithubAppKeyState(
+  app: AdditionalGithubApp,
+): Promise<boolean> {
+  return refreshKeyState(additionalGithubAppKeyPath(app.id));
+}
+
+/** Store or remove an additional App's private key around a config commit,
+ * restoring the previous key when the commit fails (the same transaction
+ * shape as commitGithubAppKeyMutation). `null` removes the key. */
+export async function commitAdditionalGithubAppKeyMutation<T>(
+  id: string,
+  key: string | null,
+  commitConfig: () => T | Promise<T>,
+): Promise<T> {
+  const path = additionalGithubAppKeyPath(id);
+  const previous = await readKey(path);
+  if (key === null) {
+    await rm(path, { force: true });
+    setKeyState(path, false);
+  } else {
+    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+    await writeFileAtomicAsync(
+      path,
+      key.endsWith("\n") ? key : `${key}\n`,
+      0o600,
+    );
+    setKeyState(path, true);
+  }
+  clearAppCaches();
+  try {
+    return await commitConfig();
+  } catch (error) {
+    if (previous === null) await rm(path, { force: true });
+    else await writeFileAtomicAsync(path, previous, 0o600);
+    setKeyState(path, previous !== null);
+    clearAppCaches();
+    throw error;
+  }
+}
+
 /**
  * A one-repository installation token for Runner workspace materialization.
  * It is intentionally separate from the read-only check token above: the
@@ -711,14 +903,16 @@ export async function githubAppRepositoryToken(
   const owner = githubRepoOwner(ghRepo);
   const repo = ghRepo.split("/")[1];
   if (!owner || !repo) return null;
-  const headers = await appAuthHeaders().catch(() => null);
+  const app = appForOwner(owner);
+  const headers = await appAuthHeaders(app).catch(() => null);
   if (!headers) return null;
   const repositories = githubRunTokenRepositories(ghRepo, opts.alsoRepos);
   try {
-    // The installation is the one for this repository's owner. An owner the
-    // App is not installed on fails closed here, and GitHub refuses the mint
-    // anyway when the installation cannot see the repository.
-    const installation = await selectInstallation(owner, headers);
+    // The installation is the one for this repository's owner, minted by the
+    // App that serves that owner. An owner no App is installed on fails
+    // closed here, and GitHub refuses the mint anyway when the installation
+    // cannot see the repository.
+    const installation = await selectInstallation(owner, headers, app);
     if (!githubRepositoryMatchesInstallation(ghRepo, installation.owner)) {
       throw new Error(`installation belongs to ${installation.owner}`);
     }
@@ -797,6 +991,75 @@ export async function githubServiceReadOnlyEnv(
   return githubGitCredentialEnv(token || "");
 }
 
+/**
+ * Give a run's GitHub env the right credential for every repository it spans
+ * that an additional per-account App serves (github-app-registry.ts). Each
+ * such owner gets an owner-scoped git credential: the person's own sign-in to
+ * that App when the run acts as them (`personal`) and they have one, else the
+ * App's repository-scoped installation token. When the session's own
+ * repository is one of them, GH_TOKEN/GITHUB_TOKEN follow it too, so `gh`
+ * targets that account. Everything served by the primary App is untouched,
+ * and with no additional Apps this returns `env` as is.
+ */
+export async function withAdditionalAppRunCredentials(
+  env: Record<string, string>,
+  input: {
+    ghRepo?: string | null;
+    attachedRepos?: readonly string[];
+    user?: string | null;
+    personal: boolean;
+    readOnly?: boolean;
+  },
+): Promise<Record<string, string>> {
+  const apps = additionalGithubApps();
+  if (!apps.length) return env;
+  const groups = new Map<
+    string,
+    { app: AdditionalGithubApp; repos: string[] }
+  >();
+  for (const repo of [input.ghRepo, ...(input.attachedRepos ?? [])]) {
+    const owner = githubRepoOwner(repo ?? undefined);
+    if (!repo || !owner) continue;
+    const app = additionalGithubAppForOwner(owner);
+    if (!app) continue;
+    const group = groups.get(owner.toLowerCase());
+    if (group) {
+      if (!group.repos.some((r) => r.toLowerCase() === repo.toLowerCase()))
+        group.repos.push(repo);
+    } else groups.set(owner.toLowerCase(), { app, repos: [repo] });
+  }
+  if (!groups.size) return env;
+  const { githubAppUserTokenForRun } = await import("./github-auth");
+  const primaryOwner = githubRepoOwner(
+    input.ghRepo ?? undefined,
+  )?.toLowerCase();
+  const entries: Array<{ owner: string; token: string }> = [];
+  let primaryToken: string | null = null;
+  for (const [owner, { app, repos }] of groups) {
+    const personal =
+      input.personal && !input.readOnly
+        ? githubAppUserTokenForRun(app.id, input.user)?.token
+        : null;
+    const token =
+      personal ||
+      (await githubAppRepositoryToken(repos[0]!, {
+        alsoRepos: repos.slice(1),
+        ...(input.readOnly ? { readOnly: true } : {}),
+      }));
+    if (!token) {
+      console.warn(`[github-app] ${missingGithubAppMessage(app.owner)}`);
+      continue;
+    }
+    entries.push({ owner: app.owner, token });
+    if (owner === primaryOwner) primaryToken = token;
+  }
+  const { withOwnerCredentials } = await import("./github-git-credential");
+  const out = withOwnerCredentials(env, entries);
+  return primaryToken
+    ? { ...out, GH_TOKEN: primaryToken, GITHUB_TOKEN: primaryToken }
+    : out;
+}
+
 /** Env var carrying the read-only sibling-repository token of an automation
  * run (Automation.readRepos). Not GH_TOKEN: gh only honors that one, so a
  * script opts in per command with `GH_TOKEN=$GH_READ_TOKEN gh …`. */
@@ -832,10 +1095,11 @@ export async function githubAppReadReposToken(
     );
     return null;
   }
-  const headers = await appAuthHeaders().catch(() => null);
+  const app = appForOwner(owner);
+  const headers = await appAuthHeaders(app).catch(() => null);
   if (!headers) return null;
   try {
-    const installation = await selectInstallation(owner, headers);
+    const installation = await selectInstallation(owner, headers, app);
     if (!githubRepositoryMatchesInstallation(ghRepo, installation.owner)) {
       throw new Error(`installation belongs to ${installation.owner}`);
     }
