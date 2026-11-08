@@ -51,6 +51,7 @@ import { WorkspaceSummary, WorkspaceSummaryBody } from "../WorkspaceSummary";
 import { CollaboratorsSubmenu } from "../WorkspaceCollaborators";
 import { WorkspaceWaiting } from "./busy-indicators";
 import { ThreadsDetailsSection } from "../threads/ThreadsPanel";
+import { CoordinatorOverflowItems } from "../threads/CoordinatorMenuItems";
 import {
   IconArchive,
   IconChevronRight,
@@ -995,6 +996,12 @@ export function SessionViewerChrome({
                   {!workspaceScopedMenu && spinOffAction}
                   {!workspaceScopedMenu && transcriptActions}
                   {portalsAction}
+                  {session.source === "opensession" && !session.desk && (
+                    <CoordinatorOverflowItems
+                      session={session}
+                      close={() => setOverflowOpen(false)}
+                    />
+                  )}
                   {moveToSandboxAction}
                   {branchAction && (
                     <>

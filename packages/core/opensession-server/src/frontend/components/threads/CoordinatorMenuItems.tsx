@@ -6,10 +6,27 @@ import { errorMessage } from "../../lib/error-message";
 import { composerMenuIcon, composerMenuItem } from "../../lib/composer-classes";
 import type { UnifiedSession } from "../../lib/types";
 import { useWorkspaceRecord } from "../../lib/workspace-records";
+import { Menu, MENU_ICON } from "../../ui/menu";
 import { toast } from "../../ui/toast";
 import { ComposerPressButton } from "../composer/ComposerControls";
 import { IconDelegate, IconGear } from "../icons";
 import { openWorkspaceSettings } from "../WorkspaceSettingsDialog";
+
+function toggleCoordinatorMode(sessionId: string, on: boolean) {
+  void setCoordinatorMode(sessionId, !on)
+    .then(() =>
+      toast(
+        on
+          ? "Coordinator mode is off"
+          : "Coordinator mode is on. The agent hands work to threads from the next message.",
+      ),
+    )
+    .catch((error) =>
+      toast(errorMessage(error, "Couldn't change coordinator mode"), {
+        variant: "error",
+      }),
+    );
+}
 
 /**
  * The composer "+" menu's coordinator controls: switch coordinator mode for
@@ -38,19 +55,7 @@ export function CoordinatorMenuItems({
         }
         onPress={() => {
           close();
-          void setCoordinatorMode(session.id, !on)
-            .then(() =>
-              toast(
-                on
-                  ? "Coordinator mode is off"
-                  : "Coordinator mode is on. The agent hands work to threads from the next message.",
-              ),
-            )
-            .catch((error) =>
-              toast(errorMessage(error, "Couldn't change coordinator mode"), {
-                variant: "error",
-              }),
-            );
+          toggleCoordinatorMode(session.id, on);
         }}
       >
         <span className={composerMenuIcon}>
@@ -75,6 +80,45 @@ export function CoordinatorMenuItems({
           </span>
           <span className="grow whitespace-nowrap">Workspace settings…</span>
         </ComposerPressButton>
+      )}
+    </>
+  );
+}
+
+/** The same controls in the session header's ⋯ menu, which is the quick
+ *  session menu on a phone. */
+export function CoordinatorOverflowItems({
+  session,
+  close,
+}: {
+  session: UnifiedSession;
+  close: () => void;
+}) {
+  const workspace = useWorkspaceRecord(session.workspaceId ?? null);
+  const on = useIsCoordinating(session, workspace);
+  return (
+    <>
+      <Menu.Item
+        onClick={() => {
+          close();
+          toggleCoordinatorMode(session.id, on);
+        }}
+      >
+        <IconDelegate size={20} className={MENU_ICON} />
+        <span className="grow">
+          {on ? "Turn off coordinator mode" : "Turn on coordinator mode"}
+        </span>
+      </Menu.Item>
+      {workspace && (
+        <Menu.Item
+          onClick={() => {
+            close();
+            openWorkspaceSettings(workspace.id);
+          }}
+        >
+          <IconGear size={20} className={MENU_ICON} />
+          <span className="grow">Workspace settings…</span>
+        </Menu.Item>
       )}
     </>
   );
