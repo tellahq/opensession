@@ -35,12 +35,12 @@ Alongside it sits a second, independent axis — _where_ a session's work happen
 
 And a third — _what starts or coordinates work when you are not there_:
 
-| Concept        | Trigger                                    | Memory across runs                                 |
-| -------------- | ------------------------------------------ | -------------------------------------------------- |
-| **Automation** | a cron schedule or an external event       | none — every run is a fresh session                |
-| **Goal**       | its own self-set wake time                 | yes — wakes resume one session over days           |
-| **Workflow**   | a script fanning out agents and tool calls | successful calls replay when a workflow is resumed |
-| **Space**      | people talking to a coordinator agent      | yes — one shared conversation that spawns threads  |
+| Concept         | Trigger                                         | Memory across runs                                 |
+| --------------- | ----------------------------------------------- | -------------------------------------------------- |
+| **Automation**  | a cron schedule or an external event            | none — every run is a fresh session                |
+| **Goal**        | its own self-set wake time                      | yes — wakes resume one session over days           |
+| **Workflow**    | a script fanning out agents and tool calls      | successful calls replay when a workflow is resumed |
+| **Coordinator** | people talking to a session in coordinator mode | yes — one conversation that spawns threads         |
 
 ## Projects
 
@@ -116,6 +116,17 @@ runs can use dedicated worktrees while remaining in the same workspace.
 A workspace belongs to whoever created it, and its sidebar row files into their
 lanes. Add teammates as collaborators from the info panel and the row files into
 their sidebar the same way. Each one is notified once, when they are added.
+
+A workspace can work on more than one branch. Its worktree's branch is the
+primary one, which shared sessions join; a stacked session or a coordinator's
+thread on its own branch adds that branch to the workspace's list. The
+workspace then answers for each branch's PR, its Review can switch between
+them, and the tab strip's **+** menu can start a session on any of them.
+
+A workspace also has settings beyond its name: an optional **goal** (what the
+work is for), its project before it has a checkout, and who it is shared with.
+Open them from the composer's **+** menu (Workspace settings) or the Threads
+panel.
 
 A workspace with no worktree is fine too — that is what an ask-style workspace
 looks like, or a feed workspace for a ticket where there is nothing to check
@@ -269,38 +280,36 @@ a persistent worktree across wakes. When the shared-checkout exception is
 active, a code goal instead works directly on the default branch, without a
 feature branch or pull request.
 
-## Spaces
+## Coordinator mode
 
-A space is a shared conversation with one agent whose job is to spawn and
-coordinate other sessions for you. You give it a name, an optional **goal**,
-a project, and who it is shared with; a first message is optional, and
-without one the agent opens the space with a welcome. From then on you talk
-to the space and it splits the work into **threads**: child sessions it
-starts, follows, and summarizes back. Name, goal, project and sharing can all
-be changed later from the space's settings.
+Coordinator mode is a per-session setting, switched from the composer's **+**
+menu (or **More options** when starting a session), like pstack mode. While it
+is on, the agent hands self-contained work to other sessions, called
+**threads**, instead of doing it itself: it starts them with `spawn_task`,
+waits on them instead of polling, reports back what each found or changed,
+and keeps a `coordinator-summary.md` asset current. Each turn carries that
+standing briefing, plus the workspace's goal when it has one. A session with
+a checkout may read the code to plan, but its changes still go to threads; a
+Scratch session has no checkout at all. Turning the mode off makes the
+session ordinary again from its next message, and nothing about its repo or
+checkout changes.
 
-Underneath, a space is a workspace marked as one. Its root session is the
-**coordinator**. It is a Scratch session: it has a writable scratch directory
-for notes and scripts but no checkout of the project, so reading and changing
-the code happens in threads, each with its own branch and review. Threads run
-in the space's project unless the coordinator names another repository. Each
-coordinator turn carries a standing briefing: keep threads pointed at the
-goal, delegate self-contained work with `spawn_task`, wait on threads instead
-of polling, and keep a `space-summary.md` asset current with the goal, the
-threads, decisions, and open questions.
+Threads are ordinary child sessions in the coordinator's workspace. They do
+not inherit the mode; they do the work, each on its own branch, which the
+workspace adds to its branch list. A coordinating workspace carries a small
+mark in the sidebar.
 
-Threads are ordinary child sessions in the space's workspace. They nest under
-the space in the sidebar, report back to the coordinator, and can be opened
-and steered directly. The space's conversation shows each thread it starts as
-a live card with what it is doing right now; clicking a card opens the thread
-beside the conversation, where you can read it and message its agent without
-leaving the space. The side panel (the top of the details page on a phone)
-groups every thread by where it stands: blocked, ready to ship, working, idle,
-shipped, and lists the conversation's comments and artifacts. Coming back to
-a space after its threads moved, a **Since you were last here** card above
-the composer gives a short written catch-up. Teammates join a space the same
-way they join any workspace, as collaborators. Start one with the **+** in
-the sidebar's Spaces section.
+Any conversation that has started threads shows them: each as a live card in
+the transcript with what it is doing right now, and all of them in the side
+panel's **Threads** tab (the top of the details page on a phone), grouped by
+where they stand: blocked, ready to ship, working, idle, shipped. Clicking a
+card opens the thread beside the conversation, where you can read it and
+message its agent without leaving. Coming back after the threads moved, a
+**Since you were last here** card above the composer gives a short written
+catch-up. A coordinating session's panel opens on the Threads tab.
+
+Workspaces made as "spaces" before coordinator mode was a setting keep their
+root session coordinating until someone switches it off.
 
 ## Message comments and reactions
 
@@ -313,8 +322,8 @@ message work as before.
 
 ## Huddles
 
-A huddle is a voice call that lives inside a workspace (a space is one) or a
-standalone session. Start it with the headphones in the header; while anyone
+A huddle is a voice call that lives inside a workspace or a standalone
+session. Start it with the headphones in the header; while anyone
 is inside, the button turns into **Join huddle** with who is there. The call
 follows you as a small card in the corner while you move around, with mute,
 invite (a teammate gets a toast with **Join**), notes, and leave. Audio goes

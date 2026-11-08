@@ -49,7 +49,7 @@ export const DEMO_LIVE_ENGINE_SESSION_ID = "ses_demolive";
 export const DEMO_ASK_SESSION_ID = "bks-demo-ask";
 export const DEMO_ASK_ENGINE_SESSION_ID = "ses_demoask";
 export const DEMO_PR_NUMBER = 128;
-/** The demo space (server/spaces.ts): its workspace and coordinator. */
+/** The demo coordinator (server/coordinator.ts): its workspace and session. */
 export const DEMO_SPACE_WORKSPACE_ID = "ws-demo-space";
 export const DEMO_SPACE_SESSION_ID = "bks-demo-space";
 /** Thread lanes the demo space shows: one shipped, one waiting on a person. */
@@ -1333,8 +1333,8 @@ export function demoSessions(opts: {
     });
   }
 
-  // 9. A space: a coordinator conversation and the threads it started, one in
-  // each state the space panel groups by (server/spaces.ts). The coordinator's
+  // 9. Coordinator mode: a conversation that hands work to threads, one in
+  // each state the threads panel groups by (server/coordinator.ts). The coordinator's
   // spawn_task results are what the transcript turns into thread cards.
   {
     const t0 = now - 90 * min;
@@ -1388,7 +1388,9 @@ export function demoSessions(opts: {
       engineSessionId: "ses_demospace",
       file: base(DEMO_SPACE_SESSION_ID, "ses_demospace", 90, 8, {
         title: "Spaces v1 launch",
-        // A coordinator is a Scratch session with no checkout (spaces.ts).
+        // Coordinator mode on a Scratch session: it has no checkout, so
+        // all the code work happens in its threads.
+        coordinator: true,
         mode: "scratch",
         repo: undefined,
         worktreeDir: spaceScratchDir,

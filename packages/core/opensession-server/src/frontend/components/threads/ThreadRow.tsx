@@ -5,12 +5,12 @@ import {
   threadState,
   threadStatusLine,
   type ThreadState,
-} from "../../lib/space-threads";
+} from "../../lib/session-threads";
 import type { UnifiedSession } from "../../lib/types";
 import { cn } from "../../ui/cn";
 import { UserAvatar } from "../UserAvatar";
 import { ListRow } from "../../ui/list-row";
-import { THREAD_DOT } from "./space-classes";
+import { THREAD_DOT } from "./thread-classes";
 
 /** Summaries by `id:lastActivity`, so a thread is asked again only after it
  *  moved. Module-wide: the panel and the transcript cards share it. */

@@ -1151,6 +1151,7 @@ export function nativeSessionRow(data: NativeSessionFile): UnifiedSession {
     fastMode: data.fastMode,
     speed: data.speed,
     pstackMode: data.pstackMode,
+    coordinator: data.coordinator,
     shipMode: data.shipMode,
     directShips: data.directShips,
     accountId: data.accountId,

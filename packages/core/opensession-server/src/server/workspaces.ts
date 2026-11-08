@@ -52,7 +52,7 @@ function store() {
 
 /** A composer, not a document store. Mirrors MAX_DRAFT_LENGTH in drafts.ts. */
 const MAX_DRAFT_LENGTH = 32_000;
-/** A space's goal is a paragraph, not a brief. */
+/** A workspace's goal is a paragraph, not a brief. */
 export const MAX_GOAL_LENGTH = 2_000;
 
 /** An unsent composer prompt parked on a workspace before any session exists. */
@@ -118,14 +118,58 @@ export interface Workspace {
    *  Absent = the repository's `publicationMode`. New sessions inherit it. */
   shipMode?: "pull-request" | "direct";
   /**
-   * A space (spaces.ts): its root sessions coordinate, delegating work to
-   * child sessions that stay in this workspace. Set at creation, never
-   * toggled. Absent = an ordinary workspace.
+   * Legacy: created as a "space" before coordinator mode was a per-session
+   * setting. Its root session coordinates until switched off
+   * (coordinator.ts). Nothing sets it any more.
    */
   space?: true;
-  /** A space's goal: what its work is for. The coordinator keeps its
-   *  threads pointed at it (spaces.ts). Absent = no goal set. */
+  /** What the workspace's work is for. A coordinating session keeps its
+   *  threads pointed at it (coordinator.ts). Absent = no goal set. */
   goal?: string;
+  /**
+   * Branches its sessions work on besides `branch`, oldest first: a
+   * coordinator's threads, a stacked tab. `branch` and `worktreeDir` stay the
+   * primary checkout that share-mode tabs join; these let the workspace answer
+   * for each branch's PR too. A shipped branch stays listed.
+   */
+  branches?: WorkspaceBranch[];
+}
+
+/** One more branch a workspace's sessions work on. */
+export interface WorkspaceBranch {
+  repo: string;
+  branch: string;
+  worktreeDir?: string;
+  /** ISO time it was added. */
+  at: string;
+}
+
+/** Enough for a long-running coordinator; the oldest drop off past it. */
+const MAX_WORKSPACE_BRANCHES = 100;
+
+/** Every branch of a workspace, the primary first. */
+export function workspaceBranchList(
+  workspace: Pick<Workspace, "repo" | "branch" | "worktreeDir" | "branches">,
+): Array<{ repo?: string; branch: string; worktreeDir?: string }> {
+  const primary = workspace.branch
+    ? [
+        {
+          repo: workspace.repo,
+          branch: workspace.branch,
+          worktreeDir: workspace.worktreeDir,
+        },
+      ]
+    : [];
+  return [
+    ...primary,
+    ...(workspace.branches ?? []).filter(
+      (b) =>
+        !(
+          b.branch === workspace.branch &&
+          (b.repo || workspace.repo) === workspace.repo
+        ),
+    ),
+  ];
 }
 
 /** A teammate added to a workspace, keyed by picker first name. */
@@ -429,8 +473,6 @@ export async function createWorkspace(input: {
   worktreeDir?: string;
   attachedRepos?: AttachedRepo[];
   draft?: WorkspaceDraft;
-  /** Create a space (spaces.ts) rather than an ordinary workspace. */
-  space?: boolean;
   goal?: string;
   /** Reuse a caller-supplied id (e.g. migration wrapping an orphan session). */
   id?: string;
@@ -456,7 +498,6 @@ export async function createWorkspace(input: {
     ...(input.attachedRepos && input.attachedRepos.length
       ? { attachedRepos: input.attachedRepos }
       : {}),
-    ...(input.space ? { space: true as const } : {}),
     ...(input.goal?.trim()
       ? { goal: input.goal.trim().slice(0, MAX_GOAL_LENGTH) }
       : {}),
@@ -580,6 +621,31 @@ export function materializeWorkspaceWorktree(
         : next.branch
           ? { branch: next.branch }
           : {}),
+    };
+  });
+}
+
+/**
+ * Add a branch one of the workspace's sessions works on. A no-op for its
+ * primary branch or one already listed. Callers record after the create
+ * has made the workspace's first checkout its primary.
+ */
+export function recordWorkspaceBranch(
+  id: string,
+  next: { repo: string; branch: string; worktreeDir?: string },
+): Promise<Workspace | null> {
+  return mutateWorkspace(id, (cur) => {
+    if (!next.branch) return cur;
+    const same = (b: { repo?: string; branch: string }) =>
+      b.branch === next.branch && (b.repo || cur.repo) === next.repo;
+    if (cur.branch && same({ repo: cur.repo, branch: cur.branch })) return cur;
+    const list = cur.branches ?? [];
+    if (list.some(same)) return cur;
+    return {
+      ...cur,
+      branches: [...list, { ...next, at: new Date().toISOString() }].slice(
+        -MAX_WORKSPACE_BRANCHES,
+      ),
     };
   });
 }

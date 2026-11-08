@@ -1,32 +1,37 @@
-import { useState } from "react";
-import { useIsPhone } from "../../hooks/useIsPhone";
-import { updateWorkspaceApi } from "../../lib/api/workspaces";
-import { cachedRepos } from "../../lib/repo-cache";
-import { errorMessage } from "../../lib/error-message";
-import { repoLabel } from "../../lib/repo-label";
-import { NO_REPO } from "../../lib/session-repo";
-import type { Workspace } from "../../lib/types";
-import { publishWorkspaceRecord } from "../../lib/workspace-records";
-import { Button } from "../../ui/button";
-import { Field, Input, Textarea } from "../../ui/input";
-import { Menu } from "../../ui/menu";
-import { Modal } from "../../ui/modal";
-import { OptionSelect } from "../../ui/select";
-import { ResponsiveDialog, SheetBody, SheetIconButton } from "../../ui/sheet";
-import { toast } from "../../ui/toast";
-import { IconPeople, IconX } from "../icons";
-import { UserAvatar } from "../UserAvatar";
+import { useState, useSyncExternalStore } from "react";
+import { useIsPhone } from "../hooks/useIsPhone";
+import { updateWorkspaceApi } from "../lib/api/workspaces";
+import { cachedRepos } from "../lib/repo-cache";
+import { errorMessage } from "../lib/error-message";
+import { repoLabel } from "../lib/repo-label";
+import { NO_REPO } from "../lib/session-repo";
+import type { Workspace } from "../lib/types";
+import {
+  publishWorkspaceRecord,
+  useWorkspaceRecord,
+} from "../lib/workspace-records";
+import { Button } from "../ui/button";
+import { Field, Input, Textarea } from "../ui/input";
+import { Menu } from "../ui/menu";
+import { Modal } from "../ui/modal";
+import { OptionSelect } from "../ui/select";
+import { ResponsiveDialog, SheetBody, SheetIconButton } from "../ui/sheet";
+import { toast } from "../ui/toast";
+import { IconPeople, IconX } from "./icons";
+import { UserAvatar } from "./UserAvatar";
 import {
   CollaboratorMenuItems,
   useWorkspaceCollaborators,
-} from "../WorkspaceCollaborators";
+} from "./WorkspaceCollaborators";
 
 /**
- * Change a space after it was made: its name, goal, project and who it is
- * shared with. Sharing applies as you toggle it (the same control as a
- * workspace's collaborators); the rest saves together.
+ * A workspace's settings: its name, goal, project and who it is shared with.
+ * The goal is what a coordinating session keeps its threads pointed at.
+ * Sharing applies as you toggle it (the same control as the collaborators
+ * menu); the rest saves together. The project can only change before the
+ * workspace has a checkout of its own.
  */
-export function SpaceSettingsDialog({
+export function WorkspaceSettingsDialog({
   workspace,
   open,
   onOpenChange,
@@ -63,15 +68,16 @@ export function SpaceSettingsDialog({
       name: name.trim(),
       goal: goal.trim() || null,
     };
-    // A space without a project keeps none; the server has no "clear repo".
-    if (repo !== NO_REPO && repo !== workspace.repo) patch.repo = repo;
+    // A workspace without a project keeps none; the server has no "clear repo".
+    if (!workspace.worktreeDir && repo !== NO_REPO && repo !== workspace.repo)
+      patch.repo = repo;
     void updateWorkspaceApi(workspace.id, patch)
       .then((updated) => {
         publishWorkspaceRecord(updated);
         onOpenChange(false);
       })
       .catch((error) =>
-        toast(errorMessage(error, "Couldn't save the space"), {
+        toast(errorMessage(error, "Couldn't save the workspace"), {
           variant: "error",
         }),
       )
@@ -92,21 +98,23 @@ export function SpaceSettingsDialog({
         <Textarea
           value={goal}
           maxLength={2000}
-          placeholder="What the work is for. The agent keeps its threads pointed at it."
+          placeholder="What the work is for. In coordinator mode the agent keeps its threads pointed at it."
           className="min-h-20 phone:text-input-phone"
           onChange={(event) => setGoal(event.target.value)}
         />
       </Field>
-      <div className="flex min-w-0 flex-col gap-1.5">
-        <span className="text-label font-medium text-dim">Project</span>
-        <OptionSelect
-          label="Project"
-          value={repo}
-          options={projectOptions}
-          onChange={setRepo}
-          className="w-full"
-        />
-      </div>
+      {!workspace.worktreeDir && (
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <span className="text-label font-medium text-dim">Project</span>
+          <OptionSelect
+            label="Project"
+            value={repo}
+            options={projectOptions}
+            onChange={setRepo}
+            className="w-full"
+          />
+        </div>
+      )}
       {sharing && (
         <div className="flex min-w-0 flex-col gap-1.5">
           <span className="text-label font-medium text-dim">Shared with</span>
@@ -169,12 +177,12 @@ export function SpaceSettingsDialog({
         open={open}
         onClose={() => onOpenChange(false)}
         phone
-        label="Space settings"
+        label="Workspace settings"
         sheetClassName="max-h-[88dvh]"
       >
         <div className="flex shrink-0 items-center gap-3 px-6 pb-2 pt-0.5">
           <h2 className="m-0 min-w-0 flex-1 text-dialog-title font-semibold leading-tight text-fg">
-            Space settings
+            Workspace settings
           </h2>
           <SheetIconButton
             aria-label="Close"
@@ -195,10 +203,49 @@ export function SpaceSettingsDialog({
   return (
     <Modal.Root open={open} onOpenChange={onOpenChange}>
       <Modal.Content widthClassName="max-w-[34rem]">
-        <Modal.Header title="Space settings" />
+        <Modal.Header title="Workspace settings" />
         {fields}
         <Modal.Footer>{actions}</Modal.Footer>
       </Modal.Content>
     </Modal.Root>
+  );
+}
+
+// One dialog for the whole viewer, opened from menus that close on click
+// (the composer "+"), so it outlives the menu that asked for it.
+let openId: string | null = null;
+const listeners = new Set<() => void>();
+function setOpenId(id: string | null) {
+  openId = id;
+  for (const listener of listeners) listener();
+}
+
+/** Open a workspace's settings in the mounted WorkspaceSettingsHost. */
+export function openWorkspaceSettings(workspaceId: string): void {
+  setOpenId(workspaceId);
+}
+
+/** Where openWorkspaceSettings shows its dialog. Mount once per viewer. */
+export function WorkspaceSettingsHost() {
+  const read = () => openId;
+  const id = useSyncExternalStore(
+    (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    read,
+    read,
+  );
+  const workspace = useWorkspaceRecord(id);
+  if (!workspace) return null;
+  return (
+    <WorkspaceSettingsDialog
+      key={workspace.id}
+      workspace={workspace}
+      open
+      onOpenChange={(open) => {
+        if (!open) setOpenId(null);
+      }}
+    />
   );
 }

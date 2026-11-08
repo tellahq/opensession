@@ -1,48 +1,35 @@
 import { useEffect, useState } from "react";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { useNavigation } from "../../hooks/useNavigation";
-import { fetchSpaceRecapApi } from "../../lib/api/workspaces";
+import { fetchThreadRecapApi } from "../../lib/api/workspaces";
 import { useSessionRecords } from "../../lib/session-records";
-import { openSpaceThread } from "../../lib/space-thread-view";
+import { openThreadPane } from "../../lib/thread-view";
 import {
-  isSpaceCoordinator,
-  markSpaceSeen,
-  spaceSeenAt,
+  markThreadsSeen,
   threadState,
-} from "../../lib/space-threads";
+  threadsSeenAt,
+} from "../../lib/session-threads";
 import type { UnifiedSession } from "../../lib/types";
-import { useWorkspaceRecord } from "../../lib/workspace-records";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
 import { IconX } from "../icons";
 import { getCurrentUser } from "../UserPicker";
-import { THREAD_DOT } from "./space-classes";
+import { THREAD_DOT } from "./thread-classes";
 
 /**
- * "Since you were last here", above a space's composer: the agent's short
- * catch-up on what the space's threads did while the reader was away, and
- * the threads it covers. Shown once per visit, only when something changed.
+ * "Since you were last here", above the composer of a conversation that has
+ * started threads: the agent's short catch-up on what they did while the
+ * reader was away, and the threads it covers. Shown once per visit, only
+ * when something changed.
  */
-export function SpaceCatchUp({ session }: { session: UnifiedSession }) {
-  const workspace = useWorkspaceRecord(session.workspaceId ?? null);
-  if (!workspace || !isSpaceCoordinator(session, workspace)) return null;
-  return (
-    <CatchUp
-      key={workspace.id}
-      workspaceId={workspace.id}
-      coordinatorId={session.id}
-    />
-  );
+export function ThreadsCatchUp({ session }: { session: UnifiedSession }) {
+  const sessions = useSessionRecords();
+  if (!sessions.some((s) => s.parentSessionId === session.id)) return null;
+  return <CatchUp key={session.id} rootId={session.id} />;
 }
 
-function CatchUp({
-  workspaceId,
-  coordinatorId,
-}: {
-  workspaceId: string;
-  coordinatorId: string;
-}) {
-  const [since] = useState(() => spaceSeenAt(workspaceId));
+function CatchUp({ rootId }: { rootId: string }) {
+  const [since] = useState(() => threadsSeenAt(rootId));
   const [recap, setRecap] = useState<{
     text: string | null;
     threadIds: string[];
@@ -53,21 +40,21 @@ function CatchUp({
   const phone = useIsPhone();
 
   // Stamp the visit now and again on leaving, so the next visit counts
-  // from the last moment the reader had the space open.
+  // from the last moment the reader had the conversation open.
   useEffect(() => {
-    const stamp = () => markSpaceSeen(workspaceId, Date.now());
+    const stamp = () => markThreadsSeen(rootId, Date.now());
     stamp();
     window.addEventListener("pagehide", stamp);
     return () => {
       stamp();
       window.removeEventListener("pagehide", stamp);
     };
-  }, [workspaceId]);
+  }, [rootId]);
 
   useEffect(() => {
     if (since === null) return;
     let live = true;
-    void fetchSpaceRecapApi(workspaceId, since, getCurrentUser())
+    void fetchThreadRecapApi(rootId, since, getCurrentUser())
       .then((result) => {
         if (live) setRecap(result);
       })
@@ -75,7 +62,7 @@ function CatchUp({
     return () => {
       live = false;
     };
-  }, [workspaceId, since]);
+  }, [rootId, since]);
 
   if (dismissed || !recap?.text) return null;
   const threads = recap.threadIds
@@ -113,7 +100,7 @@ function CatchUp({
               onClick={() =>
                 phone
                   ? navigation.openSession(thread.id)
-                  : openSpaceThread(coordinatorId, thread.id)
+                  : openThreadPane(rootId, thread.id)
               }
             >
               <span

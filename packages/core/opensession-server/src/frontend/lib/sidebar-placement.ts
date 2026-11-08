@@ -14,7 +14,6 @@ import { wsPrApproved, wsPrMerged } from "./sidebar-lanes";
 import type { WsRow } from "./sidebar-types";
 
 export type SidebarPlacement =
-  | "space"
   | "snoozed"
   | "needs-review"
   | "approved-review"
@@ -142,10 +141,6 @@ export function classifySidebarPlacement(
   row: WsRow,
   context: SidebarPlacementContext,
 ): SidebarPlacement {
-  // A space is a standing conversation, not a piece of work moving through
-  // review lanes: it files into the Spaces band whenever it is in view.
-  if (row.workspace?.space)
-    return context.claimed || context.inStatusScope ? "space" : "outside";
   if (context.snoozed) return "snoozed";
 
   // "Add to sidebar" says this is your work now, so it files into Active

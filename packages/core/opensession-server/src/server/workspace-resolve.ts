@@ -213,7 +213,7 @@ export interface ResolvedWorkspace {
  * new record and the destination rendered “Workspace not found.”
  */
 export function workspaceBacksOpenPr(
-  workspace: Pick<Workspace, "repo" | "prNumber" | "branch">,
+  workspace: Pick<Workspace, "repo" | "prNumber" | "branch" | "branches">,
   openPrs: Array<{ repo: string; number: number; branch: string }>,
   defaultRepoId: string,
 ): boolean {
@@ -229,7 +229,9 @@ export function workspaceBacksOpenPr(
 export function openPrWorkspaceMatcher(
   openPrs: Array<{ repo: string; number: number; branch: string }>,
   defaultRepoId: string,
-): (workspace: Pick<Workspace, "repo" | "prNumber" | "branch">) => boolean {
+): (
+  workspace: Pick<Workspace, "repo" | "prNumber" | "branch" | "branches">,
+) => boolean {
   const byNumber = new Set<string>();
   const byBranch = new Set<string>();
   for (const pr of openPrs) {
@@ -237,8 +239,16 @@ export function openPrWorkspaceMatcher(
     byBranch.add(`${pr.repo}\u0000${pr.branch}`);
   }
   return (workspace) => {
-    if (workspace.prNumber === undefined && !workspace.branch) return false;
     const repo = workspace.repo || defaultRepoId;
+    // A thread's or stacked tab's branch (workspace.branches) keeps the
+    // workspace active while its PR is open, as the primary's does.
+    if (
+      workspace.branches?.some((b) =>
+        byBranch.has(`${b.repo || repo}\u0000${b.branch}`),
+      )
+    )
+      return true;
+    if (workspace.prNumber === undefined && !workspace.branch) return false;
     return workspace.prNumber !== undefined
       ? byNumber.has(`${repo}\u0000${workspace.prNumber}`)
       : byBranch.has(`${repo}\u0000${workspace.branch}`);

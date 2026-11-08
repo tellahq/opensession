@@ -78,8 +78,10 @@ interface SidePanelHostProps {
   browser?: ReactNode;
   portals: ReactNode;
   agents: ReactNode;
-  /** The Space tab's page, in a space's conversation only. */
-  space?: ReactNode;
+  /** The Threads tab's page, for a conversation with threads. */
+  threads?: ReactNode;
+  /** A coordinating session's Threads tab cannot be closed. */
+  pinnedThreads?: boolean;
 }
 
 const ICON = 15;
@@ -92,7 +94,7 @@ const NEW_TAB_STYLE: CSSProperties & { "--panel-w": string } = {
 
 function tabIcon(tab: SidePanelTab) {
   switch (tab) {
-    case "space":
+    case "threads":
       return <IconMessages size={ICON} className="shrink-0" />;
     case "changes":
       return <IconFile size={ICON} className="shrink-0" />;
@@ -109,7 +111,7 @@ function tabIcon(tab: SidePanelTab) {
 }
 
 const TAB_LABELS: Record<SidePanelTab, string> = {
-  space: "Space",
+  threads: "Threads",
   changes: "Changes",
   review: "Review",
   browser: "Browser",
@@ -155,7 +157,8 @@ export function SidePanelHost({
   browser,
   portals,
   agents,
-  space,
+  threads,
+  pinnedThreads,
 }: SidePanelHostProps) {
   const dropHover = useSyncExternalStore(
     subscribeSidePanel,
@@ -217,8 +220,8 @@ export function SidePanelHost({
                   <span className="truncate @max-[380px]:hidden">{name}</span>
                   {count(tab)}
                 </button>
-                {/* A space's own tab stays: it is the space, not a tool. */}
-                {tab !== "space" && (
+                {/* A coordinator's Threads tab stays: it is the work. */}
+                {!(tab === "threads" && pinnedThreads) && (
                   <button
                     type="button"
                     className={cn(
@@ -334,8 +337,8 @@ export function SidePanelHost({
           >
             {current === "new"
               ? newTabPage
-              : current === "space"
-                ? space
+              : current === "threads"
+                ? threads
                 : current === "changes"
                   ? changes
                   : current === "review"

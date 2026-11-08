@@ -14,8 +14,9 @@ export function canJoinCreateWorkspace(
     branch?: string;
   },
 ): boolean {
-  // A space's coordinator is a Scratch session even when the space has a
-  // project (server/spaces.ts): the project is where its threads run.
+  // A legacy space's coordinator is a Scratch session even when the space
+  // has a project (server/coordinator.ts): the project is where its
+  // threads run.
   if (workspace.space && destination.mode === "scratch") return true;
   if ((workspace.repo || undefined) !== (destination.repo || undefined))
     return false;

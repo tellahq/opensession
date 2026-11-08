@@ -143,8 +143,6 @@ import { SidebarCustomizeDialog } from "./sidebar/SidebarCustomizeDialog";
 import { SidebarItem } from "./sidebar/SidebarItem";
 import { SidebarToolsMenu } from "./sidebar/SidebarToolsMenu";
 import { WorkspaceContextMenu } from "./sidebar/WorkspaceContextMenu";
-import { NewSpaceDialog } from "./sidebar/NewSpaceDialog";
-import { SpacesBand } from "./sidebar/SpacesBand";
 import { useTeamPresence } from "./TeamPresence";
 import { githubLoginFor } from "./UserAvatar";
 import { useCurrentUser } from "./UserPicker";
@@ -269,7 +267,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   const [filterOpen, setFilterOpen] = useState(false);
   const [addProject, setAddProject] = useState<AddRepoMode | null>(null);
   const [customizeOpen, setCustomizeOpen] = useState(false);
-  const [newSpaceOpen, setNewSpaceOpen] = useState(false);
   const [filterButton, setFilterButton] = useState<HTMLButtonElement | null>(
     null,
   );
@@ -642,10 +639,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   const approvedReviewRows = rowsAtPlacement(placedWsRows, "approved-review");
   const awaitingReviewRows = rowsAtPlacement(placedWsRows, "awaiting-review");
   const focusWsRows = rowsAtPlacement(placedWsRows, "status");
-  // Spaces are long-lived conversations: the most recently active leads.
-  const spaceRows = rowsAtPlacement(placedWsRows, "space").sort(
-    (a, b) => Date.parse(b.lastActivity) - Date.parse(a.lastActivity),
-  );
   const snoozedWsRows = sortSnoozedWorkspaceRows(
     rowsAtPlacement(placedWsRows, "snoozed"),
     snoozes,
@@ -664,7 +657,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   // attention → In progress, drafts → Backlog, the rest → In progress).
   const githubLogin = githubLoginFor(currentUser);
   const workspaceRowsInView = [
-    ...spaceRows,
     ...activeFocusWsRows,
     ...pinnedWsRows,
     ...snoozedWsRows,
@@ -855,7 +847,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     // thing to say then. "Nothing here yet" would not be.
     filter.autoCreated === "hide";
   const workspaceListEmpty =
-    spaceRows.length === 0 &&
     needsReviewRows.length === 0 &&
     awaitingReviewRows.length === 0 &&
     approvedReviewRows.length === 0 &&
@@ -1560,20 +1551,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
                 )}
                 data-sidebar-list
               >
-                {/* Spaces lead the list: a space is where work is started and
-                    followed, and its + is the only way to start one, so it
-                    stays above the empty and loading states too. */}
-                {!(sessionsLoading && sessions.length === 0) && (
-                  <SpacesBand
-                    rows={spaceRows}
-                    open={isOpen("spaces:band")}
-                    searching={search.trim().length > 0}
-                    ownsSelection={rowOwnsSelection}
-                    renderRow={renderWsRow}
-                    onToggle={() => toggleGroup("spaces:band")}
-                    onNewSpace={() => setNewSpaceOpen(true)}
-                  />
-                )}
                 {sessionsLoading && sessions.length === 0 && (
                   <ListSkeleton
                     variant="bare"
@@ -1855,14 +1832,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
           )
         }
         onRepositoryOrderChange={setRepoOrder}
-      />
-      <NewSpaceDialog
-        open={newSpaceOpen}
-        onOpenChange={setNewSpaceOpen}
-        repos={registeredRepos}
-        // By id: the new coordinator is not in the session list yet, and
-        // openWorkspace would find the space empty and open a composer.
-        onCreated={({ sessionId }) => navigation.openSession(sessionId)}
       />
       {confirmDialog}
     </>

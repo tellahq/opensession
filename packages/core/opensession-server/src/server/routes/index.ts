@@ -24,6 +24,7 @@ import { handleScriptRoutes } from "./scripts";
 import { handleBuildRoutes } from "./builds";
 import { handleSessionAssetsRoutes } from "./session-assets";
 import { handleCommentThreadRoutes } from "./comment-threads";
+import { handleCoordinatorRoutes } from "./coordinator";
 import { handleSessionContextRoutes } from "./session-context";
 import { handleSessionVoiceRoutes } from "./session-voice";
 import { handleClientDiagnosticsRoutes } from "./client-diagnostics";
@@ -102,6 +103,7 @@ export const routeHandlers: RouteHandler[] = [
   // swallowed by broader matches.
   handleSessionAssetsRoutes,
   handleCommentThreadRoutes,
+  handleCoordinatorRoutes,
   handleSessionContextRoutes,
   handleSessionVoiceRoutes,
   handleComposerAutocompleteRoutes,

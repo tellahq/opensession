@@ -211,7 +211,7 @@ import { noteYouShouldKnowStep } from "./you-should-know";
 import { scheduleSessionHistoryIndex } from "./session-index";
 import { broadcastToSession, sessionWatchers } from "./ws-hub";
 import { peekWorkspace } from "./workspaces";
-import { spaceCoordinatorNoteFor } from "./spaces";
+import { coordinatorNoteFor } from "./coordinator";
 import {
   broadcastQueue,
   beginNextPromptDispatch,
@@ -3112,12 +3112,11 @@ async function runSessionPromptInner(
       "pinned-goal",
     )}\n\n${prompt}`;
   }
-  // A root session in a space coordinates it (spaces.ts). Like the goal, the
-  // briefing is session-level context, so it rides every turn fenced.
+  // Coordinator mode (coordinator.ts). Like the goal, the briefing is
+  // session-level context, so it rides every turn fenced.
   if (!session.automation) {
-    const spaceNote = await spaceCoordinatorNoteFor(session);
-    if (spaceNote)
-      prompt = `${wrapContext(spaceNote, "space-coordinator")}\n\n${prompt}`;
+    const note = await coordinatorNoteFor(session);
+    if (note) prompt = `${wrapContext(note, "coordinator")}\n\n${prompt}`;
   }
 
   const portalsNote =

@@ -6,11 +6,10 @@ import { repoLabel } from "../../lib/repo-label";
 import { useSessionRecords } from "../../lib/session-records";
 import {
   groupThreads,
-  isSpaceCoordinator,
-  spaceThreads,
+  sessionThreads,
   THREAD_STATE_LABEL,
   threadState,
-} from "../../lib/space-threads";
+} from "../../lib/session-threads";
 import { shortTime } from "../../lib/time";
 import { useWorkspaceRecord } from "../../lib/workspace-records";
 import type { CommentThread, UnifiedSession, Workspace } from "../../lib/types";
@@ -22,55 +21,56 @@ import { EmptyState } from "../../ui/state";
 import { IconFile, IconMessage, IconGear } from "../icons";
 import { RepoTile } from "../RepoTile";
 import { UserAvatar } from "../UserAvatar";
-import { SPACE_CAPTION } from "./space-classes";
-import { SpaceSettingsDialog } from "./SpaceSettingsDialog";
+import { THREAD_CAPTION } from "./thread-classes";
+import { WorkspaceSettingsDialog } from "../WorkspaceSettingsDialog";
 import { ThreadPane } from "./ThreadPane";
 import { HuddleButton } from "../huddle/HuddleButton";
-import {
-  closeSpaceThread,
-  useOpenSpaceThread,
-} from "../../lib/space-thread-view";
+import { closeThreadPane, useOpenThreadPane } from "../../lib/thread-view";
+import { useIsCoordinating } from "../../lib/coordinator-mode";
 import { ThreadRow } from "./ThreadRow";
 
-type SpaceTab = "threads" | "comments" | "artifacts";
+type PanelTab = "threads" | "comments" | "artifacts";
 
-/** The file the coordinator is told to keep current (server/spaces.ts). */
-const SUMMARY_ASSET = "space-summary.md";
+/** The file a coordinator is told to keep current (server/coordinator.ts),
+ *  and its name from before coordinator mode was a session setting. */
+const SUMMARY_ASSETS = new Set(["coordinator-summary.md", "space-summary.md"]);
+const isSummary = (path: string) => SUMMARY_ASSETS.has(path);
 
 /**
- * A space at a glance: who is in it, its threads by where they stand, the
- * conversation's comment threads, and the documents it keeps. It is the
- * desktop side panel's Space tab and the top of the phone's details page.
+ * The threads a conversation handed work to, at a glance: its workspace's
+ * goal and people, the threads by where they stand, the conversation's
+ * comment threads, and the documents it keeps. The desktop side panel's
+ * Threads tab and the top of the phone's details page.
  */
-export function SpacePanel({
+export function ThreadsPanel({
   workspace,
-  coordinatorId,
+  rootId,
   onOpenSession,
   onOpenAsset,
   showTitle = true,
 }: {
-  workspace: Workspace;
-  /** The space's conversation: its comments and artifacts live there. */
-  coordinatorId: string;
+  workspace: Workspace | null;
+  /** The conversation that started the threads. */
+  rootId: string;
   onOpenSession?: (id: string) => void;
   onOpenAsset?: (path: string) => void;
-  /** Off where the page around it already names the space. */
+  /** Off where the page around it already names the workspace. */
   showTitle?: boolean;
 }) {
-  const openThread = useOpenSpaceThread(coordinatorId);
+  const openThread = useOpenThreadPane(rootId);
   if (openThread)
     return (
       <ThreadPane
         key={openThread}
         threadId={openThread}
-        onBack={() => closeSpaceThread(coordinatorId)}
+        onBack={() => closeThreadPane(rootId)}
         onOpenSession={onOpenSession}
       />
     );
   return (
-    <SpaceOverview
+    <ThreadsOverview
       workspace={workspace}
-      coordinatorId={coordinatorId}
+      rootId={rootId}
       onOpenSession={onOpenSession}
       onOpenAsset={onOpenAsset}
       showTitle={showTitle}
@@ -78,81 +78,38 @@ export function SpacePanel({
   );
 }
 
-function SpaceOverview({
+function ThreadsOverview({
   workspace,
-  coordinatorId,
+  rootId,
   onOpenSession,
   onOpenAsset,
   showTitle,
 }: {
-  workspace: Workspace;
-  coordinatorId: string;
+  workspace: Workspace | null;
+  rootId: string;
   onOpenSession?: (id: string) => void;
   onOpenAsset?: (path: string) => void;
   showTitle: boolean;
 }) {
   const sessions = useSessionRecords();
-  const threads = spaceThreads(sessions, workspace.id);
-  const [tab, setTab] = useState<SpaceTab>("threads");
-  const [editing, setEditing] = useState(false);
-  const comments = useSpaceComments(coordinatorId);
-  const artifacts = useSpaceArtifacts(coordinatorId, sessions);
+  const threads = sessionThreads(sessions, rootId);
+  const [tab, setTab] = useState<PanelTab>("threads");
+  const comments = usePanelComments(rootId);
+  const artifacts = usePanelArtifacts(rootId, sessions);
   const shipped = threads.filter((t) => threadState(t) === "shipped").length;
-  const members = [
-    workspace.createdBy,
-    ...(workspace.collaborators ?? []).map((c) => c.name),
-  ].filter((name, i, all) => name && all.indexOf(name) === i);
 
   return (
     <div className="flex flex-col gap-3 px-3 pt-3 pb-6">
       <header className="flex flex-col gap-1.5 px-2">
-        <div className="flex min-w-0 items-center gap-2">
-          {showTitle && (
-            <h2 className="m-0 min-w-0 flex-1 truncate text-section-title font-semibold leading-tight text-fg">
-              {workspace.name}
-            </h2>
-          )}
-          <HuddleButton
-            target={{
-              roomId: `workspace:${workspace.id}`,
-              label: workspace.name,
-              sessionId: coordinatorId,
-            }}
+        {workspace && (
+          <WorkspaceHeading
+            workspace={workspace}
+            rootId={rootId}
+            showTitle={showTitle}
           />
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={<IconGear size={20} />}
-            aria-label="Space settings"
-            className={cn("phone:min-h-11", !showTitle && "ml-auto")}
-            onClick={() => setEditing(true)}
-          >
-            Settings
-          </Button>
-        </div>
-        {workspace.goal && (
-          <p className="m-0 whitespace-pre-line text-supporting text-fg">
-            {workspace.goal}
-          </p>
         )}
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-meta text-dim">
-          <span className="flex min-w-0 items-center gap-1.5">
-            {workspace.repo && <RepoTile name={workspace.repo} size={14} />}
-            <span className="truncate">
-              {workspace.repo ? repoLabel(workspace.repo) : "No project"}
-            </span>
-          </span>
-          <span className="flex items-center" aria-label="Members">
-            {members.map((name, i) => (
-              <UserAvatar
-                key={name}
-                name={name}
-                size={18}
-                title={name}
-                className={cn(i > 0 && "-ml-1")}
-              />
-            ))}
-          </span>
+          {workspace && <WorkspaceFacts workspace={workspace} />}
           {threads.length > 0 && (
             <span className="tabular-nums">
               {shipped} shipped · {threads.length - shipped} open
@@ -164,14 +121,8 @@ function SpaceOverview({
         )}
       </header>
 
-      <SpaceSettingsDialog
-        workspace={workspace}
-        open={editing}
-        onOpenChange={setEditing}
-      />
-
       <Segmented
-        label="Space"
+        label="Threads panel"
         value={tab}
         onValueChange={(value) => {
           if (
@@ -206,6 +157,86 @@ function SpaceOverview({
   );
 }
 
+/** The workspace's name, huddle and settings, then its goal. */
+function WorkspaceHeading({
+  workspace,
+  rootId,
+  showTitle,
+}: {
+  workspace: Workspace;
+  rootId: string;
+  showTitle: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  return (
+    <>
+      <div className="flex min-w-0 items-center gap-2">
+        {showTitle && (
+          <h2 className="m-0 min-w-0 flex-1 truncate text-section-title font-semibold leading-tight text-fg">
+            {workspace.name}
+          </h2>
+        )}
+        <HuddleButton
+          target={{
+            roomId: `workspace:${workspace.id}`,
+            label: workspace.name,
+            sessionId: rootId,
+          }}
+        />
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={<IconGear size={20} />}
+          aria-label="Workspace settings"
+          className={cn("phone:min-h-11", !showTitle && "ml-auto")}
+          onClick={() => setEditing(true)}
+        >
+          Settings
+        </Button>
+      </div>
+      {workspace.goal && (
+        <p className="m-0 whitespace-pre-line text-supporting text-fg">
+          {workspace.goal}
+        </p>
+      )}
+      <WorkspaceSettingsDialog
+        workspace={workspace}
+        open={editing}
+        onOpenChange={setEditing}
+      />
+    </>
+  );
+}
+
+/** Project and people, on the panel's meta line. */
+function WorkspaceFacts({ workspace }: { workspace: Workspace }) {
+  const members = [
+    workspace.createdBy,
+    ...(workspace.collaborators ?? []).map((c) => c.name),
+  ].filter((name, i, all) => name && all.indexOf(name) === i);
+  return (
+    <>
+      <span className="flex min-w-0 items-center gap-1.5">
+        {workspace.repo && <RepoTile name={workspace.repo} size={14} />}
+        <span className="truncate">
+          {workspace.repo ? repoLabel(workspace.repo) : "No project"}
+        </span>
+      </span>
+      <span className="flex items-center" aria-label="Members">
+        {members.map((name, i) => (
+          <UserAvatar
+            key={name}
+            name={name}
+            size={18}
+            title={name}
+            className={cn(i > 0 && "-ml-1")}
+          />
+        ))}
+      </span>
+    </>
+  );
+}
+
 function Count({ n }: { n: number }) {
   return <span className="tabular-nums text-faint">{n}</span>;
 }
@@ -236,14 +267,15 @@ function ThreadGroups({
   if (threads.length === 0)
     return (
       <EmptyState className="py-8">
-        No threads yet. The agent starts one for each piece of work you give it.
+        No threads yet. In coordinator mode the agent starts one for each piece
+        of work you give it.
       </EmptyState>
     );
   return (
     <div className="flex flex-col">
       {groupThreads(threads).map((group) => (
         <section key={group.state} aria-label={THREAD_STATE_LABEL[group.state]}>
-          <div className={SPACE_CAPTION}>
+          <div className={THREAD_CAPTION}>
             {THREAD_STATE_LABEL[group.state]}
             <Count n={group.threads.length} />
           </div>
@@ -321,21 +353,21 @@ function ArtifactList({
   if (files.length === 0)
     return (
       <EmptyState className="py-8">
-        No artifacts yet. The agent keeps the space's summary here.
+        No artifacts yet. A coordinator keeps its summary here.
       </EmptyState>
     );
   return (
     <div className="flex flex-col">
       {files.map((file) => (
         <ListRow key={file.path} onClick={() => onOpen?.(file.path)}>
-          {file.path === SUMMARY_ASSET ? (
+          {isSummary(file.path) ? (
             <IconMessage size={18} className="mt-px shrink-0 text-dim" />
           ) : (
             <IconFile size={18} className="mt-px shrink-0 text-dim" />
           )}
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="truncate text-label text-fg">
-              {file.path === SUMMARY_ASSET ? "Space summary" : file.path}
+              {isSummary(file.path) ? "Summary" : file.path}
             </span>
             {file.description && (
               <span className="line-clamp-2 text-meta text-dim">
@@ -354,7 +386,7 @@ function ArtifactList({
 
 /** The conversation's comment threads, refreshed when the window regains
  *  focus. The transcript's live copy is the session viewer's own. */
-function useSpaceComments(sessionId: string) {
+function usePanelComments(sessionId: string) {
   const [threads, setThreads] = useState<CommentThread[] | null>(null);
   useEffect(() => {
     let live = true;
@@ -385,7 +417,7 @@ function useSpaceComments(sessionId: string) {
  * The conversation's assets, summary first. Refetched when its session list
  * row moves, which is when the agent may have written one.
  */
-function useSpaceArtifacts(
+function usePanelArtifacts(
   sessionId: string,
   sessions: readonly UnifiedSession[],
 ) {
@@ -399,8 +431,7 @@ function useSpaceArtifacts(
         setFiles(
           [...next].sort(
             (a, b) =>
-              Number(b.path === SUMMARY_ASSET) -
-                Number(a.path === SUMMARY_ASSET) ||
+              Number(isSummary(b.path)) - Number(isSummary(a.path)) ||
               Date.parse(b.mtime) - Date.parse(a.mtime),
           ),
         );
@@ -414,11 +445,11 @@ function useSpaceArtifacts(
 }
 
 /**
- * The phone's place for the panel: the top of a space conversation's details
- * page, where the desktop puts it in the side panel. Renders nothing for any
- * other session.
+ * The phone's place for the panel: the top of a conversation's details page,
+ * where the desktop puts it in the side panel. Shown for a coordinating
+ * session or one that has started threads; nothing for any other.
  */
-export function SpaceDetailsSection({
+export function ThreadsDetailsSection({
   session,
   onOpenSession,
   onOpenAsset,
@@ -431,11 +462,14 @@ export function SpaceDetailsSection({
   onLeave: () => void;
 }) {
   const workspace = useWorkspaceRecord(session.workspaceId ?? null);
-  if (!workspace || !isSpaceCoordinator(session, workspace)) return null;
+  const sessions = useSessionRecords();
+  const hasThreads = sessions.some((s) => s.parentSessionId === session.id);
+  const coordinating = useIsCoordinating(session, workspace);
+  if (!hasThreads && !coordinating) return null;
   return (
-    <SpacePanel
+    <ThreadsPanel
       workspace={workspace}
-      coordinatorId={session.id}
+      rootId={session.id}
       showTitle={false}
       onOpenSession={
         onOpenSession &&

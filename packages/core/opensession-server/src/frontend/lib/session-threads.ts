@@ -1,8 +1,7 @@
 /**
- * A space's threads: the sessions its coordinator (and their own children)
- * started inside the space's workspace (server/spaces.ts). Pure, so the
- * grouping, status lines and the "since you were last here" recap can be
- * tested without a browser.
+ * A session's threads: the sessions it started (and their own children),
+ * which coordinator mode hands work to (server/coordinator.ts). Pure, so the
+ * grouping and status lines can be tested without a browser.
  */
 
 import {
@@ -31,36 +30,47 @@ export const THREAD_STATE_LABEL: Record<ThreadState, string> = {
   shipped: "Shipped",
 };
 
-/** Whether `workspace` is a space. */
-export function isSpaceWorkspace(
-  workspace: Pick<Workspace, "space"> | null | undefined,
-): boolean {
-  return workspace?.space === true;
-}
-
-/** Whether `session` is a root (coordinator) session of the space it sits in. */
-export function isSpaceCoordinator(
-  session: Pick<UnifiedSession, "parentSessionId" | "workspaceId">,
+/**
+ * Whether `session` is in coordinator mode. Its own setting wins; without
+ * one, the root session of a legacy space workspace coordinates.
+ */
+export function isCoordinating(
+  session: Pick<
+    UnifiedSession,
+    "coordinator" | "parentSessionId" | "workspaceId"
+  >,
   workspace: Pick<Workspace, "id" | "space"> | null | undefined,
 ): boolean {
+  if (session.coordinator !== undefined) return session.coordinator;
   return (
-    isSpaceWorkspace(workspace) &&
+    workspace?.space === true &&
     !session.parentSessionId &&
-    session.workspaceId === workspace?.id
+    session.workspaceId === workspace.id
   );
 }
 
-/** Every thread in the space: its sessions that have a parent, newest first. */
-export function spaceThreads(
+/** The sessions `rootId` started, and theirs in turn, newest first. */
+export function sessionThreads(
   sessions: readonly UnifiedSession[],
-  workspaceId: string,
+  rootId: string,
 ): UnifiedSession[] {
-  return sessions
-    .filter(
-      (session) =>
-        session.workspaceId === workspaceId && !!session.parentSessionId,
-    )
-    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  const inside = new Set([rootId]);
+  const out: UnifiedSession[] = [];
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const session of sessions)
+      if (
+        session.parentSessionId &&
+        inside.has(session.parentSessionId) &&
+        !inside.has(session.id)
+      ) {
+        inside.add(session.id);
+        out.push(session);
+        grew = true;
+      }
+  }
+  return out.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }
 
 export function threadState(session: UnifiedSession): ThreadState {
@@ -127,42 +137,7 @@ export function groupThreads(threads: readonly UnifiedSession[]) {
   return groups;
 }
 
-/** What changed in a space since a person last looked at it. */
-export interface SpaceRecap {
-  started: UnifiedSession[];
-  shipped: UnifiedSession[];
-  ready: UnifiedSession[];
-  blocked: UnifiedSession[];
-}
-
-/**
- * The recap for someone who last looked at the space at `seenAt` (ms epoch).
- * Blocked threads count whenever they changed since; they are what needs the
- * person. Null when nothing changed, or when they have never looked.
- */
-export function spaceRecap(
-  threads: readonly UnifiedSession[],
-  seenAt: number | null,
-): SpaceRecap | null {
-  if (seenAt === null) return null;
-  const changed = threads.filter(
-    (thread) => Date.parse(thread.lastActivity) > seenAt,
-  );
-  const recap: SpaceRecap = {
-    started: changed.filter((thread) => Date.parse(thread.createdAt) > seenAt),
-    shipped: changed.filter((thread) => threadState(thread) === "shipped"),
-    ready: changed.filter((thread) => threadState(thread) === "ready"),
-    blocked: changed.filter((thread) => threadState(thread) === "blocked"),
-  };
-  const empty =
-    !recap.started.length &&
-    !recap.shipped.length &&
-    !recap.ready.length &&
-    !recap.blocked.length;
-  return empty ? null : recap;
-}
-
-const SEEN_KEY = "opensession-space-seen";
+const SEEN_KEY = "opensession-threads-seen";
 const seenSchema = z.record(z.string(), z.number());
 
 function readSeen(storage: Pick<Storage, "getItem">) {
@@ -176,23 +151,24 @@ function readSeen(storage: Pick<Storage, "getItem">) {
   }
 }
 
-/** When this browser last had `workspaceId`'s space on screen (ms epoch). */
-export function spaceSeenAt(
-  workspaceId: string,
+/** When this browser last had `sessionId` on screen, for its threads'
+ *  catch-up (ms epoch). */
+export function threadsSeenAt(
+  sessionId: string,
   storage: Pick<Storage, "getItem"> = localStorage,
 ): number | null {
-  return readSeen(storage)[workspaceId] ?? null;
+  return readSeen(storage)[sessionId] ?? null;
 }
 
-export function markSpaceSeen(
-  workspaceId: string,
+export function markThreadsSeen(
+  sessionId: string,
   at: number,
   storage: Pick<Storage, "getItem" | "setItem"> = localStorage,
 ): void {
   const seen = readSeen(storage);
-  delete seen[workspaceId];
-  seen[workspaceId] = at;
-  // Keep the newest 200 spaces.
+  delete seen[sessionId];
+  seen[sessionId] = at;
+  // Keep the newest 200.
   const kept = Object.fromEntries(Object.entries(seen).slice(-200));
   try {
     storage.setItem(SEEN_KEY, JSON.stringify(kept));

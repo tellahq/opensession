@@ -50,7 +50,7 @@ import { WorkflowPanel } from "../WorkflowPanel";
 import { WorkspaceSummary, WorkspaceSummaryBody } from "../WorkspaceSummary";
 import { CollaboratorsSubmenu } from "../WorkspaceCollaborators";
 import { WorkspaceWaiting } from "./busy-indicators";
-import { SpaceDetailsSection } from "../space/SpacePanel";
+import { ThreadsDetailsSection } from "../threads/ThreadsPanel";
 import {
   IconArchive,
   IconChevronRight,
@@ -1375,7 +1375,7 @@ export function SessionViewerChrome({
                           </div>
                         </div>
                         <div className={INFO_CONTENT}>
-                          <SpaceDetailsSection
+                          <ThreadsDetailsSection
                             session={session}
                             onOpenSession={openSession}
                             onOpenAsset={openAssetFromTranscript}

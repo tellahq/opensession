@@ -157,7 +157,9 @@ export function sessionlessWorkspacePanes(
     workspace.prNumber !== undefined || workspace.key?.startsWith("ghpr-");
   const panes: WorkspacePaneTab[] = [];
   if (
-    (workspace.prNumber !== undefined || !!workspace.branch) &&
+    (workspace.prNumber !== undefined ||
+      !!workspace.branch ||
+      !!workspace.branches?.length) &&
     (options.reviewOpen.has(workspaceKey) ||
       (reviewIsDefault && !options.reviewClosed.has(workspaceKey)))
   ) {

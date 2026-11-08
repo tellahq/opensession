@@ -8,7 +8,7 @@ import {
   THREAD_STATE_LABEL,
   threadState,
   threadStatusLine,
-} from "../../lib/space-threads";
+} from "../../lib/session-threads";
 import type { TranscriptEntry } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
@@ -18,7 +18,7 @@ import { toast } from "../../ui/toast";
 import { IconArrowUpRight, IconChevronLeft } from "../icons";
 import { TranscriptBlocks } from "../TranscriptBlocks";
 import { getCurrentUser } from "../UserPicker";
-import { THREAD_DOT } from "./space-classes";
+import { THREAD_DOT } from "./thread-classes";
 
 /** How many of the thread's latest entries the pane reads. */
 const TAIL = 400;
@@ -26,9 +26,9 @@ const TAIL = 400;
 const POLL_MS = 2_000;
 
 /**
- * A thread opened beside its space's conversation: where it stands, its
+ * A thread opened beside the conversation that started it: where it stands, its
  * conversation, and a box to keep iterating with its agent, without leaving
- * the space. "Open" takes the whole window when the thread needs more room
+ * it. "Open" takes the whole window when the thread needs more room
  * (its review, its browser, its terminal).
  */
 export function ThreadPane({
@@ -69,7 +69,7 @@ export function ThreadPane({
             className="-ml-1.5 phone:min-h-11"
             onClick={onBack}
           >
-            Space
+            Threads
           </Button>
           <span className="flex-1" />
           {onOpenSession && (

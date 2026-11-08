@@ -115,6 +115,9 @@ export interface SessionTabsActions {
     mode: "share" | "stack" | "ask",
     origin?: NewTabMorphOrigin,
   ) => void;
+  /** Start a session on another branch the workspace's sessions work on (a
+   *  thread's, a stacked tab's), joining that branch's checkout. */
+  newSessionOnBranch?: (ref: { repo: string; branch: string }) => void;
   /** Rename a session (double-click the title); empty title resets it. */
   rename: (id: string, title: string) => void;
   /** Close (archive) a session — the × revealed on hover. */

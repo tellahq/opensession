@@ -95,6 +95,7 @@ import {
   IconChevronDown,
   IconChevronRight,
   IconChecklist,
+  IconDelegate,
   IconGlobe,
   IconConnections,
   IconDotsHorizontal,
@@ -512,6 +513,7 @@ export function NewSession({
   // Pstack mode: the pstack playbooks and skills load for every turn. Off by
   // default so an ordinary session never sees them.
   const [pstackMode, setPstackMode] = useState(false);
+  const [coordinator, setCoordinator] = useState(false);
   // Start the repo's Portal with the session, so its dev server comes up
   // while the agent works instead of when someone first opens it.
   const [startPortal, setStartPortal] = useState(false);
@@ -1195,6 +1197,7 @@ export function NewSession({
       createMessage.speed = speed;
     }
     if (pstackMode) createMessage.pstackMode = true;
+    if (coordinator) createMessage.coordinator = true;
     // Only an explicit choice is sent; otherwise the repository decides.
     if (showShipChoice && shipChoice?.repo === createRepo)
       createMessage.shipMode = shipChoice.mode;
@@ -1752,6 +1755,7 @@ export function NewSession({
                       (branchPicked ||
                         sandboxProvider ||
                         pstackMode ||
+                        coordinator ||
                         (showShipChoice && shipMode !== repoShipMode) ||
                         (repoPortal && startPortal) ||
                         modelEngine(effectiveModelId) !== "pi" ||
@@ -1972,6 +1976,19 @@ export function NewSession({
                       <span className="truncate">Pstack mode</span>
                     </span>
                     <Menu.Check on={pstackMode} className="text-dim" />
+                  </Menu.CheckboxItem>
+                  <Menu.CheckboxItem
+                    checked={coordinator}
+                    closeOnClick={false}
+                    onCheckedChange={setCoordinator}
+                    className="justify-between gap-3"
+                    title="Hand work to threads by default and track them here"
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <IconDelegate className="shrink-0 text-dim" size={20} />
+                      <span className="truncate">Coordinator mode</span>
+                    </span>
+                    <Menu.Check on={coordinator} className="text-dim" />
                   </Menu.CheckboxItem>
                   <Menu.SubmenuRoot>
                     <Menu.SubmenuTrigger className="justify-between gap-3">

@@ -28,6 +28,7 @@ import { touchNativeSession } from "../session-cache";
 import {
   DEMO_ASK_ENGINE_SESSION_ID,
   DEMO_ASK_SESSION_ID,
+  DEMO_BRANCH,
   DEMO_REPO_ID,
   DEMO_SPACE_WORKSPACE_ID,
   demoAskQuestions,
@@ -111,19 +112,28 @@ export async function seedDemoDataset(): Promise<void> {
   }
 }
 
-/** The demo space's workspace record, which the session files point at. */
+/** The demo coordinator's workspace record, which the session files point at. */
 async function seedDemoSpace(): Promise<void> {
-  const { addWorkspaceCollaborator, createWorkspace, getWorkspace } =
-    await import("../workspaces");
+  const {
+    addWorkspaceCollaborator,
+    createWorkspace,
+    getWorkspace,
+    recordWorkspaceBranch,
+  } = await import("../workspaces");
   if (await getWorkspace(DEMO_SPACE_WORKSPACE_ID)) return;
   await createWorkspace({
     id: DEMO_SPACE_WORKSPACE_ID,
     name: "Spaces v1 launch",
     repo: DEMO_REPO_ID,
     createdBy: "Alex",
-    space: true,
+    goal: "Launch the todo app on mobile by Friday with no known upload bugs.",
   });
   await addWorkspaceCollaborator(DEMO_SPACE_WORKSPACE_ID, "Sam", "Alex");
+  // The thread with a PR works on its own branch.
+  await recordWorkspaceBranch(DEMO_SPACE_WORKSPACE_ID, {
+    repo: DEMO_REPO_ID,
+    branch: DEMO_BRANCH,
+  });
 }
 
 /**

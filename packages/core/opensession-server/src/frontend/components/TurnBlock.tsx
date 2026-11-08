@@ -34,8 +34,8 @@ import {
   type SuggestedTask,
 } from "@tellahq/opensession-protocol/tool-presentation";
 import { unplacedMedia } from "../lib/placed-media";
-import { spawnedThreadId, spawnedThreadPrompt } from "../lib/space-threads";
-import { ThreadCards, type SpawnedThread } from "./space/ThreadCards";
+import { spawnedThreadId, spawnedThreadPrompt } from "../lib/session-threads";
+import { ThreadCards, type SpawnedThread } from "./threads/ThreadCards";
 import { IconChevronDown, IconStack } from "./icons";
 import { cn } from "../ui/cn";
 import { Fold } from "../ui/fold";

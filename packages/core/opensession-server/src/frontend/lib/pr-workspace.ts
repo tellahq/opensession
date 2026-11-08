@@ -26,6 +26,10 @@ export function workspaceCarriedPrKeys(workspace: Workspace): string[] {
   if (workspace.prNumber != null)
     keys.push(prNumberKey(repo, workspace.prNumber));
   if (workspace.branch) keys.push(prBranchKey(repo, workspace.branch));
+  // The other branches its sessions work on: a thread's or stacked tab's PR
+  // belongs here too.
+  for (const extra of workspace.branches ?? [])
+    keys.push(prBranchKey(extra.repo || repo, extra.branch));
   return keys;
 }
 
@@ -93,4 +97,30 @@ export function findPrWorkspaceId(
       : record.id;
   }
   return (person ?? carriers[0])?.workspaceId ?? null;
+}
+
+/** One branch a workspace's sessions work on. */
+export interface WorkspaceBranchRef {
+  repo: string;
+  branch: string;
+}
+
+/**
+ * Every branch of a workspace, its primary first: the checkout share-mode
+ * tabs join, then the branches threads and stacked tabs added. A coordinator
+ * workspace may have no primary, only the list.
+ */
+export function workspaceBranchList(
+  workspace: Pick<Workspace, "repo" | "branch" | "branches">,
+): WorkspaceBranchRef[] {
+  const repo = workspace.repo || DEFAULT_REPO_ID;
+  const out: WorkspaceBranchRef[] = workspace.branch
+    ? [{ repo, branch: workspace.branch }]
+    : [];
+  for (const extra of workspace.branches ?? []) {
+    const ref = { repo: extra.repo || repo, branch: extra.branch };
+    if (!out.some((b) => b.repo === ref.repo && b.branch === ref.branch))
+      out.push(ref);
+  }
+  return out;
 }

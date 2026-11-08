@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
+import { workspaceBranchList } from "../lib/pr-workspace";
+import { useWorkspaceRecord } from "../lib/workspace-records";
 import { useShortcutLabel } from "../hooks/useShortcutBindings";
 import { Reorder, useReducedMotion } from "motion/react";
 import type { UnifiedSession } from "../lib/types";
@@ -176,6 +178,9 @@ export function SessionTabs({
     order: tabOrder,
     views: viewTabs,
   } = content;
+  const tabsWorkspace = useWorkspaceRecord(
+    tabs.find((session) => session.workspaceId)?.workspaceId ?? null,
+  );
   const {
     inSplit,
     showHistory = true,
@@ -194,6 +199,7 @@ export function SessionTabs({
     selectView: onSelectView,
     closeView: onCloseView,
     newSession: onNewSession,
+    newSessionOnBranch: onNewSessionOnBranch,
     rename: onRename,
     close: onClose,
     delete: onDelete,
@@ -357,6 +363,14 @@ export function SessionTabs({
 
   // Plain-click shares the workspace worktree. The standard context menu owns
   // right-click positioning, dismissal, focus and keyboard behavior.
+  // Other branches this workspace's sessions work on (a coordinator's
+  // threads, stacked tabs), each a place a new session can join.
+  const activeBranch = tabs.find((s) => s.id === activeId)?.branch;
+  const otherBranches = tabsWorkspace
+    ? workspaceBranchList(tabsWorkspace).filter(
+        (ref) => ref.branch !== activeBranch,
+      )
+    : [];
   const newTabButton = onNewSession && (
     <ContextMenu.Root>
       <ContextMenu.Trigger
@@ -398,6 +412,17 @@ export function SessionTabs({
         <ContextMenu.Item onClick={() => onNewSession("ask")}>
           New session · ask (no worktree)
         </ContextMenu.Item>
+        {onNewSessionOnBranch &&
+          otherBranches.map((ref) => (
+            <ContextMenu.Item
+              key={`${ref.repo}:${ref.branch}`}
+              onClick={() => onNewSessionOnBranch(ref)}
+            >
+              <span className="min-w-0 truncate">
+                New session · on {ref.branch}
+              </span>
+            </ContextMenu.Item>
+          ))}
       </ContextMenu.Popup>
     </ContextMenu.Root>
   );

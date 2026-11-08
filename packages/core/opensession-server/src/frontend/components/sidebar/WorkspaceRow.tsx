@@ -45,6 +45,7 @@ import { ReviewAskerFace } from "../ReviewAskerFace";
 import { UserAvatar } from "../UserAvatar";
 import { IconArchive, IconMoon, IconPin, IconTrash } from "../icons";
 import { AutoCreatedMark } from "./AutoCreatedMark";
+import { CoordinatorMark, rowCoordinates } from "./CoordinatorMark";
 import {
   RunTicker,
   SnoozeBadge,
@@ -473,6 +474,7 @@ export function WorkspaceRow({
             a Slack thread, a Linear issue. Same slot and ink as the mark
             above (SidebarItem carries the session-row half). */}
         {!editing && <OriginMark source={rowOriginSource(row)} />}
+        {!editing && rowCoordinates(row) && <CoordinatorMark />}
         {row.mention &&
           !editing && (
             // Same badge as a session row (SidebarItem): the face of whoever

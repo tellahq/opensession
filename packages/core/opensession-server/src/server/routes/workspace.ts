@@ -82,7 +82,6 @@ import {
   openPrWorkspaceMatcher,
 } from "../workspace-resolve";
 import { resolveModel } from "../models";
-import { createSpace, SpaceInputError } from "../spaces";
 import {
   REPOS,
   createWorktree,
@@ -623,80 +622,6 @@ export async function handleWorkspaceRoutes(
       ...(draft ? { draft } : {}),
     });
     return Response.json({ workspace });
-  }
-
-  // A space's catch-up since the reader last looked (space-recap.ts).
-  const recapMatch = path.match(/^\/api\/spaces\/([^/]+)\/recap$/);
-  if (recapMatch && req.method === "POST") {
-    const body = (await req.json().catch(() => ({}))) as {
-      since?: unknown;
-      user?: unknown;
-    };
-    const since = Number(body.since);
-    if (!Number.isFinite(since) || since <= 0)
-      return Response.json({ error: "since is required" }, { status: 400 });
-    const { spaceRecap } = await import("../space-recap");
-    return Response.json(
-      await spaceRecap(
-        decodeURIComponent(recapMatch[1]!),
-        since,
-        requestUser(ctx, body.user),
-      ),
-    );
-  }
-
-  // A space and its coordinator in one request (spaces.ts): title, optional
-  // project, and the first message. Responds with the coordinator's id so
-  // the client opens the conversation it just started.
-  if (path === "/api/spaces" && req.method === "POST") {
-    const body = (await req.json().catch(() => ({}))) as {
-      title?: unknown;
-      repo?: unknown;
-      prompt?: unknown;
-      user?: unknown;
-      goal?: unknown;
-      sharedWith?: unknown;
-    };
-    const repo =
-      typeof body.repo === "string" && body.repo && body.repo !== NO_REPO
-        ? body.repo
-        : undefined;
-    if (repo) {
-      try {
-        getRepo(repo);
-      } catch {
-        return Response.json(
-          { error: "That project is not registered" },
-          { status: 400 },
-        );
-      }
-    }
-    try {
-      const { workspace, sessionId } = await createSpace({
-        title: typeof body.title === "string" ? body.title : "",
-        prompt: typeof body.prompt === "string" ? body.prompt : "",
-        ...(repo ? { repo } : {}),
-        ...(typeof body.goal === "string" ? { goal: body.goal } : {}),
-        sharedWith: Array.isArray(body.sharedWith)
-          ? body.sharedWith.filter((n): n is string => typeof n === "string")
-          : [],
-        user: requestUser(ctx, body.user) || "Anonymous",
-        ...(ctx.authUser?.login ? { createdByLogin: ctx.authUser.login } : {}),
-      });
-      return Response.json({ workspace, sessionId });
-    } catch (error) {
-      if (error instanceof SpaceInputError)
-        return Response.json({ error: error.message }, { status: 400 });
-      return Response.json(
-        {
-          error:
-            error instanceof Error
-              ? error.message
-              : "Couldn't create the space",
-        },
-        { status: 500 },
-      );
-    }
   }
 
   // Resolve-or-create the ONE workspace for a PR or a Plain support ticket

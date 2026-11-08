@@ -1,15 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import {
   groupThreads,
-  isSpaceCoordinator,
-  markSpaceSeen,
-  spaceRecap,
-  spaceSeenAt,
-  spaceThreads,
+  isCoordinating,
+  markThreadsSeen,
+  sessionThreads,
   spawnedThreadId,
   threadState,
   threadStatusLine,
-} from "./space-threads";
+  threadsSeenAt,
+} from "./session-threads";
 import type { UnifiedSession } from "./types";
 
 function session(
@@ -32,31 +31,47 @@ function session(
   };
 }
 
-describe("space threads", () => {
-  test("are the space's sessions with a parent, newest first", () => {
-    const threads = spaceThreads(
+describe("session threads", () => {
+  test("are what the session started, and theirs in turn, newest first", () => {
+    const threads = sessionThreads(
       [
         session("bks-root", { parentSessionId: undefined }),
         session("old", { createdAt: "2026-11-07T08:00:00Z" }),
         session("new", { createdAt: "2026-11-07T09:30:00Z" }),
-        session("elsewhere", { workspaceId: "ws-other" }),
+        session("grandchild", {
+          parentSessionId: "old",
+          createdAt: "2026-11-07T08:30:00Z",
+        }),
+        session("elsewhere", { parentSessionId: "bks-other" }),
       ],
-      "ws-space",
+      "bks-root",
     );
-    expect(threads.map((thread) => thread.id)).toEqual(["new", "old"]);
+    expect(threads.map((thread) => thread.id)).toEqual([
+      "new",
+      "grandchild",
+      "old",
+    ]);
   });
 
-  test("only a root session in a space coordinates it", () => {
-    const space = { id: "ws-space", space: true as const };
-    expect(isSpaceCoordinator({ workspaceId: "ws-space" }, space)).toBe(true);
+  test("a session's own coordinator setting wins", () => {
+    expect(isCoordinating({ coordinator: true }, null)).toBe(true);
+    const legacy = { id: "ws-space", space: true as const };
     expect(
-      isSpaceCoordinator(
+      isCoordinating({ coordinator: false, workspaceId: "ws-space" }, legacy),
+    ).toBe(false);
+  });
+
+  test("a legacy space's root session coordinates, its threads do not", () => {
+    const legacy = { id: "ws-space", space: true as const };
+    expect(isCoordinating({ workspaceId: "ws-space" }, legacy)).toBe(true);
+    expect(
+      isCoordinating(
         { workspaceId: "ws-space", parentSessionId: "bks-root" },
-        space,
+        legacy,
       ),
     ).toBe(false);
     expect(
-      isSpaceCoordinator({ workspaceId: "ws-space" }, { id: "ws-space" }),
+      isCoordinating({ workspaceId: "ws-space" }, { id: "ws-space" }),
     ).toBe(false);
   });
 });
@@ -101,45 +116,16 @@ describe("threadState", () => {
   });
 });
 
-describe("spaceRecap", () => {
-  const seen = Date.parse("2026-11-07T09:45:00Z");
-
-  test("is null on a first visit or when nothing changed", () => {
-    expect(spaceRecap([session("a")], null)).toBeNull();
-    expect(
-      spaceRecap(
-        [session("a", { lastActivity: "2026-11-07T09:00:00Z" })],
-        seen,
-      ),
-    ).toBeNull();
-  });
-
-  test("lists what started, shipped, got ready, or got blocked since", () => {
-    const recap = spaceRecap(
-      [
-        session("started", { createdAt: "2026-11-07T09:50:00Z" }),
-        session("shipped", { prState: "MERGED" }),
-        session("ready", { prState: "OPEN" }),
-        session("stuck", { waitingForInput: true }),
-        session("quiet", { lastActivity: "2026-11-07T09:00:00Z" }),
-      ],
-      seen,
-    );
-    expect(recap?.started.map((s) => s.id)).toEqual(["started"]);
-    expect(recap?.shipped.map((s) => s.id)).toEqual(["shipped"]);
-    expect(recap?.ready.map((s) => s.id)).toEqual(["ready"]);
-    expect(recap?.blocked.map((s) => s.id)).toEqual(["stuck"]);
-  });
-
+describe("threads seen", () => {
   test("the seen time round-trips through storage", () => {
     const store = new Map<string, string>();
     const storage = {
       getItem: (key: string) => store.get(key) ?? null,
       setItem: (key: string, value: string) => void store.set(key, value),
     };
-    expect(spaceSeenAt("ws-space", storage)).toBeNull();
-    markSpaceSeen("ws-space", 42, storage);
-    expect(spaceSeenAt("ws-space", storage)).toBe(42);
+    expect(threadsSeenAt("bks-root", storage)).toBeNull();
+    markThreadsSeen("bks-root", 42, storage);
+    expect(threadsSeenAt("bks-root", storage)).toBe(42);
   });
 });
 

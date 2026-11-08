@@ -478,6 +478,8 @@ export type ProtocolClientMessage =
       speed?: SessionSpeed;
       /** Start in pstack mode: the pstack skill family loads for every turn. */
       pstackMode?: boolean;
+      /** Start in coordinator mode: hand work to threads instead of doing it. */
+      coordinator?: boolean;
       /** Start the repository's first Portal once the workspace is ready. */
       startPortal?: boolean;
       /** Pinned provider account; omitted means automatic pool selection. */

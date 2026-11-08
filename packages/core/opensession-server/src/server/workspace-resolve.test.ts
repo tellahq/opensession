@@ -124,6 +124,31 @@ describe("workspaceBacksOpenPr", () => {
     expect(workspaceBacksOpenPr({ repo: repoId }, openPrs, repoId)).toBe(false);
   });
 
+  test("a PR on any of the workspace's branches keeps it active", () => {
+    const at = "2026-11-08T00:00:00.000Z";
+    expect(
+      workspaceBacksOpenPr(
+        {
+          repo: repoId,
+          prNumber: 1,
+          branch: "primary",
+          branches: [
+            { repo: repoId, branch: "skip-running-next-fallbacks", at },
+          ],
+        },
+        openPrs,
+        repoId,
+      ),
+    ).toBe(true);
+    expect(
+      workspaceBacksOpenPr(
+        { repo: repoId, branches: [{ repo: repoId, branch: "other", at }] },
+        openPrs,
+        repoId,
+      ),
+    ).toBe(false);
+  });
+
   test("does not revive closed or cross-repo PR workspaces", () => {
     expect(
       workspaceBacksOpenPr(

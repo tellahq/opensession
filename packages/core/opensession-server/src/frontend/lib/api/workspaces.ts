@@ -87,26 +87,6 @@ export async function fetchWorkspaces(options?: {
   }
 }
 
-/** Create a space and start its coordinator on the first message. `repo`
- *  omitted is a space without a project. */
-export async function createSpaceApi(input: {
-  title: string;
-  repo?: string;
-  /** Empty: the agent opens the space with a welcome. */
-  prompt: string;
-  goal?: string;
-  /** Teammates who can see the space and chat in it. */
-  sharedWith?: string[];
-  /** The picker identity; the server prefers the signed-in one. */
-  user?: string;
-}): Promise<{ workspace: Workspace; sessionId: string }> {
-  return request<{ workspace: Workspace; sessionId: string }>("/spaces", {
-    method: "POST",
-    body: input,
-    label: "Couldn't create the space",
-  });
-}
-
 export async function createWorkspaceApi(input: {
   name: string;
   repo?: string;
@@ -130,7 +110,7 @@ export async function updateWorkspaceApi(
     order?: number;
     /** null clears the draft. */
     draft?: Workspace["draft"] | null;
-    /** A space's goal; null clears it. */
+    /** The workspace's goal; null clears it. */
     goal?: string | null;
   },
 ): Promise<Workspace> {
@@ -241,18 +221,30 @@ export async function resolveWorkspaceApi(
   });
 }
 
-/** A space's catch-up since `since` (ms epoch), written by a helper model. */
-export async function fetchSpaceRecapApi(
-  workspaceId: string,
+/** A catch-up on a session's threads since `since` (ms epoch), written by a
+ *  helper model. */
+export async function fetchThreadRecapApi(
+  sessionId: string,
   since: number,
   user: string,
 ): Promise<{ text: string | null; threadIds: string[] }> {
   return request<{ text: string | null; threadIds: string[] }>(
-    `/spaces/${encodeURIComponent(workspaceId)}/recap`,
+    `/sessions/${encodeURIComponent(sessionId)}/thread-recap`,
     {
       method: "POST",
       body: { since, user },
-      label: "Couldn't catch up on the space",
+      label: "Couldn't catch up on the threads",
     },
+  );
+}
+
+/** Switch a session's coordinator mode. */
+export async function setCoordinatorApi(
+  sessionId: string,
+  on: boolean,
+): Promise<void> {
+  await request<void>(
+    `/sessions/${encodeURIComponent(sessionId)}/coordinator`,
+    { method: "PUT", body: { on }, label: "Couldn't change coordinator mode" },
   );
 }

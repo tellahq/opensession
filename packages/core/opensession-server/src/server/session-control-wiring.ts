@@ -109,6 +109,7 @@ import {
   type Workspace,
   getWorkspace,
   materializeWorkspaceWorktree,
+  recordWorkspaceBranch,
 } from "./workspaces";
 import { ownedWorktree } from "./session-workspace";
 import {
@@ -737,7 +738,7 @@ registerSessionControl({
       invokingSessionId,
       plainDiscussionId,
       slackOrigin,
-      openingContext,
+      coordinator: coordinatorInput,
     } = ownedInput;
     const bksId = requestedId;
     const createIdentity = new Bun.CryptoHasher("sha256")
@@ -882,10 +883,10 @@ registerSessionControl({
     const parentRepoContext = parentSession
       ? await resolveSessionRepoContext(parentSession, repoInput, prompt)
       : null;
-    // A Scratch parent carries no repo. When it coordinates a space, its
-    // threads default to the space's project rather than the instance's
-    // default repo (spaces.ts).
-    const parentSpaceRepo =
+    // A Scratch parent carries no repo. When it sits in a workspace (a
+    // coordinator, typically), its threads default to the workspace's
+    // project rather than the instance's default repo (coordinator.ts).
+    const parentWorkspaceRepo =
       parentSession?.mode === "scratch" && parentSession.workspaceId
         ? (await getWorkspace(parentSession.workspaceId))?.repo
         : undefined;
@@ -895,7 +896,7 @@ registerSessionControl({
     const repo = getRepo(
       repoInput ||
         joinedWorkspace?.repo ||
-        parentSpaceRepo ||
+        parentWorkspaceRepo ||
         parentRepoContext?.repo ||
         parentSession?.repo,
     );
@@ -1249,6 +1250,22 @@ registerSessionControl({
         });
     }
 
+    // A session on its own branch in a workspace whose checkout is another
+    // (a coordinator's thread, a stacked tab) adds that branch to the
+    // workspace, so the workspace answers for its PR too.
+    if (
+      resolvedWorkspaceId &&
+      !isAsk &&
+      !isScratch &&
+      sessionBranch &&
+      (await ownedWorktree(wtPath))
+    )
+      await recordWorkspaceBranch(resolvedWorkspaceId, {
+        repo: repo.id,
+        branch: sessionBranch,
+        worktreeDir: wtPath,
+      });
+
     // @session:<id> mentions in a create_session prompt (e.g. a monitor
     // session spun up to watch others) get the same resolving footer as
     // prompts on existing sessions — this create path bypasses
@@ -1285,15 +1302,6 @@ registerSessionControl({
       openingPrompt += `
 
 ${createMentionsNote}`;
-    if (openingContext) {
-      const { wrapContext } = await import("./prompt-context");
-      openingPrompt = [
-        openingPrompt,
-        wrapContext(openingContext.text, openingContext.source),
-      ]
-        .filter((part) => part.trim())
-        .join("\n\n");
-    }
     // A session joining a workspace opens with the workspace's own context, the
     // same as the web create: the feed item it hangs off, and the support
     // ticket it belongs to. Without this a "new tab" in a ticket workspace is
@@ -1382,6 +1390,8 @@ ${createMentionsNote}`;
         ? {}
         : { fastMode: true, speed: createSpeed }),
       pstackMode: createPstackMode || undefined,
+      coordinator:
+        (fork ? fork.source.coordinator : coordinatorInput) || undefined,
       accountId: createAccountId,
       subscriptionPolicy: createFunding.subscriptionPolicy,
       images,

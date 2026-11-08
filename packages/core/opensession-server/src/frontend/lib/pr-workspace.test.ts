@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { findPrWorkspaceId, workspaceCarriesPr } from "./pr-workspace";
+import {
+  findPrWorkspaceId,
+  workspaceBranchList,
+  workspaceCarriesPr,
+} from "./pr-workspace";
 import type { UnifiedSession, Workspace } from "./types";
 
 const ws = (w: Partial<Workspace> & { id: string }): Workspace => ({
@@ -43,6 +47,29 @@ describe("workspaceCarriesPr", () => {
     ).toBe(true);
   });
 
+  it("matches a PR on any of the workspace's other branches", () => {
+    const workspace = ws({
+      id: "w1",
+      repo: "opensession",
+      branch: "coordinator",
+      branches: [
+        { repo: "opensession", branch: "thread-a", at: "2026-11-08T00:00:00Z" },
+      ],
+    });
+    expect(
+      workspaceCarriesPr(workspace, {
+        repo: "opensession",
+        branch: "thread-a",
+      }),
+    ).toBe(true);
+    expect(
+      workspaceCarriesPr(workspace, {
+        repo: "opensession",
+        branch: "thread-b",
+      }),
+    ).toBe(false);
+  });
+
   it("does not match another repository", () => {
     expect(
       workspaceCarriesPr(ws({ id: "w1", repo: "tella-fusion", prNumber: 8 }), {
@@ -50,6 +77,40 @@ describe("workspaceCarriesPr", () => {
         number: 8,
       }),
     ).toBe(false);
+  });
+});
+
+describe("workspaceBranchList", () => {
+  it("lists the primary first, then each other branch once", () => {
+    const at = "2026-11-08T00:00:00Z";
+    expect(
+      workspaceBranchList(
+        ws({
+          id: "w1",
+          repo: "acme",
+          branch: "main-work",
+          branches: [
+            { repo: "acme", branch: "main-work", at },
+            { repo: "acme", branch: "thread-a", at },
+          ],
+        }),
+      ),
+    ).toEqual([
+      { repo: "acme", branch: "main-work" },
+      { repo: "acme", branch: "thread-a" },
+    ]);
+  });
+
+  it("a coordinator workspace with no checkout lists only its threads' branches", () => {
+    expect(
+      workspaceBranchList(
+        ws({
+          id: "w1",
+          repo: "acme",
+          branches: [{ repo: "acme", branch: "thread-a", at: "x" }],
+        }),
+      ),
+    ).toEqual([{ repo: "acme", branch: "thread-a" }]);
   });
 });
 

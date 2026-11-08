@@ -635,6 +635,9 @@ export interface UnifiedSession {
   speed?: "fast" | "ultrafast";
   /** Pstack mode: the pstack skill family loads for this session's runs. */
   pstackMode?: boolean;
+  /** Coordinator mode: hands work to threads instead of doing it. `false`
+   *  is an explicit off; absent follows the workspace (a legacy space). */
+  coordinator?: boolean;
   /** Ship-mode choice made at creation; absent = the repository's. */
   shipMode?: ShipMode;
   /** Pinned account in the active model provider's pool; unset = auto. */
@@ -748,10 +751,18 @@ export interface Workspace {
   draft?: { text: string; updatedAt: string; by?: string; autoName?: boolean };
   /** Teammates added besides the creator; each gets it in their sidebar. */
   collaborators?: Array<{ name: string; by: string; at: string }>;
-  /** A space: its root session coordinates threads it spawns inside it. */
+  /** Legacy "space": its root session coordinates until switched off. */
   space?: true;
-  /** A space's goal: what its work is for. */
+  /** What the workspace's work is for; a coordinating session follows it. */
   goal?: string;
+  /** Branches its sessions work on besides `branch` (threads, stacked
+   *  tabs), oldest first. A shipped branch stays listed. */
+  branches?: Array<{
+    repo: string;
+    branch: string;
+    worktreeDir?: string;
+    at: string;
+  }>;
 }
 
 export interface DiffFile {

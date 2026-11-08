@@ -10,8 +10,8 @@ import { SidePanelHost } from "../session/SidePanelHost";
 import { WorkflowPanel } from "../WorkflowPanel";
 import { WorkspaceSummaryBody } from "../WorkspaceSummary";
 import { WorkspaceWaiting } from "./busy-indicators";
-import { SpacePanel } from "../space/SpacePanel";
-import type { SidePanelSpace } from "../../hooks/useSidePanelTabs";
+import { ThreadsPanel } from "../threads/ThreadsPanel";
+import type { SidePanelThreads } from "../../hooks/useSidePanelTabs";
 
 type HostProps = ComponentProps<typeof SidePanelHost>;
 type SummaryProps = ComponentProps<typeof WorkspaceSummaryBody>;
@@ -134,8 +134,8 @@ interface SessionViewerSidePanelProps {
   browser: PanelBrowserContent;
   portals: PortalContent;
   agents: AgentContent;
-  /** Set in a space's own conversation: the Space tab's page. */
-  space: SidePanelSpace | null;
+  /** Set for a conversation that coordinates or has threads. */
+  threads: SidePanelThreads | null;
 }
 
 export function SessionViewerSidePanel({
@@ -150,7 +150,7 @@ export function SessionViewerSidePanel({
   browser,
   portals,
   agents,
-  space,
+  threads,
 }: SessionViewerSidePanelProps) {
   const [prBandHeight, measurePrBand] = useBoxHeight();
   const changesStyle: CSSProperties & { "--diff-panel-top": string } = {
@@ -214,11 +214,12 @@ export function SessionViewerSidePanel({
           ) : undefined
         }
         browser={<PanelBrowser content={browser} />}
-        space={
-          space && (
-            <SpacePanel
-              workspace={space.workspace}
-              coordinatorId={space.coordinatorId}
+        pinnedThreads={threads?.pinned}
+        threads={
+          threads && (
+            <ThreadsPanel
+              workspace={threads.workspace}
+              rootId={threads.rootId}
               onOpenSession={summary.onOpenSession}
               onOpenAsset={summary.onOpenAsset}
             />

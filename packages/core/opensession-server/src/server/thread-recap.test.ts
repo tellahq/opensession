@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { spaceRecap, threadStanding } from "./space-recap";
+import { descendants, threadRecap, threadStanding } from "./thread-recap";
 import type { UnifiedSession } from "./types";
 
 function session(over: Partial<UnifiedSession>): UnifiedSession {
@@ -19,10 +19,10 @@ function session(over: Partial<UnifiedSession>): UnifiedSession {
 
 const since = Date.parse("2026-11-07T10:00:00.000Z");
 
-describe("spaceRecap", () => {
+describe("threadRecap", () => {
   test("recaps only threads that changed since, newest first", async () => {
     let prompt = "";
-    const result = await spaceRecap("ws-a", since, "Grace", {
+    const result = await threadRecap("ws-a", "bks-root", since, "Grace", {
       members: async () => [
         session({ id: "bks-root" }),
         session({
@@ -63,7 +63,7 @@ describe("spaceRecap", () => {
   });
 
   test("asks no model when nothing changed", async () => {
-    const result = await spaceRecap("ws-b", since, "Grace", {
+    const result = await threadRecap("ws-b", "bks-root", since, "Grace", {
       members: async () => [],
       lastMessage: async () => null,
       write: async () => {
@@ -72,6 +72,15 @@ describe("spaceRecap", () => {
       now: () => since,
     });
     expect(result).toEqual({ text: null, threadIds: [] });
+  });
+
+  test("follows threads of threads, and only this root's", () => {
+    const tree = [
+      session({ id: "a", parentSessionId: "root" }),
+      session({ id: "b", parentSessionId: "a" }),
+      session({ id: "c", parentSessionId: "other" }),
+    ];
+    expect(descendants(tree, "root").map((s) => s.id)).toEqual(["a", "b"]);
   });
 
   test("names where a thread stands", () => {

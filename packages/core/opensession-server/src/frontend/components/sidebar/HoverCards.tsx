@@ -1,4 +1,5 @@
 import { loopScheduleLabel } from "../SessionBanners";
+import { workspaceBranchList } from "../../lib/pr-workspace";
 import type { WorkspaceOverview } from "../../lib/api";
 import { providerFromUrl } from "../../lib/provider";
 import { sessionPrMerged, sessionPrRefs } from "../../lib/session-prs";
@@ -35,7 +36,7 @@ import {
 } from "../../lib/snoozes";
 import { elapsedSince, fullTime } from "../../lib/time";
 import { ROW_COLORS } from "../../lib/row-colors";
-import type { UnifiedSession } from "../../lib/types";
+import type { UnifiedSession, Workspace } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
 import {
@@ -582,6 +583,7 @@ function WsOverviewInfo({
         )}
         <span className="min-w-0 truncate">{row.name}</span>
       </div>
+      <WsBranchesLine workspace={row.workspace} />
 
       {row.status === "needsinput" &&
         (row.sessions.some((c) => c.waitingForInput) ? (
@@ -1076,5 +1078,19 @@ function CollaboratorsSheetPage({
         )}
       </SheetBody>
     </>
+  );
+}
+
+/** A workspace whose sessions work on several branches (a coordinator's
+ *  threads, stacked tabs) says how many, and which. One branch is the
+ *  normal case and says nothing. */
+function WsBranchesLine({ workspace }: { workspace: Workspace | null }) {
+  const branches = workspace ? workspaceBranchList(workspace) : [];
+  if (branches.length < 2) return null;
+  const names = branches.map((b) => b.branch).join(", ");
+  return (
+    <div className="mt-[3px] truncate text-meta text-faint" title={names}>
+      {branches.length} branches: {names}
+    </div>
   );
 }

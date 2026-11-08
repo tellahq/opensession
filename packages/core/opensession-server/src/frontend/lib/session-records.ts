@@ -1,6 +1,6 @@
 /**
  * The app's live session list, for surfaces that sit several layers below its
- * owner (useSessions): a space's thread panel and the thread cards in its
+ * owner (useSessions): the threads panel and the thread cards in a
  * transcript. The list stays the source; this only mirrors it, the same way
  * workspace-records.ts mirrors the workspace list.
  */

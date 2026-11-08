@@ -819,6 +819,17 @@ export function useSessionTabs({
           newSession: barSessions.some((session) => session.desk)
             ? undefined
             : (mode, origin) => handleNewSession(mode, side, origin),
+          newSessionOnBranch: (ref) => {
+            const workspaceId = barSessions.find(
+              (session) => session.workspaceId,
+            )?.workspaceId;
+            if (workspaceId)
+              openPrefilledSession({
+                workspaceId,
+                repo: ref.repo,
+                branch: ref.branch,
+              });
+          },
           rename: async (id, title) => {
             await (async () => {
               await renameSessionApi(id, title);

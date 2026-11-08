@@ -191,6 +191,7 @@ import {
   getWorkspace,
   materializeWorkspaceWorktree,
   updateWorkspace,
+  recordWorkspaceBranch,
 } from "./workspaces";
 import {
   type CreationOpeningEffectItem,
@@ -281,6 +282,7 @@ export interface CreateSessionMessage {
   fastMode?: unknown;
   speed?: unknown;
   pstackMode?: unknown;
+  coordinator?: unknown;
   startPortal?: unknown;
   accountId?: string;
   mcpServers?: unknown;
@@ -448,6 +450,8 @@ export interface ResolvedCreate {
   speed?: SessionSpeed; // unset falls back to fastMode; "ultrafast" needs GPT-6 Astra and a Pro $500 login
   /** Pstack mode from the palette toggle; `/pstack <task>` as the opening prompt also enables it. */
   pstackMode?: boolean;
+  /** Coordinator mode from the palette toggle (coordinator.ts). */
+  coordinator?: boolean;
   /** The session's ship-mode choice (palette toggle or its workspace's);
    *  absent = the repository's publicationMode. */
   shipMode?: ShipMode;
@@ -777,6 +781,7 @@ function createdSessionFileDefaults(spec: ResolvedCreate): NativeSessionFile {
       : {}),
     ...(spec.effort ? { effort: spec.effort } : {}),
     ...(specPstackMode(spec) ? { pstackMode: true } : {}),
+    ...(spec.coordinator ? { coordinator: true } : {}),
     ...(spec.shipMode ? { shipMode: spec.shipMode } : {}),
     ...(spec.autoFallback === false ? { autoFallback: false } : {}),
     ...(spec.fastMode ? { fastMode: true } : {}),
@@ -2617,6 +2622,9 @@ export async function handleCreateSessionMessage(
   const createPstackMode = forkSource
     ? forkSource.pstackMode
     : msg.pstackMode === true;
+  const createCoordinator = forkSource
+    ? forkSource.coordinator === true
+    : msg.coordinator === true;
   // Ship mode from the palette's PR | Direct toggle (forks inherit). A
   // session joining a workspace without its own choice takes the workspace's.
   const requestedShipMode = forkSource
@@ -2866,6 +2874,22 @@ export async function handleCreateSessionMessage(
     // all - the sandbox provider clones it in-container on the
     // opening run below.
     let volumeWorkspace = false;
+    // A branch another session in this workspace already works on (a
+    // thread, a stacked tab): a share-mode create naming it joins that
+    // checkout instead of trying to check the branch out a second time.
+    const listedBranch =
+      worktreeMode === "share" && branch
+        ? workspace?.branches?.find(
+            (b) =>
+              b.branch === branch &&
+              (b.repo || workspace?.repo) === repo.id &&
+              !!b.worktreeDir,
+          )
+        : undefined;
+    const listedBranchDir =
+      listedBranch?.worktreeDir && (await pathExists(listedBranch.worktreeDir))
+        ? listedBranch.worktreeDir
+        : undefined;
     if (recoveringSession) {
       wtPath = recoveringSession.worktreeDir || repo.repo;
       needsWorktree =
@@ -2911,6 +2935,8 @@ export async function handleCreateSessionMessage(
       // checkout exists; only the first-ever create pays a worktree
       // add (ensureAskCheckout).
       wtPath = await ensureAskCheckout(repo.id);
+    } else if (listedBranchDir) {
+      wtPath = listedBranchDir;
     } else if (usesSharedCheckout && !workspace?.worktreeDir) {
       // This repository's default, or the person's override, points a fresh
       // code workspace at the live main checkout. An existing workspace's
@@ -3079,6 +3105,21 @@ export async function handleCreateSessionMessage(
     // deal for a workspace whose first session just consumed a draft that
     // still wears the draft's first-line name (autoName not demoted to
     // false). The generated title upgrades that first line the same way.
+    // A session on its own branch in a workspace whose checkout is another
+    // (a stacked tab, a thread) adds that branch to the workspace's list.
+    if (
+      workspace &&
+      !isAsk &&
+      !isScratch &&
+      sessionBranch &&
+      (await ownedWorktree(wtPath))
+    )
+      workspace =
+        (await recordWorkspaceBranch(workspace.id, {
+          repo: repo.id,
+          branch: sessionBranch,
+          worktreeDir: wtPath,
+        })) ?? workspace;
     // The palette's choice belongs to the workspace it just created, so the
     // sessions added to it later ship the same way.
     if (
@@ -3263,6 +3304,7 @@ export async function handleCreateSessionMessage(
       fastMode: createSpeed !== "standard",
       speed: createSpeed,
       pstackMode: createPstackMode,
+      coordinator: createCoordinator || undefined,
       ...(createShipMode ? { shipMode: createShipMode } : {}),
       ...(msg.startPortal === true && !forkSource ? { startPortal: true } : {}),
       accountId: createAccountId,

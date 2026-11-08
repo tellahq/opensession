@@ -106,7 +106,9 @@ import type { UnifiedSession } from "../../lib/types";
 import type { SessionComments } from "../../lib/comment-threads";
 import { InlineComments } from "../comments/InlineComments";
 import { MessageCommentsPane } from "../comments/MessageCommentsPane";
-import { SpaceCatchUp } from "../space/SpaceCatchUp";
+import { ThreadsCatchUp } from "../threads/ThreadsCatchUp";
+import { CoordinatorMenuItems } from "../threads/CoordinatorMenuItems";
+import { WorkspaceSettingsHost } from "../WorkspaceSettingsDialog";
 import { anchorFromRange } from "../../lib/comment-anchor";
 import { requestCommentDraft } from "../../lib/comment-draft";
 import { toast as showToast } from "../../ui/toast";
@@ -1215,6 +1217,7 @@ export function SessionViewerMainRegion({
                 isPhone={isPhone}
               />
             )}
+            <WorkspaceSettingsHost />
             {/* Comments on a whole message (its hover Comment action). */}
             {!loading && (
               <MessageCommentsPane
@@ -1428,7 +1431,7 @@ export function SessionViewerMainRegion({
                     </div>
                   </div>
                 )}
-                <SpaceCatchUp session={session} />
+                <ThreadsCatchUp session={session} />
                 <TypingIndicator
                   presence={typingPresence}
                   className="mx-auto mb-1 w-full max-w-[calc(var(--session-col)+40px)] px-5"
@@ -1595,6 +1598,9 @@ export function SessionViewerMainRegion({
                           Send to Slack…
                         </span>
                       </button>
+                      {session.source === "opensession" && !session.desk && (
+                        <CoordinatorMenuItems session={session} close={close} />
+                      )}
                       {session.source === "opensession" && (
                         <ConnectFolderMenuItem
                           sessionId={session.id}

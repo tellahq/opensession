@@ -321,13 +321,13 @@ export async function generateDemoData(
   await writeFile(scriptRenderPath, injectBootstrap(MONITOR_FIT_PAGE));
 
   // The demo space: two threads in fixed lanes, and the summary its
-  // coordinator is told to keep (server/spaces.ts).
+  // coordinator is told to keep (server/coordinator.ts).
   await writeJson(
     join(sessionsDir, "status-overrides.json"),
     DEMO_SPACE_STATUSES,
   );
   await writeText(
-    join(stateDir("assets"), DEMO_SPACE_SESSION_ID, "space-summary.md"),
+    join(stateDir("assets"), DEMO_SPACE_SESSION_ID, "coordinator-summary.md"),
     [
       "# Spaces v1 launch",
       "",

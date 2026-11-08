@@ -156,6 +156,19 @@ export function IconKeyboard(p: IconProps) {
   );
 }
 
+/** Coordinator mode: one conversation handing work out to several. */
+export function IconDelegate(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <circle {...stroke} cx="12" cy="6.25" r="2.25" />
+      <circle {...stroke} cx="5.75" cy="17.75" r="2" />
+      <circle {...stroke} cx="12" cy="17.75" r="2" />
+      <circle {...stroke} cx="18.25" cy="17.75" r="2" />
+      <path {...stroke} d="M12 8.5V15.75M10.5 8L6.75 15.9M13.5 8L17.25 15.9" />
+    </Svg>
+  );
+}
+
 export function IconChecklist(p: IconProps) {
   return (
     <Svg {...p}>

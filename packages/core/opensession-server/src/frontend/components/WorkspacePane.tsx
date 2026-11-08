@@ -1,4 +1,9 @@
 import { AGENT_NAME } from "../lib/brand";
+import {
+  workspaceBranchList,
+  type WorkspaceBranchRef,
+} from "../lib/pr-workspace";
+import { OptionSelect } from "../ui/select";
 import React, {
   useCallback,
   useEffect,
@@ -459,15 +464,28 @@ export function WorkspacePane({
   // workspace shows before its sessions have loaded, which is most of the
   // time a PR link is followed cold — and the workspace's branch is the
   // first PR filed here, not the one the link was for.
+  //
+  // A workspace with several branches (a coordinator's threads, stacked
+  // tabs) reviews the primary unless the picker in the header chose another.
   const focusedBranch =
     focusPr?.workspaceId === workspace.id ? focusPr?.branch : undefined;
+  const branchList = workspaceBranchList(workspace);
+  const [pickedBranch, setPickedBranch] = useState<{
+    workspaceId: string;
+    key: string;
+  } | null>(null);
+  const branchKey = (b: WorkspaceBranchRef) => `${b.repo}:${b.branch}`;
+  const shownBranch =
+    (pickedBranch?.workspaceId === workspace.id
+      ? branchList.find((b) => branchKey(b) === pickedBranch.key)
+      : undefined) ?? branchList[0];
   const reviewTarget = focusedBranch
     ? {
         repo: focusPr?.repo || workspace.repo || "repository",
         branch: focusedBranch,
       }
-    : workspace.branch
-      ? { repo: workspace.repo || "repository", branch: workspace.branch }
+    : shownBranch
+      ? { repo: shownBranch.repo, branch: shownBranch.branch }
       : null;
   useEffect(
     () => setReviewPage("files"),
@@ -826,6 +844,21 @@ export function WorkspacePane({
           {workspaceMenu}
           {tab === "review" && reviewTarget && (
             <div ref={setReviewSessionActionTarget} className="contents" />
+          )}
+          {tab === "review" && !focusedBranch && branchList.length > 1 && (
+            <OptionSelect
+              label="Branch to review"
+              size="sm"
+              className="max-w-[240px]"
+              value={shownBranch ? branchKey(shownBranch) : ""}
+              options={branchList.map((b) => ({
+                value: branchKey(b),
+                label: b.branch,
+              }))}
+              onChange={(key) =>
+                setPickedBranch({ workspaceId: workspace.id, key })
+              }
+            />
           )}
           {showWorkspaceNewSessionAction && (
             <Tooltip label="New tab in this workspace">

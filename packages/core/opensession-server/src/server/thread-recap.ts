@@ -1,8 +1,9 @@
 /**
- * "Since you were last here": a space's catch-up, written by a helper model
- * from what its threads did after a moment the reader names. The space's
- * threads come from the catalog's workspace index; only the few threads that
- * changed have their latest message read (one known session each).
+ * "Since you were last here": a catch-up on the threads a session started,
+ * written by a helper model from what they did after a moment the reader
+ * names. The threads come from the catalog's workspace index (a thread lands
+ * in its parent's workspace); only the few that changed have their latest
+ * message read (one known session each).
  */
 
 import { oneShot } from "./one-shot";
@@ -35,7 +36,7 @@ const defaultDeps: Deps = {
   lastMessage: async (session) =>
     (await buildWorkspaceOverview([session])).lastMessage?.content ?? null,
   write: (prompt, user) =>
-    oneShot(prompt, { user, label: "space-recap", timeoutMs: 45_000 }),
+    oneShot(prompt, { user, label: "thread-recap", timeoutMs: 45_000 }),
   now: Date.now,
 };
 
@@ -50,18 +51,43 @@ export function threadStanding(thread: UnifiedSession): string {
   return "idle, waiting for someone";
 }
 
-export async function spaceRecap(
+/** Sessions descended from `rootId` (children, their children, ...). */
+export function descendants(
+  sessions: readonly UnifiedSession[],
+  rootId: string,
+): UnifiedSession[] {
+  const inside = new Set([rootId]);
+  const out: UnifiedSession[] = [];
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const s of sessions)
+      if (
+        s.parentSessionId &&
+        inside.has(s.parentSessionId) &&
+        !inside.has(s.id)
+      ) {
+        inside.add(s.id);
+        out.push(s);
+        grew = true;
+      }
+  }
+  return out;
+}
+
+export async function threadRecap(
   workspaceId: string,
+  rootId: string,
   since: number,
   reader: string,
   deps: Deps = defaultDeps,
 ): Promise<SpaceRecapResult> {
-  const key = `${workspaceId}:${Math.floor(since / 60_000)}`;
+  const key = `${workspaceId}:${rootId}:${Math.floor(since / 60_000)}`;
   const hit = cache.get(key);
   if (hit && deps.now() - hit.at < CACHE_MS) return hit.result;
 
-  const changed = (await deps.members(workspaceId))
-    .filter((s) => s.parentSessionId && Date.parse(s.lastActivity) > since)
+  const changed = descendants(await deps.members(workspaceId), rootId)
+    .filter((s) => Date.parse(s.lastActivity) > since)
     .sort((a, b) => Date.parse(b.lastActivity) - Date.parse(a.lastActivity))
     .slice(0, MAX_THREADS);
   if (changed.length === 0) return { text: null, threadIds: [] };
@@ -77,7 +103,7 @@ export async function spaceRecap(
     }),
   );
   const prompt = [
-    `${reader || "A teammate"} is back in a shared space after being away. Write them a catch-up of what its threads did since, in two to four short sentences of plain prose: what shipped, what is waiting on a person (name who, when it is clear), and what is still working. Lead with what needs them. No greeting, no headings, no lists, no thread ids, no Markdown.`,
+    `${reader || "A teammate"} is back in a conversation that hands work to threads, after being away. Write them a catch-up of what the threads did since, in two to four short sentences of plain prose: what shipped, what is waiting on a person (name who, when it is clear), and what is still working. Lead with what needs them. No greeting, no headings, no lists, no thread ids, no Markdown.`,
     "",
     "Threads that changed:",
     ...lines,

@@ -240,6 +240,9 @@ export interface UnifiedSession {
   presetNote?: string;
   /** Sticky pstack engineering mode, enabled with /pstack <task>. */
   pstackMode?: boolean;
+  /** Coordinator mode (coordinator.ts): hand work to threads instead of
+   *  doing it. `false` is an explicit off; absent follows the workspace. */
+  coordinator?: boolean;
   /** Ship-mode choice made at creation (ship-mode.ts); absent = the repo's. */
   shipMode?: "pull-request" | "direct";
   /** Pushes of this workspace's branch straight to the default branch,
@@ -735,6 +738,8 @@ export interface NativeSessionFile {
    *  carry it; nothing reads it, and list rows strip it. */
   presetNote?: string;
   pstackMode?: boolean; // sticky pstack engineering mode, toggled with /pstack or /poteto-mode
+  /** See UnifiedSession.coordinator. */
+  coordinator?: boolean;
   /** See UnifiedSession.shipMode. */
   shipMode?: "pull-request" | "direct";
   /** See UnifiedSession.directShips. */

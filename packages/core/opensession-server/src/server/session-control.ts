@@ -14,7 +14,6 @@
  * A future autonomous monitor (src/agents/loops) can call the same
  * getSessionControl() surface directly, no MCP involved.
  */
-import type { ContextSource } from "./prompt-context";
 import type { SessionSpeed } from "@tellahq/opensession-protocol/session";
 import type { ImageInput } from "./run-events";
 import type {
@@ -88,12 +87,6 @@ export type SandboxRequest =
 
 export interface CreateSessionOpts {
   prompt: string;
-  /**
-   * Model-only context for the opening turn, fenced after the prompt and
-   * never shown or used for the title. With an empty `prompt` the session
-   * opens on the agent's reply alone (a space's welcome).
-   */
-  openingContext?: { text: string; source: ContextSource };
   /** Trusted Slack ingress only, never accepted from model-authored create arguments. */
   slackOrigin?: import("./types").SlackSessionOrigin;
   /** Stable server-chosen id for an idempotent client create request. */
@@ -129,6 +122,8 @@ export interface CreateSessionOpts {
   speed?: SessionSpeed; // unset falls back to fastMode; "ultrafast" needs GPT-6 Astra and a Pro $500 login
   /** Pstack mode persisted on the session: the pstack skill family loads for its runs. */
   pstackMode?: boolean;
+  /** Start in coordinator mode (coordinator.ts). */
+  coordinator?: boolean;
   /** Composer image attachments as `data:image/...;base64,` URLs. */
   images?: string[];
   /** Raw composer file references, already staged through `/api/upload`. */

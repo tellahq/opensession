@@ -1,21 +1,20 @@
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { useNavigation } from "../../hooks/useNavigation";
 import { useMessageCommentsSession } from "../../lib/message-comments";
-import { openSpaceThread } from "../../lib/space-thread-view";
-import { useWorkspaceRecord } from "../../lib/workspace-records";
+import { openThreadPane } from "../../lib/thread-view";
 import { useSessionRecord } from "../../lib/session-records";
 import {
   THREAD_STATE_LABEL,
   threadState,
   threadStatusLine,
-} from "../../lib/space-threads";
+} from "../../lib/session-threads";
 import { cn } from "../../ui/cn";
 import {
   MessageActionButtons,
   MessageThreadSummary,
 } from "../comments/MessageActions";
 import { ListRow } from "../../ui/list-row";
-import { THREAD_DOT } from "./space-classes";
+import { THREAD_DOT } from "./thread-classes";
 import { useThreadGist } from "./ThreadRow";
 import { useThreadActivity } from "./useThreadActivity";
 
@@ -74,20 +73,16 @@ function ThreadCardBody({
 }) {
   const navigation = useNavigation();
   const thread = useSessionRecord(spawned.threadId);
+  // The conversation the card is in: its Threads tab opens the thread.
   const hostId = useMessageCommentsSession();
-  const host = useSessionRecord(hostId);
-  const space = useWorkspaceRecord(host?.workspaceId ?? null);
-  // Only a space's own conversation has the Space tab to open it in.
-  const coordinatorId =
-    host && space?.space && !host.parentSessionId ? host.id : null;
   const phone = useIsPhone();
   return (
     <ListRow
       variant="card"
       onClick={() =>
         // Beside the conversation on desktop; a phone has no room for two.
-        coordinatorId && !phone
-          ? openSpaceThread(coordinatorId, spawned.threadId)
+        hostId && !phone
+          ? openThreadPane(hostId, spawned.threadId)
           : navigation.openSession(spawned.threadId)
       }
     >

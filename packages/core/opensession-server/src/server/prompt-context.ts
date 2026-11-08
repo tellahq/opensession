@@ -49,6 +49,8 @@ export type ContextSource =
   | "steer-note"
   | "uploads-note"
   | "pinned-goal"
+  | "coordinator"
+  // Older transcripts' name for the coordinator briefing.
   | "space-coordinator"
   | "portals-note"
   | "local-folders-note"
@@ -69,6 +71,7 @@ const SOURCES = new Set<string>([
   "steer-note",
   "uploads-note",
   "pinned-goal",
+  "coordinator",
   "space-coordinator",
   "portals-note",
   "local-folders-note",
