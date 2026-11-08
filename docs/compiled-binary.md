@@ -112,6 +112,18 @@ through Pi's own dependency and both build modes stage it. Without it Pi drops
 every image from turns ("Image omitted"); the compiled server logs a warning
 naming the paths it checked when Pi first loads.
 
+**External: `quickjs.wasm` and `codemode-worker.js`.** Pi's codemode tool runs
+scripts in a QuickJS wasm VM on a worker thread. Pi resolves the wasm from
+`quickjs-wasi` and the worker from its own binary layout, and neither exists
+inside the `opensession` executable. `scripts/lib/codemode-sidecars.ts` copies
+the wasm and bundles `@earendil-works/pi-codemode`'s worker beside the
+executable in both build modes, and `src/server/codemode-runtime.ts` points Pi
+at them through two setters the Pi patch
+(`patches/@earendil-works%2Fpi-coding-agent@1.1.0.patch`) exports. The compiled
+server warns at Pi's first load when either file is missing. The release
+workflow runs `opensession codemode-smoke`, one real codemode script, from the
+packaged Linux binary outside its release directory.
+
 **External: the `claude` CLI.** The Anthropic bridge is the Claude Agent SDK
 running in-process (`src/server/anthropic-bridge.ts`), and the SDK shells out
 to the installed `claude` binary (`OPENSESSION_CLAUDE_BIN`, default `claude` on

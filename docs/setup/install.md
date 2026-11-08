@@ -265,6 +265,14 @@ the current one under `~/.opensession/releases/`, and swaps the `src` symlink
 atomically. With a service installed it performs a health-gated restart; if the
 new release does not become healthy, it repoints `src` to the previous release
 and restarts it. Without a service, restart the foreground server yourself.
+Since 0.4.80 this restart is part of `update`; earlier releases only swapped
+the symlink.
+
+On macOS, `restart` replaces the server's launchd job, which ends every
+process the server started. When `opensession update`, `restart`, `stop`, or
+`bind` runs from a session's shell, the CLI therefore hands the command to a
+one-shot launchd job (`dev.opensession.cli-handoff`) that outlives the
+server, and returns. Its output goes to `~/.opensession/logs/cli-handoff.log`.
 The previous release stays on disk. `OPENSESSION_RELEASE_BASE` overrides the
 release base URL; `--channel <url>` points at a specific tarball.
 

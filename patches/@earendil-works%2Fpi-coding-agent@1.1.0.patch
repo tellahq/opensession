@@ -1,0 +1,63 @@
+diff --git a/dist/config.d.ts b/dist/config.d.ts
+index a1f218a..1185895 100644
+--- a/dist/config.d.ts
++++ b/dist/config.d.ts
+@@ -77,6 +77,8 @@ export declare function resolveCodemodeWorkerSpecifier(runtime: "bun-binary" | "
+  * Get the codemode worker entry, or undefined to use the worker that ships next to pi-codemode.
+  * The Bun and Node release builds both pass the worker as an extra entrypoint.
+  */
++/** Open Session patch: name the codemode worker a host executable ships. */
++export declare function setCodemodeWorkerSpecifier(specifier: string | URL): void;
+ export declare function getCodemodeWorkerSpecifier(): string | URL | undefined;
+ export type InstallChange = {
+     kind: "updated";
+diff --git a/dist/config.js b/dist/config.js
+index 62eb303..a7d7d54 100644
+--- a/dist/config.js
++++ b/dist/config.js
+@@ -416,11 +416,21 @@ export function resolveCodemodeWorkerSpecifier(runtime, moduleUrl) {
+     return undefined;
+ }
+ let codemodeWorkerDataUrl;
++let codemodeWorkerOverride;
++/**
++ * Open Session patch: a host that compiles Pi into its own executable ships the codemode worker
++ * beside that executable, so it names the worker here instead of Pi's own binary layout.
++ */
++export function setCodemodeWorkerSpecifier(specifier) {
++    codemodeWorkerOverride = specifier;
++}
+ /**
+  * Get the codemode worker entry, or undefined to use the worker that ships next to pi-codemode.
+  * The Bun and Node release builds both pass the worker as an extra entrypoint.
+  */
+ export function getCodemodeWorkerSpecifier() {
++    if (codemodeWorkerOverride !== undefined)
++        return codemodeWorkerOverride;
+     const runtime = isBunBinary ? "bun-binary" : isBundledNode ? "bundled-node" : "unbundled";
+     const specifier = resolveCodemodeWorkerSpecifier(runtime, import.meta.url);
+     if (runtime !== "bundled-node" || !(specifier instanceof URL))
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 9f9bd73..a76569e 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -41,4 +41,6 @@ export { convertToPng } from "./utils/image-convert.ts";
+ export { formatDimensionNote, type ResizedImage, resizeImage } from "./utils/image-resize.ts";
+ export { detectSupportedImageMimeTypeFromFile } from "./utils/mime.ts";
+ export { getPowerShellConfig, getShellConfig } from "./utils/shell.ts";
++// Open Session patch: let a host executable point codemode at the files it ships.
++export { setCodemodeWorkerSpecifier, setEmbeddedQuickJSWasmPath } from "./config.ts";
+ //# sourceMappingURL=index.d.ts.map
+\ No newline at end of file
+diff --git a/dist/index.js b/dist/index.js
+index c48934f..e5ec639 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -50,4 +50,6 @@ export { formatDimensionNote, resizeImage } from "./utils/image-resize.js";
+ export { detectSupportedImageMimeTypeFromFile } from "./utils/mime.js";
+ // Shell utilities
+ export { getPowerShellConfig, getShellConfig } from "./utils/shell.js";
++// Open Session patch: let a host executable point codemode at the files it ships.
++export { setCodemodeWorkerSpecifier, setEmbeddedQuickJSWasmPath } from "./config.js";
+ //# sourceMappingURL=index.js.map
+\ No newline at end of file

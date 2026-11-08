@@ -14,6 +14,10 @@ import type { XaiAccount, bindXaiAccount } from "./xai-accounts";
 import { XAI_OAUTH_PROVIDER } from "./xai-provider-id";
 import { isCompiledBinary } from "../runner-host/exe";
 import { checkPhotonWasm } from "./photon-wasm";
+import {
+  checkCodemodeSidecars,
+  useCompiledCodemodeSidecars,
+} from "./codemode-runtime";
 
 export type PiSdk = typeof import("@earendil-works/pi-coding-agent");
 type PiModel = NonNullable<ReturnType<ModelRuntime["getModel"]>>;
@@ -33,6 +37,10 @@ export function loadPiSdk(): Promise<PiSdk> {
       if (isCompiledBinary() && !g.__piPhotonChecked) {
         g.__piPhotonChecked = true;
         void checkPhotonWasm().catch(() => {});
+        // Codemode's QuickJS wasm and worker ship beside the executable too
+        // (codemode-runtime.ts); Pi's own lookups cannot reach them there.
+        useCompiledCodemodeSidecars(sdk);
+        void checkCodemodeSidecars().catch(() => {});
       }
       return sdk;
     },

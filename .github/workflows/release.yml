@@ -78,6 +78,10 @@ jobs:
             # image in a Pi turn is dropped (scripts/lib/photon-wasm.ts).
             tar -tzf "$versioned" > "$out/listing.txt"
             grep -Fqx "opensession-$version-$os-$arch/photon_rs_bg.wasm" "$out/listing.txt"
+            # Pi's codemode runs in QuickJS from the same directory
+            # (packages/core/opensession-server/src/server/codemode-runtime.ts).
+            grep -Fqx "opensession-$version-$os-$arch/quickjs.wasm" "$out/listing.txt"
+            grep -Fqx "opensession-$version-$os-$arch/codemode-worker.js" "$out/listing.txt"
             cp "$versioned" "$out/assets/"
             cp "$versioned" "$out/assets/opensession-$os-$arch.tar.gz"
           done
@@ -99,6 +103,9 @@ jobs:
           mkdir -p "$root"
           printf '%s\n' '{"provider":"local","publicIngress":{"enabled":true,"port":43860,"host":"127.0.0.1"}}' > "$root/sandbox.json"
           binary="$RUNNER_TEMP/release/stage/opensession-$version-linux-x64/opensession"
+          # One real codemode script from the packaged binary, run outside the
+          # release directory so nothing there can stand in for a sidecar.
+          (cd "$root" && OPENSESSION_STATE_DIR="$root/codemode-state" "$binary" codemode-smoke)
           common_env=(
             OPENSESSION_STATE_DIR="$root/state"
             OPENSESSION_SANDBOX_CONFIG="$root/sandbox.json"

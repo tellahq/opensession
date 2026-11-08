@@ -20,6 +20,8 @@
  *         opensession                 the target binary
  *         node_modules/               sharp + @img/sharp-<target> sidecar
  *         photon_rs_bg.wasm           Photon image wasm Pi resizes images with
+ *         quickjs.wasm                QuickJS wasm Pi's codemode scripts run in
+ *         codemode-worker.js          the worker thread that hosts that VM
  *         *-worker.js                 Worker sidecars
  *         opensession*.service        system service and socket templates
  *         opensession.socket          (see scripts/lib/release-artefact.ts)
@@ -55,6 +57,7 @@ import {
   writeSimulatorViewerDist,
 } from "./lib/compile-embeds";
 import { stagePhotonWasm } from "./lib/photon-wasm";
+import { stageCodemodeSidecars } from "./lib/codemode-sidecars";
 import { RELEASE_SERVICE_TEMPLATES } from "./lib/release-artefact";
 
 const REPO_ROOT = resolve(import.meta.dir, "..");
@@ -484,6 +487,12 @@ async function stageExecutableSidecars(exeDir: string): Promise<void> {
   const wasm = stagePhotonWasm(exeDir);
   console.log(
     `[compile] photon wasm: ${(statSync(wasm).size / 1e6).toFixed(1)} MB`,
+  );
+  // Pi's codemode cannot reach quickjs-wasi or its worker inside the
+  // executable (packages/core/opensession-server/src/server/codemode-runtime.ts).
+  const codemode = await stageCodemodeSidecars(exeDir);
+  console.log(
+    `[compile] codemode: ${(statSync(codemode.wasm).size / 1e6).toFixed(1)} MB wasm, ${(statSync(codemode.worker).size / 1e3).toFixed(0)} KB worker`,
   );
 }
 

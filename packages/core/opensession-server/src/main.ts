@@ -124,6 +124,17 @@ if (sub === "runner-host") {
   process.argv.splice(2, 1);
   const { scriptHostMain } = await import("./script-host/main");
   scriptHostMain(process.argv[2]);
+} else if (sub === "codemode-smoke") {
+  // Release smoke test: one codemode script through Pi's real tool, so a
+  // compiled release missing its QuickJS wasm or worker never ships.
+  const { runCodemodeSmoke } = await import("./server/codemode-runtime");
+  try {
+    await runCodemodeSmoke();
+    process.exit(0);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 } else if (sub === "server") {
   process.argv.splice(2, 1);
   // Surface a boot failure with a clear origin: a compiled binary's otherwise
