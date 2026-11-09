@@ -12,13 +12,13 @@ export interface EngineOption {
  * the model each ran on. Older sessions still store these ids; the server
  * routes them to the same models (models.ts RETIRED_PRESET_MODELS). */
 const RETIRED_PRESET_MODELS = new Map<string, string>([
-  ["dial/ultra", "pi/anthropic/claude-fable-5-1"],
+  ["dial/ultra", "pi/anthropic/claude-fable-5-2"],
   ["dial/high", "pi/openai/gpt-6.1-sol"],
   ["dial/medium", "pi/openai/gpt-6.1-sol"],
   ["dial/low", "pi/openai/gpt-6-luna"],
   ["dial/opus-fable", "pi/anthropic/claude-opus-5-5"],
-  ["orchestrator/fable", "pi/anthropic/claude-fable-5-1"],
-  ["orchestrator/fable-sol", "pi/anthropic/claude-fable-5-1"],
+  ["orchestrator/fable", "pi/anthropic/claude-fable-5-2"],
+  ["orchestrator/fable-sol", "pi/anthropic/claude-fable-5-2"],
   ["orchestrator/sol", "pi/openai/gpt-6.1-sol"],
 ]);
 const stripPi = (id: string) => (id.startsWith("pi/") ? id.slice(3) : id);

@@ -113,7 +113,7 @@ function DefaultModelRow({
   const engineLabel = (m: (typeof primaryModels)[number]) =>
     m.provider === "pi" ? m.label : shortModelLabel(m.id, models || []);
   // The trigger reads the selected model's label from this flat list, so a
-  // closed select shows "Fable 5.1" rather than pi/anthropic/claude-fable-5-1.
+  // closed select shows "Fable 5.2" rather than pi/anthropic/claude-fable-5-2.
   const items = [
     ...primaryModels.map((m) => ({ value: m.id, label: engineLabel(m) })),
     ...claudeModels.map((m) => ({ value: m.id, label: m.label })),

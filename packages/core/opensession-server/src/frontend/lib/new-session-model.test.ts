@@ -5,12 +5,12 @@ import {
 } from "./new-session-model";
 
 const models = [
-  { id: "pi/anthropic/claude-fable-5-1", efforts: ["low", "high", "max"] },
+  { id: "pi/anthropic/claude-fable-5-2", efforts: ["low", "high", "max"] },
   { id: "pi/openai/gpt-6.1-sol", efforts: ["none", "high", "xhigh"] },
 ];
 const base = {
   models,
-  default: "pi/anthropic/claude-fable-5-1",
+  default: "pi/anthropic/claude-fable-5-2",
   modelPref: "",
 };
 
@@ -52,7 +52,7 @@ describe("preferredNewSessionEffort", () => {
     expect(
       preferredNewSessionEffort({
         models,
-        model: "pi/anthropic/claude-fable-5-1",
+        model: "pi/anthropic/claude-fable-5-2",
         effortPref: "xhigh",
       }),
     ).toBeUndefined();

@@ -939,6 +939,20 @@ describe("buildPiAnthropicModels", () => {
     });
   });
 
+  test("registers Fable 5.2 with its published limits and pricing", async () => {
+    const [fable] = buildPiAnthropicModels([], "claude-fable-5-2");
+    expect(fable).toMatchObject({
+      id: "claude-fable-5-2",
+      name: "Claude Fable 5.2",
+      reasoning: true,
+      contextWindow: 1_000_000,
+      maxTokens: 128_000,
+      cost: { input: 8, output: 40, cacheRead: 0.2, cacheWrite: 10 },
+      thinkingLevelMap: { off: null, xhigh: "xhigh", max: "max" },
+      compat: { forceAdaptiveThinking: true, supportsTemperature: false },
+    });
+  });
+
   test("registers Opus 5.5 with its published limits and pricing", async () => {
     const [opus] = buildPiAnthropicModels([], "claude-opus-5-5");
     expect(opus).toMatchObject({

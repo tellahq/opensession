@@ -91,13 +91,13 @@ final class SessionViewModelTests: XCTestCase {
     /// for the next sessions poll.
     func testModelChangedMovesTheLiveModelWithTheSnapshot() {
         var session = Session(id: "bks-1")
-        session.model = "claude-fable-5-1"
+        session.model = "claude-fable-5-2"
         session.accountId = "claude-acc"
         let viewModel = SessionViewModel(session: session)
-        XCTAssertEqual(viewModel.model, "claude-fable-5-1")
+        XCTAssertEqual(viewModel.model, "claude-fable-5-2")
 
         viewModel.handle(.modelChanged(sessionId: "bks-other", model: "gpt-5", by: nil))
-        XCTAssertEqual(viewModel.model, "claude-fable-5-1", "another session's frame is ignored")
+        XCTAssertEqual(viewModel.model, "claude-fable-5-2", "another session's frame is ignored")
 
         viewModel.handle(.modelChanged(sessionId: "bks-1", model: "gpt-5", by: "teammate"))
         viewModel.handle(.subscriptionChanged(sessionId: "bks-1", accountId: nil))

@@ -122,7 +122,7 @@ test("conversation target routes a retired preset to its model with the session'
   expect(
     await sessionConversationModel({ model: "dial/ultra", effort: "medium" }),
   ).toEqual({
-    model: "pi/anthropic/claude-fable-5-1",
+    model: "pi/anthropic/claude-fable-5-2",
     effort: "medium",
   });
 });

@@ -59,7 +59,7 @@ export const EFFORTS = [
 ];
 
 const PRIMARY_MODEL_IDS = [
-  "claude-fable-5-1",
+  "claude-fable-5-2",
   "claude-opus-5-5",
   "claude-sonnet-5-5",
   "claude-haiku-5-5",
@@ -156,7 +156,7 @@ export function workspacePresetLabel(id: string): string | null {
   return slug ? friendlyModelSlug(slug) : null;
 }
 
-/** Display name without the vendor noise: "Claude Fable 5.1" → "Fable 5.1",
+/** Display name without the vendor noise: "Claude Fable 5.2" → "Fable 5.2",
  * "GPT-5.5 (Codex)" → "GPT-5.5", "engine/anthropic/claude-sonnet-5" →
  * "Sonnet 5". The engine is an implementation detail — it never shows in a
  * model's name. */
@@ -210,7 +210,7 @@ const PROVIDER_ORDER = [
 /** Preferred display order for the engine main list (by id tail); anything
  * unlisted keeps its registry/config order after these. */
 const MODEL_TAIL_ORDER = [
-  "claude-fable-5-1",
+  "claude-fable-5-2",
   "claude-opus-5-5",
   "claude-opus-4-8",
   "claude-sonnet-5-5",

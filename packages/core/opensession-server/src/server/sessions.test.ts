@@ -284,7 +284,7 @@ describe("getAllSessions", () => {
     writeFileSync(transcriptPath, "");
     writeSession("bks-legacy-transcript-index", {
       claudeSessionId: sessionId,
-      model: "claude-fable-5-1",
+      model: "claude-fable-5-2",
       worktreeDir: null,
     });
 
@@ -336,12 +336,12 @@ describe("getAllSessions", () => {
   it("keeps the cooperative request scan byte-for-byte equivalent", async () => {
     writeSession("bks-cooperative-scan", {
       title: "Cooperative scan",
-      model: "claude-fable-5-1",
+      model: "claude-fable-5-2",
       workspaceId: "ws-cooperative",
     });
     writeSession("bks-cooperative-archived", {
       title: "Archived cooperative scan",
-      model: "claude-fable-5-1",
+      model: "claude-fable-5-2",
       workspaceId: "ws-cooperative-archived",
       archived: true,
     });
@@ -457,7 +457,7 @@ describe("getAllSessions", () => {
     writeSession("bks-fable-orchestrator", {
       title: "Fable orchestrator with workspace",
       repo: "opensession",
-      model: "claude-fable-5-1",
+      model: "claude-fable-5-2",
       claudeSessionId: "claude-session-1",
       workspaceId: "ws-demo",
     });
@@ -487,7 +487,7 @@ describe("getAllSessions", () => {
     expect(fable).toMatchObject({
       id: "bks-fable-orchestrator",
       repo: "opensession",
-      model: "claude-fable-5-1",
+      model: "claude-fable-5-2",
       workspaceId: "ws-demo",
     });
   });
@@ -593,7 +593,7 @@ describe("getAllSessions", () => {
     writeFileSync(rolloutPath, "");
     writeSession("bks-switched-back-to-claude", {
       title: "Switched back to Claude before Claude transcript exists",
-      model: "claude-fable-5-1",
+      model: "claude-fable-5-2",
       claudeSessionId: "missing-claude-transcript",
       codexThreadId,
     });

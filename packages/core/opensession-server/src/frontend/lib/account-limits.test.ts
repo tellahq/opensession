@@ -296,7 +296,7 @@ describe("weeklyRemainingReadout", () => {
         accounts,
         viewer: "Kent",
         provider: "claude",
-        model: "claude-fable-5-1",
+        model: "claude-fable-5-2",
       }),
     ).toMatchObject({ accountId: "mine", scope: "Fable", remaining: 55 });
   });
@@ -373,7 +373,7 @@ describe("weeklyRemainingReadout", () => {
         accounts,
         viewer: "Kent",
         provider: "claude",
-        model: "claude-fable-5-1",
+        model: "claude-fable-5-2",
       }),
     ).toMatchObject({ accountId: "pool", remaining: 60 });
   });

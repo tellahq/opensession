@@ -149,7 +149,8 @@ export function normalizeModelEffort(
 
 /** Retired Claude slugs upgrade persisted sessions to the current release. */
 const RETIRED_CLAUDE_REROUTE: Record<string, string> = {
-  "claude-fable-5": "claude-fable-5-1",
+  "claude-fable-5": "claude-fable-5-2",
+  "claude-fable-5-1": "claude-fable-5-2",
   "claude-opus-5": "claude-opus-5-5",
   "claude-opus-4-8": "claude-opus-5-5",
   "claude-sonnet-5": "claude-sonnet-5-5",
@@ -167,7 +168,7 @@ function rerouteRetiredClaudeModel(model: string): string {
 }
 
 export const DEFAULT_BRIDGE_PICKER_MODELS = [
-  "claude-fable-5-1",
+  "claude-fable-5-2",
   "claude-opus-5-5",
   "claude-sonnet-5-5",
   "claude-haiku-5-5",
@@ -179,13 +180,19 @@ export const DEFAULT_BRIDGE_PICKER_MODELS = [
 
 export const KNOWN_MODELS: ModelInfo[] = [
   {
+    id: "claude-fable-5-2",
+    provider: "claude",
+    label: "Claude Fable 5.2",
+    aliases: ["fable", "fable5.2"],
+  },
+  // Keep the old ids resolvable for persisted sessions. Dispatch upgrades them
+  // to Fable 5.2 through RETIRED_CLAUDE_REROUTE.
+  {
     id: "claude-fable-5-1",
     provider: "claude",
     label: "Claude Fable 5.1",
-    aliases: ["fable", "fable5.1"],
+    aliases: ["fable5.1"],
   },
-  // Keep the old id resolvable for persisted sessions. Dispatch upgrades it
-  // to Fable 5.1 through RETIRED_CLAUDE_REROUTE.
   {
     id: "claude-fable-5",
     provider: "claude",
@@ -339,13 +346,13 @@ export const KNOWN_MODELS: ModelInfo[] = [
  * sessions that still carry one of these ids run on the model it led.
  */
 const RETIRED_PRESET_MODELS: Record<string, string> = {
-  "dial/ultra": "claude-fable-5-1",
+  "dial/ultra": "claude-fable-5-2",
   "dial/high": "gpt-6.1-sol",
   "dial/medium": "gpt-6.1-sol",
   "dial/low": "gpt-6-luna",
   "dial/opus-fable": "claude-opus-5-5",
-  "orchestrator/fable": "claude-fable-5-1",
-  "orchestrator/fable-sol": "claude-fable-5-1",
+  "orchestrator/fable": "claude-fable-5-2",
+  "orchestrator/fable-sol": "claude-fable-5-2",
   "orchestrator/sol": "gpt-6.1-sol",
 };
 
@@ -500,8 +507,8 @@ export function refreshPickerModels(): void {
 }
 refreshPickerModels();
 
-/** Per-provider defaults: claude-fable-5-1 for Anthropic, gpt-6.1-sol for OpenAI. */
-export const DEFAULT_CLAUDE_MODEL = "claude-fable-5-1";
+/** Per-provider defaults: claude-fable-5-2 for Anthropic, gpt-6.1-sol for OpenAI. */
+export const DEFAULT_CLAUDE_MODEL = "claude-fable-5-2";
 export const DEFAULT_CODEX_MODEL = "gpt-6.1-sol";
 export const BEST_AVAILABLE_CODEX_MODEL = "codex-best-available";
 
@@ -519,6 +526,7 @@ const CODEX_MODEL_ORDER = ["gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-luna"];
  * primary, so the human is asked — the safe default).
  */
 const FALLBACK_TIER: Record<string, number> = {
+  "claude-fable-5-2": 3,
   "claude-fable-5-1": 3,
   "gpt-6-astra": 3,
   "gpt-6.1-sol": 3,
@@ -1149,6 +1157,7 @@ export function modelLabel(model?: string | null): string {
 // only context ceilings here for the live context-fill gauge.
 
 const CONTEXT_WINDOWS: Record<string, number> = {
+  "claude-fable-5-2": 1_000_000,
   "claude-fable-5-1": 1_000_000,
   "claude-opus-5-5": 1_000_000,
   "claude-opus-5": 1_000_000,

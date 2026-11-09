@@ -68,7 +68,7 @@ describe("oneShot", () => {
   test("falls over from any Claude model to caller-named OpenAI models", () => {
     expect(
       oneShotFallbackModels(
-        "pi/anthropic/claude-fable-5-1",
+        "pi/anthropic/claude-fable-5-2",
         "no usable Claude account in the pool (all exhausted or sidelined)",
         ["gpt-6-astra", "gpt-6.1-sol"],
       ),
@@ -85,7 +85,7 @@ describe("oneShot", () => {
     ).toEqual(["pi/anthropic/claude-opus-5-5"]);
     expect(
       oneShotFallbackModels(
-        "pi/anthropic/claude-fable-5-1",
+        "pi/anthropic/claude-fable-5-2",
         "usage limit reached",
         ["claude-opus-5-5", "gpt-6-astra", "gpt-6-astra"],
       ),
@@ -102,14 +102,14 @@ describe("oneShot", () => {
     ).toEqual(["pi/openai/gpt-6-luna"]);
     expect(
       oneShotFallbackModels(
-        "pi/anthropic/claude-fable-5-1",
+        "pi/anthropic/claude-fable-5-2",
         "invalid model id",
         ["gpt-6-astra"],
       ),
     ).toEqual([]);
     expect(
       oneShotFallbackModels(
-        "pi/anthropic/claude-fable-5-1",
+        "pi/anthropic/claude-fable-5-2",
         "quota",
         undefined,
       ),

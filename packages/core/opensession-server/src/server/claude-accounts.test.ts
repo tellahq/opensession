@@ -122,7 +122,7 @@ describe("pickAccount usage-credits policy", () => {
       source: "meridian",
     });
     expect(
-      accounts.pickAccount(new Set(["fresh"]), undefined, "claude-fable-5-1")
+      accounts.pickAccount(new Set(["fresh"]), undefined, "claude-fable-5-2")
         ?.id,
     ).toBe("maxed");
     accounts.__setUsageCacheForTest("maxed", usage(100));
@@ -130,7 +130,7 @@ describe("pickAccount usage-credits policy", () => {
 
   test("allows a blind personal account for a singleton Fable requirement", async () => {
     expect(
-      accounts.pickAccount(undefined, "Jaap", ["claude-fable-5-1"])?.id,
+      accounts.pickAccount(undefined, "Jaap", ["claude-fable-5-2"])?.id,
     ).toBe("blind-personal");
   });
 
@@ -148,14 +148,14 @@ describe("pickAccount usage-credits policy", () => {
     expect(
       accounts.pickAccount(new Set(["maxed"]), undefined, [
         "claude-opus-5",
-        "claude-fable-5-1",
+        "claude-fable-5-2",
       ]),
     ).toBeUndefined();
     accounts.__setUsageCacheForTest("fresh", usage(20));
     expect(
       accounts.pickAccount(new Set(["maxed"]), undefined, [
         "claude-opus-5",
-        "claude-fable-5-1",
+        "claude-fable-5-2",
       ]),
     ).toBeUndefined();
     accounts.__setUsageCacheForTest("fresh", usage(50));
@@ -562,7 +562,7 @@ describe("sidelines survive a restart", () => {
     accounts.__setUsageCacheForTest("reboot-model", fableSpent);
     accounts.__setUsageCacheForTest("reboot-opus", usage(10));
     accounts.markExhausted("reboot");
-    accounts.markExhausted("reboot-model", "claude-fable-5-1");
+    accounts.markExhausted("reboot-model", "claude-fable-5-2");
     accounts.markExhausted(
       "reboot-opus",
       "claude-opus-5",
@@ -596,7 +596,7 @@ describe("sidelines survive a restart", () => {
     expect(rebooted?.exhaustedUntil).toBeNull();
     const fable = accounts.earliestPoolReset(
       undefined,
-      "claude-fable-5-1",
+      "claude-fable-5-2",
       "reboot-model",
     );
     expect(fable).not.toBeNull();
@@ -654,7 +654,7 @@ describe("model-scoped sidelines without a weekly cap of their own", () => {
     }
     accounts.markExhausted("sonnet-ok", "claude-sonnet-5-5", farFuture());
     accounts.markExhausted("sonnet-spent", "claude-sonnet-5-5", farFuture());
-    accounts.markExhausted("fable-unknown", "claude-fable-5-1", farFuture());
+    accounts.markExhausted("fable-unknown", "claude-fable-5-2", farFuture());
   });
 
   afterAll(async () => {
@@ -681,6 +681,6 @@ describe("model-scoped sidelines without a weekly cap of their own", () => {
       "fable-unknown",
       snapshot(40, [{ label: "Fable", utilization: null, resetsAt: null }]),
     );
-    expect(pick("fable-unknown", "claude-fable-5-1")).toBeUndefined();
+    expect(pick("fable-unknown", "claude-fable-5-2")).toBeUndefined();
   });
 });

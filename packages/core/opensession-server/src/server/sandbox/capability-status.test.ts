@@ -348,7 +348,7 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
 
 describe("provider-independent model-family sandboxability", () => {
   test("family derivation follows the resolved engine provider", async () => {
-    expect(sandboxModelFamilyFor("claude-fable-5-1").id).toBe("pi");
+    expect(sandboxModelFamilyFor("claude-fable-5-2").id).toBe("pi");
     expect(sandboxModelFamilyFor("gpt-5.5").id).toBe("pi");
     expect(sandboxModelFamilyFor("codex").id).toBe("pi"); // alias resolves
     expect(sandboxModelFamilyFor("pi/openai/gpt-5.4-mini").id).toBe("pi");
@@ -359,7 +359,7 @@ describe("provider-independent model-family sandboxability", () => {
 
   test("Claude, Pi, and every Pi provider are sandboxable", async () => {
     for (const model of [
-      "claude-fable-5-1",
+      "claude-fable-5-2",
       "pi/anthropic/claude-sonnet-5",
       "pi/openai/gpt-5.5",
       "pi/openai/gpt-5.6-sol",
@@ -380,7 +380,7 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
         undefined,
         "sandbox-default-test-user",
         undefined,
-        "claude-fable-5-1",
+        "claude-fable-5-2",
       ),
     ).toEqual({ ok: true, provider: "daytona" });
     expect(
@@ -388,7 +388,7 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
         "local",
         "sandbox-default-test-user",
         undefined,
-        "claude-fable-5-1",
+        "claude-fable-5-2",
       ),
     ).toEqual({ ok: true, provider: null });
   });
@@ -405,7 +405,7 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
         undefined,
         "sandbox-default-test-user",
         "tella",
-        "claude-fable-5-1",
+        "claude-fable-5-2",
       ),
     ).toEqual({ ok: true, provider: "daytona" });
     expect(
@@ -413,7 +413,7 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
         undefined,
         "sandbox-default-test-user",
         "other",
-        "claude-fable-5-1",
+        "claude-fable-5-2",
       ),
     ).toEqual({ ok: true, provider: null });
     expect(
@@ -421,7 +421,7 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
         "local",
         "sandbox-default-test-user",
         "tella",
-        "claude-fable-5-1",
+        "claude-fable-5-2",
       ),
     ).toEqual({ ok: true, provider: null });
   });
@@ -576,7 +576,7 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
     write({ provider: "daytona" });
     await ready("daytona");
     expect(
-      resolveRequestedSandbox("daytona", undefined, "claude-fable-5-1"),
+      resolveRequestedSandbox("daytona", undefined, "claude-fable-5-2"),
     ).toEqual({
       ok: true,
       provider: "daytona",
