@@ -340,12 +340,13 @@ export function interactiveMcpServers(
               presentRepos: () => presentMemoryRepos(sessionId),
               sessionLink: sessionLink(sessionId),
             }),
-          // Read the web: fetch a URL as text, search what was fetched,
-          // clone a GitHub repo instead of scraping it. Deliberately no
-          // search provider. The session id only picks which scratch dir a
-          // clone lands in; the tool list is the same for every session,
-          // which is what lets it ride the shared server pool.
-          "opensession-web": () => createWebMcpServer({ sessionId }),
+          // Read the web: search it (Claude's WebSearch on a Claude
+          // account), fetch a URL as text, search what was fetched, clone a
+          // GitHub repo instead of scraping it. The session id picks which
+          // scratch dir a clone lands in and the user routes web_search to
+          // their personal account first; the tool list is the same for
+          // every session, which is what lets it ride the shared server pool.
+          "opensession-web": () => createWebMcpServer({ sessionId, user }),
           // Portals are session-scoped supervised HTTP/WebSocket services.
           // The old Preview tool was intentionally replaced rather than
           // aliased: agents should choose Portals for live software.

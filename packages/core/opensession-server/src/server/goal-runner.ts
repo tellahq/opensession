@@ -63,7 +63,10 @@ function goalMcpServers(
     // Goals often measure public URLs over time. Give them the same bounded,
     // SSRF-safe reader as interactive sessions instead of opening curl in the
     // ask-mode shell allowlist.
-    "opensession-web": createWebMcpServer({ sessionId: osSessionId }),
+    "opensession-web": createWebMcpServer({
+      sessionId: osSessionId,
+      user: createdBy,
+    }),
   };
 }
 

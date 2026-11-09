@@ -51,7 +51,7 @@ touches an in-process tool:
 | [`opensession-publish`](#opensession-publish) | 4 | interactive | Needs a session id. |
 | [`opensession-repos`](#opensession-repos) | 7 | interactive | Needs a session id. |
 | [`opensession-memory`](#opensession-memory) | 6 | interactive, automation | Needs a session id. |
-| [`opensession-web`](#opensession-web) | 3 | interactive, goal wake, automation | Needs a session id. Automations get it only when their MCP allowlist names it. |
+| [`opensession-web`](#opensession-web) | 4 | interactive, goal wake, automation | Needs a session id. Automations get it only when their MCP allowlist names it. |
 | [`opensession-portals`](#opensession-portals) | 9 | interactive | Needs a session id. |
 | [`opensession-desktop`](#opensession-desktop) | 8 | interactive | Needs a sandboxed session. |
 | [`opensession-walkthrough`](#opensession-walkthrough) | 2 | interactive | Needs a session id. |
@@ -79,7 +79,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-38 servers, 186 tools.
+38 servers, 187 tools.
 
 ## opensession-sessions
 
@@ -737,18 +737,24 @@ Sync one visible memory repository with its configured upstream and report the r
 
 ## opensession-web
 
-Read a URL as text, search what was fetched, clone a GitHub repo. No web search.
+Search the web, read a URL as text, search what was fetched, clone a GitHub repo.
 
 - **Source** `packages/core/opensession-server/src/server/web-mcp.ts`
 - **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`, `packages/core/opensession-server/src/server/goal-runner.ts`, `packages/core/opensession-server/src/server/automations.ts`
 - **Runs** interactive, goal wake, automation
 - **Condition** Needs a session id. Automations get it only when their MCP allowlist names it.
 
+### `web_search`
+
+`mcp__opensession-web__web_search` · input: `query` (string, required), `allowed_domains` (string[]), `blocked_domains` (string[])
+
+Search the web and return a ranked list of titles and URLs. Runs Claude's web search, the same one Claude Code uses. Results carry no page text: read the ones you want with `fetch_url`. A short summary written by the search model may follow the list; treat it as a lead, not a source. Write queries the way you would type them into a search engine. Use `allowed_domains` to search one site (e.g. ["github.com"]). A search takes about 10 seconds.
+
 ### `fetch_url`
 
 `mcp__opensession-web__fetch_url` · input: `url` (string, required), `mode` ("text" | "raw"), `headChars` (number), `refresh` (boolean)
 
-Fetch a URL and return its readable text. Returns the first part of the page inline plus a `handle`; the whole body is kept on disk for an hour, so use `read_page` with that handle to search the rest rather than re-fetching. This keeps a long page out of the conversation unless you ask for the part you need. A GitHub repository URL is CLONED instead of scraped, and the result is a local path you can read with the normal file tools. A GitHub file URL is read as raw text rather than as a rendered page. Private, loopback and link-local addresses are refused, redirects included. This does not search the web: pass a URL you already have.
+Fetch a URL and return its readable text. Returns the first part of the page inline plus a `handle`; the whole body is kept on disk for an hour, so use `read_page` with that handle to search the rest rather than re-fetching. This keeps a long page out of the conversation unless you ask for the part you need. A GitHub repository URL is CLONED instead of scraped, and the result is a local path you can read with the normal file tools. A GitHub file URL is read as raw text rather than as a rendered page. Private, loopback and link-local addresses are refused, redirects included. To find a URL, use `web_search` first.
 
 ### `read_page`
 
