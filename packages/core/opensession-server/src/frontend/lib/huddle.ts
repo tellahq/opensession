@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { os1Shell } from "./os1-shell";
 import { transcribeClip } from "./api/automations";
 import { errorMessage } from "./error-message";
 import type {
@@ -316,8 +317,17 @@ export async function startScreenShare(): Promise<void> {
       video: { frameRate: { ideal: 15, max: 30 } },
       audio: false,
     });
-  } catch {
-    // The person closed the picker.
+  } catch (error) {
+    // Closing the picker (or macOS refusing screen recording) is NotAllowed:
+    // nothing to say. Anything else means this app can't capture at all,
+    // which in the desktop app means a build from before it learned to.
+    if (error instanceof DOMException && error.name === "NotAllowedError")
+      return;
+    noticeHandler?.(
+      os1Shell()
+        ? "This version of the desktop app can't share your screen. Update the app, or share from a browser."
+        : `Couldn't share your screen: ${errorMessage(error, "not supported here")}`,
+    );
     return;
   }
   const [track] = stream.getVideoTracks();
