@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { deliverSessionPrompt, fetchTranscript } from "../../lib/api/sessions";
+import {
+  type ReplyComposerCatalog,
+  SessionReplyComposer,
+} from "../SessionReplyComposer";
+import { fetchTranscript } from "../../lib/api/sessions";
 import { errorMessage } from "../../lib/error-message";
 import { PANEL_BODY } from "../../lib/session-panel-classes";
 import { useSessionRecord } from "../../lib/session-records";
-import { isSendCombo } from "../../lib/send-key";
 import {
   THREAD_STATE_LABEL,
   threadState,
@@ -12,15 +15,12 @@ import {
 import type { TranscriptEntry } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
-import { Textarea } from "../../ui/input";
 import { EmptyState, InlineAlert, LoadingState } from "../../ui/state";
-import { toast } from "../../ui/toast";
 import { MessageCommentsSession } from "../../lib/message-comments";
 import { ThreadPaneLevelProvider } from "../../lib/thread-view";
 import { Tooltip } from "../../ui/tooltip";
-import { IconChevronLeft, IconExpand } from "../icons";
+import { IconChevronLeft, IconExpand, IconX } from "../icons";
 import { TranscriptBlocks } from "../TranscriptBlocks";
-import { getCurrentUser } from "../UserPicker";
 import { THREAD_DOT } from "./thread-classes";
 
 /** How many of the thread's latest entries the pane reads. */
@@ -32,7 +32,7 @@ const POLL_MS = 2_000;
  * A thread opened beside the conversation that started it: where it stands, its
  * conversation, and a box to keep iterating with its agent, without leaving
  * it. A thread it starts in turn opens on top of it, one level deeper; the
- * header leads back through each level. Full screen opens the thread by
+ * header leads back through each level, and Close ends the split. Full screen opens the thread by
  * itself when it needs more room (its review, its browser, its terminal).
  */
 export function ThreadPane({
@@ -41,15 +41,17 @@ export function ThreadPane({
   trail,
   onBack,
   onOpenSession,
+  catalog,
 }: {
-  /** The conversation the panel sits beside. */
+  /** The conversation the split sits beside. */
   rootId: string;
   threadId: string;
   /** The open threads above this one, outermost first. */
   trail: readonly string[];
-  /** Keep the first `depth` levels open; 0 is the thread list. */
+  /** Keep the first `depth` levels open; 0 closes the thread. */
   onBack: (depth: number) => void;
   onOpenSession?: (id: string) => void;
+  catalog: ReplyComposerCatalog;
 }) {
   const thread = useSessionRecord(threadId);
   const state = thread ? threadState(thread) : null;
@@ -73,30 +75,31 @@ export function ThreadPane({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-col gap-1 border-b border-divider px-3 pt-2.5 pb-2.5">
         <div className="flex min-w-0 items-center gap-0.5">
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={<IconChevronLeft size={20} />}
-            aria-label={trail.length === 0 ? undefined : "Back"}
-            className="-ml-1.5 shrink-0 phone:min-h-11"
-            onClick={() => onBack(trail.length)}
-          >
-            {trail.length === 0 ? "Threads" : null}
-          </Button>
-          {trail.length > 0 && (
-            <nav
-              aria-label="Open threads"
-              className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden text-meta text-faint"
-            >
-              <Crumb label="Threads" fixed onClick={() => onBack(0)} />
-              {trail.map((id, depth) => (
-                <ThreadCrumb
-                  key={id}
-                  threadId={id}
-                  onClick={() => onBack(depth + 1)}
-                />
-              ))}
-            </nav>
+          {trail.length > 0 ? (
+            <>
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={<IconChevronLeft size={20} />}
+                aria-label="Back"
+                className="-ml-1.5 shrink-0"
+                onClick={() => onBack(trail.length)}
+              />
+              <nav
+                aria-label="Open threads"
+                className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden text-meta text-faint"
+              >
+                {trail.map((id, depth) => (
+                  <ThreadCrumb
+                    key={id}
+                    threadId={id}
+                    onClick={() => onBack(depth + 1)}
+                  />
+                ))}
+              </nav>
+            </>
+          ) : (
+            <span className="px-0.5 text-meta text-faint">Thread</span>
           )}
           <span className="flex-1" />
           {onOpenSession && (
@@ -106,11 +109,21 @@ export function ThreadPane({
                 variant="ghost"
                 aria-label="Open full screen"
                 icon={<IconExpand size={18} />}
-                className="shrink-0 phone:size-11"
+                className="shrink-0"
                 onClick={() => onOpenSession(threadId)}
               />
             </Tooltip>
           )}
+          <Tooltip label="Close thread">
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label="Close thread"
+              icon={<IconX size={18} />}
+              className="-mr-1.5 shrink-0"
+              onClick={() => onBack(0)}
+            />
+          </Tooltip>
         </div>
         <div className="flex min-w-0 items-start gap-2 px-0.5">
           {state && (
@@ -170,31 +183,27 @@ export function ThreadPane({
           <EmptyState>Nothing in this thread yet.</EmptyState>
         )}
       </div>
-      <ThreadReply threadId={threadId} />
+      {thread && (
+        <div className="shrink-0 px-3 pt-1 pb-3">
+          <SessionReplyComposer
+            target={thread}
+            catalog={catalog}
+            placeholder="Message this thread"
+          />
+        </div>
+      )}
     </div>
   );
 }
 
-function Crumb({
-  label,
-  fixed = false,
-  onClick,
-}: {
-  label: string;
-  /** Never squeezed: the way out to the list stays readable. */
-  fixed?: boolean;
-  onClick: () => void;
-}) {
+function Crumb({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <>
       <Button
         size="sm"
         variant="ghost"
         title={label}
-        className={cn(
-          "px-1 font-normal text-dim",
-          fixed ? "shrink-0" : "min-w-0 max-w-[10rem] shrink",
-        )}
+        className="min-w-0 max-w-[12rem] shrink px-1 font-normal text-dim"
         onClick={onClick}
       >
         <span className="truncate">{label}</span>
@@ -215,55 +224,6 @@ function ThreadCrumb({
 }) {
   const thread = useSessionRecord(threadId);
   return <Crumb label={thread?.title || "Thread"} onClick={onClick} />;
-}
-
-function ThreadReply({ threadId }: { threadId: string }) {
-  const [text, setText] = useState("");
-  const [sending, setSending] = useState(false);
-  function send() {
-    const content = text.trim();
-    if (!content || sending) return;
-    setSending(true);
-    void deliverSessionPrompt(threadId, {
-      content,
-      user: getCurrentUser(),
-      clientId: crypto.randomUUID(),
-    })
-      .then(() => setText(""))
-      .catch((error) =>
-        toast(errorMessage(error, "Couldn't send to the thread"), {
-          variant: "error",
-        }),
-      )
-      .finally(() => setSending(false));
-  }
-  return (
-    // The right inset keeps Send clear of the Desk button, which floats in
-    // the window's bottom-right corner: this panel's corner (DESK_FAB).
-    <div className="flex shrink-0 items-end gap-2 border-t border-divider p-2.5 pr-16 phone:pr-2.5">
-      <Textarea
-        value={text}
-        aria-label="Message this thread"
-        placeholder="Message this thread"
-        className="max-h-40 min-h-10 flex-1 phone:text-input-phone"
-        onChange={(event) => setText(event.target.value)}
-        onKeyDown={(event) => {
-          if (isSendCombo(event, "enter")) {
-            event.preventDefault();
-            send();
-          }
-        }}
-      />
-      <Button
-        variant="primary"
-        disabled={!text.trim() || sending}
-        onClick={send}
-        className="phone:min-h-11"
-      >
-        Send
-      </Button>
-    </div>
-  );
 }
 
 /** The thread's latest entries, re-read while it works. */

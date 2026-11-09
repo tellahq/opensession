@@ -23,13 +23,8 @@ import { RepoTile } from "../RepoTile";
 import { UserAvatar } from "../UserAvatar";
 import { THREAD_CAPTION } from "./thread-classes";
 import { WorkspaceSettingsDialog } from "../WorkspaceSettingsDialog";
-import { ThreadPane } from "./ThreadPane";
 import { HuddleButton } from "../huddle/HuddleButton";
-import {
-  closeThreadPane,
-  openThreadPane,
-  useThreadPaneStack,
-} from "../../lib/thread-view";
+import { openThreadPane } from "../../lib/thread-view";
 import { useIsCoordinating } from "../../lib/coordinator-mode";
 import { ThreadRow } from "./ThreadRow";
 
@@ -61,19 +56,6 @@ export function ThreadsPanel({
   /** Off where the page around it already names the workspace. */
   showTitle?: boolean;
 }) {
-  const stack = useThreadPaneStack(rootId);
-  const openThread = stack.at(-1);
-  if (openThread)
-    return (
-      <ThreadPane
-        key={openThread}
-        rootId={rootId}
-        threadId={openThread}
-        trail={stack.slice(0, -1)}
-        onBack={(depth) => closeThreadPane(rootId, depth)}
-        onOpenSession={onOpenSession}
-      />
-    );
   return (
     <ThreadsOverview
       workspace={workspace}
@@ -157,7 +139,7 @@ function ThreadsOverview({
         <ThreadGroups
           threads={threads}
           onOpen={(id) => {
-            // Beside the conversation when it has a panel on screen.
+            // In a split beside the conversation where there is room.
             if (!openThreadPane(rootId, id)) onOpenSession?.(id);
           }}
         />

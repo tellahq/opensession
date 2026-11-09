@@ -10,19 +10,14 @@ import {
   fetchTranscript,
   fetchModels,
   fetchProviderAccounts,
-  fetchFileMentions,
-  fetchMentionSuggestions,
-  fetchSkillMentions,
   type ModelOption,
   type ProviderAccountOption,
 } from "../lib/api";
-import { loadDraft, saveDraft } from "../lib/drafts";
 import { Button } from "../ui/button";
 import { InlineAlert } from "../ui/state";
-import type { FileAttachment } from "../lib/images";
 import { getReads, isUnread, markRead } from "../lib/reads";
 import { TranscriptBlocks } from "./TranscriptBlocks";
-import { Composer } from "./Composer";
+import { SessionReplyComposer } from "./SessionReplyComposer";
 import { useCurrentUser } from "./UserPicker";
 import { shortTime, elapsedSince } from "../lib/time";
 import { SwipeCard } from "../ui/swipe-deck";
@@ -578,193 +573,19 @@ function CardBody({
         </div>
       </div>
 
-      <CatchUpComposer
-        target={target}
-        connected={connected}
-        models={models}
-        defaultModel={defaultModel}
-        accounts={accounts}
-        send={send}
-        currentUser={currentUser}
-        onReplied={onReplied}
-      />
+      {/* Stop pointerdown from reaching the card's drag handler so typing,
+          the menus and text selection never start a swipe. */}
+      <div
+        className="shrink-0 border-t border-line p-2.5"
+        onPointerDownCapture={(e) => e.stopPropagation()}
+      >
+        <SessionReplyComposer
+          target={target}
+          catalog={{ connected, models, defaultModel, accounts, send }}
+          onReplied={onReplied}
+        />
+      </div>
     </>
-  );
-}
-
-/**
- * The catch-up reply box is the full shared Composer, wired to the card's
- * reply-target session — so a reply from the deck has the same reach as one
- * from the session view: attach images/files, switch the model + reasoning
- * effort, pin a subscription, set a goal, dictate, and @-mention repo files.
- * Model / subscription / goal changes route through the /model, /sub and /goal
- * slash commands (persisted + broadcast server-side), exactly like SessionViewer.
- * Slack sessions can switch models too (the /model command syncs the loop's
- * store server-side); Linear-owned sessions keep the model fixed — that's the
- * owning agent's call — but still get attachments and effort.
- */
-function CatchUpComposer({
-  target,
-  connected,
-  models,
-  defaultModel,
-  accounts,
-  send,
-  currentUser,
-  onReplied,
-}: {
-  target: UnifiedSession;
-  connected: boolean;
-  models: ModelOption[];
-  defaultModel: string;
-  accounts: ProviderAccountOption[];
-  send: (msg: WSClientMessage) => void;
-  currentUser: string;
-  onReplied: () => void;
-}) {
-  // Share the session's draft with the main session view (same key), so a reply
-  // half-typed here shows up there and vice-versa. Images/files are parked in
-  // the same draft record (Composer only owns the text).
-  const draftKey = `session:${target.id}`;
-  const [images, setImages] = useState<string[]>(
-    () => loadDraft(draftKey).images,
-  );
-  const [files, setFiles] = useState<FileAttachment[]>(
-    () => loadDraft(draftKey).files,
-  );
-  useEffect(() => {
-    saveDraft(draftKey, { images, files });
-  }, [draftKey, images, files]);
-
-  const [model, setModel] = useState(target.model || "");
-  const [accountId, setAccountId] = useState(target.accountId || "");
-  const [effort, setEffort] = useState("high");
-  // Optimistic goal (the /goal command persists but doesn't broadcast a live
-  // update); `undefined` defers to the session's stored goal.
-  const [goalOverride, setGoalOverride] = useState<string | null | undefined>(
-    undefined,
-  );
-  const currentGoal =
-    goalOverride !== undefined ? goalOverride : (target.goal ?? null);
-
-  const isNative = target.source === "opensession";
-  // Send the reply into the target session (images fold in as content blocks;
-  // files route to the queue server-side), then advance the deck.
-  function handleSend(
-    raw: string,
-    opts?: { steer?: boolean; pastedTexts?: string[] },
-  ): boolean {
-    const text = raw.trim();
-    const pastedTexts = opts?.pastedTexts ?? [];
-    if (
-      !text &&
-      images.length === 0 &&
-      files.length === 0 &&
-      pastedTexts.length === 0
-    )
-      return false;
-    if (!connected) return false;
-    // Prefer the staged disk path (HTTP upload); fall back to inline dataUrl.
-    const filePayload = files.map((f) =>
-      f.path
-        ? { name: f.name, path: f.path }
-        : { name: f.name, dataUrl: f.dataUrl },
-    );
-    const message: Extract<WSClientMessage, { type: "prompt" }> = {
-      type: "prompt",
-      sessionId: target.id,
-      content: text,
-      user: currentUser,
-      effort,
-    };
-    if (images.length > 0) message.images = images;
-    if (files.length > 0) message.files = filePayload;
-    if (pastedTexts.length > 0) message.pastedTexts = pastedTexts;
-    send(message);
-    setImages([]);
-    setFiles([]);
-    onReplied();
-    return true;
-  }
-
-  // Model / account / goal all route through their slash commands (they
-  // persist, notice, and broadcast to other viewers) — mirrors SessionViewer.
-  function handleModelChange(next: string) {
-    const targetModel = next || defaultModel;
-    if (!targetModel || targetModel === (model || defaultModel)) return;
-    setModel(next);
-    send({
-      type: "prompt",
-      sessionId: target.id,
-      content: `/model ${targetModel}`,
-      user: currentUser,
-    });
-  }
-  function handleAccountChange(next: string) {
-    if (next === (accountId || "")) return;
-    setAccountId(next);
-    const acct = next ? accounts.find((a) => a.id === next) : null;
-    send({
-      type: "prompt",
-      sessionId: target.id,
-      content: next ? `/account ${acct?.id || next}` : "/account auto",
-      user: currentUser,
-    });
-  }
-  function handleSetGoal(goal: string | null) {
-    setGoalOverride(goal);
-    send({
-      type: "prompt",
-      sessionId: target.id,
-      content: goal ? `/goal ${goal}` : "/goal clear",
-      user: currentUser,
-    });
-  }
-
-  return (
-    // Stop pointerdown from reaching the card's drag handler so typing, the
-    // menus and text selection in the composer never start a swipe.
-    <div
-      className="shrink-0 border-t border-line p-2.5"
-      onPointerDownCapture={(e) => e.stopPropagation()}
-    >
-      <Composer
-        config={{
-          draftKey,
-          placeholder: connected ? "Reply…" : "Not connected",
-          disabled: !connected,
-          sendDisabled: (text) =>
-            !text.trim() && images.length === 0 && files.length === 0,
-          images,
-          files,
-          models,
-          defaultModel,
-          model,
-          modelDisabled: !isNative && target.source !== "slack",
-          modelTitle:
-            isNative || target.source === "slack"
-              ? "Switch the model for this session"
-              : "Set the model from the owning agent (its session file is agent-owned)",
-          effort,
-          accounts: isNative ? accounts : undefined,
-          accountId,
-          goal: currentGoal,
-        }}
-        actions={{
-          onSend: handleSend,
-          onImagesChange: setImages,
-          onFilesChange: setFiles,
-          onModelChange: handleModelChange,
-          onEffortChange: setEffort,
-          onAccountChange: isNative ? handleAccountChange : undefined,
-          onSetGoal: isNative ? handleSetGoal : undefined,
-          mentionFetch: (query) => fetchFileMentions(query, target.id),
-          paletteFetch: (query) =>
-            fetchMentionSuggestions(query, target.id, currentUser),
-          skillsFetch: (query) => fetchSkillMentions(query, target.id),
-        }}
-      />
-    </div>
   );
 }
 
