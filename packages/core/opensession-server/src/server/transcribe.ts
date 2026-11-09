@@ -9,10 +9,17 @@
  * MediaRecorder produced (webm/opus on Chrome, mp4/AAC on iOS Safari); ffmpeg
  * normalizes to 16k mono wav for whisper.cpp, while the hosted APIs take the
  * original container as-is.
+ *
+ * Local runs are bounded. Each one takes most of the CPU, and a backlog makes
+ * every run slower, which grows the backlog: on 2026-11-09 a huddle with notes
+ * on (a clip per person every 20 s) left 72 runs going for over an hour and
+ * starved the whole host. So at most LOCAL_LANES run at once, a few more may
+ * wait, anything past that fails fast as busy, and each run is killed after
+ * LOCAL_TIMEOUT_MS, by us and (should the gateway go away) by systemd.
  */
 
 import { homeDir } from "./paths";
-import { tmpdir } from "node:os";
+import { availableParallelism, tmpdir } from "node:os";
 import { join } from "node:path";
 import { unlink } from "node:fs/promises";
 import { workloadArgv } from "./workload-scope";
@@ -26,6 +33,41 @@ const WHISPER_MODEL =
 
 /** Max clip we accept — dictation, not podcasts. */
 export const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+
+/** Local whisper runs at once, and how many more may wait for a lane. */
+export const LOCAL_LANES = 2;
+export const LOCAL_QUEUE = 4;
+const LOCAL_TIMEOUT_MS = 90_000;
+/** Threads per run, so the lanes together leave the host some room. */
+const LOCAL_THREADS = Math.max(
+  2,
+  Math.floor(availableParallelism() / LOCAL_LANES) - 1,
+);
+
+let running = 0;
+const waiting: Array<() => void> = [];
+
+/**
+ * Run `task` in one of `LOCAL_LANES` lanes. Rejects at once when every lane
+ * is busy and the queue is full.
+ */
+export async function inLocalLane<T>(task: () => Promise<T>): Promise<T> {
+  if (running >= LOCAL_LANES) {
+    if (waiting.length >= LOCAL_QUEUE)
+      throw new Error("local transcription is busy; try again shortly");
+    await new Promise<void>((resolve) => waiting.push(resolve));
+  } else {
+    running++;
+  }
+  try {
+    return await task();
+  } finally {
+    // Hand the lane straight to the next waiter, or free it.
+    const next = waiting.shift();
+    if (next) next();
+    else running--;
+  }
+}
 
 function extForMime(mime: string): string {
   if (mime.includes("mp4") || mime.includes("aac") || mime.includes("m4a"))
@@ -101,21 +143,31 @@ async function transcribeLocal(audio: Blob, ext: string): Promise<string> {
           "-f",
           wavPath,
           "-t",
-          "14",
+          String(LOCAL_THREADS),
           "-bs",
           "1",
           "-np", // no progress/system prints on stderr
           "-nt", // no timestamps — plain text lines on stdout
         ],
         "transcribe",
+        // Outlives nothing: systemd stops a run the gateway forgot.
+        {
+          properties: [`RuntimeMaxSec=${Math.ceil(LOCAL_TIMEOUT_MS / 1000)}`],
+        },
       ),
       { stdout: "pipe", stderr: "pipe" },
     );
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      whisper.kill();
+    }, LOCAL_TIMEOUT_MS);
     const [code, out, err] = await Promise.all([
       whisper.exited,
       new Response(whisper.stdout).text(),
       new Response(whisper.stderr).text(),
-    ]);
+    ]).finally(() => clearTimeout(timer));
+    if (timedOut) throw new Error("whisper-cli took too long");
     if (code !== 0) throw new Error(`whisper-cli failed: ${err.slice(-300)}`);
     return out
       .split("\n")
@@ -185,7 +237,7 @@ export async function transcribeAudio(
   if (await localWhisperAvailable()) {
     try {
       return {
-        text: await transcribeLocal(audio, ext),
+        text: await inLocalLane(() => transcribeLocal(audio, ext)),
         provider: "whisper.cpp",
       };
     } catch (e: any) {

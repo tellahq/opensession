@@ -88,6 +88,9 @@ let meterTimer: number | undefined;
 let recorder: MediaRecorder | null = null;
 let clipTimer: number | undefined;
 let inviteHandler: ((invite: HuddleInvite) => void) | null = null;
+/** This browser's clips go to the transcriber one at a time, so a slow
+ *  server holds at most one of them per person (server/transcribe.ts). */
+let notesChain: Promise<void> = Promise.resolve();
 /** Said once per call, so a broken transcriber doesn't toast every clip. */
 let notesFailureShown = false;
 let noticeHandler: ((text: string) => void) | null = null;
@@ -560,23 +563,25 @@ function startNotes() {
     rec.onstop = () => {
       const audio = new Blob(chunks, { type: rec.mimeType || "audio/webm" });
       if (audio.size > 2_000)
-        void transcribeClip(audio)
-          .then((text) => {
-            const said = text.trim();
-            if (said)
-              send?.({
-                type: "huddle_note",
-                text: said.slice(0, 2000),
-                roomId,
-              });
-          })
-          .catch((error) => {
-            if (notesFailureShown) return;
-            notesFailureShown = true;
-            noticeHandler?.(
-              `Huddle notes couldn't transcribe your microphone: ${errorMessage(error, "transcription failed")}`,
-            );
-          });
+        notesChain = notesChain.then(() =>
+          transcribeClip(audio)
+            .then((text) => {
+              const said = text.trim();
+              if (said)
+                send?.({
+                  type: "huddle_note",
+                  text: said.slice(0, 2000),
+                  roomId,
+                });
+            })
+            .catch((error) => {
+              if (notesFailureShown) return;
+              notesFailureShown = true;
+              noticeHandler?.(
+                `Huddle notes couldn't transcribe your microphone: ${errorMessage(error, "transcription failed")}`,
+              );
+            }),
+        );
       if (recorder === rec) clip();
     };
     rec.start();
