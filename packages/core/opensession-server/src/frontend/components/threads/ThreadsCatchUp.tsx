@@ -97,11 +97,10 @@ function CatchUp({ rootId }: { rootId: string }) {
               size="sm"
               variant="soft"
               className="max-w-full gap-1.5 phone:min-h-11"
-              onClick={() =>
-                phone
-                  ? navigation.openSession(thread.id)
-                  : openThreadPane(rootId, thread.id)
-              }
+              onClick={() => {
+                if (phone || !openThreadPane(rootId, thread.id))
+                  navigation.openSession(thread.id);
+              }}
             >
               <span
                 aria-hidden="true"

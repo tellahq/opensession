@@ -271,9 +271,10 @@ export function registerSidePanelHost(key: string): () => void {
   };
 }
 
-/** Whether a viewer can show the panel right now (see registerSidePanelHost). */
-export function sidePanelHostOnScreen(): boolean {
-  return hosts.length > 0;
+/** Whether a viewer can show the panel right now (see registerSidePanelHost):
+ *  any viewer, or the one for `key`. */
+export function sidePanelHostOnScreen(key?: string): boolean {
+  return key ? hosts.includes(key) : hosts.length > 0;
 }
 
 /** Light the open panel up as a drop target while a tab is dragged over it. */

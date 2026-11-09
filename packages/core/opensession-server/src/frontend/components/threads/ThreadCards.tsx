@@ -1,7 +1,7 @@
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { useNavigation } from "../../hooks/useNavigation";
 import { useMessageCommentsSession } from "../../lib/message-comments";
-import { openThreadPane } from "../../lib/thread-view";
+import { openThreadPane, useThreadPaneLevel } from "../../lib/thread-view";
 import { useSessionRecord } from "../../lib/session-records";
 import {
   THREAD_STATE_LABEL,
@@ -75,16 +75,20 @@ function ThreadCardBody({
   const thread = useSessionRecord(spawned.threadId);
   // The conversation the card is in: its Threads tab opens the thread.
   const hostId = useMessageCommentsSession();
+  // Inside a thread already open beside the conversation: one level deeper.
+  const level = useThreadPaneLevel();
   const phone = useIsPhone();
   return (
     <ListRow
       variant="card"
-      onClick={() =>
-        // Beside the conversation on desktop; a phone has no room for two.
-        hostId && !phone
-          ? openThreadPane(hostId, spawned.threadId)
-          : navigation.openSession(spawned.threadId)
-      }
+      onClick={() => {
+        // Beside the conversation on desktop; a phone has no room for two,
+        // and a conversation with no panel on screen opens the thread itself.
+        const opened = level
+          ? openThreadPane(level.rootId, spawned.threadId, level.threadId)
+          : !!hostId && !phone && openThreadPane(hostId, spawned.threadId);
+        if (!opened) navigation.openSession(spawned.threadId);
+      }}
     >
       {thread ? (
         <LiveThread thread={thread} />

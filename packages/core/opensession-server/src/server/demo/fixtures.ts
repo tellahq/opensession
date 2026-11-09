@@ -1452,6 +1452,18 @@ export function demoSessions(opts: {
             `${thread.id}-u1`,
             iso(now - thread.startedAgoMin * min),
           ),
+          // A thread can start threads of its own: the profile thread hands
+          // the benchmark to one, which opens a level deeper in the panel.
+          ...(thread.id === NESTED_THREAD.parent
+            ? tool(
+                "space-nested",
+                1,
+                "mcp__opensession-sessions__spawn_task",
+                { prompt: NESTED_THREAD.prompt, mode: "ask" },
+                `Spawned task \`${NESTED_THREAD.id}\` — https://example.test/session/${NESTED_THREAD.id}`,
+                now - (thread.startedAgoMin - 2) * min,
+              )
+            : []),
           transcriptLineAssistantText(
             thread.reply,
             `${thread.id}-a1`,
@@ -1461,10 +1473,46 @@ export function demoSessions(opts: {
         ],
       });
     }
+    const engineId = `ses_${NESTED_THREAD.id.replaceAll("-", "_")}`;
+    sessions.push({
+      id: NESTED_THREAD.id,
+      engineSessionId: engineId,
+      file: base(NESTED_THREAD.id, engineId, 27, 21, {
+        title: NESTED_THREAD.title,
+        workspaceId: DEMO_SPACE_WORKSPACE_ID,
+        parentSessionId: NESTED_THREAD.parent,
+        spawnDepth: 2,
+        agentStarted: true,
+        mode: "ask",
+        worktreeDir: repoDir,
+      }),
+      lines: [
+        transcriptLineUser(
+          NESTED_THREAD.prompt,
+          `${NESTED_THREAD.id}-u1`,
+          iso(now - 27 * min),
+        ),
+        transcriptLineAssistantText(
+          "Memoizing the filter takes a 1,000-item render from 180 ms to 12 ms.",
+          `${NESTED_THREAD.id}-a1`,
+          iso(now - 21 * min),
+          MODEL_FABLE,
+        ),
+      ],
+    });
   }
 
   return sessions;
 }
+
+/** The demo's thread inside a thread. */
+const NESTED_THREAD = {
+  id: "bks-demo-space-t4a",
+  parent: "bks-demo-space-t4",
+  title: "Benchmark the memoized filter",
+  prompt:
+    "Benchmark the todo list render at 1,000 items with the filter memoized and without.",
+};
 
 // ── Ask card ────────────────────────────────────────────────────────────────
 

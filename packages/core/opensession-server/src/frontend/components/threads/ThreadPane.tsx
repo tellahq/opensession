@@ -15,7 +15,10 @@ import { cn } from "../../ui/cn";
 import { Textarea } from "../../ui/input";
 import { EmptyState, InlineAlert, LoadingState } from "../../ui/state";
 import { toast } from "../../ui/toast";
-import { IconArrowUpRight, IconChevronLeft } from "../icons";
+import { MessageCommentsSession } from "../../lib/message-comments";
+import { ThreadPaneLevelProvider } from "../../lib/thread-view";
+import { Tooltip } from "../../ui/tooltip";
+import { IconChevronLeft, IconExpand } from "../icons";
 import { TranscriptBlocks } from "../TranscriptBlocks";
 import { getCurrentUser } from "../UserPicker";
 import { THREAD_DOT } from "./thread-classes";
@@ -28,16 +31,24 @@ const POLL_MS = 2_000;
 /**
  * A thread opened beside the conversation that started it: where it stands, its
  * conversation, and a box to keep iterating with its agent, without leaving
- * it. "Open" takes the whole window when the thread needs more room
- * (its review, its browser, its terminal).
+ * it. A thread it starts in turn opens on top of it, one level deeper; the
+ * header leads back through each level. Full screen opens the thread by
+ * itself when it needs more room (its review, its browser, its terminal).
  */
 export function ThreadPane({
+  rootId,
   threadId,
+  trail,
   onBack,
   onOpenSession,
 }: {
+  /** The conversation the panel sits beside. */
+  rootId: string;
   threadId: string;
-  onBack: () => void;
+  /** The open threads above this one, outermost first. */
+  trail: readonly string[];
+  /** Keep the first `depth` levels open; 0 is the thread list. */
+  onBack: (depth: number) => void;
   onOpenSession?: (id: string) => void;
 }) {
   const thread = useSessionRecord(threadId);
@@ -61,27 +72,44 @@ export function ThreadPane({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-col gap-1 border-b border-divider px-3 pt-2.5 pb-2.5">
-        <div className="flex items-center gap-1">
+        <div className="flex min-w-0 items-center gap-0.5">
           <Button
             size="sm"
             variant="ghost"
             icon={<IconChevronLeft size={20} />}
-            className="-ml-1.5 phone:min-h-11"
-            onClick={onBack}
+            aria-label={trail.length === 0 ? undefined : "Back"}
+            className="-ml-1.5 shrink-0 phone:min-h-11"
+            onClick={() => onBack(trail.length)}
           >
-            Threads
+            {trail.length === 0 ? "Threads" : null}
           </Button>
+          {trail.length > 0 && (
+            <nav
+              aria-label="Open threads"
+              className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden text-meta text-faint"
+            >
+              <Crumb label="Threads" fixed onClick={() => onBack(0)} />
+              {trail.map((id, depth) => (
+                <ThreadCrumb
+                  key={id}
+                  threadId={id}
+                  onClick={() => onBack(depth + 1)}
+                />
+              ))}
+            </nav>
+          )}
           <span className="flex-1" />
           {onOpenSession && (
-            <Button
-              size="sm"
-              variant="ghost"
-              trailing={<IconArrowUpRight size={16} />}
-              className="phone:min-h-11"
-              onClick={() => onOpenSession(threadId)}
-            >
-              Open
-            </Button>
+            <Tooltip label="Open full screen">
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-label="Open full screen"
+                icon={<IconExpand size={18} />}
+                className="shrink-0 phone:size-11"
+                onClick={() => onOpenSession(threadId)}
+              />
+            </Tooltip>
           )}
         </div>
         <div className="flex min-w-0 items-start gap-2 px-0.5">
@@ -124,13 +152,19 @@ export function ThreadPane({
           <InlineAlert>{error}</InlineAlert>
         ) : entries.length > 0 ? (
           <div className="min-w-0">
-            <TranscriptBlocks
-              entries={entries}
-              sessionId={threadId}
-              scrollElement={body}
-              shouldMaintainEnd={shouldMaintainEnd}
-              live={working}
-            />
+            {/* Comments land on this thread, and its own thread cards open
+                one level deeper in this panel. */}
+            <MessageCommentsSession value={threadId}>
+              <ThreadPaneLevelProvider value={{ rootId, threadId }}>
+                <TranscriptBlocks
+                  entries={entries}
+                  sessionId={threadId}
+                  scrollElement={body}
+                  shouldMaintainEnd={shouldMaintainEnd}
+                  live={working}
+                />
+              </ThreadPaneLevelProvider>
+            </MessageCommentsSession>
           </div>
         ) : (
           <EmptyState>Nothing in this thread yet.</EmptyState>
@@ -139,6 +173,48 @@ export function ThreadPane({
       <ThreadReply threadId={threadId} />
     </div>
   );
+}
+
+function Crumb({
+  label,
+  fixed = false,
+  onClick,
+}: {
+  label: string;
+  /** Never squeezed: the way out to the list stays readable. */
+  fixed?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="ghost"
+        title={label}
+        className={cn(
+          "px-1 font-normal text-dim",
+          fixed ? "shrink-0" : "min-w-0 max-w-[10rem] shrink",
+        )}
+        onClick={onClick}
+      >
+        <span className="truncate">{label}</span>
+      </Button>
+      <span aria-hidden="true" className="shrink-0">
+        ›
+      </span>
+    </>
+  );
+}
+
+function ThreadCrumb({
+  threadId,
+  onClick,
+}: {
+  threadId: string;
+  onClick: () => void;
+}) {
+  const thread = useSessionRecord(threadId);
+  return <Crumb label={thread?.title || "Thread"} onClick={onClick} />;
 }
 
 function ThreadReply({ threadId }: { threadId: string }) {
