@@ -8,9 +8,8 @@
  * disk, and `readFetched` pulls the rest by search or explicit offset. The
  * model decides how much of a page it pays for.
  *
- * Deliberately NOT a search tool. There is no provider, no API key and no
- * ranking: this turns a URL you already have into text you can read. Search
- * belongs to whatever MCP server an instance chooses to mount.
+ * Deliberately NOT a search tool: this turns a URL you already have into text
+ * you can read. Finding the URL is web-search.ts.
  *
  * Safety: every hop is checked against private address space before it is
  * dialled, redirects included (an allowed hostname can redirect to

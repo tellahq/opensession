@@ -1,7 +1,10 @@
 /**
  * `opensession-web` — the in-process MCP server that lets a run read the web.
  *
- * Three tools, and the shape of each is the point:
+ * Four tools, and the shape of each is the point:
+ *  - `web_search` returns ranked titles and URLs, never page bodies. It runs
+ *    Claude Code's own WebSearch on a Claude account (web-search.ts), since
+ *    every engine's built-in search is switched off.
  *  - `fetch_url` returns a bounded head plus a handle, never the whole page.
  *    A doc page is often 80k tokens; pouring that into the transcript to
  *    answer one question makes every later turn pay for it forever.
@@ -12,13 +15,9 @@
  *    a shallow clone hands over the real files and a path to explore with
  *    the tools the run already has.
  *
- * There is deliberately no search. This turns a URL you have into text you
- * can read; ranking the web is a different product and belongs to whichever
- * MCP server an instance chooses to mount.
- *
- * In-process on purpose: it reaches every engine at once, needs no API key,
- * no subprocess and no network mount, and its address safety (see
- * web-fetch.ts) is enforced in our own code rather than trusted to a vendor.
+ * In-process on purpose: it reaches every engine at once, needs no API key
+ * and no network mount, and its address safety (see web-fetch.ts) is
+ * enforced in our own code rather than trusted to a vendor.
  */
 import { access, mkdir, readFile } from "fs/promises";
 import { z } from "zod";
@@ -26,6 +25,7 @@ import { createSdkMcpServer, tool } from "./inprocess-mcp";
 import { stateDir } from "./paths";
 import { ensureSessionScratch } from "./session-scratch";
 import { fetchWeb, readFetched } from "./web-fetch";
+import { claudeWebSearch, formatWebSearch } from "./web-search";
 import { workloadArgv } from "./workload-scope";
 import { removeTree } from "./workload-scope";
 
@@ -132,11 +132,56 @@ async function describeClone(dir: string): Promise<string> {
   return lines.join("\n");
 }
 
-export function createWebMcpServer(opts: { sessionId?: string } = {}) {
+export function createWebMcpServer(
+  opts: {
+    sessionId?: string;
+    /** The run's user, for personal-first Claude account routing in
+     *  web_search. Absent (automations) = pool accounts only. */
+    user?: string;
+  } = {},
+) {
   return createSdkMcpServer({
     name: "opensession-web",
     version: "1.0.0",
     tools: [
+      tool(
+        "web_search",
+        [
+          "Search the web and return a ranked list of titles and URLs.",
+          "",
+          "Runs Claude's web search, the same one Claude Code uses. Results carry no page",
+          "text: read the ones you want with `fetch_url`. A short summary written by the",
+          "search model may follow the list; treat it as a lead, not a source.",
+          "",
+          "Write queries the way you would type them into a search engine. Use",
+          '`allowed_domains` to search one site (e.g. ["github.com"]). A search takes',
+          "about 10 seconds.",
+        ].join("\n"),
+        {
+          query: z.string().describe("The search query."),
+          allowed_domains: z
+            .array(z.string())
+            .optional()
+            .describe("Only return results from these domains."),
+          blocked_domains: z
+            .array(z.string())
+            .optional()
+            .describe("Never return results from these domains."),
+        },
+        async (args) => {
+          const query = String(args.query ?? "").trim();
+          if (query.length < 2) throw new Error("Pass a search query.");
+          const outcome = await claudeWebSearch(
+            {
+              query,
+              allowedDomains: args.allowed_domains,
+              blockedDomains: args.blocked_domains,
+            },
+            { user: opts.user, sessionId: opts.sessionId },
+          );
+          return text(formatWebSearch(outcome));
+        },
+      ),
       tool(
         "fetch_url",
         [
@@ -152,7 +197,7 @@ export function createWebMcpServer(opts: { sessionId?: string } = {}) {
           "text rather than as a rendered page.",
           "",
           "Private, loopback and link-local addresses are refused, redirects included.",
-          "This does not search the web: pass a URL you already have.",
+          "To find a URL, use `web_search` first.",
         ].join("\n"),
         {
           url: z.string().describe("Absolute http(s) URL."),

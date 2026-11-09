@@ -93,9 +93,9 @@ export const INTERNAL_MCP_CAPABILITIES = {
   },
   "opensession-web": {
     summary:
-      "Read a URL as text, search what was fetched, clone a GitHub repo. No web search.",
+      "Search the web, read a URL as text, search what was fetched, clone a GitHub repo.",
     guidance:
-      "Fetch a known URL as text, search fetched content, or clone a GitHub repository. It does not provide general web search.",
+      "Search the web, fetch a URL as text and search inside it, or clone a GitHub repository.",
   },
   "opensession-portals": {
     summary: "Supervised HTTP/WebSocket services for this session's workspace.",
