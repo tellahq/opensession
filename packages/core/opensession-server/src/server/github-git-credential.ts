@@ -127,12 +127,6 @@ export function withReadRepoCredentials(
   readRepos: readonly string[],
 ): Record<string, string> {
   if (!env.GH_READ_TOKEN || !readRepos.length) return env;
-  const entries: Array<[string, string]> = [];
-  for (let index = 0; ; index++) {
-    const key = env[`GIT_CONFIG_KEY_${index}`];
-    if (key === undefined) break;
-    entries.push([key, env[`GIT_CONFIG_VALUE_${index}`] ?? ""]);
-  }
   const scoped: Array<[string, string]> = readRepos
     .filter((repo) => /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo))
     .flatMap((repo) => [
@@ -145,6 +139,23 @@ export function withReadRepoCredentials(
         INLINE_GITHUB_READ_CREDENTIAL_HELPER,
       ],
     ]);
+  return withScopedCredentialHelpers(env, scoped);
+}
+
+/** Insert URL-scoped credential helpers after the helper reset and before
+ * the run's general GitHub helper, so each answers for its own URLs first and
+ * every other github.com URL keeps the general credential. */
+function withScopedCredentialHelpers(
+  env: Record<string, string>,
+  scoped: Array<[string, string]>,
+): Record<string, string> {
+  if (!scoped.length) return env;
+  const entries: Array<[string, string]> = [];
+  for (let index = 0; ; index++) {
+    const key = env[`GIT_CONFIG_KEY_${index}`];
+    if (key === undefined) break;
+    entries.push([key, env[`GIT_CONFIG_VALUE_${index}`] ?? ""]);
+  }
   const general = entries.findIndex(
     ([key, value]) => key === "credential.https://github.com.helper" && value,
   );
@@ -159,6 +170,67 @@ export function withReadRepoCredentials(
   });
   out.GIT_CONFIG_COUNT = String(merged.length);
   return out;
+}
+
+/** Env var prefix of the per-owner tokens withOwnerCredentials adds. */
+export const GITHUB_OWNER_TOKEN_ENV_PREFIX = "OPENSESSION_GITHUB_OWNER_TOKEN_";
+
+function inlineOwnerCredentialHelper(variable: string): string {
+  return `!f() { test "$1" = get || exit 0; echo username=x-access-token; echo "password=$${variable}"; }; f`;
+}
+
+const GITHUB_LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
+
+/**
+ * Route git over HTTPS to a different token per repository owner: one helper
+ * scoped to `https://github.com/<owner>` for each entry, answered from a
+ * process-local env var, ahead of the general helper. This is how a run
+ * reaches repositories under accounts served by different GitHub Apps
+ * (github-app-registry.ts): the general credential keeps serving every
+ * other owner. Git matches the scope at path boundaries and case-sensitively,
+ * so the owner is listed as given and in lower case. Tokens stay in the
+ * environment, never in .git/config or a URL. Entries for owners already
+ * scoped in `env` are replaced.
+ */
+export function withOwnerCredentials(
+  env: Record<string, string>,
+  owners: ReadonlyArray<{ owner: string; token: string }>,
+): Record<string, string> {
+  const usable = owners.filter(
+    ({ owner, token }) => GITHUB_LOGIN.test(owner) && !!token,
+  );
+  if (!usable.length) return env;
+  const replaced = new Set(usable.map(({ owner }) => owner.toLowerCase()));
+  // Drop earlier helpers for the same owners so the newest token answers.
+  const kept: Record<string, string> = {};
+  const entries: Array<[string, string]> = [];
+  for (let index = 0; ; index++) {
+    const key = env[`GIT_CONFIG_KEY_${index}`];
+    if (key === undefined) break;
+    const owner = key.match(
+      /^credential\.https:\/\/github\.com\/([^/]+)\.helper$/,
+    )?.[1];
+    if (owner && replaced.has(owner.toLowerCase())) continue;
+    entries.push([key, env[`GIT_CONFIG_VALUE_${index}`] ?? ""]);
+  }
+  for (const [key, value] of Object.entries(env))
+    if (!/^GIT_CONFIG_(KEY|VALUE)_\d+$/.test(key)) kept[key] = value;
+  entries.forEach(([key, value], index) => {
+    kept[`GIT_CONFIG_KEY_${index}`] = key;
+    kept[`GIT_CONFIG_VALUE_${index}`] = value;
+  });
+  kept.GIT_CONFIG_COUNT = String(entries.length);
+  let next = 0;
+  while (kept[`${GITHUB_OWNER_TOKEN_ENV_PREFIX}${next}`] !== undefined) next++;
+  const scoped: Array<[string, string]> = [];
+  for (const { owner, token } of usable) {
+    const variable = `${GITHUB_OWNER_TOKEN_ENV_PREFIX}${next++}`;
+    kept[variable] = token;
+    const helper = inlineOwnerCredentialHelper(variable);
+    for (const spelling of new Set([owner, owner.toLowerCase()]))
+      scoped.push([`credential.https://github.com/${spelling}.helper`, helper]);
+  }
+  return withScopedCredentialHelpers(kept, scoped);
 }
 
 await recheckShim();

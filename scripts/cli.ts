@@ -381,6 +381,13 @@ async function removeAutomation(id: string): Promise<number> {
 const RECIPES_HINT = "expected them in recipes/automations/";
 
 async function main(): Promise<number> {
+  // A restart from a session shell would kill itself halfway on launchd.
+  const handoff = await service.handOffServiceCommand(argv);
+  if (handoff.handedOff) {
+    if (handoff.code === 0) info(handoff.message);
+    else fail(handoff.message);
+    return handoff.code;
+  }
   switch (command) {
     case "onboard":
     case "setup":

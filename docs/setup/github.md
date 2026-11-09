@@ -44,11 +44,68 @@ The UI will not overwrite or delete an operator-managed key.
 Environment overrides for the App identity are
 `OPENSESSION_GITHUB_CLIENT_ID`, `OPENSESSION_GITHUB_CLIENT_SECRET`,
 `OPENSESSION_GITHUB_APP_SLUG`, and `OPENSESSION_GITHUB_APP_KEY` (a path, not PEM
-contents). Environment values win over config. Install the same App on every
-account whose repositories this instance should use. Open Session resolves each
+contents). Environment values win over config. A public App can be installed
+on every account whose repositories this instance should use; a private App
+installs only on its owner (see below). Open Session resolves each
 repository through the installation for its owner and caches tokens per
 installation. `installationOwner` is an optional default for calls that do not
 name a repository; `installationId` may pin that default by numeric id.
+
+### More than one GitHub account
+
+The setup wizard creates a private App, and GitHub installs a private App only
+on the account that owns it. To work with repositories under another account
+(your personal account with a fork, or a second organization) without making
+the App public, add one App per extra account: Settings → Integrations →
+GitHub → **Add GitHub account** runs the same creation flow for an
+organization or a personal account. Then enable Device Flow in the new App's
+settings and install it on its account.
+
+Extra Apps are listed under `integrations.github.apps`. The classic fields
+above remain the first App and keep serving every owner they served before; a
+config without `apps` behaves exactly as it always has.
+
+```jsonc
+{
+  "integrations": {
+    "github": {
+      "oauthClientId": "Iv…", // first App, unchanged
+      "apps": [
+        {
+          "id": "3f9c1a2b4d5e", // local id: key file and webhook path
+          "owner": "octocat", // the account this App serves
+          "ownerType": "User", // or "Organization"
+          "appSlug": "open-session-octocat",
+          "oauthClientId": "Iv…",
+          "oauthClientSecret": "…",
+          "webhookSecret": "…",
+        },
+      ],
+    },
+  },
+}
+```
+
+- **App choice.** A repository whose owner matches an extra App's `owner` is
+  served by that App (installation tokens, the repository picker, clones).
+  Every other owner uses the first App. An owner no App reaches fails closed
+  with "No Open Session GitHub App is installed for <owner>".
+- **Keys.** Each extra App's private key is stored at
+  `~/.opensession/github-apps/<id>.pem` (0600).
+- **Sign-in.** People sign in to each extra App separately from its row in
+  Settings. Those tokens live in `~/.opensession/github-auth-apps/<id>.json`, next
+  to (not inside) `github-auth.json`, and are refreshed by the same ticker.
+- **Run shells.** A session's git gets one credential helper per extra-App
+  owner, scoped to `https://github.com/<owner>`, ahead of the general helper.
+  It carries the person's sign-in to that App when the turn acts as them, and
+  otherwise that App's repository-scoped installation token. When the
+  session's own repository is under such an owner, `GH_TOKEN` follows it, so
+  `gh` targets that account too. A `gh` call against an attached repository
+  under a different owner still uses `GH_TOKEN`. Remote runner hosts keep
+  their launcher-projected credential.
+- **Webhooks.** Each extra App delivers to `/github/webhook/<id>` and is
+  verified with its own `webhookSecret`. Configuring public ingress points
+  every App at its own path.
 
 ### Required permissions
 

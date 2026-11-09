@@ -6,6 +6,7 @@ import {
   githubAppSettingsUrlForSlug,
   githubAppSetupOwner,
   githubManifestAction,
+  githubRepoFullNameFromInput,
   shouldReloadAfterGithubAuthEnabled,
 } from "./github-app-setup";
 
@@ -116,5 +117,34 @@ describe("GitHub App creation owner", () => {
     );
     expect(personal.pathname).toBe("/settings/apps/new");
     expect(personal.search).toBe(organization.search);
+  });
+});
+
+describe("githubRepoFullNameFromInput", () => {
+  test("accepts a full name or any GitHub URL of the repository", () => {
+    for (const input of [
+      "octocat/hello-world",
+      " octocat/hello-world.git ",
+      "https://github.com/octocat/hello-world",
+      "https://github.com/octocat/hello-world.git",
+      "https://github.com/octocat/hello-world/tree/main/src",
+      "github.com/octocat/hello-world",
+      "git@github.com:octocat/hello-world.git",
+      "ssh://git@github.com/octocat/hello-world.git",
+    ]) {
+      expect(githubRepoFullNameFromInput(input)).toBe("octocat/hello-world");
+    }
+  });
+
+  test("rejects anything that is not one GitHub repository", () => {
+    for (const input of [
+      "",
+      "octocat",
+      "https://gitlab.com/octocat/hello-world",
+      "https://github.com/octocat",
+      "owner/name/extra",
+    ]) {
+      expect(githubRepoFullNameFromInput(input)).toBeNull();
+    }
   });
 });

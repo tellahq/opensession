@@ -17,6 +17,7 @@ import {
   releaseGithubDelivery,
 } from "./webhook-deliveries";
 import { handleGithubPrEvent } from "./webhook";
+import { additionalGithubAppById } from "../../server/github-app-registry";
 
 const GITHUB_WEBHOOK_BODY_LIMIT = 1024 * 1024;
 const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET || "";
@@ -42,6 +43,29 @@ function slackAgentEnabled(): boolean {
 
 /** The shared route handler used by GitHub and Slack compatibility registration. */
 export async function handleGithubWebhook(req: Request): Promise<Response> {
+  return handleVerifiedGithubWebhook(req, GITHUB_WEBHOOK_SECRET);
+}
+
+/** `POST /github/webhook/<app id>`: deliveries of an additional per-account
+ * GitHub App (github-app-registry.ts), verified with that App's own secret.
+ * An unknown App, or one without a stored secret, answers 404 so the path
+ * reveals nothing. Accepted deliveries take the same path as the primary
+ * App's. */
+export async function handleAdditionalAppGithubWebhook(
+  req: Request,
+  url: URL,
+): Promise<Response> {
+  const match = url.pathname.match(/^\/github\/webhook\/([a-z0-9-]+)$/);
+  const app = match ? additionalGithubAppById(match[1]) : null;
+  if (!app?.webhookSecret)
+    return Response.json({ error: "Not found" }, { status: 404 });
+  return handleVerifiedGithubWebhook(req, app.webhookSecret);
+}
+
+async function handleVerifiedGithubWebhook(
+  req: Request,
+  secret: string,
+): Promise<Response> {
   let body: string;
   try {
     body = await readRequestTextWithinLimit(req, GITHUB_WEBHOOK_BODY_LIMIT);
@@ -52,7 +76,7 @@ export async function handleGithubWebhook(req: Request): Promise<Response> {
     throw error;
   }
   const signature = req.headers.get("x-hub-signature-256") || "";
-  if (!verifyGitHubSignature(body, signature, GITHUB_WEBHOOK_SECRET)) {
+  if (!verifyGitHubSignature(body, signature, secret)) {
     console.error("[github] Invalid GitHub webhook signature");
     return Response.json({ error: "Invalid signature" }, { status: 401 });
   }

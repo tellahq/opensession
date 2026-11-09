@@ -10,6 +10,7 @@ import { duration } from "../ui/motion";
 import { InlineAlert } from "../ui/state";
 import { Tooltip } from "../ui/tooltip";
 import { IconTile } from "./BrandTile";
+import { GithubAccountApps } from "./GithubAccountApps";
 import { IconCheckCircleFilled, IconQuestionCircle } from "./icons";
 import githubCreateAppGuide from "../assets/github-create-app.svg";
 import githubDeviceFlowGuide from "../assets/github-enable-device-flow.svg";
@@ -299,8 +300,8 @@ export function GithubManifestSetup({
         )}
       </div>
       <p className="m-0 text-supporting leading-snug text-dim">
-        Ownership is separate from repository access. You can install the same
-        App on both personal and organization accounts.
+        GitHub creates this App as private, so it can only be installed on the
+        account that owns it. You can add Apps for other accounts later.
       </p>
       <div className="flex flex-col gap-2">
         <GithubSetupStep
@@ -334,10 +335,13 @@ export function GithubManifestSetup({
         <GithubSetupStep
           label="Install GitHub app"
           guide={githubInstallAppGuide}
-          caption="Choose a personal or organization account and the repositories Open Session can access. Repeat to add another account without changing existing installations."
+          caption="Choose the repositories Open Session can access on the account that owns the App. For another account, add a GitHub App for it below."
           href={installUrl}
         />
       </div>
+      {returnTo === "settings" && github.clientIdConfigured && (
+        <GithubAccountApps />
+      )}
       {result === "created" && (
         <SettingsHint className="m-0">
           GitHub App created. Enable Device Flow before you install it.

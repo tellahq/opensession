@@ -702,6 +702,14 @@ the default for calls that do not name a repository. Teammate device-flow
 tokens are limited by both the App's installations and the person's own GitHub
 access. Out-of-installation writes therefore fail at GitHub's side.
 
+A private App installs only on its owner, so an instance may list further
+per-account Apps under `integrations.github.apps` (docs/setup/github.md, "More
+than one GitHub account"). Each serves only its own `owner`: tokens for that
+owner's repositories are minted with that App's key, its people sign in to it
+separately, and a run reaches it only through a git credential helper scoped
+to `https://github.com/<owner>`. Every other owner keeps the first App, and an
+owner no App serves fails closed.
+
 The App is a fail-closed boundary: token-mint failure never consults ambient
 `gh` hosts.yml accounts, SSH credentials, or a connected human. Process-local
 Git config rewrites GitHub SSH remotes to HTTPS so the projected App or user

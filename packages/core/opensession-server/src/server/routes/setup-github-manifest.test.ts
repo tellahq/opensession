@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { __setGithubAppKeyPathForTest } from "../github-app";
+import { __setAdditionalGithubAppKeyDirForTest } from "../github-app-registry";
 import {
   __resetGithubManifestStatesForTest,
   buildGithubAppManifest,
@@ -66,6 +67,7 @@ beforeEach(async () => {
   delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
   delete process.env.OPENSESSION_GITHUB_APP_KEY;
   await __setGithubAppKeyPathForTest(keyPath);
+  __setAdditionalGithubAppKeyDirForTest(join(dir, "github-apps"));
   __resetGithubManifestStatesForTest();
   globalThis.fetch = originalFetch;
 });
@@ -73,6 +75,7 @@ beforeEach(async () => {
 afterEach(async () => {
   globalThis.fetch = originalFetch;
   await __setGithubAppKeyPathForTest(undefined);
+  __setAdditionalGithubAppKeyDirForTest(undefined);
   __resetGithubManifestStatesForTest();
   if (saved.config === undefined) delete process.env.OPENSESSION_CONFIG;
   else {
@@ -91,6 +94,108 @@ afterEach(async () => {
 });
 
 describe("GitHub App manifest", () => {
+  test("adds a per-account App beside the primary App without touching it", async () => {
+    const primary = {
+      oauthClientId: "Iv1.primary",
+      oauthClientSecret: "primary-secret",
+      appSlug: "open-session-acme",
+      installationOwner: "acme",
+      appOrg: "acme",
+      userPrAuth: true,
+    };
+    writeFileSync(
+      configPath,
+      JSON.stringify({ integrations: { github: primary } }),
+    );
+    await getConfigAsync();
+
+    // The primary App's own account is already served.
+    const refused = await handleSetupRoutes(
+      context("/api/setup/github/manifest", "POST", {
+        additional: true,
+        owner: "organization",
+        organization: "ACME",
+        returnTo: "settings",
+      }),
+    );
+    expect(refused?.status).toBe(409);
+
+    const start = await handleSetupRoutes(
+      context("/api/setup/github/manifest", "POST", {
+        additional: true,
+        owner: "personal",
+        returnTo: "settings",
+      }),
+    );
+    expect(start?.status).toBe(200);
+    const started = (await start?.json()) as {
+      action: string;
+      manifest: string;
+    };
+    const state = new URL(started.action).searchParams.get("state");
+    const manifest = JSON.parse(started.manifest);
+    expect(manifest.public).toBe(false);
+    expect(manifest.hook_attributes.url).toMatch(
+      /\/backstage\/github\/webhook\/[a-f0-9]{12}$/,
+    );
+
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const pem = privateKey.export({ format: "pem", type: "pkcs8" }).toString();
+    globalThis.fetch = (async () =>
+      Response.json(
+        {
+          slug: "open-session-octocat",
+          client_id: "Iv1.octocat",
+          client_secret: "octocat-secret",
+          webhook_secret: "octocat-hook",
+          pem,
+          owner: { login: "octocat" },
+        },
+        { status: 201 },
+      )) as unknown as typeof fetch;
+    const completed = await handleSetupRoutes(
+      context(
+        `/api/setup/github/manifest/callback?code=c&state=${encodeURIComponent(state!)}`,
+        "GET",
+      ),
+    );
+    expect(completed?.status).toBe(303);
+    expect(completed?.headers.get("location")).toBe(
+      "http://100.90.80.70:3850/backstage/settings/integrations?github_manifest=created",
+    );
+
+    const github = JSON.parse(readFileSync(configPath, "utf8")).integrations
+      .github;
+    const { apps, ...rest } = github;
+    expect(rest).toEqual(primary);
+    expect(apps).toHaveLength(1);
+    expect(apps[0]).toMatchObject({
+      owner: "octocat",
+      ownerType: "User",
+      appSlug: "open-session-octocat",
+      oauthClientId: "Iv1.octocat",
+      oauthClientSecret: "octocat-secret",
+      webhookSecret: "octocat-hook",
+    });
+    expect(manifest.hook_attributes.url).toEndWith(`/${apps[0].id}`);
+    expect(
+      readFileSync(join(dir, "github-apps", `${apps[0].id}.pem`), "utf8"),
+    ).toContain("PRIVATE KEY");
+    // The primary App's key and webhook secret were not written.
+    expect(existsSync(keyPath)).toBe(false);
+    expect(existsSync(envPath)).toBe(false);
+  });
+
+  test("refuses to add an account before the first App exists", async () => {
+    const response = await handleSetupRoutes(
+      context("/api/setup/github/manifest", "POST", {
+        additional: true,
+        owner: "personal",
+      }),
+    );
+    expect(response?.status).toBe(409);
+  });
+
   test("creates a private-only registration with an inactive webhook", () => {
     const manifest = buildGithubAppManifest({
       origin: "http://100.90.80.70:3850",

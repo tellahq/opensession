@@ -67,6 +67,7 @@ import {
 } from "./paths";
 import { isCompiledBinary } from "../../packages/core/opensession-server/src/runner-host/exe";
 import { dim, fail, info, ok, run, runInherit, warn } from "./ui";
+import { handOffIfUnderService, type HandoffResult } from "./launchd-handoff";
 
 export type Supervisor = "systemd" | "launchd" | "none";
 /** Which systemd manager owns the unit. */
@@ -242,6 +243,21 @@ export async function bootoutLaunchAgent(
     }
     await pause(Math.min(250, deadline - now()));
   }
+}
+
+/** On launchd, run a restarting command from a session shell as its own
+ * job so it survives the bootout of the server it runs under
+ * (launchd-handoff.ts). `handedOff: false` means: run it here. */
+export async function handOffServiceCommand(
+  argv: readonly string[],
+): Promise<HandoffResult> {
+  if (supervisor() !== "launchd") return { handedOff: false };
+  return await handOffIfUnderService(argv, {
+    serviceLabels: [LAUNCHD_LABEL, LAUNCHD_SESSION_KERNEL_LABEL],
+    domain: domain(),
+    bootstrap: (label, plist) => bootstrapLaunchAgent(label, plist),
+    bootout: (label) => bootoutLaunchAgent(label),
+  });
 }
 
 /** Keep the gateway down while restarting its kernel; never bootstrap a

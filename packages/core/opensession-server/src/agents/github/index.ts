@@ -40,7 +40,10 @@ import {
   restoreDesiredReviews,
 } from "./webhook";
 import { githubWebhookCount, loadGithubDeliveries } from "./webhook-deliveries";
-import { handleGithubWebhook } from "./webhook-intake";
+import {
+  handleAdditionalAppGithubWebhook,
+  handleGithubWebhook,
+} from "./webhook-intake";
 import {
   indexPendingMentions,
   listPrStatesAsync,
@@ -446,6 +449,7 @@ export class GithubAgent implements AgentModule {
     >();
 
     routes.set("POST /github/webhook", handleGithubWebhook);
+    routes.set("POST /github/webhook/*", handleAdditionalAppGithubWebhook);
 
     // Manual trigger for testing: POST /github-pr/<secret> { prNumber, headRef, headSha?, behavior, requestedBy? }
     routes.set("POST /github-pr/*", async (req, url) => {
@@ -514,6 +518,7 @@ export class GithubAgent implements AgentModule {
     // GitHub normally owns this shared route. Slack registers the same handler
     // only when this independently gated agent is disabled.
     routes.set("POST /github/webhook", handleGithubWebhook);
+    routes.set("POST /github/webhook/*", handleAdditionalAppGithubWebhook);
 
     return routes;
   }

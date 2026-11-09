@@ -46,12 +46,21 @@
 
 import { stateDir } from "./paths";
 import { isDevInstance } from "./dev-mode";
-import { chmod, readFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rm } from "node:fs/promises";
+import { dirname } from "node:path";
 import { audit } from "./audit";
 import { configuredIdentity, getConfig } from "./config";
 import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import { fetchWithTimeout } from "./shared/fetch-with-timeout";
-import { githubGitCredentialEnv } from "./github-git-credential";
+import {
+  githubGitCredentialEnv,
+  withOwnerCredentials,
+} from "./github-git-credential";
+import {
+  additionalGithubAppById,
+  additionalGithubApps,
+  validAdditionalGithubAppId,
+} from "./github-app-registry";
 import {
   cachedJsonFileCopy,
   cachedJsonFileShared,
@@ -60,8 +69,21 @@ import {
   publishJsonFile,
 } from "./shared/json-file-cache";
 
-/** Env override is for tests/sandboxes; read per call so it can change. */
-function storePath(): string {
+/** Env override is for tests/sandboxes; read per call so it can change.
+ *
+ * `appId` names an additional per-account App (github-app-registry.ts). Its
+ * sign-ins live in their own file with the same shape, beside the primary
+ * App's, so the primary store, its readers, and older releases never see
+ * another App's tokens. */
+function storePath(appId?: string | null): string {
+  if (appId) {
+    if (!validAdditionalGithubAppId(appId))
+      throw new Error(`invalid GitHub App id: ${appId}`);
+    const base = process.env.OPENSESSION_GITHUB_AUTH_STORE;
+    return base
+      ? `${base.replace(/\.json$/, "")}.app-${appId}.json`
+      : `${stateDir("github-auth-apps")}/${appId}.json`;
+  }
   return (
     process.env.OPENSESSION_GITHUB_AUTH_STORE || stateDir("github-auth.json")
   );
@@ -264,25 +286,26 @@ function storeFrom(raw: { users?: Store["users"] } | undefined): Store {
 
 /** The loaded store, without I/O. Refreshed in the background, so a write
  * by another process is seen within a second (see loadGithubAuthStore). */
-function readStore(): Store {
+function readStore(appId?: string | null): Store {
   try {
-    return storeFrom(cachedJsonFileCopy(storePath()));
+    return storeFrom(cachedJsonFileCopy(storePath(appId)));
   } catch {
     return { users: {} };
   }
 }
 
 /** The store fresh from disk, for read-modify-write. */
-async function readStoreFresh(): Promise<Store> {
+async function readStoreFresh(appId?: string | null): Promise<Store> {
   try {
-    return storeFrom(await loadJsonFileCopy(storePath()));
+    return storeFrom(await loadJsonFileCopy(storePath(appId)));
   } catch {
     return { users: {} };
   }
 }
 
-async function writeStore(store: Store): Promise<void> {
-  const path = storePath();
+async function writeStore(store: Store, appId?: string | null): Promise<void> {
+  const path = storePath(appId);
+  if (appId) await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   await writeJsonAtomicAsync(path, store);
   publishJsonFile(path, store);
   invalidateReconnectCache();
@@ -309,6 +332,9 @@ export async function loadGithubAuthStore(): Promise<void> {
   const projected = process.env[GITHUB_RUN_AUTH_FILE_ENV];
   await Promise.all([
     loadJsonFileShared(storePath()).catch(() => undefined),
+    ...additionalGithubApps().map((app) =>
+      loadJsonFileShared(storePath(app.id)).catch(() => undefined),
+    ),
     projected
       ? loadJsonFileShared(projected).catch(() => undefined)
       : undefined,
@@ -339,14 +365,29 @@ const DEVICE_FLOW_DISABLED =
   'Tick "Enable Device Flow" in the app\'s settings on GitHub, then try again.';
 const GITHUB_DEVICE_VERIFICATION_URI = "https://github.com/login/device";
 
-export async function startGithubDeviceFlow(): Promise<
-  DeviceFlowStart | { error: string }
-> {
+/** The client id (and secret) of the App a device flow or refresh runs
+ * against: the primary App, or an additional one by id. */
+function appClient(appId?: string | null): {
+  clientId: string | null;
+  clientSecret: string | null;
+} {
+  if (!appId) return githubUserAuthSettings();
+  const app = additionalGithubAppById(appId);
+  return app
+    ? { clientId: app.clientId, clientSecret: app.clientSecret }
+    : { clientId: null, clientSecret: null };
+}
+
+export async function startGithubDeviceFlow(
+  appId?: string | null,
+): Promise<DeviceFlowStart | { error: string }> {
   // The device flow uses the configured App client id from environment or config.
   // Without an App, authentication is unavailable. Who may reach this is the route's
   // job (operator mode: signed in; simple mode: App configured), not the
   // flow's — starting a device code is a read-only call to GitHub.
-  const clientId = githubAppIdentity().clientId;
+  const clientId = appId
+    ? appClient(appId).clientId
+    : githubAppIdentity().clientId;
   if (!clientId)
     return { error: "GitHub connect is not configured (no client id)" };
   const res = await fetchWithTimeout("https://github.com/login/device/code", {
@@ -426,8 +467,9 @@ export function validateGithubTokenLogin(
 export async function pollGithubDeviceFlow(
   deviceCode: string,
   expectedLogin?: string | null,
+  appId?: string | null,
 ): Promise<DeviceFlowPoll> {
-  const { clientId } = githubAppIdentity();
+  const { clientId } = appId ? appClient(appId) : githubAppIdentity();
   if (!clientId)
     return { status: "error", error: "No OAuth client id configured" };
   const res = await fetchWithTimeout(
@@ -464,7 +506,7 @@ export async function pollGithubDeviceFlow(
   const token: string | undefined = body.access_token;
   if (typeof token !== "string" || !token)
     return { status: "error", error: "GitHub returned no access token" };
-  return identifyAndStoreToken(token, body, expectedLogin);
+  return identifyAndStoreToken(token, body, expectedLogin, appId);
 }
 
 // ── Server-driven device-flow completion ──
@@ -605,6 +647,7 @@ async function identifyAndStoreToken(
   token: string,
   grant: TokenGrant,
   expectedLogin?: string | null,
+  appId?: string | null,
 ): Promise<DeviceFlowPoll> {
   const scope = grant.scope;
   const userRes = await fetchWithTimeout("https://api.github.com/user", {
@@ -631,7 +674,7 @@ async function identifyAndStoreToken(
   if (!ownership.ok) return { status: "error", error: ownership.error };
 
   await mutateStore(async () => {
-    const store = await readStoreFresh();
+    const store = await readStoreFresh(appId);
     const record: StoredAccount = {
       login,
       token,
@@ -653,9 +696,14 @@ async function identifyAndStoreToken(
     } else {
       store.users = { [login.toLowerCase()]: record };
     }
-    await writeStore(store);
+    await writeStore(store, appId);
   });
-  audit({ kind: "github_auth_connect", login, scopes: scope });
+  audit({
+    kind: "github_auth_connect",
+    login,
+    scopes: scope,
+    ...(appId ? { app: appId } : {}),
+  });
   return { status: "ok", login, ...(user.name ? { name: user.name } : {}) };
 }
 
@@ -664,17 +712,26 @@ async function identifyAndStoreToken(
 /** Flag an account whose refresh grant is unrecoverable. The stored tokens stay
  *  put (the getters already fail closed on the expired access token) — this only
  *  stops the sweep from retrying and lets the UI surface the reconnect. */
-function markRefreshDead(key: string, error: string): Promise<void> {
+function markRefreshDead(
+  key: string,
+  error: string,
+  appId?: string | null,
+): Promise<void> {
   return mutateStore(async () => {
-    const store = await readStoreFresh();
+    const store = await readStoreFresh(appId);
     const account = store.users[key];
     if (!account || account.refreshFailedAt) return;
     store.users[key] = {
       ...account,
       refreshFailedAt: new Date().toISOString(),
     };
-    await writeStore(store);
-    audit({ kind: "github_auth_refresh_dead", login: account.login, error });
+    await writeStore(store, appId);
+    audit({
+      kind: "github_auth_refresh_dead",
+      login: account.login,
+      error,
+      ...(appId ? { app: appId } : {}),
+    });
   });
 }
 
@@ -683,18 +740,21 @@ function markRefreshDead(key: string, error: string): Promise<void> {
  *  together. Returns false when the account has nothing to refresh or the
  *  grant is rejected (person must reconnect — getters already fail closed on
  *  the expired access token). */
-export async function refreshGithubToken(login: string): Promise<boolean> {
-  const { clientId, clientSecret } = githubUserAuthSettings();
+export async function refreshGithubToken(
+  login: string,
+  appId?: string | null,
+): Promise<boolean> {
+  const { clientId, clientSecret } = appClient(appId);
   if (!clientId || !clientSecret) return false;
   const key = login.toLowerCase();
-  const account = (await readStoreFresh()).users[key];
+  const account = (await readStoreFresh(appId)).users[key];
   if (!account?.refreshToken) return false;
   if (account.refreshFailedAt) return false; // already known dead — see markRefreshDead
   if (
     account.refreshTokenExpiresAt &&
     Date.parse(account.refreshTokenExpiresAt) <= Date.now()
   ) {
-    await markRefreshDead(key, "refresh token expired");
+    await markRefreshDead(key, "refresh token expired", appId);
     return false;
   }
   const res = await fetchWithTimeout(
@@ -717,19 +777,25 @@ export async function refreshGithubToken(login: string): Promise<boolean> {
     (await res.json().catch(() => null)) ?? {};
   if (body.error || !body.access_token) {
     const error = body.error_description || body.error || `HTTP ${res.status}`;
-    audit({ kind: "github_auth_refresh_failed", login, error });
+    audit({
+      kind: "github_auth_refresh_failed",
+      login,
+      error,
+      ...(appId ? { app: appId } : {}),
+    });
     // `bad_refresh_token` is GitHub's final answer: the grant is gone and no
     // amount of retrying brings it back (it was retried every 20 minutes for
     // four days before this existed). Record it so the sweep gives up and the
     // Connections UI can ask for a reconnect instead of failing silently.
-    if (body.error === "bad_refresh_token") await markRefreshDead(key, error);
+    if (body.error === "bad_refresh_token")
+      await markRefreshDead(key, error, appId);
     return false;
   }
   // Re-read inside the write to keep the window for clobbering a concurrent
   // connect as small as possible (single-process, so this is belt only).
   const accessToken = body.access_token;
   const stored = await mutateStore(async () => {
-    const store = await readStoreFresh();
+    const store = await readStoreFresh(appId);
     const current = store.users[key];
     if (!current) return false;
     const { refreshFailedAt: _cleared, ...kept } = current;
@@ -738,11 +804,15 @@ export async function refreshGithubToken(login: string): Promise<boolean> {
       token: accessToken,
       ...grantExpiryFields(body),
     };
-    await writeStore(store);
+    await writeStore(store, appId);
     return true;
   });
   if (!stored) return false;
-  audit({ kind: "github_auth_refresh", login });
+  audit({
+    kind: "github_auth_refresh",
+    login,
+    ...(appId ? { app: appId } : {}),
+  });
   return true;
 }
 
@@ -756,16 +826,19 @@ export async function refreshExpiringGithubTokens(): Promise<void> {
   // stores a client secret for exactly this refresh. Bailing on
   // githubUserAuthActive() left those tokens to expire and drop out of
   // soleGithubAccount() until a manual reconnect.
-  const { clientId, clientSecret } = githubUserAuthSettings();
-  if (!clientId || !clientSecret) return;
-  for (const account of Object.values((await readStoreFresh()).users)) {
-    if (!account.refreshToken || !account.expiresAt) continue;
-    if (account.refreshFailedAt) continue; // dead grant — only a reconnect fixes it
-    if (Date.parse(account.expiresAt) - Date.now() > REFRESH_SKEW_MS) continue;
-    try {
-      await refreshGithubToken(account.login);
-    } catch {
-      // transient (GitHub unreachable) — next sweep retries
+  for (const appId of [null, ...additionalGithubApps().map((a) => a.id)]) {
+    const { clientId, clientSecret } = appClient(appId);
+    if (!clientId || !clientSecret) continue;
+    for (const account of Object.values((await readStoreFresh(appId)).users)) {
+      if (!account.refreshToken || !account.expiresAt) continue;
+      if (account.refreshFailedAt) continue; // dead grant — only a reconnect fixes it
+      if (Date.parse(account.expiresAt) - Date.now() > REFRESH_SKEW_MS)
+        continue;
+      try {
+        await refreshGithubToken(account.login, appId);
+      } catch {
+        // transient (GitHub unreachable) — next sweep retries
+      }
     }
   }
 }
@@ -1096,8 +1169,96 @@ function credentialForAccount(account: StoredAccount): GithubCredential {
   return {
     kind: "user",
     principal: `user:${account.login.toLowerCase()}`,
-    env: githubGitCredentialEnv(account.token),
+    env: withAdditionalAppUserCredentials(
+      githubGitCredentialEnv(account.token),
+      account.login,
+    ),
   };
+}
+
+/** The same person's sign-ins to the additional per-account Apps, as
+ * owner-scoped git credentials beside their primary token: a push to a
+ * repository under one of those accounts uses the App that can reach it,
+ * every other push keeps the primary token. Derived from the login on every
+ * resolution, so durable `user:<login>` principals pick them up too. */
+function withAdditionalAppUserCredentials(
+  env: Record<string, string>,
+  login: string,
+): Record<string, string> {
+  const owners: Array<{ owner: string; token: string }> = [];
+  for (const app of additionalGithubApps()) {
+    const account = usableAccountForApp(app.id, login);
+    if (account) owners.push({ owner: app.owner, token: account.token });
+  }
+  return owners.length ? withOwnerCredentials(env, owners) : env;
+}
+
+function usableAccountForApp(
+  appId: string,
+  login: string,
+): StoredAccount | null {
+  const account = readStore(appId).users[login.toLowerCase()];
+  return account?.token && tokenUsable(account) ? account : null;
+}
+
+// ── Additional per-account Apps (github-app-registry.ts) ─────────────────────
+
+/** Accounts signed in to one additional App, tokens stripped. */
+export function connectedGithubAppAccounts(
+  appId: string,
+): GithubConnectedAccount[] {
+  return Object.values(readStore(appId).users)
+    .map(stripStoredAccount)
+    .sort((a, b) => a.login.localeCompare(b.login));
+}
+
+export async function removeGithubAppAccount(
+  appId: string,
+  login: string,
+): Promise<boolean> {
+  const key = login.toLowerCase();
+  const removed = await mutateStore(async () => {
+    const store = await readStoreFresh(appId);
+    if (!store.users[key]) return false;
+    delete store.users[key];
+    await writeStore(store, appId);
+    return true;
+  });
+  if (removed) audit({ kind: "github_auth_disconnect", login, app: appId });
+  return removed;
+}
+
+/** Forget every sign-in to an App that is being removed. */
+export async function removeGithubAppStore(appId: string): Promise<void> {
+  await mutateStore(async () => {
+    const path = storePath(appId);
+    await rm(path, { force: true });
+    publishJsonFile(path, undefined);
+  });
+}
+
+/** The token the person behind a run holds for an additional App: their own
+ * sign-in in operator mode (resolved through the same identity table as the
+ * primary App), the sole signed-in account in simple mode. Null when they
+ * have not signed in, so the caller falls back to the App's installation
+ * token. */
+export function githubAppUserTokenForRun(
+  appId: string,
+  user?: string | null,
+): { login: string; token: string } | null {
+  const primary = githubCredentialForRun(user);
+  const login = githubCredentialLogin(primary);
+  if (login) {
+    const account = usableAccountForApp(appId, login);
+    return account ? { login: account.login, token: account.token } : null;
+  }
+  if (githubUserAuthActive()) return null;
+  const usable = Object.values(readStore(appId).users).filter(
+    (a) => a.token && tokenUsable(a),
+  );
+  return usable.length === 1
+    ? { login: usable[0]!.login, token: usable[0]!.token }
+    : null;
 }
 
 function usableAccountForLogin(login: string): StoredAccount | null {
