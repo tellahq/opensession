@@ -10,10 +10,8 @@ import type { UnifiedSession, Workspace } from "./types";
  */
 const pending = new Map<string, boolean>();
 const listeners = new Set<() => void>();
-let version = 0;
 
 function emit() {
-  version++;
   for (const listener of listeners) listener();
 }
 
@@ -28,10 +26,14 @@ export function setCoordinatorMode(sessionId: string, on: boolean) {
   pending.set(sessionId, on);
   emit();
   const request = setCoordinatorApi(sessionId, on);
-  void request.catch(() => {
+  const settle = () => {
+    if (pending.get(sessionId) !== on) return;
     pending.delete(sessionId);
     emit();
-  });
+  };
+  // By then the session's row carries the setting; a later switch from
+  // another device must not be masked by this one.
+  void request.then(() => window.setTimeout(settle, 15_000), settle);
   return request;
 }
 
@@ -42,11 +44,13 @@ export function useIsCoordinating(
   > | null,
   workspace: Pick<Workspace, "id" | "space"> | null | undefined,
 ): boolean {
-  const read = () => version;
-  useSyncExternalStore(subscribe, read, read);
+  // The snapshot is the value itself: the React Compiler caches anything
+  // computed from module state by its inputs alone, so a read after a bare
+  // version subscription would go stale.
+  const id = session?.id;
+  const read = () => (id ? pending.get(id) : undefined);
+  const local = useSyncExternalStore(subscribe, read, read);
   if (!session) return false;
-  const local = pending.get(session.id);
   if (local !== undefined && local !== session.coordinator) return local;
-  if (local !== undefined) pending.delete(session.id);
   return isCoordinating(session, workspace);
 }

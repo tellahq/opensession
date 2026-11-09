@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigation } from "../../hooks/useNavigation";
 import { useIsPhone } from "../../hooks/useIsPhone";
@@ -35,6 +35,12 @@ import {
 } from "../icons";
 import { HuddleChat } from "./HuddleChat";
 import { HuddleScreen } from "./HuddleScreen";
+import { useDockPlacement } from "./useDockPlacement";
+
+interface DockStyle extends CSSProperties {
+  "--dock-right"?: string;
+  "--dock-bottom"?: string;
+}
 import { UserAvatar } from "../UserAvatar";
 import { getCurrentUser, TEAM } from "../UserPicker";
 
@@ -92,6 +98,8 @@ function Dock() {
   const phone = useIsPhone();
   const navigation = useNavigation();
   const [collapsed, setCollapsed] = useState(false);
+  // Beside an open side panel and above the composer, not over either.
+  const placement = useDockPlacement(!phone);
   usePeople();
   if (!call) return null;
   const room =
@@ -124,16 +132,21 @@ function Dock() {
   const sharers = members.filter((m) => m.sharing && m.peerId !== call.peerId);
   const watching = sharers.some((m) => screens[m.peerId]);
   const sharable = canShareScreen();
+  const dockStyle: DockStyle = {
+    "--dock-right": `${placement.right}px`,
+    "--dock-bottom": `${placement.bottom}px`,
+  };
 
   return (
     <section
       aria-label="Huddle"
+      style={dockStyle}
       className={cn(
         "fixed z-50 flex flex-col gap-2 rounded-xl border border-divider bg-raised p-2.5 smooth-shadow-md",
         phone
           ? "inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))]"
           : cn(
-              "right-4 bottom-[84px]",
+              "right-[var(--dock-right)] bottom-[var(--dock-bottom)]",
               watching && !collapsed ? "w-[420px]" : "w-[320px]",
             ),
       )}

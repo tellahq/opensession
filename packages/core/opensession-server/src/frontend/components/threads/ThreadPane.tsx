@@ -238,7 +238,9 @@ function ThreadReply({ threadId }: { threadId: string }) {
       .finally(() => setSending(false));
   }
   return (
-    <div className="flex shrink-0 items-end gap-2 border-t border-divider p-2.5">
+    // The right inset keeps Send clear of the Desk button, which floats in
+    // the window's bottom-right corner: this panel's corner (DESK_FAB).
+    <div className="flex shrink-0 items-end gap-2 border-t border-divider p-2.5 pr-16 phone:pr-2.5">
       <Textarea
         value={text}
         aria-label="Message this thread"

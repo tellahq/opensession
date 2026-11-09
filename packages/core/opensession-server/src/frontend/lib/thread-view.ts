@@ -10,11 +10,9 @@ import { openSidePanelTab, sidePanelHostOnScreen } from "./side-panel-store";
  */
 const open = new Map<string, readonly string[]>();
 const listeners = new Set<() => void>();
-let version = 0;
 const NONE: readonly string[] = [];
 
 function emit() {
-  version++;
   for (const listener of listeners) listener();
 }
 
@@ -53,15 +51,17 @@ export function closeThreadPane(rootId: string, depth = 0) {
 
 /** The threads open beside `rootId`, outermost first. */
 export function useThreadPaneStack(rootId: string): readonly string[] {
-  useSyncExternalStore(
-    (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    () => version,
-    () => version,
-  );
-  return open.get(rootId) ?? NONE;
+  // The snapshot is the stack itself (a new array on every change): the
+  // React Compiler caches `open.get(rootId)` by `rootId` alone, so reading
+  // it after a bare version subscription kept the old stack and Back did
+  // nothing.
+  const read = () => open.get(rootId) ?? NONE;
+  return useSyncExternalStore(subscribe, read, read);
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
 }
 
 /** Inside an open thread's transcript: which conversation it sits beside,
