@@ -196,6 +196,23 @@ export function buildRunInstructions(input: {
           MONITORING_GUIDANCE
         : "For longer, report where things stand and end your turn."),
   );
+  // The shell tool runs `bash -c '<command>'`, so the command text is that
+  // shell's own argv. `pkill -f foo` in a compound command (or inside a
+  // `bash -c`/`ssh`/`kubectl exec` wrapper) matches and SIGTERMs the tool's
+  // shell: exit 143, output cut off, later steps never run. Runs kept doing
+  // it even with a dozen memory gotchas on file, and reached for the `[x]yz`
+  // regex trick, which still matches when the same command also started the
+  // process. pkill by name also hits sibling sessions' identical processes.
+  if (!input.isAsk) {
+    parts.push(
+      "## Stopping processes\nYour command is its shell's command line, so `pkill -f` or " +
+        "`pgrep -f` on a pattern it contains (also inside `bash -c`, `ssh`, or `kubectl exec`) " +
+        "kills your own tool call with exit 143; a `[x]yz` pattern still matches if the same " +
+        "command started the process. Never kill by name: other sessions run the same programs. " +
+        "Kill the PID you recorded at start (`$!`, a pid file, or a `setsid` group), or find a " +
+        "server by port (`ss -ltnp`).",
+    );
+  }
   // One guidance line per mounted internal server. MCP tools hide
   // behind mcp_search (bar DIRECT_MCP_TOOLS), so this is how a run learns which tools exist before
   // it knows to search for them. The sections below add the standing rules

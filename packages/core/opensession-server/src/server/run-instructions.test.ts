@@ -136,6 +136,7 @@ describe("buildRunInstructions", () => {
       "## Working directory",
       "## Pull requests",
       "## Waiting",
+      "## Stopping processes",
       "## Tools",
       "## Portals",
       "## Media",
@@ -194,8 +195,10 @@ describe("buildRunInstructions", () => {
     // in a report adds ~100: a PR summary without them left the person
     // hunting for the session that owns each PR. The Plain notes clause in
     // References adds ~75: Plain does not link `<repo>#<number>`, so notes
-    // named PRs a teammate could not click.
-    expect(prompt.length).toBeLessThan(4_450);
+    // named PRs a teammate could not click. "Stopping processes" adds ~470:
+    // runs kept running `pkill -f <pattern>` from a command that contains the
+    // pattern, which kills the tool's own `bash -c` shell (exit 143).
+    expect(prompt.length).toBeLessThan(4_950);
   });
 
   test("asks for visual proof by default only where walkthroughs are mounted", () => {
@@ -242,6 +245,21 @@ describe("buildRunInstructions", () => {
     expect(automation).not.toContain("schedule_prompt");
     expect(automation).not.toContain("never poll inside one turn");
     expect(automation).not.toContain("`pr_checks`");
+  });
+
+  // `pkill -f <pattern>` in the tool's own `bash -c` command line kills the
+  // tool shell (exit 143). Every run that can act gets the PID-based rule.
+  test("tells acting runs to kill by PID, never pkill -f their own pattern", () => {
+    const prompt = buildRunInstructions({ isAsk: false, hasSession: true });
+    expect(prompt).toContain("## Stopping processes");
+    expect(prompt).toContain("kills your own tool call with exit 143");
+    expect(prompt).toContain("Never kill by name");
+    expect(buildRunInstructions({ isAsk: false })).toContain(
+      "## Stopping processes",
+    );
+    expect(
+      buildRunInstructions({ isAsk: true, hasSession: true }),
+    ).not.toContain("## Stopping processes");
   });
 
   // Polling CI from a tool call was a quarter of active agent time on PR
