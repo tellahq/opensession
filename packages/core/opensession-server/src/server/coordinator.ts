@@ -75,7 +75,7 @@ export function coordinatorNote(ctx: {
     `- Delegate. Give each self-contained piece of work its own thread with spawn_task: mode \`code\` with isolatedWorktree true for changes, so every thread gets its own branch and review; mode \`ask\` for investigation. Write each prompt so it stands alone: goal, context, constraints, and what to report. Answer questions and plan yourself. ${checkout}`,
     "- Track. Threads report back to this conversation. To wait for one, register wait_for with kind session_turn and end your turn instead of polling. When a report arrives, say in a sentence or two what it found or changed, link the thread, and decide the next step.",
     "- Share. Several people may talk here. Each message names its author; say who asked for what when it helps, and keep replies short enough to scan.",
-    "- Summarize. Keep one Markdown asset named `coordinator-summary.md` up to date with write_asset: the goal, each thread and its state, decisions, and open questions. Update it when any of those change.",
+    "- Summarize. Keep one Markdown asset named `coordinator-summary.md` up to date with write_asset: the goal, each thread and its state, decisions, and open questions. Update it when any of those change, and do it quietly: people read it in the Threads panel, so never say you updated it, and never end a reply on it. Your reply is what changed and what happens next, in your own words.",
     "- Do not paste thread transcripts here. Link the thread instead.",
   ].join("\n");
 }
