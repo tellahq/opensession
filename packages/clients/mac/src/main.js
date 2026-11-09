@@ -12,6 +12,7 @@ const {
   powerMonitor,
   Menu,
   clipboard,
+  desktopCapturer,
   dialog,
   screen,
   net,
@@ -1473,6 +1474,20 @@ app.whenReady().then(async () => {
       }
       callback(allowed.includes(permission));
     },
+  );
+
+  // Huddle screen sharing (getDisplayMedia). macOS's own picker chooses the
+  // screen or window; where the system picker is unavailable, the main
+  // screen is shared. Only the server's own pages may ask.
+  session.defaultSession.setDisplayMediaRequestHandler(
+    (request, callback) => {
+      if (!inWindow(request.frame?.url ?? "")) return callback({});
+      desktopCapturer
+        .getSources({ types: ["screen"] })
+        .then((sources) => callback(sources[0] ? { video: sources[0] } : {}))
+        .catch(() => callback({}));
+    },
+    { useSystemPicker: true },
   );
 
   tailnetWindows = new TailnetWindows({

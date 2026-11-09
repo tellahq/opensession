@@ -32,6 +32,7 @@ import {
   IconEye,
   IconMail,
   IconMessage,
+  IconHeadphones,
   IconPeople,
   IconUndo,
 } from "../icons";
@@ -47,6 +48,7 @@ const KIND_ICON: Record<
   comment: { icon: <IconMessage />, ink: "text-accent" },
   collaborator: { icon: <IconPeople />, ink: "text-accent" },
   reminder: { icon: <IconClock />, ink: "text-dim" },
+  huddle: { icon: <IconHeadphones />, ink: "text-green" },
 };
 
 const SWIPE_PX = 88;

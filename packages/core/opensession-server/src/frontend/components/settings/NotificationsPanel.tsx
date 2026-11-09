@@ -110,6 +110,11 @@ const ALERT_ROWS: {
     title: "Added to a workspace",
     desc: "Someone adds you as a collaborator",
   },
+  {
+    group: "huddles",
+    title: "Huddle invites",
+    desc: "Someone invites you to a huddle",
+  },
   { group: "reminders", title: "Reminders", desc: "Desk task reminders" },
 ];
 

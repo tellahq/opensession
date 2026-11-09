@@ -16,7 +16,7 @@
 
 /**
  * People notify people: review requests and results, mentions, workspace
- * invites, and your own Desk reminders. Agent activity (questions, failed or
+ * and huddle invites, and your own Desk reminders. Agent activity (questions, failed or
  * finished runs) does not; the sidebar already shows it.
  */
 export const NOTIFICATION_KINDS = [
@@ -27,6 +27,7 @@ export const NOTIFICATION_KINDS = [
   "collaborator",
   "reminder",
   "comment",
+  "huddle",
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -37,6 +38,7 @@ export const ALERT_GROUPS = {
   mentions: ["mention", "comment"],
   collaborators: ["collaborator"],
   reminders: ["reminder"],
+  huddles: ["huddle"],
 } as const satisfies Record<string, readonly NotificationKind[]>;
 export type AlertGroup = keyof typeof ALERT_GROUPS;
 export type AlertPrefs = Record<AlertGroup, boolean>;
@@ -47,6 +49,7 @@ export const DEFAULT_ALERT_PREFS: AlertPrefs = {
   mentions: true,
   collaborators: true,
   reminders: true,
+  huddles: true,
 };
 
 export type NotificationSubjectType =

@@ -12,6 +12,7 @@ export const NOTIFICATION_KINDS = [
   "collaborator",
   "reminder",
   "comment",
+  "huddle",
 ] as const;
 
 export const notificationThreadSchema = z.object({
@@ -38,6 +39,7 @@ const alertsSchema = z.object({
   mentions: z.boolean(),
   collaborators: z.boolean(),
   reminders: z.boolean(),
+  huddles: z.boolean().default(true),
 });
 
 const inboxSchema = z.object({
@@ -55,6 +57,7 @@ export const DEFAULT_NOTIFICATION_ALERTS: NotificationAlerts = {
   mentions: true,
   collaborators: true,
   reminders: true,
+  huddles: true,
 };
 
 export async function fetchNotifications(user: string): Promise<{

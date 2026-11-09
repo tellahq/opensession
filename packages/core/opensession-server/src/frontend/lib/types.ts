@@ -1127,7 +1127,7 @@ export type WSClientMessage =
   | { type: "huddle_signal"; to: string; data: HuddleSignalData }
   | { type: "huddle_mute"; muted: boolean }
   | { type: "huddle_notes"; on: boolean }
-  | { type: "huddle_note"; text: string }
+  | { type: "huddle_note"; text: string; roomId?: string }
   | { type: "huddle_share"; on: boolean }
   | { type: "huddle_chat"; text: string }
   | { type: "huddle_invite"; to: string };

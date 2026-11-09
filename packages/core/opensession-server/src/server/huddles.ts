@@ -9,7 +9,12 @@
  * relays the room's chat, and delivers invites. The chat lasts as long as the
  * room. Nothing is persisted except, when someone turned notes on, the call's
  * summary (chat included), which lands as a team note on the session the
- * huddle started from once the last person leaves.
+ * huddle started from once the last person leaves. Each person transcribes
+ * their own microphone in clips, and the clip running when they leave is
+ * still being transcribed then, so a room with notes stays open for those
+ * late lines for NOTES_GRACE_MS before it is summarized. Invites also go to
+ * the invitee's notifications, so they reach a closed app or a background
+ * window.
  *
  * Rooms are keyed `session:<id>` or `workspace:<id>`. The ICE servers come
  * from OPENSESSION_HUDDLE_ICE_SERVERS (a JSON RTCIceServer list); without
@@ -56,6 +61,8 @@ interface Room {
   transcript: NoteLine[];
   chat: HuddleChatMessage[];
   members: Map<HuddleSocket, HuddleMember>;
+  /** Bumped each time the room empties; a stale close timer sees it moved. */
+  generation: number;
 }
 
 export interface HuddleRoomState {
@@ -74,6 +81,8 @@ const MAX_NOTE_CHARS = 2_000;
 /** Chat a newcomer gets on joining; older messages drop off. */
 export const MAX_HUDDLE_CHAT = 200;
 const MAX_CHAT_CHARS = 2_000;
+/** How long an emptied room with notes waits for its last clips. */
+export const NOTES_GRACE_MS = 30_000;
 
 const ROOM_ID = /^(session|workspace):[\w.-]{1,128}$/;
 
@@ -135,6 +144,8 @@ const notesSchema = z.object({
 const noteSchema = z.object({
   type: z.literal("huddle_note"),
   text: z.string().min(1).max(MAX_NOTE_CHARS),
+  /** The room the clip was recorded in, for a clip that lands after leaving. */
+  roomId: z.string().regex(ROOM_ID).optional(),
 });
 const shareSchema = z.object({
   type: z.literal("huddle_share"),
@@ -168,6 +179,16 @@ export interface HuddleDeps {
   clients: () => Iterable<HuddleSocket>;
   /** Write a finished call's notes; best effort. */
   summarize: (room: HuddleRoomState, transcript: NoteLine[]) => Promise<void>;
+  /** Put an invite in the invitee's notifications; best effort. */
+  notifyInvite: (invite: {
+    to: string;
+    from: string;
+    roomId: string;
+    label: string;
+    sessionId: string | null;
+  }) => void;
+  /** Run `fn` after `ms` (a timer in production, controlled in tests). */
+  schedule: (fn: () => void, ms: number) => void;
   now: () => number;
   newId: () => string;
 }
@@ -175,6 +196,10 @@ export interface HuddleDeps {
 export function createHuddles(deps: HuddleDeps) {
   const rooms = new Map<string, Room>();
   const roomOf = new Map<HuddleSocket, Room>();
+  /** Emptied rooms with notes, waiting for their last clips. */
+  const closing = new Map<string, Room>();
+  /** The room each socket was last in, so its final clip still lands. */
+  const lastRoom = new WeakMap<HuddleSocket, Room>();
 
   const identity = (ws: HuddleSocket) =>
     (ws.data.authUser || ws.data.user || "").trim() || "Someone";
@@ -216,25 +241,40 @@ export function createHuddles(deps: HuddleDeps) {
     room.members.delete(ws);
     if (room.members.size === 0) {
       rooms.delete(room.id);
-      if (room.notes && room.transcript.length > 0) {
-        const finished = state(room);
-        void deps
-          .summarize(finished, room.transcript)
-          .catch((error) =>
-            console.warn(
-              "[huddles] summary failed:",
-              error instanceof Error ? error.message : String(error),
-            ),
-          );
+      if (room.notes) {
+        const generation = ++room.generation;
+        closing.set(room.id, room);
+        deps.schedule(() => finish(room, generation), NOTES_GRACE_MS);
       }
     }
     announce();
+  }
+
+  /** Summarize an emptied room unless someone came back in the meantime. */
+  function finish(room: Room, generation: number) {
+    if (room.generation !== generation || closing.get(room.id) !== room) return;
+    closing.delete(room.id);
+    void deps
+      .summarize(state(room), room.transcript)
+      .catch((error) =>
+        console.warn(
+          "[huddles] summary failed:",
+          error instanceof Error ? error.message : String(error),
+        ),
+      );
   }
 
   function join(ws: HuddleSocket, msg: z.infer<typeof joinSchema>) {
     // One huddle at a time: joining another leaves the current one.
     if (roomOf.get(ws)?.id === msg.roomId) return;
     leave(ws);
+    // Back before an emptied room was summarized: the same call goes on.
+    const reopened = rooms.has(msg.roomId) ? null : closing.get(msg.roomId);
+    if (reopened) {
+      closing.delete(reopened.id);
+      reopened.generation++;
+      rooms.set(reopened.id, reopened);
+    }
     let room = rooms.get(msg.roomId);
     if (room && room.members.size >= MAX_HUDDLE_MEMBERS) {
       send(ws, {
@@ -253,6 +293,7 @@ export function createHuddles(deps: HuddleDeps) {
         transcript: [],
         chat: [],
         members: new Map(),
+        generation: 0,
       };
       rooms.set(room.id, room);
     }
@@ -266,6 +307,7 @@ export function createHuddles(deps: HuddleDeps) {
     const peers = [...room.members.values()].map((m) => m.peerId);
     room.members.set(ws, member);
     roomOf.set(ws, room);
+    lastRoom.set(ws, room);
     // The newcomer calls everyone already inside, so two offers never cross.
     send(ws, {
       type: "huddle_joined",
@@ -331,6 +373,13 @@ export function createHuddles(deps: HuddleDeps) {
       });
       delivered++;
     }
+    deps.notifyInvite({
+      to: msg.to.trim(),
+      from: identity(ws),
+      roomId: room.id,
+      label: room.label,
+      sessionId: room.sessionId,
+    });
     send(ws, { type: "huddle_invite_result", to: msg.to, delivered });
   }
 
@@ -372,7 +421,16 @@ export function createHuddles(deps: HuddleDeps) {
           break;
         }
         case "huddle_note": {
-          const room = roomOf.get(ws);
+          // A clip finished after its speaker left still belongs to the
+          // room it was recorded in, while that room is open or closing.
+          const last = lastRoom.get(ws);
+          const room =
+            roomOf.get(ws) ??
+            (last &&
+            last.id === msg.roomId &&
+            (rooms.get(last.id) === last || closing.get(last.id) === last)
+              ? last
+              : undefined);
           if (!room?.notes || room.transcript.length >= MAX_TRANSCRIPT_LINES)
             break;
           room.transcript.push({

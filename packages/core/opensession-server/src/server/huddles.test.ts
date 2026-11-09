@@ -14,12 +14,17 @@ function socket(user: string) {
 function setup() {
   const clients: Array<ReturnType<typeof socket>> = [];
   const summaries: Array<{ roomId: string; lines: number }> = [];
+  const invites: Array<{ to: string; from: string; sessionId: string | null }> =
+    [];
+  const timers: Array<() => void> = [];
   let n = 0;
   const hub = createHuddles({
     clients: () => clients,
     summarize: async (room, transcript) => {
       summaries.push({ roomId: room.roomId, lines: transcript.length });
     },
+    notifyInvite: (invite) => invites.push(invite),
+    schedule: (fn) => timers.push(fn),
     now: () => 1_000,
     newId: () => `peer-${++n}`,
   });
@@ -28,7 +33,11 @@ function setup() {
     clients.push(ws);
     return ws;
   };
-  return { hub, connect, summaries };
+  /** Let the notes grace period run out. */
+  const elapse = () => {
+    for (const fn of timers.splice(0)) fn();
+  };
+  return { hub, connect, summaries, invites, elapse };
 }
 
 const join = (roomId = "session:bks-a") => ({
@@ -108,19 +117,78 @@ describe("huddles", () => {
     expect(ada.last("huddle_invite_result")).toMatchObject({ delivered: 0 });
   });
 
-  test("notes are kept only while on, and summarized when the last person leaves", () => {
-    const { hub, connect, summaries } = setup();
+  test("notes are kept only while on, and summarized after the last clips land", () => {
+    const { hub, connect, summaries, elapse } = setup();
     const ada = connect("Ada");
     hub.message(ada, join());
     hub.message(ada, { type: "huddle_note", text: "before" });
     hub.message(ada, { type: "huddle_notes", on: true });
     hub.message(ada, { type: "huddle_note", text: "ship it" });
     hub.message(ada, { type: "huddle_leave" });
-    expect(summaries).toEqual([{ roomId: "session:bks-a", lines: 1 }]);
+    expect(summaries).toEqual([]);
+    // The clip that was running when Ada left is transcribed afterwards.
+    hub.message(ada, {
+      type: "huddle_note",
+      text: "and tell Grace",
+      roomId: "session:bks-a",
+    });
+    hub.message(ada, {
+      type: "huddle_note",
+      text: "wrong room",
+      roomId: "session:other",
+    });
+    expect(hub.rooms()).toEqual([]);
+    elapse();
+    expect(summaries).toEqual([{ roomId: "session:bks-a", lines: 2 }]);
+    // Too late now.
+    hub.message(ada, {
+      type: "huddle_note",
+      text: "after",
+      roomId: "session:bks-a",
+    });
+    elapse();
+    expect(summaries).toHaveLength(1);
+  });
+
+  test("coming back before the summary continues the same call", () => {
+    const { hub, connect, summaries, elapse } = setup();
+    const ada = connect("Ada");
+    hub.message(ada, join());
+    hub.message(ada, { type: "huddle_notes", on: true });
+    hub.message(ada, { type: "huddle_note", text: "one" });
+    hub.close(ada);
+    const back = connect("Ada");
+    hub.message(back, join());
+    expect(hub.rooms()[0]?.notes).toBe(true);
+    hub.message(back, { type: "huddle_note", text: "two" });
+    elapse();
+    expect(summaries).toEqual([]);
+    hub.close(back);
+    elapse();
+    expect(summaries).toEqual([{ roomId: "session:bks-a", lines: 2 }]);
+  });
+
+  test("a room without notes closes with no summary", () => {
+    const { hub, connect, summaries, elapse } = setup();
+    const ada = connect("Ada");
+    hub.message(ada, join());
+    hub.close(ada);
+    elapse();
+    expect(summaries).toEqual([]);
+  });
+
+  test("an invite also goes to the invitee's notifications", () => {
+    const { hub, connect, invites } = setup();
+    const ada = connect("Ada");
+    hub.message(ada, join());
+    hub.message(ada, { type: "huddle_invite", to: " Jaap " });
+    expect(invites).toEqual([
+      expect.objectContaining({ to: "Jaap", from: "Ada", sessionId: "bks-a" }),
+    ]);
   });
 
   test("chat reaches only the room, and a newcomer gets what was said", () => {
-    const { hub, connect, summaries } = setup();
+    const { hub, connect, summaries, elapse } = setup();
     const ada = connect("Ada");
     const grace = connect("Grace");
     const linus = connect("Linus");
@@ -144,6 +212,7 @@ describe("huddles", () => {
     hub.message(grace, { type: "huddle_chat", text: "ship it" });
     hub.close(ada);
     hub.close(grace);
+    elapse();
     expect(summaries).toEqual([{ roomId: "session:bks-a", lines: 1 }]);
   });
 

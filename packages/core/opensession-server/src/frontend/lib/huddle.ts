@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { transcribeClip } from "./api/automations";
+import { errorMessage } from "./error-message";
 import type {
   HuddleChatMessage,
   HuddleRoom,
@@ -87,6 +88,8 @@ let meterTimer: number | undefined;
 let recorder: MediaRecorder | null = null;
 let clipTimer: number | undefined;
 let inviteHandler: ((invite: HuddleInvite) => void) | null = null;
+/** Said once per call, so a broken transcriber doesn't toast every clip. */
+let notesFailureShown = false;
 let noticeHandler: ((text: string) => void) | null = null;
 
 export interface HuddleInvite {
@@ -175,7 +178,9 @@ function handle(msg: WSServerMessage) {
       break;
     case "huddle_invite_result":
       if (msg.delivered === 0)
-        noticeHandler?.(`${msg.to} isn't online right now.`);
+        noticeHandler?.(
+          `${msg.to} isn't in the app right now. The invite is in their notifications.`,
+        );
       break;
     case "huddle_error":
       noticeHandler?.(msg.message);
@@ -214,6 +219,7 @@ export async function joinHuddle(target: {
   if (!send) return;
   if (snapshot.call?.roomId === target.roomId) return;
   if (snapshot.call) leaveHuddle();
+  notesFailureShown = false;
   set({
     call: {
       roomId: target.roomId,
@@ -540,6 +546,9 @@ function syncNotes() {
 function startNotes() {
   if (!local || !("MediaRecorder" in window)) return;
   const stream = local;
+  // Clips still being transcribed after leaving name their room, so the
+  // server can file them into its summary (server/huddles.ts).
+  const roomId = snapshot.call?.roomId;
   const clip = () => {
     if (snapshot.call === null || local !== stream) return;
     const chunks: Blob[] = [];
@@ -555,9 +564,19 @@ function startNotes() {
           .then((text) => {
             const said = text.trim();
             if (said)
-              send?.({ type: "huddle_note", text: said.slice(0, 2000) });
+              send?.({
+                type: "huddle_note",
+                text: said.slice(0, 2000),
+                roomId,
+              });
           })
-          .catch(() => {});
+          .catch((error) => {
+            if (notesFailureShown) return;
+            notesFailureShown = true;
+            noticeHandler?.(
+              `Huddle notes couldn't transcribe your microphone: ${errorMessage(error, "transcription failed")}`,
+            );
+          });
       if (recorder === rec) clip();
     };
     rec.start();

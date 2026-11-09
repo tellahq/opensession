@@ -13,10 +13,49 @@ export function huddles(): ReturnType<typeof createHuddles> {
   g.__huddles ??= createHuddles({
     clients: () => allClients,
     summarize: summarizeHuddle,
+    notifyInvite: (invite) => void notifyInvite(invite),
+    schedule: (fn, ms) => void setTimeout(fn, ms),
     now: Date.now,
     newId: () => crypto.randomUUID(),
   });
   return g.__huddles;
+}
+
+/** An invite in the invitee's notifications: a banner in a background window
+ *  or the desktop app, and a push to their devices. */
+async function notifyInvite(invite: {
+  to: string;
+  from: string;
+  roomId: string;
+  label: string;
+  sessionId: string | null;
+}): Promise<void> {
+  const { notifyUser, sessionUrl } = await import("./notifications");
+  const workspaceId = invite.roomId.startsWith("workspace:")
+    ? invite.roomId.slice("workspace:".length)
+    : null;
+  await notifyUser(invite.to, {
+    kind: "huddle",
+    subject: invite.sessionId
+      ? { type: "session", id: invite.sessionId, title: invite.label }
+      : {
+          type: "workspace",
+          id: workspaceId || invite.roomId,
+          title: invite.label,
+        },
+    reason: `${invite.from} invites you to a huddle`,
+    body: "Open it to join.",
+    actor: invite.from,
+    url: invite.sessionId
+      ? sessionUrl(invite.sessionId)
+      : `/workspace/${encodeURIComponent(workspaceId || "")}`,
+    eventKey: `huddle:${invite.roomId}:${invite.from}:${Date.now()}`,
+  }).catch((error) =>
+    console.warn(
+      "[huddles] invite notification failed:",
+      error instanceof Error ? error.message : String(error),
+    ),
+  );
 }
 
 function clock(at: number): string {
@@ -29,6 +68,17 @@ async function summarizeHuddle(
   transcript: Array<{ user: string; at: number; text: string }>,
 ): Promise<void> {
   if (!room.sessionId) return;
+  if (transcript.length === 0) {
+    // Say so rather than stay silent: someone turned notes on and expects them.
+    const { createThread, agentName } =
+      await import("./comment-thread-service");
+    await createThread({
+      sessionId: room.sessionId,
+      user: agentName(),
+      text: "**Huddle notes** · Notes were on, but nothing was transcribed. Everyone was muted, the calls were too short, or transcription isn't set up on this server.",
+    });
+    return;
+  }
   const [{ oneShot }, { createThread, agentName }] = await Promise.all([
     import("./one-shot"),
     import("./comment-thread-service"),
