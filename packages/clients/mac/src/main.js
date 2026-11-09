@@ -492,6 +492,10 @@ function setUpdateState(next) {
 // (the toast only appears once an update is actually staged).
 let manualCheck = false;
 let updaterReady = false;
+// Squirrel refuses a second check while one runs (its "The command is disabled
+// and cannot be executed"), and a found update keeps it busy until the
+// download finishes. Track that so a menu click reports progress instead.
+let updateBusy = false;
 
 async function promptRestartToUpdate() {
   const { response } = await dialog.showMessageBox(win, {
@@ -523,6 +527,21 @@ function checkForUpdatesFromMenu() {
   }
   if (updateState.state === "downloaded") {
     promptRestartToUpdate();
+    return;
+  }
+  if (updateBusy) {
+    manualCheck = true;
+    dialog.showMessageBox(win, {
+      type: "info",
+      message:
+        updateState.state === "available"
+          ? "Downloading an update"
+          : "Checking for updates",
+      detail:
+        updateState.state === "available"
+          ? "You'll be asked to restart when it's ready."
+          : "You'll hear back in a moment.",
+    });
     return;
   }
   manualCheck = true;
@@ -559,6 +578,9 @@ function initAutoUpdate() {
     return;
   }
   updaterReady = true;
+  autoUpdater.on("checking-for-update", () => {
+    updateBusy = true;
+  });
   autoUpdater.on("update-available", () => {
     setUpdateState({ state: "available", version: null });
     if (manualCheck) {
@@ -572,6 +594,7 @@ function initAutoUpdate() {
     }
   });
   autoUpdater.on("update-not-available", () => {
+    updateBusy = false;
     if (manualCheck) {
       manualCheck = false;
       dialog.showMessageBox(win, {
@@ -582,6 +605,7 @@ function initAutoUpdate() {
     }
   });
   autoUpdater.on("update-downloaded", (_e, _notes, releaseName) => {
+    updateBusy = false;
     setUpdateState({ state: "downloaded", version: releaseName || null });
     if (manualCheck) {
       manualCheck = false;
@@ -589,6 +613,7 @@ function initAutoUpdate() {
     }
   });
   autoUpdater.on("error", (err) => {
+    updateBusy = false;
     // Offline / tailnet-down is normal; log and retry on the next tick.
     console.error("[update]", err);
     if (manualCheck) {
@@ -602,6 +627,7 @@ function initAutoUpdate() {
   });
   const check = () => {
     if (updateState.state === "downloaded") return; // already staged
+    if (updateBusy) return; // the last check is still checking or downloading
     try {
       autoUpdater.checkForUpdates();
     } catch (err) {
