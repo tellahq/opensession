@@ -1,13 +1,15 @@
 /**
- * Huddles: voice calls that live inside a session, a workspace or a space.
+ * Huddles: voice calls, with screen sharing and a text chat, that live inside
+ * a session or a workspace.
  *
- * Audio flows browser to browser over WebRTC (a full mesh, which suits the
- * handful of people a huddle holds). This module is only the switchboard: it
- * keeps who is in which room in memory, relays the offers, answers and ICE
- * candidates between peers over the existing WebSocket, and delivers
- * invites. Nothing is persisted except, when someone turned notes on, the
- * call's summary, which lands as a team note on the session the huddle
- * started from once the last person leaves.
+ * Audio and shared screens flow browser to browser over WebRTC (a full mesh,
+ * which suits the handful of people a huddle holds). This module is only the
+ * switchboard: it keeps who is in which room in memory, relays the offers,
+ * answers and ICE candidates between peers over the existing WebSocket,
+ * relays the room's chat, and delivers invites. The chat lasts as long as the
+ * room. Nothing is persisted except, when someone turned notes on, the call's
+ * summary (chat included), which lands as a team note on the session the
+ * huddle started from once the last person leaves.
  *
  * Rooms are keyed `session:<id>` or `workspace:<id>`. The ICE servers come
  * from OPENSESSION_HUDDLE_ICE_SERVERS (a JSON RTCIceServer list); without
@@ -26,7 +28,16 @@ export interface HuddleMember {
   peerId: string;
   user: string;
   muted: boolean;
+  /** Sending their screen to everyone in the room. */
+  sharing: boolean;
   joinedAt: number;
+}
+
+export interface HuddleChatMessage {
+  id: string;
+  user: string;
+  at: number;
+  text: string;
 }
 
 interface NoteLine {
@@ -43,6 +54,7 @@ interface Room {
   startedAt: number;
   notes: boolean;
   transcript: NoteLine[];
+  chat: HuddleChatMessage[];
   members: Map<HuddleSocket, HuddleMember>;
 }
 
@@ -59,6 +71,9 @@ export interface HuddleRoomState {
 export const MAX_HUDDLE_MEMBERS = 8;
 const MAX_TRANSCRIPT_LINES = 2_000;
 const MAX_NOTE_CHARS = 2_000;
+/** Chat a newcomer gets on joining; older messages drop off. */
+export const MAX_HUDDLE_CHAT = 200;
+const MAX_CHAT_CHARS = 2_000;
 
 const ROOM_ID = /^(session|workspace):[\w.-]{1,128}$/;
 
@@ -121,6 +136,14 @@ const noteSchema = z.object({
   type: z.literal("huddle_note"),
   text: z.string().min(1).max(MAX_NOTE_CHARS),
 });
+const shareSchema = z.object({
+  type: z.literal("huddle_share"),
+  on: z.boolean(),
+});
+const chatSchema = z.object({
+  type: z.literal("huddle_chat"),
+  text: z.string().trim().min(1).max(MAX_CHAT_CHARS),
+});
 const inviteSchema = z.object({
   type: z.literal("huddle_invite"),
   to: z.string().min(1).max(64),
@@ -134,6 +157,8 @@ const messageSchema = z.discriminatedUnion("type", [
   muteSchema,
   notesSchema,
   noteSchema,
+  shareSchema,
+  chatSchema,
   inviteSchema,
   subscribeSchema,
 ]);
@@ -226,6 +251,7 @@ export function createHuddles(deps: HuddleDeps) {
         startedAt: deps.now(),
         notes: false,
         transcript: [],
+        chat: [],
         members: new Map(),
       };
       rooms.set(room.id, room);
@@ -234,6 +260,7 @@ export function createHuddles(deps: HuddleDeps) {
       peerId: deps.newId(),
       user: identity(ws),
       muted: false,
+      sharing: false,
       joinedAt: deps.now(),
     };
     const peers = [...room.members.values()].map((m) => m.peerId);
@@ -246,6 +273,7 @@ export function createHuddles(deps: HuddleDeps) {
       peerId: member.peerId,
       peers,
       iceServers: huddleIceServers(),
+      chat: room.chat,
     });
     announce();
   }
@@ -261,6 +289,30 @@ export function createHuddles(deps: HuddleDeps) {
           from: from.peerId,
           data: msg.data,
         });
+  }
+
+  function chat(ws: HuddleSocket, msg: z.infer<typeof chatSchema>) {
+    const room = roomOf.get(ws);
+    if (!room) return;
+    const message: HuddleChatMessage = {
+      id: deps.newId(),
+      user: identity(ws),
+      at: deps.now(),
+      text: msg.text,
+    };
+    room.chat.push(message);
+    if (room.chat.length > MAX_HUDDLE_CHAT)
+      room.chat.splice(0, room.chat.length - MAX_HUDDLE_CHAT);
+    // With notes on, what is typed belongs in the summary as much as what is
+    // said.
+    if (room.notes && room.transcript.length < MAX_TRANSCRIPT_LINES)
+      room.transcript.push({
+        user: message.user,
+        at: message.at,
+        text: `(in chat) ${message.text}`,
+      });
+    for (const peer of room.members.keys())
+      send(peer, { type: "huddle_chat", roomId: room.id, message });
   }
 
   function invite(ws: HuddleSocket, msg: z.infer<typeof inviteSchema>) {
@@ -330,6 +382,17 @@ export function createHuddles(deps: HuddleDeps) {
           });
           break;
         }
+        case "huddle_share": {
+          const member = roomOf.get(ws)?.members.get(ws);
+          if (member && member.sharing !== msg.on) {
+            member.sharing = msg.on;
+            announce();
+          }
+          break;
+        }
+        case "huddle_chat":
+          chat(ws, msg);
+          break;
         case "huddle_invite":
           invite(ws, msg);
           break;

@@ -1384,6 +1384,19 @@ export function IconHeadphones(p: IconProps) {
   );
 }
 
+export function IconScreenShare(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path
+        {...stroke}
+        d="M4.75 7.75c0-1.1.9-2 2-2h10.5c1.1 0 2 .9 2 2v5.5c0 1.1-.9 2-2 2H6.75c-1.1 0-2-.9-2-2v-5.5Z"
+      />
+      <path {...stroke} d="M9.75 19.25h4.5M12 15.25v4" />
+      <path {...stroke} d="M12 12.75v-4.5M9.75 10.25 12 8l2.25 2.25" />
+    </Svg>
+  );
+}
+
 export function IconMicOff(p: IconProps) {
   return (
     <Svg {...p}>

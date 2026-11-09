@@ -451,10 +451,13 @@ ingress.example.com {
 See the maintained
 [`deploy/caddy/sandbox-ingress.caddy.example`](../../deploy/caddy/sandbox-ingress.caddy.example).
 
-## Huddle audio
+## Huddle audio and screen sharing
 
-Huddles send audio directly between browsers over WebRTC; the server only
-relays the call setup over its WebSocket. Browsers on the same network, or on
+Huddles send audio and shared screens directly between browsers over WebRTC;
+the server only relays the call setup and the huddle chat over its WebSocket.
+A shared screen costs each viewer's upload nothing, but the person sharing
+sends one stream per viewer, so a large huddle on a slow uplink may see a
+blurrier screen. Browsers on the same network, or on
 the same tailnet, find each other without any extra setup. When people are on
 networks that cannot reach each other directly, give the server a STUN and,
 for strict NATs, a TURN server as a JSON list of `RTCIceServer` entries:

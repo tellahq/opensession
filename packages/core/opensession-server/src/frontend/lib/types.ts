@@ -1128,6 +1128,8 @@ export type WSClientMessage =
   | { type: "huddle_mute"; muted: boolean }
   | { type: "huddle_notes"; on: boolean }
   | { type: "huddle_note"; text: string }
+  | { type: "huddle_share"; on: boolean }
+  | { type: "huddle_chat"; text: string }
   | { type: "huddle_invite"; to: string };
 
 /** What one peer hands another while setting up a call. */
@@ -1144,7 +1146,16 @@ export interface HuddleMember {
   peerId: string;
   user: string;
   muted: boolean;
+  /** Sending their screen to the room. Absent from older servers. */
+  sharing?: boolean;
   joinedAt: number;
+}
+
+export interface HuddleChatMessage {
+  id: string;
+  user: string;
+  at: number;
+  text: string;
 }
 
 export interface HuddleRoom {
@@ -1203,7 +1214,10 @@ export type WSServerMessage =
       peerId: string;
       peers: string[];
       iceServers: RTCIceServer[];
+      /** What was said in the chat before this person joined. */
+      chat?: HuddleChatMessage[];
     }
+  | { type: "huddle_chat"; roomId: string; message: HuddleChatMessage }
   | { type: "huddle_signal"; from: string; data: HuddleSignalData }
   | {
       type: "huddle_invite";

@@ -4,12 +4,16 @@ import { useNavigation } from "../../hooks/useNavigation";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import {
   bindHuddles,
+  canShareScreen,
   huddleRoom,
   inviteToHuddle,
   joinHuddle,
   leaveHuddle,
+  setHuddleChatOpen,
   setHuddleMuted,
   setHuddleNotes,
+  startScreenShare,
+  stopScreenShare,
   useHuddles,
 } from "../../lib/huddle";
 import { usePeople } from "../../lib/people";
@@ -24,16 +28,20 @@ import {
   IconChevronDown,
   IconHeadphones,
   IconMic,
+  IconMessage,
   IconMicOff,
   IconPeople,
+  IconScreenShare,
 } from "../icons";
+import { HuddleChat } from "./HuddleChat";
+import { HuddleScreen } from "./HuddleScreen";
 import { UserAvatar } from "../UserAvatar";
 import { getCurrentUser, TEAM } from "../UserPicker";
 
 /**
  * The call wherever the person goes: a small card in the corner while they
- * are in a huddle, with who is inside (a ring on whoever is talking), mute,
- * invite, notes, and leave. Also binds the huddle client to the app socket
+ * are in a huddle, with who is inside (a ring on whoever is talking), the
+ * screen someone shares, the chat, and mute, share, invite, notes and leave. Also binds the huddle client to the app socket
  * and turns a teammate's invite into a toast with Join.
  */
 export function HuddleDock({
@@ -75,7 +83,7 @@ export function HuddleDock({
 }
 
 function Dock() {
-  const { call, rooms, online } = useHuddles();
+  const { call, rooms, online, screens } = useHuddles();
   const workspace = useWorkspaceRecord(
     call?.roomId.startsWith("workspace:")
       ? call.roomId.slice("workspace:".length)
@@ -113,6 +121,9 @@ function Dock() {
     return key !== me && !inside.has(key);
   });
   const alone = call.status === "live" && members.length <= 1;
+  const sharers = members.filter((m) => m.sharing && m.peerId !== call.peerId);
+  const watching = sharers.some((m) => screens[m.peerId]);
+  const sharable = canShareScreen();
 
   return (
     <section
@@ -121,7 +132,10 @@ function Dock() {
         "fixed z-50 flex flex-col gap-2 rounded-xl border border-divider bg-raised p-2.5 smooth-shadow-md",
         phone
           ? "inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))]"
-          : "right-4 bottom-[84px] w-[300px]",
+          : cn(
+              "right-4 bottom-[84px]",
+              watching && !collapsed ? "w-[420px]" : "w-[320px]",
+            ),
       )}
     >
       <div className="flex items-center gap-2">
@@ -176,6 +190,13 @@ function Dock() {
                 </span>
                 <span className="max-w-[90px] truncate">{m.user}</span>
                 {m.muted && <IconMicOff size={14} className="text-faint" />}
+                {m.sharing && (
+                  <IconScreenShare
+                    size={14}
+                    className="text-accent"
+                    aria-label="Sharing their screen"
+                  />
+                )}
               </span>
             ))}
           </div>
@@ -188,10 +209,16 @@ function Dock() {
           ) : null}
           {room?.notes && (
             <p className="m-0 px-0.5 text-meta text-dim">
-              Notes are on. Everyone's microphone is transcribed, and a summary
-              is posted when the huddle ends.
+              Notes are on. Everyone's microphone and the chat are transcribed,
+              and a summary is posted when the huddle ends.
             </p>
           )}
+          <HuddleScreen
+            sharers={sharers}
+            screens={screens}
+            ownScreen={call.screen}
+          />
+          {call.chatOpen && <HuddleChat messages={call.chat} />}
         </>
       )}
 
@@ -206,6 +233,52 @@ function Dock() {
             className="phone:size-11"
             onClick={() => setHuddleMuted(!call.muted)}
           />
+        </Tooltip>
+        {sharable && (
+          <Tooltip label={call.screen ? "Stop sharing" : "Share your screen"}>
+            <Button
+              size="sm"
+              variant={call.screen ? "success" : "soft"}
+              aria-label={call.screen ? "Stop sharing" : "Share your screen"}
+              aria-pressed={!!call.screen}
+              icon={<IconScreenShare size={20} />}
+              className="phone:size-11"
+              disabled={call.status !== "live"}
+              onClick={() =>
+                call.screen ? stopScreenShare() : void startScreenShare()
+              }
+            />
+          </Tooltip>
+        )}
+        <Tooltip label={call.chatOpen ? "Hide chat" : "Chat"}>
+          <span className="relative inline-flex">
+            <Button
+              size="sm"
+              variant={call.chatOpen ? "success" : "soft"}
+              aria-label={
+                call.unread > 0
+                  ? `Chat, ${call.unread} unread`
+                  : call.chatOpen
+                    ? "Hide chat"
+                    : "Chat"
+              }
+              aria-pressed={call.chatOpen}
+              icon={<IconMessage size={20} />}
+              className="phone:size-11"
+              onClick={() => {
+                setHuddleChatOpen(!call.chatOpen);
+                if (!call.chatOpen) setCollapsed(false);
+              }}
+            />
+            {call.unread > 0 && (
+              <span
+                aria-hidden
+                className="pointer-events-none absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] leading-none font-semibold text-on-accent tabular-nums"
+              >
+                {call.unread > 9 ? "9+" : call.unread}
+              </span>
+            )}
+          </span>
         </Tooltip>
         <Menu.Root>
           <Tooltip label="Invite">

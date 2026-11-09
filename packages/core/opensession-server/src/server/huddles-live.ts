@@ -45,7 +45,7 @@ async function summarizeHuddle(
       `Huddle: ${room.label}`,
       `People: ${people.join(", ")}`,
       "",
-      "Transcript (each person's own microphone, transcribed in chunks):",
+      "Transcript (each person's own microphone, transcribed in chunks; lines marked (in chat) were typed in the huddle's chat):",
       lines,
     ].join("\n"),
     { label: "huddle-summary", timeoutMs: 90_000 },

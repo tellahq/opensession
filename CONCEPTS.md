@@ -323,13 +323,22 @@ message work as before.
 ## Huddles
 
 A huddle is a voice call that lives inside a workspace or a standalone
-session. Start it with the headphones in the header; while anyone
-is inside, the button turns into **Join huddle** with who is there. The call
-follows you as a small card in the corner while you move around, with mute,
-invite (a teammate gets a toast with **Join**), notes, and leave. Audio goes
-browser to browser; the server only connects people. With **Notes** on, each
-person's microphone is transcribed, and when the last person leaves a summary
-is posted as a team note on the session the huddle started from.
+session. Start it with the headphones in the header; while anyone is inside,
+the button turns into **Join huddle** with who is there. The call follows you
+as a small card in the corner while you move around, with mute, screen
+sharing, chat, invite (a teammate gets a toast with **Join**), notes, and
+leave.
+
+Anyone on a desktop browser can **share their screen**; everyone else sees it
+in the card and can open it large. When several people share, the card lets
+you pick whose screen to watch. The **chat** is for a link, a command, or a
+word from someone who can't talk; it lasts as long as the huddle, and the
+chat button counts what you haven't read.
+
+Audio and screens go browser to browser; the server only connects people and
+relays the chat. With **Notes** on, each person's microphone is transcribed,
+chat messages are added to the transcript, and when the last person leaves a
+summary is posted as a team note on the session the huddle started from.
 
 ## Workflows
 

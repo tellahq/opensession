@@ -119,6 +119,50 @@ describe("huddles", () => {
     expect(summaries).toEqual([{ roomId: "session:bks-a", lines: 1 }]);
   });
 
+  test("chat reaches only the room, and a newcomer gets what was said", () => {
+    const { hub, connect, summaries } = setup();
+    const ada = connect("Ada");
+    const grace = connect("Grace");
+    const linus = connect("Linus");
+    hub.message(ada, join());
+    hub.message(linus, join("session:other"));
+    hub.message(ada, { type: "huddle_chat", text: "  link: example.test  " });
+    hub.message(ada, { type: "huddle_chat", text: "   " });
+    expect(ada.last("huddle_chat")).toMatchObject({
+      roomId: "session:bks-a",
+      message: { user: "Ada", text: "link: example.test" },
+    });
+    expect(linus.last("huddle_chat")).toBeUndefined();
+    hub.message(grace, join());
+    expect(
+      (grace.last("huddle_joined")?.chat as Array<{ text: string }>).map(
+        (m) => m.text,
+      ),
+    ).toEqual(["link: example.test"]);
+    // Typed lines join the notes once they are on.
+    hub.message(ada, { type: "huddle_notes", on: true });
+    hub.message(grace, { type: "huddle_chat", text: "ship it" });
+    hub.close(ada);
+    hub.close(grace);
+    expect(summaries).toEqual([{ roomId: "session:bks-a", lines: 1 }]);
+  });
+
+  test("sharing a screen is announced to everyone", () => {
+    const { hub, connect } = setup();
+    const ada = connect("Ada");
+    const grace = connect("Grace");
+    hub.message(ada, join());
+    hub.message(grace, join());
+    hub.message(ada, { type: "huddle_share", on: true });
+    const rooms = grace.last("huddles")?.rooms as Array<{
+      members: Array<{ user: string; sharing: boolean }>;
+    }>;
+    expect(rooms[0]?.members).toMatchObject([
+      { user: "Ada", sharing: true },
+      { user: "Grace", sharing: false },
+    ]);
+  });
+
   test("a full room turns the next person away", () => {
     const { hub, connect } = setup();
     for (let i = 0; i < MAX_HUDDLE_MEMBERS; i++)

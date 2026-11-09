@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { transcribeClip } from "./api/automations";
 import type {
+  HuddleChatMessage,
   HuddleRoom,
   HuddleSignalData,
   WSClientMessage,
@@ -9,9 +10,15 @@ import type {
 
 /**
  * The browser's half of a huddle (server/huddles.ts): one voice call at a
- * time, browser to browser over WebRTC. Every person in the call holds a
- * connection to every other (a mesh), which keeps a server out of the audio
- * path and suits the handful of people a huddle holds.
+ * time, browser to browser over WebRTC, with screen sharing and a text chat.
+ * Every person in the call holds a connection to every other (a mesh), which
+ * keeps a server out of the audio and video path and suits the handful of
+ * people a huddle holds.
+ *
+ * Each connection carries a video slot from the start, empty until someone
+ * shares. Sharing puts the screen into the slot of every connection, so it
+ * starts and stops without renegotiating; the server's `sharing` flag says
+ * whose slot has a picture in it.
  *
  * The call lives here, not in a component, so it keeps going while the
  * person moves between sessions; HuddleDock shows it wherever they are.
@@ -27,6 +34,12 @@ export interface HuddleCall {
   muted: boolean;
   /** Peer ids (including this one) whose audio is above a talking level. */
   speaking: string[];
+  /** This browser's shared screen, while it shares one. */
+  screen: MediaStream | null;
+  chat: HuddleChatMessage[];
+  chatOpen: boolean;
+  /** Chat messages from others since the chat was last open. */
+  unread: number;
 }
 
 interface Snapshot {
@@ -34,6 +47,9 @@ interface Snapshot {
   call: HuddleCall | null;
   /** People with a session open right now: who an invite can reach. */
   online: string[];
+  /** Each peer's video slot, keyed by peer id. It shows a picture only while
+   *  that member is `sharing`. */
+  screens: Record<string, MediaStream>;
 }
 
 type Send = (message: WSClientMessage) => void;
@@ -43,6 +59,8 @@ interface Peer {
   pc: RTCPeerConnection;
   audio: HTMLAudioElement;
   pending: RTCIceCandidateInit[];
+  /** The video slot this browser fills with its screen while sharing. */
+  video: RTCRtpSender | null;
 }
 
 /** Talking, on WebRTC's 0-1 `audioLevel` scale. */
@@ -50,7 +68,7 @@ const SPEAKING_LEVEL = 0.02;
 /** How long each notes clip runs before it is transcribed. */
 const NOTE_CLIP_MS = 20_000;
 
-let snapshot: Snapshot = { rooms: [], call: null, online: [] };
+let snapshot: Snapshot = { rooms: [], call: null, online: [], screens: {} };
 const listeners = new Set<() => void>();
 function set(next: Partial<Snapshot>) {
   snapshot = { ...snapshot, ...next };
@@ -63,6 +81,7 @@ function setCall(patch: Partial<HuddleCall>) {
 let send: Send | null = null;
 let iceServers: RTCIceServer[] = [];
 let local: MediaStream | null = null;
+let screen: MediaStream | null = null;
 const peers = new Map<string, Peer>();
 let meterTimer: number | undefined;
 let recorder: MediaRecorder | null = null;
@@ -129,9 +148,24 @@ function handle(msg: WSServerMessage) {
     case "huddle_joined":
       if (snapshot.call?.roomId !== msg.roomId) return;
       iceServers = msg.iceServers;
-      setCall({ peerId: msg.peerId, status: "live" });
+      setCall({ peerId: msg.peerId, status: "live", chat: msg.chat ?? [] });
       for (const peerId of msg.peers) void callPeer(peerId);
+      // Seated again after a reconnect while sharing.
+      if (screen) send?.({ type: "huddle_share", on: true });
       break;
+    case "huddle_chat": {
+      const call = snapshot.call;
+      if (call?.roomId !== msg.roomId) return;
+      if (call.chat.some((m) => m.id === msg.message.id)) return;
+      const mine =
+        call.peerId !== null &&
+        msg.message.user.toLowerCase() === myName(call)?.toLowerCase();
+      setCall({
+        chat: [...call.chat, msg.message].slice(-200),
+        unread: call.chatOpen || mine ? call.unread : call.unread + 1,
+      });
+      break;
+    }
     case "huddle_signal":
       void onSignal(msg.from, msg.data);
       break;
@@ -165,6 +199,12 @@ export function huddleRoom(roomId: string): HuddleRoom | null {
   return snapshot.rooms.find((room) => room.roomId === roomId) ?? null;
 }
 
+/** The name the server seated this browser under. */
+function myName(call: HuddleCall): string | undefined {
+  return huddleRoom(call.roomId)?.members.find((m) => m.peerId === call.peerId)
+    ?.user;
+}
+
 /** Join (or start) a huddle. Leaves the one this browser is in. */
 export async function joinHuddle(target: {
   roomId: string;
@@ -183,6 +223,10 @@ export async function joinHuddle(target: {
       peerId: null,
       muted: false,
       speaking: [],
+      screen: null,
+      chat: [],
+      chatOpen: false,
+      unread: 0,
     },
   });
   try {
@@ -214,6 +258,7 @@ export function leaveHuddle(): void {
   closePeers();
   stopNotes();
   stopLocal();
+  stopScreen();
   window.clearInterval(meterTimer);
   meterTimer = undefined;
   set({ call: null });
@@ -235,6 +280,68 @@ export function inviteToHuddle(name: string): void {
   send?.({ type: "huddle_invite", to: name });
 }
 
+export function sendHuddleChat(text: string): void {
+  const said = text.trim();
+  if (said && snapshot.call) send?.({ type: "huddle_chat", text: said });
+}
+
+export function setHuddleChatOpen(open: boolean): void {
+  if (!snapshot.call) return;
+  setCall(open ? { chatOpen: true, unread: 0 } : { chatOpen: false });
+}
+
+// ── Screen sharing ──────────────────────────────────────────────────────────
+
+/** Browsers that can capture a screen: desktop ones, not phones. */
+export function canShareScreen(): boolean {
+  return (
+    !!navigator.mediaDevices && "getDisplayMedia" in navigator.mediaDevices
+  );
+}
+
+export async function startScreenShare(): Promise<void> {
+  if (!snapshot.call || screen) return;
+  let stream: MediaStream;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: { ideal: 15, max: 30 } },
+      audio: false,
+    });
+  } catch {
+    // The person closed the picker.
+    return;
+  }
+  const [track] = stream.getVideoTracks();
+  if (!snapshot.call || !track) {
+    for (const t of stream.getTracks()) t.stop();
+    return;
+  }
+  // Text and code stay sharp; a dropped frame matters less.
+  track.contentHint = "detail";
+  // The browser's own "Stop sharing" bar ends the track.
+  track.onended = () => stopScreenShare();
+  screen = stream;
+  for (const entry of peers.values())
+    void entry.video?.replaceTrack(track).catch(() => {});
+  setCall({ screen: stream });
+  send?.({ type: "huddle_share", on: true });
+}
+
+export function stopScreenShare(): void {
+  if (!screen) return;
+  stopScreen();
+  setCall({ screen: null });
+  send?.({ type: "huddle_share", on: false });
+}
+
+function stopScreen() {
+  if (!screen) return;
+  for (const track of screen.getTracks()) track.stop();
+  screen = null;
+  for (const entry of peers.values())
+    void entry.video?.replaceTrack(null).catch(() => {});
+}
+
 // ── Peers ───────────────────────────────────────────────────────────────────
 
 function peer(peerId: string): Peer {
@@ -243,7 +350,7 @@ function peer(peerId: string): Peer {
   const pc = new RTCPeerConnection({ iceServers });
   const audio = new Audio();
   audio.autoplay = true;
-  const entry: Peer = { pc, audio, pending: [] };
+  const entry: Peer = { pc, audio, pending: [], video: null };
   peers.set(peerId, entry);
   for (const track of local?.getTracks() ?? [])
     if (local) pc.addTrack(track, local);
@@ -262,6 +369,15 @@ function peer(peerId: string): Peer {
       },
     });
   pc.ontrack = (event) => {
+    if (event.track.kind === "video") {
+      set({
+        screens: {
+          ...snapshot.screens,
+          [peerId]: new MediaStream([event.track]),
+        },
+      });
+      return;
+    }
     const [stream] = event.streams;
     if (!stream) return;
     audio.srcObject = stream;
@@ -278,7 +394,13 @@ function peer(peerId: string): Peer {
 
 /** The newcomer offers to everyone already inside (server/huddles.ts). */
 async function callPeer(peerId: string) {
-  const { pc } = peer(peerId);
+  const entry = peer(peerId);
+  const { pc } = entry;
+  // The video slot, so sharing later needs no new offer.
+  const slot = pc.addTransceiver("video", { direction: "sendrecv" });
+  entry.video = slot.sender;
+  if (screen)
+    await slot.sender.replaceTrack(screen.getVideoTracks()[0] ?? null);
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
   send?.({
@@ -294,6 +416,21 @@ async function onSignal(from: string, data: HuddleSignalData) {
   const { pc } = entry;
   if (data.sdp) {
     await pc.setRemoteDescription(data.sdp);
+    // Answer the offerer's video slot with one of our own, so either side
+    // can share. Older clients offer none; their calls stay voice only.
+    if (data.sdp.type === "offer" && !entry.video) {
+      const slot = pc
+        .getTransceivers()
+        .find((t) => t.receiver.track.kind === "video");
+      if (slot) {
+        slot.direction = "sendrecv";
+        entry.video = slot.sender;
+        if (screen)
+          await slot.sender
+            .replaceTrack(screen.getVideoTracks()[0] ?? null)
+            .catch(() => {});
+      }
+    }
     for (const candidate of entry.pending.splice(0))
       await pc.addIceCandidate(candidate).catch(() => {});
     if (data.sdp.type === "offer") {
@@ -325,6 +462,11 @@ function syncPeers(rooms: HuddleRoom[]) {
       closePeer(entry);
       peers.delete(peerId);
     }
+  const screens = Object.fromEntries(
+    Object.entries(snapshot.screens).filter(([peerId]) => peers.has(peerId)),
+  );
+  if (Object.keys(screens).length !== Object.keys(snapshot.screens).length)
+    set({ screens });
 }
 
 function closePeer(entry: Peer) {
@@ -335,6 +477,7 @@ function closePeer(entry: Peer) {
 function closePeers() {
   for (const entry of peers.values()) closePeer(entry);
   peers.clear();
+  set({ screens: {} });
 }
 
 function stopLocal() {
