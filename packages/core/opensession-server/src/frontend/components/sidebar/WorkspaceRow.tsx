@@ -181,6 +181,7 @@ export function WorkspaceRow({
 }: WorkspaceRowProps) {
   const hasQuestion = row.sessions.some((session) => session.waitingForInput);
   const failed = !hasQuestion && !!workspaceRunNeedingAttention(row.sessions);
+  const coordinates = rowCoordinates(row);
   // A manually pinned Needs input lane remains blue, but a failed top-level
   // run gets its own red marker rather than masquerading as a question.
   const waiting = !failed && row.status === "needsinput";
@@ -416,6 +417,13 @@ export function WorkspaceRow({
             <span
               className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.failed}`}
             />
+          ) : coordinates ? (
+            // A coordinator's PR or branch is whichever thread shipped
+            // last, which says little about the work: its rail is the
+            // state alone, running or idle.
+            <span
+              className={`size-2 shrink-0 rounded-full ${row.running ? SIDEBAR_STATUS_DOT.running : SIDEBAR_STATUS_DOT.idle}`}
+            />
           ) : noSectionHeading ? (
             <WsStatusMark row={row} size={18} />
           ) : row.running ? (
@@ -475,7 +483,7 @@ export function WorkspaceRow({
             a Slack thread, a Linear issue. Same slot and ink as the mark
             above (SidebarItem carries the session-row half). */}
         {!editing && <OriginMark source={rowOriginSource(row)} />}
-        {!editing && rowCoordinates(row) && <CoordinatorMark />}
+        {!editing && coordinates && <CoordinatorMark />}
         {!editing && <SoundMark row={row} />}
         {row.mention &&
           !editing && (
