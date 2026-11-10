@@ -345,19 +345,22 @@ function subagentIsActive(session: UnifiedSession): boolean {
  * Child rows to draw beneath the workspace that is currently selected: only
  * active workers (running, queued, or waiting for input) with a worktree or
  * workspace of their own. Inline workers stay in the group (so they never
- * surface as top-level rows) but are not listed. Idle workers are hidden,
- * except the one that is open, so selecting it never removes its row.
+ * surface as top-level rows) but are not listed, except under a coordinator
+ * (`allThreads`), whose threads are the work itself, checkout or not. Idle
+ * workers are hidden, except the one that is open, so selecting it never
+ * removes its row.
  */
 export function subagentsForSelectedWorkspace(
   groups: ReadonlyMap<string, WorkspaceSubagent[]>,
   workspaceId: string | null | undefined,
   selectedWorkspaceId: string | null | undefined,
   selectedSessionId: string | null = null,
+  allThreads = false,
 ): WorkspaceSubagent[] {
   if (!workspaceId || workspaceId !== selectedWorkspaceId) return [];
   return (groups.get(workspaceId) ?? []).filter(
     (item) =>
-      !item.inline &&
+      (allThreads || !item.inline) &&
       (subagentIsActive(item.session) || item.session.id === selectedSessionId),
   );
 }
