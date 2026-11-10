@@ -9,11 +9,8 @@ import type {
   WSClientMessage,
 } from "../../lib/types";
 import { DiffStat } from "../DiffStat";
-import { useState } from "react";
-import { copyToClipboard } from "../../lib/share-link";
-import { CopyCheck } from "../../ui/copy";
-import { Tooltip } from "../../ui/tooltip";
-import { IconArrowRight, IconCopy } from "../icons";
+import { IconArrowRight } from "../icons";
+import { CopyTextButton } from "./CopyTextButton";
 import { SelectionToSession } from "../SelectionToSession";
 import { UserAvatar } from "../UserAvatar";
 import { WalkthroughCard } from "../WalkthroughCard";
@@ -255,29 +252,12 @@ function DesktopIdentity({
 }
 
 function BranchChip({ name, copyable }: { name: string; copyable?: boolean }) {
-  const [copied, setCopied] = useState(false);
   return (
     <span className="inline-flex min-w-0 items-center gap-0.5 rounded-md bg-control py-0.5 pl-2 pr-0.5 font-mono text-meta text-link">
       <span className={`min-w-0 truncate ${copyable ? "" : "pr-1.5"}`}>
         {name}
       </span>
-      {copyable && (
-        <Tooltip label={copied ? "Copied" : "Copy branch name"}>
-          <button
-            type="button"
-            aria-label="Copy branch name"
-            className="grid size-5 shrink-0 place-items-center rounded-sm border-0 bg-transparent p-0 text-faint hover:bg-hover hover:text-fg"
-            onClick={() => {
-              copyToClipboard(name, () => {
-                setCopied(true);
-                window.setTimeout(() => setCopied(false), 1200);
-              });
-            }}
-          >
-            <CopyCheck copied={copied} idle={<IconCopy />} />
-          </button>
-        </Tooltip>
-      )}
+      {copyable && <CopyTextButton text={name} label="Copy branch name" />}
     </span>
   );
 }

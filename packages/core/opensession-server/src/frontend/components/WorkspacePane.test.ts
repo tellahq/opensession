@@ -116,7 +116,7 @@ test("reviews with and without a PR share the review toolbar", () => {
   expect(prPanelSource).toContain("{phoneLayout ? (");
   expect(prPanelSource).toContain("<PhoneReviewHeader");
   expect(prPanelSource).not.toContain("const reviewBar");
-  expect(prPanelSource).toContain('["files", "Files",');
+  expect(prPanelSource).toContain('"Files changed",');
   expect(prPanelSource).toContain('label="Code view"');
   expect(prPanelSource).toContain(
     '<SegmentedOption value="all">Changes</SegmentedOption>',
@@ -246,14 +246,13 @@ test("wide Review keeps page navigation in the identity bar", () => {
   );
   expect(prPanelSource).toContain("sessionActionTarget === undefined");
   expect(prPanelSource).toContain('label="Pull request pages"');
+  expect(prPanelSource).toContain("<UnderlineTabs.Root");
   expect(prPanelSource).toContain('className="shrink-0 phone:hidden"');
   expect(prPanelSource).toContain("<PhoneReviewHeader");
   expect(prPanelSource).toContain('aria-label="Back to overview"');
   expect(prPanelSource).toContain("phoneNavigation");
   expect(prPanelSource).not.toContain("phonePageTabs");
-  expect(prPanelSource).toContain(
-    "{(compactToolbar || !phoneLayout) && fileControls}",
-  );
+  expect(prPanelSource).toContain("{pageTabs}\n              {fileControls}");
   expect(prFilesPageSource).not.toContain("desktop:pt-12");
   expect(prOverviewPageSource).not.toContain("desktop:pt-12");
   expect(summarySource).not.toContain('aria-label="Pull request pages"');
