@@ -1,6 +1,13 @@
-import { useLayoutEffect, useRef, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useSyncExternalStore,
+} from "react";
+import { frameAudioReport } from "../lib/frame-audio";
 import {
   getKeptFrames,
+  keptFrameAudible,
   keptFrameEntered,
   keptFrameLoaded,
   keptFrameNavigated,
@@ -54,6 +61,15 @@ function KeptFrameBox({
     () => keptFrameReturned(key, window.history.length),
   );
   useFrameLocation(frameRef, (href) => keptFrameNavigated(key, href));
+  // Whether the page is playing sound, for the sidebar's speaker.
+  useEffect(() => {
+    const listener = (event: MessageEvent) => {
+      const audible = frameAudioReport(event, frameRef.current?.contentWindow);
+      if (audible !== null) keptFrameAudible(key, audible);
+    };
+    window.addEventListener("message", listener);
+    return () => window.removeEventListener("message", listener);
+  }, [key]);
 
   // Follows the slot: placed before paint, then on every size change of the
   // slot or the pane (tab strip, side panel, split ratio, window). A slot with

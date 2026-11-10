@@ -24,6 +24,7 @@ import {
   pickLandingSession,
   workspaceLandingReady,
 } from "../lib/landing-session";
+import { viewTabScope } from "../lib/kept-frames";
 import { findPrWorkspaceId } from "../lib/pr-workspace";
 import { markRead } from "../lib/reads";
 import type { ReviewQueueItem } from "../lib/review-queue";
@@ -135,10 +136,7 @@ export function useWorkspacePanes({
   // id — the same grouping rule as the tab strip (tabOrderKey below), so a
   // view tab opened in a workspace survives switching between sibling sessions.
   const wsKeyFor = (s: UnifiedSession | null | undefined): string | null =>
-    s
-      ? s.workspaceId ||
-        (s.worktreeDir?.includes("/worktrees/") ? s.worktreeDir : s.id)
-      : null;
+    s ? viewTabScope(s) : null;
   // On the session-less workspace route the key is the route's workspace id.
   const routeWorkspaceId = route.view === "workspace" ? route.id : null;
   const routeWorkspace: Workspace | null = routeWorkspaceId

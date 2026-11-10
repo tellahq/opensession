@@ -1,6 +1,9 @@
 import { beforeEach, expect, test } from "bun:test";
 import {
   KEPT_FRAME_LIMIT,
+  audibleFrameScopes,
+  keptFrameAudible,
+  viewTabScope,
   dropKeptFrame,
   getKeptFrame,
   getKeptFrames,
@@ -102,4 +105,25 @@ test("a reported location shows until the frame loads something else", () => {
   );
   loadKeptFrame("staging:a", "https://a.example.test/settings");
   expect(getKeptFrame("staging:a")!.location).toBeNull();
+});
+
+test("audible pages name their scope until they reload", () => {
+  showKeptFrame("staging:ws-a", spec("https://a.example.test/"), slot());
+  showKeptFrame("portal:ws-b", spec("https://b.example.test/"), slot());
+  expect(audibleFrameScopes()).toBe("");
+  keptFrameAudible("staging:ws-a", true);
+  keptFrameAudible("portal:ws-b", true);
+  expect(audibleFrameScopes()).toBe("ws-a\nws-b");
+  loadKeptFrame("staging:ws-a", "https://a.example.test/next");
+  expect(audibleFrameScopes()).toBe("ws-b");
+  keptFrameAudible("portal:ws-b", false);
+  expect(audibleFrameScopes()).toBe("");
+});
+
+test("a session's view tabs live under its workspace, worktree, or itself", () => {
+  expect(viewTabScope({ id: "s1", workspaceId: "w1" })).toBe("w1");
+  expect(viewTabScope({ id: "s1", worktreeDir: "/home/x/worktrees/b" })).toBe(
+    "/home/x/worktrees/b",
+  );
+  expect(viewTabScope({ id: "s1", worktreeDir: "/home/x/repo" })).toBe("s1");
 });
