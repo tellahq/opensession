@@ -27,7 +27,13 @@ import {
   popupScrollClasses,
   popupSurfaceClasses,
 } from "../../ui/popup-classes";
-import { IconCheck, IconChevronRight, IconDotsHorizontal } from "../icons";
+import {
+  IconCheck,
+  IconChevronRight,
+  IconDotsHorizontal,
+  IconSidebarLeft,
+  IconSidebarRight,
+} from "../icons";
 import { REVIEW_TREE_CSS } from "../../lib/pr-file-tree-styles";
 import { cn } from "../../ui/cn";
 
@@ -74,6 +80,8 @@ export function PrFileTree({
   leftoverTitle,
   removedFiles,
   layout = "sidebar",
+  side = "left",
+  onCollapse,
 }: {
   files: PrFile[];
   mode: "flat" | "tree";
@@ -93,6 +101,10 @@ export function PrFileTree({
   removedFiles?: readonly string[];
   /** Mount inside the parent's responsive sheet; onOpenFile can also close it. */
   layout?: "sidebar" | "sheet";
+  /** Which edge of the diff the sidebar sits on; the resize handle faces the diff. */
+  side?: "left" | "right";
+  /** Offer a button that hides the sidebar entirely. */
+  onCollapse?: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [unreviewedOnly, setUnreviewedOnly] = useState(false);
@@ -232,7 +244,8 @@ export function PrFileTree({
     const startWidth = root.getBoundingClientRect().width;
     document.body.classList.add("resizing-pr-file-tree");
     const move = (moveEvent: PointerEvent) => {
-      root.style.width = `${clampWidth(startWidth + moveEvent.clientX - startX)}px`;
+      const delta = moveEvent.clientX - startX;
+      root.style.width = `${clampWidth(startWidth + (side === "right" ? -delta : delta))}px`;
     };
     const cleanup = () => {
       document.body.classList.remove("resizing-pr-file-tree");
@@ -331,7 +344,7 @@ export function PrFileTree({
         "flex min-h-0 shrink-0 flex-col",
         layout === "sheet"
           ? "relative h-full w-full"
-          : `${WS_SUMMARY_SURFACE} sticky top-[var(--review-file-tree-top,0px)] mb-2 ml-2 mt-[var(--review-file-tree-gap,8px)] max-h-[calc(100dvh-var(--review-file-tree-top,0px)-16px)] desktop:max-h-[calc(100dvh-var(--desktop-header-h)-var(--review-file-tree-top,0px)-16px)]`,
+          : `${WS_SUMMARY_SURFACE} sticky top-[var(--review-file-tree-top,0px)] mb-2 ${side === "right" ? "mr-2" : "ml-2"} mt-[var(--review-file-tree-gap,8px)] max-h-[calc(100dvh-var(--review-file-tree-top,0px)-16px)] desktop:max-h-[calc(100dvh-var(--desktop-header-h)-var(--review-file-tree-top,0px)-16px)]`,
       )}
       style={
         layout === "sheet"
@@ -350,6 +363,24 @@ export function PrFileTree({
               ? files.length
               : `${visibleFiles.length} / ${files.length}`}
           </span>
+          {onCollapse && (
+            <Tooltip label="Hide changed files">
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label="Hide changed files"
+                icon={
+                  side === "right" ? (
+                    <IconSidebarRight size={18} />
+                  ) : (
+                    <IconSidebarLeft size={18} />
+                  )
+                }
+                className="-mr-1.5"
+                onClick={onCollapse}
+              />
+            </Tooltip>
+          )}
         </div>
       )}
       <div className="flex shrink-0 flex-col gap-2 px-3 pb-2">
@@ -576,14 +607,19 @@ export function PrFileTree({
           aria-valuemax={maxWidth}
           aria-valuenow={Math.round(renderedWidth)}
           tabIndex={0}
-          className="absolute inset-y-0 -right-1 z-10 w-[9px] cursor-col-resize touch-none after:absolute after:inset-y-1 after:left-1 after:w-px after:bg-transparent after:transition-[background-color] after:content-[''] hover:after:bg-accent focus-visible:outline-none focus-visible:after:bg-accent [body.resizing-pr-file-tree_&]:after:bg-accent"
+          className={cn(
+            "absolute inset-y-0 z-10 w-[9px] cursor-col-resize",
+            "touch-none after:absolute after:inset-y-1 after:left-1 after:w-px after:bg-transparent after:transition-[background-color] after:content-[''] hover:after:bg-accent focus-visible:outline-none focus-visible:after:bg-accent [body.resizing-pr-file-tree_&]:after:bg-accent",
+            side === "right" ? "-left-1" : "-right-1",
+          )}
           onPointerDown={startResize}
           onDoubleClick={() => commitWidth(DEFAULT_WIDTH)}
           onKeyDown={(event) => {
             if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
             event.preventDefault();
             commitWidth(
-              renderedWidth + (event.key === "ArrowRight" ? 16 : -16),
+              renderedWidth +
+                ((event.key === "ArrowRight") === (side === "left") ? 16 : -16),
             );
           }}
         />

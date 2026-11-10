@@ -18,7 +18,13 @@ import {
 import { Button } from "../../ui/button";
 import { Tooltip } from "../../ui/tooltip";
 import { ResponsiveDialog } from "../../ui/sheet";
-import { IconChevronLeft, IconChevronRight, IconFile, IconX } from "../icons";
+import {
+  IconChevronLeft,
+  IconChevronRight,
+  IconFile,
+  IconSidebarRight,
+  IconX,
+} from "../icons";
 import { CodeFlow } from "../CodeFlow";
 import { CommentableDiff } from "../DeferredDiff";
 import { DiffPanel } from "../DiffPanel";
@@ -33,6 +39,15 @@ type DiffSource = "pull-request" | "worktree";
 type CodeView = "all" | "guide" | "flow";
 type FileTreeMode = ComponentProps<typeof PrFileTree>["mode"];
 type GuideSections = ReturnType<typeof sectionsWithPatches>;
+
+const TREE_HIDDEN_KEY = "opensession-review-file-tree-hidden";
+function readTreeHidden(): boolean {
+  try {
+    return localStorage.getItem(TREE_HIDDEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 interface Props {
   diffSource: DiffSource;
@@ -130,6 +145,14 @@ export function PrFilesPage({
 }: Props) {
   const isPhone = useIsPhone();
   const [filesOpen, setFilesOpen] = useState(false);
+  // The sidebar can be put away entirely; the choice sticks across reviews.
+  const [treeHidden, setTreeHidden] = useState(readTreeHidden);
+  const hideTree = (hidden: boolean) => {
+    setTreeHidden(hidden);
+    try {
+      localStorage.setItem(TREE_HIDDEN_KEY, hidden ? "1" : "0");
+    } catch {}
+  };
   const [scroller, setScroller] = useState<HTMLElement | null>(null);
   const { activeFile, selectFile } = useActiveReviewFile(scroller);
   const paths = reviewFiles.map((file) => file.path);
@@ -187,6 +210,8 @@ export function PrFilesPage({
       mode={fileListMode === "hidden" ? "tree" : fileListMode}
       showFileStats={showFileStats}
       layout={filesOpen ? "sheet" : "sidebar"}
+      side="right"
+      onCollapse={filesOpen ? undefined : () => hideTree(true)}
       activeFile={activeFile}
       reviewedFiles={reviewedFiles}
       changedFiles={changedFiles}
@@ -269,6 +294,18 @@ export function PrFilesPage({
               <DiffStat files={files} />
             )}
           </div>
+          {treeHidden && fileListMode !== "hidden" && files.length > 0 && (
+            <Tooltip label="Show changed files">
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label="Show changed files"
+                icon={<IconSidebarRight size={18} />}
+                className="order-last"
+                onClick={() => hideTree(false)}
+              />
+            </Tooltip>
+          )}
           {codeView !== "flow" && (
             <>
               <Tooltip label="Previous file (K)">
@@ -331,12 +368,6 @@ export function PrFilesPage({
         </div>
       )}
       <div className="flex min-h-0 flex-1">
-        {diffSource === "pull-request" &&
-          !isPhone &&
-          !filesOpen &&
-          fileListMode !== "hidden" &&
-          files.length > 0 &&
-          navigator}
         {filesOpen && (
           <ResponsiveDialog
             open={filesOpen}
@@ -655,6 +686,15 @@ export function PrFilesPage({
             )}
           </div>
         </main>
+        {/* Changed files sit right of the diff, like GitHub's file tree
+            mirrored, so the diff starts at the pane's left edge. */}
+        {diffSource === "pull-request" &&
+          !isPhone &&
+          !filesOpen &&
+          !treeHidden &&
+          fileListMode !== "hidden" &&
+          files.length > 0 &&
+          navigator}
       </div>
       {isPhone &&
         diffSource === "pull-request" && (
