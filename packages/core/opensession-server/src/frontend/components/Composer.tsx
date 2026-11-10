@@ -682,16 +682,14 @@ export function Composer({
   useLayoutEffect(() => {
     busyRef.current = busy;
   });
-  // The first Escape during a run only arms the stop and says so; a second
-  // Escape within ESC_STOP_WINDOW_MS stops the turn. A
+  // The first Escape during a run only arms the stop; a second Escape within
+  // ESC_STOP_WINDOW_MS stops the turn. The pending timer is the armed state. A
   // turn that ends on its own disarms it, so a late Escape never stops the
   // NEXT turn.
-  const [escArmed, setEscArmed] = useState(false);
   const escArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   function disarmEsc() {
     if (escArmTimer.current) clearTimeout(escArmTimer.current);
     escArmTimer.current = null;
-    setEscArmed(false);
   }
   useEffect(() => () => disarmEsc(), []);
   useEffect(() => {
@@ -1410,18 +1408,16 @@ export function Composer({
     // so the send combos keep working in any mode.
     if (vim.handleKeyDown(e)) return;
     // Esc twice while a run is busy interrupts the turn: the first press arms
-    // it and shows a hint, the second within the window stops.
+    // it, the second within the window stops.
     if (e.key === "Escape" && busy && onStop && !disabled) {
       e.preventDefault();
       e.stopPropagation();
       if (e.repeat) return;
-      if (escArmed) {
+      if (escArmTimer.current) {
         disarmEsc();
         onStop();
         return;
       }
-      setEscArmed(true);
-      if (escArmTimer.current) clearTimeout(escArmTimer.current);
       escArmTimer.current = setTimeout(disarmEsc, ESC_STOP_WINDOW_MS);
       return;
     }
@@ -2307,16 +2303,10 @@ export function Composer({
       </motion.div>
       {/* The keyboard-shortcut hint is irrelevant on touch and eats vertical
           space right where the keyboard appears. */}
-      {escArmed ? (
-        <div role="status" className="mt-[7px] text-center text-meta text-dim">
-          Press Esc again to stop
+      {hint && (
+        <div className="mt-[7px] text-center text-meta text-faint phone:hidden">
+          {hint}
         </div>
-      ) : (
-        hint && (
-          <div className="mt-[7px] text-center text-meta text-faint phone:hidden">
-            {hint}
-          </div>
-        )
       )}
       {/* Outside the toolbar: the stop button lives in a row that the phone
           composer unmounts when it minimizes, and the question has to survive
