@@ -577,6 +577,35 @@ html[data-theme="light"] .composer-hl .cmp-fence {
     max-height: 400px;
   }
 }
+/* Two or more session images in a row (markdown.ts groupSessionImageRuns):
+   a batch of screenshots reads as a contact sheet, each tile a figure with
+   its caption, rather than a stack one viewport tall per image. Two columns
+   at phone width. */
+.md-figure-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  align-items: start;
+  margin: 2px 0 8px;
+}
+.md-figure-grid .md-figure {
+  margin: 0;
+  min-width: 0;
+}
+.md-figure-grid .md-figure .md-image-link {
+  width: 100%;
+}
+.md-figure-grid .md-figure .md-image {
+  width: 100%;
+  max-height: 480px;
+  object-fit: contain;
+}
+@media (max-width: 720px) {
+  .md-figure-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+}
 /* An <img> written as raw HTML in PR prose (html-sanitize.ts tags them). The
    block treatment above is right for a pasted screenshot and wrong here: bots
    use raw images for 16px avatars and status badges inside a table cell, where
