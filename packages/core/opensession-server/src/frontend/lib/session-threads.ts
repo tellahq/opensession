@@ -137,46 +137,6 @@ export function groupThreads(threads: readonly UnifiedSession[]) {
   return groups;
 }
 
-const SEEN_KEY = "opensession-threads-seen";
-const seenSchema = z.record(z.string(), z.number());
-
-function readSeen(storage: Pick<Storage, "getItem">) {
-  try {
-    const parsed = seenSchema.safeParse(
-      JSON.parse(storage.getItem(SEEN_KEY) ?? "{}"),
-    );
-    return parsed.success ? parsed.data : {};
-  } catch {
-    return {};
-  }
-}
-
-/** When this browser last had `sessionId` on screen, for its threads'
- *  catch-up (ms epoch). */
-export function threadsSeenAt(
-  sessionId: string,
-  storage: Pick<Storage, "getItem"> = localStorage,
-): number | null {
-  return readSeen(storage)[sessionId] ?? null;
-}
-
-export function markThreadsSeen(
-  sessionId: string,
-  at: number,
-  storage: Pick<Storage, "getItem" | "setItem"> = localStorage,
-): void {
-  const seen = readSeen(storage);
-  delete seen[sessionId];
-  seen[sessionId] = at;
-  // Keep the newest 200.
-  const kept = Object.fromEntries(Object.entries(seen).slice(-200));
-  try {
-    storage.setItem(SEEN_KEY, JSON.stringify(kept));
-  } catch {
-    /* private mode: the recap just shows again next time */
-  }
-}
-
 /**
  * The thread a spawn_task or create_session call started, read from the
  * call's result (`Spawned task \`bks-…\``). Null for any other tool, a call

@@ -304,9 +304,8 @@ the transcript with what it is doing right now, and all of them in the side
 panel's **Threads** tab (the top of the details page on a phone), grouped by
 where they stand: blocked, ready to ship, working, idle, shipped. Clicking a
 card opens the thread beside the conversation, where you can read it and
-message its agent without leaving. Coming back after the threads moved, a
-**Since you were last here** card above the composer gives a short written
-catch-up. A coordinating session's panel opens on the Threads tab.
+message its agent without leaving. A coordinating session's panel opens on
+the Threads tab.
 
 Workspaces made as "spaces" before coordinator mode was a setting keep their
 root session coordinating until someone switches it off.

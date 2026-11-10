@@ -106,7 +106,6 @@ import type { UnifiedSession } from "../../lib/types";
 import type { SessionComments } from "../../lib/comment-threads";
 import { InlineComments } from "../comments/InlineComments";
 import { MessageCommentsPane } from "../comments/MessageCommentsPane";
-import { ThreadsCatchUp } from "../threads/ThreadsCatchUp";
 import { CoordinatorMenuItems } from "../threads/CoordinatorMenuItems";
 import { ThreadSplit } from "../threads/ThreadSplit";
 import { WorkspaceSettingsHost } from "../WorkspaceSettingsDialog";
@@ -1439,7 +1438,6 @@ export function SessionViewerMainRegion({
                       </div>
                     </div>
                   )}
-                  <ThreadsCatchUp session={session} />
                   <TypingIndicator
                     presence={typingPresence}
                     className="mx-auto mb-1 w-full max-w-[calc(var(--session-col)+40px)] px-5"

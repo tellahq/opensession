@@ -2,12 +2,10 @@ import { describe, expect, test } from "bun:test";
 import {
   groupThreads,
   isCoordinating,
-  markThreadsSeen,
   sessionThreads,
   spawnedThreadId,
   threadState,
   threadStatusLine,
-  threadsSeenAt,
 } from "./session-threads";
 import type { UnifiedSession } from "./types";
 
@@ -113,19 +111,6 @@ describe("threadState", () => {
       "working",
       "idle",
     ]);
-  });
-});
-
-describe("threads seen", () => {
-  test("the seen time round-trips through storage", () => {
-    const store = new Map<string, string>();
-    const storage = {
-      getItem: (key: string) => store.get(key) ?? null,
-      setItem: (key: string, value: string) => void store.set(key, value),
-    };
-    expect(threadsSeenAt("bks-root", storage)).toBeNull();
-    markThreadsSeen("bks-root", 42, storage);
-    expect(threadsSeenAt("bks-root", storage)).toBe(42);
   });
 });
 
