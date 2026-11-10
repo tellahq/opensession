@@ -41,7 +41,7 @@ export interface ComposerConfig {
   stopping?: boolean;
   /**
    * Ask for the stop confirmation from outside the composer: the parent bumps
-   * this counter, and each bump opens the same dialog Escape does. A counter
+   * this counter, and each bump opens the stop confirmation dialog. A counter
    * rather than a callback ref because the question is "has one more been
    * asked for", which a boolean cannot say twice in a row.
    */

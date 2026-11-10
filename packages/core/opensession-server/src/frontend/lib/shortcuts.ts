@@ -201,9 +201,8 @@ export const SHORTCUT_COMMANDS: ShortcutCommand[] = [
     group: "Sessions",
     defaults: ["mod+alt+n"],
   },
-  // Escape already asks this, but only with the composer focused, which is
-  // exactly where you are not when you have been reading the transcript. The
-  // two land on the same confirmation.
+  // Escape twice already stops, but only with the composer focused, which is
+  // exactly where you are not when you have been reading the transcript.
   {
     id: "run-stop",
     title: "Stop the run",

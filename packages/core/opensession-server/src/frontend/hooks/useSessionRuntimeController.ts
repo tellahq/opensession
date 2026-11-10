@@ -353,10 +353,10 @@ export function useSessionRuntimeController({
   }, [isBusy, loading, entries, session.runStartedAt]);
 
   // ⌘. asks to stop the running turn from anywhere in the session. Escape
-  // asks the same question, but only with the composer focused — which is
+  // twice stops it too, but only with the composer focused — which is
   // exactly where you are not when you have been reading the transcript.
   //
-  // Both land on the composer's own confirmation. The dialog, and the rule
+  // ⌘. lands on the composer's own confirmation. The dialog, and the rule
   // that it goes away when the turn finishes on its own rather than stopping
   // the next one, live there; this only asks for it, through a counter, so
   // there is no second copy of any of that here. (The stop BUTTON stays

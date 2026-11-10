@@ -386,9 +386,10 @@ export function ComposerAddMenu({
   );
 }
 
-/** Confirms stopping from Escape. The stop button stays immediate because its
- *  press is already deliberate. Escape dismisses this dialog, while initial
- *  focus on Stop lets Enter confirm. */
+/** Confirms stopping from ⌘. (Escape stops on a second press instead). The
+ *  stop button stays immediate because its press is already deliberate.
+ *  Escape dismisses this dialog, while initial focus on Stop lets Enter
+ *  confirm. */
 export function StopConfirmModal({
   open,
   onOpenChange,
