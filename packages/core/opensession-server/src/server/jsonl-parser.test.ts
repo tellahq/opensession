@@ -167,6 +167,52 @@ describe("entriesForWire", () => {
     ).toEqual([]);
   });
 
+  it("credits a teammate's image-only stored row to the teammate", () => {
+    const [entry] = entriesForWire([
+      {
+        id: "teammate-image",
+        type: "user",
+        content: "[Teammate] ",
+        timestamp: TS,
+        images: ["data:image/png;base64,AAAA"],
+      },
+    ]);
+    expect(entry.sender).toBe("Teammate");
+    expect(entry.content).toBe("");
+    expect(entry.images).toEqual(["data:image/png;base64,AAAA"]);
+  });
+
+  it("credits a teammate's image-only steer parsed from the jsonl", async () => {
+    const userLine = (uuid: string, text: string | null) =>
+      JSON.stringify({
+        type: "user",
+        uuid,
+        timestamp: TS,
+        message: {
+          role: "user",
+          content: [
+            ...(text === null ? [] : [{ type: "text", text }]),
+            {
+              type: "image",
+              source: { type: "base64", media_type: "image/png", data: "AAAA" },
+            },
+          ],
+        },
+      });
+    const path = writeFixture([
+      userLine("teammate", "[Teammate] "),
+      userLine("owner", null),
+    ]);
+    const entries = entriesForWire(await parseTranscript(path));
+    expect(entries).toHaveLength(2);
+    const [teammate, owner] = entries;
+    expect(teammate.sender).toBe("Teammate");
+    expect(teammate.content).toBe("");
+    expect(teammate.images).toEqual(["data:image/png;base64,AAAA"]);
+    expect(owner.sender).toBeUndefined();
+    expect(owner.images).toEqual(["data:image/png;base64,AAAA"]);
+  });
+
   it("drops parser-only metadata after classifying an entry", () => {
     const [entry] = entriesForWire([
       {

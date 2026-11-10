@@ -142,7 +142,10 @@ export function stripContext(text: string): string {
   const shown = hasFence(withoutLegacyGoal)
     ? withoutLegacyGoal.replace(STRIP_RE, "").trimStart()
     : withoutLegacyGoal;
-  return ATTRIBUTION_ONLY_RE.test(shown.trim()) ? "" : shown;
+  // Blank a lone "[Name] " only when stripping left it behind: that prefix
+  // attributed plumbing, not a message. A fence-free "[Name] " is a teammate's
+  // attachment-only turn and the prefix is all that credits them.
+  return shown !== text && ATTRIBUTION_ONLY_RE.test(shown.trim()) ? "" : shown;
 }
 
 // A fence opener on its own line that is never closed, through the end of the
