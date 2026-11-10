@@ -1477,10 +1477,10 @@ describe("buildPiAnthropicProvider", () => {
     }
   });
 
-  test("the CLI gets pi's context window and never compacts or refuses on its own", async () => {
+  test("the CLI gets pi's limits and never compacts or refuses on its own", async () => {
     // A release newer than the bundled CLI's catalog: the CLI would assume a
-    // 200K window, auto-compact behind pi's back, and answer a synthetic
-    // "Prompt is too long" once it could not.
+    // 200K window and a 32K output cap, auto-compact behind pi's back, and
+    // answer a synthetic "Prompt is too long" once it could not.
     const [fable] = buildPiAnthropicModels([], "claude-fable-5-2");
     await designate(["ctx-account"]);
     await seedAccounts(["ctx-account"]);
@@ -1505,6 +1505,7 @@ describe("buildPiAnthropicProvider", () => {
       expect(Number(env?.CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE)).toBeGreaterThan(
         fable.contextWindow,
       );
+      expect(env?.CLAUDE_CODE_MAX_OUTPUT_TOKENS).toBe("128000");
     } finally {
       query.mockRestore();
     }
