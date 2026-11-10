@@ -505,7 +505,7 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
   test("the picker opt-out persists and stops Fable from falling back", async () => {
     if (!redirected) return;
     const sid = "bks-zz-no-auto-fallback";
-    const model = "pi/anthropic/claude-fable-5-1";
+    const model = "pi/anthropic/claude-fable-5-2";
     writeSessionFile(sid, { model });
     sessionCache.invalidateSessionsCache();
     const session = sessionCache.findSession(sid)!;

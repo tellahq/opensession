@@ -28,6 +28,7 @@ const { VoiceAudioBridge } = require("./voice-audio-bridge");
 const { MacKeychainReview } = require("./mac-keychain-ui");
 const { LocalFolders } = require("./local-folders");
 const { FRAME_INSPECT_SCRIPT, captureRect } = require("./frame-inspect");
+const { FRAME_AUDIO_SCRIPT } = require("./frame-audio");
 const macKeychainReview = new MacKeychainReview({
   dialog,
   context: (target) => {
@@ -1088,7 +1089,9 @@ function createWindow(initialURL = null, initialAccountID = null) {
   });
   // Pages the app frames (its Browser and Portal tabs) answer the app's
   // inspect requests, so a comment on one can name its element
-  // (frame-inspect.js). Only the app's own direct frames get the responder.
+  // (frame-inspect.js), and report when they play sound, so the sidebar can
+  // show where it comes from (frame-audio.js). Only the app's own direct
+  // frames get these.
   createdWindow.webContents.on(
     "did-frame-finish-load",
     (_event, isMainFrame, frameProcessId, frameRoutingId) => {
@@ -1098,6 +1101,7 @@ function createWindow(initialURL = null, initialAccountID = null) {
       if (!frame || frame.parent !== contents.mainFrame) return;
       if (!inWindow(contents.mainFrame.url)) return;
       frame.executeJavaScript(FRAME_INSPECT_SCRIPT).catch(() => {});
+      frame.executeJavaScript(FRAME_AUDIO_SCRIPT).catch(() => {});
     },
   );
   // Pinch and wheel zoom land in the renderer, so the level has to be read back

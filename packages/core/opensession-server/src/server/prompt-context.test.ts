@@ -86,6 +86,11 @@ describe("prompt-context", () => {
     expect(isContextOnly(delivered)).toBe(true);
   });
 
+  it("keeps a fence-free attribution that carries an attachment", () => {
+    expect(stripContext("[Teammate] ")).toBe("[Teammate] ");
+    expect(isContextOnly("[Teammate] ")).toBe(false);
+  });
+
   it("keeps the attribution when the human actually said something", () => {
     const delivered = `[Kent] ${wrapContext("handoff")}\n\nrebase this`;
     expect(stripContext(delivered)).toBe("[Kent] rebase this");

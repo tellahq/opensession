@@ -6,6 +6,7 @@ import {
   frameStepped,
   freshFrameHistory,
 } from "./frame-history";
+import { FRAME_AUDIO_PAUSE } from "./frame-audio";
 
 /**
  * Framed pages (the Browser and Portal tabs) that outlive the pane showing
@@ -40,6 +41,8 @@ export interface KeptFrame extends KeptFrameSpec {
   /** Bumped by Reload so the frame remounts on the same address. */
   nonce: number;
   loading: boolean;
+  /** The page says it is playing sound; see frame-audio.ts. */
+  audible: boolean;
   slot: HTMLElement | null;
   /** Recency for eviction. Order in `frames` never changes (see above). */
   shownAt: number;
@@ -48,6 +51,23 @@ export interface KeptFrame extends KeptFrameSpec {
 /** The frame key for a workspace's Browser or Portal view-tab. */
 export function keptFrameKey(kind: "staging" | "portal", scope: string) {
   return `${kind}:${scope}`;
+}
+
+/**
+ * The scope a session's view tabs, and so its kept frames, live under: its
+ * workspace, the isolated worktree it shares, or the lone session.
+ */
+export function viewTabScope(session: {
+  id: string;
+  workspaceId?: string | null;
+  worktreeDir?: string | null;
+}): string {
+  return (
+    session.workspaceId ||
+    (session.worktreeDir?.includes("/worktrees/")
+      ? session.worktreeDir
+      : session.id)
+  );
 }
 
 let frames: readonly KeptFrame[] = [];
@@ -120,6 +140,7 @@ export function showKeptFrame(
           history: freshFrameHistory(0),
           nonce: 0,
           loading: true,
+          audible: false,
           slot,
           shownAt,
         },
@@ -138,6 +159,7 @@ export function showKeptFrame(
           history: freshFrameHistory(frame.history.length),
           nonce: frame.nonce + 1,
           loading: true,
+          audible: false,
         }),
     slot,
     shownAt,
@@ -160,6 +182,7 @@ export function loadKeptFrame(key: string, address: string) {
     history: freshFrameHistory(frame.history.length),
     nonce: frame.nonce + 1,
     loading: true,
+    audible: false,
   }));
 }
 
@@ -180,6 +203,37 @@ export function keptFrameNavigated(key: string, location: string) {
   update(key, (frame) =>
     frame.location === location ? frame : { ...frame, location },
   );
+}
+
+/** The page reported whether it is playing sound. */
+export function keptFrameAudible(key: string, audible: boolean) {
+  update(key, (frame) =>
+    frame.audible === audible ? frame : { ...frame, audible },
+  );
+}
+
+/**
+ * The scopes (see keptFrameKey) whose Browser or Portal page is playing
+ * sound, joined into one string so a subscriber re-renders only when it
+ * changes. Scopes never contain a newline.
+ */
+export function audibleFrameScopes(): string {
+  return frames
+    .filter((frame) => frame.audible)
+    .map((frame) => frame.key.slice(frame.key.indexOf(":") + 1))
+    .join("\n");
+}
+
+/** Asks every audible page under `scopes` to pause; see frame-audio.ts. */
+export function pauseKeptFrames(scopes: ReadonlySet<string>) {
+  for (const frame of frames) {
+    if (!frame.audible) continue;
+    if (!scopes.has(frame.key.slice(frame.key.indexOf(":") + 1))) continue;
+    keptFrameElement(frame.key)?.contentWindow?.postMessage(
+      { type: FRAME_AUDIO_PAUSE },
+      "*",
+    );
+  }
 }
 
 /** Records a Back (-1) or Forward (1) the toolbar sent to the window. */

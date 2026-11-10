@@ -80,7 +80,7 @@ test("review inversion reuses catalog-derived authorship", async () => {
     "openai",
   );
   expect(
-    inverseReviewModel(author, "pi/anthropic/claude-fable-5-1"),
+    inverseReviewModel(author, "pi/anthropic/claude-fable-5-2"),
   ).toBeNull();
   store.remove("owner");
 });
@@ -93,7 +93,7 @@ test("a session that linked the PR owns it; the PR's own runs never do", async (
   });
   // Opened the PR from a temporary checkout, then linked it.
   store.upsert({
-    ...row("follower", "pi/anthropic/claude-fable-5-1"),
+    ...row("follower", "pi/anthropic/claude-fable-5-2"),
     branch: "scratch",
     linkedPrs: [{ repo: "app", branch: "feature", number: 1 }],
   });
@@ -103,7 +103,7 @@ test("a session that linked the PR owns it; the PR's own runs never do", async (
   });
   // A session with the branch checked out outranks a newer linked follower.
   store.upsert({
-    ...row("follower", "pi/anthropic/claude-fable-5-1"),
+    ...row("follower", "pi/anthropic/claude-fable-5-2"),
     branch: "scratch",
     lastActivity: "2026-09-19T00:00:00Z",
     linkedPrs: [{ repo: "app", branch: "feature", number: 1 }],

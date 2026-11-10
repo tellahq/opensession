@@ -73,7 +73,7 @@ test("the catalog lists plain models only and keeps the default", async () => {
 test("a retired preset default resolves to the model it led", async () => {
   preferred = "pi/dial/ultra";
   const result = await modelCatalog();
-  expect(result.default).toBe("pi/anthropic/claude-fable-5-1");
+  expect(result.default).toBe("pi/anthropic/claude-fable-5-2");
 });
 
 test("the catalog respects provider availability", async () => {

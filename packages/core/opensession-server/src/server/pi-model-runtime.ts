@@ -52,6 +52,7 @@ import {
   PASSTHROUGH_PREFIX,
   BRIDGE_CWD,
   bridgeDesignationError,
+  cliPassthroughEnv,
   ensureAnthropicBridgeCwd,
   IMAGE_ONLY_PROMPT,
   currentTurnStart,
@@ -1314,6 +1315,7 @@ function createLiveSdkConversation(input: {
         CLAUDE_CODE_OAUTH_TOKEN: input.account.token,
         CLAUDE_CONFIG_DIR: claudeConfigDirFor(input.account.id),
         MCP_TOOL_TIMEOUT: String(LIVE_MCP_TOOL_TIMEOUT_MS),
+        ...cliPassthroughEnv(input.model),
       },
     },
   });

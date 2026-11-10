@@ -58,8 +58,9 @@
  *    heartbeat-ping while the SDK works, then replay the finished message as
  *    synthesized Anthropic SSE events. (Protects against client idle
  *    timeouts, e.g. Bun's hard 300s fetch cap, without partial-delta code.)
- *  - `max_tokens` / `temperature` from the request are ignored (the SDK does
- *    not expose them); thinking blocks are not round-tripped.
+ *  - `temperature` from the request is ignored (the SDK does not expose it),
+ *    and `max_tokens` only reaches the CLI as its output cap for the request;
+ *    thinking blocks are not round-tripped.
  *  - The SDK's own built-in tools are disallowed; only client tools exist.
  *
  * The pi engine's in-process sibling (pi-anthropic-provider.ts) reimplements
@@ -87,6 +88,7 @@ import {
   type ClaudeAccount,
 } from "./claude-accounts";
 import { cacheCreationUsage } from "./claude-cache-writes";
+import { contextWindowFor } from "./models";
 import { CLAUDE_CODE_BIN } from "./runner-shared";
 import { spawnClaudeCodeInWorkload } from "./workload-scope";
 import {
@@ -485,6 +487,45 @@ function jsonSchemaToZod(schema: any): z.ZodTypeAny {
 export const PASSTHROUGH_MCP = "oc";
 export const PASSTHROUGH_PREFIX = `mcp__${PASSTHROUGH_MCP}__`;
 
+/** Far above any real window: the CLI never refuses a request on its own
+ *  token estimate. */
+const CLI_BLOCKING_LIMIT_OFF = 1_000_000_000;
+
+/**
+ * Env that keeps the Claude Code CLI a plain transport for pi. Pi owns the
+ * conversation and its limits: it decides when to compact, recovers when the
+ * API reports a real overflow, and knows each model's window and output cap.
+ * Left alone, the CLI applies its own:
+ *  - Its model catalog lags new releases. For an id it does not know it
+ *    assumes a 200K window and a 32K output cap, silently auto-compacts its
+ *    own copy of the conversation while pi still believes the model sees
+ *    everything, and once it cannot compact it answers locally with a
+ *    synthetic "Prompt is too long" that no API call produced.
+ *  - Its pre-flight token estimate runs well above the real count on dense
+ *    content, so even with the right window it can refuse a turn, or pi's own
+ *    compaction summary, that the API would accept.
+ * DISABLE_COMPACT turns the CLI's compaction off and makes it read the window
+ * from CLAUDE_CODE_MAX_CONTEXT_TOKENS. The blocking override leaves the
+ * too-long verdict to the API, whose error pi's overflow recovery handles.
+ * CLAUDE_CODE_MAX_OUTPUT_TOKENS replaces the CLI's output cap with pi's (the
+ * CLI still lowers it to its own ceiling for the model).
+ */
+export function cliPassthroughEnv(limits: {
+  contextWindow: number;
+  maxTokens: number;
+}): Record<string, string> {
+  return {
+    DISABLE_COMPACT: "1",
+    ...(limits.contextWindow > 0
+      ? { CLAUDE_CODE_MAX_CONTEXT_TOKENS: String(limits.contextWindow) }
+      : {}),
+    CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE: String(CLI_BLOCKING_LIMIT_OFF),
+    ...(limits.maxTokens > 0
+      ? { CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(Math.floor(limits.maxTokens)) }
+      : {}),
+  };
+}
+
 /** Primary switch: an empty `tools` list removes every SDK built-in from the
  *  model's context, including ones added by SDK bumps after the denylist
  *  below was written (CronCreate, ScheduleWakeup, Monitor, ...). Without it a
@@ -790,6 +831,11 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
           HOME: process.env.HOME,
           LANG: process.env.LANG,
           CLAUDE_CODE_OAUTH_TOKEN: account.token,
+          ...cliPassthroughEnv({
+            contextWindow: contextWindowFor(model),
+            maxTokens:
+              typeof body?.max_tokens === "number" ? body.max_tokens : 0,
+          }),
         },
         hooks: {
           PreToolUse: [

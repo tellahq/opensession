@@ -9,13 +9,13 @@ function model(id: string, provider: ModelOption["provider"]): ModelOption {
 describe("model picker groups", () => {
   test("keeps current Fable and Sol slugs out of legacy", () => {
     const { primary, legacy } = splitModelOptions([
-      model("claude-fable-5-1", "claude"),
+      model("claude-fable-5-2", "claude"),
       model("gpt-6.1-sol", "codex"),
       model("gpt-5.5", "codex"),
     ]);
 
     expect(primary.map((entry) => entry.id)).toEqual([
-      "claude-fable-5-1",
+      "claude-fable-5-2",
       "gpt-6.1-sol",
     ]);
     expect(legacy.map((entry) => entry.id)).toEqual(["gpt-5.5"]);
@@ -23,7 +23,7 @@ describe("model picker groups", () => {
 
   test("keeps Pi-routed models first class", () => {
     const { primary, legacy } = splitModelOptions([
-      model("pi/anthropic/claude-fable-5-1", "pi"),
+      model("pi/anthropic/claude-fable-5-2", "pi"),
       model("pi/openai/gpt-6.1-sol", "pi"),
     ]);
     expect(primary).toHaveLength(2);
@@ -43,6 +43,15 @@ describe("model picker groups", () => {
         model("pi/anthropic/claude-opus-5-5", "pi"),
       ]).primary.map((entry) => entry.id),
     ).toEqual(["pi/anthropic/claude-opus-5-5", "pi/anthropic/claude-sonnet-5"]);
+  });
+
+  test("shows Fable 5.2 as the current Fable", () => {
+    const { primary, legacy } = splitModelOptions([
+      model("claude-fable-5-1", "claude"),
+      model("claude-fable-5-2", "claude"),
+    ]);
+    expect(primary.map((entry) => entry.id)).toEqual(["claude-fable-5-2"]);
+    expect(legacy.map((entry) => entry.id)).toEqual(["claude-fable-5-1"]);
   });
 
   test("shows Sonnet 5.5 as the current Sonnet", () => {

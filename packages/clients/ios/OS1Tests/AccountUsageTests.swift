@@ -276,7 +276,7 @@ final class AccountUsageTests: XCTestCase {
         let rows = WeeklyRemaining.rows(accounts, viewer: "Kent", now: now)
         let readout = WeeklyRemaining.readout(
             rows: rows, accounts: accounts, viewer: "Kent", kind: .claude,
-            model: "pi/anthropic/claude-fable-5-1", accountId: nil
+            model: "pi/anthropic/claude-fable-5-2", accountId: nil
         )
         XCTAssertEqual(readout?.accountId, "mine")
         XCTAssertEqual(readout?.scope, "Fable")
@@ -304,7 +304,7 @@ final class AccountUsageTests: XCTestCase {
         let rows = WeeklyRemaining.rows(accounts, viewer: "Kent", now: now)
         let readout = WeeklyRemaining.readout(
             rows: rows, accounts: accounts, viewer: "Kent", kind: .claude,
-            model: "claude-fable-5-1", accountId: nil
+            model: "claude-fable-5-2", accountId: nil
         )
         XCTAssertEqual(readout?.accountId, "pool")
         XCTAssertEqual(readout?.remaining, 60)
@@ -315,12 +315,12 @@ final class AccountUsageTests: XCTestCase {
     func testProviderForModel() throws {
         let data = Data("""
         {"models":[
-          {"id":"pi/anthropic/claude-fable-5-1","accountProvider":"claude"},
+          {"id":"pi/anthropic/claude-fable-5-2","accountProvider":"claude"},
           {"id":"pi/dial/opus-fable","group":"dial","composition":["pi/anthropic/claude-opus-5"]}
-        ],"default":"pi/anthropic/claude-fable-5-1"}
+        ],"default":"pi/anthropic/claude-fable-5-2"}
         """.utf8)
         let catalog = try JSONDecoder().decode(ModelCatalog.self, from: data)
-        XCTAssertEqual(WeeklyRemaining.provider(forModel: "pi/anthropic/claude-fable-5-1", catalog: catalog), .claude)
+        XCTAssertEqual(WeeklyRemaining.provider(forModel: "pi/anthropic/claude-fable-5-2", catalog: catalog), .claude)
         XCTAssertEqual(WeeklyRemaining.provider(forModel: "pi/dial/opus-fable", catalog: catalog), .claude)
         XCTAssertEqual(WeeklyRemaining.provider(forModel: "pi/openai/gpt-5.6-sol", catalog: nil), .codex)
         XCTAssertEqual(WeeklyRemaining.provider(forModel: "pi/xai-oauth/grok-5", catalog: nil), .xai)

@@ -412,7 +412,7 @@ describe("resolvePiRoutedModel", () => {
   test("routes retired preset ids to the model they led", () => {
     expect(resolvePiRoutedModel("pi/dial/ultra")).toEqual({
       providerID: "anthropic",
-      modelID: "claude-fable-5-1",
+      modelID: "claude-fable-5-2",
     });
     expect(resolvePiRoutedModel("pi/orchestrator/sol")).toEqual({
       providerID: "openai",

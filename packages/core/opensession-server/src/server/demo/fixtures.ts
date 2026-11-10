@@ -65,7 +65,7 @@ export const DEMO_RENDER_TITLE = "Monitor arm clamp fit";
  *  pi agents usually reach `html_render`, then a screenshot marker. */
 export const DEMO_SCRIPT_RENDER_SESSION_ID = "bks-demo-render-script";
 
-const MODEL_FABLE = "pi/anthropic/claude-fable-5-1";
+const MODEL_FABLE = "pi/anthropic/claude-fable-5-2";
 const MODEL_SONNET = "pi/anthropic/claude-sonnet-5-5";
 const MODEL_CODEX = "pi/openai/gpt-5.5-codex";
 

@@ -7,6 +7,24 @@ const RELEASE_METADATA: Record<
   Pick<PiCatalogModel, "name" | "cost" | "contextWindow" | "maxTokens"> &
     Partial<Pick<PiCatalogModel, "thinkingLevelMap" | "compat">>
 > = {
+  // https://platform.claude.com/docs/en/models/fable-5-2/overview
+  // Same API surface as Fable 5.1: adaptive thinking always on, no sampling
+  // parameters, effort up to max.
+  "claude-fable-5-2": {
+    name: "Claude Fable 5.2",
+    cost: { input: 8, output: 40, cacheRead: 0.2, cacheWrite: 10 },
+    contextWindow: 1_000_000,
+    maxTokens: 128_000,
+    thinkingLevelMap: { off: null, xhigh: "xhigh", max: "max" },
+    compat: {
+      supportsMidConvoEffort: true,
+      supportsMidConvoSystemMessages: true,
+      supportsMidConvoToolChanges: true,
+      forceAdaptiveThinking: true,
+      supportsTemperature: false,
+      supportsStrictTools: true,
+    },
+  },
   // https://platform.claude.com/docs/en/models/opus-5-5/overview
   "claude-opus-5-5": {
     name: "Claude Opus 5.5",

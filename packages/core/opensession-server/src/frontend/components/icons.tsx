@@ -1456,6 +1456,25 @@ export function IconMoon(p: IconProps) {
   );
 }
 
+export function IconSpeaker(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path
+        {...stroke}
+        d="M4.75 9.75V14.25C4.75 14.8 5.2 15.25 5.75 15.25H8.25L12.25 18.75V5.25L8.25 8.75H5.75C5.2 8.75 4.75 9.2 4.75 9.75Z"
+      />
+      <path
+        {...stroke}
+        d="M15.25 9.75C15.88 10.37 16.25 11.14 16.25 12C16.25 12.86 15.88 13.63 15.25 14.25"
+      />
+      <path
+        {...stroke}
+        d="M17.75 7.25C18.99 8.5 19.75 10.17 19.75 12C19.75 13.83 18.99 15.5 17.75 16.75"
+      />
+    </Svg>
+  );
+}
+
 export function IconPalette(p: IconProps) {
   return (
     <Svg {...p}>

@@ -72,6 +72,57 @@ function sessionMediaFigure(token: Tokens.Paragraph): string | null {
   return `<figure class="md-figure">${media}${figcaption}</figure>\n`;
 }
 
+/** A paragraph that is one still image of session media: a grid tile. */
+function isSessionImageParagraph(token: Token): token is Tokens.Paragraph {
+  if (token.type !== "paragraph") return false;
+  const [image, ...rest] = token.tokens ?? [];
+  return (
+    rest.length === 0 &&
+    image?.type === "image" &&
+    SESSION_MEDIA_HREF_RE.test(image.href) &&
+    !VIDEO_HREF_RE.test(image.href)
+  );
+}
+
+/**
+ * Two or more session images in a row, with only blank lines between them,
+ * are a set the agent is showing together (a batch of screenshots under one
+ * heading): one figure each would stack them a viewport tall apiece, so the
+ * run becomes a grid of captioned tiles (base-markdown.css .md-figure-grid).
+ * A heading, prose or a video between images ends the run. Top level only.
+ */
+function groupSessionImageRuns(tokens: Token[]): Token[] {
+  const out: Token[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    if (!isSessionImageParagraph(tokens[i])) {
+      out.push(tokens[i]);
+      continue;
+    }
+    const figures: Tokens.Paragraph[] = [];
+    let end = i;
+    for (let j = i; j < tokens.length; j++) {
+      const token = tokens[j];
+      if (isSessionImageParagraph(token)) {
+        figures.push(token);
+        end = j;
+      } else if (token.type !== "space") break;
+    }
+    if (figures.length < 2) {
+      out.push(tokens[i]);
+      continue;
+    }
+    const run = tokens.slice(i, end + 1);
+    const grid: Tokens.Generic = {
+      type: "mediaGrid",
+      raw: run.map((t) => t.raw).join(""),
+      figures,
+    };
+    out.push(grid);
+    i = end;
+  }
+  return out;
+}
+
 function isLinkToken(token: Token): token is Tokens.Link {
   return token.type === "link";
 }
@@ -1490,6 +1541,9 @@ function isBareUrlLink(token: Tokens.Link): boolean {
 }
 
 md.use({
+  hooks: {
+    processAllTokens: groupSessionImageRuns,
+  },
   tokenizer: {
     // Strikethrough requires DOUBLE tildes (~~text~~). GFM also accepts a
     // single ~, but session content is full of bare tildes that are NOT
@@ -1711,6 +1765,21 @@ md.use({
   // Bare session ids in prose (not wrapped in backticks) also link. Strict
   // uuidv7 shape so it only fires on real ids.
   extensions: [
+    // A run of session images grouped by groupSessionImageRuns.
+    {
+      name: "mediaGrid",
+      level: "block",
+      renderer(token: Tokens.Generic) {
+        const figures: Token[] = Array.isArray(token.figures)
+          ? token.figures
+          : [];
+        const html = figures
+          .filter(isSessionImageParagraph)
+          .map((figure) => sessionMediaFigure(figure) ?? "")
+          .join("");
+        return `<div class="md-figure-grid">${html}</div>\n`;
+      },
+    },
     // Math (lib/math-block.ts). A `$$` block on its own lines becomes the
     // same code token a ```math fence is, so the fence upgrader typesets
     // both and a body that is never upgraded still shows readable source.

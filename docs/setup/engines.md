@@ -2,7 +2,7 @@
 
 Open Session sends every production model turn through the bundled Pi runtime;
 there is no separate `pi` executable to install. Model ids use
-`pi/<provider>/<model>`. Recognized bare ids such as `claude-fable-5-1` and
+`pi/<provider>/<model>`. Recognized bare ids such as `claude-fable-5-2` and
 `gpt-6.1-sol`, and provider paths such as `openai/gpt-6.1-sol`, normalize to
 that form at dispatch. See the [generated engine catalog](../generated/engines.md)
 for the current routing table.
@@ -156,7 +156,7 @@ the catalog. Settings writes preserve every field the form does not edit.
 **Settings → Providers** controls the default model and whether interactive
 runs switch models automatically. The selected default is stored in
 `~/.opensession/default-model.json`; without an override, `OPENSESSION_MODEL`
-is used, then `claude-fable-5-1`.
+is used, then `claude-fable-5-2`.
 
 Interactive auto-fallback is on by default. Its preferred model comes from
 `OPENSESSION_FALLBACK_MODEL`, defaulting to `claude-opus-5`; set the variable to

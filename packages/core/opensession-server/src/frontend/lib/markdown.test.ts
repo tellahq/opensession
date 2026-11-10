@@ -1610,6 +1610,32 @@ describe("session media placed in the body", () => {
     expect(html).not.toContain(`<p><a href="${shot}"`);
   });
 
+  it("lays out a run of /media images as a grid of figures", () => {
+    const other = "/media?path=%2Ftmp%2Fother.png";
+    const html = renderMarkdown(
+      `### Sign-in\n\n![One](${shot})\n\n![Two](${other})\n\n![](${shot})\n\n### Home\n\n![Solo](${other})`,
+    );
+    const grids = html.match(/<div class="md-figure-grid">/g) ?? [];
+    expect(grids).toHaveLength(1);
+    const grid = html.slice(
+      html.indexOf('<div class="md-figure-grid">'),
+      html.indexOf("<h3", html.indexOf("md-figure-grid")),
+    );
+    expect(grid.match(/<figure class="md-figure">/g)).toHaveLength(3);
+    expect(grid).toContain(
+      '<figcaption class="md-figcaption">Two</figcaption>',
+    );
+    // A lone image after the heading stays a full-width figure.
+    expect(html).toMatch(/<\/h3>\n?<figure class="md-figure">.*Solo/s);
+  });
+
+  it("ends an image grid at prose or a video", () => {
+    const html = renderMarkdown(
+      `![A](${shot})\n\nBetween.\n\n![B](${shot})\n\n![C](${clip})`,
+    );
+    expect(html).not.toContain("md-figure-grid");
+  });
+
   it("leaves the caption off when the alt is empty", () => {
     const html = renderMarkdown(`![](${shot})`);
     expect(html).toContain('<figure class="md-figure">');

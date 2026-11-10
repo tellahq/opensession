@@ -24,7 +24,7 @@ describe("model labels", () => {
 
   it("names a retired preset by the model it ran on", () => {
     expect(shortModelLabel("pi/orchestrator/fable-sol", models)).toBe(
-      "Fable 5.1",
+      "Fable 5.2",
     );
     expect(shortModelLabel("dial/high", models)).toBe("GPT-6.1 Sol");
   });

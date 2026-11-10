@@ -163,20 +163,24 @@ describe("Pi-only model routing", () => {
     expect(modelLabel("pi/openai/gpt-6-sol")).toBe("GPT-6 Sol");
   });
 
-  test("upgrades retired Fable 5 ids to Fable 5.1", async () => {
-    expect(resolveModel("claude-fable-5")?.id).toBe("claude-fable-5-1");
-    expect(toPiModel("anthropic/claude-fable-5")).toBe(
-      "pi/anthropic/claude-fable-5-1",
-    );
-    expect(toPiModel("pi/anthropic/claude-fable-5")).toBe(
-      "pi/anthropic/claude-fable-5-1",
-    );
+  test("upgrades retired Fable 5 and 5.1 ids to Fable 5.2", async () => {
+    expect(resolveModel("fable")?.id).toBe("claude-fable-5-2");
+    for (const retired of ["claude-fable-5", "claude-fable-5-1"]) {
+      expect(resolveModel(retired)?.id).toBe("claude-fable-5-2");
+      expect(toPiModel(`anthropic/${retired}`)).toBe(
+        "pi/anthropic/claude-fable-5-2",
+      );
+      expect(toPiModel(`pi/anthropic/${retired}`)).toBe(
+        "pi/anthropic/claude-fable-5-2",
+      );
+    }
+    expect(modelLabel("claude-fable-5-1")).toBe("Claude Fable 5.1");
   });
 
   test("routes every accepted id to Pi", async () => {
-    expect(routeModel("claude-fable-5-1")).toEqual({
+    expect(routeModel("claude-fable-5-2")).toEqual({
       engine: "pi",
-      model: "pi/anthropic/claude-fable-5-1",
+      model: "pi/anthropic/claude-fable-5-2",
     });
     expect(routeModel("openai/gpt-6.1-sol")).toEqual({
       engine: "pi",
@@ -245,20 +249,20 @@ describe("Pi-only model routing", () => {
 
   test("builds a Pi-only fallback chain", async () => {
     const first = nextFallbackModel(
-      "pi/anthropic/claude-fable-5-1",
+      "pi/anthropic/claude-fable-5-2",
       new Set(),
       "pi/openai/gpt-6.1-sol",
     );
     expect(first?.id.startsWith("pi/")).toBe(true);
     expect(
-      fallbackPlan("pi/anthropic/claude-fable-5-1", "pi/openai/gpt-6.1-sol"),
+      fallbackPlan("pi/anthropic/claude-fable-5-2", "pi/openai/gpt-6.1-sol"),
     ).toSatisfy((hops) => hops.every((hop) => hop.id.startsWith("pi/")));
   });
 
   test("falls back from Fable to Astra before configured Sol or Opus", async () => {
     for (const primary of [
-      "claude-fable-5-1",
-      "pi/anthropic/claude-fable-5-1",
+      "claude-fable-5-2",
+      "pi/anthropic/claude-fable-5-2",
     ]) {
       for (const preferred of ["pi/openai/gpt-6.1-sol", "claude-opus-5-5"]) {
         expect(nextFallbackModel(primary, new Set(), preferred)).toEqual({
@@ -276,7 +280,7 @@ describe("Pi-only model routing", () => {
   test("keeps Sol available when Astra is exhausted", async () => {
     expect(
       nextFallbackModel(
-        "pi/anthropic/claude-fable-5-1",
+        "pi/anthropic/claude-fable-5-2",
         new Set(["pi/openai/gpt-6-astra"]),
         "claude-opus-5-5",
       ),
@@ -284,8 +288,8 @@ describe("Pi-only model routing", () => {
   });
 
   test("keeps automatic fallback disabled when requested", async () => {
-    expect(fallbackPlan("pi/anthropic/claude-fable-5-1", "none")).toEqual([]);
-    expect(fallbackPlan("pi/anthropic/claude-fable-5-1", undefined)).toEqual(
+    expect(fallbackPlan("pi/anthropic/claude-fable-5-2", "none")).toEqual([]);
+    expect(fallbackPlan("pi/anthropic/claude-fable-5-2", undefined)).toEqual(
       [],
     );
   });
@@ -374,7 +378,7 @@ describe("Pi-only model routing", () => {
     expect(pickerIds).not.toContain("pi/openai/gpt-5.6-sol");
     expect(pickerIds).not.toContain("pi/openai/gpt-6-sol");
     expect(pickerIds).not.toContain("pi/openai/gpt-5.6-luna");
-    expect(pickerIds).toContain("pi/anthropic/claude-fable-5-1");
+    expect(pickerIds).toContain("pi/anthropic/claude-fable-5-2");
   });
 
   test("deduplicates retired pickerModels after routing", async () => {
@@ -416,7 +420,7 @@ describe("Pi-only model routing", () => {
 });
 
 test("interactive fallback is on by default and a session can opt out", async () => {
-  const model = "pi/anthropic/claude-fable-5-1";
+  const model = "pi/anthropic/claude-fable-5-2";
   expect(interactiveFallbackModel(model)).toBe(automaticFallbackModel(model));
   expect(interactiveFallbackModel(model, true)).toBe(
     automaticFallbackModel(model),
@@ -433,9 +437,9 @@ test("retired preset ids resolve to the model they led", async () => {
   expect(resolveModel("pi/dial/high")?.id).toBe("gpt-6.1-sol");
   expect(resolveModel("dial/opus-fable")?.id).toBe("claude-opus-5-5");
   expect(toPiModel("pi/orchestrator/fable")).toBe(
-    "pi/anthropic/claude-fable-5-1",
+    "pi/anthropic/claude-fable-5-2",
   );
-  expect(toPiModel("pi/dial/ultra")).toBe("pi/anthropic/claude-fable-5-1");
+  expect(toPiModel("pi/dial/ultra")).toBe("pi/anthropic/claude-fable-5-2");
   expect(resolveModel("pi/orchestrator/missing")).toBeNull();
   expect(resolveModel("pi/workspace-preset/ws-acme/opus")).toBeNull();
   expect(toPiModel("pi/workspace-preset/ws-acme/opus")).toBeUndefined();
