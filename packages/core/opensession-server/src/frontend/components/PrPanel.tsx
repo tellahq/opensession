@@ -66,7 +66,6 @@ import { toast } from "../ui/toast";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import type { CommentTarget, PendingComment } from "../lib/commentable-diff";
 import { getCurrentUser, useAuthStatus, useCurrentUser } from "./UserPicker";
-import { UserAvatar } from "./UserAvatar";
 import { renderPrCommentMarkdown } from "../lib/markdown";
 import { useMarkdownRepo } from "./MarkdownBody";
 import { isOutdatedReviewComment } from "../lib/pr-comments";
@@ -82,7 +81,8 @@ import { errorMessage } from "../lib/error-message";
 import {
   IconBranches,
   IconCheck,
-  IconChevronRight,
+  IconChecklist,
+  IconFile,
   IconChevronLeft,
   IconCopy,
   IconDotsHorizontal,
@@ -97,6 +97,7 @@ import {
 } from "./icons";
 import { Menu, MENU_ICON } from "../ui/menu";
 import { Tooltip } from "../ui/tooltip";
+import { UnderlineTabs } from "../ui/tabs";
 import { TopBar, PhoneTopBarAction } from "../ui/top-bar";
 import { Popover } from "../ui/popover";
 import { Segmented, SegmentedOption } from "../ui/segmented";
@@ -115,13 +116,13 @@ import { checkClass, isDeployment, summarize } from "../lib/pr-status-derive";
 import { prStatusMark } from "../lib/pr-status";
 import { PR_NO_PR_BAR, PR_REPO_TABS } from "../lib/pr-tone-classes";
 import { stripHtmlComments } from "../lib/pr-prompts";
-import { PrStateIcon } from "./pr/PrStateIcon";
 import { LinkPrControl } from "./pr/LinkPrControl";
 import { PrCard } from "./pr/PrCard";
 import { StackLinkSection } from "./pr/Stack";
 import { PrStackChip } from "./pr/StackPopover";
 import { ReviewRail } from "./pr/ReviewRail";
-import { MergeBox } from "./pr/MergeBox";
+import { MergeBox, MergeStatusIcon } from "./pr/MergeBox";
+import { CopyTextButton } from "./pr/CopyTextButton";
 import { PR_COMMENTS_HEADING_ID } from "./pr/PrViews";
 import { GitStatusRows } from "./pr/GitStatus";
 import { ReviewToolbar } from "./pr/ReviewToolbar";
@@ -441,6 +442,7 @@ export function PrPanel({
   const [worktreeToolbarTarget, setWorktreeToolbarTarget] =
     useState<HTMLDivElement | null>(null);
   const [railStacked, setRailStacked] = useState(false);
+  const [mergeStatusOpen, setMergeStatusOpen] = useState(false);
   const [headerCompact, setHeaderCompact] = useState(
     () => window.matchMedia("(max-width: 720px)").matches,
   );
@@ -1462,13 +1464,6 @@ export function PrPanel({
   const comments = (pr.comments || []).filter(
     (c) => stripHtmlComments(c.body) && !isOutdatedReviewComment(c.body),
   );
-  const stateLabel = pr.isDraft
-    ? "Draft"
-    : pr.state === "OPEN"
-      ? "Open"
-      : pr.state === "MERGED"
-        ? "Merged"
-        : "Closed";
   // The state reads in the app's own PR language rather than a badge of its
   // own: the glyph carries the colour (prStatusMark, the same green/yellow/
   // red/purple the sidebar row and the workspace rows paint) and the word
@@ -1490,8 +1485,8 @@ export function PrPanel({
     else if (choice === "cancel-auto") void handleAutoMerge(false);
     else handleForceMerge(choices.bypasses);
   };
-  // The green landing action beside Finish review, in the desktop header and
-  // the phone Files pill: Ready on a draft, Auto-merge when that is the host's
+  // The green landing action beside Finish review in the phone Files pill
+  // (desktop reaches it through the bar's Merge status): Ready on a draft, Auto-merge when that is the host's
   // way in, otherwise Merge, and Undo while a merge waits in its window. Merge
   // stays in the actions menu and on the overview too.
   const landAction = (className: string, size?: "sm") =>
@@ -1587,8 +1582,18 @@ export function PrPanel({
       showStatus={!showMergeBox}
     />
   );
-  const mergeBox = showMergeBox ? (
+  const showComments = () => {
+    setPage("overview");
+    // The comments mount with the overview, a frame after the page switch.
+    requestAnimationFrame(() =>
+      document
+        .getElementById(PR_COMMENTS_HEADING_ID)
+        ?.scrollIntoView({ block: "start", behavior: "smooth" }),
+    );
+  };
+  const renderMergeBox = (inPopover: boolean) => (
     <MergeBox
+      inPopover={inPopover}
       status={{
         git,
         pr,
@@ -1613,15 +1618,61 @@ export function PrPanel({
       showChecks={caps.checks}
       showApprovals={caps.reviewers}
       commentCount={comments.length}
-      onShowChecks={() => setFocusChecksSeq((prev) => prev + 1)}
-      onShowComments={() =>
-        document
-          .getElementById(PR_COMMENTS_HEADING_ID)
-          ?.scrollIntoView({ block: "start", behavior: "smooth" })
-      }
+      onShowChecks={() => {
+        setMergeStatusOpen(false);
+        setPage("overview");
+        setFocusChecksSeq((prev) => prev + 1);
+      }}
+      onShowComments={() => {
+        setMergeStatusOpen(false);
+        showComments();
+      }}
       error={mergeError}
     />
-  ) : null;
+  );
+  const mergeBox = showMergeBox ? renderMergeBox(false) : null;
+  // GitHub's bar chip: the state as a glyph, and the whole merge box one
+  // click away from either page.
+  const mergeStatusLabel =
+    pr.state === "MERGED"
+      ? "Merged"
+      : pr.state === "CLOSED"
+        ? "Closed"
+        : pr.isDraft
+          ? "Draft"
+          : "Merge status";
+  const mergeStatus = (
+    <Popover.Root open={mergeStatusOpen} onOpenChange={setMergeStatusOpen}>
+      <Tooltip label={statusMark.label}>
+        <Popover.Trigger
+          render={
+            <Button
+              variant="default"
+              size="sm"
+              className="shrink-0"
+              aria-label={headerCompact ? mergeStatusLabel : undefined}
+              icon={
+                <span className={`inline-flex ${statusMark.className}`}>
+                  <MergeStatusIcon pr={pr} tone={statusMark.tone} />
+                </span>
+              }
+            >
+              {headerCompact ? null : mergeStatusLabel}
+            </Button>
+          }
+        />
+      </Tooltip>
+      <Popover.Popup
+        side="bottom"
+        align="end"
+        sideOffset={6}
+        initialFocus
+        className="max-w-[calc(100vw-24px)] overflow-hidden p-0"
+      >
+        {renderMergeBox(true)}
+      </Popover.Popup>
+    </Popover.Root>
+  );
 
   const codeSettings = (
     <Popover.Root>
@@ -1720,30 +1771,37 @@ export function PrPanel({
   );
 
   const pageOptions = [
-    ["overview", "Overview", comments.length || undefined],
-    ["files", "Files", files.length || undefined],
+    [
+      "overview",
+      "Overview",
+      comments.length || undefined,
+      <IconChecklist key="overview" size={16} />,
+    ],
+    [
+      "files",
+      "Files changed",
+      files.length || undefined,
+      <IconFile key="files" size={16} />,
+    ],
   ] as const;
 
-  // Desktop switches pages in the identity bar. Phone opens Files from Overview.
-  const titlePageSwitcher = (
-    <Segmented
+  // Desktop switches pages in the bar's tab row. Phone opens Files from
+  // Overview.
+  const pageTabs = (
+    <UnderlineTabs.Root
       label="Pull request pages"
       value={page}
       onValueChange={(next) => {
         if (next === "overview" || next === "files") setPage(next);
       }}
-      size="sm"
       className="shrink-0 phone:hidden"
     >
-      {pageOptions.map(([key, label, count]) => (
-        <SegmentedOption key={key} value={key}>
+      {pageOptions.map(([key, label, count, icon]) => (
+        <UnderlineTabs.Tab key={key} value={key} icon={icon} count={count}>
           {label}
-          {count !== undefined && (
-            <span className="text-meta text-faint tabular-nums">{count}</span>
-          )}
-        </SegmentedOption>
+        </UnderlineTabs.Tab>
       ))}
-    </Segmented>
+    </UnderlineTabs.Root>
   );
 
   const fileControls = (
@@ -1962,113 +2020,84 @@ export function PrPanel({
             }
           />
         ) : (
-          <TopBar as="header" className="h-10 shrink-0 gap-2.5 px-4">
-            {/* State, in the app's own PR language, filled rather than drawn: the
-            tone washes the whole chip and the glyph and word share its ink.
-            It is its own object, so it gets more air than the pieces of the
-            identity line it precedes. */}
-            <Tooltip label={statusMark.label}>
-              <span
-                className={`mr-1.5 flex h-6 shrink-0 items-center gap-1.5 rounded-control px-2 ${statusMark.bgClassName} ${statusMark.className}`}
+          <>
+            {/* GitHub's pull request bar: the number and title on the left,
+            merge status and the review on the right. State, author and
+            branches are the overview header's job, so the bar stays one
+            quiet line on both pages. */}
+            <TopBar as="header" className="h-11 shrink-0 gap-2 px-4">
+              {targetPicker}
+              <h1
+                className="m-0 flex min-w-0 flex-1 items-center gap-1.5 text-item-title leading-[1.2]"
+                title={`${pr.title} #${pr.number}`}
               >
-                <PrStateIcon state={pr.state} isDraft={pr.isDraft} />
-                {!headerCompact && (
-                  <span className="text-label font-medium">{stateLabel}</span>
-                )}
-              </span>
-            </Tooltip>
-            {targetPicker}
-            {/* Author and title in the session header's own breadcrumb shape: a
-            tight picture-and-name pill, a chevron, then the name of the thing
-            you are looking at. Same spacing and weights as RepoBar's
-            `[icon] repo › title`, so the two headers read as one bar. */}
-            {!headerCompact && (
-              <>
-                <span className="flex shrink-0 items-center gap-[7px] text-item-title font-medium text-fg">
-                  <UserAvatar
-                    name={pr.author}
-                    login={provider.key === "github" ? pr.author : null}
-                    size={18}
-                    edge={false}
-                    title={pr.author}
-                  />
-                  <span className="max-w-[180px] truncate">{pr.author}</span>
+                <Tooltip label={`Open on ${provider.name}`}>
+                  <a
+                    className="shrink-0 font-normal text-faint no-underline hover:text-link"
+                    href={pr.url}
+                    target="_blank"
+                    rel="noopener"
+                  >
+                    #{pr.number}
+                  </a>
+                </Tooltip>
+                <span className="truncate font-semibold text-fg">
+                  {pr.title}
                 </span>
-                <IconChevronRight size={18} className="shrink-0 text-faint" />
-              </>
-            )}
-            {/* Title only. Counts, commits and the sessions on this PR are the
-            rail's job, so the bar stays one line of identity.
-
-            The title is the name of the page you are already on, so it is
-            inert. The outbound jump rides the number, which is the reference
-            everywhere else in the app. */}
-            <h1
-              className="flex min-w-0 flex-1 items-baseline gap-1 text-item-title font-medium leading-[1.2] text-fg"
-              title={`${pr.title} #${pr.number}`}
-            >
-              <span className="truncate">{pr.title}</span>
-              <Tooltip label={`Open on ${provider.name}`}>
-                <a
-                  className="shrink-0 font-normal text-faint no-underline hover:text-link"
-                  href={pr.url}
-                  target="_blank"
-                  rel="noopener"
+                {!headerCompact && (
+                  <CopyTextButton text={pr.title} label="Copy title" />
+                )}
+              </h1>
+              {/* A stack is secondary navigation, not page content. Keep its
+              compact position/size chip in the bar and reveal the full rail
+              in the shared popover instead of spending canvas height. */}
+              {caps.stacks && pr.stack && (
+                <PrStackChip
+                  pr={pr}
+                  tone={statusMark.tone}
+                  size="bar"
+                  headline={statusMark.label}
+                  repo={active?.repo}
+                  onOpenPr={onOpenPr}
+                />
+              )}
+              {pr.staging?.url && !headerCompact && (
+                <Tooltip label="Open the preview environment">
+                  <a
+                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-control text-dim no-underline hover:bg-hover hover:text-fg"
+                    href={pr.staging.url}
+                    target="_blank"
+                    rel="noopener"
+                    aria-label="Open the preview environment"
+                  >
+                    <IconGlobe size={19} />
+                  </a>
+                </Tooltip>
+              )}
+              {mergeStatus}
+              {canCommentOnReview(pr.state, caps.reviewComments) && (
+                <Button
+                  variant="success-strong"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => setReviewOpen(true)}
                 >
-                  #{pr.number}
-                </a>
-              </Tooltip>
-            </h1>
-            {(compactToolbar || !phoneLayout) && fileControls}
-            {titlePageSwitcher}
-            {/* A stack is secondary navigation, not page content. Keep its compact
-            position/size chip in the identity bar and reveal the full rail in
-            the shared popover instead of spending permanent canvas height. */}
-            {caps.stacks && pr.stack && (
-              <PrStackChip
-                pr={pr}
-                tone={statusMark.tone}
-                size="bar"
-                headline={statusMark.label}
-                repo={active?.repo}
-                onOpenPr={onOpenPr}
-              />
-            )}
-            {pr.staging?.url && !headerCompact && (
-              <Tooltip label="Open the preview environment">
-                <a
-                  /* An icon-only control carries its glyph ~6px inside its box,
-                 so the last one in the row is outdented to put that glyph on
-                 the row's content edge — where the view control below it
-                 sits, since a bordered control is flush with its own box. */
-                  className={`ml-auto inline-flex size-8 shrink-0 items-center justify-center rounded-control text-dim no-underline hover:bg-hover hover:text-fg ${pr.state === "OPEN" ? "" : "-mr-1.5"}`}
-                  href={pr.staging.url}
-                  target="_blank"
-                  rel="noopener"
-                  aria-label="Open the preview environment"
-                >
-                  <IconGlobe size={19} />
-                </a>
-              </Tooltip>
-            )}
-            {canCommentOnReview(pr.state, caps.reviewComments) && (
-              <Button
-                variant="primary"
-                size="sm"
-                className="shrink-0 phone:min-h-11"
-                onClick={() => setReviewOpen(true)}
-              >
-                Finish review{pending.length > 0 ? ` (${pending.length})` : ""}
-              </Button>
-            )}
-            {/* Landing the PR sits beside Finish review, one click from the
-            bar. Phone carries it in the Files pill and the overview card. */}
-            {!phoneLayout && landAction("shrink-0", "sm")}
-            {sessionActionTarget === undefined &&
-              !headerCompact &&
-              sessionActionButton}
-            {prActions}
-          </TopBar>
+                  Finish review
+                  {pending.length > 0 ? ` (${pending.length})` : ""}
+                </Button>
+              )}
+              {sessionActionTarget === undefined &&
+                !headerCompact &&
+                sessionActionButton}
+              {prActions}
+            </TopBar>
+            {/* The pages as GitHub's underline tabs, with the Files page's
+            own controls at the row's far end. */}
+            <div className="flex h-10 shrink-0 items-stretch gap-2 border-t border-divider px-4">
+              {pageTabs}
+              {fileControls}
+            </div>
+          </>
         )}
       </ReviewToolbar>
 

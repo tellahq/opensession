@@ -34,6 +34,7 @@ export function MergeBox({
   onShowChecks,
   onShowComments,
   error,
+  inPopover,
 }: {
   status: GitStatusRowsProps;
   statusMark: PrStatusMark;
@@ -44,6 +45,8 @@ export function MergeBox({
   onShowChecks: () => void;
   onShowComments: () => void;
   error?: string | null;
+  /** Drawn inside the bar's Merge status popover: the popup is the surface. */
+  inPopover?: boolean;
 }) {
   const pr = status.pr;
   const { rows, notes } = useGitStatusRows({ ...status, emphasis: true });
@@ -54,9 +57,13 @@ export function MergeBox({
   return (
     <section
       aria-label="Merge status"
-      /* The conversation's own measure, so the box and the description
-         under it share both edges. */
-      className="mx-auto w-full min-w-0 max-w-[760px] overflow-hidden rounded-xl bg-panel"
+      className={
+        inPopover
+          ? "w-[440px] min-w-0 max-w-full"
+          : // The conversation's own measure, so the box and the description
+            // under it share both edges.
+            "mx-auto w-full min-w-0 max-w-[760px] overflow-hidden rounded-xl bg-panel"
+      }
     >
       <div className="flex items-center gap-3 px-4 py-3.5">
         <span
@@ -67,7 +74,7 @@ export function MergeBox({
             statusMark.className,
           )}
         >
-          <LeadIcon pr={pr} tone={statusMark.tone} />
+          <MergeStatusIcon pr={pr} tone={statusMark.tone} />
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="m-0 truncate text-body font-semibold text-fg">
@@ -131,7 +138,14 @@ export function MergeBox({
   );
 }
 
-function LeadIcon({ pr, tone }: { pr: PrDetails; tone: PrStatusMark["tone"] }) {
+/** The state as one glyph: the merge box's lead, and the bar's Merge status. */
+export function MergeStatusIcon({
+  pr,
+  tone,
+}: {
+  pr: Pick<PrDetails, "state" | "isDraft">;
+  tone: PrStatusMark["tone"];
+}) {
   if (pr.state !== "OPEN" || pr.isDraft)
     return <PrStateIcon state={pr.state} isDraft={pr.isDraft} />;
   if (tone === "green") return <IconCheck size={18} />;
