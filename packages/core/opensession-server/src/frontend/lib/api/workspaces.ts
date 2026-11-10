@@ -221,23 +221,6 @@ export async function resolveWorkspaceApi(
   });
 }
 
-/** A catch-up on a session's threads since `since` (ms epoch), written by a
- *  helper model. */
-export async function fetchThreadRecapApi(
-  sessionId: string,
-  since: number,
-  user: string,
-): Promise<{ text: string | null; threadIds: string[] }> {
-  return request<{ text: string | null; threadIds: string[] }>(
-    `/sessions/${encodeURIComponent(sessionId)}/thread-recap`,
-    {
-      method: "POST",
-      body: { since, user },
-      label: "Couldn't catch up on the threads",
-    },
-  );
-}
-
 /** Switch a session's coordinator mode. */
 export async function setCoordinatorApi(
   sessionId: string,
