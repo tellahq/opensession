@@ -81,7 +81,7 @@ export const ComposerPressButton = forwardRef<
 
 /** Set / update / clear the session goal — a centered dialog on the shared
  *  Modal primitive (Base UI, squircle shell, focus-trapped, exit-animated). */
-function GoalModal({
+export function GoalModal({
   open,
   initial,
   onOpenChange,
@@ -112,6 +112,7 @@ function GoalModal({
 
         <textarea
           ref={inputRef}
+          aria-label="Goal"
           className="min-h-[120px] w-full resize-y rounded-lg border border-line-strong bg-surface px-4 py-3.5 text-body leading-relaxed text-fg outline-none"
           value={text}
           rows={3}

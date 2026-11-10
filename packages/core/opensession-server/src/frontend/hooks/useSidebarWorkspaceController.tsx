@@ -5,6 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { rowCoordinates } from "../components/sidebar/CoordinatorMark";
 import { RowCardPopup } from "../components/SidebarRowCards";
 import { WsCardBody, WsMobileSheet } from "../components/sidebar/HoverCards";
 import { SubagentRows } from "../components/sidebar/SubagentRows";
@@ -782,6 +783,7 @@ export function useSidebarWorkspaceController({
             row.workspace?.id,
             selectedWorkspaceId,
             selectedId,
+            rowCoordinates(row),
           )
         : [];
     const editingState = editing

@@ -470,6 +470,35 @@ describe("subagentsForWorkspace", () => {
     ]);
   });
 
+  test("a coordinator lists its inline threads too", () => {
+    const thread = session("thread", {
+      parentSessionId: "parent",
+      isRunning: true,
+    });
+    const idle = session("idle", { parentSessionId: "parent" });
+    const groups = new Map([
+      [
+        "ws-parent",
+        [
+          { session: thread, depth: 1, inline: true, sharesRootPr: false },
+          { session: idle, depth: 1, inline: true, sharesRootPr: false },
+        ],
+      ],
+    ]);
+    expect(
+      subagentsForSelectedWorkspace(groups, "ws-parent", "ws-parent"),
+    ).toEqual([]);
+    expect(
+      subagentsForSelectedWorkspace(
+        groups,
+        "ws-parent",
+        "ws-parent",
+        null,
+        true,
+      ).map((item) => item.session.id),
+    ).toEqual(["thread"]);
+  });
+
   test("does not nest a selected worker beneath its own temporary workspace", () => {
     const worker = session("worker", {
       workspaceId: "ws-worker",

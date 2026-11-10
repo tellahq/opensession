@@ -192,6 +192,7 @@ import {
   materializeWorkspaceWorktree,
   updateWorkspace,
   recordWorkspaceBranch,
+  MAX_GOAL_LENGTH,
 } from "./workspaces";
 import {
   type CreationOpeningEffectItem,
@@ -283,6 +284,7 @@ export interface CreateSessionMessage {
   speed?: unknown;
   pstackMode?: unknown;
   coordinator?: unknown;
+  goal?: unknown;
   startPortal?: unknown;
   accountId?: string;
   mcpServers?: unknown;
@@ -452,6 +454,8 @@ export interface ResolvedCreate {
   pstackMode?: boolean;
   /** Coordinator mode from the palette toggle (coordinator.ts). */
   coordinator?: boolean;
+  /** The session's pinned goal (/goal), set from the palette. */
+  goal?: string;
   /** The session's ship-mode choice (palette toggle or its workspace's);
    *  absent = the repository's publicationMode. */
   shipMode?: ShipMode;
@@ -782,6 +786,7 @@ function createdSessionFileDefaults(spec: ResolvedCreate): NativeSessionFile {
     ...(spec.effort ? { effort: spec.effort } : {}),
     ...(specPstackMode(spec) ? { pstackMode: true } : {}),
     ...(spec.coordinator ? { coordinator: true } : {}),
+    ...(spec.goal ? { goal: spec.goal } : {}),
     ...(spec.shipMode ? { shipMode: spec.shipMode } : {}),
     ...(spec.autoFallback === false ? { autoFallback: false } : {}),
     ...(spec.fastMode ? { fastMode: true } : {}),
@@ -2625,6 +2630,12 @@ export async function handleCreateSessionMessage(
   const createCoordinator = forkSource
     ? forkSource.coordinator === true
     : msg.coordinator === true;
+  // The palette's goal pins to the session like /goal (forks inherit).
+  const createGoal = forkSource
+    ? forkSource.goal
+    : typeof msg.goal === "string"
+      ? msg.goal.trim().slice(0, MAX_GOAL_LENGTH) || undefined
+      : undefined;
   // Ship mode from the palette's PR | Direct toggle (forks inherit). A
   // session joining a workspace without its own choice takes the workspace's.
   const requestedShipMode = forkSource
@@ -2833,6 +2844,12 @@ export async function handleCreateSessionMessage(
         throw new Error(
           `Workspace ${plannedWorkspaceId} projection is missing after actor receipt`,
         );
+      // A workspace started for this goal carries it too: the Threads panel
+      // shows it and a coordinator is briefed with it (coordinator.ts).
+      if (createGoal)
+        workspace =
+          (await updateWorkspace(workspace.id, { goal: createGoal })) ??
+          workspace;
     }
   }
   // Set once the session has been announced to the client (early
@@ -3305,6 +3322,7 @@ export async function handleCreateSessionMessage(
       speed: createSpeed,
       pstackMode: createPstackMode,
       coordinator: createCoordinator || undefined,
+      ...(createGoal ? { goal: createGoal } : {}),
       ...(createShipMode ? { shipMode: createShipMode } : {}),
       ...(msg.startPortal === true && !forkSource ? { startPortal: true } : {}),
       accountId: createAccountId,
