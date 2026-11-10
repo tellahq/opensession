@@ -6,6 +6,7 @@ import type { useWebSocket } from "../hooks/useWebSocket";
 import type { useWorkspacePanes } from "../hooks/useWorkspacePanes";
 import { renameSessionApi } from "../lib/api";
 import type { Route } from "../lib/app-route";
+import { useFocusComposerOnOpen } from "../lib/composer-focus-pulse";
 import type { UnifiedSession, Workspace } from "../lib/types";
 import { viewTabKind } from "../lib/workspace-pane-tabs";
 import { SessionPaneProviders } from "./SessionPaneProviders";
@@ -52,10 +53,7 @@ interface AppSessionPaneProps {
   };
   composer: Pick<
     ReturnType<typeof useAppViewState>,
-    | "newSessionSeq"
-    | "focusComposerOnOpen"
-    | "sessionComposerPrefills"
-    | "setSessionComposerPrefills"
+    "newSessionSeq" | "sessionComposerPrefills" | "setSessionComposerPrefills"
   >;
   visibility: Pick<
     ReturnType<typeof useAppViewState>,
@@ -133,7 +131,6 @@ export function AppSessionPane({
   },
   composer: {
     newSessionSeq,
-    focusComposerOnOpen,
     sessionComposerPrefills,
     setSessionComposerPrefills,
   },
@@ -175,6 +172,7 @@ export function AppSessionPane({
     tabStripVisible,
   },
 }: AppSessionPaneProps) {
+  const focusComposerOnOpen = useFocusComposerOnOpen();
   const surfaceId = requestedSurfaceId ?? viewerSession.id;
   const pendingSocket = surfaceId === pendingSessionId;
   const sessionSocket = pendingSocket

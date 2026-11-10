@@ -20,7 +20,6 @@ import { getLane, getLanes, onLanesChanged } from "../lib/lanes";
 import { mentionFor, onMentionsChanged } from "../lib/mentions";
 import { usePeople } from "../lib/people";
 import { getReads, isUnread, markUnread, onReadsChanged } from "../lib/reads";
-import { getRecents, onRecentsChanged } from "../lib/recents";
 import { setRepoOrder } from "../lib/repo-order";
 import type { ReviewQueueItem } from "../lib/review-queue";
 import { personKey } from "../lib/review-queue";
@@ -232,7 +231,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   // counterpart to Archive, which is global: a hidden row leaves only THIS
   // user's sidebar, and the session keeps running for everyone else.
   const [hides, setHidesState] = useState<Record<string, string>>(getHides);
-  const [recents, setRecents] = useState<string[]>(getRecents);
   // Per-session last-read marks, driving the unread dot. Kept in sync via the
   // same event the viewer fires when it marks a session read.
   const [reads, setReads] = useState(getReads);
@@ -326,7 +324,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   // when your lanes change.
   const [lanes, setLanesState] = useState<Record<string, string>>(getLanes);
   useEffect(() => onLanesChanged(() => setLanesState(getLanes())), []);
-  useEffect(() => onRecentsChanged(() => setRecents(getRecents())), []);
   useEffect(() => onReadsChanged(() => setReads(getReads())), []);
   // Sessions where a teammate tagged you. Server-owned, so it re-renders on
   // the socket push as well as on your own clears. The counter is a render
