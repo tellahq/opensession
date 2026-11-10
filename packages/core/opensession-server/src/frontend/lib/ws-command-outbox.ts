@@ -158,6 +158,7 @@ const mutationMessageSchema = z.discriminatedUnion("type", [
       speed: z.enum(SESSION_SPEEDS).optional(),
       pstackMode: z.boolean().optional(),
       coordinator: z.boolean().optional(),
+      goal: z.string().max(2000).optional(),
       accountId: z.string().optional(),
       forkFrom: z
         .object({ sourceId: z.string(), messageId: z.string().optional() })

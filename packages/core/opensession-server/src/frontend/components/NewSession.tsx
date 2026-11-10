@@ -1,4 +1,5 @@
 import type { SessionSpeed } from "@tellahq/opensession-protocol/session";
+import { GoalModal } from "./composer/ComposerControls";
 import React, {
   useCallback,
   useEffect,
@@ -95,6 +96,7 @@ import {
   IconChevronDown,
   IconChevronRight,
   IconChecklist,
+  IconCrosshair,
   IconDelegate,
   IconGlobe,
   IconConnections,
@@ -514,6 +516,9 @@ export function NewSession({
   // default so an ordinary session never sees them.
   const [pstackMode, setPstackMode] = useState(false);
   const [coordinator, setCoordinator] = useState(false);
+  // A goal pinned from the start, like /goal; a new workspace takes it too.
+  const [goal, setGoal] = useState<string | null>(null);
+  const [goalOpen, setGoalOpen] = useState(false);
   // Start the repo's Portal with the session, so its dev server comes up
   // while the agent works instead of when someone first opens it.
   const [startPortal, setStartPortal] = useState(false);
@@ -1198,6 +1203,7 @@ export function NewSession({
     }
     if (pstackMode) createMessage.pstackMode = true;
     if (coordinator) createMessage.coordinator = true;
+    if (goal) createMessage.goal = goal;
     // Only an explicit choice is sent; otherwise the repository decides.
     if (showShipChoice && shipChoice?.repo === createRepo)
       createMessage.shipMode = shipChoice.mode;
@@ -1746,6 +1752,15 @@ export function NewSession({
               {/* Rarely changed execution settings stay one level behind a single
                 overflow button. Their current values remain visible in the
                 submenu rows, while attachment stays one tap away. */}
+              <GoalModal
+                open={goalOpen}
+                initial={goal ?? ""}
+                onOpenChange={setGoalOpen}
+                onSubmit={(next) => {
+                  setGoal(next);
+                  setGoalOpen(false);
+                }}
+              />
               <Menu.Root>
                 <Tooltip label="More options">
                   <Menu.Trigger
@@ -1756,6 +1771,7 @@ export function NewSession({
                         sandboxProvider ||
                         pstackMode ||
                         coordinator ||
+                        !!goal ||
                         (showShipChoice && shipMode !== repoShipMode) ||
                         (repoPortal && startPortal) ||
                         modelEngine(effectiveModelId) !== "pi" ||
@@ -1990,6 +2006,23 @@ export function NewSession({
                     </span>
                     <Menu.Check on={coordinator} className="text-dim" />
                   </Menu.CheckboxItem>
+                  <Menu.Item
+                    onClick={() => setGoalOpen(true)}
+                    className="justify-between gap-3"
+                    title={goal ? `Goal: ${goal}` : undefined}
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <IconCrosshair className="shrink-0 text-dim" size={20} />
+                      <span className="truncate">
+                        {goal ? "Edit goal" : "Set a goal"}
+                      </span>
+                    </span>
+                    {goal && (
+                      <span className="min-w-0 max-w-[45%] truncate text-dim">
+                        {goal}
+                      </span>
+                    )}
+                  </Menu.Item>
                   <Menu.SubmenuRoot>
                     <Menu.SubmenuTrigger className="justify-between gap-3">
                       <span className="flex min-w-0 items-center gap-2">

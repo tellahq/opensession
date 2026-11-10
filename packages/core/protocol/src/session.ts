@@ -480,6 +480,8 @@ export type ProtocolClientMessage =
       pstackMode?: boolean;
       /** Start in coordinator mode: hand work to threads instead of doing it. */
       coordinator?: boolean;
+      /** Pin a session goal from the start, as /goal does. */
+      goal?: string;
       /** Start the repository's first Portal once the workspace is ready. */
       startPortal?: boolean;
       /** Pinned provider account; omitted means automatic pool selection. */
