@@ -14,7 +14,6 @@ const comments = [
 test("pull request conversations show GitHub profile images", () => {
   const html = renderToStaticMarkup(
     <ConversationView
-      author="kentdebruin"
       descriptionHtml="<p>Summary</p>"
       comments={comments}
       provider={providerFromUrl(
@@ -23,14 +22,12 @@ test("pull request conversations show GitHub profile images", () => {
     />,
   );
 
-  expect(html).toContain("https://github.com/kentdebruin.png?size=56");
   expect(html).toContain("https://github.com/michielw.png?size=56");
 });
 
 test("providers without profile images retain initial avatars", () => {
   const html = renderToStaticMarkup(
     <ConversationView
-      author="kentdebruin"
       descriptionHtml="<p>Summary</p>"
       comments={comments}
       provider={providerFromUrl("https://team.code.storage/review/1")}
@@ -38,7 +35,6 @@ test("providers without profile images retain initial avatars", () => {
   );
 
   expect(html).not.toContain("<img");
-  expect(html).toContain(">K</span>");
   expect(html).toContain(">M</span>");
 });
 
@@ -46,7 +42,6 @@ test("description previews retain complete markdown and links", () => {
   const body = `<p>${"A detailed summary. ".repeat(100)}</p><p><a href="https://example.test/details">Details</a></p>`;
   const html = renderToStaticMarkup(
     <ConversationView
-      author="acme"
       descriptionHtml={body}
       comments={[]}
       provider={providerFromUrl("https://github.com/acme/project/pull/1")}
@@ -61,7 +56,6 @@ test("description previews retain complete markdown and links", () => {
 test("empty descriptions keep their explicit empty state", () => {
   const html = renderToStaticMarkup(
     <ConversationView
-      author="acme"
       descriptionHtml=""
       comments={[]}
       provider={providerFromUrl("https://github.com/acme/project/pull/1")}

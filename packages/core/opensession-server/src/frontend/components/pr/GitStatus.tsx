@@ -39,26 +39,7 @@ import {
   IconX,
 } from "../icons";
 
-/**
- * Local/remote discrepancy rows for the Status card: each gets a line with one
- * action on the right. Push is a direct server-side `git push`; the judgment
- * calls (create the PR, resolve conflicts, update from base, commit stray
- * changes) prompt the session — the agent does the work, not a bare button.
- */
-export function GitStatusRows({
-  git,
-  pr,
-  sessionId,
-  repo,
-  send,
-  onRefresh,
-  onMerge,
-  merging,
-  mergeScheduled,
-  onMarkReady,
-  markingReady,
-  merge,
-}: {
+export type GitStatusRowsProps = {
   git: GitStatusInfo | null;
   pr: PrDetails | null;
   sessionId: string;
@@ -79,7 +60,39 @@ export function GitStatusRows({
     /** An auto-merge toggle is in flight. */
     busy?: boolean;
   };
-}) {
+  /** Draw the merge action as the page's primary button rather than the
+   *  row's quiet plate: the overview's merge box leads with it. */
+  emphasis?: boolean;
+};
+
+export interface GitStatusRow {
+  key: string;
+  label: string;
+  tone: GitDotTone;
+  action?: React.ReactNode;
+}
+
+/**
+ * The rows GitStatusRows draws, for a surface that lays them out itself. The
+ * first row is the pull request's own state ("Ready to merge", "Merge
+ * conflicts") with its one action; the rest are the branch's local/remote
+ * discrepancies. `notes` is the prompted/error line under them.
+ */
+export function useGitStatusRows({
+  git,
+  pr,
+  sessionId,
+  repo,
+  send,
+  onRefresh,
+  onMerge,
+  merging,
+  mergeScheduled,
+  onMarkReady,
+  markingReady,
+  merge,
+  emphasis,
+}: GitStatusRowsProps) {
   const runner = useGitTaskRunner({ sessionId, repo, send, onRefresh });
   const { prompted, error } = runner;
   const mergeDeadline = useDeferredMergeDeadline(deferredMergeKey(pr?.url));
@@ -88,12 +101,7 @@ export function GitStatusRows({
   const tasks = gitTasks(git, pr, base);
   const task = (key: GitTask["key"]) => tasks.find((t) => t.key === key);
 
-  const rows: Array<{
-    key: string;
-    label: string;
-    tone: GitDotTone;
-    action?: React.ReactNode;
-  }> = [];
+  const rows: GitStatusRow[] = [];
 
   if (pr) {
     const status = deriveStatus(pr);
@@ -125,6 +133,7 @@ export function GitStatusRows({
         (pr.state === "OPEN" && !pr.isDraft && merge ? (
           <MergeControl
             merge={merge}
+            emphasis={emphasis}
             merging={merging}
             mergeScheduled={mergeScheduled}
             undo={
@@ -235,6 +244,28 @@ export function GitStatusRows({
       ),
     });
   }
+  const notes =
+    prompted || error ? (
+      <>
+        {prompted && (
+          <div className={`${GIT_NOTE} text-faint`}>
+            Asked {AGENT_NAME} to {prompted} ✓
+          </div>
+        )}
+        {error && <div className={`${GIT_NOTE} text-red`}>{error}</div>}
+      </>
+    ) : null;
+  return { rows, notes };
+}
+
+/**
+ * Local/remote discrepancy rows for the Status card: each gets a line with one
+ * action on the right. Push is a direct server-side `git push`; the judgment
+ * calls (create the PR, resolve conflicts, update from base, commit stray
+ * changes) prompt the session — the agent does the work, not a bare button.
+ */
+export function GitStatusRows(props: GitStatusRowsProps) {
+  const { rows, notes } = useGitStatusRows(props);
   if (rows.length === 0) return null;
 
   return (
@@ -246,12 +277,7 @@ export function GitStatusRows({
           {row.action}
         </div>
       ))}
-      {prompted && (
-        <div className={`${GIT_NOTE} text-faint`}>
-          Asked {AGENT_NAME} to {prompted} ✓
-        </div>
-      )}
-      {error && <div className={`${GIT_NOTE} text-red`}>{error}</div>}
+      {notes}
     </>
   );
 }
@@ -270,11 +296,13 @@ const MERGE_CHOICE_ICON: Record<MergeChoice, React.ReactNode> = {
  */
 function MergeControl({
   merge,
+  emphasis,
   merging,
   mergeScheduled,
   undo,
 }: {
-  merge: NonNullable<Parameters<typeof GitStatusRows>[0]["merge"]>;
+  merge: NonNullable<GitStatusRowsProps["merge"]>;
+  emphasis?: boolean;
   merging?: boolean;
   mergeScheduled?: boolean;
   undo: React.ReactNode;
@@ -288,8 +316,9 @@ function MergeControl({
       {undo}
       {primary && (
         <Button
-          variant="soft"
-          className={GIT_ACTION}
+          variant={emphasis ? "success-strong" : "soft"}
+          size={emphasis ? "sm" : undefined}
+          className={emphasis ? "shrink-0" : GIT_ACTION}
           onClick={() => merge.onChoose(primary)}
           disabled={busy || (primary === "auto" && merge.busy)}
           title={MERGE_CHOICE_TITLE[primary]}

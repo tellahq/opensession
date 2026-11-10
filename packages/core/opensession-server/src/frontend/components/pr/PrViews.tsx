@@ -32,15 +32,10 @@ function PrAvatar({ login, provider }: { login: string; provider: Provider }) {
   );
 }
 
-function PrDescriptionCard({
-  author,
-  descriptionHtml,
-  provider,
-}: {
-  author: string;
-  descriptionHtml: string;
-  provider: Provider;
-}) {
+/** The Comments heading, which the merge box's Comments readout scrolls to. */
+export const PR_COMMENTS_HEADING_ID = "pr-overview-comments";
+
+function PrDescriptionCard({ descriptionHtml }: { descriptionHtml: string }) {
   const isPhone = useIsPhone();
   const bodyId = useId();
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -71,18 +66,12 @@ function PrDescriptionCard({
     );
   return (
     <article className="min-w-0 rounded-xl border border-line/60 bg-surface smooth-shadow-sm phone:rounded-none phone:border-0 phone:bg-transparent phone:shadow-none">
-      {/* Phone: the identity block above already names the author, so the
-          description reads as a section of the page, not a comment card. */}
+      {/* The identity block above already names the author at both widths,
+          so the description carries no byline of its own. On a phone it reads
+          as a section of the page rather than a card. */}
       <h2 className="m-0 hidden px-1 text-body font-semibold text-fg phone:block">
         Description
       </h2>
-      <div className="flex items-center gap-2 border-b border-divider px-4 py-3 phone:hidden">
-        <PrAvatar login={author} provider={provider} />
-        <div>
-          <div className="text-xs font-semibold text-fg">{author}</div>
-          <div className="text-meta text-faint">Opened this pull request</div>
-        </div>
-      </div>
       <div
         id={bodyId}
         ref={previewRef}
@@ -115,12 +104,13 @@ function PrDescriptionCard({
 
 /**
  * The Overview page's main column: the description, then the conversation.
+ * The page's identity header names the author, so the description is the
+ * body alone, as on GitHub.
  *
  * It carries no heading of its own — the page tab above it already says where
  * you are, and a second "Conversation" title only pushed the description down.
  */
 export function ConversationView({
-  author,
   descriptionHtml,
   comments,
   provider,
@@ -128,7 +118,6 @@ export function ConversationView({
   pr,
   onAddToInput,
 }: {
-  author: string;
   descriptionHtml: string;
   comments: PrComment[];
   provider: Provider;
@@ -144,15 +133,13 @@ export function ConversationView({
        without it the box sizes to its content and `max-w` becomes a fixed 760px
        that a phone can't fit. */
     <div className="mx-auto flex w-full min-w-0 max-w-[760px] flex-col gap-4">
-      <PrDescriptionCard
-        key={pr?.url}
-        author={author}
-        descriptionHtml={descriptionHtml}
-        provider={provider}
-      />
+      <PrDescriptionCard key={pr?.url} descriptionHtml={descriptionHtml} />
 
       {comments.length > 0 && (
-        <h2 className="m-0 hidden px-1 pt-2 text-body font-semibold text-fg phone:block">
+        <h2
+          id={PR_COMMENTS_HEADING_ID}
+          className="m-0 scroll-mt-4 px-1 pt-2 text-body font-semibold text-fg"
+        >
           Comments{" "}
           <span className="font-normal text-faint tabular-nums">
             {comments.length}

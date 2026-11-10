@@ -121,6 +121,8 @@ import { PrCard } from "./pr/PrCard";
 import { StackLinkSection } from "./pr/Stack";
 import { PrStackChip } from "./pr/StackPopover";
 import { ReviewRail } from "./pr/ReviewRail";
+import { MergeBox } from "./pr/MergeBox";
+import { PR_COMMENTS_HEADING_ID } from "./pr/PrViews";
 import { GitStatusRows } from "./pr/GitStatus";
 import { ReviewToolbar } from "./pr/ReviewToolbar";
 import { EmptyState, LoadingState } from "../ui/state";
@@ -1550,6 +1552,9 @@ export function PrPanel({
       : reviewEvent === "REQUEST_CHANGES"
         ? "Request changes"
         : "Submit review";
+  // Beside the conversation, the status leads the main column as a merge
+  // box; stacked above it, the rail's own Status section already leads.
+  const showMergeBox = !railStacked && !hideWideOverviewRail;
   const rail = (
     <ReviewRail
       className={railStacked ? "min-w-0" : "w-[264px] shrink-0"}
@@ -1579,8 +1584,44 @@ export function PrPanel({
       onStartSession={onStartSession}
       focusChecksSeq={focusChecksSeq}
       compact={railStacked}
+      showStatus={!showMergeBox}
     />
   );
+  const mergeBox = showMergeBox ? (
+    <MergeBox
+      status={{
+        git,
+        pr,
+        sessionId,
+        repo: active?.repo,
+        send,
+        onRefresh: load,
+        onMerge: handleMerge,
+        merging,
+        mergeScheduled,
+        onMarkReady: handleMarkReady,
+        markingReady,
+        merge: {
+          primary: choices.primary,
+          all: choices.all,
+          onChoose: chooseMerge,
+          busy: autoMergeBusy,
+        },
+      }}
+      statusMark={statusMark}
+      checks={checkSummary}
+      showChecks={caps.checks}
+      showApprovals={caps.reviewers}
+      commentCount={comments.length}
+      onShowChecks={() => setFocusChecksSeq((prev) => prev + 1)}
+      onShowComments={() =>
+        document
+          .getElementById(PR_COMMENTS_HEADING_ID)
+          ?.scrollIntoView({ block: "start", behavior: "smooth" })
+      }
+      error={mergeError}
+    />
+  ) : null;
 
   const codeSettings = (
     <Popover.Root>
@@ -2044,6 +2085,7 @@ export function PrPanel({
           send={send}
           railStacked={railStacked}
           rail={rail}
+          mergeBox={mergeBox}
           statusMark={statusMark}
           hideWideOverviewRail={hideWideOverviewRail}
           walkthrough={walkthrough}
