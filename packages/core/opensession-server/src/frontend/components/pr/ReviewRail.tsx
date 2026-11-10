@@ -60,6 +60,7 @@ export function ReviewRail({
   onStartSession,
   focusChecksSeq,
   compact,
+  showStatus = true,
   className,
 }: {
   pr: PrDetails;
@@ -98,6 +99,8 @@ export function ReviewRail({
   focusChecksSeq?: number;
   /** Stacked above the conversation rather than beside it: keep it short. */
   compact?: boolean;
+  /** False while the overview's merge box carries the status instead. */
+  showStatus?: boolean;
   className?: string;
 }) {
   const [checksOpen, setChecksOpen] = useState(false);
@@ -123,25 +126,29 @@ export function ReviewRail({
     <aside
       className={`${className ?? ""} phone:rounded-xl phone:bg-panel phone:px-2 phone:py-1`}
     >
-      <RailSection title="Status">
-        <GitStatusRows
-          git={git}
-          pr={pr}
-          sessionId={sessionId}
-          repo={repo}
-          send={send}
-          onRefresh={onRefresh}
-          onMerge={onMerge}
-          merging={merging}
-          mergeScheduled={mergeScheduled}
-          onMarkReady={onMarkReady}
-          markingReady={markingReady}
-          merge={merge}
-        />
-        {mergeError && (
-          <p className="m-0 px-2 pt-1 text-supporting text-red">{mergeError}</p>
-        )}
-      </RailSection>
+      {showStatus && (
+        <RailSection title="Status">
+          <GitStatusRows
+            git={git}
+            pr={pr}
+            sessionId={sessionId}
+            repo={repo}
+            send={send}
+            onRefresh={onRefresh}
+            onMerge={onMerge}
+            merging={merging}
+            mergeScheduled={mergeScheduled}
+            onMarkReady={onMarkReady}
+            markingReady={markingReady}
+            merge={merge}
+          />
+          {mergeError && (
+            <p className="m-0 px-2 pt-1 text-supporting text-red">
+              {mergeError}
+            </p>
+          )}
+        </RailSection>
+      )}
 
       {caps.reviewers && reviewers.length > 0 && (
         <RailSection title="Reviewers">

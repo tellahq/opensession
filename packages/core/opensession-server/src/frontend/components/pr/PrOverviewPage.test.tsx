@@ -61,3 +61,29 @@ for (const [state, isDraft, label] of [
     );
   });
 }
+
+test("desktop overview leads with the title, branches and the merge box", () => {
+  const html = renderToStaticMarkup(
+    <PrOverviewPage
+      compactToolbar={false}
+      sessionId="example-session"
+      provider={providerFromUrl(pr.url)}
+      pr={pr}
+      railStacked={false}
+      rail={<aside>Rail</aside>}
+      mergeBox={<section>Merge box</section>}
+      statusMark={prStatusMark({ state: pr.state, isDraft: pr.isDraft })}
+      hideWideOverviewRail={false}
+      bodyHtml="<p>Description first</p>"
+      comments={[]}
+    />,
+  );
+  expect(html).toContain("wants to merge into");
+  expect(html).toContain("Copy branch name");
+  expect(html.indexOf("wants to merge into")).toBeLessThan(
+    html.indexOf("Merge box"),
+  );
+  expect(html.indexOf("Merge box")).toBeLessThan(
+    html.indexOf("Description first"),
+  );
+});
