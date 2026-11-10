@@ -87,6 +87,7 @@ import {
   type ClaudeAccount,
 } from "./claude-accounts";
 import { cacheCreationUsage } from "./claude-cache-writes";
+import { contextWindowFor } from "./models";
 import { CLAUDE_CODE_BIN } from "./runner-shared";
 import { spawnClaudeCodeInWorkload } from "./workload-scope";
 import {
@@ -485,6 +486,38 @@ function jsonSchemaToZod(schema: any): z.ZodTypeAny {
 export const PASSTHROUGH_MCP = "oc";
 export const PASSTHROUGH_PREFIX = `mcp__${PASSTHROUGH_MCP}__`;
 
+/** Far above any real window: the CLI never refuses a request on its own
+ *  token estimate. */
+const CLI_BLOCKING_LIMIT_OFF = 1_000_000_000;
+
+/**
+ * Env that keeps the Claude Code CLI a plain transport for pi. Pi owns the
+ * conversation: it decides when to compact, and it recovers when the API
+ * reports a real overflow. Left alone, the CLI does both itself:
+ *  - Its model catalog lags new releases. For an id it does not know (CLI
+ *    2.1.318 and claude-fable-5-2) it assumes a 200K window, silently
+ *    auto-compacts its own copy of the conversation while pi still believes
+ *    the model sees everything, and once it cannot compact it answers locally
+ *    with a synthetic "Prompt is too long" that no API call produced.
+ *  - Its pre-flight token estimate runs well above the real count on dense
+ *    content, so even with the right window it can refuse a turn, or pi's own
+ *    compaction summary, that the API would accept.
+ * DISABLE_COMPACT turns the CLI's compaction off and makes it read the window
+ * from CLAUDE_CODE_MAX_CONTEXT_TOKENS. The blocking override leaves the
+ * too-long verdict to the API, whose error pi's overflow recovery handles.
+ */
+export function cliPassthroughContextEnv(
+  contextWindow: number,
+): Record<string, string> {
+  return {
+    DISABLE_COMPACT: "1",
+    ...(contextWindow > 0
+      ? { CLAUDE_CODE_MAX_CONTEXT_TOKENS: String(contextWindow) }
+      : {}),
+    CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE: String(CLI_BLOCKING_LIMIT_OFF),
+  };
+}
+
 /** Primary switch: an empty `tools` list removes every SDK built-in from the
  *  model's context, including ones added by SDK bumps after the denylist
  *  below was written (CronCreate, ScheduleWakeup, Monitor, ...). Without it a
@@ -790,6 +823,7 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
           HOME: process.env.HOME,
           LANG: process.env.LANG,
           CLAUDE_CODE_OAUTH_TOKEN: account.token,
+          ...cliPassthroughContextEnv(contextWindowFor(model)),
         },
         hooks: {
           PreToolUse: [

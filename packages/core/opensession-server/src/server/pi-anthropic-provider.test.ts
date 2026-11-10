@@ -1477,6 +1477,39 @@ describe("buildPiAnthropicProvider", () => {
     }
   });
 
+  test("the CLI gets pi's context window and never compacts or refuses on its own", async () => {
+    // A release newer than the bundled CLI's catalog: the CLI would assume a
+    // 200K window, auto-compact behind pi's back, and answer a synthetic
+    // "Prompt is too long" once it could not.
+    const [fable] = buildPiAnthropicModels([], "claude-fable-5-2");
+    await designate(["ctx-account"]);
+    await seedAccounts(["ctx-account"]);
+    accounts.__setUsageCacheForTest("ctx-account", freshUsage);
+    let env: Record<string, string | undefined> | undefined;
+    const query = spyOn(sdk, "query").mockImplementation((input) => {
+      env = input.options?.env;
+      throw new Error("test SDK reached");
+    });
+    try {
+      const provider = buildPiAnthropicProvider({
+        unifiedSessionId: "os-ctx",
+        builtinModels: [],
+        ensureModelId: fable.id,
+      }) as any;
+      for await (const _ of provider.streamSimple(fable, {
+        messages: [{ role: "user", content: "hi" }],
+      })) {
+      }
+      expect(env?.DISABLE_COMPACT).toBe("1");
+      expect(env?.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe("1000000");
+      expect(Number(env?.CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE)).toBeGreaterThan(
+        fable.contextWindow,
+      );
+    } finally {
+      query.mockRestore();
+    }
+  });
+
   test("a usage-limited account rotates to the next one inside the same turn", async () => {
     // More than the old four-account ceiling. SDK usage-limit responses
     // must walk the picker until the real pool is dry.
