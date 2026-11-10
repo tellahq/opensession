@@ -20,15 +20,26 @@ import {
   publishWorkspaceRecord,
   useWorkspaceRecord,
 } from "../lib/workspace-records";
+import {
+  WS_SUMMARY_LABEL,
+  WS_SUMMARY_RAIL,
+  WS_SUMMARY_ROW,
+  WS_SUMMARY_SECTION,
+  WS_SUMMARY_STATE,
+} from "../lib/workspace-summary-classes";
 import { cn } from "../ui/cn";
 import { Menu, MENU_ICON } from "../ui/menu";
 import { IconChevronDown, IconChevronRight, IconPeople } from "./icons";
 import { UserAvatar } from "./UserAvatar";
 import { getCurrentUser, TEAM } from "./UserPicker";
+import {
+  WorkspaceSummaryAdd,
+  WorkspaceSummaryAddRow,
+} from "./WorkspaceSummaryAdd";
 
 /**
  * Add/remove state for a workspace's collaborators, shared by the info
- * panel's row and the session header's ⋯ menu. Null when there is no
+ * panel's row, the header's summary card and the session header's ⋯ menu. Null when there is no
  * workspace record or nobody to add.
  */
 export function useWorkspaceCollaborators(
@@ -198,5 +209,57 @@ export function CollaboratorsSubmenu({
         <CollaboratorMenuItems {...state} />
       </Menu.Popup>
     </Menu.SubmenuRoot>
+  );
+}
+
+/**
+ * The same control in the header's summary card, in that card's row grammar:
+ * a heading with a "+" that opens the picker, then one row per collaborator.
+ * With nobody added yet it is a single add row, so the first collaborator can
+ * be added from here even when you are the only one viewing.
+ */
+export function WorkspaceSummaryCollaborators({
+  state,
+  groupClass,
+}: {
+  state: WorkspaceCollaboratorsState;
+  groupClass: string;
+}) {
+  const { collaborators, error } = state;
+  const errorRow = error && (
+    <div className="px-4 py-1 text-meta font-medium text-red">{error}</div>
+  );
+  if (!collaborators.length)
+    return (
+      <div className={groupClass}>
+        <WorkspaceSummaryAddRow label="Collaborators" action="Add collaborator">
+          <CollaboratorMenuItems {...state} />
+        </WorkspaceSummaryAddRow>
+        {errorRow}
+      </div>
+    );
+  return (
+    <div className={groupClass}>
+      <div className={cn(WS_SUMMARY_SECTION, "gap-2")}>
+        <span>Collaborators</span>
+        <WorkspaceSummaryAdd label="Add collaborator">
+          <CollaboratorMenuItems {...state} />
+        </WorkspaceSummaryAdd>
+      </div>
+      {collaborators.map((c) => (
+        <div
+          key={c.name}
+          className={cn(WS_SUMMARY_ROW, "cursor-default hover:bg-transparent")}
+          title={`${c.name}, added by ${c.by}`}
+        >
+          <span className={WS_SUMMARY_RAIL}>
+            <UserAvatar name={c.name} size={16} edge={false} />
+          </span>
+          <span className={WS_SUMMARY_LABEL}>{c.name}</span>
+          <span className={cn(WS_SUMMARY_STATE, "text-dim")}>added</span>
+        </div>
+      ))}
+      {errorRow}
+    </div>
   );
 }
