@@ -310,7 +310,12 @@ export function resolveRunGithubActor(input: {
   const interactiveKind = INTERACTIVE_KINDS.has(
     baseJournalKind(input.journalKind),
   );
-  const steerer = interactiveKind ? interactivePrompter(input.steeredBy) : null;
+  // Sandbox launchers normalize steered automation turns to "automation".
+  // Keep their sender for the denial note; remote turns remain ineligible.
+  const steerer =
+    interactiveKind || input.remote
+      ? interactivePrompter(input.steeredBy)
+      : null;
   if (steerer) {
     const blocked = input.remote
       ? "a Sandbox automation run never holds a person's token"

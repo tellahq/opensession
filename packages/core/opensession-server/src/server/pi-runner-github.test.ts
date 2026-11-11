@@ -641,7 +641,9 @@ describe("a person steering an automation-owned session", () => {
       remote?: boolean;
     },
   ) {
-    const author = commitAuthorFor(input.sender, "Alice");
+    const author = input.remote
+      ? undefined
+      : commitAuthorFor(input.sender, "Alice");
     const actor = resolveRunGithubActor({
       user: undefined,
       authorName: author?.name,
@@ -768,10 +770,15 @@ describe("a person steering an automation-owned session", () => {
       const result = await turn(cwd, {
         sender: "Alice",
         steeredBy: "Alice",
+        kind: "automation",
         remote: true,
       });
       expect(Object.values(result.env)).not.toContain("human-token");
-      expect(result.note).toContain("Sandbox automation run");
+      expect(result.ownerLogin).toBeNull();
+      expect(result.context).toContain(
+        "GitHub access: gh and git use the GitHub App's token, not Alice's own GitHub account (a Sandbox automation run never holds a person's token).",
+      );
+      expect(result.context).not.toContain("account through gh");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
