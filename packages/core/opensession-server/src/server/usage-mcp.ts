@@ -146,9 +146,13 @@ export function claudeUsageAccount(
   const limits: UsageLimit[] = [];
   if (u) {
     if (u.fiveHour)
-      limits.push(limit("5h", u.fiveHour.utilization, u.fiveHour.resetsAt, now));
+      limits.push(
+        limit("5h", u.fiveHour.utilization, u.fiveHour.resetsAt, now),
+      );
     if (u.sevenDay)
-      limits.push(limit("7d", u.sevenDay.utilization, u.sevenDay.resetsAt, now));
+      limits.push(
+        limit("7d", u.sevenDay.utilization, u.sevenDay.resetsAt, now),
+      );
     for (const s of u.scopedLimits ?? [])
       limits.push(
         limit(`${s.label} weekly`, s.utilization, s.resetsAt, now, true),

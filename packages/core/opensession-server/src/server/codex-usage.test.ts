@@ -4,16 +4,24 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { withCodexAuthLock } from "./codex-auth-lock";
+import type { CodexAccount } from "./codex-accounts";
 import {
   codexAccessTokenNeedsRefresh,
+  codexResetCreditKey,
+  codexUsageFor,
+  consumeCodexResetCredit,
   normalizeCodexRateLimits,
   probeCodexUsage,
+  refreshCodexUsage,
+  shouldUseCodexResetCredit,
+  type CodexAccountUsage,
 } from "./codex-usage";
 
 /** A structurally valid JWT whose only claim is `exp` (seconds). */
@@ -280,5 +288,246 @@ done
     const usage = await probeCodexUsage(home, executable, 2_000);
     expect(usage.error).toBeUndefined();
     expect(usage.buckets[0]?.primary?.utilization).toBe(17);
+  });
+});
+
+const NOW = Date.parse("2026-11-11T12:00:00.000Z");
+const DAY = 24 * 60 * 60 * 1000;
+
+function usageWithWeekly(
+  weekly: { utilization: number | null; resetsAt: string | null },
+  resetCreditsAvailable: number | null = 1,
+): CodexAccountUsage {
+  return {
+    fetchedAt: new Date(NOW).toISOString(),
+    buckets: [
+      {
+        id: "codex",
+        primary: { utilization: 3, resetsAt: null, windowDurationMins: 300 },
+        secondary: { ...weekly, windowDurationMins: 10_080 },
+      },
+    ],
+    resetCreditsAvailable,
+  };
+}
+
+describe("shouldUseCodexResetCredit", () => {
+  const inDays = (days: number) => new Date(NOW + days * DAY).toISOString();
+
+  test("spends a credit on a full weekly limit more than two days out", () => {
+    expect(
+      shouldUseCodexResetCredit(
+        usageWithWeekly({ utilization: 100, resetsAt: inDays(2.1) }),
+        NOW,
+      ),
+    ).toBe(true);
+  });
+
+  test("waits out a weekly limit that resets within one or two days", () => {
+    for (const days of [0.5, 1, 1.5, 2]) {
+      expect(
+        shouldUseCodexResetCredit(
+          usageWithWeekly({ utilization: 100, resetsAt: inDays(days) }),
+          NOW,
+        ),
+      ).toBe(false);
+    }
+  });
+
+  test("keeps the credit while any weekly allowance is left", () => {
+    expect(
+      shouldUseCodexResetCredit(
+        usageWithWeekly({ utilization: 99, resetsAt: inDays(5) }),
+        NOW,
+      ),
+    ).toBe(false);
+  });
+
+  test("needs a credit, a reset time, and a clean read", () => {
+    expect(
+      shouldUseCodexResetCredit(
+        usageWithWeekly({ utilization: 100, resetsAt: inDays(5) }, 0),
+        NOW,
+      ),
+    ).toBe(false);
+    expect(
+      shouldUseCodexResetCredit(
+        usageWithWeekly({ utilization: 100, resetsAt: null }),
+        NOW,
+      ),
+    ).toBe(false);
+    expect(
+      shouldUseCodexResetCredit(
+        {
+          ...usageWithWeekly({ utilization: 100, resetsAt: inDays(5) }),
+          error: "timed out",
+        },
+        NOW,
+      ),
+    ).toBe(false);
+  });
+
+  test("ignores a full five-hour window and other buckets", () => {
+    const usage: CodexAccountUsage = {
+      fetchedAt: new Date(NOW).toISOString(),
+      buckets: [
+        {
+          id: "codex",
+          primary: {
+            utilization: 100,
+            resetsAt: inDays(0.1),
+            windowDurationMins: 300,
+          },
+          secondary: {
+            utilization: 40,
+            resetsAt: inDays(5),
+            windowDurationMins: 10_080,
+          },
+        },
+        {
+          id: "codex_spark",
+          primary: null,
+          secondary: {
+            utilization: 100,
+            resetsAt: inDays(5),
+            windowDurationMins: 10_080,
+          },
+        },
+      ],
+      resetCreditsAvailable: 2,
+    };
+    expect(shouldUseCodexResetCredit(usage, NOW)).toBe(false);
+  });
+
+  test("finds a weekly window reported in the primary slot", () => {
+    const usage: CodexAccountUsage = {
+      fetchedAt: new Date(NOW).toISOString(),
+      buckets: [
+        {
+          id: "codex",
+          primary: {
+            utilization: 100,
+            resetsAt: inDays(4),
+            windowDurationMins: 10_080,
+          },
+          secondary: null,
+        },
+      ],
+      resetCreditsAvailable: 1,
+    };
+    expect(shouldUseCodexResetCredit(usage, NOW)).toBe(true);
+  });
+});
+
+test("reset credit keys are stable per account and weekly window", () => {
+  const key = codexResetCreditKey("acct-a", "2026-11-16T10:00:12.000Z");
+  expect(key).toMatch(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+  );
+  expect(codexResetCreditKey("acct-a", "2026-11-16T10:00:47.000Z")).toBe(key);
+  expect(codexResetCreditKey("acct-b", "2026-11-16T10:00:12.000Z")).not.toBe(
+    key,
+  );
+  expect(codexResetCreditKey("acct-a", "2026-11-23T10:00:12.000Z")).not.toBe(
+    key,
+  );
+});
+
+describe("reset credits through the app-server", () => {
+  const dir = mkdtempSync(join(tmpdir(), "codex-reset-"));
+  const executable = join(dir, "fake-codex");
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  /** Fake app-server whose weekly window is full (resetting `resetsAt`, unix
+   * seconds) until a reset credit is consumed, which it records in
+   * `$CODEX_HOME/consumed` along with the idempotency key. */
+  function writeFakeCodex(resetsAt: number) {
+    writeFileSync(
+      executable,
+      `#!/bin/sh
+while IFS= read -r line; do
+  id=$(printf '%s' "$line" | sed -n 's/.*"id":\\([0-9]*\\).*/\\1/p')
+  case "$line" in
+    *'"method":"initialize"'*)
+      printf '{"id":%s,"result":{}}\\n' "$id"
+      ;;
+    *'account/read'*)
+      printf '{"id":%s,"result":{}}\\n' "$id"
+      ;;
+    *'account/rateLimits/read'*)
+      if [ -f "$CODEX_HOME/consumed" ]; then
+        printf '{"id":%s,"result":{"rateLimits":{"limitId":"codex","secondary":{"usedPercent":0,"windowDurationMins":10080,"resetsAt":${resetsAt + 7 * 86400}}},"rateLimitResetCredits":{"availableCount":0}}}\\n' "$id"
+      else
+        printf '{"id":%s,"result":{"rateLimits":{"limitId":"codex","secondary":{"usedPercent":100,"windowDurationMins":10080,"resetsAt":${resetsAt}}},"rateLimitResetCredits":{"availableCount":1}}}\\n' "$id"
+      fi
+      exit 0
+      ;;
+    *'account/rateLimitResetCredit/consume'*)
+      printf '%s\\n' "$line" >> "$CODEX_HOME/consumed"
+      printf '{"id":%s,"result":{"outcome":"reset"}}\\n' "$id"
+      exit 0
+      ;;
+  esac
+done
+`,
+    );
+    chmodSync(executable, 0o700);
+  }
+
+  function homeAccount(id: string): CodexAccount {
+    const home = join(dir, id);
+    writeAuth(home, jwtExpiringAt(Date.now() / 1000 + 9 * 24 * 3600));
+    return {
+      id,
+      name: id,
+      kind: "home",
+      value: home,
+      createdAt: new Date(0).toISOString(),
+    };
+  }
+
+  test("consume reports the backend outcome", async () => {
+    writeFakeCodex(Math.floor(Date.now() / 1000) + 5 * 86400);
+    const account = homeAccount("consume-home");
+    const result = await consumeCodexResetCredit(
+      account.value,
+      "key-1",
+      executable,
+      2_000,
+    );
+    expect(result).toEqual({ outcome: "reset" });
+    expect(readFileSync(join(account.value, "consumed"), "utf-8")).toContain(
+      '"idempotencyKey":"key-1"',
+    );
+  });
+
+  test("a poll spends a credit on a weekly limit days from resetting", async () => {
+    writeFakeCodex(Math.floor(Date.now() / 1000) + 5 * 86400);
+    const account = homeAccount("far-reset");
+    const reset: string[] = [];
+    await refreshCodexUsage([account], {
+      executable,
+      onResetCredit: (a) => reset.push(a.id),
+    });
+    expect(reset).toEqual(["far-reset"]);
+    expect(existsSync(join(account.value, "consumed"))).toBe(true);
+    expect(codexUsageFor("far-reset")?.buckets[0]?.secondary?.utilization).toBe(
+      0,
+    );
+  });
+
+  test("a poll leaves the credit when the weekly limit resets within two days", async () => {
+    writeFakeCodex(Math.floor(Date.now() / 1000) + 36 * 3600);
+    const account = homeAccount("near-reset");
+    const reset: string[] = [];
+    await refreshCodexUsage([account], {
+      executable,
+      onResetCredit: (a) => reset.push(a.id),
+    });
+    expect(reset).toEqual([]);
+    expect(existsSync(join(account.value, "consumed"))).toBe(false);
+    expect(
+      codexUsageFor("near-reset")?.buckets[0]?.secondary?.utilization,
+    ).toBe(100);
   });
 });

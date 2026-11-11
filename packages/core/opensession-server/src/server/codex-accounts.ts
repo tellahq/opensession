@@ -542,14 +542,35 @@ export function listCodexAccounts(): CodexAccount[] {
   return readStore();
 }
 
-/** Refresh every ChatGPT-plan account's supported app-server rate-limit view. */
+/**
+ * A reset credit just cleared this account's limits: drop its usage-limit
+ * sidelines (account-wide and per model) so the picker hands it out again.
+ */
+function clearCodexSidelines(account: CodexAccount): void {
+  let changed = false;
+  for (const key of [...exhaustedUntil.keys()]) {
+    if (key === account.id || key.startsWith(`${account.id}:`)) {
+      exhaustedUntil.delete(key);
+      changed = true;
+    }
+  }
+  if (changed) persistExhausted();
+}
+
+const usageRefreshOptions = { onResetCredit: clearCodexSidelines };
+
+/**
+ * Refresh every ChatGPT-plan account's supported app-server rate-limit view,
+ * spending a rate-limit reset credit on an account whose weekly limit is
+ * fully used and more than two days from resetting (codex-usage.ts).
+ */
 export async function refreshAllCodexUsage(): Promise<void> {
-  await refreshCodexUsage(readStore());
+  await refreshCodexUsage(readStore(), usageRefreshOptions);
 }
 
 /** Start the hourly usage snapshot poller (boot-wired beside Claude usage). */
 export function startCodexUsagePoller(): void {
-  startCodexUsagePolling(readStore);
+  startCodexUsagePolling(readStore, usageRefreshOptions);
 }
 
 /**
