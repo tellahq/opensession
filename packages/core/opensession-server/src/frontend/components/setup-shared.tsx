@@ -65,6 +65,9 @@ export interface SetupRepo {
   defaultBranch: string;
   /** Where new code sessions run. Existing sessions keep their current checkout. */
   isolatedWorktrees: boolean;
+  /** Sessions without a repository use it, so it can't be removed. Absent
+   *  from servers that predate repository removal. */
+  isDefault?: boolean;
   lifecycle: SetupRepoLifecycle;
 }
 
