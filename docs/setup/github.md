@@ -726,9 +726,10 @@ that requires it keeps blocking.
 
 A PR whose body carries a session's attribution footer gets a GitHub
 deployment to the **Open in OS** environment (named from the product mark),
-whose **View deployment** button opens that session. It is posted when the PR
-is opened, reopened, edited, marked ready, or pushed, once per head commit;
-GitHub marks the previous one inactive. PRs from forks get none. The link is
+whose **View deployment** button opens that session. There is one per PR,
+created on its head branch the first time the PR is opened, reopened, edited,
+marked ready, or pushed with the footer present. Later events find it and
+stop, unless the footer now names another session. PRs from forks get none. The link is
 built from this server's public URL and the session id in the footer, never
 copied from the body. Each post is recorded in the audit log
 (`session_deployment_posted`).

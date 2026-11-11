@@ -559,7 +559,7 @@ async function postSessionDeployment(
     const target = sessionDeploymentTarget({
       action,
       body: pr.body,
-      headSha: pr.head?.sha,
+      headRef: pr.head?.ref,
       externalFork,
       state: pr.state,
     });

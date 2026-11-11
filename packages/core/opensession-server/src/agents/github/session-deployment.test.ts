@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { sessionDeploymentTarget } from "./session-deployment";
+import {
+  isSessionDeploymentFor,
+  sessionDeploymentTarget,
+} from "./session-deployment";
 
 const BODY =
   "Fixes the thing.\n\nStarted by Ada in [this OS session](https://os.example.test/session/os-abc123)";
@@ -10,7 +13,7 @@ function target(
   return sessionDeploymentTarget({
     action: "opened",
     body: BODY,
-    headSha: "deadbeef",
+    headRef: "feature-x",
     externalFork: false,
     state: "open",
     ...overrides,
@@ -18,11 +21,11 @@ function target(
 }
 
 describe("sessionDeploymentTarget", () => {
-  test("a session-opened PR deploys its head to the footer's session", () => {
-    expect(target()).toEqual({ sessionId: "os-abc123", headSha: "deadbeef" });
+  test("a session-opened PR deploys its branch to the footer's session", () => {
+    expect(target()).toEqual({ sessionId: "os-abc123", headRef: "feature-x" });
   });
 
-  test("new heads and body edits deploy too", () => {
+  test("pushes and body edits look too, so a failed first try is retried", () => {
     for (const action of [
       "synchronize",
       "edited",
@@ -44,6 +47,33 @@ describe("sessionDeploymentTarget", () => {
     expect(target({ action: "edited", state: "closed" })).toBeNull();
     expect(target({ action: "labeled" })).toBeNull();
     expect(target({ action: "closed" })).toBeNull();
-    expect(target({ headSha: undefined })).toBeNull();
+    expect(target({ headRef: undefined })).toBeNull();
+  });
+});
+
+describe("isSessionDeploymentFor", () => {
+  test("the PR's existing link to the same session is reused", () => {
+    expect(
+      isSessionDeploymentFor(
+        { payload: { pr: 7, sessionId: "os-abc123" } },
+        7,
+        "os-abc123",
+      ),
+    ).toBe(true);
+    expect(
+      isSessionDeploymentFor(
+        { payload: '{"pr":7,"sessionId":"os-abc123"}' },
+        7,
+        "os-abc123",
+      ),
+    ).toBe(true);
+  });
+
+  test("another PR on the same branch, or another session, gets a new one", () => {
+    const d = { payload: { pr: 7, sessionId: "os-abc123" } };
+    expect(isSessionDeploymentFor(d, 8, "os-abc123")).toBe(false);
+    expect(isSessionDeploymentFor(d, 7, "os-other")).toBe(false);
+    expect(isSessionDeploymentFor({ payload: "" }, 7, "os-abc123")).toBe(false);
+    expect(isSessionDeploymentFor({}, 7, "os-abc123")).toBe(false);
   });
 });
