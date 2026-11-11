@@ -445,8 +445,8 @@ export function rowHasCollaborator(row: WsRow, person: string): boolean {
 
 // Whether a row files under `person`'s own lanes: they own it, started it, collaborate on it,
 // or (for the viewer) it mentions them or they claimed it. The sidebar's
-// person lens and the row menu's Keep/Hide choice both read this, so the menu
-// offers Hide exactly for the rows your own sidebar already holds.
+// person lens and the row menu both read this: the menu offers Keep only for
+// rows your own sidebar does not already hold.
 export function rowBelongsToPerson(
   row: WsRow,
   person: string,

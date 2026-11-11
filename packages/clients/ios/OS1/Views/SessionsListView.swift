@@ -3176,9 +3176,11 @@ struct SessionsListView: View {
     }
     #endif
 
-    /// One sidebar-membership action, chosen by the "me" lens's own rule
-    /// (`PeopleLens.membership`): Hide for a row your sidebar holds, Keep for
-    /// one you only see through another lens, Restore for a hidden row.
+    /// Sidebar membership, chosen by the "me" lens's own rule
+    /// (`PeopleLens.membership`): Hide for a row your sidebar holds, Restore
+    /// for a hidden row, and Keep plus Hide for one you only see because it is
+    /// open or through another lens. Archive is global, so Hide is the only
+    /// personal way to drop a teammate's session you opened from a link.
     @ViewBuilder
     private func membershipButton(_ workspace: SidebarWorkspace) -> some View {
         if !workspace.sessions.isEmpty {
@@ -3203,6 +3205,11 @@ struct SessionsListView: View {
                     LaneStore.shared.claim(workspace.sessions)
                 } label: {
                     Label("Keep in sidebar", systemImage: "tray.and.arrow.down")
+                }
+                Button {
+                    hide(workspace)
+                } label: {
+                    Label("Hide from sidebar", systemImage: "eye.slash")
                 }
             }
         }
