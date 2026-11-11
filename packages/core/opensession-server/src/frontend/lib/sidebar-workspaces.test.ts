@@ -7,7 +7,6 @@ import {
   sessionSharesSelectedSidebarGroup,
   sidebarWorkspaceIdForSession,
   spawnedSessionBelongsInSidebar,
-  subagentsForSelectedWorkspace,
   workspaceMainSession,
   workspaceRowOwnsSelection,
   workspaceRowOwnsSession,
@@ -294,106 +293,6 @@ describe("subagentsForWorkspace", () => {
     expect(subagentsByWorkspace(sessions).has("ws-child")).toBe(false);
   });
 
-  test("lists isolated workers but hides disposable inline workers", () => {
-    const sessions = [
-      session("root", {
-        workspaceId: "ws-root",
-        worktreeDir: "/worktrees/root",
-      }),
-      session("inline", {
-        workspaceId: "ws-root",
-        worktreeDir: "/worktrees/root",
-        parentSessionId: "root",
-        createdAt: "2026-08-18T10:00:01Z",
-      }),
-      session("own-worktree", {
-        isRunning: true,
-        workspaceId: "ws-root",
-        worktreeDir: "/worktrees/isolated",
-        parentSessionId: "root",
-        createdAt: "2026-08-18T10:00:02Z",
-      }),
-      session("own-workspace", {
-        isRunning: true,
-        workspaceId: "ws-worker",
-        worktreeDir: null,
-        parentSessionId: "root",
-        createdAt: "2026-08-18T10:00:03Z",
-      }),
-    ];
-
-    const groups = subagentsByWorkspace(sessions);
-    expect(
-      groups.get("ws-root")?.map(({ session, inline }) => [session.id, inline]),
-    ).toEqual([
-      ["inline", true],
-      ["own-worktree", false],
-      ["own-workspace", false],
-    ]);
-    expect(
-      subagentsForSelectedWorkspace(groups, "ws-root", "ws-root").map(
-        ({ session }) => session.id,
-      ),
-    ).toEqual(["own-worktree", "own-workspace"]);
-  });
-
-  test("marks only workers whose PRs all belong to the root", () => {
-    const root = session("root", {
-      workspaceId: "ws-root",
-      repo: "opensession",
-      branch: "root-pr",
-      prNumber: 10,
-      prUrl: "https://github.com/tellahq/opensession/pull/10",
-    });
-    const same = session("same", {
-      workspaceId: "ws-same",
-      parentSessionId: "root",
-      repo: "opensession",
-      branch: "root-pr",
-      prNumber: 10,
-      prUrl: "https://github.com/tellahq/opensession/pull/10/files",
-      createdAt: "2026-08-18T10:00:01Z",
-    });
-    const distinct = session("distinct", {
-      workspaceId: "ws-distinct",
-      parentSessionId: "root",
-      repo: "opensession",
-      branch: "worker-pr",
-      prNumber: 11,
-      prUrl: "https://github.com/tellahq/opensession/pull/11",
-      createdAt: "2026-08-18T10:00:02Z",
-    });
-    const sameAndDistinct = session("same-and-distinct", {
-      workspaceId: "ws-multiple",
-      parentSessionId: "root",
-      prs: [
-        {
-          repo: "opensession",
-          branch: "root-pr",
-          source: "primary",
-          number: 10,
-        },
-        {
-          repo: "opensession",
-          branch: "linked-pr",
-          source: "linked",
-          number: 12,
-        },
-      ],
-      createdAt: "2026-08-18T10:00:03Z",
-    });
-
-    expect(
-      subagentsByWorkspace([root, same, distinct, sameAndDistinct])
-        .get("ws-root")
-        ?.map(({ session, sharesRootPr }) => [session.id, sharesRootPr]),
-    ).toEqual([
-      ["same", true],
-      ["distinct", false],
-      ["same-and-distinct", false],
-    ]);
-  });
-
   test("keeps idle workers nested after their PR merges or closes", () => {
     const parent = session("parent", { workspaceId: "ws-parent" });
     const merged = session("merged", {
@@ -416,87 +315,6 @@ describe("subagentsForWorkspace", () => {
         ({ session }) => session.id,
       ),
     ).toEqual(["merged", "closed"]);
-  });
-
-  test("lists only active workers, plus the one that is open", () => {
-    const item = (id: string, overrides: Partial<UnifiedSession> = {}) => ({
-      session: session(id, { parentSessionId: "parent", ...overrides }),
-      depth: 1,
-      inline: false,
-      sharesRootPr: false,
-    });
-    const groups = new Map([
-      [
-        "ws-parent",
-        [
-          item("running", { isRunning: true }),
-          item("waiting", { waitingForInput: true }),
-          item("queued", { queuedCount: 1 }),
-          item("idle"),
-          item("open"),
-        ],
-      ],
-    ]);
-
-    expect(
-      subagentsForSelectedWorkspace(
-        groups,
-        "ws-parent",
-        "ws-parent",
-        "open",
-      ).map(({ session }) => session.id),
-    ).toEqual(["running", "waiting", "queued", "open"]);
-  });
-
-  test("expands child rows only for the selected root workspace", () => {
-    const child = session("child", {
-      parentSessionId: "parent",
-      isRunning: true,
-    });
-    const groups = new Map([
-      [
-        "ws-parent",
-        [{ session: child, depth: 1, inline: false, sharesRootPr: false }],
-      ],
-    ]);
-
-    expect(
-      subagentsForSelectedWorkspace(groups, "ws-parent", "ws-other"),
-    ).toEqual([]);
-    expect(
-      subagentsForSelectedWorkspace(groups, "ws-parent", "ws-parent"),
-    ).toEqual([
-      { session: child, depth: 1, inline: false, sharesRootPr: false },
-    ]);
-  });
-
-  test("a coordinator lists its inline threads too", () => {
-    const thread = session("thread", {
-      parentSessionId: "parent",
-      isRunning: true,
-    });
-    const idle = session("idle", { parentSessionId: "parent" });
-    const groups = new Map([
-      [
-        "ws-parent",
-        [
-          { session: thread, depth: 1, inline: true, sharesRootPr: false },
-          { session: idle, depth: 1, inline: true, sharesRootPr: false },
-        ],
-      ],
-    ]);
-    expect(
-      subagentsForSelectedWorkspace(groups, "ws-parent", "ws-parent"),
-    ).toEqual([]);
-    expect(
-      subagentsForSelectedWorkspace(
-        groups,
-        "ws-parent",
-        "ws-parent",
-        null,
-        true,
-      ).map((item) => item.session.id),
-    ).toEqual(["thread"]);
   });
 
   test("does not nest a selected worker beneath its own temporary workspace", () => {

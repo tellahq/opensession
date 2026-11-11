@@ -63,10 +63,6 @@ import {
   setSidebarFeedVisible,
 } from "../lib/sidebar-feeds";
 import {
-  getSidebarSubagentsPref,
-  onSidebarSubagentsChanged,
-} from "../lib/sidebar-subagents-pref";
-import {
   DEFAULT_PROJECT,
   readExpanded,
   sessionRepo,
@@ -203,7 +199,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   const [hiddenTools, setHiddenTools] = useState(readHiddenSidebarTools);
   const [toolOrder, setToolOrderState] = useState(getSidebarToolOrder);
   const [hiddenFeeds, setHiddenFeeds] = useState(readHiddenSidebarFeeds);
-  const [showSubagents, setShowSubagents] = useState(getSidebarSubagentsPref);
   const {
     sidebarScrollRef,
     savedRepoOrder,
@@ -249,13 +244,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   );
   useEffect(
     () => onSidebarFeedsChanged(() => setHiddenFeeds(readHiddenSidebarFeeds())),
-    [],
-  );
-  useEffect(
-    () =>
-      onSidebarSubagentsChanged(() =>
-        setShowSubagents(getSidebarSubagentsPref()),
-      ),
     [],
   );
   useSidebarStickyHeadings(sidebarScrollRef);
@@ -478,7 +466,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     filtered,
     rowOwnsSelection,
     sorted,
-    subagentsByWorkspaceId,
     workspaceSubagentIds,
   } = useSidebarInventory({
     sessions,
@@ -961,7 +948,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     hideRow,
     isDraftWsRow,
     newSessionKeys,
-    renderPinnedWsRow,
     renderReviewWsRow,
     renderWsRow,
     renderWsRowImpl,
@@ -979,13 +965,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
       reads,
       activeSnoozeKeys,
       snoozes,
-      subagentsByWorkspaceId,
     },
     state: {
       selectedId,
       selectedWorkspaceId,
       isPhone,
-      showSubagents,
       groupsByRepo,
       runStartSeen,
       wsTimePref,
@@ -1229,7 +1213,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
         ),
         repo: wsRowRepo(row),
         sessions: row.sessions,
-        node: renderPinnedWsRow(row),
+        node: renderWsRow(row),
       });
     }
     const seenLoose = new Set<string>();

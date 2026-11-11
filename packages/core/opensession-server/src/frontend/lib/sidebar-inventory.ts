@@ -154,7 +154,6 @@ export function deriveSidebarInventory({
     filtered,
     rowOwnsSelection,
     sorted,
-    subagentsByWorkspaceId,
     workspaceSubagentIds,
   };
 }

@@ -1,10 +1,4 @@
-import {
-  canonicalPrUrl,
-  prBranchKey,
-  prNumberKey,
-  sessionPrRefs,
-} from "./session-prs";
-import type { SessionPrRef, UnifiedSession, Workspace } from "./types";
+import type { UnifiedSession, Workspace } from "./types";
 
 export function isScratchWorkspace(
   sessions: readonly Pick<UnifiedSession, "mode">[],
@@ -139,84 +133,6 @@ export interface WorkspaceSubagent {
   session: UnifiedSession;
   /** One for a direct child of workspace work, increasing for nested workers. */
   depth: number;
-  /**
-   * The worker shares its parent's checkout: same worktree, or no worktree of
-   * its own inside the same workspace. It is disposable scaffolding of the
-   * parent's run, so the sidebar tracks it (it must never become a top-level
-   * row) but does not list it. A worker with a worktree or workspace of its
-   * own is separate work and gets a row.
-   */
-  inline: boolean;
-  /**
-   * Every PR the worker carries belongs to the root session too. The workspace
-   * row already shows that PR, so the worker row does not repeat its icon.
-   */
-  sharesRootPr: boolean;
-}
-
-function subagentIsInline(
-  session: Pick<UnifiedSession, "workspaceId" | "worktreeDir">,
-  parent: Pick<UnifiedSession, "worktreeDir">,
-  root: Pick<UnifiedSession, "workspaceId">,
-): boolean {
-  if (session.workspaceId && session.workspaceId !== root.workspaceId)
-    return false;
-  if (session.worktreeDir && session.worktreeDir !== parent.worktreeDir)
-    return false;
-  return true;
-}
-
-/**
- * A root session's PRs, indexed by the three ways a child's PR can match one
- * of them: same repo and number, same repo and branch, or the same link. A
- * root is compared against every child it has, so build this once per root
- * rather than re-deriving and re-parsing its PR list for each pair.
- */
-interface RootPrIndex {
-  numbers: Set<string>;
-  branches: Set<string>;
-  links: Set<string>;
-}
-
-function indexRootPrs(root: UnifiedSession): RootPrIndex {
-  const index: RootPrIndex = {
-    numbers: new Set(),
-    branches: new Set(),
-    links: new Set(),
-  };
-  for (const ref of sessionPrRefs(root)) {
-    if (ref.number !== undefined)
-      index.numbers.add(prNumberKey(ref.repo, ref.number));
-    if (ref.branch) index.branches.add(prBranchKey(ref.repo, ref.branch));
-    const link = canonicalPrUrl(ref.url);
-    if (link !== undefined) index.links.add(link);
-  }
-  return index;
-}
-
-function rootIndexHasPr(index: RootPrIndex, ref: SessionPrRef): boolean {
-  if (
-    ref.number !== undefined &&
-    index.numbers.has(prNumberKey(ref.repo, ref.number))
-  )
-    return true;
-  if (ref.branch && index.branches.has(prBranchKey(ref.repo, ref.branch)))
-    return true;
-  const link = canonicalPrUrl(ref.url);
-  return link !== undefined && index.links.has(link);
-}
-
-function subagentSharesRootPr(
-  session: UnifiedSession,
-  rootPrs: RootPrIndex,
-): boolean {
-  const own = sessionPrRefs(session);
-  if (own.length === 0) return false;
-  return own.every((pr) => rootIndexHasPr(rootPrs, pr));
-}
-
-export function sessionHasOpenPr(session: UnifiedSession): boolean {
-  return sessionPrRefs(session).some((pr) => (pr.state ?? "OPEN") === "OPEN");
 }
 
 /**
@@ -271,21 +187,11 @@ export function subagentsByWorkspace(
   for (const session of sessions) byId.set(session.id, session);
 
   const groups = new Map<string, WorkspaceSubagent[]>();
-  const rootPrsById = new Map<string, RootPrIndex>();
-  const rootPrs = (root: UnifiedSession): RootPrIndex => {
-    let index = rootPrsById.get(root.id);
-    if (!index) {
-      index = indexRootPrs(root);
-      rootPrsById.set(root.id, index);
-    }
-    return index;
-  };
   for (const session of byId.values()) {
     if (!session.parentSessionId || session.archived) continue;
 
     let parentId: string | undefined = session.parentSessionId;
     let root: UnifiedSession | undefined;
-    let directParent: UnifiedSession | undefined;
     let depth = 0;
     const seen = new Set([session.id]);
     while (parentId) {
@@ -299,19 +205,13 @@ export function subagentsByWorkspace(
         break;
       }
       seen.add(parent.id);
-      directParent ??= parent;
       root = parent;
       depth++;
       parentId = parent.parentSessionId;
     }
-    if (!root?.workspaceId || !directParent) continue;
+    if (!root?.workspaceId) continue;
     const items = groups.get(root.workspaceId) ?? [];
-    items.push({
-      session,
-      depth,
-      inline: subagentIsInline(session, directParent, root),
-      sharesRootPr: subagentSharesRootPr(session, rootPrs(root)),
-    });
+    items.push({ session, depth });
     groups.set(root.workspaceId, items);
   }
 
@@ -331,38 +231,6 @@ export function subagentsForWorkspace(
 ): WorkspaceSubagent[] {
   if (!workspaceId) return [];
   return subagentsByWorkspace(sessions).get(workspaceId) ?? [];
-}
-
-function subagentIsActive(session: UnifiedSession): boolean {
-  return (
-    session.isRunning ||
-    !!session.waitingForInput ||
-    (session.queuedCount ?? 0) > 0
-  );
-}
-
-/**
- * Child rows to draw beneath the workspace that is currently selected: only
- * active workers (running, queued, or waiting for input) with a worktree or
- * workspace of their own. Inline workers stay in the group (so they never
- * surface as top-level rows) but are not listed, except under a coordinator
- * (`allThreads`), whose threads are the work itself, checkout or not. Idle
- * workers are hidden, except the one that is open, so selecting it never
- * removes its row.
- */
-export function subagentsForSelectedWorkspace(
-  groups: ReadonlyMap<string, WorkspaceSubagent[]>,
-  workspaceId: string | null | undefined,
-  selectedWorkspaceId: string | null | undefined,
-  selectedSessionId: string | null = null,
-  allThreads = false,
-): WorkspaceSubagent[] {
-  if (!workspaceId || workspaceId !== selectedWorkspaceId) return [];
-  return (groups.get(workspaceId) ?? []).filter(
-    (item) =>
-      (allThreads || !item.inline) &&
-      (subagentIsActive(item.session) || item.session.id === selectedSessionId),
-  );
 }
 
 /** The root session a workspace row should open, never one of its subagents. */

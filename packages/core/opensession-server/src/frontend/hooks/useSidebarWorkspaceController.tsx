@@ -5,10 +5,8 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { rowCoordinates } from "../components/sidebar/CoordinatorMark";
 import { RowCardPopup } from "../components/SidebarRowCards";
 import { WsCardBody, WsMobileSheet } from "../components/sidebar/HoverCards";
-import { SubagentRows } from "../components/sidebar/SubagentRows";
 import { WorkspaceRow } from "../components/sidebar/WorkspaceRow";
 import { blockingOverlayOpen } from "../lib/blocking-overlay";
 import { setHide } from "../lib/hides";
@@ -40,11 +38,7 @@ import {
 } from "../lib/sidebar-swipe";
 import type { Props, SidebarHandle, WsRow } from "../lib/sidebar-types";
 import { pickUnreadWorkspaceSession } from "../lib/sidebar-unread-session";
-import type { WorkspaceSubagent } from "../lib/sidebar-workspaces";
-import {
-  subagentsForSelectedWorkspace,
-  workspaceMainSession,
-} from "../lib/sidebar-workspaces";
+import { workspaceMainSession } from "../lib/sidebar-workspaces";
 import { SNOOZE_SOMEDAY, clearSnooze, setSnooze } from "../lib/snoozes";
 import type { UnifiedSession, Workspace } from "../lib/types";
 import { useConfirm } from "../ui/confirm";
@@ -72,14 +66,12 @@ interface WorkspaceControllerData {
   reads: Record<string, string>;
   activeSnoozeKeys: Set<string>;
   snoozes: Record<string, string>;
-  subagentsByWorkspaceId: ReadonlyMap<string, WorkspaceSubagent[]>;
 }
 
 interface WorkspaceControllerState {
   selectedId: string | null;
   selectedWorkspaceId: string | null;
   isPhone: boolean;
-  showSubagents: boolean;
   groupsByRepo: boolean;
   runStartSeen: Map<string, number>;
   wsTimePref: "off" | "always" | "hover";
@@ -166,13 +158,11 @@ export function useSidebarWorkspaceController({
     reads,
     activeSnoozeKeys,
     snoozes,
-    subagentsByWorkspaceId,
   },
   state: {
     selectedId,
     selectedWorkspaceId,
     isPhone,
-    showSubagents,
     groupsByRepo,
     runStartSeen,
     wsTimePref,
@@ -763,12 +753,7 @@ export function useSidebarWorkspaceController({
     }
   }
 
-  function renderWsRowImpl(
-    row: WsRow,
-    inbox: boolean,
-    review = false,
-    includeSubagents = true,
-  ) {
+  function renderWsRowImpl(row: WsRow, inbox: boolean, review = false) {
     const active = rowOwnsSelection(row);
     const editing = rowRenameEditing(row);
     const rowPin = workspacePinState(row);
@@ -776,16 +761,6 @@ export function useSidebarWorkspaceController({
       isPhone && wsSwipe?.key === row.key ? wsSwipe.offset : 0;
     const swipeAction =
       isPhone && wsSwipe?.key === row.key ? (wsSwipe.action ?? null) : null;
-    const subagents =
-      includeSubagents && showSubagents
-        ? subagentsForSelectedWorkspace(
-            subagentsByWorkspaceId,
-            row.workspace?.id,
-            selectedWorkspaceId,
-            selectedId,
-            rowCoordinates(row),
-          )
-        : [];
     const editingState = editing
       ? {
           value: row.workspace ? workspaceDraft : sessionDraft,
@@ -802,152 +777,127 @@ export function useSidebarWorkspaceController({
       : null;
 
     return (
-      <React.Fragment key={row.key}>
-        <WorkspaceRow
-          row={row}
-          presentation={{
-            inbox,
-            active,
-            isPhone,
-            isDraft: isDraftWsRow(row),
-            hasSectionHeading: !rowIsScratch(row),
-            groupsByRepo,
-            repoName: wsRowRepo(row),
-            runStartSeenMs: runStartSeen.get(row.key) ?? null,
-            snoozed: rowIsSnoozed(row),
-            snoozeIso: activeSnoozeKeys.has(row.key)
-              ? (snoozes[row.key] ?? null)
-              : null,
-            timePreference: wsTimePref,
-            shipsDirectlyToMain: rowShipsDirectlyToMain(row),
-            pinned: rowPin.pinned,
-            tint: rowTintHex(rowColorKey(rowColors, row.key)),
-          }}
-          context={{
-            editing: editingState,
-            currentUser,
-            mePersonKey,
-            teamViewing,
-          }}
-          swipe={{
-            offset: swipeOffset,
-            action: swipeAction,
-            dragging: wsDraggingKey === row.key,
-            dragSide: wsDraggingKey === row.key ? wsDragSide : null,
-          }}
-          shortcuts={{
-            pinShortcutKeys: pinShortcutKeys ?? undefined,
-            archiveShortcutKeys: archiveShortcutKeys ?? undefined,
-          }}
-          events={{
-            onActivate: (event) => {
-              // Touch taps open from touchend (their ghost click is
-              // preventDefault'd), so this is the mouse/desktop path. Still
-              // swallow a click that ends a long-press, belt-and-suspenders.
-              if (wsLongPressed.current) {
-                wsLongPressed.current = false;
-                event.preventDefault();
-                return;
-              }
-              if (editing) return;
-              // Keyboard activation has no mousedown. Give it the same
-              // immediate selection feedback before the route render.
+      <WorkspaceRow
+        key={row.key}
+        row={row}
+        presentation={{
+          inbox,
+          active,
+          isPhone,
+          isDraft: isDraftWsRow(row),
+          hasSectionHeading: !rowIsScratch(row),
+          groupsByRepo,
+          repoName: wsRowRepo(row),
+          runStartSeenMs: runStartSeen.get(row.key) ?? null,
+          snoozed: rowIsSnoozed(row),
+          snoozeIso: activeSnoozeKeys.has(row.key)
+            ? (snoozes[row.key] ?? null)
+            : null,
+          timePreference: wsTimePref,
+          shipsDirectlyToMain: rowShipsDirectlyToMain(row),
+          pinned: rowPin.pinned,
+          tint: rowTintHex(rowColorKey(rowColors, row.key)),
+        }}
+        context={{
+          editing: editingState,
+          currentUser,
+          mePersonKey,
+          teamViewing,
+        }}
+        swipe={{
+          offset: swipeOffset,
+          action: swipeAction,
+          dragging: wsDraggingKey === row.key,
+          dragSide: wsDraggingKey === row.key ? wsDragSide : null,
+        }}
+        shortcuts={{
+          pinShortcutKeys: pinShortcutKeys ?? undefined,
+          archiveShortcutKeys: archiveShortcutKeys ?? undefined,
+        }}
+        events={{
+          onActivate: (event) => {
+            // Touch taps open from touchend (their ghost click is
+            // preventDefault'd), so this is the mouse/desktop path. Still
+            // swallow a click that ends a long-press, belt-and-suspenders.
+            if (wsLongPressed.current) {
+              wsLongPressed.current = false;
+              event.preventDefault();
+              return;
+            }
+            if (editing) return;
+            // Keyboard activation has no mousedown. Give it the same
+            // immediate selection feedback before the route render.
+            previewSidebarSelection(
+              sidebarScrollRef.current,
+              event.currentTarget,
+            );
+            openWsRow(row, review);
+          },
+          onMouseEnter: (event) => wsRowHoverEnter(row, event.currentTarget),
+          onMouseLeave: scheduleWsHoverClose,
+          onMouseDown: (event) => {
+            closeWsHover();
+            if (event.button === 0 && !editing)
               previewSidebarSelection(
                 sidebarScrollRef.current,
                 event.currentTarget,
               );
-              openWsRow(row, review);
-            },
-            onMouseEnter: (event) => wsRowHoverEnter(row, event.currentTarget),
-            onMouseLeave: scheduleWsHoverClose,
-            onMouseDown: (event) => {
-              closeWsHover();
-              if (event.button === 0 && !editing)
-                previewSidebarSelection(
-                  sidebarScrollRef.current,
-                  event.currentTarget,
-                );
-            },
-            onTouchStart: (event) => wsRowTouchStart(row, event),
-            onTouchMove: (event) => wsRowTouchMove(row, event),
-            onTouchEnd: (event) => wsRowTouchEnd(row, event, review),
-            onTouchCancel: (event) => {
-              clearWsPress();
-              endActiveLift();
-              wsLiftSheet.current = null;
-              wsSwipeOrigin.current = null;
-              wsSwiping.current = false;
-              setWsDraggingKey(null);
-              setWsDragSide(null);
-              event.currentTarget.style.removeProperty("--swipe-x");
-              event.currentTarget.parentElement?.style.removeProperty(
-                "--swipe-action-w",
-              );
-            },
-            onContextMenu: (event) => {
-              event.preventDefault();
-              // The sidebar background carries a menu of its own, so this
-              // row has to claim the event rather than let both open.
-              event.stopPropagation();
-              if (wsLongPressed.current || wsPressOrigin.current) return;
-              closeWsHover();
-              setWorkspaceMenu({
-                id: row.workspace ? row.workspace.id : row.key,
-                x: event.clientX,
-                y: event.clientY,
-                source: event.currentTarget,
-              });
-            },
-          }}
-          actions={{
-            onCloseSwipe: () => setWsSwipe(null),
-            onTogglePin: rowPin.toggle,
-            onToggleSnooze: () => toggleWorkspaceSnooze(row),
-            onArchive: (current) => archiveWorkspaceWithNext(row, current),
-            onDeleteDraft: () => deleteDraftWsRow(row),
-            onConfirmDeleteDraft: confirmDeleteDraft,
-            onOpenMention: (target) => {
-              if (wsLongPressed.current) return;
-              if (row.workspace)
-                navigation.openWorkspace(row.workspace.id, target);
-              else navigation.openSession(target);
-            },
-            onStartWorkspaceRename: () => {
-              if (!row.workspace) return;
-              setWorkspaceDraft(row.workspace.name);
-              setEditingWorkspaceId(row.workspace.id);
-            },
-            onStartSessionRename: () => {
-              if (row.sessions[0]) startSessionRename(row.sessions[0]);
-            },
-            onKeepInSidebar: () => onSetStatus(row.sessions, "mine"),
-          }}
-        />
-        <SubagentRows
-          items={subagents}
-          selectedId={selectedId}
-          onSelect={openSidebarSession}
-          onArchive={(session) => onArchive(session, null)}
-          rename={
-            editingSessionId &&
-            subagents.some(({ session }) => session.id === editingSessionId)
-              ? {
-                  sessionId: editingSessionId,
-                  value: sessionDraft,
-                  onChange: setSessionDraft,
-                  onCommit: () => {
-                    const session = subagents.find(
-                      (item) => item.session.id === editingSessionId,
-                    )?.session;
-                    if (session) commitSessionRename(session);
-                  },
-                  onCancel: () => setEditingSessionId(null),
-                }
-              : null
-          }
-          onStartRename={startSessionRename}
-        />
-      </React.Fragment>
+          },
+          onTouchStart: (event) => wsRowTouchStart(row, event),
+          onTouchMove: (event) => wsRowTouchMove(row, event),
+          onTouchEnd: (event) => wsRowTouchEnd(row, event, review),
+          onTouchCancel: (event) => {
+            clearWsPress();
+            endActiveLift();
+            wsLiftSheet.current = null;
+            wsSwipeOrigin.current = null;
+            wsSwiping.current = false;
+            setWsDraggingKey(null);
+            setWsDragSide(null);
+            event.currentTarget.style.removeProperty("--swipe-x");
+            event.currentTarget.parentElement?.style.removeProperty(
+              "--swipe-action-w",
+            );
+          },
+          onContextMenu: (event) => {
+            event.preventDefault();
+            // The sidebar background carries a menu of its own, so this
+            // row has to claim the event rather than let both open.
+            event.stopPropagation();
+            if (wsLongPressed.current || wsPressOrigin.current) return;
+            closeWsHover();
+            setWorkspaceMenu({
+              id: row.workspace ? row.workspace.id : row.key,
+              x: event.clientX,
+              y: event.clientY,
+              source: event.currentTarget,
+            });
+          },
+        }}
+        actions={{
+          onCloseSwipe: () => setWsSwipe(null),
+          onTogglePin: rowPin.toggle,
+          onToggleSnooze: () => toggleWorkspaceSnooze(row),
+          onArchive: (current) => archiveWorkspaceWithNext(row, current),
+          onDeleteDraft: () => deleteDraftWsRow(row),
+          onConfirmDeleteDraft: confirmDeleteDraft,
+          onOpenMention: (target) => {
+            if (wsLongPressed.current) return;
+            if (row.workspace)
+              navigation.openWorkspace(row.workspace.id, target);
+            else navigation.openSession(target);
+          },
+          onStartWorkspaceRename: () => {
+            if (!row.workspace) return;
+            setWorkspaceDraft(row.workspace.name);
+            setEditingWorkspaceId(row.workspace.id);
+          },
+          onStartSessionRename: () => {
+            if (row.sessions[0]) startSessionRename(row.sessions[0]);
+          },
+          onKeepInSidebar: () => onSetStatus(row.sessions, "mine"),
+        }}
+      />
     );
   }
   // One sidebar row per workspace: status dot (most urgent session), name, session
@@ -963,12 +913,6 @@ export function useSidebarWorkspaceController({
   // opens the workspace's Review tab (see openWsRow).
   function renderReviewWsRow(row: WsRow) {
     return renderWsRowImpl(row, false, true);
-  }
-
-  // Pinned is the row's visible placement while it is pinned. Its children stay
-  // hidden here, keeping one visible subagent row per session.
-  function renderPinnedWsRow(row: WsRow) {
-    return renderWsRowImpl(row, false, false, false);
   }
 
   // `inbox` renders the Inbox-mode variant of the same row — a repo tile in
@@ -1118,7 +1062,6 @@ export function useSidebarWorkspaceController({
     hideRow,
     isDraftWsRow,
     newSessionKeys,
-    renderPinnedWsRow,
     renderReviewWsRow,
     renderWsRow,
     renderWsRowImpl,
