@@ -503,6 +503,73 @@ describe("normalizeDefaultBranch", () => {
   });
 });
 
+describe("repository removal", () => {
+  async function removeRepo(id: string) {
+    const url = new URL(
+      `http://localhost/api/setup/repos/${encodeURIComponent(id)}`,
+    );
+    return handleSetupRepoRoutes({
+      req: new Request(url, { method: "DELETE" }),
+      url,
+      path: url.pathname,
+      publicPrefix: "",
+    });
+  }
+
+  async function writeRepoConfig(config: Record<string, unknown>) {
+    const dir = mkdtempSync(join(tmpdir(), "opensession-repo-remove-"));
+    tempDirs.push(dir);
+    const path = join(dir, "config.json");
+    const repo = createGitRepo(dir);
+    process.env.OPENSESSION_CONFIG = path;
+    await getConfigAsync();
+    writeFileSync(
+      path,
+      JSON.stringify({
+        ...config,
+        repos: {
+          main: { label: "Main", repo, default: true },
+          extra: { label: "Extra", repo, customSetting: "kept" },
+          other: { label: "Other", repo, customSetting: "kept" },
+        },
+      }),
+    );
+    await getConfigAsync();
+    return { path, repo };
+  }
+
+  test("unregisters only the selected repository and keeps its checkout", async () => {
+    const { path, repo } = await writeRepoConfig({
+      newSessionRepo: "extra",
+      unrelated: { kept: true },
+    });
+
+    const response = await removeRepo("extra");
+
+    expect(response?.status).toBe(200);
+    expect(await response?.json()).toEqual({ id: "extra", removed: true });
+    const saved = JSON.parse(readFileSync(path, "utf8"));
+    expect(Object.keys(saved.repos)).toEqual(["main", "other"]);
+    expect(saved.repos.other.customSetting).toBe("kept");
+    expect(saved.newSessionRepo).toBeUndefined();
+    expect(saved.unrelated).toEqual({ kept: true });
+    expect(existsSync(join(repo, "README.md"))).toBe(true);
+  });
+
+  test("refuses the default repository and unknown ids", async () => {
+    const { path } = await writeRepoConfig({});
+    const before = readFileSync(path, "utf8");
+
+    const refused = await removeRepo("main");
+    expect(refused?.status).toBe(409);
+    expect((await refused?.json()).error).toContain("default repository");
+
+    expect((await removeRepo("missing"))?.status).toBe(404);
+    expect((await removeRepo("__proto__"))?.status).toBe(400);
+    expect(readFileSync(path, "utf8")).toBe(before);
+  });
+});
+
 describe("repository default branch settings", () => {
   test("updates only the selected repo config", async () => {
     const dir = mkdtempSync(join(tmpdir(), "opensession-repo-config-"));
