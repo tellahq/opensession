@@ -1430,13 +1430,26 @@ export async function scrubRemoteWarmWorkspaceAuthority(
   }
 }
 
+/** Create the workspace's parent directory, owned by the sandbox user. The
+ * session keeps the server's canonical path, which on a macOS server lives
+ * under `/Users`, a directory a Linux guest's user cannot create. Fall back
+ * to passwordless sudo, as the home directory check in the base runtime
+ * does, and hand only the parent to the user. */
+export function ensureWorkspaceParentCommand(cwd: string): string {
+  const parent = shellQuoteWord(dirname(cwd));
+  return (
+    `{ mkdir -p ${parent} 2>/dev/null || ` +
+    `{ sudo -n mkdir -p ${parent} && sudo -n chown "$(id -u):$(id -g)" ${parent}; }; }`
+  );
+}
+
 function warmWorkspaceAttachCommand(warmDir: string, cwd: string): string {
   // A symlink is durable across every provider's command namespace and keeps
   // realpath-sensitive build caches (notably ReScript's compiler-info) on the
   // exact path where the project image prepared them. Bind-mounting Daytona's
   // warm tree under a new real path invalidated all 3,165 compiled modules.
   return (
-    `mkdir -p ${shellQuoteWord(dirname(cwd))} && ` +
+    `${ensureWorkspaceParentCommand(cwd)} && ` +
     `rmdir ${shellQuoteWord(cwd)} 2>/dev/null || true; ` +
     `test ! -e ${shellQuoteWord(cwd)} && ` +
     `ln -s ${shellQuoteWord(warmDir)} ${shellQuoteWord(cwd)}`
@@ -1539,7 +1552,7 @@ export async function setupRemoteWorkspace(
     // full clone died on the default 3GiB disk with an EMPTY git error,
     // because the fatal line itself couldn't be written to the full disk).
     const clone = await driver.exec(
-      `mkdir -p ${shellQuoteWord(dirname(cwd))} && git clone --filter=blob:none -- ${shellQuoteWord(cloneUrl)} ${shellQuoteWord(cwd)}`,
+      `${ensureWorkspaceParentCommand(cwd)} && git clone --filter=blob:none -- ${shellQuoteWord(cloneUrl)} ${shellQuoteWord(cwd)}`,
       { timeoutMs: 600_000 },
     );
     if (clone.exitCode !== 0) {
