@@ -19,6 +19,7 @@ describe("automation MCP fallback", () => {
       "opensession-health",
       "opensession-report",
       "opensession-turn",
+      "opensession-usage",
     ]);
     for (const server of Object.values(servers)) {
       expect(server).toMatchObject({ type: "sdk" });

@@ -56,6 +56,7 @@ import { createWalkthroughMcpServer } from "../agents/slack/walkthrough-tools";
 import { createWorkflowsMcpServer } from "../agents/slack/workflow-tools";
 import { createAuditMcpServer } from "./audit-mcp";
 import { createHealthMcpServer } from "./health-mcp";
+import { createUsageMcpServer } from "./usage-mcp";
 import { createRunnersMcpServer } from "./runners-mcp";
 import { createLocalFoldersMcpServer } from "./local-folders-mcp";
 import { createScheduleMcpServer } from "./schedule-mcp";
@@ -612,6 +613,18 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
     runClasses: ["automation"],
     note: "The only way a monitor can see its own host: loopback fetches are refused and unattended ask runs have no shell. One argument-less read, no writes.",
     build: () => createHealthMcpServer(),
+  },
+  {
+    name: "opensession-usage",
+    summary: INTERNAL_MCP_CAPABILITIES["opensession-usage"].summary,
+    source: "packages/core/opensession-server/src/server/usage-mcp.ts",
+    wiring: [
+      "packages/core/opensession-server/src/server/interactive-mcp.ts",
+      "packages/core/opensession-server/src/server/automations.ts",
+    ],
+    runClasses: ["interactive", "automation"],
+    note: "Lists only accounts the run may use (shared pool, plus the run user's personal ones), with no tokens or credential paths. Its one lever, refresh, re-polls each provider at most once per 5 minutes per instance.",
+    build: () => createUsageMcpServer({ user: USER }),
   },
   {
     name: "opensession-audit",

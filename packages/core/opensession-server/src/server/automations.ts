@@ -84,6 +84,7 @@ import { createAuditMcpServer } from "./audit-mcp";
 import { createChartsMcpServer } from "./charts-mcp";
 import { createWebMcpServer } from "./web-mcp";
 import { createHealthMcpServer } from "./health-mcp";
+import { createUsageMcpServer } from "./usage-mcp";
 import { papercutsEnabledForRepo } from "./papercuts";
 import {
   registerRunToken,
@@ -1422,6 +1423,8 @@ export function automationBaselineMcpServers(
     }),
     "opensession-health": createHealthMcpServer(),
     "opensession-audit": createAuditMcpServer(),
+    // Subscription headroom; no user, so shared pool accounts only.
+    "opensession-usage": createUsageMcpServer(),
     // Compiles a ```vega-lite fence for a report and offloads big data into
     // this run's own assets; no reads, no paths, no URLs (charts-mcp.ts).
     "opensession-charts": createChartsMcpServer({ sessionId }),
