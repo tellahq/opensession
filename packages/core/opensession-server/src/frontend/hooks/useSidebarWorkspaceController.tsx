@@ -23,7 +23,7 @@ import { getLane } from "../lib/lanes";
 import { isClaimed, ownedBy } from "../lib/sidebar-lanes";
 import { unreadChatsInOrder } from "../lib/unread-chats";
 import { previewSidebarSelection } from "../lib/sidebar-selection";
-import type { SwipeAction, SwipeState } from "../lib/sidebar-swipe";
+import type { SwipeState } from "../lib/sidebar-swipe";
 import {
   LONG_PRESS_MS,
   LONG_PRESS_SLOP,
@@ -32,6 +32,7 @@ import {
   SWIPE_OPEN_THRESHOLD,
   SWIPE_REVEAL_PX,
   clampSwipe,
+  createWsDragStore,
   editableOwnsCaretChord,
   editableSwallowsArchiveChord,
   fullSwipeThreshold,
@@ -544,25 +545,23 @@ export function useSidebarWorkspaceController({
     null,
   );
   const [wsSwipe, setWsSwipe] = useState<SwipeState | null>(null);
-  const [wsDraggingKey, setWsDraggingKey] = useState<string | null>(null);
-  // Which action the in-flight drag is revealing. Split from wsSwipe so a
+  // The dragged row and the action it is revealing. Split from wsSwipe so a
   // touchmove only re-renders when the side FLIPS — the per-frame offset is
-  // written straight to the DOM in wsRowTouchMove.
-  const [wsDragSide, setWsDragSide] = useState<SwipeAction | null>(null);
+  // written straight to the DOM in wsRowTouchMove — and kept in a store so
+  // that re-render reaches only the dragged row, not the whole sidebar.
+  const [wsDrag] = useState(createWsDragStore);
   useEffect(() => {
     if (!isPhone) {
       setWsSwipe(null);
       wsSwipeOffset.current = 0;
-      setWsDraggingKey(null);
-      setWsDragSide(null);
+      wsDrag.set(null, null);
     }
-  }, [isPhone]);
+  }, [isPhone, wsDrag]);
   useEffect(() => {
     setWsSwipe(null);
     wsSwipeOffset.current = 0;
-    setWsDraggingKey(null);
-    setWsDragSide(null);
-  }, [selectedId]);
+    wsDrag.set(null, null);
+  }, [selectedId, wsDrag]);
 
   function clearWsPress() {
     if (wsPressTimer.current) clearTimeout(wsPressTimer.current);
@@ -615,7 +614,6 @@ export function useSidebarWorkspaceController({
       ) {
         wsSwiping.current = true;
         wsMoved.current = true;
-        setWsDraggingKey(row.key);
         clearWsPress();
         e.preventDefault();
         const offset = clampSwipe(dx, swipeO.width);
@@ -630,7 +628,7 @@ export function useSidebarWorkspaceController({
           "--swipe-action-w",
           `${Math.max(SWIPE_REVEAL_PX, Math.abs(offset))}px`,
         );
-        setWsDragSide(swipeActionForOffset(offset));
+        wsDrag.set(row.key, swipeActionForOffset(offset));
         return;
       }
     }
@@ -692,8 +690,7 @@ export function useSidebarWorkspaceController({
     clearWsPress();
     wsSwipeOrigin.current = null;
     wsSwiping.current = false;
-    setWsDraggingKey(null);
-    setWsDragSide(null);
+    wsDrag.set(null, null);
     // The drag wrote --swipe-x / --swipe-action-w straight onto the DOM;
     // React never owned them, so a re-render with an undefined style prop
     // won't remove them. Clear here; the committed wsSwipe state (if any)
@@ -832,8 +829,7 @@ export function useSidebarWorkspaceController({
           swipe={{
             offset: swipeOffset,
             action: swipeAction,
-            dragging: wsDraggingKey === row.key,
-            dragSide: wsDraggingKey === row.key ? wsDragSide : null,
+            drag: wsDrag,
           }}
           shortcuts={{
             pinShortcutKeys: pinShortcutKeys ?? undefined,
@@ -877,8 +873,7 @@ export function useSidebarWorkspaceController({
               wsLiftSheet.current = null;
               wsSwipeOrigin.current = null;
               wsSwiping.current = false;
-              setWsDraggingKey(null);
-              setWsDragSide(null);
+              wsDrag.set(null, null);
               event.currentTarget.style.removeProperty("--swipe-x");
               event.currentTarget.parentElement?.style.removeProperty(
                 "--swipe-action-w",

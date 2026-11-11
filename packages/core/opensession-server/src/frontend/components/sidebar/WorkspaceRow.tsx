@@ -32,7 +32,11 @@ import {
   rowOriginSource,
   rowWasAgentStarted,
 } from "../../lib/sidebar-placement";
-import { SWIPE_REVEAL_PX, type SwipeAction } from "../../lib/sidebar-swipe";
+import {
+  SWIPE_REVEAL_PX,
+  type SwipeAction,
+  type WsDragStore,
+} from "../../lib/sidebar-swipe";
 import type { WsRow } from "../../lib/sidebar-types";
 import { shouldEmphasizeUnread } from "../../lib/sidebar-unread-session";
 import { shortTime } from "../../lib/time";
@@ -69,8 +73,7 @@ export type WorkspaceRowEditing = {
 export interface WorkspaceRowSwipe {
   offset: number;
   action: SwipeAction | null;
-  dragging: boolean;
-  dragSide: SwipeAction | null;
+  drag: WsDragStore;
 }
 
 type WorkspaceSwipeStyle = React.CSSProperties & {
@@ -214,12 +217,20 @@ export function WorkspaceRow({
   const showRunDuration = runStartMs !== null;
   const swipeOffset = isPhone ? swipe.offset : 0;
   const swipeAction = isPhone ? swipe.action : null;
-  const draggingRow = swipe.dragging;
-  // Which underlay to show: the in-flight drag reveals its side via
-  // wsDragSide (per-frame offsets live only in the DOM now), an open or
-  // committing row falls back to the reconciled wsSwipe state.
+  const readDrag = () => swipe.drag.rowDrag(row.key);
+  const drag = React.useSyncExternalStore(
+    swipe.drag.subscribe,
+    readDrag,
+    readDrag,
+  );
+  const draggingRow = drag !== "idle";
+  // Which underlay to show: the in-flight drag reveals its side via the drag
+  // store (per-frame offsets live only in the DOM now), an open or committing
+  // row falls back to the reconciled wsSwipe state.
   const swipeSide: SwipeAction | null = draggingRow
-    ? swipe.dragSide
+    ? drag === "none"
+      ? null
+      : drag
     : swipeAction === "archive" || swipeOffset < 0
       ? "archive"
       : swipeAction === "star" || swipeOffset > 0

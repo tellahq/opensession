@@ -1,10 +1,16 @@
 import { expect, test } from "bun:test";
-import React, { type ReactElement, type ReactNode } from "react";
+import React, {
+  type ComponentProps,
+  type ReactElement,
+  type ReactNode,
+} from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import {
   SIDEBAR_SWIPE_ACTION_UNSNOOZE,
   SIDEBAR_SWIPE_ROW,
   SIDEBAR_WS_ROW,
 } from "../../lib/sidebar-classes";
+import { createWsDragStore } from "../../lib/sidebar-swipe";
 import type { WsRow } from "../../lib/sidebar-types";
 
 Object.assign(globalThis, {
@@ -30,6 +36,18 @@ Object.assign(globalThis, {
 
 const { WorkspaceDraftIndicator } = await import("./WorkspaceDraftIndicator");
 const { WorkspaceRow } = await import("./WorkspaceRow");
+
+// WorkspaceRow subscribes to the drag store, so call it inside a render to
+// give its hook a dispatcher, then inspect the element tree it returned.
+function renderRow(props: ComponentProps<typeof WorkspaceRow>): ReactNode {
+  let tree: ReactNode = null;
+  function Capture() {
+    tree = WorkspaceRow(props);
+    return null;
+  }
+  renderToStaticMarkup(<Capture />);
+  return tree;
+}
 
 interface ClickEvent {
   stopPropagation: () => void;
@@ -71,7 +89,7 @@ test("renders workspace row state and wires row and swipe actions", () => {
   let pinned = 0;
   let stopped = 0;
 
-  const rendered = WorkspaceRow({
+  const rendered = renderRow({
     row,
     presentation: {
       inbox: false,
@@ -95,7 +113,7 @@ test("renders workspace row state and wires row and swipe actions", () => {
       mePersonKey: "jaap",
       teamViewing: [],
     },
-    swipe: { offset: 72, action: "star", dragging: false, dragSide: null },
+    swipe: { offset: 72, action: "star", drag: createWsDragStore() },
     shortcuts: { pinShortcutKeys: ["⌘", "P"] },
     events: {
       onActivate: () => activated++,
@@ -176,7 +194,7 @@ test("a snoozed row's leading swipe wakes it instead of pinning", () => {
   let pinned = 0;
   let unsnoozed = 0;
 
-  const rendered = WorkspaceRow({
+  const rendered = renderRow({
     row,
     presentation: {
       inbox: true,
@@ -200,7 +218,7 @@ test("a snoozed row's leading swipe wakes it instead of pinning", () => {
       mePersonKey: "jaap",
       teamViewing: [],
     },
-    swipe: { offset: 72, action: "star", dragging: false, dragSide: null },
+    swipe: { offset: 72, action: "star", drag: createWsDragStore() },
     shortcuts: { pinShortcutKeys: ["⌘", "P"] },
     events: {
       onActivate: () => {},
