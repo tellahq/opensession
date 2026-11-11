@@ -7,7 +7,7 @@ import {
   getActiveViewTabKeys,
   type ActiveViewTab,
 } from "../lib/active-view-tab";
-import { resolveWorkspaceApi } from "../lib/api";
+import { newSessionApi, resolveWorkspaceApi } from "../lib/api";
 import type { Route } from "../lib/app-route";
 import { resolveAnonymousUserPath } from "../lib/auth-ready";
 import { BASE_PATH } from "../lib/base";
@@ -32,6 +32,7 @@ interface UseAppViewStateOptions {
   workspacesRef: RefObject<Workspace[]>;
   refreshWorkspaces: () => Promise<void>;
   openPrRef: RefObject<(repo: string, number: number) => void>;
+  inject: (session: UnifiedSession, opts?: { sticky?: boolean }) => void;
   addHandler: ReturnType<typeof useWebSocket>["addHandler"];
 }
 
@@ -42,6 +43,7 @@ export function useAppViewState({
   workspacesRef,
   refreshWorkspaces,
   openPrRef,
+  inject,
   addHandler,
 }: UseAppViewStateOptions) {
   // A "new tab" while a session is open is a *new session in that same session*, not
@@ -154,10 +156,12 @@ export function useAppViewState({
   // the conversation that made the PR, not a Review panel beside whatever is
   // on screen. Most clicks need no server at all (the workspace and session
   // lists already say where the PR lives); the rest resolve first and keep the
-  // current view up meanwhile. With no session of its own yet, the PR's
-  // workspace opens on its composer, which starts a session on the PR's
-  // branch. Only an unresolvable PR falls through to the standalone route,
-  // which says there is no such PR.
+  // current view up meanwhile. With no session of its own yet, the PR gets a
+  // new empty one in its workspace, on its branch, so the summary card shows
+  // the PR beside a fresh chat; if that create fails the workspace composer
+  // takes over. Only an unresolvable PR falls through to the standalone
+  // route, which says there is no such PR.
+  const startingPrSession = useRef<string | null>(null);
   const openPrByRef = (repo: string, number: number) => {
     const open = (workspaceId: string) => {
       const sessionId = findPrSessionId(sessionsRef.current, workspaceId, {
@@ -167,11 +171,26 @@ export function useAppViewState({
       if (sessionId) {
         setActiveViewTabState(null);
         navigate({ view: "session", id: sessionId });
-      } else {
-        composeInWorkspaceRef.current = workspaceId;
-        setActiveViewTabState(null);
-        navigate({ view: "workspace", id: workspaceId });
+        return;
       }
+      if (startingPrSession.current === workspaceId) return;
+      startingPrSession.current = workspaceId;
+      newSessionApi(`workspace:${workspaceId}`, getCurrentUser(), "share")
+        .then(({ id, session }) => {
+          if (session) inject(session, { sticky: true });
+          refreshWorkspaces();
+          setActiveViewTabState(null);
+          navigate({ view: "session", id });
+        })
+        .catch(() => {
+          composeInWorkspaceRef.current = workspaceId;
+          setActiveViewTabState(null);
+          navigate({ view: "workspace", id: workspaceId });
+        })
+        .finally(() => {
+          if (startingPrSession.current === workspaceId)
+            startingPrSession.current = null;
+        });
     };
     const known = findPrWorkspaceId(
       workspacesRef.current,

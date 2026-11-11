@@ -3,6 +3,7 @@ import type { RouteContext } from "./context";
 import {
   archiveWorkspaceMemberSessions,
   deleteWorkspaceMemberSessions,
+  workspaceSessionSource,
 } from "./workspace";
 
 function workspaceDeleteContext(): RouteContext {
@@ -96,5 +97,25 @@ test("workspace archive sends every member through the session archive route and
   expect(result).toEqual({
     archived: ["own", "review/1", "worker"],
     failed: ["busy"],
+  });
+});
+
+test("a session-less PR workspace is its own new-session source", () => {
+  expect(workspaceSessionSource(null)).toBeUndefined();
+  const src = workspaceSessionSource({
+    id: "ghpr-acme-42",
+    name: "Fix login",
+    repo: "acme",
+    branch: "fix-login",
+    createdBy: "someone",
+    createdAt: "2026-11-01T00:00:00.000Z",
+  });
+  expect(src).toMatchObject({
+    id: "workspace:ghpr-acme-42",
+    workspaceId: "ghpr-acme-42",
+    repo: "acme",
+    branch: "fix-login",
+    worktreeDir: null,
+    mode: "code",
   });
 });

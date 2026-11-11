@@ -421,6 +421,7 @@ export function AppContent({
     workspacesRef,
     refreshWorkspaces,
     openPrRef,
+    inject,
     addHandler,
   });
   const {

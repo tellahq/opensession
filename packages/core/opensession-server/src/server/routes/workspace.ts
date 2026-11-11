@@ -62,7 +62,11 @@ import {
 import { searchSkills } from "../skills";
 import { handleSlashCommand } from "../slash-commands";
 import { sanitizeBranchSlug } from "../suggest-branch";
-import { type NativeSessionFile, type StackedOn } from "../types";
+import {
+  type NativeSessionFile,
+  type StackedOn,
+  type UnifiedSession,
+} from "../types";
 import {
   WorkspaceRepoConflictError,
   type Workspace,
@@ -801,7 +805,15 @@ export async function handleWorkspaceRoutes(
   const newSessionMatch = path.match(/^\/api\/sessions\/(.+)\/new-session$/);
   if (newSessionMatch && req.method === "POST") {
     const sourceId = decodeURIComponent(newSessionMatch[1]);
-    const src = await findSessionAsync(sourceId);
+    // `workspace:<id>` starts the first session of a workspace that has none
+    // yet (a PR workspace opened from a PR link): an empty share session on
+    // the workspace's branch, built from the workspace record itself.
+    const sourceWorkspaceId = sourceId.startsWith("workspace:")
+      ? sourceId.slice("workspace:".length)
+      : null;
+    const src = sourceWorkspaceId
+      ? workspaceSessionSource(await getWorkspace(sourceWorkspaceId))
+      : await findSessionAsync(sourceId);
     if (!src)
       return Response.json({ error: "Session not found" }, { status: 404 });
     const body = (await req.json().catch(() => ({}))) as {
@@ -826,6 +838,11 @@ export async function handleWorkspaceRoutes(
     // one branch). stack: a new worktree branched off it (stacked PRs). ask:
     // no worktree, read-only on main. Empty session — first prompt starts the run.
     const worktreeMode = body.mode || "share";
+    if (sourceWorkspaceId && (worktreeMode !== "share" || body.duplicate))
+      return Response.json(
+        { error: "A workspace without sessions can only start a new one" },
+        { status: 400 },
+      );
     // Volume-mode sandbox workspaces live inside ONE session's container —
     // share/stack siblings would either mint a divergent second clone at
     // the same path or ENOENT on the host. Not supported yet.
@@ -1282,4 +1299,31 @@ export async function handleWorkspaceRoutes(
   }
 
   return undefined;
+}
+
+/**
+ * The session-shaped source a workspace's first session is created from when
+ * it has no session yet. Carries only what the new-session route reads: the
+ * workspace, its repo and branch, and its worktree when it owns one.
+ */
+export function workspaceSessionSource(
+  workspace: Awaited<ReturnType<typeof getWorkspace>>,
+): UnifiedSession | undefined {
+  if (!workspace) return undefined;
+  return {
+    id: `workspace:${workspace.id}`,
+    claudeSessionId: null,
+    transcriptPath: null,
+    source: "opensession",
+    branch: workspace.branch ?? null,
+    worktreeDir: workspace.worktreeDir ?? null,
+    startedBy: null,
+    title: workspace.name,
+    lastActivity: workspace.createdAt,
+    createdAt: workspace.createdAt,
+    isRunning: false,
+    workspaceId: workspace.id,
+    ...(workspace.repo ? { repo: workspace.repo } : {}),
+    mode: workspace.branch || workspace.worktreeDir ? "code" : "ask",
+  };
 }
