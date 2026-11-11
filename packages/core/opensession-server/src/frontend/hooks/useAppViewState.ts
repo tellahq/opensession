@@ -154,9 +154,10 @@ export function useAppViewState({
   // the conversation that made the PR, not a Review panel beside whatever is
   // on screen. Most clicks need no server at all (the workspace and session
   // lists already say where the PR lives); the rest resolve first and keep the
-  // current view up meanwhile. A workspace with no session to land in still
-  // opens on Review (the bare workspace landing), and only an unresolvable PR
-  // falls through to the standalone route, which says there is no such PR.
+  // current view up meanwhile. With no session of its own yet, the PR's
+  // workspace opens on its composer, which starts a session on the PR's
+  // branch. Only an unresolvable PR falls through to the standalone route,
+  // which says there is no such PR.
   const openPrByRef = (repo: string, number: number) => {
     const open = (workspaceId: string) => {
       const sessionId = findPrSessionId(sessionsRef.current, workspaceId, {
@@ -167,6 +168,8 @@ export function useAppViewState({
         setActiveViewTabState(null);
         navigate({ view: "session", id: sessionId });
       } else {
+        composeInWorkspaceRef.current = workspaceId;
+        setActiveViewTabState(null);
         navigate({ view: "workspace", id: workspaceId });
       }
     };
@@ -194,6 +197,10 @@ export function useAppViewState({
   // One-shot guard consumed by the workspace default-pane seeding effect (set
   // when closing a view tab replaces the workspace URL — see onCloseView).
   const suppressWsSeedRef = useRef(false);
+  // One-shot: the workspace a PR chip opened on its composer (no session of
+  // its own yet), so the landing effect keeps the composer instead of jumping
+  // to another session or seeding Review.
+  const composeInWorkspaceRef = useRef<string | null>(null);
 
   // Set for the render right after opening a workspace from the sidebar or
   // clicking a session tab, so the session it lands on autofocuses its
@@ -291,6 +298,7 @@ export function useAppViewState({
     takePendingReviewFocus,
     focusReviewPr,
     suppressWsSeedRef,
+    composeInWorkspaceRef,
     focusComposerOnOpen,
     setFocusComposerOnOpen,
     sessionComposerPrefills,

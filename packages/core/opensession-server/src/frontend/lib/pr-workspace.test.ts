@@ -305,6 +305,15 @@ describe("findPrSessionId", () => {
     );
   });
 
+  it("ignores a review run when it is the only carrier", () => {
+    const sessions = [
+      session({ id: "bks-ghpr-acme-42-review", workspaceId: "w1", prs }),
+    ];
+    expect(
+      findPrSessionId(sessions, "w1", { repo: "acme", number: 42 }),
+    ).toBeNull();
+  });
+
   it("returns null when no session in the workspace carries it", () => {
     const sessions = [session({ id: "os-a", workspaceId: "w1" })];
     expect(

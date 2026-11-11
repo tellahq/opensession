@@ -114,6 +114,7 @@ export function useWorkspacePanes({
     takePendingReviewFocus,
     focusReviewPr,
     suppressWsSeedRef,
+    composeInWorkspaceRef,
   } = viewState;
   // Review opens in the side panel on desktop unless it was moved to the
   // main strip (see lib/side-panel-store). Phones have no side panel.
@@ -253,6 +254,11 @@ export function useWorkspacePanes({
       suppressWsSeedRef.current = false;
       return;
     }
+    // A PR chip with no session of its own opened this workspace's composer.
+    if (composeInWorkspaceRef.current === landingWsKey) {
+      composeInWorkspaceRef.current = null;
+      return;
+    }
     // Ref read: the trigger set is the route + readiness, and the freshest
     // committed list is what a landing decision wants anyway.
     const p = workspacesRef.current.find((x) => x.id === landingWsKey) || null;
@@ -368,6 +374,7 @@ export function useWorkspacePanes({
     setActiveViewTab,
     navigate,
     suppressWsSeedRef,
+    composeInWorkspaceRef,
     workspacesRef,
     sessionsRef,
     setReviewOpen,

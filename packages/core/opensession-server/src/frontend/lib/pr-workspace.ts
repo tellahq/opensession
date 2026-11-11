@@ -101,8 +101,8 @@ export function findPrWorkspaceId(
 
 /**
  * The session in a workspace that carries this PR: the newest live one a
- * person drove, else the newest live carrier. Null when none does, and the
- * caller lands on the workspace as a whole.
+ * person drove. A review run does not count. Null when none does, and the
+ * caller opens the workspace's composer to start one.
  */
 export function findPrSessionId(
   sessions: UnifiedSession[],
@@ -112,12 +112,13 @@ export function findPrSessionId(
   const carriers = sessions
     .filter(
       (s) =>
-        !s.archived && s.workspaceId === workspaceId && sessionCarriesPr(s, pr),
+        !s.archived &&
+        s.workspaceId === workspaceId &&
+        !isAutomationSession(s) &&
+        sessionCarriesPr(s, pr),
     )
     .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
-  return (
-    (carriers.find((s) => !isAutomationSession(s)) ?? carriers[0])?.id ?? null
-  );
+  return carriers[0]?.id ?? null;
 }
 
 /** One branch a workspace's sessions work on. */
