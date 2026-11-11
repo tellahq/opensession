@@ -1285,6 +1285,8 @@ export function PrStatusBar({
           primaryRepo={primaryRepoId}
           onOpen={openStatusRow}
           variant="summary"
+          sessionId={sessionId}
+          refreshTick={refreshTick}
         />
       </>
     );

@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
+import { SWRConfig, unstable_serialize } from "swr";
+import { apiSWRKey } from "../lib/api-swr";
 import { PrSeriesRows } from "./PrSeriesRows";
 import type { SessionPrRef } from "../lib/pr-refs";
 
@@ -153,4 +155,38 @@ test("summary rows show every stacked PR in the workspace card", () => {
   // Summary rows use the card's quiet row grammar instead of another status band.
   expect(html).not.toContain("bg-green-soft");
   expect(html).not.toContain("bg-red-soft");
+});
+
+test("a summary row leads with its own PR's preview link when it has one", () => {
+  const key = unstable_serialize(
+    apiSWRKey.sessionPr("os-1", "tella-fusion", "feature"),
+  );
+  const html = renderToStaticMarkup(
+    <SWRConfig
+      value={{
+        provider: () => new Map(),
+        fallback: {
+          [key]: {
+            staging: { status: "Ready", url: "https://feature.example.test" },
+          },
+        },
+      }}
+    >
+      <PrSeriesRows
+        refs={[ref({ title: "Play icon" })]}
+        primaryRepo="tella-fusion"
+        variant="summary"
+        sessionId="os-1"
+      />
+    </SWRConfig>,
+  );
+  expect(html).toContain('href="https://feature.example.test"');
+  expect(html).toContain('aria-label="Preview environment for #72"');
+});
+
+test("a summary row without a preview keeps its PR glyph", () => {
+  const html = renderToStaticMarkup(
+    <PrSeriesRows refs={[ref()]} variant="summary" sessionId="os-1" />,
+  );
+  expect(html).not.toContain("Preview environment");
 });

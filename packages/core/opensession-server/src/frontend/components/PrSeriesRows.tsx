@@ -1,3 +1,4 @@
+import type React from "react";
 import { repoLabel } from "../lib/repo-label";
 import { Tooltip } from "../ui/tooltip";
 import { providerFromUrl } from "../lib/provider";
@@ -27,6 +28,7 @@ import {
 } from "../lib/workspace-summary-classes";
 import { cn } from "../ui/cn";
 import { IconArrowUpRight, IconPullRequest } from "./icons";
+import { PrRefStagingMark, usePrRefStaging } from "./PrRefStagingMark";
 
 /**
  * The PRs a session owns beyond the one its own branch carries, stacked under
@@ -51,14 +53,24 @@ export function PrSeriesRow({
   primaryRepo,
   onOpen,
   variant = "bar",
+  sessionId,
+  refreshTick,
 }: {
   prRef: SessionPrRef;
+  /** Summary variant: the session whose PR API reads this row's preview. */
+  sessionId?: string;
+  refreshTick?: number;
   /** The session's own repo. A PR inside it needs no repo hint on its chip. */
   primaryRepo?: string;
   onOpen?: (r: { repo: string; branch: string }) => void;
   variant?: "bar" | "summary";
 }) {
   const tone = refTone(prRef);
+  const staging = usePrRefStaging(
+    variant === "summary" ? sessionId : undefined,
+    prRef,
+    refreshTick,
+  );
   const provider = providerFromUrl(prRef.url || "");
   const target = { repo: prRef.repo, branch: prRef.branch };
   const ariaLabel = `Review ${repoLabel(prRef.repo)} pull request #${prRef.number}`;
@@ -66,7 +78,9 @@ export function PrSeriesRow({
     const body = (
       <>
         <span className={WS_SUMMARY_RAIL}>
-          <IconPullRequest size={20} className={WS_SUMMARY_ICON} />
+          {!staging && (
+            <IconPullRequest size={20} className={WS_SUMMARY_ICON} />
+          )}
         </span>
         <span className={WS_SUMMARY_LABEL}>
           {refChipText(prRef, primaryRepo)}
@@ -79,8 +93,26 @@ export function PrSeriesRow({
     );
     const className = cn(WS_SUMMARY_ROW, "gap-2 no-underline");
     const title = refLabel(prRef);
+    // The preview link sits beside the row rather than inside it: the row is
+    // itself a link, and links do not nest.
+    // The preview link takes the PR glyph's place in the rail, the way the
+    // primary band leads with its globe. It sits over the row rather than
+    // inside it: the row is itself a link, and links do not nest.
+    const withPreview = (row: React.ReactNode) =>
+      staging ? (
+        <div className="relative flex min-w-0">
+          {row}
+          <PrRefStagingMark
+            staging={staging}
+            number={prRef.number}
+            className="absolute left-3 top-1/2 -translate-y-1/2"
+          />
+        </div>
+      ) : (
+        row
+      );
     if (prRef.url) {
-      return (
+      return withPreview(
         <a
           className={className}
           href={prRef.url}
@@ -103,10 +135,10 @@ export function PrSeriesRow({
           }}
         >
           {body}
-        </a>
+        </a>,
       );
     }
-    return (
+    return withPreview(
       <button
         type="button"
         className={className}
@@ -116,7 +148,7 @@ export function PrSeriesRow({
         onClick={() => onOpen?.(target)}
       >
         {body}
-      </button>
+      </button>,
     );
   }
   return (
@@ -158,8 +190,12 @@ export function PrSeriesRows({
   primaryRepo,
   onOpen,
   variant = "bar",
+  sessionId,
+  refreshTick,
 }: {
   refs: SessionPrRef[];
+  sessionId?: string;
+  refreshTick?: number;
   primaryRepo?: string;
   onOpen?: (r: { repo: string; branch: string }) => void;
   variant?: "bar" | "summary";
@@ -174,6 +210,8 @@ export function PrSeriesRows({
           primaryRepo={primaryRepo}
           onOpen={onOpen}
           variant={variant}
+          sessionId={sessionId}
+          refreshTick={refreshTick}
         />
       ))}
     </>

@@ -17,6 +17,7 @@ import { IconArrowUpRight, IconCheck, IconCopy, IconGlobe } from "./icons";
 import { checkClass, isDeployment } from "../lib/pr-status-derive";
 import { useSessionPendingCreation } from "../hooks/useSessionPendingCreation";
 import { useShortcutLabel } from "../hooks/useShortcutBindings";
+import { SUMMARY_MARK_HOVER } from "./PrRefStagingMark";
 
 // The open-preview chord's handler lives in SessionViewer: this component
 // mounts once per layout variant, so a listener here would register several
@@ -71,11 +72,6 @@ const ICON_PENDING = "cursor-default text-dim";
 const SUMMARY_MARK =
   "grid size-7 shrink-0 place-items-center rounded-md no-underline focus-ring " +
   "transition-[background-color,scale] duration-150 ease-out";
-/** Pointer and press. The press step also takes a hair of scale, which is what
- *  makes a 28px target feel like it answered. */
-const SUMMARY_MARK_HOVER =
-  "hover:bg-[color-mix(in_srgb,currentColor_26%,transparent)] " +
-  "active:scale-[0.96] active:bg-[color-mix(in_srgb,currentColor_34%,transparent)]";
 /* The mark's 20px glyph sits inside a 28px target, so its visible edge already
    sits 4px inside the box. Push the box another 4px off the headline to land a
    14px gap between the globe and the words: at the row's bare 6px the glyph
