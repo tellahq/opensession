@@ -37,6 +37,7 @@ import {
 import { writeFileAtomicAsync } from "./shared/atomic-write";
 import {
   GITHUB_APP_CHECKS_PERMISSIONS as CHECKS_PERMISSIONS,
+  GITHUB_APP_DEPLOYMENTS_PERMISSIONS as DEPLOYMENTS_PERMISSIONS,
   GITHUB_APP_CODE_PERMISSIONS as CODE_PERMISSIONS,
   GITHUB_APP_READ_PERMISSIONS as READ_PERMISSIONS,
   GITHUB_APP_WRITE_PERMISSIONS as WRITE_PERMISSIONS,
@@ -495,17 +496,25 @@ export interface GithubInstallationCredential {
 }
 
 /** Which permission set a service mint asks for. `checks` exists only for the
- *  approval gate's check runs; see GITHUB_APP_CHECKS_PERMISSIONS. */
-type MintScope = "read" | "write" | "checks";
+ *  approval gate's check runs (GITHUB_APP_CHECKS_PERMISSIONS), `deployments`
+ *  only for the session link on PRs (GITHUB_APP_DEPLOYMENTS_PERMISSIONS). */
+type MintScope = "read" | "write" | "checks" | "deployments";
 
-function mintScope(opts: { write?: boolean; checks?: boolean }): MintScope {
-  return opts.checks ? "checks" : opts.write ? "write" : "read";
+function mintScope(opts: {
+  write?: boolean;
+  checks?: boolean;
+  deployments?: boolean;
+}): MintScope {
+  if (opts.checks) return "checks";
+  if (opts.deployments) return "deployments";
+  return opts.write ? "write" : "read";
 }
 
 const MINT_PERMISSIONS: Record<MintScope, Record<string, string>> = {
   read: READ_PERMISSIONS,
   write: WRITE_PERMISSIONS,
   checks: CHECKS_PERMISSIONS,
+  deployments: DEPLOYMENTS_PERMISSIONS,
 };
 
 export async function githubAppInstallationToken(
@@ -517,6 +526,7 @@ export async function githubAppInstallationToken(
 async function installationCredential(opts: {
   write?: boolean;
   checks?: boolean;
+  deployments?: boolean;
   owner?: string;
 }): Promise<GithubInstallationCredential | null> {
   const app = appForOwner(opts.owner);
@@ -633,6 +643,8 @@ export async function githubInstallationCredential(
     write?: boolean;
     /** Mint the approval gate's checks-only set instead of read/write. */
     checks?: boolean;
+    /** Mint the session-deployment set instead of read/write. */
+    deployments?: boolean;
     repo?: string;
     owner?: string;
   } = {},
@@ -644,6 +656,7 @@ export async function githubInstallationCredential(
   return installationCredential({
     ...(opts.write ? { write: true } : {}),
     ...(opts.checks ? { checks: true } : {}),
+    ...(opts.deployments ? { deployments: true } : {}),
     ...(owner ? { owner } : {}),
   });
 }

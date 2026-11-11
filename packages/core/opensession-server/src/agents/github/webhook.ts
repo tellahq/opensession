@@ -95,6 +95,7 @@ interface PrPayload {
   draft?: boolean;
   state?: string;
   title?: string;
+  body?: string | null;
   head?: { ref?: string; sha?: string; repo?: { full_name?: string } };
   user?: { login?: string };
   labels?: Array<{ name: string }>;
@@ -303,6 +304,14 @@ export async function handleGithubPrEvent(
       (action === "edited" && payload?.changes?.base)
     )
       void refreshApprovalGate(pr.number, ghRepo || defaultRepo().ghRepo);
+
+    // A session-opened PR links back to its session as a GitHub deployment.
+    void postSessionDeployment(
+      ghRepo || defaultRepo().ghRepo,
+      pr,
+      action,
+      externalFork,
+    );
 
     // ── Label actions ── (ignore labels we applied to ourselves)
     if (action === "labeled") {
@@ -535,6 +544,31 @@ export async function handleGithubPrEvent(
   } catch (e) {
     console.error("[github] handleGithubPrEvent error:", e);
     throw e;
+  }
+}
+
+async function postSessionDeployment(
+  ghRepo: string,
+  pr: PrPayload,
+  action: string,
+  externalFork: boolean,
+): Promise<void> {
+  try {
+    const { sessionDeploymentTarget, ensureSessionDeployment } =
+      await import("./session-deployment");
+    const target = sessionDeploymentTarget({
+      action,
+      body: pr.body,
+      headRef: pr.head?.ref,
+      externalFork,
+      state: pr.state,
+    });
+    if (target) await ensureSessionDeployment(ghRepo, pr.number, target);
+  } catch (e) {
+    console.error(
+      `[github] session deployment for PR #${pr.number} failed:`,
+      e,
+    );
   }
 }
 

@@ -40,7 +40,9 @@ export const GITHUB_APP_GRANT_PERMISSIONS: Record<string, string> = {
   pull_requests: "write", // reviews, comments, open/merge
   issues: "write", // issue and PR comments
   members: "read", // team roster / attribution
-  deployments: "read", // Vercel preview deployment + status polling
+  // Read Vercel preview deployments; write only the "Open in" session
+  // deployment (agents/github/session-deployment.ts), minted on its own token.
+  deployments: "write",
   metadata: "read", // required baseline
 };
 
@@ -83,6 +85,14 @@ export const GITHUB_APP_WRITE_PERMISSIONS: Record<string, string> = {
  *  never appears and so blocks where it is required), not every other write. */
 export const GITHUB_APP_CHECKS_PERMISSIONS: Record<string, string> = {
   checks: "write",
+  metadata: "read",
+};
+
+/** The session-deployment token. Its own mint, so an installation that has
+ *  not yet accepted `deployments: write` loses only the session link on its
+ *  PRs, not every other write. */
+export const GITHUB_APP_DEPLOYMENTS_PERMISSIONS: Record<string, string> = {
+  deployments: "write",
   metadata: "read",
 };
 

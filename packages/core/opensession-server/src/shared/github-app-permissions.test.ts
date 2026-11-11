@@ -8,6 +8,7 @@ import { describe, test, expect } from "bun:test";
 import {
   GITHUB_APP_CHECKS_PERMISSIONS,
   GITHUB_APP_CODE_PERMISSIONS,
+  GITHUB_APP_DEPLOYMENTS_PERMISSIONS,
   GITHUB_APP_GRANT_PERMISSIONS,
   GITHUB_APP_READ_PERMISSIONS,
   GITHUB_APP_WRITE_PERMISSIONS,
@@ -97,6 +98,23 @@ describe("github app permission sets", () => {
       GITHUB_APP_CODE_PERMISSIONS,
     ])
       expect(set.checks).not.toBe("write");
+  });
+
+  test("only the session-deployment mint asks for deployments:write", () => {
+    // An installation that has not accepted deployments:write must keep every
+    // other mint working; only the session link on PRs goes missing.
+    expect(uncoveredScopes(GITHUB_APP_DEPLOYMENTS_PERMISSIONS)).toEqual([]);
+    expect(GITHUB_APP_DEPLOYMENTS_PERMISSIONS).toEqual({
+      deployments: "write",
+      metadata: "read",
+    });
+    for (const set of [
+      GITHUB_APP_READ_PERMISSIONS,
+      GITHUB_APP_WRITE_PERMISSIONS,
+      GITHUB_APP_CODE_PERMISSIONS,
+      GITHUB_APP_CHECKS_PERMISSIONS,
+    ])
+      expect(set.deployments).not.toBe("write");
   });
 
   test("the write mint carries no read-only scope whose absence would 422 it", () => {

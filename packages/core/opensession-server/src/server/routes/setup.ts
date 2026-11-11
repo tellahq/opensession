@@ -319,7 +319,8 @@ export async function handleSetupRoutes(
   }
 
   if (path === "/api/setup/status" && req.method === "GET") {
-    const { configuredRepos, configuredIdentity } = await import("../config");
+    const { configuredRepos, configuredIdentity, defaultRepo } =
+      await import("../config");
     const { INTEGRATIONS } = await import("../integrations/registry");
     // The env FILE, not process.env: a credential saved via PUT must keep
     // reading as present on every later status refetch, not flap back to
@@ -332,6 +333,10 @@ export async function handleSetupRoutes(
     const envValues = await readEnvFileValues({ includeUnset: true });
 
     const access = setupAccessSnapshot({ persistedEnv: envValues });
+    const repos = configuredRepos();
+    const defaultRepoId = Object.keys(repos).length
+      ? defaultRepo(repos).id
+      : null;
 
     return Response.json({
       // Compatibility field for the native app's tolerant setup snapshot.
@@ -341,12 +346,14 @@ export async function handleSetupRoutes(
       // ingress request so they cannot hold up the rest of Setup.
       ingress: { publicBaseUrl: configuredPublicIngress().publicBaseUrl },
       repos: await Promise.all(
-        Object.values(configuredRepos()).map(async (r) => ({
+        Object.values(repos).map(async (r) => ({
           id: r.id,
           label: r.label,
           path: r.repo,
           defaultBranch: r.defaultBranch,
           isolatedWorktrees: !sharedCheckoutForNewSessions(r),
+          // The fallback for sessions without a repository: not removable.
+          isDefault: r.id === defaultRepoId,
           // Can sessions in this repo provision and boot themselves? Read off
           // the main checkout — worktrees carry the same committed files.
           lifecycle: await repoLifecycle(r.repo),

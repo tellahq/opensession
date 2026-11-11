@@ -111,7 +111,7 @@ describe("GitHub App onboarding link", () => {
       issues: "write",
       pull_requests: "write",
       members: "read",
-      deployments: "read",
+      deployments: "write",
       metadata: "read",
     });
   });

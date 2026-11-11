@@ -203,22 +203,16 @@ export function WorkspaceContextMenu({
   if (row && sessions.length > 0) {
     entries.push({ kind: "sep" });
     const hidden = hiddenRowKeys.has(row.key);
-    // One sidebar-membership action. A row your own sidebar already holds
-    // (the same test the "me" lens uses) offers Hide; a row you only see
-    // because it is open or through another view offers Keep. A hidden row
-    // offers Restore.
+    // Sidebar membership. A row your own sidebar already holds (the same test
+    // the "me" lens uses) offers Hide; a hidden row offers Restore. A row you
+    // only see because it is open or through another view offers Keep, and
+    // Hide too: Archive is global, so without Hide a teammate's session you
+    // opened from a link would have no personal way off your sidebar.
     const inMySidebar = rowBelongsToPerson(row, currentUser, {
       currentUser,
       isClaimed,
     });
-    if (hidden || inMySidebar) {
-      entries.push({
-        kind: "item",
-        icon: hidden ? <IconEye size={20} /> : <IconEyeOff size={20} />,
-        label: hidden ? "Restore to my sidebar" : "Hide from my sidebar",
-        onClick: () => onHide(row, hidden),
-      });
-    } else {
+    if (!hidden && !inMySidebar) {
       entries.push({
         kind: "item",
         icon: <IconInbox size={20} />,
@@ -226,6 +220,12 @@ export function WorkspaceContextMenu({
         onClick: () => onSetStatus(sessions, "mine"),
       });
     }
+    entries.push({
+      kind: "item",
+      icon: hidden ? <IconEye size={20} /> : <IconEyeOff size={20} />,
+      label: hidden ? "Restore to my sidebar" : "Hide from my sidebar",
+      onClick: () => onHide(row, hidden),
+    });
     entries.push({
       kind: "item",
       icon: <IconArchive size={20} />,

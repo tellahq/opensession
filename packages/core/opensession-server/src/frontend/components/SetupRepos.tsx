@@ -22,11 +22,13 @@ import {
   settingsInputClass,
 } from "../ui/settings";
 import { toast } from "../ui/toast";
+import { useConfirm } from "../ui/confirm";
 import {
   IconArrowUpToLine,
   IconBranches,
   IconDotsHorizontal,
   IconPlus,
+  IconTrash,
 } from "./icons";
 import { RepoTile } from "./RepoTile";
 import { GithubRepoAccess } from "./GithubRepoAccess";
@@ -277,8 +279,8 @@ function RepositoryRow({
   );
 }
 
-/** A repo row's ⋯ menu and its consequences: the default-branch dialog and
- *  the isolated-worktrees toggle. Shared by the settings page's full row and
+/** A repo row's ⋯ menu and its consequences: the default-branch dialog,
+ *  the isolated-worktrees toggle and removal. Shared by the settings page's full row and
  *  the wizard's compact rows, so both surfaces manage a repo identically. */
 function RepoActionsMenu({
   repo,
@@ -304,7 +306,10 @@ function RepoActionsMenu({
     repo.isolatedWorktrees,
   );
   const [branchDialogOpen, setBranchDialogOpen] = useState(false);
-  const [saving, setSaving] = useState<"branch" | "worktrees" | null>(null);
+  const [saving, setSaving] = useState<
+    "branch" | "worktrees" | "remove" | null
+  >(null);
+  const [confirm, confirmDialog] = useConfirm();
   const [branchError, setBranchError] = useState<string | null>(null);
   const branchErrorId = useId();
   const branchInputRef = useRef<HTMLInputElement>(null);
@@ -373,6 +378,35 @@ function RepoActionsMenu({
     setSaving(null);
   }
 
+  async function removeRepo() {
+    if (saving) return;
+    setSaving("remove");
+    try {
+      await setupRequest(`/api/setup/repos/${encodeURIComponent(repo.id)}`, {
+        method: "DELETE",
+      });
+      notifyReposChanged();
+      await onChanged();
+      toast(`${repo.label} removed`);
+    } catch (error) {
+      toast(errorMessage(error, "Failed to remove repository"), {
+        variant: "error",
+      });
+    }
+    setSaving(null);
+  }
+
+  function confirmRemove() {
+    confirm({
+      title: `Remove ${repo.label}?`,
+      description:
+        "Sessions can no longer use it. Its checkout stays on the server, so you can add it again later.",
+      confirmLabel: "Remove",
+      destructive: true,
+      onConfirm: () => void removeRepo(),
+    });
+  }
+
   function openBranchDialog() {
     setBranch(defaultBranch);
     setBranchError(null);
@@ -408,8 +442,27 @@ function RepoActionsMenu({
             </span>
             <Menu.Check on={isolatedWorktrees} />
           </Menu.CheckboxItem>
+          <Menu.Separator />
+          <Menu.Item
+            className={cn(
+              "data-[disabled]:cursor-default data-[disabled]:opacity-40",
+              repo.isDefault
+                ? "text-dim"
+                : "text-red data-[highlighted]:bg-red-soft data-[highlighted]:text-red",
+            )}
+            disabled={!!saving || repo.isDefault}
+            onClick={confirmRemove}
+          >
+            <IconTrash size={17} />
+            <span className="min-w-0 flex-1 truncate">
+              {repo.isDefault
+                ? "Default repository can't be removed"
+                : "Remove repository"}
+            </span>
+          </Menu.Item>
         </Menu.Popup>
       </Menu.Root>
+      {confirmDialog}
       <Modal.Root
         open={branchDialogOpen}
         onOpenChange={(open) => {

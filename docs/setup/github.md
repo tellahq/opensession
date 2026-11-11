@@ -118,7 +118,7 @@ canonical permission set used when tokens are minted:
 | Checks                 | Read and write | check runs; the approval gate's check   |
 | Commit statuses        | Read           | status rollups                          |
 | Contents               | Read and write | clone and push                          |
-| Deployments            | Read           | preview deployment state                |
+| Deployments            | Read and write | preview state; the session link on PRs  |
 | Issues                 | Read and write | issue and PR comments                   |
 | Metadata               | Read           | GitHub baseline                         |
 | Pull requests          | Read and write | reviews, PRs, merges                    |
@@ -721,6 +721,22 @@ The check needs the App's **Checks: read and write** permission. It is minted
 on its own token, so an installation that has not accepted the upgrade keeps
 every other feature working; only the gate check is missing, and a ruleset
 that requires it keeps blocking.
+
+## Session link on pull requests
+
+A PR whose body carries a session's attribution footer gets a GitHub
+deployment to the **Open in OS** environment (named from the product mark),
+whose **View deployment** button opens that session. There is one per PR,
+created on its head branch the first time the PR is opened, reopened, edited,
+marked ready, or pushed with the footer present. Later events find it and
+stop, unless the footer now names another session. PRs from forks get none. The link is
+built from this server's public URL and the session id in the footer, never
+copied from the body. Each post is recorded in the audit log
+(`session_deployment_posted`).
+
+It needs the App's **Deployments: read and write** permission, minted on its
+own token: an installation that has not accepted the upgrade loses only this
+link.
 
 ## Automation PR credentials and review requests
 

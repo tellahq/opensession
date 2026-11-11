@@ -9,6 +9,7 @@
  *   POST /api/setup/repos: clone a remote, register an existing local checkout,
  *                          or start a new repository on this server.
  *   PATCH /api/setup/repos/:id: change its default branch or worktree policy.
+ *   DELETE /api/setup/repos/:id: unregister it. The checkout stays on disk.
  */
 
 import { $ } from "bun";
@@ -28,6 +29,7 @@ import {
   codeStorageConfig,
   configuredRepos,
   configuredSelfDev,
+  defaultRepo,
   type Repo,
   type RepoSection,
 } from "../config";
@@ -1061,6 +1063,51 @@ async function registrationResponse(
   }
 }
 
+/**
+ * Unregister a repository. Only its config entry goes: the checkout, its
+ * worktrees and every session record stay on disk, so adding it back later
+ * picks up where it left off. The default repository is refused because
+ * sessions with no repository of their own resolve to it.
+ */
+async function removeRepoResponse(id: string): Promise<Response> {
+  if (["__proto__", "prototype", "constructor"].includes(id)) {
+    return Response.json({ error: "Invalid repository id" }, { status: 400 });
+  }
+  const unknown = () =>
+    Response.json({ error: `Unknown repository: ${id}` }, { status: 404 });
+  const repos = configuredRepos();
+  if (!Object.hasOwn(repos, id)) return unknown();
+  if (defaultRepo(repos).id === id) {
+    return Response.json(
+      {
+        error: `${repos[id].label} is the default repository. Sessions without a repository use it, so it can't be removed.`,
+      },
+      { status: 409 },
+    );
+  }
+  try {
+    const removed = await withConfigMutationLock(async () => {
+      if (!Object.hasOwn(configuredRepos(), id)) return false;
+      const config = await rawConfig();
+      const sections = reposForMutation(config);
+      delete sections[id];
+      if (config.newSessionRepo === id) delete config.newSessionRepo;
+      await persistRawConfig(config);
+      audit({ kind: "setup_repo_remove", id, path: repos[id].repo });
+      return true;
+    });
+    if (!removed) return unknown();
+  } catch (e) {
+    return Response.json(
+      { error: e instanceof Error ? e.message : String(e) },
+      { status: 400 },
+    );
+  }
+  invalidateGithubRepoListCache();
+  invalidateCsRepoListCache();
+  return Response.json({ id, removed: true });
+}
+
 export async function handleSetupRepoRoutes(
   ctx: RouteContext,
 ): Promise<Response | undefined> {
@@ -1375,6 +1422,15 @@ export async function handleSetupRepoRoutes(
   }
 
   const updateMatch = path.match(/^\/api\/setup\/repos\/([^/]+)$/);
+  if (updateMatch && req.method === "DELETE") {
+    let id: string;
+    try {
+      id = decodeURIComponent(updateMatch[1]);
+    } catch {
+      return Response.json({ error: "Invalid repository id" }, { status: 400 });
+    }
+    return removeRepoResponse(id);
+  }
   if (updateMatch && req.method === "PATCH") {
     let id: string;
     try {
