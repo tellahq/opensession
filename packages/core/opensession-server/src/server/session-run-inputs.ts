@@ -111,6 +111,14 @@ export interface SessionRunInputs {
    *  a `waitActor` wake (`"<person> (wait)"`), kept here so
    *  automationSessionMcp can mount its narrower continuation shape. */
   humanPrompter: string | undefined;
+  /** The person who sent this turn into an automation-owned root session
+   *  themselves (`interactivePrompter`), or undefined. The run's GitHub
+   *  credential follows them (pi-runner resolveRunGithubActor): their own
+   *  connected account, never the automation's wider grants and never anyone
+   *  else's. Undefined for every interactive session (whose `user` already
+   *  names the sender), the automation's own ticks, machine senders, a
+   *  scheduled /loop tick, a wait's wake, and sandboxed descendants. */
+  steeredBy: string | undefined;
   inProcessMcpBranch: InProcessMcpBranch;
   /** Whether the run gets the repos/memory/personal-prompt note. Automation
    *  runs get none: their prompts are untrusted text. */
@@ -230,6 +238,10 @@ export async function resolveSessionRunInputs(
         : undefined,
     accountUser,
     humanPrompter: prompter,
+    steeredBy:
+      session.automation && !session.automationDescendantPolicy
+        ? (interactivePrompter(opts.user) ?? undefined)
+        : undefined,
     inProcessMcpBranch: sessionInProcessMcpBranch(session, prompter),
     sessionNote: !isAutomationSession,
   };

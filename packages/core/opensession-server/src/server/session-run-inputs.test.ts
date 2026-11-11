@@ -325,6 +325,36 @@ describe("resolveSessionRunInputs", () => {
     expect(inputs.deniedTools).toBeDefined();
     expect(inputs.user).toBeUndefined();
     expect(inputs.sessionNote).toBe(false);
+    // A Sandbox descendant never acts on GitHub as whoever prompts it.
+    expect(inputs.steeredBy).toBeUndefined();
+  });
+
+  test("only a person who pressed send steers an automation's GitHub identity", async () => {
+    const session = { ...plain, automation: "Incident first pass" };
+    // The person themselves: the turn's GitHub credential follows them.
+    const steered = await resolveSessionRunInputs(session, { user: "Kent" });
+    expect(steered.steeredBy).toBe("Kent");
+    // The automation's own tick, webhook relays, machine senders, and every
+    // scheduled or waited turn in a person's name keep the automation's.
+    for (const user of [
+      undefined,
+      "Incident first pass (automation)",
+      "GitHub",
+      "Plain",
+      "auto-continue",
+      "system (restart)",
+      "Kent (loop)",
+      "Kent (scheduled)",
+      "Kent (wait)",
+      "anonymous",
+    ]) {
+      const inputs = await resolveSessionRunInputs(session, { user });
+      expect(inputs.steeredBy).toBeUndefined();
+    }
+    // An interactive session already names its sender as `user`.
+    expect(
+      (await resolveSessionRunInputs(plain, { user: "Kent" })).steeredBy,
+    ).toBeUndefined();
   });
 
   test("an allowlist that resolves to nothing reports itself as unscoped", async () => {

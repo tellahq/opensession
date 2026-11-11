@@ -269,6 +269,15 @@ export interface RunAgentOpts {
    */
   accountUser?: string;
   /**
+   * The person who sent this turn into an automation-owned session
+   * themselves (SessionRunInputs.steeredBy). The run's GitHub credential and
+   * the identity its session context describes follow them instead of the
+   * automation (pi-runner resolveRunGithubActor): their own connected
+   * account or, failing that, the App token with a plain note. Unset for
+   * every other run, which keeps the existing rules.
+   */
+  steeredBy?: string;
+  /**
    * Model to switch to when the primary model dies on usage limits with no
    * account left in its pool (claude-runner/codex-runner rotate their own
    * account pools first — this fires only once a whole pool is exhausted).
@@ -2142,6 +2151,7 @@ export async function resumeInterruptedRuns(
                     : undefined,
                   user: run.user,
                   accountUser: run.accountUser,
+                  steeredBy: run.steeredBy,
                   deniedTools: run.deniedTools,
                   publicationPolicy: run.publicationPolicy,
                   confirmTools: run.confirmTools,
@@ -2256,6 +2266,7 @@ export async function resumeInterruptedRuns(
                   : undefined,
                 user: run.user,
                 accountUser: run.accountUser,
+                steeredBy: run.steeredBy,
                 deniedTools: run.deniedTools,
                 publicationPolicy: run.publicationPolicy,
                 confirmTools: run.confirmTools,
@@ -2362,6 +2373,7 @@ export async function resumeInterruptedRuns(
                 : undefined,
               user: run.user,
               accountUser: run.accountUser,
+              steeredBy: run.steeredBy,
               deniedTools: run.deniedTools,
               publicationPolicy: run.publicationPolicy,
               confirmTools: run.confirmTools,

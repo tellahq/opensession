@@ -209,9 +209,15 @@ the run's `GH_TOKEN` / `GITHUB_TOKEN` and, through a process-local
 credential helper, its HTTPS git credential, so the branch push and any PR
 the shell opens carry their identity. "Started by a person" means the
 turn's sender is a human (or the auto-continue of their own prompt), the run
-kind is interactive, and the mode is code. When that person is unknown,
+kind is interactive, and the mode is code. A person who pressed send in an
+automation-owned session counts too: that turn acts as them, with their own
+connected account, while the automation's own turns, webhook and wait wakes,
+timers, and scheduled prompts keep the automation's App token. That steered
+turn needs operator mode (it never borrows the simple-mode sole account) and
+never runs in a Sandbox with a person's token. When that person is unknown,
 unmapped, or disconnected, the run falls back to the App token below rather
-than running credential-free. In a sandbox the launcher resolves the same
+than running credential-free, and a steered turn's session context says it
+cannot act as them. In a sandbox the launcher resolves the same
 choice on the host and projects only the chosen token into a private,
 run-scoped file, together with the login of the credential it selected as a
 non-secret marker (the mapped person in operator mode, the sole connected

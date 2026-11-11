@@ -12,10 +12,14 @@ import {
 import { AUTO_CONTINUE_USER, githubCredentialUser } from "./auto-continue";
 import { mergeGuardDenyReason } from "./command-policy";
 import { humanPrompter } from "./session-actors";
+import { buildSessionContext } from "./run-instructions";
+import { commitAuthorFor } from "./shared/user-mappings";
 import {
   githubCodeRunEnv,
   githubReadReposRunEnv,
   githubReadRunEnv,
+  resolveRunGithubActor,
+  runGithubAccessNote,
   runGithubEnv,
   runGithubMergeGuard,
   usesHostGithubLogin,
@@ -567,6 +571,207 @@ describe("which credential a run's shell holds", () => {
       writeFileSync(auth, JSON.stringify({ GH_TOKEN: "projected-token" }));
       await loadGithubAuthStore();
       expect(guard(true)).toEqual({ allowMerge: true });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("a person steering an automation-owned session", () => {
+  // Same fixture as above: Alice is mapped and connected ("human-token"), no
+  // App is configured, so the App path yields "" and the two are told apart.
+  async function seed(dir: string, opts: { operatorMode: boolean }) {
+    const cwd = join(dir, "repo");
+    mkdirSync(cwd);
+    const config = join(dir, "config.json");
+    const users = join(dir, "github-users.json");
+    writeFileSync(
+      config,
+      JSON.stringify({
+        identity: {
+          team: [
+            { name: "Alice Example", github: "alice", aliases: ["Alice"] },
+            { name: "Bob Example", github: "bob", aliases: ["Bob"] },
+          ],
+        },
+        ...(opts.operatorMode
+          ? {
+              integrations: {
+                github: { userPrAuth: true, oauthClientId: "test-client-id" },
+              },
+            }
+          : {}),
+        repos: {
+          app: { repo: cwd, ghRepo: "acme/app", defaultBranch: "main" },
+        },
+      }),
+    );
+    writeFileSync(
+      users,
+      JSON.stringify({
+        users: {
+          alice: {
+            login: "alice",
+            token: "human-token",
+            source: "device",
+            connectedAt: new Date().toISOString(),
+          },
+        },
+      }),
+    );
+    await loadGithubAuthStore();
+    process.env.OPENSESSION_CONFIG = config;
+    await getConfigAsync();
+    process.env.OPENSESSION_GITHUB_AUTH_STORE = users;
+    await loadGithubAuthStore();
+    delete process.env[GITHUB_RUN_AUTH_FILE_ENV];
+    return cwd;
+  }
+
+  /** One code turn in an automation-owned session, wired the way pi-runner
+   *  wires it: the run user is dropped, the automation deny-set makes the
+   *  policy unattended, and the commit author is the sender or, for a
+   *  machine turn, the person who last prompted the session. */
+  async function turn(
+    cwd: string,
+    input: {
+      sender: string;
+      steeredBy?: string;
+      kind?: string;
+      remote?: boolean;
+    },
+  ) {
+    const author = commitAuthorFor(input.sender, "Alice");
+    const actor = resolveRunGithubActor({
+      user: undefined,
+      authorName: author?.name,
+      steeredBy: input.steeredBy,
+      unattended: true,
+      journalKind: input.kind ?? "prompt",
+      remote: input.remote ?? false,
+    });
+    const env = await runGithubEnv({
+      isCode: true,
+      ownerTurn: actor.ownerTurn,
+      user: actor.user,
+      githubKindRun: false,
+      cwd,
+    });
+    const ownerLogin = actor.ownerTurn ? githubRunOwnerLogin(actor.user) : null;
+    const note = runGithubAccessNote({
+      actor,
+      steered: !!input.steeredBy,
+      isCode: true,
+      ownerLogin,
+      hostLogin: false,
+    });
+    const context = buildSessionContext({
+      osSessionId: "os-steered",
+      cwd,
+      isAsk: false,
+      repoHost: "github",
+      author,
+      githubUserLogin: ownerLogin,
+      githubAccessNote: note,
+    });
+    return { env, ownerLogin, note, context, author };
+  }
+
+  test("the steering person acts as themselves, and the context says so", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "opensession-steer-github-"));
+    try {
+      const cwd = await seed(dir, { operatorMode: true });
+      const steered = await turn(cwd, { sender: "Alice", steeredBy: "Alice" });
+      expect(steered.env.GH_TOKEN).toBe("human-token");
+      expect(steered.env.GITHUB_TOKEN).toBe("human-token");
+      expect(steered.ownerLogin).toBe("alice");
+      expect(steered.note).toBeNull();
+      // Credential and attribution come from the same person.
+      expect(steered.context).toContain(
+        "PR attribution footer: Started by Alice in",
+      );
+      expect(steered.context).toContain("PRs use @alice's account through gh");
+      expect(steered.context).not.toContain("GitHub access:");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("the automation's own turns keep its credential after a person steered", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "opensession-steer-github-"));
+    try {
+      const cwd = await seed(dir, { operatorMode: true });
+      // A webhook wake, a timer, a wait's wake, a scheduled tick: Alice
+      // prompted last, so commits still credit her, but nobody pressed send.
+      for (const input of [
+        { sender: "Incident first pass (automation)", kind: "automation" },
+        { sender: "Incident first pass (automation)" },
+        { sender: "auto-continue" },
+        { sender: "Alice (wait)", steeredBy: "Alice (wait)" },
+        { sender: "Alice (loop)", steeredBy: "Alice (loop)" },
+        { sender: "Alice (scheduled)", steeredBy: "Alice (scheduled)" },
+        // A steering marker never upgrades a non-interactive run kind.
+        { sender: "Alice", steeredBy: "Alice", kind: "automation" },
+      ]) {
+        const result = await turn(cwd, input);
+        expect(result.env.GH_TOKEN).toBe("");
+        expect(Object.values(result.env)).not.toContain("human-token");
+        expect(result.ownerLogin).toBeNull();
+        expect(result.note).toBeNull();
+        expect(result.context).not.toContain("account through gh");
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a person without a connected account gets the App token, never someone else's, and is told", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "opensession-steer-github-"));
+    try {
+      const cwd = await seed(dir, { operatorMode: true });
+      for (const person of ["Bob", "Some Randomer"]) {
+        const result = await turn(cwd, { sender: person, steeredBy: person });
+        expect(result.env.GH_TOKEN).toBe("");
+        expect(Object.values(result.env)).not.toContain("human-token");
+        expect(result.ownerLogin).toBeNull();
+        expect(result.context).toContain(
+          `GitHub access: gh and git use the GitHub App's token, not ${person}'s own GitHub account (${person} has no connected GitHub account on this instance).`,
+        );
+        expect(result.context).not.toContain("account through gh");
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("simple mode never hands a steering person the sole connected account", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "opensession-steer-github-"));
+    try {
+      const cwd = await seed(dir, { operatorMode: false });
+      // Bob steering must not borrow Alice's token just because hers is the
+      // only one, and without sign-in Alice herself is not proven either.
+      for (const person of ["Bob", "Alice"]) {
+        const result = await turn(cwd, { sender: person, steeredBy: person });
+        expect(result.env.GH_TOKEN).toBe("");
+        expect(Object.values(result.env)).not.toContain("human-token");
+        expect(result.note).toContain("per-user GitHub sign-in is off");
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a Sandbox automation run never holds the steering person's token", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "opensession-steer-github-"));
+    try {
+      const cwd = await seed(dir, { operatorMode: true });
+      const result = await turn(cwd, {
+        sender: "Alice",
+        steeredBy: "Alice",
+        remote: true,
+      });
+      expect(Object.values(result.env)).not.toContain("human-token");
+      expect(result.note).toContain("Sandbox automation run");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

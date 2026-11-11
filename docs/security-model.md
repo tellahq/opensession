@@ -505,7 +505,19 @@ addresses, GitHub logins, and Slack ids resolve to the configured person.
   before the shared pool when they take over an automation's session. A
   machine sender (the automation's own tick, a review handoff, auto-continue)
   resolves to no account user and stays pool-only. `accountUser` never feeds
-  the MCP gate, GitHub credentials, or the trust profile. It is journaled
+  the MCP gate, GitHub credentials, or the trust profile.
+- GitHub credentials follow a person who steers an automation-owned root
+  session: `steeredBy` (session-run-inputs.ts) names a sender who pressed send
+  themselves (`interactivePrompter`, so never a scheduled, `/loop`, or wait
+  sender, and never a machine actor). pi-runner `resolveRunGithubActor` gives
+  that code turn the person's own connected token, found by exact identity
+  mapping in operator mode. It never falls back to the simple-mode sole
+  account or to the automation owner's token, and a Sandbox automation run
+  never holds it. When the person has no usable account, the turn keeps the
+  App token and its session context says so. The automation's MCP allowlist,
+  denials, and dropped MCP identity are unchanged; descendants never carry
+  `steeredBy`. It is journaled with the run so restart recovery keeps the
+  same credential. It is journaled
   with the run so restart recovery keeps the same routing. On every
   launch path (host, detached pi host, Runner, sandbox) a person's takeover
   turn carries no automation pin (`runAccountSpec`, `remoteRunAccountPolicy`),
