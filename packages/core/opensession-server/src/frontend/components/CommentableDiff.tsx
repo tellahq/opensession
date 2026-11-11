@@ -5,6 +5,7 @@ import React, {
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { createPortal } from "react-dom";
 import { parsePatchFiles } from "@pierre/diffs";
@@ -46,6 +47,10 @@ import {
   IconUndo,
 } from "./icons";
 import { copyToClipboard } from "../lib/share-link";
+import {
+  createCopiedPathStore,
+  type CopiedPathStore,
+} from "../lib/copied-path-store";
 import {
   applyDiffDefaults,
   applyViewedCollapse,
@@ -417,21 +422,13 @@ export function CommentableDiff({ patch, options }: Props) {
 
   // Copying the path is the reliable way to get it out of the diff — text
   // selection breaks wherever the surrounding surface sets user-select: none.
-  const [copied, setCopied] = useState<string | null>(null);
+  // The check it flashes lives in a store the buttons read, so it does not
+  // re-render every file row (see copied-path-store.ts).
+  const [copiedPath] = useState(createCopiedPathStore);
+  useEffect(() => () => copiedPath.dispose(), [copiedPath]);
   const [stickyRoot, setStickyRoot] = useState<HTMLDivElement | null>(null);
   useStickyEdges(stickyRoot, stickyFileHeaders);
   useDiffScrollMemory(stickyRoot, expansionKey);
-  const copiedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
-  const copyPath = (path: string) => {
-    copyToClipboard(path, () => {
-      setCopied(path);
-      clearTimeout(copiedTimer.current);
-      copiedTimer.current = setTimeout(() => setCopied(null), 1400);
-    });
-  };
-  useEffect(() => () => clearTimeout(copiedTimer.current), []);
 
   const copyMenuValue = (value: string, message: string) => {
     copyToClipboard(value, () => toast(message));
@@ -805,22 +802,7 @@ export function CommentableDiff({ patch, options }: Props) {
                 </button>
               </Tooltip>
             )}
-            <Tooltip label={copied === file.name ? "Copied" : "Copy path"}>
-              <Button
-                variant="ghost"
-                size="sm"
-                className={`phone:hidden ${copied === file.name ? "text-green" : "text-faint"}`}
-                aria-label={`Copy path ${file.name}`}
-                icon={
-                  copied === file.name ? (
-                    <IconCheck size={18} />
-                  ) : (
-                    <IconCopy size={18} />
-                  )
-                }
-                onClick={() => copyPath(file.name)}
-              />
-            </Tooltip>
+            <CopyPathButton path={file.name} store={copiedPath} />
             {pend.length > 0 && (
               <span className="inline-flex shrink-0 items-center gap-[3px] font-sans text-meta text-faint before:text-meta before:content-['💬']">
                 {pend.length}
@@ -1457,6 +1439,33 @@ const CommentForm = function CommentForm({
     </div>
   );
 };
+
+/** A file header's copy-path button, with the check it shows for a beat. */
+function CopyPathButton({
+  path,
+  store,
+}: {
+  path: string;
+  store: CopiedPathStore;
+}) {
+  const copied = useSyncExternalStore(
+    store.subscribe,
+    () => store.get() === path,
+    () => store.get() === path,
+  );
+  return (
+    <Tooltip label={copied ? "Copied" : "Copy path"}>
+      <Button
+        variant="ghost"
+        size="sm"
+        className={`phone:hidden ${copied ? "text-green" : "text-faint"}`}
+        aria-label={`Copy path ${path}`}
+        icon={copied ? <IconCheck size={18} /> : <IconCopy size={18} />}
+        onClick={() => copyToClipboard(path, () => store.show(path))}
+      />
+    </Tooltip>
+  );
+}
 
 /**
  * One file's diff. Memoized so an unrelated re-render (another file's selection,
