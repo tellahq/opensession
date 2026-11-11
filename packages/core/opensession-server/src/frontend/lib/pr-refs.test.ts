@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   osReviewText,
+  refAction,
   refChipText,
   refLabel,
   refState,
@@ -301,5 +302,30 @@ describe("series headline over sessionPrPresentation", () => {
       tone: "green",
       label: "2 PRs",
     });
+  });
+});
+
+describe("refAction", () => {
+  const base = {
+    repo: "acme",
+    branch: "feat",
+    source: "discovered" as const,
+    number: 42,
+    state: "OPEN" as const,
+  };
+  test("names the PR and its branch, conflicts first", () => {
+    const action = refAction({
+      ...base,
+      mergeable: "CONFLICTING",
+      checks: { total: 1, passed: 0, failed: 1, pending: 0 },
+    });
+    expect(action?.label).toBe("Resolve");
+    expect(action?.prompt).toContain("PR #42 (branch feat");
+  });
+  test("offers nothing for a merged or healthy PR", () => {
+    expect(
+      refAction({ ...base, state: "MERGED", mergeable: "CONFLICTING" }),
+    ).toBeNull();
+    expect(refAction(base)).toBeNull();
   });
 });

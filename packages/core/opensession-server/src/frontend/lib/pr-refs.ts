@@ -113,6 +113,44 @@ export function refState(ref: PrStateFacts): string {
 }
 
 /**
+ * The one fix a ref-only PR row can offer, asked of the session that opened
+ * it: the same Resolve / Fix checks / Address feedback the primary band
+ * offers, with the PR and its branch named, since the session may be working
+ * on another branch. Null when there is nothing to fix.
+ */
+export function refAction(ref: SessionPrRef): {
+  label: string;
+  pending: string;
+  prompt: string;
+  tone: "red" | "status-red";
+} | null {
+  if (ref.state !== "OPEN") return null;
+  const pr = `PR #${ref.number} (branch ${ref.branch} in ${repoLabel(ref.repo)})`;
+  if (ref.mergeable === "CONFLICTING")
+    return {
+      label: "Resolve",
+      pending: "Resolving…",
+      tone: "red",
+      prompt: `${pr} has merge conflicts with its base. Rebase that branch on the latest base, resolve the conflicts, and push.`,
+    };
+  if ((ref.checks?.failed ?? 0) > 0)
+    return {
+      label: "Fix checks",
+      pending: "Fixing…",
+      tone: "status-red",
+      prompt: `Investigate the failing checks on ${pr}, fix the failures on that branch, run the relevant tests, commit the changes, and push them.`,
+    };
+  if (ref.reviewDecision === "CHANGES_REQUESTED")
+    return {
+      label: "Address feedback",
+      pending: "Addressing…",
+      tone: "status-red",
+      prompt: `Address the requested changes on ${pr}, run the relevant tests, commit the changes on that branch, and push them.`,
+    };
+  return null;
+}
+
+/**
  * Chip text. A PR in the session's own repo is just its number; one in another
  * repo carries a short repo hint, because a bare "#72" next to "#5253" gives no
  * clue which repository it belongs to.

@@ -190,3 +190,27 @@ test("a summary row without a preview keeps its PR glyph", () => {
   );
   expect(html).not.toContain("Preview environment");
 });
+
+test("a summary row offers the fix its PR needs, asked of the session", () => {
+  const prompts: string[] = [];
+  const failing = renderToStaticMarkup(
+    <PrSeriesRows
+      refs={[ref({ checks: { total: 3, passed: 2, failed: 1, pending: 0 } })]}
+      variant="summary"
+      onPrompt={(content) => prompts.push(content)}
+    />,
+  );
+  expect(failing).toContain(">Fix checks</button>");
+  const conflicting = renderToStaticMarkup(
+    <PrSeriesRows
+      refs={[ref({ mergeable: "CONFLICTING" })]}
+      variant="summary"
+      onPrompt={() => {}}
+    />,
+  );
+  expect(conflicting).toContain(">Resolve</button>");
+  const healthy = renderToStaticMarkup(
+    <PrSeriesRows refs={[ref()]} variant="summary" onPrompt={() => {}} />,
+  );
+  expect(healthy).not.toContain("</button>");
+});

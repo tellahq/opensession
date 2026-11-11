@@ -1287,6 +1287,17 @@ export function PrStatusBar({
           variant="summary"
           sessionId={sessionId}
           refreshTick={refreshTick}
+          onPrompt={
+            send
+              ? (content) =>
+                  send({
+                    type: "prompt",
+                    sessionId,
+                    user: getCurrentUser(),
+                    content,
+                  })
+              : undefined
+          }
         />
       </>
     );
