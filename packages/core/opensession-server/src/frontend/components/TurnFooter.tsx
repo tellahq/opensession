@@ -133,6 +133,10 @@ export const TurnFooter = function TurnFooter({
             )}
           </button>
         </Tooltip>
+        <MessageActionButtons
+          message={{ entryId: entry.id, author: "Agent", text: entry.content }}
+          className="size-6 min-h-6"
+        />
         <Menu.Root>
           <Menu.Trigger
             className={
@@ -165,12 +169,12 @@ export const TurnFooter = function TurnFooter({
               </Menu.Item>
             )}
             {(onFork || linkTo) && <Menu.Separator className="my-1" />}
-            <div className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-faint">
+            <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-medium text-faint">
               <IconClock size={20} />
               {fullTime(entry.timestamp)}
             </div>
             {entry.model && (
-              <div className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-faint">
+              <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-medium text-faint">
                 <IconSparkle size={20} />
                 Written by {messageModelLabel(entry.model)}
               </div>
@@ -184,13 +188,13 @@ export const TurnFooter = function TurnFooter({
                 {/* GroupLabel MUST live inside a Group — bare it throws Base UI
                     error #31 and white-screens the app on open. */}
                 <Menu.Group>
-                  <Menu.GroupLabel className="px-2.5 pt-0.5">
+                  <Menu.GroupLabel className="pt-0.5">
                     Changed files
                   </Menu.GroupLabel>
                   {files.slice(0, MAX_MENU_FILES).map((f) => (
                     <div
                       key={f.path}
-                      className="flex items-center gap-2 px-2.5 py-1 text-xs font-medium text-faint"
+                      className="flex items-center gap-2 px-2 py-1 text-xs font-medium text-faint"
                     >
                       <ExtBadge name={fileName(f.path)} />
                       <span className="min-w-0 flex-1 truncate text-dim">
@@ -203,7 +207,7 @@ export const TurnFooter = function TurnFooter({
                     </div>
                   ))}
                   {files.length > MAX_MENU_FILES && (
-                    <div className="px-2.5 py-1 text-xs font-medium text-faint">
+                    <div className="px-2 py-1 text-xs font-medium text-faint">
                       +{files.length - MAX_MENU_FILES} more
                     </div>
                   )}
@@ -212,10 +216,6 @@ export const TurnFooter = function TurnFooter({
             )}
           </Menu.Popup>
         </Menu.Root>
-        <MessageActionButtons
-          message={{ entryId: entry.id, author: "Agent", text: entry.content }}
-          className="size-6 min-h-6"
-        />
       </div>
       <TouchedFileChips files={files} max={isPhone ? 1 : MAX_CHIPS} />
       <MessageThreadSummary
