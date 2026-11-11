@@ -1156,7 +1156,7 @@ function prMentionLink(
   if (unqualified) repo = resolveBarePrRepo(contextRepo, number);
   const href = `${BASE_PATH}/pr/${encodeURIComponent(repo)}/${number}`;
   // `data-pr-gh` is the escape hatch, not the destination: a plain click
-  // stays in the review here, cmd/ctrl-click leaves for github.com.
+  // opens the PR's session here, cmd/ctrl-click leaves for github.com.
   const ghRepo = knownRepos.get(repo);
   const key = prStateKey(repo, number);
   const state = knownPrStates.get(key);

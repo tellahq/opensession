@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+  findPrSessionId,
   findPrWorkspaceId,
   workspaceBranchList,
   workspaceCarriesPr,
@@ -252,6 +253,62 @@ describe("findPrWorkspaceId", () => {
     ];
     expect(
       findPrWorkspaceId([], sessions, { repo: "opensession", number: 9 }),
+    ).toBeNull();
+  });
+});
+
+describe("findPrSessionId", () => {
+  const prs: UnifiedSession["prs"] = [
+    { repo: "acme", branch: "feat", number: 42, source: "discovered" },
+  ];
+  it("picks the newest live person session in the workspace carrying the PR", () => {
+    const sessions = [
+      session({
+        id: "os-old",
+        workspaceId: "w1",
+        prs,
+        createdAt: "2026-11-01T00:00:00Z",
+      }),
+      session({
+        id: "os-new",
+        workspaceId: "w1",
+        prs,
+        createdAt: "2026-11-02T00:00:00Z",
+      }),
+      session({
+        id: "os-gone",
+        workspaceId: "w1",
+        prs,
+        archived: true,
+        createdAt: "2026-11-03T00:00:00Z",
+      }),
+      session({
+        id: "bks-ghpr-acme-42-review",
+        workspaceId: "w1",
+        prs,
+        createdAt: "2026-11-04T00:00:00Z",
+      }),
+      session({
+        id: "os-other",
+        workspaceId: "w2",
+        prs,
+        createdAt: "2026-11-05T00:00:00Z",
+      }),
+      session({
+        id: "os-unrelated",
+        workspaceId: "w1",
+        createdAt: "2026-11-06T00:00:00Z",
+      }),
+    ];
+    expect(findPrSessionId(sessions, "w1", { repo: "acme", number: 42 })).toBe(
+      "os-new",
+    );
+  });
+
+  it("returns null when no session in the workspace carries it", () => {
+    const sessions = [session({ id: "os-a", workspaceId: "w1" })];
+    expect(
+      findPrSessionId(sessions, "w1", { repo: "acme", number: 42 }),
     ).toBeNull();
   });
 });

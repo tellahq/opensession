@@ -118,7 +118,7 @@ export function useAppDocumentInteractions({
   // dangerouslySetInnerHTML, so they can't carry a React handler — and they
   // turn up in every markdown surface, not just the transcript. One
   // document-level listener gives them both readings of "open this PR":
-  //   - plain click → the review here, navigated in place rather than
+  //   - plain click → the session that made the PR, navigated in place rather than
   //     reloading the whole SPA to follow the href
   //   - cmd/ctrl-click (and the middle button, which fires `auxclick`) → the
   //     PR on github.com in a new tab. That gesture means "open elsewhere",
