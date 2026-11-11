@@ -24,6 +24,8 @@ import {
   recordMentions,
 } from "./mentions";
 import { teamFirstNames } from "./people";
+import { getConfigAsync } from "./config";
+import { withPastedTexts } from "@tellahq/opensession-protocol/pasted-text";
 
 // The catalog mirrors every document into the legacy directory and the boot
 // import reads from it, so the scratch root stays in place for the whole
@@ -216,6 +218,54 @@ describe("mentions", () => {
     expect(
       await notifyMentions("nobody tagged", sender, "os-quiet", "note"),
     ).toEqual([]);
+  });
+
+  test("a name inside pasted text is not a mention", async () => {
+    // A pasted block (meeting notes, a Slack export) names people without
+    // asking anything of them; only the typed message can tag someone.
+    const configPath = join(SCRATCH, "pasted-mentions-config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        identity: {
+          team: [
+            { name: "Ada Example" },
+            { name: "Bea Example" },
+            { name: "Cy Example" },
+          ],
+        },
+      }),
+    );
+    const savedConfig = process.env.OPENSESSION_CONFIG;
+    process.env.OPENSESSION_CONFIG = configPath;
+    try {
+      await getConfigAsync();
+      const prompt = withPastedTexts("@Bea can you check these", [
+        "Attendees: @Ada, @Bea and @Cy",
+      ]);
+      expect(await recordMentions(prompt, "Cy", "os-pasted", "prompt")).toEqual(
+        ["Bea"],
+      );
+      expect((await listMentions("Ada")).map((m) => m.sessionId)).not.toContain(
+        "os-pasted",
+      );
+      const stored = (await listMentions("Bea")).find(
+        (m) => m.sessionId === "os-pasted",
+      );
+      expect(stored?.preview).toBe("@Bea can you check these");
+      expect(
+        await recordMentions(
+          withPastedTexts("", ["@Ada was there"]),
+          "Cy",
+          "os-paste-only",
+          "prompt",
+        ),
+      ).toEqual([]);
+    } finally {
+      if (savedConfig === undefined) delete process.env.OPENSESSION_CONFIG;
+      else process.env.OPENSESSION_CONFIG = savedConfig;
+      await getConfigAsync().catch(() => {});
+    }
   });
 
   test("preview is capped with an ellipsis, short text untouched", () => {

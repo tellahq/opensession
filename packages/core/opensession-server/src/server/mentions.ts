@@ -14,6 +14,7 @@
  * whole-map PUT in reads.ts carries).
  */
 
+import { splitPastedTexts } from "@tellahq/opensession-protocol/pasted-text";
 import { catalogDocuments } from "./catalog-documents";
 import { documentField } from "./shared/catalog-user-store";
 import { mentionedUsers } from "./people";
@@ -121,18 +122,27 @@ export async function recordMentions(
   source: Mention["source"],
   onRecorded?: (person: string, mention: Mention) => void,
 ): Promise<string[]> {
-  if (!text.includes("@")) return [];
-  const people = mentionedUsers(text, sender);
+  // Only what the sender typed can tag someone. A pasted block (meeting
+  // notes, a Slack export, an attendee list) names people without asking
+  // anything of them, so it never becomes a mention.
+  const typed = typedText(text);
+  if (!typed.includes("@")) return [];
+  const people = mentionedUsers(typed, sender);
   for (const person of people) {
     const mention = await addMention(person, {
       sessionId,
       by: sender || "Someone",
       source,
-      preview: text,
+      preview: typed,
     });
     if (mention) onRecorded?.(person, mention);
   }
   return people;
+}
+
+/** The message without its folded `<pasted-text>` blocks. */
+function typedText(text: string): string {
+  return splitPastedTexts(text)?.content ?? text;
 }
 
 /**
@@ -164,7 +174,7 @@ export async function notifyMentions(
     await import("./notifications");
   const { findSession } = await import("./session-cache");
   const session = findSession(sessionId);
-  const body = mentionPreview(text);
+  const body = mentionPreview(typedText(text));
   for (const name of mentioned)
     void notifyUser(name, {
       kind: "mention",
