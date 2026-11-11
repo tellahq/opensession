@@ -1086,7 +1086,6 @@ export function IngressPanel({
                                         value={url}
                                         placeholder="https://ingress.example.com"
                                         disabled={!!busy}
-                                        readOnly={!!privateDomain}
                                         onChange={(event) =>
                                           setDrafts((current) => ({
                                             ...current,
@@ -1097,12 +1096,18 @@ export function IngressPanel({
                                     </SettingsField>
                                     {privateDomain && (
                                       <p className="m-0">
-                                        Open Session uses a separate{" "}
+                                        Use a hostname separate from the private
+                                        app address. Cloudflare’s free
+                                        certificate covers only one level below
+                                        your domain, so a name like{" "}
                                         <strong className="font-medium text-fg">
-                                          ingress
+                                          ingress.example.com
                                         </strong>{" "}
-                                        hostname alongside the private app
-                                        address.
+                                        works where{" "}
+                                        <strong className="font-medium text-fg">
+                                          ingress.os.example.com
+                                        </strong>{" "}
+                                        does not.
                                       </p>
                                     )}
                                     <p className="m-0">
