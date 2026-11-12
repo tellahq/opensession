@@ -17,6 +17,10 @@
  * Pure and side-effect free — safe to import from anywhere.
  */
 
+import {
+  AUTOMATIONS_ACCOUNT_OWNER,
+  isAutomationsAccountOwner,
+} from "./account-owner";
 import { AUTO_CONTINUE_USER } from "./auto-continue";
 import { personaName, productMark, productName } from "./config";
 import { isNativeSessionId } from "./paths";
@@ -274,14 +278,23 @@ export function sessionCreationOwner(
  * interactive session owner's account instead of becoming an unknown user and
  * incorrectly declaring the shared pool dry. A machine-owned session stays
  * pool-only: never turn one synthetic actor into another person's authority.
+ * An automation turn with no person behind it (`automationAccounts`) asks as
+ * the Automations account group instead.
  */
 export function providerAccountUser(
   promptUser?: string | null,
   sessionOwner?: string | null,
+  automationAccounts?: boolean,
 ): string | undefined {
-  if (promptUser && !isMachineActor(promptUser)) return promptUser;
-  if (sessionOwner && !isMachineActor(sessionOwner)) return sessionOwner;
-  return undefined;
+  // The Automations group's owner value is never a person: only the
+  // explicit automation flag below may ask for it.
+  const person = (name?: string | null) =>
+    !!name && !isMachineActor(name) && !isAutomationsAccountOwner(name);
+  if (person(promptUser)) return promptUser!;
+  if (person(sessionOwner)) return sessionOwner!;
+  // An automation's own turn: its Automations-group accounts first, the
+  // shared pool as backup (account-owner.ts).
+  return automationAccounts ? AUTOMATIONS_ACCOUNT_OWNER : undefined;
 }
 
 /**

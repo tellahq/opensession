@@ -20,6 +20,7 @@ import {
   SYSTEM_RESTART_USER,
   workerActor,
 } from "./session-actors";
+import { AUTOMATIONS_ACCOUNT_OWNER } from "./account-owner";
 
 const SESSION = "os-019fe194-5fbe-7000-a81e-d0a656ad77f4";
 
@@ -74,6 +75,21 @@ describe("machine actors", () => {
 
   test("human prompts keep the prompter's provider account", () => {
     expect(providerAccountUser("Kent", "Jaap")).toBe("Kent");
+  });
+
+  test("an automation's own turn asks as the Automations account group", () => {
+    expect(providerAccountUser(undefined, undefined, true)).toBe(
+      AUTOMATIONS_ACCOUNT_OWNER,
+    );
+    expect(providerAccountUser("auto-continue", undefined, true)).toBe(
+      AUTOMATIONS_ACCOUNT_OWNER,
+    );
+    // A person taking over an automation-owned session pays as themselves.
+    expect(providerAccountUser("Kent", undefined, true)).toBe("Kent");
+    // Nobody can claim the group by sending as it.
+    expect(
+      providerAccountUser(AUTOMATIONS_ACCOUNT_OWNER, "@Automations"),
+    ).toBeUndefined();
   });
 
   test("machine-owned sessions remain pool-only", () => {

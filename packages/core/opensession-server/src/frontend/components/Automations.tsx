@@ -27,7 +27,10 @@ import {
   type SandboxStatusInfo,
 } from "../lib/api";
 import { fetchWorkspaces } from "../lib/api/workspaces";
-import { providerAccountLabel } from "../lib/provider-account";
+import {
+  isAutomationsAccountOwner,
+  providerAccountLabel,
+} from "../lib/provider-account";
 import type { Workspace } from "../lib/types";
 import { getCurrentUser } from "./UserPicker";
 import { CheckStatusIcon } from "./CheckStatusIcon";
@@ -1961,11 +1964,21 @@ function AutomationForm({
               value={accountId}
               onChange={(e) => setAccountId(e.target.value)}
             >
-              <option value="">Auto · shared pool rotation</option>
+              <option value="">
+                {eligibleAccounts.some((x) =>
+                  isAutomationsAccountOwner(x.owner),
+                )
+                  ? "Auto · Automations accounts, then shared pool"
+                  : "Auto · shared pool rotation"}
+              </option>
               {eligibleAccounts.map((x) => (
                 <option key={x.id} value={x.id}>
                   {providerAccountLabel(x)}
-                  {x.owner ? ` · ${x.owner}'s` : ""}
+                  {!x.owner
+                    ? ""
+                    : isAutomationsAccountOwner(x.owner)
+                      ? " · Automations"
+                      : ` · ${x.owner}'s`}
                 </option>
               ))}
             </Select>

@@ -93,6 +93,25 @@ describe("xai account pool", () => {
     expect(listed.find((a) => a.id === "mine")?.mode).toBe("personal");
   });
 
+  test("an Automations account serves automation turns only", async () => {
+    await setXaiAccountOwner("theirs", "@automations");
+    try {
+      const pick = (user?: string) => {
+        const picked = pickXaiAccount({ user, sessionKey: "s" });
+        return "error" in picked ? picked.error : picked.id;
+      };
+      expect(pick("@automations")).toBe("theirs");
+      expect(pick("Alex")).toBe("mine");
+      expect(pick("Nobody")).toBe("shared");
+      expect(pick()).toBe("shared");
+      expect(listXaiAccountsPublic().find((a) => a.id === "theirs")?.mode).toBe(
+        "automations",
+      );
+    } finally {
+      await setXaiAccountOwner("theirs", "Grant");
+    }
+  });
+
   test("a person's own account wins, other people's are never eligible", () => {
     const out: { reason?: string } = {};
     const mine = pickXaiAccount({ user: "Alex", sessionKey: "s", out });

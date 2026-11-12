@@ -262,6 +262,8 @@ export interface HostedRunOpts {
   author?: GitIdentity | null;
   user?: string;
   accountUser?: string;
+  /** See RunAgentOpts.automationAccounts. */
+  automationAccounts?: boolean;
   fallbackModel?: string;
   /** Stable provider-account affinity for internal fan-out workers. */
   accountAffinityKey?: string;
@@ -489,6 +491,7 @@ async function* runAgentInProcess(
       author: opts.author,
       user: opts.user,
       accountUser: opts.accountUser,
+      automationAccounts: opts.automationAccounts,
       fallbackModel: opts.fallbackModel,
       accountAffinityKey: opts.accountAffinityKey,
       effort: opts.effort,
@@ -623,6 +626,7 @@ function hostedRunRecord(spec: RunHostSpec): ActiveRunRecord {
     mcpServers: spec.mcpServers,
     user: spec.user,
     accountUser: spec.accountUser,
+    automationAccounts: spec.automationAccounts,
     deniedTools: spec.deniedTools,
     publicationPolicy: spec.publicationPolicy,
     confirmTools: spec.confirmTools,
@@ -708,6 +712,7 @@ async function spawnHostRun(
     author: opts.author,
     user: opts.user,
     accountUser: opts.accountUser,
+    automationAccounts: opts.automationAccounts,
     fallbackModel: opts.fallbackModel,
     accountAffinityKey: opts.accountAffinityKey,
     effort: opts.effort,

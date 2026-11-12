@@ -285,7 +285,11 @@ private struct AccountUsageRow: View {
     /// Whose subscription this is. A shared pool account is the default, so it
     /// is the phrase that needs no name beside it.
     private var ownership: String {
-        if let owner = account.owner, owner.isEmpty == false { return "Personal · \(owner)" }
+        if let owner = account.owner, owner.isEmpty == false {
+            // The server's reserved owner for the Automations account group.
+            if owner.lowercased() == "@automations" { return "Automations" }
+            return "Personal · \(owner)"
+        }
         return "Shared pool"
     }
 

@@ -10,7 +10,8 @@
  *
  * Only accounts the run could be given are listed, through the same owner
  * gate the pickers apply: shared pool accounts, plus personal accounts owned
- * by the run's user. A run without a user (an automation) sees the pool only.
+ * by the run's user. An automation asks as AUTOMATIONS_ACCOUNT_OWNER, so it
+ * sees the pool plus the Automations accounts; no user means the pool only.
  * Tokens, the email field and credential paths never leave this module.
  *
  * Held to the automation in-process bar like opensession-health: aggregate
@@ -61,7 +62,7 @@ export interface UsageAccount {
   id: string;
   name: string;
   plan?: string;
-  mode: "shared" | "personal";
+  mode: "shared" | "personal" | "automations";
   /** The picker would hand this account to a new run right now. */
   usable: boolean;
   /** Benched after a limit error or a wedge until this time. */
@@ -122,7 +123,7 @@ function base(
     name: string;
     label?: string;
     plan?: string;
-    mode: "shared" | "personal";
+    mode: "shared" | "personal" | "automations";
     usable: boolean;
     exhaustedUntil: string | null;
   },
