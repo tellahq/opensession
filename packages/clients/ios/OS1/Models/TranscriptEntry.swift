@@ -82,6 +82,11 @@ struct TranscriptEntry: Identifiable, Decodable, Equatable, Sendable {
     /// Content-free marker separating a completed response from a later
     /// system-triggered turn. It affects grouping but never renders a row.
     var turnBoundary: Bool?
+    /// Set beside `turnBoundary` when the server nudged the agent to continue
+    /// after a turn that had ended ("nudge"), instead of the agent's own wait
+    /// waking it. The boundary then only ends the turn above it; the turn
+    /// below is ordinary work, not a check-back.
+    var turnBoundaryKind: String?
     /// Provider-supplied reasoning summary. Optional so transcripts from older
     /// servers keep decoding; only `true` changes presentation.
     var isReasoning: Bool?
