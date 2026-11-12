@@ -17,6 +17,7 @@ function claude(over: Partial<ClaudeAccountPublic> = {}): ClaudeAccountPublic {
     email: "pool@example.test",
     createdAt: EARLIER,
     mode: "shared",
+    sidelined: false,
     noUsageScope: false,
     exhaustedUntil: null,
     usable: true,
