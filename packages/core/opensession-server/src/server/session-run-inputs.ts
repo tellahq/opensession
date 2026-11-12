@@ -94,8 +94,10 @@ export interface SessionRunInputs {
    *  gate. */
   mcpRunAs: McpRunAs | undefined;
   /** The person whose personal provider subscription may serve this turn:
-   *  the human who sent the prompt, or undefined when a machine did (an
-   *  automation tick, a review handoff, auto-continue). Unlike `user` it
+   *  the human who sent the prompt. When a machine did (a worker report, a
+   *  review handoff, auto-continue), an interactive session falls back to
+   *  the person it acts for, and an automation-owned one to undefined (the
+   *  shared pool). Unlike `user` it
    *  survives an automation-owned session, because a person who takes one
    *  over and presses send is spending their own subscription; the shared
    *  pool stays the backup. It reaches provider account selection only,
@@ -130,7 +132,19 @@ export type RunInputsSession = Pick<
   | "startedBy"
   | "createdByLogin"
   | "plainDiscussionId"
->;
+> &
+  Partial<Pick<UnifiedSession, "lastPromptedBy" | "createdBy">>;
+
+/** The person whose subscription a senderless turn in an interactive session
+ *  spends: the last person who prompted it, else the person who started or
+ *  created it. Null when no person is on record. */
+function sessionAccountOwner(session: RunInputsSession): string | null {
+  return (
+    humanPrompter(session.lastPromptedBy) ??
+    humanPrompter(session.startedBy) ??
+    humanPrompter(session.createdBy)
+  );
+}
 
 /** Which in-process server set the next turn carries. Pure — mirrors the
  *  `inProcessMcp` ternary at the runAgent call site. `humanPrompter` is the
@@ -202,7 +216,17 @@ export async function resolveSessionRunInputs(
               await import("./feeds")
             ).feedMcpServersForRefs(session.externalRefs!)
           : undefined;
-  const accountUser = humanPrompter(opts.user) ?? undefined;
+  // A machine-sent turn in a person's session (a worker report, an agent
+  // message, an auto-continue, a restart resume) bills the person the session
+  // acts for. Without this it only had the GitHub-login fallback the runner
+  // applies, so a session created without one ran pool-only on those turns
+  // and failed "no usable Claude account in the pool" while the owner's own
+  // subscriptions had headroom. Automation-owned sessions keep machine turns
+  // on the pool.
+  const accountUser =
+    humanPrompter(opts.user) ??
+    (isAutomationSession ? null : sessionAccountOwner(session)) ??
+    undefined;
   // A wait's wake sent in a person's name rides the same field, so every
   // launch path hands it to automationSessionMcp, which tells the two apart.
   const prompter =
