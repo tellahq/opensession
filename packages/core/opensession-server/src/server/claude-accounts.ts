@@ -142,6 +142,9 @@ export interface ClaudeAccountPublic {
   createdAt: string;
   owner?: string;
   mode: "shared" | "personal" | "automations";
+  /** Benched by any sideline, account-wide or for one model. A model
+   *  sideline alone leaves `exhaustedUntil` null. */
+  sidelined: boolean;
   usage: AccountUsage | null;
   noUsageScope: boolean;
   credentialsPath?: string;
@@ -1088,6 +1091,7 @@ function toPublic(a: ClaudeAccount): ClaudeAccountPublic {
     createdAt: a.createdAt,
     owner: a.owner,
     mode: accountOwnerMode(a.owner),
+    sidelined: hasActiveSideline(a.id),
     usage,
     noUsageScope: a.usageScope === "missing" && !a.credentialsPath,
     credentialsPath: a.credentialsPath,
@@ -1101,6 +1105,36 @@ function toPublic(a: ClaudeAccount): ClaudeAccountPublic {
         fiveHour === null ||
         fiveHour < EXHAUSTED_UTILIZATION),
   };
+}
+
+function hasActiveSideline(id: string): boolean {
+  const now = Date.now();
+  for (const [key, until] of sidelines()) {
+    if ((key === id || key.startsWith(`${id}:`)) && until > now) return true;
+  }
+  return false;
+}
+
+/**
+ * Put an account back in rotation by hand, for a limit someone reset at the
+ * provider. Normally only a usage poll showing headroom returns a benched
+ * account early, which cannot happen while its usage login is broken. Clears
+ * every sideline (account-wide and per model) in memory, where the picker
+ * reads them, and in the state file, plus the cached usage that still shows
+ * the spent windows (the next poll fills them in again). A real limit benches
+ * it again on the next refused request.
+ */
+export function returnAccountToPool(id: string): ClaudeAccountPublic | null {
+  const account = readStore().find((a) => a.id === id);
+  if (!account) return null;
+  const map = sidelines();
+  for (const key of [...map.keys()]) {
+    if (key === id || key.startsWith(`${id}:`)) map.delete(key);
+  }
+  persistSidelines();
+  usageCache.delete(id);
+  console.log(`[claude-accounts] ${account.name} returned to the pool by hand`);
+  return toPublic(account);
 }
 
 export function listAccountsPublic(): ClaudeAccountPublic[] {

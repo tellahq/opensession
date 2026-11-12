@@ -74,7 +74,9 @@ interface ClaudeAccountInfo {
   plan?: string;
   /** Personal sub of this person; unset = shared pool account. */
   owner?: string;
-  mode: "shared" | "personal";
+  mode: "shared" | "personal" | "automations";
+  /** Benched account-wide or for a model; older servers omit it. */
+  sidelined?: boolean;
   usage: {
     fetchedAt: string;
     fiveHour: UsageWindow | null;
@@ -664,6 +666,19 @@ function useClaudeAccounts() {
     }
   }
 
+  async function returnToPool(account: ClaudeAccountInfo) {
+    try {
+      await request(
+        `/claude-accounts/${encodeURIComponent(account.id)}/return-to-pool`,
+        { method: "POST", label: "Could not return the account to the pool" },
+      );
+      toast(`${providerAccountLabel(account)} is back in rotation`);
+      void load();
+    } catch (cause) {
+      setError(errorMessage(cause, "Could not return the account to the pool"));
+    }
+  }
+
   async function setCredentialsPath(account: ClaudeAccountInfo) {
     const current =
       account.credentialsPath ||
@@ -693,6 +708,7 @@ function useClaudeAccounts() {
     load,
     refreshing,
     remove,
+    returnToPool,
     setCredentialsPath,
     setError,
     rename: useAccountRename("/claude-accounts", "Anthropic", load, setError),
@@ -787,6 +803,15 @@ function ClaudeAccountRows({ state }: { state: ClaudeAccountsState }) {
                     <IconDotsHorizontal size={18} />
                   </Menu.Trigger>
                   <Menu.Popup align="end" sideOffset={4}>
+                    {(account.sidelined || account.exhaustedUntil) && (
+                      <Menu.Item
+                        onClick={() => state.returnToPool(account)}
+                        title="Use this after resetting its limit at Anthropic. A real limit benches it again on the next refused request."
+                      >
+                        <IconHistory size={16} className="text-faint" />
+                        Return to pool
+                      </Menu.Item>
+                    )}
                     <Menu.Item onClick={() => state.setSignIn(account)}>
                       <IconPlug size={16} className="text-faint" />
                       Connect usage…

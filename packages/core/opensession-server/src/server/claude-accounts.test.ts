@@ -286,6 +286,28 @@ describe("resolveAccount owner gate", () => {
     ).toMatchObject({ mode: "automations" });
   });
 
+  test("returnAccountToPool clears every sideline and the stale usage", async () => {
+    seedUsable();
+    accounts.__setUsageCacheForTest("maxed", usage(100));
+    accounts.markExhausted("maxed");
+    accounts.markExhausted("maxed", "claude-opus-5");
+    const benched = accounts.listAccountsPublic().find((a) => a.id === "maxed");
+    expect(benched?.sidelined).toBe(true);
+    expect(
+      accounts.resolveAccount({ pinnedId: "maxed", strictPin: true }),
+    ).toHaveProperty("refusal");
+    const back = accounts.returnAccountToPool("maxed");
+    expect(back).toMatchObject({ sidelined: false, exhaustedUntil: null });
+    const pinned = accounts.resolveAccount({
+      pinnedId: "maxed",
+      strictPin: true,
+      model: "claude-opus-5",
+    });
+    expect((pinned as any).account?.id).toBe("maxed");
+    expect(accounts.returnAccountToPool("missing")).toBeNull();
+    seedUsable();
+  });
+
   test("reports the reason for the path that produced the account", async () => {
     seedUsable();
     expect((accounts.resolveAccount({ pinnedId: "fresh" }) as any).reason).toBe(
