@@ -3,6 +3,7 @@ import { pathExists } from "./shared/path-exists";
 import type { TranscriptEntry } from "./types";
 import {
   classifyEntries,
+  hiddenTurnStart,
   parseAnsweredAskData,
 } from "@tellahq/opensession-protocol/notices";
 import { withToolPresentations } from "@tellahq/opensession-protocol/tool-presentation";
@@ -1403,9 +1404,10 @@ function stripAssistantContextTail(
 }
 
 /** Hide model-only context while preserving the one structural fact a reader
- * needs: a background wait starts another agent turn. The payload stays
- * private; clients receive only a content-free boundary carrying the original
- * sequence identity, so old stored waits gain the fix without migration. */
+ * needs: a background wait, or a nudge to continue, starts another agent turn.
+ * The payload stays private; clients receive only a content-free boundary
+ * carrying the original sequence identity, so old stored records gain the fix
+ * without migration. */
 function projectContextForWire(entries: TranscriptEntry[]): TranscriptEntry[] {
   const projected: TranscriptEntry[] = [];
   for (const entry of entries) {
@@ -1416,13 +1418,15 @@ function projectContextForWire(entries: TranscriptEntry[]): TranscriptEntry[] {
       projected.push(entry);
       continue;
     }
-    if (entry.contextInjection?.source === "background-wait") {
+    const start = hiddenTurnStart(entry);
+    if (start) {
       projected.push({
         id: entry.id,
         type: "user",
         content: "",
         timestamp: entry.timestamp,
         turnBoundary: true,
+        ...(start === "nudge" ? { turnBoundaryKind: "nudge" as const } : {}),
         ...(entry.seq !== undefined ? { seq: entry.seq } : {}),
         ...(entry.changeSeq !== undefined
           ? { changeSeq: entry.changeSeq }

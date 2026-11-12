@@ -4,6 +4,13 @@ import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  AUTO_CONTINUE_FABRICATED_PROMPT,
+  AUTO_CONTINUE_PROMPT,
+  EMPTY_REPLY_RETRY_PROMPT,
+  ORPHANED_STEER_PROMPT,
+  WEDGE_RETRY_PROMPT,
+} from "./auto-continue";
+import {
   entriesForWire,
   extractImageMarkers,
   extractImplicitMedia,
@@ -263,6 +270,37 @@ describe("entriesForWire", () => {
         changeSeq: 12,
       },
     ]);
+  });
+
+  it("projects a nudge after a finished turn as a boundary that is not a check-back", () => {
+    const context = (id: string, content: string) => ({
+      id,
+      type: "system" as const,
+      content,
+      timestamp: TS,
+      noticeKind: "context-injection" as const,
+      contextInjection: { source: "auto-continue", turnId: id },
+    });
+    expect(
+      entriesForWire([
+        context("announced", AUTO_CONTINUE_PROMPT),
+        context("fabricated", AUTO_CONTINUE_FABRICATED_PROMPT),
+        // These resume a turn that was cut short: the text before them is
+        // narration, so they start nothing.
+        context("stall", WEDGE_RETRY_PROMPT),
+        context("unread", ORPHANED_STEER_PROMPT),
+        context("empty", EMPTY_REPLY_RETRY_PROMPT),
+      ]),
+    ).toEqual(
+      ["announced", "fabricated"].map((id) => ({
+        id,
+        type: "user",
+        content: "",
+        timestamp: TS,
+        turnBoundary: true,
+        turnBoundaryKind: "nudge",
+      })),
+    );
   });
 });
 

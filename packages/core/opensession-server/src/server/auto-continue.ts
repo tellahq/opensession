@@ -8,6 +8,8 @@
  * clean turn ends on an announced next action.
  */
 
+import { CLEAN_TURN_NUDGE_PREFIX } from "@tellahq/opensession-protocol/notices";
+
 /** Sentinel user for the auto-continue turn (also keys the one-nudge guard). */
 export const AUTO_CONTINUE_USER = "auto-continue";
 
@@ -27,8 +29,13 @@ export function githubCredentialUser(
   return authorName || undefined;
 }
 
+// Both wordings sent after a turn that ended cleanly open with
+// CLEAN_TURN_NUDGE_PREFIX: the transcript recognizes the nudge by it and ends
+// the turn above there, so that turn's answer is not folded into the work the
+// nudge starts.
 export const AUTO_CONTINUE_PROMPT =
-  "[auto-continue] Your previous turn ended by announcing a next step without " +
+  CLEAN_TURN_NUDGE_PREFIX +
+  "by announcing a next step without " +
   "executing it. Continue now: perform the step you announced, and keep working " +
   "until the task is done or you are genuinely blocked on input only the human " +
   "can give. If your previous turn actually ended by asking the human a " +
@@ -45,7 +52,8 @@ export const AUTO_CONTINUE_PROMPT =
  * ends right after, so the nudge carries the correction itself.
  */
 export const AUTO_CONTINUE_FABRICATED_PROMPT =
-  "[auto-continue] Your previous turn ended with what looks like a tool-call " +
+  CLEAN_TURN_NUDGE_PREFIX +
+  "with what looks like a tool-call " +
   "transcript written out as text. None of it was executed: you authored it, " +
   "and every value in it is fabricated. Re-read the genuine tool results " +
   "earlier in the conversation, actually invoke the tools you only narrated, " +

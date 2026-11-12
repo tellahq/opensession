@@ -624,6 +624,38 @@ export function isContextInjection(entry: TranscriptEntry): boolean {
   );
 }
 
+/** How every nudge the server sends after a turn that ended cleanly opens.
+ *  The server builds its wordings on this, and stored records are recognized
+ *  by it, so transcripts written before the boundary existed need no
+ *  migration. */
+export const CLEAN_TURN_NUDGE_PREFIX =
+  "[auto-continue] Your previous turn ended ";
+
+/**
+ * Whether a model-only context record started a turn of its own, with no
+ * message a reader can see: the agent's background wait waking it ("wait"), or
+ * the server nudging it to continue after a turn that had ended ("nudge").
+ * The turn before either one is complete, so its last answer must never be
+ * filed as narration of the work that follows.
+ *
+ * Other auto-continue context resumes a turn that was cut short (an engine
+ * stall, an account switch), where the text before it really is narration, so
+ * it starts nothing.
+ */
+export function hiddenTurnStart(
+  entry: Pick<TranscriptEntry, "noticeKind" | "contextInjection" | "content">,
+): "wait" | "nudge" | null {
+  if (entry.noticeKind !== "context-injection") return null;
+  const source = entry.contextInjection?.source;
+  if (source === "background-wait") return "wait";
+  if (
+    source === "auto-continue" &&
+    entry.content.startsWith(CLEAN_TURN_NUDGE_PREFIX)
+  )
+    return "nudge";
+  return null;
+}
+
 /** Drop injection records on the way to a client. Same "on the way out"
  *  discipline as classification: nothing is deleted, it just isn't
  *  conversation. Returns the same array when there was nothing to drop. */

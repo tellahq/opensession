@@ -96,6 +96,12 @@ export interface TranscriptEntry {
    * fake user message. Stored context payloads remain private; the server
    * projects only this boolean boundary. */
   turnBoundary?: boolean;
+  /** Set beside `turnBoundary` when the server nudged the agent to continue
+   * after a turn that had ended, instead of the agent's own wait waking it.
+   * The turn above it is complete, so its answer stays visible, and the turn
+   * below is ordinary work: clients end the turn here without opening a
+   * check-back fold. */
+  turnBoundaryKind?: "nudge";
   // Set on a tool_result whose block carried is_error — the UI shows the step
   // with an error state instead of a success check.
   isError?: boolean;
@@ -197,7 +203,9 @@ export type TranscriptIndexRole =
   | "notice"
   | "review_handoff"
   /** A turn the agent's own wait or scheduled check-back started, with no
-   *  person in between. Clients fold runs of these like review loops. */
+   *  person in between. Clients fold runs of these like review loops. A
+   *  server nudge to continue is indexed the same way, so the turn before it
+   *  ends there; its payload's `turnBoundaryKind` says it is not a check-back. */
   | "check_back"
   | "system"
   | "assistant"

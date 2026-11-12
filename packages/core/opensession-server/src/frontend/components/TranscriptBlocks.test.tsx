@@ -1714,6 +1714,90 @@ describe("TranscriptBlocks check-backs", () => {
       setTurnPrefs(null);
     }
   });
+
+  const nudge = (id: string, second: number): TranscriptEntry => ({
+    ...wake(id, second),
+    turnBoundaryKind: "nudge",
+  });
+  const ask: TranscriptEntry = {
+    id: "ask",
+    type: "user",
+    content: "Ask the questions with more context",
+    timestamp: at(0),
+  };
+
+  test("an answer stays visible when a nudge to continue starts the next turn", () => {
+    const entries = [
+      ask,
+      tool("read-doc", 1),
+      say("answer", "Here are the three open questions.", 2),
+      nudge("nudge-1", 3),
+      { ...say("think", "The nudge is a mistake.", 4), isReasoning: true },
+      say("repeat", "Waiting on your answers to the three questions.", 5),
+    ];
+    const html = renderToStaticMarkup(<TranscriptBlocks entries={entries} />);
+    expect(html).toContain("Here are the three open questions.");
+    expect(html).toContain("Waiting on your answers to the three questions.");
+    // The nudged turn is ordinary work, not a check-back, and the boundary
+    // itself never renders.
+    expect(html).not.toContain("Checked back");
+    expect(html).not.toContain('data-eid="nudge-1"');
+
+    // Without the boundary the two turns read as one, and the answer is
+    // narration inside its fold.
+    const merged = renderToStaticMarkup(
+      <TranscriptBlocks
+        entries={entries.filter((entry) => entry.id !== "nudge-1")}
+      />,
+    );
+    expect(merged).not.toContain("Here are the three open questions.");
+  });
+
+  test("a nudged turn's answer is not folded as an interim check-back report", () => {
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        entries={[
+          ask,
+          say("plan", "Research is done. Next: the doc.", 1),
+          nudge("nudge-1", 2),
+          tool("write-doc", 3),
+          say("done", "The doc is written; CI is running.", 4),
+          wake("wake-1", 10),
+          tool("look-1", 11),
+          say("green", "CI is green.", 12),
+        ]}
+      />,
+    );
+    expect(html).toContain("Research is done. Next: the doc.");
+    expect(html).toContain("The doc is written; CI is running.");
+    expect(html).toContain("CI is green.");
+    expect(html).toContain('aria-label="Checked back, once"');
+  });
+
+  test("a nudge between check-backs stays inside their fold", () => {
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        entries={[
+          ask,
+          say("first", "Pushed; waiting on CI.", 1),
+          wake("wake-1", 10),
+          tool("look-1", 11),
+          say("still", "Still running. More when it finishes.", 12),
+          nudge("nudge-1", 13),
+          say("repeat", "Nothing to do until CI finishes.", 14),
+          wake("wake-2", 20),
+          tool("look-2", 21),
+          say("green", "CI is green.", 22),
+        ]}
+      />,
+    );
+    expect(html).toContain("Pushed; waiting on CI.");
+    expect(html).toContain('aria-label="Checked back, 2 times"');
+    expect(html).not.toContain("Still running.");
+    expect(html).not.toContain("Nothing to do until CI finishes.");
+    expect(html).not.toContain('data-eid="nudge-1"');
+    expect(html).toContain("CI is green.");
+  });
 });
 
 describe("TranscriptBlocks review loops", () => {

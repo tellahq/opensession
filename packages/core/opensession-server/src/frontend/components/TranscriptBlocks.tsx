@@ -153,8 +153,10 @@ type ReviewBlockRole =
 function reviewBlockRole(block: RenderBlock): ReviewBlockRole {
   if (block.kind !== "entry") return { kind: "other" };
   // A background wait's content-free boundary, or a scheduled check-back:
-  // the agent started this turn itself.
-  if (block.entry.turnBoundary) return { kind: "check-back" };
+  // the agent started this turn itself. A nudge to continue only ends the
+  // turn above it: what follows is ordinary work with its own answer.
+  if (block.entry.turnBoundary)
+    return { kind: isNudgeBoundary(block) ? "other" : "check-back" };
   const entry = classifyEntry(block.entry);
   if (entry.notice?.kind === "scheduled-prompt") return { kind: "check-back" };
   if (entry.notice?.kind === "review-handoff") {
@@ -244,6 +246,17 @@ function groupReviewLoops(blocks: RenderBlock[]): RenderBlock[] {
   return grouped;
 }
 
+/** The server told the agent to continue after a turn that had ended. The
+ * boundary is structural only: it keeps that turn's answer out of the work
+ * below it and never renders. */
+function isNudgeBoundary(block: RenderBlock): boolean {
+  return (
+    block.kind === "entry" &&
+    Boolean(block.entry.turnBoundary) &&
+    block.entry.turnBoundaryKind === "nudge"
+  );
+}
+
 /** Whether the check-backs open at `from` go on: another one starts before
  * any human message, review loop or note. */
 function checkBacksContinue(blocks: RenderBlock[], from: number): boolean {
@@ -268,7 +281,9 @@ function groupCheckBacks(blocks: RenderBlock[]): RenderBlock[] {
   for (let i = 0; i < blocks.length; i++) {
     const first = blocks[i]!;
     if (reviewBlockRole(first).kind !== "check-back") {
-      grouped.push(first);
+      // Outside a fold a nudge boundary has done its work by splitting the
+      // turn; inside one, the fold skips it like any other boundary.
+      if (!isNudgeBoundary(first)) grouped.push(first);
       continue;
     }
     const loop: RenderBlock[] = [first];
