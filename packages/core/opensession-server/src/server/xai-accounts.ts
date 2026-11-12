@@ -21,6 +21,7 @@
  */
 
 import { withLabel } from "./provider-account-label";
+import { accountOwnerMode } from "./account-owner";
 import { registerMemoryProbe } from "./memory-probes";
 import { constants } from "fs";
 import { access, chmod } from "fs/promises";
@@ -78,7 +79,8 @@ export interface XaiAccount {
   /** xAI account identity from the id token or the proxy's /user. */
   email?: string;
   /** Personal account: only this person's runs may use it, and their runs
-   *  prefer it over the shared pool. Unset = shared pool account. */
+   *  prefer it over the shared pool. Unset = shared pool account.
+   *  AUTOMATIONS_ACCOUNT_OWNER reserves it for automation turns. */
   owner?: string;
   createdAt: string;
   access: string;
@@ -95,7 +97,7 @@ export interface XaiAccountPublic {
   email?: string;
   kind: "oauth";
   owner?: string;
-  mode: "shared" | "personal";
+  mode: "shared" | "personal" | "automations";
   createdAt: string;
   exhaustedUntil: string | null;
   usable: boolean;
@@ -325,7 +327,7 @@ function toPublic(a: XaiAccount): XaiAccountPublic {
     ...(a.email ? { email: a.email } : {}),
     kind: "oauth",
     ...(a.owner ? { owner: a.owner } : {}),
-    mode: a.owner ? "personal" : "shared",
+    mode: accountOwnerMode(a.owner),
     createdAt: a.createdAt,
     exhaustedUntil:
       until !== undefined && until > Date.now()

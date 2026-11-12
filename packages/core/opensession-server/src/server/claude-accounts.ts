@@ -12,6 +12,7 @@
  */
 
 import { withLabel } from "./provider-account-label";
+import { accountOwnerMode } from "./account-owner";
 import { registerMemoryProbe } from "./memory-probes";
 import { homeDir } from "./paths";
 import { chmod, readFile } from "fs/promises";
@@ -82,7 +83,9 @@ export interface ClaudeAccount {
    * person (same identity table as commit attribution / MCP allowedUsers) use
    * the account — and their runs prefer it over the shared pool, falling back
    * to the pool when it's exhausted. Unset = shared pool account, used by
-   * everyone and by automations (which run with no user).
+   * everyone and by automations (which run with no user). The reserved
+   * AUTOMATIONS_ACCOUNT_OWNER puts it in the Automations group instead: only
+   * automation turns use it, before the shared pool.
    */
   owner?: string;
   // "missing" once the usage endpoint has returned 403 for this token
@@ -138,7 +141,7 @@ export interface ClaudeAccountPublic {
   plan?: string;
   createdAt: string;
   owner?: string;
-  mode: "shared" | "personal";
+  mode: "shared" | "personal" | "automations";
   usage: AccountUsage | null;
   noUsageScope: boolean;
   credentialsPath?: string;
@@ -1084,7 +1087,7 @@ function toPublic(a: ClaudeAccount): ClaudeAccountPublic {
     plan: a.plan,
     createdAt: a.createdAt,
     owner: a.owner,
-    mode: a.owner ? "personal" : "shared",
+    mode: accountOwnerMode(a.owner),
     usage,
     noUsageScope: a.usageScope === "missing" && !a.credentialsPath,
     credentialsPath: a.credentialsPath,

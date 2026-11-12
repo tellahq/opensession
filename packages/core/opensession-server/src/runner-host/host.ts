@@ -607,6 +607,7 @@ try {
     author: spec.author,
     user: spec.user,
     accountUser: spec.accountUser,
+    automationAccounts: spec.automationAccounts,
     fallbackModel: spec.fallbackModel,
     accountAffinityKey: spec.accountAffinityKey,
     effort: spec.effort,

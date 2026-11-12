@@ -84,6 +84,8 @@ export interface ActiveRunRecord {
    *  Preserved across resume so recovery does not fall back to pool-only;
    *  read by provider account selection only, never by MCP or GitHub policy. */
   accountUser?: string;
+  /** RunAgentOpts.automationAccounts, preserved across resume. */
+  automationAccounts?: boolean;
   deniedTools?: Record<string, string>; // per-run tool denials, preserved across resume
   publicationPolicy?: { repo: string; branch: string; headBranch: string };
   confirmTools?: Record<string, string>; // per-run human-confirmed tools, preserved across resume
@@ -214,6 +216,7 @@ export function buildRunJournalRecord(
     transientFallback?: boolean;
     fallbackModel?: string;
     accountUser?: string;
+    automationAccounts?: boolean;
     accountId?: string;
     accountStrict?: boolean;
     usageCredits?: boolean;
@@ -248,6 +251,7 @@ export function buildRunJournalRecord(
   return {
     ...site,
     accountUser: site.accountUser ?? opts.accountUser,
+    automationAccounts: site.automationAccounts ?? opts.automationAccounts,
     accountId: site.accountId ?? opts.accountId,
     accountStrict: site.accountStrict ?? opts.accountStrict,
     usageCredits: site.usageCredits ?? opts.usageCredits,

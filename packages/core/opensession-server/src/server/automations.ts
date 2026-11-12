@@ -85,6 +85,7 @@ import { createChartsMcpServer } from "./charts-mcp";
 import { createWebMcpServer } from "./web-mcp";
 import { createHealthMcpServer } from "./health-mcp";
 import { createUsageMcpServer } from "./usage-mcp";
+import { AUTOMATIONS_ACCOUNT_OWNER } from "./account-owner";
 import { papercutsEnabledForRepo } from "./papercuts";
 import {
   registerRunToken,
@@ -1423,8 +1424,11 @@ export function automationBaselineMcpServers(
     }),
     "opensession-health": createHealthMcpServer(),
     "opensession-audit": createAuditMcpServer(),
-    // Subscription headroom; no user, so shared pool accounts only.
-    "opensession-usage": createUsageMcpServer(),
+    // Subscription headroom: the accounts this automation's runs may use,
+    // the shared pool and the Automations group.
+    "opensession-usage": createUsageMcpServer({
+      user: AUTOMATIONS_ACCOUNT_OWNER,
+    }),
     // Compiles a ```vega-lite fence for a report and offloads big data into
     // this run's own assets; no reads, no paths, no URLs (charts-mcp.ts).
     "opensession-charts": createChartsMcpServer({ sessionId }),
@@ -2729,6 +2733,8 @@ export async function runAutomation(
         prReviewer: automation.prReviewer,
         readRepos: automation.readRepos,
         author: labelIdentity(automation.name),
+        // Its Automations-group accounts first, the shared pool as backup.
+        automationAccounts: true,
         journalKind: "automation",
         trustProfile: "automation",
       });
@@ -2760,6 +2766,8 @@ export async function runAutomation(
         // The automation is the commit author. Nobody sent this prompt, so the
         // instance identity would otherwise collapse every routine into one.
         author: labelIdentity(automation.name),
+        // Its Automations-group accounts first, the shared pool as backup.
+        automationAccounts: true,
       };
       events =
         providerFor(runModel) === "pi"

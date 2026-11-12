@@ -2099,6 +2099,7 @@ export async function openCreatedSession(
               aws: openingTrust.aws,
               author: commitAuthorFor(spec.user, spec.createdBy),
               user: openingTrust.user,
+              automationAccounts: automationChild || undefined,
               journalKind: automationChild ? "automation" : "create",
               trustProfile: openingTrust.trustProfile,
               onAskUser: automationChild ? undefined : makeAskHandler(bksId),

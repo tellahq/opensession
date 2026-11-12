@@ -142,6 +142,10 @@ export interface RunHostSpec {
   /** Person whose personal provider subscription may serve the run when it
    *  differs from `user` (see agent-runner RunAgentOpts). */
   accountUser?: string;
+  /** The run belongs to an automation: with no `accountUser`, provider
+   *  accounts come from the Automations group first, shared pool as backup.
+   *  Older hosts ignore it and use the shared pool. */
+  automationAccounts?: boolean;
   fallbackModel?: string;
   /** Stable provider-account affinity for internal fan-out workers. */
   accountAffinityKey?: string;

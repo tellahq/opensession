@@ -196,6 +196,8 @@ describe("automation descendant opening policy", () => {
       // Only the person's provider subscription follows them across the
       // boundary; MCP, GitHub and trust identities stay dropped.
       accountUser: "human@example.com",
+      // Machine turns still draw from the Automations accounts first.
+      automationAccounts: true,
       journalKind: "automation",
       trustProfile: "automation",
     });
