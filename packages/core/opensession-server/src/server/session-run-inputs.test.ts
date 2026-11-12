@@ -289,7 +289,13 @@ describe("resolveSessionRunInputs", () => {
     // login ran pool-only and failed "no usable Claude account in the pool"
     // while the owner's own subscriptions had headroom.
     const session = { ...plain, createdByLogin: undefined };
-    for (const user of ["Open Session", "worker bks-1", "auto-continue"]) {
+    for (const user of [
+      "Open Session",
+      "worker bks-1",
+      "auto-continue",
+      "Open Session (scheduled)",
+      "GitHub (scheduled)",
+    ]) {
       const inputs = await resolveSessionRunInputs(session, { user });
       expect(inputs.accountUser).toBe("Michiel");
       // Only account selection: MCP and spawn identity stay the sender's.
@@ -304,6 +310,16 @@ describe("resolveSessionRunInputs", () => {
         )
       ).accountUser,
     ).toBe("Kent");
+    // A machine-scheduled check-back recorded as the last prompter is not
+    // the person the session acts for.
+    expect(
+      (
+        await resolveSessionRunInputs(
+          { ...session, lastPromptedBy: "Open Session (scheduled)" },
+          { user: "Open Session (scheduled)" },
+        )
+      ).accountUser,
+    ).toBe("Michiel");
     expect(
       (
         await resolveSessionRunInputs(

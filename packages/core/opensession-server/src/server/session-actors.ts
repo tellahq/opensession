@@ -186,10 +186,18 @@ function sameBrand(a: string, b: string): boolean {
   return !!key(a) && key(a) === key(b);
 }
 
-/** True when `createdBy` is one of our sentinels rather than a person. */
+/** True when `createdBy` is one of our sentinels rather than a person. A
+ *  scheduler-minted sender (`"<x> (scheduled)"`, `(loop)`, `(wait)`) is judged
+ *  by the name it was minted for: a check-back that a worker report or a
+ *  review handoff scheduled is no more a person than its scheduler, and
+ *  reading `"Open Session (scheduled)"` as one made it the session's last
+ *  prompter and ran its turn pool-only. */
 export function isMachineActor(createdBy?: string | null): boolean {
-  const name = (createdBy || "").trim();
-  if (!name) return false;
+  const sender = (createdBy || "").trim();
+  if (!sender) return false;
+  const name = scheduledOwner(sender);
+  // The senderless forms ("scheduled", "loop") name nobody.
+  if (!name) return true;
   // A configured teammate is never a sentinel, whatever they are called.
   // Cheap insurance against a login like "GitHub" reading as machine.
   if (gitIdentityFor(name)) return false;

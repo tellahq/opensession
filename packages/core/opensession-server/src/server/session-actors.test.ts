@@ -119,10 +119,33 @@ describe("machine actors", () => {
     }
   });
 
+  test("a tick scheduled with no person behind it is a machine actor", () => {
+    // A check-back a worker report or review handoff scheduled ran as
+    // "Open Session (scheduled)", read as a person, became the session's last
+    // prompter and ran pool-only instead of on the owner's subscription.
+    for (const sender of [
+      loopActor(null),
+      scheduledActor(null),
+      scheduledActor("Open Session"),
+      scheduledActor("GitHub"),
+      scheduledActor("auto-continue"),
+      scheduledActor(workerActor(SESSION)),
+      waitActor("Health monitor (automation)"),
+    ]) {
+      expect(isScheduledActor(sender)).toBe(true);
+      expect(isMachineActor(sender)).toBe(true);
+      expect(humanPrompter(sender)).toBeNull();
+      expect(providerAccountUser(sender, "Kent")).toBe("Kent");
+    }
+    expect(providerAccountUser(scheduledActor("Ada"), "Kent")).toBe(
+      "Ada (scheduled)",
+    );
+  });
+
   test("a scheduled loop tick keeps the person's credit but is not their presence", () => {
     expect(loopActor("Kent")).toBe("Kent (loop)");
     expect(loopActor(undefined)).toBe("loop");
-    for (const sender of [loopActor("Kent"), loopActor(null), "kent (LOOP)"]) {
+    for (const sender of [loopActor("Kent"), "kent (LOOP)"]) {
       expect(isScheduledActor(sender)).toBe(true);
       // Not a machine actor: the session is still Kent's, so the recorded
       // prompter, commit identity and provider account credit him.
@@ -141,11 +164,9 @@ describe("machine actors", () => {
     );
     expect(scheduledActor("Kent (loop)")).toBe("Kent (scheduled)");
     expect(scheduledActor("scheduled")).toBe("scheduled");
-    for (const sender of [scheduledActor("Kent"), scheduledActor(null)]) {
-      expect(isScheduledActor(sender)).toBe(true);
-      expect(isMachineActor(sender)).toBe(false);
-      expect(interactivePrompter(sender)).toBeNull();
-    }
+    expect(isScheduledActor(scheduledActor("Kent"))).toBe(true);
+    expect(isMachineActor(scheduledActor("Kent"))).toBe(false);
+    expect(interactivePrompter(scheduledActor("Kent"))).toBeNull();
     expect(humanPrompter(scheduledActor("Kent"))).toBe("Kent (scheduled)");
     // A wait's wake keeps the person's credit and names whose wait it is,
     // but is never their presence either.
