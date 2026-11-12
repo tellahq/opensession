@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { useThreadPaneStack } from "../lib/thread-view";
 import { useNavigation } from "./useNavigation";
 import type { ReviewRegion } from "../components/session-viewer/SessionViewerMainRegion";
 import type { PanelBrowserTarget } from "../lib/portal-pin";
@@ -86,12 +85,9 @@ export function useSidePanelTabs({
   const workspace = useWorkspaceRecord(self?.workspaceId ?? null);
   const sessions = useSessionRecords();
   const coordinating = useIsCoordinating(self, workspace);
-  // A thread opened from a card counts even when it isn't a child here (a
-  // session started with create_session, say).
-  const openThreads = useThreadPaneStack(preview.sessionId);
-  const hasThreads =
-    openThreads.length > 0 ||
-    sessions.some((s) => s.parentSessionId === preview.sessionId);
+  const hasThreads = sessions.some(
+    (s) => s.parentSessionId === preview.sessionId,
+  );
   const threads: SidePanelThreads | null =
     self && (coordinating || hasThreads)
       ? { workspace, rootId: self.id, pinned: coordinating }

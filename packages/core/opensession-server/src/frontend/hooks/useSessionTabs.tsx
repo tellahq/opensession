@@ -48,6 +48,7 @@ import {
   type TabSplit,
 } from "../lib/split-tabs";
 import { setTabColor } from "../lib/tab-colors";
+import { closeThreadTab, isThreadTab, useThreadTabs } from "../lib/thread-tabs";
 import { appendNewTabs, applyTabOrder, saveTabOrder } from "../lib/tab-order";
 import { copySessionTranscript } from "../lib/transcript-copy";
 import type { UnifiedSession, Workspace } from "../lib/types";
@@ -317,6 +318,10 @@ export function useSessionTabs({
     copyLinkPathRef.current = copyLinkPath;
   });
 
+  /** Threads someone opened as tabs (lib/thread-tabs). */
+  const threadTabs = useThreadTabs();
+  const takesTab = (s: UnifiedSession) =>
+    !s.parentSessionId || threadTabs.has(s.id);
   // Canonicalize the open session's URL to /workspace/<wsId>/session/<sessionId> once
   // its workspace is known (replaceState: same history depth, so Back and the
   // mobile page-stack are unaffected). Workspace-less sessions keep /session/<id>.
@@ -328,9 +333,12 @@ export function useSessionTabs({
     if (route.view !== "session" || !currentSession) return;
     // Remember the open session as its workspace's landing tab, so re-entering
     // the workspace (sidebar, bare /workspace/<id> URL) returns here. A worker
-    // session is not a tab (see `viewingWorker`), so it never becomes the
+    // session not opened as a thread tab is not a tab (see `viewingWorker`), so it never becomes the
     // workspace's landing spot — re-entering lands on the session that spawned it.
-    if (activeWorkspaceId && !currentSession.parentSessionId)
+    if (
+      activeWorkspaceId &&
+      (!currentSession.parentSessionId || threadTabs.has(currentSession.id))
+    )
       saveWorkspaceLastSession(activeWorkspaceId, route.id);
     const canonical =
       activeWorkspacePane ??
@@ -343,6 +351,7 @@ export function useSessionTabs({
   }, [
     route,
     currentSession,
+    threadTabs,
     activeWorkspaceId,
     activeWorkspacePane,
     openSubagentPath,
@@ -366,7 +375,7 @@ export function useSessionTabs({
    * entirely and the header breadcrumb (repo > session > worker) is what says
    * where you are and how to get back up.
    */
-  const viewingWorker = !!currentSession?.parentSessionId;
+  const viewingWorker = !!currentSession && !takesTab(currentSession);
   // The strip's natural order (createdAt asc), before any user reordering.
   const naturalSessions: UnifiedSession[] = activeWorkspaceId
     ? sessions
@@ -375,9 +384,10 @@ export function useSessionTabs({
             liveTab(s) &&
             !hiddenEmptySessionIds.has(s.id) &&
             s.workspaceId === activeWorkspaceId &&
-            // Workers never take a tab — they are reached from the header's
-            // worker menu and read as a level below their parent.
-            !s.parentSessionId,
+            // Workers take no tab unless someone opened one as a thread tab:
+            // otherwise they are reached from the header's worker menu and
+            // read as a level below their parent.
+            takesTab(s),
         )
         .sort(byCreated)
     : currentSession?.worktreeDir?.includes("/worktrees/")
@@ -387,7 +397,7 @@ export function useSessionTabs({
               liveTab(s) &&
               !hiddenEmptySessionIds.has(s.id) &&
               s.worktreeDir === currentSession.worktreeDir &&
-              !s.parentSessionId,
+              takesTab(s),
           )
           .sort(byCreated)
       : currentSession
@@ -838,7 +848,9 @@ export function useSessionTabs({
             });
             refresh();
           },
-          close: closeSession,
+          close: (s) => {
+            if (!closeThreadTabOf(s)) closeSession(s);
+          },
           delete: deleteSessionFromTab,
           toast: showToast,
           restore: restoreSession,
@@ -1234,6 +1246,22 @@ export function useSessionTabs({
     dropStalePins,
     openNewSessionInWorkspace,
   });
+  /**
+   * Closing a thread's tab only takes the tab away: the thread keeps running,
+   * still one click away from the conversation that started it, which is
+   * where closing it lands. False for any other session, which closes as usual.
+   */
+  const closeThreadTabOf = (s: UnifiedSession): boolean => {
+    if (!s.parentSessionId || !isThreadTab(s.id)) return false;
+    closeThreadTab(s.id);
+    if (route.view === "session" && route.id === s.id)
+      navigate({ view: "session", id: s.parentSessionId });
+    return true;
+  };
+  const closeSessionTabRef = useRef(closeThreadTabOf);
+  useLayoutEffect(() => {
+    closeSessionTabRef.current = closeThreadTabOf;
+  });
   const selectSessionTab = (next: UnifiedSession) => {
     const empty =
       currentSession &&
@@ -1377,7 +1405,7 @@ export function useSessionTabs({
         void copySessionTranscript(s, "concise", showToast);
       } else if (matchesShortcut(e, "session-close")) {
         e.preventDefault();
-        void closeSessionRef.current(s);
+        if (!closeSessionTabRef.current(s)) void closeSessionRef.current(s);
       } else if (!s.desk && matchesShortcut(e, "session-new-sibling")) {
         e.preventDefault();
         void handleNewSessionRef.current("share");

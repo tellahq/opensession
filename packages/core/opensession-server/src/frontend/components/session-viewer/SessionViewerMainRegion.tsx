@@ -107,7 +107,6 @@ import type { SessionComments } from "../../lib/comment-threads";
 import { InlineComments } from "../comments/InlineComments";
 import { MessageCommentsPane } from "../comments/MessageCommentsPane";
 import { CoordinatorMenuItems } from "../threads/CoordinatorMenuItems";
-import { ThreadSplit } from "../threads/ThreadSplit";
 import { WorkspaceSettingsHost } from "../WorkspaceSettingsDialog";
 import { anchorFromRange } from "../../lib/comment-anchor";
 import { requestCommentDraft } from "../../lib/comment-draft";
@@ -1687,12 +1686,6 @@ export function SessionViewerMainRegion({
           </div>
         ) : null}
       </div>
-      {/* A thread opened from a card: a column beside the conversation. */}
-      <ThreadSplit
-        rootId={session.id}
-        onOpenSession={navigation.openSession}
-        catalog={{ connected, models, defaultModel, accounts, send }}
-      />
     </>
   );
 }
