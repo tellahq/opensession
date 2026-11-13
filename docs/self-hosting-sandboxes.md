@@ -59,7 +59,9 @@ or another provider.
 
 ## What a Sandbox is
 
-Every Sandbox session gets its own machine. Open Session:
+Every Sandbox session gets its own machine, except that the tabs of one
+workspace share theirs (see [Tabs that share a Sandbox](#tabs-that-share-a-sandbox)).
+Open Session:
 
 - creates the VM (from the project's snapshot when one exists, else from the
   provider's base image), installs the base runtime, and clones the
@@ -82,6 +84,27 @@ Every Sandbox session gets its own machine. Open Session:
 The session's **Sandbox** badge shows Preparing, Awake, Sleeping, Waking, or
 Needs attention, with manual sleep, wake, checkpoint, and rebuild, plus the
 `setup` and `resume` logs and the age of the last checkpoint.
+
+### Tabs that share a Sandbox
+
+A new tab (+) in a Sandbox session's workspace joins the same machine and
+works in the same checkout, the way tabs on this machine share a worktree.
+Both records carry `sandboxHost`, the session the provider keys the machine
+by, so every tab's turn reaches the same machine
+(`server/sandbox/shared-machine.ts`). While several tabs use the machine:
+
+- deleting a tab keeps the machine until the last tab is deleted;
+- archiving a tab puts the machine to sleep only once every other tab on it
+  is archived too;
+- an idle or manual sleep waits for every tab's turn, and each tab's badge
+  shows the same Sandbox state;
+- moving a tab and rebuilding the machine are refused, because the other
+  tabs would lose their workspace.
+
+Each tab keeps its own conversation, engine state, scratch folder, and
+checkpoint ref. Stacked tabs (a new branch on top of this one) are not
+supported in a Sandbox yet; an Ask tab still reads the repository's own
+checkout on this machine.
 
 ## Where the agent runs
 

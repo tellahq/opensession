@@ -88,6 +88,10 @@ import { activeSandboxFor, restoreSandboxPortals } from "./session-sandbox";
 import { checkpointSessionWorkspace } from "./sandbox/checkpoint";
 import { settleSessionLifecycle } from "./sandbox/lifecycle-lane";
 import {
+  mirrorSandboxToPeers,
+  sandboxHostSessionId,
+} from "./sandbox/shared-machine";
+import {
   portalSandboxProvider,
   syncPortalSandboxAfterTurn,
 } from "./portal-sandbox";
@@ -196,6 +200,7 @@ import type {
 } from "./types";
 import {
   findSession,
+  findSessionAsync,
   getCachedSessions,
   publishSessionChange,
   persistAutoModelSwitch,
@@ -2195,7 +2200,9 @@ export async function maybeLaunchSandboxedRun(
     const sandbox = await ensureSandboxWaitingForCapacity(
       provider,
       {
-        sessionId: session.id,
+        // A tab sharing another tab's machine reaches it through the
+        // session the provider keys it by (sandbox/shared-machine.ts).
+        sessionId: sandboxHostSessionId(session),
         repo: owningAutomation
           ? getRepo(owningAutomation.repo).id
           : session.repo,
@@ -2322,6 +2329,14 @@ export async function maybeLaunchSandboxedRun(
           lifecycle: "awake",
           lastLifecycleError: undefined,
         },
+      });
+      // The other tabs on this machine show it awake too, and follow it when
+      // this ensure had to replace a lost one.
+      void mirrorSandboxToPeers(session, {
+        sandboxId: sandbox.id,
+        workspace: sandbox.workspace,
+        lifecycle: "awake",
+        lastLifecycleError: undefined,
       });
     }
     // The loop runs here, in an ordinary detached run host; the Sandbox is
@@ -2460,7 +2475,7 @@ export async function maybeLaunchSandboxedRun(
         (await (async () => {
           try {
             return await getSandboxProvider(sbProvider).machineFor?.(
-              session.id,
+              sandboxHostSessionId(session),
             );
           } catch {
             return undefined;
@@ -2705,6 +2720,17 @@ class RunPreparationDeferredError extends Error {
   }
 }
 
+/**
+ * A tab sharing another tab's Sandbox machine also waits for the host
+ * session's lane, where a sleep of the shared machine may be running.
+ */
+async function settleSandboxHostLifecycle(sessionId: string): Promise<void> {
+  const session = await findSessionAsync(sessionId);
+  if (!session?.sandboxHost) return;
+  const host = sandboxHostSessionId(session);
+  if (host !== sessionId) await settleSessionLifecycle(host);
+}
+
 /** Run a prompt against an existing session, broadcasting to all watchers. */
 export async function runSessionPrompt(
   sessionId: string,
@@ -2725,6 +2751,7 @@ export async function runSessionPrompt(
   // is. Waiting here, before the reservation below, keeps the reservation
   // from making that operation refuse.
   await settleSessionLifecycle(sessionId);
+  await settleSandboxHostLifecycle(sessionId);
   // A direct send to a sandbox can spend minutes provisioning before its run
   // journal exists. Give it the same durable dispatch record as a queue drain,
   // so a restart during provisioning requeues the complete prompt.
@@ -2785,6 +2812,7 @@ export async function runSessionPrompt(
   // let it land its final session update before this turn reads the session
   // it runs in.
   await settleSessionLifecycle(sessionId);
+  await settleSandboxHostLifecycle(sessionId);
   const finishDeskNavigation = deskTextNavigation.begin(
     sessionId,
     durablePromptEntryId,

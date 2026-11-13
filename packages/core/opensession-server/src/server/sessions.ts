@@ -1171,6 +1171,7 @@ export function nativeSessionRow(data: NativeSessionFile): UnifiedSession {
     sandbox: data.sandbox,
     sandboxCheckpoint: data.sandboxCheckpoint,
     sandboxGpu: data.sandboxGpu,
+    sandboxHost: data.sandboxHost,
     portalSandbox: data.portalSandbox,
     lastActivity: data.lastActivity,
     createdAt: data.createdAt,

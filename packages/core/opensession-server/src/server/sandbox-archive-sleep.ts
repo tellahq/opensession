@@ -22,6 +22,12 @@ import { getSandboxProvider } from "./sandbox";
 import { checkpointSessionWorkspace } from "./sandbox/checkpoint";
 import { isRemoteSandboxProvider } from "./sandbox/config";
 import { withSessionLifecycleLane } from "./sandbox/lifecycle-lane";
+import {
+  mirrorSandboxToPeers,
+  sandboxHostSessionId,
+  sandboxPeerBusy,
+  sandboxPeers,
+} from "./sandbox/shared-machine";
 import { findSessionAsync, touchNativeSession } from "./session-cache";
 import { activePortalSandboxFor, activeSandboxFor } from "./session-sandbox";
 
@@ -85,7 +91,7 @@ export type SleptSandbox = { kind: "workspace" | "portal"; sandboxId: string };
  * arrived while this waited keeps the machine awake. Resolves the machines
  * it put to sleep.
  */
-export function sleepSessionSandboxes(
+export async function sleepSessionSandboxes(
   sessionId: string,
   options: {
     reason: SandboxSleepReason;
@@ -94,15 +100,46 @@ export function sleepSessionSandboxes(
     stillIdle?: (sandboxId: string) => boolean;
   },
 ): Promise<SleptSandbox[]> {
+  // A machine shared by several tabs is slept on its host's lane, the one
+  // every tab's run admission waits for (sandbox/shared-machine.ts).
+  const host = await findSessionAsync(sessionId).then(
+    (session) => (session?.sandboxHost ? sandboxHostSessionId(session) : null),
+    () => null,
+  );
+  const sleep = () => sleepOnLane(sessionId, options);
+  return host && host !== sessionId
+    ? withSessionLifecycleLane(host, sleep)
+    : sleep();
+}
+
+const sessionBusy = (sessionId: string) =>
+  hostRunBusy(sessionId) || isAgentSessionBusy(sessionId);
+
+function sleepOnLane(
+  sessionId: string,
+  options: Parameters<typeof sleepSessionSandboxes>[1],
+): Promise<SleptSandbox[]> {
   return withSessionLifecycleLane(sessionId, async () => {
     const slept: SleptSandbox[] = [];
     const session = await findSessionAsync(sessionId);
     if (!session) return slept;
     const archived = isArchivedId(sessionId);
-    const busy = hostRunBusy(sessionId) || isAgentSessionBusy(sessionId);
+    const busy = sessionBusy(sessionId);
     const label = options.reason === "archived" ? "archived" : "idle";
 
     const workspace = session.sandbox;
+    // Another tab on the same machine keeps it awake: during its turn, and
+    // for as long as it is not archived when this tab is.
+    const peerKeepsAwake = async (): Promise<boolean> => {
+      if (!session.sandboxHost) return false;
+      if (await sandboxPeerBusy(session, sessionBusy)) return true;
+      if (options.reason !== "archived") return false;
+      try {
+        return (await sandboxPeers(session, { liveOnly: true })).length > 0;
+      } catch {
+        return true;
+      }
+    };
     const workspaceProvider = workspace?.provider
       ? getSandboxProvider(workspace.provider)
       : undefined;
@@ -117,7 +154,8 @@ export function sleepSessionSandboxes(
         record: workspace,
         canPause: true,
         stillIdle: options.stillIdle?.(workspace.sandboxId),
-      })
+      }) &&
+      !(await peerKeepsAwake())
     ) {
       const sandboxId = workspace.sandboxId;
       // Only a machine that is already awake is checkpointed; waking one to
@@ -137,6 +175,10 @@ export function sleepSessionSandboxes(
           lifecycle: "sleeping",
           lastLifecycleError: undefined,
         },
+      });
+      await mirrorSandboxToPeers(session, {
+        lifecycle: "sleeping",
+        lastLifecycleError: undefined,
       });
       await workspaceProvider.pause(sandboxId);
       slept.push({ kind: "workspace", sandboxId });

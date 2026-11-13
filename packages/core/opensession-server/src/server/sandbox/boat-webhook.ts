@@ -25,7 +25,7 @@
  * prewarmed standby has no session yet and is ignored.
  */
 import { createHmac, timingSafeEqual } from "crypto";
-import type { PortalSandboxRecord } from "../types";
+import type { PortalSandboxRecord, UnifiedSession } from "../types";
 import type { PublicWebhookHandler } from "../webhook-server";
 import { resolveWorkspaceSecretAsync } from "../workspace-secrets";
 
@@ -215,15 +215,23 @@ async function machineStatus(
 
 async function persist(
   owner: Owner,
-  record: PortalSandboxRecord,
+  current: { session: UnifiedSession; record: PortalSandboxRecord },
   lifecycle: "awake" | "sleeping",
 ): Promise<void> {
   const { touchNativeSession } = await import("../session-cache");
-  const patch = { ...record, lifecycle, lastLifecycleError: undefined };
+  const patch = { ...current.record, lifecycle, lastLifecycleError: undefined };
   touchNativeSession(
     owner.sessionId,
     owner.role === "workspace" ? { sandbox: patch } : { portalSandbox: patch },
   );
+  // Other tabs sharing the machine show the same state (shared-machine.ts).
+  if (owner.role === "workspace") {
+    const { mirrorSandboxToPeers } = await import("./shared-machine");
+    await mirrorSandboxToPeers(current.session, {
+      lifecycle,
+      lastLifecycleError: undefined,
+    });
+  }
 }
 
 async function markAsleep(sandboxId: string, owner: Owner): Promise<void> {
@@ -235,7 +243,7 @@ async function markAsleep(sandboxId: string, owner: Owner): Promise<void> {
     if ((await machineStatus(sandboxId)) !== "stopped") return;
     const { suspendSandboxPreviewRoutes } = await import("../preview");
     await suspendSandboxPreviewRoutes(sandboxId);
-    await persist(owner, current.record, "sleeping");
+    await persist(owner, current, "sleeping");
     console.log(
       `[sandbox:boat] ${owner.sessionId}: ${sandboxId} stopped by Boat, recorded asleep`,
     );
@@ -253,7 +261,7 @@ async function markAwake(sandboxId: string, owner: Owner): Promise<void> {
     if (!current) return;
     if ((await machineStatus(sandboxId)) !== "running") return;
     if (current.record.lifecycle !== "awake")
-      await persist(owner, current.record, "awake");
+      await persist(owner, current, "awake");
     const { isArchivedId } = await import("../archive");
     // A Portal Sandbox relaunches on the next visit, which first lands the
     // host checkpoint; relaunching here would serve an older tree.

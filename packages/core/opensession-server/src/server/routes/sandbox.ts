@@ -34,6 +34,12 @@ import {
   type CheckpointOutcome,
 } from "../sandbox/checkpoint";
 import { withSessionLifecycleLane } from "../sandbox/lifecycle-lane";
+import {
+  mirrorSandboxToPeers,
+  sandboxHostSessionId,
+  sandboxPeerBusy,
+  sharedSandboxRefusal,
+} from "../sandbox/shared-machine";
 import type { SandboxSessionSpec } from "../sandbox/provider";
 import { suspendSandboxPreviewRoutes } from "../preview";
 import {
@@ -70,6 +76,7 @@ type RecreateSession = Pick<
   | "automationId"
   | "sandboxCheckpoint"
   | "sandboxGpu"
+  | "sandboxHost"
 >;
 
 type AttachSession = Pick<
@@ -191,6 +198,10 @@ async function currentOnLane(
   };
 }
 
+/** A turn is admitted or running for the session. */
+const sessionRunBusy = (sessionId: string) =>
+  hostRunBusy(sessionId) || isAgentSessionBusy(sessionId);
+
 /**
  * Refusal while a turn is admitted or running. Checked on the session's
  * lifecycle lane, after claiming it: run admission reserves the session and
@@ -198,7 +209,7 @@ async function currentOnLane(
  * starts the moment the lane is free, and the workspace is that turn's.
  */
 function lifecycleBusyRefusal(sessionId: string): Response | null {
-  if (!hostRunBusy(sessionId) && !isAgentSessionBusy(sessionId)) return null;
+  if (!sessionRunBusy(sessionId)) return null;
   return Response.json(
     { error: "Wait for the agent to finish before changing this Sandbox." },
     { status: 409 },
@@ -376,7 +387,10 @@ async function releaseSandbox(session: StoredSession, why: string) {
   // Also retire failed/in-flight provisioning, before the move erases its
   // provider selection. A failed retirement must leave that selection intact
   // so the person can retry instead of silently leaking paid compute.
-  const id = await teardownRecordedSandbox(session.id, recorded);
+  const id = await teardownRecordedSandbox(
+    sandboxHostSessionId(session),
+    recorded,
+  );
   console.log(
     `[sandbox] ${session.id}: released ${id || "unmaterialized Sandbox"} (${why})`,
   );
@@ -488,6 +502,8 @@ async function attachSandbox(
   await touchNativeSessionStrict(session.id, {
     // The GPU the new machine carries; none clears an earlier one.
     sandboxGpu: gpu,
+    // The new machine is this session's own.
+    sandboxHost: undefined,
     sandbox: {
       provider,
       lifecycle: "preparing",
@@ -590,6 +606,7 @@ async function detachSandbox(
     sandbox: { provider: "local" },
     // Back on this machine: the GPU went with the Sandbox.
     sandboxGpu: undefined,
+    sandboxHost: undefined,
     worktreeDir: dir,
     // A move that carried nothing must not leave a checkpoint that predates
     // the work it left behind, or a later move would restore that instead.
@@ -630,7 +647,9 @@ export function recreateSandboxSpec(
     trust?.trustProfile ||
     (session.automationId || session.automation ? "automation" : undefined);
   return {
-    sessionId: session.id,
+    // The provider's key for the machine, which a tab that once shared it
+    // keeps (sandbox/shared-machine.ts).
+    sessionId: sandboxHostSessionId(session),
     repo: session.repo,
     branch: session.branch || undefined,
     mode: session.mode,
@@ -774,6 +793,10 @@ export async function handleSandboxRoutes(
         if ("response" in current) return current.response;
         const busy = lifecycleBusyRefusal(current.session.id);
         if (busy) return busy;
+        // A move replaces the machine, and the other tabs on it would lose
+        // their workspace (sandbox/shared-machine.ts).
+        const shared = await sharedSandboxRefusal(current.session);
+        if (shared) return Response.json({ error: shared }, { status: 409 });
         return action === "attach"
           ? attachSandbox(ctx, current.session)
           : detachSandbox(ctx, current.session);
@@ -862,6 +885,21 @@ async function runSandboxLifecycleAction(
     );
   const busy = lifecycleBusyRefusal(session.id);
   if (busy) return busy;
+  if (
+    (action === "pause" || action === "recreate") &&
+    (await sandboxPeerBusy(session, sessionRunBusy))
+  )
+    return Response.json(
+      {
+        error:
+          "Wait for the other tabs on this Sandbox to finish before changing it.",
+      },
+      { status: 409 },
+    );
+  if (action === "recreate") {
+    const shared = await sharedSandboxRefusal(session);
+    if (shared) return Response.json({ error: shared }, { status: 409 });
+  }
   const provider = getSandboxProvider(recorded.provider);
   try {
     if (action === "checkpoint") {
@@ -898,6 +936,10 @@ async function runSandboxLifecycleAction(
           lifecycle: "sleeping",
           lastLifecycleError: undefined,
         },
+      });
+      await mirrorSandboxToPeers(session, {
+        lifecycle: "sleeping",
+        lastLifecycleError: undefined,
       });
       await provider.pause(recorded.sandboxId);
     } else if (action === "resume") {
@@ -959,7 +1001,10 @@ async function runSandboxLifecycleAction(
       // recorded trust policy has to be read before it.
       const spec = recreateSandboxSpec(
         current,
-        await recordedTrustPolicy(recorded.provider, session.id),
+        await recordedTrustPolicy(
+          recorded.provider,
+          sandboxHostSessionId(session),
+        ),
       );
       touchNativeSession(session.id, {
         sandbox: {
@@ -983,7 +1028,7 @@ async function runSandboxLifecycleAction(
         codexThreadId: undefined,
       });
     }
-    if (action === "resume")
+    if (action === "resume") {
       touchNativeSession(session.id, {
         sandbox: {
           ...recorded,
@@ -991,6 +1036,11 @@ async function runSandboxLifecycleAction(
           lastLifecycleError: undefined,
         },
       });
+      await mirrorSandboxToPeers(session, {
+        lifecycle: "awake",
+        lastLifecycleError: undefined,
+      });
+    }
     audit({
       msg: `sandbox_${action}`,
       session_id: session.id,

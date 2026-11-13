@@ -14,6 +14,7 @@ import {
   renameSessionApi,
   setSessionStatusApi,
 } from "../lib/api";
+import { ApiError } from "../lib/api/request";
 import type { Route } from "../lib/app-route";
 import { routePath } from "../lib/app-route";
 import { BASE_PATH } from "../lib/base";
@@ -1140,7 +1141,13 @@ export function useSessionTabs({
           openSessionlessWorkspaceComposer();
         } else {
           console.error("New session failed:", error);
-          showToast("Couldn't create a new tab.");
+          // A refusal says why (a stacked tab in a Sandbox, say); anything
+          // else stays generic.
+          showToast(
+            error instanceof ApiError && error.status < 500
+              ? error.message
+              : "Couldn't create a new tab.",
+          );
         }
       })
       .finally(async () => {

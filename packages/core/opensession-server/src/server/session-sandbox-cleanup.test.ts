@@ -33,6 +33,18 @@ mock.module("./workload-identity", () => ({
   createWorkloadIdentityEnv: () => ({}),
   workloadIdentityIssuer: () => null,
 }));
+let peers: { id: string }[] | Error = [];
+let peersAsked: PromiseWithResolvers<void> | undefined;
+mock.module("./sandbox/shared-machine", () => ({
+  sandboxHostSessionId: (session: { id: string; sandboxHost?: string }) =>
+    session.sandboxHost || session.id,
+  mirrorSandboxToPeers: async () => {},
+  sandboxPeers: async () => {
+    peersAsked?.resolve();
+    if (peers instanceof Error) throw peers;
+    return peers;
+  },
+}));
 const { teardownRecordedSandbox, destroySessionSandbox } =
   await import("./session-sandbox");
 const {
@@ -62,6 +74,8 @@ beforeEach(() => {
   events.length = 0;
   destroyError = undefined;
   onDestroy = undefined;
+  peers = [];
+  peersAsked = undefined;
   rmSync(join(root, "sandboxes"), { recursive: true, force: true });
 });
 afterAll(() => {
@@ -181,3 +195,45 @@ test("recovery skips malformed provider mapping files", async () => {
     (await findRemoteStateBySessionAsync("daytona", "failed"))?.sandboxId,
   ).toBe("good-vm");
 });
+
+test("deleting the last tab on a shared machine retires it under its host's key", async () => {
+  await record("tab-1", "bx_shared", "box");
+  await record("tab-2", "bx_unrelated", "box");
+  const destroyed = Promise.withResolvers<void>();
+  onDestroy = destroyed.resolve;
+  destroySessionSandbox(
+    {
+      id: "tab-2",
+      source: "opensession",
+      workspaceId: "ws-1",
+      sandboxHost: "tab-1",
+      sandbox: { provider: "box", lifecycle: "needs_attention" },
+    } as any,
+    "delete",
+  );
+  await destroyed.promise;
+  expect(events.at(-1)).toBe("destroy:box:bx_shared");
+});
+
+for (const [label, answer] of [
+  ["another tab still uses it", [{ id: "tab-1" }]],
+  ["its other tabs cannot be checked", new Error("catalog down")],
+] as const)
+  test(`deleting a tab keeps the shared machine when ${label}`, async () => {
+    await record("tab-1", "bx_shared", "box");
+    peers = answer as { id: string }[] | Error;
+    peersAsked = Promise.withResolvers<void>();
+    destroySessionSandbox(
+      {
+        id: "tab-2",
+        source: "opensession",
+        workspaceId: "ws-1",
+        sandboxHost: "tab-1",
+        sandbox: { provider: "box", sandboxId: "bx_shared" },
+      } as any,
+      "delete",
+    );
+    await peersAsked.promise;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(events).toEqual([]);
+  });

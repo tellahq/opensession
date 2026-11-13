@@ -20,6 +20,11 @@ import {
   withRemoteEnsureLock,
 } from "./sandbox/adapters/bootstrap";
 import { withSessionLifecycleLane } from "./sandbox/lifecycle-lane";
+import {
+  mirrorSandboxToPeers,
+  sandboxHostSessionId,
+  sandboxPeers,
+} from "./sandbox/shared-machine";
 import { dropSandboxPreviewRoutes } from "./preview";
 import {
   listSandboxPortalServices,
@@ -61,10 +66,18 @@ export function destroySessionSandbox(
     label: string,
     clear: () => void,
     providerSessionId = session.id,
+    keep?: () => Promise<string | null>,
   ) => {
     if (!isRemoteSandboxProvider(record.provider)) return;
     void (async () => {
       try {
+        const kept = await keep?.();
+        if (kept) {
+          console.log(
+            `[sandbox] kept ${record.sandboxId || "unmaterialized Sandbox"} of ${session.id} (${label}): ${kept}`,
+          );
+          return;
+        }
         const id = await teardownRecordedSandbox(providerSessionId, record);
         console.log(
           `[sandbox] retired ${id || "unmaterialized Sandbox"} for ${session.id} (${label})`,
@@ -80,10 +93,28 @@ export function destroySessionSandbox(
   };
   const sb = session.sandbox;
   if (sb)
-    retire(sb, why, () =>
-      touchNativeSession(session.id, {
-        sandbox: { ...sb, sandboxId: undefined },
-      }),
+    retire(
+      sb,
+      why,
+      () =>
+        touchNativeSession(session.id, {
+          sandbox: { ...sb, sandboxId: undefined },
+        }),
+      // A machine shared by several tabs is the provider's under its host
+      // session and goes only with the last tab (sandbox/shared-machine.ts).
+      sandboxHostSessionId(session),
+      session.sandboxHost
+        ? () =>
+            sandboxPeers(session).then(
+              (peers) =>
+                peers.length
+                  ? `still used by ${peers.map((peer) => peer.id).join(", ")}`
+                  : null,
+              // Unsure who else uses it: keep the disk. The provider's own
+              // idle timer still stops the machine.
+              () => "could not check its other tabs",
+            )
+        : undefined,
     );
   const portal = session.portalSandbox;
   if (portal)
@@ -163,14 +194,17 @@ export async function activeSandboxFor(
   const sandboxId = sb.sandboxId;
   return liveSandbox(session, { ...sb, sandboxId }, options, {
     disowned: "the session no longer runs on this Sandbox",
-    persist: (patch) =>
-      session.source === "opensession"
-        ? persistIfStillRecorded(session.id, (data) =>
-            data.sandbox?.sandboxId === sandboxId
-              ? { ...data, sandbox: { ...data.sandbox, ...patch } }
-              : null,
-          )
-        : Promise.resolve(true),
+    persist: async (patch) => {
+      if (session.source !== "opensession") return true;
+      const recorded = await persistIfStillRecorded(session.id, (data) =>
+        data.sandbox?.sandboxId === sandboxId
+          ? { ...data, sandbox: { ...data.sandbox, ...patch } }
+          : null,
+      );
+      // Other tabs on a shared machine show the same state.
+      if (recorded) await mirrorSandboxToPeers(session, patch);
+      return recorded;
+    },
   });
 }
 

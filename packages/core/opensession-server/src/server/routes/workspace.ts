@@ -31,6 +31,10 @@ import {
   resolveInteractiveSandbox,
 } from "../sandbox/defaults";
 import {
+  newTabWorkspace,
+  sandboxHostSessionId,
+} from "../sandbox/shared-machine";
+import {
   SESSIONS_DIR,
   findSessionAsync,
   getCachedSessionsAsync,
@@ -843,17 +847,16 @@ export async function handleWorkspaceRoutes(
         { error: "A workspace without sessions can only start a new one" },
         { status: 400 },
       );
-    // Volume-mode sandbox workspaces live inside ONE session's container —
-    // share/stack siblings would either mint a divergent second clone at
-    // the same path or ENOENT on the host. Not supported yet.
-    if (hasRemoteWorkspace(src) && worktreeMode !== "ask")
-      return Response.json(
-        {
-          error:
-            "This session's workspace lives inside its sandbox volume — sibling sessions aren't supported for volume-mode sandboxes yet (open an Ask session instead)",
-        },
-        { status: 400 },
-      );
+    // A share tab of a remote Sandbox session joins its machine; other
+    // workspaces that are not on this host refuse (shared-machine.ts).
+    const tabWorkspace = newTabWorkspace(
+      src,
+      worktreeMode,
+      hasRemoteWorkspace(src),
+    );
+    if (typeof tabWorkspace === "object")
+      return Response.json({ error: tabWorkspace.error }, { status: 400 });
+    const joinsSandbox = tabWorkspace === "join";
     const requestedId = body.clientSessionId;
     if (requestedId !== undefined && !isClientSessionId(requestedId))
       return Response.json(
@@ -899,6 +902,7 @@ export async function handleWorkspaceRoutes(
     // code sessions live on the main checkout by design.
     if (
       !srcScratch &&
+      !joinsSandbox &&
       worktreeMode === "share" &&
       (await isSharedCheckoutDir(worktreeDir)) &&
       !(await repoForPath(worktreeDir)).sharedCheckout
@@ -940,7 +944,12 @@ export async function handleWorkspaceRoutes(
           ...(src.source === "opensession" ? { sessionId: src.id } : {}),
         };
       }
-    } else if (worktreeMode === "share" && !worktreeDir && src.workspaceId) {
+    } else if (
+      worktreeMode === "share" &&
+      !joinsSandbox &&
+      !worktreeDir &&
+      src.workspaceId
+    ) {
       // Same workspace ⇒ same worktree: even when the source session has no
       // worktree of its own (e.g. + from an ask tab), a share sibling
       // joins the workspace's owned worktree instead of starting bare.
@@ -1006,21 +1015,34 @@ export async function handleWorkspaceRoutes(
     const siblingModel = body.model
       ? resolveModel(String(body.model))?.id
       : undefined;
+    // A tab joining the source's machine runs on that provider, so the model
+    // is checked against it rather than against the person's default.
     const sandboxResolved = resolveInteractiveSandbox(
-      body.sandbox,
+      joinsSandbox ? src.sandbox!.provider : body.sandbox,
       requestUser(ctx, body.user),
       repoId,
       siblingModel,
     );
     if (!sandboxResolved.ok)
       return Response.json({ error: sandboxResolved.error }, { status: 400 });
-    // A sibling on the project's GPU default gets its GPU too.
-    const siblingGpu = defaultSandboxGpu(
-      body.sandbox,
-      undefined,
-      sandboxResolved.provider,
-      repoId,
-    );
+    // A sibling on the project's GPU default gets its GPU too; one joining a
+    // machine keeps the GPU that machine was started with.
+    const siblingGpu = joinsSandbox
+      ? src.sandboxGpu
+      : defaultSandboxGpu(
+          body.sandbox,
+          undefined,
+          sandboxResolved.provider,
+          repoId,
+        );
+    // Both tabs name the machine's host before the new one exists, so a
+    // delete, archive, or idle sleep of either can see the other.
+    const sandboxHost = joinsSandbox ? sandboxHostSessionId(src) : undefined;
+    if (joinsSandbox && !src.sandboxHost)
+      await updateSessionFile(src.id, (current) => ({
+        ...current,
+        sandboxHost: current.sandboxHost || src.id,
+      }));
     // A sibling in a ticket-linked session/workspace stays linked to the ticket
     // (conversation tab + ticket→session mapping follow the workspace).
     const siblingWorkspace = workspaceId
@@ -1056,17 +1078,31 @@ export async function handleWorkspaceRoutes(
       // would make the create-gate meaningless).
       ...(siblingModel ? { model: siblingModel } : {}),
       ...(siblingGpu ? { sandboxGpu: siblingGpu } : {}),
-      ...(sandboxResolved.provider
+      ...(joinsSandbox
         ? {
+            sandboxHost,
             sandbox: {
-              provider: sandboxResolved.provider,
-              // Remote providers are always volume-style (no host mounts).
-              ...(isRemoteSandboxProvider(sandboxResolved.provider)
-                ? { workspace: "volume" as const }
+              provider: src.sandbox!.provider,
+              workspace: "volume" as const,
+              ...(src.sandbox!.sandboxId
+                ? { sandboxId: src.sandbox!.sandboxId }
+                : {}),
+              ...(src.sandbox!.lifecycle
+                ? { lifecycle: src.sandbox!.lifecycle }
                 : {}),
             },
           }
-        : {}),
+        : sandboxResolved.provider
+          ? {
+              sandbox: {
+                provider: sandboxResolved.provider,
+                // Remote providers are always volume-style (no host mounts).
+                ...(isRemoteSandboxProvider(sandboxResolved.provider)
+                  ? { workspace: "volume" as const }
+                  : {}),
+              },
+            }
+          : {}),
     };
     await updateSessionFile(bksId, () => data);
     if (body.duplicate)

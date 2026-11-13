@@ -151,6 +151,52 @@ describe("two idle timers", () => {
     expect(attempts).toBe(2);
   });
 
+  test("a machine shared by two tabs stays awake while either one works", async () => {
+    const t0 = 6_000_000;
+    noteSandboxActivity({ sandboxId: "bx_s", sessionId: "tab-1" }, "agent", t0);
+    noteSandboxActivity({ sandboxId: "bx_s", sessionId: "tab-2" }, "agent", t0);
+    const d = deps({ busy: (sessionId) => sessionId === "tab-2" });
+    expect(
+      await sweepIdleSandboxes({ ...d.value, now: t0 + 10 * MIN }),
+    ).toEqual([]);
+    // A prompt in the second tab is an interaction on the machine too.
+    noteSessionHumanActivity("tab-2", t0 + 10 * MIN);
+    const done = deps();
+    expect(
+      await sweepIdleSandboxes({ ...done.value, now: t0 + 25 * MIN }),
+    ).toEqual([]);
+    expect(
+      await sweepIdleSandboxes({ ...done.value, now: t0 + 30 * MIN }),
+    ).toEqual(["bx_s"]);
+  });
+
+  test("a shared machine is slept and kept alive through a tab that still exists", async () => {
+    const t0 = 7_000_000;
+    noteSandboxActivity({ sandboxId: "bx_d", sessionId: "gone" }, "agent", t0);
+    noteSandboxActivity({ sandboxId: "bx_d", sessionId: "tab-2" }, "agent", t0);
+    const keptVia: string[] = [];
+    const sleptVia: string[] = [];
+    const d = deps({
+      busy: (sessionId) => sessionId === "tab-2",
+      async keepAlive(sessionId) {
+        keptVia.push(sessionId);
+        return sessionId !== "gone";
+      },
+    });
+    await sweepIdleSandboxes({ ...d.value, now: t0 + KEEP_ALIVE_EVERY_MS });
+    expect(keptVia).toEqual(["gone", "tab-2"]);
+    const idle = deps({
+      async sleep(sessionId, sandboxId, stillIdle) {
+        sleptVia.push(sessionId);
+        return sessionId === "tab-2" && stillIdle(sandboxId);
+      },
+    });
+    expect(
+      await sweepIdleSandboxes({ ...idle.value, now: t0 + 30 * MIN }),
+    ).toEqual(["bx_d"]);
+    expect(sleptVia).toEqual(["gone", "tab-2"]);
+  });
+
   test("provider session ids map back to the session", () => {
     expect(idleSessionId(`abc${PORTAL_SANDBOX_SUFFIX}`)).toBe("abc");
     expect(idleSessionId("abc")).toBe("abc");

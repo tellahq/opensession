@@ -38,7 +38,11 @@ export type SandboxActivityKind = "agent" | "human";
 
 type IdleEntry = {
   sandboxId: string;
+  /** The session the sweep sleeps the machine through. */
   sessionId: string;
+  /** Every session seen working on the machine: tabs of one workspace can
+   *  share it (shared-machine.ts), and a turn in any of them is work. */
+  sessionIds: Set<string>;
   agentAt: number;
   humanAt: number;
   keptAliveAt: number;
@@ -82,11 +86,19 @@ export function noteSandboxActivity(
     entry = {
       sandboxId: input.sandboxId,
       sessionId,
+      sessionIds: new Set([sessionId]),
       agentAt: now,
       humanAt: Math.max(prompted, kind === "human" ? now : 0),
       keptAliveAt: now,
     };
     entries.set(input.sandboxId, entry);
+  } else if (!entry.sessionIds.has(sessionId)) {
+    entry.sessionIds.add(sessionId);
+    if (!ownOnly)
+      entry.humanAt = Math.max(
+        entry.humanAt,
+        humanBySession.get(sessionId) ?? 0,
+      );
   }
   if (kind === "agent") entry.agentAt = Math.max(entry.agentAt, now);
   else entry.humanAt = Math.max(entry.humanAt, now);
@@ -99,13 +111,30 @@ export function noteSessionHumanActivity(sessionId: string, now = Date.now()) {
   if (!sessionId) return;
   humanBySession.set(sessionId, now);
   for (const entry of entries.values())
-    if (entry.sessionId === sessionId && !jobsOnly(entry.sandboxId))
+    if (entry.sessionIds.has(sessionId) && !jobsOnly(entry.sandboxId))
       entry.humanAt = Math.max(entry.humanAt, now);
 }
 
 /** Stop tracking a retired Sandbox. */
 export function forgetSandboxIdle(sandboxId: string): void {
   entries.delete(sandboxId);
+}
+
+function entryBusy(
+  entry: IdleEntry,
+  busy: (sessionId: string) => boolean,
+): boolean {
+  for (const sessionId of entry.sessionIds) if (busy(sessionId)) return true;
+  return false;
+}
+
+/** The sessions to act through, the first one seen first. A session on a
+ *  shared machine may have been deleted since; the next one is tried. */
+function entrySessions(entry: IdleEntry): string[] {
+  return [
+    entry.sessionId,
+    ...[...entry.sessionIds].filter((id) => id !== entry.sessionId),
+  ];
 }
 
 function idleNow(
@@ -141,8 +170,10 @@ export interface IdleSweepDeps {
     sandboxId: string,
     stillIdle: (sandboxId: string) => boolean,
   ): Promise<boolean>;
-  /** Push the provider's own idle timer out (Boat's TTL). */
-  keepAlive(sessionId: string, sandboxId: string): Promise<void>;
+  /** Push the provider's own idle timer out (Boat's TTL). Resolves false
+   *  when the session no longer records the machine, so another session on
+   *  it is tried. */
+  keepAlive(sessionId: string, sandboxId: string): Promise<boolean | void>;
 }
 
 /** How often an in-use machine's provider timer is pushed out. Well inside
@@ -163,18 +194,21 @@ export async function sweepIdleSandboxes(
   const slept: string[] = [];
   for (const entry of [...entries.values()]) {
     const ownOnly = jobsOnly(entry.sandboxId);
-    if (!ownOnly && deps.busy(entry.sessionId)) entry.agentAt = now;
+    if (!ownOnly && entryBusy(entry, deps.busy)) entry.agentAt = now;
     if (!idleNow(entry, policy, now)) {
       if (now - entry.keptAliveAt >= KEEP_ALIVE_EVERY_MS) {
         entry.keptAliveAt = now;
-        await deps
-          .keepAlive(entry.sessionId, entry.sandboxId)
-          .catch((error) =>
-            console.warn(
-              `[sandbox-idle] keepalive for ${entry.sandboxId} failed:`,
-              error instanceof Error ? error.message : String(error),
-            ),
-          );
+        for (const sessionId of entrySessions(entry)) {
+          const kept = await deps
+            .keepAlive(sessionId, entry.sandboxId)
+            .catch((error) =>
+              console.warn(
+                `[sandbox-idle] keepalive for ${entry.sandboxId} failed:`,
+                error instanceof Error ? error.message : String(error),
+              ),
+            );
+          if (kept !== false) break;
+        }
       }
       continue;
     }
@@ -184,15 +218,15 @@ export async function sweepIdleSandboxes(
         const current = entries.get(sandboxId);
         return Boolean(
           current &&
-          (jobsOnly(sandboxId) || !deps.busy(current.sessionId)) &&
+          (jobsOnly(sandboxId) || !entryBusy(current, deps.busy)) &&
           idleNow(current, policy, Date.now()),
         );
       };
-      const didSleep = await deps.sleep(
-        entry.sessionId,
-        entry.sandboxId,
-        stillIdle,
-      );
+      let didSleep = false;
+      for (const sessionId of entrySessions(entry)) {
+        didSleep = await deps.sleep(sessionId, entry.sandboxId, stillIdle);
+        if (didSleep) break;
+      }
       if (didSleep) slept.push(entry.sandboxId);
       // Slept, or not sleepable (asleep already, gone, no pause): stop
       // tracking. Activity that arrived meanwhile keeps the entry.
@@ -275,7 +309,8 @@ async function defaultSweep(): Promise<string[]> {
           : session?.portalSandbox?.sandboxId === sandboxId
             ? session.portalSandbox
             : undefined;
-      if (!record?.provider || record.lifecycle === "sleeping") return;
+      if (!record?.provider) return false;
+      if (record.lifecycle === "sleeping") return;
       await index.getSandboxProvider(record.provider).keepAlive?.(sandboxId);
     },
   });

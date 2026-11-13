@@ -384,6 +384,12 @@ export interface UnifiedSession {
    *  beside `sandbox` for the same reason as `sandboxCheckpoint`; every
    *  start of the session's machine passes it to the provider. */
   sandboxGpu?: string;
+  /** Set on every tab of a workspace that shares one remote Sandbox machine:
+   *  the session id the provider keys that machine by (the first tab names
+   *  itself). Kept beside `sandbox` for the same reason as
+   *  `sandboxCheckpoint`. Absent means the machine was never shared
+   *  (sandbox/shared-machine.ts). */
+  sandboxHost?: string;
   /** The Sandbox that runs this session's Portals while the session itself
    * stays on this machine (portal-sandbox.ts). Never set beside a workspace
    * Sandbox, whose Portals run in it. */
@@ -812,6 +818,8 @@ export interface NativeSessionFile {
   sandboxCheckpoint?: SandboxCheckpointRecord;
   /** See UnifiedSession.sandboxGpu. */
   sandboxGpu?: string;
+  /** See UnifiedSession.sandboxHost. */
+  sandboxHost?: string;
   /** See UnifiedSession.portalSandbox. */
   portalSandbox?: PortalSandboxRecord;
   runner?: {
