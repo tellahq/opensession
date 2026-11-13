@@ -546,8 +546,13 @@ export class SessionListStore {
    * Return every human-created live row and only the useful automation tail.
    * Ranking and counting stay inside SQLite, so JavaScript never parses the
    * thousands of automation payloads a collapsed sidebar cannot display.
+   * `claimedSessionIds` are runs the viewer added to their own sidebar (a
+   * personal lane or pin); they stay however old they are.
    */
-  listSidebar(selectedSessionId?: string): UnifiedSession[] {
+  listSidebar(
+    selectedSessionId?: string,
+    claimedSessionIds: readonly string[] = [],
+  ): UnifiedSession[] {
     const rows = this.db
       .query(
         `
@@ -570,6 +575,7 @@ export class SessionListStore {
 					FROM ranked_automation
 					WHERE automation_rank <= 5 OR is_running = 1
 						OR waiting_for_input = 1 OR manual_status IS NOT NULL OR id = ?
+						OR id IN (SELECT value FROM json_each(?))
 					UNION ALL
 					SELECT payload, last_activity_ms, NULL AS automation_run_count
 					FROM session_list
@@ -580,14 +586,21 @@ export class SessionListStore {
 				ORDER BY last_activity_ms DESC
 			`,
       )
-      .all(selectedSessionId || "", selectedSessionId || "") as StoredRow[];
+      .all(
+        selectedSessionId || "",
+        JSON.stringify(claimedSessionIds),
+        selectedSessionId || "",
+      ) as StoredRow[];
     return decodeRows(rows);
   }
 
   /** `listSidebar` when the live slice has coverage, else null. */
-  listSidebarCovered(selectedSessionId?: string): UnifiedSession[] | null {
+  listSidebarCovered(
+    selectedSessionId?: string,
+    claimedSessionIds: readonly string[] = [],
+  ): UnifiedSession[] | null {
     return this.hasCoverage("exclude")
-      ? this.listSidebar(selectedSessionId)
+      ? this.listSidebar(selectedSessionId, claimedSessionIds)
       : null;
   }
 

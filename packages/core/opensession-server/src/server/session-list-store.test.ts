@@ -388,6 +388,36 @@ describe("SessionListStore", () => {
     );
   });
 
+  test("keeps older automation runs the viewer claimed", () => {
+    const store = memoryStore();
+    const rows: UnifiedSession[] = [];
+    for (let index = 0; index < 10; index++) {
+      rows.push(
+        session(
+          `auto-${index}`,
+          `2026-08-22T11:${String(index).padStart(2, "0")}:00.000Z`,
+          { automation: "triage" },
+        ),
+      );
+    }
+    store.upsertMany(rows);
+
+    const ids = new Set(
+      store.listSidebar(undefined, ["auto-0", "auto-1"]).map((row) => row.id),
+    );
+    expect(ids).toEqual(
+      new Set([
+        "auto-0",
+        "auto-1",
+        "auto-5",
+        "auto-6",
+        "auto-7",
+        "auto-8",
+        "auto-9",
+      ]),
+    );
+  });
+
   test("includes an archived session when its direct route is selected", () => {
     const store = memoryStore();
     store.upsertMany([

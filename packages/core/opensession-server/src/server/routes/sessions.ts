@@ -144,6 +144,7 @@ import {
   loadSidebarSessionScopeContext,
   parseSidebarSessionScope,
   scopeSessionsForSidebar,
+  sidebarClaimedSessionIds,
   sessionIsRecentTeamActivity,
   sidebarSessionScopeKey,
   type SidebarSessionScope,
@@ -804,7 +805,10 @@ const SIDEBAR_AUTOMATION_RUNS = 5;
  */
 export function sidebarLiveSessions<
   T extends UnifiedSession & SessionListSignals,
->(sessions: T[]): Array<T & { automationRunCount?: number }> {
+>(
+  sessions: T[],
+  claimedSessionIds: ReadonlySet<string> = new Set(),
+): Array<T & { automationRunCount?: number }> {
   const byAutomation = new Map<string, T[]>();
   for (const session of sessions) {
     if (!session.automation) continue;
@@ -824,7 +828,8 @@ export function sidebarLiveSessions<
       if (
         sessionIsRecentTeamActivity(row, now) ||
         row.waitingForInput ||
-        row.manualStatus
+        row.manualStatus ||
+        claimedSessionIds.has(row.id)
       )
         keep.add(row);
     }
@@ -1073,13 +1078,19 @@ function refreshSidebarSessionsResponse(
     async (revision) => {
       const signals = await sessionListRuntimeSignals();
       const context = sessionEnrichmentContext();
-      const indexed = await indexedSidebarSessions(scope.selectedSessionId);
+      const claimed = await sidebarClaimedSessionIds(scope.user);
+      const indexed = await indexedSidebarSessions(
+        scope.selectedSessionId,
+        claimed,
+      );
       const sliced = await mapYielding(
         indexed ?? (await getCachedSessionsAsync("exclude")),
         (session) => enrichSession(session, signals, context, "row"),
       );
       shareWorkspacePrRefs(sliced);
-      const bounded = indexed ? sliced : sidebarLiveSessions(sliced);
+      const bounded = indexed
+        ? sliced
+        : sidebarLiveSessions(sliced, new Set(claimed));
       const scoped = scopeSessionsForSidebar(
         bounded,
         scope,

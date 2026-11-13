@@ -155,6 +155,23 @@ describe("sidebarLiveSessions", () => {
     ).toBe(true);
   });
 
+  test("keeps an older automation run the viewer added to their sidebar", () => {
+    const runs = Array.from({ length: 8 }, (_, index) =>
+      archivedSession({
+        id: `run-${index}`,
+        archived: false,
+        automation: "triage",
+        lastActivity: `2026-08-${String(index + 1).padStart(2, "0")}T10:00:00.000Z`,
+      }),
+    );
+
+    expect(
+      sidebarLiveSessions(runs, new Set(["run-0"])).map(
+        (session) => session.id,
+      ),
+    ).toEqual(["run-0", "run-3", "run-4", "run-5", "run-6", "run-7"]);
+  });
+
   test("keeps just-finished automation runs beyond the history cap", () => {
     const now = Date.now();
     const minutesAgo = [0, 1, 2, 3, 4, 10, 20, 30];
