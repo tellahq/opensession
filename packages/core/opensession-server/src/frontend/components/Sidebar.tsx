@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { useNavigation } from "../hooks/useNavigation";
 import { useSidebarDnd } from "../hooks/useSidebarDnd";
-import { useSidebarPeopleActivityNow } from "../hooks/useSidebarPeopleActivityNow";
+import { useSidebarPeopleActivityExpiry } from "../hooks/useSidebarPeopleActivityExpiry";
 import { useSidebarSources } from "../hooks/useSidebarSources";
 import { useSidebarStickyHeadings } from "../hooks/useSidebarStickyHeadings";
 import { useSidebarWorkspaceController } from "../hooks/useSidebarWorkspaceController";
@@ -193,7 +193,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   };
   const isPhone = useIsPhone();
   const [search, setSearch] = useState("");
-  const peopleActivityNow = useSidebarPeopleActivityNow(sessions);
+  const [peopleActivityNow, setPeopleActivityNow] = useState(Date.now);
   // Groups are collapsed by default; the expanded set persists per browser
   const [expanded, setExpanded] = useState<Set<string>>(readExpanded);
   const [hiddenTools, setHiddenTools] = useState(readHiddenSidebarTools);
@@ -482,6 +482,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     peopleActivityNow,
     automationOverview,
   });
+  useSidebarPeopleActivityExpiry(
+    activePersonGroups,
+    peopleActivityNow,
+    setPeopleActivityNow,
+  );
 
   // ── Hidden rows ─────────────────────────────────────────────────────────
   // "Hide from my sidebar" is the personal counterpart to Archive: archiving
