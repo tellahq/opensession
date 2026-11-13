@@ -10,7 +10,8 @@
  *
  *  - Claude account with an `owner` (personal sub) → DM that teammate
  *    (resolved through the same identity table as commit attribution).
- *  - Pool Claude accounts and all codex accounts → DM the instance owner.
+ *  - Pool and Automations-group Claude accounts and all codex accounts →
+ *    DM the instance owner.
  *
  * Detected issues: unreadable/expired Claude OAuth credential files, revoked
  * setup-tokens (401 from the usage endpoint), failed Claude OAuth refreshes,
@@ -28,6 +29,7 @@
 
 import { readFile } from "fs/promises";
 import { accountDisplayName } from "./provider-account-label";
+import { personalAccountOwner } from "./account-owner";
 import { listAccountsPublic } from "./claude-accounts";
 import { listCodexAccountsPublic } from "./codex-accounts";
 import { refreshIdleCodexTokens } from "./codex-token-refresh";
@@ -114,11 +116,12 @@ function days(ms: number): string {
 function claudeIssues(): Issue[] {
   const issues: Issue[] = [];
   for (const a of listAccountsPublic()) {
-    const who = a.owner || FALLBACK_TEAMMATE;
+    const personal = personalAccountOwner(a.owner);
+    const who = personal || FALLBACK_TEAMMATE;
     const identity = accountDisplayName(a);
-    const label = a.owner
+    const label = personal
       ? `your personal Claude sub "${identity}"`
-      : `pool Claude account "${identity}"`;
+      : `${a.owner ? "Automations" : "pool"} Claude account "${identity}"`;
     const err = a.usage?.error || "";
     const relogin = a.credentialsPath?.includes(".opensession-claude-oauth")
       ? `Reconnect usage in Settings → Providers → account menu → "Connect usage".`
@@ -217,11 +220,12 @@ function xaiIssues(): Issue[] {
   return xaiRefreshFailures().flatMap(
     ({ account, message, reloginRequired }) => {
       if (!reloginRequired) return [];
-      const who = account.owner || FALLBACK_TEAMMATE;
+      const personal = personalAccountOwner(account.owner);
+      const who = personal || FALLBACK_TEAMMATE;
       const identity = accountDisplayName(account);
-      const label = account.owner
+      const label = personal
         ? `your personal SuperGrok account "${identity}"`
-        : `pool SuperGrok account "${identity}"`;
+        : `${account.owner ? "Automations" : "pool"} SuperGrok account "${identity}"`;
       return [
         {
           key: `xai:${account.id}:relogin`,

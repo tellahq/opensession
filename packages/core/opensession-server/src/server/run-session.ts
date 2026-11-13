@@ -1956,6 +1956,7 @@ export function sandboxRunSecuritySpec(
   | "user"
   | "mcpGrantUser"
   | "accountUser"
+  | "automationAccounts"
   | "journalKind"
   | "trustProfile"
 > {
@@ -2008,6 +2009,7 @@ export function sandboxRunSecuritySpec(
     // The person pressing send may spend their own subscription even in an
     // automation-owned session; the identity stops at account selection.
     accountUser: opts.accountUser,
+    automationAccounts: opts.isAutomationSession || undefined,
     journalKind: opts.isAutomationSession ? "automation" : "prompt",
     trustProfile: opts.isAutomationSession ? "automation" : "interactive",
   };
@@ -2338,6 +2340,7 @@ export async function maybeLaunchSandboxedRun(
       user: security.user,
       accountUser: opts.accountUser,
       steeredBy: opts.steeredBy,
+      automationAccounts: security.automationAccounts,
       fallbackModel: opts.isAutomationSession
         ? undefined
         : isFixedSubscription(session)
@@ -3525,6 +3528,7 @@ async function runSessionPromptInner(
           // A person steering an automation-owned session acts on GitHub as
           // themselves; the automation's own turns keep its credential.
           steeredBy: runInputs.steeredBy,
+          automationAccounts: isAutomationSession || undefined,
           fallbackModel: isFixedSubscription(session)
             ? "none"
             : interactiveFallbackModel(session.model, session.autoFallback),
@@ -3648,6 +3652,8 @@ async function runSessionPromptInner(
       // A person steering an automation-owned session acts on GitHub as
       // themselves (pi-runner resolveRunGithubActor).
       steeredBy: runInputs.steeredBy,
+      // An automation's own turns draw from its Automations accounts first.
+      automationAccounts: runInputs.isAutomationSession || undefined,
       // The creator grant also gives provider routing a safe human identity for
       // synthetic continuations such as worker reports and restart recovery.
       mcpGrantUser: runInputs.mcpGrantUser,

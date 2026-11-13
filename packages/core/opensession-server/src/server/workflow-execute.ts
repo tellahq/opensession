@@ -555,6 +555,11 @@ function detachedWorkflowRunner(
       author: opts.author,
       user: opts.user,
       accountUser: opts.accountUser,
+      // A workflow inside an automation's session is that automation's work.
+      automationAccounts:
+        opts.automationAccounts ??
+        (!!(parent?.automation || parent?.automationDescendantPolicy) ||
+          undefined),
       fallbackModel: opts.fallbackModel,
       accountAffinityKey: opts.accountAffinityKey,
       effort: opts.effort,

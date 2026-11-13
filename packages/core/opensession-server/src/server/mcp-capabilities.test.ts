@@ -58,8 +58,8 @@ describe("renderInternalMcpCapabilities", () => {
     // per-turn note names its tools instead, and from 7,500 for
     // opensession-html, one more server at the usual ~150 chars, and from
     // 7,700 for the ~100-char rule to link child sessions in a report, and
-    // from 7,800 for opensession-gpu.
-    expect(note.length).toBeLessThan(7_900);
+    // from 7,800 for opensession-gpu, and from 7,900 for opensession-usage.
+    expect(note.length).toBeLessThan(8_000);
   });
 
   test("is empty when nothing internal is mounted", () => {

@@ -25,6 +25,7 @@ writeFileSync(
       mkAccount("maxed"),
       mkAccount("personal", "Alex"),
       mkAccount("blind-personal", "Jaap"),
+      mkAccount("automations", "@automations"),
     ],
   }),
 );
@@ -258,6 +259,53 @@ describe("resolveAccount owner gate", () => {
     });
     expect((owner as any).account.id).toBe("personal");
     expect((owner as any).reason).toBe("sticky");
+  });
+
+  test("an Automations account serves automation turns only, before the pool", async () => {
+    seedUsable();
+    accounts.__setUsageCacheForTest("automations", usage(70));
+    const automation = accounts.resolveAccount({ user: "@automations" });
+    expect((automation as any).account.id).toBe("automations");
+    // People and owner-less runs never reach it, even pinned.
+    for (const user of ["Alex", "Robin", undefined]) {
+      const run = accounts.resolveAccount({ user });
+      expect((run as any).account.id).not.toBe("automations");
+      const strict = accounts.resolveAccount({
+        user,
+        pinnedId: "automations",
+        strictPin: true,
+      });
+      expect((strict as any).refusal?.kind).toBe("pin-unusable");
+    }
+    // Spent, automation turns fall back to the shared pool.
+    accounts.__setUsageCacheForTest("automations", usage(100));
+    const backup = accounts.resolveAccount({ user: "@automations" });
+    expect((backup as any).reason).toBe("pool");
+    expect(
+      accounts.listAccountsPublic().find((a) => a.id === "automations"),
+    ).toMatchObject({ mode: "automations" });
+  });
+
+  test("returnAccountToPool clears every sideline and the stale usage", async () => {
+    seedUsable();
+    accounts.__setUsageCacheForTest("maxed", usage(100));
+    accounts.markExhausted("maxed");
+    accounts.markExhausted("maxed", "claude-opus-5");
+    const benched = accounts.listAccountsPublic().find((a) => a.id === "maxed");
+    expect(benched?.sidelined).toBe(true);
+    expect(
+      accounts.resolveAccount({ pinnedId: "maxed", strictPin: true }),
+    ).toHaveProperty("refusal");
+    const back = accounts.returnAccountToPool("maxed");
+    expect(back).toMatchObject({ sidelined: false, exhaustedUntil: null });
+    const pinned = accounts.resolveAccount({
+      pinnedId: "maxed",
+      strictPin: true,
+      model: "claude-opus-5",
+    });
+    expect((pinned as any).account?.id).toBe("maxed");
+    expect(accounts.returnAccountToPool("missing")).toBeNull();
+    seedUsable();
   });
 
   test("reports the reason for the path that produced the account", async () => {

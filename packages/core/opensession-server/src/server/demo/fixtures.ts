@@ -31,6 +31,7 @@ import {
   youShouldKnowRecordContent,
 } from "@tellahq/opensession-protocol/notices";
 import { describeLoop, loopTickNote } from "../session-loop";
+import { AUTO_CONTINUE_PROMPT } from "../auto-continue";
 
 type JsonlLine = Record<string, unknown>;
 
@@ -1153,6 +1154,58 @@ export function demoSessions(opts: {
           "**CI on PR #133 is green.** Unit tests and the build passed. The only open check is the approval gate, which needs someone to approve the PR; there is nothing left to fix.",
           "demo-ci-a4",
           iso(t0 + 40 * min + 50_000),
+          MODEL_FABLE,
+        ),
+      ],
+    });
+  }
+
+  // 11. Nudged after an answer: the turn ended on questions for the person,
+  //     the server told the agent to continue anyway, and the agent repeated
+  //     itself in one line. The nudge is model-only context with no visible
+  //     message, yet it starts a turn: the answer above it stays out of the
+  //     nudged turn's fold.
+  {
+    const t0 = now - 26 * min;
+    sessions.push({
+      id: "bks-demo-nudge",
+      engineSessionId: "ses_demo11",
+      file: base("bks-demo-nudge", "ses_demo11", 26, 24, {
+        title: "Open questions on the sync design",
+        branch: "demo/sync-design",
+        worktreeDir: repoDir,
+        usage: usage(0.48, 15_200, 2_140, 3, iso(now - 24 * min)),
+      }),
+      lines: [
+        transcriptLineUser(
+          "Can you ask the open questions from the sync design again, with some more context?",
+          "demo-nudge-u1",
+          iso(t0),
+        ),
+        ...tool(
+          "nudge",
+          1,
+          "Bash",
+          { command: "sed -n '/## Open questions/,$p' docs/sync-design.md" },
+          "## Open questions\n1. Conflict policy\n2. Offline queue size",
+          t0 + 20_000,
+        ),
+        transcriptLineAssistantText(
+          'Here are the two open questions from the sync design, each with its options and my recommendation.\n\n**1. What wins when the same todo is edited on two devices?**\n- **A. Last write wins.** Simple, and what the server does today, but an offline edit can silently overwrite a newer one.\n- **B. Merge per field.** The title and the done flag are merged separately, so edits to different fields both survive.\n\nI recommend B: it costs one extra column and removes the only data loss in the design.\n\n**2. How many offline changes does a device keep?**\n- **A. No limit.** Nothing is ever dropped, but a device that stays offline for weeks sends one very large sync.\n- **B. The last 500 changes.** Bounded, and older changes are folded into a snapshot.\n\nI recommend B.\n\nA reply like "1B, 2B" is enough. I\'ll write the answers into the doc and start on the server change.',
+          "demo-nudge-a1",
+          iso(t0 + 70_000),
+          MODEL_FABLE,
+        ),
+        transcriptLineContextInjection(
+          AUTO_CONTINUE_PROMPT,
+          { source: "auto-continue", turnId: "demo-nudge-turn-2" },
+          "demo-nudge-c1",
+          iso(t0 + 72_000),
+        ),
+        transcriptLineAssistantText(
+          "Waiting on your answers to the two open questions in the sync design before I start: the conflict policy (1A or 1B) and the offline queue size (2A or 2B).",
+          "demo-nudge-a2",
+          iso(t0 + 90_000),
           MODEL_FABLE,
         ),
       ],

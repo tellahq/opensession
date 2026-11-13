@@ -263,6 +263,8 @@ export interface HostedRunOpts {
   user?: string;
   accountUser?: string;
   steeredBy?: string;
+  /** See RunAgentOpts.automationAccounts. */
+  automationAccounts?: boolean;
   fallbackModel?: string;
   /** Stable provider-account affinity for internal fan-out workers. */
   accountAffinityKey?: string;
@@ -491,6 +493,7 @@ async function* runAgentInProcess(
       user: opts.user,
       accountUser: opts.accountUser,
       steeredBy: opts.steeredBy,
+      automationAccounts: opts.automationAccounts,
       fallbackModel: opts.fallbackModel,
       accountAffinityKey: opts.accountAffinityKey,
       effort: opts.effort,
@@ -626,6 +629,7 @@ function hostedRunRecord(spec: RunHostSpec): ActiveRunRecord {
     user: spec.user,
     accountUser: spec.accountUser,
     steeredBy: spec.steeredBy,
+    automationAccounts: spec.automationAccounts,
     deniedTools: spec.deniedTools,
     publicationPolicy: spec.publicationPolicy,
     confirmTools: spec.confirmTools,
@@ -712,6 +716,7 @@ async function spawnHostRun(
     user: opts.user,
     accountUser: opts.accountUser,
     steeredBy: opts.steeredBy,
+    automationAccounts: opts.automationAccounts,
     fallbackModel: opts.fallbackModel,
     accountAffinityKey: opts.accountAffinityKey,
     effort: opts.effort,

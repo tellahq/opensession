@@ -7,7 +7,13 @@ import React, {
   useState,
 } from "react";
 import { usePeople } from "../../lib/people";
-import { providerAccountLabel } from "../../lib/provider-account";
+import {
+  AUTOMATIONS_ACCOUNT_OWNER,
+  accountOwnerDescription,
+  accountOwnerLabel,
+  isAutomationsAccountOwner,
+  providerAccountLabel,
+} from "../../lib/provider-account";
 import { request } from "../../lib/api/request";
 import { errorMessage } from "../../lib/error-message";
 import { UserAvatar } from "../UserAvatar";
@@ -40,6 +46,7 @@ import { cn } from "../../ui/cn";
 import { toast } from "../../ui/toast";
 import { BrandMark, IconTile } from "../BrandTile";
 import {
+  IconClock,
   IconDotsHorizontal,
   IconHistory,
   IconPencil,
@@ -67,7 +74,9 @@ interface ClaudeAccountInfo {
   plan?: string;
   /** Personal sub of this person; unset = shared pool account. */
   owner?: string;
-  mode: "shared" | "personal";
+  mode: "shared" | "personal" | "automations";
+  /** Benched account-wide or for a model; older servers omit it. */
+  sidelined?: boolean;
   usage: {
     fetchedAt: string;
     fiveHour: UsageWindow | null;
@@ -176,7 +185,8 @@ function abortPendingOAuth(pending: {
   }
 }
 
-/** Choose the shared pool or one person's subscription. */
+/** Choose the shared pool, the Automations group or one person's
+ *  subscription. */
 function OwnerSelect({
   value,
   onChange,
@@ -199,15 +209,26 @@ function OwnerSelect({
   // GET /api/people lands rather than only on the next render.
   const roster = usePeople().map((p) => p.name);
   // Keep a non-team owner (e.g. set via the API) selectable.
-  const owners = value && !roster.includes(value) ? [value, ...roster] : roster;
+  const owners =
+    value && !isAutomationsAccountOwner(value) && !roster.includes(value)
+      ? [value, ...roster]
+      : roster;
   const items = [
     { value: "", label: "Shared pool" },
+    { value: AUTOMATIONS_ACCOUNT_OWNER, label: "Automations" },
     ...owners.map((name) => ({ value: name, label: name })),
   ];
   // The person's own picture, the way every other people picker in the app
-  // draws them. The pool is everyone, so it takes the group glyph.
+  // draws them. The pool is everyone, so it takes the group glyph, and the
+  // Automations group the glyph Automations has everywhere else.
   const ownerIcon = (owner: string) =>
-    owner ? <UserAvatar name={owner} size={16} /> : <IconPeople size={16} />;
+    !owner ? (
+      <IconPeople size={16} />
+    ) : isAutomationsAccountOwner(owner) ? (
+      <IconClock size={16} />
+    ) : (
+      <UserAvatar name={owner} size={16} />
+    );
   return (
     <Select.Root
       items={items}
@@ -223,7 +244,7 @@ function OwnerSelect({
         children={
           quiet ? (
             <span className="flex h-4 items-center leading-none">
-              {value || "Shared pool"}
+              {accountOwnerLabel(value) ?? "Shared pool"}
             </span>
           ) : undefined
         }
@@ -645,6 +666,19 @@ function useClaudeAccounts() {
     }
   }
 
+  async function returnToPool(account: ClaudeAccountInfo) {
+    try {
+      await request(
+        `/claude-accounts/${encodeURIComponent(account.id)}/return-to-pool`,
+        { method: "POST", label: "Could not return the account to the pool" },
+      );
+      toast(`${providerAccountLabel(account)} is back in rotation`);
+      void load();
+    } catch (cause) {
+      setError(errorMessage(cause, "Could not return the account to the pool"));
+    }
+  }
+
   async function setCredentialsPath(account: ClaudeAccountInfo) {
     const current =
       account.credentialsPath ||
@@ -674,6 +708,7 @@ function useClaudeAccounts() {
     load,
     refreshing,
     remove,
+    returnToPool,
     setCredentialsPath,
     setError,
     rename: useAccountRename("/claude-accounts", "Anthropic", load, setError),
@@ -758,11 +793,7 @@ function ClaudeAccountRows({ state }: { state: ClaudeAccountsState }) {
                   label={`Owner of ${providerAccountLabel(account)}`}
                   quiet
                   className="phone:ml-auto"
-                  title={
-                    account.owner
-                      ? `${account.owner}'s personal subscription. Their runs use it first, everyone else never does.`
-                      : "Shared pool account, used by everyone and by automations."
-                  }
+                  title={accountOwnerDescription(account.owner)}
                 />
                 <Menu.Root>
                   <Menu.Trigger
@@ -772,6 +803,15 @@ function ClaudeAccountRows({ state }: { state: ClaudeAccountsState }) {
                     <IconDotsHorizontal size={18} />
                   </Menu.Trigger>
                   <Menu.Popup align="end" sideOffset={4}>
+                    {(account.sidelined || account.exhaustedUntil) && (
+                      <Menu.Item
+                        onClick={() => state.returnToPool(account)}
+                        title="Use this after resetting its limit at Anthropic. A real limit benches it again on the next refused request."
+                      >
+                        <IconHistory size={16} className="text-faint" />
+                        Return to pool
+                      </Menu.Item>
+                    )}
                     <Menu.Item onClick={() => state.setSignIn(account)}>
                       <IconPlug size={16} className="text-faint" />
                       Connect usage…
@@ -1143,11 +1183,7 @@ function CodexAccountRows({ state }: { state: CodexAccountsState }) {
                 label={`Owner of ${providerAccountLabel(account)}`}
                 quiet
                 className="phone:ml-auto"
-                title={
-                  account.owner
-                    ? `${account.owner}'s personal subscription. Their runs use it first, everyone else never does.`
-                    : "Shared pool account, used by everyone and by automations."
-                }
+                title={accountOwnerDescription(account.owner)}
               />
               <Menu.Root>
                 <Menu.Trigger
@@ -1453,11 +1489,7 @@ function XaiAccountRows({ state }: { state: XaiAccountsState }) {
                 label={`Owner of ${providerAccountLabel(account)}`}
                 quiet
                 className="phone:ml-auto"
-                title={
-                  account.owner
-                    ? `${account.owner}'s personal subscription. Their runs use it first, everyone else never does.`
-                    : "Shared pool account, used by everyone and by automations."
-                }
+                title={accountOwnerDescription(account.owner)}
               />
               <Menu.Root>
                 <Menu.Trigger
@@ -1787,7 +1819,8 @@ export function ProviderAccountsSection({
       </SettingCard>
       <SettingsHint className={onboarding ? "mt-4 px-6" : undefined}>
         Runs rotate through shared accounts for the selected model. Personal
-        accounts are used only for their owner's runs.
+        accounts are used only for their owner's runs, and Automations accounts
+        only for automations.
       </SettingsHint>
     </>
   );
@@ -2010,7 +2043,7 @@ function AddClaudeAccountForm({
           </p>
           <Field
             label="Owner"
-            title="Personal sub: this person's runs use the account first, with the shared pool as backup. Shared pool: used by everyone and by automations."
+            title="Personal sub: this person's runs use the account first, with the shared pool as backup. Automations: only automation runs use it, before the shared pool. Shared pool: used by everyone and by automations."
           >
             <OwnerSelect value={owner} onChange={setOwner} label="Owner" />
           </Field>
@@ -2306,7 +2339,7 @@ function AddCodexAccountForm({ onAdded }: { onAdded: () => void }) {
           )}
           <Field
             label="Owner"
-            title="Personal sub: this person's runs use the account first, with the shared pool as backup. Shared pool: used by everyone and by automations."
+            title="Personal sub: this person's runs use the account first, with the shared pool as backup. Automations: only automation runs use it, before the shared pool. Shared pool: used by everyone and by automations."
           >
             <OwnerSelect
               value={owner}
@@ -2558,7 +2591,7 @@ function AddXaiAccountForm({ onAdded }: { onAdded: () => void }) {
       >
         <Field
           label="Owner"
-          title="Personal sub: this person's runs use the account first, with the shared pool as backup. Shared pool: used by everyone and by automations."
+          title="Personal sub: this person's runs use the account first, with the shared pool as backup. Automations: only automation runs use it, before the shared pool. Shared pool: used by everyone and by automations."
         >
           <OwnerSelect
             value={owner}

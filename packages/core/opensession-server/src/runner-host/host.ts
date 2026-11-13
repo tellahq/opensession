@@ -608,6 +608,7 @@ try {
     user: spec.user,
     accountUser: spec.accountUser,
     steeredBy: spec.steeredBy,
+    automationAccounts: spec.automationAccounts,
     fallbackModel: spec.fallbackModel,
     accountAffinityKey: spec.accountAffinityKey,
     effort: spec.effort,

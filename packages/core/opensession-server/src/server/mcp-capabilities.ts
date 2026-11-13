@@ -217,6 +217,12 @@ export const INTERNAL_MCP_CAPABILITIES = {
     guidance:
       "Inspect this instance's disk, memory, load, process fleets, and agent status.",
   },
+  "opensession-usage": {
+    summary:
+      "Read used and remaining percent of every Claude, Codex and SuperGrok subscription this run may use.",
+    guidance:
+      "Before big work, check subscription headroom with `read_subscription_usage`: remaining percent per limit, resets, usable accounts.",
+  },
   "opensession-audit": {
     summary: "Read one day's rolled-up audit digest.",
     guidance:

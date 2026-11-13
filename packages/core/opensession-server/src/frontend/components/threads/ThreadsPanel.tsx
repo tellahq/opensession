@@ -24,7 +24,8 @@ import { UserAvatar } from "../UserAvatar";
 import { THREAD_CAPTION } from "./thread-classes";
 import { WorkspaceSettingsDialog } from "../WorkspaceSettingsDialog";
 import { HuddleButton } from "../huddle/HuddleButton";
-import { openThreadPane } from "../../lib/thread-view";
+import { openThreadTab } from "../../lib/thread-tabs";
+import { useIsPhone } from "../../hooks/useIsPhone";
 import { useIsCoordinating } from "../../lib/coordinator-mode";
 import { ThreadRow } from "./ThreadRow";
 
@@ -82,6 +83,7 @@ function ThreadsOverview({
 }) {
   const sessions = useSessionRecords();
   const threads = sessionThreads(sessions, rootId);
+  const phone = useIsPhone();
   const [tab, setTab] = useState<PanelTab>("threads");
   const comments = usePanelComments(rootId);
   const artifacts = usePanelArtifacts(rootId, sessions);
@@ -139,8 +141,9 @@ function ThreadsOverview({
         <ThreadGroups
           threads={threads}
           onOpen={(id) => {
-            // In a split beside the conversation where there is room.
-            if (!openThreadPane(rootId, id)) onOpenSession?.(id);
+            // In a tab of its own on desktop.
+            if (!phone) openThreadTab(id);
+            onOpenSession?.(id);
           }}
         />
       )}

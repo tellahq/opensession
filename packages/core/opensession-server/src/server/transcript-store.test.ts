@@ -13,6 +13,7 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { AUTO_CONTINUE_PROMPT, WEDGE_RETRY_PROMPT } from "./auto-continue";
 import {
   TranscriptStore,
   TRANSCRIPT_DATA_MAX_BYTES,
@@ -810,6 +811,44 @@ describe("transcript outline and random-access ranges", () => {
     );
     raw.close();
     expect(roles()).toEqual(["user", "assistant", "check_back", "check_back"]);
+  });
+
+  test("indexes a nudge to continue as a turn boundary, including rows stored hidden", async () => {
+    const sid = "bks-outline-nudge";
+    const context = (id: string, content: string) =>
+      entry(id, content, {
+        type: "system",
+        noticeKind: "context-injection",
+        contextInjection: { source: "auto-continue", turnId: id },
+      });
+    await store.appendTranscriptEvents(sid, [
+      entry("human", "Ask the questions", { type: "user" }),
+      entry("answer", "Here are the three questions."),
+      context("nudge", AUTO_CONTINUE_PROMPT),
+      entry("repeat", "Waiting on your answers."),
+      // A turn the stall cut short goes on: its record starts nothing.
+      context("stall", WEDGE_RETRY_PROMPT),
+      // Quoting the nudge is not being one.
+      entry("quote", `The nudge reads "${AUTO_CONTINUE_PROMPT}"`, {
+        type: "system",
+        noticeKind: "context-injection",
+        contextInjection: { source: "handoff", turnId: "quote" },
+      }),
+    ]);
+    const roles = () =>
+      store.readTranscriptIndex(sid).entries.map((row) => row.role);
+    const visible = () => roles().filter((role) => role !== "hidden");
+    expect(roles()).toHaveLength(6);
+    expect(visible()).toEqual(["user", "assistant", "check_back", "assistant"]);
+
+    // Nudges recorded before they were a boundary were stored hidden.
+    const raw = new Database(dbPath);
+    raw.run(
+      "UPDATE transcript_outline SET render_role = 'hidden' WHERE session_id = ? AND uuid = 'nudge'",
+      [sid],
+    );
+    raw.close();
+    expect(visible()).toEqual(["user", "assistant", "check_back", "assistant"]);
   });
 
   test("backfill preserves oversized row roles and original lengths", async () => {

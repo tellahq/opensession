@@ -278,6 +278,13 @@ export interface RunAgentOpts {
    */
   steeredBy?: string;
   /**
+   * The run belongs to an automation (its own session or a descendant). When
+   * no person is behind the turn (`accountUser`), provider account selection
+   * draws from the Automations account group first, shared pool as backup.
+   * Account selection only, like `accountUser`. Journaled for resume.
+   */
+  automationAccounts?: boolean;
+  /**
    * Model to switch to when the primary model dies on usage limits with no
    * account left in its pool (claude-runner/codex-runner rotate their own
    * account pools first — this fires only once a whole pool is exhausted).
@@ -2152,6 +2159,7 @@ export async function resumeInterruptedRuns(
                   user: run.user,
                   accountUser: run.accountUser,
                   steeredBy: run.steeredBy,
+                  automationAccounts: run.automationAccounts,
                   deniedTools: run.deniedTools,
                   publicationPolicy: run.publicationPolicy,
                   confirmTools: run.confirmTools,
@@ -2267,6 +2275,7 @@ export async function resumeInterruptedRuns(
                 user: run.user,
                 accountUser: run.accountUser,
                 steeredBy: run.steeredBy,
+                automationAccounts: run.automationAccounts,
                 deniedTools: run.deniedTools,
                 publicationPolicy: run.publicationPolicy,
                 confirmTools: run.confirmTools,
@@ -2374,6 +2383,7 @@ export async function resumeInterruptedRuns(
               user: run.user,
               accountUser: run.accountUser,
               steeredBy: run.steeredBy,
+              automationAccounts: run.automationAccounts,
               deniedTools: run.deniedTools,
               publicationPolicy: run.publicationPolicy,
               confirmTools: run.confirmTools,

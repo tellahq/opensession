@@ -12,6 +12,7 @@
  */
 
 import { withLabel } from "./provider-account-label";
+import { accountOwnerMode } from "./account-owner";
 import { registerMemoryProbe } from "./memory-probes";
 import { homeDir } from "./paths";
 import { chmod, readFile } from "fs/promises";
@@ -82,7 +83,9 @@ export interface ClaudeAccount {
    * person (same identity table as commit attribution / MCP allowedUsers) use
    * the account — and their runs prefer it over the shared pool, falling back
    * to the pool when it's exhausted. Unset = shared pool account, used by
-   * everyone and by automations (which run with no user).
+   * everyone and by automations (which run with no user). The reserved
+   * AUTOMATIONS_ACCOUNT_OWNER puts it in the Automations group instead: only
+   * automation turns use it, before the shared pool.
    */
   owner?: string;
   // "missing" once the usage endpoint has returned 403 for this token
@@ -138,7 +141,10 @@ export interface ClaudeAccountPublic {
   plan?: string;
   createdAt: string;
   owner?: string;
-  mode: "shared" | "personal";
+  mode: "shared" | "personal" | "automations";
+  /** Benched by any sideline, account-wide or for one model. A model
+   *  sideline alone leaves `exhaustedUntil` null. */
+  sidelined: boolean;
   usage: AccountUsage | null;
   noUsageScope: boolean;
   credentialsPath?: string;
@@ -1084,7 +1090,8 @@ function toPublic(a: ClaudeAccount): ClaudeAccountPublic {
     plan: a.plan,
     createdAt: a.createdAt,
     owner: a.owner,
-    mode: a.owner ? "personal" : "shared",
+    mode: accountOwnerMode(a.owner),
+    sidelined: hasActiveSideline(a.id),
     usage,
     noUsageScope: a.usageScope === "missing" && !a.credentialsPath,
     credentialsPath: a.credentialsPath,
@@ -1098,6 +1105,36 @@ function toPublic(a: ClaudeAccount): ClaudeAccountPublic {
         fiveHour === null ||
         fiveHour < EXHAUSTED_UTILIZATION),
   };
+}
+
+function hasActiveSideline(id: string): boolean {
+  const now = Date.now();
+  for (const [key, until] of sidelines()) {
+    if ((key === id || key.startsWith(`${id}:`)) && until > now) return true;
+  }
+  return false;
+}
+
+/**
+ * Put an account back in rotation by hand, for a limit someone reset at the
+ * provider. Normally only a usage poll showing headroom returns a benched
+ * account early, which cannot happen while its usage login is broken. Clears
+ * every sideline (account-wide and per model) in memory, where the picker
+ * reads them, and in the state file, plus the cached usage that still shows
+ * the spent windows (the next poll fills them in again). A real limit benches
+ * it again on the next refused request.
+ */
+export function returnAccountToPool(id: string): ClaudeAccountPublic | null {
+  const account = readStore().find((a) => a.id === id);
+  if (!account) return null;
+  const map = sidelines();
+  for (const key of [...map.keys()]) {
+    if (key === id || key.startsWith(`${id}:`)) map.delete(key);
+  }
+  persistSidelines();
+  usageCache.delete(id);
+  console.log(`[claude-accounts] ${account.name} returned to the pool by hand`);
+  return toPublic(account);
 }
 
 export function listAccountsPublic(): ClaudeAccountPublic[] {

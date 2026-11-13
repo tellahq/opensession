@@ -199,6 +199,7 @@ export async function maybeLaunchRunnerRun(
     author: commitAuthorFor(opts.user, sessionPrincipal(session)),
     user: runUser,
     accountUser: runInputs.accountUser,
+    automationAccounts: runInputs.isAutomationSession || undefined,
     mcpGrantUser: runInputs.mcpGrantUser,
     fallbackModel: isFixedSubscription(session)
       ? "none"
@@ -252,6 +253,7 @@ export async function maybeLaunchRunnerRun(
     publicationPolicy,
     aws: !runInputs.isAutomationSession || agentAwsCredsForUntrustedRuns(),
     trustProfile: runInputs.isAutomationSession ? "automation" : "interactive",
+    automationAccounts: runInputs.isAutomationSession || undefined,
     kind: runInputs.isAutomationSession ? "automation" : "prompt",
     runnerId: runner.id,
     hostId,

@@ -55,6 +55,7 @@ import { createCommentsMcpServer } from "./comments-mcp";
 import { createDatabasesMcpServer } from "../agents/slack/databases-tools";
 import { createWorkflowsMcpServer } from "../agents/slack/workflow-tools";
 import { createSelfDeployMcpServer } from "./self-deploy";
+import { createUsageMcpServer } from "./usage-mcp";
 import { createWebMcpServer } from "./web-mcp";
 import { callMcpTool } from "./mcp-client";
 import { papercutsEnabledForRepo } from "./papercuts";
@@ -228,6 +229,9 @@ export function interactiveMcpServers(
     // but transcripts can hold sensitive material — interactive-only like the
     // siblings (the automation gate in the run-rpc builder below fails closed).
     "opensession-search": () => createSearchMcpServer(),
+    // Subscription headroom for planning: accounts this user may run on,
+    // with used/remaining percent per limit. Read-only.
+    "opensession-usage": () => createUsageMcpServer({ user }),
     // Self-deploy: ff-only deploy of THIS instance to a sha + restart, with a
     // last-known-good pin, health gate, and watchdog-covered rollback
     // (deploy/self-deploy.sh). Interactive-only like every sibling — a deploy

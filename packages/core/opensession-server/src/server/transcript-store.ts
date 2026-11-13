@@ -63,7 +63,9 @@ import { sanitizeTranscriptMediaEntry } from "./transcript-media";
 import { v2SnapshotEntryWeight } from "./transcript-wire";
 import {
   classifyEntry,
+  CLEAN_TURN_NUDGE_PREFIX,
   dropContextInjections,
+  hiddenTurnStart,
 } from "@tellahq/opensession-protocol/notices";
 import type {
   TranscriptIndexEntry,
@@ -1937,19 +1939,28 @@ export class TranscriptStore {
   ): TranscriptOutline {
     const rows = this.db
       .query(
+        // Hidden rows are mostly large context records, so they are only
+        // searched for the nudge marker, never parsed.
         `SELECT o.uuid, o.seq, o.change_seq, o.ts, o.render_role, o.content_length, o.review_pr_number,
-                CASE WHEN json_valid(e.data) THEN json_extract(e.data, '$.notice.kind') END AS notice_kind,
-                CASE WHEN json_valid(e.data) THEN json_extract(e.data, '$.type') END AS entry_type,
-                CASE WHEN json_valid(e.data) THEN substr(json_extract(e.data, '$.content'), 1, 1024) END AS notice_prefix,
-                CASE WHEN json_valid(e.data) THEN json_extract(e.data, '$.contextInjection.source') END AS context_source
+                CASE WHEN o.render_role != 'hidden' AND json_valid(e.data) THEN json_extract(e.data, '$.notice.kind') END AS notice_kind,
+                CASE WHEN o.render_role != 'hidden' AND json_valid(e.data) THEN json_extract(e.data, '$.type') END AS entry_type,
+                CASE WHEN o.render_role != 'hidden' AND json_valid(e.data) THEN substr(json_extract(e.data, '$.content'), 1, 1024) END AS notice_prefix,
+                CASE WHEN o.render_role != 'hidden' AND json_valid(e.data) THEN json_extract(e.data, '$.contextInjection.source') END AS context_source,
+                CASE WHEN o.render_role = 'hidden' THEN instr(e.data, ?) > 0 AND instr(e.data, ?) > 0 END AS hidden_nudge
          FROM transcript_outline o
-         LEFT JOIN transcript_events e ON (o.render_role = 'notice'
+         LEFT JOIN transcript_events e ON (o.render_role IN ('notice', 'hidden')
              OR (o.render_role = 'user' AND o.content_length = 0))
            AND e.session_id = o.session_id AND e.seq = o.seq
          WHERE o.session_id = ? AND o.seq > ?
          ORDER BY o.seq LIMIT ?`,
       )
-      .all(sessionId, afterSeq, limit) as Array<{
+      .all(
+        LEGACY_NUDGE_CONTENT,
+        LEGACY_NUDGE_SOURCE,
+        sessionId,
+        afterSeq,
+        limit,
+      ) as Array<{
       uuid: string;
       seq: number;
       change_seq: number;
@@ -1961,6 +1972,7 @@ export class TranscriptStore {
       entry_type: TranscriptEntry["type"] | null;
       notice_prefix: string | null;
       context_source: string | null;
+      hidden_nudge: number | null;
     }>;
     const entries = rows.map((row) => ({
       id: row.uuid,
@@ -3250,9 +3262,15 @@ function destinationResult(
 
 // ── Outline projection ─────────────────────────────────────────────────────
 
+// How a nudge record stored as "hidden" reads in its serialized row. JSON
+// escapes every quote inside a string value, so these unescaped fragments can
+// only be the record's own content and source keys.
+const LEGACY_NUDGE_CONTENT = `"content":${JSON.stringify(CLEAN_TURN_NUDGE_PREFIX).slice(0, -1)}`;
+const LEGACY_NUDGE_SOURCE = `"source":"auto-continue"`;
+
 /** Correct roles stored before the projection learned them, within one
  * bounded index page: notices that are agent messages, and the turns a
- * background wait or scheduled check-back started. */
+ * background wait, a nudge to continue or a scheduled check-back started. */
 function legacyOutlineRole(row: {
   uuid: string;
   render_role: TranscriptIndexRole;
@@ -3260,7 +3278,10 @@ function legacyOutlineRole(row: {
   entry_type: TranscriptEntry["type"] | null;
   notice_prefix: string | null;
   context_source: string | null;
+  hidden_nudge: number | null;
 }): TranscriptIndexRole {
+  if (row.render_role === "hidden")
+    return row.hidden_nudge ? "check_back" : row.render_role;
   if (row.render_role === "user")
     return row.context_source === "background-wait"
       ? "check_back"
@@ -3289,14 +3310,11 @@ function transcriptOutlineProjection(entry: TranscriptEntry): {
   contentLength: number;
   reviewPrNumber?: number;
 } {
-  // A background wait is model-only context, but it starts a distinct turn.
-  // Index it as a content-free check-back boundary so hydrated ranges cannot
-  // merge the completed status before the wait into the later continuation,
-  // and clients can fold the agent's self-started turns.
-  if (
-    entry.noticeKind === "context-injection" &&
-    entry.contextInjection?.source === "background-wait"
-  ) {
+  // A background wait, or a nudge to continue, is model-only context, but it
+  // starts a distinct turn. Index it as a content-free check-back boundary so
+  // hydrated ranges cannot merge the completed answer before it into the
+  // later continuation, and clients can fold the agent's self-started turns.
+  if (hiddenTurnStart(entry)) {
     return { role: "check_back", contentLength: 0 };
   }
   if (dropContextInjections([entry]).length === 0) {

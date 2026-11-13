@@ -19,8 +19,8 @@ function lastVisible(selector: string): Element | null {
 }
 
 /**
- * Keep the huddle card off what people type into: left of an open thread
- * split or session side panel (whose bottom right holds a reply box) and above the
+ * Keep the huddle card off what people type into: left of an open session
+ * side panel (whose bottom right holds a reply box) and above the
  * conversation's composer. Falls back to the corner when neither is on
  * screen.
  */
@@ -32,12 +32,8 @@ export function useDockPlacement(enabled: boolean): DockPlacement {
     const observed = new Set<Element>();
     const resize = new ResizeObserver(() => later());
     function measure() {
-      // An open thread split sits left of the panel, so it is the edge.
-      const panel =
-        lastVisible(".thread-split") ?? lastVisible(".viewer-panel");
-      const composer = lastVisible(
-        ".detail-pane .composer:not(.thread-split .composer)",
-      );
+      const panel = lastVisible(".viewer-panel");
+      const composer = lastVisible(".detail-pane .composer");
       for (const el of [panel, composer])
         if (el && !observed.has(el)) {
           observed.add(el);

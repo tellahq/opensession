@@ -6,7 +6,10 @@ import {
   isAnthropicModel,
   modelEngine,
 } from "../lib/model-engine";
-import { providerAccountLabel } from "../lib/provider-account";
+import {
+  accountOwnerLabel,
+  providerAccountLabel,
+} from "../lib/provider-account";
 import {
   getRecentModels,
   onRecentModelsChanged,
@@ -1176,7 +1179,7 @@ export function ModelEffortSelect({
                   >
                     <span className="min-w-0 truncate">
                       {providerAccountLabel(a)}
-                      {a.owner ? ` · ${a.owner}` : ""}
+                      {a.owner ? ` · ${accountOwnerLabel(a.owner)}` : ""}
                       {a.usable ? "" : " · exhausted"}
                     </span>
                     <Menu.Check on={selected} className="text-dim" />

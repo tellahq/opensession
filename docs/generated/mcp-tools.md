@@ -74,12 +74,13 @@ touches an in-process tool:
 | [`opensession-databases`](#opensession-databases) | 8 | interactive, automation | Needs a session id. |
 | [`opensession-turn`](#opensession-turn) | 2 | automation | – |
 | [`opensession-health`](#opensession-health) | 1 | automation | – |
+| [`opensession-usage`](#opensession-usage) | 1 | interactive, automation | – |
 | [`opensession-audit`](#opensession-audit) | 1 | automation | – |
 | [`opensession-self`](#opensession-self) | 2 | automation | Only with the human-set `selfImprove` flag on that automation. |
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-38 servers, 187 tools.
+39 servers, 188 tools.
 
 ## opensession-sessions
 
@@ -1443,6 +1444,21 @@ Read this instance's own disk, memory, load, process fleets and agent status.
 `mcp__opensession-health__read_host_metrics` · input: none
 
 Read this instance's health: disk usage on /, memory and swap, load averages against core count, counts of the process fleets that have leaked before (detached run hosts, MCP proxies, headless Chrome, dev stacks, git operations), cgroup memory accounting, and each agent's status. Returns the same fields as the health endpoint. Use it for a health check instead of trying to fetch the server over HTTP, which is refused for loopback addresses.
+
+## opensession-usage
+
+Read used and remaining percent of every Claude, Codex and SuperGrok subscription this run may use.
+
+- **Source** `packages/core/opensession-server/src/server/usage-mcp.ts`
+- **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`, `packages/core/opensession-server/src/server/automations.ts`
+- **Runs** interactive, automation
+- **Note** Lists only accounts the run may use (shared pool, plus the run user's personal ones), with no tokens or credential paths. Its one lever, refresh, re-polls each provider at most once per 5 minutes per instance.
+
+### `read_subscription_usage`
+
+`mcp__opensession-usage__read_subscription_usage` · input: `provider` ("claude" | "codex" | "xai"), `refresh` (boolean)
+
+Read how much of each model subscription (Claude, Codex/ChatGPT, SuperGrok) is used and left, so you can plan work: for every account this run may use, each limit (Claude 5h and 7d windows plus per-model weekly caps, Codex windows per model bucket, SuperGrok period credits) as used and remaining percent with its reset time, whether the account is usable right now or sidelined and until when, paid overflow (extra usage, credits), and when the numbers were fetched. Also a per-provider summary: usable account count and the best remaining headroom. Usage is polled hourly; pass refresh: true to re-poll first (rate-limited to once per 5 minutes per provider).
 
 ## opensession-audit
 

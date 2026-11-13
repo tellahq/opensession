@@ -13,6 +13,7 @@ import {
   listAccountsPublic,
   refreshAllUsage,
   removeAccount,
+  returnAccountToPool,
   setAccountLabel,
   setAccountOwner,
 } from "../claude-accounts";
@@ -133,6 +134,14 @@ export async function handleAccountsRoutes(
     return cancelClaudeLogin(decodeURIComponent(oauthLoginMatch[1]))
       ? Response.json({ ok: true })
       : Response.json({ error: "Not found" }, { status: 404 });
+  }
+
+  // Clear an account's sidelines after its limit was reset at Anthropic.
+  const returnMatch = path.match(
+    /^\/api\/claude-accounts\/([^/]+)\/return-to-pool$/,
+  );
+  if (returnMatch && req.method === "POST") {
+    return foundOr404(returnAccountToPool(decodeURIComponent(returnMatch[1])));
   }
 
   const accountDelMatch = path.match(/^\/api\/claude-accounts\/([^/]+)$/);

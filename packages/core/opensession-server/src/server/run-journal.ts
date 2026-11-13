@@ -88,6 +88,8 @@ export interface ActiveRunRecord {
    *  .steeredBy), preserved across resume so a recovered turn keeps the same
    *  GitHub credential and session-context identity. */
   steeredBy?: string;
+  /** RunAgentOpts.automationAccounts, preserved across resume. */
+  automationAccounts?: boolean;
   deniedTools?: Record<string, string>; // per-run tool denials, preserved across resume
   publicationPolicy?: { repo: string; branch: string; headBranch: string };
   confirmTools?: Record<string, string>; // per-run human-confirmed tools, preserved across resume
@@ -219,6 +221,7 @@ export function buildRunJournalRecord(
     fallbackModel?: string;
     accountUser?: string;
     steeredBy?: string;
+    automationAccounts?: boolean;
     accountId?: string;
     accountStrict?: boolean;
     usageCredits?: boolean;
@@ -254,6 +257,7 @@ export function buildRunJournalRecord(
     ...site,
     accountUser: site.accountUser ?? opts.accountUser,
     steeredBy: site.steeredBy ?? opts.steeredBy,
+    automationAccounts: site.automationAccounts ?? opts.automationAccounts,
     accountId: site.accountId ?? opts.accountId,
     accountStrict: site.accountStrict ?? opts.accountStrict,
     usageCredits: site.usageCredits ?? opts.usageCredits,

@@ -12,6 +12,7 @@ import {
   markCodexExhausted,
   markCodexWedged,
   setCodexAccountLabel,
+  setCodexAccountOwner,
 } from "./codex-accounts";
 import { pickOpenaiAccount } from "./openai-auth";
 
@@ -184,6 +185,32 @@ describe("pickOpenaiAccount pins", () => {
     );
     expect("error" in picked).toBe(false);
     if (!("error" in picked)) expect(picked.id).not.toBe("theirs");
+  });
+
+  test("an Automations account serves automation turns only", async () => {
+    await setCodexAccountOwner("theirs", "@automations");
+    try {
+      const pick = (user?: string, pin?: string) => {
+        const picked = pickOpenaiAccount(
+          "gpt-5.5",
+          undefined,
+          "session",
+          {},
+          user,
+          pin,
+        );
+        return "error" in picked ? undefined : picked.id;
+      };
+      expect(pick("@automations")).toBe("theirs");
+      expect(pick("@automations", "theirs")).toBe("theirs");
+      expect(pick("Alex", "theirs")).not.toBe("theirs");
+      expect(pick(undefined, "theirs")).not.toBe("theirs");
+      expect(
+        listCodexAccountsPublic().find((a) => a.id === "theirs")?.mode,
+      ).toBe("automations");
+    } finally {
+      await setCodexAccountOwner("theirs", "Grant");
+    }
   });
 
   test("wedge sideline removes the account from picks; clear restores it", () => {

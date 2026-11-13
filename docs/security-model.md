@@ -873,9 +873,12 @@ Automations never receive `opensession-admin` or the unrestricted interactive
 set:
 
 - Every automation receives `opensession-report`, `opensession-turn`,
-  `opensession-databases`, `opensession-health`, and `opensession-audit`. The
-  latter two expose aggregate host metrics and a bounded daily audit digest,
-  not arbitrary filesystem or command access.
+  `opensession-databases`, `opensession-health`, `opensession-audit`, and
+  `opensession-usage`. The latter three expose aggregate host metrics, a
+  bounded daily audit digest, and the used and remaining percent of shared
+  pool subscriptions (no personal accounts, tokens, or credential paths), not arbitrary
+  filesystem or command access. `opensession-usage` can trigger a usage
+  re-poll at most once per 5 minutes per provider for the whole instance.
 - `opensession-databases` is scoped the way `opensession-report` is: a run only
   sees databases tagged with its own automation id, and the ones it creates
   carry that tag. Every statement is screened before it reaches SQLite
