@@ -123,6 +123,67 @@ describe("GitHub publication authority", () => {
     ).toEqual({ allowMerge: true });
   });
 
+  test("a check-back a machine turn scheduled acts for the session owner", () => {
+    for (const sender of [
+      "Open Session (scheduled)",
+      "agent os-123 (scheduled)",
+      "scheduled",
+      "loop",
+    ]) {
+      const actor = resolveRunGithubActor({
+        user: sender,
+        authorName: "Alex",
+        unattended: false,
+        journalKind: "prompt",
+        remote: false,
+      });
+      expect(actor.user).toBe("Alex");
+      expect(actor.ownerTurn).toBe(true);
+      expect(
+        runGithubMergeGuard({
+          isCode: true,
+          ownerTurn: actor.ownerTurn,
+          ownerLogin: null,
+          baseBranch: "main",
+        }),
+      ).toEqual({ allowMerge: true });
+    }
+    // A person's own check-back still acts as that person.
+    expect(
+      resolveRunGithubActor({
+        user: "Sam (scheduled)",
+        authorName: "Alex",
+        unattended: false,
+        journalKind: "prompt",
+        remote: false,
+      }).user,
+    ).toBe("Sam (scheduled)");
+    // Without a session owner, and for the machine turn itself, it is nobody.
+    for (const input of [
+      { user: "Open Session (scheduled)", authorName: undefined },
+      { user: "Open Session", authorName: "Alex" },
+    ]) {
+      expect(
+        resolveRunGithubActor({
+          ...input,
+          unattended: false,
+          journalKind: "prompt",
+          remote: false,
+        }).ownerTurn,
+      ).toBe(false);
+    }
+    // Unattended runs stay guarded.
+    expect(
+      resolveRunGithubActor({
+        user: "Open Session (scheduled)",
+        authorName: "Alex",
+        unattended: true,
+        journalKind: "prompt",
+        remote: false,
+      }).ownerTurn,
+    ).toBe(false);
+  });
+
   test("ask, unattended and machine turns keep protection", () => {
     for (const input of [
       { isCode: false, ownerTurn: true, ownerLogin: "alex" },

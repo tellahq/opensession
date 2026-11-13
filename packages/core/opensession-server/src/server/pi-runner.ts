@@ -155,6 +155,7 @@ import {
   humanPrompter,
   interactivePrompter,
   providerAccountUser,
+  scheduledOwner,
 } from "./session-actors";
 import {
   GITHUB_RUN_AUTH_FILE_ENV,
@@ -295,7 +296,10 @@ export interface RunGithubActor {
  *   automation run never holds a person's token. The automation's own ticks,
  *   wakes and scheduled prompts carry no `steeredBy` and stay unattended.
  * - Otherwise the sender (or the session owner behind an auto-continue)
- *   of an attended interactive-kind turn.
+ *   of an attended interactive-kind turn. A check-back that a machine turn
+ *   scheduled (`"Open Session (scheduled)"`, a worker report's follow-up)
+ *   acts for the session owner the same way, so a coordinator woken by its
+ *   own check-backs keeps the owner's publication workflow.
  */
 export function resolveRunGithubActor(input: {
   /** The run's user; automation-owned sessions pass none. */
@@ -324,7 +328,10 @@ export function resolveRunGithubActor(input: {
         : unconnectedReason(steerer);
     return { user: steerer, ownerTurn: !blocked, person: steerer, blocked };
   }
-  const user = githubCredentialUser(input.user, input.authorName);
+  const sender = githubCredentialUser(input.user, input.authorName);
+  const machineCheckBack =
+    !!sender && scheduledOwner(sender) !== sender && !humanPrompter(sender);
+  const user = machineCheckBack ? input.authorName || undefined : sender;
   const ownerTurn =
     !input.unattended && interactiveKind && humanPrompter(user) !== null;
   return {
