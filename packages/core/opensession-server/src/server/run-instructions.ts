@@ -335,6 +335,10 @@ export function buildSessionContext(input: {
   /** A connected person's code turn holds their token in the shell
    * (pi-runner runGithubEnv), so PRs need no bot-attribution assignee. */
   githubUserLogin?: string | null;
+  /** Says plainly that the person behind this turn could not get their own
+   *  GitHub access (pi-runner runGithubAccessNote), so the agent does not
+   *  claim to act as them. */
+  githubAccessNote?: string | null;
   /** `Name <email>` for the Co-authored-by trailer (pi-runner GIT_COAUTHOR_ENV). */
   coAuthor?: string;
 }): string {
@@ -362,6 +366,8 @@ export function buildSessionContext(input: {
         ? `When possible, assign @${login}.`
         : "";
     if (rule) lines.push(rule);
+    if (input.githubAccessNote)
+      lines.push(`GitHub access: ${input.githubAccessNote}`);
     // The Session trailer links each commit to the session that wrote it, so
     // a direct push to main keeps the same record a PR footer gives.
     const trailers = [

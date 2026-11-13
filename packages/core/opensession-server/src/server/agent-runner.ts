@@ -269,6 +269,15 @@ export interface RunAgentOpts {
    */
   accountUser?: string;
   /**
+   * The person who sent this turn into an automation-owned session
+   * themselves (SessionRunInputs.steeredBy). The run's GitHub credential and
+   * the identity its session context describes follow them instead of the
+   * automation (pi-runner resolveRunGithubActor): their own connected
+   * account or, failing that, the App token with a plain note. Unset for
+   * every other run, which keeps the existing rules.
+   */
+  steeredBy?: string;
+  /**
    * The run belongs to an automation (its own session or a descendant). When
    * no person is behind the turn (`accountUser`), provider account selection
    * draws from the Automations account group first, shared pool as backup.
@@ -2149,6 +2158,7 @@ export async function resumeInterruptedRuns(
                     : undefined,
                   user: run.user,
                   accountUser: run.accountUser,
+                  steeredBy: run.steeredBy,
                   automationAccounts: run.automationAccounts,
                   deniedTools: run.deniedTools,
                   publicationPolicy: run.publicationPolicy,
@@ -2264,6 +2274,7 @@ export async function resumeInterruptedRuns(
                   : undefined,
                 user: run.user,
                 accountUser: run.accountUser,
+                steeredBy: run.steeredBy,
                 automationAccounts: run.automationAccounts,
                 deniedTools: run.deniedTools,
                 publicationPolicy: run.publicationPolicy,
@@ -2371,6 +2382,7 @@ export async function resumeInterruptedRuns(
                 : undefined,
               user: run.user,
               accountUser: run.accountUser,
+              steeredBy: run.steeredBy,
               automationAccounts: run.automationAccounts,
               deniedTools: run.deniedTools,
               publicationPolicy: run.publicationPolicy,

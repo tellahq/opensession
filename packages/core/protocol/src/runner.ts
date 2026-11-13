@@ -142,6 +142,9 @@ export interface RunHostSpec {
   /** Person whose personal provider subscription may serve the run when it
    *  differs from `user` (see agent-runner RunAgentOpts). */
   accountUser?: string;
+  /** Person who steered an automation-owned session's turn; the run's GitHub
+   *  credential follows them (see agent-runner RunAgentOpts). */
+  steeredBy?: string;
   /** The run belongs to an automation: with no `accountUser`, provider
    *  accounts come from the Automations group first, shared pool as backup.
    *  Older hosts ignore it and use the shared pool. */

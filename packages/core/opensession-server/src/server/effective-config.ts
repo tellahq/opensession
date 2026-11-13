@@ -467,9 +467,19 @@ export async function buildSessionEffectiveConfig(
       "session-run-inputs.ts provider account identity",
     ),
     git: row(git ?? null, "shared/user-mappings.ts"),
+    steeredBy: row(
+      inputs.steeredBy ?? null,
+      "session-run-inputs.ts automation steering identity",
+    ),
+    // An automation's own turns hold its App token; a person steering it
+    // holds their own (pi-runner resolveRunGithubActor).
     github: row(
-      githubUserLoginForRun(inputs.user || git?.name) ?? null,
-      "github-auth.ts",
+      (inputs.isAutomationSession
+        ? inputs.steeredBy
+          ? githubUserLoginForRun(inputs.steeredBy)
+          : null
+        : githubUserLoginForRun(inputs.user || git?.name)) ?? null,
+      "github-auth.ts / pi-runner.ts resolveRunGithubActor",
     ),
     paths: row(configuredPaths(), "config.ts configuredPaths"),
   };

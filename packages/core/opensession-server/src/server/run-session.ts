@@ -2049,6 +2049,9 @@ export async function maybeLaunchSandboxedRun(
     /** The person who sent this turn themselves (RunInputs.humanPrompter);
      *  undefined for machine turns and scheduled ticks. Run-rpc only. */
     humanPrompter?: string;
+    /** RunInputs.steeredBy. A Sandbox run never holds that person's token;
+     *  pi-runner says so in the session context instead. */
+    steeredBy?: string;
     images?: ImageInput[];
     /** Server-staged file attachments; a remote sandbox gets their bytes in
      *  the spec because it cannot read the server's uploads dir. */
@@ -2336,6 +2339,7 @@ export async function maybeLaunchSandboxedRun(
       ),
       user: security.user,
       accountUser: opts.accountUser,
+      steeredBy: opts.steeredBy,
       automationAccounts: security.automationAccounts,
       fallbackModel: opts.isAutomationSession
         ? undefined
@@ -3384,6 +3388,7 @@ async function runSessionPromptInner(
           user,
           accountUser: runInputs.accountUser,
           humanPrompter: runInputs.humanPrompter,
+          steeredBy: runInputs.steeredBy,
           images,
           attachments,
           mcpServers: mcpServers ?? "all",
@@ -3520,6 +3525,9 @@ async function runSessionPromptInner(
           author: commitAuthorFor(user, sessionPrincipal(session)),
           user: runInputs.user,
           accountUser: runInputs.accountUser,
+          // A person steering an automation-owned session acts on GitHub as
+          // themselves; the automation's own turns keep its credential.
+          steeredBy: runInputs.steeredBy,
           automationAccounts: isAutomationSession || undefined,
           fallbackModel: isFixedSubscription(session)
             ? "none"
@@ -3641,6 +3649,9 @@ async function runSessionPromptInner(
       // The person who sent the prompt may spend their own subscription even
       // when the session is automation-owned (the pool stays the backup).
       accountUser: runInputs.accountUser,
+      // A person steering an automation-owned session acts on GitHub as
+      // themselves (pi-runner resolveRunGithubActor).
+      steeredBy: runInputs.steeredBy,
       // An automation's own turns draw from its Automations accounts first.
       automationAccounts: runInputs.isAutomationSession || undefined,
       // The creator grant also gives provider routing a safe human identity for

@@ -151,10 +151,16 @@ import {
 import { transcript } from "./actor-transcript";
 import { transcriptForwarder } from "./transcript-forward";
 import { gitIdentityEnv, type GitIdentity } from "./shared/user-mappings";
-import { humanPrompter, providerAccountUser } from "./session-actors";
+import {
+  humanPrompter,
+  interactivePrompter,
+  providerAccountUser,
+} from "./session-actors";
 import {
   GITHUB_RUN_AUTH_FILE_ENV,
   githubRunOwnerLogin,
+  githubUserAuthActive,
+  githubUserLoginForRun,
   githubUserRunEnv,
   projectedGithubRunEnv,
 } from "./github-auth";
@@ -260,11 +266,117 @@ export async function githubReadReposRunEnv(
   return githubServiceReadReposEnv(repo.ghRepo, readRepos);
 }
 
+/** Whose GitHub credential a turn may hold, decided once so the shell token
+ * (runGithubEnv), the merge guard and the session context's identity lines
+ * all read the same answer. */
+export interface RunGithubActor {
+  /** The identity runGithubEnv and githubRunOwnerLogin resolve. */
+  user: string | undefined;
+  /** The turn may hold `user`'s own token; runGithubEnv still falls back to
+   *  the App token when they turn out not to be connected. */
+  ownerTurn: boolean;
+  /** The person who sent this turn, when one did and their own GitHub
+   *  access is what they would expect; the session context names them when
+   *  the turn ends up without it. Null for machine and unattended turns. */
+  person: string | null;
+  /** Why `person` cannot hold their own token this turn, known up front.
+   *  Null when nothing rules it out. */
+  blocked: string | null;
+}
+
+/**
+ * The person a turn acts as on GitHub (docs/setup/github.md, "Who holds which
+ * credential").
+ *
+ * - A person who steers an automation-owned session (`steeredBy`, set only
+ *   for a sender who pressed send themselves) acts as themselves: their own
+ *   connected account, resolved by exact identity mapping, never the
+ *   simple-mode sole account and never the automation owner's. A Sandbox
+ *   automation run never holds a person's token. The automation's own ticks,
+ *   wakes and scheduled prompts carry no `steeredBy` and stay unattended.
+ * - Otherwise the sender (or the session owner behind an auto-continue)
+ *   of an attended interactive-kind turn.
+ */
+export function resolveRunGithubActor(input: {
+  /** The run's user; automation-owned sessions pass none. */
+  user?: string | null;
+  /** The commit author's name: the owner behind an auto-continue. */
+  authorName?: string | null;
+  steeredBy?: string | null;
+  unattended: boolean;
+  journalKind?: string;
+  remote: boolean;
+}): RunGithubActor {
+  const interactiveKind = INTERACTIVE_KINDS.has(
+    baseJournalKind(input.journalKind),
+  );
+  // Sandbox launchers normalize steered automation turns to "automation".
+  // Keep their sender for the denial note; remote turns remain ineligible.
+  const steerer =
+    interactiveKind || input.remote
+      ? interactivePrompter(input.steeredBy)
+      : null;
+  if (steerer) {
+    const blocked = input.remote
+      ? "a Sandbox automation run never holds a person's token"
+      : githubUserLoginForRun(steerer)
+        ? null
+        : unconnectedReason(steerer);
+    return { user: steerer, ownerTurn: !blocked, person: steerer, blocked };
+  }
+  const user = githubCredentialUser(input.user, input.authorName);
+  const ownerTurn =
+    !input.unattended && interactiveKind && humanPrompter(user) !== null;
+  return {
+    user,
+    ownerTurn,
+    person: ownerTurn ? humanPrompter(user) : null,
+    blocked: null,
+  };
+}
+
+function unconnectedReason(person: string): string {
+  return githubUserAuthActive()
+    ? `${person} has no connected GitHub account on this instance`
+    : "per-user GitHub sign-in is off on this instance";
+}
+
+/** The session-context line for a person whose own GitHub access this turn
+ * could not get, or null when it holds their token, nobody is behind it, or
+ * gh uses the host's own login. Outside operator mode an interactive turn's
+ * App token is the norm and goes unremarked; a steered automation turn always
+ * says it. */
+export function runGithubAccessNote(input: {
+  actor: RunGithubActor;
+  steered: boolean;
+  isCode: boolean;
+  ownerLogin: string | null;
+  hostLogin: boolean;
+}): string | null {
+  const { actor } = input;
+  if (!input.isCode || input.hostLogin || input.ownerLogin || !actor.person)
+    return null;
+  // Outside operator mode, or on a host whose launcher already chose the
+  // credential, an interactive turn's App token is expected.
+  if (
+    !input.steered &&
+    (!githubUserAuthActive() || process.env[GITHUB_RUN_AUTH_FILE_ENV])
+  )
+    return null;
+  const reason = actor.blocked ?? unconnectedReason(actor.person);
+  return (
+    `gh and git use the GitHub App's token, not ${actor.person}'s own ` +
+    `GitHub account (${reason}). Do not claim to act as ${actor.person} on ` +
+    "GitHub: repositories outside that token's reach stay unreachable this turn."
+  );
+}
+
 /** The GitHub credential one run's shell holds (docs/setup/github.md, "Who
  * holds which credential").
  *
- * - A code turn a connected person started (`ownerTurn`) acts as them: their
- *   token for gh and HTTPS git, so the push and the PR carry their identity.
+ * - A code turn a connected person started or steered (`ownerTurn`, see
+ *   resolveRunGithubActor) acts as them: their token for gh and HTTPS git,
+ *   so the push and the PR carry their identity.
  * - Every other code run, including an owner turn whose person is not
  *   connected, an automation, and a review handoff or worker report (a
  *   machine sender is nobody), holds the repository-scoped App code set. A
@@ -2418,17 +2530,23 @@ async function* runPiAttempt(
       publicRepo && configuredPrivateTerms.length > 0
         ? { terms: configuredPrivateTerms }
         : undefined;
-    // The person this turn acts for, if any: the sender, unless it is the
-    // synthetic auto-continue driver, in which case the author fallback
-    // names the session owner (#322). A machine sender (a review handoff, a
-    // worker report, an automation) is nobody. In code mode an owner turn
-    // puts their connected token in the shell (runGithubEnv) and describes
-    // PR authorship as theirs; every other run holds an App token.
-    const githubUser = githubCredentialUser(user, author?.name);
-    const ownerTurn =
-      !policy.unattended &&
-      INTERACTIVE_KINDS.has(baseJournalKind(journal?.kind)) &&
-      humanPrompter(githubUser) !== null;
+    // The person this turn acts for, if any: the person steering an
+    // automation-owned session, else the sender, unless it is the synthetic
+    // auto-continue driver, in which case the author fallback names the
+    // session owner (#322). A machine sender (a review handoff, a worker
+    // report, an automation) is nobody. In code mode an owner turn puts
+    // their connected token in the shell (runGithubEnv) and describes PR
+    // authorship as theirs; every other run holds an App token.
+    const githubActor = resolveRunGithubActor({
+      user,
+      authorName: author?.name,
+      steeredBy: opts.steeredBy,
+      unattended: Boolean(policy.unattended),
+      journalKind: journal?.kind,
+      remote: Boolean(remote),
+    });
+    const githubUser = githubActor.user;
+    const ownerTurn = githubActor.ownerTurn;
     // On a remote host this reads the launcher's projected marker, not the
     // person store, so a sandboxed owner turn drops the guard exactly when
     // a host run would.
@@ -2953,6 +3071,13 @@ async function* runPiAttempt(
       user,
       author,
       githubUserLogin,
+      githubAccessNote: runGithubAccessNote({
+        actor: githubActor,
+        steered: !!opts.steeredBy,
+        isCode: mode === "code",
+        ownerLogin: githubUserLogin,
+        hostLogin: hostGithubLogin,
+      }),
       coAuthor: agentGitEnv[GIT_COAUTHOR_ENV],
     });
     await loader.reload();
