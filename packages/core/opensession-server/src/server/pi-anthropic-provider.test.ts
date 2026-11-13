@@ -1511,6 +1511,221 @@ describe("buildPiAnthropicProvider", () => {
     }
   });
 
+  for (const scenario of [
+    "recover",
+    "blocked-again",
+    "real-auth",
+    "partial-answer",
+    "aborted",
+    "fresh-request",
+  ] as const) {
+    test(`Cloudflare continuation recovery: ${scenario}`, async () => {
+      await designate(["edge-account", "other-account"]);
+      await seedAccounts(["edge-account", "other-account"]);
+      for (const id of ["edge-account", "other-account"])
+        accounts.__setUsageCacheForTest(id, freshUsage);
+      const sessionId = `edge-${scenario}`;
+      const block =
+        "Failed to authenticate. API Error: 403 Attention Required! | Cloudflare";
+      const error =
+        scenario === "real-auth"
+          ? "Failed to authenticate. API Error: 401 Invalid token"
+          : block;
+      const controller = new AbortController();
+      const prompts: unknown[] = [];
+      const closed: number[] = [];
+      let starts = 0;
+      const failure = {
+        type: "assistant",
+        error: "authentication_failed",
+        message: { content: [{ type: "text", text: error }] },
+      };
+      const query = spyOn(sdk, "query").mockImplementation((input) => {
+        const attempt = ++starts;
+        const messages: any[] =
+          attempt === 1
+            ? [
+                ...(scenario === "fresh-request"
+                  ? []
+                  : [
+                      {
+                        type: "assistant",
+                        uuid: "checkpoint",
+                        session_id: "sdk-edge",
+                        message: {
+                          id: "tool-message",
+                          content: [
+                            {
+                              type: "tool_use",
+                              id: "call-1",
+                              name: "mcp__oc__read",
+                              input: {},
+                            },
+                          ],
+                        },
+                      },
+                    ]),
+                ...(scenario === "partial-answer"
+                  ? [
+                      {
+                        type: "assistant",
+                        message: {
+                          content: [{ type: "text", text: "Already visible" }],
+                        },
+                      },
+                    ]
+                  : []),
+                failure,
+                {
+                  type: "result",
+                  subtype: "error_during_execution",
+                  is_error: true,
+                  result: error,
+                },
+              ]
+            : scenario === "blocked-again"
+              ? [failure]
+              : [
+                  {
+                    type: "result",
+                    subtype: "success",
+                    is_error: false,
+                    result: "Recovered",
+                    session_id: "sdk-recovered",
+                  },
+                ];
+        const iterator = (input.prompt as AsyncIterable<any>)[
+          Symbol.asyncIterator
+        ]();
+        return {
+          next: async () => {
+            if (attempt > 1 && prompts.length === 0)
+              prompts.push((await iterator.next()).value);
+            const value = messages.shift();
+            if (value === failure && scenario === "aborted") controller.abort();
+            return value
+              ? { value, done: false }
+              : { value: undefined, done: true };
+          },
+          close: () => closed.push(attempt),
+          [Symbol.asyncIterator]() {
+            return this;
+          },
+        } as any;
+      });
+      try {
+        const provider = buildPiAnthropicProvider({
+          unifiedSessionId: sessionId,
+          builtinModels: [model],
+          accountId: "edge-account",
+          accountStrict: true,
+        }) as any;
+        const messages: any[] = [
+          {
+            role: "system",
+            content: "Test assistant",
+            toolsAdded: [
+              {
+                name: "read",
+                description: "Read",
+                parameters: { type: "object", properties: {} },
+              },
+            ],
+          },
+          { role: "user", content: "Read the result, then answer" },
+        ];
+        if (scenario !== "fresh-request") {
+          const first: any[] = [];
+          for await (const event of provider.streamSimple(
+            model,
+            { messages },
+            { sessionId },
+          ))
+            first.push(event);
+          expect(first.at(-1)?.reason).toBe("toolUse");
+          messages.push(
+            {
+              role: "assistant",
+              content: [
+                { type: "toolCall", id: "call-1", name: "read", arguments: {} },
+              ],
+            },
+            {
+              role: "toolResult",
+              toolCallId: "call-1",
+              toolName: "read",
+              content: [
+                { type: "text", text: "Previously completed tool result" },
+              ],
+            },
+          );
+        }
+        const events: any[] = [];
+        for await (const event of provider.streamSimple(
+          model,
+          { messages },
+          { sessionId, signal: controller.signal },
+        ))
+          events.push(event);
+        const shouldReplay =
+          scenario === "recover" || scenario === "blocked-again";
+        expect(query).toHaveBeenCalledTimes(shouldReplay ? 2 : 1);
+        expect(events.filter((event) => event.type === "start")).toHaveLength(
+          1,
+        );
+        expect(events.at(-1)?.type).toBe(
+          scenario === "recover" ? "done" : "error",
+        );
+        if (scenario === "aborted")
+          expect(events.at(-1)?.reason).toBe("aborted");
+        if (shouldReplay) {
+          expect(closed).toContain(1);
+          expect(
+            (query.mock.calls[1] as any)[0].options.resume,
+          ).toBeUndefined();
+          expect(
+            (query.mock.calls[1] as any)[0].options.env.CLAUDE_CODE_OAUTH_TOKEN,
+          ).toBe(
+            (query.mock.calls[0] as any)[0].options.env.CLAUDE_CODE_OAUTH_TOKEN,
+          );
+          expect(JSON.stringify(prompts)).toContain(
+            "Previously completed tool result",
+          );
+          expect(events.some((event) => event.type === "toolcall_end")).toBe(
+            false,
+          );
+        }
+        if (scenario !== "real-auth") {
+          expect(
+            events
+              .filter((event) => event.type === "text_delta")
+              .map((event) => event.delta),
+          ).not.toContain(block);
+        }
+        // An edge block never benches a valid subscription.
+        expect(
+          (
+            pickBridgeAccount(model.id, {
+              accountId: "edge-account",
+              accountStrict: true,
+            }) as any
+          ).id,
+        ).toBe("edge-account");
+      } finally {
+        for (const live of [...liveSdkConversations().values()]) {
+          if (live.key.startsWith(`pi:${sessionId}:`)) {
+            live.disposed = true;
+            liveSdkConversations().delete(live.key);
+          }
+        }
+        for (const key of piSdkSessionStore().keys())
+          if (key.startsWith(`pi:${sessionId}:`))
+            piSdkSessionStore().delete(key);
+        query.mockRestore();
+      }
+    });
+  }
+
   test("a usage-limited account rotates to the next one inside the same turn", async () => {
     // More than the old four-account ceiling. SDK usage-limit responses
     // must walk the picker until the real pool is dry.

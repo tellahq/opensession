@@ -1,5 +1,5 @@
 import { getConfigAsync } from "./config";
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -63,6 +63,11 @@ beforeAll(async () => {
   );
   const codexAccounts = await import("./codex-accounts");
   priorCodexHome = codexAccounts.__setCodexHomeForTest(home);
+});
+
+afterEach(async () => {
+  // Finish write-throughs before the next test replaces the on-disk fixture.
+  await (await import("./pr-cache")).flushPrCacheSnapshot();
 });
 
 afterAll(async () => {

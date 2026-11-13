@@ -1399,6 +1399,20 @@ interface CapturedToolUse {
   input: unknown;
 }
 
+/** The CLI labels an HTML edge block as authentication_failed too. Do not
+ * confuse it with an invalid token, a normal permission error, or quota. */
+function isCloudflareBlock(message: string): boolean {
+  return (
+    /\b403\b/.test(message) && /attention required!.*cloudflare/i.test(message)
+  );
+}
+
+interface SdkAttemptRetry {
+  retry: boolean;
+  cloudflareReplayed: boolean;
+  replayAccount?: ClaudeAccount;
+}
+
 async function* runSdkStream(
   opts: PiAnthropicProviderOpts,
   model: PiCatalogModel,
@@ -1436,8 +1450,9 @@ async function* runSdkStream(
 
   // Never retry the same account twice during this turn's fallback walk.
   const excluded = new Set<string>();
+  const rotate: SdkAttemptRetry = { retry: false, cloudflareReplayed: false };
   for (;;) {
-    const rotate = { retry: false };
+    rotate.retry = false;
     yield* runSdkAttempt(
       opts,
       model,
@@ -1454,7 +1469,8 @@ async function* runSdkStream(
 
 /** One attempt on one account. Sets `rotate.retry` instead of yielding a
  *  terminal error when the failure is a usage limit, nothing has streamed
- *  yet, and another account can serve. */
+ *  yet, and another account can serve. An edge-blocked continuation gets one
+ *  fresh replay on the same account before surfacing the failure. */
 async function* runSdkAttempt(
   opts: PiAnthropicProviderOpts,
   model: PiCatalogModel,
@@ -1463,7 +1479,7 @@ async function* runSdkAttempt(
   partial: PiAssistantMessageShape,
   fail: (reason: "aborted" | "error", message: string) => PiStreamEvent,
   excluded: Set<string>,
-  rotate: { retry: boolean },
+  rotate: SdkAttemptRetry,
 ): AsyncGenerator<PiStreamEvent> {
   const signal = options?.signal;
   const requestId = crypto.randomUUID();
@@ -1521,14 +1537,17 @@ async function* runSdkAttempt(
     const stickyId =
       liveSdkConversations().get(storeKey)?.accountId ??
       piSdkSessionStore().get(storeKey)?.accountId;
-    const picked = pickBridgeAccount(model.id, {
-      accountId: opts.accountId,
-      accountStrict: opts.accountStrict,
-      usageCredits: opts.usageCredits,
-      user: opts.user,
-      excludeIds: excluded.size ? [...excluded] : undefined,
-      stickyId,
-    });
+    const picked =
+      rotate.replayAccount ??
+      pickBridgeAccount(model.id, {
+        accountId: opts.accountId,
+        accountStrict: opts.accountStrict,
+        usageCredits: opts.usageCredits,
+        user: opts.user,
+        excludeIds: excluded.size ? [...excluded] : undefined,
+        stickyId,
+      });
+    rotate.replayAccount = undefined;
     if ("error" in picked) throw new Error(picked.error);
     account = picked;
     await ensureSdkDirs(account.id);
@@ -1823,6 +1842,16 @@ async function* runSdkAttempt(
           continue;
         }
         if (m.type === "assistant") {
+          // Synthetic CLI errors are not model output. In particular, exposing
+          // an edge-block page as text would make a safe empty-step retry look
+          // like a partially streamed answer.
+          if (m.error === "authentication_failed") {
+            const detail = (m.message?.content ?? [])
+              .filter((block: Record<string, any>) => block?.type === "text")
+              .map((block: Record<string, any>) => block.text)
+              .join("\n");
+            if (isCloudflareBlock(detail)) throw new Error(detail);
+          }
           const assistantAddedForwardedCall =
             captureVisibleSdkAssistantToolUses(
               earlyStop,
@@ -2025,6 +2054,30 @@ async function* runSdkAttempt(
     // A failed continuation may mean the resumed SDK session is dead (config
     // dir swept/wiped): evict the mapping so the next turn replays fresh.
     if (plannedContinuation) piSdkSessionStore().delete(storeKey);
+    // Rebuild only the failed model step, not the agent turn: context already
+    // contains the results of executed tools. One fresh query can recover a
+    // blocked live continuation without replaying tools or benching good auth.
+    if (
+      account &&
+      plannedContinuation &&
+      isCloudflareBlock(message) &&
+      partial.content.length === 0 &&
+      !rotate.cloudflareReplayed
+    ) {
+      rotate.cloudflareReplayed = true;
+      rotate.replayAccount = account;
+      rotate.retry = true;
+      audit({
+        ...auditBase,
+        direction: "out",
+        ok: false,
+        account: account.name,
+        duration_ms: Date.now() - started,
+        error: message,
+        recovery: "cloudflare_fresh_replay",
+      });
+      return;
+    }
     const accountUnavailable = isClaudeAccountUnavailable(message, true);
     // Account-level death: sideline the picked designated account before
     // surfacing (claude-direct's markExhausted discipline); the preserved
