@@ -631,6 +631,9 @@ describe("getAllSessions", () => {
   });
 
   it("removes a submitted review from the cached sidebar request immediately", async () => {
+    // An earlier test's cache mutation persists the snapshot asynchronously;
+    // let it land before seeding, or its rename overwrites this file.
+    await (await import("./pr-cache")).flushPrCacheSnapshot();
     writeFileSync(
       join(home, ".opensession-pr-cache.json"),
       JSON.stringify({
@@ -695,6 +698,7 @@ describe("getAllSessions", () => {
   });
 
   it("drops withdrawn review requests from the cached sidebar state immediately", async () => {
+    await (await import("./pr-cache")).flushPrCacheSnapshot();
     writeFileSync(
       join(home, ".opensession-pr-cache.json"),
       JSON.stringify({
