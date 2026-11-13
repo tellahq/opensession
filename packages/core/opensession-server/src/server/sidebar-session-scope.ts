@@ -159,6 +159,18 @@ export function __resetAutomationAudienceForTest(): void {
   automationAudience = undefined;
 }
 
+/**
+ * Session ids the user put in their own sidebar: a personal lane ("Add to
+ * sidebar") or a pin. The live list bounds automation history to each
+ * automation's newest runs, so a claimed older run has to be named to stay.
+ */
+export async function sidebarClaimedSessionIds(
+  user: string,
+): Promise<string[]> {
+  const [lanes, pins] = await Promise.all([getLanes(user), getPins(user)]);
+  return [...new Set([...Object.keys(lanes), ...pins])];
+}
+
 /** Read catalog-owned overlays. This path has no file or SQLite fallback. */
 export async function loadSidebarSessionScopeContext(
   scope: SidebarSessionScope,

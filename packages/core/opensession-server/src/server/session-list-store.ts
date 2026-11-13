@@ -410,8 +410,13 @@ export function indexedWorkspaceMembers(
 
 export function indexedSidebarSessions(
   selectedSessionId?: string,
+  claimedSessionIds: readonly string[] = [],
 ): Promise<UnifiedSession[] | null> {
-  return callIndex("listSidebarCovered", selectedSessionId).then(shared);
+  return callIndex(
+    "listSidebarCovered",
+    selectedSessionId,
+    claimedSessionIds,
+  ).then(shared);
 }
 
 export function indexedWorkspaceMemberSessions(
