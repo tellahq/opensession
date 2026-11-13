@@ -2031,6 +2031,46 @@ function sessionReadRepos(
   return repos.length ? repos : undefined;
 }
 
+/**
+ * The in-process servers a sandboxed turn mounts when it runs inside this
+ * process: exactly the `names` a detached host would proxy, built by the
+ * caller's `inProcessMcp` or, for the opening turn, from the session's own
+ * kind. An automation-owned turn without a caller-built set gets nothing.
+ */
+export function sandboxFallbackInProcessMcp(
+  session: UnifiedSession,
+  opts: {
+    isAutomationSession: boolean;
+    user?: string;
+    promptEntryId?: string;
+    inProcessMcp?: () => Record<string, unknown>;
+  },
+  names: readonly string[],
+): Record<string, unknown> | undefined {
+  if (!names.length) return undefined;
+  const servers = opts.inProcessMcp
+    ? opts.inProcessMcp()
+    : opts.isAutomationSession
+      ? {}
+      : session.plainDiscussionId
+        ? plainDiscussionSessionMcp(session.id, session.plainDiscussionId)
+        : {
+            ...interactiveMcpServers(opts.user, session.id, opts.promptEntryId),
+            ...(session.goalId
+              ? {
+                  "opensession-goal-self": createGoalSelfMcpServer(
+                    session.goalId,
+                  ),
+                }
+              : {}),
+          };
+  return Object.fromEntries(
+    names.flatMap((name) =>
+      name in servers ? [[name, servers[name]] as const] : [],
+    ),
+  );
+}
+
 export async function maybeLaunchSandboxedRun(
   session: UnifiedSession,
   opts: {
@@ -2061,6 +2101,10 @@ export async function maybeLaunchSandboxedRun(
     isAutomationSession: boolean;
     /** See sandboxRunSecuritySpec. */
     automationProxyMcpServers?: string[];
+    /** Builds this turn's in-process server set (the caller's
+     *  inProcessMcpForTurn). Only mounted when the platform has no detached
+     *  run host, and then only the names the host would proxy. */
+    inProcessMcp?: () => Record<string, unknown>;
     mcpRunAs?: McpRunAs;
     startToken?: string;
   },
@@ -2325,6 +2369,14 @@ export async function maybeLaunchSandboxedRun(
       // they do for any session here; an automation keeps its allowlist.
       mcpServers: opts.mcpServers ?? "all",
       proxyMcpServers: security.proxyMcpServers,
+      // Without a detached run host (macOS) the run stays in this process and
+      // mounts the servers directly instead of proxying them by name.
+      fallbackInProcessMcp: () =>
+        sandboxFallbackInProcessMcp(
+          session,
+          opts,
+          security.proxyMcpServers ?? [],
+        ),
       reposNote: opts.isAutomationSession
         ? undefined
         : await buildSessionNote(session, opts.user),
@@ -3359,6 +3411,31 @@ async function runSessionPromptInner(
   const attachedGhRepos = session.automationDescendantPolicy
     ? undefined
     : await sessionGithubRepos(session);
+  // The in-process opensession-* set this turn carries, rebuilt per call
+  // because an McpServer holds exactly one transport. Self-management tools
+  // for normal sessions; withheld from automation sessions (and their
+  // interactive resumes), same gate as deniedTools above. Automation-owned
+  // sessions keep their automation-bar set (papercuts + report/workflows
+  // rebuild + the selfImprove pair, plus a person's own spawn suite — the
+  // same fail-closed set the hosted path proxies and run-rpc's fallback
+  // builder serves, resolved once above as automationMcp) so a Slack thread
+  // reply reaches a session with the same tools its unattended run had. A
+  // Plain discussion session gets only its approval server: it reads
+  // untrusted ticket text. A goal-driven session also gets its own
+  // opensession-goal-self controls, so an interactive turn (a human steering
+  // it in the UI) can set the next wake, append to the ledger, or
+  // pause/finish — the same tools the headless wake has.
+  const inProcessMcpForTurn = (): Record<string, unknown> =>
+    isAutomationSession
+      ? automationMcp
+      : session.plainDiscussionId
+        ? plainDiscussionSessionMcp(sessionId, session.plainDiscussionId)
+        : session.goalId
+          ? {
+              ...interactiveMcpServers(user, sessionId, durablePromptEntryId),
+              "opensession-goal-self": createGoalSelfMcpServer(session.goalId),
+            }
+          : interactiveMcpServers(user, sessionId, durablePromptEntryId);
   const runnerRun = fixedSubscriptionRefusal
     ? null
     : await maybeLaunchRunnerRun(session, {
@@ -3395,6 +3472,7 @@ async function runSessionPromptInner(
           deniedTools,
           isAutomationSession,
           automationProxyMcpServers,
+          inProcessMcp: inProcessMcpForTurn,
           mcpRunAs: runInputs.mcpRunAs,
           startToken,
         });
@@ -3451,31 +3529,6 @@ async function runSessionPromptInner(
   // scoping intact: proxy names come from the same fail-closed automation
   // set the run-rpc fallback builder serves, while the repos note and MCP
   // grant identity are withheld.
-  // The in-process opensession-* set this turn carries, rebuilt per call
-  // because an McpServer holds exactly one transport. Self-management tools
-  // for normal sessions; withheld from automation sessions (and their
-  // interactive resumes), same gate as deniedTools above. Automation-owned
-  // sessions keep their automation-bar set (papercuts + report/workflows
-  // rebuild + the selfImprove pair, plus a person's own spawn suite — the
-  // same fail-closed set the hosted path proxies and run-rpc's fallback
-  // builder serves, resolved once above as automationMcp) so a Slack thread
-  // reply reaches a session with the same tools its unattended run had. A
-  // Plain discussion session gets only its approval server: it reads
-  // untrusted ticket text. A goal-driven session also gets its own
-  // opensession-goal-self controls, so an interactive turn (a human steering
-  // it in the UI) can set the next wake, append to the ledger, or
-  // pause/finish — the same tools the headless wake has.
-  const inProcessMcpForTurn = (): Record<string, unknown> =>
-    isAutomationSession
-      ? automationMcp
-      : session.plainDiscussionId
-        ? plainDiscussionSessionMcp(sessionId, session.plainDiscussionId)
-        : session.goalId
-          ? {
-              ...interactiveMcpServers(user, sessionId, durablePromptEntryId),
-              "opensession-goal-self": createGoalSelfMcpServer(session.goalId),
-            }
-          : interactiveMcpServers(user, sessionId, durablePromptEntryId);
   const hostedRun =
     !fixedSubscriptionRefusal &&
     !runnerRun &&

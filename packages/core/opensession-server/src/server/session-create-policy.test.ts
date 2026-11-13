@@ -3,7 +3,10 @@ import {
   assertAutomationDescendantOpeningIsolation,
   openingCreateTrustPolicy,
 } from "./session-create";
-import { sandboxRunSecuritySpec } from "./run-session";
+import {
+  sandboxFallbackInProcessMcp,
+  sandboxRunSecuritySpec,
+} from "./run-session";
 import { runAccountSpec } from "./session-run-inputs";
 import type { UnifiedSession } from "./types";
 import {
@@ -160,6 +163,37 @@ describe("automation descendant opening policy", () => {
         automationProxyMcpServers: automationBar,
       }).proxyMcpServers,
     ).toContain("opensession-sessions");
+  });
+
+  test("an in-process sandbox turn mounts exactly the servers a host would proxy", () => {
+    // macOS has no detached run host, so the turn mounts the servers itself.
+    const session = { id: "os-interactive" } as UnifiedSession;
+    const opts = { isAutomationSession: false, user: "Alex" };
+    const names = sandboxRunSecuritySpec(session, opts).proxyMcpServers ?? [];
+    expect(names).toContain("opensession-sessions");
+    expect(
+      Object.keys(sandboxFallbackInProcessMcp(session, opts, names) ?? {}),
+    ).toEqual(names);
+    // A caller-built set is cut down to the proxied names.
+    expect(
+      sandboxFallbackInProcessMcp(
+        { id: "os-auto", automation: "Health monitor" } as UnifiedSession,
+        {
+          isAutomationSession: true,
+          inProcessMcp: () => ({ "opensession-papercuts": 1, extra: 2 }),
+        },
+        ["opensession-papercuts"],
+      ),
+    ).toEqual({ "opensession-papercuts": 1 });
+    // An automation turn with no caller-built set mounts nothing.
+    expect(
+      sandboxFallbackInProcessMcp(
+        { id: "os-auto", automation: "Health monitor" } as UnifiedSession,
+        { isAutomationSession: true },
+        ["opensession-papercuts"],
+      ),
+    ).toEqual({});
+    expect(sandboxFallbackInProcessMcp(session, opts, [])).toBeUndefined();
   });
 
   test("sandbox host spec preserves the complete descendant security boundary", () => {
