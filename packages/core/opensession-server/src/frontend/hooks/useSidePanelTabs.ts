@@ -15,9 +15,8 @@ import {
   registerSidePanelHost,
   setSidePanelDock,
 } from "../lib/side-panel-store";
-import { useSessionRecord } from "../lib/session-records";
+import { useHasChildSessions, useSessionRecord } from "../lib/session-records";
 import { useIsCoordinating } from "../lib/coordinator-mode";
-import { useSessionRecords } from "../lib/session-records";
 import { useWorkspaceRecord } from "../lib/workspace-records";
 import type { Workspace } from "../lib/types";
 
@@ -83,11 +82,8 @@ export function useSidePanelTabs({
   // that merely started threads can open it like any other tab.
   const self = useSessionRecord(preview.sessionId);
   const workspace = useWorkspaceRecord(self?.workspaceId ?? null);
-  const sessions = useSessionRecords();
   const coordinating = useIsCoordinating(self, workspace);
-  const hasThreads = sessions.some(
-    (s) => s.parentSessionId === preview.sessionId,
-  );
+  const hasThreads = useHasChildSessions(preview.sessionId);
   const threads: SidePanelThreads | null =
     self && (coordinating || hasThreads)
       ? { workspace, rootId: self.id, pinned: coordinating }
