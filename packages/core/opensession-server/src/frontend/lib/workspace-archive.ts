@@ -50,3 +50,16 @@ export function workspaceArchivedSessions(
     (b.lastActivity || "").localeCompare(a.lastActivity || ""),
   );
 }
+
+/**
+ * The archived rows to store when a workspace's fetch lands or the workspace
+ * closes. Most workspaces have closed nothing, so switching between them
+ * fetches one empty list after another; keeping the stored empty list spares
+ * the whole app a render that would change nothing.
+ */
+export function nextFetchedWorkspaceArchive(
+  prev: UnifiedSession[],
+  next: UnifiedSession[],
+): UnifiedSession[] {
+  return !prev.length && !next.length ? prev : next;
+}

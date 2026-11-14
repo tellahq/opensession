@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchWorkspaceArchivedSessions } from "../lib/api";
 import type { UnifiedSession } from "../lib/types";
+import { nextFetchedWorkspaceArchive } from "../lib/workspace-archive";
 
 /**
  * The archived sessions of ONE workspace.
@@ -29,7 +30,7 @@ export function useWorkspaceArchive(
   const [rows, setRows] = useState<UnifiedSession[]>([]);
   useEffect(() => {
     if (!workspaceId) {
-      setRows([]);
+      setRows((prev) => nextFetchedWorkspaceArchive(prev, []));
       return;
     }
     let active = true;
@@ -41,7 +42,7 @@ export function useWorkspaceArchive(
           controller.signal,
         );
         if (!active) return;
-        setRows(sessions);
+        setRows((prev) => nextFetchedWorkspaceArchive(prev, sessions));
       })().catch(async () => {
         // The history menu is an extra; a failed fetch just leaves it out
         // rather than putting an error in front of the session someone
