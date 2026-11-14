@@ -42,6 +42,9 @@ const TOOL_ALIASES: Record<string, string> = {
   apply_patch: "Edit",
   bash: "Bash",
   shell: "Bash",
+  // Follow-ups to a command `bash` left running in the background.
+  bash_status: "BashOutput",
+  bash_kill: "KillShell",
   // pi's codemode: one JavaScript script that calls the other tools.
   codemode: "Codemode",
   exec_command: "Bash",
@@ -256,6 +259,7 @@ export function toolFamily(toolName: string): ToolFamily {
   switch (canonicalToolName(toolName)) {
     case "Bash":
     case "BashOutput":
+    case "KillShell":
     case "Codemode":
       return "run";
     case "Read":
@@ -569,6 +573,11 @@ export function toolDetail(toolName: string, input: unknown): ToolDetail {
           160,
         ),
       };
+    }
+    case "BashOutput":
+    case "KillShell": {
+      const id = toolInputString(inp, "id");
+      return id ? { kind: "text", text: id } : { kind: "none" };
     }
     case "Codemode": {
       const script = codemodeScript(inp);

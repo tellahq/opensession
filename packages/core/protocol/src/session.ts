@@ -23,6 +23,7 @@
 
 import type { AnsweredAskData, EntryNotice, NoticeKind } from "./notices";
 import type { ToolPresentation } from "./tool-presentation";
+import type { ContextBreakdown, RunActivity } from "./events";
 
 /** The complete set of managed Executor providers. */
 /** Service speed for ChatGPT subscription runs. "fast" is OpenAI's priority
@@ -236,6 +237,8 @@ export interface SessionUsage {
   contextTokens: number;
   /** Token ceiling of the model that produced `contextTokens`. */
   contextWindow: number;
+  /** What `contextTokens` is made of, from the latest run that reported it. */
+  context?: ContextBreakdown;
   /** Number of completed turns folded into these totals. */
   turns: number;
   /** ISO time of the last update. */
@@ -619,6 +622,12 @@ export type SessionLiveEvent =
   | { type: "stream_tool_use"; sessionId?: string; entry: TranscriptEntry }
   | { type: "stream_tool_result"; sessionId?: string; entry: TranscriptEntry }
   | { type: "stream_done"; sessionId?: string }
+  /** The running turn entered a phase worth naming, or (null) left one. */
+  | {
+      type: "stream_activity";
+      sessionId?: string;
+      activity: RunActivity | null;
+    }
   | {
       type: "session_status";
       sessionId?: string;
@@ -729,6 +738,8 @@ export type ProtocolServerMessage =
         by?: string;
         text: string;
         startedAt: number;
+        /** The phase the turn is in, for a viewer that joins mid-run. */
+        activity?: RunActivity | null;
       };
     }
   // The same live-turn frames a feed server wraps in session_feed.event.

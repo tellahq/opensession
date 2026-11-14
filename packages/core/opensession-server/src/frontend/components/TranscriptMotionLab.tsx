@@ -6,6 +6,7 @@ import React, {
   useState,
 } from "react";
 import { AnimatePresence } from "motion/react";
+import type { RunActivity } from "@tellahq/opensession-protocol/events";
 import { LiveTurnStore } from "../lib/live-turn-store";
 import * as transcriptMotionScenarios from "../lib/transcript-motion-scenarios";
 import type {
@@ -32,6 +33,9 @@ type TranscriptMotionControl = {
    * exercise growth above the reader inside their own row, in the row above,
    * or during a fling, none of which a keyed prepend covers. */
   grow?: (entryId: string) => boolean;
+  /** Put the status row in a phase the engine would report (compacting, a
+   * retry wait), which no scripted scenario reaches on its own. */
+  setActivity: (activity: RunActivity | null) => void;
 };
 
 declare global {
@@ -186,6 +190,7 @@ function TranscriptMotionPlayer({
     const control: TranscriptMotionControl = {
       paused: controlRef.current?.paused ?? false,
       followLatest: () => scrollToLatest("auto"),
+      setActivity: (activity) => liveTurnStore.setActivity(activity),
       step: manual
         ? () => {
             const event = scenario.events[eventIndex];
@@ -221,7 +226,14 @@ function TranscriptMotionPlayer({
       if (window.__transcriptMotionControl === control)
         delete window.__transcriptMotionControl;
     };
-  }, [eventIndex, manual, onStatusChange, scenario, scrollToLatest]);
+  }, [
+    eventIndex,
+    liveTurnStore,
+    manual,
+    onStatusChange,
+    scenario,
+    scrollToLatest,
+  ]);
 
   useEffect(() => {
     if (manual) return () => liveTurnStore.clear();

@@ -31,6 +31,8 @@ import {
   makeGuardedGrepExecute,
   makeGuardedToolOps,
   makePiBashTool,
+  makePiBackgroundShells,
+  makePiBackgroundShellTools,
   parsePiModel,
   piModelResolutionError,
   piBashHomeEnv,
@@ -1795,6 +1797,119 @@ test("automation descendants receive an isolated CLI home", () => {
     AWS_SHARED_CREDENTIALS_FILE:
       "/scratch/session/automation-home-run_unsafe/.aws/credentials",
     GH_CONFIG_DIR: "/scratch/session/automation-home-run_unsafe/.config/gh",
+  });
+});
+
+describe("makePiBashTool background commands", () => {
+  const env = { PATH: process.env.PATH || "/usr/bin:/bin" };
+  const text = (result: any) => String(result.content[0].text);
+
+  test("offers background only when the run has somewhere to keep it", () => {
+    const plain = makePiBashTool({
+      cwd: tmpdir(),
+      env,
+      gated: false,
+      unattended: false,
+    });
+    expect((plain.parameters as any).properties.background).toBeUndefined();
+    expect(plain.description).not.toContain("background");
+  });
+
+  test("starts, follows and stops a command across three tools", async () => {
+    const audits: PiBashAuditEvent[] = [];
+    const shells = makePiBackgroundShells({
+      cwd: tmpdir(),
+      env,
+      onAudit: (event) => audits.push(event),
+    });
+    const bash = makePiBashTool({
+      cwd: tmpdir(),
+      env,
+      gated: false,
+      unattended: false,
+      onAudit: (event) => audits.push(event),
+      background: shells,
+    });
+    const [status, kill] = makePiBackgroundShellTools({ shells });
+    expect([status.name, kill.name]).toEqual(["bash_status", "bash_kill"]);
+
+    const started = await (bash as any).execute(
+      "bg-start",
+      { command: "echo up; sleep 60", background: true },
+      undefined,
+      undefined,
+    );
+    expect(started.details).toMatchObject({ id: "bg1", running: true });
+    expect(text(started)).toContain("bg1 is still running");
+    expect(text(started)).toContain("up");
+
+    const waited = await (status as any).execute(
+      "bg-status",
+      { id: "bg1", wait: 0 },
+      undefined,
+    );
+    expect(waited.details.running).toBe(true);
+    expect(text(waited)).toContain("(no new output)");
+
+    const stopped = await (kill as any).execute("bg-kill", { id: "bg1" });
+    expect(stopped.details).toMatchObject({ running: false, exitCode: null });
+    expect(text(stopped)).toContain("bg1 was stopped");
+    expect(audits.map((event) => [event.phase, event.background])).toEqual([
+      ["start", true],
+      ["finish", true],
+    ]);
+    expect(audits[1].outcome).toBe("cancelled");
+    await shells.dispose();
+  }, 30_000);
+
+  test("a background command that fails is an error, like a foreground one", async () => {
+    const shells = makePiBackgroundShells({ cwd: tmpdir(), env });
+    const bash = makePiBashTool({
+      cwd: tmpdir(),
+      env,
+      gated: false,
+      unattended: false,
+      background: shells,
+    });
+    await expect(
+      (bash as any).execute(
+        "bg-fail",
+        { command: "echo nope; exit 4", background: true },
+        undefined,
+        undefined,
+      ),
+    ).rejects.toThrow(/bg1 exited with code 4[\s\S]*nope/);
+    await shells.dispose();
+  });
+
+  test("background does not skip the screens a command must pass", async () => {
+    const shells = makePiBackgroundShells({ cwd: tmpdir(), env });
+    const readOnly = makePiBashTool({
+      cwd: tmpdir(),
+      env,
+      gated: false,
+      askReadOnly: true,
+      unattended: false,
+      background: shells,
+    });
+    await expect(
+      (readOnly as any).execute(
+        "bg-denied",
+        { command: "rm -rf build", background: true },
+        undefined,
+        undefined,
+      ),
+    ).rejects.toThrow();
+    await expect(
+      makePiBackgroundShellTools({ shells })[0].execute(
+        "none",
+        { id: "bg1" },
+        undefined,
+        undefined,
+        undefined as never,
+      ),
+    ).rejects.toThrow(/No background command/);
+    await shells.dispose();
   });
 });
 

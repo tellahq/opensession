@@ -2181,6 +2181,11 @@ export async function openCreatedSession(
           finalReply.text(event.text);
           io.emit({ type: "stream_text", text: event.text });
         }
+        if (event.type === "activity")
+          io.emit({
+            type: "stream_activity",
+            activity: event.activity ?? null,
+          });
         if (event.type === "tool_use") {
           toolUseCount++;
           finalReply.toolUse();

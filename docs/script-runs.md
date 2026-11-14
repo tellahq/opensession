@@ -11,6 +11,13 @@ start_script ──> script-runs.ts ──systemd-run --user --scope──> scri
                       └─────────── reattach on boot ─────────────────┘
 ```
 
+A command that only has to outlive one tool call, not the turn, does not need
+a script run: the agent's `bash` tool takes `background: true`, returns an id
+within seconds, and `bash_status` and `bash_kill` follow the command. That
+covers a build or a test suite the agent keeps working beside. It is stopped
+when the turn ends, which is the line between the two: a script run is for
+work that must still be there afterwards.
+
 ## What a run gets
 
 - **It survives restarts.** The command is owned by a script host

@@ -1,5 +1,6 @@
 import { LiveTextBuffer } from "@tellahq/opensession-protocol/live-text";
 import { advanceReveal } from "@tellahq/opensession-protocol/stream-cuts";
+import type { RunActivity } from "@tellahq/opensession-protocol/events";
 import {
   countSessionPerf,
   recordSessionPerf,
@@ -93,6 +94,9 @@ export class LiveTurnStore {
   private shown = 0;
   private lastFrameAt = 0;
   private instant = prefersReducedMotion();
+  /** The phase the engine last reported for the running turn. Held beside the
+   * snapshot rather than in it: a phase change must not repaint the bubble. */
+  private activity: RunActivity | null = null;
 
   constructor() {
     startSessionPerfObservers();
@@ -110,6 +114,15 @@ export class LiveTurnStore {
   hasText = () => Boolean(this.buffer.text);
   hasPaintedText = () => this.snapshot.hasPaintedText;
   textLength = () => this.buffer.text.length;
+  getActivity = () => this.activity;
+  getNoActivity = () => null;
+
+  setActivity(activity: RunActivity | null | undefined) {
+    const next = activity ?? null;
+    if (JSON.stringify(next) === JSON.stringify(this.activity)) return;
+    this.activity = next;
+    this.emit();
+  }
 
   start(by?: string | null, runId?: string) {
     this.cancelTimers();
@@ -118,6 +131,7 @@ export class LiveTurnStore {
     this.lastFrameAt = 0;
     this.instant = prefersReducedMotion();
     this.firstDeltaAt = null;
+    this.activity = null;
     this.snapshot = {
       text: "",
       live: true,
@@ -159,6 +173,7 @@ export class LiveTurnStore {
     // Snap the tail: the durable entry lands next, and a bubble that keeps
     // typing after the turn ended reads as a stuck run.
     this.shown = this.buffer.text.length;
+    this.activity = null;
     this.snapshot = {
       ...this.snapshot,
       text: this.buffer.text,
@@ -180,6 +195,7 @@ export class LiveTurnStore {
     this.buffer.reset();
     this.shown = 0;
     this.lastFrameAt = 0;
+    this.activity = null;
     this.snapshot = {
       ...EMPTY,
       revision: this.snapshot.revision + 1,

@@ -349,6 +349,14 @@ export function useWebSocket(presenceActive = true) {
               };
               for (const handler of handlersRef.current) handler(text);
             }
+            if (msg.active.activity) {
+              const activity: WSServerMessage = {
+                type: "stream_activity",
+                sessionId: msg.sessionId,
+                activity: msg.active.activity,
+              };
+              for (const handler of handlersRef.current) handler(activity);
+            }
           }
           delivered = null;
         }

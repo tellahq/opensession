@@ -1,4 +1,5 @@
 import { LiveTextBuffer } from "@tellahq/opensession-protocol/live-text";
+import type { RunActivity } from "@tellahq/opensession-protocol/events";
 import type { SessionLiveEvent } from "@tellahq/opensession-protocol/session";
 import { setPrimarySessionRunning } from "./session-state-events";
 
@@ -41,6 +42,7 @@ export interface SessionFeedSnapshot {
     by?: string;
     text: string;
     startedAt: number;
+    activity?: RunActivity | null;
   };
 }
 
@@ -51,6 +53,8 @@ interface ActiveTurn {
   entryId: string;
   by?: string;
   startedAt: number;
+  /** The phase the turn last reported, replayed to a viewer joining mid-run. */
+  activity?: RunActivity | null;
 }
 
 interface FeedState {
@@ -140,6 +144,8 @@ export function appendSessionFeed(
       startedAt: Date.now(),
     };
     state.live.reset();
+  } else if (event.type === "stream_activity" && state.active) {
+    state.active.activity = event.activity;
   } else if (event.type === "stream_text" && state.active) {
     state.live.append(event.text ?? "", event.blockId);
   } else if (event.type === "transcript_append" && state.active) {
@@ -240,6 +246,7 @@ export function isFeedEvent(msg: object): msg is SessionLiveEvent {
     type === "stream_text" ||
     type === "stream_tool_use" ||
     type === "stream_tool_result" ||
+    type === "stream_activity" ||
     type === "stream_done" ||
     type === "session_status"
   );

@@ -7,7 +7,11 @@ import { Spinner } from "../../ui/spinner";
 import { PulseDot } from "../../ui/status";
 import { cn } from "../../ui/cn";
 import { TextShimmer } from "../../ui/text-shimmer";
-import { busyActivityStatus } from "../../lib/busy-activity";
+import {
+  activityInterruptsStream,
+  busyActivityStatus,
+} from "../../lib/busy-activity";
+import type { RunActivity } from "@tellahq/opensession-protocol/events";
 import { msgActivityShimmer, msgRow } from "../../lib/msg-classes";
 import { TRANSCRIPT_SYNC_SPOT } from "../../lib/session-viewer-classes";
 import type { LiveTurnStore } from "../../lib/live-turn-store";
@@ -114,29 +118,57 @@ export function TranscriptSyncing() {
   );
 }
 
-// Persistent turn-level fallback for providers that emit no visible reasoning
-// or tool event for a while. It only claims what the client knows: the request
-// is active. The 1Hz ticker stays inside this tiny node instead of re-rendering
-// the transcript, and the elapsed value is hidden from assistive tech so it is
-// not announced every second.
-function BusyWorking({ since }: { since: number | null }) {
+// Persistent turn-level status. With a phase from the engine it names that
+// phase (waiting for the model, running a command, compacting, retrying);
+// without one it only claims what the client knows: the request is active.
+// The 1Hz ticker stays inside this tiny node instead of re-rendering the
+// transcript, and the elapsed value is hidden from assistive tech so it is
+// not announced every second. A retry countdown is hidden for the same
+// reason: its label would otherwise be re-announced on every tick.
+function BusyWorking({
+  since,
+  activity,
+}: {
+  since: number | null;
+  activity: RunActivity | null;
+}) {
   const [now, setNow] = useState(() => Date.now());
+  const ticking = since != null || activity?.kind === "retrying";
   useEffect(() => {
-    if (since == null) return;
+    if (!ticking) return;
     setNow(Date.now());
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
-  }, [since]);
-  const status = busyActivityStatus(since == null ? 0 : now - since);
+  }, [ticking]);
+  const status = busyActivityStatus(
+    since == null ? 0 : now - since,
+    activity,
+    now,
+  );
+  const countingDown = activity?.kind === "retrying";
   return (
     <>
-      <span role="status" aria-live="polite" className="inline-flex">
+      <span
+        role="status"
+        aria-live={countingDown ? "off" : "polite"}
+        aria-label={countingDown ? "Retrying" : undefined}
+        className="inline-flex"
+      >
         <TextShimmer
-          className={cn("text-meta font-medium", msgActivityShimmer)}
+          className={cn(
+            "text-meta font-medium",
+            countingDown && "tabular-nums",
+            msgActivityShimmer,
+          )}
         >
           {status.label}
         </TextShimmer>
       </span>
+      {status.detail && (
+        <span className="text-meta text-faint tabular-nums">
+          · {status.detail}
+        </span>
+      )}
       {status.elapsed && (
         <span aria-hidden="true" className="text-meta text-faint tabular-nums">
           · {status.elapsed}
@@ -229,12 +261,21 @@ export function BusyInline({
     liveTurnStore.hasPaintedText,
     getFalse,
   );
+  const activity = useSyncExternalStore(
+    liveTurnStore.subscribe,
+    liveTurnStore.getActivity,
+    liveTurnStore.getNoActivity,
+  );
   // Once words are visible, the stream itself and its caret are the progress
   // indicator. Keeping a second status row under a growing answer makes every
   // line wrap relocate that row, and under reduced motion those relocations are
   // intentionally instant. Collapse it once instead; stopping always remains
-  // explicit even when streamed text is still present.
-  const shown = !hasPaintedText || stoppingSince != null;
+  // explicit even when streamed text is still present, and so do a compaction
+  // and a retry wait, which the words above cannot explain.
+  const shown =
+    !hasPaintedText ||
+    stoppingSince != null ||
+    activityInterruptsStream(activity);
   return (
     <motion.div
       initial={reducedMotion ? false : { height: 0, opacity: 0 }}
@@ -267,7 +308,7 @@ export function BusyInline({
         {stoppingSince != null ? (
           <BusyStopping since={stoppingSince} />
         ) : (
-          <BusyWorking since={since} />
+          <BusyWorking since={since} activity={activity} />
         )}
       </div>
     </motion.div>

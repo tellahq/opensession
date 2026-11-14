@@ -14,6 +14,7 @@
  * (sessions.ts isPiSessionId matches /^ses_/).
  */
 
+import { contextBreakdown } from "../pi-context";
 import {
   transcriptLineAssistantText,
   transcriptLineCompactionSummary,
@@ -89,14 +90,32 @@ function usage(
   turns: number,
   at: string,
 ) {
+  // What a session sends before its first message, in round numbers.
+  const fixed = {
+    systemPrompt: 6_200,
+    instructions: 3_100,
+    skills: 1_400,
+    tools: 9_800,
+    mcpTools: 2_600,
+  };
+  const fixedTokens = Object.values(fixed).reduce((sum, n) => sum + n, 0);
+  const contextTokens =
+    fixedTokens + Math.min(inputTokens + outputTokens, 150_000);
   return {
     costUsd,
     inputTokens,
     outputTokens,
     cacheReadTokens: Math.round(inputTokens * 3.2),
     cacheCreationTokens: Math.round(inputTokens * 0.4),
-    contextTokens: Math.min(inputTokens + outputTokens, 150_000),
-    contextWindow: 200_000,
+    contextTokens,
+    contextWindow: 1_000_000,
+    context: contextBreakdown({
+      fixed,
+      contextTokens,
+      // A long demo session has been summarized once already.
+      ...(turns > 20 ? { summaryChars: 14_000, compactions: 1 } : {}),
+      contextWindow: 1_000_000,
+    }),
     turns,
     updatedAt: at,
   };

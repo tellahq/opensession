@@ -491,7 +491,7 @@ describe("TranscriptBlocks indexed ranges", () => {
       );
       expect(html).toContain(">Working</span>");
       expect(html).not.toContain(">Worked</span>");
-      expect(html).toContain("3 steps");
+      expect(html).toContain("ran 3 commands");
       expect(html).toContain('data-eid="indexed-6#turn"');
     }
   });
@@ -555,7 +555,7 @@ describe("TranscriptBlocks indexed ranges", () => {
 
     expect(html.match(/>Working<\/span>/g)).toHaveLength(1);
     expect(html).not.toContain(">Worked</span>");
-    expect(html).toContain("2 steps");
+    expect(html).toContain("read 2 files");
     expect(html).toContain("I’ll inspect the relevant files first.");
   });
 

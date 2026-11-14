@@ -18,7 +18,70 @@ export interface TurnUsage {
   cacheReadTokens: number;
   cacheCreationTokens: number;
   contextTokens: number;
+  /** What `contextTokens` is made of, when the engine can tell. */
+  context?: ContextBreakdown;
 }
+
+/**
+ * The parts of a prompt a person can do something about. `messages` is the
+ * conversation itself; everything else is sent again on every request before
+ * the first message. Clients must render an unknown kind as plain "Other".
+ */
+export type ContextSectionKind =
+  | "system-prompt"
+  | "instructions"
+  | "tools"
+  | "mcp-tools"
+  | "skills"
+  | "summary"
+  | "messages";
+
+export interface ContextSection {
+  kind: ContextSectionKind;
+  tokens: number;
+}
+
+/**
+ * An estimate of what fills the context window. The total is the provider's
+ * own prompt size; the fixed sections are sized from their text (about four
+ * characters a token) and `messages` takes the remainder, so the sections
+ * always add up to `contextTokens`.
+ */
+export interface ContextBreakdown {
+  sections: ContextSection[];
+  /** Prompt size at which the engine compacts the conversation. */
+  compactAtTokens?: number;
+  /** How many times this conversation has been compacted so far. */
+  compactions?: number;
+}
+
+/**
+ * What a live run is doing while neither streamed text nor a tool row says
+ * so. Sent only for phases the engine reports itself; a client that receives
+ * none keeps its generic "Working" wording. Clients must treat an unknown
+ * kind as no activity.
+ */
+export type RunActivity =
+  /** A request is with the model and nothing has come back yet. */
+  | { kind: "waiting" }
+  /** The model is reasoning before it answers or acts. */
+  | { kind: "thinking" }
+  /** The model is writing text. */
+  | { kind: "writing" }
+  /** The model is writing the arguments of a tool call. */
+  | { kind: "preparing"; toolName?: string }
+  /** Tool calls are executing. `toolName` is the most recent one. */
+  | { kind: "tool"; toolName?: string; count: number }
+  /** The engine is summarizing older messages to free context. */
+  | { kind: "compacting" }
+  /** A provider request failed and the engine waits to send it again. */
+  | {
+      kind: "retrying";
+      attempt: number;
+      maxAttempts: number;
+      /** Epoch ms of the next attempt. */
+      retryAt: number;
+    };
 
 /** A large Anthropic turn after the first should reuse at least some prefix. */
 export function isLikelyPromptCacheMiss(
@@ -102,6 +165,9 @@ export interface StreamEvent {
     | "done"
     | "error"
     | "model_switch"
+    // The run entered or left a phase worth naming (`activity`, null when it
+    // left one). Live-only: never persisted, safe to drop.
+    | "activity"
     // Runner-injected operational notice (`text`), e.g. "usage limit hit on
     // account X; switched to Y and retrying". NOT part of the model's reply —
     // the runner persists it as a durable system line in the session
@@ -118,6 +184,8 @@ export interface StreamEvent {
    * subtracting strings (see LiveTextBuffer in the protocol package).
    */
   blockId?: string;
+  /** On an `activity` event: the phase the run is in now, or null. */
+  activity?: RunActivity | null;
   /** On a model_switch: the exhausted model and the fallback it switched to. */
   fromModel?: string;
   toModel?: string;

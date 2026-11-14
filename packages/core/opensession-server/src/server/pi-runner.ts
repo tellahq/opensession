@@ -182,6 +182,22 @@ import {
 import { createPiMcpBridge, type PiMcpBridge } from "./pi-mcp-bridge";
 import { controlPlaneWorkloadCommand, stopUserScope } from "./systemd-scopes";
 import {
+  contextBreakdown,
+  estimateFixedContext,
+  piCompactionReserveTokens,
+} from "./pi-context";
+import {
+  BACKGROUND_START_WAIT_S,
+  BACKGROUND_STATUS_MAX_WAIT_S,
+  BACKGROUND_STATUS_WAIT_S,
+  createLocalBackgroundShells,
+  createRemoteBackgroundShells,
+  shellReportText,
+  type BackgroundShells,
+  type LocalShellProcess,
+  type ShellReport,
+} from "./pi-background-shell";
+import {
   createMcpRuntime,
   splitMcpMigrationBoundary,
   type McpRuntime,
@@ -209,7 +225,12 @@ import {
   ensureContainerShimDir,
   sessionContainerEnv,
 } from "./session-containers";
-import type { StreamEvent, ImageInput, TurnUsage } from "./run-events";
+import type {
+  StreamEvent,
+  ImageInput,
+  RunActivity,
+  TurnUsage,
+} from "./run-events";
 
 const g = globalThis as any;
 
@@ -1666,6 +1687,9 @@ export interface PiBashAuditEvent {
    *  Separates the pattern the Waiting prompt asks for from the one it bans. */
   sleep_in_loop?: boolean;
   timeout_s: number;
+  /** Started with `background: true`: its finish is the command's own exit,
+   *  which can come long after the tool call that started it returned. */
+  background?: boolean;
   duration_ms?: number;
   exit_code?: number | null;
   timed_out?: boolean;
@@ -1698,6 +1722,7 @@ function summarizeBashAuditCommand(
   PiBashAuditEvent,
   | "phase"
   | "timeout_s"
+  | "background"
   | "duration_ms"
   | "exit_code"
   | "timed_out"
@@ -1763,6 +1788,191 @@ export function piBashHomeEnv(input: {
   };
 }
 
+/**
+ * Start `bash -c <command>` the way every agent shell command starts: with
+ * the given env only, in its own process group, and off the control plane.
+ * setsid makes bash a process-group leader, so killTree's kill(-pid) reaches
+ * the grandchildren a plain proc.kill() misses (bash may already be gone when
+ * a timeout fires). Absent setsid (macOS), it degrades to the direct-child
+ * kill.
+ */
+async function spawnPiBash(
+  command: string,
+  input: { cwd: string; env: Record<string, string> },
+): Promise<LocalShellProcess & { pid: number }> {
+  const setsidPath = await cachedWhich("setsid");
+  const directCommand = setsidPath
+    ? [setsidPath, "/bin/bash", "-c", command]
+    : ["/bin/bash", "-c", command];
+  const scoped = await controlPlaneWorkloadCommand(
+    directCommand,
+    `opensession-agent-cmd-${crypto.randomUUID().slice(0, 13)}`,
+    { env: input.env },
+  );
+  const proc = Bun.spawn(scoped.command, {
+    cwd: input.cwd,
+    env: scoped.env,
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const killTree = () => {
+    if (scoped.unit) stopUserScope(scoped.unit);
+    const killGroup = (sig: "SIGTERM" | "SIGKILL") => {
+      try {
+        if (!scoped.unit && setsidPath) process.kill(-proc.pid, sig);
+        else proc.kill(sig);
+      } catch {}
+    };
+    killGroup("SIGTERM");
+    // Escalate for SIGTERM-ignorers; unref'd so a dead group never holds
+    // the process (or a tool's return) open.
+    const escalate = setTimeout(() => killGroup("SIGKILL"), 1_500);
+    (escalate as unknown as { unref?: () => void }).unref?.();
+  };
+  return {
+    pid: proc.pid,
+    stdout: proc.stdout,
+    stderr: proc.stderr,
+    exited: proc.exited,
+    killTree,
+  };
+}
+
+/** The run's background commands: here, or in its Sandbox workspace. */
+export function makePiBackgroundShells(input: {
+  cwd: string;
+  env: Record<string, string>;
+  remote?: RemoteWorkspace;
+  onAudit?: (event: PiBashAuditEvent) => void;
+}): BackgroundShells {
+  const onExit = (exit: {
+    command: string;
+    exitCode: number | null;
+    durationMs: number;
+    killed: boolean;
+  }) =>
+    input.onAudit?.({
+      phase: "finish",
+      ...summarizeBashAuditCommand(exit.command),
+      timeout_s: 0,
+      background: true,
+      duration_ms: exit.durationMs,
+      exit_code: exit.exitCode,
+      timed_out: false,
+      cancelled: exit.killed,
+      outcome: exit.killed
+        ? "cancelled"
+        : exit.exitCode === 0
+          ? "ok"
+          : "failed",
+    });
+  return input.remote
+    ? createRemoteBackgroundShells({
+        workspace: input.remote,
+        env: input.env,
+        outputCap: BASH_OUTPUT_CAP,
+        onExit,
+      })
+    : createLocalBackgroundShells({
+        spawn: (command) => spawnPiBash(command, input),
+        outputCap: BASH_OUTPUT_CAP,
+        onExit,
+      });
+}
+
+/** What the model reads for one look at a background command. A command that
+ *  exited non-zero is an error, as it is in the foreground. */
+function shellReportResult(report: ShellReport) {
+  const text = shellReportText(report);
+  if (!report.running && report.exitCode !== null && report.exitCode !== 0)
+    throw new Error(text);
+  return {
+    content: [{ type: "text" as const, text }],
+    details: {
+      id: report.id,
+      running: report.running,
+      exitCode: report.exitCode,
+      truncatedChars: report.droppedChars || undefined,
+    },
+  };
+}
+
+/**
+ * `bash_status` and `bash_kill`: the two ways back to a command `bash`
+ * started with `background: true`. Neither takes a command, so neither needs
+ * the policy screens `bash` applies before it starts one.
+ */
+export function makePiBackgroundShellTools(input: {
+  shells: BackgroundShells;
+  runSignal?: AbortSignal;
+}): ToolDefinition<any, any, any>[] {
+  const id = (params: unknown) => {
+    const value = String((params as { id?: unknown })?.id ?? "").trim();
+    if (!value) throw new Error("Missing id");
+    return value;
+  };
+  return [
+    {
+      name: "bash_status",
+      label: "bash_status",
+      description:
+        "Wait for a background command (started by bash with background: true) and return what it " +
+        "printed since the last call, with whether it is still running and how long it has been " +
+        "silent. Returns as soon as the command exits. Still running after the wait is normal for " +
+        "a slow command, not an error: do other work or call this again. Never rerun the command " +
+        "to see more output.",
+      parameters: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "Id returned by bash" },
+          wait: {
+            type: "number",
+            description: `Seconds to wait for the command to exit (default ${BACKGROUND_STATUS_WAIT_S}, max ${BACKGROUND_STATUS_MAX_WAIT_S}, 0 to only read)`,
+          },
+        },
+        required: ["id"],
+      } as any,
+      async execute(_toolCallId, params, signal) {
+        const raw = Number((params as { wait?: unknown })?.wait);
+        const waitS = Number.isFinite(raw)
+          ? Math.min(Math.max(raw, 0), BACKGROUND_STATUS_MAX_WAIT_S)
+          : BACKGROUND_STATUS_WAIT_S;
+        const signals = [signal, input.runSignal].filter(
+          (candidate): candidate is AbortSignal => !!candidate,
+        );
+        const report = await input.shells.status(
+          id(params),
+          waitS,
+          signals.length ? AbortSignal.any(signals) : undefined,
+        );
+        if (signals.some((candidate) => candidate.aborted))
+          throw new Error("Command aborted");
+        return shellReportResult(report);
+      },
+    },
+    {
+      name: "bash_kill",
+      label: "bash_kill",
+      description:
+        "Stop a background command and everything it started, and return its remaining output. " +
+        "Use it for a command that is no longer needed or looks hung (no new output across " +
+        "repeated bash_status calls and not expected to be slow). Not a routine step after a " +
+        "wait that ended while the command was still running.",
+      parameters: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "Id returned by bash" },
+        },
+        required: ["id"],
+      } as any,
+      async execute(_toolCallId, params) {
+        return shellReportResult(await input.shells.kill(id(params)));
+      },
+    },
+  ];
+}
+
 /** The custom `bash` tool: same name/schema surface as pi's built-in (so the
  *  model needs no new habits) but execution is ours — Bun.spawn with the
  *  MINIMAL env only, never the server process env. `gated` additionally
@@ -1796,13 +2006,23 @@ export function makePiBashTool(input: {
    * signal because AgentSession.abort() can leave an active tool signal live. */
   runSignal?: AbortSignal;
   onAudit?: (event: PiBashAuditEvent) => void;
+  /** Offer `background: true`. The caller registers bash_status and bash_kill
+   *  (makePiBackgroundShellTools) over the same shells. */
+  background?: BackgroundShells;
 }): ToolDefinition<any, any, any> {
   return {
     name: "bash",
     label: "bash",
     description:
       "Execute a bash command in the session workspace. Output is merged stdout+stderr, " +
-      `tail-truncated at ${BASH_OUTPUT_CAP} characters.`,
+      `tail-truncated at ${BASH_OUTPUT_CAP} characters.` +
+      (input.background
+        ? " Set background: true for a command that may outlast the timeout or that you do not " +
+          "need to wait on (a build, a long test run, a dev server): the call returns within " +
+          `${BACKGROUND_START_WAIT_S} seconds with an id while the command keeps running, ` +
+          "bash_status waits for it and returns its new output, and bash_kill stops it. A " +
+          "background command is stopped when your turn ends."
+        : ""),
     parameters: {
       type: "object",
       properties: {
@@ -1811,6 +2031,15 @@ export function makePiBashTool(input: {
           type: "number",
           description: `Timeout in seconds (default ${BASH_DEFAULT_TIMEOUT_S}, max ${BASH_MAX_TIMEOUT_S})`,
         },
+        ...(input.background
+          ? {
+              background: {
+                type: "boolean",
+                description:
+                  "Keep the command running after this call returns. The timeout does not apply.",
+              },
+            }
+          : {}),
       },
       required: ["command"],
     } as any,
@@ -1861,6 +2090,28 @@ export function makePiBashTool(input: {
       if (aborted()) throw new Error("Command aborted");
       const commandAudit = summarizeBashAuditCommand(command);
       const commandStartedAt = Date.now();
+      if (
+        input.background &&
+        (params as { background?: unknown })?.background === true
+      ) {
+        // Past every screen above, like any other command. Its finish is
+        // audited when the command itself exits (makePiBackgroundShells).
+        input.onAudit?.({
+          phase: "start",
+          ...commandAudit,
+          timeout_s: 0,
+          background: true,
+        });
+        const signals = [signal, input.runSignal].filter(
+          (candidate): candidate is AbortSignal => !!candidate,
+        );
+        const report = await input.background.start(
+          command,
+          signals.length ? AbortSignal.any(signals) : undefined,
+        );
+        if (aborted()) throw new Error("Command aborted");
+        return shellReportResult(report);
+      }
       input.onAudit?.({ phase: "start", ...commandAudit, timeout_s: timeoutS });
       if (input.remote) {
         let exitCode: number | null = null;
@@ -1917,43 +2168,11 @@ export function makePiBashTool(input: {
           });
         }
       }
-      // setsid makes bash a process-group leader, so kill(-pid) reaches the
-      // grandchildren a plain proc.kill() misses (bash may already be gone
-      // when the timeout fires). Absent setsid (macOS), degrade to the
-      // direct-child kill.
-      const setsidPath = await cachedWhich("setsid");
-      const directCommand = setsidPath
-        ? [setsidPath, "/bin/bash", "-c", command]
-        : ["/bin/bash", "-c", command];
-      const scoped = await controlPlaneWorkloadCommand(
-        directCommand,
-        `opensession-agent-cmd-${crypto.randomUUID().slice(0, 13)}`,
-        { env: input.env },
-      );
       let timedOut = false;
       let exitCode: number | null = null;
       try {
-        const proc = Bun.spawn(scoped.command, {
-          cwd: input.cwd,
-          env: scoped.env,
-          stdin: "ignore",
-          stdout: "pipe",
-          stderr: "pipe",
-        });
-        const killTree = () => {
-          if (scoped.unit) stopUserScope(scoped.unit);
-          const killGroup = (sig: "SIGTERM" | "SIGKILL") => {
-            try {
-              if (!scoped.unit && setsidPath) process.kill(-proc.pid, sig);
-              else proc.kill(sig);
-            } catch {}
-          };
-          killGroup("SIGTERM");
-          // Escalate for SIGTERM-ignorers; unref'd so a dead group never holds
-          // the process (or this tool's return) open.
-          const escalate = setTimeout(() => killGroup("SIGKILL"), 1_500);
-          (escalate as unknown as { unref?: () => void }).unref?.();
-        };
+        const proc = await spawnPiBash(command, input);
+        const { killTree } = proc;
 
         let out = "";
         let droppedChars = 0;
@@ -2096,7 +2315,11 @@ interface PiAccountWalk {
 export function piStreamEventRequiresAccountContinuation(
   event: Pick<StreamEvent, "type">,
 ): boolean {
-  return event.type !== "init" && event.type !== "usage_snapshot";
+  return (
+    event.type !== "init" &&
+    event.type !== "usage_snapshot" &&
+    event.type !== "activity"
+  );
 }
 
 /**
@@ -2346,6 +2569,7 @@ async function* runPiAttempt(
   };
   let reachedTerminal = false;
   let session: AgentSession | undefined;
+  let backgroundShells: BackgroundShells | undefined;
   let mcpRuntime: McpRuntime | undefined;
   let mcpBridge: PiMcpBridge | undefined;
   let checkpointWriter: PiTurnCheckpointWriter | undefined;
@@ -2834,6 +3058,16 @@ async function* runPiAttempt(
       ...mcpBridge.discoveryTools,
       ...mcpBridge.directTools,
     ];
+    const bashAudit = (event: PiBashAuditEvent) =>
+      audit({
+        msg: `pi_command_${event.phase}`,
+        request_id: requestId,
+        run_key: runKey,
+        session_id: journal?.osSessionId,
+        run_kind: journal?.kind,
+        model,
+        ...event,
+      });
     for (const name of localTools) {
       switch (name) {
         case "read":
@@ -2896,16 +3130,17 @@ async function* runPiAttempt(
               mergeGuard,
               privateTermsGuard,
               runSignal: abort.signal,
-              onAudit: (event) =>
-                audit({
-                  msg: `pi_command_${event.phase}`,
-                  request_id: requestId,
-                  run_key: runKey,
-                  session_id: journal?.osSessionId,
-                  run_kind: journal?.kind,
-                  model,
-                  ...event,
-                }),
+              onAudit: bashAudit,
+              background: (backgroundShells = makePiBackgroundShells({
+                cwd,
+                env: commandEnv,
+                remote,
+                onAudit: bashAudit,
+              })),
+            }),
+            ...makePiBackgroundShellTools({
+              shells: backgroundShells,
+              runSignal: abort.signal,
             }),
           );
           break;
@@ -3004,9 +3239,25 @@ async function* runPiAttempt(
     // request with a one-token cap during long tool runs. Keep it off: the
     // in-process Anthropic provider would run each replay as a full Claude
     // Agent SDK turn, and subscription accounts would spend quota on it.
+    //
+    // A large context window is compacted at a fixed size instead of at pi's
+    // default, which lets it fill to within 16K of the ceiling (pi-context.ts).
+    // Scoped to this run's model so a mid-session model change keeps its own.
+    const compactionReserve = piCompactionReserveTokens(piModel.contextWindow);
     const settingsManager = sdk.SettingsManager.inMemory({
       cacheWarming: "off",
       ...(binding.usesOpenaiOAuth ? { transport: "sse" as const } : {}),
+      ...(compactionReserve
+        ? {
+            compaction: {
+              modelOverrides: {
+                [`${piModel.provider}/${piModel.id}`]: {
+                  reserveTokens: compactionReserve,
+                },
+              },
+            },
+          }
+        : {}),
     });
     const workspaceRoot = resolve(context.dir);
     const loader = new sdk.DefaultResourceLoader({
@@ -3403,6 +3654,9 @@ async function* runPiAttempt(
     // Cancellation: our registry AbortController drives session.abort().
     const onAbort = () => {
       void liveSession.abort().catch(() => {});
+      // A stop reaches the commands the run left in the background too,
+      // without waiting for the turn to finish unwinding.
+      void backgroundShells?.dispose().catch(() => {});
     };
     if (abort.signal.aborted) onAbort();
     else abort.signal.addEventListener("abort", onAbort, { once: true });
@@ -3420,6 +3674,69 @@ async function* runPiAttempt(
     };
 
     push({ type: "init", sessionId: piSessionId, provider: PROVIDER, model });
+
+    // The phase a viewer cannot read off the transcript: a request that has
+    // produced nothing yet, a tool call still being written, a compaction, a
+    // retry wait. Repeats are dropped so a burst of tool events is one frame.
+    let lastActivityKey = "null";
+    const setActivity = (activity: RunActivity | null) => {
+      const key = JSON.stringify(activity);
+      if (key === lastActivityKey) return;
+      lastActivityKey = key;
+      push({ type: "activity", activity });
+    };
+    const runningTools = new Map<string, string>();
+    const toolActivity = (): RunActivity | null => {
+      const names = [...runningTools.values()];
+      return names.length
+        ? {
+            kind: "tool",
+            toolName: names[names.length - 1],
+            count: names.length,
+          }
+        : null;
+    };
+
+    // What every request of this run sends before its first message, sized
+    // once. The conversation's share is whatever the provider's prompt size
+    // leaves over, so only the summary has to be tracked as the run goes.
+    const mcpToolNames = new Set(
+      [...mcpBridge.discoveryTools, ...mcpBridge.directTools].map(
+        (tool) => tool.name,
+      ),
+    );
+    let fixedContext: ReturnType<typeof estimateFixedContext> | undefined;
+    let compactions = 0;
+    let summaryChars = 0;
+    try {
+      fixedContext = estimateFixedContext({
+        systemPrompt: liveSession.systemPrompt,
+        instructionFiles: loader
+          .getAgentsFiles()
+          .agentsFiles.map((file) => file.content),
+        skills: loader.getSkills().skills,
+        tools: liveSession.state.tools,
+        isMcpTool: (name) => mcpToolNames.has(name),
+      });
+      for (const entry of liveSession.sessionManager.getBranch()) {
+        if (entry.type !== "compaction") continue;
+        compactions++;
+        summaryChars = entry.summary.length;
+      }
+    } catch (err) {
+      console.warn("[pi-runner] context estimate failed:", err);
+    }
+    const describeContext = () => {
+      usageTotal.context = fixedContext
+        ? contextBreakdown({
+            fixed: fixedContext,
+            contextTokens: usageTotal.contextTokens,
+            summaryChars,
+            compactions,
+            contextWindow: piModel.contextWindow,
+          })
+        : undefined;
+    };
     // Engine-keyed write of the turn's user line — same uuid as the early
     // store write, so the row upserts instead of duplicating the bubble.
     appendRunLines([userLine]);
@@ -3557,8 +3874,24 @@ async function* runPiAttempt(
             // first token, cuts the response as soon as it starts.
             if ((ev as any).message?.role === "assistant") interruptForSteer();
             break;
+          case "turn_start":
+            setActivity({ kind: "waiting" });
+            break;
           case "message_update": {
             const ame = (ev as any).assistantMessageEvent;
+            if (ame?.type === "toolcall_start") {
+              const block = ame.partial?.content?.[ame.contentIndex];
+              setActivity({
+                kind: "preparing",
+                ...(typeof block?.name === "string" && block.name
+                  ? { toolName: block.name }
+                  : {}),
+              });
+            } else if (ame?.type === "thinking_start") {
+              setActivity({ kind: "thinking" });
+            } else if (ame?.type === "text_start") {
+              setActivity({ kind: "writing" });
+            }
             if (
               (ame?.type === "text_delta" || ame?.type === "thinking_delta") &&
               typeof ame.delta === "string"
@@ -3576,6 +3909,11 @@ async function* runPiAttempt(
             // a live card for one would vanish on reload. The codemode
             // call's card stands for them.
             if (t.parentToolCallId) break;
+            runningTools.set(
+              String(t.toolCallId),
+              String(t.toolName || "tool"),
+            );
+            setActivity(toolActivity());
             push({
               type: "tool_use",
               toolName: String(t.toolName || "tool"),
@@ -3587,6 +3925,9 @@ async function* runPiAttempt(
           case "tool_execution_end": {
             const t = ev as any;
             if (t.parentToolCallId) break;
+            runningTools.delete(String(t.toolCallId));
+            // The last tool returning hands the turn back to the model.
+            setActivity(toolActivity() ?? { kind: "waiting" });
             const { text, images } = contentToTextAndImages(t.result?.content);
             // `content`, not `result`: stream consumers read event.content
             // (run-session's stream_tool_result). 500-char preview like
@@ -3624,6 +3965,7 @@ async function* runPiAttempt(
                   (usageTotal.costUsd || 0) + (u.cost?.total || 0);
                 usageTotal.contextTokens =
                   (u.input || 0) + (u.cacheRead || 0) + (u.cacheWrite || 0);
+                describeContext();
                 recordRequestUsage(u, msg.model, msg.timestamp);
                 push({ type: "usage_snapshot", usage: { ...usageTotal } });
               }
@@ -3712,9 +4054,15 @@ async function* runPiAttempt(
             }
             break;
           }
+          case "compaction_start":
+            setActivity({ kind: "compacting" });
+            break;
           case "compaction_end": {
             const ce = ev as any;
+            setActivity(null);
             if (!ce.aborted && ce.result?.summary) {
+              compactions++;
+              summaryChars = String(ce.result.summary).length;
               try {
                 appendRunLines([
                   transcriptLineCompactionSummary(
@@ -3762,6 +4110,12 @@ async function* runPiAttempt(
             } else {
               // Make the silent wait visible — pi retries transient provider
               // errors (3x, exponential from 2s) with no output in between.
+              setActivity({
+                kind: "retrying",
+                attempt: Number(r.attempt) || 1,
+                maxAttempts: Number(r.maxAttempts) || 1,
+                retryAt: Date.now() + (Number(r.delayMs) || 0),
+              });
               const notice = `pi auto-retry ${r.attempt}/${r.maxAttempts} in ${Math.round(
                 (r.delayMs || 0) / 1000,
               )}s — ${errText.slice(0, 300)}`;
@@ -3777,8 +4131,12 @@ async function* runPiAttempt(
             }
             break;
           }
+          case "auto_retry_end":
+            setActivity(null);
+            break;
           case "agent_settled":
             sawSettled = true;
+            setActivity(null);
             break;
         }
       } catch (err) {
@@ -4061,6 +4419,12 @@ async function* runPiAttempt(
       await (reachedTerminal || abort.signal.aborted
         ? checkpointWriter.discard()
         : checkpointWriter.flush());
+    }
+    // Background commands belong to this run: stop what it left running.
+    if (backgroundShells) {
+      try {
+        await backgroundShells.dispose();
+      } catch {}
     }
     if (mcpRuntime) {
       try {

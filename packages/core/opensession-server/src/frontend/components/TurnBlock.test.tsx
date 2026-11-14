@@ -97,7 +97,7 @@ describe("grouped tool run row", () => {
     ];
     const html = render(items, new Map());
 
-    expect(html).toContain("2 step");
+    expect(html).toContain("Ran 1 command, edited 1 file");
     expect(html).toContain("Bash · Edit");
     expect(html).toContain("+2");
     expect(html).toContain("-1");
@@ -112,7 +112,7 @@ describe("grouped tool run row", () => {
     const html = render(items, new Map());
 
     expect(html.match(/data-tool-run="true"/g)).toHaveLength(1);
-    expect(html).toContain("3 steps");
+    expect(html).toContain("Read 1 file, ran 1 search, ran 1 command");
     expect(html).toContain("Read · Find · Bash");
     expect(html).not.toContain("**/*website*.ts");
   });
@@ -126,7 +126,7 @@ describe("grouped tool run row", () => {
     const html = render(items, new Map());
 
     expect(html.match(/data-tool-run="true"/g)).toHaveLength(1);
-    expect(html).toContain("3 steps");
+    expect(html).toContain("Ran 3 searches");
   });
 
   test("keeps skills and checklist updates inside routine steps", () => {
@@ -146,7 +146,9 @@ describe("grouped tool run row", () => {
     const html = render(items, new Map());
 
     expect(html.match(/data-tool-run="true"/g)).toHaveLength(1);
-    expect(html).toContain("6 steps");
+    expect(html).toContain(
+      "Read 1 file, loaded 1 skill, updated the plan, ran 1 command",
+    );
     expect(html).toContain(
       "Read · Skill · TaskCreate · TaskUpdate · TodoWrite · Bash",
     );
@@ -166,7 +168,7 @@ describe("grouped tool run row", () => {
     const html = render(items, toolResults);
 
     expect(html.match(/data-tool-run="true"/g)).toHaveLength(1);
-    expect(html).toContain("3 steps");
+    expect(html).toContain("Read 1 file, called 1 tool, ran 1 command");
     expect(html).toContain("Read · ListAgents · Bash");
   });
 
@@ -184,7 +186,7 @@ describe("grouped tool run row", () => {
     const html = render(items, new Map());
 
     expect(html).toContain('data-tool-run="true"');
-    expect(html).toContain("2 steps");
+    expect(html).toContain("Called 2 tools");
     expect(html).toContain("opensession-sessions_send_to_session ×2");
   });
 

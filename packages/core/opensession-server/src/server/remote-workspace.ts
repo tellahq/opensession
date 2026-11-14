@@ -931,6 +931,165 @@ export async function runRemoteCommand(
   }
 }
 
+const BACKGROUND_MARKER = "__OPENSESSION_BACKGROUND__";
+
+/** A command left running in a Sandbox after the call that started it. */
+export interface RemoteBackgroundCommand {
+  /** Log file in the Sandbox scratch; `.pid` and `.exit` sit beside it. */
+  logFile: string;
+  commandFile?: string;
+  /** Bytes of the log already returned. */
+  offset: number;
+}
+
+export interface RemoteBackgroundRead {
+  /** Output since the previous read, at most `outputCap` bytes of it. */
+  output: string;
+  droppedChars: number;
+  running: boolean;
+  /** Null while running, and for a command that was killed. */
+  exitCode: number | null;
+  /** Seconds since the command last wrote output. */
+  silentForS: number;
+}
+
+/**
+ * Start a command in a Sandbox and return without waiting for it. It runs as
+ * its own process group with its output in a file, like remoteCommandScript's
+ * command, so the provider's call returns as soon as the wrapper does. The
+ * subshell around it records the exit code beside the log: that file is how a
+ * later read tells "exited" from "killed" (a killed group never writes it).
+ */
+export async function startRemoteBackgroundCommand(
+  workspace: RemoteWorkspace,
+  input: { command: string; env: Record<string, string> },
+): Promise<RemoteBackgroundCommand> {
+  const id = crypto.randomUUID().slice(0, 12);
+  const logFile = `${workspace.scratchDir}/.os-bg-${id}.log`;
+  workspace.forgetCache();
+  let commandFile: string | undefined;
+  if (Buffer.byteLength(input.command) > INLINE_COMMAND_BYTES) {
+    commandFile = `${workspace.scratchDir}/.os-bg-${id}.sh`;
+    await workspace.writeFile(commandFile, input.command);
+  }
+  const result = await workspace.exec({
+    script: [
+      "set -m",
+      'if [ -n "$OS_TMPDIR" ] && mkdir -p "$OS_TMPDIR" 2>/dev/null; then export TMPDIR="$OS_TMPDIR"; fi',
+      'mkdir -p "$(dirname "$OS_BG")" || exit 125',
+      ': > "$OS_BG" || exit 125',
+      'if [ -n "$OS_CMD_FILE" ]; then ( bash "$OS_CMD_FILE"; printf %s "$?" > "$OS_BG.exit" ) </dev/null >"$OS_BG" 2>&1 & else ( bash -c "$OS_CMD"; printf %s "$?" > "$OS_BG.exit" ) </dev/null >"$OS_BG" 2>&1 & fi',
+      'printf %s "$!" > "$OS_BG.pid"',
+    ].join("\n"),
+    env: {
+      ...input.env,
+      ...(commandFile
+        ? { OS_CMD_FILE: commandFile }
+        : { OS_CMD: input.command }),
+      OS_BG: logFile,
+    },
+    identity: true,
+    timeoutMs: 60_000,
+  });
+  if (result.exitCode !== 0)
+    throw new Error(
+      `The Sandbox could not start the command: ${(result.stderr || result.stdout).trim().slice(-2_000)}`,
+    );
+  return { logFile, commandFile, offset: 0 };
+}
+
+/**
+ * Wait up to `waitS` for a background command to end, then return what it
+ * wrote since the last read. The wait happens inside the Sandbox, so a long
+ * one is a single call. Reads are by byte offset, which makes a repeated call
+ * with the same offset return the same bytes.
+ */
+export async function readRemoteBackgroundCommand(
+  workspace: RemoteWorkspace,
+  command: RemoteBackgroundCommand,
+  input: { waitS: number; outputCap: number },
+): Promise<RemoteBackgroundRead> {
+  const wait = Math.max(0, Math.floor(input.waitS));
+  const cap = Math.max(1, Math.floor(input.outputCap));
+  const result = await workspace.exec({
+    script: [
+      'pid="$(cat "$OS_BG.pid" 2>/dev/null)"',
+      `end=$(( $(date +%s) + ${wait} ))`,
+      'while [ ! -e "$OS_BG.exit" ] && [ -n "$pid" ] && kill -0 -- -"$pid" 2>/dev/null && [ "$(date +%s)" -lt "$end" ]; do sleep 0.5; done',
+      'code=-; if [ -e "$OS_BG.exit" ]; then code="$(cat "$OS_BG.exit")"; fi',
+      'alive=0; if [ "$code" = - ] && [ -n "$pid" ] && kill -0 -- -"$pid" 2>/dev/null; then alive=1; fi',
+      'size=$(wc -c < "$OS_BG" 2>/dev/null | tr -d " "); size=${size:-0}',
+      'mtime=$(stat -c %Y "$OS_BG" 2>/dev/null || stat -f %m "$OS_BG" 2>/dev/null || echo 0)',
+      "new=$(( size - OS_BG_OFFSET )); from=$OS_BG_OFFSET",
+      `if [ "$new" -gt ${cap} ]; then from=$(( size - ${cap} )); new=${cap}; fi`,
+      'if [ "$new" -gt 0 ]; then tail -c +"$(( from + 1 ))" "$OS_BG" | head -c "$new"; fi',
+      `printf '\\n${BACKGROUND_MARKER} %s %s %s %s %s\\n' "$code" "$size" "$alive" "$mtime" "$(date +%s)"`,
+    ].join("\n"),
+    env: { OS_BG: command.logFile, OS_BG_OFFSET: String(command.offset) },
+    cwd: "/",
+    idempotent: true,
+    timeoutMs: (wait + 30) * 1000,
+  });
+  const at = result.stdout.lastIndexOf(`\n${BACKGROUND_MARKER} `);
+  if (at < 0)
+    throw new Error(
+      `The Sandbox did not report on the command: ${(result.stderr || result.stdout).trim().slice(-2_000)}`,
+    );
+  const [code, size, alive, mtime, now] = result.stdout
+    .slice(at + BACKGROUND_MARKER.length + 2)
+    .trim()
+    .split(/\s+/);
+  const total = Number(size) || 0;
+  const output = result.stdout.slice(0, at);
+  const droppedChars = Math.max(0, total - command.offset - cap);
+  command.offset = Math.max(command.offset, total);
+  workspace.forgetCache();
+  return {
+    output,
+    droppedChars,
+    running: alive === "1",
+    exitCode: code === "-" ? null : Number(code),
+    silentForS: Math.max(0, (Number(now) || 0) - (Number(mtime) || 0)),
+  };
+}
+
+/** Stop a background command's whole process group: TERM, then KILL. */
+export async function stopRemoteBackgroundCommand(
+  workspace: RemoteWorkspace,
+  command: RemoteBackgroundCommand,
+): Promise<void> {
+  await workspace.exec({
+    script:
+      'pid="$(cat "$OS_BG.pid" 2>/dev/null)"; [ -n "$pid" ] || exit 0; ' +
+      'kill -TERM -- -"$pid" 2>/dev/null; ' +
+      'for i in 1 2 3 4 5 6; do kill -0 -- -"$pid" 2>/dev/null || exit 0; sleep 0.25; done; ' +
+      'kill -KILL -- -"$pid" 2>/dev/null; exit 0',
+    env: { OS_BG: command.logFile },
+    cwd: "/",
+    idempotent: true,
+    timeoutMs: 30_000,
+  });
+}
+
+/** Remove a finished background command's files from the Sandbox scratch. */
+export function forgetRemoteBackgroundCommand(
+  workspace: RemoteWorkspace,
+  command: RemoteBackgroundCommand,
+): void {
+  void workspace
+    .exec({
+      script:
+        'rm -f "$OS_BG" "$OS_BG.pid" "$OS_BG.exit" ${OS_FILE:+"$OS_FILE"}',
+      env: {
+        OS_BG: command.logFile,
+        ...(command.commandFile ? { OS_FILE: command.commandFile } : {}),
+      },
+      cwd: "/",
+      idempotent: true,
+    })
+    .catch(() => {});
+}
+
 /**
  * The environment a remote command receives: the run's explicit entries,
  * minus everything that names this machine (its PATH, HOME, temp and

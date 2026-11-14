@@ -625,6 +625,10 @@ export function useSessionViewerSubscription({
           liveTurnStore.append(msg.text, msg.blockId);
           break;
         }
+        case "stream_activity":
+          if (msg.sessionId && msg.sessionId !== session.id) break;
+          liveTurnStore.setActivity(msg.activity);
+          break;
         case "stream_tool_use":
         case "stream_tool_result":
           transcriptViewStore.merge([msg.entry]);

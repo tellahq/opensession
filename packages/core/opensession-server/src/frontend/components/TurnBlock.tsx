@@ -64,6 +64,7 @@ import {
   TurnLineStatsCard,
 } from "./TurnFooter";
 import { transcriptDisclosureLedger } from "../lib/transcript-disclosures";
+import { workSummary, workSummaryTitle } from "../lib/work-summary";
 import { turnScrollAnchor } from "../lib/transcript-block-identity";
 
 interface Props {
@@ -91,13 +92,15 @@ export function useTurnActivityPrefs(): TurnActivityPrefs {
 }
 
 /**
- * One turn's work, folded into a single calm line — "Worked · 12m 4s · 51
- * steps" — closed by default so the session reads as question → answer. It
+ * One turn's work, folded into a single calm line — "Worked · 12m 4s · ran 9
+ * commands, edited 3 files" — closed by default so the session reads as
+ * question → answer. It
  * stays open while working, showing intermediate narration and reasoning beside
  * the tools they describe. The final assistant output never enters this fold.
  *
  * The collapsed line carries what a folded turn can't otherwise say: duration,
- * step count, and the ±lines it moved when the turn wrote files. Line changes
+ * what the steps were (lib/work-summary.ts), and the ±lines it moved when the
+ * turn wrote files. Line changes
  * keep the diff surfaces' colors, while routine failures stay quiet and one
  * click away. The counts sit after the meta run and never shrink; the
  * duration/steps run truncates first, so a phone drops characters off the
@@ -214,7 +217,7 @@ export const TurnBlock = function TurnBlock({
 
   const workCountsLabel =
     tools.length > 0
-      ? `${tools.length} step${tools.length === 1 ? "" : "s"}`
+      ? workSummary(tools)
       : messages.length > 0
         ? `${messages.length} message${messages.length === 1 ? "" : "s"}`
         : "";
@@ -552,6 +555,7 @@ function ToolRunBlock({
 
   const { label, pending, additions, deletions, statusLabel, mediaLabel } =
     toolRunAggregate(items, toolResults, live);
+  const summary = workSummaryTitle(items);
   // Folded, the count alone hides what the run is waiting on. A long build
   // looked like nothing was happening, so name the step still running.
   const pathRoots = useToolPathRoots();
@@ -595,12 +599,12 @@ function ToolRunBlock({
             )}
           />
         </span>
-        {/* Just the count. Which tools ran is what the row is folding away,
-            and one click puts every step back with its own glyph, so naming
-            them here only asks to be read. The names stay in the aria-label,
-            where the count alone would tell a screen reader nothing. */}
-        <span className="flex-shrink-0 truncate text-item-title font-medium leading-5 text-dim transition-colors group-hover:text-fg">
-          {items.length} step{items.length === 1 ? "" : "s"}
+        {/* What the run did, as a sentence: "Ran 3 commands, read 2 files".
+            It may shrink (the line stats and the running step beside it may
+            not), so a narrow column loses the tail of the sentence first. The
+            tool names stay in the aria-label for a screen reader. */}
+        <span className="min-w-0 flex-shrink truncate text-item-title font-medium leading-5 text-dim transition-colors group-hover:text-fg">
+          {summary}
         </span>
         {/* What the count can't say: a run that edited files moved lines, in
             the same green/red the turn header and the diff surfaces use. */}

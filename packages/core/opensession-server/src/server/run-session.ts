@@ -1259,7 +1259,13 @@ export async function recordRecoveredRunEvent(
       });
     return;
   }
-  if (event.type === "text_chunk") {
+  if (event.type === "activity") {
+    broadcastToSession(osSessionId, {
+      type: "stream_activity",
+      sessionId: osSessionId,
+      activity: event.activity ?? null,
+    });
+  } else if (event.type === "text_chunk") {
     broadcastToSession(osSessionId, {
       type: "stream_text",
       sessionId: osSessionId,
@@ -1832,6 +1838,13 @@ export function foldSessionUsage(
     cacheCreationTokens: base.cacheCreationTokens + turn.cacheCreationTokens,
     contextTokens: turn.contextTokens || base.contextTokens,
     contextWindow: contextWindowFor(model) || base.contextWindow,
+    // The breakdown describes `contextTokens`, so it moves only with it: a
+    // run that reported no prompt size keeps the last one that did.
+    ...(turn.contextTokens && turn.context
+      ? { context: turn.context }
+      : !turn.contextTokens && base.context
+        ? { context: base.context }
+        : {}),
     turns: base.turns + 1,
     updatedAt: new Date().toISOString(),
   };
@@ -3920,6 +3933,15 @@ async function runSessionPromptInner(
         // so transcript matching alone cannot retire their receipts.
         if (event.steerId)
           await acknowledgeSteerDelivery(sessionId, event.steerId);
+        break;
+      case "activity":
+        // Live-only: which phase the run is in. Nothing is persisted; a
+        // viewer that joins later reads it from the feed snapshot.
+        broadcastToSession(sessionId, {
+          type: "stream_activity",
+          sessionId,
+          activity: event.activity ?? null,
+        });
         break;
       case "usage_snapshot":
         // Live mid-run cost/context — same fold as `done`, recomputed from

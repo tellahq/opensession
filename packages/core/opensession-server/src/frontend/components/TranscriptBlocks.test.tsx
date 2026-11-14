@@ -347,7 +347,7 @@ describe("TranscriptBlocks compact tool runs", () => {
     // update, a second grouped-step row would only repeat the same information.
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain(">Working</span>");
-    expect(html).toContain("2 steps</span>");
+    expect(html).toContain("ran 1 command, read 1 file</span>");
     expect(html).not.toContain('data-tool-run="true"');
     expect(html).not.toContain("Show 2 grouped steps");
     expect(html).not.toContain("git status");
@@ -362,7 +362,7 @@ describe("TranscriptBlocks compact tool runs", () => {
 
     expect(html).toContain('aria-expanded="true"');
     expect(html).toContain(">Working</span>");
-    expect(html).toContain("2 steps</span>");
+    expect(html).toContain("ran 1 command, read 1 file</span>");
     expect(html).not.toContain('data-tool-run="true"');
     expect(html).not.toContain("Show 2 grouped steps");
     expect(html).toContain("git status");
@@ -461,7 +461,7 @@ describe("TranscriptBlocks compact tool runs", () => {
     expect(html).not.toContain('data-tool-run="true"');
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain(">Working</span>");
-    expect(html).toContain("1 step</span>");
+    expect(html).toContain("ran 1 command</span>");
     expect(html).not.toContain("git status");
   });
 
@@ -628,8 +628,7 @@ describe("TranscriptBlocks compact tool runs", () => {
     );
 
     expect(html.match(/>Worked<\/span>/g)).toHaveLength(1);
-    expect(html).toContain("2 steps");
-    expect(html).not.toContain("1 step");
+    expect(html).toContain("ran 1 command, read 1 file");
   });
 
   test("folds edits into the run and counts their lines on the row", () => {
@@ -674,7 +673,7 @@ describe("TranscriptBlocks compact tool runs", () => {
     // individual calls stay behind that row until someone opens it.
     expect(html).not.toContain('data-tool-run="true"');
     expect(html).toContain('aria-expanded="false"');
-    expect(html).toContain("4 steps");
+    expect(html).toContain("edited 2 files, ran 1 command");
     expect(html).toContain("+3");
     expect(html).toContain("-3");
     expect(html).not.toContain("Show 4 grouped steps");
@@ -714,7 +713,7 @@ describe("TranscriptBlocks compact tool runs", () => {
     );
 
     expect(html).toContain(">Working</span>");
-    expect(html).toContain("1 step</span>");
+    expect(html).toContain("edited 1 file</span>");
     expect(html).toContain("+400");
     expect(html).toContain("-23");
     expect(html).not.toContain('data-tool-run="true"');
@@ -1268,7 +1267,7 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
     setTurnPrefs("folded", "folded");
     const folded = renderToStaticMarkup(<TranscriptBlocks entries={entries} />);
     expect(folded.match(/>Worked<\/span>/g)).toHaveLength(1);
-    expect(folded).toContain("2 steps");
+    expect(folded).toContain("ran 2 commands");
     expect(folded).not.toContain("Checking deployment status");
 
     setTurnPrefs("open", "folded");
@@ -1945,7 +1944,7 @@ describe("TranscriptBlocks review loops", () => {
     );
     expect(html).toContain('aria-expanded="true"');
     expect(html).toContain('data-tool-run="true"');
-    expect(html).toContain(">2 steps<");
+    expect(html).toContain(">Read 2 files<");
     expect(html).not.toContain("report.txt");
     expect(html).toContain('aria-label="Review passed"');
     expect(html).toContain("M4.75 12C4.75 7.99594");
