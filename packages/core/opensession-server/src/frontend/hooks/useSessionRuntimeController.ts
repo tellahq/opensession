@@ -579,8 +579,13 @@ export function useSessionPreviewStatusEffect(
     worktreeDir,
   }: PreviewStatusEffectOptions,
 ) {
+  // The poll below lands every 3 s and almost always brings back the same
+  // status. Keep the stored object when nothing changed, or each poll
+  // re-renders the whole session view, transcript included.
   const setPreviewStatus = useEffectEvent((status: PreviewStatus) => {
-    preview.setStatus(status);
+    preview.setStatus((prev) =>
+      prev && JSON.stringify(prev) === JSON.stringify(status) ? prev : status,
+    );
   });
   const launching = preview.launchingPortal != null;
   // One read when the session opens, so the header knows which Portals the
