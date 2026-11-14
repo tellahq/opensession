@@ -1,4 +1,9 @@
+import { mobileFilterBtn } from "../../lib/app-header-classes";
 import type { FilterState } from "../../lib/sidebar-filter";
+import {
+  type FilterMenuStore,
+  useFilterMenuOpen,
+} from "../../lib/sidebar-filter-menu";
 import {
   DENSITY_OPTIONS,
   getSidebarDensity,
@@ -29,6 +34,7 @@ import { cn } from "../../ui/cn";
 import { RepoTile, repoLabel } from "../RepoTile";
 import {
   IconChevronRight,
+  IconDotsHorizontal,
   IconFolder,
   IconFolderPlus,
   IconPlus,
@@ -105,6 +111,40 @@ function FilterSubmenu<Value extends string>({
       </Menu.Popup>
     </Menu.SubmenuRoot>
   );
+}
+
+/** The phone's Workspace options button, portaled into the top bar. It reads
+ *  the open state itself so pressing it does not re-render the sidebar. */
+export function MobileFilterButton({
+  menu,
+  buttonRef,
+}: {
+  menu: FilterMenuStore;
+  buttonRef: (button: HTMLButtonElement | null) => void;
+}) {
+  const open = useFilterMenuOpen(menu);
+  return (
+    <button
+      ref={buttonRef}
+      className={mobileFilterBtn(open)}
+      onClick={menu.toggle}
+      aria-label="Workspace options"
+    >
+      <IconDotsHorizontal size={22} />
+    </button>
+  );
+}
+
+/** Mounts FilterPopover while the sidebar's menu store says it is open. */
+export function FilterPopoverHost({
+  menu,
+  ...props
+}: Omit<React.ComponentProps<typeof FilterPopover>, "onClose"> & {
+  menu: FilterMenuStore;
+}) {
+  const open = useFilterMenuOpen(menu);
+  if (!open) return null;
+  return <FilterPopover {...props} onClose={() => menu.set(false)} />;
 }
 
 export function FilterPopover({

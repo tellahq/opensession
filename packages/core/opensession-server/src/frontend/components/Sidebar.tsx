@@ -8,7 +8,6 @@ import { useSidebarSources } from "../hooks/useSidebarSources";
 import { useSidebarStickyHeadings } from "../hooks/useSidebarStickyHeadings";
 import { useSidebarWorkspaceController } from "../hooks/useSidebarWorkspaceController";
 import { closePrPreviewApi } from "../lib/api";
-import { mobileFilterBtn } from "../lib/app-header-classes";
 import { useAutomationOverview } from "../lib/automation-overview";
 import {
   clearHides,
@@ -69,6 +68,7 @@ import {
   setFilter,
   useSidebarFilter,
 } from "../lib/sidebar-filter";
+import { createFilterMenuStore } from "../lib/sidebar-filter-menu";
 import { sortActiveRows } from "../lib/active-order";
 import { useActiveRowDrag } from "../hooks/useActiveRowDrag";
 import { useSidebarInventory } from "../lib/sidebar-inventory";
@@ -122,13 +122,17 @@ import { cn } from "../ui/cn";
 import { useConfirm } from "../ui/confirm";
 import { ContextMenu } from "../ui/menu";
 import { EmptyState, ListSkeleton } from "../ui/state";
-import { IconDotsHorizontal, IconMessages } from "./icons";
+import { IconMessages } from "./icons";
 import { AddProjectDialog, type AddRepoMode } from "./SetupRepos";
 import { PrRow } from "./PrRow";
 import { AutomationsBand } from "./sidebar/AutomationsBand";
 import { DraftRow } from "./sidebar/DraftRow";
 import { FeedRow } from "./sidebar/FeedRows";
-import { FilterPopover, RepoFilterChip } from "./sidebar/Filters";
+import {
+  FilterPopoverHost,
+  MobileFilterButton,
+  RepoFilterChip,
+} from "./sidebar/Filters";
 import { PeopleBand } from "./sidebar/PeopleBand";
 import { PersonalBand } from "./sidebar/PersonalBand";
 import { ProjectBands } from "./sidebar/ProjectBands";
@@ -252,7 +256,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   // The person lens is shared with Home's facepile (lib/sidebar-filter), so
   // a face picked there is the sidebar you come back to.
   const filter = useSidebarFilter();
-  const [filterOpen, setFilterOpen] = useState(false);
+  // Open state of the filter popover, kept out of Sidebar's own state so
+  // opening it does not re-render every row (lib/sidebar-filter-menu).
+  const [filterMenu] = useState(createFilterMenuStore);
   const [addProject, setAddProject] = useState<AddRepoMode | null>(null);
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [filterButton, setFilterButton] = useState<HTMLButtonElement | null>(
@@ -1341,7 +1347,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
         borrowedLens,
         workspacesOpen,
         repoInline,
-        filterOpen,
         newSessionKeys,
       }}
       tools={{
@@ -1360,7 +1365,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
       }}
       actions={{
         navigation,
-        setFilterOpen,
+        filterMenu,
         onToggleWorkspaces: () => toggleBand("workspaces"),
       }}
     />
@@ -1449,38 +1454,30 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
               !borrowedLens &&
               headerActionsEl &&
               createPortal(
-                <>
-                  <button
-                    ref={setMobileFilterButton}
-                    className={mobileFilterBtn(filterOpen)}
-                    onClick={() => setFilterOpen((o) => !o)}
-                    aria-label="Workspace options"
-                  >
-                    <IconDotsHorizontal size={22} />
-                  </button>
-                </>,
+                <MobileFilterButton
+                  menu={filterMenu}
+                  buttonRef={setMobileFilterButton}
+                />,
                 headerActionsEl,
               )}
 
-            {filterOpen && (
-              <FilterPopover
-                anchor={isPhone ? mobileFilterButton : filterButton}
-                filter={filter}
-                repos={repos}
-                people={peopleWithAgent}
-                currentUser={currentUser}
-                onChange={setFilter}
-                onClose={() => setFilterOpen(false)}
-                onCustomize={() => {
-                  setFilterOpen(false);
-                  setCustomizeOpen(true);
-                }}
-                onAddProject={(mode) => {
-                  setFilterOpen(false);
-                  setAddProject(mode);
-                }}
-              />
-            )}
+            <FilterPopoverHost
+              menu={filterMenu}
+              anchor={isPhone ? mobileFilterButton : filterButton}
+              filter={filter}
+              repos={repos}
+              people={peopleWithAgent}
+              currentUser={currentUser}
+              onChange={setFilter}
+              onCustomize={() => {
+                filterMenu.set(false);
+                setCustomizeOpen(true);
+              }}
+              onAddProject={(mode) => {
+                filterMenu.set(false);
+                setAddProject(mode);
+              }}
+            />
             <AddProjectDialog
               mode={addProject}
               onClose={() => setAddProject(null)}
