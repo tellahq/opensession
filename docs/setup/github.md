@@ -208,9 +208,10 @@ A code turn a connected person started acts as that person: their token is
 the run's `GH_TOKEN` / `GITHUB_TOKEN` and, through a process-local
 credential helper, its HTTPS git credential, so the branch push and any PR
 the shell opens carry their identity. "Started by a person" means the
-turn's sender is a human (or the auto-continue of their own prompt, or a
-scheduled check-back in their session, even one a worker report or review
-handoff scheduled), the run kind is interactive, and the mode is code. A person who pressed send in an
+turn's sender is a human, or a machine sender into a session a person owns
+(the auto-continue of their prompt, a worker report, another agent's
+message, a review handoff, a CI notice, a scheduled check-back), the run
+kind is interactive, and the mode is code. A person who pressed send in an
 automation-owned session counts too: that turn acts as them, with their own
 connected account, while the automation's own turns, webhook and wait wakes,
 timers, and scheduled prompts keep the automation's App token. That steered
@@ -227,9 +228,8 @@ host run would. An App-token projection carries no login and stays guarded.
 
 Every other run holds a short-lived installation token scoped to its
 repository and never a person's: the code permission set for unattended
-code runs and for machine senders into an interactive session (a review
-handoff, a worker report, an automation), the read set for every ask run,
-whoever started it, because the review workflows process untrusted PR
+code runs and for machine senders into a session no person owns, the read
+set for every ask run, whoever started it, because the review workflows process untrusted PR
 content and can print their environment. The token also covers the
 session's attached repositories under the same owner, with the same
 permission set, so a machine-started turn reaches every repository the
