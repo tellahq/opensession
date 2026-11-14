@@ -175,26 +175,47 @@ function searchText(text: string): string {
   return text.toLowerCase().replace(/[-_/\s]+/g, " ");
 }
 
+// Each row's search text, kept per row object. Session rows are immutable
+// state, so a keystroke reuses the text of every row it has seen before
+// instead of rebuilding it for the whole archive.
+const rowSearchText = new WeakMap<UnifiedSession, string>();
+
+function archivedSearchText(s: UnifiedSession): string {
+  let hay = rowSearchText.get(s);
+  if (hay === undefined) {
+    hay = searchText(
+      [
+        s.workspaceName,
+        s.title,
+        sessionRepo(s),
+        s.branch,
+        s.startedBy,
+        s.automation,
+        s.id,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    );
+    rowSearchText.set(s, hay);
+  }
+  return hay;
+}
+
 /** Whether an archived row matches the search box: every word must appear
  * somewhere in its workspace name, title, repo, branch, owner, automation or id (so a
- * pasted session id finds its row). Exported for tests. */
-export function archivedMatchesSearch(s: UnifiedSession, query: string) {
+ * pasted session id finds its row). Built once per query. */
+function archivedSearchMatcher(query: string): (s: UnifiedSession) => boolean {
   const terms = searchText(query).split(" ").filter(Boolean);
-  if (terms.length === 0) return true;
-  const hay = searchText(
-    [
-      s.workspaceName,
-      s.title,
-      sessionRepo(s),
-      s.branch,
-      s.startedBy,
-      s.automation,
-      s.id,
-    ]
-      .filter(Boolean)
-      .join(" "),
-  );
-  return terms.every((term) => hay.includes(term));
+  if (terms.length === 0) return () => true;
+  return (s) => {
+    const hay = archivedSearchText(s);
+    return terms.every((term) => hay.includes(term));
+  };
+}
+
+/** One row against one query. Exported for tests. */
+export function archivedMatchesSearch(s: UnifiedSession, query: string) {
+  return archivedSearchMatcher(query)(s);
 }
 
 // The repo the sidebar is currently filtered to ("all" when unset), read fresh
@@ -229,6 +250,38 @@ function originChip(s: UnifiedSession): { label: string; tone: string } | null {
   return null;
 }
 
+/**
+ * The archived sessions and the filter options built from them. A hook so the
+ * compiler memoizes all of it on the session list: inline in Archived, the
+ * effects that read `people` and `repos` split these scopes, so every
+ * keystroke in the search box re-walked the whole archive.
+ */
+function useArchivedSet(sessions: UnifiedSession[], meKey: string) {
+  const roster = usePeople();
+  const allArchived = sessions.filter((s) => s.archived);
+  const hasAutoArchived = allArchived.some(isAutoReason);
+
+  // Teammates who archived something, most-archived first — the Owner options
+  // beyond you. Built from the whole archived set, not the filtered one, so
+  // choosing a person doesn't empty the list you chose them from.
+  const canonical = canonicalNames(roster);
+  const people = sessionOwners(allArchived, canonical, meKey);
+
+  // Repos present in the archived set, most-used first — the repo dropdown options.
+  const repos = (() => {
+    const counts = new Map<string, number>();
+    for (const s of allArchived) {
+      const p = sessionRepo(s);
+      counts.set(p, (counts.get(p) || 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([name]) => name);
+  })();
+
+  return { allArchived, hasAutoArchived, canonical, people, repos };
+}
+
 export function Archived({
   sessions,
   loaded,
@@ -238,7 +291,9 @@ export function Archived({
 }: Props) {
   const currentUser = useCurrentUser();
   const isPhone = useIsPhone();
-  const roster = usePeople();
+  const meKey = currentUser.toLowerCase();
+  const { allArchived, hasAutoArchived, canonical, people, repos } =
+    useArchivedSet(sessions, meKey);
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   // Scope: default to *my* archived sessions, and inherit the sidebar's
@@ -267,28 +322,6 @@ export function Archived({
     };
   }, []);
 
-  const allArchived = sessions.filter((s) => s.archived);
-  const hasAutoArchived = allArchived.some(isAutoReason);
-
-  // Teammates who archived something, most-archived first — the Owner options
-  // beyond you. Built from the whole archived set, not the filtered one, so
-  // choosing a person doesn't empty the list you chose them from.
-  const meKey = currentUser.toLowerCase();
-  const canonical = canonicalNames(roster);
-  const people = sessionOwners(allArchived, canonical, meKey);
-
-  // Repos present in the archived set, most-used first — the repo dropdown options.
-  const repos = (() => {
-    const counts = new Map<string, number>();
-    for (const s of allArchived) {
-      const p = sessionRepo(s);
-      counts.set(p, (counts.get(p) || 0) + 1);
-    }
-    return Array.from(counts.entries())
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .map(([name]) => name);
-  })();
-
   // If the inherited repo isn't among the archived sessions, fall back to "all"
   // so the list isn't mysteriously empty on open.
   useEffect(() => {
@@ -307,7 +340,9 @@ export function Archived({
       setOwner("everyone");
   }, [owner, people]);
 
-  const archived = (() => {
+  // The owner, repo and reason filters, apart from the search so a keystroke
+  // reuses them.
+  const scoped = (() => {
     let list = allArchived;
     if (owner !== "everyone") {
       const user = owner === "mine" ? meKey : owner;
@@ -318,18 +353,17 @@ export function Archived({
       list = list.filter((s) =>
         reason === "auto" ? isAutoReason(s) : !isAutoReason(s),
       );
-    if (search.trim())
-      list = list.filter((s) => archivedMatchesSearch(s, search));
     return list;
   })();
+  const matchesSearch = archivedSearchMatcher(search);
+  const archived = search.trim() ? scoped.filter(matchesSearch) : scoped;
   // The page opens scoped to your sessions and the sidebar's repo, so a
   // search can come back empty while the match sits one filter away. Count
   // those so the list can say so instead of reading as "not archived".
   const filtered = owner !== "everyone" || repo !== "all" || reason !== "all";
   const hiddenMatches =
     search.trim() && filtered
-      ? allArchived.filter((s) => archivedMatchesSearch(s, search)).length -
-        archived.length
+      ? allArchived.filter(matchesSearch).length - archived.length
       : 0;
   const clearFilters = () => {
     setOwner("everyone");
