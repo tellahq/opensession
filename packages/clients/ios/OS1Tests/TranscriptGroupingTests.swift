@@ -1324,6 +1324,95 @@ final class TranscriptGroupingTests: XCTestCase {
         }
     }
 
+    /// The server's nudge to continue after a turn that had ended.
+    private func nudge(_ id: String) -> TranscriptEntry {
+        TranscriptEntry(
+            id: id, type: "user", content: "", turnBoundary: true, turnBoundaryKind: "nudge"
+        )
+    }
+
+    private func messageAndFoldIDs(_ blocks: [TranscriptBlock]) -> [String] {
+        blocks.compactMap { block in
+            switch block {
+            case .message(let entry): entry.id
+            case .work: "work"
+            case .reviewLoop(let loop): loop.id
+            default: nil
+            }
+        }
+    }
+
+    func testTranscriptEntryDecodesTurnBoundaryKind() throws {
+        let data = Data(
+            #"{"id":"n","type":"user","content":"","turnBoundary":true,"turnBoundaryKind":"nudge"}"#.utf8
+        )
+        let entry = try JSONDecoder().decode(TranscriptEntry.self, from: data)
+        XCTAssertEqual(entry.turnBoundary, true)
+        XCTAssertEqual(entry.turnBoundaryKind, "nudge")
+    }
+
+    func testAnAnswerStaysVisibleWhenANudgeStartsTheNextTurn() {
+        append([
+            TranscriptEntry(id: "u1", type: "user", content: "Ask the questions with more context"),
+            toolUse("t1", name: "Bash", input: ["command": .string("cat doc.md")]),
+            toolResult("t1", text: "ok"),
+            TranscriptEntry(id: "answer", type: "assistant", content: "Here are the three open questions."),
+            nudge("n1"),
+            TranscriptEntry(id: "repeat", type: "assistant", content: "Waiting on your answers."),
+        ])
+
+        // The nudged turn is ordinary work, not a check-back, and the
+        // boundary itself is never a row.
+        XCTAssertEqual(
+            messageAndFoldIDs(viewModel.displayBlocks),
+            ["u1", "work", "answer", "repeat"]
+        )
+        XCTAssertTrue(checkBacks(in: viewModel.displayBlocks).isEmpty)
+    }
+
+    func testANudgedTurnsAnswerIsNotFoldedAsAnInterimCheckBackReport() {
+        append([
+            TranscriptEntry(id: "u1", type: "user", content: "Write the doc"),
+            TranscriptEntry(id: "plan", type: "assistant", content: "Research is done. Next: the doc."),
+            nudge("n1"),
+            toolUse("t1", name: "Bash", input: ["command": .string("git push")]),
+            toolResult("t1", text: "ok"),
+            TranscriptEntry(id: "done", type: "assistant", content: "The doc is written; CI is running."),
+            wake("w1"),
+            toolUse("t2", name: "Bash", input: ["command": .string("gh pr checks")]),
+            toolResult("t2", text: "pass"),
+            TranscriptEntry(id: "green", type: "assistant", content: "CI is green."),
+        ])
+
+        XCTAssertEqual(
+            messageAndFoldIDs(viewModel.displayBlocks),
+            ["u1", "plan", "work", "done", "check-back:w1", "green"]
+        )
+    }
+
+    func testANudgeBetweenCheckBacksStaysInsideTheirFold() {
+        append([
+            TranscriptEntry(id: "u1", type: "user", content: "Merge main"),
+            TranscriptEntry(id: "a1", type: "assistant", content: "Pushed; waiting on CI."),
+            wake("w1"),
+            toolUse("t1", name: "Bash", input: ["command": .string("gh pr checks")]),
+            toolResult("t1", text: "pending"),
+            TranscriptEntry(id: "still", type: "assistant", content: "Still running."),
+            nudge("n1"),
+            TranscriptEntry(id: "repeat", type: "assistant", content: "Nothing to do until CI finishes."),
+            wake("w2"),
+            toolUse("t2", name: "Bash", input: ["command": .string("gh pr checks")]),
+            toolResult("t2", text: "pass"),
+            TranscriptEntry(id: "green", type: "assistant", content: "CI is green."),
+        ])
+
+        XCTAssertEqual(
+            messageAndFoldIDs(viewModel.displayBlocks),
+            ["u1", "a1", "check-back:w1", "green"]
+        )
+        XCTAssertEqual(checkBacks(in: viewModel.displayBlocks).first?.rounds, 2)
+    }
+
     func testAWaitFoldsTheWorkItWokeAndKeepsItsAnswer() {
         append([
             TranscriptEntry(id: "u1", type: "user", content: "Merge main"),
