@@ -1,16 +1,25 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import type { SessionBuildWire } from "@tellahq/opensession-protocol/session";
 import { BASE_PATH } from "../lib/base";
 import { checkToneClass } from "../lib/pr-checks";
 import {
   buildGroupUrl,
+  buildsFlapStatus,
   buildVisual,
+  createBuildsClock,
   hiddenBuildGroupKeys,
   isBuildLive,
   hideBuildGroup,
   hideKey,
   visibleBuildGroups,
   type BuildGroup,
+  type BuildsClock,
   type RolloutApp,
 } from "../lib/session-builds";
 import { composerQueue } from "../lib/composer-classes";
@@ -45,7 +54,9 @@ export function useBuildsFlap(
 ): ReactNode {
   const { addHandler } = useSessionSocket();
   const [builds, setBuilds] = useState<SessionBuildWire[]>([]);
-  const [now, setNow] = useState(() => Date.now());
+  // Ticks through a store rather than state: this hook runs in the session
+  // view, which would otherwise re-render whole every second a build runs.
+  const [clock] = useState(() => createBuildsClock());
   const [hidden, setHidden] = useState(() => hiddenBuildGroupKeys());
   const [reloads, setReloads] = useState(0);
   // Bumped by every frame: a load that started before a frame arrived is
@@ -90,8 +101,10 @@ export function useBuildsFlap(
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
 
-  const groups = visibleBuildGroups(builds, hidden, now);
-  const anyLive = groups.some((g) => g.live);
+  const flapStatus = useSyncExternalStore(clock.subscribe, () =>
+    buildsFlapStatus(visibleBuildGroups(builds, hidden, clock.get())),
+  );
+  const anyLive = flapStatus === "live";
 
   // A missed final frame would leave a build running forever: while one
   // runs, check the list once a minute.
@@ -109,17 +122,18 @@ export function useBuildsFlap(
   useEffect(() => {
     if (!builds.length) return;
     const timer = setInterval(
-      () => setNow(Date.now()),
+      () => clock.set(Date.now()),
       anyLive ? 1_000 : 30_000,
     );
     return () => clearInterval(timer);
-  }, [builds.length, anyLive]);
+  }, [builds.length, anyLive, clock]);
 
-  if (!groups.length) return null;
+  if (flapStatus === "none") return null;
   return (
     <BuildsFlap
-      groups={groups}
-      now={now}
+      builds={builds}
+      hidden={hidden}
+      clock={clock}
       onHide={(group) => {
         hideBuildGroup(group);
         setHidden((prev) => new Set(prev).add(hideKey(group)));
@@ -129,15 +143,19 @@ export function useBuildsFlap(
 }
 
 function BuildsFlap({
-  groups,
-  now,
+  builds,
+  hidden,
+  clock,
   onHide,
 }: {
-  groups: BuildGroup[];
-  now: number;
+  builds: SessionBuildWire[];
+  hidden: Set<string>;
+  clock: BuildsClock;
   onHide: (group: BuildGroup) => void;
 }) {
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
+  const now = useSyncExternalStore(clock.subscribe, clock.get);
+  const groups = visibleBuildGroups(builds, hidden, now);
   return (
     // The run status flap's metrics (ComposerAgents), so the two read as one
     // family when they stack: same row height and bottom inset.
