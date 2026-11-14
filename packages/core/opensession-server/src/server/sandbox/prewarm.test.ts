@@ -54,6 +54,8 @@ import {
   _stopPrewarmSweepForTest,
   type PrewarmAdapter,
 } from "./prewarm";
+import { prepareSandboxEnvironment } from "./environments";
+import { writeRemoteRepoTemplate } from "./remote-repo-template";
 
 let scratch: string;
 let prevSessionsDir: string;
@@ -449,6 +451,26 @@ describe("claimPrewarm (adoption)", () => {
         (await claimPrewarm("daytona", "tella-fusion", "bks-s"))?.sandboxId,
       ).toBe(fake.created[1]);
     },
+  );
+
+  test.skipIf(killSwitch)(
+    "an environment refresh creates one sandbox, not one per poll",
+    async () => {
+      const fake = makeFakeAdapter();
+      // An existing (stale) template, so the refresh can verify and return.
+      await writeRemoteRepoTemplate("daytona", "tella-fusion", "tpl-old");
+      const prepared = prepareSandboxEnvironment("tella-fusion", "daytona", {
+        refresh: true,
+        user: "image-registry-refresh",
+      });
+      const outcome = await Promise.race([
+        prepared.then(() => "done"),
+        new Promise((resolve) => setTimeout(() => resolve("looping"), 8_000)),
+      ]);
+      expect(outcome).toBe("done");
+      expect(fake.created).toEqual(["pw-1"]);
+    },
+    15_000,
   );
 
   test.skipIf(killSwitch)(

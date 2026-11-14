@@ -408,18 +408,24 @@ export async function prepareSandboxEnvironment(
   options.onProgress?.("Creating sandbox", 10);
   try {
     const deadline = Date.now() + 20 * 60_000;
+    // Ask for the refresh until one is in flight, then only poll it. Every
+    // refresh request replaces a ready prewarm, so repeating it on each poll
+    // destroyed the finished sandbox and created another one until the
+    // deadline: about twenty provider starts per refresh.
+    let refreshTemplate = options.refresh;
     while (Date.now() < deadline) {
       const requested = await requestPrewarm(
         provider,
         repo,
         options.user || "workspace-setup",
         {
-          refreshTemplate: options.refresh,
+          refreshTemplate,
           // Daytona and Box can retain a stopped disk with zero compute. It
           // removes slow snapshot materialization from the first-turn path.
           standby: true,
         },
       );
+      if (requested.state === "bootstrapping") refreshTemplate = undefined;
       const entry = prewarmStatus(provider, repo);
       if (entry?.stage) options.onProgress?.(entry.stage, entry.progress || 10);
       else if (requested.state === "at-capacity") {
