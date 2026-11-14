@@ -1,4 +1,10 @@
-import { type MouseEvent, useState } from "react";
+import {
+  type MouseEvent,
+  type Ref,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 import { Menu, MENU_ICON } from "../ui/menu";
 import { useCopy } from "../ui/copy";
 import { IconArrowUpRight, IconCheck, IconCopy, IconGlobe } from "./icons";
@@ -30,21 +36,44 @@ interface OpenLinkMenu {
   y: number;
 }
 
+interface LinkMenuHandle {
+  open: (menu: OpenLinkMenu) => void;
+}
+
 /**
  * Right-clicking a web link in a transcript offers to open it in the
  * workspace's Browser tab. Shift-right-click keeps the browser's own menu.
+ *
+ * The menu owns its open state, so opening, closing and copying render the
+ * menu alone instead of the transcript region that hosts it.
  */
 export function useLinkContextMenu(openBrowser: (url: string) => void) {
-  const [menu, setMenu] = useState<OpenLinkMenu | null>(null);
-  const { copied, copy } = useCopy();
+  const menuRef = useRef<LinkMenuHandle>(null);
 
   function onContextMenu(event: MouseEvent) {
     if (event.shiftKey || event.defaultPrevented) return;
     const url = webLink(anchorHref(event.target), window.location.origin);
     if (!url) return;
     event.preventDefault();
-    setMenu({ url, x: event.clientX, y: event.clientY });
+    menuRef.current?.open({ url, x: event.clientX, y: event.clientY });
   }
+
+  const element = <LinkContextMenu ref={menuRef} openBrowser={openBrowser} />;
+
+  return { onContextMenu, element };
+}
+
+function LinkContextMenu({
+  ref,
+  openBrowser,
+}: {
+  ref: Ref<LinkMenuHandle>;
+  openBrowser: (url: string) => void;
+}) {
+  const [menu, setMenu] = useState<OpenLinkMenu | null>(null);
+  const { copied, copy } = useCopy();
+
+  useImperativeHandle(ref, () => ({ open: setMenu }));
 
   const anchor = menu
     ? {
@@ -53,7 +82,7 @@ export function useLinkContextMenu(openBrowser: (url: string) => void) {
       }
     : undefined;
 
-  const element = (
+  return (
     <Menu.Root
       open={!!menu}
       onOpenChange={(open) => {
@@ -100,6 +129,4 @@ export function useLinkContextMenu(openBrowser: (url: string) => void) {
       </Menu.Popup>
     </Menu.Root>
   );
-
-  return { onContextMenu, element };
 }
