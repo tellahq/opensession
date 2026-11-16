@@ -77,14 +77,21 @@ type PreviewStatusEffectOptions = {
   worktreeDir: string | null | undefined;
 };
 
-function stagingIsRelevant(
+/**
+ * Whether this session has a PR whose preview deploy to load, and whether
+ * that PR is still open (only an open PR's preview is polled). A merged or
+ * closed PR keeps its last preview so an open Browser tab stays put.
+ */
+function stagingPr(
   session: UnifiedSession,
   phonePr: SessionPrRef | undefined,
-) {
-  return phonePr
+): "none" | "open" | "done" {
+  if (!phonePr && !session.prUrl) return "none";
+  const state = phonePr
     ? (phonePr.state ??
-        (phonePr.source === "primary" ? session.prState : undefined)) === "OPEN"
-    : !!session.prUrl && session.prState === "OPEN";
+      (phonePr.source === "primary" ? session.prState : undefined))
+    : session.prState;
+  return state === "OPEN" ? "open" : "done";
 }
 
 export function useSessionRuntimeController({
@@ -379,7 +386,7 @@ export function useSessionRuntimeController({
   // relevance gate; the server caches PR details for 30s, so the duplicate
   // fetch stays cheap). Kept here because StagingLink mounts per layout
   // variant, so a window listener inside it would register multiple times.
-  const stagingRelevant = stagingIsRelevant(session, phonePr);
+  const stagingPrState = stagingPr(session, phonePr);
   const [staging, setStaging] = useState<{
     url: string;
     status: string;
@@ -393,7 +400,7 @@ export function useSessionRuntimeController({
   const [stagingSettled, setStagingSettled] = useState(false);
   useEffect(() => {
     setStagingSettled(false);
-    if (!stagingRelevant) {
+    if (stagingPrState === "none") {
       setStaging(null);
       setStagingSettled(true);
       return;
@@ -408,23 +415,31 @@ export function useSessionRuntimeController({
           }
         })
         .catch(() => {});
-    const stop = pollWhileVisible(load, PR_WEBHOOK_FALLBACK_POLL_MS);
+    // A merged or closed PR's preview no longer changes: load it once.
+    const stop =
+      stagingPrState === "open"
+        ? pollWhileVisible(load, PR_WEBHOOK_FALLBACK_POLL_MS)
+        : (() => {
+            const ctrl = new AbortController();
+            void load(ctrl.signal);
+            return () => ctrl.abort();
+          })();
     return () => {
       alive = false;
       stop();
     };
   }, [
     session.id,
-    stagingRelevant,
+    stagingPrState,
     gitRefreshTick,
     phonePr?.repo,
     phonePr?.branch,
   ]);
   const stagingUrl = staging ? stagingHref(staging, session.previewPath) : null;
   // The Preview environment pane is a top-strip view-tab now (App owns whether it's
-  // foregrounded). If the deploy vanishes while its tab is open+active — PR
-  // merged/closed, so `stagingRelevant` drops and the fetch settles with no
-  // staging — close the tab rather than leave it pointing at nothing.
+  // foregrounded). Merging or closing the PR keeps its last preview, so the
+  // tab stays open. Only when the PR has no preview at all (or the session
+  // lost its PR) does the tab close rather than point at nothing.
   useEffect(() => {
     if (showStaging && stagingSettled && !stagingUrl) onCloseStaging?.();
   }, [showStaging, stagingSettled, stagingUrl, onCloseStaging]);
