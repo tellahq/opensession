@@ -3,6 +3,7 @@ import { Tooltip as BaseTooltip } from "@base-ui/react/tooltip";
 import { cn } from "./cn";
 import { ExclusivePopupProvider } from "./exclusive-popups";
 import { FLOATING_OVERLAY_LAYER } from "./popup-classes";
+import { usePopupsArmed } from "./popup-arming";
 
 /**
  * Tooltip on Base UI (Tooltip.Root/Trigger/Positioner/Popup), styled with
@@ -15,6 +16,9 @@ import { FLOATING_OVERLAY_LAYER } from "./popup-classes";
  * (label/side/offset/shortcut, single-element child, no wrapper DOM) so call
  * sites didn't change. Open delay + instant group hand-off between adjacent
  * triggers come from <TooltipProvider> at the app root.
+ *
+ * Inside an unarmed PopupArmingRegion (ui/popup-arming.ts) the child renders
+ * alone until the region arms, which happens before the pointer reaches it.
  *
  * Animation follows Base UI's lifecycle attributes. In particular,
  * data-instant disables transitions while the provider hands off between two
@@ -59,7 +63,8 @@ export function Tooltip({
   popupClassName?: string;
   children: React.ReactElement;
 }) {
-  if (!label) return children;
+  const armed = usePopupsArmed();
+  if (!label || !armed) return children;
 
   return (
     <BaseTooltip.Root>

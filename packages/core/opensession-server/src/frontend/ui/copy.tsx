@@ -81,12 +81,30 @@ export function CopyCheck({
   // bottom, and a button centring the box put the ink visibly off-centre.
   // Sizing the box below the icon is not a smaller icon, it is a broken one.
   const box = Math.max(size, MIN_ICON_SIZE);
+  // Until the first copy the glyph is plain markup. A transcript renders one
+  // of these per message, and each AnimatePresence + motion.span mounts its
+  // own animation and layout machinery for a swap that rarely happens.
+  const [animated, setAnimated] = useState(copied);
+  if (copied && !animated) setAnimated(true);
+  const [animatedOnMount] = useState(copied);
+  if (!animated)
+    return (
+      <span
+        className={cn("relative inline-grid place-items-center", className)}
+        style={{ width: box, height: box }}
+      >
+        <span className="col-start-1 row-start-1 grid place-items-center">
+          {idle}
+        </span>
+      </span>
+    );
   return (
     <span
       className={cn("relative inline-grid place-items-center", className)}
       style={{ width: box, height: box }}
     >
-      <AnimatePresence initial={false} mode="popLayout">
+      {/* Mounted by the first copy, so the check that starts here pops in. */}
+      <AnimatePresence initial={!animatedOnMount} mode="popLayout">
         {copied ? (
           <motion.span
             key="check"

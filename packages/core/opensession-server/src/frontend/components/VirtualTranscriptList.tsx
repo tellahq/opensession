@@ -25,6 +25,7 @@ import {
   type TranscriptVirtualNavigation,
 } from "../lib/transcript-virtual-navigation";
 import { cn } from "../ui/cn";
+import { PopupArmingRegion } from "../ui/popup-arming-region";
 
 export interface VirtualTranscriptItem {
   key: string;
@@ -95,7 +96,13 @@ function EnterRow({
   enter?: boolean;
   children: React.ReactNode;
 }) {
-  return <div className={transcriptEnterClass(Boolean(enter))}>{children}</div>;
+  // Each row builds its tooltips and menus when someone reaches for it, not
+  // when a session opens with dozens of rows at once.
+  return (
+    <PopupArmingRegion className={transcriptEnterClass(Boolean(enter))}>
+      {children}
+    </PopupArmingRegion>
+  );
 }
 
 /**
@@ -200,6 +207,11 @@ class TranscriptVirtualizer extends React.Component<
    * reuse the list and cost no reconciliation. */
   private arrivals = new TranscriptArrivalTracker();
   private seeded: { session: string; sizes?: TranscriptSizes } | null = null;
+  /** A session just opened: mount about one screen of rows, and the rest of
+   *  the tail and overscan once the browser is idle (widenAfterFirstScreen). */
+  private firstScreen = true;
+  private firstScreenFor: string | undefined;
+  private widenHandle: (() => void) | undefined;
   /** The offset callback TanStack registered through `observeElementOffset`.
    * A scrollTop write made here hands the virtualizer its new offset in the
    * same task, instead of one scroll event (and one paint) later. */
@@ -211,6 +223,7 @@ class TranscriptVirtualizer extends React.Component<
   constructor(props: Omit<Props, "enabled">) {
     super(props);
     this.syncSeeded(props.sizeCacheKey);
+    this.firstScreenFor = props.sizeCacheKey;
     this.virtualizer = new Virtualizer(this.options(props));
     // Row refs measure during React's commit, before componentDidMount. A
     // notification raised there must wait for the lifecycle, not flush.
@@ -222,6 +235,7 @@ class TranscriptVirtualizer extends React.Component<
     this.runCommitLifecycle(() => {
       this.mountCleanup = this.virtualizer._didMount();
       this.virtualizer._willUpdate();
+      this.widenAfterFirstScreen();
       this.settleReaderAnchor();
       this.syncTopApproach();
       this.syncReaderInput();
@@ -261,6 +275,7 @@ class TranscriptVirtualizer extends React.Component<
     this.runCommitLifecycle(() => {
       this.measureCommittedRows(prevProps);
       this.virtualizer._willUpdate();
+      this.widenAfterFirstScreen();
       this.settleReaderAnchor();
       this.syncTopApproach();
       this.syncReaderInput();
@@ -277,6 +292,7 @@ class TranscriptVirtualizer extends React.Component<
 
   componentWillUnmount() {
     this.mounted = false;
+    this.widenHandle?.();
     this.mountCleanup?.();
     this.navigationCleanup?.();
     this.clearReaderInput();
@@ -285,6 +301,55 @@ class TranscriptVirtualizer extends React.Component<
       window.clearTimeout(this.underfilledHistoryTimer);
     if (this.visibleTimer !== undefined) window.clearTimeout(this.visibleTimer);
     this.rowObserver?.disconnect();
+  }
+
+  /** Restart the first-screen window when the list switches sessions. Runs
+   *  in render, before the range is derived. */
+  private syncFirstScreen(sizeCacheKey?: string) {
+    if (sizeCacheKey === this.firstScreenFor) return;
+    this.firstScreenFor = sizeCacheKey;
+    this.widenHandle?.();
+    this.widenHandle = undefined;
+    this.firstScreen = true;
+  }
+
+  /** Opening a session used to mount the 24-block tail and the overscan in
+   *  one commit, most of it above the viewport, before anything painted.
+   *  The first commit now holds what fits on screen; the rest mounts in an
+   *  idle callback, through the same measured-row path as scrolling up. */
+  private widenAfterFirstScreen() {
+    if (!this.firstScreen || this.widenHandle) return;
+    const widen = () => {
+      this.widenHandle = undefined;
+      this.firstScreen = false;
+      if (this.mounted)
+        this.setState(({ revision }) => ({ revision: revision + 1 }));
+    };
+    if ("requestIdleCallback" in window) {
+      const id = window.requestIdleCallback(widen, { timeout: 1_000 });
+      this.widenHandle = () => window.cancelIdleCallback(id);
+    } else {
+      const id = globalThis.setTimeout(widen, 50);
+      this.widenHandle = () => globalThis.clearTimeout(id);
+    }
+  }
+
+  /** How many tail rows the first commit mounts: the trailing rows that fill
+   *  the scroller once and a half, from measured or seeded sizes. Without a
+   *  laid-out scroller (tests, a hidden pane) there is nothing to fit, so the
+   *  whole tail mounts as before. */
+  private firstScreenTail(count: number, trailingMounted: number): number {
+    const viewport = this.scrollContainer()?.clientHeight ?? 0;
+    const measurements = this.virtualizer?.measurementsCache;
+    if (viewport <= 0 || !measurements) return trailingMounted;
+    let rows = 0;
+    let height = 0;
+    for (let index = count - 1; index >= 0 && rows < trailingMounted; index--) {
+      rows++;
+      height += measurements[index]?.size ?? 0;
+      if (height >= viewport * 1.5) break;
+    }
+    return rows;
   }
 
   private notifyLayout() {
@@ -394,14 +459,19 @@ class TranscriptVirtualizer extends React.Component<
       // Touch momentum can move a phone viewport farther between committed
       // frames than wheel scrolling. Keep twice as much history mounted there
       // so the leading edge cannot expose an unmounted row during a fast fling.
-      overscan: transcriptOverscan(
-        typeof window !== "undefined" && window.matchMedia(PHONE_QUERY).matches,
-      ),
+      overscan: this.firstScreen
+        ? 0
+        : transcriptOverscan(
+            typeof window !== "undefined" &&
+              window.matchMedia(PHONE_QUERY).matches,
+          ),
       rangeExtractor: (range) =>
         virtualTranscriptRange(
           defaultRangeExtractor(range),
           range.count,
-          props.trailingMounted,
+          this.firstScreen
+            ? this.firstScreenTail(range.count, props.trailingMounted)
+            : props.trailingMounted,
         ),
       observeElementRect,
       observeElementOffset: this.observeOffset,
@@ -929,6 +999,7 @@ class TranscriptVirtualizer extends React.Component<
     // a write that reached here through a lifecycle render needs no flush.
     this.writeAwaitingRender = false;
     this.syncSeeded(this.props.sizeCacheKey);
+    this.syncFirstScreen(this.props.sizeCacheKey);
     this.virtualizer.setOptions(this.options(this.props));
     this.virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (
       item,

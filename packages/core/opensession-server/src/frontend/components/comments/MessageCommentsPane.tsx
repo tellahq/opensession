@@ -144,7 +144,7 @@ export function MessageCommentsPane({
     <aside
       aria-label="Comments"
       data-comment-card
-      className="absolute inset-y-0 right-0 z-30 flex w-[min(400px,100%)] flex-col bg-surface shadow-[var(--shadow-popup,0_8px_32px_rgba(0,0,0,0.12))]"
+      className="absolute inset-y-2 right-2 z-30 flex w-[min(400px,calc(100%-16px))] flex-col overflow-hidden rounded-2xl bg-surface shadow-[var(--shadow-popup,0_8px_32px_rgba(0,0,0,0.12))]"
     >
       <div className="flex shrink-0 items-center gap-1 px-3 pt-3 pb-2">
         <Button

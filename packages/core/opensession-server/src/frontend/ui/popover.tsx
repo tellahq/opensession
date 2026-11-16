@@ -3,6 +3,12 @@ import { Popover as BasePopover } from "@base-ui/react/popover";
 import { cn } from "./cn";
 import { FLOATING_OVERLAY_LAYER } from "./popup-classes";
 import { useExclusivePopup, useExclusivePopupDelay } from "./exclusive-popups";
+import {
+  DeferredPopupRootContext,
+  useDeferredPopupRoot,
+  useLazyPopupRoot,
+} from "./popup-arming";
+import { DeferredPopupTrigger } from "./popup-arming-region";
 
 /**
  * Popover on Base UI parts, styled with Tailwind tokens. Composable shape —
@@ -25,6 +31,28 @@ function Trigger({
   className?: string;
 }) {
   const groupedDelay = useExclusivePopupDelay(delay);
+  const deferred = useDeferredPopupRoot();
+  if (deferred) {
+    const {
+      render,
+      openOnHover,
+      closeDelay,
+      handle,
+      payload,
+      nativeButton,
+      style,
+      ...domProps
+    } = props;
+    return (
+      <DeferredPopupTrigger
+        haspopup="dialog"
+        onOpen={deferred.open}
+        render={render}
+        state={{ open: false, disabled: Boolean(domProps.disabled) }}
+        props={{ ...domProps, className }}
+      />
+    );
+  }
   return (
     <BasePopover.Trigger
       {...props}
@@ -34,14 +62,37 @@ function Trigger({
   );
 }
 
-function Root<Payload = unknown>({
+/** Inside an unarmed PopupArmingRegion (ui/popup-arming.ts) the root waits:
+ *  its trigger is a plain button and its popup is not rendered until the
+ *  region arms or the button is clicked. A controlled root never waits. */
+function Root<Payload = unknown>(
+  props: BasePopover.Root.Props<Payload> & {
+    /** Keep false for a popover nested inside another popup. Opening a child
+     * should not dismiss the parent that owns its trigger. */
+    exclusive?: boolean;
+  },
+) {
+  const { deferred, openOnMount } = useLazyPopupRoot(props.open);
+  const { children } = props;
+  if (deferred && !(children instanceof Function))
+    return (
+      <DeferredPopupRootContext value={deferred}>
+        {children}
+      </DeferredPopupRootContext>
+    );
+  return (
+    <DeferredPopupRootContext value={null}>
+      <LiveRoot {...props} defaultOpen={props.defaultOpen || openOnMount} />
+    </DeferredPopupRootContext>
+  );
+}
+
+function LiveRoot<Payload = unknown>({
   actionsRef,
   onOpenChange,
   exclusive = true,
   ...props
 }: BasePopover.Root.Props<Payload> & {
-  /** Keep false for a popover nested inside another popup. Opening a child
-   * should not dismiss the parent that owns its trigger. */
   exclusive?: boolean;
 }) {
   const internalActionsRef = React.useRef<BasePopover.Root.Actions | null>(
@@ -141,6 +192,7 @@ function Popup({
   "aria-label"?: string;
   children: React.ReactNode;
 }) {
+  if (useDeferredPopupRoot()) return null;
   return (
     <BasePopover.Portal container={portalContainer}>
       <BasePopover.Positioner
