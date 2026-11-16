@@ -10,7 +10,7 @@ import {
 import { dropKeptFrame, keptFrameKey } from "../lib/kept-frames";
 import { requestPanelBrowser } from "../lib/portal-pin";
 import type { PortalTarget } from "../lib/portals";
-import { opensInSidePanel } from "../lib/side-panel-store";
+import { addSidePanelTab, opensInSidePanel } from "../lib/side-panel-store";
 
 export function useOnDemandViewTabs({
   workspaceKey,
@@ -56,10 +56,13 @@ export function useOnDemandViewTabs({
   const [desktopOpen, setDesktopOpen] = useState<Set<string>>(() => new Set());
 
   // Open/foreground this workspace's Preview environment view-tab (the Info
-  // panel button). Adds the tab to the strip if absent.
-  function openStaging() {
+  // panel button). Adds the tab to the strip if absent. `background` only adds
+  // the tab, leaving whatever is in front where it is.
+  function openStaging(options?: { background?: boolean }) {
+    const background = options?.background === true;
     if (opensInSidePanel("browser")) {
-      requestPanelBrowser({ kind: "staging" });
+      if (background) addSidePanelTab("browser");
+      else requestPanelBrowser({ kind: "staging" });
       return;
     }
     if (!workspaceKey) return;
@@ -68,7 +71,7 @@ export function useOnDemandViewTabs({
       if (prev.has(key)) return prev;
       return new Set(prev).add(key);
     });
-    setActiveViewTab("staging");
+    if (!background) setActiveViewTab("staging");
   }
   // Open a link in this workspace's Browser tab, adding the tab if absent.
   function openBrowser(url: string) {

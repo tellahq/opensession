@@ -70,6 +70,8 @@ export const SETTINGS_KEYWORDS = {
     "vim mode",
     "debug",
     "agentation",
+    "preview environment",
+    "browser tab",
     "session context",
     "page feedback",
     "pin new sessions",

@@ -129,6 +129,11 @@ import {
   setPrLinksOnGithubPref,
 } from "../../lib/pr-links-on-github";
 import {
+  getPreviewAutoOpenPref,
+  onPreviewAutoOpenChanged,
+  setPreviewAutoOpenPref,
+} from "../../lib/preview-auto-open-pref";
+import {
   getViewportReadoutPref,
   onViewportReadoutChanged,
   setViewportReadoutPref,
@@ -356,6 +361,11 @@ function LinksSection() {
     () => onPrLinksOnGithubChanged(() => setOnGithub(getPrLinksOnGithubPref())),
     [],
   );
+  const [autoOpen, setAutoOpen] = useState(getPreviewAutoOpenPref);
+  useEffect(
+    () => onPreviewAutoOpenChanged(() => setAutoOpen(getPreviewAutoOpenPref())),
+    [],
+  );
 
   return (
     <>
@@ -369,6 +379,17 @@ function LinksSection() {
               aria-label="Open pull requests on GitHub"
               checked={onGithub}
               onCheckedChange={setPrLinksOnGithubPref}
+            />
+          }
+        />
+        <SettingRow
+          title="Add a Browser tab for previews"
+          desc="When a pull request's preview environment is ready, a Browser tab with it opens behind what you're viewing. Once per pull request. Only affects you."
+          control={
+            <Switch
+              aria-label="Add a Browser tab for previews"
+              checked={autoOpen}
+              onCheckedChange={setPreviewAutoOpenPref}
             />
           }
         />

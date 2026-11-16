@@ -198,6 +198,13 @@ export function openSidePanelTab(tab: SidePanelTab, key = hosts.at(-1)): void {
   });
 }
 
+/** Add `tab` to the strip without selecting it or opening any panel. */
+export function addSidePanelTab(tab: SidePanelTab): void {
+  const current = getSidePanelState();
+  if (current.tabs.includes(tab)) return;
+  update({ tabs: withSidePanelTab(current.tabs, tab) });
+}
+
 /**
  * Close `tab` in the strip; `key`'s page moves to a neighbour. Closing the
  * last tab closes `key`'s panel too.

@@ -64,7 +64,9 @@ export interface NavigationActions {
   openPrefilledSession(prefill: NewSessionPrefill): void;
 
   openReview(): void;
-  openStaging(): void;
+  /** Open the PR preview in this workspace's Browser tab. `background` adds
+   *  the tab without bringing it to the front. */
+  openStaging(options?: { background?: boolean }): void;
   /** Open a link in this workspace's Browser tab. */
   openBrowser(url: string): void;
   openPortal(target: PortalTarget): void;

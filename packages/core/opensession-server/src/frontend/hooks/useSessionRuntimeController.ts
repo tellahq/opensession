@@ -1,4 +1,5 @@
 import {
+  use,
   useEffect,
   useEffectEvent,
   useLayoutEffect,
@@ -30,6 +31,12 @@ import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { portalTargetFor } from "../lib/portals";
 import { NO_TYPING, type TypingPresence } from "../lib/typing";
 import { previewOpenable, stagingHref } from "../lib/preview-url";
+import { claimPreviewAutoOpen } from "../lib/preview-auto-open";
+import {
+  getPreviewAutoOpenPref,
+  onPreviewAutoOpenChanged,
+} from "../lib/preview-auto-open-pref";
+import { NavigationContext } from "./useNavigation";
 import type { SessionViewerProps } from "../lib/session-viewer-bindings";
 import { sessionHasWorkspace } from "../lib/session-workspace";
 import { useWorkspaceRecord } from "../lib/workspace-records";
@@ -398,6 +405,10 @@ export function useSessionRuntimeController({
   // and fills in async), so the Preview environment view-tab auto-closes only on the former
   // rather than flicker-closing during load.
   const [stagingSettled, setStagingSettled] = useState(false);
+  // The PR the loaded preview belongs to. Switching sessions keeps the last
+  // one's preview until the new fetch lands, so the auto-open below checks it.
+  const stagingPrUrl = phonePr?.url ?? session.prUrl ?? null;
+  const [stagingLoadedFor, setStagingLoadedFor] = useState<string | null>(null);
   useEffect(() => {
     setStagingSettled(false);
     if (stagingPrState === "none") {
@@ -411,6 +422,7 @@ export function useSessionRuntimeController({
         .then((pullRequest) => {
           if (alive) {
             setStaging(pullRequest?.staging ?? null);
+            setStagingLoadedFor(stagingPrUrl);
             setStagingSettled(true);
           }
         })
@@ -434,6 +446,7 @@ export function useSessionRuntimeController({
     gitRefreshTick,
     phonePr?.repo,
     phonePr?.branch,
+    stagingPrUrl,
   ]);
   const stagingUrl = staging ? stagingHref(staging, session.previewPath) : null;
   // The Preview environment pane is a top-strip view-tab now (App owns whether it's
@@ -443,6 +456,28 @@ export function useSessionRuntimeController({
   useEffect(() => {
     if (showStaging && stagingSettled && !stagingUrl) onCloseStaging?.();
   }, [showStaging, stagingSettled, stagingUrl, onCloseStaging]);
+
+  // With the opt-in on, the first time a PR's preview deploy is up its
+  // Browser tab is already waiting in the strip. It lands behind whatever is
+  // in front, and only once per PR: closing it sticks.
+  const navigation = use(NavigationContext);
+  const autoOpenOn = useSyncExternalStore(
+    onPreviewAutoOpenChanged,
+    getPreviewAutoOpenPref,
+  );
+  const autoOpenReady =
+    autoOpenOn &&
+    focused &&
+    stagingPrState === "open" &&
+    !!stagingPrUrl &&
+    stagingLoadedFor === stagingPrUrl &&
+    !!staging &&
+    previewOpenable(staging);
+  useEffect(() => {
+    if (!autoOpenReady || !stagingPrUrl || !navigation) return;
+    if (claimPreviewAutoOpen(stagingPrUrl))
+      navigation.openStaging({ background: true });
+  }, [autoOpenReady, stagingPrUrl, navigation]);
 
   // ⌘O opens the PR's preview environment (the Vercel preview StagingLink's globe
   // points at); ⌘G opens its GitHub PR and ⌘⇧G copies that URL instead.
