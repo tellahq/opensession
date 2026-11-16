@@ -1,9 +1,8 @@
 import React from "react";
-import { Reorder } from "motion/react";
 import { IconChevronDown } from "../icons";
 import type { ActiveRowDrag } from "../../hooks/useActiveRowDrag";
 import { sortActiveRows } from "../../lib/active-order";
-import { ActiveReorderItem } from "./ActiveReorderItem";
+import { ActiveReorderGroup } from "./ActiveReorderItem";
 import { cn } from "../../ui/cn";
 import type { ReviewQueueItem } from "../../lib/review-queue";
 import { activityBandFor, type ActivityBand } from "../../lib/sidebar-activity";
@@ -360,14 +359,6 @@ export function createWorkspaceGroupingRenderers({
     if (rows.length === 0) return null;
     const gkey = `${ns}inbox:${label.toLowerCase()}`;
     const open = isOpen(gkey);
-    const draft = activeDrag.draft?.gkey === gkey ? activeDrag.draft : null;
-    if (draft) {
-      const index = new Map(draft.keys.map((key, i) => [key, i] as const));
-      rows = [...rows].sort(
-        (a, b) =>
-          (index.get(a.key) ?? Infinity) - (index.get(b.key) ?? Infinity),
-      );
-    }
     return (
       <div className={SIDEBAR_STATUS_GROUP} data-status-group key={gkey}>
         <button
@@ -397,22 +388,14 @@ export function createWorkspaceGroupingRenderers({
           />
         </button>
         {open ? (
-          <Reorder.Group
-            as="div"
-            axis="y"
-            values={rows.map((row) => row.key)}
-            onReorder={(keys: string[]) => activeDrag.onReorder(gkey, keys)}
-          >
-            {rows.map((row) => (
-              <ActiveReorderItem
-                key={row.key}
-                rowKey={row.key}
-                drag={activeDrag}
-              >
-                {renderWsRowImpl(row, !ns)}
-              </ActiveReorderItem>
-            ))}
-          </Reorder.Group>
+          <ActiveReorderGroup
+            gkey={gkey}
+            drag={activeDrag}
+            rows={rows.map((row) => ({
+              key: row.key,
+              node: renderWsRowImpl(row, !ns),
+            }))}
+          />
         ) : (
           rows
             .filter((row) => rowOwnsSelection(row))

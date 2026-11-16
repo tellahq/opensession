@@ -11,13 +11,47 @@ import {
  *  no press to start from. */
 type LiftFn = () => boolean;
 
-export interface ActiveRowDrag {
-  /** The saved per-user order the Active sections sort by. */
-  order: string[];
+export interface ActiveRowDragView {
   /** Mid-drag, Motion's in-flight order for the section being dragged. */
   draft: { gkey: string; keys: string[] } | null;
   /** The row floating under the pointer (or lifted by a long press). */
   dragKey: string | null;
+}
+
+/** The in-flight drag, outside Sidebar state. Each row swap during a drag
+ *  used to re-render the whole sidebar and every row; now only the Active
+ *  section's Reorder group subscribes (ActiveReorderGroup). */
+export interface ActiveRowDragStore {
+  get: () => ActiveRowDragView;
+  set: (patch: Partial<ActiveRowDragView>) => void;
+  subscribe: (listener: () => void) => () => void;
+}
+
+export function createActiveRowDragStore(): ActiveRowDragStore {
+  let view: ActiveRowDragView = { draft: null, dragKey: null };
+  const listeners = new Set<() => void>();
+  return {
+    get: () => view,
+    set: (patch) => {
+      const next = { ...view, ...patch };
+      if (next.draft === view.draft && next.dragKey === view.dragKey) return;
+      view = next;
+      for (const listener of listeners) listener();
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+}
+
+export interface ActiveRowDrag {
+  /** The saved per-user order the Active sections sort by. */
+  order: string[];
+  /** The in-flight draft order and dragged row. */
+  store: ActiveRowDragStore;
   /** Whole-row mouse drag. Touch drags start from a long press instead,
    *  because a whole-row drag would steal the list's scroll. */
   pointerDrag: boolean;
@@ -65,9 +99,8 @@ export function useActiveRowDrag(
   const [order, setOrder] = useState(getActiveOrder);
   useEffect(() => onActiveOrderChanged(() => setOrder(getActiveOrder())), []);
 
-  const [draft, setDraft] = useState<ActiveRowDrag["draft"]>(null);
-  const draftRef = useRef<ActiveRowDrag["draft"]>(null);
-  const [dragKey, setDragKey] = useState<string | null>(null);
+  const [store] = useState(createActiveRowDragStore);
+  const draftRef = useRef<ActiveRowDragView["draft"]>(null);
   const justDragged = useRef(false);
   const lifts = useRef(new Map<string, LiftFn>());
   const lifted = useRef<{ key: string; moved: boolean } | null>(null);
@@ -83,7 +116,7 @@ export function useActiveRowDrag(
   }, []);
 
   const onDragEnd = () => {
-    setDragKey(null);
+    store.set({ dragKey: null });
     justDragged.current = true;
     // The drop's click fires synchronously after pointerup; swallow only it.
     setTimeout(() => {
@@ -91,22 +124,21 @@ export function useActiveRowDrag(
     }, 0);
     const pending = draftRef.current;
     draftRef.current = null;
-    setDraft(null);
+    store.set({ draft: null });
     if (pending)
       setActiveOrder(placeActiveOrder(getActiveOrder(), pending.keys));
   };
 
   return {
     order,
-    draft,
-    dragKey,
+    store,
     pointerDrag: !isPhone,
     onReorder: (gkey, keys) => {
       if (lifted.current) lifted.current.moved = true;
       draftRef.current = { gkey, keys };
-      setDraft({ gkey, keys });
+      store.set({ draft: draftRef.current });
     },
-    onDragStart: setDragKey,
+    onDragStart: (key) => store.set({ dragKey: key }),
     onDragEnd,
     onClickCapture: (event) => {
       if (!justDragged.current) return;
@@ -118,7 +150,7 @@ export function useActiveRowDrag(
       const lift = lifts.current.get(key);
       if (!lift || !lift()) return false;
       lifted.current = { key, moved: false };
-      setDragKey(key);
+      store.set({ dragKey: key });
       startBlockingScroll();
       return true;
     },
@@ -129,7 +161,7 @@ export function useActiveRowDrag(
       if (!lift) return null;
       // A lift that never moved never started a Motion drag, so nothing else
       // will set the row down.
-      if (!lift.moved) setDragKey(null);
+      if (!lift.moved) store.set({ dragKey: null });
       return { moved: lift.moved };
     },
   };
