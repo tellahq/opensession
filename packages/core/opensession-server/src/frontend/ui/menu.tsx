@@ -10,6 +10,12 @@ import {
   popupScrollClasses,
   popupSurfaceClasses,
 } from "./popup-classes";
+import {
+  DeferredPopupRootContext,
+  useDeferredPopupRoot,
+  useLazyPopupRoot,
+} from "./popup-arming";
+import { DeferredPopupTrigger } from "./popup-arming-region";
 
 /**
  * Menu on Base UI parts, styled with Tailwind tokens. Composable shape —
@@ -22,12 +28,59 @@ import {
  * enter AND exit work, keyboard nav and a11y stay intact.
  */
 
+/** Inside an unarmed PopupArmingRegion (ui/popup-arming.ts) the root waits:
+ *  its trigger is a plain button and its popup is not rendered until the
+ *  region arms or the button is clicked. */
+function Root<Payload = unknown>({
+  children,
+  defaultOpen,
+  ...props
+}: BaseMenu.Root.Props<Payload>) {
+  const { deferred, openOnMount } = useLazyPopupRoot(props.open);
+  if (deferred && !(children instanceof Function))
+    return (
+      <DeferredPopupRootContext value={deferred}>
+        {children}
+      </DeferredPopupRootContext>
+    );
+  return (
+    <DeferredPopupRootContext value={null}>
+      <BaseMenu.Root {...props} defaultOpen={defaultOpen || openOnMount}>
+        {children}
+      </BaseMenu.Root>
+    </DeferredPopupRootContext>
+  );
+}
+
 function Trigger({
   className,
   ...props
 }: Omit<React.ComponentProps<typeof BaseMenu.Trigger>, "className"> & {
   className?: string;
 }) {
+  const deferred = useDeferredPopupRoot();
+  if (deferred) {
+    const {
+      render,
+      openOnHover,
+      delay,
+      closeDelay,
+      handle,
+      payload,
+      nativeButton,
+      style,
+      ...domProps
+    } = props;
+    return (
+      <DeferredPopupTrigger
+        haspopup="menu"
+        onOpen={deferred.open}
+        render={render}
+        state={{ open: false, disabled: Boolean(domProps.disabled) }}
+        props={{ ...domProps, className: cn("focus-ring", className) }}
+      />
+    );
+  }
   return (
     <BaseMenu.Trigger {...props} className={cn("focus-ring", className)} />
   );
@@ -67,6 +120,7 @@ function Popup({
   finalFocus?: React.ComponentProps<typeof BaseMenu.Popup>["finalFocus"];
   children: React.ReactNode;
 }) {
+  if (useDeferredPopupRoot()) return null;
   return (
     <BaseMenu.Portal>
       <BaseMenu.Positioner
@@ -292,7 +346,7 @@ export const ContextMenu = {
 };
 
 export const Menu = {
-  Root: BaseMenu.Root,
+  Root,
   Trigger,
   Popup,
   Item,
