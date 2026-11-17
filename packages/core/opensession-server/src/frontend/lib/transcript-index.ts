@@ -32,6 +32,12 @@ const isBoundary = (role: TranscriptIndexRole) =>
   role === "check_back" ||
   role === "system";
 
+/** A compaction notice is a moment inside the work, not a turn boundary: the
+ *  engine compacts between steps and keeps going. Kept in the surrounding
+ *  range so the turn's grouping can fold it in with the steps around it. */
+const startsRange = (entry: TranscriptIndexEntry) =>
+  isBoundary(entry.role) && entry.noticeKind !== "compaction";
+
 /** Project a complete content-free outline into stable conversation ranges. */
 export function buildTranscriptRanges(
   entries: TranscriptIndexEntry[],
@@ -50,7 +56,7 @@ export function buildTranscriptRanges(
       if (current) current.lastSeq = entry.seq;
       continue;
     }
-    if (!current || isBoundary(entry.role)) {
+    if (!current || startsRange(entry)) {
       finish();
       current = {
         key: `range:${entry.id}`,
@@ -60,7 +66,7 @@ export function buildTranscriptRanges(
         estimateSize: 96,
         startTimestampMs: entry.timestampMs,
         endTimestampMs: entry.timestampMs,
-        headRole: isBoundary(entry.role) ? entry.role : null,
+        headRole: startsRange(entry) ? entry.role : null,
         reviewPrNumber: entry.reviewPrNumber ?? null,
         reviewRounds: entry.role === "review_handoff" ? 1 : 0,
         assistantCount: 0,
@@ -179,6 +185,7 @@ export function transcriptIndexEntryFromPayload(entry: {
   changeSeq?: number;
   contentLength?: number;
   turnBoundary?: boolean;
+  noticeKind?: string;
   notice?: { kind?: string; title?: string };
 }): TranscriptIndexEntry | null {
   if (entry.seq === undefined || entry.changeSeq === undefined) return null;
@@ -221,6 +228,12 @@ export function transcriptIndexEntryFromPayload(entry: {
   };
   if (reviewPrNumber !== undefined) {
     indexedEntry.reviewPrNumber = reviewPrNumber;
+  }
+  if (
+    role === "notice" &&
+    (entry.notice?.kind === "compaction" || entry.noticeKind === "compaction")
+  ) {
+    indexedEntry.noticeKind = "compaction";
   }
   return indexedEntry;
 }

@@ -9,10 +9,11 @@ import {
 import type { PanelBrowserFrame } from "../lib/panel-browser-frame";
 import {
   WS_SUMMARY_FRAME,
-  WS_SUMMARY_FRAME_CAPTION,
+  WS_SUMMARY_FRAME_HOST,
   WS_SUMMARY_FRAME_MEDIA,
   WS_SUMMARY_SECTION,
 } from "../lib/workspace-summary-classes";
+import { addressHost } from "../lib/preview-url";
 import { cn } from "../ui/cn";
 
 /**
@@ -43,12 +44,7 @@ export function WorkspaceSummaryBrowser({
   const [pageWidth] = useState(wideSidePanelWidth);
 
   const address = kept ? (kept.location ?? kept.address) : url;
-  let host = address;
-  try {
-    host = new URL(address).host;
-  } catch {
-    /* not a URL: show it as it is */
-  }
+  const host = addressHost(address);
 
   return (
     <>
@@ -65,12 +61,13 @@ export function WorkspaceSummaryBrowser({
           data-kept-frame-width={pageWidth}
           className={WS_SUMMARY_FRAME_MEDIA}
         >
-          {/* Under the page, which covers it once it has loaded. */}
+          {/* Under the page, which covers it once it has loaded and carries
+              the same address on top. */}
           <span className="grid h-full w-full place-items-center text-meta text-faint">
             Loading…
           </span>
+          <span className={WS_SUMMARY_FRAME_HOST}>{host}</span>
         </span>
-        <span className={WS_SUMMARY_FRAME_CAPTION}>{host}</span>
       </button>
     </>
   );

@@ -19,6 +19,15 @@ export const PREVIEW_FRAME = {
     "camera; microphone; display-capture; fullscreen; autoplay; clipboard-write",
 } as const;
 
+/** The host of `address`, or `address` itself when it is not a URL. */
+export function addressHost(address: string): string {
+  try {
+    return new URL(address).host || address;
+  } catch {
+    return address;
+  }
+}
+
 /** How a link opened in a Browser tab is framed. */
 export const LINK_FRAME = {
   name: "Browser",
