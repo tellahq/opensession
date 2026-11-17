@@ -9,6 +9,9 @@ const infoSource = await Bun.file(
 const collaboratorsSource = await Bun.file(
   new URL("./WorkspaceCollaborators.tsx", import.meta.url),
 ).text();
+const addSource = await Bun.file(
+  new URL("./WorkspaceSummaryAdd.tsx", import.meta.url),
+).text();
 const apiSource = await Bun.file(
   new URL("../lib/api/workspaces.ts", import.meta.url),
 ).text();
@@ -130,6 +133,14 @@ test("popup review heading keeps a small gap after a lone PR band", () => {
   expect(summarySource).toContain('"[&>.ws-summary-band:last-child]:mb-0"');
   expect(summarySource).toContain(
     '"[.ws-summary-pr-group:has(>.ws-summary-band:last-child)+.ws-summary-review-group_&]:mt-1"',
+  );
+});
+
+test("an empty section's add row keeps a gap below the PR band", () => {
+  // Flush under the PR band, an empty Collaborators row read as part of it.
+  expect(addSource).toContain('cn(WS_SUMMARY_ROW, "ws-summary-add-row")');
+  expect(summarySource).toContain(
+    '"[&_.ws-summary-pr-group:has(>.ws-summary-band)~div_.ws-summary-add-row]:mt-2"',
   );
 });
 

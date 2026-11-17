@@ -15,7 +15,11 @@ import {
   liveReasoningHeading,
   normalizeFragmentedReasoning,
 } from "../lib/reasoning-display";
-import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
+import {
+  MarkdownBody,
+  useMarkdownOwnPrs,
+  useMarkdownRepo,
+} from "./MarkdownBody";
 import { TranscriptBlocks } from "./TranscriptBlocks";
 
 type TranscriptBlocksProps = React.ComponentProps<typeof TranscriptBlocks>;
@@ -65,6 +69,7 @@ function StreamingMessage({
     store.getServerSnapshot,
   );
   const repo = useMarkdownRepo();
+  const ownPrs = useMarkdownOwnPrs();
   const assetPaths = useOpenAssetPaths();
   useLayoutEffect(() => {
     onLayout?.();
@@ -82,7 +87,7 @@ function StreamingMessage({
   }
 
   const displayText = normalizeFragmentedReasoning(snapshot.text);
-  const markdown = { repo, sessionId, assetPaths };
+  const markdown = { repo, sessionId, assetPaths, ownPrs };
   const html = renderMarkdown(displayText, markdown);
   // Always rendered, never raw source: the server cuts frames at block
   // boundaries, so what arrives here is markdown that stands on its own.

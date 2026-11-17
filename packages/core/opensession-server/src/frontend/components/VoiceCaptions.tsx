@@ -7,6 +7,7 @@ import {
   msgRow,
   msgStreamingRow,
 } from "../lib/msg-classes";
+import { singleLineRef } from "../lib/single-line-bubble";
 import { cn } from "../ui/cn";
 
 /**
@@ -40,7 +41,9 @@ export function VoiceCaptions({
           /* .msg-user stays as a hook: useSessionScroll finds turn
 					   boundaries by it, as on the settled row this becomes. */
           <div key="user" className={cn(msgRow, msgOwnTurn, "msg-user")}>
-            <div className={msgBubbleUser}>{caption.text}</div>
+            <div ref={singleLineRef} className={msgBubbleUser}>
+              {caption.text}
+            </div>
           </div>
         ) : (
           /* .msg-streaming + .msg-body-assistant stay as hooks: the streaming

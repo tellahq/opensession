@@ -277,7 +277,7 @@ describe("TranscriptBlocks indexed ranges", () => {
           ]}
         />,
       );
-      expect(html).toContain(">Worked</span>");
+      expect(html).toContain(">Worked for 3s</span>");
       expect(html).not.toContain("animate-spin");
       // A call with no result reads as "–".
       expect(html).not.toContain(">–</span>");
@@ -491,8 +491,20 @@ describe("TranscriptBlocks indexed ranges", () => {
       );
       expect(html).toContain(">Working</span>");
       expect(html).not.toContain(">Worked</span>");
-      expect(html).toContain("ran 3 commands");
+      expect(html).not.toContain("ran 3 commands");
       expect(html).toContain('data-eid="indexed-6#turn"');
+
+      setTurnPrefs("open");
+      const expanded = renderToStaticMarkup(
+        <TranscriptBlocks
+          live
+          transcriptIndex={scenario.index}
+          entries={scenario.entries}
+        />,
+      );
+      expect(expanded).toContain("ran 3 commands");
+      expect(expanded).toContain('data-eid="indexed-6#turn"');
+      setTurnPrefs(null);
     }
   });
 

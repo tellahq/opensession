@@ -16,6 +16,31 @@ stays a readable line, and both clients keep the fence as code whenever its
 parser refuses the source. Never make a block the only carrier of information
 the reader needs.
 
+## Compact progress updates
+
+For a routine progress-only reply, an agent can send one Markdown line:
+
+```text
+◷ **CI**: Running
+```
+
+A later turn uses the same topic and a checkmark for confirmed success:
+
+```text
+✓ **CI**: All checks passed
+```
+
+On web and native clients, the latest update replaces the first row's label.
+Open that row to read earlier updates. Human messages and team notes start a
+new scope. The stored transcript is unchanged; extension and exported
+transcripts keep readable Markdown messages rather than coalescing them.
+
+This is opt-in, not a summary of arbitrary prose. The entire reply must match:
+a topic of at most 48 characters and a plain-text status of at most 200.
+Attachments, questions, extra paragraphs and clamped messages stay messages.
+Use normal replies for blockers, decisions, deliverables and verification
+limits. A completed turn alone never implies success.
+
 ## Catalog
 
 | Form                                 | Renders as                                             | Source                                                            |

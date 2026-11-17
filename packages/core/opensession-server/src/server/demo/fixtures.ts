@@ -29,6 +29,7 @@ import type { NativeSessionFile } from "../types";
 import { MONITOR_FIT_PAGE } from "./monitor-fit-page";
 import {
   loopTickMessage,
+  scheduledPromptMessage,
   youShouldKnowRecordContent,
 } from "@tellahq/opensession-protocol/notices";
 import { describeLoop, loopTickNote } from "../session-loop";
@@ -1573,6 +1574,63 @@ export function demoSessions(opts: {
       ],
     });
   }
+
+  sessions.push({
+    id: "bks-demo-progress",
+    engineSessionId: "ses_demoprogress",
+    file: base("bks-demo-progress", "ses_demoprogress", 12, 2, {
+      title: "Track build progress",
+      mode: "ask",
+      worktreeDir: repoDir,
+    }),
+    lines: [
+      transcriptLineUser(
+        "Run the build and check the deployment.",
+        "progress-user",
+        iso(now - 12 * min),
+      ),
+      transcriptLineAssistantText(
+        "✓ Build fix pushed.",
+        "progress-fix",
+        iso(now - 11 * min),
+        MODEL_FABLE,
+      ),
+      transcriptLineUser(
+        scheduledPromptMessage("progress-start", "Check the build status."),
+        "progress-start",
+        iso(now - 10 * min),
+      ),
+      transcriptLineAssistantText(
+        "◷ **CI**: Running",
+        "progress-running",
+        iso(now - 9 * min),
+        MODEL_FABLE,
+      ),
+      transcriptLineUser(
+        scheduledPromptMessage("progress-check", "Check the build status."),
+        "progress-check",
+        iso(now - 5 * min),
+      ),
+      transcriptLineAssistantText(
+        "✓ **CI**: All checks passed",
+        "progress-done",
+        iso(now - 4 * min),
+        MODEL_FABLE,
+      ),
+      transcriptLineContextInjection(
+        "Check the deployment.",
+        { source: "background-wait" },
+        "progress-deploy",
+        iso(now - 3 * min),
+      ),
+      transcriptLineAssistantText(
+        "Deployment is blocked: the preview service is unavailable. The build passed, but the preview has not been verified.",
+        "progress-blocker",
+        iso(now - 2 * min),
+        MODEL_FABLE,
+      ),
+    ],
+  });
 
   return sessions;
 }

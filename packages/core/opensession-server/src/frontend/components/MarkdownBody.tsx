@@ -14,6 +14,7 @@ import {
   finalizeFenceUpgrades,
 } from "../lib/fence-upgraders";
 import type { MarkdownContext } from "../lib/markdown";
+import { observeSingleLine } from "../lib/single-line-bubble";
 import {
   MATH_PLACEHOLDER_MARK,
   upgradeMathPlaceholders,
@@ -61,6 +62,55 @@ export function useMarkdownRepo(): string | undefined {
   return useContext(MarkdownRepoContext);
 }
 
+type OwnPrs = NonNullable<MarkdownContext["ownPrs"]>;
+const NO_OWN_PRS: OwnPrs = [];
+
+/**
+ * The PRs a session pane's conversation is about. A mention of one renders as
+ * plain text rather than a chip: the chip exists to go to a PR, and this pane
+ * already is that PR's conversation.
+ */
+const MarkdownOwnPrsContext = createContext<OwnPrs>(NO_OWN_PRS);
+
+export function MarkdownOwnPrsProvider({
+  prs,
+  children,
+}: {
+  prs: readonly { repo?: string; number?: number }[];
+  children: React.ReactNode;
+}) {
+  // Session objects are rebuilt on every poll; key the value on its content so
+  // a poll that changes nothing keeps every bubble's render context stable.
+  const key = prs
+    .flatMap((pr) =>
+      pr.repo && pr.number !== undefined ? [`${pr.repo}#${pr.number}`] : [],
+    )
+    .join(" ");
+  const value = useMemo<OwnPrs>(
+    () =>
+      key
+        ? key.split(" ").map((entry) => {
+            const at = entry.lastIndexOf("#");
+            return {
+              repo: entry.slice(0, at),
+              number: Number(entry.slice(at + 1)),
+            };
+          })
+        : NO_OWN_PRS,
+    [key],
+  );
+  return (
+    <MarkdownOwnPrsContext.Provider value={value}>
+      {children}
+    </MarkdownOwnPrsContext.Provider>
+  );
+}
+
+/** The PRs to pass as `renderMarkdown(src, { ownPrs })`. */
+export function useMarkdownOwnPrs(): OwnPrs {
+  return useContext(MarkdownOwnPrsContext);
+}
+
 /**
  * Rendered-markdown container that upgrades ```lang fences after mount:
  * every block kind in the registry (lib/fence-upgraders.ts: mermaid
@@ -75,6 +125,7 @@ export function MarkdownBody({
   className,
   enhance = true,
   markdown,
+  pillWhenSingleLine = false,
 }: {
   html: string;
   className?: string;
@@ -85,6 +136,9 @@ export function MarkdownBody({
   /** The context `html` was rendered with, handed to a block that renders
    * markdown of its own (a slide deck) so its links resolve the same way. */
   markdown?: MarkdownContext;
+  /** Mark the body `data-single-line` while it fits on one line, so a
+   *  message bubble can round into a pill (lib/single-line-bubble.ts). */
+  pillWhenSingleLine?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   // Read through a ref by the upgrade effect: callers build the context
@@ -267,6 +321,11 @@ export function MarkdownBody({
     const el = ref.current;
     return el ? attachCodeCopy(el) : undefined;
   }, [enhance]);
+
+  useEffect(() => {
+    const el = ref.current;
+    return pillWhenSingleLine && el ? observeSingleLine(el) : undefined;
+  }, [pillWhenSingleLine]);
 
   return (
     <div ref={ref} className={className} dangerouslySetInnerHTML={innerHtml} />

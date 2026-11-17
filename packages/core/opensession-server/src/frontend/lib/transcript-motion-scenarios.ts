@@ -430,13 +430,86 @@ export function applyTranscriptMotionEvent(
   }
 }
 
+/** Readable status messages arriving over separate background turns. This uses
+ * the real transcript renderer, not a second implementation of the row. */
+export function makeTranscriptProgressScenario(): TranscriptMotionScenario {
+  const row = (
+    id: string,
+    type: TranscriptEntry["type"],
+    content: string,
+    seq: number,
+    extra: Partial<TranscriptEntry> = {},
+  ): TranscriptEntry => ({
+    id,
+    type,
+    content,
+    seq,
+    changeSeq: seq,
+    timestamp: timestamp(seq),
+    ...extra,
+  });
+  return {
+    seed: 1,
+    initial: {
+      entries: [
+        row(
+          "progress-request",
+          "user",
+          "Run the build and check the deployment.",
+          1,
+        ),
+        row("progress-merge", "assistant", "✓ Build fix pushed.", 2),
+        row("progress-start", "user", "", 3, { turnBoundary: true }),
+        row("progress-running", "assistant", "◷ **CI**: Running", 4),
+      ],
+      optimisticEntries: [],
+      busy: false,
+    },
+    events: [
+      {
+        kind: "append-entry",
+        entry: row("progress-wake", "user", "", 5, { turnBoundary: true }),
+        atMs: 3000,
+      },
+      {
+        kind: "append-entry",
+        entry: row(
+          "progress-done",
+          "assistant",
+          "✓ **CI**: All checks passed",
+          6,
+        ),
+        atMs: 3100,
+      },
+      {
+        kind: "append-entry",
+        entry: row("progress-preview-wake", "user", "", 7, {
+          turnBoundary: true,
+        }),
+        atMs: 5000,
+      },
+      {
+        kind: "append-entry",
+        entry: row(
+          "progress-limit",
+          "assistant",
+          "Deployment is blocked: the preview service is unavailable. The build passed, but the preview has not been verified.",
+          8,
+        ),
+        atMs: 5100,
+      },
+    ],
+    durationMs: 6000,
+  };
+}
+
 export function transcriptMotionFixtureOptions(
   pathname: string,
   search: string,
 ): {
   seed: number;
   speed: number;
-  profile: "motion" | "stream" | "hydration";
+  profile: "motion" | "stream" | "hydration" | "progress";
 } | null {
   if (stripBasePath(pathname) !== "/__fixtures/transcript-motion") return null;
   const params = new URLSearchParams(search);
@@ -450,6 +523,8 @@ export function transcriptMotionFixtureOptions(
         ? "stream"
         : params.get("profile") === "hydration"
           ? "hydration"
-          : "motion",
+          : params.get("profile") === "progress"
+            ? "progress"
+            : "motion",
   };
 }
