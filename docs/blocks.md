@@ -110,17 +110,21 @@ their body and render exactly as before.
 ### Before/after
 
 `OPENSESSION_COMPARE: /abs/before.png /abs/after.png` renders the two stills
-with the three views a GitHub image diff has, on a switch under them:
+with the three views a GitHub image diff has, on a quiet switch at the end of
+the caption line that shows while the pointer is over the comparison:
 
 - **2-up**: both stills whole, side by side under their names. Select either
   to open it in the gallery.
 - **Swipe**: one slider. Drag the divider, tap anywhere, or use the arrow
   keys with the slider focused. The expand button opens the after still.
-- **Onion skin**: the after still laid over the before; the range beside the
-  switch sets how much of it shows.
+- **Onion skin**: the after still laid over the before; the range under the
+  stills sets how much of it shows.
 
-The view is a per-user preference that follows you across devices, 2-up until
-you pick another; switching one comparison switches every one on the page.
+The view is a per-user preference, 2-up until you pick another; switching one
+comparison switches every one on the page. A touch screen has no switch and
+always shows 2-up, stacked Before over After at phone width so each still is a
+full-width tap into the gallery. The native iOS app stacks them the same way;
+the native Mac app keeps the swipe slider.
 Both paths obey the media rules above, both land in `images[]` and
 `featuredMedia`, and the caption rule is the same. The server rewrites the
 line into a ` ```compare ` fence:

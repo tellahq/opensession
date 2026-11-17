@@ -93,9 +93,8 @@ export function useNewSessionCreateStart({
       workspacePreparing: true,
     };
     flushSync(() => {
-      // Every create appears in the sidebar at send time. Background and
-      // "Create more" used to wait for session_created even though the open
-      // action already had this complete deterministic shell.
+      // Every create appears in the sidebar at send time, from this complete
+      // deterministic shell, rather than waiting for session_created.
       inject(shell, { sticky: true });
       if (started.openImmediately) {
         setOptimisticSession(shell);

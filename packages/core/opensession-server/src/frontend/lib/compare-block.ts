@@ -4,7 +4,7 @@
  * The server writes the fence for an `OPENSESSION_COMPARE: /a.png /b.png`
  * line (server/transcript-media.ts placeMediaMarkers), so a client without
  * this upgrader reads two links and a caption. Here the fence becomes the
- * comparison a GitHub image diff offers, with a switch under the stills:
+ * comparison a GitHub image diff offers, with a switch beside the caption:
  *
  * - 2-up: both stills side by side, each opening the gallery on click.
  * - Swipe: the before still underneath, the after still clipped to the right
@@ -13,13 +13,19 @@
  *   own: a drag or a tap anywhere moves it, arrow keys move it, a finger
  *   moves it, and it carries the accessible name and value.
  * - Onion skin: the after still laid over the before at an opacity set by a
- *   second range beside the switch.
+ *   second range under the stills.
  *
  * The view is one per-user preference (user-pref.ts), not one per block:
  * whoever prefers dragging a divider picks Swipe once and every comparison
- * after that opens the same way, on every device. The pref is created on the
- * first build rather than at import, so this module stays inert in a test
- * without a window and in the copy control that imports the registry.
+ * after that opens the same way. The pref is created on the first build
+ * rather than at import, so this module stays inert in a test without a
+ * window and in the copy control that imports the registry.
+ *
+ * A touch screen gets no switch and always 2-up: a divider under a finger
+ * fights the transcript's scroll and hides what it is dragged over, while
+ * two whole stills, stacked at phone width, are each a large tap into the
+ * gallery. The switch on a pointer device is a quiet row beside the
+ * caption that shows on hover or focus, since 2-up already shows everything.
  */
 
 import {
@@ -27,6 +33,7 @@ import {
   expandIconMarkup,
 } from "../components/icons";
 import type { FenceUpgrader } from "./fence-upgraders";
+import { isTouchPrimary } from "./platform";
 import * as UserPrefs from "./user-pref";
 
 export interface CompareSpec {
@@ -93,6 +100,15 @@ export function decodeCompareMode(
   return COMPARE_MODES.find((mode) => mode.value === raw)?.value ?? null;
 }
 
+/** The view a block shows: the preference, except on a touch screen, where
+ *  only 2-up works under a finger. */
+export function effectiveCompareMode(
+  mode: CompareMode,
+  touch: boolean,
+): CompareMode {
+  return touch ? "two-up" : mode;
+}
+
 let pref: UserPrefs.UserPref<CompareMode> | null = null;
 
 function compareModePref(): UserPrefs.UserPref<CompareMode> {
@@ -118,7 +134,8 @@ function compareModePref(): UserPrefs.UserPref<CompareMode> {
   return pref;
 }
 
-function applyMode(figure: HTMLElement, mode: CompareMode): void {
+function applyMode(figure: HTMLElement, preferred: CompareMode): void {
+  const mode = effectiveCompareMode(preferred, isTouchPrimary);
   figure.dataset.mode = mode;
   for (const button of Array.from(
     figure.querySelectorAll<HTMLElement>(".md-compare-mode"),
@@ -166,11 +183,8 @@ function rangeInput(
   return range;
 }
 
-/** The switch under the stills and, for Onion skin, the blend range. */
-function buildBar(box: HTMLElement): HTMLElement {
-  const bar = document.createElement("div");
-  bar.className = "md-compare-bar";
-
+/** The view switch, set beside the caption. */
+function buildModes(): HTMLElement {
   const modes = document.createElement("div");
   modes.className = "md-compare-modes";
   modes.setAttribute("role", "group");
@@ -184,7 +198,11 @@ function buildBar(box: HTMLElement): HTMLElement {
     button.addEventListener("click", () => compareModePref().set(value));
     modes.append(button);
   }
+  return modes;
+}
 
+/** Onion skin's blend range, under the stills while that view is on. */
+function buildBlend(box: HTMLElement): HTMLElement {
   const blend = document.createElement("div");
   blend.className = "md-compare-blend";
   const blendBefore = document.createElement("span");
@@ -204,9 +222,7 @@ function buildBar(box: HTMLElement): HTMLElement {
     ),
     blendAfter,
   );
-
-  bar.append(modes, blend);
-  return bar;
+  return blend;
 }
 
 /** The block as DOM. Thin on purpose: the grammar above is the tested part. */
@@ -265,7 +281,8 @@ function buildCompare(spec: CompareSpec): HTMLElement {
   expand.innerHTML = expandIconMarkup();
 
   box.append(before, after, labelBefore, labelAfter, divider, range, expand);
-  figure.append(box, buildBar(box));
+  figure.append(box);
+  if (!isTouchPrimary) figure.append(buildBlend(box), buildModes());
   if (spec.caption) {
     const caption = document.createElement("figcaption");
     caption.className = "md-figcaption";

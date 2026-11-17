@@ -3,6 +3,7 @@ import {
   COMPARE_MODES,
   DEFAULT_COMPARE_MODE,
   decodeCompareMode,
+  effectiveCompareMode,
   parseCompareFence,
 } from "./compare-block";
 
@@ -68,5 +69,14 @@ describe("compare mode preference", () => {
     expect(decodeCompareMode("")).toBeNull();
     expect(decodeCompareMode(null)).toBeNull();
     expect(decodeCompareMode(undefined)).toBeNull();
+  });
+});
+
+describe("effectiveCompareMode", () => {
+  it("keeps the preference under a pointer and shows 2-up on touch", () => {
+    for (const { value } of COMPARE_MODES) {
+      expect(effectiveCompareMode(value, false)).toBe(value);
+      expect(effectiveCompareMode(value, true)).toBe("two-up");
+    }
   });
 });

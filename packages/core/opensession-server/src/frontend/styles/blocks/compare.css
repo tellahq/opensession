@@ -1,15 +1,30 @@
 /* ```compare fence upgraded into a before/after comparison (lib/compare-block.ts).
    Renderer-emitted markup, which is why it is a stylesheet and not a utility
    string. The figure carries `data-mode`, one of the three views on the
-   switch under the stills; the rules without a mode are Swipe, and 2-up and
-   Onion skin override them below.
+   switch beside the caption; the rules without a mode are Swipe, and 2-up
+   and Onion skin override them below. A touch screen is always 2-up and has
+   no switch (compare-block.ts).
 
    Swipe: the before still is in flow and sizes the box, capped like a placed
    image; the after still lies over it, clipped to the right of the divider.
    `--p` is the divider's position in percent, set by the range input that
    covers the whole box and is the only thing there that takes input. */
 .md-compare-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "box box"
+    "blend blend"
+    "caption modes";
+  align-items: center;
+  column-gap: 12px;
   margin: 2px 0 8px;
+}
+.md-compare-wrap > .md-compare {
+  grid-area: box;
+}
+.md-compare-wrap > .md-figcaption {
+  grid-area: caption;
 }
 .md-compare {
   --p: 50;
@@ -31,6 +46,11 @@
   max-height: 480px;
   height: auto;
   pointer-events: none;
+}
+/* A transcript image's margin (`.markdown img`) would leave a strip of the
+   box above and below the stills. */
+.md-compare .md-compare-img {
+  margin: 0;
 }
 .md-compare-after {
   position: absolute;
@@ -148,7 +168,7 @@
   grid-template-areas:
     "label-before label-after"
     "before after";
-  gap: 4px 8px;
+  gap: 6px 8px;
   width: auto;
   overflow: visible;
   border-radius: 0;
@@ -190,6 +210,26 @@
 .md-compare-wrap[data-mode="two-up"] .md-diagram-expand {
   display: none;
 }
+/* At phone width the stills stack, each under its pill and as wide as the
+   column allows, so each is a large tap into the gallery and the eye goes
+   from one to the other down the page. */
+@media (max-width: 720px) {
+  .md-compare-wrap[data-mode="two-up"] .md-compare {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "label-before"
+      "before"
+      "label-after"
+      "after";
+    row-gap: 6px;
+  }
+  .md-compare-wrap[data-mode="two-up"] .md-compare-label-after {
+    margin-top: 10px;
+  }
+  .md-compare-wrap[data-mode="two-up"] .md-compare-label {
+    font-size: 12px;
+  }
+}
 
 /* ── Onion skin ────────────────────────────────────────────────────
    The after still lies whole over the before at `--blend` percent
@@ -210,36 +250,44 @@
   display: none;
 }
 
-/* ── The bar ───────────────────────────────────────────────────────
-   The view switch, drawn the way the JSON tree's Tree / Raw toggle is
-   (blocks/json-tree.css): a recessed track with the option in effect on
-   the segmented knob tokens. Beside it, in Onion skin only, the blend
-   range; on a narrow column it wraps under the switch. */
-.md-compare-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
+/* ── The switch ────────────────────────────────────────────────────
+   A quiet row of words at the end of the caption line: 2-up already shows
+   everything, so the switch stays out of the way. Where there is a hover it
+   shows only while the pointer is over the comparison or keyboard focus is
+   inside it. In Onion skin the blend range sits under the stills; on a narrow
+   column it takes the full width. */
+.md-compare-modes {
+  grid-area: modes;
+  display: inline-flex;
+  justify-self: end;
+  gap: 2px;
   margin-top: 6px;
   font-family: var(--sans);
-  font-size: var(--type-meta);
+  font-size: 11px;
 }
-.md-compare-modes {
-  display: inline-flex;
-  flex: none;
-  padding: 2px;
-  border-radius: calc(9px * var(--rf));
-  corner-shape: var(--cs);
-  background: var(--hover);
+@media (hover: hover) {
+  .md-compare-modes {
+    opacity: 0;
+    transition: opacity var(--dur-micro) var(--ease);
+  }
+  .md-compare-wrap:hover .md-compare-modes,
+  .md-compare-wrap:has(:focus-visible) .md-compare-modes {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .md-compare-modes {
+    transition: none;
+  }
 }
 .md-compare-mode {
-  min-height: 24px;
-  padding: 2px 9px;
+  min-height: 20px;
+  padding: 1px 6px;
   border: 0;
-  border-radius: calc(7px * var(--rf));
+  border-radius: calc(6px * var(--rf));
   corner-shape: var(--cs);
   background: transparent;
-  color: var(--text-dim);
+  color: var(--text-faint);
   font: inherit;
   font-weight: 500;
   white-space: nowrap;
@@ -252,9 +300,8 @@
   color: var(--text);
 }
 .md-compare-mode[aria-pressed="true"] {
-  background: var(--segmented-knob-surface);
+  background: var(--hover);
   color: var(--text);
-  box-shadow: 0 0 0 1px var(--segmented-knob-edge);
 }
 .md-compare-mode:focus-visible,
 .md-compare-blend-range:focus-visible {
@@ -262,12 +309,14 @@
   outline-offset: 2px;
 }
 .md-compare-blend {
+  grid-area: blend;
   display: none;
-  flex: 1 1 200px;
   align-items: center;
   gap: 8px;
   max-width: 360px;
+  margin-top: 6px;
   color: var(--text-dim);
+  font-family: var(--sans);
   font-size: 11px;
   font-weight: 500;
 }
@@ -290,15 +339,7 @@
   .md-compare-img {
     max-height: 400px;
   }
-  .md-compare-mode {
-    min-height: 40px;
-    padding: 2px 12px;
-  }
   .md-compare-blend {
-    flex-basis: 100%;
     max-width: none;
-  }
-  .md-compare-blend-range {
-    min-height: 40px;
   }
 }

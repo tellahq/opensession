@@ -102,6 +102,7 @@ import {
   IconConnections,
   IconDotsHorizontal,
   IconEye,
+  IconPullRequest,
   IconReturn,
   IconBox,
   IconMessage,
@@ -146,17 +147,9 @@ import {
   ASK_BTN_ON,
   ASK_SURFACE,
   CHEVRON,
-  CREATE_ACTIONS,
-  CREATE_CARET,
+  CARD_RADIUS,
+  CREATE_BTN,
   CREATE_KBD,
-  CREATE_LABELS,
-  CREATE_MAIN,
-  CREATE_MAIN_SPLIT,
-  CREATE_MAIN_WHOLE,
-  CREATE_MENU,
-  CREATE_MENU_ITEM,
-  CREATE_SPLIT,
-  CYCLE_SHORTCUT,
   EDGE_DIVIDER,
   ERROR,
   FOOTER,
@@ -171,7 +164,6 @@ import {
   MULTI_MODIFIER,
   PHONE_SEND,
   TRIGGER_STRONG,
-  type CreateAction,
   type CreateStatus,
 } from "../lib/new-session-classes";
 import {
@@ -542,15 +534,6 @@ export function NewSession({
     const account = accounts.find((item) => item.id === accountId);
     if (accountId && account?.provider !== accountProvider) setAccountId("");
   }, [accountProvider, accountId, accounts]);
-  // What a create does with the view behind the palette. Chosen from the
-  // Create split-button's dropdown; the primary button reflects the choice.
-  const [chosenCreateAction, setCreateAction] = useState<CreateAction>("open");
-  // Inline there is no view behind the card: "background" would leave you on an
-  // empty page and "more" is what the card already does, so a create opens the
-  // session it just made. The caret that picks between them is hidden too.
-  const createAction: CreateAction = inline ? "open" : chosenCreateAction;
-  const [createMenuOpen, setCreateMenuOpen] = useState(false);
-  const createSplitRef = useRef<HTMLDivElement>(null);
   const isPhone = useIsPhone();
   /** The palette as a phone sheet: close and send ride in the top bar, and the
    *  footer keeps only the tools. The inline card has no bar of its own to put
@@ -743,48 +726,11 @@ export function NewSession({
   // (The prompt's auto-grow, its scroll-fade and the draft store it writes
   // through all live in NewSessionPrompt now, beside the text they read.)
 
-  // Close the Create dropdown on an outside click.
-  useEffect(() => {
-    if (!createMenuOpen) return;
-    function onDown(e: MouseEvent) {
-      if (
-        createSplitRef.current &&
-        e.target instanceof Node &&
-        !createSplitRef.current.contains(e.target)
-      ) {
-        setCreateMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [createMenuOpen]);
-
-  // Step through the Create options without leaving the prompt: the primary
-  // button's label is the feedback, and an open dropdown moves its check. This
-  // rides on the dialog rather than on window because Base UI's
-  // popup stops keydown propagation before it leaves the card, which is also
-  // why it can use a chord the rest of the app is free to bind elsewhere.
-  function cycleCreateAction(e: React.KeyboardEvent) {
-    if (busy) return;
-    if (!(e.metaKey || e.ctrlKey) || !e.altKey || e.shiftKey) return;
-    const step = e.code === "ArrowDown" ? 1 : e.code === "ArrowUp" ? -1 : 0;
-    if (!step) return;
-    e.preventDefault();
-    const at = CREATE_ACTIONS.indexOf(createAction);
-    setCreateAction(
-      CREATE_ACTIONS[
-        (at + step + CREATE_ACTIONS.length) % CREATE_ACTIONS.length
-      ],
-    );
-  }
-
   function handleCardKeyDown(e: React.KeyboardEvent) {
     if (!busy && matchesShortcut(e, "composer-attach")) {
       e.preventDefault();
       fileInputRef.current?.click();
-      return;
     }
-    cycleCreateAction(e);
   }
 
   useEffect(() => {
@@ -914,9 +860,9 @@ export function NewSession({
       clearDraft(DRAFT_KEY);
       if (consumedWorkspaceId)
         consumeNewSessionWorkspaceDraft(consumedWorkspaceId);
-      // "Create more" stays in the palette and resets for the next task. The
-      // other actions close it after App handles the same announcement.
-      if (createAction === "more" || inline) {
+      // The inline card stays on the page and resets for the next task. The
+      // palette closes after App handles the same announcement.
+      if (inline) {
         setStatus({ kind: "idle" });
         promptHandle.current?.setText("");
         setImages([]);
@@ -926,7 +872,7 @@ export function NewSession({
         setBranchEdited(false);
         promptRef.current?.focus();
       } else {
-        createdRef.current = createAction === "open";
+        createdRef.current = true;
         onBack();
       }
     }
@@ -1092,8 +1038,8 @@ export function NewSession({
     const attachRepos = extraRepos.filter((id) => id !== createRepo);
     const createMode = mode;
 
-    // With "Create more" off, App tears down the palette when the
-    // session_created event arrives (and drops us into the new session).
+    // App tears down the palette when the session_created event arrives (and
+    // drops us into the new session).
     setStatus({ kind: "creating" });
     creatingRef.current = true;
     // Workspace linkage: scoped to an existing workspace (the tab/sidebar +),
@@ -1147,12 +1093,9 @@ export function NewSession({
     if (images.length) optimisticCreate.images = images;
     if (files.length) optimisticCreate.files = files;
     if (pastedBlocks.length) optimisticCreate.pastedTexts = pastedBlocks;
-    // The default action opens against this deterministic id without waiting
-    // for workspace or model setup. This assignment replaces the former
-    // `createAction === "open" ? { openImmediately: true }` fragment.
-    // The other actions keep their own surface.
-    if (createAction === "open") optimisticCreate.openImmediately = true;
-    if (createAction === "background") optimisticCreate.background = true;
+    // A create opens against this deterministic id without waiting for
+    // workspace or model setup.
+    optimisticCreate.openImmediately = true;
 
     const createMessage: NewSessionCreateMessage = {
       type: "create_session",
@@ -1241,16 +1184,14 @@ export function NewSession({
     try {
       send(createMessage);
       consumePendingDraftParks(prompt, workspaceId, createWorkspaceId);
-      if (createAction === "open") {
-        // The send was accepted. Consume the global composer now, before App
-        // opens the optimistic session, so reopening it during workspace setup
-        // starts on the next message rather than the one already queued.
-        // App owns the submitted copy and restores it if creation fails.
-        promptHandle.current?.dropPendingDraftWrite();
-        dropStagingAttachments(DRAFT_KEY);
-        clearDraft(DRAFT_KEY);
-        promptHandle.current?.setText("");
-      }
+      // The send was accepted. Consume the global composer now, before App
+      // opens the optimistic session, so reopening it during workspace setup
+      // starts on the next message rather than the one already queued.
+      // App owns the submitted copy and restores it if creation fails.
+      promptHandle.current?.dropPendingDraftWrite();
+      dropStagingAttachments(DRAFT_KEY);
+      clearDraft(DRAFT_KEY);
+      promptHandle.current?.setText("");
       onCreateStarted?.(optimisticCreate);
     } catch (error) {
       creatingRef.current = false;
@@ -1579,7 +1520,7 @@ export function NewSession({
             className={PHONE_SEND}
             onClick={createOrSendDictation}
             disabled={!canCreate}
-            aria-label={CREATE_LABELS[createAction]}
+            aria-label="Create"
           >
             <IconArrowUp size={22} />
           </button>
@@ -1601,6 +1542,19 @@ export function NewSession({
             )}
             <NewSessionFolderChips folders={localFolders} disabled={busy} />
             <AnimatePresence initial={false}>
+              {/* The PR picker sits in the overflow menu, so a picked PR shows
+                here, where it can also be dropped. */}
+              {selectedPullRequest && (
+                <ComposerContextChip
+                  key="pull-request"
+                  icon={<IconPullRequest size={15} />}
+                  label={`${repoOptionLabel(selectedPullRequest.repo) || selectedPullRequest.repo} #${selectedPullRequest.number}`}
+                  title={`Starts from PR #${selectedPullRequest.number}: ${selectedPullRequest.title}`}
+                  onRemove={() => setStartPoint(defaultStartPoint())}
+                  removeLabel="Start from a new branch instead"
+                  disabled={busy}
+                />
+              )}
               {selectedMcpServers.map((mcp) => (
                 <ComposerContextChip
                   key={mcp}
@@ -1706,46 +1660,23 @@ export function NewSession({
                   e.target.value = "";
                 }}
               />
-              {/* Ask sits with the tools rather than in the header: Code is what
-                you are almost always doing, so the header should show what you
-                are working on (the repo, the branch) and this is the one
-                switch that changes it. Off it is a quiet icon; on it names
-                itself and wears the green the card and the composer's Ask pill
-                also wear, because read-only running silently is the one state
-                worth being loud about. */}
-              {!workspaceId && forceMode !== "scratch" && (
-                <NewSessionPrPicker
-                  repo={repo}
-                  selected={selectedPullRequest}
-                  disabled={busy}
-                  onSelect={(pullRequest) => {
-                    setRepo(pullRequest.repo);
-                    setExtraRepos([]);
-                    setStartPoint({ kind: "pull-request", pullRequest });
-                  }}
-                  onClear={() => setStartPoint(defaultStartPoint())}
-                />
-              )}
-              {!forceMode && (
-                <Tooltip
-                  label={
-                    permission === "ask"
-                      ? "Ask mode on · reads, changes nothing. Click to write code instead"
-                      : "Ask mode · read-only, and no repo unless you pick one"
-                  }
-                >
+              {/* Ask lives in the overflow menu while it is off. On, it
+                surfaces here and names itself in the green the card and the
+                composer's Ask pill also wear, because read-only running
+                silently is the one state worth being loud about. Pressing it
+                turns the mode back off. */}
+              {!forceMode && permission === "ask" && (
+                <Tooltip label="Ask mode on · reads, changes nothing. Click to write code instead">
                   <button
                     type="button"
-                    className={
-                      permission === "ask" ? ASK_BTN_ON : FOOTER_ICON_BTN
-                    }
+                    className={ASK_BTN_ON}
                     onClick={togglePermission}
                     disabled={busy}
-                    aria-pressed={permission === "ask"}
+                    aria-pressed
                     aria-label="Ask mode"
                   >
-                    <IconEye size={permission === "ask" ? 14 : 20} />
-                    {permission === "ask" && "Ask"}
+                    <IconEye size={14} />
+                    Ask
                   </button>
                 </Tooltip>
               )}
@@ -1768,6 +1699,7 @@ export function NewSession({
                     className={cn(
                       FOOTER_ICON_BTN,
                       (branchPicked ||
+                        !!selectedPullRequest ||
                         sandboxProvider ||
                         pstackMode ||
                         coordinator ||
@@ -1789,6 +1721,36 @@ export function NewSession({
                   sideOffset={6}
                   className="min-w-[260px] max-w-[min(360px,calc(100vw-1rem))]"
                 >
+                  {!forceMode && (
+                    <Menu.CheckboxItem
+                      checked={permission === "ask"}
+                      closeOnClick={false}
+                      onCheckedChange={togglePermission}
+                      className="justify-between gap-3"
+                      title="Read-only, and no repo unless you pick one"
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <IconEye className="shrink-0 text-dim" size={20} />
+                        <span className="truncate">Ask mode</span>
+                      </span>
+                      <Menu.Check
+                        on={permission === "ask"}
+                        className="text-dim"
+                      />
+                    </Menu.CheckboxItem>
+                  )}
+                  {!workspaceId && forceMode !== "scratch" && (
+                    <NewSessionPrPicker
+                      repo={repo}
+                      selected={selectedPullRequest}
+                      onSelect={(pullRequest) => {
+                        setRepo(pullRequest.repo);
+                        setExtraRepos([]);
+                        setStartPoint({ kind: "pull-request", pullRequest });
+                      }}
+                      onClear={() => setStartPoint(defaultStartPoint())}
+                    />
+                  )}
                   {showBranchPicker && (
                     <Menu.SubmenuRoot>
                       <Menu.SubmenuTrigger className="justify-between gap-3">
@@ -2082,32 +2044,6 @@ export function NewSession({
                       })}
                     </Menu.Popup>
                   </Menu.SubmenuRoot>
-                  {/* The phone's send is one round button, so what the desktop
-                    caret holds lives here instead. Flat rows rather than a
-                    submenu: a submenu opens on hover, which a finger does not
-                    have. A plain div rather than Menu.GroupLabel, which stops
-                    the sibling submenus above from opening at all. */}
-                  {phoneBar && (
-                    <>
-                      <div className="px-2 pb-1 pt-1.5 text-meta font-medium text-faint">
-                        On create
-                      </div>
-                      {CREATE_ACTIONS.map((action) => (
-                        <Menu.Item
-                          key={action}
-                          onClick={() => setCreateAction(action)}
-                        >
-                          <Menu.Check
-                            on={createAction === action}
-                            className="text-dim"
-                          />
-                          <span className="min-w-0 truncate">
-                            {CREATE_LABELS[action]}
-                          </span>
-                        </Menu.Item>
-                      ))}
-                    </>
-                  )}
                 </Menu.Popup>
               </Menu.Root>
             </div>
@@ -2166,118 +2102,34 @@ export function NewSession({
               />
 
               {!phoneBar && (
-                <div className={CREATE_SPLIT} ref={createSplitRef}>
-                  <button
-                    className={cn(
-                      CREATE_MAIN,
-                      inline ? CREATE_MAIN_WHOLE : CREATE_MAIN_SPLIT,
-                    )}
-                    onClick={createOrSendDictation}
-                    disabled={!canCreate}
-                  >
-                    {status.kind === "reconnecting"
-                      ? "Reconnecting…"
-                      : status.kind === "creating"
-                        ? "Creating…"
-                        : isStaging(staging)
-                          ? "Attaching…"
-                          : CREATE_LABELS[createAction]}
-                    {/* The hint has to match the preference — a bare ↩ next to a
+                <button
+                  className={CREATE_BTN}
+                  onClick={createOrSendDictation}
+                  disabled={!canCreate}
+                >
+                  {status.kind === "reconnecting"
+                    ? "Reconnecting…"
+                    : status.kind === "creating"
+                      ? "Creating…"
+                      : isStaging(staging)
+                        ? "Attaching…"
+                        : "Create"}
+                  {/* The hint has to match the preference: a bare ↩ next to a
                     field that only creates on ⌘↩ is what made Enter look
                     broken in the first place. */}
-                    {sendKey === "mod-enter" ? (
-                      <span
-                        className={`${CREATE_KBD} mx-0 phone:hidden text-xs`}
-                      >
-                        {MOD_ENTER_GLYPH}
-                      </span>
-                    ) : (
-                      /* Snug the return glyph up to the label and nudge it off the
-                     button edge. "Create more" is a desktop workflow, so the
-                     hint goes away with the caret on phones. */
-                      <IconReturn
-                        className={`${CREATE_KBD} -mx-[3px] phone:hidden`}
-                        size={20}
-                      />
-                    )}
-                  </button>
-                  {/* The tooltip is where the cycle shortcut is taught: the caret
-                  is the only thing on screen that says these options exist.
-                  Inline there are no options to pick between, so the button is
-                  whole and the caret is gone. */}
-                  {!inline && (
-                    <Tooltip label="Create options" shortcut={CYCLE_SHORTCUT}>
-                      <button
-                        type="button"
-                        className={CREATE_CARET}
-                        onClick={() => setCreateMenuOpen((v) => !v)}
-                        // Not having a prompt yet leaves the caret alone: the options
-                        // are still worth reading, and picking one is how you change
-                        // what Enter will do. A create in flight is the one thing that
-                        // closes it off, and then it greys out with the main button
-                        // beside it, so the pair still reads as one busy control. An
-                        // attachment on its way to disk holds the same pair the same
-                        // way, for the second or two it takes.
-                        disabled={busy || isStaging(staging)}
-                        aria-haspopup="menu"
-                        aria-expanded={createMenuOpen}
-                        aria-label="Create options"
-                      >
-                        <IconChevronDown
-                          className={`transition-transform ${createMenuOpen ? "rotate-180" : ""}`}
-                          size={22}
-                        />
-                      </button>
-                    </Tooltip>
+                  {sendKey === "mod-enter" ? (
+                    <span className={`${CREATE_KBD} mx-0 phone:hidden text-xs`}>
+                      {MOD_ENTER_GLYPH}
+                    </span>
+                  ) : (
+                    /* Snug the return glyph up to the label and nudge it off
+                      the button edge. */
+                    <IconReturn
+                      className={`${CREATE_KBD} -mx-[3px] phone:hidden`}
+                      size={20}
+                    />
                   )}
-                  {!inline && createMenuOpen && (
-                    <div className={CREATE_MENU} role="menu">
-                      {[
-                        {
-                          action: "open" as const,
-                          title: "Create",
-                          desc: "Open the new session",
-                        },
-                        {
-                          action: "background" as const,
-                          title: "Create in background",
-                          desc: "Stay where you are",
-                        },
-                        {
-                          action: "more" as const,
-                          title: "Create more",
-                          desc: "Stay here to start another",
-                        },
-                      ].map((opt) => (
-                        <button
-                          key={opt.action}
-                          type="button"
-                          role="menuitemradio"
-                          aria-checked={createAction === opt.action}
-                          className={CREATE_MENU_ITEM}
-                          onClick={() => {
-                            setCreateAction(opt.action);
-                            setCreateMenuOpen(false);
-                          }}
-                        >
-                          <Menu.Check
-                            on={createAction === opt.action}
-                            size={22}
-                            className="mt-px text-dim"
-                          />
-                          <span className="flex min-w-0 flex-col gap-px">
-                            <span className="text-label font-semibold">
-                              {opt.title}
-                            </span>
-                            <span className="text-supporting text-dim">
-                              {opt.desc}
-                            </span>
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                </button>
               )}
             </div>
           </div>
@@ -2348,6 +2200,10 @@ export function NewSession({
           // inside that strip on a client whose keyboard is taller than the
           // one 43dvh was measured against. Past the cap the prompt scrolls,
           // which is what its scroller is for.
+          // Rounder than the other palettes: this one is something you type
+          // into, and its corner sits concentric with the pill-shaped
+          // controls along its bottom edge.
+          CARD_RADIUS,
           "max-h-[calc(89dvh-1rem)] phone:max-h-[calc(100dvh-12px)] phone:[body.kb-open_&]:max-h-[min(43dvh,100%)] phone:rounded-t-[calc(40px*var(--rf))] phone:rounded-b-none phone:[&_textarea]:min-h-[160px] phone:[&_textarea]:text-input-phone",
           ASK_SURFACE,
           mode === "ask" && "before:opacity-100 after:opacity-100",

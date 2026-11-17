@@ -136,9 +136,7 @@ test("the default create exposes its deterministic session id immediately", asyn
     "const clientSessionId = newClientSessionId()",
   );
   expect(createHandler).toContain("id: clientSessionId");
-  expect(createHandler).toContain(
-    'createAction === "open" ? { openImmediately: true }',
-  );
+  expect(createHandler).toContain("optimisticCreate.openImmediately = true");
   expect(createHandler).toContain("onCreateStarted?.(optimisticCreate)");
 });
 
@@ -353,7 +351,7 @@ test("empty creation is enabled without bypassing upload and connection guards",
   expect(source).not.toContain("Create empty session");
   // A shared placeholder branch would adopt the previous empty workspace.
   expect(source).toContain("`session-${clientSessionId.slice(-12)}`");
-  expect(source).toContain("aria-label={CREATE_LABELS[createAction]}");
+  expect(source).toContain('aria-label="Create"');
 });
 
 test("empty creates are idle but any opening input starts a turn", () => {
