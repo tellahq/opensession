@@ -17,6 +17,8 @@ import {
   subscribeKeptFrames,
   type KeptFrame,
 } from "../lib/kept-frames";
+import { addressHost } from "../lib/preview-url";
+import { WS_SUMMARY_FRAME_HOST } from "../lib/workspace-summary-classes";
 import { useFrameFocus } from "../hooks/useFrameFocus";
 import { useFrameLocation } from "../hooks/useFrameLocation";
 import { duration, ease } from "../ui/motion";
@@ -75,6 +77,7 @@ function KeptFrameBox({
   panel: boolean;
 }) {
   const boxRef = useRef<HTMLDivElement>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const { slot, key } = frame;
   // A pane's slot wins; the thumbnail only shows a page nobody else is.
@@ -107,20 +110,23 @@ function KeptFrameBox({
   // no size sits under a hidden ancestor, so the frame hides with it.
   useLayoutEffect(() => {
     const box = boxRef.current;
+    const page = pageRef.current;
     const host = hostRef.current;
-    if (!box || !host) return;
+    if (!box || !page || !host) return;
     const from = handoff(shown.current, slot ? "slot" : "thumb");
     if (!slot) {
       if (thumb && thumbReady) {
-        const follow = () => followThumb(box, host, thumb, shown);
+        const follow = () => followThumb(box, page, host, thumb, shown);
         if (!from) return follow();
-        return glide(box, host, from, () => thumbPose(thumb), follow, shown);
+        const target = () => thumbPose(thumb);
+        return glide(box, page, host, from, target, follow, shown);
       }
       return holdOrHide(box, shown.current);
     }
     const follow = () => followSlot(box, host, slot, shown);
     if (!from) return follow();
-    return glide(box, host, from, () => slotPose(slot), follow, shown);
+    const target = () => slotPose(slot);
+    return glide(box, page, host, from, target, follow, shown);
   }, [slot, thumb, thumbReady, hostRef]);
 
   return (
@@ -138,16 +144,24 @@ function KeptFrameBox({
       data-kept-frame={frame.key}
     >
       {frame.loading && !thumb ? <BrowserLoading name={frame.name} /> : null}
-      <iframe
-        key={`${frame.address}#${frame.nonce}`}
-        ref={frameRef}
-        className={BROWSER_FRAME}
-        src={frame.address}
-        title={frame.title}
-        onLoad={() => keptFrameLoaded(key, window.history.length)}
-        allow={frame.allow}
-        sandbox={frame.sandbox}
-      />
+      {/* Scaled down as a thumbnail; the box and its address stay full size. */}
+      <div ref={pageRef} className="h-full w-full">
+        <iframe
+          key={`${frame.address}#${frame.nonce}`}
+          ref={frameRef}
+          className={BROWSER_FRAME}
+          src={frame.address}
+          title={frame.title}
+          onLoad={() => keptFrameLoaded(key, window.history.length)}
+          allow={frame.allow}
+          sandbox={frame.sandbox}
+        />
+      </div>
+      {thumb ? (
+        <span className={WS_SUMMARY_FRAME_HOST}>
+          {addressHost(frame.location ?? frame.address)}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -303,38 +317,48 @@ function thumbPose(
 }
 
 /**
- * Lays the box out at the pose's layout width, tall enough to reach the
- * bottom of its visible part, and scales it into the pose, clipped to that
- * part with its rounded corners.
+ * Places the box over the pose's visible part, with its rounded corners, and
+ * lays the page in it out at the pose's layout width, scaled into the pose.
+ * The box stays full size, so what it shows over the page (the address) does
+ * too.
  */
-function placeScaled(box: HTMLDivElement, host: HTMLElement, pose: Pose) {
+function placeScaled(
+  box: HTMLDivElement,
+  page: HTMLDivElement,
+  host: HTMLElement,
+  pose: Pose,
+) {
   const from = host.getBoundingClientRect();
-  const { page, visible, layoutWidth } = pose;
-  const scale = page.width / layoutWidth;
-  const layoutHeight = (visible.bottom - page.top) / scale;
+  const { visible, layoutWidth } = pose;
+  const scale = pose.page.width / layoutWidth;
+  const height = visible.bottom - pose.page.top;
   const inset = [
-    visible.top - page.top,
-    page.left + page.width - visible.right,
+    visible.top - pose.page.top,
+    pose.page.left + pose.page.width - visible.right,
     0,
-    visible.left - page.left,
+    visible.left - pose.page.left,
   ]
-    .map((px) => `${Math.max(0, px / scale)}px`)
+    .map((px) => `${Math.max(0, px)}px`)
     .join(" ");
   box.style.display = "block";
-  box.style.left = `${page.left - from.left}px`;
-  box.style.top = `${page.top - from.top}px`;
-  box.style.width = `${layoutWidth}px`;
-  box.style.height = `${layoutHeight}px`;
-  box.style.transformOrigin = "0 0";
-  box.style.transform = `scale(${scale})`;
-  box.style.clipPath = `inset(${inset} round ${pose.radius / scale}px)`;
+  box.style.left = `${pose.page.left - from.left}px`;
+  box.style.top = `${pose.page.top - from.top}px`;
+  box.style.width = `${pose.page.width}px`;
+  box.style.height = `${height}px`;
+  box.style.clipPath = `inset(${inset} round ${pose.radius}px)`;
+  page.style.width = `${layoutWidth}px`;
+  page.style.height = `${height / scale}px`;
+  page.style.transformOrigin = "0 0";
+  page.style.transform = `scale(${scale})`;
 }
 
-function unscale(box: HTMLDivElement) {
+function unscale(box: HTMLDivElement, page: HTMLDivElement) {
   box.style.opacity = "";
-  box.style.transform = "";
-  box.style.transformOrigin = "";
   box.style.clipPath = "";
+  page.style.width = "";
+  page.style.height = "";
+  page.style.transform = "";
+  page.style.transformOrigin = "";
 }
 
 /** Lays the frame over its slot, following every size change. */
@@ -384,6 +408,7 @@ function followSlot(
  */
 function followThumb(
   box: HTMLDivElement,
+  page: HTMLDivElement,
   host: HTMLElement,
   tile: HTMLElement,
   shown: React.RefObject<Shown | null>,
@@ -406,14 +431,14 @@ function followThumb(
       return;
     }
     shown.current = { ...pose, endedAt: null };
-    placeScaled(box, host, pose);
+    placeScaled(box, page, host, pose);
     box.style.opacity = String(opacity);
   };
   place();
   return () => {
     cancelAnimationFrame(raf);
     box.style.display = "none";
-    unscale(box);
+    unscale(box, page);
     ended(shown);
   };
 }
@@ -447,6 +472,7 @@ function aim(to: Pose | null, from: Pose): Pose | null {
  */
 function glide(
   box: HTMLDivElement,
+  page: HTMLDivElement,
   host: HTMLElement,
   from: Pose,
   target: () => Pose | null,
@@ -484,7 +510,7 @@ function glide(
     };
     // Cut short (the panel closes while it opens), it turns back from here.
     shown.current = { ...pose, endedAt: null };
-    placeScaled(box, host, pose);
+    placeScaled(box, page, host, pose);
   };
   place(0);
   let stop = () => {};
@@ -498,7 +524,7 @@ function glide(
       ease,
       onUpdate: place,
       onComplete: () => {
-        unscale(box);
+        unscale(box, page);
         stop = follow();
       },
     });
@@ -507,7 +533,7 @@ function glide(
     cancelAnimationFrame(raf);
     flight?.stop();
     stop();
-    unscale(box);
+    unscale(box, page);
     ended(shown);
   };
 }

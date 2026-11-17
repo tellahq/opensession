@@ -706,6 +706,22 @@ describe("transcript outline and random-access ranges", () => {
     expect(outline.lastSeq).toBe(7);
   });
 
+  test("marks a compaction notice in the outline", async () => {
+    const sid = "bks-outline-compaction";
+    await store.appendTranscriptEvents(sid, [
+      entry("work", "Using Read", { type: "tool_use", toolName: "Read" }),
+      entry("compaction", "Handoff summary", {
+        type: "system",
+        noticeKind: "compaction",
+      }),
+    ]);
+    const [, compaction] = store.readTranscriptIndex(sid).entries;
+    expect(compaction).toMatchObject({
+      role: "notice",
+      noticeKind: "compaction",
+    });
+  });
+
   test("updates an old outline row in place when its role changes", async () => {
     const sid = "bks-outline-upsert";
     await store.appendTranscriptEvents(sid, [entry("same", "draft")]);

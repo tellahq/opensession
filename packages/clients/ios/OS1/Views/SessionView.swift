@@ -1565,6 +1565,18 @@ struct SessionView: View {
     }
     #endif
 
+    /// `PrLinks.Index` keys for every PR this session carries.
+    private var ownPrKeys: Set<String> {
+        let session = viewModel.session
+        var keys = Set(SessionPrSeries.rows(for: session).compactMap { row in
+            row.number.map { PrLinks.Index.key(row.target.repo, $0) }
+        })
+        if let repo = session.repo, let number = session.prNumber {
+            keys.insert(PrLinks.Index.key(repo, number))
+        }
+        return keys
+    }
+
     private func pullRequestButton(number: Int) -> some View {
         Button {
             showPrPanel = true
@@ -1935,6 +1947,10 @@ struct SessionView: View {
         // are still current. Same object for the life of the view model, so
         // installing it here costs the rows nothing.
         .environment(\.quickReplyRelay, viewModel.quickReplies)
+        // This session's own PRs read as plain text in its chat, as on the
+        // web: the chip would only open the conversation already on screen,
+        // and the PR stays a tap away from the title.
+        .environment(\.transcriptOwnPrs, ownPrKeys)
         .transcriptQuoteInteractions(viewModel.quoteSelection)
         .onKeyPress(.escape) {
             guard viewModel.quoteSelection.text != nil else { return .ignored }
@@ -3976,7 +3992,12 @@ private struct SessionInputBar: View {
                             .lineLimit(1)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
-                            .background(Capsule().fill(OS1VisualStyle.hover))
+                            // The composer's own material, as the web's
+                            // ReplySuggestions: the pills lead into the box
+                            // you type in, so they wear its fill and edge.
+                            .background(Capsule().fill(OS1VisualStyle.composerSurface))
+                            .overlay { Capsule().strokeBorder(OS1VisualStyle.replyPillEdge, lineWidth: 1) }
+                            .shadow(color: .black.opacity(0.06), radius: 5, y: 2)
                             .frame(minHeight: 44)
                     }
                     .buttonStyle(.plain)

@@ -839,12 +839,11 @@ struct NoticeRow: View {
                     // The title is one line and stays one line. The body
                     // below is where the detail lives, which is what kept a
                     // folded notice from printing its whole text twice.
+                    // The title is the toggle, as on the web: a "show" label
+                    // beside it only added noise to a line most people never
+                    // open. The accessibility value still says which it is.
                     Text(notice.title)
                         .lineLimit(notice.isCollapsible && !state.expanded ? 2 : nil)
-                    if notice.isCollapsible {
-                        Text(state.expanded ? "hide" : "show")
-                            .foregroundStyle(OS1VisualStyle.link)
-                    }
                 }
                 .font(.footnote)
                 .foregroundStyle(tone.color)

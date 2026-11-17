@@ -575,30 +575,17 @@ struct WorktreeInfoView: View {
                 Button {
                     panel = .review(sessionId: currentSession.id)
                 } label: {
-                    HStack(spacing: 12) {
-                        // Each mark is cut to a circle and set in a ring of the
-                        // card's own grey, outside it, so the overlap reads as
-                        // a cut-out. A ring drawn on top of a squircle avatar
-                        // left its corners poking out past the circle.
-                        HStack(spacing: -8) {
-                            Image(systemName: mergeStatusIcon(pr))
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundStyle(.white)
-                                .frame(width: 32, height: 32)
-                                .background(tone, in: Circle())
-                                .padding(2)
-                                .background(OS1VisualStyle.raised, in: Circle())
-                            ForEach(mergeReviewers(pr), id: \.login) { reviewer in
-                                UserAvatar(person: reviewer.login, login: reviewer.login, size: 32)
-                                    .clipShape(Circle())
-                                    .padding(2)
-                                    .background(OS1VisualStyle.raised, in: Circle())
-                            }
-                        }
-                        .fixedSize()
-                        // The facepile is a fixed size, so the words get the
-                        // rest of the row and wrap rather than truncate when
-                        // that is not enough (larger text, three reviewers).
+                    // How the checks went on the left, who reviewed on the
+                    // right: a status is not a person, so it does not join
+                    // the faces' pile.
+                    HStack(spacing: 10) {
+                        Image(systemName: mergeStatusIcon(pr))
+                            .font(.system(size: 11, weight: .heavy))
+                            .foregroundStyle(.white)
+                            .frame(width: 22, height: 22)
+                            .background(tone, in: Circle())
+                        // The words get the rest of the row and wrap rather
+                        // than truncate at larger text sizes.
                         Text(mergeStatusLine(pr))
                             .font(.body.weight(.medium))
                             .foregroundStyle(OS1VisualStyle.text)
@@ -607,6 +594,7 @@ struct WorktreeInfoView: View {
                             .fixedSize(horizontal: false, vertical: true)
                             .layoutPriority(1)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                        ReviewerPile(logins: mergeReviewers(pr).map(\.login))
                         Image(systemName: "chevron.right")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(OS1VisualStyle.textFaint)
@@ -2074,6 +2062,33 @@ private struct InfoSection<Content: View>: View {
                     OS1VisualStyle.raised,
                     in: RoundedRectangle(cornerRadius: 18, style: .continuous)
                 )
+        }
+    }
+}
+
+/// Who reviewed the pull request, as the app's squircle faces overlapping by
+/// a quarter. Reading order is depth order: each face tucks behind the one to
+/// its left, separated by a halo of the card's grey that follows the front
+/// face's outline.
+private struct ReviewerPile: View {
+    let logins: [String]
+
+    private let size: CGFloat = 26
+    private let halo: CGFloat = 2
+
+    var body: some View {
+        if !logins.isEmpty {
+            // Measured face to face: each halo adds its width on both sides,
+            // so it comes off the spacing too.
+            HStack(spacing: -(size / 4) - halo * 2) {
+                ForEach(Array(logins.enumerated()), id: \.element) { index, login in
+                    UserAvatar(person: login, login: login, size: size)
+                        .padding(halo)
+                        .background(OS1VisualStyle.raised, in: SquircleCapsule())
+                        .zIndex(Double(logins.count - index))
+                }
+            }
+            .fixedSize()
         }
     }
 }
