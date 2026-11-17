@@ -4,7 +4,7 @@ import { IconArrowUpRight, IconCopy, IconGlobe } from "../icons";
 import { Button } from "../../ui/button";
 import { BrowserPane } from "../BrowserPane";
 import { keptFrameKey } from "../../lib/kept-frames";
-import { PREVIEW_FRAME } from "../../lib/preview-url";
+import { LINK_FRAME, PREVIEW_FRAME } from "../../lib/preview-url";
 import { PortalPane } from "../PortalPane";
 
 interface StagingDeployment {
@@ -70,12 +70,12 @@ export function SessionPreviewSurface({
         <div className={VIEWER_REVIEW_MAIN}>
           <BrowserPane
             url={surface.url}
-            name="Browser"
-            frameTitle="Browser"
+            name={LINK_FRAME.name}
+            frameTitle={LINK_FRAME.title}
             keepAliveKey={browserKey}
             commentSessionId={commentSessionId}
-            allow="clipboard-read; clipboard-write; fullscreen; autoplay"
-            sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms allow-modals allow-downloads"
+            allow={LINK_FRAME.allow}
+            sandbox={LINK_FRAME.sandbox}
           />
         </div>
       );

@@ -16,6 +16,10 @@ import { FRAME_AUDIO_PAUSE } from "./frame-audio";
  * and the layer lays the frame over that slot. Once no slot shows a frame it
  * stays loaded, hidden, until it is one of more than KEPT_FRAME_LIMIT frames
  * and the least recently shown.
+ *
+ * A frame can also be shown small, as a live thumbnail (the workspace summary
+ * card's Browser preview). A pane's slot always wins over a thumbnail, so a
+ * card left open never takes the page away from the tab showing it.
  */
 
 export const KEPT_FRAME_LIMIT = 3;
@@ -44,6 +48,8 @@ export interface KeptFrame extends KeptFrameSpec {
   /** The page says it is playing sound; see frame-audio.ts. */
   audible: boolean;
   slot: HTMLElement | null;
+  /** Where the frame shows as a thumbnail while no `slot` shows it. */
+  thumb: HTMLElement | null;
   /** Recency for eviction. Order in `frames` never changes (see above). */
   shownAt: number;
 }
@@ -108,7 +114,7 @@ function evict(list: readonly KeptFrame[]): readonly KeptFrame[] {
   if (excess <= 0) return list;
   const drop = new Set(
     list
-      .filter((frame) => !frame.slot)
+      .filter((frame) => !frame.slot && !frame.thumb)
       .sort((a, b) => a.shownAt - b.shownAt)
       .slice(0, excess)
       .map((frame) => frame.key),
@@ -147,7 +153,12 @@ export function showKeptFrame(
     commit(evict([...frames, newFrame(key, spec, slot, shownAt)]));
     return;
   }
-  update(key, (frame) => ({
+  update(key, (frame) => ({ ...respec(frame, spec), slot, shownAt }));
+}
+
+/** `frame` asked for by `spec`: a different URL starts it over. */
+function respec(frame: KeptFrame, spec: KeptFrameSpec): KeptFrame {
+  return {
     ...frame,
     ...spec,
     ...(frame.url === spec.url
@@ -160,9 +171,7 @@ export function showKeptFrame(
           loading: true,
           audible: false,
         }),
-    slot,
-    shownAt,
-  }));
+  };
 }
 
 /**
@@ -173,6 +182,33 @@ export function showKeptFrame(
 export function preloadKeptFrame(key: string, spec: KeptFrameSpec) {
   if (getKeptFrame(key)) return;
   commit(evict([...frames, newFrame(key, spec, null, ++clock)]));
+}
+
+/**
+ * Shows `key`'s page as a thumbnail in `thumb`, loading it first if no frame
+ * has it. The page stays where it navigated, so the thumbnail is the same
+ * page the tab will show.
+ */
+export function showKeptFrameThumb(
+  key: string,
+  spec: KeptFrameSpec,
+  thumb: HTMLElement,
+) {
+  const shownAt = ++clock;
+  if (!getKeptFrame(key)) {
+    commit(
+      evict([...frames, { ...newFrame(key, spec, null, shownAt), thumb }]),
+    );
+    return;
+  }
+  update(key, (frame) => ({ ...respec(frame, spec), thumb, shownAt }));
+}
+
+/** The thumbnail went away; the frame stays loaded and hidden. */
+export function hideKeptFrameThumb(key: string, thumb: HTMLElement) {
+  const frame = getKeptFrame(key);
+  if (!frame || frame.thumb !== thumb) return;
+  commit(evict(frames.map((f) => (f.key === key ? { ...f, thumb: null } : f))));
 }
 
 function newFrame(
@@ -191,6 +227,7 @@ function newFrame(
     loading: true,
     audible: false,
     slot,
+    thumb: null,
     shownAt,
   };
 }

@@ -76,6 +76,11 @@ function storedWidth(key: string): number {
   return stored >= MIN_W && stored <= MAX_W ? stored : 0;
 }
 
+/** Roughly how wide a wide tab (Browser, Review) opens, in pixels. */
+export function wideSidePanelWidth(): number {
+  return storedWidth(WIDE_WIDTH_KEY) || Math.round(window.innerWidth / 2);
+}
+
 /** How long the panel takes to slide in or change width: `--dur-lg`. */
 const RESIZE_MS = 280;
 
