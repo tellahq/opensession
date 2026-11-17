@@ -2212,6 +2212,26 @@ describe("TranscriptBlocks progress rows", () => {
     expect(html).not.toContain("Scheduled check-back");
   });
 
+  test("a scheduled check-back folds to its title, with no show label", () => {
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        entries={[
+          row("u", "user", "Watch the build", 1),
+          row("a", "assistant", "Started the build.", 2),
+          row(
+            "wake",
+            "user",
+            "<!--os:scheduled-prompt:build-->\nCheck the build.",
+            3,
+          ),
+        ]}
+      />,
+    );
+    expect(html).toContain("Scheduled check-back");
+    expect(html).not.toContain(">show<");
+    expect(html).not.toContain("Check the build.");
+  });
+
   test("worker reports do not turn intermediate status narration into an invisible owner", () => {
     const html = renderToStaticMarkup(
       <TranscriptBlocks
