@@ -556,7 +556,7 @@ export function useWorkspacePanes({
     subagentLabel: subagentStack.at(-1)?.label ?? null,
   }).map(({ icon, ...tab }) =>
     icon === "globe"
-      ? { ...tab, icon: createElement(IconGlobe, { size: 14 }) }
+      ? { ...tab, icon: createElement(IconGlobe, { size: 16, dense: true }) }
       : tab,
   );
 

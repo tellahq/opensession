@@ -1005,14 +1005,27 @@ struct SessionView: View {
         } message: {
             Text("Choose a name for this workspace.")
         }
-        .sheet(isPresented: $showWorktreeInfo) {
-            WorktreeInfoView(
-                viewModel: viewModel,
-                sessions: tabs,
-                catalog: catalog
-            )
-            .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
+        // The overview is a page one level deeper than the chat, pushed on
+        // the conversation's own stack like every other session detail, so
+        // the chevron and the edge swipe bring you back. A host with no stack
+        // to push onto gets it as a sheet instead.
+        .onChange(of: showWorktreeInfo) { _, show in
+            guard show, openPanel.isAvailable else { return }
+            showWorktreeInfo = false
+            openPanel(.overview(sessionId: viewModel.session.id))
+        }
+        .sheet(isPresented: Binding(
+            get: { showWorktreeInfo && !openPanel.isAvailable },
+            set: { if !$0 { showWorktreeInfo = false } }
+        )) {
+            NavigationStack {
+                WorktreeInfoView(
+                    viewModel: viewModel,
+                    sessions: tabs,
+                    catalog: catalog,
+                    showsClose: true
+                )
+            }
         }
         #endif
             #if os(macOS)
@@ -1478,8 +1491,7 @@ struct SessionView: View {
         return actions + facepile + 16
     }
 
-    /// Mobile web opens workspace details when its title is tapped. Keep the
-    /// same identity in native navigation and present a SwiftUI details sheet.
+    /// Tapping the title opens the chat's overview page.
     private var sessionIdentityButton: some View {
         Button {
             showWorktreeInfo = true
@@ -3103,11 +3115,16 @@ struct SessionTabsView: View {
         fetchedArchivedTabs = rows
     }
 
+    @ViewBuilder
     private func panelContent(_ panel: SessionPanel) -> some View {
-        SessionPanelView(
-            panel: panel,
-            viewModel: viewModelForSession(session(withId: panel.sessionId))
-        )
+        let viewModel = viewModelForSession(session(withId: panel.sessionId))
+        if case .overview = panel {
+            // The overview speaks for the whole workspace, so it gets every
+            // tab rather than the one session a panel is about.
+            WorktreeOverviewPage(viewModel: viewModel, sessions: visibleTabs)
+        } else {
+            SessionPanelView(panel: panel, viewModel: viewModel)
+        }
     }
 
     private func session(withId id: String) -> Session {
