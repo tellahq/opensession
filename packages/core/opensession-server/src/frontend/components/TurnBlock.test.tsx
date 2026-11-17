@@ -374,3 +374,36 @@ describe("suggested task", () => {
     }
   });
 });
+
+describe("open work fold", () => {
+  test("leaves counts to the grouped row instead of repeating them above it", async () => {
+    const { TurnBlock } = await import("./TurnBlock");
+    const items: TranscriptEntry[] = [
+      {
+        id: "say",
+        type: "assistant",
+        content: "Checking the build.",
+        timestamp: "2026-08-17T09:00:00.000Z",
+      },
+      toolUse("a", "Bash", { command: "ls" }),
+      toolUse("b", "Bash", { command: "pwd" }),
+    ];
+    const getItem = localStorage.getItem;
+    localStorage.getItem = (key: string) =>
+      key === "opensession-turn-activity" ? "open" : null;
+    try {
+      const html = renderToStaticMarkup(
+        React.createElement(TurnBlock, {
+          items,
+          toolResults: new Map(),
+          live: false,
+        }),
+      );
+      expect(html).toContain('aria-expanded="true"');
+      expect(html).toContain("Ran 2 commands");
+      expect(html).not.toContain("ran 2 commands");
+    } finally {
+      localStorage.getItem = getItem;
+    }
+  });
+});
