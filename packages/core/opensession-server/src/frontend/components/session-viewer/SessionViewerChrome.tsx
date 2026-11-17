@@ -311,7 +311,7 @@ interface SessionViewerChromeProps {
   infoActions: ChromeInfoActions;
   conversation: ChromeConversation;
   /** The side panel Browser page the summary card previews, or null. */
-  summaryBrowser: PanelBrowserFrame | null;
+  summaryBrowser: { frame: PanelBrowserFrame; onOpen: () => void } | null;
 }
 
 export function SessionViewerChrome({
@@ -1202,15 +1202,7 @@ export function SessionViewerChrome({
                       reviewRequestSessionId={effectiveReview?.ownerId}
                       onReviewChange={onReviewChange}
                       prReviewRequested={effectiveReview?.prReviewRequested}
-                      browser={
-                        summaryBrowser && {
-                          frame: summaryBrowser,
-                          onOpen: () => {
-                            setDesktopPanelPage("browser");
-                            setActivePanelOpen(true);
-                          },
-                        }
-                      }
+                      browser={summaryBrowser}
                       running={isRunningLive}
                       workspacePreparing={workspacePreparing}
                       send={connected ? send : undefined}
