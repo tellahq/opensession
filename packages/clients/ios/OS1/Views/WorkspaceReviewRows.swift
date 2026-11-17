@@ -23,6 +23,10 @@ struct WorkspaceReviewRows: View {
     /// Open a session the agent just started. Auto-fix does its work in a live
     /// session in this workspace rather than posting on the PR.
     var onOpenRun: ((String) -> Void)?
+    /// Rows as a plain list on a neutral card, split by hairlines, with the
+    /// state in the words' colour only: the overview page, where the cards
+    /// around it carry no tint. The default keeps each row's coloured band.
+    var plain = false
 
     /// The roster and the agent's name are fetched once per launch and read
     /// here as plain state rather than straight off the singletons: both
@@ -46,7 +50,7 @@ struct WorkspaceReviewRows: View {
         // a yellow one reads as one striped block. The gap matches the plate's
         // padding, and the corners stay concentric — 8 inside + 6 of padding
         // is the section plate's own 14.
-        VStack(spacing: 6) {
+        VStack(spacing: plain ? 0 : 6) {
             if let pr {
                 AgentReviewRow(
                     sessionId: sessionId,
@@ -55,6 +59,7 @@ struct WorkspaceReviewRows: View {
                     agentName: agentName,
                     onOpenRun: onOpenRun
                 )
+                if plain { Divider().padding(.leading, 54) }
             }
             ReviewerRow(
                 state: WorkspaceReview.state(of: sessions, openSessionId: sessionId),
@@ -64,7 +69,8 @@ struct WorkspaceReviewRows: View {
                 onOpenPr: onOpenPr
             )
         }
-        .padding(6)
+        .padding(plain ? 0 : 6)
+        .environment(\.reviewRowsPlain, plain)
         // Follow the roster rather than reading it once after `ensureLoaded`:
         // that returns at once while another view's fetch is in flight, and
         // a row that read the empty roster then would name a team request by
@@ -77,6 +83,34 @@ struct WorkspaceReviewRows: View {
             await TeamDirectory.shared.ensureLoaded()
             await InstanceIdentity.shared.ensureLoaded()
             agentName = InstanceIdentity.shared.personaName
+        }
+    }
+}
+
+extension EnvironmentValues {
+    /// Set by `WorkspaceReviewRows(plain:)` for the rows inside it.
+    @Entry var reviewRowsPlain = false
+}
+
+/// The glyph a review row leads with: a small circle on the banded rows,
+/// a rounded tile of the page colour on the plain ones (the overview's rows
+/// all lead with one).
+private struct ReviewRowGlyph<Content: View>: View {
+    @Environment(\.reviewRowsPlain) private var plain
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        if plain {
+            content
+                .frame(width: 30, height: 30)
+                .background(
+                    OS1VisualStyle.background,
+                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                )
+        } else {
+            content
+                .frame(width: 26, height: 26)
+                .background(OS1VisualStyle.border.opacity(0.35), in: Circle())
         }
     }
 }
@@ -163,7 +197,7 @@ private struct AgentReviewRow: View {
                 // live session and re-evaluates at streaming rates, and an
                 // implicit animation on a row that rebuilds that often keeps
                 // combining until the app dies in `swift_abortRetainOverflow`.
-                Group {
+                ReviewRowGlyph {
                     if active {
                         ProgressView().controlSize(.small)
                     } else {
@@ -172,8 +206,6 @@ private struct AgentReviewRow: View {
                             .foregroundStyle(OS1VisualStyle.textDim)
                     }
                 }
-                .frame(width: 26, height: 26)
-                .background(OS1VisualStyle.border.opacity(0.35), in: Circle())
             },
             name: agentName,
             detail: detail,
@@ -342,6 +374,8 @@ private struct ReviewerRow: View {
     let teams: [OS1API.ReviewTeam]
     var onOpenPr: (() -> Void)?
 
+    @Environment(\.reviewRowsPlain) private var plain
+
     /// The request as this device believes it: the polled one, and whatever
     /// was picked here until the next poll confirms it.
     @State private var request: SessionReviewRequest?
@@ -412,13 +446,13 @@ private struct ReviewerRow: View {
             tone: tone,
             leading: {
                 if let faceName {
-                    UserAvatar(person: faceName, size: 26)
+                    UserAvatar(person: faceName, size: plain ? 30 : 26)
                 } else {
-                    Image(systemName: team == nil ? "person.2" : "person.3")
-                        .font(.system(size: 14))
-                        .foregroundStyle(OS1VisualStyle.textDim)
-                        .frame(width: 26, height: 26)
-                        .background(OS1VisualStyle.border.opacity(0.35), in: Circle())
+                    ReviewRowGlyph {
+                        Image(systemName: team == nil ? "person.2" : "person.3")
+                            .font(.system(size: 14))
+                            .foregroundStyle(OS1VisualStyle.textDim)
+                    }
                 }
             },
             name: rowName,
@@ -745,9 +779,11 @@ private struct ReviewRow<Leading: View, Trailing: View>: View {
     var onTap: (() -> Void)?
     @ViewBuilder let trailing: Trailing
 
+    @Environment(\.reviewRowsPlain) private var plain
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 10) {
+            HStack(spacing: plain ? 12 : 10) {
                 if let onTap {
                     Button(action: onTap) { identity }
                         .buttonStyle(.plain)
@@ -772,11 +808,11 @@ private struct ReviewRow<Leading: View, Trailing: View>: View {
                     .foregroundStyle(OS1VisualStyle.redInk)
             }
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, plain ? 12 : 10)
         .padding(.vertical, 10)
-        .frame(minHeight: 56)
+        .frame(minHeight: plain ? 60 : 56)
         .background(
-            tone.fill,
+            plain ? .clear : tone.fill,
             in: RoundedRectangle(cornerRadius: 8, style: .continuous)
         )
     }
@@ -788,9 +824,9 @@ private struct ReviewRow<Leading: View, Trailing: View>: View {
     /// Who the row is about and where that review stands. One block, because
     /// it is one tap target when the row leads to the reading behind it.
     private var identity: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: plain ? 12 : 10) {
             leading
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: plain ? 2 : 1) {
                 if let name {
                     Text(name)
                         .font(.subheadline.weight(.medium))
@@ -798,7 +834,7 @@ private struct ReviewRow<Leading: View, Trailing: View>: View {
                         .lineLimit(1)
                 }
                 detail
-                    .font(.caption)
+                    .font(plain ? .footnote : .caption)
                     .foregroundStyle(tint)
                     .lineLimit(2)
             }
@@ -817,6 +853,8 @@ private struct ReviewActionLabel: View {
     /// something carries the caret.
     var chevron = true
 
+    @Environment(\.reviewRowsPlain) private var plain
+
     var body: some View {
         HStack(spacing: 3) {
             if spinning {
@@ -833,7 +871,10 @@ private struct ReviewActionLabel: View {
         .font(.footnote.weight(.semibold))
         .foregroundStyle(OS1VisualStyle.text)
         .padding(.horizontal, title == nil ? 7 : 10)
-        .padding(.vertical, 6)
-        .background(OS1VisualStyle.border.opacity(0.3), in: Capsule())
+        .padding(.vertical, plain ? 7 : 6)
+        .background(
+            plain ? AnyShapeStyle(OS1VisualStyle.background) : AnyShapeStyle(OS1VisualStyle.border.opacity(0.3)),
+            in: Capsule()
+        )
     }
 }

@@ -330,13 +330,20 @@ struct WorktreeInfoView: View {
         // already reads "<repo> · <model>", so a row that only repeated it
         // would push the worktree's own details off the screen. It appears
         // only where the repo can still be changed.
+        // The Changes card above names the branch once git status is in;
+        // until then it is here, so the page always says which branch.
         InfoSection(title: "Worktree") {
-            repositoryRow
-            if let branch = gitStatus?.branch ?? currentSession.branch, !branch.isEmpty {
-                InfoRow(label: "Branch", value: branch, icon: "arrow.triangle.branch")
+            if repoSwitchable && !repos.isEmpty {
+                repositoryRow
+                RowDivider()
+            }
+            if gitStatus == nil, let branch = currentSession.branch, !branch.isEmpty {
+                InfoRow(label: "Branch", value: branch, icon: "arrow.triangle.branch", monospaced: true)
+                RowDivider()
             }
             if let path = currentSession.worktreeDir, !path.isEmpty {
                 InfoRow(label: "Path", value: path, icon: "folder", monospaced: true)
+                RowDivider()
             }
             InfoRow(
                 label: "Mode",
@@ -344,9 +351,11 @@ struct WorktreeInfoView: View {
                 icon: "terminal"
             )
             if let startedBy = oldestSession?.startedBy, !startedBy.isEmpty {
+                RowDivider()
                 InfoRow(label: "Started by", value: startedBy, icon: "person")
             }
             ForEach(currentSession.attachedRepos ?? []) { repo in
+                RowDivider()
                 InfoRow(
                     label: "Attached",
                     value: "\(RepoTile.label(for: repo.repo)) · \(repo.branch)",
@@ -456,50 +465,42 @@ struct WorktreeInfoView: View {
                         value: sandboxStateLabel,
                         icon: sandboxStateIcon
                     )
-                    Divider()
+                    RowDivider()
                     InfoRow(label: "Provider", value: sandboxStatus?.provider ?? sandbox.provider, icon: "shippingbox")
                     if let workspace = sandboxStatus?.workspace ?? sandbox.workspace,
                        !workspace.isEmpty {
-                        Divider()
+                        RowDivider()
                         InfoRow(label: "Workspace", value: workspace.capitalized, icon: "externaldrive")
                     }
                     if let cwd = sandboxStatus?.cwd, !cwd.isEmpty {
-                        Divider()
+                        RowDivider()
                         InfoRow(label: "Path", value: cwd, icon: "folder", monospaced: true)
                     }
                     if sandboxState == "awake", sandboxStatus?.canPause == true {
-                        Divider()
+                        RowDivider()
                         sandboxActionButton(.pause, title: "Pause compute", icon: "pause.circle")
                     }
                     if sandboxState == "sleeping" || sandboxState == "needs_attention", sandboxStatus?.canResume == true {
-                        Divider()
+                        RowDivider()
                         sandboxActionButton(.resume, title: "Wake sandbox", icon: "play.circle")
                     }
                     if canRecreateSandbox {
-                        Divider()
+                        RowDivider()
                         Button {
                             confirmingSandboxRecreate = true
                         } label: {
-                            HStack(spacing: 10) {
-                                if sandboxAction == .recreate {
-                                    ProgressView().controlSize(.small)
-                                } else {
-                                    Image(systemName: "arrow.clockwise")
-                                }
-                                Text(sandboxAction == .recreate ? "Recreating sandbox…" : "Recreate from clean image")
-                                Spacer()
-                            }
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(OS1VisualStyle.redInk)
-                            .padding(.horizontal, 12)
-                            .frame(minHeight: 48)
-                            .contentShape(Rectangle())
+                            ActionRow(
+                                title: sandboxAction == .recreate ? "Recreating sandbox…" : "Recreate from clean image",
+                                icon: "arrow.clockwise",
+                                tint: OS1VisualStyle.redInk,
+                                working: sandboxAction == .recreate
+                            )
                         }
                         .buttonStyle(.plain)
                         .disabled(sandboxAction != nil || sandboxStatus?.busy == true)
                     }
                     if sandboxError != nil {
-                        Divider()
+                        RowDivider()
                         Button("Retry") { Task { await reloadSandbox() } }
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(OS1VisualStyle.link)
@@ -510,7 +511,7 @@ struct WorktreeInfoView: View {
                     if let error = sandboxStatus?.lastLifecycleError
                         ?? currentSession.sandbox?.lastLifecycleError,
                        !error.isEmpty {
-                        Divider()
+                        RowDivider()
                         Text(error)
                             .font(.footnote)
                             .foregroundStyle(OS1VisualStyle.redInk)
@@ -526,16 +527,16 @@ struct WorktreeInfoView: View {
         if let runner = currentSession.runner {
             InfoSection(title: "Runner") {
                 InfoRow(label: "Machine", value: runner.name, icon: "desktopcomputer")
-                Divider()
+                RowDivider()
                 InfoRow(
                     label: "Status",
                     value: RunnerStatus(lifecycle: runner.lifecycle).label,
                     icon: RunnerStatus(lifecycle: runner.lifecycle).icon
                 )
-                Divider()
+                RowDivider()
                 InfoRow(label: "Workspace", value: runner.workspacePath, icon: "folder", monospaced: true)
                 if let error = runner.lastLifecycleError, !error.isEmpty {
-                    Divider()
+                    RowDivider()
                     Text(error)
                         .font(.footnote)
                         .foregroundStyle(OS1VisualStyle.redInk)
@@ -915,17 +916,15 @@ struct WorktreeInfoView: View {
         }
     }
 
-    /// Git state and the diff in one card. They answer the same question —
-    /// what this workspace did to the tree — and on most workspaces each is a
-    /// line or two, so two titled cards for them cost a third of the first
-    /// screen and pushed the PR and the overview below the fold.
+    /// Git state and the diff in one card. They answer the same question,
+    /// what this workspace did to the tree, and on most workspaces each is a
+    /// line or two.
     @ViewBuilder
     private var workSection: some View {
         let files = diff?.files ?? []
         InfoSection(
-            title: files.isEmpty
-                ? "Git status"
-                : "\(files.count) file\(files.count == 1 ? "" : "s") changed",
+            title: "Changes",
+            count: files.isEmpty ? nil : files.count,
             trailing: files.isEmpty ? nil : diff.map { AnyView(diffTotals($0)) }
         ) {
             gitStatusRow
@@ -933,86 +932,77 @@ struct WorktreeInfoView: View {
         }
     }
 
+    /// Where the branch stands, as one row: the branch, then what is not
+    /// pushed or not pulled yet, or that there is nothing.
     @ViewBuilder
     private var gitStatusRow: some View {
         if loading && gitStatus == nil {
-            HStack(spacing: 9) {
+            HStack(spacing: 12) {
                 ProgressView().controlSize(.small)
+                    .frame(width: 30, height: 30)
                 Text("Checking worktree…")
                     .font(.subheadline)
                     .foregroundStyle(OS1VisualStyle.textDim)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
+            .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+            .padding(.horizontal, 12)
         } else if let gitStatus {
-            FlowLayout(spacing: 7) {
-                    if gitStatus.uncommittedFiles > 0 {
-                        StatusPill(
-                            text: "\(gitStatus.uncommittedFiles) uncommitted",
-                            icon: "pencil",
-                            color: OS1VisualStyle.yellow
-                        )
+            let pending = gitPendingParts(gitStatus)
+            HStack(spacing: 12) {
+                RowIcon(symbol: "arrow.triangle.branch")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text((gitStatus.branch ?? currentSession.branch).flatMap { $0.isEmpty ? nil : $0 } ?? "No branch")
+                        .font(.subheadline.weight(.medium).monospaced())
+                        .foregroundStyle(OS1VisualStyle.text)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(pending.isEmpty ? OS1VisualStyle.green : OS1VisualStyle.yellow)
+                            .frame(width: 7, height: 7)
+                        Text(pending.isEmpty ? "Up to date" : pending.joined(separator: " · "))
+                            .lineLimit(2)
                     }
-                    if gitStatus.ahead > 0 {
-                        StatusPill(
-                            text: "\(gitStatus.ahead) ahead",
-                            icon: "arrow.up",
-                            color: OS1VisualStyle.blue
-                        )
-                    }
-                    if gitStatus.behind > 0 {
-                        StatusPill(
-                            text: "\(gitStatus.behind) behind upstream",
-                            icon: "arrow.down",
-                            color: OS1VisualStyle.yellow
-                        )
-                    } else if gitStatus.behindBase > 0,
-                              currentSession.prState != "MERGED" {
-                        StatusPill(
-                            text: "\(gitStatus.behindBase) behind \(gitStatus.baseBranch)",
-                            icon: "arrow.down",
-                            color: OS1VisualStyle.yellow
-                        )
-                    }
-                    if gitStatus.uncommittedFiles == 0,
-                       gitStatus.ahead == 0,
-                       gitStatus.behind == 0,
-                       (gitStatus.behindBase == 0 || currentSession.prState == "MERGED") {
-                        StatusPill(
-                            text: "Up to date",
-                            icon: "checkmark",
-                            color: OS1VisualStyle.green
-                        )
-                    }
+                    .font(.footnote)
+                    .foregroundStyle(OS1VisualStyle.textDim)
+                }
+                Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
         }
+    }
+
+    private func gitPendingParts(_ status: OS1API.GitStatus) -> [String] {
+        var parts: [String] = []
+        if status.uncommittedFiles > 0 { parts.append("\(status.uncommittedFiles) uncommitted") }
+        if status.ahead > 0 { parts.append("\(status.ahead) to push") }
+        if status.behind > 0 {
+            parts.append("\(status.behind) behind upstream")
+        } else if status.behindBase > 0, currentSession.prState != "MERGED" {
+            parts.append("\(status.behindBase) behind \(status.baseBranch)")
+        }
+        return parts
     }
 
     @ViewBuilder
     private func changedFileRows(_ files: [OS1API.DiffFile]) -> some View {
         if !files.isEmpty {
-            let shown = Array(files.prefix(8))
-            Divider()
-                ForEach(shown) { file in
-                    Button {
-                        panel = .changes(
-                            sessionId: currentSession.id,
-                            path: file.path
-                        )
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: DiffFileStyle.icon(file.status))
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(DiffFileStyle.color(file.status))
-                                .frame(width: 20)
-                            Text(file.path)
-                                .font(.footnote.monospaced())
-                                .foregroundStyle(OS1VisualStyle.text)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                            Spacer(minLength: 8)
+            let shown = Array(files.prefix(6))
+            if gitStatus != nil || loading { RowDivider() }
+            ForEach(shown) { file in
+                Button {
+                    panel = .changes(
+                        sessionId: currentSession.id,
+                        path: file.path
+                    )
+                } label: {
+                    HStack(spacing: 12) {
+                        RowIcon(symbol: DiffFileStyle.icon(file.status))
+                        FileName(path: file.path)
+                        Spacer(minLength: 8)
+                        HStack(spacing: 5) {
                             if file.additions > 0 {
                                 Text(verbatim: "+\(file.additions)")
                                     .foregroundStyle(OS1VisualStyle.greenInk)
@@ -1021,39 +1011,37 @@ struct WorktreeInfoView: View {
                                 Text(verbatim: "−\(file.deletions)")
                                     .foregroundStyle(OS1VisualStyle.redInk)
                             }
-                            Image(systemName: "chevron.right")
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(OS1VisualStyle.textDim)
                         }
-                        .font(.caption.monospacedDigit())
-                        .padding(.horizontal, 12)
-                        .frame(minHeight: 44)
-                        .contentShape(Rectangle())
+                        .font(.footnote.weight(.medium).monospacedDigit())
+                        RowChevron()
                     }
-                    .buttonStyle(.plain)
-                    if file.id != shown.last?.id { Divider() }
-                }
-                Divider()
-                Button {
-                    panel = .changes(sessionId: currentSession.id)
-                } label: {
-                    HStack(spacing: 6) {
-                        Text(
-                            files.count > shown.count
-                                ? "Show all \(files.count) files"
-                                : "Open changes"
-                        )
-                        Image(systemName: "chevron.right")
-                            .font(.caption2.weight(.semibold))
-                    }
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(OS1VisualStyle.accentInk)
-                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 12)
-                    .frame(minHeight: 44)
+                    .frame(minHeight: 56)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                RowDivider()
+            }
+            Button {
+                panel = .changes(sessionId: currentSession.id)
+            } label: {
+                HStack {
+                    Text(
+                        files.count > shown.count
+                            ? "Show all \(files.count) files"
+                            : "Open changes"
+                    )
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(OS1VisualStyle.accentInk)
+                    Spacer()
+                    RowChevron()
+                }
+                .padding(.leading, 54)
+                .padding(.trailing, 12)
+                .frame(minHeight: 48)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -1063,67 +1051,58 @@ struct WorktreeInfoView: View {
     @ViewBuilder
     private var assetsSection: some View {
         if !fileAssets.isEmpty {
-            InfoSection(
-                title: "Files",
-                trailing: AnyView(
-                    Text(verbatim: "\(fileAssets.count)")
-                        .font(.caption.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(OS1VisualStyle.textDim)
-                )
-            ) {
-                let shown = Array(fileAssets.prefix(8))
+            InfoSection(title: "Files", count: fileAssets.count) {
+                let shown = Array(fileAssets.prefix(6))
                 ForEach(shown) { asset in
                     Button {
                         panel = .asset(sessionId: currentSession.id, path: asset.path)
                     } label: {
-                        HStack(alignment: asset.description == nil ? .center : .top, spacing: 10) {
-                            Image(systemName: AssetKind.of(asset).symbol)
-                                .symbolRenderingMode(.hierarchical)
-                                .font(.system(size: 13))
-                                .foregroundStyle(OS1VisualStyle.textDim)
-                                .frame(width: 20)
-                                .padding(.top, asset.description == nil ? 0 : 2)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(asset.path)
-                                    .font(.footnote.monospaced())
+                        HStack(spacing: 12) {
+                            RowIcon(symbol: AssetKind.of(asset).symbol)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(asset.name)
+                                    .font(.subheadline.weight(.medium))
                                     .foregroundStyle(OS1VisualStyle.text)
                                     .lineLimit(1)
                                     .truncationMode(.middle)
-                                if let description = asset.description, !description.isEmpty {
-                                    Text(description)
-                                        .font(.caption)
-                                        .foregroundStyle(OS1VisualStyle.textDim)
-                                        .lineLimit(2)
-                                        .multilineTextAlignment(.leading)
-                                }
+                                Text(assetDetail(asset))
+                                    .font(.footnote)
+                                    .foregroundStyle(OS1VisualStyle.textDim)
+                                    .lineLimit(2)
+                                    .multilineTextAlignment(.leading)
                             }
                             Spacer(minLength: 8)
-                            Text(ByteCountFormatter.string(
-                                fromByteCount: Int64(asset.size),
-                                countStyle: .file
-                            ))
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(OS1VisualStyle.textDim)
-                            Image(systemName: "chevron.right")
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(OS1VisualStyle.textFaint)
+                            RowChevron()
                         }
                         .padding(.horizontal, 12)
-                        .frame(minHeight: 44)
+                        .padding(.vertical, 8)
+                        .frame(minHeight: 56)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    if asset.id != shown.last?.id { Divider() }
+                    if asset.id != shown.last?.id { RowDivider() }
                 }
                 if fileAssets.count > shown.count {
-                    Text("\(fileAssets.count - shown.count) more in the Assets tab.")
-                        .font(.caption)
+                    RowDivider()
+                    Text("\(fileAssets.count - shown.count) more in the Assets tab")
+                        .font(.footnote)
                         .foregroundStyle(OS1VisualStyle.textDim)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(12)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .padding(.leading, 54)
                 }
             }
         }
+    }
+
+    /// The description when the agent wrote one, else where the file is and
+    /// its size.
+    private func assetDetail(_ asset: OS1API.SessionAsset) -> String {
+        let size = ByteCountFormatter.string(fromByteCount: Int64(asset.size), countStyle: .file)
+        if let description = asset.description, !description.isEmpty {
+            return "\(size) · \(description)"
+        }
+        let folder = (asset.path as NSString).deletingLastPathComponent
+        return folder.isEmpty ? size : "\(size) · \(folder)"
     }
 
     private var visualAssets: [OS1API.SessionAsset] {
@@ -1151,7 +1130,8 @@ struct WorktreeInfoView: View {
                     guard let url = SessionLinks.url(for: id) else { return }
                     dismiss()
                     openURL(url)
-                }
+                },
+                plain: true
             )
         }
     }
@@ -1179,7 +1159,7 @@ struct WorktreeInfoView: View {
                         }
                     }
                     .buttonStyle(.plain)
-                    if rows.contains(where: { !$0.isPrimary }) { Divider() }
+                    if rows.contains(where: { !$0.isPrimary }) { RowDivider() }
                 }
                 SessionPrSeriesRows(
                     session: currentSession,
@@ -1326,7 +1306,7 @@ struct WorktreeInfoView: View {
                     SummaryBlock(label: "Latest update", content: lastMessage.content)
                 }
                 if let prompt = overview.prompt {
-                    if overview.lastMessage != nil { Divider() }
+                    if overview.lastMessage != nil { RowDivider(inset: 14) }
                     SummaryBlock(label: "Started with", content: prompt.content, lines: 4)
                 }
             }
@@ -1469,7 +1449,7 @@ struct WorktreeInfoView: View {
             .buttonStyle(.plain)
 
             if engineChoices.count > 1 {
-                Divider()
+                RowDivider()
                 Menu {
                     ForEach(engineChoices) { engine in
                         let routed = ModelCatalog.routedID(currentModel, engine: engine.id)
@@ -1500,7 +1480,7 @@ struct WorktreeInfoView: View {
 
             if let efforts = catalog?.option(for: currentModel)?.efforts,
                !efforts.isEmpty {
-                Divider()
+                RowDivider()
                 Menu {
                     ForEach(efforts, id: \.self) { effort in
                         Button {
@@ -1526,7 +1506,7 @@ struct WorktreeInfoView: View {
             let speeds = speedChoices
             if !speeds.isEmpty {
                 let effective = speeds.effective(viewModel.speed)
-                Divider()
+                RowDivider()
                 Menu {
                     ForEach(speeds.options) { option in
                         Button {
@@ -1588,7 +1568,7 @@ struct WorktreeInfoView: View {
         if remoteSandbox == nil, SandboxMove.canMove(currentSession) {
             InfoSection(title: "Runtime") {
                 InfoRow(label: "Runs on", value: "This machine", icon: "desktopcomputer")
-                Divider()
+                RowDivider()
                 if let providers = sandboxMove.providers {
                     if providers.isEmpty {
                         Text(SandboxMoveCopy.noneReady)
@@ -1601,11 +1581,11 @@ struct WorktreeInfoView: View {
                             .foregroundStyle(OS1VisualStyle.textDim)
                             .padding(12)
                         ForEach(providers, id: \.self) { provider in
-                            Divider()
+                            RowDivider()
                             sandboxMoveButton(provider)
                         }
                         if viewModel.isRunning {
-                            Divider()
+                            RowDivider()
                             Text(SandboxMoveCopy.waitForAgent)
                                 .font(.footnote)
                                 .foregroundStyle(OS1VisualStyle.textDim)
@@ -1635,20 +1615,12 @@ struct WorktreeInfoView: View {
                 }
             }
         } label: {
-            HStack(spacing: 10) {
-                if working {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Image(systemName: "cube")
-                }
-                Text(SandboxMoveCopy.action(provider, working: working))
-                Spacer()
-            }
-            .font(.subheadline.weight(.medium))
-            .foregroundStyle(OS1VisualStyle.link)
-            .padding(.horizontal, 12)
-            .frame(minHeight: 48)
-            .contentShape(Rectangle())
+            ActionRow(
+                title: SandboxMoveCopy.action(provider, working: working),
+                icon: "cube",
+                tint: OS1VisualStyle.link,
+                working: working
+            )
         }
         .buttonStyle(.plain)
         .disabled(
@@ -1714,20 +1686,12 @@ struct WorktreeInfoView: View {
         Button {
             Task { await performSandboxAction(action) }
         } label: {
-            HStack(spacing: 10) {
-                if sandboxAction == action {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Image(systemName: icon)
-                }
-                Text(sandboxAction == action ? "\(title)…" : title)
-                Spacer()
-            }
-            .font(.subheadline.weight(.medium))
-            .foregroundStyle(OS1VisualStyle.link)
-            .padding(.horizontal, 12)
-            .frame(minHeight: 48)
-            .contentShape(Rectangle())
+            ActionRow(
+                title: sandboxAction == action ? "\(title)…" : title,
+                icon: icon,
+                tint: OS1VisualStyle.link,
+                working: sandboxAction == action
+            )
         }
         .buttonStyle(.plain)
         .disabled(sandboxAction != nil || sandboxStatus?.busy == true)
@@ -2012,7 +1976,7 @@ struct WorktreeInfoView: View {
                 Text(verbatim: "−\(diff.totalDeletions)").foregroundStyle(OS1VisualStyle.redInk)
             }
         }
-        .font(.caption.weight(.semibold).monospacedDigit())
+        .font(.subheadline.weight(.semibold).monospacedDigit())
     }
 
 }
@@ -2089,26 +2053,124 @@ struct WorktreeInfoSheet: View {
     }
 }
 
+/// A titled card on the overview, in the same heading and plate as the
+/// Deployments and Demos sections above it, so the page reads as one design
+/// from the merge card to the run settings.
 private struct InfoSection<Content: View>: View {
     let title: String
+    var count: Int? = nil
     var trailing: AnyView? = nil
     @ViewBuilder let content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(title)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(OS1VisualStyle.textDim)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                OverviewHeading(title: title, count: count)
                 Spacer()
                 trailing
             }
             VStack(spacing: 0) { content }
                 .background(
                     OS1VisualStyle.raised,
-                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    in: RoundedRectangle(cornerRadius: 18, style: .continuous)
                 )
         }
+    }
+}
+
+/// A row's glyph on an overview card: an SF Symbol on a small tile of the
+/// page's own colour, the way the deployment rows draw theirs.
+private struct RowIcon: View {
+    let symbol: String
+    var tint: Color = OS1VisualStyle.textDim
+
+    var body: some View {
+        Image(systemName: symbol)
+            .symbolRenderingMode(.hierarchical)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(tint)
+            .frame(width: 30, height: 30)
+            .background(
+                OS1VisualStyle.background,
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            )
+    }
+}
+
+/// The hairline between rows of a card, starting where the text does
+/// (past the icon tile) like a system list.
+private struct RowDivider: View {
+    var inset: CGFloat = 54
+
+    var body: some View {
+        Divider().padding(.leading, inset)
+    }
+}
+
+private struct RowChevron: View {
+    var body: some View {
+        Image(systemName: "chevron.right")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(OS1VisualStyle.textFaint)
+    }
+}
+
+/// A file as a name with its folder under it: the name is what you look
+/// for, and a full path in one line truncates exactly that part away.
+private struct FileName: View {
+    let path: String
+
+    var body: some View {
+        let folder = (path as NSString).deletingLastPathComponent
+        VStack(alignment: .leading, spacing: 2) {
+            Text((path as NSString).lastPathComponent)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(OS1VisualStyle.text)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            if !folder.isEmpty {
+                Text(folder)
+                    .font(.footnote)
+                    .foregroundStyle(OS1VisualStyle.textDim)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+            }
+        }
+    }
+}
+
+/// A row that does something to the workspace (wake, pause, move): its
+/// glyph on a tile and the action in its colour, a spinner while it runs.
+private struct ActionRow: View {
+    let title: String
+    let icon: String
+    let tint: Color
+    var working = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Group {
+                if working {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: icon)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(tint)
+                }
+            }
+            .frame(width: 30, height: 30)
+            .background(
+                OS1VisualStyle.background,
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            )
+            Text(title)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(tint)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .frame(minHeight: 52)
+        .contentShape(Rectangle())
     }
 }
 
@@ -2415,19 +2477,22 @@ private struct InfoRow: View {
     var monospaced = false
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Label(label, systemImage: icon)
+        HStack(spacing: 12) {
+            RowIcon(symbol: icon)
+            Text(label)
                 .font(.subheadline)
-                .foregroundStyle(OS1VisualStyle.textDim)
+                .foregroundStyle(OS1VisualStyle.text)
+                .layoutPriority(1)
             Spacer(minLength: 12)
             Text(value)
-                .font(monospaced ? .caption.monospaced() : .subheadline)
-                .foregroundStyle(OS1VisualStyle.text)
+                .font(monospaced ? .footnote.monospaced() : .subheadline)
+                .foregroundStyle(OS1VisualStyle.textDim)
                 .multilineTextAlignment(.trailing)
                 .textSelection(.enabled)
         }
         .padding(.horizontal, 12)
-        .frame(minHeight: 46)
+        .padding(.vertical, 8)
+        .frame(minHeight: 52)
     }
 }
 
@@ -2437,11 +2502,13 @@ private struct SettingsRow: View {
     let icon: String
 
     var body: some View {
-        HStack(spacing: 10) {
-            Label(label, systemImage: icon)
+        HStack(spacing: 12) {
+            RowIcon(symbol: icon)
+            Text(label)
                 .font(.subheadline)
                 .foregroundStyle(OS1VisualStyle.text)
-            Spacer()
+                .layoutPriority(1)
+            Spacer(minLength: 12)
             Text(value)
                 .font(.subheadline)
                 .foregroundStyle(OS1VisualStyle.textDim)
@@ -2451,7 +2518,7 @@ private struct SettingsRow: View {
                 .foregroundStyle(OS1VisualStyle.textFaint)
         }
         .padding(.horizontal, 12)
-        .frame(minHeight: 48)
+        .frame(minHeight: 52)
         .contentShape(Rectangle())
     }
 }
@@ -2477,17 +2544,18 @@ private struct SummaryBlock: View {
     var lines = 5
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(label)
-                .font(.caption.weight(.semibold))
+                .font(.footnote.weight(.semibold))
                 .foregroundStyle(OS1VisualStyle.textDim)
             Text(Self.inline(content))
                 .font(.subheadline)
                 .foregroundStyle(OS1VisualStyle.text)
+                .lineSpacing(2)
                 .lineLimit(lines)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
+        .padding(14)
     }
 
     /// Agent messages are markdown, and a preview that prints the syntax —
