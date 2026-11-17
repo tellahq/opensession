@@ -32,3 +32,41 @@ export function panelBrowserFrame({
     return null;
   return { key, spec: { ...PREVIEW_FRAME, url: stagingUrl } };
 }
+
+/**
+ * The page the workspace summary card previews, or null. It is the kept page
+ * of the Browser tab, wherever that tab lives, and only while the tab is not
+ * on screen.
+ *
+ * Without the auto-open preference the card previews only a side panel
+ * Browser tab that is already in the strip. With it, a ready preview deploy
+ * is previewed even with no tab: one the person closed, or one the main strip
+ * keeps when Browser opens there.
+ */
+export function summaryBrowserFrame({
+  dock,
+  showing,
+  hasPanelTab,
+  autoOpen,
+  scope,
+  ...page
+}: Parameters<typeof panelBrowserFrame>[0] & {
+  /** Where Browser opens: the side panel or the main tab strip. */
+  dock: "panel" | "main";
+  /** Its tab is the one on screen. */
+  showing: boolean;
+  hasPanelTab: boolean;
+  autoOpen: boolean;
+  /** The main strip's workspace scope (viewTabScope), if known. */
+  scope: string | null;
+}): PanelBrowserFrame | null {
+  if (showing) return null;
+  if (dock === "panel")
+    return hasPanelTab || autoOpen ? panelBrowserFrame(page) : null;
+  const { staging, stagingUrl } = page;
+  if (!autoOpen || !scope || !stagingUrl || !staging?.embeddable) return null;
+  return {
+    key: keptFrameKey("staging", scope),
+    spec: { ...PREVIEW_FRAME, url: stagingUrl },
+  };
+}
