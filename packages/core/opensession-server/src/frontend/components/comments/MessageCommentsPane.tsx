@@ -5,6 +5,7 @@ import { sendThreadToSession } from "../../lib/comment-threads";
 import { errorMessage } from "../../lib/error-message";
 import {
   closeMessageComments,
+  messageExcerpt,
   openMessageComments,
   publishMessageReactions,
   publishMessageThreads,
@@ -179,13 +180,19 @@ function PaneBody({
 }) {
   return (
     <>
-      <ListRow variant="card" className="flex-col gap-1" onClick={onReveal}>
-        <span className="flex items-center gap-1.5 text-meta font-medium text-dim">
-          <UserAvatar name={target.author} size={16} />
+      {/* The message, quoted rather than boxed: a rule down its side, its
+          author, and its opening lines as plain text. Pressing it brings the
+          message into view. */}
+      <ListRow
+        onClick={onReveal}
+        className="group flex-col gap-1 rounded-none border-0 border-l-2 border-solid border-line py-0.5 pr-0 pl-3 hover:border-line-strong hover:bg-transparent phone:min-h-0"
+      >
+        <span className="flex items-center gap-2 text-supporting font-medium text-fg">
+          <UserAvatar name={target.author} size={18} />
           {target.author}
         </span>
-        <span className="line-clamp-4 text-label text-fg">
-          {target.excerpt || "Message"}
+        <span className="line-clamp-3 text-label leading-snug text-dim transition-colors group-hover:text-fg">
+          {messageExcerpt(target.excerpt) || "Message"}
         </span>
       </ListRow>
       {thread ? (

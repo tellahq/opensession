@@ -19,6 +19,15 @@ export const PREVIEW_FRAME = {
     "camera; microphone; display-capture; fullscreen; autoplay; clipboard-write",
 } as const;
 
+/** How a link opened in a Browser tab is framed. */
+export const LINK_FRAME = {
+  name: "Browser",
+  title: "Browser",
+  allow: "clipboard-read; clipboard-write; fullscreen; autoplay",
+  sandbox:
+    "allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms allow-modals allow-downloads",
+} as const;
+
 /**
  * Whether a PR preview environment's link opens a working deploy. A first
  * build has nothing behind the branch alias yet (it 404s); a rebuild keeps

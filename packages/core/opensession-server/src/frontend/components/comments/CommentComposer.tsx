@@ -5,6 +5,8 @@ import { noAutofill } from "../../lib/composer-autofill";
 import { isTouchPrimary } from "../../lib/platform";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
+import { Tooltip } from "../../ui/tooltip";
+import { IconArrowUp } from "../icons";
 import { useFileMentions } from "../useFileMentions";
 
 /** The agent as an "@" row: tagging it asks for an answer in the thread. */
@@ -93,72 +95,84 @@ export function CommentComposer({
   const expanded = !compact || focused || value.length > 0;
 
   return (
-    <div className={cn("flex flex-col gap-2", className)}>
-      <div ref={setInputWrap} className="relative">
-        <textarea
-          ref={textareaRef}
-          value={value}
-          rows={1}
-          disabled={busy}
-          placeholder={placeholder}
-          aria-label={placeholder}
-          {...noAutofill}
-          {...mentionInputProps}
-          onChange={(e) => setValue(e.target.value)}
-          onFocus={() => setFocused(true)}
-          onBlur={() => {
-            setFocused(false);
-            closeMentions();
-          }}
-          onKeyUp={syncMentions}
-          onClick={syncMentions}
-          onKeyDown={(e) => {
-            if (handleMentionKeyDown(e)) return;
-            if (e.key === "Escape" && onCancel) {
-              e.preventDefault();
-              e.stopPropagation();
-              onCancel();
-              return;
-            }
-            if (
-              e.key === "Enter" &&
-              !e.shiftKey &&
-              !e.nativeEvent.isComposing &&
-              (e.metaKey || e.ctrlKey || !isTouchPrimary)
-            ) {
-              e.preventDefault();
-              void submit();
-            }
-          }}
-          className="block max-h-48 min-h-9 w-full resize-none overflow-hidden rounded-control border border-line bg-surface px-2.5 py-2 text-body leading-snug text-fg outline-none placeholder:text-faint focus-visible:border-accent phone:min-h-11 phone:text-input-phone"
-        />
-        {mentionPopup}
-      </div>
+    // One card, like the session composer: the draft on top and, once it is
+    // in use, Cancel and a send disc inside the same edge. Focus deepens the
+    // hairline rather than ringing it in the accent.
+    <div
+      ref={setInputWrap}
+      className={cn(
+        "relative flex flex-col rounded-xl border border-line bg-surface smooth-shadow-xs transition-[border-color] focus-within:border-line-strong",
+        expanded ? "px-3 pt-2.5 pb-2" : "px-3 py-1.5",
+        className,
+      )}
+    >
+      <textarea
+        ref={textareaRef}
+        value={value}
+        rows={1}
+        disabled={busy}
+        placeholder={placeholder}
+        aria-label={placeholder}
+        {...noAutofill}
+        {...mentionInputProps}
+        onChange={(e) => setValue(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => {
+          setFocused(false);
+          closeMentions();
+        }}
+        onKeyUp={syncMentions}
+        onClick={syncMentions}
+        onKeyDown={(e) => {
+          if (handleMentionKeyDown(e)) return;
+          if (e.key === "Escape" && onCancel) {
+            e.preventDefault();
+            e.stopPropagation();
+            onCancel();
+            return;
+          }
+          if (
+            e.key === "Enter" &&
+            !e.shiftKey &&
+            !e.nativeEvent.isComposing &&
+            (e.metaKey || e.ctrlKey || !isTouchPrimary)
+          ) {
+            e.preventDefault();
+            void submit();
+          }
+        }}
+        className="block max-h-48 min-h-6 w-full resize-none overflow-hidden border-none bg-transparent p-0 text-body leading-normal text-fg outline-none placeholder:text-faint phone:text-input-phone"
+      />
+      {mentionPopup}
       {expanded && (
-        <div className="flex items-center justify-end gap-2">
+        <div className="mt-2 flex items-center justify-end gap-1.5">
           {onCancel && (
             <Button
               size="sm"
               variant="ghost"
               onClick={onCancel}
               disabled={busy}
-              className="phone:min-h-11"
+              className="phone:min-h-10"
             >
               Cancel
             </Button>
           )}
-          <Button
-            size="sm"
-            variant="primary"
-            // Keep focus in the box: a press that blurs it would collapse a
-            // compact reply box before the click lands.
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => void submit()}
-            disabled={busy || !value.trim()}
-            className="phone:min-h-11"
-          >
-            {submitLabel}
-          </Button>
+          <Tooltip label={submitLabel}>
+            <Button
+              size="sm"
+              variant="primary"
+              aria-label={submitLabel}
+              icon={<IconArrowUp size={18} />}
+              // Keep focus in the box: a press that blurs it would collapse a
+              // compact reply box before the click lands.
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => void submit()}
+              disabled={busy || !value.trim()}
+              // The session composer's send disc, at comment size. Until
+              // there is text it is a quiet grey disc, not a washed accent.
+              className="size-7 rounded-full disabled:bg-pressed disabled:text-faint disabled:opacity-100 disabled:shadow-none phone:size-10"
+            />
+          </Tooltip>
         </div>
       )}
     </div>

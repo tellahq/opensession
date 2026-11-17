@@ -40,6 +40,8 @@ import { getCurrentUser } from "./UserPicker";
 import { PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { PrStatusBar } from "./PrStatusBar";
 import { StagingLink } from "./StagingLink";
+import { WorkspaceSummaryBrowser } from "./WorkspaceSummaryBrowser";
+import type { PanelBrowserFrame } from "../lib/panel-browser-frame";
 import { UserAvatar } from "./UserAvatar";
 import {
   useWorkspaceCollaborators,
@@ -188,6 +190,9 @@ interface Props {
   ) => void;
   /** Workspace-wide GitHub requests, including requests held by a sibling session. */
   prReviewRequested?: string[];
+  /** The side panel's Browser page, previewed while the panel is not
+   *  showing it, and how to open it there. */
+  browser?: { frame: PanelBrowserFrame; onOpen: () => void } | null;
   /** Live run state, so the PR block refetches the moment a turn ends. */
   running?: boolean;
   /** The worktree is not ready yet, so worktree and PR status stay quiet. */
@@ -455,6 +460,9 @@ export function WorkspaceSummary({
         <WorkspaceSummaryBody
           session={session}
           {...body}
+          // The page leaves with the card, not after its fade: it is laid
+          // over the card rather than inside it.
+          browser={open ? body.browser : null}
           reviewMode={reviewMode}
           close={dismissAfterRouting}
         />
@@ -477,6 +485,7 @@ export function WorkspaceSummaryBody({
   reviewRequestSessionId,
   onReviewChange,
   prReviewRequested,
+  browser,
   running,
   workspacePreparing,
   send,
@@ -1844,6 +1853,17 @@ export function WorkspaceSummaryBody({
                 </span>
               </button>
             )}
+          </div>
+        )}
+
+        {/* Last, like the panel tab it stands in for. Not on a phone, which
+				    has no side panel to keep the page in. */}
+        {browser && !embedded && (
+          <div className={groupClass}>
+            <WorkspaceSummaryBrowser
+              frame={browser.frame}
+              onOpen={() => go(browser.onOpen)}
+            />
           </div>
         )}
       </SummaryRest>

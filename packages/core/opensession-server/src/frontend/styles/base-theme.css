@@ -301,6 +301,9 @@
   /* Inline affordances: a link in an agent answer, a PR title that opens. The
 	   accent cannot do this job once it is ink, and red never should have. */
   --link: var(--blue);
+  /* Your own message bubble. A neutral panel until an accent is picked; the
+	   accent block below tints it so your turns stand out in a long chat. */
+  --bubble-user: var(--bg-panel);
   --tooltip-bg: #303030;
   --tooltip-fg: #eeeeee;
   --tooltip-ring: rgba(255, 255, 255, 0.1);
@@ -710,6 +713,10 @@ html[data-accent] {
 	   darker under light, lighter under dark, because that is where the ink
 	   ramp points. */
   --accent-hover: color-mix(in srgb, var(--accent) 82%, var(--text));
+  /* Your own bubble wears the accent so it is easy to spot among the agent's
+	   answers. Opaque, mixed into the panel grey it replaces, so body text keeps
+	   its contrast. Same mix as AccentTheme.userBubble on native. */
+  --bubble-user: color-mix(in srgb, var(--accent) 22%, var(--bg-panel));
 }
 
 html[data-theme="light"][data-accent] {
@@ -717,6 +724,7 @@ html[data-theme="light"][data-accent] {
   --accent-ink: var(--accent-ink-light, var(--accent));
   --on-accent: var(--on-accent-light, #ffffff);
   --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+  --bubble-user: color-mix(in srgb, var(--accent) 12%, var(--bg));
 }
 
 html[data-accent="sky"] {

@@ -59,6 +59,8 @@
 	   `raised` in dark; in light it sits closer to the page (see base.css). */
   --color-sidebar: var(--sidebar-bg);
   --color-panel: var(--bg-panel);
+  /* Your own message bubble: the accent, softened. See base-theme.css. */
+  --color-bubble-user: var(--bubble-user);
   /* The session's right-hand panel column. A hair off the page rather than a
 	   tier below it, the way `sidebar` is (see base.css). The plate its sections
 	   sit on has no utility of its own: PANEL_SHELL re-points --bg-panel at

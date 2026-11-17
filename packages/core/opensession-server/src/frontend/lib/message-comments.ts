@@ -139,3 +139,24 @@ export const MessageCommentsSession = SessionIdContext.Provider;
 export function useMessageCommentsSession(): string | null {
   return use(SessionIdContext);
 }
+
+/**
+ * A message as one line of plain text, for the quote a comment pane shows:
+ * fences, inline code ticks, emphasis, headings, list and quote markers, link
+ * targets and tree drawing come out, so a quoted answer reads as prose rather
+ * than as its Markdown source. Safe to run on text it already flattened.
+ */
+export function messageExcerpt(text: string, max = 600): string {
+  const plain = text
+    .replace(/```[\w-]*/g, " ")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/^\s*>\s?/gm, "")
+    .replace(/^\s*(?:[-*+]|\d+\.)\s+/gm, "")
+    .replace(/[├└│┌┐┘┬┴┼─]+/g, " ")
+    .replace(/\*\*|__|`/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return plain.length > max ? `${plain.slice(0, max - 1)}…` : plain;
+}

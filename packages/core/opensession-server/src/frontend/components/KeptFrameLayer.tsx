@@ -27,8 +27,10 @@ import { BROWSER_FRAME, BrowserLoading } from "./BrowserPane";
  * the pane's raised chrome and every popup still paint over it.
  *
  * The side panel's frames get a second layer, `panel`, mounted after the
- * panel's column. Below 920px the panel floats at z-30, so its layer rises
- * with it; on a phone there is no panel.
+ * panel's column. Below 920px the panel floats at z-30, so its frames rise
+ * with it; on a phone there is no panel. The layer itself takes no z-index,
+ * so each frame stacks on its own: that is what lets a thumbnail rise above
+ * the summary card it sits in.
  */
 export function KeptFrameLayer({ panel = false }: { panel?: boolean }) {
   const frames = useSyncExternalStore(
@@ -42,7 +44,7 @@ export function KeptFrameLayer({ panel = false }: { panel?: boolean }) {
       ref={hostRef}
       className={
         panel
-          ? "pointer-events-none absolute inset-0 overflow-hidden max-[920px]:z-30 phone:hidden"
+          ? "pointer-events-none absolute inset-0 overflow-hidden phone:hidden"
           : "pointer-events-none absolute inset-0 overflow-hidden"
       }
     >
@@ -50,7 +52,12 @@ export function KeptFrameLayer({ panel = false }: { panel?: boolean }) {
       {frames
         .filter((frame) => keptFrameInPanel(frame.key) === panel)
         .map((frame) => (
-          <KeptFrameBox key={frame.key} frame={frame} hostRef={hostRef} />
+          <KeptFrameBox
+            key={frame.key}
+            frame={frame}
+            hostRef={hostRef}
+            panel={panel}
+          />
         ))}
     </div>
   );
@@ -59,13 +66,20 @@ export function KeptFrameLayer({ panel = false }: { panel?: boolean }) {
 function KeptFrameBox({
   frame,
   hostRef,
+  panel,
 }: {
   frame: KeptFrame;
   hostRef: React.RefObject<HTMLDivElement | null>;
+  panel: boolean;
 }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const { slot, key } = frame;
+  // A pane's slot wins; the thumbnail only shows a page nobody else is.
+  const thumb = slot ? null : frame.thumb;
+  // Held back until the page has painted something: a loader scaled down to
+  // a thumbnail is a smudge, and the card's tile says "Loading" itself.
+  const thumbReady = !frame.loading;
   useFrameFocus(
     frameRef,
     () => keptFrameEntered(key),
@@ -90,6 +104,7 @@ function KeptFrameBox({
     const host = hostRef.current;
     if (!box || !host) return;
     if (!slot) {
+      if (thumb && thumbReady) return followThumb(box, host, thumb);
       box.style.display = "none";
       return;
     }
@@ -115,15 +130,23 @@ function KeptFrameBox({
       observer.disconnect();
       window.removeEventListener("resize", place);
     };
-  }, [slot, hostRef]);
+  }, [slot, thumb, thumbReady, hostRef]);
 
   return (
     <div
       ref={boxRef}
-      className="pointer-events-auto absolute hidden bg-white"
+      className={
+        thumb
+          ? // Above the card it sits in (its popup's z), and out of the
+            // pointer's way so a click lands on the tile under it.
+            "pointer-events-none absolute z-[2147483646] hidden bg-white"
+          : panel
+            ? "pointer-events-auto absolute hidden bg-white max-[920px]:z-30"
+            : "pointer-events-auto absolute hidden bg-white"
+      }
       data-kept-frame={frame.key}
     >
-      {frame.loading ? <BrowserLoading name={frame.name} /> : null}
+      {frame.loading && !thumb ? <BrowserLoading name={frame.name} /> : null}
       <iframe
         key={`${frame.address}#${frame.nonce}`}
         ref={frameRef}
@@ -136,4 +159,88 @@ function KeptFrameBox({
       />
     </div>
   );
+}
+
+/** The width a thumbnail lays its page out at when its tile names none. */
+const THUMB_PAGE_WIDTH = 1280;
+
+/**
+ * Lays the frame over a thumbnail tile: the page keeps a full-size layout
+ * (the tile's `data-kept-frame-width`, else THUMB_PAGE_WIDTH) and is scaled
+ * down to the tile, with the tile's rounded corners, and cut off where a
+ * scrolling ancestor (the summary card) hides the tile. It also fades with
+ * its ancestors, so it comes and goes with the card's own animation.
+ *
+ * The tile moves without resizing whenever the card's content above it
+ * changes or the card scrolls, which no observer reports, so this follows it
+ * every animation frame while it is shown and only writes when it moved.
+ */
+function followThumb(
+  box: HTMLDivElement,
+  host: HTMLElement,
+  tile: HTMLElement,
+): () => void {
+  const pageWidth = Number(tile.dataset.keptFrameWidth) || THUMB_PAGE_WIDTH;
+  const radius = parseFloat(getComputedStyle(tile).borderTopLeftRadius) || 0;
+  const clips: HTMLElement[] = [];
+  const ancestors: HTMLElement[] = [];
+  for (
+    let el = tile.parentElement;
+    el && el !== document.body;
+    el = el.parentElement
+  ) {
+    ancestors.push(el);
+    const style = getComputedStyle(el);
+    if (style.overflowX !== "visible" || style.overflowY !== "visible")
+      clips.push(el);
+  }
+  let last = "";
+  let raf = 0;
+  const place = () => {
+    raf = requestAnimationFrame(place);
+    const to = tile.getBoundingClientRect();
+    const from = host.getBoundingClientRect();
+    let { top, left, right, bottom } = to;
+    for (const clip of clips) {
+      const r = clip.getBoundingClientRect();
+      top = Math.max(top, r.top);
+      left = Math.max(left, r.left);
+      right = Math.min(right, r.right);
+      bottom = Math.min(bottom, r.bottom);
+    }
+    let opacity = 1;
+    for (const el of ancestors) opacity *= Number(getComputedStyle(el).opacity);
+    const at = [to.left, to.top, to.width, to.height, top, left, right]
+      .concat(bottom, from.left, from.top, opacity)
+      .join();
+    if (at === last) return;
+    last = at;
+    if (to.width === 0 || right <= left || bottom <= top || opacity === 0) {
+      box.style.display = "none";
+      return;
+    }
+    const scale = to.width / pageWidth;
+    const inset = [top - to.top, to.right - right, to.bottom - bottom]
+      .concat(left - to.left)
+      .map((px) => `${px / scale}px`)
+      .join(" ");
+    box.style.display = "block";
+    box.style.opacity = String(opacity);
+    box.style.left = `${to.left - from.left}px`;
+    box.style.top = `${to.top - from.top}px`;
+    box.style.width = `${pageWidth}px`;
+    box.style.height = `${to.height / scale}px`;
+    box.style.transformOrigin = "0 0";
+    box.style.transform = `scale(${scale})`;
+    box.style.clipPath = `inset(${inset} round ${radius / scale}px)`;
+  };
+  place();
+  return () => {
+    cancelAnimationFrame(raf);
+    box.style.display = "none";
+    box.style.opacity = "";
+    box.style.transform = "";
+    box.style.transformOrigin = "";
+    box.style.clipPath = "";
+  };
 }

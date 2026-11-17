@@ -1516,6 +1516,7 @@ export function SessionViewer({
         }}
       />
       <SessionViewerChrome
+        summaryBrowser={sidePanelTabs.summaryBrowser}
         identity={{
           session,
           hasWorkspace,
@@ -1549,8 +1550,7 @@ export function SessionViewer({
           activePanelOpen,
           summaryVisible,
           // A full-width browser (staging, Portal, Desktop) or an open asset
-          // leaves no reading column for the card to stand beside, so it
-          // opens only on request instead of covering the page.
+          // leaves the card no room beside it, so it opens only on request.
           summaryHasRoom:
             summaryHasRoom &&
             !(showStaging || showPortal || showDesktop || showAssets),

@@ -47,6 +47,7 @@ import { StagingLink } from "../StagingLink";
 import { UsageMeter } from "../UsageMeter";
 import { UserAvatar } from "../UserAvatar";
 import { WorkflowPanel } from "../WorkflowPanel";
+import type { PanelBrowserFrame } from "../../lib/panel-browser-frame";
 import { WorkspaceSummary, WorkspaceSummaryBody } from "../WorkspaceSummary";
 import { CollaboratorsSubmenu } from "../WorkspaceCollaborators";
 import { WorkspaceWaiting } from "./busy-indicators";
@@ -309,6 +310,8 @@ interface SessionViewerChromeProps {
   infoState: ChromeInfoState;
   infoActions: ChromeInfoActions;
   conversation: ChromeConversation;
+  /** The side panel Browser page the summary card previews, or null. */
+  summaryBrowser: PanelBrowserFrame | null;
 }
 
 export function SessionViewerChrome({
@@ -321,6 +324,7 @@ export function SessionViewerChrome({
   infoState,
   infoActions,
   conversation,
+  summaryBrowser,
 }: SessionViewerChromeProps) {
   const {
     session,
@@ -1198,6 +1202,15 @@ export function SessionViewerChrome({
                       reviewRequestSessionId={effectiveReview?.ownerId}
                       onReviewChange={onReviewChange}
                       prReviewRequested={effectiveReview?.prReviewRequested}
+                      browser={
+                        summaryBrowser && {
+                          frame: summaryBrowser,
+                          onOpen: () => {
+                            setDesktopPanelPage("browser");
+                            setActivePanelOpen(true);
+                          },
+                        }
+                      }
                       running={isRunningLive}
                       workspacePreparing={workspacePreparing}
                       send={connected ? send : undefined}
