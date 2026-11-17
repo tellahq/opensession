@@ -116,6 +116,22 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
         ))
     }
 
+    /// Your own message bubble: the fill softened into the surface it
+    /// replaces, so your turns are easy to spot in a long chat. Opaque, so the
+    /// body text keeps its contrast. 12% into white in light; 22% into the
+    /// dark bubble grey, because a thinner wash disappears on a dark page.
+    /// Same mix as the web's --bubble-user.
+    var userBubble: Color {
+        Color(platformColor: AccentTheme.dynamic(
+            light: AccentTheme.platformColor(
+                AccentTheme.blend(fills.light, toward: 0xFF_FF_FF, by: 0.88)
+            ),
+            dark: AccentTheme.platformColor(
+                AccentTheme.blend(fills.dark, toward: 0x31_31_31, by: 0.78)
+            )
+        ))
+    }
+
     /// The picker presentation: barely lifted at the top-left and shaded at
     /// the bottom-right. Both stops derive from `fills`, so replacing a palette
     /// hex still changes the whole swatch in one place.

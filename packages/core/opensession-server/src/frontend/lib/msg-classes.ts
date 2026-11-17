@@ -74,7 +74,10 @@ export const msgBody =
  *  capped short of the column so a long message still reads right-aligned. */
 const msgBubble =
   "msg-body block max-w-[min(600px,90%)] self-end text-body leading-6 break-words text-fg";
-export const msgBubbleUser = `${msgBubble} rounded-lg bg-panel px-3.5 py-2.5`;
+/** Your own words wear the accent tint, so they are easy to find in a long
+ *  chat. A teammate's turn or an agent message reuses the shape and puts
+ *  `bg-panel` back: only your bubble carries the colour. */
+export const msgBubbleUser = `${msgBubble} rounded-lg bg-bubble-user px-3.5 py-2.5`;
 export const msgBubbleHuman = `${msgBubble} rounded-row bg-[rgba(31,158,138,0.12)] px-3.5 py-2.25`;
 
 /**

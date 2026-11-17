@@ -960,7 +960,8 @@ export const MessageBubble = function MessageBubble({
           className={cn(
             msgBubbleUser,
             "flex w-fit min-w-0 flex-col rounded-xl p-0",
-            outgoing ? "bg-accent/10" : "self-start",
+            // The accent tint is reserved for your own words.
+            outgoing ? "bg-accent/10" : "self-start bg-panel",
           )}
         >
           <AgentMessageBody
@@ -1109,7 +1110,8 @@ export const MessageBubble = function MessageBubble({
           />
           {displayContent && (
             <ClampedBody
-              className={cn(msgBubbleUser, "markdown")}
+              // Only your own words wear the accent; a teammate's stay neutral.
+              className={cn(msgBubbleUser, "markdown", fromOther && "bg-panel")}
               content={displayContent}
               entry={bodyEntry}
               sessionId={sessionId}
