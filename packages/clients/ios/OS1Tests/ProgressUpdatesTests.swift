@@ -261,8 +261,8 @@ final class ProgressUpdatesTests: XCTestCase {
         XCTAssertEqual(progressWork(result).first??.rounds, 2)
     }
 
-    func testATaskThatMovesOnKeepsOneRowWithItsCheckBacks() {
-        let result = blocks([
+    private var shipped: [TranscriptEntry] {
+        [
             user("u", "Ship it"),
             toolUse("t1"), toolResult("t1"),
             say("a", "◷ **CI**: Running", at: 10),
@@ -272,16 +272,46 @@ final class ProgressUpdatesTests: XCTestCase {
             wake("w2"),
             toolUse("t3"), toolResult("t3"),
             say("c", "Live: the change is out.", at: 130),
-        ])
-        let rows = progressRows(result)
-        XCTAssertEqual(rows.count, 1)
-        XCTAssertEqual(rows.first?.latest.label, "Deployment: Running")
-        XCTAssertEqual(rows.first?.history.map(\.update.label), ["CI: Running"])
-        XCTAssertFalse(result.contains { if case .reviewLoop = $0 { true } else { false } })
-        XCTAssertNotNil(progressWork(result).first ?? nil)
+        ]
+    }
+
+    private func workFolds(_ blocks: [TranscriptBlock]) -> [ReviewLoop] {
+        blocks.compactMap { block in
+            if case .reviewLoop(let loop) = block, loop.kind == .work { loop } else { nil }
+        }
+    }
+
+    func testAnAnsweredTaskFoldsIntoOneWorkRow() {
+        let result = blocks(shipped)
+        XCTAssertTrue(progressRows(result).isEmpty, "the answer is the report")
+        let folds = workFolds(result)
+        XCTAssertEqual(folds.count, 1)
+        // From the first dated entry (the tool fixtures carry no time).
+        XCTAssertEqual(folds.first?.duration ?? 0, 120, accuracy: 1)
+        // No separate first work fold or check-back fold beside it.
+        XCTAssertFalse(result.contains { if case .work = $0 { true } else { false } })
+        XCTAssertFalse(result.contains { block in
+            if case .reviewLoop(let loop) = block { loop.kind == .checkBack } else { false }
+        })
+        // The statuses and all three commands are inside, one tap away.
+        let inner = folds.first?.blocks ?? []
+        XCTAssertTrue(inner.flatMap(\.entryIds).contains("a"))
+        XCTAssertTrue(inner.flatMap(\.entryIds).contains("b"))
+        let tools = inner.reduce(0) { count, block in
+            if case .work(let turn) = block { return count + turn.toolCount }
+            return count
+        }
+        XCTAssertEqual(tools, 3)
         guard case .message(let last) = result.last(where: { if case .footer = $0 { false } else { true } })
         else { return XCTFail("the final answer stays a message") }
         XCTAssertEqual(last.id, "c")
+    }
+
+    func testARunningTaskKeepsItsStatusRow() {
+        let result = blocks(Array(shipped.dropLast()), live: true)
+        XCTAssertEqual(progressRows(result).first?.latest.label, "Deployment: Running")
+        XCTAssertEqual(progressRows(result).first?.history.map(\.update.label), ["CI: Running"])
+        XCTAssertTrue(workFolds(result).isEmpty)
     }
 
     func testABlockerOrQuestionStaysAReadableMessage() {
@@ -291,9 +321,10 @@ final class ProgressUpdatesTests: XCTestCase {
             wake("w"),
             say("b", "CI failed on the lint step. Should I fix it or revert?"),
         ])
-        XCTAssertEqual(progressRows(result).count, 1)
+        XCTAssertTrue(progressRows(result).isEmpty)
+        XCTAssertEqual(workFolds(result).count, 1)
         let messages = result.compactMap { if case .message(let entry) = $0 { entry.id } else { nil } }
-        XCTAssertTrue(messages.contains("b"), "a blocker is never folded into the status row")
+        XCTAssertTrue(messages.contains("b"), "a blocker is never folded away")
     }
 
     func testAScheduledCheckBackLeadingOnlyToAStatusDropsItsNotice() {
