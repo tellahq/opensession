@@ -1985,7 +1985,7 @@ describe("TranscriptBlocks review loops", () => {
     expect(html).toContain(
       "flex size-[22px] flex-none self-center items-center justify-center",
     );
-    expect(html).toContain("-translate-y-px");
+    expect(html).toContain("rotate-90");
     expect(html).not.toMatch(WORKED_TITLE);
   });
 

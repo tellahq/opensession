@@ -38,14 +38,15 @@ test("the work row expands to files with hover diff previews", () => {
   expect(summarySource).not.toContain("files committed");
 });
 
-test("commits and changed files share one row with a files or commits switch", () => {
+test("the Changes row lists files, and commits only when there is no file diff", () => {
   expect(summarySource).toContain("const prCommits = pr?.commits ?? []");
   expect(summarySource).toContain(
     "const commitCount = prCommits.length || commits.length",
   );
   expect(summarySource).toContain("aria-expanded={workOpen}");
-  expect(summarySource).toContain('aria-label="Show files or commits"');
-  expect(summarySource).toContain('["commits", "Commits", commitCount]');
+  expect(summarySource).not.toContain('aria-label="Show files or commits"');
+  expect(summarySource).not.toContain('["commits", "Commits", commitCount]');
+  expect(summarySource).toContain("(showDiffChanges ? (");
   expect(summarySource).not.toContain("<Segmented");
   expect(summarySource).toContain(
     "<span className={WS_SUMMARY_LABEL}>Changes</span>",
@@ -62,9 +63,7 @@ test("a commit opens its details and code changes in a nested overlay", () => {
     "fetchCommit(sha, repo, { includeChanges: true })",
   );
   expect(summarySource).toContain("function commitDetailsPopup(");
-  expect(summarySource).toContain(
-    '((workOpen && workTab === "files") || Boolean(openCommit))',
-  );
+  expect(summarySource).toContain("(workOpen || Boolean(openCommit))");
   expect(summarySource).toContain("prCommits.length === 1");
   expect(summarySource).toContain("{rawPatch?.trim() && (");
   expect(summarySource).toContain("<PatchDiffs");

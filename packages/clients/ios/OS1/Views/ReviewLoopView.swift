@@ -13,7 +13,7 @@ import SwiftUI
 ///
 /// The same row folds a check-back phase (`ReviewLoop.Kind.checkBack`): turns
 /// the agent started itself, from a background wait or its own scheduled
-/// check-back. Closed it reads "Checked back, 3 times"; the last turn's answer
+/// check-back. Closed it reads "Checked back 3 times ›"; the last turn's answer
 /// stays outside as the report. Mirrors the web's `CheckBackBlock`.
 struct ReviewLoopView: View {
     let loop: ReviewLoop
@@ -26,8 +26,6 @@ struct ReviewLoopView: View {
     /// The loop is the work fold, so only the Tool calls preference is left
     /// to answer inside it.
     var activity = TurnActivity.standard
-
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -116,15 +114,25 @@ struct ReviewLoopView: View {
         }
     }
 
-    @ViewBuilder
+    /// One quiet gray line, like the turn fold above it: "Checked back
+    /// 3 times ›" or "Review passed ›". The PR number stays in
+    /// the accessibility label; the session already names its PR. The text is
+    /// free to wrap, so an accessibility type size never widens the row past
+    /// the transcript.
     private var header: some View {
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                wrappedHeader
-            } else {
-                singleLineHeader
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            Text(headerText)
+                .font(.subheadline)
+                .multilineTextAlignment(.leading)
+            chevron
+            if loop.isLive {
+                ProgressView()
+                    .controlSize(.mini)
+                    .padding(.leading, 2)
             }
+            Spacer(minLength: 0)
         }
+        .foregroundStyle(OS1VisualStyle.textDim)
         #if os(iOS)
         .frame(minHeight: 44)
         #else
@@ -133,94 +141,34 @@ struct ReviewLoopView: View {
         .contentShape(Rectangle())
     }
 
-    private var singleLineHeader: some View {
-        HStack(spacing: 6) {
-            chevron
-
-            title
-                .fixedSize()
-
-            // Opened, a settled loop trades its verdict for the round count:
-            // the verdict then has its own row at the end of the work.
-            detail
-                .lineLimit(1)
-
-            Spacer(minLength: 6)
-
-            prNumberLabel
-                .fixedSize()
-
-            if loop.isLive {
-                ProgressView()
-                    .controlSize(.mini)
-            }
-        }
-    }
-
-    /// At an accessibility type size the title and the PR number are each
-    /// close to a full line on their own, and an `HStack` of intrinsically
-    /// sized text does not give way: it reports a width wider than the
-    /// transcript, and a vertical `ScrollView` centres content it cannot fit,
-    /// so this one row would drag every paragraph around it off both edges.
-    /// The same answer as the turn fold above it: let the row wrap.
-    private var wrappedHeader: some View {
-        FlowLayout(spacing: 6) {
-            // One subview, so the chevron is never stranded on a line of its
-            // own above the words it points at.
-            HStack(spacing: 6) {
-                chevron
-                title
-            }
-            .fixedSize()
-
-            detail
-                .fixedSize(horizontal: false, vertical: true)
-
-            prNumberLabel
-                .fixedSize()
-
-            if loop.isLive {
-                ProgressView()
-                    .controlSize(.mini)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
     private var chevron: some View {
-        Image(systemName: "chevron.down")
+        Image(systemName: "chevron.right")
             .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(OS1VisualStyle.textFaint)
-            .rotationEffect(.degrees(state.expanded ? 0 : -90))
+            .rotationEffect(.degrees(state.expanded ? 90 : 0))
     }
 
-    private var title: some View {
-        Text(titleText)
-            .font(.subheadline.weight(.medium))
-            .foregroundStyle(OS1VisualStyle.textDim)
-    }
-
-    private var detail: some View {
-        Text(visibleDetail)
-            .font(.footnote)
-            .foregroundStyle(OS1VisualStyle.textFaint)
-    }
-
-    @ViewBuilder
-    private var prNumberLabel: some View {
-        if let prNumber = loop.prNumber {
-            // Verbatim: interpolated into a LocalizedStringKey the number
-            // runs through the device's locale and #5496 reads "PR #5.496"
-            // (same trap as PrPanel's title).
-            Text(verbatim: "PR #\(prNumber)")
-                .font(.caption2)
-                .foregroundStyle(OS1VisualStyle.textFaint)
+    private var headerText: String {
+        if isCheckBack {
+            return loop.isLive ? "Checking back" : "Checked back \(loop.detail)"
+        }
+        if loop.isLive { return "Reviewing" }
+        // Opened, a settled loop trades its verdict for the round count: the
+        // verdict then has its own row at the end of the work.
+        if state.expanded && loop.isSettled { return reviewedIn }
+        switch loop.result?.status {
+        case .passed: return "Review passed"
+        case .failed: return "Review needs changes"
+        case .pending: return "Reviewing"
+        case nil:
+            switch loop.settled {
+            case .passed: return "Review passed"
+            case .capped: return "Review handed over"
+            default: return reviewedIn
+            }
         }
     }
 
-    private var visibleDetail: String {
-        state.expanded && loop.isSettled ? loop.roundsLabel : loop.detail
-    }
+    private var reviewedIn: String { "Reviewed in \(loop.roundsLabel)" }
 
     private var isCheckBack: Bool { loop.kind == .checkBack }
 

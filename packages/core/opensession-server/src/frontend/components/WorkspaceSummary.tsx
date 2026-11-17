@@ -507,9 +507,9 @@ export function WorkspaceSummaryBody({
   // Pictures or rows. One preference, shared with the Workspace panel's own
   // Assets section, so the same folder is not drawn two ways in one window.
   const [assetView, setAssetView] = useAssetViewMode();
-  // Commits and changed files share one row. Open, it lists one or the other.
+  // One "Changes" row. Open, it lists the changed files, or the commits when
+  // there is no file diff to show.
   const [workOpen, setWorkOpen] = useState(false);
-  const [workTab, setWorkTab] = useState<"files" | "commits">("files");
   const [openCommit, setOpenCommit] = useState<OpenCommitDetails | null>(null);
   const diffTheme = useResolvedTheme();
   // `session` follows the session-list poll; the viewer's explicit value follows
@@ -570,9 +570,7 @@ export function WorkspaceSummaryBody({
     session.repo || undefined,
     undefined,
     {
-      enabled:
-        ((workOpen && workTab === "files") || Boolean(openCommit)) &&
-        Boolean(pr),
+      enabled: (workOpen || Boolean(openCommit)) && Boolean(pr),
       revision: `${pr?.headRefOid || ""}\0${refreshTick || 0}`,
     },
   );
@@ -1171,7 +1169,7 @@ export function WorkspaceSummaryBody({
   }
 
   /** Everything this work changed, in one row: "Changes" and the line totals.
-   *  Open, it lists the files or the commits, each with its count. */
+   *  Open, it lists the files, or the commits when there is no file diff. */
   function workRow() {
     if (!hasCommitDetails && !showDiffChanges) return null;
     const commitStats = commits.reduce(
@@ -1182,14 +1180,8 @@ export function WorkspaceSummaryBody({
       }),
       { files: 0, additions: 0, deletions: 0 },
     );
-    const files = showDiffChanges ? changedFiles : commitStats.files;
     const added = showDiffChanges ? additions : commitStats.additions;
     const removed = showDiffChanges ? deletions : commitStats.deletions;
-    const view = !hasCommitDetails
-      ? "files"
-      : !showDiffChanges
-        ? "commits"
-        : workTab;
     return (
       <div className={groupClass}>
         <button
@@ -1217,41 +1209,7 @@ export function WorkspaceSummaryBody({
           />
         </button>
         {workOpen &&
-          hasCommitDetails &&
-          showDiffChanges && (
-            // Two quiet words in the section-label style, not a pill: a
-            // raised control here outweighed the rows it chooses between.
-            <div
-              role="group"
-              aria-label="Show files or commits"
-              className="flex h-[26px] shrink-0 items-center gap-3 px-4 phone:h-9"
-            >
-              {(
-                [
-                  ["files", "Files", files],
-                  ["commits", "Commits", commitCount],
-                ] as const
-              ).map(([value, label, count]) => (
-                <button
-                  key={value}
-                  type="button"
-                  aria-pressed={workTab === value}
-                  onClick={() => setWorkTab(value)}
-                  className={cn(
-                    "focus-ring inline-flex cursor-pointer items-baseline gap-1 rounded-sm border-none bg-transparent p-0 text-label font-medium transition-colors motion-reduce:transition-none",
-                    workTab === value ? "text-fg" : "text-faint hover:text-dim",
-                  )}
-                >
-                  {label}
-                  <span className="font-normal text-faint tabular-nums">
-                    {count}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        {workOpen &&
-          (view === "files" ? (
+          (showDiffChanges ? (
             <div className="pb-1">{changeFiles.map(fileChangeRow)}</div>
           ) : prCommits.length > 0 ? (
             prCommits.map(prCommittedRow)
