@@ -1,5 +1,5 @@
 import { clsx, type ClassValue } from "clsx";
-import { extendTailwindMerge } from "tailwind-merge";
+import { extendTailwindMerge, validators } from "tailwind-merge";
 
 /**
  * The semantic type scale from styles/tailwind.css. tailwind-merge only ships
@@ -43,6 +43,12 @@ const twMerge = extendTailwindMerge({
       // currently favours the override by luck — reordering the theme
       // tokens would silently square off AskCard's pill.
       rounded: [{ rounded: ["control"] }],
+      // The `smooth-shadow-*` tiers (styles/smooth-shadow.css) are box
+      // shadows too. Unregistered, a caller's `shadow-none` landed beside a
+      // primitive's `smooth-shadow-xs` instead of replacing it, and the
+      // stylesheet kept the smooth one, so the override silently did
+      // nothing. Any suffix counts, so a new tier is covered without a list.
+      shadow: [{ "smooth-shadow": [validators.isAny] }],
     },
   },
 });
