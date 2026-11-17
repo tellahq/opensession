@@ -1943,6 +1943,7 @@ export class TranscriptStore {
         // searched for the nudge marker, never parsed.
         `SELECT o.uuid, o.seq, o.change_seq, o.ts, o.render_role, o.content_length, o.review_pr_number,
                 CASE WHEN o.render_role != 'hidden' AND json_valid(e.data) THEN json_extract(e.data, '$.notice.kind') END AS notice_kind,
+                CASE WHEN o.render_role = 'notice' AND json_valid(e.data) THEN json_extract(e.data, '$.noticeKind') END AS parsed_notice_kind,
                 CASE WHEN o.render_role != 'hidden' AND json_valid(e.data) THEN json_extract(e.data, '$.type') END AS entry_type,
                 CASE WHEN o.render_role != 'hidden' AND json_valid(e.data) THEN substr(json_extract(e.data, '$.content'), 1, 1024) END AS notice_prefix,
                 CASE WHEN o.render_role != 'hidden' AND json_valid(e.data) THEN json_extract(e.data, '$.contextInjection.source') END AS context_source,
@@ -1969,6 +1970,7 @@ export class TranscriptStore {
       content_length: number;
       review_pr_number: number | null;
       notice_kind: string | null;
+      parsed_notice_kind: string | null;
       entry_type: TranscriptEntry["type"] | null;
       notice_prefix: string | null;
       context_source: string | null;
@@ -1985,6 +1987,9 @@ export class TranscriptStore {
       contentLength: row.content_length,
       ...(row.review_pr_number != null
         ? { reviewPrNumber: row.review_pr_number }
+        : {}),
+      ...(row.parsed_notice_kind === "compaction"
+        ? { noticeKind: "compaction" as const }
         : {}),
     }));
     return {

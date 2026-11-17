@@ -669,9 +669,8 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
     if (entry.type === "tool_result") {
       continue; // rendered inside turn blocks via toolResults
     } else if (
-      agentMessageText(entry) !== null ||
-      entry.type === "assistant" ||
-      entry.type === "tool_use"
+      isWorkEntry(entry) ||
+      compactsMidTurn(turn, renderedEntries, index, Boolean(live))
     ) {
       turn.push(entry);
     } else {
@@ -1301,6 +1300,41 @@ function IndexedTranscriptBlocks(props: Props) {
       }}
     />
   );
+}
+
+/** A step of the agent's own work: what a turn's fold is made of. */
+function isWorkEntry(entry: TranscriptEntry): boolean {
+  return (
+    agentMessageText(entry) !== null ||
+    entry.type === "assistant" ||
+    entry.type === "tool_use"
+  );
+}
+
+/**
+ * Whether the entry at `index` is a context compaction in the middle of a
+ * turn. The engine compacts between steps and carries on with the same work,
+ * so the notice belongs inside the fold, where it happened. Ending the turn
+ * there made one run read as two, each timed from its own half, the first
+ * with no answer under it. A compaction after the turn's answer, before the
+ * next message, still stands between turns.
+ */
+export function compactsMidTurn(
+  turn: readonly TranscriptEntry[],
+  entries: readonly TranscriptEntry[],
+  index: number,
+  live: boolean,
+): boolean {
+  if (entries[index]?.notice?.kind !== "compaction") return false;
+  const last = turn[turn.length - 1];
+  if (!last) return false;
+  for (let i = index + 1; i < entries.length; i++) {
+    const next = entries[i]!;
+    if (next.type !== "tool_result") return isWorkEntry(next);
+  }
+  // Nothing after it yet. A running turn is still working through it, unless
+  // it already ended on what may be its answer.
+  return live && (last.type !== "assistant" || Boolean(last.isReasoning));
 }
 
 /**

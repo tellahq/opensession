@@ -537,6 +537,71 @@ describe("TranscriptBlocks compact tool runs", () => {
     expect(html).not.toContain("Reading the lockfile next.");
   });
 
+  test("keeps a mid-turn compaction inside one Worked group", () => {
+    setTurnPrefs(null);
+    const compaction: TranscriptEntry = {
+      id: "compaction",
+      type: "system",
+      noticeKind: "compaction",
+      content: "Handoff summary",
+      timestamp: "2026-08-13T06:00:02.500Z",
+    };
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        entries={[
+          ...toolEntries.slice(0, 3),
+          compaction,
+          ...toolEntries.slice(3),
+          {
+            id: "answer",
+            type: "assistant",
+            content: "The repository is clean.",
+            timestamp: "2026-08-13T06:03:07Z",
+          },
+        ]}
+      />,
+    );
+
+    // One group, timed across the compaction from its first step to its last.
+    expect(html.match(WORKED_TITLES)).toEqual([">Worked for 3s</span>"]);
+    expect(html).toContain("The repository is clean.");
+  });
+
+  test("keeps a compaction between turns as its own line", () => {
+    setTurnPrefs(null);
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        entries={[
+          ...toolEntries.slice(0, 3),
+          {
+            id: "answer",
+            type: "assistant",
+            content: "The repository is clean.",
+            timestamp: "2026-08-13T06:00:03Z",
+          },
+          {
+            id: "compaction",
+            type: "system",
+            noticeKind: "compaction",
+            content: "Handoff summary",
+            timestamp: "2026-08-13T06:00:04Z",
+          },
+          {
+            id: "next",
+            type: "user",
+            content: "Now check the manifest",
+            timestamp: "2026-08-13T06:00:05Z",
+          },
+        ]}
+      />,
+    );
+
+    expect(html).toContain("Context compacted");
+    expect(html.indexOf("The repository is clean.")).toBeLessThan(
+      html.indexOf("Context compacted"),
+    );
+  });
+
   test("keeps narration folded after a message sent between turns", () => {
     setTurnPrefs(null);
     const html = renderToStaticMarkup(
