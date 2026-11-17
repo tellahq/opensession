@@ -165,14 +165,14 @@ export function DeckDone({
       <div className="mt-2 flex gap-2">
         {secondary && (
           <button
-            className="rounded-control border border-line bg-panel px-4 py-2.5 text-sm font-semibold text-dim hover:bg-surface hover:text-fg"
+            className="rounded-full border border-line bg-panel px-4 py-2.5 text-sm font-semibold text-dim hover:bg-surface hover:text-fg"
             onClick={secondary.onClick}
           >
             {secondary.label}
           </button>
         )}
         <button
-          className="rounded-control bg-panel px-4 py-2.5 text-sm font-semibold text-fg hover:bg-surface"
+          className="rounded-full bg-panel px-4 py-2.5 text-sm font-semibold text-fg hover:bg-surface"
           onClick={onExit}
         >
           Done

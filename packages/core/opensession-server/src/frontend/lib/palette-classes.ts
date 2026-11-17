@@ -16,8 +16,7 @@
  *
  * These are meant to be combined through `cn()`, not concatenated: the
  * variants below depend on tailwind-merge dropping the base entry they
- * replace (`rounded-full` over `rounded-control`, `text-accent` over
- * `text-dim`). A plain template string leaves both in and the winner is
+ * replace (`text-accent` over `text-dim`). A plain template string leaves both in and the winner is
  * decided by the compiled sheet's order.
  */
 
@@ -28,38 +27,24 @@
    its target on every viewport. `src/frontend/AGENTS.md` cites this control
    as the example of keeping a hover wash proportional.
 
-   Three details are load-bearing:
+   These details are load-bearing:
    · `border-transparent` is a real 1px border holding layout, not decoration.
      The wash is `inset-1` from the PADDING box, so dropping the border would
      grow it from 30px to 32px.
    · `[&>*]:relative [&>*]:z-[1]` lifts the glyph (and the new-session
      footer's count badge) above the wash — the pseudo-element is positioned,
      so it would otherwise paint over static in-flow content.
-   · `before:[corner-shape:var(--cs)]` is not redundant with `rounded-*`.
-     base.css grants the squircle to elements carrying a `rounded-` class, and
-     `corner-shape` does NOT inherit into a pseudo-element — so a `::before`
-     whose radius comes from `before:rounded-control` still resolves `round`
-     and the wash hovers into a plain rounded rect inside a squircled button.
-     The token spells itself `round` outside the `@supports` block, which is
-     what keeps the fallback honest.
+   · It is a circle, like every button in the app, and so is its wash.
+     `rounded-full` is base.css's opt-out from the squircle (a squircle at
+     50% is a lobed blob). The wash spells `before:[corner-shape:round]` out
+     because `corner-shape` does not inherit into a pseudo-element.
    · The base button reset in styles/base.css already supplies `cursor`,
      `background`, `padding` and `border: none`, so only the deviations are
      written here. */
 export const paletteIconBtn =
-  "relative inline-flex size-10 items-center justify-center rounded-control border border-transparent text-item-title text-dim transition-[color] hover:text-fg disabled:cursor-default disabled:opacity-50 " +
-  "before:absolute before:inset-1 before:z-0 before:rounded-control before:[corner-shape:var(--cs)] before:transition-[background,box-shadow] before:content-[''] hover:before:bg-hover " +
+  "relative inline-flex size-10 items-center justify-center rounded-full border border-transparent text-item-title text-dim transition-[color] hover:text-fg disabled:cursor-default disabled:opacity-50 " +
+  "before:absolute before:inset-1 before:z-0 before:rounded-full before:[corner-shape:round] before:transition-[background,box-shadow] before:content-[''] hover:before:bg-hover " +
   "[&>*]:relative [&>*]:z-[1] phone:[&_svg]:size-5";
-
-/** The phone composer's resting pill, and the ONE place `rounded-full` is the
- *  right spelling in this family. base.css grants `corner-shape: squircle` to
- *  `[class*="rounded-"]:not([class*="rounded-full"])`, so `rounded-full` is
- *  precisely the opt-out — and opting out is the intent here: the resting
- *  composer IS a 999px pill and its + / mic sit flush in its rounded ends, so
- *  they have to be circles. A squircle at 50% is a lobed blob, not a circle.
- *  The wash needs the same treatment or a circular button hovers into a
- *  squircle. Everywhere else this family keeps its squircle. */
-export const paletteIconBtnRound =
-  "rounded-full before:rounded-full before:[corner-shape:round]";
 
 /** On reads as one filled accent chip: the glyph lights up with its wash. The
  *  hover colour is restated because the base's `hover:text-fg` is a different

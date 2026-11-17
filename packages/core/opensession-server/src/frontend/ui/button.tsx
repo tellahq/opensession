@@ -59,36 +59,38 @@ const sizes: Record<Size, string> = {
   // Heights bracket the app's existing chrome: 32px matches the viewer
   // header buttons, 26px the chip/inline tier.
   //
-  // One radius across every size: `rounded-control`, the corner the rest of
-  // the chrome already uses (legacy.css authors it as `calc(10px*var(--rf))`
-  // on .btn-viewer-pin / .btn-panel-toggle / .btn-viewer-newsession). The
-  // `rounded-xs`/`rounded-sm` this used to ship read visibly squarer than the
-  // buttons it sat beside — enough that call sites kept patching it back out
-  // by hand. Holding one corner across the scale is also what makes the three
-  // sizes read as one family: it goes pill on the short sizes, exactly as the
-  // ~26px chrome buttons already do, and stays a soft rect on lg.
+  // One shape across every size and variant: a pill, and a circle when the
+  // button is icon-only. It matches the composer's send disc, the new-session
+  // Create and the tabs, so every pressable plate in the app reads as one
+  // family. `rounded-full` is also the opt-out from base.css's squircle
+  // (a squircle at 50% is a lobed blob, not a pill). It used to be
+  // `rounded-control`, a soft rect that only went pill-like on the short sizes.
+  //
+  // Padding sits half a step wider than it did as a rect: a pill's ends eat
+  // into the label's air, so the same px-3 read cramped once the corners went
+  // round.
   //
   // There used to be an `xs` between nothing and `sm`, 24px against 26px with
   // the same padding, type and corner. Two names for one control: the 2px
   // never told anyone anything, and choosing between them was a coin toss.
-  sm: "min-h-[26px] px-2.5 text-xs rounded-control",
-  md: "min-h-8 px-3 text-sm rounded-control",
-  lg: "min-h-9 px-3.5 text-base rounded-control",
+  sm: "min-h-[26px] px-3 text-xs rounded-full",
+  md: "min-h-8 px-3.5 text-sm rounded-full",
+  lg: "min-h-9 px-4 text-base rounded-full",
 };
 
 // Leading icon + label: shave 4px off the icon side, which is the glyph's own
 // whitespace minus the label's side bearing (see doc block).
 const iconLeadPad: Record<Size, string> = {
-  sm: "pl-1.5",
-  md: "pl-2",
-  lg: "pl-2.5",
+  sm: "pl-2",
+  md: "pl-2.5",
+  lg: "pl-3",
 };
 
 // Trailing caret + label: the same 4px shave, on the caret's side.
 const caretTrailPad: Record<Size, string> = {
-  sm: "pr-1.5",
-  md: "pr-2",
-  lg: "pr-2.5",
+  sm: "pr-2",
+  md: "pr-2.5",
+  lg: "pr-3",
 };
 
 // The air between glyph and label. One gap utility only: a second one on the
