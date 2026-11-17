@@ -2212,6 +2212,26 @@ describe("TranscriptBlocks progress rows", () => {
     expect(html).not.toContain("Scheduled check-back");
   });
 
+  test("a scheduled check-back folds to its title, with no show label", () => {
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        entries={[
+          row("u", "user", "Watch the build", 1),
+          row("a", "assistant", "Started the build.", 2),
+          row(
+            "wake",
+            "user",
+            "<!--os:scheduled-prompt:build-->\nCheck the build.",
+            3,
+          ),
+        ]}
+      />,
+    );
+    expect(html).toContain("Scheduled check-back");
+    expect(html).not.toContain(">show<");
+    expect(html).not.toContain("Check the build.");
+  });
+
   test("worker reports do not turn intermediate status narration into an invisible owner", () => {
     const html = renderToStaticMarkup(
       <TranscriptBlocks
@@ -2255,9 +2275,48 @@ describe("TranscriptBlocks progress rows", () => {
       );
     }
     const html = renderToStaticMarkup(<TranscriptBlocks entries={work} />);
-    expect(html.match(/aria-label="Checked back"/g)).toHaveLength(1);
-    expect(html).toContain('aria-label="Checked back, 3 times"');
+    expect(html).not.toContain("Checked back");
     expect(html.match(/data-progress-topic="CI"/g)).toHaveLength(1);
+    expect(html).toContain("Show work and earlier updates");
+    expect(html).not.toContain("check-build");
+
+    const open = renderToStaticMarkup(
+      <TranscriptBlocks entries={work} reviewLoopsOpen />,
+    );
+    expect(open).toContain("check-build");
+    expect(open).toContain('aria-label="Earlier updates"');
+  });
+
+  test("a task that moves on to a new topic keeps one row", () => {
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        entries={[
+          row("u", "user", "Ship it", 1),
+          row("ci", "assistant", "◷ **CI**: Running", 2),
+          row("wake-1", "user", "", 3, { turnBoundary: true }),
+          row("tool-1", "tool_use", "", 4, {
+            toolName: "Bash",
+            toolUseId: "tool-1",
+            toolInput: { command: "gh pr checks" },
+          }),
+          row("deploy", "assistant", "◷ **Deployment**: Running", 5),
+          row("wake-2", "user", "", 6, { turnBoundary: true }),
+          row("tool-2", "tool_use", "", 7, {
+            toolName: "Bash",
+            toolUseId: "tool-2",
+            toolInput: { command: "deploy status" },
+          }),
+          row("live", "assistant", "Live: the change is out.", 8),
+        ]}
+        reviewLoopsOpen
+      />,
+    );
+    expect(html.match(/data-progress-topic=/g)).toHaveLength(1);
+    expect(html).toContain('data-progress-topic="Deployment"');
+    expect(html).not.toContain("Checked back");
+    expect(html).toContain("CI: Running");
+    expect(html).toContain("deploy status");
+    expect(html).toContain("Live: the change is out.");
   });
 
   test("progress does not split a multi-round review loop", () => {
