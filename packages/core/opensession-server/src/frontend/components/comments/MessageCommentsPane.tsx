@@ -16,6 +16,7 @@ import {
 import type { CommentThread } from "../../lib/types";
 import { useSessionSocket } from "../../hooks/useSessionSocket";
 import { Button } from "../../ui/button";
+import { ListRow } from "../../ui/list-row";
 import { ResponsiveDialog, SheetBody, SheetIconButton } from "../../ui/sheet";
 import { toast } from "../../ui/toast";
 import { Tooltip } from "../../ui/tooltip";
@@ -182,10 +183,9 @@ function PaneBody({
       {/* The message, quoted rather than boxed: a rule down its side, its
           author, and its opening lines as plain text. Pressing it brings the
           message into view. */}
-      <button
-        type="button"
+      <ListRow
         onClick={onReveal}
-        className="group flex cursor-pointer flex-col gap-1 border-0 border-l-2 border-solid border-line bg-transparent py-0.5 pr-0 pl-3 text-left transition-colors hover:border-line-strong focus-visible:outline-2 focus-visible:outline-accent-ink"
+        className="group flex-col gap-1 rounded-none border-0 border-l-2 border-solid border-line py-0.5 pr-0 pl-3 hover:border-line-strong hover:bg-transparent phone:min-h-0"
       >
         <span className="flex items-center gap-2 text-supporting font-medium text-fg">
           <UserAvatar name={target.author} size={18} />
@@ -194,7 +194,7 @@ function PaneBody({
         <span className="line-clamp-3 text-label leading-snug text-dim transition-colors group-hover:text-fg">
           {messageExcerpt(target.excerpt) || "Message"}
         </span>
-      </button>
+      </ListRow>
       {thread ? (
         <CommentThreadView
           key={thread.id}
