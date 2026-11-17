@@ -942,6 +942,12 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
           (candidate.kind === "entry" && candidate.entry.type === "assistant"),
       );
 
+  // A turn's closing hairline divides its work from what follows. A footer
+  // is the turn's own summary row, not something to divide from.
+  const lastContentBlock = groupedBlocks.findLastIndex(
+    (block) => block.kind !== "footer",
+  );
+
   const virtualItems: VirtualTranscriptItem[] = groupedBlocks.map(
     (block, i) => {
       const key = renderBlockKey(block, i, turnMountScope);
@@ -1029,6 +1035,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
           expandWhileRunning={block.expandWhileRunning}
           onOpenSubagent={onOpenSubagent}
           sessionId={sessionId}
+          last={i === lastContentBlock}
         />
       ) : block.kind === "note" ? (
         <NoteBubble thread={block.note} sessionId={sessionId} />
