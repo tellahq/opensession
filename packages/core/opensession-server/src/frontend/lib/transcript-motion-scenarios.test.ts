@@ -3,6 +3,7 @@ import {
   applyTranscriptMotionEvent,
   makeTranscriptHydrationScenario,
   makeTranscriptMotionScenario,
+  makeTranscriptProgressScenario,
   makeTranscriptStreamPerformanceScenario,
   transcriptMotionFixtureOptions,
 } from "./transcript-motion-scenarios";
@@ -113,6 +114,23 @@ describe("transcript motion scenarios", () => {
     state = applyTranscriptMotionEvent(state, update);
     expect(state.entries[index]?.id).toBe(append.entry.id);
     expect(state.entries[index]?.content).toBe(update.content);
+  });
+
+  test("progress fixture preserves updates and the separate blocker", () => {
+    const scenario = makeTranscriptProgressScenario();
+    let state = scenario.initial;
+    for (const event of scenario.events)
+      state = applyTranscriptMotionEvent(state, event);
+    expect(
+      state.entries.filter((entry) => entry.content.includes("**CI**")),
+    ).toHaveLength(2);
+    expect(state.entries.at(-1)?.content).toContain("Deployment is blocked");
+    expect(
+      transcriptMotionFixtureOptions(
+        "/__fixtures/transcript-motion",
+        "?profile=progress",
+      )?.profile,
+    ).toBe("progress");
   });
 
   test("recognizes only the isolated fixture route", () => {

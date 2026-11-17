@@ -1,12 +1,9 @@
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { useNavigation } from "../../hooks/useNavigation";
 import { openThreadTab } from "../../lib/thread-tabs";
+import type { UnifiedSession } from "../../lib/types";
 import { useSessionRecord } from "../../lib/session-records";
-import {
-  THREAD_STATE_LABEL,
-  threadState,
-  threadStatusLine,
-} from "../../lib/session-threads";
+import { threadState, threadStatusLine } from "../../lib/session-threads";
 import { cn } from "../../ui/cn";
 import {
   MessageActionButtons,
@@ -14,8 +11,6 @@ import {
 } from "../comments/MessageActions";
 import { ListRow } from "../../ui/list-row";
 import { THREAD_DOT } from "./thread-classes";
-import { useThreadGist } from "./ThreadRow";
-import { useThreadActivity } from "./useThreadActivity";
 
 /** A thread the turn started, and the prompt it was started on. */
 export interface SpawnedThread {
@@ -26,14 +21,12 @@ export interface SpawnedThread {
 }
 
 /**
- * The threads a turn started, as live cards under the turn: where each one
- * stands now, updated in place as it works, ships, or stops on a question.
- * Like a suggested task, the card is addressed to the reader, so it stays
- * when the turn's steps fold away.
+ * Delegated work stays reachable below the fold as quiet nested rows.
+ * Show one current status, not a second copy of the worker's report.
  */
 export function ThreadCards({ threads }: { threads: SpawnedThread[] }) {
   return (
-    <div className="mt-1 flex flex-col gap-1.5 pl-[7px] pr-1">
+    <div className="mt-0.5 flex flex-col pl-5 pr-1">
       {threads.map((thread) => (
         <ThreadCard key={thread.id} spawned={thread} />
       ))}
@@ -52,10 +45,10 @@ function ThreadCard({ spawned }: { spawned: SpawnedThread }) {
   };
   return (
     <div className="flex flex-col gap-1">
-      <div className="group/card flex items-start gap-1">
+      <div className="group/card flex items-center gap-1">
         <ThreadCardBody spawned={spawned} fallbackTitle={fallbackTitle} />
-        <div className="flex shrink-0 flex-col gap-0.5 pt-1 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-hover/card:opacity-100 [@media(hover:hover)]:group-focus-within/card:opacity-100">
-          <MessageActionButtons message={message} />
+        <div className="flex shrink-0 items-center gap-0.5 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-hover/card:opacity-100 [@media(hover:hover)]:group-focus-within/card:opacity-100">
+          <MessageActionButtons message={message} className="phone:size-11" />
         </div>
       </div>
       <MessageThreadSummary message={message} />
@@ -75,7 +68,8 @@ function ThreadCardBody({
   const phone = useIsPhone();
   return (
     <ListRow
-      variant="card"
+      className="items-center py-1 font-sans"
+      aria-label={`Open thread: ${thread?.title || fallbackTitle}${thread ? `, ${threadStatusLine(thread)}` : ""}`}
       onClick={() => {
         // A tab of its own beside the conversation on desktop; a phone
         // opens the thread as its own page.
@@ -84,18 +78,17 @@ function ThreadCardBody({
       }}
     >
       {thread ? (
-        <LiveThread thread={thread} />
+        <ThreadCardSummary thread={thread} />
       ) : (
         <>
           <span
             aria-hidden="true"
-            className="mt-[7px] size-2 shrink-0 rounded-full bg-line-strong"
-          />
-          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="truncate text-label font-medium text-fg">
-              {fallbackTitle}
-            </span>
-            <span className="text-meta text-dim">Thread</span>
+            className="flex size-5 shrink-0 items-center justify-center phone:self-start"
+          >
+            <span className="size-1.5 rounded-full bg-line-strong" />
+          </span>
+          <span className="min-w-0 truncate text-label text-dim">
+            {fallbackTitle}
           </span>
         </>
       )}
@@ -103,43 +96,35 @@ function ThreadCardBody({
   );
 }
 
-function LiveThread({
-  thread,
-}: {
-  thread: NonNullable<ReturnType<typeof useSessionRecord>>;
-}) {
+export function ThreadCardSummary({ thread }: { thread: UnifiedSession }) {
   const state = threadState(thread);
-  const gist = useThreadGist(thread, state);
-  const line = threadStatusLine(thread);
-  const activity = useThreadActivity(thread.id, state === "working");
+  const status = threadStatusLine(thread);
   return (
     <>
       <span
         aria-hidden="true"
-        className={cn(
-          "mt-[7px] size-2 shrink-0 rounded-full",
-          THREAD_DOT[state],
-          state === "working" && "motion-safe:animate-pulse",
-        )}
-      />
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-label font-medium text-fg">
+        className="flex size-5 shrink-0 items-center justify-center phone:self-start"
+      >
+        <span
+          className={cn(
+            "size-1.5 rounded-full",
+            THREAD_DOT[state],
+            state === "working" && "motion-safe:animate-pulse",
+          )}
+        />
+      </span>
+      <span className="flex min-w-0 flex-1 items-baseline gap-2 phone:flex-col phone:items-start phone:gap-0.5">
+        <span className="min-w-0 truncate text-label text-dim phone:max-w-full">
           {thread.title}
         </span>
-        <span className="line-clamp-2 text-meta text-dim">
-          <span className="font-medium">{THREAD_STATE_LABEL[state]}</span>
-          {line !== THREAD_STATE_LABEL[state] && ` · ${line}`}
-          {gist && <span className="text-faint"> · {gist}</span>}
+        <span
+          className={cn(
+            "shrink-0 text-meta",
+            state === "blocked" ? "text-blue" : "text-faint",
+          )}
+        >
+          {status}
         </span>
-        {activity && (
-          <span
-            className="truncate text-meta text-faint"
-            aria-live="polite"
-            title={activity}
-          >
-            {activity}
-          </span>
-        )}
       </span>
     </>
   );
