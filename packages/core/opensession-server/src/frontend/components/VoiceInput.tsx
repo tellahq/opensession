@@ -8,7 +8,7 @@ import React, {
 } from "react";
 import { motion } from "motion/react";
 import { transcribeClip } from "../lib/api";
-import { IconMic, IconX } from "./icons";
+import { IconMic, IconStopSquare, IconX } from "./icons";
 import { Tooltip } from "../ui/tooltip";
 import { Spinner } from "../ui/spinner";
 import { PRODUCT_NAME } from "../lib/brand";
@@ -45,11 +45,10 @@ const BAR_COUNT = 9;
  *  the oldest on the left. */
 const WIDE_BAR_COUNT = 64;
 
-/* While live, the mic becomes a row of its own: discard ×, a solid red pill
-   carrying the meter (pressing it stops and keeps the text), and the audio
-   options chevron, beside the host's send control. The field stays visible
-   and editable above it: the transcript is appended to the draft when the
-   clip ends. */
+/* While live, the mic becomes a solid red pill beside the host's send
+   control: discard ×, the meter, then stop (keeps the text). The audio
+   options chevron follows it. The field stays visible and editable above:
+   the transcript is appended to the draft when the clip ends. */
 const LIVE = "inline-flex shrink-0 items-center gap-1";
 /** A phone has no room beside the model pill, so there the row takes the
  *  whole toolbar instead (the host hides its other controls). */
@@ -57,10 +56,11 @@ const LIVE_WIDE = "flex min-w-0 flex-1 items-center gap-1";
 /* Red is the recording light. White on --red clears 4.5:1 in both themes,
    the same pairing as the danger-strong button. */
 const RECORD_PILL =
-  "focus-ring relative inline-flex h-10 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-red px-4 text-white plate-sheen transition-[filter,scale] hover:brightness-110 active:scale-[0.97] disabled:cursor-default disabled:hover:brightness-100 disabled:active:scale-100 phone:h-11";
-const RECORD_PILL_WIDE = "min-w-0 flex-1 overflow-hidden px-5";
-const SIDE_BUTTON =
-  "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-dim transition-colors hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-50 phone:size-11";
+  "inline-flex h-10 shrink-0 items-center gap-1 rounded-full bg-red px-1 text-white plate-sheen phone:h-11";
+const RECORD_PILL_WIDE = "min-w-0 flex-1";
+/** The × and stop inside the red pill: white glyphs on a white wash. */
+const PILL_BUTTON =
+  "focus-ring inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-white transition-[background-color,scale] hover:bg-white/15 active:scale-[0.94] disabled:cursor-default disabled:opacity-60 disabled:hover:bg-transparent disabled:active:scale-100 phone:size-9";
 
 /* Waveform bars. Colour lives on the variant, never alongside a second colour
    utility on the same element. Two of those don't compose, the sheet's order
@@ -80,7 +80,7 @@ const PILL_MOTION = {
 /**
  * Dictation control shared by the session Composer and the New-session
  * palette. Idle it's a mic button; tapping it swaps the mic for a compact
- * live row (discard, a red meter pill that stops, audio options) and leaves
+ * live red pill (discard · meter · stop, then audio options) and leaves
  * the field above it visible. Stop puts
  * the browser's final text in the draft through `onText`; the send key, or
  * the host's send control through `controlRef`, hands it to `onTextSend`
@@ -495,60 +495,61 @@ export function VoiceInput({
                 ? "Transcribing"
                 : "Recording"}
           </span>
-          <Tooltip label="Discard" shortcut={["Esc"]}>
-            <button
-              type="button"
-              className={SIDE_BUTTON}
-              onClick={() => stop(false)}
-              disabled={phase === "transcribing"}
-              aria-label="Discard dictation"
-            >
-              <IconX size={20} />
-            </button>
-          </Tooltip>
-          <Tooltip label="Stop">
-            <button
-              type="button"
-              className={cn(RECORD_PILL, wide && RECORD_PILL_WIDE)}
-              onClick={() => stop(true)}
-              disabled={!recording}
-              aria-label="Stop dictating"
-            >
-              {/* Oldest samples on the left, the newest on the right. */}
-              <span
-                className={cn(
-                  "flex h-5 items-center gap-1 transition-opacity",
-                  wide && "min-w-0 flex-1 justify-end overflow-hidden",
-                  phase === "transcribing" && "opacity-0",
-                )}
-                aria-hidden="true"
+          <div className={cn(RECORD_PILL, wide && RECORD_PILL_WIDE)}>
+            <Tooltip label="Discard" shortcut={["Esc"]}>
+              <button
+                type="button"
+                className={PILL_BUTTON}
+                onClick={() => stop(false)}
+                disabled={phase === "transcribing"}
+                aria-label="Discard dictation"
               >
-                {Array.from({ length: bars }, (_, i) => {
-                  const l = recording
-                    ? levels[levels.length - bars + i]
-                    : undefined;
-                  return (
-                    <span
-                      key={i}
-                      className={
-                        l === undefined ? WAVE_BAR_IDLE : WAVE_BAR_LIVE
-                      }
-                      style={
-                        l === undefined
-                          ? undefined
-                          : { height: `${15 + l * 85}%` }
-                      }
-                    />
-                  );
-                })}
-              </span>
-              {phase === "transcribing" && (
-                <span className="absolute inset-0 flex items-center justify-center">
-                  <Spinner size="md" />
-                </span>
+                <IconX size={20} />
+              </button>
+            </Tooltip>
+            {/* Oldest samples on the left, the newest by the stop button. */}
+            <span
+              className={cn(
+                "flex h-5 items-center gap-1 px-1",
+                wide && "min-w-0 flex-1 justify-end overflow-hidden",
               )}
-            </button>
-          </Tooltip>
+              aria-hidden="true"
+            >
+              {Array.from({ length: bars }, (_, i) => {
+                const l = recording
+                  ? levels[levels.length - bars + i]
+                  : undefined;
+                return (
+                  <span
+                    key={i}
+                    className={l === undefined ? WAVE_BAR_IDLE : WAVE_BAR_LIVE}
+                    style={
+                      l === undefined
+                        ? undefined
+                        : { height: `${15 + l * 85}%` }
+                    }
+                  />
+                );
+              })}
+            </span>
+            {phase === "transcribing" ? (
+              <span className="inline-flex size-8 shrink-0 items-center justify-center phone:size-9">
+                <Spinner size="md" />
+              </span>
+            ) : (
+              <Tooltip label="Stop">
+                <button
+                  type="button"
+                  className={PILL_BUTTON}
+                  onClick={() => stop(true)}
+                  disabled={!recording}
+                  aria-label="Stop dictating"
+                >
+                  <IconStopSquare size={22} />
+                </button>
+              </Tooltip>
+            )}
+          </div>
           <VoiceAudioOptions mode="dictation" />
         </motion.div>
       )}
