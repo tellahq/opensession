@@ -12,7 +12,7 @@ import {
   turnScrollAnchor,
 } from "../lib/transcript-block-identity";
 import { MessageBubble } from "./MessageBubble";
-import { ProgressStatusRow } from "./ProgressStatusRow";
+import { ProgressStatusLine, ProgressStatusRow } from "./ProgressStatusRow";
 import {
   collectProgressUpdates,
   type ProgressGroup,
@@ -38,7 +38,11 @@ import {
 } from "../lib/transcript-state";
 import { collectWrittenAssets } from "../lib/open-asset";
 import { classifyEntry } from "@tellahq/opensession-protocol/notices";
-import { CheckBackBlock, ReviewLoopBlock } from "./ReviewLoopBlock";
+import {
+  CheckBackBlock,
+  ReviewLoopBlock,
+  WorkFoldBlock,
+} from "./ReviewLoopBlock";
 import type { ReviewLoopResult } from "../lib/review-loop";
 import type { ReviewSettledOutcome } from "@tellahq/opensession-protocol/notices";
 import {
@@ -78,9 +82,12 @@ type RenderBlock =
   | { kind: "note"; note: CommentThread }
   | {
       kind: "review-loop";
-      /** A review loop, or turns the agent's own waits and scheduled
-       *  check-backs started with no person in between. */
-      variant: "review" | "check-back";
+      /** A review loop, turns the agent's own waits and scheduled
+       *  check-backs started with no person in between, or a whole task that
+       *  reported with status lines and then answered (`foldReportedTasks`). */
+      variant: "review" | "check-back" | "work";
+      /** On a work fold: from the task's first work to its answer. */
+      durationMs?: number;
       blocks: RenderBlock[];
       prNumber: number | null;
       /** Review rounds, or check-back turns. */
@@ -344,6 +351,64 @@ function groupCheckBacks(
   return grouped;
 }
 
+/** A task the agent reported on with status lines and then answered reads as
+ * "Worked for 7m ›" above that answer: the statuses and check-backs were
+ * interim, and the answer is the report. Only a settled answer (its footer is
+ * down) closes a task, so a running one keeps its live status row. Human
+ * messages, notes, notices and review loops are never folded in. */
+function foldReportedTasks(
+  blocks: RenderBlock[],
+  progress: ReadonlyMap<string, ProgressGroup | null>,
+): RenderBlock[] {
+  if (!progress.size) return blocks;
+  const folded: RenderBlock[] = [];
+  let run: RenderBlock[] = [];
+  const isStatus = (block: RenderBlock) =>
+    block.kind === "entry" && progress.has(block.entry.id);
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i]!;
+    const next = blocks[i + 1];
+    const answer =
+      block.kind === "entry" &&
+      block.entry.type === "assistant" &&
+      !isStatus(block) &&
+      next?.kind === "footer" &&
+      next.entry.id === block.entry.id;
+    if (answer && run.some(isStatus)) {
+      const first = run.flatMap(renderBlockEntries)[0];
+      folded.push({
+        kind: "review-loop",
+        variant: "work",
+        blocks: run,
+        prNumber: null,
+        rounds: 0,
+        settled: null,
+        durationMs: first
+          ? Date.parse(block.entry.timestamp) - Date.parse(first.timestamp)
+          : undefined,
+      });
+      folded.push(block, next);
+      run = [];
+      i++;
+      continue;
+    }
+    const foldable =
+      block.kind === "turn" ||
+      block.kind === "footer" ||
+      (block.kind === "entry" &&
+        (block.entry.type === "assistant" ||
+          reviewBlockRole(block).kind === "check-back"));
+    if (foldable) {
+      run.push(block);
+      continue;
+    }
+    folded.push(...run, block);
+    run = [];
+  }
+  folded.push(...run);
+  return folded;
+}
+
 /** One status row per task. Status messages leave their folds; the check-back
  * fold that holds or leads straight to the row's latest update folds under
  * that row instead of drawing its own "Checked back" line beside it. Review
@@ -371,7 +436,7 @@ function projectProgressBlocks(
       continue;
     }
     flush();
-    if (block.kind !== "review-loop") {
+    if (block.kind !== "review-loop" || block.variant === "work") {
       projected.push(block);
       continue;
     }
@@ -476,7 +541,8 @@ function renderBlockKey(
     return renderBlockKey(block.checkBack, index, turnMountScope);
   if (block.kind === "review-loop") {
     const first = renderBlockEntries(block)[0];
-    return `${block.variant === "review" ? "review-loop" : "check-back"}:${first?.id ?? index}`;
+    const prefix = block.variant === "review" ? "review-loop" : block.variant;
+    return `${prefix}:${first?.id ?? index}`;
   }
   return transcriptEntryMountKey(block.entry);
 }
@@ -763,7 +829,10 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
     }
   }
   const groupedBlocks = projectProgressBlocks(
-    groupCheckBacks(groupReviewLoops(blocks), progressUpdates),
+    groupCheckBacks(
+      groupReviewLoops(foldReportedTasks(blocks, progressUpdates)),
+      progressUpdates,
+    ),
     progressUpdates,
   );
   const isConversationBoundary = (block: RenderBlock) =>
@@ -817,6 +886,8 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
               assets={inner.assets}
               onFork={onFork}
             />
+          ) : inner.kind === "entry" && progressUpdates.has(inner.entry.id) ? (
+            <ProgressStatusLine entry={inner.entry} />
           ) : inner.kind === "entry" &&
             !inner.entry.turnBoundary &&
             reviewBlockRole(inner).kind !== "handoff" ? (
@@ -879,7 +950,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
       if (block.kind === "review-loop") {
         // Final assistant output deliberately sits outside the review disclosure.
         // It does not make the loop historical while that same turn is live.
-        const isLive = isLoopLive(i);
+        const isLive = block.variant !== "work" && isLoopLive(i);
         const checkBackIsTail = isCheckBackTail(i);
         const loopChildren = renderLoopChildren(block, isLive);
         return {
@@ -893,7 +964,15 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
           ),
           estimateSize: renderBlockEstimate(block),
           content:
-            block.variant === "review" ? (
+            block.variant === "work" ? (
+              <WorkFoldBlock
+                durationMs={block.durationMs}
+                defaultOpen={reviewLoopsOpen}
+                onOpenChange={onReviewLoopOpenChange}
+              >
+                {loopChildren}
+              </WorkFoldBlock>
+            ) : block.variant === "review" ? (
               <ReviewLoopBlock
                 prNumber={block.prNumber}
                 rounds={block.rounds}
@@ -1472,7 +1551,18 @@ function groupIndexedReviewLoops(
       grouped.push(atom);
       continue;
     }
-    const loop: IndexedTimelineAtom[] = [atom];
+    // A check-back continues the request above it: that request's range
+    // joins the group, so a task that ends in an answer can fold its first
+    // work and its check-backs into one row (`foldReportedTasks`).
+    const request = grouped.at(-1);
+    const head =
+      atom.range.headRole === "check_back" &&
+      request?.kind === "range" &&
+      request.range.headRole === "user"
+        ? grouped.pop()!
+        : null;
+    const loop: IndexedTimelineAtom[] =
+      head?.kind === "range" ? [head, atom] : [atom];
     let rounds = atom.range.reviewRounds;
     let prNumber = atom.range.reviewPrNumber;
     while (index + 1 < atoms.length) {
@@ -1493,7 +1583,7 @@ function groupIndexedReviewLoops(
       ),
       rounds,
       prNumber,
-      timestampMs: atom.timestampMs,
+      timestampMs: loop[0]!.timestampMs,
     });
   }
   return grouped;
