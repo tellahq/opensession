@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useTurnActivityPrefs } from "./TurnBlock";
-import { IconChevronDown, IconCheckCircle, IconX } from "./icons";
+import { IconChevronRight, IconCheckCircle, IconX } from "./icons";
 import { cn } from "../ui/cn";
 import type { ReviewLoopResult } from "../lib/review-loop";
 import type { ReviewSettledOutcome } from "@tellahq/opensession-protocol/notices";
@@ -37,10 +37,12 @@ export function ReviewLoopBlock({
   const [open, toggle] = useLoopOpen(defaultOpen, onOpenChange);
   const status = live ? "pending" : result?.status;
   const resultDetail = reviewLoopDetail(status, rounds, settled);
-  const visibleDetail =
+  // Opened, a settled loop trades its verdict for the round count: the
+  // verdict then has its own row at the end of the work.
+  const text =
     open && status !== "pending"
-      ? `${rounds} ${rounds === 1 ? "round" : "rounds"}`
-      : resultDetail;
+      ? reviewedIn(rounds)
+      : reviewLoopText(status, rounds, settled);
   const label = [
     "Review loop",
     resultDetail,
@@ -52,9 +54,8 @@ export function ReviewLoopBlock({
   return (
     <LoopDisclosure
       title="Review loop"
+      text={text}
       label={label}
-      detail={visibleDetail}
-      aside={prNumber ? `PR #${prNumber}` : undefined}
       live={live}
       liveLabel="Review in progress"
       open={open}
@@ -93,8 +94,8 @@ export function CheckBackBlock({
   return (
     <LoopDisclosure
       title="Checked back"
+      text={live ? "Checking back" : `Checked back ${detail}`}
       label={`Checked back, ${detail}`}
-      detail={detail}
       live={live}
       liveLabel="Check-back in progress"
       open={open}
@@ -135,12 +136,15 @@ function checkBackCount(rounds: number): string {
   return rounds === 1 ? "once" : `${rounds} times`;
 }
 
-/** The folded row both loops share: chevron, title, quiet detail, spinner. */
+/**
+ * The folded row both loops share, styled like a turn's work fold: one quiet
+ * gray line, "Checked back 10 times ›", then a spinner while it runs. The PR
+ * number stays in the accessible label; the session already names its PR.
+ */
 function LoopDisclosure({
   title,
+  text,
   label,
-  detail,
-  aside,
   live,
   liveLabel,
   open,
@@ -148,9 +152,8 @@ function LoopDisclosure({
   children,
 }: {
   title: string;
+  text: string;
   label: string;
-  detail: string;
-  aside?: string;
   live: boolean;
   liveLabel: string;
   open: boolean;
@@ -167,28 +170,20 @@ function LoopDisclosure({
         aria-expanded={open}
         aria-label={label}
         onClick={onToggle}
-        className="-mx-2 flex w-[calc(100%+16px)] min-w-0 cursor-pointer items-baseline gap-2 rounded-control border-0 bg-transparent py-1 pl-1 pr-3 text-left font-sans text-item-title leading-5 text-dim transition-colors hover:bg-hover/40 hover:text-fg phone:min-h-10 phone:items-center"
+        className="-mx-2 flex w-fit max-w-[calc(100%+16px)] min-w-0 cursor-pointer items-baseline gap-1.5 rounded-control border-0 bg-transparent px-2 py-1 text-left font-sans text-item-title leading-5 text-faint transition-colors hover:text-dim phone:min-h-11 phone:items-center"
       >
+        <span className="min-w-0 truncate">{text}</span>
         <span
           className={cn(
-            "grid size-5 flex-none self-center place-items-center leading-none text-faint transition-transform duration-150",
-            open ? "-translate-y-px" : "-rotate-90",
+            "grid size-5 flex-none self-center place-items-center leading-none transition-transform duration-150",
+            open && "rotate-90",
           )}
         >
-          <IconChevronDown size={20} className="block" />
+          <IconChevronRight size={20} className="block" />
         </span>
-        <span className="shrink-0 font-medium">{title}</span>
-        <span className="min-w-0 truncate text-label leading-4 text-faint">
-          {detail}
-        </span>
-        {aside && (
-          <span className="hidden shrink-0 text-label leading-4 text-faint desktop:block">
-            {aside}
-          </span>
-        )}
         {live && (
           <span
-            className="ml-auto size-[11px] flex-none self-center animate-spin rounded-full border border-b-line-strong border-l-line-strong border-r-line-strong border-t-dim"
+            className="ml-1 size-[11px] flex-none self-center animate-spin rounded-full border border-b-line-strong border-l-line-strong border-r-line-strong border-t-dim"
             aria-label={liveLabel}
           />
         )}
@@ -198,6 +193,24 @@ function LoopDisclosure({
       )}
     </section>
   );
+}
+
+/** The closed row's words: one plain phrase, never "Review loop · …". */
+function reviewLoopText(
+  status: ReviewLoopResult["status"] | undefined,
+  rounds: number,
+  settled?: ReviewSettledOutcome | null,
+): string {
+  if (status === "pending") return "Reviewing";
+  if (status === "passed") return "Review passed";
+  if (status === "failed") return "Review needs changes";
+  if (settled === "passed") return "Review passed";
+  if (settled === "capped") return "Review handed over";
+  return reviewedIn(rounds);
+}
+
+function reviewedIn(rounds: number): string {
+  return `Reviewed in ${rounds} ${rounds === 1 ? "round" : "rounds"}`;
 }
 
 function reviewLoopDetail(
