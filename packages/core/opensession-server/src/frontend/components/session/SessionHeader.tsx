@@ -103,32 +103,19 @@ export function SessionHeader({
           // switch/attach menu: scratch names the feed it came from,
           // an Ask session with the repo turned off says so.
           (session.repoLess ? (
-            <span className="flex min-w-0 items-center gap-1.5">
-              <span
-                className="flex min-w-0 items-center gap-1.5 text-label font-medium text-dim"
-                title={
-                  session.mode === "scratch"
-                    ? "Scratch session · no repo"
-                    : "Ask session · no repo"
-                }
-              >
-                {session.mode === "scratch" ? (
-                  <RepoTile
-                    name={session.externalRefs?.[0]?.kind || "scratch"}
-                  />
-                ) : (
-                  <IconEye size={16} className="shrink-0 text-faint" />
-                )}
-                <span className="truncate">
-                  {session.mode === "scratch"
-                    ? session.externalRefs?.[0]?.kind || "scratch"
-                    : "No repo"}
-                </span>
-              </span>
-              <IconChevronDown
-                size={18}
-                className="shrink-0 -rotate-90 text-faint"
-              />
+            <span
+              className="flex shrink-0 items-center"
+              title={
+                session.mode === "scratch"
+                  ? `Scratch session · ${session.externalRefs?.[0]?.kind || "no repo"}`
+                  : "Ask session · no repo"
+              }
+            >
+              {session.mode === "scratch" ? (
+                <RepoTile name={session.externalRefs?.[0]?.kind || "scratch"} />
+              ) : (
+                <IconEye size={16} className="shrink-0 text-faint" />
+              )}
             </span>
           ) : (
             <RepoBar
