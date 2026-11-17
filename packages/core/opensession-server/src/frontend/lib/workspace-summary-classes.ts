@@ -241,6 +241,12 @@ export const WS_SUMMARY_FRAME_MEDIA =
 export const WS_SUMMARY_FRAME_CAPTION =
   "block w-full truncate text-meta text-dim";
 
+/** The address of a live page, laid over its bottom-left corner like a
+ *  video's title: dark glass, so it reads on any page. */
+export const WS_SUMMARY_FRAME_HOST =
+  "pointer-events-none absolute bottom-2 left-2 z-[1] max-w-[calc(100%_-_16px)] truncate " +
+  "rounded-full bg-black/55 px-2.5 py-1 text-meta font-medium text-white backdrop-blur-xl";
+
 /** A picture in the list, centred in the rail the glyphs use. A 16px tile
  *  inside a 20px slot, the same inset the sidebar gives its repo tiles: a
  *  filled image next to line art wants to sit a little smaller than the

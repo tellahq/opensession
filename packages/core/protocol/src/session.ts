@@ -224,6 +224,10 @@ export interface TranscriptIndexEntry {
   contentLength: number;
   /** Present only on review handoffs, for the collapsed loop label. */
   reviewPrNumber?: number;
+  /** Present only on a context-compaction notice. The engine compacts between
+   *  steps of one turn, so clients keep it inside the surrounding range
+   *  instead of starting a new one there. */
+  noticeKind?: "compaction";
 }
 
 /** Cumulative token/cost accounting for a session, as viewers render it. */
