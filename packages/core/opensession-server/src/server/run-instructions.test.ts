@@ -199,7 +199,9 @@ describe("buildRunInstructions", () => {
     // runs kept running `pkill -f <pattern>` from a command that contains the
     // pattern, which kills the tool's own `bash -c` shell (exit 143).
     // Compact reporting and the opt-in progress line add ~700 characters.
-    expect(prompt.length).toBeLessThan(5_700);
+    // Leaving CI run state to the builds flap adds ~140: agents posted
+    // "CI: Running" lines that repeated the live runs above the input.
+    expect(prompt.length).toBeLessThan(5_800);
   });
 
   test("prefers concise outcomes without hiding blockers or verification limits", () => {
@@ -209,15 +211,29 @@ describe("buildRunInstructions", () => {
     expect(prompt).toContain(
       "verification limits and required decisions explicit",
     );
-    expect(prompt).toContain("◷ **CI**: Running");
-    expect(prompt).toContain("✓ **CI**: All checks passed");
+    expect(prompt).toContain("◷ **Migration**: Running");
+    expect(prompt).toContain("✓ **Migration**: Done");
     expect(prompt).toContain("never for blockers, questions or deliverables");
-    expect(prompt).toContain("Keep passing verification out of delivery prose");
-    expect(prompt).toContain("no command lists, test counts or build recaps");
-    expect(prompt).toContain("✓ **Checks**: Passed");
+    expect(prompt).toContain("Leave passing verification out");
+    expect(prompt).toContain("no command lists, test counts, build recaps");
+    expect(prompt).not.toContain("**Checks**: Passed");
     expect(prompt).toContain(
       "State failures or missing verification briefly in plain text",
     );
+  });
+
+  test("leaves CI run state to the builds flap where it shows", () => {
+    const github = buildRunInstructions({ isAsk: false, hasSession: true });
+    expect(github).toContain("CI and deploy runs show live above the input");
+    expect(github).toContain("post no line that only repeats their state");
+    const codestorage = buildRunInstructions({
+      isAsk: false,
+      hasSession: true,
+      repoHost: "codestorage",
+    });
+    expect(codestorage).not.toContain("live above the input");
+    const scratch = buildRunInstructions({ isAsk: false, isScratch: true });
+    expect(scratch).not.toContain("live above the input");
   });
 
   test("asks for visual proof by default only where walkthroughs are mounted", () => {

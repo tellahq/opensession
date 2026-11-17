@@ -21,14 +21,19 @@ the reader needs.
 For a routine progress-only reply, an agent can send one Markdown line:
 
 ```text
-◷ **CI**: Running
+◷ **Migration**: Running
 ```
 
 A later turn uses the same topic and a checkmark for confirmed success:
 
 ```text
-✓ **CI**: All checks passed
+✓ **Migration**: Done
 ```
+
+On a GitHub repository the session already shows its CI and deploy runs live
+above the input, so agents are told not to post a line that only repeats run
+state (`CI: Running`, `All checks passed`), only what the runs cannot show,
+such as merge readiness. Passing local checks get no line either.
 
 On web and native clients, every update in one task shares a single row,
 whatever its topic: `◷ **CI**: Running` followed by `◷ **Deployment**: Running`
