@@ -97,7 +97,7 @@ import {
   type TapPoint,
 } from "../lib/composer-prediction";
 import { useComposerAutocomplete } from "../hooks/useComposerAutocomplete";
-import { paletteIconBtn, paletteIconBtnRound } from "../lib/palette-classes";
+import { paletteIconBtn } from "../lib/palette-classes";
 import { askSurface, noteSurface } from "../lib/tinted-surface";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
@@ -610,7 +610,6 @@ export function Composer({
   };
   const composerIconButtonClass = cn(
     paletteIconBtn,
-    minimized && paletteIconBtnRound,
     !minimized && "phone:[&_svg]:size-[22px]",
   );
   const addButtonClass = cn(

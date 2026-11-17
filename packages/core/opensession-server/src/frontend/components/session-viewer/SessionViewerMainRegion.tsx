@@ -1408,7 +1408,7 @@ export function SessionViewerMainRegion({
                               <Button
                                 variant="ghost"
                                 size="lg"
-                                className="size-11 min-h-11 rounded-control [corner-shape:squircle]"
+                                className="size-11 min-h-11"
                                 icon={<IconArchive size={22} aria-hidden />}
                                 aria-label="Archive and open next chat"
                                 disabled={archiving}
@@ -1426,7 +1426,7 @@ export function SessionViewerMainRegion({
                             <Button
                               variant="ghost"
                               size="lg"
-                              className="size-11 min-h-11 rounded-control [corner-shape:squircle]"
+                              className="size-11 min-h-11"
                               icon={<IconPlus size={22} aria-hidden />}
                               aria-label="New workspace"
                               disabled={!openNewWorkspace}

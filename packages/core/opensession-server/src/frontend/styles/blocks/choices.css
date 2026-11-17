@@ -2,10 +2,11 @@
    Quick replies: a ```choices fence rendered by lib/choices-block.ts.
 
    A wrapping row of chips. Each chip wears the surface an ask card's
-   option row wears (lib/ask-card-classes.ts: bg-control, the 12px
-   control corner, the hover wash, the accent focus ring), so a reply
-   offered by the agent reads as the same kind of thing as an answer it
-   asked for. Built as DOM inside injected markdown, which is why these
+   option row wears (lib/ask-card-classes.ts: bg-control, the hover
+   wash, the accent focus ring), so a reply offered by the agent reads
+   as the same kind of thing as an answer it asked for. The corner is a
+   pill like every button: half the 36px height, so one line is a
+   stadium and a reply that wraps stays a soft rounded box. Built as DOM inside injected markdown, which is why these
    live here rather than as utilities on JSX.
    ───────────────────────────────────────────────────────────── */
 .md-choices {
@@ -20,10 +21,10 @@
   align-items: center;
   min-height: 36px;
   max-width: 100%;
-  padding: 6px 12px;
+  padding: 6px 14px;
   border: 0;
-  border-radius: calc(12px * var(--rf));
-  corner-shape: var(--cs);
+  border-radius: 18px;
+  corner-shape: round;
   background: var(--control-surface);
   color: var(--text);
   font: inherit;

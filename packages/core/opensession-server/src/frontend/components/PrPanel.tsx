@@ -1107,7 +1107,7 @@ export function PrPanel({
         <Button
           variant="ghost"
           size="md"
-          className="flex-none rounded-control"
+          className="flex-none"
           aria-label={sessionActionLabel}
           icon={<IconPlus size={22} />}
           onClick={onStartSession}
