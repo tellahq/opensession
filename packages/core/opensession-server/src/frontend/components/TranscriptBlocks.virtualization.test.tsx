@@ -567,7 +567,8 @@ describe("TranscriptBlocks indexed ranges", () => {
 
     expect(html.match(/>Working<\/span>/g)).toHaveLength(1);
     expect(html).not.toContain(">Worked</span>");
-    expect(html).toContain("read 2 files");
+    expect(html.match(/data-tool-run="true"/g)).toHaveLength(1);
+    expect(html).toContain(">Read 2 files<");
     expect(html).toContain("I’ll inspect the relevant files first.");
   });
 
