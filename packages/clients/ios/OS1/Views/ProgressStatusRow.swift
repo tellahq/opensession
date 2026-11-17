@@ -145,6 +145,28 @@ struct ProgressStatusRow: View {
     }
 }
 
+/// A status message inside a work fold: the same quiet line as an earlier
+/// update in an open status row. Mirrors the web's `ProgressStatusLine`.
+struct ProgressStatusLine: View {
+    let update: ProgressUpdate
+    @ScaledMetric(relativeTo: .footnote) private var iconWidth: CGFloat = 16
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: update.symbol)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(OS1VisualStyle.textFaint)
+                .frame(width: iconWidth)
+                .accessibilityHidden(true)
+            Text(update.label)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.footnote)
+        .foregroundStyle(OS1VisualStyle.textDim)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 private extension View {
     /// The platform's minimum touch target on iOS; the Mac keeps the row's
     /// own height.

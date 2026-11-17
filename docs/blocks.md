@@ -40,7 +40,9 @@ whatever its topic: `◷ **CI**: Running` followed by `◷ **Deployment**: Runni
 reads as one row that moved on. The row sits at the latest update and takes in
 the check-back fold beside it, so there is no separate "Checked back" line.
 Open the row to read earlier updates and that work. Human messages and team
-notes start a new scope. The stored transcript is unchanged; extension and exported
+notes start a new scope. Once the task ends in an ordinary answer, the row has
+done its job: the task's work, statuses and check-backs fold into one
+`Worked for …` row above that answer, which is the report. The stored transcript is unchanged; extension and exported
 transcripts keep readable Markdown messages rather than coalescing them.
 
 This is opt-in, not a summary of arbitrary prose. The entire reply must match:
