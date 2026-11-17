@@ -190,6 +190,32 @@ final class PrLinksTests: XCTestCase {
         XCTAssertEqual(linkify(text), text)
     }
 
+    // MARK: - The conversation's own PR
+
+    /// In the session that IS a PR's conversation, a chip for that PR would
+    /// open the page already on screen, so every form of it stays text.
+    /// Any other PR keeps its chip.
+    func testOwnPrStaysPlainText() {
+        let own: Set<String> = [PrLinks.Index.key("opensession", 5528)]
+        func linkifyOwn(_ text: String) -> String {
+            chipsAsLinks(PrLinks.linkify(text, sessionId: session, ownPrs: own))
+        }
+        XCTAssertEqual(linkifyOwn("rebased #5528 on main"), "rebased #5528 on main")
+        XCTAssertEqual(linkifyOwn("see opensession#5528"), "see opensession#5528")
+        XCTAssertEqual(
+            linkifyOwn("opened https://github.com/tellahq/opensession/pull/5528 for review"),
+            "opened PR #5528 for review"
+        )
+        XCTAssertEqual(
+            linkifyOwn("see [the PR](https://github.com/tellahq/opensession/pull/5528)"),
+            "see the PR"
+        )
+        XCTAssertEqual(
+            linkifyOwn("#5528 replaces tella-fusion#5528"),
+            "#5528 replaces [tella-fusion#5528](os1pr:tella-fusion/5528)"
+        )
+    }
+
     // MARK: - Where a chip points
 
     func testReferenceRoundTripsThroughItsUrl() {

@@ -712,80 +712,112 @@ struct YouShouldKnowAction {
     let viewModel: SessionViewModel
 }
 
-/// A You should know note with its answers: Learn more opens the
-/// explanation, Ask about this quotes the note under the draft, I knew this
-/// tells later checks to skip the topic, and Turn off, pressed twice, switches
-/// the side agent off for this person (Settings → Preferences turns it back on).
+/// A You should know note with its answers: Ask about this quotes the note
+/// under the draft, Learn more opens the explanation, I knew this tells later
+/// checks to skip the topic, and Turn off (in the card's ⋯ menu, so opening
+/// the menu is the confirmation a second press used to be) switches the side
+/// agent off for this person (Settings → Preferences turns it back on).
+///
+/// It starts where the agent's text starts, not centered in the column: the
+/// note is the side agent talking, so it reads with the replies rather than
+/// as a system line. Same layout as the web's YouShouldKnowNotice.
 struct YouShouldKnowNoticeView: View {
     let entry: TranscriptEntry
     let note: YouShouldKnowNote
     let state: TurnFoldState
     let action: YouShouldKnowAction
 
-    @State private var offArmed = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var cards: SessionActionCardsModel { action.viewModel.actionCards }
     private var known: Bool { cards.knownYouShouldKnow.contains(note.line) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(note.tag)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(OS1VisualStyle.textFaint)
+        VStack(alignment: .leading, spacing: 0) {
+            header
             Text(note.line)
                 .font(.subheadline)
                 .foregroundStyle(OS1VisualStyle.text)
                 .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 6)
             if state.expanded, !note.explanation.isEmpty {
                 MarkdownBody(note.explanation)
-                    .padding(.top, 6)
+                    .padding(.top, 8)
             }
-            buttons.padding(.top, 6)
+            buttons.padding(.top, 8)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
         .frame(maxWidth: 560, alignment: .leading)
         .background(
             OS1VisualStyle.chipFill,
-            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
         )
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(note.tag)
-        .task(id: offArmed) {
-            // The second press has to follow the first; a pause disarms it,
-            // the way leaving the button does on the web.
-            guard offArmed else { return }
-            try? await Task.sleep(for: .seconds(4))
-            if !Task.isCancelled { offArmed = false }
+    }
+
+    private var header: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "lightbulb")
+                .font(.footnote)
+                .frame(width: 16)
+            Text(note.tag)
+                .font(.footnote.weight(.medium))
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            if !cards.youShouldKnowOff {
+                Menu {
+                    Button("Turn off You should know") { turnOff() }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.footnote.weight(.medium))
+                        .frame(width: 32, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .padding(.trailing, -8)
+                .accessibilityLabel("\(note.tag) options")
+            }
         }
+        .foregroundStyle(OS1VisualStyle.textFaint)
     }
 
     private var buttons: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 2) {
+            Button("Ask about this") { askAbout() }
+                .buttonStyle(NotePillStyle(prominent: true))
             if !note.explanation.isEmpty {
-                Button(state.expanded ? "Hide" : "Learn more") {
-                    withAnimation(.snappy(duration: 0.2)) { state.toggle() }
+                Button {
+                    if reduceMotion {
+                        state.toggle()
+                    } else {
+                        withAnimation(.snappy(duration: 0.2)) { state.toggle() }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(state.expanded ? "Hide" : "Learn more")
+                        Image(systemName: "chevron.down")
+                            .font(.caption2.weight(.semibold))
+                            .opacity(0.6)
+                            .rotationEffect(.degrees(state.expanded ? 180 : 0))
+                    }
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(NotePillStyle(prominent: false))
                 .accessibilityValue(state.expanded ? "Expanded" : "Collapsed")
             }
-            Button("Ask about this") { askAbout() }
-                .buttonStyle(.bordered)
             if !known {
                 Button("I knew this") { remember(quiet: false) }
-                    .buttonStyle(.borderless)
-            }
-            Spacer(minLength: 0)
-            if !cards.youShouldKnowOff {
-                Button(offArmed ? "Press again to turn off" : "Turn off") { turnOff() }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(offArmed ? OS1VisualStyle.redInk : OS1VisualStyle.textFaint)
+                    .buttonStyle(NotePillStyle(prominent: false))
             }
         }
-        .font(.footnote)
-        .controlSize(.small)
         .lineLimit(1)
+        .padding(.leading, -2)
     }
 
     /// As in the plugin, asking about a note also counts as having seen it.
@@ -805,21 +837,37 @@ struct YouShouldKnowNoticeView: View {
     }
 
     private func turnOff() {
-        guard offArmed else {
-            offArmed = true
-            Haptics.play(.armed)
-            return
-        }
         Task {
             do {
                 try await cards.turnOffYouShouldKnow()
                 action.viewModel.showNotice("You should know is off. Turn it back on in Settings.")
             } catch {
-                offArmed = false
                 action.viewModel.showNotice(
                     describe(error, fallback: "Failed to turn off You should know")
                 )
             }
         }
+    }
+}
+
+/// The note's buttons, as the web card's: a soft grey pill for the action
+/// worth taking, plain dim text for the others. Never the system's tinted
+/// bordered style, which put three blue capsules under a grey note.
+private struct NotePillStyle: ButtonStyle {
+    let prominent: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.footnote.weight(.medium))
+            .foregroundStyle(prominent ? OS1VisualStyle.text : OS1VisualStyle.textDim)
+            .padding(.horizontal, prominent ? 12 : 9)
+            .padding(.vertical, 6)
+            .background {
+                if prominent { Capsule().fill(OS1VisualStyle.hover) }
+            }
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+            .opacity(configuration.isPressed ? 0.55 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
