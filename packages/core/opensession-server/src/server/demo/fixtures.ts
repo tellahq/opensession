@@ -1632,6 +1632,96 @@ export function demoSessions(opts: {
     ],
   });
 
+  // A task whose status moves from one topic to the next across background
+  // check-backs: one row, with the check-back work folded under it.
+  const shipSid = "bks-demo-ship";
+  sessions.push({
+    id: shipSid,
+    engineSessionId: "ses_demoship",
+    file: base(shipSid, "ses_demoship", 14, 2, {
+      title: "Ship the filter fix",
+      mode: "ask",
+      worktreeDir: repoDir,
+    }),
+    lines: [
+      transcriptLineUser(
+        "Push the filter fix and deploy it.",
+        "ship-user",
+        iso(now - 14 * min),
+      ),
+      ...tool(
+        shipSid,
+        1,
+        "Bash",
+        { command: "git push origin HEAD:main" },
+        "main -> main",
+        now - 14 * min + 20_000,
+      ),
+      ...tool(
+        shipSid,
+        2,
+        "Bash",
+        { command: "gh run list --limit 1" },
+        "in_progress  CI  main",
+        now - 12 * min,
+      ),
+      transcriptLineAssistantText(
+        "◷ **CI**: Running",
+        "ship-ci",
+        iso(now - 12 * min + 5_000),
+        MODEL_FABLE,
+      ),
+      transcriptLineContextInjection(
+        "CI run finished.",
+        { source: "background-wait" },
+        "ship-wake-1",
+        iso(now - 8 * min),
+      ),
+      ...tool(
+        shipSid,
+        3,
+        "Bash",
+        { command: "gh run view --exit-status" },
+        "✓ main CI · 4m12s",
+        now - 8 * min + 5_000,
+      ),
+      ...tool(
+        shipSid,
+        4,
+        "Bash",
+        { command: "bun run deploy" },
+        "Deploy queued",
+        now - 7 * min,
+      ),
+      transcriptLineAssistantText(
+        "◷ **Deployment**: Running",
+        "ship-deploy",
+        iso(now - 7 * min + 5_000),
+        MODEL_FABLE,
+      ),
+      transcriptLineContextInjection(
+        "Deploy finished.",
+        { source: "background-wait" },
+        "ship-wake-2",
+        iso(now - 3 * min),
+      ),
+      ...tool(
+        shipSid,
+        5,
+        "Bash",
+        { command: "curl -s https://acme.example.test/health" },
+        "ok",
+        now - 3 * min + 5_000,
+      ),
+      transcriptLineAssistantText(
+        "Live: the filter fix is deployed and the health check passes.",
+        "ship-live",
+        iso(now - 2 * min),
+        MODEL_FABLE,
+      ),
+    ],
+  });
+
   return sessions;
 }
 
