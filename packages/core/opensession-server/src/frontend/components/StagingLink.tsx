@@ -7,7 +7,12 @@ import type { PrCheck, UnifiedSession } from "../lib/types";
 import { worstPrRef } from "../lib/pr-refs";
 import { sessionPrPresentation } from "../lib/session-prs";
 import { previewOpenable, stagingHref } from "../lib/preview-url";
-import { WS_SUMMARY_ICON } from "../lib/workspace-summary-classes";
+import {
+  OVERVIEW_ROW,
+  OVERVIEW_ROW_MARK,
+  OVERVIEW_ROW_META,
+  WS_SUMMARY_ICON,
+} from "../lib/workspace-summary-classes";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
 import { toast } from "../ui/toast";
@@ -118,8 +123,9 @@ export function StagingLink({
   session: UnifiedSession;
   /** "bar" = the labelled Preview environment link; "header" = a compact
    *  state-colored icon; "action" = a cell in the mobile workspace grid;
-   *  "summary" = a row in the header's workspace summary card. */
-  variant?: "bar" | "header" | "action" | "summary";
+   *  "summary" = a row in the header's workspace summary card;
+   *  "overview" = a row in the overview page's Deployments list. */
+  variant?: "bar" | "header" | "action" | "summary" | "overview";
   /** Bumped when GitHub reports PR/check/deployment activity for this session. */
   refreshTick?: number;
 }) {
@@ -168,7 +174,9 @@ export function StagingLink({
   // shimmering globe so the affordance loads alongside the checks; otherwise
   // (backend-only PR, no deploy) render nothing.
   if (!staging) {
-    if (!deployPending) return null;
+    // The overview lists the deploy's own check beside this row, and that
+    // check already says it is running.
+    if (!deployPending || variant === "overview") return null;
     const shimmerGlobe = (size: number) => (
       <span
         className="relative inline-flex items-center justify-center animate-[staging-shimmer_1.4s_ease-in-out_infinite]"
@@ -458,6 +466,36 @@ export function StagingLink({
           {globe(20, RING_LG)}
         </a>
       </Tooltip>,
+    );
+  }
+
+  if (variant === "overview") {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener"
+        onClick={onClick}
+        aria-disabled={building || undefined}
+        className={OVERVIEW_ROW}
+        title={tooltip("")}
+      >
+        <span
+          className={cn(
+            OVERVIEW_ROW_MARK,
+            spinning ? "text-yellow" : "text-green",
+          )}
+        >
+          {globe(18, RING_LG)}
+        </span>
+        <span className="min-w-0 flex-1 truncate">Preview environment</span>
+        {spinning && (
+          <span className={OVERVIEW_ROW_META}>
+            {building ? staging.status : "Redeploying"}
+          </span>
+        )}
+        <IconArrowUpRight size={20} className="shrink-0 text-faint" />
+      </a>
     );
   }
 

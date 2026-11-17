@@ -1,4 +1,4 @@
-import type { ReactNode, Ref } from "react";
+import { useEffect, useRef, type ReactNode, type Ref } from "react";
 import { createPortal } from "react-dom";
 import { BASE_PATH } from "../../lib/base";
 import { brandLogo } from "../../brand-logos";
@@ -51,6 +51,9 @@ interface SessionHeaderProps {
   onCommitRename: () => void;
   onCancelRename: () => void;
   canRename: boolean;
+  /** Open the chat's overview page. A single click on the title does it;
+   *  a double-click still renames. */
+  onOpenOverview?: () => void;
   menu: ReactNode;
   menuTrailing?: ReactNode;
   isPhone: boolean;
@@ -80,6 +83,7 @@ export function SessionHeader({
   onCommitRename,
   onCancelRename,
   canRename,
+  onOpenOverview,
   menu,
   menuTrailing,
   isPhone,
@@ -93,6 +97,15 @@ export function SessionHeader({
   topbarEl,
   headerActionsEl,
 }: SessionHeaderProps) {
+  // A click waits out the double-click window before opening the overview,
+  // so the rename gesture the title has always had still lands on its own.
+  const overviewClick = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (overviewClick.current) clearTimeout(overviewClick.current);
+    },
+    [],
+  );
   const header = (
     <TopBar className={VIEWER_HEADER} ref={headerRef}>
       <TopBarLeading className={VIEWER_TITLE}>
@@ -189,17 +202,56 @@ export function SessionHeader({
           />
         ) : (
           <OverflowFadeText
-            className={`${VIEWER_BRANCH} ${canRename ? VIEWER_BRANCH_EDITABLE : ""}`}
+            className={cn(
+              VIEWER_BRANCH,
+              (canRename || onOpenOverview) && VIEWER_BRANCH_EDITABLE,
+              onOpenOverview && "cursor-pointer",
+            )}
+            {...(onOpenOverview
+              ? {
+                  role: "button",
+                  tabIndex: 0,
+                  "aria-haspopup": "dialog" as const,
+                  onKeyDown: (event: React.KeyboardEvent) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    event.preventDefault();
+                    onOpenOverview();
+                  },
+                }
+              : {})}
             title={
-              parentSession
+              onOpenOverview
                 ? canRename
-                  ? `${session.title} · double-click to rename`
-                  : session.title
-                : workspaceName
-                  ? `${session.title} · double-click to rename the workspace`
-                  : canRename
-                    ? "Double-click to rename"
+                  ? "Open overview · double-click to rename"
+                  : "Open overview"
+                : parentSession
+                  ? canRename
+                    ? `${session.title} · double-click to rename`
                     : session.title
+                  : workspaceName
+                    ? `${session.title} · double-click to rename the workspace`
+                    : canRename
+                      ? "Double-click to rename"
+                      : session.title
+            }
+            onClick={
+              onOpenOverview
+                ? (event: React.MouseEvent) => {
+                    if (overviewClick.current)
+                      clearTimeout(overviewClick.current);
+                    overviewClick.current = null;
+                    // A drag across the name selects it; that is not a click.
+                    if (event.detail > 1 || window.getSelection()?.toString())
+                      return;
+                    overviewClick.current = setTimeout(
+                      () => {
+                        overviewClick.current = null;
+                        onOpenOverview();
+                      },
+                      canRename ? 250 : 0,
+                    );
+                  }
+                : undefined
             }
             onDoubleClick={
               canRename

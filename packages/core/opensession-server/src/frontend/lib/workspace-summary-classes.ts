@@ -249,3 +249,42 @@ export const WS_SUMMARY_FRAME_CAPTION =
  *  is tell two rows apart at a glance once you already know them. */
 export const WS_SUMMARY_THUMB =
   "size-4 overflow-hidden rounded-sm border border-line bg-panel object-cover";
+
+/* ── Session overview page ──────────────────────────────────────────────────
+ *
+ * The page a chat's title opens, on every width. It reads top to bottom as
+ * one overview: the name and where the work stands, the PR card with its one
+ * action, then a labelled list per kind of thing (Deployments, Demos, …).
+ * Each list is its own raised plate with hairlines between rows, so the page
+ * scans as a few grouped blocks rather than one long form.
+ */
+
+/** A section's label, sitting over the plate and aligned with its rows. */
+export const OVERVIEW_HEADING =
+  "flex items-center gap-1.5 px-1 pt-5 pb-2 text-label font-medium text-dim";
+
+/** A list of rows on one raised plate. */
+export const OVERVIEW_LIST =
+  "flex flex-col overflow-hidden rounded-2xl bg-raised divide-y divide-divider";
+
+/** One row in an overview list: a leading mark, a name, a quiet fact, and an
+ *  outward arrow when the row leaves the app. */
+export const OVERVIEW_ROW =
+  "flex min-h-14 w-full min-w-0 items-center gap-3 border-none bg-transparent px-4 text-left text-item-title text-fg no-underline " +
+  "cursor-pointer transition-colors hover:bg-hover focus-ring aria-disabled:cursor-default";
+
+/** The 32px tile a row's status mark sits in. */
+export const OVERVIEW_ROW_MARK =
+  "grid size-8 shrink-0 place-items-center rounded-md bg-hover";
+
+/** A row's quiet trailing fact (a duration, a state). */
+export const OVERVIEW_ROW_META = "shrink-0 text-label text-dim tabular-nums";
+
+/** The demo carousel: wide cards that scroll sideways and snap, with the next
+ *  one peeking in from the edge so the strip says it scrolls. */
+export const OVERVIEW_CAROUSEL =
+  "-mx-3 flex snap-x snap-mandatory scroll-px-3 gap-3 overflow-x-auto px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+
+export const OVERVIEW_DEMO =
+  "relative aspect-[16/10] w-[82%] max-w-[420px] shrink-0 snap-start overflow-hidden rounded-2xl border-none bg-raised p-0 " +
+  "cursor-pointer smooth-shadow-sm focus-ring";

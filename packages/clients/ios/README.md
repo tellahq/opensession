@@ -238,12 +238,16 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   the body column widths and scroll with the rows when the table overflows.
 
   ```
-- **Workspace details** — tapping the session title opens a native worktree sheet
-  with repository and branch metadata, local git status, changed files, a
-  color-coded pull request card for checks, review state and conflicts,
-  workspace context, a Conversation filmstrip for pictures and recordings,
-  native preview frames for visual session assets while documents and data keep
-  their file rows, model/reasoning controls, and live remote
+- **Workspace details**: tapping the session title opens a native overview
+  sheet. It leads with a large title and state pills (run or PR state, +/−
+  lines that open Changes), then a merge card (headline such as "Ready to
+  merge", reviewers and the checks rollup, and a full-width "Squash and merge"
+  button behind a confirmation; long-press for the other methods), a
+  Deployments list (the PR's preview environment plus deploy checks such as
+  Vercel), and a Demos carousel of the conversation's and assets' pictures and
+  recordings, videos first. Below that: repository and branch metadata, local
+  git status, changed files, workspace context, document and data assets as
+  Files rows, model/reasoning controls, and live remote
   sandbox status. Sandboxed workspaces expose explicit pause, wake, and
   confirmed recreate controls without embedding the web client. A code session
   on this machine gets a Runtime section instead, with "Move to Daytona/Box"

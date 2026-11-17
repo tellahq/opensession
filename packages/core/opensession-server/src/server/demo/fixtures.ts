@@ -2083,6 +2083,24 @@ export function demoPrDetails(now: number, ghRepo: string) {
         conclusion: "SUCCESS",
         workflowName: "CI",
       },
+      // Preview deploys arrive as status contexts: no workflow, a link to
+      // the deploy, and a start and end the overview turns into a duration.
+      {
+        name: "Vercel – acme-todo-web",
+        status: "COMPLETED",
+        conclusion: "SUCCESS",
+        url: "https://acme-todo-web-preview.example.test",
+        startedAt: iso(now - 40 * 60_000),
+        completedAt: iso(now - 39 * 60_000),
+      },
+      {
+        name: "Vercel – acme-todo-docs",
+        status: "COMPLETED",
+        conclusion: "SUCCESS",
+        url: "https://acme-todo-docs-preview.example.test",
+        startedAt: iso(now - 40 * 60_000),
+        completedAt: iso(now - 37 * 60_000),
+      },
     ],
     comments: [
       {

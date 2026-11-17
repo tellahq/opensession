@@ -53,6 +53,10 @@ struct WorktreeInfoView: View {
     @State private var switchedRepo: OS1API.SwitchedRepo?
     /// Account pools as this device last fetched them, for the Speed row.
     @State private var accountPools = SettingsAPI.cachedProviderAccountPools()
+    /// The merge method waiting on its confirmation, from the merge card.
+    @State private var pendingMerge: String?
+    @State private var merging = false
+    @State private var mergeError: String?
 
     var body: some View {
         NavigationStack {
@@ -63,10 +67,15 @@ struct WorktreeInfoView: View {
                 // own metadata — branch, path, mode — changes once and is
                 // reference material, so it sits below the answer rather than
                 // filling the first screen with it.
+                // The top answers "can this ship?": the title and its state,
+                // the pull request with its one action, where it is deployed,
+                // and what it looks like. Everything else is reference below.
                 LazyVStack(alignment: .leading, spacing: 22) {
                     hero
+                    mergeSection
+                    deploymentsSection
+                    demosSection
                     overviewSection
-                    conversationSection
                     reviewSection
                         .id("review")
                     pullRequestSection
@@ -94,12 +103,54 @@ struct WorktreeInfoView: View {
             #endif
             }
             .background(OS1VisualStyle.background)
-            .navigationTitle("Workspace")
+            // The page carries its own large title, so the bar is only its
+            // floating buttons. The title still names the back button of
+            // anything pushed from here.
+            .navigationTitle("Overview")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "chevron.down")
+                    }
+                    .accessibilityLabel("Close")
                 }
+                if let url = viewModel.prDetails?.url.flatMap(URL.init(string:)) {
+                    ToolbarItem(placement: .primaryAction) {
+                        ShareLink(item: url) {
+                            Image(systemName: "square.and.arrow.up")
+                        }
+                        .accessibilityLabel("Share pull request")
+                    }
+                }
+            }
+            .confirmationDialog(
+                mergeConfirmationTitle,
+                isPresented: Binding(
+                    get: { pendingMerge != nil },
+                    set: { if !$0 { pendingMerge = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button(Self.mergeButtonLabel(pendingMerge ?? "squash")) {
+                    merge(method: pendingMerge ?? "squash")
+                }
+                Button("Cancel", role: .cancel) { pendingMerge = nil }
+            } message: {
+                Text(mergeConfirmationMessage)
+            }
+            .alert(
+                "Couldn’t merge pull request",
+                isPresented: Binding(
+                    get: { mergeError != nil },
+                    set: { if !$0 { mergeError = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(mergeError ?? "Please try again.")
             }
             .task(id: loadIdentity) { await load() }
             .refreshable { await refresh() }
@@ -179,42 +230,62 @@ struct WorktreeInfoView: View {
         }
     }
 
+    /// The page's title block, left-aligned like a document: the name, then
+    /// what state it is in as pills, then where it runs.
     private var hero: some View {
-        VStack(spacing: 9) {
-            RepoTile(name: currentSession.effectiveRepo, size: 52, round: true)
+        VStack(alignment: .leading, spacing: 12) {
             Text(currentSession.displayTitle)
-                .font(.title2.weight(.bold))
-                .multilineTextAlignment(.center)
+                .font(.largeTitle.weight(.bold))
+                .foregroundStyle(OS1VisualStyle.text)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+            FlowLayout(spacing: 8) {
+                if let stateLabel {
+                    HStack(spacing: 5) {
+                        Label(stateLabel.text, systemImage: stateLabel.icon)
+                        // The state alone can't say whether this started a
+                        // minute ago or an hour ago.
+                        if viewModel.isRunning, let since = viewModel.runStartedAt {
+                            Text("·").foregroundStyle(stateLabel.color.opacity(0.6))
+                            RunElapsedLabel(since: since)
+                        }
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(stateLabel.color)
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 6)
+                    .background(stateLabel.color.opacity(0.12), in: Capsule())
+                }
+                if let diff, diff.totalAdditions + diff.totalDeletions > 0 {
+                    Button {
+                        panel = .changes(sessionId: currentSession.id)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(verbatim: "+\(diff.totalAdditions)")
+                                .foregroundStyle(OS1VisualStyle.greenInk)
+                            Text(verbatim: "−\(diff.totalDeletions)")
+                                .foregroundStyle(OS1VisualStyle.redInk)
+                        }
+                        .font(.subheadline.weight(.semibold).monospacedDigit())
+                        .padding(.horizontal, 11)
+                            .padding(.vertical, 6)
+                            .background(OS1VisualStyle.raised, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open changes")
+                }
+            }
             Text(heroSubtitle)
                 .font(.subheadline)
                 .foregroundStyle(OS1VisualStyle.textDim)
-                .multilineTextAlignment(.center)
-            if let stateLabel {
-                HStack(spacing: 5) {
-                    Label(stateLabel.text, systemImage: stateLabel.icon)
-                    // The state alone can't say whether this started a minute
-                    // ago or has been going for an hour, which is the whole
-                    // question when you open the sheet on a running workspace.
-                    if viewModel.isRunning, let since = viewModel.runStartedAt {
-                        Text("·").foregroundStyle(stateLabel.color.opacity(0.6))
-                        RunElapsedLabel(since: since)
-                    }
-                }
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(stateLabel.color)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(stateLabel.color.opacity(0.12), in: Capsule())
-            }
             if let heroFooter {
                 Text(heroFooter)
                     .font(.caption)
                     .foregroundStyle(OS1VisualStyle.textFaint)
-                    .multilineTextAlignment(.center)
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 4)
     }
 
     /// The line under the state: how long ago this stopped, what is queued
@@ -467,6 +538,318 @@ struct WorktreeInfoView: View {
         }
     }
 
+    /// The pull request as one card: where it stands, who signed off and
+    /// how its checks went, and its one action as a full-width button.
+    @ViewBuilder
+    private var mergeSection: some View {
+        if let pr = viewModel.prDetails {
+            let tone = mergeTone(pr)
+            VStack(alignment: .leading, spacing: 14) {
+                Button {
+                    panel = .review(sessionId: currentSession.id)
+                } label: {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(mergeHeadline(pr))
+                            .font(.headline)
+                            .foregroundStyle(OS1VisualStyle.text)
+                        HStack(spacing: 5) {
+                            Text(verbatim: "#\(pr.number)").monospacedDigit()
+                            Text(pr.title ?? "Pull request").lineLimit(1)
+                        }
+                        .font(.subheadline)
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    panel = .review(sessionId: currentSession.id)
+                } label: {
+                    HStack(spacing: 12) {
+                        HStack(spacing: -8) {
+                            Image(systemName: mergeStatusIcon(pr))
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 34, height: 34)
+                                .background(tone, in: Circle())
+                                .overlay(Circle().stroke(OS1VisualStyle.raised, lineWidth: 2))
+                            ForEach(mergeReviewers(pr), id: \.login) { reviewer in
+                                UserAvatar(person: reviewer.login, login: reviewer.login, size: 34)
+                                    .overlay(Circle().stroke(OS1VisualStyle.raised, lineWidth: 2))
+                            }
+                        }
+                        Text(mergeStatusLine(pr))
+                            .font(.body.weight(.medium))
+                            .foregroundStyle(OS1VisualStyle.text)
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(OS1VisualStyle.textFaint)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                if pr.isOpen {
+                    Button {
+                        pendingMerge = "squash"
+                    } label: {
+                        HStack(spacing: 8) {
+                            if merging { ProgressView().controlSize(.small).tint(OS1VisualStyle.background) }
+                            Text(merging ? "Merging…" : "Squash and merge")
+                        }
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(OS1VisualStyle.background)
+                        .frame(maxWidth: .infinity, minHeight: 50)
+                        .background(OS1VisualStyle.text, in: Capsule())
+                        .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(merging)
+                    .opacity(merging ? 0.7 : 1)
+                    .contextMenu {
+                        Button("Squash and merge") { pendingMerge = "squash" }
+                        Button("Create a merge commit") { pendingMerge = "merge" }
+                        Button("Rebase and merge") { pendingMerge = "rebase" }
+                    }
+                }
+            }
+            .padding(16)
+            .background {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(OS1VisualStyle.raised)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .fill(tone.opacity(0.08))
+                    )
+            }
+        }
+    }
+
+    private func mergeTone(_ pr: PrDetails) -> Color {
+        if pr.isOpen, pr.mergeable == "CONFLICTING" || pr.reviewDecision == "CHANGES_REQUESTED" {
+            return OS1VisualStyle.red
+        }
+        return pr.summary.color
+    }
+
+    private func mergeHeadline(_ pr: PrDetails) -> String {
+        switch pr.summary {
+        case .merged: return "Merged"
+        case .closed: return "Closed"
+        case .draft: return "Draft"
+        case .failing: return "Checks failing"
+        case .pending: return "Checks running"
+        case .passing:
+            if pr.mergeable == "CONFLICTING" { return "Merge conflicts" }
+            if pr.reviewDecision == "CHANGES_REQUESTED" { return "Changes requested" }
+            if pr.reviewDecision == "REVIEW_REQUIRED" { return "Waiting for review" }
+            return "Ready to merge"
+        }
+    }
+
+    private func mergeStatusIcon(_ pr: PrDetails) -> String {
+        switch pr.summary {
+        case .merged: "arrow.triangle.merge"
+        case .closed, .failing: "xmark"
+        case .draft: "pencil"
+        case .pending: "clock"
+        case .passing: pr.mergeable == "CONFLICTING" ? "exclamationmark" : "checkmark"
+        }
+    }
+
+    /// People, not teams: a team row says nobody in particular looked.
+    private func mergeReviewers(_ pr: PrDetails) -> [PrReviewer] {
+        Array((pr.reviewers ?? []).filter { $0.isTeam != true }.prefix(3))
+    }
+
+    private func mergeStatusLine(_ pr: PrDetails) -> String {
+        let checks = (pr.checks ?? []).filter { !Self.isDeployment($0) }
+        let failed = checks.filter { $0.rank == .failure }.count
+        let pending = checks.filter { $0.rank == .pending }.count
+        if failed > 0 { return "\(failed) of \(checks.count) checks failed" }
+        if pending > 0 { return "\(pending) of \(checks.count) checks running" }
+        if !checks.isEmpty { return "All checks passed" }
+        return pr.reviewDecision == "APPROVED" ? "Approved" : "No checks"
+    }
+
+    private var mergeConfirmationTitle: String {
+        guard let number = viewModel.prDetails?.number else { return "Merge pull request?" }
+        return "Merge PR #\(number)?"
+    }
+
+    private var mergeConfirmationMessage: String {
+        guard let pr = viewModel.prDetails else { return "This cannot be undone." }
+        var warnings: [String] = []
+        if pr.mergeable == "CONFLICTING" { warnings.append("it has conflicts") }
+        if (pr.checks ?? []).contains(where: { $0.rank == .failure }) {
+            warnings.append("checks are failing")
+        } else if (pr.checks ?? []).contains(where: { $0.rank == .pending }) {
+            warnings.append("checks are still running")
+        }
+        if pr.isDraft == true { warnings.append("it’s still a draft") }
+        if pr.reviewDecision == "CHANGES_REQUESTED" { warnings.append("changes were requested") }
+        let base = pr.baseRefName ?? "the base branch"
+        guard !warnings.isEmpty else { return "This merges into \(base)." }
+        return "This merges into \(base) even though \(warnings.joined(separator: ", "))."
+    }
+
+    private static func mergeButtonLabel(_ method: String) -> String {
+        switch method {
+        case "merge": "Create a merge commit"
+        case "rebase": "Rebase and merge"
+        default: "Squash and merge"
+        }
+    }
+
+    private func merge(method: String) {
+        pendingMerge = nil
+        guard !merging else { return }
+        merging = true
+        mergeError = nil
+        Task {
+            do {
+                try await viewModel.mergePr(method: method)
+                Haptics.play(.commit)
+            } catch {
+                mergeError = (error as? LocalizedError)?.errorDescription
+                    ?? error.localizedDescription
+            }
+            merging = false
+        }
+    }
+
+    /// A check that is a deploy rather than a test, as the web's
+    /// `isDeployment` reads it: a provider's preview status, or a job named
+    /// for deploying.
+    private static func isDeployment(_ check: PrCheck) -> Bool {
+        let name = check.name
+        if check.workflowName == nil || check.workflowName?.isEmpty == true,
+           name.range(of: "^(preview|vercel)\\s*([–—-]|/)", options: [.regularExpression, .caseInsensitive]) != nil {
+            return true
+        }
+        return name.range(of: "^deploy\\b", options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    private struct DeploymentRow: Identifiable {
+        let id: String
+        let name: String
+        let detail: String
+        let rank: PrCheck.Rank
+        let url: URL?
+    }
+
+    private var deployments: [DeploymentRow] {
+        guard let pr = viewModel.prDetails else { return [] }
+        var rows: [DeploymentRow] = []
+        if let href = pr.staging?.href(previewPath: currentSession.previewPath) {
+            rows.append(DeploymentRow(
+                id: "staging",
+                name: "Preview environment",
+                detail: href.host() ?? href.absoluteString,
+                rank: .success,
+                url: href
+            ))
+        }
+        for check in (pr.checks ?? []) where Self.isDeployment(check) {
+            let name = check.name.replacingOccurrences(
+                of: "^(vercel|preview)\\s*([–—-]|/)\\s*",
+                with: "",
+                options: [.regularExpression, .caseInsensitive]
+            )
+            let state: String = switch check.rank {
+            case .success: "Ready"
+            case .failure: "Failed"
+            case .pending: "Building"
+            case .neutral: "Skipped"
+            }
+            rows.append(DeploymentRow(
+                id: "check|\(check.name)",
+                name: name.isEmpty ? check.name : name,
+                detail: [state, Self.checkDuration(check)].compactMap { $0 }.joined(separator: " · "),
+                rank: check.rank,
+                url: check.url.flatMap(URL.init(string:))
+            ))
+        }
+        return rows
+    }
+
+    private static func checkDuration(_ check: PrCheck) -> String? {
+        guard let start = Session.parseISO(check.startedAt),
+              let end = Session.parseISO(check.completedAt)
+        else { return nil }
+        let seconds = Int(end.timeIntervalSince(start).rounded())
+        if seconds <= 0 { return nil }
+        return seconds < 60 ? "\(seconds)s" : "\(Int((Double(seconds) / 60).rounded()))m"
+    }
+
+    /// Where this change runs: the PR's preview environment and every deploy
+    /// its checks report.
+    @ViewBuilder
+    private var deploymentsSection: some View {
+        let rows = deployments
+        if !rows.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                OverviewHeading(title: "Deployments", count: rows.count)
+                VStack(spacing: 0) {
+                    ForEach(rows) { row in
+                        Button {
+                            if let url = row.url { openURL(url) }
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: row.id == "staging" ? "globe" : "triangle.fill")
+                                    .font(.system(size: row.id == "staging" ? 17 : 13, weight: .semibold))
+                                    .foregroundStyle(OS1VisualStyle.text)
+                                    .frame(width: 38, height: 38)
+                                    .background(OS1VisualStyle.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(row.name)
+                                        .font(.body.weight(.medium))
+                                        .foregroundStyle(OS1VisualStyle.text)
+                                        .lineLimit(1)
+                                    HStack(spacing: 5) {
+                                        Circle()
+                                            .fill(Self.deployColor(row.rank))
+                                            .frame(width: 7, height: 7)
+                                        Text(row.detail)
+                                            .lineLimit(1)
+                                    }
+                                    .font(.footnote)
+                                    .foregroundStyle(OS1VisualStyle.textDim)
+                                }
+                                Spacer(minLength: 8)
+                                if row.url != nil {
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(OS1VisualStyle.textFaint)
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .frame(minHeight: 62)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(row.url == nil)
+                        if row.id != rows.last?.id { Divider().padding(.leading, 62) }
+                    }
+                }
+                .background(OS1VisualStyle.raised, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            }
+        }
+    }
+
+    private static func deployColor(_ rank: PrCheck.Rank) -> Color {
+        switch rank {
+        case .success: OS1VisualStyle.green
+        case .failure: OS1VisualStyle.red
+        case .pending: OS1VisualStyle.yellow
+        case .neutral: OS1VisualStyle.textFaint
+        }
+    }
+
     /// Git state and the diff in one card. They answer the same question —
     /// what this workspace did to the tree — and on most workspaces each is a
     /// line or two, so two titled cards for them cost a third of the first
@@ -614,28 +997,16 @@ struct WorktreeInfoView: View {
     /// workspace page.
     @ViewBuilder
     private var assetsSection: some View {
-        if !assets.isEmpty {
+        if !fileAssets.isEmpty {
             InfoSection(
-                title: "Assets",
+                title: "Files",
                 trailing: AnyView(
-                    Text(verbatim: "\(assets.count)")
+                    Text(verbatim: "\(fileAssets.count)")
                         .font(.caption.weight(.semibold).monospacedDigit())
                         .foregroundStyle(OS1VisualStyle.textDim)
                 )
             ) {
-                if !visualAssets.isEmpty {
-                    WorkspaceMediaStrip(
-                        items: visualAssets.map {
-                            WorkspaceMediaItem.asset($0, sessionId: currentSession.id)
-                        },
-                        onOpen: { item in
-                            guard case .asset(let asset) = item.source else { return }
-                            panel = .asset(sessionId: currentSession.id, path: asset.path)
-                        }
-                    )
-                }
                 let shown = Array(fileAssets.prefix(8))
-                if !visualAssets.isEmpty, !shown.isEmpty { Divider() }
                 ForEach(shown) { asset in
                     Button {
                         panel = .asset(sessionId: currentSession.id, path: asset.path)
@@ -723,8 +1094,9 @@ struct WorktreeInfoView: View {
     @ViewBuilder
     private var pullRequestSection: some View {
         let rows = SessionPrSeries.rows(for: currentSession)
-        let primaryNumber = viewModel.prDetails?.number ?? currentSession.prNumber
-        if !rows.isEmpty || primaryNumber != nil {
+        // Once the merge card has the primary PR this lists only the others.
+        let primaryNumber = viewModel.prDetails == nil ? currentSession.prNumber : nil
+        if rows.contains(where: { !$0.isPrimary }) || primaryNumber != nil {
             InfoSection(
                 title: rows.count == 1 ? "Pull request" : "Pull requests",
                 trailing: primaryNumber.flatMap { number in
@@ -746,7 +1118,7 @@ struct WorktreeInfoView: View {
                 }
                 SessionPrSeriesRows(
                     session: currentSession,
-                    includePrimary: primaryNumber == nil
+                    includePrimary: primaryNumber == nil && viewModel.prDetails == nil
                 ) { row in
                     if row.isPrimary {
                         panel = .review(sessionId: currentSession.id)
@@ -917,26 +1289,37 @@ struct WorktreeInfoView: View {
         }
     }
 
+    /// What the work looks like: recordings first, then screenshots, from
+    /// the conversation and the session's assets alike, as one large
+    /// carousel. Called Demos when there is a recording to play.
     @ViewBuilder
-    private var conversationSection: some View {
+    private var demosSection: some View {
         let media = conversationMedia
-        if !media.isEmpty {
-            // The strip carries recordings too, but screenshots are what people
-            // call the set. Same word the web card and panel head it with.
-            InfoSection(
-                title: "Screenshots",
-                trailing: AnyView(
-                    Text(verbatim: "\(media.count)")
-                        .font(.caption.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(OS1VisualStyle.textDim)
+        let items = (
+            media.map { WorkspaceMediaItem.conversation($0, label: mediaLabel($0)) }
+            + visualAssets.map { WorkspaceMediaItem.asset($0, sessionId: currentSession.id) }
+        )
+        .enumerated()
+        .sorted { lhs, rhs in
+            let l = lhs.element.kind == .video ? 0 : 1
+            let r = rhs.element.kind == .video ? 0 : 1
+            return l == r ? lhs.offset < rhs.offset : l < r
+        }
+        .map(\.element)
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                OverviewHeading(
+                    title: items.contains { $0.kind == .video } ? "Demos" : "Screenshots",
+                    count: items.count
                 )
-            ) {
-                WorkspaceMediaStrip(
-                    items: media.map {
-                        WorkspaceMediaItem.conversation($0, label: mediaLabel($0))
-                    },
-                    onOpen: openConversationMedia
-                )
+                WorkspaceMediaStrip(items: items, large: true) { item in
+                    switch item.source {
+                    case .conversation:
+                        openConversationMedia(item)
+                    case .asset(let asset):
+                        panel = .asset(sessionId: currentSession.id, path: asset.path)
+                    }
+                }
             }
         }
     }
@@ -1309,9 +1692,13 @@ struct WorktreeInfoView: View {
         if viewModel.isRunning {
             return ("Working", "sparkles", OS1VisualStyle.green)
         }
-        switch currentSession.prState {
-        case "OPEN": return ("In review", "arrow.triangle.pull", OS1VisualStyle.yellow)
-        case "MERGED": return ("Merged", "checkmark", OS1VisualStyle.purple)
+        switch viewModel.prDetails?.state ?? currentSession.prState {
+        case "OPEN":
+            return viewModel.prDetails?.isDraft == true
+                ? ("Draft", "pencil", OS1VisualStyle.textDim)
+                : ("Open", "arrow.triangle.pull", OS1VisualStyle.green)
+        case "MERGED": return ("Merged", "arrow.triangle.merge", OS1VisualStyle.purple)
+        case "CLOSED": return ("Closed", "xmark", OS1VisualStyle.red)
         default: return nil
         }
     }
@@ -1636,6 +2023,26 @@ private struct InfoSection<Content: View>: View {
     }
 }
 
+/// A section title on the overview: larger than the reference sections'
+/// labels, because these are the page's main answers.
+private struct OverviewHeading: View {
+    let title: String
+    var count: Int? = nil
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(title)
+                .font(.title3.weight(.bold))
+                .foregroundStyle(OS1VisualStyle.text)
+            if let count {
+                Text(verbatim: "\(count)")
+                    .font(.subheadline.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(OS1VisualStyle.textDim)
+            }
+        }
+    }
+}
+
 private struct WorkspaceImageSelection: Identifiable {
     let index: Int
     var id: Int { index }
@@ -1697,10 +2104,12 @@ private struct WorkspaceMediaItem: Identifiable {
 /// and a clipped next card that leaves the continuation discoverable.
 private struct WorkspaceMediaStrip: View {
     let items: [WorkspaceMediaItem]
+    /// The overview's carousel: cards most of the page wide, one at a time.
+    var large = false
     let onOpen: (WorkspaceMediaItem) -> Void
 
-    private let frameWidth: CGFloat = 152
-    private let frameHeight: CGFloat = 96
+    private var frameWidth: CGFloat { large ? 300 : 152 }
+    private var frameHeight: CGFloat { large ? 188 : 96 }
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -1708,9 +2117,9 @@ private struct WorkspaceMediaStrip: View {
                 ForEach(items) { item in
                     Button { onOpen(item) } label: {
                         VStack(alignment: .leading, spacing: 6) {
-                            WorkspaceMediaFrame(item: item)
+                            WorkspaceMediaFrame(item: item, fill: large)
                                 .frame(width: frameWidth, height: frameHeight)
-                            if let caption = item.caption {
+                                            if let caption = item.caption {
                                 Text(caption)
                                     .font(.caption)
                                     .foregroundStyle(OS1VisualStyle.textDim)
@@ -1726,14 +2135,21 @@ private struct WorkspaceMediaStrip: View {
             }
             .scrollTargetLayout()
         }
-        .contentMargins(.horizontal, 12, for: .scrollContent)
-        .contentMargins(.vertical, 12, for: .scrollContent)
+        .contentMargins(.horizontal, large ? 0 : 12, for: .scrollContent)
+        .contentMargins(.vertical, large ? 0 : 12, for: .scrollContent)
+        // On the overview the strip keeps the page's margin, so the first
+        // card lines up with the text above, and draws past it so the next
+        // card peeks in from the screen edge.
+        .scrollClipDisabled(large)
         .scrollTargetBehavior(.viewAligned(limitBehavior: .always))
     }
 }
 
 private struct WorkspaceMediaFrame: View {
     let item: WorkspaceMediaItem
+    /// Fill the frame edge to edge (the overview's carousel) rather than
+    /// letterboxing the whole picture inside it.
+    var fill = false
 
     @State private var image: UIImage?
     @State private var failed = false
@@ -1744,7 +2160,16 @@ private struct WorkspaceMediaFrame: View {
     var body: some View {
         ZStack {
             OS1VisualStyle.background
-            if let image {
+            if let image, fill {
+                // Sized by the frame, not the picture, so filling it cannot
+                // grow the card past its slot.
+                Color.clear.overlay {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                }
+                .clipped()
+            } else if let image {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
@@ -1765,9 +2190,9 @@ private struct WorkspaceMediaFrame: View {
                     .offset(x: 1)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: fill ? 18 : 10, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: fill ? 18 : 10, style: .continuous)
                 .stroke(OS1VisualStyle.border, lineWidth: 0.5)
         }
         .task(id: item.id) { await load() }
@@ -1836,7 +2261,7 @@ private struct WorkspaceMediaFrame: View {
         }
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
-        generator.maximumSize = CGSize(width: 608, height: 384)
+        generator.maximumSize = CGSize(width: 960, height: 600)
         let result = try await generator.image(at: CMTime(seconds: 0.1, preferredTimescale: 600))
         return UIImage(cgImage: result.image)
     }
@@ -1849,7 +2274,7 @@ private struct WorkspaceMediaFrame: View {
                   [
                       kCGImageSourceCreateThumbnailFromImageAlways: true,
                       kCGImageSourceCreateThumbnailWithTransform: true,
-                      kCGImageSourceThumbnailMaxPixelSize: 608,
+                      kCGImageSourceThumbnailMaxPixelSize: 960,
                   ] as CFDictionary
               )
         else { return nil }

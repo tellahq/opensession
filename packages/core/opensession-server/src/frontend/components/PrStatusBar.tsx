@@ -52,6 +52,10 @@ import {
   PR_BAR_STATE_TEXT,
   PR_STATE_TEXT,
   PR_SUMMARY_BAND_BG,
+  PR_OVERVIEW_ACTION as OVERVIEW_ACTION,
+  PR_OVERVIEW_BUTTON,
+  PR_OVERVIEW_CARD as OVERVIEW_CARD,
+  PR_OVERVIEW_STATUS_DOT as OVERVIEW_STATUS_DOT,
 } from "../lib/pr-tone-classes";
 // The summary variant renders into the workspace summary card, so it borrows
 // that card's row grammar rather than inventing a third one. The strip owns
@@ -97,7 +101,10 @@ import {
   IconCheck,
   IconPlus,
   IconArchive,
+  IconX,
 } from "./icons";
+import { UserAvatar } from "./UserAvatar";
+import { Button } from "../ui/button";
 
 /**
  * Conductor-style status strip at the top of the right Workspace panel: the PR
@@ -156,8 +163,11 @@ interface Props {
    *   component: headline derivation, the stack merge plan, deferred merge,
    *   the prompt-the-session paths, and busy state. A second implementation is
    *   a second thing that can be wrong about whether a merge is in flight.
+   * - "overview" is the same PR as a card on the session's overview page:
+   *   where it stands, who signed off, and its one action as a full-width
+   *   button.
    */
-  variant?: "bar" | "header" | "summary";
+  variant?: "bar" | "header" | "summary" | "overview";
   /** Optional element rendered inside the strip, left of the PR chip (bar
 	    variant only) so it shares the strip's tone background — e.g. the globe
 	    staging-deploy icon in the Workspace panel. */
@@ -766,6 +776,18 @@ export function PrStatusBar({
   // session that turns out to have nothing is the same blink, pointed the
   // other way.
   if (!loaded) {
+    if (variant === "overview")
+      return (
+        <div className={OVERVIEW_CARD}>
+          <Skeleton label="Loading PR status">
+            <div className="flex flex-col gap-3">
+              <SkeletonBar className="w-[40%]" />
+              <SkeletonBar className="w-[70%]" />
+              <SkeletonBar className="h-12 w-full rounded-[999px]" />
+            </div>
+          </Skeleton>
+        </div>
+      );
     if (variant === "summary")
       // No tone to paint yet, so the band holds its shape without a fill
       // rather than guessing a colour it may have to take back.
@@ -803,7 +825,9 @@ export function PrStatusBar({
   // Primary action for the current headline (right side of the strip). In the
   // session header it sizes up to the header's other bordered controls, so the
   // chip and the action read as a matched pair.
-  const actionBtn = variant === "header" ? PR_HEAD_BTN : "";
+  const overview = variant === "overview";
+  const actionBtn =
+    variant === "header" ? PR_HEAD_BTN : overview ? PR_OVERVIEW_BUTTON : "";
   function renderAction(): React.ReactNode {
     if (prompted) {
       const tone: PrBarButtonProps["tone"] =
@@ -1029,8 +1053,12 @@ export function PrStatusBar({
         const mergeButton = (
           <PrBarButton
             className={actionBtn}
-            tone="green"
-            icon={!merging ? <IconGitMerge size={18} /> : undefined}
+            // On the overview the card already says green; the button is the
+            // page's one dark primary, like any other call to action there.
+            tone={overview ? "solid" : "green"}
+            icon={
+              !merging && !overview ? <IconGitMerge size={18} /> : undefined
+            }
             disabled={!!busy || merging}
             onClick={handleMerge}
             title={
@@ -1049,7 +1077,9 @@ export function PrStatusBar({
                 : "Merging…"
               : stackMerge
                 ? "Merge stack"
-                : "Merge"}
+                : overview
+                  ? "Squash and merge"
+                  : "Merge"}
             {stackMerge && !merging && (
               <span className="ml-1.5 rounded-full bg-white/20 px-1.5 tabular-nums">
                 {stackMerge.layers.length}
@@ -1086,6 +1116,139 @@ export function PrStatusBar({
   // which is the card's only departure from "the whole row is the target". It
   // has to be: the label opens the PR (or its checks) and the button beside it
   // merges, pushes or pulls, and a button inside a button is not a thing.
+  if (variant === "overview") {
+    const provider = pr ? providerFromUrl(pr.url) : null;
+    const reviewers = (pr?.reviewers ?? []).filter(
+      (reviewer) => !reviewer.isTeam,
+    );
+    const statusLine = checksPr
+      ? checksSummary.failed > 0
+        ? `${checksSummary.failed} of ${checksSummary.total} checks failed`
+        : checksSummary.pending > 0
+          ? `${checksSummary.pending} of ${checksSummary.total} checks running`
+          : "All checks passed"
+      : pr
+        ? reviewers.some((reviewer) => reviewer.state === "APPROVED")
+          ? "Approved"
+          : pr.state === "OPEN"
+            ? "No checks"
+            : null
+        : git?.branch
+          ? git.branch
+          : null;
+    const action = renderAction();
+    return (
+      <>
+        <div className={OVERVIEW_CARD}>
+          <div className="flex min-w-0 flex-col gap-1">
+            <span className="text-body font-semibold text-fg">
+              {headlineLabel}
+            </span>
+            {pr && (
+              <a
+                className="flex min-w-0 items-center gap-1.5 text-label text-dim no-underline hover:text-fg"
+                href={pr.url}
+                target="_blank"
+                rel="noopener"
+                onClick={(event) => {
+                  if (!onOpenPrTab || event.metaKey || event.ctrlKey) return;
+                  event.preventDefault();
+                  onOpenPrTab();
+                }}
+              >
+                {provider && (
+                  <BrandMark
+                    name={provider.key}
+                    size={14}
+                    className="shrink-0"
+                  />
+                )}
+                <span className="shrink-0 tabular-nums">#{pr.number}</span>
+                <span className="min-w-0 truncate">{pr.title}</span>
+              </a>
+            )}
+          </div>
+          {statusLine && (
+            <Button
+              variant="ghost"
+              className="h-auto min-h-11 min-w-0 justify-start gap-3 rounded-row px-0 text-left opacity-100 hover:bg-transparent hover:opacity-100 active:scale-100"
+              onClick={() => (checksPr ? onOpenChecksTab : onOpenPrTab)?.()}
+            >
+              <span className="flex shrink-0 items-center">
+                <span
+                  className={cn(
+                    "grid size-9 place-items-center rounded-full ring-2 ring-raised",
+                    OVERVIEW_STATUS_DOT[headlineTone],
+                  )}
+                  aria-hidden
+                >
+                  {headlineTone === "red" ? (
+                    <IconX size={18} />
+                  ) : headlineTone === "yellow" ? (
+                    <Spinner size="sm" />
+                  ) : headlineTone === "purple" ? (
+                    <IconGitMerge size={18} />
+                  ) : (
+                    <IconCheck size={18} />
+                  )}
+                </span>
+                {reviewers.slice(0, 3).map((reviewer) => (
+                  <UserAvatar
+                    key={reviewer.login}
+                    name={reviewer.login}
+                    login={reviewer.login}
+                    size={36}
+                    edge={false}
+                    title={`${reviewer.login} · ${reviewer.state.toLowerCase().replace("_", " ")}`}
+                    className="-ml-2 rounded-full ring-2 ring-raised"
+                  />
+                ))}
+              </span>
+              <span className="min-w-0 truncate text-item-title text-fg">
+                {statusLine}
+              </span>
+            </Button>
+          )}
+          {action && <div className={OVERVIEW_ACTION}>{action}</div>}
+          {children}
+          {prLoadError && (
+            <p role="alert" className="text-meta leading-snug text-yellow">
+              {prLoadError}
+            </p>
+          )}
+          {error && (
+            <p role="alert" className="text-meta leading-snug text-red">
+              {error}
+            </p>
+          )}
+        </div>
+        {statusRows.length > 0 && (
+          <div className="overflow-hidden rounded-2xl bg-raised py-1">
+            <PrSeriesRows
+              refs={statusRows}
+              primaryRepo={primaryRepoId}
+              onOpen={openStatusRow}
+              variant="summary"
+              sessionId={sessionId}
+              refreshTick={refreshTick}
+              onPrompt={
+                send
+                  ? (content) =>
+                      send({
+                        type: "prompt",
+                        sessionId,
+                        user: getCurrentUser(),
+                        content,
+                      })
+                  : undefined
+              }
+            />
+          </div>
+        )}
+      </>
+    );
+  }
+
   if (variant === "summary") {
     // The label is the button, rather than a button wrapping it: it has to
     // carry the row's truncation and its flex share, and a `display:contents`
