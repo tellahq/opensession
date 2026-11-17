@@ -23,8 +23,8 @@ interface Props {
   initialAttached: AttachedRepo[];
   /**
    * How the trigger renders:
-   *  - "breadcrumb" (default): the desktop session-header pill, followed by a
-   *    "›" separator before the title.
+   *  - "breadcrumb" (default): the desktop session header's repo icon, in
+   *    front of the title.
    *  - "menu-row": a full-width row styled like the ⋯ overflow menu's other
    *    items.
    *  - "hero": the compact repository link below the phone Workspace title.
@@ -33,7 +33,7 @@ interface Props {
 }
 
 /**
- * Repo segment of the session-header breadcrumb: `[icon] repo › title`.
+ * Repo segment of the session header: `[icon] title`.
  * Clicking the repo opens one menu that covers all cross-repo control —
  * switch the primary repo (any session, including a wrong choice made after
  * work started; the old worktree is left on disk so nothing is stranded, and
@@ -240,23 +240,20 @@ export function RepoBar({
         )}
       </Menu.Trigger>
     ) : (
+      // Desktop header: the repo is just its icon in front of the title. The
+      // name lives in the tooltip and the menu, so no "repo ›" crumb.
       <Menu.Trigger
-        className="-mx-1.5 -my-1 flex min-w-0 shrink-0 cursor-pointer items-center gap-[7px] rounded-md border-0 bg-transparent px-1.5 py-1 text-item-title font-medium text-fg hover:bg-hover data-[popup-open]:bg-hover"
-        title="Click to switch or attach another repo"
+        className="-mx-1 -my-1 flex shrink-0 cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent p-1 text-fg hover:bg-hover data-[popup-open]:bg-hover"
+        title={`${busy ?? repoLabel(primary)}${
+          attached.length > 0
+            ? ` + ${attached.map((r) => repoLabel(r.repo)).join(", ")}`
+            : ""
+        } · switch or attach a repo`}
+        aria-label={`Repository: ${repoLabel(primary)}. Change repository`}
       >
         <RepoTile name={primary} />
-        {/* Type sits optically high beside a centered image tile: its descender
-            space otherwise makes the word look low even when the line boxes agree. */}
-        <span className="max-w-[180px] -translate-y-px truncate">
-          {busy ?? repoLabel(primary)}
-        </span>
         {attached.length > 0 && (
-          <span
-            className="text-label text-dim"
-            title={attached.map((r) => repoLabel(r.repo)).join(", ")}
-          >
-            +{attached.length}
-          </span>
+          <span className="text-label text-dim">+{attached.length}</span>
         )}
       </Menu.Trigger>
     );
@@ -423,11 +420,6 @@ export function RepoBar({
           </Modal.Footer>
         </Modal.Content>
       </Modal.Root>
-      {/* Breadcrumb separator between the repo and the session title — only in
-          the desktop header, not the compact/menu-row phone variants. */}
-      {variant === "breadcrumb" && (
-        <IconChevronRight size={18} className="shrink-0 text-faint" />
-      )}
     </>
   );
 }
