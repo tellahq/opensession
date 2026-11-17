@@ -12,10 +12,10 @@ import { cn } from "./cn";
  * single loudest reason a form here reads as assembled from parts rather than
  * designed.
  *
- * So the scale is deliberately Button's scale, step for step: same heights,
- * same horizontal padding, same one radius. A field and a button of the same
- * size are the same box; only the fill and the border differ, which is the
- * distinction that should carry (a well you type into vs. a plate you press).
+ * So the heights are deliberately Button's, step for step. The corner is not:
+ * buttons are pills, and a field keeps the soft `rounded-control` rect, the
+ * way macOS pairs a rounded text field with a capsule button. The shape is
+ * what says which is a well you type into and which a plate you press.
  *
  * The fill is `bg-surface` — the page's own surface, so a field reads as a
  * well cut into the group it sits in rather than another raised card. Focus

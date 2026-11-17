@@ -342,7 +342,7 @@ function Header({
         </BaseDialog.Title>
         <BaseDialog.Close
           aria-label="Close"
-          className="focus-ring relative -mr-1.5 -mt-1 flex size-8 shrink-0 items-center justify-center rounded-control p-0 text-faint transition-colors after:absolute after:-inset-1 after:content-[''] hover:bg-hover hover:text-fg"
+          className="focus-ring relative -mr-1.5 -mt-1 flex size-8 shrink-0 items-center justify-center rounded-full p-0 text-faint transition-colors after:absolute after:-inset-1 after:content-[''] hover:bg-hover hover:text-fg"
         >
           <IconX size={20} />
         </BaseDialog.Close>

@@ -97,13 +97,8 @@ export const FOOTER_LEFT =
   "flex min-w-0 items-center gap-1.5 phone:flex-1 max-[560px]:gap-1";
 export const FOOTER_RIGHT =
   "flex min-w-0 items-center gap-1.5 phone:contents max-[560px]:gap-1";
-/** Round at every width, like the model pill and Create beside them: a 12px
- *  corner among pills is the one square thing on the card. The hover wash
- *  rides a pseudo-element, so it has to be rounded with them. */
-export const FOOTER_ICON_BTN = cn(
-  paletteIconBtn,
-  "shrink-0 rounded-full before:rounded-full phone:size-11",
-);
+/** Round like every icon button: the shape comes from `paletteIconBtn`. */
+export const FOOTER_ICON_BTN = cn(paletteIconBtn, "shrink-0 phone:size-11");
 /** Ask mode, once it is on. Off, it is a row in the footer's overflow menu.
  *  On, it surfaces in the footer wearing the same green marker the session
  *  composer's toolbar shows for the same mode, so one mode reads identically in
