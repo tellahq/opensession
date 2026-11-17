@@ -4,9 +4,10 @@ import SwiftUI
 /// turn did before it answered.
 ///
 /// Folded is the default because the answer is what people came for. The
-/// header is one quiet gray line, "Worked for 12s ›"; the step count,
-/// failures and line changes open with the fold, above the steps they
-/// describe.
+/// header is one quiet gray line, "Worked for 12s ›". Open, the steps sit
+/// nudged in under it and a hairline closes the fold; the step count,
+/// failures and line changes head it only when the calls render flat, since
+/// grouped rows already name their own.
 struct TurnBlockView: View {
     let turn: WorkTurn
     let sessionId: String
@@ -35,8 +36,15 @@ struct TurnBlockView: View {
             .accessibilityHint(state.expanded ? "Hide the work" : "Show the work")
 
             if state.expanded {
+                let flatTools = turn.rendersToolCallsInPlace(preference: activity)
                 VStack(alignment: .leading, spacing: 8) {
-                    foldSummary
+                    // Grouped rows each name their own counts and lines, so
+                    // the turn-wide line above them would read as the same
+                    // summary twice. It stays only when calls render flat
+                    // and it is the one summary there is.
+                    if flatTools {
+                        foldSummary
+                    }
 
                     TurnStepsView(
                         items: turn.items,
@@ -47,9 +55,7 @@ struct TurnBlockView: View {
                         // The turn header already summarizes a tool-only run.
                         // Opening it reveals calls directly instead of adding
                         // a second row with the same step count.
-                        rendersToolCallsInPlace: turn.rendersToolCallsInPlace(
-                            preference: activity
-                        ),
+                        rendersToolCallsInPlace: flatTools,
                         expansionState: expansionState
                     )
 
@@ -57,7 +63,9 @@ struct TurnBlockView: View {
                 }
                 .padding(.leading, Self.foldContentInset)
                 .padding(.top, 8)
-                .overlay(alignment: .leading) { foldRail }
+                .padding(.bottom, 8)
+                .overlay(alignment: .bottom) { foldEnd }
+                .padding(.bottom, 4)
                 .transition(.opacity)
             }
 
@@ -95,22 +103,16 @@ struct TurnBlockView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Where the open fold's hairline sits: under the chevron it drops from.
-    private static let railInset: CGFloat = 5
-    /// Where the fold's rows start: under the header's own word, clear of the
-    /// rail rather than crowding it.
+    /// Where the fold's rows start: nudged in under the header's own word.
     private static let foldContentInset: CGFloat = 16
 
-    /// The rail down an open fold. A turn can run for pages, and once the
-    /// header has scrolled away nothing said whether a paragraph was still
-    /// part of the work or already the answer. The answer sits back at the
-    /// column edge with no rail beside it, so the seam reads from any scroll
-    /// position. Mirrors the web viewer's turn fold.
-    private var foldRail: some View {
+    /// The hairline that closes an open fold, so where the work ends and the
+    /// turn's final answer begins stays legible. It replaced a rail down the
+    /// fold's leading edge, as on the web viewer's turn fold.
+    private var foldEnd: some View {
         Rectangle()
             .fill(OS1VisualStyle.border)
-            .frame(width: 1)
-            .offset(x: Self.railInset)
+            .frame(height: 1)
             .accessibilityHidden(true)
     }
 

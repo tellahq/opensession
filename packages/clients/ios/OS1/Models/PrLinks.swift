@@ -228,24 +228,32 @@ enum PrLinks {
     /// `ledger` carries what the message has already drawn across the pieces
     /// it is rendered in (prose, table cells, a callout). Without one, the
     /// text is a whole message of its own.
+    ///
+    /// `ownPrs` are the PRs the conversation is about (`Index.key`). A
+    /// mention of one stays the text it was written as, and a link to one
+    /// keeps only its label: a chip there would open what the reader is
+    /// already looking at. The web does the same (`renderMarkdown`'s
+    /// `ownPrs`).
     static func linkify(
         _ markdown: String,
         sessionId: String?,
-        ledger: Ledger = Ledger()
+        ledger: Ledger = Ledger(),
+        ownPrs: Set<String> = []
     ) -> String {
         guard markdown.contains("#") || markdown.contains("/pull/") else { return markdown }
         let contextRepo = sessionId.flatMap { index.repos[$0] }
         return MarkdownProse.rewrite(markdown) { line in
             guard line.contains("#") || line.contains("/pull/") else { return line }
             return rewriteMentions(
-                in: retargetLinks(in: line),
+                in: retargetLinks(in: line, ownPrs: ownPrs),
                 repo: contextRepo,
-                ledger: ledger
+                ledger: ledger,
+                ownPrs: ownPrs
             )
         }
     }
 
-    private static func retargetLinks(in line: String) -> String {
+    private static func retargetLinks(in line: String, ownPrs: Set<String>) -> String {
         guard line.contains("/pull/") else { return line }
         let ns = line as NSString
         var result = ""
@@ -263,9 +271,15 @@ enum PrLinks {
                 location: cursor,
                 length: match.range.location - cursor
             ))
-            result += ns.substring(with: match.range(at: 1))
-            result += destination(for: reference)
-            result += ns.substring(with: match.range(at: 6))
+            if ownPrs.contains(Index.key(reference.repo, reference.number)) {
+                // `[label](` minus its brackets: the label alone, as prose.
+                let opener = ns.substring(with: match.range(at: 1))
+                result += String(opener.dropFirst().dropLast(2))
+            } else {
+                result += ns.substring(with: match.range(at: 1))
+                result += destination(for: reference)
+                result += ns.substring(with: match.range(at: 6))
+            }
             cursor = match.range.location + match.range.length
         }
         guard cursor > 0 else { return line }
@@ -276,7 +290,8 @@ enum PrLinks {
     private static func rewriteMentions(
         in line: String,
         repo contextRepo: String?,
-        ledger: Ledger
+        ledger: Ledger,
+        ownPrs: Set<String>
     ) -> String {
         let ns = line as NSString
         var result = ""
@@ -287,8 +302,13 @@ enum PrLinks {
         ) {
             // Group 1 matched: an existing link or code span, copied verbatim.
             guard match.range(at: 1).location == NSNotFound else { continue }
-            guard let chip = chip(for: match, in: ns, repo: contextRepo, ledger: ledger)
-            else { continue }
+            guard let chip = chip(
+                for: match,
+                in: ns,
+                repo: contextRepo,
+                ledger: ledger,
+                ownPrs: ownPrs
+            ) else { continue }
             result += ns.substring(with: NSRange(
                 location: cursor,
                 length: match.range.location - cursor
@@ -307,7 +327,8 @@ enum PrLinks {
         for match: NSTextCheckingResult,
         in ns: NSString,
         repo contextRepo: String?,
-        ledger: Ledger
+        ledger: Ledger,
+        ownPrs: Set<String>
     ) -> String? {
         if match.range(at: 2).location != NSNotFound {
             guard let reference = reference(
@@ -315,6 +336,9 @@ enum PrLinks {
                 name: ns.substring(with: match.range(at: 4)),
                 number: ns.substring(with: match.range(at: 5))
             ) else { return nil }
+            if ownPrs.contains(Index.key(reference.repo, reference.number)) {
+                return "PR #\(reference.number)"
+            }
             // A pasted URL is labelled like a mention: the address is 50
             // characters of noise, and the chip already says it is a PR.
             return link(label: "PR #\(reference.number)", to: reference, ledger: ledger)
@@ -329,6 +353,7 @@ enum PrLinks {
         guard let number = Int(digits), let repo = repoId(for: qualifier, context: contextRepo)
         else { return nil }
         let reference = Reference(repo: repo, number: number)
+        if ownPrs.contains(Index.key(reference.repo, reference.number)) { return nil }
         // A short number with nothing but its digits to go on is prose.
         if cue.isEmpty, qualifier == nil, !bareMentionLinks(reference, digits: digits) {
             return nil
