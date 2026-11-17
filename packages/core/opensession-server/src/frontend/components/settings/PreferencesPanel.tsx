@@ -172,6 +172,7 @@ import {
 } from "./AppearancePanel";
 import { PersonalSandboxDefaultRow } from "./SandboxDefaults";
 import { PendingSendsSection } from "./PendingSendsSection";
+import { VoiceAudioSection } from "./VoiceAudioSection";
 import { RepoTile } from "../RepoTile";
 import { ModelEffortSelect } from "../ModelEffortSelect";
 import { IconPlus, IconRepo } from "../icons";
@@ -1336,6 +1337,7 @@ export function PreferencesPanel() {
         />
       </SettingCard>
 
+      <VoiceAudioSection />
       <DeskVoicePanel />
       <PersonalPromptPanel />
       <PendingSendsSection />

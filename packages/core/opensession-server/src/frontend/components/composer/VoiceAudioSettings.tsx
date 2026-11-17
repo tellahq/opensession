@@ -19,8 +19,9 @@ import { IconChevronDown, IconChevronRight } from "../icons";
  * Audio routing on the Mac desktop shell: which microphone (and, for a
  * call, which output) the next dictation or call uses, and whether other
  * apps' audio is lowered while someone speaks. The choices are one shared
- * preference, reachable from a small chevron that appears once dictation or
- * a call has started, so the idle composer carries no extra button.
+ * preference, set in Settings (settings/VoiceAudioSection) and reachable
+ * during a call from a small chevron, so the idle composer carries no extra
+ * button. Dictation's pill has no chevron.
  *
  * Nothing here renders unless the shell
  * exposes `window.os1.voiceAudio`, so the web, phone and older shells are

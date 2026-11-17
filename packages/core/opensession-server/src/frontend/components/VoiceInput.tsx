@@ -26,7 +26,6 @@ import {
 import { errorMessage } from "../lib/error-message";
 import { DictationAudio } from "../lib/dictation-audio";
 import { os1Shell } from "../lib/os1-shell";
-import { VoiceAudioOptions } from "./composer/VoiceAudioSettings";
 
 type Phase = "idle" | "requesting" | "recording" | "transcribing";
 
@@ -46,8 +45,8 @@ const BAR_COUNT = 9;
 const WIDE_BAR_COUNT = 64;
 
 /* While live, the mic becomes a solid red pill beside the host's send
-   control: discard ×, the meter, the audio options chevron (Mac shell only),
-   then stop (keeps the text). The field stays visible and editable above:
+   control: discard ×, the meter, then stop (keeps the text). The microphone
+   is picked in Settings, not here. The field stays visible and editable above:
    the transcript is appended to the draft when the clip ends. */
 const LIVE = "inline-flex shrink-0 items-center gap-1";
 /** A phone has no room beside the model pill, so there the row takes the
@@ -61,11 +60,6 @@ const RECORD_PILL_WIDE = "min-w-0 flex-1";
 /** The × and stop inside the red pill: white glyphs on a white wash. */
 const PILL_BUTTON =
   "focus-ring inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-white transition-[background-color,scale] hover:bg-white/15 active:scale-[0.94] disabled:cursor-default disabled:opacity-60 disabled:hover:bg-transparent disabled:active:scale-100 phone:size-9";
-
-/** The audio options trigger restyled from its grey round to the pill's
- *  white glyph and wash, open state included. */
-const PILL_MENU_TRIGGER =
-  "text-white hover:bg-white/15 hover:text-white data-[popup-open]:bg-white/15 data-[popup-open]:text-white phone:size-9";
 
 /* Waveform bars. Colour lives on the variant, never alongside a second colour
    utility on the same element. Two of those don't compose, the sheet's order
@@ -85,7 +79,7 @@ const PILL_MOTION = {
 /**
  * Dictation control shared by the session Composer and the New-session
  * palette. Idle it's a mic button; tapping it swaps the mic for a compact
- * live red pill (discard · meter · audio options · stop) and leaves
+ * live red pill (discard · meter · stop) and leaves
  * the field above it visible. Stop puts
  * the browser's final text in the draft through `onText`; the send key, or
  * the host's send control through `controlRef`, hands it to `onTextSend`
@@ -537,7 +531,6 @@ export function VoiceInput({
                 );
               })}
             </span>
-            <VoiceAudioOptions mode="dictation" className={PILL_MENU_TRIGGER} />
             {phase === "transcribing" ? (
               <span className="inline-flex size-8 shrink-0 items-center justify-center phone:size-9">
                 <Spinner size="md" />
