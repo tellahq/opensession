@@ -101,8 +101,8 @@ export function readExpanded(): Set<string> {
 
 // ── Grouping / filtering controls (the filter popover) ─────────────────────
 // Two independent answers shape the list. "Group by" chooses the row sections:
-// Inbox (Active / Snoozed), Activity (In progress / Needs action / Recent /
-// Yesterday / Earlier / Merged), or Status (Needs input / In progress / …). "Group by
+// Inbox (Active / Snoozed), Activity (Merged / In progress / Needs action /
+// Recent / Yesterday / Earlier), or Status (Needs input / In progress / …). "Group by
 // project" then decides whether those sections are global or repeated inside
 // each project. Repo and Person only narrow the same inventory.
 export type GroupBy = "inbox" | "activity" | "status";
