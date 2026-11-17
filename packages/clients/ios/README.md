@@ -139,8 +139,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   step count, failures and line changes above the steps and changed files. The
   turn's final answer escapes the fold and renders as a normal message. An agent's
   opt-in status line (`◷ **CI**: Running`, later `✓ **CI**: All checks
-passed`, the whole message and nothing else) draws as one compact row that
-  takes each later update on the same topic, with earlier updates one tap
+passed`, the whole message and nothing else) draws as one compact row per
+  task: it sits at the latest update, whatever its topic, and takes in the
+  check-back fold beside it, so earlier updates and that work are one tap
   away (`Models/ProgressUpdates.swift`, mirroring the web). A human message,
   a review handoff or a team note starts a new row; blockers, questions and
   anything with extra prose or attachments stay ordinary messages, and the
