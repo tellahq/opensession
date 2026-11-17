@@ -4,6 +4,7 @@ import { IconArrowUpRight, IconCopy, IconGlobe } from "../icons";
 import { Button } from "../../ui/button";
 import { BrowserPane } from "../BrowserPane";
 import { keptFrameKey } from "../../lib/kept-frames";
+import { PREVIEW_FRAME } from "../../lib/preview-url";
 import { PortalPane } from "../PortalPane";
 
 interface StagingDeployment {
@@ -37,14 +38,20 @@ type PreviewSurface =
 export function SessionPreviewSurface({
   surface,
   frameScope,
+  inPanel = false,
   commentSessionId,
 }: {
   surface: PreviewSurface;
   /** Keeps the page loaded across tab and session switches; see BrowserPane. */
   frameScope?: string;
+  /** The side panel's Browser tab, whose page is kept apart from the main
+   *  strip's: the two can hold different pages. */
+  inPanel?: boolean;
   /** Where a comment on the page goes; see BrowserAnnotationLayer. */
   commentSessionId?: string;
 }) {
+  const browserKey =
+    frameScope && keptFrameKey(inPanel ? "panel" : "staging", frameScope);
   switch (surface.kind) {
     case "portal":
       return (
@@ -65,7 +72,7 @@ export function SessionPreviewSurface({
             url={surface.url}
             name="Browser"
             frameTitle="Browser"
-            keepAliveKey={frameScope && keptFrameKey("staging", frameScope)}
+            keepAliveKey={browserKey}
             commentSessionId={commentSessionId}
             allow="clipboard-read; clipboard-write; fullscreen; autoplay"
             sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms allow-modals allow-downloads"
@@ -78,7 +85,7 @@ export function SessionPreviewSurface({
           deployment={surface.deployment}
           url={surface.url}
           shareLink={surface.shareLink}
-          keepAliveKey={frameScope && keptFrameKey("staging", frameScope)}
+          keepAliveKey={browserKey}
           commentSessionId={commentSessionId}
         />
       );
@@ -109,11 +116,11 @@ function SessionStagingPane({
       <div className={VIEWER_REVIEW_MAIN}>
         <BrowserPane
           url={url}
-          name="Preview environment"
+          name={PREVIEW_FRAME.name}
           keepAliveKey={keepAliveKey}
           commentSessionId={commentSessionId}
-          frameTitle="Preview environment"
-          allow="camera; microphone; display-capture; fullscreen; autoplay; clipboard-write"
+          frameTitle={PREVIEW_FRAME.title}
+          allow={PREVIEW_FRAME.allow}
           leading={
             deployment.status !== "Ready" ? (
               <span className="mr-1 shrink-0 text-xs text-dim">

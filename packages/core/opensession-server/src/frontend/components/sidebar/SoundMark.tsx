@@ -14,7 +14,10 @@ export function rowFrameScopes(row: {
   sessions: readonly UnifiedSession[];
   workspace?: Workspace | null;
 }): Set<string> {
-  const scopes = new Set(row.sessions.map(viewTabScope));
+  // Side panel pages are kept per session.
+  const scopes = new Set(
+    row.sessions.flatMap((session) => [viewTabScope(session), session.id]),
+  );
   if (row.workspace) scopes.add(row.workspace.id);
   return scopes;
 }

@@ -63,6 +63,7 @@ import type { LiveTurnStore } from "../lib/live-turn-store";
 import type { TranscriptViewStore } from "../lib/transcript-view-store";
 import type { SessionPrRef } from "../lib/types";
 import type { PortalTarget } from "../lib/portals";
+import { dropKeptFrame, keptFrameKey } from "../lib/kept-frames";
 import {
   onPanelBrowserRequest,
   type PanelBrowserTarget,
@@ -349,6 +350,7 @@ export function useSessionViewStateController({
   );
   useEffect(() => onPanelBrowserRequest(takePanelBrowserRequest), []);
   const closePanelBrowser = () => {
+    dropKeptFrame(keptFrameKey("panel", session.id));
     sidePanel.setBrowser(null);
     sidePanel.closeTab("browser");
   };
