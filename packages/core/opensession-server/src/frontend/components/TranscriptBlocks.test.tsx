@@ -2352,36 +2352,65 @@ describe("TranscriptBlocks progress rows", () => {
     expect(open).toContain('aria-label="Earlier updates"');
   });
 
-  test("a task that moves on to a new topic keeps one row", () => {
+  const shipped = [
+    row("u", "user", "Ship it", 1),
+    row("ci", "assistant", "◷ **CI**: Running", 2),
+    row("wake-1", "user", "", 3, { turnBoundary: true }),
+    row("tool-1", "tool_use", "", 4, {
+      toolName: "Bash",
+      toolUseId: "tool-1",
+      toolInput: { command: "gh pr checks" },
+    }),
+    row("deploy", "assistant", "◷ **Deployment**: Running", 5),
+    row("wake-2", "user", "", 6, { turnBoundary: true }),
+    row("tool-2", "tool_use", "", 7, {
+      toolName: "Bash",
+      toolUseId: "tool-2",
+      toolInput: { command: "deploy status" },
+    }),
+    row("live", "assistant", "Live: the change is out.", 68),
+  ];
+
+  test("an answered task folds its statuses and check-backs into one work row", () => {
+    const html = renderToStaticMarkup(<TranscriptBlocks entries={shipped} />);
+    expect(html).not.toContain("data-progress-topic");
+    expect(html).not.toContain("Checked back");
+    expect(html.match(/Worked for 1m/g)).toHaveLength(2);
+    expect(html).not.toContain("Deployment: Running");
+    expect(html).toContain("Live: the change is out.");
+
+    const open = renderToStaticMarkup(
+      <TranscriptBlocks entries={shipped} reviewLoopsOpen />,
+    );
+    expect(open).toContain("CI: Running");
+    expect(open).toContain("Deployment: Running");
+    expect(open).toContain("deploy status");
+  });
+
+  test("an answered task folds the same way across indexed ranges", () => {
+    const index = shipped.map((entry) => ({
+      id: entry.id,
+      seq: entry.seq!,
+      changeSeq: entry.seq!,
+      timestampMs: Date.parse(entry.timestamp),
+      contentLength: entry.content.length,
+      role: entry.turnBoundary ? ("check_back" as const) : entry.type,
+    }));
     const html = renderToStaticMarkup(
-      <TranscriptBlocks
-        entries={[
-          row("u", "user", "Ship it", 1),
-          row("ci", "assistant", "◷ **CI**: Running", 2),
-          row("wake-1", "user", "", 3, { turnBoundary: true }),
-          row("tool-1", "tool_use", "", 4, {
-            toolName: "Bash",
-            toolUseId: "tool-1",
-            toolInput: { command: "gh pr checks" },
-          }),
-          row("deploy", "assistant", "◷ **Deployment**: Running", 5),
-          row("wake-2", "user", "", 6, { turnBoundary: true }),
-          row("tool-2", "tool_use", "", 7, {
-            toolName: "Bash",
-            toolUseId: "tool-2",
-            toolInput: { command: "deploy status" },
-          }),
-          row("live", "assistant", "Live: the change is out.", 8),
-        ]}
-        reviewLoopsOpen
-      />,
+      <TranscriptBlocks entries={shipped} transcriptIndex={index} />,
+    );
+    expect(html).not.toContain("data-progress-topic");
+    expect(html).not.toContain("Checked back");
+    expect(html).toContain("Worked for 1m");
+    expect(html).toContain("Live: the change is out.");
+  });
+
+  test("a running task keeps its status row", () => {
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks entries={shipped.slice(0, -1)} live />,
     );
     expect(html.match(/data-progress-topic=/g)).toHaveLength(1);
     expect(html).toContain('data-progress-topic="Deployment"');
-    expect(html).not.toContain("Checked back");
-    expect(html).toContain("CI: Running");
-    expect(html).toContain("deploy status");
-    expect(html).toContain("Live: the change is out.");
   });
 
   test("progress does not split a multi-round review loop", () => {
@@ -2429,7 +2458,7 @@ describe("TranscriptBlocks progress rows", () => {
     expect(html).toContain("All checks passed");
   });
 
-  test("keeps blockers and verification limits as messages outside the row", () => {
+  test("a blocker reads as the answer, with the statuses folded behind it", () => {
     const html = renderToStaticMarkup(
       <TranscriptBlocks
         entries={[
@@ -2444,7 +2473,8 @@ describe("TranscriptBlocks progress rows", () => {
         ]}
       />,
     );
-    expect(html.match(/data-progress-topic="CI"/g)).toHaveLength(1);
+    expect(html).not.toContain("data-progress-topic");
+    expect(html).toContain("Worked");
     expect(html).toContain("The real editor is unverified");
   });
 

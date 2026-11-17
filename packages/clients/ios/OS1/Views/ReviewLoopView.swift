@@ -95,6 +95,9 @@ struct ReviewLoopView: View {
     }
 
     private var headerText: String {
+        if loop.kind == .work {
+            return loop.detail.isEmpty ? "Worked" : "Worked for \(loop.detail)"
+        }
         if isCheckBack {
             return loop.isLive ? "Checking back" : "Checked back \(loop.detail)"
         }
@@ -119,17 +122,27 @@ struct ReviewLoopView: View {
 
     private var isCheckBack: Bool { loop.kind == .checkBack }
 
-    private var titleText: String { isCheckBack ? "Checked back" : "Review loop" }
+    private var titleText: String {
+        switch loop.kind {
+        case .work: "Worked"
+        case .checkBack: "Checked back"
+        case .review: "Review loop"
+        }
+    }
 
     private var accessibilityHint: String {
-        let work = isCheckBack ? "check-back work" : "review work"
+        let work = switch loop.kind {
+        case .work: "work"
+        case .checkBack: "check-back work"
+        case .review: "review work"
+        }
         return state.expanded ? "Hide the \(work)" : "Show the \(work)"
     }
 
     private var accessibilityLabel: String {
         var parts = [titleText, loop.isLive ? "Working" : loop.detail]
         if let prNumber = loop.prNumber { parts.append("PR #\(prNumber)") }
-        return parts.joined(separator: ", ")
+        return parts.filter { !$0.isEmpty }.joined(separator: ", ")
     }
 }
 
@@ -180,7 +193,10 @@ struct LoopWorkRows: View {
         case .footer(let footer):
             TurnFooterView(footer: footer, sessionId: sessionId)
         case .message(let entry):
-            if let notice = entry.notice {
+            if let update = ProgressUpdate(entry) {
+                // A status inside a fold is one quiet line, not a message.
+                ProgressStatusLine(update: update)
+            } else if let notice = entry.notice {
                 NoticeRow(
                     entry: entry,
                     notice: notice,
