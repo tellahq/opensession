@@ -34,6 +34,14 @@ export function useSessionRecords(): readonly UnifiedSession[] {
   return useSyncExternalStore(subscribe, () => list);
 }
 
+/** Whether any live session was started from `parentId`. A boolean, so a
+ *  list update that changes nothing here re-renders nothing. */
+export function useHasChildSessions(parentId: string): boolean {
+  return useSyncExternalStore(subscribe, () =>
+    list.some((session) => session.parentSessionId === parentId),
+  );
+}
+
 /** One session by id (or a former id), or null while it is not in the list. */
 export function useSessionRecord(id: string | null): UnifiedSession | null {
   return useSyncExternalStore(subscribe, () =>
