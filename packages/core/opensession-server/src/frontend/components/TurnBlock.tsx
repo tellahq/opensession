@@ -314,10 +314,10 @@ export const TurnBlock = function TurnBlock({
         <div
           className={cn(
             "mt-0.5",
-            // Open, the work's rows sit nudged in under the header, and a
+            // Open, the work's rows sit flush under the header, and a
             // hairline closes the fold, so where the work ends and the
             // turn's final answer begins stays legible.
-            "mb-3 border-b border-line pb-2 pl-4",
+            "mb-3 border-b border-line pb-2",
           )}
         >
           {flatTools && (
@@ -364,7 +364,7 @@ export const TurnBlock = function TurnBlock({
                 sessionId={sessionId}
               />
             ) : (
-              // Tool icons align with the fold chevron on desktop. Phones use
+              // Tool icons sit flush with the column on desktop. Phones use
               // the 1px optical correction for the icon's inset glyph.
               <div
                 key={sec.items[0].id}
