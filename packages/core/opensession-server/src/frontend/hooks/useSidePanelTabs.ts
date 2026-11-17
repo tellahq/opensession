@@ -13,11 +13,17 @@ import {
   getSidePanelState,
   openSidePanelTab,
   registerSidePanelHost,
+  addSidePanelTab,
   setSidePanelDock,
   sidePanelDockOf,
   subscribeSidePanel,
 } from "../lib/side-panel-store";
-import { panelBrowserFrame } from "../lib/panel-browser-frame";
+import { summaryBrowserFrame } from "../lib/panel-browser-frame";
+import { viewTabScope } from "../lib/kept-frames";
+import {
+  getPreviewAutoOpenPref,
+  onPreviewAutoOpenChanged,
+} from "../lib/preview-auto-open-pref";
 import { useSessionRecord } from "../lib/session-records";
 import { useIsCoordinating } from "../lib/coordinator-mode";
 import { useSessionRecords } from "../lib/session-records";
@@ -43,6 +49,10 @@ interface PanelState {
   panelEntering: boolean;
   activePanelOpen: boolean;
   desktopPanelPage: string;
+  setActivePanelOpen: (open: boolean) => void;
+  setDesktopPanelPage: (page: "browser") => void;
+  /** The main strip shows the PR preview. */
+  showStaging: boolean;
   setPanelTerminalMounted: (mounted: boolean) => void;
 }
 
@@ -151,18 +161,37 @@ export function useSidePanelTabs({
     if (tab === "terminal") setPanelTerminalMounted(false);
   };
 
-  // The summary card previews the Browser tab's page while the panel is not
-  // showing it: Browser opens in the panel, its tab is in the strip, and the
-  // panel is shut or on another tab.
+  // The summary card previews the Browser tab's page while it is not on
+  // screen, opening that tab when clicked.
   const browserDock = useSyncExternalStore(subscribeSidePanel, () =>
     sidePanelDockOf("browser"),
   );
-  const summaryBrowser =
-    browserDock === "panel" &&
-    panelTabs.includes("browser") &&
-    !(panel.activePanelOpen && panel.desktopPanelPage === "browser")
-      ? panelBrowserFrame({ ...preview, target: panelBrowser })
-      : null;
+  const autoOpen = useSyncExternalStore(
+    onPreviewAutoOpenChanged,
+    getPreviewAutoOpenPref,
+  );
+  const inPanel = browserDock === "panel";
+  const summaryFrame = summaryBrowserFrame({
+    ...preview,
+    target: panelBrowser,
+    dock: browserDock,
+    showing: inPanel
+      ? panel.activePanelOpen && panel.desktopPanelPage === "browser"
+      : panel.showStaging,
+    hasPanelTab: panelTabs.includes("browser"),
+    autoOpen,
+    scope: self ? viewTabScope(self) : null,
+  });
+  const summaryBrowser = summaryFrame && {
+    frame: summaryFrame,
+    onOpen: inPanel
+      ? () => {
+          addSidePanelTab("browser");
+          panel.setDesktopPanelPage("browser");
+          panel.setActivePanelOpen(true);
+        }
+      : () => navigation.openStaging(),
+  };
 
   const browser: PanelBrowserContent = {
     ...preview,
