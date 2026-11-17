@@ -747,7 +747,11 @@ enum TranscriptGrouping {
     /// message presentation rule so only an actual person's message ends a loop.
     private static func reviewBlockRole(_ block: TranscriptBlock) -> ReviewBlockRole {
         guard case .message(let entry) = block else { return .other }
-        if entry.turnBoundary == true { return .checkBack }
+        // A nudge to continue only ends the turn above it: what follows is
+        // ordinary work with its own answer, not a check-back.
+        if entry.turnBoundary == true {
+            return entry.turnBoundaryKind == "nudge" ? .other : .checkBack
+        }
         guard let notice = entry.notice else {
             return entry.isUser ? .userMessage : .other
         }
@@ -868,6 +872,14 @@ enum TranscriptGrouping {
         return false
     }
 
+    /// The server told the agent to continue after a turn that had ended.
+    /// The boundary is structural only: it keeps that turn's answer out of
+    /// the work below it and never renders (web: `isNudgeBoundary`).
+    private static func isNudgeBoundary(_ block: TranscriptBlock) -> Bool {
+        guard case .message(let entry) = block else { return false }
+        return entry.turnBoundary == true && entry.turnBoundaryKind == "nudge"
+    }
+
     /// Whether a block ends a check-back phase outright: a person's message,
     /// a note, a walkthrough or a review loop, each of which has its own
     /// place and must never vanish inside an automation fold.
@@ -903,13 +915,16 @@ enum TranscriptGrouping {
     private static func groupCheckBacks(
         _ blocks: [TranscriptBlock], live: Bool
     ) -> [TranscriptBlock] {
-        guard blocks.contains(where: isCheckBack) else { return blocks }
+        guard blocks.contains(where: { isCheckBack($0) || isNudgeBoundary($0) })
+        else { return blocks }
         var grouped: [TranscriptBlock] = []
         var index = 0
         while index < blocks.count {
             let first = blocks[index]
             guard isCheckBack(first) else {
-                grouped.append(first)
+                // Outside a fold a nudge boundary has done its work by
+                // splitting the turn; inside one, the fold's row skips it.
+                if !isNudgeBoundary(first) { grouped.append(first) }
                 index += 1
                 continue
             }
