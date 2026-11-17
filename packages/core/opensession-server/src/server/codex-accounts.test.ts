@@ -350,7 +350,7 @@ describe("pickOpenaiAccount ultrafast routing", () => {
     ultrafast = true,
   ) => {
     const picked = pickOpenaiAccount(
-      "gpt-6-astra",
+      "gpt-6.2-astra",
       undefined,
       session,
       undefined,
@@ -384,7 +384,7 @@ describe("pickOpenaiAccount ultrafast routing", () => {
   });
 
   test("falls back to the ordinary pool when no Pro $500 account is usable", () => {
-    markCodexExhausted("promax", "gpt-6-astra");
+    markCodexExhausted("promax", "gpt-6.2-astra");
     expect(pick("s1")).toBe("pro");
     expect(pick("s1", "Alex")).toBe("alex-pro");
   });

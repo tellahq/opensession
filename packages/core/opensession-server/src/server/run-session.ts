@@ -3702,7 +3702,7 @@ async function runSessionPromptInner(
       // with the prior history (same entries the handoff note was built from)
       // so the UI transcript stays continuous. Everything dispatches onto the
       // pi engine, so no provider gate — the picker id's provider can be
-      // "codex"/"claude" (bare gpt-6.1-sol) while the run still lands on
+      // "codex"/"claude" (bare gpt-6.2-sol) while the run still lands on
       // pi; the old `provider === "pi"` guard silently dropped the
       // seed for exactly those switches.
       seedTranscriptEntries:

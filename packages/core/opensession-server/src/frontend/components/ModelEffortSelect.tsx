@@ -66,8 +66,8 @@ const PRIMARY_MODEL_IDS = [
   "claude-opus-5-5",
   "claude-sonnet-5-5",
   "claude-haiku-5-5",
-  "gpt-6-astra",
-  "gpt-6.1-sol",
+  "gpt-6.2-astra",
+  "gpt-6.2-sol",
   "gpt-6.1-terra",
   "gpt-6-luna",
 ] as const;
@@ -221,8 +221,8 @@ const MODEL_TAIL_ORDER = [
   "claude-sonnet-4-6",
   "claude-haiku-5-5",
   "claude-haiku-4-5",
-  "gpt-6-astra",
-  "gpt-6.1-sol",
+  "gpt-6.2-astra",
+  "gpt-6.2-sol",
   "gpt-6.1-terra",
   "gpt-6-luna",
   "kimi-k3",
@@ -419,8 +419,8 @@ export function ModelEffortSelect({
     modelInfo?.fastModeSupported === true &&
     currentAccount?.kind !== "api_key" &&
     !!(currentAccount || subscriptionAccount);
-  // Ultrafast is GPT-6 Astra on a Pro $500 login: the pinned account, or on
-  // auto any usable one, which the server routes ultrafast turns to.
+  // Ultrafast is Astra or Sol on a Pro $500 login: the pinned account, or
+  // on auto any usable one, which the server routes ultrafast turns to.
   const ultrafastAccount = providerAccounts.find(
     (a) => a.plan === ULTRAFAST_PLAN && a.kind !== "api_key" && a.usable,
   );
@@ -707,7 +707,7 @@ export function ModelEffortSelect({
           ) {
             onEffortChange(nextEffort);
           }
-          // Ultrafast exists only on GPT-6 Astra; other models keep Fast
+          // Ultrafast exists only on Astra and Sol; other models keep Fast
           // where they have it.
           if (onSpeedChange && speed && speed !== "standard") {
             if (nextModelInfo?.fastModeSupported !== true) {

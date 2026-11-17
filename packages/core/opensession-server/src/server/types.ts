@@ -254,7 +254,7 @@ export interface UnifiedSession {
   autoFallback?: boolean;
   /** Use OpenAI's priority service tier for ChatGPT OAuth Codex runs. */
   fastMode?: boolean;
-  speed?: SessionSpeed; // unset falls back to fastMode; "ultrafast" needs GPT-6 Astra and a Pro $500 login
+  speed?: SessionSpeed; // unset falls back to fastMode; "ultrafast" needs Astra or Sol and a Pro $500 login
   /**
    * Pinned provider account for runs in this session. The id belongs to the
    * active model's Claude or Codex pool. Unset = auto (personal-first, shared
@@ -754,7 +754,7 @@ export interface NativeSessionFile {
   /** Allow automatic model switching when the selected model is unavailable. Defaults to true. */
   autoFallback?: boolean;
   fastMode?: boolean; // OpenAI priority service tier for ChatGPT OAuth Codex runs
-  speed?: SessionSpeed; // unset falls back to fastMode; "ultrafast" needs GPT-6 Astra and a Pro $500 login
+  speed?: SessionSpeed; // unset falls back to fastMode; "ultrafast" needs Astra or Sol and a Pro $500 login
   accountId?: string; // pinned Claude/Codex provider account; unset = auto pool
   /** Set only at creation; never cleared or changed (fixed-subscription.ts). */
   subscriptionPolicy?: "fixed";

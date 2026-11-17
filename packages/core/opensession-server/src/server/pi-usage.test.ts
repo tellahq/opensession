@@ -13,7 +13,7 @@ const row = {
 test("folds a catalog day into per-model and per-session usage", () => {
   const day = usageDayFromCatalog([
     { ...row, sessionId: "os-a", model: "claude-opus-5" },
-    { ...row, sessionId: "os-a", model: "pi/openai/gpt-6.1-sol", costUsd: 0.5 },
+    { ...row, sessionId: "os-a", model: "pi/openai/gpt-6.2-sol", costUsd: 0.5 },
     { ...row, sessionId: "bks-b", model: "claude-opus-5", output: 1 },
     { ...row, sessionId: "", model: "claude-haiku-4-5" },
   ]);
@@ -31,7 +31,7 @@ test("folds a catalog day into per-model and per-session usage", () => {
   expect(day.byModel.map((usage) => [usage.model, usage.requests])).toEqual([
     ["claude-opus-5", 4],
     ["claude-haiku-4-5", 2],
-    ["gpt-6.1-sol", 2],
+    ["gpt-6.2-sol", 2],
   ]);
   // Unowned usage counts toward the day and its model, never a session.
   expect(day.bySession).toEqual({

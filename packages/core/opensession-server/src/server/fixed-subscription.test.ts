@@ -45,7 +45,7 @@ writeFileSync(
 );
 
 const CLAUDE_MODEL = "pi/anthropic/claude-opus-5";
-const OPENAI_MODEL = "pi/openai/gpt-6.1-sol";
+const OPENAI_MODEL = "pi/openai/gpt-6.2-sol";
 
 let policy: typeof import("./fixed-subscription");
 let accounts: typeof import("./claude-accounts");

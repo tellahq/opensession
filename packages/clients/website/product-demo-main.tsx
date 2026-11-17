@@ -201,7 +201,7 @@ const sessions: UnifiedSession[] = [
         "Retry failed billing webhooks",
         88,
         240,
-        "openai/gpt-6.1-sol",
+        "openai/gpt-6.2-sol",
       ],
       [
         "onboarding-empty",
@@ -236,7 +236,7 @@ const sessions: UnifiedSession[] = [
         "Fix chart colours in dark mode",
         268,
         502,
-        "openai/gpt-6.1-sol",
+        "openai/gpt-6.2-sol",
       ],
       [
         "stale-invites",
@@ -250,7 +250,7 @@ const sessions: UnifiedSession[] = [
         "Tune search ranking for short queries",
         358,
         640,
-        "openai/gpt-6.1-sol",
+        "openai/gpt-6.2-sol",
       ],
       [
         "mobile-keyboard",
@@ -285,7 +285,7 @@ const sessions: UnifiedSession[] = [
         "Document the webhook payloads",
         624,
         980,
-        "openai/gpt-6.1-sol",
+        "openai/gpt-6.2-sol",
       ],
       [
         "retry-backoff",
@@ -299,7 +299,7 @@ const sessions: UnifiedSession[] = [
         "Export a workspace to CSV",
         754,
         1128,
-        "openai/gpt-6.1-sol",
+        "openai/gpt-6.2-sol",
       ],
     ] as const
   ).map(([slug, title, activeMinutes, createdMinutes, model]) => ({

@@ -70,16 +70,16 @@ describe("oneShot", () => {
       oneShotFallbackModels(
         "pi/anthropic/claude-fable-5-2",
         "no usable Claude account in the pool (all exhausted or sidelined)",
-        ["gpt-6-astra", "gpt-6.1-sol"],
+        ["gpt-6.2-astra", "gpt-6.2-sol"],
       ),
-    ).toEqual(["pi/openai/gpt-6-astra", "pi/openai/gpt-6.1-sol"]);
+    ).toEqual(["pi/openai/gpt-6.2-astra", "pi/openai/gpt-6.2-sol"]);
   });
 
   test("skips fallbacks on the primary's own provider and the primary itself", () => {
     expect(
-      oneShotFallbackModels("pi/openai/gpt-6-astra", "usage limit reached", [
-        "gpt-6-astra",
-        "gpt-6.1-sol",
+      oneShotFallbackModels("pi/openai/gpt-6.2-astra", "usage limit reached", [
+        "gpt-6.2-astra",
+        "gpt-6.2-sol",
         "claude-opus-5-5",
       ]),
     ).toEqual(["pi/anthropic/claude-opus-5-5"]);
@@ -87,9 +87,9 @@ describe("oneShot", () => {
       oneShotFallbackModels(
         "pi/anthropic/claude-fable-5-2",
         "usage limit reached",
-        ["claude-opus-5-5", "gpt-6-astra", "gpt-6-astra"],
+        ["claude-opus-5-5", "gpt-6.2-astra", "gpt-6.2-astra"],
       ),
-    ).toEqual(["pi/openai/gpt-6-astra"]);
+    ).toEqual(["pi/openai/gpt-6.2-astra"]);
   });
 
   test("keeps Haiku on its configured fallback and never hops on caller errors", () => {
@@ -97,14 +97,14 @@ describe("oneShot", () => {
       oneShotFallbackModels(
         "pi/anthropic/claude-haiku-5-5",
         "no usable Claude account in the pool",
-        ["gpt-6-astra"],
+        ["gpt-6.2-astra"],
       ),
     ).toEqual(["pi/openai/gpt-6-luna"]);
     expect(
       oneShotFallbackModels(
         "pi/anthropic/claude-fable-5-2",
         "invalid model id",
-        ["gpt-6-astra"],
+        ["gpt-6.2-astra"],
       ),
     ).toEqual([]);
     expect(

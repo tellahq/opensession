@@ -407,3 +407,36 @@ describe("open work fold", () => {
     }
   });
 });
+
+describe("open work fold hairline", () => {
+  async function markup(last: boolean) {
+    const { TurnBlock } = await import("./TurnBlock");
+    const getItem = localStorage.getItem;
+    localStorage.getItem = (key: string) =>
+      key === "opensession-turn-activity" ? "open" : null;
+    try {
+      return renderToStaticMarkup(
+        React.createElement(TurnBlock, {
+          items: [toolUse("a", "Bash", { command: "ls" })],
+          toolResults: new Map(),
+          live: false,
+          last,
+        }),
+      );
+    } finally {
+      localStorage.getItem = getItem;
+    }
+  }
+
+  test("divides the work from what follows it", async () => {
+    const html = await markup(false);
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).toContain("border-b border-line");
+  });
+
+  test("drops the line when nothing follows the work", async () => {
+    const html = await markup(true);
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).not.toContain("border-b border-line");
+  });
+});
