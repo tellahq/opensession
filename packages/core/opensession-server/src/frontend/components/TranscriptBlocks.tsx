@@ -351,30 +351,57 @@ function groupCheckBacks(
   return grouped;
 }
 
-/** A task the agent reported on with status lines and then answered reads as
- * "Worked for 7m ›" above that answer: the statuses and check-backs were
- * interim, and the answer is the report. Only a settled answer (its footer is
- * down) closes a task, so a running one keeps its live status row. Human
- * messages, notes, notices and review loops are never folded in. */
+/** A task the agent reported on with status lines, or picked back up on its
+ * own (a wait waking it, its scheduled check-back), and then answered reads as
+ * one message: "Worked for 7m ›" above its last answer. The statuses,
+ * check-backs and earlier answers were interim, and the last answer is the
+ * report. Only a settled answer (its footer is down) that nothing self-started
+ * follows closes a task, so a running one keeps its live row. Human messages,
+ * notes, notices and review loops are never folded in, and check-backs inside
+ * a review loop stay with that loop. */
 function foldReportedTasks(
   blocks: RenderBlock[],
   progress: ReadonlyMap<string, ProgressGroup | null>,
 ): RenderBlock[] {
-  if (!progress.size) return blocks;
   const folded: RenderBlock[] = [];
   let run: RenderBlock[] = [];
+  let inReview = false;
   const isStatus = (block: RenderBlock) =>
     block.kind === "entry" && progress.has(block.entry.id);
+  const isCheckBack = (block: RenderBlock) =>
+    !inReview && reviewBlockRole(block).kind === "check-back";
+  // A nudge to continue is self-started too, so it never ends the task, but
+  // on its own it does not make the answer before it interim.
+  const foldable = (block: RenderBlock) =>
+    block.kind === "turn" ||
+    block.kind === "footer" ||
+    isNudgeBoundary(block) ||
+    (block.kind === "entry" &&
+      (block.entry.type === "assistant" ||
+        reviewBlockRole(block).kind === "check-back"));
+  // Whether the agent picks the task back up after `from` on its own.
+  const pickedBackUp = (from: number) => {
+    for (let j = from; j < blocks.length && foldable(blocks[j]!); j++)
+      if (isCheckBack(blocks[j]!)) return true;
+    return false;
+  };
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i]!;
     const next = blocks[i + 1];
+    const role = reviewBlockRole(block).kind;
+    if (role === "handoff") inReview = true;
+    else if (role === "settled" || role === "user-message") inReview = false;
     const answer =
       block.kind === "entry" &&
       block.entry.type === "assistant" &&
       !isStatus(block) &&
       next?.kind === "footer" &&
       next.entry.id === block.entry.id;
-    if (answer && run.some(isStatus)) {
+    if (
+      answer &&
+      run.some((inner) => isStatus(inner) || isCheckBack(inner)) &&
+      !pickedBackUp(i + 2)
+    ) {
       const first = run.flatMap(renderBlockEntries)[0];
       folded.push({
         kind: "review-loop",
@@ -392,13 +419,7 @@ function foldReportedTasks(
       i++;
       continue;
     }
-    const foldable =
-      block.kind === "turn" ||
-      block.kind === "footer" ||
-      (block.kind === "entry" &&
-        (block.entry.type === "assistant" ||
-          reviewBlockRole(block).kind === "check-back"));
-    if (foldable) {
+    if (foldable(block)) {
       run.push(block);
       continue;
     }
@@ -846,9 +867,16 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
         ),
       )
     : -1;
+  // Work before a settled answer (its footer) or a fold of turns the agent
+  // started itself belongs to a finished turn, even with no message between.
   const liveTurnBoundary = (
     runningWork >= 0 ? groupedBlocks.slice(0, runningWork) : groupedBlocks
-  ).findLastIndex(isConversationBoundary);
+  ).findLastIndex(
+    (block) =>
+      isConversationBoundary(block) ||
+      block.kind === "footer" ||
+      block.kind === "review-loop",
+  );
   const lastReviewLoop = groupedBlocks.findLastIndex(
     (block) => block.kind === "review-loop" && block.variant === "review",
   );

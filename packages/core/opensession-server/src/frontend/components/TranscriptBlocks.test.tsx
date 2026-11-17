@@ -1130,7 +1130,7 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
     setTurnPrefs(null);
   });
 
-  test("keeps completed output visible across a background wake", () => {
+  test("a background wake continues the same message", () => {
     setTurnPrefs("folded", "folded");
     const html = renderToStaticMarkup(
       <TranscriptBlocks
@@ -1182,11 +1182,16 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
       />,
     );
 
-    expect(html).toContain("Implemented and committed. Deployment is running.");
+    // The agent picked the task back up itself, so both turns read as one
+    // message: one work row above the answer that reports.
+    expect(html).not.toContain(
+      "Implemented and committed. Deployment is running.",
+    );
     expect(html).toContain("Deployment verified.");
-    // The woken turn's work folds into the check-back row.
     expect(html.match(WORKED_TITLES)).toHaveLength(1);
-    expect(html).toContain('aria-label="Checked back, once"');
+    expect(html).toContain('aria-label="Worked for 1m"');
+    expect(html).not.toContain("Checked back");
+    expect(html).not.toContain("Working");
     expect(html).not.toContain('data-eid="wait-boundary"');
     setTurnPrefs(null);
   });
@@ -1705,7 +1710,7 @@ describe("TranscriptBlocks check-backs", () => {
     timestamp: at(second),
   });
 
-  test("folds consecutive self-started turns and keeps only the last report", () => {
+  test("folds a task the agent picked back up into one message", () => {
     const html = renderToStaticMarkup(
       <TranscriptBlocks
         entries={[
@@ -1735,11 +1740,32 @@ describe("TranscriptBlocks check-backs", () => {
         ]}
       />,
     );
-    expect(html).toContain("Pushed; waiting on CI.");
-    expect(html).toContain('aria-label="Checked back, 3 times"');
+    expect(html).not.toContain("Pushed; waiting on CI.");
+    expect(html).not.toContain("Checked back");
+    expect(html).toContain('aria-label="Worked for 31s"');
     expect(html).not.toContain("Still waiting on the approval gate.");
     expect(html).not.toContain("Still waiting, nothing broken.");
     expect(html).toContain("CI finished: 52 passed.");
+  });
+
+  test("a finished turn stops saying Working once the agent checks back", () => {
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        live
+        entries={[
+          { id: "ask", type: "user", content: "Open the PR", timestamp: at(0) },
+          tool("push", 1),
+          say("blocked", "Pushed; the PR opens on retry.", 2),
+          wake("wake-1", 10),
+          tool("retry", 11),
+        ]}
+      />,
+    );
+    // Until the check-back answers, the earlier answer is still the report.
+    expect(html).toContain("Pushed; the PR opens on retry.");
+    expect(html).toContain("Checking back");
+    expect(html).not.toContain(">Working<");
+    expect(html.match(WORKED_TITLES)).toHaveLength(1);
   });
 
   test("a human message ends the fold and stays visible", () => {
@@ -1766,8 +1792,10 @@ describe("TranscriptBlocks check-backs", () => {
         ]}
       />,
     );
-    // The second fold takes in the later wake, so its last answer reports.
-    expect(html.match(/aria-label="Checked back, /g)).toHaveLength(2);
+    // Each person's request gets one message; the second takes in the later
+    // wake, so its last answer reports.
+    expect(html.match(/aria-label="Worked for /g)).toHaveLength(2);
+    expect(html).not.toContain("Checked back");
     expect(html).toContain("Nothing new.");
     expect(html).toContain("CI is green.");
     expect(html).toContain("Now merge it");
@@ -1847,7 +1875,7 @@ describe("TranscriptBlocks check-backs", () => {
     expect(merged).not.toContain("Here are the three open questions.");
   });
 
-  test("a nudged turn's answer is not folded as an interim check-back report", () => {
+  test("a nudge inside a task the agent picked back up folds with it", () => {
     const html = renderToStaticMarkup(
       <TranscriptBlocks
         entries={[
@@ -1862,10 +1890,11 @@ describe("TranscriptBlocks check-backs", () => {
         ]}
       />,
     );
-    expect(html).toContain("Research is done. Next: the doc.");
-    expect(html).toContain("The doc is written; CI is running.");
+    expect(html).not.toContain("Research is done. Next: the doc.");
+    expect(html).not.toContain("The doc is written; CI is running.");
     expect(html).toContain("CI is green.");
-    expect(html).toContain('aria-label="Checked back, once"');
+    expect(html).not.toContain("Checked back");
+    expect(html.match(WORKED_TITLES)).toHaveLength(1);
   });
 
   test("a nudge between check-backs stays inside their fold", () => {
@@ -1885,8 +1914,8 @@ describe("TranscriptBlocks check-backs", () => {
         ]}
       />,
     );
-    expect(html).toContain("Pushed; waiting on CI.");
-    expect(html).toContain('aria-label="Checked back, 2 times"');
+    expect(html).not.toContain("Pushed; waiting on CI.");
+    expect(html).not.toContain("Checked back");
     expect(html).not.toContain("Still running.");
     expect(html).not.toContain("Nothing to do until CI finishes.");
     expect(html).not.toContain('data-eid="nudge-1"');

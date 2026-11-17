@@ -1002,30 +1002,58 @@ enum TranscriptGrouping {
         return grouped
     }
 
-    /// A task the agent reported on with status lines and then answered
-    /// reads as "Worked for 7m ›" above that answer: the statuses and
-    /// check-backs were interim, and the answer is the report. A running
-    /// answer does not close a task, so a live one keeps its status row.
-    /// Human messages, notes, notices and review loops are never folded in.
-    /// Mirrors the web's `foldReportedTasks`.
+    /// A task the agent reported on with status lines, or picked back up on
+    /// its own (a wait waking it, its scheduled check-back), and then
+    /// answered reads as one message: "Worked for 7m ›" above its last
+    /// answer. The statuses, check-backs and earlier answers were interim,
+    /// and the last answer is the report. A running answer, or one the agent
+    /// picks back up after, does not close a task, so a live one keeps its
+    /// row. Human messages, notes, notices and review loops are never folded
+    /// in, and check-backs inside a review loop stay with that loop. Mirrors
+    /// the web's `foldReportedTasks`.
     private static func foldReportedTasks(
         _ blocks: [TranscriptBlock],
         progress: ProgressProjection,
         live: Bool,
         start: (String) -> Date?
     ) -> [TranscriptBlock] {
-        guard !progress.isEmpty else { return blocks }
         func isStatus(_ block: TranscriptBlock) -> Bool {
             if case .message(let entry) = block { return progress.contains(entry.id) }
+            return false
+        }
+        func isFoldable(_ block: TranscriptBlock) -> Bool {
+            switch block {
+            case .work, .footer, .tool: true
+            case .message(let entry): entry.isAssistant || isCheckBack(block)
+            default: false
+            }
+        }
+        var inReview = false
+        func continuesTask(_ block: TranscriptBlock) -> Bool {
+            isStatus(block) || (!inReview && isCheckBack(block))
+        }
+        /// Whether the agent picks the task back up after `index` on its own.
+        func pickedBackUp(after index: Int) -> Bool {
+            guard !inReview else { return false }
+            for block in blocks[(index + 1)...] {
+                guard isFoldable(block) else { return false }
+                if isCheckBack(block) { return true }
+            }
             return false
         }
         var folded: [TranscriptBlock] = []
         var run: [TranscriptBlock] = []
         for (index, block) in blocks.enumerated() {
+            switch reviewBlockRole(block) {
+            case .handoff: inReview = true
+            case .settled, .userMessage: inReview = false
+            case .checkBack, .other: break
+            }
             if case .message(let answer) = block, answer.isAssistant,
                !progress.contains(answer.id),
                !(live && index == blocks.count - 1),
-               run.contains(where: isStatus) {
+               run.contains(where: continuesTask),
+               !pickedBackUp(after: index) {
                 // A status's footer says nothing the fold does not.
                 let work = run.filter { inner in
                     if case .footer(let footer) = inner { return !progress.contains(footer.entryId) }
@@ -1048,12 +1076,7 @@ enum TranscriptGrouping {
                 run = []
                 continue
             }
-            let foldable: Bool = switch block {
-            case .work, .footer, .tool: true
-            case .message(let entry): entry.isAssistant || isCheckBack(block)
-            default: false
-            }
-            if foldable {
+            if isFoldable(block) {
                 run.append(block)
             } else {
                 folded += run
