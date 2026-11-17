@@ -84,6 +84,10 @@ interface Props {
   onOpenSubagent?: (agentId: string, label: string) => void;
   /** Lets wire-clamped intermediate notes fetch their full content. */
   sessionId?: string;
+  /** Nothing but a footer follows this block in the transcript, so the
+   * hairline that divides the work from what comes next has nothing to
+   * divide. */
+  last?: boolean;
 }
 
 /** The two Settings → Preferences answers for how work folds, kept live. */
@@ -117,6 +121,7 @@ export const TurnBlock = function TurnBlock({
   expandWhileRunning = false,
   onOpenSubagent,
   sessionId,
+  last = false,
 }: Props) {
   const pathRoots = useToolPathRoots();
   const allTools = items.filter((it) => it.type === "tool_use");
@@ -282,6 +287,14 @@ export const TurnBlock = function TurnBlock({
   // Threads the turn started remain reachable beside the work fold.
   const threads = turnSpawnedThreads(items, toolResults);
 
+  const dividesFromBelow =
+    !last ||
+    renders.length > 0 ||
+    featured.images.length > 0 ||
+    featured.videos.length > 0 ||
+    suggested.length > 0 ||
+    threads.length > 0;
+
   return (
     <div
       className="mx-auto mb-3 w-full max-w-[var(--session-col)]"
@@ -325,8 +338,9 @@ export const TurnBlock = function TurnBlock({
             "mt-0.5",
             // Open, the work's rows sit flush under the header, and a
             // hairline closes the fold, so where the work ends and the
-            // turn's final answer begins stays legible.
-            "mb-3 border-b border-line pb-2",
+            // turn's final answer begins stays legible. With nothing below
+            // it, the line would divide the work from empty space.
+            dividesFromBelow && "mb-3 border-b border-line pb-2",
           )}
         >
           {flatTools && (
@@ -1044,6 +1058,7 @@ function SuggestedTasks({
 
 function turnBlockPropsEqual(prev: Props, next: Props): boolean {
   if (prev.live !== next.live) return false;
+  if (prev.last !== next.last) return false;
   if (prev.expandWhileRunning !== next.expandWhileRunning) return false;
   if (prev.onOpenSubagent !== next.onOpenSubagent) return false;
   if (prev.sessionId !== next.sessionId) return false;
