@@ -64,16 +64,16 @@ describe("explicit progress updates", () => {
     }
   });
 
-  test("replaces the label at the first row while retaining every update", () => {
+  test("the latest update owns the row and keeps every earlier one", () => {
     const first = entry("a", "◷ **CI**: Running");
     const last = entry("b", "✓ **CI**: All checks passed");
     const groups = collectProgressUpdates([first, wake("wake"), last]);
-    expect(groups.get("a")).toEqual({
+    expect(groups.get("b")).toEqual({
       latest: { topic: "CI", state: "done", text: "All checks passed" },
       entries: [first, last],
     });
-    expect(groups.has("b")).toBe(true);
-    expect(groups.get("b")).toBeNull();
+    expect(groups.has("a")).toBe(true);
+    expect(groups.get("a")).toBeNull();
   });
 
   test("a new human request starts a fresh row, even for the same topic", () => {
@@ -86,19 +86,26 @@ describe("explicit progress updates", () => {
     expect(groups.get("b")?.entries).toHaveLength(1);
   });
 
-  test("keeps separate topics and resets at team notes", () => {
+  test("joins topics within one task and resets at team notes", () => {
+    const ci = entry("a", "◷ **CI**: Running");
+    const deploy = entry("b", "◷ **Deployment**: Running");
     const groups = collectProgressUpdates(
       [
-        entry("a", "◷ **CI**: Running"),
-        wake("start-build"),
-        entry("b", "◷ **Build**: Running"),
+        ci,
+        wake("start-deploy"),
+        deploy,
         wake("w"),
         entry("c", "✓ **CI**: Passed", { timestamp: "2026-01-01T00:02:00Z" }),
       ],
       [],
       [Date.parse("2026-01-01T00:01:00Z")],
     );
-    expect([...groups.values()].every(Boolean)).toBe(true);
+    expect(groups.get("a")).toBeNull();
+    expect(groups.get("b")).toEqual({
+      latest: { topic: "Deployment", state: "running", text: "Running" },
+      entries: [ci, deploy],
+    });
+    expect(groups.get("c")?.entries).toHaveLength(1);
   });
 
   test("unloaded user boundaries in the outline prevent cross-task merging", () => {

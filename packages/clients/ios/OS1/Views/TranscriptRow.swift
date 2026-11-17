@@ -183,10 +183,20 @@ struct TranscriptRow: View {
             )
         case .note(let thread):
             TimelineThreadCard(thread: thread, sessionId: sessionId, context: comments)
-        case .progress(let group):
+        case .progress(let group, let work):
+            // Folded like the check-back work it may hold: Steps · Open opens
+            // it, and a row with only earlier updates stays closed.
             ProgressStatusRow(
                 group: group,
-                state: expansionState("progress-\(block.id)", false)
+                work: work,
+                sessionId: sessionId,
+                worktreeDir: worktreeDir,
+                state: expansionState(
+                    "progress-\(block.id)",
+                    work != nil && (Self.loopsOpenForScreenshot || activity.work == .open)
+                ),
+                expansionState: expansionState,
+                activity: activity
             )
         }
     }

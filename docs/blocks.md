@@ -30,9 +30,12 @@ A later turn uses the same topic and a checkmark for confirmed success:
 ✓ **CI**: All checks passed
 ```
 
-On web and native clients, the latest update replaces the first row's label.
-Open that row to read earlier updates. Human messages and team notes start a
-new scope. The stored transcript is unchanged; extension and exported
+On web and native clients, every update in one task shares a single row,
+whatever its topic: `◷ **CI**: Running` followed by `◷ **Deployment**: Running`
+reads as one row that moved on. The row sits at the latest update and takes in
+the check-back fold beside it, so there is no separate "Checked back" line.
+Open the row to read earlier updates and that work. Human messages and team
+notes start a new scope. The stored transcript is unchanged; extension and exported
 transcripts keep readable Markdown messages rather than coalescing them.
 
 This is opt-in, not a summary of arbitrary prose. The entire reply must match:
