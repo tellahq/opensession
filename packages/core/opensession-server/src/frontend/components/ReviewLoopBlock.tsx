@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useTurnActivityPrefs } from "./TurnBlock";
 import { IconChevronRight, IconCheckCircle, IconX } from "./icons";
 import { cn } from "../ui/cn";
+import { formatDuration } from "../lib/time";
 import type { ReviewLoopResult } from "../lib/review-loop";
 import type { ReviewSettledOutcome } from "@tellahq/opensession-protocol/notices";
 
@@ -98,6 +99,40 @@ export function CheckBackBlock({
       label={`Checked back, ${detail}`}
       live={live}
       liveLabel="Check-back in progress"
+      open={open}
+      onToggle={toggle}
+    >
+      {children}
+    </LoopDisclosure>
+  );
+}
+
+/**
+ * A whole task the agent reported on with status lines, then answered: its
+ * work, statuses and check-backs, folded like one turn's work above the
+ * answer that reports it.
+ */
+export function WorkFoldBlock({
+  durationMs,
+  children,
+  defaultOpen = false,
+  onOpenChange,
+}: {
+  durationMs?: number;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
+  const [open, toggle] = useLoopOpen(defaultOpen, onOpenChange);
+  const duration = durationMs === undefined ? null : formatDuration(durationMs);
+  const text = duration ? `Worked for ${duration}` : "Worked";
+  return (
+    <LoopDisclosure
+      title="Worked"
+      text={text}
+      label={text}
+      live={false}
+      liveLabel=""
       open={open}
       onToggle={toggle}
     >
