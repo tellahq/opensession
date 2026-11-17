@@ -51,7 +51,7 @@ export function TranscriptMotionLab({
 }: {
   initialSeed: number;
   speed: number;
-  profile: "motion" | "stream" | "hydration";
+  profile: "motion" | "stream" | "hydration" | "progress";
 }) {
   const [seed, setSeed] = useState(initialSeed);
   const [run, setRun] = useState(0);
@@ -63,7 +63,9 @@ export function TranscriptMotionLab({
       ? transcriptMotionScenarios.makeTranscriptStreamPerformanceScenario()
       : profile === "hydration"
         ? transcriptMotionScenarios.makeTranscriptHydrationScenario()
-        : transcriptMotionScenarios.makeTranscriptMotionScenario(seed);
+        : profile === "progress"
+          ? transcriptMotionScenarios.makeTranscriptProgressScenario()
+          : transcriptMotionScenarios.makeTranscriptMotionScenario(seed);
 
   useEffect(() => {
     const splash = document.getElementById("splash");
@@ -85,7 +87,9 @@ export function TranscriptMotionLab({
       <header className="flex min-h-14 shrink-0 items-center justify-between gap-4 px-4 desktop:px-6">
         <div className="min-w-0">
           <h1 className="truncate text-item-title font-semibold">
-            Transcript motion lab
+            {profile === "progress"
+              ? "Open Session · Progress updates"
+              : "Transcript motion lab"}
           </h1>
           <p className="truncate text-label text-faint">
             No network ·{" "}
@@ -93,7 +97,9 @@ export function TranscriptMotionLab({
               ? "10k · 100 deltas/s"
               : profile === "hydration"
                 ? "incremental history"
-                : `seed ${seed}`}{" "}
+                : profile === "progress"
+                  ? "synthetic transcript"
+                  : `seed ${seed}`}{" "}
             · {speed}×
           </p>
         </div>

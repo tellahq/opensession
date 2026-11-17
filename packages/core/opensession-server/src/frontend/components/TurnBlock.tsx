@@ -92,23 +92,9 @@ export function useTurnActivityPrefs(): TurnActivityPrefs {
 }
 
 /**
- * One turn's work, folded into a single calm line — "Worked · 12m 4s · ran 9
- * commands, edited 3 files" — closed by default so the session reads as
- * question → answer. It
- * stays open while working, showing intermediate narration and reasoning beside
- * the tools they describe. The final assistant output never enters this fold.
- *
- * The collapsed line carries what a folded turn can't otherwise say: duration,
- * what the steps were (lib/work-summary.ts), and the ±lines it moved when the
- * turn wrote files. Line changes
- * keep the diff surfaces' colors, while routine failures stay quiet and one
- * click away. The counts sit after the meta run and never shrink; the
- * duration/steps run truncates first, so a phone drops characters off the
- * middle instead of the numbers.
- *
- * Below the line sits the one thing the fold does not hide: media the turn
- * explicitly surfaced. See featuredTurnMedia for why a marked screenshot is
- * not treated as work.
+ * One turn's work, folded into "Worked · 12m" so the conversation reads as
+ * question, answer. Counts, files and tool details live inside the fold.
+ * Explicitly surfaced media and delegated threads remain directly reachable.
  */
 // Memoized with a custom comparator: TranscriptBlocks rebuilds the `items`
 // arrays and the `toolResults` Map on every render, so plain shallow-prop memo
@@ -231,9 +217,7 @@ export const TurnBlock = function TurnBlock({
   ]
     .filter(Boolean)
     .join(" · ");
-  const metaLabel = [!live && duration, countsLabel]
-    .filter(Boolean)
-    .join(" · ");
+  const metaLabel = !live && duration ? `· ${duration}` : "";
 
   // Interleave tools, intermediate narration, and provider reasoning. Adjacent
   // reasoning summaries are status revisions rather than separate moments:
@@ -274,7 +258,7 @@ export const TurnBlock = function TurnBlock({
   // Pages the turn rendered with html_render: the answer itself, so like a
   // suggestion they stay put whether the fold is open or closed.
   const renders = turnHtmlRenders(items, toolResults);
-  // Threads the turn started: live cards, like suggestions, kept by the fold.
+  // Threads the turn started remain reachable beside the work fold.
   const threads = turnSpawnedThreads(items, toolResults);
 
   return (
@@ -287,11 +271,9 @@ export const TurnBlock = function TurnBlock({
       <button
         type="button"
         aria-expanded={expanded}
-        aria-label={
-          toolOnlyAggregate?.statusLabel
-            ? `${live ? "Working" : "Worked"}. ${countsLabel}. ${toolOnlyAggregate.statusLabel}`
-            : undefined
-        }
+        aria-label={[live ? "Working" : "Worked", !live && duration]
+          .filter(Boolean)
+          .join(", ")}
         onClick={() => rememberExpansion(!expanded)}
         // Baseline, not centre: this row mixes its 14px title with 13px meta
         // runs, and centring aligns boxes rather than text. The chevron carries
@@ -300,7 +282,7 @@ export const TurnBlock = function TurnBlock({
         // asymmetric padding moves the disclosure line into that overhang so
         // the open rail sits near the transcript edge instead of floating
         // inside the work column.
-        className="-mx-2 flex w-[calc(100%+16px)] min-w-0 cursor-pointer items-baseline gap-2 rounded-control border-0 bg-transparent py-1 pl-1 pr-3 text-left font-sans text-item-title leading-5 text-dim transition-colors hover:bg-hover/40 hover:text-fg"
+        className="-mx-2 flex w-[calc(100%+16px)] min-w-0 cursor-pointer items-baseline gap-2 rounded-control border-0 bg-transparent py-1 pl-1 pr-3 text-left font-sans text-item-title leading-5 text-dim transition-colors hover:bg-hover/40 hover:text-fg phone:min-h-11 phone:items-center"
       >
         <span
           className={cn(
@@ -319,20 +301,6 @@ export const TurnBlock = function TurnBlock({
               {metaLabel}
             </span>
           </Tooltip>
-        )}
-        {/* Hovering the counts opens what they count: the lines this turn
-            wrote, per file, without unfolding it. */}
-        {additions + deletions > 0 && (
-          <TurnLineStatsCard
-            files={editedFiles}
-            additions={additions}
-            deletions={deletions}
-          />
-        )}
-        {toolOnlyAggregate?.mediaLabel && (
-          <span className="flex-shrink-0 text-meta text-faint">
-            {toolOnlyAggregate.mediaLabel}
-          </span>
         )}
         {!expanded && activity && (
           <span className="min-w-0 truncate text-label leading-4 text-faint">
@@ -362,6 +330,19 @@ export const TurnBlock = function TurnBlock({
             onClick={() => rememberExpansion(false)}
             className="absolute inset-y-0 -left-2 w-4 cursor-pointer border-0 bg-transparent p-0 after:absolute after:inset-y-0 after:left-1/2 after:border-l after:border-transparent after:transition-colors hover:after:border-line-strong focus-visible:after:border-line-strong"
           />
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 py-1 text-meta text-faint">
+            {countsLabel && <span>{countsLabel}</span>}
+            {additions + deletions > 0 && (
+              <TurnLineStatsCard
+                files={editedFiles}
+                additions={additions}
+                deletions={deletions}
+              />
+            )}
+            {toolOnlyAggregate?.mediaLabel && (
+              <span>{toolOnlyAggregate.mediaLabel}</span>
+            )}
+          </div>
           {sections.map((sec) =>
             sec.kind === "message" ? (
               <MessageBubble

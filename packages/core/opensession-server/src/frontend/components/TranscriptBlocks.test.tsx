@@ -343,11 +343,11 @@ describe("TranscriptBlocks compact tool runs", () => {
       <TranscriptBlocks live entries={toolEntries} />,
     );
 
-    // The Working row already owns the count. Until the agent writes a real
-    // update, a second grouped-step row would only repeat the same information.
+    // Keep one disclosure until the agent writes a real update. Counts and
+    // individual steps become visible together when someone opens it.
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain(">Working</span>");
-    expect(html).toContain("ran 1 command, read 1 file</span>");
+    expect(html).not.toContain("ran 1 command, read 1 file</span>");
     expect(html).not.toContain('data-tool-run="true"');
     expect(html).not.toContain("Show 2 grouped steps");
     expect(html).not.toContain("git status");
@@ -461,7 +461,7 @@ describe("TranscriptBlocks compact tool runs", () => {
     expect(html).not.toContain('data-tool-run="true"');
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain(">Working</span>");
-    expect(html).toContain("ran 1 command</span>");
+    expect(html).not.toContain("ran 1 command</span>");
     expect(html).not.toContain("git status");
   });
 
@@ -628,10 +628,10 @@ describe("TranscriptBlocks compact tool runs", () => {
     );
 
     expect(html.match(/>Worked<\/span>/g)).toHaveLength(1);
-    expect(html).toContain("ran 1 command, read 1 file");
+    expect(html).not.toContain("ran 1 command, read 1 file");
   });
 
-  test("folds edits into the run and counts their lines on the row", () => {
+  test("keeps edit counts and line totals inside the work fold", () => {
     setTurnPrefs(null);
     const edit = (n: number, path: string): TranscriptEntry[] => [
       {
@@ -651,72 +651,88 @@ describe("TranscriptBlocks compact tool runs", () => {
         timestamp: `2026-08-13T06:00:0${n}.500Z`,
       },
     ];
-    const html = renderToStaticMarkup(
-      <TranscriptBlocks
-        live
-        entries={[
-          {
-            id: "prompt",
-            type: "user",
-            content: "Rework the button",
-            timestamp: "2026-08-13T06:00:00Z",
-          },
-          ...edit(1, "/tmp/button.tsx"),
-          ...edit(2, "/tmp/button.tsx"),
-          ...edit(3, "/tmp/other.tsx"),
-          ...bashCall(1, "bun test"),
-        ]}
-      />,
-    );
+    const render = () =>
+      renderToStaticMarkup(
+        <TranscriptBlocks
+          live
+          entries={[
+            {
+              id: "prompt",
+              type: "user",
+              content: "Rework the button",
+              timestamp: "2026-08-13T06:00:00Z",
+            },
+            ...edit(1, "/tmp/button.tsx"),
+            ...edit(2, "/tmp/button.tsx"),
+            ...edit(3, "/tmp/other.tsx"),
+            ...bashCall(1, "bun test"),
+          ]}
+        />,
+      );
 
-    // The one Working row carries both the total and the lines moved. The
-    // individual calls stay behind that row until someone opens it.
+    const closed = render();
+    expect(closed).toContain('aria-expanded="false"');
+    expect(closed).not.toContain("edited 2 files, ran 1 command");
+    expect(closed).not.toContain("+3");
+    expect(closed).not.toContain('data-eid="edit-1"');
+    setTurnPrefs("open");
+    const html = render();
+
     expect(html).not.toContain('data-tool-run="true"');
-    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('aria-expanded="true"');
     expect(html).toContain("edited 2 files, ran 1 command");
     expect(html).toContain("+3");
     expect(html).toContain("-3");
     expect(html).not.toContain("Show 4 grouped steps");
-    expect(html).not.toContain('data-eid="edit-1"');
+    expect(html).toContain('data-eid="edit-1"');
+    setTurnPrefs(null);
   });
 
-  test("keeps server-derived code totals on the one Working row", () => {
+  test("keeps server-derived code totals inside the work fold", () => {
     setTurnPrefs(null);
-    const html = renderToStaticMarkup(
-      <TranscriptBlocks
-        live
-        entries={[
-          {
-            id: "prompt",
-            type: "user",
-            content: "Implement it",
-            timestamp: "2026-08-13T06:00:00Z",
-          },
-          {
-            id: "remote-edit",
-            type: "tool_use",
-            toolUseId: "remote-edit-call",
-            toolName: "remote_code_change",
-            toolInput: {},
-            content: "Editing",
-            timestamp: "2026-08-13T06:00:01Z",
-            presentation: {
-              canonical: "Edit",
-              name: "Edit",
-              family: "edit",
-              detail: { kind: "none" },
-              lineStats: { additions: 400, deletions: 23 },
+    const render = () =>
+      renderToStaticMarkup(
+        <TranscriptBlocks
+          live
+          entries={[
+            {
+              id: "prompt",
+              type: "user",
+              content: "Implement it",
+              timestamp: "2026-08-13T06:00:00Z",
             },
-          },
-        ]}
-      />,
-    );
+            {
+              id: "remote-edit",
+              type: "tool_use",
+              toolUseId: "remote-edit-call",
+              toolName: "remote_code_change",
+              toolInput: {},
+              content: "Editing",
+              timestamp: "2026-08-13T06:00:01Z",
+              presentation: {
+                canonical: "Edit",
+                name: "Edit",
+                family: "edit",
+                detail: { kind: "none" },
+                lineStats: { additions: 400, deletions: 23 },
+              },
+            },
+          ]}
+        />,
+      );
+
+    const closed = render();
+    expect(closed).not.toContain("edited 1 file");
+    expect(closed).not.toContain("+400");
+    setTurnPrefs("open");
+    const html = render();
 
     expect(html).toContain(">Working</span>");
     expect(html).toContain("edited 1 file</span>");
     expect(html).toContain("+400");
     expect(html).toContain("-23");
     expect(html).not.toContain('data-tool-run="true"');
+    setTurnPrefs(null);
   });
 
   test("shows every call in place under the always-expanded preference", () => {
@@ -761,60 +777,67 @@ describe("TranscriptBlocks compact tool runs", () => {
     expect(html).not.toContain("git diff");
   });
 
-  test("keeps incidental media status without repeating failures on the compact row", () => {
+  test("keeps incidental media counts inside the work fold", () => {
     setTurnPrefs(null);
-    const html = renderToStaticMarkup(
-      <TranscriptBlocks
-        live
-        entries={[
-          {
-            id: "prompt",
-            type: "user",
-            content: "Verify it",
-            timestamp: "2026-08-13T06:00:00Z",
-          },
-          {
-            id: "bash",
-            type: "tool_use",
-            toolUseId: "bash-call",
-            toolName: "bash",
-            toolInput: { command: "bun test" },
-            content: "Using bash",
-            timestamp: "2026-08-13T06:00:01Z",
-          },
-          {
-            id: "bash-result",
-            type: "tool_result",
-            toolUseId: "bash-call",
-            content: "failed",
-            isError: true,
-            timestamp: "2026-08-13T06:00:02Z",
-          },
-          {
-            id: "read",
-            type: "tool_use",
-            toolUseId: "read-call",
-            toolName: "read",
-            toolInput: { filePath: "/tmp/after.png" },
-            content: "Using read",
-            timestamp: "2026-08-13T06:00:03Z",
-          },
-          {
-            id: "read-result",
-            type: "tool_result",
-            toolUseId: "read-call",
-            content: "Image read successfully",
-            images: ["/media?path=after.png"],
-            timestamp: "2026-08-13T06:00:04Z",
-          },
-        ]}
-      />,
-    );
+    const render = () =>
+      renderToStaticMarkup(
+        <TranscriptBlocks
+          live
+          entries={[
+            {
+              id: "prompt",
+              type: "user",
+              content: "Verify it",
+              timestamp: "2026-08-13T06:00:00Z",
+            },
+            {
+              id: "bash",
+              type: "tool_use",
+              toolUseId: "bash-call",
+              toolName: "bash",
+              toolInput: { command: "bun test" },
+              content: "Using bash",
+              timestamp: "2026-08-13T06:00:01Z",
+            },
+            {
+              id: "bash-result",
+              type: "tool_result",
+              toolUseId: "bash-call",
+              content: "failed",
+              isError: true,
+              timestamp: "2026-08-13T06:00:02Z",
+            },
+            {
+              id: "read",
+              type: "tool_use",
+              toolUseId: "read-call",
+              toolName: "read",
+              toolInput: { filePath: "/tmp/after.png" },
+              content: "Using read",
+              timestamp: "2026-08-13T06:00:03Z",
+            },
+            {
+              id: "read-result",
+              type: "tool_result",
+              toolUseId: "read-call",
+              content: "Image read successfully",
+              images: ["/media?path=after.png"],
+              timestamp: "2026-08-13T06:00:04Z",
+            },
+          ]}
+        />,
+      );
+
+    const closed = render();
+    expect(closed).not.toContain("1 image");
+    expect(closed).not.toContain("1 media");
+    setTurnPrefs("open");
+    const html = render();
 
     expect(html).not.toContain("1 failed");
     expect(html).not.toContain("failed step");
     expect(html).toContain("1 image");
-    expect(html).toContain("1 media");
+    setTurnPrefs(null);
   });
 
   test("keeps featured media and subagents as direct rows", () => {
@@ -1267,7 +1290,7 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
     setTurnPrefs("folded", "folded");
     const folded = renderToStaticMarkup(<TranscriptBlocks entries={entries} />);
     expect(folded.match(/>Worked<\/span>/g)).toHaveLength(1);
-    expect(folded).toContain("ran 2 commands");
+    expect(folded).not.toContain("ran 2 commands");
     expect(folded).not.toContain("Checking deployment status");
 
     setTurnPrefs("open", "folded");
@@ -2129,5 +2152,200 @@ describe("TranscriptBlocks review loops", () => {
     expect(open).toContain("Fix round 1 is addressed");
     expect(open).toContain("PR #42 review passed");
     expect(open).toContain("Where things stand: the retry path");
+  });
+});
+
+describe("TranscriptBlocks progress rows", () => {
+  const row = (
+    id: string,
+    type: TranscriptEntry["type"],
+    content: string,
+    seq: number,
+    extra: Partial<TranscriptEntry> = {},
+  ): TranscriptEntry => ({
+    id,
+    type,
+    content,
+    timestamp: new Date(
+      Date.parse("2026-01-01T00:00:00Z") + seq * 1000,
+    ).toISOString(),
+    seq,
+    changeSeq: seq,
+    ...extra,
+  });
+  const updates = [
+    row("request", "user", "Fix the retry test", 1),
+    row("running", "assistant", "◷ **CI**: Running", 2),
+    row("wake", "user", "", 3, { turnBoundary: true }),
+    row("done", "assistant", "✓ **CI**: All checks passed", 4),
+  ];
+
+  test("shows one latest status row, without a duplicate message or footer", () => {
+    const html = renderToStaticMarkup(<TranscriptBlocks entries={updates} />);
+    expect(html.match(/data-progress-topic="CI"/g)).toHaveLength(1);
+    expect(html).toContain("All checks passed");
+    expect(html).toContain("Show update history");
+    expect(html).not.toContain("Worked");
+    expect(html).not.toContain("Checked back");
+    expect(html).not.toContain("Duplicate from here");
+  });
+
+  test("progress-only scheduled turns do not leave repeated scheduling notices", () => {
+    const scheduled = updates.map((entry) =>
+      entry.turnBoundary
+        ? {
+            ...entry,
+            turnBoundary: undefined,
+            content: "<!--os:scheduled-prompt:ci-->\nCheck CI.",
+          }
+        : entry,
+    );
+    const html = renderToStaticMarkup(<TranscriptBlocks entries={scheduled} />);
+    expect(html.match(/data-progress-topic="CI"/g)).toHaveLength(1);
+    expect(html).not.toContain("Scheduled check-back");
+  });
+
+  test("worker reports do not turn intermediate status narration into an invisible owner", () => {
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        entries={[
+          row("u", "user", "Check CI", 1),
+          row("running", "assistant", "◷ **CI**: Running", 2),
+          row(
+            "worker",
+            "user",
+            "[worker w] <!--os:worker-report-->\nChecks passed.",
+            3,
+          ),
+          row("passed", "assistant", "✓ **CI**: All checks passed", 4),
+        ]}
+      />,
+    );
+    expect(html.match(/data-progress-topic="CI"/g)).toHaveLength(1);
+    expect(html).toContain("All checks passed");
+  });
+
+  test("repeated progress statuses preserve one check-back work fold", () => {
+    const work: TranscriptEntry[] = [row("u", "user", "Check CI", 1)];
+    for (let i = 0; i < 3; i++) {
+      work.push(
+        row(`wake-${i}`, "user", "", 2 + i * 3, { turnBoundary: true }),
+      );
+      work.push(
+        row(`tool-${i}`, "tool_use", "", 3 + i * 3, {
+          toolName: "Bash",
+          toolUseId: `tool-${i}`,
+          toolInput: { command: "check-build" },
+        }),
+      );
+      work.push(
+        row(
+          `status-${i}`,
+          "assistant",
+          i === 2 ? "✓ **CI**: All checks passed" : "◷ **CI**: Running",
+          4 + i * 3,
+        ),
+      );
+    }
+    const html = renderToStaticMarkup(<TranscriptBlocks entries={work} />);
+    expect(html.match(/aria-label="Checked back"/g)).toHaveLength(1);
+    expect(html).toContain('aria-label="Checked back, 3 times"');
+    expect(html.match(/data-progress-topic="CI"/g)).toHaveLength(1);
+  });
+
+  test("progress does not split a multi-round review loop", () => {
+    const handoff = "[GitHub] <!--os:review-handoff-->\nReview PR #42";
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        entries={[
+          row("handoff-1", "user", handoff, 1),
+          row("status-1", "assistant", "◷ **Review**: Fixing", 2),
+          row("handoff-2", "user", handoff, 3),
+          row("status-2", "assistant", "✓ **Review**: Fixed", 4),
+        ]}
+      />,
+    );
+    expect(html.match(/aria-label="Review loop"/g)).toHaveLength(1);
+    expect(html).toContain('aria-label="Review loop, 2 rounds, PR #42"');
+    expect(html).toContain("Fixing");
+    expect(html).toContain("Fixed");
+  });
+
+  test("a single status is readable text, not an unavailable button", () => {
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        entries={[row("s", "assistant", "◷ **CI**: Running", 1)]}
+      />,
+    );
+    expect(html).toContain('role="status"');
+    expect(html).not.toContain("<button");
+    expect(html).not.toContain('aria-disabled="true"');
+  });
+
+  test("shares the row across separately indexed turn ranges", () => {
+    const index = updates.map((entry) => ({
+      id: entry.id,
+      seq: entry.seq!,
+      changeSeq: entry.seq!,
+      timestampMs: Date.parse(entry.timestamp),
+      contentLength: entry.content.length,
+      role: entry.turnBoundary ? ("check_back" as const) : entry.type,
+    }));
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks entries={updates} transcriptIndex={index} />,
+    );
+    expect(html.match(/data-progress-topic="CI"/g)).toHaveLength(1);
+    expect(html).toContain("All checks passed");
+  });
+
+  test("keeps blockers and verification limits as messages outside the row", () => {
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        entries={[
+          ...updates,
+          row("wake2", "user", "", 5, { turnBoundary: true }),
+          row(
+            "blocker",
+            "assistant",
+            "The real editor is unverified. Its preview will not start.",
+            6,
+          ),
+        ]}
+      />,
+    );
+    expect(html.match(/data-progress-topic="CI"/g)).toHaveLength(1);
+    expect(html).toContain("The real editor is unverified");
+  });
+
+  test("never folds a mixed status and question into a progress row", () => {
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        entries={[
+          row("mixed", "assistant", "✓ **CI**: Passed\n\nShould I merge?", 1),
+        ]}
+      />,
+    );
+    expect(html).not.toContain("data-progress-topic");
+    expect(html).toContain("Should I merge?");
+  });
+
+  test("a later tool makes a status narration rather than a disappearing anchor", () => {
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        entries={[
+          updates[0]!,
+          updates[1]!,
+          row("tool", "tool_use", "", 3, {
+            toolName: "Bash",
+            toolUseId: "bash-1",
+            toolInput: { command: "bun test" },
+          }),
+          row("result", "tool_result", "Passed", 4, { toolUseId: "bash-1" }),
+          row("final", "assistant", "✓ **CI**: All checks passed", 5),
+        ]}
+      />,
+    );
+    expect(html.match(/data-progress-topic="CI"/g)).toHaveLength(1);
+    expect(html).toContain("All checks passed");
   });
 });

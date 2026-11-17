@@ -135,10 +135,16 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
 - **Session view:** live transcript over the `/ws` WebSocket, grouped into
   turns the way the web viewer groups them: **question → folded work → answer →
   footer**. A turn's tool calls and the narration between them collapse behind
-  one header. Phones keep that header to outcome, duration and failure count;
-  opening it reveals steps, tool families and changed files. Wider layouts also
-  show the richer fingerprint inline. The turn's final answer escapes the fold
-  and renders as a normal message. On phones, one changed-files summary
+  one header that says only `Worked · 12s`; opening it shows the step count,
+  failures and line changes above the steps and changed files. The turn's
+  final answer escapes the fold and renders as a normal message. An agent's
+  opt-in status line (`◷ **CI**: Running`, later `✓ **CI**: All checks
+passed`, the whole message and nothing else) draws as one compact row that
+  takes each later update on the same topic, with earlier updates one tap
+  away (`Models/ProgressUpdates.swift`, mirroring the web). A human message,
+  a review handoff or a team note starts a new row; blockers, questions and
+  anything with extra prose or attachments stay ordinary messages, and the
+  stored transcript is unchanged. On phones, one changed-files summary
   replaces the footer chip cloud while opening the same Changes panel. Comment
   threads sit beside that timeline without entering the agent context: a
   thread with no passage is a team note in the timeline (the yellow composer
@@ -752,6 +758,7 @@ OS1/
     LibraryView.swift        Startable recipes and templates
     TranscriptRow.swift      Per-block rendering: bubbles, notices, clamping
     TurnBlockView.swift      Work fold header + turn footer + file chips
+    ProgressStatusRow.swift  One agent status row with its update history
     ToolCallRow.swift        Tool rows, bespoke bodies, unified-diff rendering
     SubagentView.swift       A Task call's sub-agent transcript, in a sheet
     SessionPanel.swift       Pushed session details + the openPanel action

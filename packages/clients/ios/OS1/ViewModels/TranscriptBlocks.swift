@@ -25,6 +25,9 @@ enum TranscriptBlock: Identifiable, Equatable {
     /// A PR review handoff and the fix work it triggered, or the turns the
     /// agent started itself (`ReviewLoop.Kind.checkBack`), as one fold.
     case reviewLoop(ReviewLoop)
+    /// An opt-in status line (`✓ **CI**: All checks passed`) standing in for
+    /// every later update on the same topic. See `ProgressProjection`.
+    case progress(ProgressGroup)
 
     var id: String {
         switch self {
@@ -35,6 +38,7 @@ enum TranscriptBlock: Identifiable, Equatable {
         case .walkthrough(let walkthrough): "walkthrough:\(walkthrough.publishedAt)"
         case .note(let note): "note:\(note.id)"
         case .reviewLoop(let loop): loop.id
+        case .progress(let group): group.id
         }
     }
 
@@ -69,6 +73,9 @@ enum TranscriptBlock: Identifiable, Equatable {
         // A loop stands in for every entry it folded, so an anchor inside one
         // resolves to the loop's row rather than to nothing.
         case .reviewLoop(let loop): loop.blocks.flatMap(\.entryIds)
+        // The row stands in for every update it replaced, so an anchor on a
+        // later one still resolves to it.
+        case .progress(let group): group.entries.map(\.id)
         }
     }
 }
@@ -696,15 +703,20 @@ enum TranscriptGrouping {
             }
             if isLast { flush(isTrailing: true) }
         }
+        let progress = ProgressProjection.collect(
+            from: items,
+            noteDates: notes.map(\.date)
+        )
         let grouped = groupCheckBacks(
             groupReviewLoops(
                 place(notes, into: place(walkthrough, into: blocks)),
                 live: live,
                 result: reviewResult
             ),
-            live: live
+            live: live,
+            progress: progress
         )
-        return thinkingMessages.visibleBlocks(grouped)
+        return thinkingMessages.visibleBlocks(project(progress, into: grouped))
     }
 
     /// Where the run of person and system messages closing the transcript
@@ -901,7 +913,7 @@ enum TranscriptGrouping {
     /// grouping, so a check-back inside a review loop stays there. Mirrors the
     /// web's `groupCheckBacks`.
     private static func groupCheckBacks(
-        _ blocks: [TranscriptBlock], live: Bool
+        _ blocks: [TranscriptBlock], live: Bool, progress: ProgressProjection
     ) -> [TranscriptBlock] {
         guard blocks.contains(where: isCheckBack) else { return blocks }
         var grouped: [TranscriptBlock] = []
@@ -928,9 +940,13 @@ enum TranscriptGrouping {
             }
             index += 1
             // A lone wait boundary has nothing to fold: it is structural only.
-            // A lone scheduled check-back notice stays a readable notice.
+            // A lone scheduled check-back notice stays a readable notice,
+            // unless all it led to is a status row, which says enough.
             if loop.count == 1 {
-                if case .message(let entry) = first, entry.turnBoundary != true {
+                let leadsToStatus = index < blocks.count
+                    && progress.contains(blocks[index].id)
+                if case .message(let entry) = first, entry.turnBoundary != true,
+                   !leadsToStatus {
                     grouped.append(first)
                 }
                 continue
@@ -962,6 +978,44 @@ enum TranscriptGrouping {
             grouped[last] = .reviewLoop(loop)
         }
         return grouped
+    }
+
+    /// Draw each topic's status updates as one row at its first update. Work
+    /// folds stay intact: only the status messages themselves (and their
+    /// footers) leave a loop, and a check-back loop left with nothing but
+    /// its own wake-ups goes with them. Mirrors the web's
+    /// `projectProgressBlocks`.
+    private static func project(
+        _ progress: ProgressProjection, into blocks: [TranscriptBlock]
+    ) -> [TranscriptBlock] {
+        guard !progress.isEmpty else { return blocks }
+        func isProgress(_ block: TranscriptBlock) -> Bool {
+            switch block {
+            case .message(let entry): progress.contains(entry.id)
+            case .footer(let footer): progress.contains(footer.entryId)
+            default: false
+            }
+        }
+        func row(_ block: TranscriptBlock) -> TranscriptBlock? {
+            guard case .message(let entry) = block,
+                  let group = progress.owners[entry.id]
+            else { return nil }
+            return .progress(group)
+        }
+        return blocks.flatMap { block -> [TranscriptBlock] in
+            if let status = row(block) { return [status] }
+            if isProgress(block) { return [] }
+            guard case .reviewLoop(var loop) = block,
+                  loop.blocks.contains(where: isProgress)
+            else { return [block] }
+            let statuses = loop.blocks.compactMap(row)
+            loop.blocks = loop.blocks.filter { !isProgress($0) }
+            let hasWork = loop.kind == .review || loop.blocks.contains { inner in
+                guard case .message(let entry) = inner else { return true }
+                return entry.turnBoundary != true && !isCheckBack(inner)
+            }
+            return (hasWork ? [.reviewLoop(loop)] : []) + statuses
+        }
     }
 
     /// Whether this block is the GitHub-delivered review handoff that opens a
@@ -1068,6 +1122,7 @@ enum TranscriptGrouping {
         // Loops are formed after placement, so this is only for completeness:
         // a loop reads as the time of the last thing inside it.
         case .reviewLoop(let loop): loop.blocks.last.flatMap(blockTime)
+        case .progress(let group): group.entries.last?.timestampDate
         }
     }
 

@@ -198,7 +198,20 @@ describe("buildRunInstructions", () => {
     // named PRs a teammate could not click. "Stopping processes" adds ~470:
     // runs kept running `pkill -f <pattern>` from a command that contains the
     // pattern, which kills the tool's own `bash -c` shell (exit 143).
-    expect(prompt.length).toBeLessThan(4_950);
+    // Compact reporting and the opt-in progress line add ~700 characters.
+    expect(prompt.length).toBeLessThan(5_700);
+  });
+
+  test("prefers concise outcomes without hiding blockers or verification limits", () => {
+    const prompt = buildRunInstructions({ isAsk: false, hasSession: true });
+    expect(prompt).toContain("Lead with the outcome, not a work log");
+    expect(prompt).toContain("follow-ups report only what changed");
+    expect(prompt).toContain(
+      "verification limits and required decisions explicit",
+    );
+    expect(prompt).toContain("◷ **CI**: Running");
+    expect(prompt).toContain("✓ **CI**: All checks passed");
+    expect(prompt).toContain("never for blockers, questions or deliverables");
   });
 
   test("asks for visual proof by default only where walkthroughs are mounted", () => {
