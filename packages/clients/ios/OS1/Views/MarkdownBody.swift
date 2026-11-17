@@ -17,6 +17,13 @@ private struct TranscriptPrChipsDrawnKey: EnvironmentKey {
     static let defaultValue: Set<String> = []
 }
 
+/// The PRs the conversation being read is about, keyed by
+/// `PrLinks.Index.key`. A mention of one stays plain text: its chip would
+/// only lead back to the conversation the reader is already in.
+private struct TranscriptOwnPrsKey: EnvironmentKey {
+    static let defaultValue: Set<String> = []
+}
+
 /// Where Markdown is being read. Chat is the transcript's dense scale; a
 /// document is a Markdown file opened on its own (`MarkdownDocumentView`).
 enum MarkdownPresentation {
@@ -43,6 +50,11 @@ extension EnvironmentValues {
         get { self[TranscriptPrChipsDrawnKey.self] }
         set { self[TranscriptPrChipsDrawnKey.self] = newValue }
     }
+
+    var transcriptOwnPrs: Set<String> {
+        get { self[TranscriptOwnPrsKey.self] }
+        set { self[TranscriptOwnPrsKey.self] = newValue }
+    }
 }
 
 /// CommonMark/GFM rendering for durable assistant messages. Parsing and
@@ -65,6 +77,7 @@ struct MarkdownBody: View {
     @Environment(\.transcriptQuoteSelection) private var quoteSelection
     @Environment(\.transcriptAnchorEntryId) private var anchorEntryId
     @Environment(\.transcriptPrChipsDrawn) private var prChipsDrawn
+    @Environment(\.transcriptOwnPrs) private var ownPrs
     @Environment(\.markdownPresentation) private var presentation
 
     /// Whether fences, placed media, callouts and math become native blocks.
@@ -123,11 +136,11 @@ struct MarkdownBody: View {
             case .callout(let callout):
                 // The callout draws its own body; it only needs the ledger so
                 // far, and the message needs to know what it drew.
-                _ = PrLinks.linkify(callout.body, sessionId: openPanel.sessionId, ledger: ledger)
+                _ = PrLinks.linkify(callout.body, sessionId: openPanel.sessionId, ledger: ledger, ownPrs: ownPrs)
                 return PreparedBlock(block: block, prChipsDrawn: before)
             case .slides(let slides):
                 for slide in slides {
-                    _ = PrLinks.linkify(slide, sessionId: openPanel.sessionId, ledger: ledger)
+                    _ = PrLinks.linkify(slide, sessionId: openPanel.sessionId, ledger: ledger, ownPrs: ownPrs)
                 }
                 return PreparedBlock(block: block, prChipsDrawn: before)
             default:
@@ -252,7 +265,8 @@ struct MarkdownBody: View {
             sessionId: openPanel.sessionId,
             transcriptSessionId: transcriptSessionId,
             generation: generation,
-            drawnBefore: ledger.drawn
+            drawnBefore: ledger.drawn,
+            ownPrs: ownPrs
         )
         if let hit = LinkifiedCache.entries[key] {
             ledger.adopt(hit.drawnAfter)
@@ -270,7 +284,12 @@ struct MarkdownBody: View {
                     AutomationLinks.linkify(
                         MarkdownAutolink.linkify(
                             CommitLinks.linkify(
-                                PrLinks.linkify(value, sessionId: openPanel.sessionId, ledger: ledger),
+                                PrLinks.linkify(
+                                    value,
+                                    sessionId: openPanel.sessionId,
+                                    ledger: ledger,
+                                    ownPrs: ownPrs
+                                ),
                                 sessionId: openPanel.sessionId ?? transcriptSessionId
                             )
                         )
@@ -304,6 +323,7 @@ private enum LinkifiedCache {
         let transcriptSessionId: String?
         let generation: Int
         let drawnBefore: Set<String>
+        let ownPrs: Set<String>
     }
 
     struct Entry {

@@ -545,7 +545,7 @@ export function VoiceInput({
                   disabled={!recording}
                   aria-label="Stop dictating"
                 >
-                  <IconStopSquare size={22} />
+                  <IconStopSquare size={26} />
                 </button>
               </Tooltip>
             )}

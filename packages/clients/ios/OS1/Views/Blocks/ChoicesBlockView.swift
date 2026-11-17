@@ -18,18 +18,43 @@ struct ChoicesBlockView: View {
     }
 
     var body: some View {
-        FlowLayout(spacing: 8) {
+        FlowLayout(spacing: 6) {
             ForEach(choices, id: \.self) { choice in
                 chip(choice)
             }
         }
+        .padding(.top, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Quick replies")
     }
 
+    /// Round pills in the composer's material with a hairline, the same as
+    /// the reply suggestions above the composer: a reply offered in the
+    /// answer is the same kind of thing as one offered below it. The web made
+    /// the same change (styles/blocks/choices.css) after a filled, tinted chip
+    /// read heavier than the question asking it. Once answered, the pills
+    /// stay as a record at the weight of a note; the one you sent keeps its
+    /// fill and a check.
+    #if os(macOS)
+    private static let oneLineHeight: CGFloat = 34
+    private static let horizontalPadding: CGFloat = 14
+    private static let verticalPadding: CGFloat = 6
+    #else
+    private static let oneLineHeight: CGFloat = 44
+    private static let horizontalPadding: CGFloat = 16
+    private static let verticalPadding: CGFloat = 10
+    #endif
+
+    /// Half the one-line height rather than a capsule, so a reply long enough
+    /// to wrap keeps rounded ends instead of turning into a lozenge.
+    private static var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: oneLineHeight / 2, style: .circular)
+    }
+
     private func chip(_ choice: String) -> some View {
         let sent = chosen == choice
+        let live = isOpen || sent
         return Button {
             guard isOpen, let relay else { return }
             Haptics.play(.send)
@@ -49,17 +74,18 @@ struct ChoicesBlockView: View {
                     .font(.subheadline.weight(.medium))
                     .multilineTextAlignment(.leading)
             }
-            .foregroundStyle(chipInk(sent: sent))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(chipFill(sent: sent), in: Capsule())
+            .foregroundStyle(live ? OS1VisualStyle.text : OS1VisualStyle.textFaint)
+            .padding(.horizontal, Self.horizontalPadding)
+            .padding(.vertical, Self.verticalPadding)
+            .frame(minHeight: Self.oneLineHeight)
+            .background(live ? OS1VisualStyle.composerSurface : Color.clear, in: Self.shape)
             .overlay {
-                Capsule().stroke(
-                    sent ? Color.clear : (isOpen ? OS1VisualStyle.accent.opacity(0.35) : OS1VisualStyle.border),
+                Self.shape.strokeBorder(
+                    live ? OS1VisualStyle.replyPillEdge : OS1VisualStyle.border.opacity(0.55),
                     lineWidth: 1
                 )
             }
-            .contentShape(Capsule())
+            .contentShape(Self.shape)
         }
         .buttonStyle(.plain)
         .disabled(!isOpen)
@@ -79,15 +105,5 @@ struct ChoicesBlockView: View {
         }
         .accessibilityHint(isOpen ? "Sends this reply" : "")
         .accessibilityValue(sent ? "Sent" : "")
-    }
-
-    private func chipInk(sent: Bool) -> Color {
-        if sent { return OS1VisualStyle.onAccent }
-        return isOpen ? OS1VisualStyle.accentInk : OS1VisualStyle.textDim
-    }
-
-    private func chipFill(sent: Bool) -> Color {
-        if sent { return OS1VisualStyle.accent }
-        return isOpen ? OS1VisualStyle.accent.opacity(0.10) : OS1VisualStyle.chipFill
     }
 }
