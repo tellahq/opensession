@@ -315,17 +315,16 @@ function NoticeRow({
         role={isError ? "alert" : undefined}
       >
         {toned ? <NoticeGlyph /> : <NoticeIcon icon={notice.icon} />}
+        {/* The title is the toggle: a "show" label beside it only added
+            noise to a line most people never open. */}
         {collapsible ? (
           <button
             type="button"
             aria-expanded={open}
             onClick={() => setOpen((v) => !v)}
-            className="cursor-pointer [font-family:inherit] text-inherit"
+            className="cursor-pointer [font-family:inherit] text-inherit transition-colors hover:text-dim"
           >
-            {notice.title} ·{" "}
-            <span className="font-medium text-dim">
-              {open ? "hide" : "show"}
-            </span>
+            {notice.title}
           </button>
         ) : (
           <span>{notice.title}</span>
