@@ -14,6 +14,7 @@ import {
   finalizeFenceUpgrades,
 } from "../lib/fence-upgraders";
 import type { MarkdownContext } from "../lib/markdown";
+import { observeSingleLine } from "../lib/single-line-bubble";
 import {
   MATH_PLACEHOLDER_MARK,
   upgradeMathPlaceholders,
@@ -75,6 +76,7 @@ export function MarkdownBody({
   className,
   enhance = true,
   markdown,
+  pillWhenSingleLine = false,
 }: {
   html: string;
   className?: string;
@@ -85,6 +87,9 @@ export function MarkdownBody({
   /** The context `html` was rendered with, handed to a block that renders
    * markdown of its own (a slide deck) so its links resolve the same way. */
   markdown?: MarkdownContext;
+  /** Mark the body `data-single-line` while it fits on one line, so a
+   *  message bubble can round into a pill (lib/single-line-bubble.ts). */
+  pillWhenSingleLine?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   // Read through a ref by the upgrade effect: callers build the context
@@ -267,6 +272,11 @@ export function MarkdownBody({
     const el = ref.current;
     return el ? attachCodeCopy(el) : undefined;
   }, [enhance]);
+
+  useEffect(() => {
+    const el = ref.current;
+    return pillWhenSingleLine && el ? observeSingleLine(el) : undefined;
+  }, [pillWhenSingleLine]);
 
   return (
     <div ref={ref} className={className} dangerouslySetInnerHTML={innerHtml} />
