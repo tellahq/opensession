@@ -996,6 +996,27 @@ describe("renderMarkdown PR mentions", () => {
     expect(renderMarkdown("Merged #5528.", fusion)).toContain('class="pr-ref"');
   });
 
+  it("leaves the conversation's own PR as plain text", () => {
+    setKnownRepos([{ id: "tella-fusion", ghRepo: "tellahq/tella-fusion" }]);
+    const own = { ...fusion, ownPrs: [{ repo: "tella-fusion", number: 5528 }] };
+    const html = renderMarkdown(
+      "Fix the checks on PR #5528, then tella-fusion#5528, " +
+        "https://github.com/tellahq/tella-fusion/pull/5528 and #5832.",
+      own,
+    );
+    expect(html).not.toContain('data-pr-number="5528"');
+    expect(html).toContain(
+      "Fix the checks on PR #5528, then tella-fusion#5528",
+    );
+    expect(html).toContain("PR #5528 and ");
+    // Any other PR is still somewhere to go.
+    expect(html).toContain('href="/pr/tella-fusion/5832"');
+    // The same text in another conversation still chips.
+    expect(renderMarkdown("Fix the checks on PR #5528", fusion)).toContain(
+      'href="/pr/tella-fusion/5528"',
+    );
+  });
+
   it("keeps two different pull requests as two chips", () => {
     setKnownRepos([{ id: "tella-fusion", ghRepo: "tellahq/tella-fusion" }]);
     const html = renderMarkdown(

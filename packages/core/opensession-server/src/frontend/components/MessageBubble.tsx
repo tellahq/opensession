@@ -3,7 +3,11 @@ import React, { useId, useState } from "react";
 import { z } from "zod";
 import type { TranscriptEntry } from "../lib/types";
 import { markdownAffordable, renderMarkdown } from "../lib/markdown";
-import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
+import {
+  MarkdownBody,
+  useMarkdownOwnPrs,
+  useMarkdownRepo,
+} from "./MarkdownBody";
 import { classifyEntry } from "@tellahq/opensession-protocol/notices";
 import type { NoticeIcon as NoticeIconName } from "@tellahq/opensession-protocol/notices";
 import { useCurrentUser } from "./UserPicker";
@@ -138,8 +142,9 @@ export function ClampedBody({
   // The head is always within budget; only an expanded body can be too big.
   const asMarkdown = !showAll || markdownAffordable(shown);
   const repo = useMarkdownRepo();
+  const ownPrs = useMarkdownOwnPrs();
   const assetPaths = useOpenAssetPaths();
-  const markdown = { repo, sessionId, assetPaths };
+  const markdown = { repo, sessionId, assetPaths, ownPrs };
   const html =
     asMarkdown && (!summary || showAll) ? renderMarkdown(shown, markdown) : "";
 

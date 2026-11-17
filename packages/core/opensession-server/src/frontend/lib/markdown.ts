@@ -138,6 +138,11 @@ let renderedTellaVideos = new Set<string>();
  *  renderMarkdown call; null outside one, where every mention is a chip. */
 let renderedPrRefs: Set<string> | null = null;
 
+/** The PRs this conversation is about, keyed like `knownPrStates`. A mention
+ *  of one renders as its plain text: its chip would open the conversation the
+ *  reader is already in. Reset per renderMarkdown call. */
+let renderOwnPrs: ReadonlySet<string> | null = null;
+
 /**
  * The Tella videos linked from a block's prose that have not played yet in
  * this document, in the order written, one per video however many times it
@@ -1154,6 +1159,11 @@ function prMentionLink(
 ): string {
   const contextRepo = repo;
   if (unqualified) repo = resolveBarePrRepo(contextRepo, number);
+  if (
+    renderOwnPrs?.has(prStateKey(repo, number)) ||
+    (unqualified && renderOwnPrs?.has(prStateKey(contextRepo, number)))
+  )
+    return attr(label);
   const href = `${BASE_PATH}/pr/${encodeURIComponent(repo)}/${number}`;
   // `data-pr-gh` is the escape hatch, not the destination: a plain click
   // opens the PR's session here, cmd/ctrl-click leaves for github.com.
@@ -1983,7 +1993,7 @@ const mdCache = new Map<string, string>();
 const MD_CACHE_MAX = 500;
 const MD_CACHE_INPUT_MAX = 32 * 1024;
 /** The context key an empty context produces, which caches under `src` alone. */
-const EMPTY_CONTEXT_KEY = ["", "", "", ""].join("\u0000");
+const EMPTY_CONTEXT_KEY = ["", "", "", "", ""].join("\u0000");
 // The last source rendered under each context. A streaming message renders a
 // longer prefix of itself every frame, and each one is a fresh key: without
 // this, one message inserts hundreds of dead entries and evicts every other
@@ -2011,12 +2021,18 @@ export interface MarkdownContext {
    * which is what PR prose needs and what only PR prose should ask for.
    */
   rawHtml?: "escape" | "sanitize";
+  /** The PRs the surrounding conversation is about. Mentions of these stay
+   * plain text: a chip there would only link back to where the reader is. */
+  ownPrs?: readonly { repo: string; number: number }[];
 }
 
 /** Render session markdown to HTML (links open in a new tab, images inline). */
 export function renderMarkdown(src: string, ctx?: MarkdownContext): string {
   const cacheable = src.length <= MD_CACHE_INPUT_MAX;
   const assets = assetReferenceRegistry(ctx?.assetPaths);
+  const ownPrs = ctx?.ownPrs?.length
+    ? new Set(ctx.ownPrs.map((pr) => prStateKey(pr.repo, pr.number)))
+    : null;
   // Same source, different repo/session/assets, different links. Null bytes
   // cannot occur in a repo id, session id or filesystem path.
   const contextKey = [
@@ -2024,6 +2040,7 @@ export function renderMarkdown(src: string, ctx?: MarkdownContext): string {
     ctx?.sessionId ?? "",
     assets?.key ?? "",
     ctx?.rawHtml ?? "",
+    ownPrs ? [...ownPrs].sort().join("\u0001") : "",
   ].join("\u0000");
   const cacheKey =
     contextKey === EMPTY_CONTEXT_KEY ? src : `${contextKey}\u0000${src}`;
@@ -2043,12 +2060,14 @@ export function renderMarkdown(src: string, ctx?: MarkdownContext): string {
   const previousRawHtml = renderRawHtml;
   const previousTellaVideos = renderedTellaVideos;
   const previousPrRefs = renderedPrRefs;
+  const previousOwnPrs = renderOwnPrs;
   renderRepo = ctx?.repo;
   renderAssetReferences = assets;
   renderAssetSessionId = ctx?.sessionId;
   renderRawHtml = ctx?.rawHtml ?? "escape";
   renderedTellaVideos = new Set();
   renderedPrRefs = new Set();
+  renderOwnPrs = ownPrs;
   try {
     const parsed = md.parse(collapseDuplicatePrReferences(src));
     if (parsed instanceof Promise) throw new Error("Unexpected async markdown");
@@ -2062,6 +2081,7 @@ export function renderMarkdown(src: string, ctx?: MarkdownContext): string {
     renderRawHtml = previousRawHtml;
     renderedTellaVideos = previousTellaVideos;
     renderedPrRefs = previousPrRefs;
+    renderOwnPrs = previousOwnPrs;
   }
   if (cacheable) {
     dropStreamedPrefix(contextKey, src);

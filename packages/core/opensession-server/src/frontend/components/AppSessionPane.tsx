@@ -7,6 +7,7 @@ import type { useWorkspacePanes } from "../hooks/useWorkspacePanes";
 import { renameSessionApi } from "../lib/api";
 import type { Route } from "../lib/app-route";
 import type { UnifiedSession, Workspace } from "../lib/types";
+import { sessionPrRefs } from "../lib/session-prs";
 import { viewTabKind } from "../lib/workspace-pane-tabs";
 import { SessionPaneProviders } from "./SessionPaneProviders";
 import { SessionViewer } from "./SessionViewer";
@@ -187,6 +188,7 @@ export function AppSessionPane({
     <SessionPaneProviders
       key={viewerSession.id}
       repo={viewerSession.repo}
+      prs={sessionPrRefs(viewerSession)}
       socket={sessionSocket}
       pendingCreation={pendingSocket}
     >
