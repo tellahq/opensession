@@ -193,11 +193,6 @@ interface PrBarButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement>
   icon?: React.ReactNode;
 }
 
-const FLAT_TONES: ReadonlySet<PrBarButtonProps["tone"]> = new Set([
-  "secondary",
-  "purple-dashed",
-]);
-
 function PrBarButton({
   tone,
   icon,
@@ -222,23 +217,19 @@ function PrBarButton({
     // shadow and no strong edge: stacked on the fill, those two only smudged
     // its bottom edge.
     secondary:
-      "bg-raised text-fg border-line hover:bg-hover hover:brightness-100",
+      "bg-raised text-fg border-line shadow-none hover:bg-hover hover:brightness-100",
     // The open outline beside a filled button: purple ink on the strip's own
     // band, dashed, so it reads as the road not yet taken next to the solid
     // action. Nothing to fill and nothing to lift, so it drops the shadow.
     "purple-dashed":
-      "border-dashed border-[color-mix(in_srgb,var(--purple)_45%,transparent)] bg-transparent text-purple hover:bg-[color-mix(in_srgb,var(--purple)_10%,transparent)] hover:brightness-100",
+      "border-dashed border-[color-mix(in_srgb,var(--purple)_45%,transparent)] bg-transparent text-purple shadow-none hover:bg-[color-mix(in_srgb,var(--purple)_10%,transparent)] hover:brightness-100",
   } as const;
   return (
     <button
       type="button"
       className={cn(
-        "inline-flex min-h-[30px] items-center justify-center gap-1.5 rounded-control border px-2.5 py-[5px] text-label leading-none font-semibold whitespace-nowrap transition-[background-color,border-color,color,filter,transform] duration-150 ease-in-out hover:brightness-[1.08] active:scale-[0.98] active:brightness-[0.98] focus-visible:outline-2 focus-visible:outline-[var(--accent-ink)] focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-60 disabled:shadow-none",
+        "inline-flex min-h-[30px] items-center justify-center gap-1.5 rounded-control border px-2.5 py-[5px] text-label leading-none font-semibold whitespace-nowrap smooth-shadow-sm transition-[background-color,border-color,color,filter,transform] duration-150 ease-in-out hover:brightness-[1.08] active:scale-[0.98] active:brightness-[0.98] focus-visible:outline-2 focus-visible:outline-[var(--accent-ink)] focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-60 disabled:shadow-none",
         tones[tone],
-        // Only the filled tones lift. This cannot be a `shadow-none` on the
-        // flat tones: tailwind-merge does not know `smooth-shadow-sm` is a
-        // shadow, so both classes land and the stylesheet keeps the lift.
-        !FLAT_TONES.has(tone) && "smooth-shadow-sm",
         // A leading glyph carries its own margin: the icon set draws in a
         // 4.75–19.25 span of a 24 grid, so an 18px box holds ~3.5px of
         // empty on each side. Equal padding therefore lands the ink 3.5px
