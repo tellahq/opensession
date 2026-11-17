@@ -390,7 +390,7 @@ export function InlineAlert({
           aria-label="Dismiss"
           // Visually 24px so it sits inside the box's 10px padding; the
           // pseudo-element takes the hit area out to 40px.
-          className="focus-ring relative -mr-1 flex size-6 shrink-0 items-center justify-center rounded-control opacity-60 transition-opacity hover:opacity-100 before:absolute before:-inset-2 before:content-['']"
+          className="focus-ring relative -mr-1 flex size-6 shrink-0 items-center justify-center rounded-full opacity-60 transition-opacity hover:opacity-100 before:absolute before:-inset-2 before:content-['']"
           onClick={(e) => {
             e.stopPropagation();
             onDismiss();
