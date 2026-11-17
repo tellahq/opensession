@@ -1750,6 +1750,14 @@ export function Composer({
               aria-hidden="true"
             >
               {shownPrediction}
+              {/* The key that takes it sits right behind the guess, where
+                  the eye already is. A phone has no Tab key: its double tap
+                  hint stays in the toolbar. */}
+              {!isPhone && (
+                <kbd className="ml-1.5 inline-block h-[18px] rounded-sm border border-line px-1.5 align-middle text-meta leading-[16px] font-medium text-faint [font-family:inherit]">
+                  Tab
+                </kbd>
+              )}
             </div>
           )}
           <textarea
@@ -1952,31 +1960,21 @@ export function Composer({
           {/* `grow basis-0 shrink-0` rather than `flex-1`: every direct child of
               the toolbar is pinned at flex-shrink 0 so the model pill is the
               only thing that gives way, and a shorthand would take that back. */}
-          {/* The key that takes the prediction waits in the spare width
-              here rather than at the field's right edge, where the room it
-              kept clear wrapped the guess onto extra lines. It takes only
-              width nobody else wants: where the row has too little left, it
-              hides rather than squeezing the model pill or clipping a word.
-              On a phone it is a gesture, not a key, so it drops the key cap
-              and with it the width a crowded phone row cannot spare. */}
+          {/* On a phone the prediction is taken with a gesture, so its hint
+              waits in the spare width here. It takes only width nobody else
+              wants: where the row has too little left, it hides rather than
+              squeezing the model pill. On desktop the Tab key cap sits
+              inline behind the guess instead. */}
           {!minimized && !phoneDictating && (
             <div className="@container flex min-w-0 shrink-0 grow basis-0 items-center justify-end">
-              {shownPrediction &&
-                (isPhone ? (
-                  <span
-                    className="pointer-events-none text-meta font-medium whitespace-nowrap text-faint @max-[68px]:hidden"
-                    aria-hidden="true"
-                  >
-                    Double tap
-                  </span>
-                ) : (
-                  <kbd
-                    className="pointer-events-none mr-1 inline-flex h-5 items-center rounded-sm border border-line px-1.5 text-meta font-medium text-faint [font-family:inherit] @max-[40px]:hidden"
-                    aria-hidden="true"
-                  >
-                    Tab
-                  </kbd>
-                ))}
+              {shownPrediction && isPhone && (
+                <span
+                  className="pointer-events-none text-meta font-medium whitespace-nowrap text-faint @max-[68px]:hidden"
+                  aria-hidden="true"
+                >
+                  Double tap
+                </span>
+              )}
             </div>
           )}
 
