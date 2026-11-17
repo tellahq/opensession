@@ -1,4 +1,5 @@
 import React from "react";
+import type { TranscriptEntry } from "@tellahq/opensession-protocol/session";
 import { cn } from "../ui/cn";
 import { IconCheck, IconClock, IconChevronRight } from "./icons";
 import { useLoopOpen } from "./ReviewLoopBlock";
@@ -112,6 +113,21 @@ export function ProgressStatusRow({
         </div>
       )}
     </section>
+  );
+}
+
+/** A status message inside a work fold: the same line as an earlier update,
+ * not a full message bubble. */
+export function ProgressStatusLine({ entry }: { entry: TranscriptEntry }) {
+  const update = parseProgressUpdate(entry);
+  if (!update) return null;
+  return (
+    <div className="mb-2 flex items-start gap-2 px-1 text-label leading-5 text-dim">
+      <StatusIcon update={update} />
+      <span className="min-w-0 break-words">
+        {update.topic}: {update.text}
+      </span>
+    </div>
   );
 }
 
