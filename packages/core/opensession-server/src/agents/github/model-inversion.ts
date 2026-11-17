@@ -24,7 +24,7 @@ import { bksIdFor } from "./run";
 import type { PrRef } from "./review";
 
 /** The two pools we can invert between (see src/server/models.ts). */
-const OPENAI_REVIEWER = "pi/openai/gpt-6.1-sol";
+const OPENAI_REVIEWER = "pi/openai/gpt-6.2-sol";
 const ANTHROPIC_REVIEWER = "pi/anthropic/claude-opus-5-5";
 
 export type ModelFamily = "anthropic" | "openai";

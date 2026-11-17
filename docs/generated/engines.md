@@ -47,17 +47,19 @@ engine and dispatch id `routeModel()` returns for it.
 | `claude-sonnet-4-6` | Claude Sonnet 4.6 | pi | `pi/anthropic/claude-sonnet-5-5` |
 | `claude-haiku-5-5` | Claude Haiku 5.5 | pi | `pi/anthropic/claude-haiku-5-5` |
 | `claude-haiku-4-5` | Claude Haiku 4.5 | pi | `pi/anthropic/claude-haiku-5-5` |
-| `codex-best-available` | Best available (Codex) | pi | `pi/openai/gpt-6.1-sol` |
-| `gpt-6-astra` | GPT-6 Astra | pi | `pi/openai/gpt-6-astra` |
-| `gpt-6.1-sol` | GPT-6.1 Sol | pi | `pi/openai/gpt-6.1-sol` |
-| `gpt-6-sol` | GPT-6 Sol | pi | `pi/openai/gpt-6.1-sol` |
-| `gpt-5.6-sol` | GPT-5.6 Sol | pi | `pi/openai/gpt-6.1-sol` |
+| `codex-best-available` | Best available (Codex) | pi | `pi/openai/gpt-6.2-sol` |
+| `gpt-6.2-astra` | GPT-6.2 Astra | pi | `pi/openai/gpt-6.2-astra` |
+| `gpt-6.2-sol` | GPT-6.2 Sol | pi | `pi/openai/gpt-6.2-sol` |
+| `gpt-6-astra` | GPT-6 Astra | pi | `pi/openai/gpt-6.2-astra` |
+| `gpt-6.1-sol` | GPT-6.1 Sol | pi | `pi/openai/gpt-6.2-sol` |
+| `gpt-6-sol` | GPT-6 Sol | pi | `pi/openai/gpt-6.2-sol` |
+| `gpt-5.6-sol` | GPT-5.6 Sol | pi | `pi/openai/gpt-6.2-sol` |
 | `gpt-6.1-terra` | GPT-6.1 Terra | pi | `pi/openai/gpt-6.1-terra` |
 | `gpt-5.6-terra` | GPT-5.6 Terra | pi | `pi/openai/gpt-6.1-terra` |
 | `gpt-6-luna` | GPT-6 Luna | pi | `pi/openai/gpt-6-luna` |
 | `gpt-5.6-luna` | GPT-5.6 Luna | pi | `pi/openai/gpt-6-luna` |
-| `gpt-5.5` | GPT-5.5 (Codex) | pi | `pi/openai/gpt-6.1-sol` |
-| `gpt-5.4` | GPT-5.4 (Codex) | pi | `pi/openai/gpt-6.1-sol` |
+| `gpt-5.5` | GPT-5.5 (Codex) | pi | `pi/openai/gpt-6.2-sol` |
+| `gpt-5.4` | GPT-5.4 (Codex) | pi | `pi/openai/gpt-6.2-sol` |
 | `gpt-5.4-mini` | GPT-5.4 mini (Codex) | pi | `pi/openai/gpt-6-luna` |
 | `gpt-5.3-codex-spark` | GPT-5.3 Codex Spark | pi | `pi/openai/gpt-6-luna` |
 
@@ -67,4 +69,4 @@ Every accepted id resolves to Pi before dispatch.
 | --- | --- |
 | `pi/anthropic/claude-opus-5` | pi |
 | `anthropic/claude-opus-5` | pi |
-| `openai/gpt-6.1-sol` | pi |
+| `openai/gpt-6.2-sol` | pi |

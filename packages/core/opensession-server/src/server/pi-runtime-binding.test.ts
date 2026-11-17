@@ -193,10 +193,13 @@ describe("createPiRuntimeBinding", () => {
       });
       return createPiRuntimeBinding(input("openai", modelID, h, { speed }));
     };
-    expect((await bind("gpt-6-astra", "ultrafast")).openaiPlan).toBe("promax");
-    await bind("gpt-6.1-sol", "ultrafast");
-    await bind("gpt-6-astra", "fast");
-    expect(plans).toEqual(["promax", undefined, undefined]);
+    expect((await bind("gpt-6.2-astra", "ultrafast")).openaiPlan).toBe(
+      "promax",
+    );
+    expect((await bind("gpt-6.2-sol", "ultrafast")).openaiPlan).toBe("promax");
+    await bind("gpt-6.1-terra", "ultrafast");
+    await bind("gpt-6.2-astra", "fast");
+    expect(plans).toEqual(["promax", "promax", undefined, undefined]);
   });
 
   test("binds an OpenAI API key to the standard provider without credential seeding", async () => {
@@ -262,6 +265,37 @@ describe("createPiRuntimeBinding", () => {
         input: 2,
         output: 7.5,
       });
+    }
+  });
+
+  test("prices GPT-6.2 Astra and Sol from their release metadata until Pi catalogs them", async () => {
+    for (const account of [oauth, apiKey]) {
+      const bind = (modelID: string) => {
+        const h = harness({ account });
+        h.deps.loadSdk = prewarmPiSdk;
+        return createPiRuntimeBinding(input("openai", modelID, h));
+      };
+      const sibling = (await bind("gpt-6.1-sol")).model;
+      for (const [modelID, name, input, output, cacheRead] of [
+        ["gpt-6.2-astra", "GPT-6.2 Astra", 8, 40, 0.4],
+        ["gpt-6.2-sol", "GPT-6.2 Sol", 2, 10, 0.1],
+      ] as const) {
+        const model = (await bind(modelID)).model;
+        expect(model.id).toBe(modelID);
+        expect(model.name).toBe(name);
+        expect(model.api).toBe(sibling.api);
+        expect(model.compat).toEqual(sibling.compat);
+        expect(model.contextWindow).toBe(272_000);
+        expect(model.thinkingLevelMap?.max).toBe("max");
+        // The API rejects reasoning effort `none`.
+        expect(model.thinkingLevelMap?.off).toBeNull();
+        expect(model.cost).toMatchObject({ input, output, cacheRead });
+        expect(model.cost.tiers?.[0]).toMatchObject({
+          inputTokensAbove: 272_000,
+          input: input * 2,
+          output: output * 1.5,
+        });
+      }
     }
   });
 

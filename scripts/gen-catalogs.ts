@@ -392,7 +392,7 @@ async function renderEngines(): Promise<string> {
   for (const example of [
     "pi/anthropic/claude-opus-5",
     "anthropic/claude-opus-5",
-    "openai/gpt-6.1-sol",
+    "openai/gpt-6.2-sol",
   ]) {
     const route = models.routeModel(example);
     out.push(`| \`${example}\` | ${route.engine} |`);

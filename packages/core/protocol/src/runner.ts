@@ -156,7 +156,7 @@ export interface RunHostSpec {
   effort?: string;
   /** OpenAI priority service tier for ChatGPT OAuth Codex runs. */
   fastMode?: boolean;
-  speed?: SessionSpeed; // unset falls back to fastMode; "ultrafast" needs GPT-6 Astra and a Pro $500 login
+  speed?: SessionSpeed; // unset falls back to fastMode; "ultrafast" needs Astra or Sol and a Pro $500 login
   /** Pstack mode: the pstack skill family is visible to the model. */
   pstackMode?: boolean;
   /** Pinned account in the active model provider's pool; pool fallback applies. */

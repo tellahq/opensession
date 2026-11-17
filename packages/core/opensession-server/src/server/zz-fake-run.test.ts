@@ -179,16 +179,16 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
   test("recovery awaits automatic model selection persistence", async () => {
     if (!redirected) return;
     const sid = "bks-zz-recovered-model";
-    writeSessionFile(sid, { model: "pi/openai/gpt-6.1-sol" });
+    writeSessionFile(sid, { model: "pi/openai/gpt-6.2-sol" });
     sessionCache.invalidateSessionsCache();
     await runSession.recordRecoveredRunEvent(sid, {
       type: "model_switch",
-      fromModel: "pi/openai/gpt-6.1-sol",
-      toModel: "pi/openai/gpt-6-astra",
+      fromModel: "pi/openai/gpt-6.2-sol",
+      toModel: "pi/openai/gpt-6.2-astra",
       switchReason: "out of credits",
     });
-    expect(sessionJson(sid).model).toBe("pi/openai/gpt-6-astra");
-    expect(sessionJson(sid).autoFallbackModel).toBe("pi/openai/gpt-6.1-sol");
+    expect(sessionJson(sid).model).toBe("pi/openai/gpt-6.2-astra");
+    expect(sessionJson(sid).autoFallbackModel).toBe("pi/openai/gpt-6.2-sol");
   });
 
   test("clean run: engine id + usage persisted, FSM idle, settled", async () => {
@@ -345,7 +345,7 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
   test("transient fallback does not replace the selected model", async () => {
     if (!redirected) return;
     const sid = "bks-zz-transient-fallback";
-    writeSessionFile(sid, { model: "gpt-6.1-sol" });
+    writeSessionFile(sid, { model: "gpt-6.2-sol" });
     sessionCache.invalidateSessionsCache();
     const fake = fakeEngineMod.makeFakeEngine([
       { kind: "error", content: "fetch failed (socket hang up)" },
@@ -356,18 +356,18 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
     await runSession.runSessionPromptAndDrain(sid, "keep going", "Test");
     const data = sessionJson(sid);
     expect(fake.calls.map((call) => call.model)).toEqual([
-      "pi/openai/gpt-6.1-sol",
-      "pi/openai/gpt-6-astra",
+      "pi/openai/gpt-6.2-sol",
+      "pi/openai/gpt-6.2-astra",
     ]);
-    expect(data.model).toBe("gpt-6.1-sol");
-    expect(data.lastEngineModel).toBe("pi/openai/gpt-6-astra");
+    expect(data.model).toBe("gpt-6.2-sol");
+    expect(data.lastEngineModel).toBe("pi/openai/gpt-6.2-astra");
     expect(data.modelHistory).toBeUndefined();
   });
 
   test("transient fallback does not replace a directly selected model", async () => {
     if (!redirected) return;
     const sid = "bks-zz-transient-direct";
-    writeSessionFile(sid, { model: "gpt-6.1-sol" });
+    writeSessionFile(sid, { model: "gpt-6.2-sol" });
     sessionCache.invalidateSessionsCache();
     const fake = fakeEngineMod.makeFakeEngine([
       { kind: "error", content: "fetch failed (socket hang up)" },
@@ -382,15 +382,15 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
     await runSession.runSessionPromptAndDrain(sid, "keep going", "Test");
 
     const data = sessionJson(sid);
-    expect(data.model).toBe("gpt-6.1-sol");
-    expect(data.lastEngineModel).toBe("pi/openai/gpt-6-astra");
+    expect(data.model).toBe("gpt-6.2-sol");
+    expect(data.lastEngineModel).toBe("pi/openai/gpt-6.2-astra");
     expect(data.modelHistory).toBeUndefined();
   });
 
   test("usage fallback still replaces an unavailable selected model", async () => {
     if (!redirected) return;
     const sid = "bks-zz-usage-fallback";
-    writeSessionFile(sid, { model: "gpt-6.1-sol" });
+    writeSessionFile(sid, { model: "gpt-6.2-sol" });
     sessionCache.invalidateSessionsCache();
     const fake = fakeEngineMod.makeFakeEngine([
       { kind: "usage_exhausted" },
@@ -405,7 +405,7 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
     await runSession.runSessionPromptAndDrain(sid, "keep going", "Test");
 
     const data = sessionJson(sid);
-    expect(data.model).toBe("pi/openai/gpt-6-astra");
+    expect(data.model).toBe("pi/openai/gpt-6.2-astra");
     expect(data.modelHistory).toHaveLength(1);
     expect(data.modelHistory[0].by).toContain("out of credits");
   });
@@ -413,7 +413,7 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
   test("prompts keep the fallback until the original selection's cooldown expires", async () => {
     if (!redirected) return;
     const sid = "bks-zz-retry-selected-model";
-    writeSessionFile(sid, { model: "gpt-6.1-sol" });
+    writeSessionFile(sid, { model: "gpt-6.2-sol" });
     sessionCache.invalidateSessionsCache();
     const fake = fakeEngineMod.makeFakeEngine([
       { kind: "usage_exhausted" },
@@ -440,13 +440,13 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
 
     const fallback = sessionJson(sid);
     expect(fallback.model).toBe(fake.calls[2].model);
-    expect(fallback.autoFallbackModel).toBe("gpt-6.1-sol");
+    expect(fallback.autoFallbackModel).toBe("gpt-6.2-sol");
 
     await runSession.runSessionPromptAndDrain(sid, "second turn", "Test");
 
     expect(fake.calls[3].model).toBe(fake.calls[2].model);
     expect(sessionJson(sid).modelHistory).toEqual(fallback.modelHistory);
-    expect(sessionJson(sid).autoFallbackModel).toBe("gpt-6.1-sol");
+    expect(sessionJson(sid).autoFallbackModel).toBe("gpt-6.2-sol");
 
     await sessionCache.updateSessionFile(sid, (data) => ({
       ...data,
@@ -459,7 +459,7 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
 
     expect(fake.calls[4].model).toBe(fake.calls[0].model);
     const retried = sessionJson(sid);
-    expect(retried.model).toBe("gpt-6.1-sol");
+    expect(retried.model).toBe("gpt-6.2-sol");
     expect(retried.autoFallbackModel).toBeUndefined();
   });
 
@@ -548,7 +548,7 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
 
     const notice = await slashCommands.handleSlashCommand(
       session!,
-      "/model gpt-6.1-sol",
+      "/model gpt-6.2-sol",
       "Test",
     );
     expect(notice).toContain("Model set to");
@@ -556,20 +556,20 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
     let data = sessionJson(sid);
     for (
       let attempt = 0;
-      data.model !== "gpt-6.1-sol" && attempt < 50;
+      data.model !== "gpt-6.2-sol" && attempt < 50;
       attempt++
     ) {
       await Bun.sleep(10);
       data = sessionJson(sid);
     }
-    expect(data.model).toBe("gpt-6.1-sol");
+    expect(data.model).toBe("gpt-6.2-sol");
     expect(data.autoFallbackModel).toBeUndefined();
   });
 
   test("usage exhaustion on a temporary fallback does not replace the viable selection", async () => {
     if (!redirected) return;
     const sid = "bks-zz-transient-then-usage";
-    writeSessionFile(sid, { model: "gpt-6.1-sol" });
+    writeSessionFile(sid, { model: "gpt-6.2-sol" });
     sessionCache.invalidateSessionsCache();
     const fake = fakeEngineMod.makeFakeEngine([
       { kind: "error", content: "fetch failed (socket hang up)" },
@@ -581,7 +581,7 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
     await runSession.runSessionPromptAndDrain(sid, "keep going", "Test");
 
     const data = sessionJson(sid);
-    expect(data.model).toBe("gpt-6.1-sol");
+    expect(data.model).toBe("gpt-6.2-sol");
     expect(data.lastEngineModel).toBe("pi/anthropic/claude-opus-5-5");
     expect(data.modelHistory).toBeUndefined();
   });

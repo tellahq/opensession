@@ -68,7 +68,7 @@ describe("actor-owned model usage", () => {
     const sessionId = `os-usage-${crypto.randomUUID()}`;
     const attempt = crypto.randomUUID();
     const batch = [
-      record(attempt, 2, at(2), "gpt-6.1-sol", 4),
+      record(attempt, 2, at(2), "gpt-6.2-sol", 4),
       record(attempt, 1, at(1)),
       record(attempt, 3, at(3)),
     ];
@@ -100,7 +100,7 @@ describe("actor-owned model usage", () => {
       },
       {
         sessionId,
-        model: "gpt-6.1-sol",
+        model: "gpt-6.2-sol",
         requests: 1,
         input: 1,
         output: 4,
