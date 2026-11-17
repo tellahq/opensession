@@ -59,7 +59,14 @@ import {
 } from "../lib/thinking-messages-pref";
 
 type RenderBlock =
-  | { kind: "entry"; entry: TranscriptEntry; reasoning?: boolean }
+  | {
+      kind: "entry";
+      entry: TranscriptEntry;
+      reasoning?: boolean;
+      /** On a status row: the check-back work it reports on, folded under it
+       *  instead of drawn as its own "Checked back" row. */
+      checkBack?: LoopBlock;
+    }
   | { kind: "turn"; items: TranscriptEntry[]; expandWhileRunning: boolean }
   | {
       kind: "footer";
@@ -81,6 +88,8 @@ type RenderBlock =
       /** Present once the loop's settle notice has landed inside it. */
       settled: ReviewSettledOutcome | null;
     };
+
+type LoopBlock = Extract<RenderBlock, { kind: "review-loop" }>;
 
 interface Props {
   entries: TranscriptEntry[];
@@ -335,23 +344,41 @@ function groupCheckBacks(
   return grouped;
 }
 
-/** Keep work loops intact. Pull only explicit status outputs out of their
- * folds, and leave each topic's latest label on its owning row. */
+/** One status row per task. Status messages leave their folds; the check-back
+ * fold that holds or leads straight to the row's latest update folds under
+ * that row instead of drawing its own "Checked back" line beside it. Review
+ * loops stay intact. */
 function projectProgressBlocks(
   blocks: RenderBlock[],
   progress: ReadonlyMap<string, ProgressGroup | null>,
 ): RenderBlock[] {
+  if (!progress.size) return blocks;
   const isProgress = (block: RenderBlock) =>
     block.kind === "entry" && progress.has(block.entry.id);
   const isOwner = (block: RenderBlock) =>
     block.kind === "entry" && Boolean(progress.get(block.entry.id));
-  return blocks.flatMap((block): RenderBlock[] => {
-    if (isProgress(block)) return isOwner(block) ? [block] : [];
-    if (block.kind !== "review-loop" || !block.blocks.some(isProgress))
-      return [block];
-    const statuses = block.blocks.filter(isOwner);
+  const projected: RenderBlock[] = [];
+  let pending: LoopBlock | null = null;
+  const flush = () => {
+    if (pending) projected.push(pending);
+    pending = null;
+  };
+  for (const [index, block] of blocks.entries()) {
+    if (isProgress(block)) {
+      if (!isOwner(block) || block.kind !== "entry") continue;
+      projected.push(pending ? { ...block, checkBack: pending } : block);
+      pending = null;
+      continue;
+    }
+    flush();
+    if (block.kind !== "review-loop") {
+      projected.push(block);
+      continue;
+    }
     const work = block.blocks.filter((inner) => !isProgress(inner));
+    // A fold with no status inside is left exactly as it was.
     const hasWork =
+      work.length === block.blocks.length ||
       block.variant === "review" ||
       work.some(
         (inner) =>
@@ -359,8 +386,26 @@ function projectProgressBlocks(
           (!inner.entry.turnBoundary &&
             reviewBlockRole(inner).kind !== "check-back"),
       );
-    return [...(hasWork ? [{ ...block, blocks: work }] : []), ...statuses];
-  });
+    const loop: LoopBlock | null = hasWork ? { ...block, blocks: work } : null;
+    const owner = block.blocks.find(isOwner);
+    if (block.variant === "check-back" && owner?.kind === "entry") {
+      projected.push({ ...owner, checkBack: loop ?? undefined });
+      continue;
+    }
+    if (block.variant === "review") {
+      if (loop) projected.push(loop);
+      if (owner) projected.push(owner);
+      continue;
+    }
+    // A check-back fold right above the row's latest update is that row's work.
+    const next = blocks
+      .slice(index + 1)
+      .find((candidate) => !isProgress(candidate) || isOwner(candidate));
+    if (loop && next && isOwner(next)) pending = loop;
+    else if (loop) projected.push(loop);
+  }
+  flush();
+  return projected;
 }
 
 function mergedNoticePrNumber(entry: TranscriptEntry): number | null {
@@ -409,6 +454,8 @@ const TOP_APPROACH_ENTRY_BUDGET = 200;
 
 function renderBlockEntries(block: RenderBlock): TranscriptEntry[] {
   if (block.kind === "turn") return block.items;
+  if (block.kind === "entry" && block.checkBack)
+    return [...renderBlockEntries(block.checkBack), block.entry];
   if (block.kind === "entry" || block.kind === "footer") return [block.entry];
   if (block.kind === "review-loop")
     return block.blocks.flatMap(renderBlockEntries);
@@ -423,6 +470,10 @@ function renderBlockKey(
   if (block.kind === "turn") return turnMountKey(block.items, turnMountScope);
   if (block.kind === "note") return `note:${block.note.id}`;
   if (block.kind === "footer") return `${block.entry.id}:footer`;
+  // A status row that took in a fold keeps the fold's key, so the row turns
+  // into the status in place instead of remounting.
+  if (block.kind === "entry" && block.checkBack)
+    return renderBlockKey(block.checkBack, index, turnMountScope);
   if (block.kind === "review-loop") {
     const first = renderBlockEntries(block)[0];
     return `${block.variant === "review" ? "review-loop" : "check-back"}:${first?.id ?? index}`;
@@ -743,6 +794,84 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
       .slice(lastReviewLoop + 1)
       .some((block) => reviewBlockRole(block).kind === "user-message");
 
+  const renderLoopChildren = (block: LoopBlock, isLive: boolean) =>
+    block.blocks.map((inner, innerIndex) => {
+      const innerKey = renderBlockKey(inner, innerIndex, turnMountScope);
+      return (
+        <React.Fragment key={innerKey}>
+          {inner.kind === "turn" ? (
+            <ReviewTurnSteps
+              items={inner.items}
+              toolResults={toolResults}
+              live={Boolean(isLive && innerIndex === block.blocks.length - 1)}
+              owner={owner}
+              sessionId={sessionId}
+              onOpenSubagent={onOpenSubagent}
+            />
+          ) : inner.kind === "footer" ? (
+            <TurnFooter
+              className={TURN_FOOTER_LIFT}
+              entry={inner.entry}
+              durationMs={inner.durationMs}
+              files={inner.files}
+              assets={inner.assets}
+              onFork={onFork}
+            />
+          ) : inner.kind === "entry" &&
+            !inner.entry.turnBoundary &&
+            reviewBlockRole(inner).kind !== "handoff" ? (
+            <MessageBubble
+              entry={inner.entry}
+              toolResult={
+                inner.entry.toolUseId
+                  ? toolResults.get(inner.entry.toolUseId)
+                  : undefined
+              }
+              enter={
+                optimisticEntryIds.has(inner.entry.id) ||
+                Boolean(
+                  isLive &&
+                  innerIndex === block.blocks.length - 1 &&
+                  inner.entry.type !== "user",
+                )
+              }
+              reasoning={inner.reasoning}
+              pendingDelivery={pendingDeliveryEntryIds.has(inner.entry.id)}
+              owner={owner}
+              sessionId={sessionId}
+              onEdit={
+                optimisticEntryIds.has(inner.entry.id)
+                  ? undefined
+                  : onEditMessage
+              }
+              optimistic={optimisticEntryIds.has(inner.entry.id)}
+            />
+          ) : null}
+        </React.Fragment>
+      );
+    });
+
+  // A fold is live until a person speaks after it.
+  const isLoopLive = (i: number) =>
+    Boolean(
+      live &&
+      !groupedBlocks
+        .slice(i + 1)
+        .some(
+          (candidate) => reviewBlockRole(candidate).kind === "user-message",
+        ),
+    );
+  // A check-back fold is running only while it is the live tail: its own
+  // final answer and footer may follow, nothing else.
+  const isCheckBackTail = (i: number) =>
+    groupedBlocks
+      .slice(i + 1)
+      .every(
+        (candidate) =>
+          candidate.kind === "footer" ||
+          (candidate.kind === "entry" && candidate.entry.type === "assistant"),
+      );
+
   const virtualItems: VirtualTranscriptItem[] = groupedBlocks.map(
     (block, i) => {
       const key = renderBlockKey(block, i, turnMountScope);
@@ -750,81 +879,9 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
       if (block.kind === "review-loop") {
         // Final assistant output deliberately sits outside the review disclosure.
         // It does not make the loop historical while that same turn is live.
-        const isLive = Boolean(
-          live &&
-          !groupedBlocks
-            .slice(i + 1)
-            .some(
-              (candidate) => reviewBlockRole(candidate).kind === "user-message",
-            ),
-        );
-        // A check-back fold is running only while it is the live tail: its
-        // own final answer and footer may follow, nothing else.
-        const checkBackIsTail = groupedBlocks
-          .slice(i + 1)
-          .every(
-            (candidate) =>
-              candidate.kind === "footer" ||
-              (candidate.kind === "entry" &&
-                candidate.entry.type === "assistant"),
-          );
-        const loopChildren = block.blocks.map((inner, innerIndex) => {
-          const innerKey = renderBlockKey(inner, innerIndex, turnMountScope);
-          return (
-            <React.Fragment key={innerKey}>
-              {inner.kind === "turn" ? (
-                <ReviewTurnSteps
-                  items={inner.items}
-                  toolResults={toolResults}
-                  live={Boolean(
-                    isLive && innerIndex === block.blocks.length - 1,
-                  )}
-                  owner={owner}
-                  sessionId={sessionId}
-                  onOpenSubagent={onOpenSubagent}
-                />
-              ) : inner.kind === "footer" ? (
-                <TurnFooter
-                  className={TURN_FOOTER_LIFT}
-                  entry={inner.entry}
-                  durationMs={inner.durationMs}
-                  files={inner.files}
-                  assets={inner.assets}
-                  onFork={onFork}
-                />
-              ) : inner.kind === "entry" &&
-                !inner.entry.turnBoundary &&
-                reviewBlockRole(inner).kind !== "handoff" ? (
-                <MessageBubble
-                  entry={inner.entry}
-                  toolResult={
-                    inner.entry.toolUseId
-                      ? toolResults.get(inner.entry.toolUseId)
-                      : undefined
-                  }
-                  enter={
-                    optimisticEntryIds.has(inner.entry.id) ||
-                    Boolean(
-                      isLive &&
-                      innerIndex === block.blocks.length - 1 &&
-                      inner.entry.type !== "user",
-                    )
-                  }
-                  reasoning={inner.reasoning}
-                  pendingDelivery={pendingDeliveryEntryIds.has(inner.entry.id)}
-                  owner={owner}
-                  sessionId={sessionId}
-                  onEdit={
-                    optimisticEntryIds.has(inner.entry.id)
-                      ? undefined
-                      : onEditMessage
-                  }
-                  optimistic={optimisticEntryIds.has(inner.entry.id)}
-                />
-              ) : null}
-            </React.Fragment>
-          );
-        });
+        const isLive = isLoopLive(i);
+        const checkBackIsTail = isCheckBackTail(i);
+        const loopChildren = renderLoopChildren(block, isLive);
         return {
           key,
           anchorId: renderBlockAnchor(block, key),
@@ -876,8 +933,16 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
         block.kind === "entry"
           ? progressUpdates.get(block.entry.id)
           : undefined;
+      const checkBack = block.kind === "entry" ? block.checkBack : undefined;
       const content = progress ? (
-        <ProgressStatusRow group={progress} />
+        <ProgressStatusRow
+          group={progress}
+          live={Boolean(checkBack) && isLoopLive(i) && isCheckBackTail(i)}
+          defaultOpen={reviewLoopsOpen}
+          onOpenChange={onReviewLoopOpenChange}
+        >
+          {checkBack && renderLoopChildren(checkBack, isLoopLive(i))}
+        </ProgressStatusRow>
       ) : block.kind === "turn" ? (
         <TurnBlock
           items={block.items}
