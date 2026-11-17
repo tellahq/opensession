@@ -96,13 +96,15 @@ export function MessageActionButtons({
           </div>
         </Menu.Popup>
       </Menu.Root>
+      {/* `rounded-sm`, not Button's pill: it sits in a row of bare icon
+          buttons (copy, react, more) that all share this corner. */}
       <Tooltip label="Comment">
         <Button
           variant="ghost"
           size="sm"
           aria-label="Comment"
           icon={<IconMessage size={20} />}
-          className={cn("size-7 min-h-7 px-0 text-faint", className)}
+          className={cn("size-7 min-h-7 rounded-sm px-0 text-faint", className)}
           onClick={() => openCommentsFor(sessionId, message)}
         />
       </Tooltip>
