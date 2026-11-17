@@ -36,7 +36,12 @@ import {
 import { unplacedMedia } from "../lib/placed-media";
 import { spawnedThreadId, spawnedThreadPrompt } from "../lib/session-threads";
 import { ThreadCards, type SpawnedThread } from "./threads/ThreadCards";
-import { IconChevronDown, IconChevronRight, IconStack } from "./icons";
+import {
+  IconChevronDown,
+  IconChevronRight,
+  IconHistory,
+  IconStack,
+} from "./icons";
 import { cn } from "../ui/cn";
 import { Fold } from "../ui/fold";
 import { TextShimmer } from "../ui/text-shimmer";
@@ -240,10 +245,14 @@ export const TurnBlock = function TurnBlock({
     | { kind: "tools"; items: TranscriptEntry[] }
     | { kind: "reasoning"; items: TranscriptEntry[] }
     | { kind: "narration"; entry: TranscriptEntry }
+    | { kind: "notice"; entry: TranscriptEntry }
   > = [];
   for (const entry of items) {
     if (agentMessageText(entry) !== null) {
       sections.push({ kind: "message", entry });
+    } else if (entry.notice) {
+      // A context compaction between steps (compactsMidTurn).
+      sections.push({ kind: "notice", entry });
     } else if (entry.type === "tool_use") {
       const last = sections[sections.length - 1];
       if (last?.kind === "tools") last.items.push(entry);
@@ -357,6 +366,8 @@ export const TurnBlock = function TurnBlock({
                 }
                 sessionId={sessionId}
               />
+            ) : sec.kind === "notice" ? (
+              <StepNotice key={sec.entry.id} entry={sec.entry} />
             ) : sec.kind === "narration" ? (
               <NarrationMessage
                 key={sec.entry.id}
@@ -796,6 +807,23 @@ function NarrationMessage({
         sessionId={sessionId}
       />
       <EntryVideos videos={unplacedMedia(entry.videos, entry.content)} />
+    </div>
+  );
+}
+
+/** A notice that happened between two steps, such as a context compaction,
+ * drawn as one more step: the tool row's glyph slot and type, at rest. Outside
+ * a fold the same notice is a centered line between turns. */
+function StepNotice({ entry }: { entry: TranscriptEntry }) {
+  return (
+    <div
+      className="flex min-w-0 items-center gap-2 px-1 py-[3px] text-item-title leading-5 text-faint"
+      data-eid={entry.id}
+    >
+      <span className="flex size-[22px] flex-shrink-0 items-center justify-center">
+        <IconHistory size={20} />
+      </span>
+      <span className="min-w-0 truncate">{entry.notice?.title}</span>
     </div>
   );
 }
