@@ -25,6 +25,7 @@ type ElementProps = {
   children?: React.ReactNode;
   className?: string;
   pane?: boolean;
+  panel?: boolean;
   ref?: unknown;
 };
 
