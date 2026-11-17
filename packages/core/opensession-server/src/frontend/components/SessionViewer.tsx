@@ -1341,7 +1341,7 @@ export function SessionViewer({
     navigation: reviewController.navigation,
     review: reviewRegion,
     preview: { staging, stagingUrl, shareLink, sessionId: session.id },
-    panel: { ...viewState.panel, setPanelTerminalMounted },
+    panel: { ...viewState.panel, setPanelTerminalMounted, showStaging },
   });
   const handleTranscriptClick = (e: MouseEvent<HTMLDivElement>) => {
     if (!transcriptBlocks.handleClick(e)) handleMessagesClick(e);
