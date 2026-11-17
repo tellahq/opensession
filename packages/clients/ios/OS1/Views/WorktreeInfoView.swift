@@ -60,6 +60,8 @@ struct WorktreeInfoView: View {
     @State private var accountPools = SettingsAPI.cachedProviderAccountPools()
     /// The merge method waiting on its confirmation, from the merge card.
     @State private var pendingMerge: String?
+    /// How the slide merges; picked from the menu beside the branches.
+    @State private var mergeMethod = "squash"
     @State private var merging = false
     @State private var mergeError: String?
 
@@ -544,7 +546,7 @@ struct WorktreeInfoView: View {
     }
 
     /// The pull request as one card: where it stands, who signed off and
-    /// how its checks went, and its one action as a full-width button.
+    /// how its checks went, and its one action as a slide to merge.
     @ViewBuilder
     private var mergeSection: some View {
         if let pr = viewModel.prDetails {
@@ -599,26 +601,58 @@ struct WorktreeInfoView: View {
                 .buttonStyle(.plain)
 
                 if pr.isOpen {
-                    Button {
-                        pendingMerge = "squash"
-                    } label: {
-                        HStack(spacing: 8) {
-                            if merging { ProgressView().controlSize(.small).tint(OS1VisualStyle.background) }
-                            Text(merging ? "Merging…" : "Squash and merge")
+                    // Where it lands and how, then the slide that does it.
+                    HStack(spacing: 10) {
+                        if let head = pr.headRefName, let base = pr.baseRefName {
+                            HStack(spacing: 5) {
+                                Text(base).foregroundStyle(OS1VisualStyle.text)
+                                Image(systemName: "arrow.left")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(OS1VisualStyle.textFaint)
+                                Text(head)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
+                            .font(.footnote.monospaced())
+                            .foregroundStyle(OS1VisualStyle.textDim)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("\(head) into \(base)")
                         }
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(OS1VisualStyle.background)
-                        .frame(maxWidth: .infinity, minHeight: 50)
-                        .background(OS1VisualStyle.text, in: Capsule())
-                        .contentShape(Capsule())
+                        Spacer(minLength: 8)
+                        Menu {
+                            Picker("Merge method", selection: $mergeMethod) {
+                                Text("Squash and merge").tag("squash")
+                                Text("Create a merge commit").tag("merge")
+                                Text("Rebase and merge").tag("rebase")
+                            }
+                        } label: {
+                            HStack(spacing: 3) {
+                                Text(Self.mergeMethodShortLabel(mergeMethod))
+                                Image(systemName: "chevron.up.chevron.down")
+                                    .font(.caption2.weight(.semibold))
+                            }
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(OS1VisualStyle.textDim)
+                            .frame(minHeight: 32)
+                            .contentShape(Rectangle())
+                        }
+                        .accessibilityLabel("Merge method, \(Self.mergeButtonLabel(mergeMethod))")
+                        .disabled(merging)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(merging)
-                    .opacity(merging ? 0.7 : 1)
-                    .contextMenu {
-                        Button("Squash and merge") { pendingMerge = "squash" }
-                        Button("Create a merge commit") { pendingMerge = "merge" }
-                        Button("Rebase and merge") { pendingMerge = "rebase" }
+
+                    // The slide is the confirmation. A PR with something
+                    // wrong (conflicts, failing checks, a draft) still asks
+                    // first, and says what.
+                    SlideToMerge(
+                        label: "Slide to merge",
+                        tint: tone,
+                        busy: merging || pendingMerge != nil
+                    ) {
+                        if mergeWarnings(pr).isEmpty {
+                            merge(method: mergeMethod)
+                        } else {
+                            pendingMerge = mergeMethod
+                        }
                     }
                 }
             }
@@ -688,6 +722,14 @@ struct WorktreeInfoView: View {
 
     private var mergeConfirmationMessage: String {
         guard let pr = viewModel.prDetails else { return "This cannot be undone." }
+        let warnings = mergeWarnings(pr)
+        let base = pr.baseRefName ?? "the base branch"
+        guard !warnings.isEmpty else { return "This merges into \(base)." }
+        return "This merges into \(base) even though \(warnings.joined(separator: ", "))."
+    }
+
+    /// What should make someone think twice before merging.
+    private func mergeWarnings(_ pr: PrDetails) -> [String] {
         var warnings: [String] = []
         if pr.mergeable == "CONFLICTING" { warnings.append("it has conflicts") }
         if (pr.checks ?? []).contains(where: { $0.rank == .failure }) {
@@ -697,9 +739,15 @@ struct WorktreeInfoView: View {
         }
         if pr.isDraft == true { warnings.append("it’s still a draft") }
         if pr.reviewDecision == "CHANGES_REQUESTED" { warnings.append("changes were requested") }
-        let base = pr.baseRefName ?? "the base branch"
-        guard !warnings.isEmpty else { return "This merges into \(base)." }
-        return "This merges into \(base) even though \(warnings.joined(separator: ", "))."
+        return warnings
+    }
+
+    private static func mergeMethodShortLabel(_ method: String) -> String {
+        switch method {
+        case "merge": "Merge commit"
+        case "rebase": "Rebase"
+        default: "Squash"
+        }
     }
 
     private static func mergeButtonLabel(_ method: String) -> String {

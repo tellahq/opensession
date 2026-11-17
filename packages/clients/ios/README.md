@@ -242,8 +242,10 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   page onto the conversation's stack (back chevron or edge swipe returns to
   the chat; the sidebar row menu shows the same page as a sheet). It leads with a large title and state pills (run or PR state, +/−
   lines that open Changes), then a merge card (headline such as "Ready to
-  merge", reviewers and the checks rollup, and a full-width "Squash and merge"
-  button behind a confirmation; long-press for the other methods), a
+  merge", reviewers and the checks rollup, base ← head with a merge-method
+  menu, and a `SlideToMerge` track: the slide is the confirmation, and a PR
+  with conflicts, failing or running checks, a draft or requested changes
+  still asks first; VoiceOver activates it as a button), a
   Deployments list (the PR's preview environment plus deploy checks such as
   Vercel), and a Demos carousel of the conversation's and assets' pictures and
   recordings, videos first. Below that: repository and branch metadata, local
