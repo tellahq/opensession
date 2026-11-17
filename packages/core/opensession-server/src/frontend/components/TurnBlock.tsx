@@ -220,6 +220,11 @@ export const TurnBlock = function TurnBlock({
   ]
     .filter(Boolean)
     .join(" · ");
+  // Tool calls render flat when there is no narration (the outer row is
+  // already the run's summary) or the Tool calls preference keeps them open.
+  // Otherwise grouped rows each name their own counts and ±lines, and the
+  // turn-wide meta line above them read as the same summary twice.
+  const flatTools = pref.tools === "open" || !hasNarration;
   const title = live
     ? "Working"
     : duration
@@ -325,19 +330,21 @@ export const TurnBlock = function TurnBlock({
             onClick={() => rememberExpansion(false)}
             className="absolute inset-y-0 -left-2 w-4 cursor-pointer border-0 bg-transparent p-0 after:absolute after:inset-y-0 after:left-1/2 after:border-l after:border-transparent after:transition-colors hover:after:border-line-strong focus-visible:after:border-line-strong"
           />
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 py-1 text-meta text-faint">
-            {countsLabel && <span>{countsLabel}</span>}
-            {additions + deletions > 0 && (
-              <TurnLineStatsCard
-                files={editedFiles}
-                additions={additions}
-                deletions={deletions}
-              />
-            )}
-            {toolOnlyAggregate?.mediaLabel && (
-              <span>{toolOnlyAggregate.mediaLabel}</span>
-            )}
-          </div>
+          {flatTools && (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 py-1 text-meta text-faint">
+              {countsLabel && <span>{countsLabel}</span>}
+              {additions + deletions > 0 && (
+                <TurnLineStatsCard
+                  files={editedFiles}
+                  additions={additions}
+                  deletions={deletions}
+                />
+              )}
+              {toolOnlyAggregate?.mediaLabel && (
+                <span>{toolOnlyAggregate.mediaLabel}</span>
+              )}
+            </div>
+          )}
           {sections.map((sec) =>
             sec.kind === "message" ? (
               <MessageBubble
@@ -383,7 +390,7 @@ export const TurnBlock = function TurnBlock({
                   items={sec.items}
                   toolResults={toolResults}
                   live={live}
-                  expandAll={pref.tools === "open" || !hasNarration}
+                  expandAll={flatTools}
                   sessionId={sessionId}
                   onOpenSubagent={onOpenSubagent}
                 />
