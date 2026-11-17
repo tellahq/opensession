@@ -203,16 +203,31 @@ export const VIEWER_REVIEW_MAIN =
 /**
  * Holds the scroll area plus the floating "Jump to latest" pill.
  *
- * Nothing is drawn between this and the bar above it on desktop. The transcript
- * runs up under the row and stops there, on the same fill, which is what makes
- * the top of the session read as one surface. Two earlier answers to the same
- * seam are gone: a scroll-edge wash driven by a CSS scroll timeline, which
- * dimmed the first legible rows, and the hairline that replaced it. Phones
- * still fade the transcript under their floating pills with a mask (see
- * VIEWER_MESSAGES), where the chrome overlays the content instead of sitting
- * above it.
+ * Phones fade the transcript under their floating pills with the header's own
+ * wash (see VIEWER_MESSAGES), where the chrome overlays the content instead of
+ * sitting above it. Desktop draws VIEWER_TOP_FADE here instead.
  */
 export const VIEWER_MESSAGES_REGION = "relative flex min-h-0 flex-1 flex-col";
+
+/**
+ * The desktop transcript's soft top edge: a 24px page-colour wash under the
+ * bar or tab strip, so rows dissolve into the chrome instead of being cut.
+ *
+ * Only while the transcript is scrolled (`data-scrolled`, from
+ * hooks/useScrollEdge.ts). At rest the first rows sit in clear space below the
+ * bar, and a wash there would only dim them; an earlier always-on scroll-edge
+ * wash was removed for exactly that.
+ *
+ * A sibling overlay rather than a mask on the scroller: a masked scroller on
+ * iOS Safari can leave whole bands unpainted (see VIEWER_MESSAGES). It stops
+ * short of the overlay scrollbar's 14px gutter for the same reason the
+ * composer's fade does.
+ */
+export const VIEWER_TOP_FADE =
+  "pointer-events-none absolute left-0 right-[14px] top-0 z-[1] h-6 " +
+  "bg-linear-to-b from-bg via-bg/60 via-35% to-transparent " +
+  "opacity-0 transition-opacity duration-150 motion-reduce:transition-none " +
+  "data-[scrolled]:opacity-100 phone:hidden";
 
 /**
  * The scroll container.
@@ -225,9 +240,9 @@ export const VIEWER_MESSAGES_REGION = "relative flex min-h-0 flex-1 flex-col";
  * and in a flex container auto cross-axis margins disable `align-items:
  * stretch`, so they would size to their content and overflow sideways.
  *
- * Bottom padding pays for the composer's overlap plus 16px of clear resting
- * space. Older rows can still scroll directly underneath the input instead of
- * stopping above it.
+ * Bottom padding pays for the composer's overlap plus the 32px fade above
+ * it (VIEWER_INPUT), so the last row rests clear of the fade. Older rows can
+ * still scroll directly underneath the input instead of stopping above it.
  *
  * `--suggestions-under` is the third term, and it is 0 almost always: the
  * quick-reply row floats on these last rows instead of taking flow height, so
@@ -238,12 +253,12 @@ export const VIEWER_MESSAGES =
   "viewer-messages flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain " +
   // Keep the reader's place when content loads or expands above them.
   "[overflow-anchor:auto] px-5 pt-0 " +
-  "pb-[calc(var(--session-under)_+_var(--suggestions-under,0px)_+_16px)] " +
+  "pb-[calc(var(--session-under)_+_var(--suggestions-under,0px)_+_32px)] " +
   // A focused phone composer is fixed and no longer reserves flow height,
   // while the transcript's layout viewport still extends behind the keyboard.
   // Clear both measured obstructions so even a tall draft and the last live
   // status row can scroll completely into the visible strip above them.
-  "phone:[body.kb-open_&]:pb-[calc(var(--kb-inset,0px)_+_var(--viewer-input-height,64px)_+_var(--suggestions-under,0px)_+_8px)] " +
+  "phone:[body.kb-open_&]:pb-[calc(var(--kb-inset,0px)_+_var(--viewer-input-height,64px)_+_var(--suggestions-under,0px)_+_32px)] " +
   // Wider side padding where the message rail lives, so its ticks have a
   // gutter of their own instead of sitting on the bubbles (lib/message-rail.ts).
   `${RAIL_GUTTER_CLASS} ` +
@@ -277,9 +292,12 @@ export const VIEWER_MESSAGES =
  * smaller than that margin, so the box rises a few px above where the
  * transcript ends and the last row tucks slightly under it.
  *
- * The input's background is transparent at the top of that overlap and solid
- * by the composer's edge. Content therefore remains crisp as it enters beneath
- * the input, then disappears behind the composer itself without a blank band.
+ * A page-colour fade (`::before`) rises 32px above the box and reaches
+ * solid at the composer's edge, so rows dissolve into the composer instead of
+ * being cut at it. Below that edge the box itself is solid page colour, so
+ * nothing shows around the composer's rounded corners. The fade sits at
+ * `z-[-1]` inside the box's own stacking context: behind the composer and the
+ * floating action band, over the transcript.
  */
 export const VIEWER_INPUT =
   "relative z-[1] mt-[calc(-1*var(--session-under))] shrink-0 px-5 pt-1 pb-3.5 " +
@@ -289,7 +307,10 @@ export const VIEWER_INPUT =
   // The fade is a later sibling of the native scroller, so painting it edge to
   // edge also fades an overlay scrollbar. Leave its narrow gutter unpainted;
   // raising the scroller would incorrectly lift transcript content too.
-  "[background:linear-gradient(to_bottom,transparent_0,var(--bg)_var(--session-under))_left_top/calc(100%_-_14px)_100%_no-repeat] " +
+  "[background:linear-gradient(var(--bg),var(--bg))_left_bottom/calc(100%_-_14px)_calc(100%_-_var(--session-under))_no-repeat] " +
+  "before:pointer-events-none before:absolute before:left-0 before:right-[14px] before:z-[-1] before:content-[''] " +
+  "before:-top-8 before:h-[calc(32px_+_var(--session-under))] " +
+  "before:bg-linear-to-b before:from-transparent before:via-bg/70 before:via-50% before:to-bg " +
   // Phone: clear the home indicator rather than jamming the composer against
   // the very bottom edge. That gap is also all the room the composer's shadow
   // gets in mobile Safari, where there is no safe-area inset.

@@ -1,4 +1,5 @@
 import { useSessionVoice } from "../../hooks/useSessionVoice";
+import { useScrollEdge } from "../../hooks/useScrollEdge";
 import { useComposerAutocompleteEnabled } from "../../hooks/useComposerAutocomplete";
 import { composerCompleteApi } from "../../lib/api/composer-autocomplete";
 import { SessionVoiceStatus } from "../SessionVoiceStatus";
@@ -11,6 +12,7 @@ import type {
   RefObject,
   SetStateAction,
 } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { duration, ease } from "../../ui/motion";
@@ -101,6 +103,7 @@ import {
   VIEWER_SUGGESTIONS,
   VIEWER_SUGGESTIONS_ROW,
   VIEWER_SUMMARY_STEP,
+  VIEWER_TOP_FADE,
 } from "../../lib/session-viewer-classes";
 import type { UnifiedSession } from "../../lib/types";
 import type { SessionComments } from "../../lib/comment-threads";
@@ -681,6 +684,8 @@ export function SessionViewerMainRegion({
     !showVideo &&
     !showTerminal;
   const autocompleteEnabled = useComposerAutocompleteEnabled();
+  const [topFade, setTopFade] = useState<HTMLDivElement | null>(null);
+  useScrollEdge(topFade, ".viewer-messages");
   const sessionWorkspaceId = session.workspaceId;
   const linkToMessage = (entryId: string) =>
     messageLink({ id: session.id, workspaceId: sessionWorkspaceId }, entryId);
@@ -915,6 +920,7 @@ export function SessionViewerMainRegion({
                   return true;
                 }}
               />
+              <div ref={setTopFade} className={VIEWER_TOP_FADE} aria-hidden />
               <div
                 className={cn(
                   VIEWER_MESSAGES,
