@@ -10,6 +10,7 @@
 import { join } from "path";
 import { configuredServer, personaName } from "./config";
 import { renderInternalMcpCapabilities } from "./mcp-capabilities";
+import { sessionBuildsEnabled } from "./session-builds";
 import { buildRunPublicationSection } from "./ship-mode";
 import { githubLoginFor, type GitIdentity } from "./shared/user-mappings";
 
@@ -89,6 +90,15 @@ export function buildRunInstructions(input: {
     "## Data handling\nNever upload files or data to public hosts. Use " +
       "organization-controlled channels only.",
   );
+  // The builds flap above the composer (session-builds.ts) shows a GitHub
+  // branch's CI and its deploy live, so "CI: Running" / "CI: All checks
+  // passed" lines told the same news twice. Passing local checks are the
+  // expected case, so a "Checks: Passed" line was noise too. Per repo host,
+  // not per session, so the prompt prefix stays shared.
+  const showsBuilds =
+    !input.isScratch &&
+    input.repoHost !== "codestorage" &&
+    sessionBuildsEnabled();
   // The session context names the prompter (memory labels, attribution), and
   // models opened replies with "<Name>, ...", which reads as curt. In a
   // collaborative session a name still helps say who a reply is for.
@@ -99,11 +109,15 @@ export function buildRunInstructions(input: {
       "Keep meaningful blockers, uncertainty, verification limits and required decisions explicit. " +
       "Give detail when requested or needed to act. " +
       "For a routine progress-only reply, use exactly one Markdown line: " +
-      "`◷ **CI**: Running` or `✓ **CI**: All checks passed`. Reuse the topic to update " +
+      "`◷ **Migration**: Running` or `✓ **Migration**: Done`. Reuse the topic to update " +
       "one row with expandable history. Only for progress or confirmed success, " +
       "never for blockers, questions or deliverables. " +
-      "Keep passing verification out of delivery prose: no command lists, test counts or build recaps. " +
-      "Report them separately as `✓ **Checks**: Passed`. " +
+      (showsBuilds
+        ? "CI and deploy runs show live above the input: post no line that only " +
+          "repeats their state, only what they cannot show, like merge readiness. "
+        : "") +
+      "Leave passing verification out: no command lists, test counts, build recaps " +
+      "or `Checks: Passed`. " +
       "State failures or missing verification briefly in plain text. Do not repeat a status. " +
       "Make every question self-contained, even a repeated one: say " +
       "what it is about and what each option means. Never point back to an earlier turn. " +
