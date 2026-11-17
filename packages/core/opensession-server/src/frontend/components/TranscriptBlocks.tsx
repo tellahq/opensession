@@ -12,6 +12,11 @@ import {
   turnScrollAnchor,
 } from "../lib/transcript-block-identity";
 import { MessageBubble } from "./MessageBubble";
+import { ProgressStatusRow } from "./ProgressStatusRow";
+import {
+  collectProgressUpdates,
+  type ProgressGroup,
+} from "../lib/progress-updates";
 import { agentMessageText } from "../lib/agent-message";
 import { NoteBubble } from "./NoteBubble";
 import { ToolSection, TurnBlock, useTurnActivityPrefs } from "./TurnBlock";
@@ -79,6 +84,8 @@ type RenderBlock =
 
 interface Props {
   entries: TranscriptEntry[];
+  /** Shared across indexed range renderers so status updates reuse one row. */
+  progressUpdates?: ReadonlyMap<string, ProgressGroup | null>;
   /** Just-sent user turns that have not landed durably yet. They participate in
    *  transcript ordering so live tools can never render above their prompt. */
   optimisticEntries?: OptimisticTranscriptEntry[];
@@ -276,7 +283,10 @@ function checkBacksContinue(blocks: RenderBlock[], from: number): boolean {
  * final answer stays outside as the report; earlier answers fold in once a
  * later check-back proves them interim. Runs after review grouping, so a
  * check-back inside a review loop stays there. */
-function groupCheckBacks(blocks: RenderBlock[]): RenderBlock[] {
+function groupCheckBacks(
+  blocks: RenderBlock[],
+  progressUpdates: ReadonlyMap<string, ProgressGroup | null>,
+): RenderBlock[] {
   const grouped: RenderBlock[] = [];
   for (let i = 0; i < blocks.length; i++) {
     const first = blocks[i]!;
@@ -303,9 +313,13 @@ function groupCheckBacks(blocks: RenderBlock[]): RenderBlock[] {
       loop.push(next);
       if (role === "check-back") rounds++;
     }
-    // A lone wait boundary has nothing to fold: it is structural only.
+    // A progress-only check-back needs no scheduling notice beside its row.
+    // Keep ordinary standalone notices readable when no status follows them.
     if (loop.length === 1) {
-      if (first.kind === "entry" && !first.entry.turnBoundary)
+      const next = blocks[i + 1];
+      const progress =
+        next?.kind === "entry" && progressUpdates.has(next.entry.id);
+      if (first.kind === "entry" && !first.entry.turnBoundary && !progress)
         grouped.push(first);
       continue;
     }
@@ -319,6 +333,34 @@ function groupCheckBacks(blocks: RenderBlock[]): RenderBlock[] {
     });
   }
   return grouped;
+}
+
+/** Keep work loops intact. Pull only explicit status outputs out of their
+ * folds, and leave each topic's latest label on its owning row. */
+function projectProgressBlocks(
+  blocks: RenderBlock[],
+  progress: ReadonlyMap<string, ProgressGroup | null>,
+): RenderBlock[] {
+  const isProgress = (block: RenderBlock) =>
+    block.kind === "entry" && progress.has(block.entry.id);
+  const isOwner = (block: RenderBlock) =>
+    block.kind === "entry" && Boolean(progress.get(block.entry.id));
+  return blocks.flatMap((block): RenderBlock[] => {
+    if (isProgress(block)) return isOwner(block) ? [block] : [];
+    if (block.kind !== "review-loop" || !block.blocks.some(isProgress))
+      return [block];
+    const statuses = block.blocks.filter(isOwner);
+    const work = block.blocks.filter((inner) => !isProgress(inner));
+    const hasWork =
+      block.variant === "review" ||
+      work.some(
+        (inner) =>
+          inner.kind !== "entry" ||
+          (!inner.entry.turnBoundary &&
+            reviewBlockRole(inner).kind !== "check-back"),
+      );
+    return [...(hasWork ? [{ ...block, blocks: work }] : []), ...statuses];
+  });
 }
 
 function mergedNoticePrNumber(entry: TranscriptEntry): number | null {
@@ -394,11 +436,20 @@ function renderBlockAnchor(block: RenderBlock, key: string): string {
   return key;
 }
 
-function transcriptMeasureVersion(entries: TranscriptEntry[]): string[] {
-  return entries.map(
-    (entry) =>
-      `${entry.id}:${entry.changeSeq ?? ""}:${entry.content.length}:${entry.contentLength ?? ""}:${entry.images?.length ?? 0}:${entry.videos?.length ?? 0}:${entry.files?.length ?? 0}:${entry.isError ? 1 : 0}`,
-  );
+function transcriptMeasureVersion(
+  entries: TranscriptEntry[],
+  progress?: ReadonlyMap<string, ProgressGroup | null>,
+): string[] {
+  return entries.flatMap((entry) => {
+    const group = progress?.get(entry.id);
+    // Hydrating an earlier owner can hide this range's row without changing
+    // its stored payload. Measure that removal in the same commit as arrival.
+    if (group === null) return [`${entry.id}:progress-hidden`];
+    return (group?.entries ?? [entry]).map(
+      (item) =>
+        `${item.id}:${item.changeSeq ?? ""}:${item.content.length}:${item.contentLength ?? ""}:${item.images?.length ?? 0}:${item.videos?.length ?? 0}:${item.files?.length ?? 0}:${item.isError ? 1 : 0}`,
+    );
+  });
 }
 
 function renderBlockEstimate(block: RenderBlock): number {
@@ -438,7 +489,17 @@ export const TranscriptBlocks = function TranscriptBlocks(props: Props) {
       ),
     [],
   );
-  const renderedProps: Props = { ...props, entries, thinkingMessages };
+  const progressUpdates = collectProgressUpdates(
+    entries,
+    props.transcriptIndex,
+    props.notes?.map((note) => note.ts),
+  );
+  const renderedProps: Props = {
+    ...props,
+    entries,
+    thinkingMessages,
+    progressUpdates,
+  };
   return (
     <>
       {props.sessionId && (
@@ -480,6 +541,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
   onLayout,
   thinkingMessages = getThinkingMessagesPref(),
   sharedToolResults,
+  progressUpdates = new Map(),
 }: Props) {
   // Top level only (nested per-range instances pass virtualize={false} and are
   // suppressed): without an outline every block renders real content, so the
@@ -590,7 +652,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
     if (final) blocks.push({ kind: "entry", entry: final });
     // Quiet actions under the settled answer, the files the turn wrote, and
     // scratch files that have no other direct route from the transcript.
-    if (final && !(live && trailing)) {
+    if (final && !(live && trailing) && !progressUpdates.has(final.id)) {
       blocks.push({
         kind: "footer",
         entry: final,
@@ -649,7 +711,10 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
       at++;
     }
   }
-  const groupedBlocks = groupCheckBacks(groupReviewLoops(blocks));
+  const groupedBlocks = projectProgressBlocks(
+    groupCheckBacks(groupReviewLoops(blocks), progressUpdates),
+    progressUpdates,
+  );
   const isConversationBoundary = (block: RenderBlock) =>
     block.kind === "entry" &&
     (block.entry.type === "user" || block.entry.type === "system");
@@ -765,7 +830,10 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
           anchorId: renderBlockAnchor(block, key),
           entryIds: entriesInBlock.map((entry) => entry.id),
           arrivalAliases: transcriptArrivalAliases(entriesInBlock),
-          measureVersion: transcriptMeasureVersion(entriesInBlock),
+          measureVersion: transcriptMeasureVersion(
+            entriesInBlock,
+            progressUpdates,
+          ),
           estimateSize: renderBlockEstimate(block),
           content:
             block.variant === "review" ? (
@@ -804,49 +872,54 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
         Boolean(live) &&
         (i === groupedBlocks.length - 1 ||
           (block.kind === "turn" && i > liveTurnBoundary));
-      const content =
-        block.kind === "turn" ? (
-          <TurnBlock
-            items={block.items}
-            toolResults={toolResults}
-            live={isLiveTail}
-            expandWhileRunning={block.expandWhileRunning}
-            onOpenSubagent={onOpenSubagent}
-            sessionId={sessionId}
-          />
-        ) : block.kind === "note" ? (
-          <NoteBubble thread={block.note} sessionId={sessionId} />
-        ) : block.kind === "footer" ? (
-          <TurnFooter
-            entry={block.entry}
-            durationMs={block.durationMs}
-            files={block.files}
-            assets={block.assets}
-            onFork={onFork}
-          />
-        ) : (
-          <MessageBubble
-            entry={block.entry}
-            toolResult={
-              block.entry.toolUseId
-                ? toolResults.get(block.entry.toolUseId)
-                : undefined
-            }
-            enter={
-              optimisticEntryIds.has(block.entry.id) ||
-              Boolean(isLiveTail && block.entry.type !== "user")
-            }
-            reasoning={block.reasoning}
-            pendingDelivery={pendingDeliveryEntryIds.has(block.entry.id)}
-            owner={owner}
-            sessionId={sessionId}
-            onEdit={
-              optimisticEntryIds.has(block.entry.id) ? undefined : onEditMessage
-            }
-            optimistic={optimisticEntryIds.has(block.entry.id)}
-            onContinue={i === groupedBlocks.length - 1 ? onContinue : undefined}
-          />
-        );
+      const progress =
+        block.kind === "entry"
+          ? progressUpdates.get(block.entry.id)
+          : undefined;
+      const content = progress ? (
+        <ProgressStatusRow group={progress} />
+      ) : block.kind === "turn" ? (
+        <TurnBlock
+          items={block.items}
+          toolResults={toolResults}
+          live={isLiveTail}
+          expandWhileRunning={block.expandWhileRunning}
+          onOpenSubagent={onOpenSubagent}
+          sessionId={sessionId}
+        />
+      ) : block.kind === "note" ? (
+        <NoteBubble thread={block.note} sessionId={sessionId} />
+      ) : block.kind === "footer" ? (
+        <TurnFooter
+          entry={block.entry}
+          durationMs={block.durationMs}
+          files={block.files}
+          assets={block.assets}
+          onFork={onFork}
+        />
+      ) : (
+        <MessageBubble
+          entry={block.entry}
+          toolResult={
+            block.entry.toolUseId
+              ? toolResults.get(block.entry.toolUseId)
+              : undefined
+          }
+          enter={
+            optimisticEntryIds.has(block.entry.id) ||
+            Boolean(isLiveTail && block.entry.type !== "user")
+          }
+          reasoning={block.reasoning}
+          pendingDelivery={pendingDeliveryEntryIds.has(block.entry.id)}
+          owner={owner}
+          sessionId={sessionId}
+          onEdit={
+            optimisticEntryIds.has(block.entry.id) ? undefined : onEditMessage
+          }
+          optimistic={optimisticEntryIds.has(block.entry.id)}
+          onContinue={i === groupedBlocks.length - 1 ? onContinue : undefined}
+        />
+      );
       const showShareAction =
         block.kind === "entry" && shareAfterEntryIds.has(block.entry.id);
       return {
@@ -854,7 +927,10 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
         anchorId: renderBlockAnchor(block, key),
         entryIds: entriesInBlock.map((entry) => entry.id),
         arrivalAliases: transcriptArrivalAliases(entriesInBlock),
-        measureVersion: transcriptMeasureVersion(entriesInBlock),
+        measureVersion: transcriptMeasureVersion(
+          entriesInBlock,
+          progressUpdates,
+        ),
         estimateSize: renderBlockEstimate(block),
         // A footer overlaps the answer above it, so its margin belongs to the
         // measured wrapper rather than inside the contained row.
@@ -1146,6 +1222,7 @@ function IndexedTranscriptBlocks(props: Props) {
         ),
         measureVersion: transcriptMeasureVersion(
           item.kind === "entry" ? [item.entry] : itemEntries,
+          props.progressUpdates,
         ),
         // A transcript_range may add several payload slices to this existing
         // outline row. That is history becoming available, not a live arrival:

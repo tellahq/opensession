@@ -183,6 +183,11 @@ struct TranscriptRow: View {
             )
         case .note(let thread):
             TimelineThreadCard(thread: thread, sessionId: sessionId, context: comments)
+        case .progress(let group):
+            ProgressStatusRow(
+                group: group,
+                state: expansionState("progress-\(block.id)", false)
+            )
         }
     }
 }

@@ -3,11 +3,10 @@ import SwiftUI
 /// The collapsible work fold: one header line standing in for everything a
 /// turn did before it answered.
 ///
-/// Folded is the default because the answer is what people came for, and
-/// shut it is one quiet gray line, "Worked for 22s ›", so a chat of many
-/// turns reads as question then answer. Opening it, or a turn still running,
-/// adds what kind of work it was (the family glyphs), how much (steps),
-/// whether it went wrong (failures, in red), and its ± lines.
+/// Folded is the default because the answer is what people came for. The
+/// header is one quiet gray line, "Worked for 12s ›"; the step count,
+/// failures and line changes open with the fold, above the steps they
+/// describe.
 struct TurnBlockView: View {
     let turn: WorkTurn
     let sessionId: String
@@ -21,11 +20,6 @@ struct TurnBlockView: View {
     let expansionState: (String, Bool) -> TurnFoldState
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-    private var glyphLimit: Int {
-        horizontalSizeClass == .compact ? 4 : 6
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -42,6 +36,8 @@ struct TurnBlockView: View {
 
             if state.expanded {
                 VStack(alignment: .leading, spacing: 8) {
+                    foldSummary
+
                     TurnStepsView(
                         items: turn.items,
                         sessionId: sessionId,
@@ -99,8 +95,7 @@ struct TurnBlockView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Where the open fold's hairline sits: just in from the title's first
-    /// letter, so it reads as hanging from the header.
+    /// Where the open fold's hairline sits: under the chevron it drops from.
     private static let railInset: CGFloat = 5
     /// Where the fold's rows start: under the header's own word, clear of the
     /// rail rather than crowding it.
@@ -156,134 +151,39 @@ struct TurnBlockView: View {
         }
     }
 
-    @ViewBuilder
+    /// "Worked for 12s ›", nothing more, in one quiet gray. The fold is
+    /// skippable because the answer sits below it; what the work came to
+    /// (steps, failures, lines) is one tap away at the top of the open fold.
+    /// Mirrors the web's `TurnBlock` header.
     private var header: some View {
-        Group {
-            if !state.expanded, !turn.isLive {
-                settledHeader
-            } else if horizontalSizeClass == .compact {
-                compactHeader
-            } else if dynamicTypeSize.isAccessibilitySize {
-                wrappedHeader
-            } else {
-                singleLineHeader
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
+                Text(turn.headerTitle)
+                    .font(.subheadline)
+                    .monospacedDigit()
+                chevron
             }
+            .fixedSize()
+            // While a closed fold is live, name the step it is on so a long
+            // build never looks stalled.
+            if !state.expanded, turn.isLive, let preview = turn.livePreview {
+                Text(preview)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(OS1VisualStyle.textFaint)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer(minLength: 0)
         }
         .foregroundStyle(OS1VisualStyle.textDim)
         #if os(iOS)
         // The label is visually one line, but its touch target still needs the
-        // platform minimum. The previous 24pt frame made otherwise-working
-        // folds easy to miss with a thumb.
+        // platform minimum.
         .frame(minHeight: 44)
         #else
         .padding(.vertical, 3)
         #endif
         .contentShape(Rectangle())
-    }
-
-    /// "Worked for 22s", or "Working" while the turn runs.
-    private var title: String {
-        if turn.isLive { return "Working" }
-        guard let duration = turn.duration,
-              let label = TranscriptFormat.duration(duration)
-        else { return "Worked" }
-        return "Worked for \(label)"
-    }
-
-    /// The title and the chevron that follows it, kept on one line.
-    private var titleLabel: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 5) {
-            Text(title)
-                .font(.subheadline)
-            chevron
-        }
-        .fixedSize()
-    }
-
-    /// Shut and settled, the fold is one muted line and nothing else:
-    /// counts, glyphs and ± lines wait inside. A running turn keeps its
-    /// counts, so a shut fold still shows the work moving.
-    private var settledHeader: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            titleLabel
-            Spacer(minLength: 0)
-        }
-    }
-
-    /// Open or live on a phone, the header adds the step count and code
-    /// totals. Tool families stay out, and the fold names the changed files.
-    private var compactHeader: some View {
-        // The title is subheadline-sized while its counts are footnotes.
-        // Align their baselines rather than the tops of two font boxes.
-        FlowLayout(spacing: 6, alignment: .firstTextBaseline) {
-            titleLabel
-
-            if !counters.isEmpty {
-                Text(counters)
-                    .font(.footnote)
-                    .fixedSize()
-            }
-
-            failureLabel
-            lineStats
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var singleLineHeader: some View {
-        HStack(spacing: 6) {
-            // Everything on this line is intrinsically sized, so a long turn
-            // on a narrow screen used to make the header wider than the
-            // transcript itself — and because a vertical ScrollView centers
-            // content it can't fit, that dragged every paragraph below the
-            // fold off the left edge. Fitting is now the layout's job: the
-            // glyphs go first, because a symbol says the least per pixel of
-            // anything here, and the numbers are what the fold is for.
-            ViewThatFits(in: .horizontal) {
-                summary(glyphs: glyphLimit)
-                summary(glyphs: 2)
-                summary(glyphs: 0)
-                compressedSummary
-            }
-            .layoutPriority(1)
-
-            Spacer(minLength: 6)
-
-            trailingDetail
-        }
-    }
-
-    /// At an accessibility type size no arrangement of one line fits — the
-    /// stats alone can take half the width — and squeezing it turns the title
-    /// into "Wo…" and the counters into a lone separator. So it wraps
-    /// instead: the fold is metadata, and metadata is allowed a second line.
-    /// The glyphs sit this one out because they are drawn at a fixed 11pt and
-    /// read as specks beside text this large, and so does the edited-file
-    /// name, which the footer's chips give in full anyway.
-    private var wrappedHeader: some View {
-        FlowLayout(spacing: 6) {
-            // One subview, so the chevron can never be left stranded on a
-            // line of its own below the words it follows.
-            titleLabel
-
-            if !counters.isEmpty {
-                Text(counters)
-                    .font(.footnote)
-                    .fixedSize()
-            }
-
-            if turn.failureCount > 0 {
-                Text("· \(turn.failureCount) failed")
-                    .font(.footnote)
-                    .foregroundStyle(OS1VisualStyle.redInk)
-                    .fixedSize()
-            }
-
-            if !turn.lineStats.isEmpty {
-                LineStatsView(stats: turn.lineStats)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var chevron: some View {
@@ -292,107 +192,53 @@ struct TurnBlockView: View {
             .rotationEffect(.degrees(state.expanded ? 90 : 0))
     }
 
-    /// What the turn did, at a given glyph budget. Rigid by construction —
-    /// `ViewThatFits` picks between these by their ideal width, so a flexible
-    /// child here would report the width of its untruncated text and make
-    /// every candidate look too big.
-    private func summary(glyphs: Int) -> some View {
-        HStack(spacing: 6) {
-            titleLabel
-
-            if glyphs > 0, !turn.families.isEmpty {
-                HStack(spacing: 5) {
-                    ForEach(turn.families.prefix(glyphs), id: \.self) { family in
-                        Image(systemName: family.symbol)
-                            .font(.system(size: 11))
-                    }
+    /// The counts the header used to carry, opening the fold: "5 steps",
+    /// failures in red, and the lines the work moved.
+    @ViewBuilder
+    private var foldSummary: some View {
+        if !turn.foldCounts.isEmpty || turn.failureCount > 0 || !turn.lineStats.isEmpty {
+            FlowLayout(spacing: 6, alignment: .firstTextBaseline) {
+                if !turn.foldCounts.isEmpty {
+                    Text(turn.foldCounts)
+                        .foregroundStyle(OS1VisualStyle.textFaint)
+                        .fixedSize()
                 }
-                .foregroundStyle(OS1VisualStyle.textFaint)
-                .fixedSize()
+                if turn.failureCount > 0 {
+                    Text("\(turn.failureCount) failed")
+                        .foregroundStyle(OS1VisualStyle.redInk)
+                        .fixedSize()
+                }
+                if !turn.lineStats.isEmpty {
+                    LineStatsView(stats: turn.lineStats)
+                }
             }
-
-            Text(counters)
-                .font(.footnote)
-                .fixedSize()
-
-            failureLabel
+            .font(.footnote)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
         }
     }
 
-    /// The last resort, and the only summary with any give in it: a narrow
-    /// window with nothing left to trade away. The counters yield first —
-    /// they are the one piece a reader can do without — and failures hold
-    /// their width to the end, because a "1 failed" cut down to "1 fa…"
-    /// would be worse than not having said it.
-    private var compressedSummary: some View {
-        HStack(spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 5) {
-                Text(title)
-                    .font(.subheadline)
-                    .lineLimit(1)
-                chevron
-            }
-            .layoutPriority(1)
+    private var accessibilityLabel: String { turn.headerTitle }
+}
 
-            Text(counters)
-                .font(.footnote)
-                .lineLimit(1)
-
-            failureLabel
-                .layoutPriority(2)
-        }
+extension WorkTurn {
+    /// A settled turn's duration, as the header shows it.
+    var durationLabel: String? {
+        guard !isLive, let duration else { return nil }
+        return TranscriptFormat.duration(duration)
     }
 
-    @ViewBuilder
-    private var failureLabel: some View {
-        if turn.failureCount > 0 {
-            Text("· \(turn.failureCount) failed")
-                .font(.footnote)
-                .foregroundStyle(OS1VisualStyle.redInk)
-                .fixedSize()
-        }
+    /// "Worked for 12s", or "Working" while the turn runs.
+    var headerTitle: String {
+        if isLive { return "Working" }
+        return durationLabel.map { "Worked for \($0)" } ?? "Worked"
     }
 
-    /// "· 5 steps". The duration already sits in the title.
-    private var counters: String {
-        turn.toolCount > 0
-            ? "· \(turn.toolCount) step\(turn.toolCount == 1 ? "" : "s")"
-            : ""
-    }
-
-    /// While a shut fold is live, what it is doing right now, beside its
-    /// line stats. The step truncates; the counts never do.
-    @ViewBuilder
-    private var trailingDetail: some View {
-        if !state.expanded, turn.isLive, turn.hasNarration, let preview = turn.livePreview {
-            HStack(spacing: 6) {
-                Text(preview)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(OS1VisualStyle.textFaint)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                lineStats
-            }
-        } else {
-            lineStats
-        }
-    }
-
-    @ViewBuilder
-    private var lineStats: some View {
-        if !turn.lineStats.isEmpty {
-            LineStatsView(stats: turn.lineStats)
-                .layoutPriority(1)
-        }
-    }
-
-    private var accessibilityLabel: String {
-        var parts = [title]
-        if turn.toolCount > 0 {
-            parts.append("\(turn.toolCount) step\(turn.toolCount == 1 ? "" : "s")")
-        }
-        if turn.failureCount > 0 { parts.append("\(turn.failureCount) failed") }
-        return parts.joined(separator: ", ")
+    /// "5 steps", or "2 messages" for a fold with narration and no tools.
+    var foldCounts: String {
+        if toolCount > 0 { return "\(toolCount) step\(toolCount == 1 ? "" : "s")" }
+        let messages = items.filter { if case .message = $0 { true } else { false } }.count
+        return messages > 0 ? "\(messages) message\(messages == 1 ? "" : "s")" : ""
     }
 }
 

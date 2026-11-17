@@ -35,7 +35,7 @@ enum ThinkingMessages: String {
                 }
             case .reviewLoop(let loop):
                 latestId = latestReasoningId(in: loop.blocks) ?? latestId
-            case .tool, .footer, .walkthrough, .note:
+            case .tool, .footer, .walkthrough, .note, .progress:
                 break
             }
         }
@@ -70,7 +70,7 @@ enum ThinkingMessages: String {
             case .reviewLoop(var loop):
                 loop.blocks = filter(loop.blocks, latestId: latestId)
                 return .reviewLoop(loop)
-            case .message, .tool, .footer, .walkthrough, .note:
+            case .message, .tool, .footer, .walkthrough, .note, .progress:
                 return block
             }
         }

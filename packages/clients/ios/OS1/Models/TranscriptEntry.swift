@@ -103,6 +103,9 @@ struct TranscriptEntry: Identifiable, Decodable, Equatable, Sendable {
     /// `content` (protocol pasted-text.ts); each renders as a card under the
     /// bubble rather than as pages of log inside it.
     var pastedTexts: [String]?
+    /// Files attached to the message. Kept as raw JSON: nothing here renders
+    /// them yet, but a message that carries one is never a compact status.
+    var files: JSONValue?
     /// Set when this entry is an operational notice rather than a message —
     /// a runner line, a recap, a worker's report, a heads-up from another
     /// session. The server classifies it (protocol notices.ts) and strips the
