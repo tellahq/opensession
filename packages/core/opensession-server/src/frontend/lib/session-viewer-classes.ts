@@ -210,8 +210,8 @@ export const VIEWER_REVIEW_MAIN =
 export const VIEWER_MESSAGES_REGION = "relative flex min-h-0 flex-1 flex-col";
 
 /**
- * The desktop transcript's soft top edge: a 24px page-colour wash under the
- * bar or tab strip, so rows dissolve into the chrome instead of being cut.
+ * The desktop transcript's soft top edge: a 24px eased page-colour wash
+ * (styles/scrim.css) under the bar or tab strip, so rows dissolve into the chrome instead of being cut.
  *
  * Only while the transcript is scrolled (`data-scrolled`, from
  * hooks/useScrollEdge.ts). At rest the first rows sit in clear space below the
@@ -225,7 +225,7 @@ export const VIEWER_MESSAGES_REGION = "relative flex min-h-0 flex-1 flex-col";
  */
 export const VIEWER_TOP_FADE =
   "pointer-events-none absolute left-0 right-[14px] top-0 z-[1] h-6 " +
-  "bg-linear-to-b from-bg via-bg/60 via-35% to-transparent " +
+  "scrim-to-t " +
   "opacity-0 transition-opacity duration-150 motion-reduce:transition-none " +
   "data-[scrolled]:opacity-100 phone:hidden";
 
@@ -292,8 +292,8 @@ export const VIEWER_MESSAGES =
  * smaller than that margin, so the box rises a few px above where the
  * transcript ends and the last row tucks slightly under it.
  *
- * A page-colour fade (`::before`) rises 32px above the box and reaches
- * solid at the composer's edge, so rows dissolve into the composer instead of
+ * An eased page-colour fade (`::before`, styles/scrim.css) rises 32px above
+ * the box and reaches solid at the composer's edge, so rows dissolve into the composer instead of
  * being cut at it. Below that edge the box itself is solid page colour, so
  * nothing shows around the composer's rounded corners. The fade sits at
  * `z-[-1]` inside the box's own stacking context: behind the composer and the
@@ -310,7 +310,7 @@ export const VIEWER_INPUT =
   "[background:linear-gradient(var(--bg),var(--bg))_left_bottom/calc(100%_-_14px)_calc(100%_-_var(--session-under))_no-repeat] " +
   "before:pointer-events-none before:absolute before:left-0 before:right-[14px] before:z-[-1] before:content-[''] " +
   "before:-top-8 before:h-[calc(32px_+_var(--session-under))] " +
-  "before:bg-linear-to-b before:from-transparent before:via-bg/70 before:via-50% before:to-bg " +
+  "before:scrim-to-b " +
   // Phone: clear the home indicator rather than jamming the composer against
   // the very bottom edge. That gap is also all the room the composer's shadow
   // gets in mobile Safari, where there is no safe-area inset.

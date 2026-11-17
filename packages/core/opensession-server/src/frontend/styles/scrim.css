@@ -1,0 +1,49 @@
+/*
+ * Eased page-colour fades for content that scrolls under fixed chrome.
+ *
+ * A two-stop linear gradient reads as a band: its opacity climbs at a constant
+ * rate, so the point where it starts is visible as an edge of its own, worst
+ * where dark chrome fades over a bright image. These follow a scrim curve
+ * instead (Andreas Larsen's easing gradients): almost nothing across the outer
+ * half, then a steep rise into solid page colour at the chrome's edge.
+ *
+ * `scrim-to-b` is solid at the bottom (above a composer); `scrim-to-t` is
+ * solid at the top (under a bar). Both resolve `--bg` on the element itself.
+ */
+@utility scrim-to-b {
+  background-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--bg) 0.2%, transparent) 1.8%,
+    color-mix(in srgb, var(--bg) 0.8%, transparent) 4.8%,
+    color-mix(in srgb, var(--bg) 2.1%, transparent) 9%,
+    color-mix(in srgb, var(--bg) 4.2%, transparent) 13.9%,
+    color-mix(in srgb, var(--bg) 7.5%, transparent) 19.8%,
+    color-mix(in srgb, var(--bg) 12.6%, transparent) 27%,
+    color-mix(in srgb, var(--bg) 19.4%, transparent) 35%,
+    color-mix(in srgb, var(--bg) 27.8%, transparent) 43.5%,
+    color-mix(in srgb, var(--bg) 38.2%, transparent) 53%,
+    color-mix(in srgb, var(--bg) 54.1%, transparent) 66%,
+    color-mix(in srgb, var(--bg) 73.8%, transparent) 81%,
+    var(--bg) 100%
+  );
+}
+
+@utility scrim-to-t {
+  background-image: linear-gradient(
+    to top,
+    transparent 0%,
+    color-mix(in srgb, var(--bg) 0.2%, transparent) 1.8%,
+    color-mix(in srgb, var(--bg) 0.8%, transparent) 4.8%,
+    color-mix(in srgb, var(--bg) 2.1%, transparent) 9%,
+    color-mix(in srgb, var(--bg) 4.2%, transparent) 13.9%,
+    color-mix(in srgb, var(--bg) 7.5%, transparent) 19.8%,
+    color-mix(in srgb, var(--bg) 12.6%, transparent) 27%,
+    color-mix(in srgb, var(--bg) 19.4%, transparent) 35%,
+    color-mix(in srgb, var(--bg) 27.8%, transparent) 43.5%,
+    color-mix(in srgb, var(--bg) 38.2%, transparent) 53%,
+    color-mix(in srgb, var(--bg) 54.1%, transparent) 66%,
+    color-mix(in srgb, var(--bg) 73.8%, transparent) 81%,
+    var(--bg) 100%
+  );
+}

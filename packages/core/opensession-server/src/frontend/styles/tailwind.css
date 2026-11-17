@@ -16,6 +16,7 @@
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" source(none);
 @import "./smooth-shadow.css";
+@import "./scrim.css";
 
 /* Only scan the frontend tree for class names (not agents/server/prompts). */
 @source "../";
