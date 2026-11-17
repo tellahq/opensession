@@ -172,7 +172,7 @@ export const PANEL_TABS =
 
 /** One tab: an icon, a word, and whatever that destination wants to report. */
 export const PANEL_TAB =
-  "focus-ring flex min-w-0 shrink-0 items-center gap-1 rounded-control px-2 py-1 " +
+  "focus-ring flex min-w-0 shrink-0 items-center gap-1 rounded-full px-2 py-1 " +
   "text-label text-dim transition-colors hover:bg-hover hover:text-fg " +
   "@max-[380px]:justify-center @max-[380px]:px-1";
 
@@ -181,7 +181,7 @@ export const PANEL_TAB_ACTIVE = "bg-hover text-fg";
 
 /** The tab's own select button: everything but the close ×. */
 export const PANEL_TAB_SELECT =
-  "focus-ring flex min-w-0 max-w-[160px] items-center gap-1.5 rounded-sm";
+  "focus-ring flex min-w-0 max-w-[160px] items-center gap-1.5 rounded-full";
 
 /**
  * A tab's ×. It shows on hover, like the main strip's, and keeps its slot
@@ -192,7 +192,7 @@ export const PANEL_TAB_SELECT =
  * composer restyled the whole document.
  */
 export const PANEL_TAB_CLOSE =
-  "focus-ring -mr-1 grid size-5 shrink-0 place-items-center rounded-sm text-faint " +
+  "focus-ring -mr-1 grid size-5 shrink-0 place-items-center rounded-full text-faint " +
   "opacity-0 transition-opacity hover:bg-hover hover:text-fg focus-visible:opacity-100 " +
   "group-hover/ptab:opacity-100 [@media(hover:none)]:opacity-100";
 
