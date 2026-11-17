@@ -112,7 +112,7 @@ export function CheckBackBlock({
  * it folded; that is the quiet these loops exist for. Once toggled by hand,
  * the person's choice wins over a later preference change.
  */
-function useLoopOpen(
+export function useLoopOpen(
   forceOpen: boolean,
   onOpenChange?: (open: boolean) => void,
 ): [boolean, () => void] {

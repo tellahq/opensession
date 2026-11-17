@@ -1,32 +1,43 @@
 import React from "react";
-import { Collapsible, collapsiblePanelClasses } from "../ui/collapsible";
 import { cn } from "../ui/cn";
-import { IconCheck, IconClock, IconChevronDown } from "./icons";
+import { IconCheck, IconClock, IconChevronRight } from "./icons";
+import { useLoopOpen } from "./ReviewLoopBlock";
 import {
   parseProgressUpdate,
   type ProgressGroup,
+  type ProgressUpdate,
 } from "../lib/progress-updates";
 
-/** Agent-reported status, not an inferred verdict from a turn ending. */
-export function ProgressStatusRow({ group }: { group: ProgressGroup }) {
+/** Agent-reported status, not an inferred verdict from a turn ending. One row
+ * per task: it shows the latest update and, opened, the earlier updates and
+ * the check-back work behind them. Styled like the work folds around it: the
+ * status, then a trailing chevron, then a spinner while a check-back runs. */
+export function ProgressStatusRow({
+  group,
+  live = false,
+  defaultOpen = false,
+  onOpenChange,
+  children,
+}: {
+  group: ProgressGroup;
+  /** A check-back folded under this row is still running. */
+  live?: boolean;
+  defaultOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** The check-back work this row reports on. */
+  children?: React.ReactNode;
+}) {
   const { latest, entries } = group;
+  const [open, toggle] = useLoopOpen(defaultOpen, onOpenChange);
   const history = entries.slice(0, -1);
+  const work = React.Children.toArray(children).some(Boolean);
   const label = `${latest.topic}: ${latest.text}`;
   const status = (
     <span className="flex min-w-0 items-start gap-2">
-      <span
-        className={cn(
-          "flex h-5 shrink-0 items-center",
-          latest.state === "done" ? "text-green" : "text-dim",
-        )}
-        aria-hidden="true"
-      >
-        {latest.state === "done" ? (
-          <IconCheck size={20} />
-        ) : (
-          <IconClock size={20} />
-        )}
-      </span>
+      <StatusIcon
+        update={latest}
+        className={latest.state === "done" ? "text-green" : "text-dim"}
+      />
       <span className="min-w-0 break-words">
         <span className="font-medium text-fg">{latest.topic}</span>
         <span className="text-dim">: {latest.text}</span>
@@ -34,54 +45,93 @@ export function ProgressStatusRow({ group }: { group: ProgressGroup }) {
     </span>
   );
   const rowClasses =
-    "-mx-2 box-border flex min-h-8 w-[calc(100%+16px)] items-center justify-between gap-2 rounded-control border-0 bg-transparent px-2 py-1 text-left font-sans text-label leading-5 phone:min-h-11";
+    "-mx-2 flex w-fit max-w-[calc(100%+16px)] min-w-0 items-center gap-1.5 rounded-control border-0 bg-transparent px-2 py-1 text-left font-sans text-label leading-5 phone:min-h-11";
   return (
-    <Collapsible.Root
+    <section
       className="mx-auto mb-3 w-full max-w-[var(--session-col)] text-label leading-5"
       data-progress-topic={latest.topic}
     >
       <span className="sr-only" role="status" aria-atomic="true">
         {label}
       </span>
-      {history.length ? (
-        <Collapsible.Trigger
-          className={cn(rowClasses, "focus-ring group hover:bg-hover")}
-          aria-label={`${label}. Show update history`}
+      {history.length || work ? (
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-label={`${label}. Show ${work ? "work and earlier updates" : "update history"}`}
+          onClick={toggle}
+          className={cn(rowClasses, "focus-ring group cursor-pointer")}
         >
           {status}
-          <IconChevronDown
-            size={20}
-            className="shrink-0 text-faint transition-transform group-data-[panel-open]:rotate-180 motion-reduce:transition-none"
-          />
-        </Collapsible.Trigger>
+          <span
+            aria-hidden="true"
+            className={cn(
+              "grid size-5 flex-none place-items-center text-faint transition-transform duration-150 group-hover:text-dim motion-reduce:transition-none",
+              open && "rotate-90",
+            )}
+          >
+            <IconChevronRight size={20} className="block" />
+          </span>
+          {live && (
+            <span
+              className="ml-1 size-[11px] flex-none animate-spin rounded-full border border-b-line-strong border-l-line-strong border-r-line-strong border-t-dim"
+              aria-label="Check-back in progress"
+            />
+          )}
+        </button>
       ) : (
         <div className={rowClasses}>{status}</div>
       )}
-      <Collapsible.Panel className={collapsiblePanelClasses}>
-        <ol
-          className="m-0 list-none space-y-2 py-2 pl-6 pr-2 text-dim"
-          aria-label={`${latest.topic} update history`}
-        >
-          {history.map((entry) => {
-            const update = parseProgressUpdate(entry)!;
-            return (
-              <li key={entry.id} className="flex items-start gap-2">
-                <span
-                  aria-hidden="true"
-                  className="flex h-5 shrink-0 items-center"
-                >
-                  {update.state === "done" ? (
-                    <IconCheck size={20} />
-                  ) : (
-                    <IconClock size={20} />
-                  )}
-                </span>
-                <span className="min-w-0 break-words">{update.text}</span>
-              </li>
-            );
-          })}
-        </ol>
-      </Collapsible.Panel>
-    </Collapsible.Root>
+      {open && (
+        <div className="mt-0.5 pl-2 [&>*:last-child]:mb-0">
+          {history.length > 0 && (
+            <ol
+              className="m-0 mb-2 list-none space-y-2 py-1 pl-1 pr-2 text-dim"
+              aria-label="Earlier updates"
+            >
+              {history.map((entry) => {
+                const update = parseProgressUpdate(entry)!;
+                // Same topic reads as a step of the latest; a different one
+                // says what that step was about.
+                const sameTopic =
+                  update.topic.toLowerCase() === latest.topic.toLowerCase();
+                return (
+                  <li key={entry.id} className="flex items-start gap-2">
+                    <StatusIcon update={update} />
+                    <span className="min-w-0 break-words">
+                      {sameTopic
+                        ? update.text
+                        : `${update.topic}: ${update.text}`}
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+          {children}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function StatusIcon({
+  update,
+  className,
+}: {
+  update: ProgressUpdate;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn("flex h-5 shrink-0 items-center", className)}
+      aria-hidden="true"
+    >
+      {update.state === "done" ? (
+        <IconCheck size={20} />
+      ) : (
+        <IconClock size={20} />
+      )}
+    </span>
   );
 }

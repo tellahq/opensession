@@ -51,9 +51,12 @@ export function parseProgressUpdate(
   };
 }
 
-/** First loaded update owns the row; later ones replace its label, not its
- * history. Human messages and team notes start a new scope. The full outline
- * keeps unloaded human turns from accidentally joining two different tasks. */
+/** One row per task: every update between two human messages or team notes
+ * joins it, whatever its topic, so "CI: Running" then "Deployment: Running"
+ * reads as one row that moved on rather than a stale row and a new one. The
+ * latest loaded update owns the row, so it sits with the newest work; earlier
+ * ones become its history. The full outline keeps unloaded human turns from
+ * accidentally joining two different tasks. */
 export function collectProgressUpdates(
   entries: TranscriptEntry[],
   index: TranscriptIndexEntry[] = [],
@@ -67,7 +70,8 @@ export function collectProgressUpdates(
   }
   // Most transcripts have no opt-in statuses. Do not walk their full outline.
   if (!updates.size) return projection;
-  const active = new Map<string, ProgressGroup>();
+  const groups: ProgressGroup[] = [];
+  let active: ProgressGroup | null = null;
   const boundaries = index.filter(
     (row) => row.role === "user" || row.role === "review_handoff",
   );
@@ -106,11 +110,11 @@ export function collectProgressUpdates(
       boundary < boundaries.length &&
       boundaries[boundary]!.seq <= (entry.seq ?? Infinity)
     ) {
-      active.clear();
+      active = null;
       boundary++;
     }
     while (note < notes.length && notes[note]! <= Date.parse(entry.timestamp)) {
-      active.clear();
+      active = null;
       note++;
     }
     const classified = entry.type === "user" ? classifyEntry(entry) : entry;
@@ -119,20 +123,21 @@ export function collectProgressUpdates(
       !classified.turnBoundary &&
       (!classified.notice || classified.notice.kind === "review-handoff")
     )
-      active.clear();
+      active = null;
     const update = finals.has(entry.id) ? updates.get(entry.id) : null;
     if (!update) continue;
-    const key = update.topic.toLowerCase();
-    const existing = active.get(key);
-    if (existing) {
-      existing.latest = update;
-      existing.entries.push(entry);
-      projection.set(entry.id, null);
+    if (active) {
+      active.latest = update;
+      active.entries.push(entry);
     } else {
-      const group = { latest: update, entries: [entry] };
-      active.set(key, group);
-      projection.set(entry.id, group);
+      active = { latest: update, entries: [entry] };
+      groups.push(active);
     }
+  }
+  for (const group of groups) {
+    const owner = group.entries.at(-1)!;
+    for (const entry of group.entries)
+      projection.set(entry.id, entry === owner ? group : null);
   }
   return projection;
 }
