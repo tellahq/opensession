@@ -16,6 +16,8 @@ import {
   subscribeKeptFrames,
   type KeptFrame,
 } from "../lib/kept-frames";
+import { addressHost } from "../lib/preview-url";
+import { WS_SUMMARY_FRAME_HOST } from "../lib/workspace-summary-classes";
 import { useFrameFocus } from "../hooks/useFrameFocus";
 import { useFrameLocation } from "../hooks/useFrameLocation";
 import { BROWSER_FRAME, BrowserLoading } from "./BrowserPane";
@@ -73,6 +75,7 @@ function KeptFrameBox({
   panel: boolean;
 }) {
   const boxRef = useRef<HTMLDivElement>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const { slot, key } = frame;
   // A pane's slot wins; the thumbnail only shows a page nobody else is.
@@ -101,10 +104,11 @@ function KeptFrameBox({
   // no size sits under a hidden ancestor, so the frame hides with it.
   useLayoutEffect(() => {
     const box = boxRef.current;
+    const page = pageRef.current;
     const host = hostRef.current;
-    if (!box || !host) return;
+    if (!box || !page || !host) return;
     if (!slot) {
-      if (thumb && thumbReady) return followThumb(box, host, thumb);
+      if (thumb && thumbReady) return followThumb(box, page, host, thumb);
       box.style.display = "none";
       return;
     }
@@ -147,16 +151,24 @@ function KeptFrameBox({
       data-kept-frame={frame.key}
     >
       {frame.loading && !thumb ? <BrowserLoading name={frame.name} /> : null}
-      <iframe
-        key={`${frame.address}#${frame.nonce}`}
-        ref={frameRef}
-        className={BROWSER_FRAME}
-        src={frame.address}
-        title={frame.title}
-        onLoad={() => keptFrameLoaded(key, window.history.length)}
-        allow={frame.allow}
-        sandbox={frame.sandbox}
-      />
+      {/* Scaled down as a thumbnail; the box and its address stay full size. */}
+      <div ref={pageRef} className="h-full w-full">
+        <iframe
+          key={`${frame.address}#${frame.nonce}`}
+          ref={frameRef}
+          className={BROWSER_FRAME}
+          src={frame.address}
+          title={frame.title}
+          onLoad={() => keptFrameLoaded(key, window.history.length)}
+          allow={frame.allow}
+          sandbox={frame.sandbox}
+        />
+      </div>
+      {thumb ? (
+        <span className={WS_SUMMARY_FRAME_HOST}>
+          {addressHost(frame.location ?? frame.address)}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -165,9 +177,10 @@ function KeptFrameBox({
 const THUMB_PAGE_WIDTH = 1280;
 
 /**
- * Lays the frame over a thumbnail tile: the page keeps a full-size layout
- * (the tile's `data-kept-frame-width`, else THUMB_PAGE_WIDTH) and is scaled
- * down to the tile, with the tile's rounded corners, and cut off where a
+ * Lays the frame over a thumbnail tile: the box takes the tile's place, and
+ * the page in it keeps a full-size layout (the tile's
+ * `data-kept-frame-width`, else THUMB_PAGE_WIDTH) scaled down to the tile.
+ * The box has the tile's rounded corners and is and cut off where a
  * scrolling ancestor (the summary card) hides the tile. It also fades with
  * its ancestors, so it comes and goes with the card's own animation.
  *
@@ -177,6 +190,7 @@ const THUMB_PAGE_WIDTH = 1280;
  */
 function followThumb(
   box: HTMLDivElement,
+  page: HTMLDivElement,
   host: HTMLElement,
   tile: HTMLElement,
 ): () => void {
@@ -222,25 +236,29 @@ function followThumb(
     const scale = to.width / pageWidth;
     const inset = [top - to.top, to.right - right, to.bottom - bottom]
       .concat(left - to.left)
-      .map((px) => `${px / scale}px`)
+      .map((px) => `${px}px`)
       .join(" ");
     box.style.display = "block";
     box.style.opacity = String(opacity);
     box.style.left = `${to.left - from.left}px`;
     box.style.top = `${to.top - from.top}px`;
-    box.style.width = `${pageWidth}px`;
-    box.style.height = `${to.height / scale}px`;
-    box.style.transformOrigin = "0 0";
-    box.style.transform = `scale(${scale})`;
-    box.style.clipPath = `inset(${inset} round ${radius / scale}px)`;
+    box.style.width = `${to.width}px`;
+    box.style.height = `${to.height}px`;
+    box.style.clipPath = `inset(${inset} round ${radius}px)`;
+    page.style.width = `${pageWidth}px`;
+    page.style.height = `${to.height / scale}px`;
+    page.style.transformOrigin = "0 0";
+    page.style.transform = `scale(${scale})`;
   };
   place();
   return () => {
     cancelAnimationFrame(raf);
     box.style.display = "none";
     box.style.opacity = "";
-    box.style.transform = "";
-    box.style.transformOrigin = "";
     box.style.clipPath = "";
+    page.style.width = "";
+    page.style.height = "";
+    page.style.transform = "";
+    page.style.transformOrigin = "";
   };
 }
