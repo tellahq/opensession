@@ -238,8 +238,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   the body column widths and scroll with the rows when the table overflows.
 
   ```
-- **Workspace details**: tapping the session title opens a native overview
-  sheet. It leads with a large title and state pills (run or PR state, +/−
+- **Workspace details**: tapping the session title pushes a native overview
+  page onto the conversation's stack (back chevron or edge swipe returns to
+  the chat; the sidebar row menu shows the same page as a sheet). It leads with a large title and state pills (run or PR state, +/−
   lines that open Changes), then a merge card (headline such as "Ready to
   merge", reviewers and the checks rollup, and a full-width "Squash and merge"
   button behind a confirmation; long-press for the other methods), a
@@ -267,11 +268,10 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   back, and nothing is left open to close later. Portals opens and controls
   exposed services. Terminal creates a new shell in the session's worktree and
   closes it when the panel disconnects. A `SessionPanel` names the kind;
-  `SessionPanelView` draws it, so a new kind lands in both hosts (the session's
-  stack and the workspace sheet's) at once. Pushed through the `openPanel`
+  `SessionPanelView` draws it, so a new kind lands in every host at once. Pushed through the `openPanel`
   environment action from the transcript and the overflow menu, and directly
-  by the workspace sheet's own rows — which push within the sheet, so that page
-  stays where it was.
+  by the overview page's own rows, which push one level deeper so the chevron
+  comes back to the overview.
 - **Agent runs**: the Agents panel reads every workflow a session started and
   updates each run immediately from `workflow_update` socket frames. A 3-second
   poll remains while a run is live for compatibility with older servers.
@@ -288,7 +288,7 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   should know note offers Learn more, Ask about this (quotes it under the
   draft), I knew this and Turn off (press twice); Preferences has the toggle.
 - **Changes** — every file the worktree has touched, and the diff of any one of
-  them, reached from the overflow menu or the workspace sheet (whose file rows
+  them, reached from the overflow menu or the overview page (whose file rows
   open that file directly, and whose "Show all N files" replaces what used to
   be a note pointing at the browser). One `GET /api/sessions/:id/diff` answers
   the file list and the whole worktree's patch together, so a file's diff is a
@@ -313,7 +313,7 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   reached five ways: the "Open" chip on a `write_asset` tool row (straight to
   that file), the chips under the turn's answer, the name of the file in the
   answer's own prose (`AssetLinks`, the same rewrite as `FileLinks` on its own
-  scheme), the workspace sheet's assets section, and the overflow menu.
+  scheme), the overview page's Files and Demos, and the overflow menu.
   HTML and media render in a `WKWebView` pointed at the raw route — the
   session token rides in as a cookie scoped to that session's assets path, so
   relative references between assets resolve — while markdown and code render
@@ -377,7 +377,7 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   in-app browser. Without the app installed they fall back to the in-app
   browser (`GitHubAppLinks`).
 - **PR panel** — sessions with a pull request expose a row in the title-opened
-  workspace sheet and the overflow menu; it opens a panel with state, review
+  overview page and the overflow menu; it opens a panel with state, review
   decision, conflicts, every check with its status, and reviewers, via
   `GET /api/sessions/:id/pr`. While the PR is open it also carries the web
   panel's actions, on the same routes: **Review** (approve / request changes /

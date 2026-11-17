@@ -35,6 +35,9 @@ enum SessionPanel: Hashable, Identifiable {
     /// way to ask for anyone else's — so this is a detail of the conversation
     /// in exactly the way the others are.
     case agents(sessionId: String)
+    /// The chat's overview page, opened from its title: a page one level
+    /// deeper than the conversation, like a messaging app's contact page.
+    case overview(sessionId: String)
 
     var id: String {
         switch self {
@@ -45,13 +48,15 @@ enum SessionPanel: Hashable, Identifiable {
         case .portals(let sessionId): "portals-\(sessionId)"
         case .terminal(let sessionId): "terminal-\(sessionId)"
         case .agents(let sessionId): "agents-\(sessionId)"
+        case .overview(let sessionId): "overview-\(sessionId)"
         }
     }
 
     var sessionId: String {
         switch self {
         case .assets(let sessionId), .review(let sessionId), .portals(let sessionId),
-             .terminal(let sessionId), .agents(let sessionId): sessionId
+             .terminal(let sessionId), .agents(let sessionId),
+             .overview(let sessionId): sessionId
         case .asset(let sessionId, _): sessionId
         case .changes(let sessionId, _): sessionId
         }
@@ -99,9 +104,9 @@ struct OpenPanelAction: Equatable {
 #if os(iOS)
 /// What a pushed panel draws.
 ///
-/// Both hosts render through here — the session's own stack and the workspace
-/// sheet's — so a new kind lands in both at once instead of in whichever one
-/// its author happened to be looking at.
+/// Every host renders through here, the session's own stack and the overview
+/// page's, so a new kind lands in all of them at once instead of in whichever
+/// one its author happened to be looking at.
 struct SessionPanelView: View {
     let panel: SessionPanel
     /// The session's live view model, for the panels that need more than an
@@ -130,6 +135,8 @@ struct SessionPanelView: View {
             TerminalView(sessionId: sessionId)
         case .agents:
             WorkflowRunsView(viewModel: viewModel)
+        case .overview:
+            WorktreeOverviewPage(viewModel: viewModel, sessions: [])
         }
     }
 }

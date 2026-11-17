@@ -6,18 +6,23 @@ import AVKit
 import ImageIO
 import UIKit
 
-/// Native counterpart of mobile web's title-opened workspace info page.
+/// The chat's overview page, opened from its title. Pushed onto the stack
+/// the conversation is on, like a messaging app's contact page, so the
+/// chevron and the edge swipe come back to the chat. A host that presents it
+/// on its own (the sidebar row's menu) wraps it in a stack and asks for a
+/// close button.
 struct WorktreeInfoView: View {
     @Bindable var viewModel: SessionViewModel
     let sessions: [Session]
     let catalog: ModelCatalog?
+    /// Draw a close button: set when this is a sheet rather than a push.
+    var showsClose = false
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
-    /// A detail of this session opened one level deeper INSIDE this sheet —
-    /// its assets, one of those files, its pull request. Pushed on the sheet's
-    /// own stack rather than the session's: this page is where you are, so
-    /// the chevron comes back here and the sheet never has to be dismissed.
+    /// A detail of this session opened one level deeper than this page: its
+    /// assets, one of those files, its pull request. Pushed on the same
+    /// stack, so the chevron comes back here rather than to the chat.
     @State private var panel: SessionPanel?
     @State private var gitStatus: OS1API.GitStatus?
     @State private var diff: OS1API.SessionDiff?
@@ -49,7 +54,7 @@ struct WorktreeInfoView: View {
     @State private var switchError: String?
     /// A switch lands before the 5s sessions poll carries it back, so the
     /// answer is held here and read through `currentSession` until the polled
-    /// row agrees. Without it the sheet keeps showing the repo just left.
+    /// row agrees. Without it the page keeps showing the repo just left.
     @State private var switchedRepo: OS1API.SwitchedRepo?
     /// Account pools as this device last fetched them, for the Speed row.
     @State private var accountPools = SettingsAPI.cachedProviderAccountPools()
@@ -59,174 +64,174 @@ struct WorktreeInfoView: View {
     @State private var mergeError: String?
 
     var body: some View {
-        NavigationStack {
-            ScrollViewReader { proxy in
-            ScrollView {
-                // Ordered by what the sheet is opened to find out: what this
-                // workspace is doing and what came out of it. The worktree's
-                // own metadata — branch, path, mode — changes once and is
-                // reference material, so it sits below the answer rather than
-                // filling the first screen with it.
-                // The top answers "can this ship?": the title and its state,
-                // the pull request with its one action, where it is deployed,
-                // and what it looks like. Everything else is reference below.
-                LazyVStack(alignment: .leading, spacing: 22) {
-                    hero
-                    mergeSection
-                    deploymentsSection
-                    demosSection
-                    overviewSection
-                    reviewSection
-                        .id("review")
-                    pullRequestSection
-                    workSection
-                    assetsSection
-                    worktreeSection
-                    sandboxSection
-                        .id("sandbox")
-                    runtimeSection
-                        .id("runtime")
-                    runnerSection
-                    runSettingsSection
-                        .id("run-settings")
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 28)
+        ScrollViewReader { proxy in
+        ScrollView {
+            // Ordered by what the page is opened to find out: what this
+            // workspace is doing and what came out of it. The worktree's
+            // own metadata — branch, path, mode — changes once and is
+            // reference material, so it sits below the answer rather than
+            // filling the first screen with it.
+            // The top answers "can this ship?": the title and its state,
+            // the pull request with its one action, where it is deployed,
+            // and what it looks like. Everything else is reference below.
+            LazyVStack(alignment: .leading, spacing: 22) {
+                hero
+                mergeSection
+                deploymentsSection
+                demosSection
+                overviewSection
+                reviewSection
+                    .id("review")
+                pullRequestSection
+                workSection
+                assetsSection
+                worktreeSection
+                sandboxSection
+                    .id("sandbox")
+                runtimeSection
+                    .id("runtime")
+                runnerSection
+                runSettingsSection
+                    .id("run-settings")
             }
-            #if DEBUG
-            // `OS1_SCROLL_TO=review|sandbox|runtime|run-settings` brings a section below the fold
-            // into the capture tool's screenshot once the sheet has loaded.
-            .onChange(of: scrollToForCapture) { _, target in
-                guard let target else { return }
-                withAnimation(nil) { proxy.scrollTo(target, anchor: .top) }
-            }
-            #endif
-            }
-            .background(OS1VisualStyle.background)
-            // The page carries its own large title, so the bar is only its
-            // floating buttons. The title still names the back button of
-            // anything pushed from here.
-            .navigationTitle("Overview")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 28)
+        }
+        #if DEBUG
+        // `OS1_SCROLL_TO=review|sandbox|runtime|run-settings` brings a section below the fold
+        // into the capture tool's screenshot once the page has loaded.
+        .onChange(of: scrollToForCapture) { _, target in
+            guard let target else { return }
+            withAnimation(nil) { proxy.scrollTo(target, anchor: .top) }
+        }
+        #endif
+        }
+        .background(OS1VisualStyle.background)
+        // The page carries its own large title, so the bar is only its
+        // floating buttons. The title still names the back button of
+        // anything pushed from here.
+        .navigationTitle("Overview")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }
+            if showsClose {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
-                        Image(systemName: "chevron.down")
+                        Image(systemName: "xmark")
                     }
                     .accessibilityLabel("Close")
                 }
-                if let url = viewModel.prDetails?.url.flatMap(URL.init(string:)) {
-                    ToolbarItem(placement: .primaryAction) {
-                        ShareLink(item: url) {
-                            Image(systemName: "square.and.arrow.up")
-                        }
-                        .accessibilityLabel("Share pull request")
+            }
+            if let url = viewModel.prDetails?.url.flatMap(URL.init(string:)) {
+                ToolbarItem(placement: .primaryAction) {
+                    ShareLink(item: url) {
+                        Image(systemName: "square.and.arrow.up")
                     }
+                    .accessibilityLabel("Share pull request")
                 }
             }
-            .confirmationDialog(
-                mergeConfirmationTitle,
-                isPresented: Binding(
-                    get: { pendingMerge != nil },
-                    set: { if !$0 { pendingMerge = nil } }
-                ),
-                titleVisibility: .visible
-            ) {
-                Button(Self.mergeButtonLabel(pendingMerge ?? "squash")) {
-                    merge(method: pendingMerge ?? "squash")
-                }
-                Button("Cancel", role: .cancel) { pendingMerge = nil }
-            } message: {
-                Text(mergeConfirmationMessage)
+        }
+        .confirmationDialog(
+            mergeConfirmationTitle,
+            isPresented: Binding(
+                get: { pendingMerge != nil },
+                set: { if !$0 { pendingMerge = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(Self.mergeButtonLabel(pendingMerge ?? "squash")) {
+                merge(method: pendingMerge ?? "squash")
             }
-            .alert(
-                "Couldn’t merge pull request",
-                isPresented: Binding(
-                    get: { mergeError != nil },
-                    set: { if !$0 { mergeError = nil } }
-                )
-            ) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(mergeError ?? "Please try again.")
+            Button("Cancel", role: .cancel) { pendingMerge = nil }
+        } message: {
+            Text(mergeConfirmationMessage)
+        }
+        .alert(
+            "Couldn’t merge pull request",
+            isPresented: Binding(
+                get: { mergeError != nil },
+                set: { if !$0 { mergeError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(mergeError ?? "Please try again.")
+        }
+        .task(id: loadIdentity) { await load() }
+        .refreshable { await refresh() }
+        .onChange(of: viewModel.isRunning) { wasRunning, isRunning in
+            if wasRunning && !isRunning {
+                // The completed turn may have produced conversation media
+                // and assets as well as worktree changes.
+                Task { await load() }
             }
-            .task(id: loadIdentity) { await load() }
-            .refreshable { await refresh() }
-            .onChange(of: viewModel.isRunning) { wasRunning, isRunning in
-                if wasRunning && !isRunning {
-                    // The completed turn may have produced conversation media
-                    // and assets as well as worktree changes.
-                    Task { await load() }
-                }
+        }
+        .navigationDestination(item: $panel) { panel in
+            SessionPanelView(panel: panel, viewModel: viewModel)
+        }
+        .fullScreenCover(item: $conversationImage) { selection in
+            // Opened from the overview page, so the viewer keeps saying
+            // which workspace the picture belongs to.
+            FullScreenImagePreview(
+                items: conversationImageGallery,
+                index: selection.index,
+                title: workspaceTitle
+            )
+        }
+        .fullScreenCover(item: $conversationVideo) { media in
+            WorkspaceVideoPreview(media: media)
+        }
+        .confirmationDialog(
+            "Recreate this sandbox?",
+            isPresented: $confirmingSandboxRecreate,
+            titleVisibility: .visible
+        ) {
+            Button("Recreate sandbox", role: .destructive) {
+                Task { await performSandboxAction(.recreate) }
             }
-            .navigationDestination(item: $panel) { panel in
-                SessionPanelView(panel: panel, viewModel: viewModel)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Unpushed files that exist only inside this sandbox will be deleted.")
+        }
+        .alert(
+            "Couldn't update sandbox",
+            isPresented: Binding(
+                get: { sandboxError != nil },
+                set: { if !$0 { sandboxError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(sandboxError ?? "Please try again.")
+        }
+        .sandboxMovePrompts(sandboxMove, onMoved: adoptSandboxMove)
+        .confirmationDialog(
+            "Switch repository?",
+            isPresented: Binding(
+                get: { confirmRepoTarget != nil },
+                set: { if !$0 { confirmRepoTarget = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: confirmRepoTarget
+        ) { target in
+            Button("Switch to \(RepoTile.label(for: target))") {
+                Task { await switchRepo(to: target) }
             }
-            .fullScreenCover(item: $conversationImage) { selection in
-                // Opened from the workspace sheet, so the viewer keeps saying
-                // which workspace the picture belongs to.
-                FullScreenImagePreview(
-                    items: conversationImageGallery,
-                    index: selection.index,
-                    title: workspaceTitle
-                )
-            }
-            .fullScreenCover(item: $conversationVideo) { media in
-                WorkspaceVideoPreview(media: media)
-            }
-            .confirmationDialog(
-                "Recreate this sandbox?",
-                isPresented: $confirmingSandboxRecreate,
-                titleVisibility: .visible
-            ) {
-                Button("Recreate sandbox", role: .destructive) {
-                    Task { await performSandboxAction(.recreate) }
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Unpushed files that exist only inside this sandbox will be deleted.")
-            }
-            .alert(
-                "Couldn't update sandbox",
-                isPresented: Binding(
-                    get: { sandboxError != nil },
-                    set: { if !$0 { sandboxError = nil } }
-                )
-            ) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(sandboxError ?? "Please try again.")
-            }
-            .sandboxMovePrompts(sandboxMove, onMoved: adoptSandboxMove)
-            .confirmationDialog(
-                "Switch repository?",
-                isPresented: Binding(
-                    get: { confirmRepoTarget != nil },
-                    set: { if !$0 { confirmRepoTarget = nil } }
-                ),
-                titleVisibility: .visible,
-                presenting: confirmRepoTarget
-            ) { target in
-                Button("Switch to \(RepoTile.label(for: target))") {
-                    Task { await switchRepo(to: target) }
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: { target in
-                Text(repoSwitchWarning(target: target))
-            }
-            .alert(
-                "Couldn't switch repository",
-                isPresented: Binding(
-                    get: { switchError != nil },
-                    set: { if !$0 { switchError = nil } }
-                )
-            ) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(switchError ?? "Please try again.")
-            }
+            Button("Cancel", role: .cancel) {}
+        } message: { target in
+            Text(repoSwitchWarning(target: target))
+        }
+        .alert(
+            "Couldn't switch repository",
+            isPresented: Binding(
+                get: { switchError != nil },
+                set: { if !$0 { switchError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(switchError ?? "Please try again.")
         }
     }
 
@@ -1070,7 +1075,7 @@ struct WorktreeInfoView: View {
     }
 
     /// Both reviewers of this change in one section, above the pull request
-    /// itself: whether anybody has looked at this is the question the sheet is
+    /// itself: whether anybody has looked at this is the question the page is
     /// opened with, and the PR's own details are what you read afterwards.
     private var reviewSection: some View {
         InfoSection(title: "Review") {
@@ -1082,7 +1087,7 @@ struct WorktreeInfoView: View {
                 onOpenPr: { panel = .review(sessionId: currentSession.id) },
                 onOpenRun: { id in
                     // The run is a session of its own, so it opens where every
-                    // other session link does: the list behind this sheet.
+                    // other session link does: the list behind this page.
                     guard let url = SessionLinks.url(for: id) else { return }
                     dismiss()
                     openURL(url)
@@ -1266,7 +1271,7 @@ struct WorktreeInfoView: View {
                 }
             }
         } else if loading {
-            // The overview is the slowest thing on the sheet (it reads every
+            // The overview is the slowest thing on the page (it reads every
             // session's transcript) and now the topmost, so it holds its place
             // instead of shoving the whole page down when it lands.
             InfoSection(title: "Overview") {
@@ -1909,7 +1914,7 @@ struct WorktreeInfoView: View {
     private var currentSession: Session {
         var session = sessions.first(where: { $0.id == viewModel.session.id }) ?? viewModel.session
         // Carry a switch that the sessions poll hasn't returned yet. Every
-        // part of this sheet reads the session (the hero tile, the branch and
+        // part of this page reads the session (the hero tile, the branch and
         // path rows, the git status keyed on `loadIdentity`), so the whole
         // page moves to the new worktree at once rather than in pieces.
         if let switchedRepo, session.repo != switchedRepo.repo {
@@ -1952,6 +1957,23 @@ struct WorktreeInfoView: View {
 
 }
 
+/// The overview as a pushed page. The conversation hands over its live view
+/// model; the model list the run settings pick from is fetched here, once.
+struct WorktreeOverviewPage: View {
+    let viewModel: SessionViewModel
+    let sessions: [Session]
+    @State private var catalog: ModelCatalog?
+
+    var body: some View {
+        WorktreeInfoView(viewModel: viewModel, sessions: sessions, catalog: catalog)
+            .task(id: viewModel.session.workspaceId) {
+                catalog = try? await OS1API.models(
+                    workspaceId: viewModel.session.workspaceId
+                )
+            }
+    }
+}
+
 /// Opens workspace details directly from a list-row context menu while still
 /// giving its model controls the live session socket they use in SessionView.
 struct WorktreeInfoSheet: View {
@@ -1974,7 +1996,14 @@ struct WorktreeInfoSheet: View {
             workspace.sessions.contains { $0.id == viewModel.session.id }
         } ?? fallbackWorkspace
 
-        WorktreeInfoView(viewModel: viewModel, sessions: workspace.sessions, catalog: catalog)
+        NavigationStack {
+            WorktreeInfoView(
+                viewModel: viewModel,
+                sessions: workspace.sessions,
+                catalog: catalog,
+                showsClose: true
+            )
+        }
             .task {
                 viewModel.start()
                 if !AppLifecycle.isActive { viewModel.appDidEnterBackground() }
@@ -2098,7 +2127,7 @@ private struct WorkspaceMediaItem: Identifiable {
     }
 }
 
-/// A glanceable row of pictures and recordings in the workspace sheet. This
+/// A glanceable row of pictures and recordings on the overview page. This
 /// follows native canvas grammar rather than copying the browser's responsive
 /// arithmetic: stable touch-sized cards, view-aligned horizontal scrolling,
 /// and a clipped next card that leaves the continuation discoverable.
