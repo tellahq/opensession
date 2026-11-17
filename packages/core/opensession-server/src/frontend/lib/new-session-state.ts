@@ -11,7 +11,7 @@ import type {
 } from "./types";
 
 export interface NewSessionProps {
-  /** Close the palette (Esc, backdrop click, or after a create without "Create more"). */
+  /** Close the palette (Esc, backdrop click, or after a create). */
   onBack: () => void;
   /**
    * Render the same card on the page instead of over a backdrop: the empty
@@ -61,8 +61,6 @@ export interface NewSessionCreateDraft {
   pastedTexts?: string[];
   /** Open the optimistic session as soon as the create message is sent. */
   openImmediately?: boolean;
-  /** Start the session without following it. */
-  background?: boolean;
 }
 
 export interface Worktree {

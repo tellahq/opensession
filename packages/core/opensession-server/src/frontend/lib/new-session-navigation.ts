@@ -22,7 +22,7 @@ export function shouldApplyCreatedSessionReply(
 }
 
 export function shouldOpenCreatedSession(
-  draft: { originPath: string; background?: boolean } | null,
+  draft: { originPath: string } | null,
   currentPath: string,
   creationSurfaceOpen: boolean,
   roomScoped = false,
@@ -36,7 +36,5 @@ export function shouldOpenCreatedSession(
   // reconnect, long after its draft was consumed; treating "no draft" as a
   // direct create made every reload jump back to that old session.
   if (!draft) return false;
-  // "Create in background" asked for the current view to stay put.
-  if (draft.background) return false;
   return creationSurfaceOpen && draft.originPath === currentPath;
 }

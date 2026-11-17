@@ -60,16 +60,6 @@ describe("shouldOpenCreatedSession", () => {
     ).toBe(true);
   });
 
-  test("leaves the current view alone for a background create", () => {
-    expect(
-      shouldOpenCreatedSession(
-        { originPath: "/session/one", background: true },
-        "/session/one",
-        true,
-      ),
-    ).toBe(false);
-  });
-
   test("does not hijack a newer route or a dismissed palette", () => {
     expect(
       shouldOpenCreatedSession(
