@@ -277,7 +277,7 @@ describe("TranscriptBlocks indexed ranges", () => {
           ]}
         />,
       );
-      expect(html).toContain(">Worked</span>");
+      expect(html).toContain(">Worked for 3s</span>");
       expect(html).not.toContain("animate-spin");
       // A call with no result reads as "–".
       expect(html).not.toContain(">–</span>");

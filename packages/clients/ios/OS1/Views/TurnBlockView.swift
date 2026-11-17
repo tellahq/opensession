@@ -3,11 +3,11 @@ import SwiftUI
 /// The collapsible work fold: one header line standing in for everything a
 /// turn did before it answered.
 ///
-/// Folded is the default because the answer is what people came for. The
-/// header has to carry enough for the fold to be skippable without opening
-/// it — what kind of work (the family glyphs), how much (steps, duration),
-/// whether it went wrong (failures, in red), and what it changed (edited
-/// files and ± lines).
+/// Folded is the default because the answer is what people came for, and
+/// shut it is one quiet gray line, "Worked for 22s ›", so a chat of many
+/// turns reads as question then answer. Opening it, or a turn still running,
+/// adds what kind of work it was (the family glyphs), how much (steps),
+/// whether it went wrong (failures, in red), and its ± lines.
 struct TurnBlockView: View {
     let turn: WorkTurn
     let sessionId: String
@@ -99,7 +99,8 @@ struct TurnBlockView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Where the open fold's hairline sits: under the chevron it drops from.
+    /// Where the open fold's hairline sits: just in from the title's first
+    /// letter, so it reads as hanging from the header.
     private static let railInset: CGFloat = 5
     /// Where the fold's rows start: under the header's own word, clear of the
     /// rail rather than crowding it.
@@ -158,7 +159,9 @@ struct TurnBlockView: View {
     @ViewBuilder
     private var header: some View {
         Group {
-            if horizontalSizeClass == .compact {
+            if !state.expanded, !turn.isLive {
+                settledHeader
+            } else if horizontalSizeClass == .compact {
                 compactHeader
             } else if dynamicTypeSize.isAccessibilitySize {
                 wrappedHeader
@@ -178,18 +181,42 @@ struct TurnBlockView: View {
         .contentShape(Rectangle())
     }
 
-    /// Phones keep the outcome, step count, and code totals visible. Tool
-    /// families and changed-file names remain one tap away inside the fold.
+    /// "Worked for 22s", or "Working" while the turn runs.
+    private var title: String {
+        if turn.isLive { return "Working" }
+        guard let duration = turn.duration,
+              let label = TranscriptFormat.duration(duration)
+        else { return "Worked" }
+        return "Worked for \(label)"
+    }
+
+    /// The title and the chevron that follows it, kept on one line.
+    private var titleLabel: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            Text(title)
+                .font(.subheadline)
+            chevron
+        }
+        .fixedSize()
+    }
+
+    /// Shut and settled, the fold is one muted line and nothing else:
+    /// counts, glyphs and ± lines wait inside. A running turn keeps its
+    /// counts, so a shut fold still shows the work moving.
+    private var settledHeader: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            titleLabel
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// Open or live on a phone, the header adds the step count and code
+    /// totals. Tool families stay out, and the fold names the changed files.
     private var compactHeader: some View {
-        // “Worked” is subheadline-sized while its counts are footnotes. Align
-        // their baselines rather than the tops of two different font boxes.
+        // The title is subheadline-sized while its counts are footnotes.
+        // Align their baselines rather than the tops of two font boxes.
         FlowLayout(spacing: 6, alignment: .firstTextBaseline) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                chevron
-                Text(turn.isLive ? "Working" : "Worked")
-                    .font(.subheadline.weight(.medium))
-            }
-            .fixedSize()
+            titleLabel
 
             if !counters.isEmpty {
                 Text(counters)
@@ -205,8 +232,6 @@ struct TurnBlockView: View {
 
     private var singleLineHeader: some View {
         HStack(spacing: 6) {
-            chevron
-
             // Everything on this line is intrinsically sized, so a long turn
             // on a narrow screen used to make the header wider than the
             // transcript itself — and because a vertical ScrollView centers
@@ -229,7 +254,7 @@ struct TurnBlockView: View {
     }
 
     /// At an accessibility type size no arrangement of one line fits — the
-    /// stats alone can take half the width — and squeezing it turns "Worked"
+    /// stats alone can take half the width — and squeezing it turns the title
     /// into "Wo…" and the counters into a lone separator. So it wraps
     /// instead: the fold is metadata, and metadata is allowed a second line.
     /// The glyphs sit this one out because they are drawn at a fixed 11pt and
@@ -238,13 +263,8 @@ struct TurnBlockView: View {
     private var wrappedHeader: some View {
         FlowLayout(spacing: 6) {
             // One subview, so the chevron can never be left stranded on a
-            // line of its own above the word it points at.
-            HStack(spacing: 6) {
-                chevron
-                Text(turn.isLive ? "Working" : "Worked")
-                    .font(.subheadline.weight(.medium))
-            }
-            .fixedSize()
+            // line of its own below the words it follows.
+            titleLabel
 
             if !counters.isEmpty {
                 Text(counters)
@@ -267,10 +287,9 @@ struct TurnBlockView: View {
     }
 
     private var chevron: some View {
-        Image(systemName: "chevron.down")
+        Image(systemName: "chevron.right")
             .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(OS1VisualStyle.textFaint)
-            .rotationEffect(.degrees(state.expanded ? 0 : -90))
+            .rotationEffect(.degrees(state.expanded ? 90 : 0))
     }
 
     /// What the turn did, at a given glyph budget. Rigid by construction —
@@ -279,9 +298,7 @@ struct TurnBlockView: View {
     /// every candidate look too big.
     private func summary(glyphs: Int) -> some View {
         HStack(spacing: 6) {
-            Text(turn.isLive ? "Working" : "Worked")
-                .font(.subheadline.weight(.medium))
-                .fixedSize()
+            titleLabel
 
             if glyphs > 0, !turn.families.isEmpty {
                 HStack(spacing: 5) {
@@ -309,10 +326,13 @@ struct TurnBlockView: View {
     /// would be worse than not having said it.
     private var compressedSummary: some View {
         HStack(spacing: 6) {
-            Text(turn.isLive ? "Working" : "Worked")
-                .font(.subheadline.weight(.medium))
-                .lineLimit(1)
-                .layoutPriority(1)
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
+                Text(title)
+                    .font(.subheadline)
+                    .lineLimit(1)
+                chevron
+            }
+            .layoutPriority(1)
 
             Text(counters)
                 .font(.footnote)
@@ -333,27 +353,18 @@ struct TurnBlockView: View {
         }
     }
 
-    /// "· 12s · 5 steps" — omitted pieces collapse rather than leaving
-    /// stray separators.
+    /// "· 5 steps". The duration already sits in the title.
     private var counters: String {
-        var parts: [String] = []
-        if let duration = turn.duration, let label = TranscriptFormat.duration(duration) {
-            parts.append(label)
-        }
-        if turn.toolCount > 0 {
-            parts.append("\(turn.toolCount) step\(turn.toolCount == 1 ? "" : "s")")
-        }
-        return parts.isEmpty ? "" : "· " + parts.joined(separator: " · ")
+        turn.toolCount > 0
+            ? "· \(turn.toolCount) step\(turn.toolCount == 1 ? "" : "s")"
+            : ""
     }
 
-    /// While a collapsed fold is live, what it is doing right now; once it
-    /// settles, what it changed. Line stats hold their space, the file names
-    /// truncate — a count is useless truncated, a filename still reads.
+    /// While a shut fold is live, what it is doing right now, beside its
+    /// line stats. The step truncates; the counts never do.
     @ViewBuilder
     private var trailingDetail: some View {
-        if state.expanded {
-            lineStats
-        } else if turn.isLive, turn.hasNarration, let preview = turn.livePreview {
+        if !state.expanded, turn.isLive, turn.hasNarration, let preview = turn.livePreview {
             HStack(spacing: 6) {
                 Text(preview)
                     .font(.system(.caption, design: .monospaced))
@@ -362,29 +373,7 @@ struct TurnBlockView: View {
                     .truncationMode(.middle)
                 lineStats
             }
-        } else if turn.touchedFiles.isEmpty {
-            lineStats
         } else {
-            // A name cut down to "….ts" is noise wearing a filename's
-            // clothes, and the footer's chips name every file anyway. So
-            // it shows whole, shows head-truncated while that still
-            // reads, or steps aside for the counts.
-            ViewThatFits(in: .horizontal) {
-                editedFiles(width: nil)
-                editedFiles(width: 72)
-                lineStats
-            }
-        }
-    }
-
-    private func editedFiles(width: CGFloat?) -> some View {
-        HStack(spacing: 6) {
-            Text(TranscriptFormat.editedFiles(turn.touchedFiles))
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(OS1VisualStyle.textFaint)
-                .lineLimit(1)
-                .truncationMode(.head)
-                .frame(width: width, alignment: .trailing)
             lineStats
         }
     }
@@ -398,12 +387,9 @@ struct TurnBlockView: View {
     }
 
     private var accessibilityLabel: String {
-        var parts = [turn.isLive ? "Working" : "Worked"]
+        var parts = [title]
         if turn.toolCount > 0 {
             parts.append("\(turn.toolCount) step\(turn.toolCount == 1 ? "" : "s")")
-        }
-        if let duration = turn.duration, let label = TranscriptFormat.duration(duration) {
-            parts.append(label)
         }
         if turn.failureCount > 0 { parts.append("\(turn.failureCount) failed") }
         return parts.joined(separator: ", ")

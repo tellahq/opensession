@@ -313,6 +313,41 @@ final class FoldStateTests: XCTestCase {
         XCTAssertFalse(live.expanded, "once you decide, the default stops winning")
     }
 
+    func testTheLiveTailFoldsOnceItSettles() {
+        // Open while it works, folded the moment it finishes, even when the
+        // turn keeps its id across the settle.
+        let store = FoldStateStore()
+        let preference = TurnActivity(work: .running)
+        var live = turn("t1", live: true)
+        live.hasNarration = true
+        let state = store.fold(for: live, preference: preference)
+        XCTAssertTrue(state.expanded, "open while the turn works")
+
+        var settled = live
+        settled.isLive = false
+        _ = store.fold(for: settled, preference: preference)
+        XCTAssertFalse(state.expanded, "folds as it settles")
+
+        state.toggle()
+        _ = store.fold(for: settled, preference: preference)
+        XCTAssertTrue(state.expanded, "reopened by hand, it stays open")
+    }
+
+    func testAFoldYouTouchedWhileLiveKeepsYourChoiceWhenItSettles() {
+        let store = FoldStateStore()
+        let preference = TurnActivity(work: .folded)
+        var live = turn("t1", live: true)
+        live.hasNarration = true
+        let state = store.fold(for: live, preference: preference)
+        state.toggle()
+        XCTAssertTrue(state.expanded)
+
+        var settled = live
+        settled.isLive = false
+        _ = store.fold(for: settled, preference: preference)
+        XCTAssertTrue(state.expanded, "a fold you opened yourself stays open")
+    }
+
     func testATurnFoldAndItsFirstToolCallFoldSeparately() {
         // A turn takes its first item's id, which for a tool-led turn is
         // also that tool row's id. The two must not share one state.

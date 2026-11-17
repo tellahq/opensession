@@ -36,7 +36,7 @@ import {
 import { unplacedMedia } from "../lib/placed-media";
 import { spawnedThreadId, spawnedThreadPrompt } from "../lib/session-threads";
 import { ThreadCards, type SpawnedThread } from "./threads/ThreadCards";
-import { IconChevronDown, IconStack } from "./icons";
+import { IconChevronDown, IconChevronRight, IconStack } from "./icons";
 import { cn } from "../ui/cn";
 import { Fold } from "../ui/fold";
 import { TextShimmer } from "../ui/text-shimmer";
@@ -92,19 +92,15 @@ export function useTurnActivityPrefs(): TurnActivityPrefs {
 }
 
 /**
- * One turn's work, folded into a single calm line — "Worked · 12m 4s · ran 9
- * commands, edited 3 files" — closed by default so the session reads as
- * question → answer. It
- * stays open while working, showing intermediate narration and reasoning beside
- * the tools they describe. The final assistant output never enters this fold.
+ * One turn's work, folded into a single quiet gray line, "Worked for 12m 4s",
+ * closed by default so the session reads as question, then answer. It stays
+ * open while working, showing intermediate narration and reasoning beside the
+ * tools they describe. The final assistant output never enters this fold.
  *
- * The collapsed line carries what a folded turn can't otherwise say: duration,
- * what the steps were (lib/work-summary.ts), and the ±lines it moved when the
- * turn wrote files. Line changes
- * keep the diff surfaces' colors, while routine failures stay quiet and one
- * click away. The counts sit after the meta run and never shrink; the
- * duration/steps run truncates first, so a phone drops characters off the
- * middle instead of the numbers.
+ * Closed and settled, the line says only how long the turn took. While it
+ * runs, or once it is open, it adds what the steps were (lib/work-summary.ts)
+ * and the ±lines it moved when the turn wrote files, in the diff surfaces'
+ * colors. Routine failures stay quiet and one click away.
  *
  * Below the line sits the one thing the fold does not hide: media the turn
  * explicitly surfaced. See featuredTurnMedia for why a marked screenshot is
@@ -231,9 +227,14 @@ export const TurnBlock = function TurnBlock({
   ]
     .filter(Boolean)
     .join(" · ");
-  const metaLabel = [!live && duration, countsLabel]
-    .filter(Boolean)
-    .join(" · ");
+  const title = live
+    ? "Working"
+    : duration
+      ? `Worked for ${duration}`
+      : "Worked";
+  // Shut and settled, the line is the title alone. A running turn keeps its
+  // counts so a closed fold still shows the work moving.
+  const showDetail = expanded || live;
 
   // Interleave tools, intermediate narration, and provider reasoning. Adjacent
   // reasoning summaries are status revisions rather than separate moments:
@@ -289,53 +290,50 @@ export const TurnBlock = function TurnBlock({
         aria-expanded={expanded}
         aria-label={
           toolOnlyAggregate?.statusLabel
-            ? `${live ? "Working" : "Worked"}. ${countsLabel}. ${toolOnlyAggregate.statusLabel}`
+            ? `${title}. ${countsLabel}. ${toolOnlyAggregate.statusLabel}`
             : undefined
         }
         onClick={() => rememberExpansion(!expanded)}
-        // Baseline, not centre: this row mixes its 14px title with 13px meta
-        // runs, and centring aligns boxes rather than text. The chevron carries
-        // no baseline of its own, so it keeps centring individually.
-        // The 8px overhang gives the icon-aligned chevron breathing room. Its
-        // asymmetric padding moves the disclosure line into that overhang so
-        // the open rail sits near the transcript edge instead of floating
-        // inside the work column.
-        className="-mx-2 flex w-[calc(100%+16px)] min-w-0 cursor-pointer items-baseline gap-2 rounded-control border-0 bg-transparent py-1 pl-1 pr-3 text-left font-sans text-item-title leading-5 text-dim transition-colors hover:bg-hover/40 hover:text-fg"
+        // Closed, a settled turn is one quiet gray line, "Worked for 22s ›",
+        // so the chat reads as question then answer. Its counts and ±lines
+        // join the line while it runs or once it is open. Baseline, not centre: open, the
+        // 14px title sits beside 13px meta runs. The chevron carries no
+        // baseline of its own, so it keeps centring individually. The 8px
+        // overhang only gives the hover fill room around the text.
+        className="-mx-2 flex w-fit max-w-[calc(100%+16px)] min-w-0 cursor-pointer items-baseline gap-1.5 rounded-control border-0 bg-transparent px-2 py-1 text-left font-sans text-item-title leading-5 text-faint transition-colors hover:text-dim"
       >
+        <Tooltip label={!live ? fullTime(timing.completedAt) : ""}>
+          <span className="flex-shrink-0">{title}</span>
+        </Tooltip>
         <span
           className={cn(
-            "grid size-5 flex-shrink-0 self-center place-items-center leading-none text-faint transition-transform duration-150",
-            !expanded && "-rotate-90",
+            "grid size-5 flex-shrink-0 self-center place-items-center leading-none transition-transform duration-150",
+            expanded && "rotate-90",
           )}
         >
-          <IconChevronDown size={20} className="block" />
+          <IconChevronRight size={20} className="block" />
         </span>
-        <span className="flex-shrink-0 font-medium">
-          {live ? "Working" : "Worked"}
-        </span>
-        {metaLabel && (
-          <Tooltip label={!live ? fullTime(timing.completedAt) : ""}>
-            <span className="min-w-0 truncate text-label leading-4 text-faint">
-              {metaLabel}
-            </span>
-          </Tooltip>
+        {showDetail && countsLabel && (
+          <span className="min-w-0 truncate text-label leading-4">
+            {countsLabel}
+          </span>
         )}
         {/* Hovering the counts opens what they count: the lines this turn
-            wrote, per file, without unfolding it. */}
-        {additions + deletions > 0 && (
+            wrote, per file. */}
+        {showDetail && additions + deletions > 0 && (
           <TurnLineStatsCard
             files={editedFiles}
             additions={additions}
             deletions={deletions}
           />
         )}
-        {toolOnlyAggregate?.mediaLabel && (
-          <span className="flex-shrink-0 text-meta text-faint">
+        {showDetail && toolOnlyAggregate?.mediaLabel && (
+          <span className="flex-shrink-0 text-meta">
             {toolOnlyAggregate.mediaLabel}
           </span>
         )}
         {!expanded && activity && (
-          <span className="min-w-0 truncate text-label leading-4 text-faint">
+          <span className="min-w-0 truncate text-label leading-4">
             {activity}
           </span>
         )}

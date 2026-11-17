@@ -10,6 +10,10 @@ import {
 
 const { TranscriptBlocks } = await import("./TranscriptBlocks");
 
+// A settled turn's fold title: "Worked for 12s", or "Worked" without timing.
+const WORKED_TITLE = />Worked(?: for [^<]+)?<\/span>/;
+const WORKED_TITLES = new RegExp(WORKED_TITLE.source, "g");
+
 describe("session context slot", () => {
   test("hides the session context row unless its debug preference is on", () => {
     const idle = renderToStaticMarkup(
@@ -407,7 +411,7 @@ describe("TranscriptBlocks compact tool runs", () => {
         <TranscriptBlocks live entries={runningTurn} />,
       );
       expect(html).toContain(">Working</span>");
-      expect(html).not.toContain(">Worked</span>");
+      expect(html).not.toMatch(WORKED_TITLE);
       expect(html).toContain("cargo test --release zz_timing");
       expect(html.indexOf("cargo test")).toBeLessThan(
         html.indexOf("Are you on option B?"),
@@ -428,7 +432,7 @@ describe("TranscriptBlocks compact tool runs", () => {
       const html = renderToStaticMarkup(
         <TranscriptBlocks entries={runningTurn} />,
       );
-      expect(html).toContain(">Worked</span>");
+      expect(html).toMatch(WORKED_TITLE);
     });
 
     test("settles once the tool returns", () => {
@@ -448,7 +452,7 @@ describe("TranscriptBlocks compact tool runs", () => {
           ]}
         />,
       );
-      expect(html).toContain(">Worked</span>");
+      expect(html).toMatch(WORKED_TITLE);
     });
   });
 
@@ -481,7 +485,7 @@ describe("TranscriptBlocks compact tool runs", () => {
       />,
     );
 
-    expect(html).toContain(">Worked</span>");
+    expect(html).toMatch(WORKED_TITLE);
     expect(html).not.toContain("git status");
     expect(html).toContain("The repository is clean.");
   });
@@ -596,7 +600,7 @@ describe("TranscriptBlocks compact tool runs", () => {
       />,
     );
 
-    expect(html.match(/>Worked<\/span>/g)).toHaveLength(1);
+    expect(html.match(WORKED_TITLES)).toHaveLength(1);
     expect(html).not.toContain("Found the relevant file.");
     expect(html).not.toContain("git status");
     expect(html).not.toContain("package.json");
@@ -604,7 +608,8 @@ describe("TranscriptBlocks compact tool runs", () => {
   });
 
   test("does not split work on a delivery row that renders nothing", () => {
-    setTurnPrefs(null);
+    // Open, so the one header's counts show it holds both runs.
+    setTurnPrefs("open", "folded");
     const html = renderToStaticMarkup(
       <TranscriptBlocks
         entries={[
@@ -627,8 +632,9 @@ describe("TranscriptBlocks compact tool runs", () => {
       />,
     );
 
-    expect(html.match(/>Worked<\/span>/g)).toHaveLength(1);
+    expect(html.match(WORKED_TITLES)).toHaveLength(1);
     expect(html).toContain("ran 1 command, read 1 file");
+    setTurnPrefs(null);
   });
 
   test("folds edits into the run and counts their lines on the row", () => {
@@ -987,7 +993,7 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
       <TranscriptBlocks entries={narratedTurn} />,
     );
 
-    expect(html.match(/>Worked<\/span>/g)).toHaveLength(1);
+    expect(html.match(WORKED_TITLES)).toHaveLength(1);
     expect(html).not.toContain("The repository is clean.");
     expect(html).not.toContain("git status");
     expect(html).toContain("All good.");
@@ -1091,7 +1097,7 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
     expect(html).toContain("Implemented and committed. Deployment is running.");
     expect(html).toContain("Deployment verified.");
     // The woken turn's work folds into the check-back row.
-    expect(html.match(/>Worked<\/span>/g)).toHaveLength(1);
+    expect(html.match(WORKED_TITLES)).toHaveLength(1);
     expect(html).toContain('aria-label="Checked back, once"');
     expect(html).not.toContain('data-eid="wait-boundary"');
     setTurnPrefs(null);
@@ -1266,8 +1272,9 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
     ];
     setTurnPrefs("folded", "folded");
     const folded = renderToStaticMarkup(<TranscriptBlocks entries={entries} />);
-    expect(folded.match(/>Worked<\/span>/g)).toHaveLength(1);
-    expect(folded).toContain("ran 2 commands");
+    expect(folded.match(WORKED_TITLES)).toHaveLength(1);
+    // Shut and settled, the header is the title alone.
+    expect(folded).not.toContain("ran 2 commands");
     expect(folded).not.toContain("Checking deployment status");
 
     setTurnPrefs("open", "folded");
@@ -1956,7 +1963,7 @@ describe("TranscriptBlocks review loops", () => {
       "flex size-[22px] flex-none self-center items-center justify-center",
     );
     expect(html).toContain("-translate-y-px");
-    expect(html).not.toContain(">Worked<");
+    expect(html).not.toMatch(WORKED_TITLE);
   });
 
   test("shows progress while a loop is still fixing feedback", () => {

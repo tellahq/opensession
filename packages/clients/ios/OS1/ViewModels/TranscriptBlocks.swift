@@ -1192,6 +1192,9 @@ final class TurnFoldState {
     var expanded: Bool
     /// Once the human decides, later default changes stop overriding them.
     private(set) var userToggled = false
+    /// Whether the store last saw this fold's turn running, so the moment it
+    /// settles can fold it once. Not observed: no view reads it.
+    @ObservationIgnored var lastSeenLive = false
 
     init(expanded: Bool) {
         self.expanded = expanded
@@ -1233,11 +1236,19 @@ final class FoldStateStore {
         if let existing = states[key] {
             // Only the live tail may re-derive its default afterwards; a
             // settled fold above the reader must never change height on its
-            // own (see the transcript's scroll notes in SessionView).
-            if turn.isLive { existing.syncDefault(fallback) }
+            // own (see the transcript's scroll notes in SessionView). The one
+            // exception is the live tail settling: open while it worked, it
+            // folds as it finishes, like the web. Without this a turn whose id
+            // survived the settle stayed open for good, while one whose id
+            // changed got a fresh, folded state, so collapsing looked random.
+            if turn.isLive || existing.lastSeenLive {
+                existing.syncDefault(fallback)
+            }
+            existing.lastSeenLive = turn.isLive
             return existing
         }
         let state = TurnFoldState(expanded: fallback)
+        state.lastSeenLive = turn.isLive
         states[key] = state
         return state
     }
