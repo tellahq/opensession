@@ -97,8 +97,10 @@ struct ReviewLoop: Identifiable, Equatable {
     /// itself, with no person in between: a background wait waking it
     /// (usually to look at CI again) or its own scheduled check-back. It
     /// folds the same way and draws the same row, without a PR or verdict.
-    /// Mirrors the web's `CheckBackBlock`.
-    enum Kind: Equatable { case review, checkBack }
+    /// Mirrors the web's `CheckBackBlock`. A work fold is a whole task the
+    /// agent reported on with status lines and then answered, folded above
+    /// that answer (`foldReportedTasks`, web `WorkFoldBlock`).
+    enum Kind: Equatable { case review, checkBack, work }
 
     var id: String
     var kind: Kind = .review
@@ -120,12 +122,15 @@ struct ReviewLoop: Identifiable, Equatable {
     /// an open PR carries; every earlier or merged loop keeps this durable
     /// verdict instead of a bare round count.
     var settled: ReviewSettledOutcome?
+    /// On a work fold: from the task's first work to its answer.
+    var duration: TimeInterval?
 
     /// What the closed row says. A live loop is always working, whatever
     /// GitHub last reported about the PR.
     var detail: String {
         if isLive { return "Working" }
         if kind == .checkBack { return rounds == 1 ? "once" : "\(rounds) times" }
+        if kind == .work { return duration.flatMap(TranscriptFormat.duration) ?? "" }
         switch result?.status {
         case .passed: return "Ready to merge"
         case .failed: return "Needs changes"
@@ -712,9 +717,21 @@ enum TranscriptGrouping {
             from: items,
             noteDates: notes.map(\.date)
         )
+        var starts: [String: Date] = [:]
+        for item in items {
+            switch item {
+            case .entry(let entry): starts[entry.id] = entry.timestampDate
+            case .toolCall(let use, _, _): starts[use.id] = use.timestampDate
+            }
+        }
         let grouped = groupCheckBacks(
             groupReviewLoops(
-                place(notes, into: place(walkthrough, into: blocks)),
+                foldReportedTasks(
+                    place(notes, into: place(walkthrough, into: blocks)),
+                    progress: progress,
+                    live: live,
+                    start: { id in starts[id] }
+                ),
                 live: live,
                 result: reviewResult
             ),
@@ -985,6 +1002,68 @@ enum TranscriptGrouping {
         return grouped
     }
 
+    /// A task the agent reported on with status lines and then answered
+    /// reads as "Worked for 7m ›" above that answer: the statuses and
+    /// check-backs were interim, and the answer is the report. A running
+    /// answer does not close a task, so a live one keeps its status row.
+    /// Human messages, notes, notices and review loops are never folded in.
+    /// Mirrors the web's `foldReportedTasks`.
+    private static func foldReportedTasks(
+        _ blocks: [TranscriptBlock],
+        progress: ProgressProjection,
+        live: Bool,
+        start: (String) -> Date?
+    ) -> [TranscriptBlock] {
+        guard !progress.isEmpty else { return blocks }
+        func isStatus(_ block: TranscriptBlock) -> Bool {
+            if case .message(let entry) = block { return progress.contains(entry.id) }
+            return false
+        }
+        var folded: [TranscriptBlock] = []
+        var run: [TranscriptBlock] = []
+        for (index, block) in blocks.enumerated() {
+            if case .message(let answer) = block, answer.isAssistant,
+               !progress.contains(answer.id),
+               !(live && index == blocks.count - 1),
+               run.contains(where: isStatus) {
+                // A status's footer says nothing the fold does not.
+                let work = run.filter { inner in
+                    if case .footer(let footer) = inner { return !progress.contains(footer.entryId) }
+                    return true
+                }
+                let first = work.lazy.flatMap(\.entryIds).compactMap(start).first
+                var duration: TimeInterval?
+                if let first, let end = answer.timestampDate {
+                    duration = end.timeIntervalSince(first)
+                }
+                folded.append(.reviewLoop(ReviewLoop(
+                    id: "work:\(work.first?.id ?? answer.id)",
+                    kind: .work,
+                    rounds: 0,
+                    isLive: false,
+                    blocks: work,
+                    duration: duration
+                )))
+                folded.append(block)
+                run = []
+                continue
+            }
+            let foldable: Bool = switch block {
+            case .work, .footer, .tool: true
+            case .message(let entry): entry.isAssistant || isCheckBack(block)
+            default: false
+            }
+            if foldable {
+                run.append(block)
+            } else {
+                folded += run
+                folded.append(block)
+                run = []
+            }
+        }
+        return folded + run
+    }
+
     /// One status row per task. Status messages (and their footers) leave
     /// their folds; the check-back fold that holds or leads straight to the
     /// row's latest update folds under that row instead of drawing its own
@@ -1017,7 +1096,7 @@ enum TranscriptGrouping {
             }
             if let loop = pending { projected.append(.reviewLoop(loop)) }
             pending = nil
-            guard case .reviewLoop(var loop) = block else {
+            guard case .reviewLoop(var loop) = block, loop.kind != .work else {
                 projected.append(block)
                 continue
             }
