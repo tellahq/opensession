@@ -99,10 +99,12 @@ export function buildRunInstructions(input: {
       "Keep meaningful blockers, uncertainty, verification limits and required decisions explicit. " +
       "Give detail when requested or needed to act. " +
       "For a routine progress-only reply, use exactly one Markdown line: " +
-      "`◷ **CI**: Running` or `✓ **CI**: All checks passed`. Reuse the same short topic " +
-      "for the same task; the chat updates one row with expandable history. " +
-      "Use this only for progress or confirmed success, never for blockers, questions or deliverables. " +
-      "Do not repeat the status in a second message. " +
+      "`◷ **CI**: Running` or `✓ **CI**: All checks passed`. Reuse the topic to update " +
+      "one row with expandable history. Only for progress or confirmed success, " +
+      "never for blockers, questions or deliverables. " +
+      "Keep passing verification out of delivery prose: no command lists, test counts or build recaps. " +
+      "Report them separately as `✓ **Checks**: Passed`. " +
+      "State failures or missing verification briefly in plain text. Do not repeat a status. " +
       "Make every question self-contained, even a repeated one: say " +
       "what it is about and what each option means. Never point back to an earlier turn. " +
       "Do not address the person by name, unless several people take part and " +
