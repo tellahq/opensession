@@ -199,7 +199,7 @@ export function UpdatePill({ addHandler, variant = "card" }: Props) {
     return (
       <Tooltip label={hint} side="top" multiline>
         <button
-          className="inline-flex h-7 shrink-0 cursor-pointer items-center rounded-control border-none bg-accent px-2.5 text-supporting font-semibold leading-none text-on-accent transition-[background] duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-accent-hover disabled:cursor-wait disabled:opacity-75 animate-[update-toast-in_var(--dur-lg)_var(--ease)] motion-reduce:animate-none"
+          className="inline-flex h-7 shrink-0 cursor-pointer items-center rounded-full border-none bg-accent px-3 text-supporting font-semibold leading-none text-on-accent transition-[background] duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-accent-hover disabled:cursor-wait disabled:opacity-75 animate-[update-toast-in_var(--dur-lg)_var(--ease)] motion-reduce:animate-none"
           onClick={refresh}
           disabled={refreshing}
           role="status"
@@ -275,7 +275,7 @@ export function UpdatePill({ addHandler, variant = "card" }: Props) {
       <div className="flex shrink-0 items-center gap-1">
         <button
           className={
-            "inline-flex h-7 items-center rounded-control px-3 cursor-pointer border-none bg-accent text-supporting font-semibold leading-none text-on-accent transition-[background] duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-accent-hover disabled:cursor-wait disabled:opacity-75"
+            "inline-flex h-7 items-center rounded-full px-3 cursor-pointer border-none bg-accent text-supporting font-semibold leading-none text-on-accent transition-[background] duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-accent-hover disabled:cursor-wait disabled:opacity-75"
           }
           onClick={refresh}
           disabled={refreshing}
