@@ -34,8 +34,8 @@ import { MOBILE_CONTROL_GLASS_EFFECTS } from "./app-header-classes";
 /** 8px, the compact trailing controls' corner. Authored the way base.css
  * authors every corner; there is no 8px step in the radius scale. */
 const PILL = "rounded-[calc(8px*var(--rf))]";
-/** Desktop tabs use the standard medium squircle; phones become round pills. */
-const TAB_CORNERS = "desktop:rounded-md desktop:[corner-shape:squircle]";
+/** Tabs are round pills on desktop and phone alike. */
+const TAB_CORNERS = "rounded-full";
 
 /* ── The strip ──────────────────────────────────────────────────────────── */
 
@@ -165,7 +165,7 @@ const TAB_BASE =
   "relative inline-flex max-w-[min(200px,100cqw)] shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
   `${TAB_CORNERS} border-0 px-2.5 py-1.5 text-label shadow-none ` +
   "transition-[background-color,color] " +
-  `phone:rounded-full phone:border phone:border-[color:var(--mobile-header-control-border)] ` +
+  `phone:border phone:border-[color:var(--mobile-header-control-border)] ` +
   `phone:shadow-[var(--mobile-header-control-shadow)] ${MOBILE_CONTROL_GLASS_EFFECTS}`;
 
 export type TabState = {
@@ -301,7 +301,7 @@ export const PR_DOT_TONE = {
 
 const CLOSE_BASE =
   "-my-0.5 -mr-[3px] inline-flex size-4 shrink-0 cursor-pointer items-center justify-center " +
-  "rounded-sm border-0 bg-transparent p-0 text-dim " +
+  "rounded-full border-0 bg-transparent p-0 text-dim " +
   "hover:bg-pressed hover:text-fg [@media_(hover:none)]:size-[26px] [@media_(hover:none)]:-mr-1";
 
 /** Desktop close controls share one absolute position, so revealing one never

@@ -11,6 +11,14 @@ export function withPreviewPath(base: string, path?: string | null): string {
   return base.replace(/\/+$/, "") + rel;
 }
 
+/** How a PR preview environment is framed in a Browser tab. */
+export const PREVIEW_FRAME = {
+  name: "Preview environment",
+  title: "Preview environment",
+  allow:
+    "camera; microphone; display-capture; fullscreen; autoplay; clipboard-write",
+} as const;
+
 /**
  * Whether a PR preview environment's link opens a working deploy. A first
  * build has nothing behind the branch alias yet (it 404s); a rebuild keeps

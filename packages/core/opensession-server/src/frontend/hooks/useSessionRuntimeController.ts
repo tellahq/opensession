@@ -30,7 +30,17 @@ import { isPinned, onPinsChanged, togglePin } from "../lib/pins";
 import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { portalTargetFor } from "../lib/portals";
 import { NO_TYPING, type TypingPresence } from "../lib/typing";
-import { previewOpenable, stagingHref } from "../lib/preview-url";
+import {
+  PREVIEW_FRAME,
+  previewOpenable,
+  stagingHref,
+} from "../lib/preview-url";
+import {
+  keptFrameKey,
+  preloadKeptFrame,
+  viewTabScope,
+} from "../lib/kept-frames";
+import { getSidePanelState, opensInSidePanel } from "../lib/side-panel-store";
 import { claimPreviewAutoOpen } from "../lib/preview-auto-open";
 import {
   getPreviewAutoOpenPref,
@@ -458,8 +468,9 @@ export function useSessionRuntimeController({
   }, [showStaging, stagingSettled, stagingUrl, onCloseStaging]);
 
   // With the opt-in on, the first time a PR's preview deploy is up its
-  // Browser tab is already waiting in the strip. It lands behind whatever is
-  // in front, and only once per PR: closing it sticks.
+  // Browser tab is already waiting in the strip, with the page loading behind
+  // it so it is there when the tab is opened. It lands behind whatever is in
+  // front, and only once per PR: closing it sticks.
   const navigation = use(NavigationContext);
   const autoOpenOn = useSyncExternalStore(
     onPreviewAutoOpenChanged,
@@ -473,11 +484,27 @@ export function useSessionRuntimeController({
     stagingLoadedFor === stagingPrUrl &&
     !!staging &&
     previewOpenable(staging);
+  const autoOpen = useEffectEvent((prUrl: string) => {
+    if (!navigation || !staging || !claimPreviewAutoOpen(prUrl)) return;
+    // Decided before openStaging, which is what routes the tab there.
+    const inPanel = opensInSidePanel("browser");
+    navigation.openStaging({ background: true });
+    // A deploy that refuses framing shows an Open link instead of a page.
+    if (!staging.embeddable) return;
+    // The panel's Browser tab shows the preview only when nothing else was
+    // handed to it.
+    if (inPanel && getSidePanelState().browsers[session.id]) return;
+    preloadKeptFrame(
+      keptFrameKey(
+        inPanel ? "panel" : "staging",
+        inPanel ? session.id : viewTabScope(session),
+      ),
+      { ...PREVIEW_FRAME, url: stagingHref(staging, session.previewPath) },
+    );
+  });
   useEffect(() => {
-    if (!autoOpenReady || !stagingPrUrl || !navigation) return;
-    if (claimPreviewAutoOpen(stagingPrUrl))
-      navigation.openStaging({ background: true });
-  }, [autoOpenReady, stagingPrUrl, navigation]);
+    if (autoOpenReady && stagingPrUrl) autoOpen(stagingPrUrl);
+  }, [autoOpenReady, stagingPrUrl]);
 
   // ⌘O opens the PR's preview environment (the Vercel preview StagingLink's globe
   // points at); ⌘G opens its GitHub PR and ⌘⇧G copies that URL instead.
