@@ -1,6 +1,7 @@
 import { toggleReactionApi } from "../../lib/api/threads";
 import { errorMessage } from "../../lib/error-message";
 import {
+  messageExcerpt,
   openMessageComments,
   publishMessageReactions,
   REACTION_EMOJI,
@@ -32,16 +33,11 @@ export interface MessageRef {
   text: string;
 }
 
-function excerpt(text: string): string {
-  const plain = text.replace(/\s+/g, " ").trim();
-  return plain.length > 600 ? `${plain.slice(0, 599)}…` : plain;
-}
-
 export function openCommentsFor(sessionId: string, message: MessageRef): void {
   openMessageComments({
     sessionId,
     entryId: message.entryId,
-    excerpt: excerpt(message.text),
+    excerpt: messageExcerpt(message.text),
     author: message.author,
   });
 }
