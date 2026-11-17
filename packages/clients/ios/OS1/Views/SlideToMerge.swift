@@ -15,6 +15,7 @@ import SwiftUI
 struct SlideToMerge: View {
     let label: String
     var busyLabel = "Merging…"
+    /// The thumb's colour. The track stays neutral grey around it.
     var tint: Color
     var busy: Bool
     let onCommit: () -> Void
@@ -40,7 +41,7 @@ struct SlideToMerge: View {
                 // The part of the track the thumb has covered, so the drag
                 // reads as filling something rather than moving a dot.
                 Capsule()
-                    .fill(tint.opacity(0.16))
+                    .fill(OS1VisualStyle.text.opacity(0.07))
                     .frame(width: thumbWidth + inset * 2 + travel * progress)
                     .opacity(min(1, Double(progress) * 6))
                 trackLabel

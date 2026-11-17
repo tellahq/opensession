@@ -645,7 +645,7 @@ struct WorktreeInfoView: View {
                     // first, and says what.
                     SlideToMerge(
                         label: "Slide to merge",
-                        tint: tone,
+                        tint: OS1VisualStyle.green,
                         busy: merging || pendingMerge != nil
                     ) {
                         if mergeWarnings(pr).isEmpty {
@@ -657,14 +657,12 @@ struct WorktreeInfoView: View {
                 }
             }
             .padding(16)
-            .background {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(OS1VisualStyle.raised)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .fill(tone.opacity(0.08))
-                    )
-            }
+            // A neutral card: the status mark carries the state, and the
+            // slider's green thumb is the one colour on it.
+            .background(
+                OS1VisualStyle.raised,
+                in: RoundedRectangle(cornerRadius: 22, style: .continuous)
+            )
         }
     }
 
