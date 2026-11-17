@@ -53,6 +53,10 @@ export function WorkspaceSummaryAdd({
  * heading. A lone heading reads as the label of whatever row comes next, so
  * the empty case carries its own glyph like every other row, and the whole
  * row opens the picker.
+ *
+ * `ws-summary-add-row` is a selector hook: under the PR band the summary card
+ * gives the row a section's gap (WorkspaceSummary.tsx), since flush against
+ * the band it read as part of the PR.
  */
 export function WorkspaceSummaryAddRow({
   label,
@@ -70,7 +74,7 @@ export function WorkspaceSummaryAddRow({
   return (
     <Menu.Root>
       <Menu.Trigger
-        className={WS_SUMMARY_ROW}
+        className={cn(WS_SUMMARY_ROW, "ws-summary-add-row")}
         disabled={disabled}
         aria-label={action}
       >
