@@ -328,6 +328,9 @@ enum OS1VisualStyle {
     /// The accent as a control's "on" state. Two accents cannot carry that job
     /// and borrow Sky for it; see `AccentTheme.controlFills`.
     static var accentControl: Color { AccentStore.shared.theme.accentControl }
+    /// Your own message bubble, tinted with the accent. A teammate's turn keeps
+    /// the neutral `userMessage`; see `AccentTheme.userBubble`.
+    static var userBubble: Color { AccentStore.shared.theme.userBubble }
     #if os(iOS)
     /// Links and other tappable words in running text.
     static let link = Color(uiColor: .link)

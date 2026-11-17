@@ -284,11 +284,12 @@ struct UserBubble: View {
                         .userMessagePanelCompat(
                             in: shape,
                             // A teammate's routed-back reply gets its own
-                            // surface, like the web's: a neutral grey bubble
-                            // would read as the driver's own words.
+                            // surface, like the web's. Your own words wear the
+                            // accent so they are easy to find; a teammate's
+                            // plain turn stays on the neutral grey.
                             tint: attribution?.viaSlack == true
                                 ? OS1VisualStyle.humanReply.opacity(0.12)
-                                : nil
+                                : attribution == nil ? OS1VisualStyle.userBubble : nil
                         )
                         .overlay {
                             if needsHairline {
