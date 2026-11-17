@@ -47,4 +47,26 @@ describe("activity sidebar bands", () => {
     ).toBe("yesterday");
     expect(activityBandFor(row(), TODAY, false)).toBe("earlier");
   });
+
+  test("collects idle merged work in Merged, whatever its day", () => {
+    expect(
+      activityBandFor(
+        row({ lastActivity: "2026-08-22T09:00:00Z" }),
+        TODAY,
+        false,
+        true,
+      ),
+    ).toBe("merged");
+    expect(activityBandFor(row(), TODAY, false, true)).toBe("merged");
+  });
+
+  test("keeps live, blocked, and draft merged rows in their own bands", () => {
+    expect(activityBandFor(row({ running: true }), TODAY, false, true)).toBe(
+      "inprogress",
+    );
+    expect(
+      activityBandFor(row({ status: "needsinput" }), TODAY, false, true),
+    ).toBe("needsaction");
+    expect(activityBandFor(row(), TODAY, true, true)).toBe("drafts");
+  });
 });
