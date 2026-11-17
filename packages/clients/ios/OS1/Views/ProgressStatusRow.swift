@@ -12,6 +12,11 @@ struct ProgressStatusRow: View {
     let state: TurnFoldState
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The icon column. Scaled with the icon's own font so a large Dynamic
+    /// Type checkmark never crowds the topic beside it.
+    @ScaledMetric(relativeTo: .footnote) private var iconWidth: CGFloat = 16
+    /// The gap between the icon column and its text, in every line.
+    private static let iconSpacing: CGFloat = 6
 
     private var history: [(id: String, update: ProgressUpdate)] { group.history }
 
@@ -42,7 +47,7 @@ struct ProgressStatusRow: View {
             if state.expanded, !history.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(history, id: \.id) { item in
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        HStack(alignment: .firstTextBaseline, spacing: Self.iconSpacing) {
                             icon(item.update, tint: OS1VisualStyle.textFaint)
                             Text(item.update.text)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -53,7 +58,7 @@ struct ProgressStatusRow: View {
                 .font(.footnote)
                 .foregroundStyle(OS1VisualStyle.textDim)
                 // Under the status text, clear of its icon.
-                .padding(.leading, 22)
+                .padding(.leading, iconWidth + Self.iconSpacing)
                 .padding(.vertical, 2)
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel("\(group.latest.topic) update history")
@@ -66,7 +71,7 @@ struct ProgressStatusRow: View {
     /// The icon sits on the first line's baseline, so a status that wraps
     /// keeps its glyph beside the topic rather than centred on the block.
     private var status: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: Self.iconSpacing) {
             icon(
                 group.latest,
                 tint: group.latest.state == .done
@@ -83,13 +88,13 @@ struct ProgressStatusRow: View {
         .accessibilityAddTraits(.updatesFrequently)
     }
 
-    /// Fixed-width so the topic and every history line share one text edge.
-    /// Sized by the font, so it scales with Dynamic Type.
+    /// One column width so the topic and every history line share one text
+    /// edge. The width scales with Dynamic Type alongside the glyph.
     private func icon(_ update: ProgressUpdate, tint: Color) -> some View {
         Image(systemName: update.symbol)
             .font(.footnote.weight(.semibold))
             .foregroundStyle(tint)
-            .frame(width: 16)
+            .frame(width: iconWidth)
             .accessibilityHidden(true)
     }
 

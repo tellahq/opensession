@@ -35,6 +35,7 @@ import { useAttachmentUploads } from "../hooks/useAttachmentUploads";
 import { foregroundFileComposerOwns, hasDraggedFiles } from "../lib/file-drag";
 import { FullPageFileDropOverlay } from "./FullPageFileDropOverlay";
 import { errorMessage } from "../lib/error-message";
+import { singleLineRef } from "../lib/single-line-bubble";
 import type { VoiceCaptionStore } from "../lib/voice-captions";
 import { VoiceCaptions } from "./VoiceCaptions";
 
@@ -639,7 +640,9 @@ export function DeskConversation({
 						    real user entry arrives. */}
             {pending && (
               <div className={cn(msgRow, msgOwnTurn, "msg-user")}>
-                <div className={msgBubbleUser}>{pending}</div>
+                <div ref={singleLineRef} className={msgBubbleUser}>
+                  {pending}
+                </div>
               </div>
             )}
           </>

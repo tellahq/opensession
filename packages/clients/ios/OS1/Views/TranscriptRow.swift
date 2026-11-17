@@ -194,6 +194,21 @@ struct TranscriptRow: View {
 
 // MARK: - Messages
 
+/// Your bubble's outline: a pill while the text fits on one line, the usual
+/// rounded rectangle once it wraps, because a pill around a paragraph reads as
+/// a lozenge. The shape gets its own frame, so no measuring is needed; the web
+/// measures instead (lib/single-line-bubble.ts).
+struct MessageBubbleShape: Shape {
+    var singleLineHeight: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        if rect.height <= singleLineHeight {
+            return Capsule(style: .circular).path(in: rect)
+        }
+        return RoundedRectangle(cornerRadius: 14, style: .continuous).path(in: rect)
+    }
+}
+
 /// A person's message. No name label — the right alignment already says who
 /// wrote it — unless someone ELSE wrote this turn, in which case the label is
 /// the only thing that says so: the server strips the "[Name] " prefix and the
@@ -275,7 +290,7 @@ struct UserBubble: View {
                 // web trims them the same way.
                 let bubbleText = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !bubbleText.isEmpty {
-                    let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    let shape = MessageBubbleShape(singleLineHeight: singleLineHeight)
                     Text(bubbleText)
                         .font(.body)
                         .padding(.horizontal, 14)
@@ -368,6 +383,18 @@ struct UserBubble: View {
     /// too small to carry the shape alone: dark puts the bubble a few points
     /// over a near-black page, and on the Mac it is the LIFTED surface, about
     /// 6/255 off the window background in light.
+    /// The tallest a one-line bubble gets: the body line with half a line
+    /// of slack for an emoji, plus the 10pt padding above and below.
+    private var singleLineHeight: CGFloat {
+        #if os(macOS)
+        let font = NSFont.preferredFont(forTextStyle: .body, options: [:])
+        let line = font.ascender - font.descender + font.leading
+        #else
+        let line = UIFont.preferredFont(forTextStyle: .body).lineHeight
+        #endif
+        return line * 1.5 + 20
+    }
+
     private var needsHairline: Bool {
         #if os(macOS)
         true

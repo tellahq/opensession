@@ -106,6 +106,7 @@ export function ClampedBody({
   sessionId,
   transformContent,
   summary,
+  pillWhenSingleLine,
 }: {
   content: string;
   className: string;
@@ -115,6 +116,8 @@ export function ClampedBody({
   transformContent?: (content: string) => string;
   /** Derived one-line preview; expansion uses the same full-content path. */
   summary?: { text: string; label: string };
+  /** See MarkdownBody: a person's one-line bubble rounds into a pill. */
+  pillWhenSingleLine?: boolean;
 }) {
   const wireClamped = !!entry?.contentClamped;
   const fullLength = entry?.contentLength ?? content.length;
@@ -167,7 +170,12 @@ export function ClampedBody({
   };
 
   const body = asMarkdown ? (
-    <MarkdownBody className={className} html={html || ""} markdown={markdown} />
+    <MarkdownBody
+      className={className}
+      html={html || ""}
+      markdown={markdown}
+      pillWhenSingleLine={pillWhenSingleLine}
+    />
   ) : (
     // Huge expanded blobs retain the existing affordable plain-text fallback.
     <pre className="my-1 max-h-[70vh] overflow-auto whitespace-pre-wrap break-words rounded-md bg-surface p-3 font-sans text-label leading-relaxed text-fg">
@@ -1112,6 +1120,7 @@ export const MessageBubble = function MessageBubble({
             <ClampedBody
               // Only your own words wear the accent; a teammate's stay neutral.
               className={cn(msgBubbleUser, "markdown", fromOther && "bg-panel")}
+              pillWhenSingleLine
               content={displayContent}
               entry={bodyEntry}
               sessionId={sessionId}

@@ -575,23 +575,37 @@ struct WorktreeInfoView: View {
                     panel = .review(sessionId: currentSession.id)
                 } label: {
                     HStack(spacing: 12) {
+                        // Each mark is cut to a circle and set in a ring of the
+                        // card's own grey, outside it, so the overlap reads as
+                        // a cut-out. A ring drawn on top of a squircle avatar
+                        // left its corners poking out past the circle.
                         HStack(spacing: -8) {
                             Image(systemName: mergeStatusIcon(pr))
                                 .font(.system(size: 15, weight: .bold))
                                 .foregroundStyle(.white)
-                                .frame(width: 34, height: 34)
+                                .frame(width: 32, height: 32)
                                 .background(tone, in: Circle())
-                                .overlay(Circle().stroke(OS1VisualStyle.raised, lineWidth: 2))
+                                .padding(2)
+                                .background(OS1VisualStyle.raised, in: Circle())
                             ForEach(mergeReviewers(pr), id: \.login) { reviewer in
-                                UserAvatar(person: reviewer.login, login: reviewer.login, size: 34)
-                                    .overlay(Circle().stroke(OS1VisualStyle.raised, lineWidth: 2))
+                                UserAvatar(person: reviewer.login, login: reviewer.login, size: 32)
+                                    .clipShape(Circle())
+                                    .padding(2)
+                                    .background(OS1VisualStyle.raised, in: Circle())
                             }
                         }
+                        .fixedSize()
+                        // The facepile is a fixed size, so the words get the
+                        // rest of the row and wrap rather than truncate when
+                        // that is not enough (larger text, three reviewers).
                         Text(mergeStatusLine(pr))
                             .font(.body.weight(.medium))
                             .foregroundStyle(OS1VisualStyle.text)
-                            .lineLimit(1)
-                        Spacer(minLength: 8)
+                            .lineLimit(3)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .layoutPriority(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         Image(systemName: "chevron.right")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(OS1VisualStyle.textFaint)
