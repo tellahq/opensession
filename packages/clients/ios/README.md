@@ -136,7 +136,7 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   turns the way the web viewer groups them: **question → folded work → answer →
   footer**. A turn's tool calls and the narration between them collapse behind
   one quiet gray header that says only `Worked for 12s`; opening it shows the
-  steps and changed files, with a hairline closing the fold. The step count,
+  steps and changed files flush under it, with a hairline closing the fold. The step count,
   failures and line changes head the open fold only when calls render flat;
   grouped tool rows already carry their own. The
   turn's final answer escapes the fold and renders as a normal message. An agent's

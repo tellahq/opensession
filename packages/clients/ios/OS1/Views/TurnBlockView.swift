@@ -5,7 +5,7 @@ import SwiftUI
 ///
 /// Folded is the default because the answer is what people came for. The
 /// header is one quiet gray line, "Worked for 12s ›". Open, the steps sit
-/// nudged in under it and a hairline closes the fold; the step count,
+/// flush under it and a hairline closes the fold; the step count,
 /// failures and line changes head it only when the calls render flat, since
 /// grouped rows already name their own.
 struct TurnBlockView: View {
@@ -61,7 +61,6 @@ struct TurnBlockView: View {
 
                     touchedFileSummary
                 }
-                .padding(.leading, Self.foldContentInset)
                 .padding(.top, 8)
                 .padding(.bottom, 8)
                 .overlay(alignment: .bottom) { foldEnd }
@@ -102,9 +101,6 @@ struct TurnBlockView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
-
-    /// Where the fold's rows start: nudged in under the header's own word.
-    private static let foldContentInset: CGFloat = 16
 
     /// The hairline that closes an open fold, so where the work ends and the
     /// turn's final answer begins stays legible. It replaced a rail down the
