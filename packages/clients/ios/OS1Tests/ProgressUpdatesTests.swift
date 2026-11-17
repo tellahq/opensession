@@ -62,7 +62,11 @@ final class ProgressUpdatesTests: XCTestCase {
     }
 
     private func progressRows(_ blocks: [TranscriptBlock]) -> [ProgressGroup] {
-        blocks.compactMap { if case .progress(let group) = $0 { group } else { nil } }
+        blocks.compactMap { if case .progress(let group, _) = $0 { group } else { nil } }
+    }
+
+    private func progressWork(_ blocks: [TranscriptBlock]) -> [ReviewLoop?] {
+        blocks.compactMap { if case .progress(_, let work) = $0 { work } else { nil } }
     }
 
     // MARK: - Parsing
@@ -113,18 +117,18 @@ final class ProgressUpdatesTests: XCTestCase {
 
     // MARK: - Projection
 
-    func testTheFirstRowTakesTheLatestLabelAndKeepsEveryUpdate() {
+    func testTheLatestUpdateOwnsTheRowAndKeepsEveryUpdate() {
         let projection = project([
             say("a", "◷ **CI**: Running"),
             wake("w"),
             say("b", "✓ **CI**: All checks passed"),
         ])
-        let group = projection.owners["a"]
+        let group = projection.owners["b"]
         XCTAssertEqual(group?.latest, ProgressUpdate(topic: "CI", state: .done, text: "All checks passed"))
         XCTAssertEqual(group?.entries.map(\.id), ["a", "b"])
         XCTAssertEqual(group?.history.map(\.update.text), ["Running"])
-        XCTAssertTrue(projection.hidden.contains("b"))
-        XCTAssertNil(projection.owners["b"])
+        XCTAssertTrue(projection.hidden.contains("a"))
+        XCTAssertNil(projection.owners["a"])
     }
 
     func testTopicsMatchCaseInsensitively() {
@@ -133,7 +137,7 @@ final class ProgressUpdatesTests: XCTestCase {
             wake("w"),
             say("b", "✓ **ci**: Passed"),
         ])
-        XCTAssertEqual(projection.owners["a"]?.entries.count, 2)
+        XCTAssertEqual(projection.owners["b"]?.entries.count, 2)
     }
 
     func testANewHumanRequestStartsAFreshRow() {
@@ -166,19 +170,21 @@ final class ProgressUpdatesTests: XCTestCase {
         XCTAssertNotNil(projection.owners["b"])
     }
 
-    func testSeparateTopicsAndTeamNotesKeepTheirOwnRows() {
+    func testTopicsShareOneRowUntilATeamNote() {
         let projection = project(
             [
                 say("a", "◷ **CI**: Running", at: 0),
                 wake("w1"),
-                say("b", "◷ **Build**: Running", at: 30),
+                say("b", "◷ **Deployment**: Running", at: 30),
                 wake("w2"),
                 say("c", "✓ **CI**: Passed", at: 120),
             ],
             notes: [Date(timeIntervalSince1970: 1_767_225_660)] // 00:01:00
         )
-        XCTAssertEqual(Set(projection.owners.keys), ["a", "b", "c"])
-        XCTAssertTrue(projection.hidden.isEmpty)
+        XCTAssertEqual(Set(projection.owners.keys), ["b", "c"])
+        XCTAssertEqual(projection.owners["b"]?.latest.topic, "Deployment")
+        XCTAssertEqual(projection.owners["b"]?.entries.map(\.id), ["a", "b"])
+        XCTAssertEqual(projection.hidden, ["a"])
     }
 
     func testNarrationFollowedByMoreWorkIsNeverAHiddenAnchor() {
@@ -229,8 +235,8 @@ final class ProgressUpdatesTests: XCTestCase {
             say("c", "✓ **CI**: All checks passed", at: 130),
         ])
         let rows = progressRows(result)
-        XCTAssertEqual(rows.count, 1, "one stable row, not three messages")
-        XCTAssertEqual(rows.first?.id, "a")
+        XCTAssertEqual(rows.count, 1, "one row, not three messages")
+        XCTAssertEqual(rows.first?.id, "c")
         XCTAssertEqual(rows.first?.latest.text, "All checks passed")
         XCTAssertEqual(rows.first?.entries.map(\.id), ["a", "b", "c"])
         // The status lines leave as rows, never as plain messages or footers.
@@ -250,6 +256,32 @@ final class ProgressUpdatesTests: XCTestCase {
         XCTAssertEqual(tools, 3)
         // Every update stays addressable for scroll anchors.
         XCTAssertTrue(result.flatMap(\.entryIds).contains("c"))
+        // The check-backs fold under the row, not beside it.
+        XCTAssertFalse(result.contains { if case .reviewLoop = $0 { true } else { false } })
+        XCTAssertEqual(progressWork(result).first??.rounds, 2)
+    }
+
+    func testATaskThatMovesOnKeepsOneRowWithItsCheckBacks() {
+        let result = blocks([
+            user("u", "Ship it"),
+            toolUse("t1"), toolResult("t1"),
+            say("a", "◷ **CI**: Running", at: 10),
+            wake("w1"),
+            toolUse("t2"), toolResult("t2"),
+            say("b", "◷ **Deployment**: Running", at: 70),
+            wake("w2"),
+            toolUse("t3"), toolResult("t3"),
+            say("c", "Live: the change is out.", at: 130),
+        ])
+        let rows = progressRows(result)
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertEqual(rows.first?.latest.label, "Deployment: Running")
+        XCTAssertEqual(rows.first?.history.map(\.update.label), ["CI: Running"])
+        XCTAssertFalse(result.contains { if case .reviewLoop = $0 { true } else { false } })
+        XCTAssertNotNil(progressWork(result).first ?? nil)
+        guard case .message(let last) = result.last(where: { if case .footer = $0 { false } else { true } })
+        else { return XCTFail("the final answer stays a message") }
+        XCTAssertEqual(last.id, "c")
     }
 
     func testABlockerOrQuestionStaysAReadableMessage() {

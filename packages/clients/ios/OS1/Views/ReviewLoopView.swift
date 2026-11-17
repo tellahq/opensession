@@ -42,17 +42,13 @@ struct ReviewLoopView: View {
 
             if state.expanded {
                 VStack(alignment: .leading, spacing: 8) {
-                    ForEach(loop.blocks) { block in
-                        // The handoff itself is what the header stands for;
-                        // drawing it again inside would say the same thing
-                        // twice, one indent apart. The settle notice stays: it
-                        // is the loop's own last word, and the verdict row
-                        // below only exists while GitHub still has one.
-                        // Wait boundaries are structural, never a row.
-                        if !isHandoff(block), !isTurnBoundary(block) {
-                            row(for: block)
-                        }
-                    }
+                    LoopWorkRows(
+                        loop: loop,
+                        sessionId: sessionId,
+                        worktreeDir: worktreeDir,
+                        expansionState: expansionState,
+                        activity: activity
+                    )
                     if let result = loop.result, result.status != .pending {
                         ReviewLoopResultRow(result: result, rounds: loop.rounds)
                     }
@@ -63,55 +59,6 @@ struct ReviewLoopView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// Review work uses the turn's own step rows, without a second worker
-    /// disclosure inside this one.
-    @ViewBuilder
-    private func row(for block: TranscriptBlock) -> some View {
-        switch block {
-        case .work(let turn):
-            TurnStepsView(
-                items: turn.items,
-                sessionId: sessionId,
-                worktreeDir: worktreeDir,
-                // Only the loop's newest work can still be running.
-                isLive: loop.isLive && block.id == loop.blocks.last?.id,
-                rendersToolCallsInPlace: activity.rendersToolCallsInPlace,
-                expansionState: expansionState
-            )
-        case .tool(let item):
-            ToolCallRow(
-                item: item,
-                sessionId: sessionId,
-                worktreeDir: worktreeDir,
-                state: expansionState(item.id, item.hasFeaturedMedia)
-            )
-        case .footer(let footer):
-            TurnFooterView(footer: footer, sessionId: sessionId)
-        case .message(let entry):
-            if let notice = entry.notice {
-                NoticeRow(
-                    entry: entry,
-                    notice: notice,
-                    state: expansionState("notice-\(entry.id)", false)
-                )
-            } else if entry.isReasoning == true {
-                ReasoningSummaryRow(entry: entry)
-            } else {
-                // A plain prompt can never be in here — one ends the loop —
-                // so anything left is the agent's own prose.
-                AssistantMessage(
-                    entry: entry,
-                    sessionId: sessionId,
-                    state: expansionState("body-\(entry.id)", false)
-                )
-            }
-        // Notes and walkthroughs are never grouped into a loop, and a loop
-        // never nests.
-        default:
-            EmptyView()
-        }
     }
 
     /// One quiet gray line, like the turn fold above it: "Checked back
@@ -179,6 +126,84 @@ struct ReviewLoopView: View {
         return state.expanded ? "Hide the \(work)" : "Show the \(work)"
     }
 
+    private var accessibilityLabel: String {
+        var parts = [titleText, loop.isLive ? "Working" : loop.detail]
+        if let prNumber = loop.prNumber { parts.append("PR #\(prNumber)") }
+        return parts.joined(separator: ", ")
+    }
+}
+
+/// The rows inside a review or check-back fold, shared with the status row
+/// that takes in a check-back fold (`ProgressStatusRow`).
+struct LoopWorkRows: View {
+    let loop: ReviewLoop
+    let sessionId: String
+    var worktreeDir: String?
+    let expansionState: (String, Bool) -> TurnFoldState
+    var activity = TurnActivity.standard
+
+    var body: some View {
+        ForEach(loop.blocks) { block in
+            // The handoff itself is what the header stands for; drawing it
+            // again inside would say the same thing twice, one indent apart.
+            // The settle notice stays: it is the loop's own last word, and the
+            // verdict row below only exists while GitHub still has one. Wait
+            // boundaries are structural, never a row.
+            if !isHandoff(block), !isTurnBoundary(block) {
+                row(for: block)
+            }
+        }
+    }
+
+    /// Review work uses the turn's own step rows, without a second worker
+    /// disclosure inside this one.
+    @ViewBuilder
+    private func row(for block: TranscriptBlock) -> some View {
+        switch block {
+        case .work(let turn):
+            TurnStepsView(
+                items: turn.items,
+                sessionId: sessionId,
+                worktreeDir: worktreeDir,
+                // Only the loop's newest work can still be running.
+                isLive: loop.isLive && block.id == loop.blocks.last?.id,
+                rendersToolCallsInPlace: activity.rendersToolCallsInPlace,
+                expansionState: expansionState
+            )
+        case .tool(let item):
+            ToolCallRow(
+                item: item,
+                sessionId: sessionId,
+                worktreeDir: worktreeDir,
+                state: expansionState(item.id, item.hasFeaturedMedia)
+            )
+        case .footer(let footer):
+            TurnFooterView(footer: footer, sessionId: sessionId)
+        case .message(let entry):
+            if let notice = entry.notice {
+                NoticeRow(
+                    entry: entry,
+                    notice: notice,
+                    state: expansionState("notice-\(entry.id)", false)
+                )
+            } else if entry.isReasoning == true {
+                ReasoningSummaryRow(entry: entry)
+            } else {
+                // A plain prompt can never be in here — one ends the loop —
+                // so anything left is the agent's own prose.
+                AssistantMessage(
+                    entry: entry,
+                    sessionId: sessionId,
+                    state: expansionState("body-\(entry.id)", false)
+                )
+            }
+        // Notes and walkthroughs are never grouped into a loop, and a loop
+        // never nests.
+        default:
+            EmptyView()
+        }
+    }
+
     private func isTurnBoundary(_ block: TranscriptBlock) -> Bool {
         guard case .message(let entry) = block else { return false }
         return entry.turnBoundary == true
@@ -187,12 +212,6 @@ struct ReviewLoopView: View {
     private func isHandoff(_ block: TranscriptBlock) -> Bool {
         guard case .message(let entry) = block else { return false }
         return entry.notice?.kind == "review-handoff"
-    }
-
-    private var accessibilityLabel: String {
-        var parts = [titleText, loop.isLive ? "Working" : loop.detail]
-        if let prNumber = loop.prNumber { parts.append("PR #\(prNumber)") }
-        return parts.joined(separator: ", ")
     }
 }
 
