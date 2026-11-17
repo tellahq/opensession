@@ -92,13 +92,18 @@ export const VIEWER_BRANCH =
  * precedes, since the name is what the bar is about.
  */
 export const VIEWER_CRUMB_UP =
-  "-mx-2 -my-[5px] max-w-[240px] shrink cursor-pointer overflow-hidden text-ellipsis rounded-[calc(6px*var(--rf))] px-2 py-[5px] " +
+  "-mx-1.5 -my-[5px] h-7 max-w-[240px] shrink cursor-pointer overflow-hidden text-ellipsis rounded-md px-1.5 pb-0.5 leading-[26px] " +
   "text-label font-medium text-dim transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] " +
   "hover:bg-hover hover:text-fg";
 
-/** Double-clickable to rename — hinted on hover without shifting the row. */
+/**
+ * Double-clickable to rename, hinted on hover without shifting the row. The
+ * hover box matches the header's repo icon button (28px tall, same radius) so
+ * the two read as a pair; the text sits a pixel high inside it, standing in for
+ * VIEWER_BRANCH's translate, which would lift the box off the icon's.
+ */
 export const VIEWER_BRANCH_EDITABLE =
-  "-mx-2 -my-[5px] cursor-text rounded-[calc(6px*var(--rf))] px-2 py-[5px] hover:bg-hover";
+  "-mx-1.5 -my-[5px] h-7 translate-y-0 cursor-text rounded-md px-1.5 pb-0.5 leading-[26px] hover:bg-hover";
 
 /** Inline rename input, sized to sit in place of the name. */
 export const VIEWER_BRANCH_RENAME =

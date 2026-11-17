@@ -241,9 +241,11 @@ export function RepoBar({
       </Menu.Trigger>
     ) : (
       // Desktop header: the repo is just its icon in front of the title. The
-      // name lives in the tooltip and the menu, so no "repo ›" crumb.
+      // name lives in the tooltip and the menu, so no "repo ›" crumb. Its hover
+      // box is the title's (VIEWER_BRANCH_EDITABLE): 28px tall, same radius,
+      // and the trailing -mr-0.5 leaves a 2px seam between the two boxes.
       <Menu.Trigger
-        className="-mx-1 -my-1 flex shrink-0 cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent p-1 text-fg hover:bg-hover data-[popup-open]:bg-hover"
+        className="-my-[5px] -ml-[5px] -mr-0.5 flex h-7 min-w-7 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-md border-0 bg-transparent px-[5px] text-fg transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-hover data-[popup-open]:bg-hover"
         title={`${busy ?? repoLabel(primary)}${
           attached.length > 0
             ? ` + ${attached.map((r) => repoLabel(r.repo)).join(", ")}`
