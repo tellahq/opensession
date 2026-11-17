@@ -31,6 +31,15 @@ enum OS1VisualStyle {
             ? UIColor(white: 0.161, alpha: 1)
             : .white
     })
+    /// A quick-reply pill's edge: the web's `--composer-border` (#dcdcdc in
+    /// light) at the 65% a pill needs to hold its ends on a white page, and
+    /// the separator in dark, where the composer's own edge is too faint for
+    /// a shape this small.
+    static let replyPillEdge = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 1, alpha: 0.12)
+            : UIColor(white: 0.863, alpha: 0.65)
+    })
     static let text = Color(uiColor: .label)
     static let textDim = Color(uiColor: .secondaryLabel)
     static let textFaint = Color(uiColor: .tertiaryLabel)
@@ -209,6 +218,14 @@ enum OS1VisualStyle {
     static let panel = Color(nsColor: .controlBackgroundColor)
     static let hover = Color(nsColor: .unemphasizedSelectedContentBackgroundColor)
     static let border = Color(nsColor: .separatorColor)
+    /// The Mac has no solid composer fill; a quick-reply pill takes the
+    /// control background, which is white in light and a lifted grey in dark.
+    static let composerSurface = Color(nsColor: .controlBackgroundColor)
+    static let replyPillEdge = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(white: 1, alpha: 0.12)
+            : NSColor(white: 0.863, alpha: 0.65)
+    })
     static let text = Color(nsColor: .labelColor)
     static let textDim = Color(nsColor: .secondaryLabelColor)
     static let textFaint = Color(nsColor: .tertiaryLabelColor)

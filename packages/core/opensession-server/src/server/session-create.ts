@@ -449,7 +449,7 @@ export interface ResolvedCreate {
   effort?: string;
   autoFallback?: boolean;
   fastMode?: boolean;
-  speed?: SessionSpeed; // unset falls back to fastMode; "ultrafast" needs GPT-6 Astra and a Pro $500 login
+  speed?: SessionSpeed; // unset falls back to fastMode; "ultrafast" needs Astra or Sol and a Pro $500 login
   /** Pstack mode from the palette toggle; `/pstack <task>` as the opening prompt also enables it. */
   pstackMode?: boolean;
   /** Coordinator mode from the palette toggle (coordinator.ts). */

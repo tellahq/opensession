@@ -26,7 +26,7 @@ describe("model labels", () => {
     expect(shortModelLabel("pi/orchestrator/fable-sol", models)).toBe(
       "Fable 5.2",
     );
-    expect(shortModelLabel("dial/high", models)).toBe("GPT-6.1 Sol");
+    expect(shortModelLabel("dial/high", models)).toBe("GPT-6.2 Sol");
   });
 
   it("leaves plain model ids alone", () => {
@@ -37,8 +37,8 @@ describe("model labels", () => {
   });
 
   it("capitalizes named GPT variants", () => {
-    expect(shortModelLabel("pi/openai/gpt-6-astra", models)).toBe(
-      "GPT-6 Astra",
+    expect(shortModelLabel("pi/openai/gpt-6.2-astra", models)).toBe(
+      "GPT-6.2 Astra",
     );
   });
 

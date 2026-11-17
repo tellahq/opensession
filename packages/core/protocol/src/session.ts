@@ -27,7 +27,7 @@ import type { ContextBreakdown, RunActivity } from "./events";
 
 /** The complete set of managed Executor providers. */
 /** Service speed for ChatGPT subscription runs. "fast" is OpenAI's priority
- * tier; "ultrafast" is GPT-6 Astra only and needs a Pro $500 login. */
+ * tier; "ultrafast" is Astra or Sol only and needs a Pro $500 login. */
 export const SESSION_SPEEDS = ["standard", "fast", "ultrafast"] as const;
 export type SessionSpeed = (typeof SESSION_SPEEDS)[number];
 

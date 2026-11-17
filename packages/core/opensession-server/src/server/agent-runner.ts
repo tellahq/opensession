@@ -149,7 +149,7 @@ export interface RunAgentOpts {
   effort?: string;
   /** Use OpenAI's priority service tier when this is a ChatGPT OAuth Codex run. */
   fastMode?: boolean;
-  speed?: SessionSpeed; // unset falls back to fastMode; "ultrafast" needs GPT-6 Astra and a Pro $500 login
+  speed?: SessionSpeed; // unset falls back to fastMode; "ultrafast" needs Astra or Sol and a Pro $500 login
   /** Pstack mode: the pstack skill family is visible to the model. */
   pstackMode?: boolean;
   /**

@@ -73,7 +73,7 @@ afterAll(async () => {
 });
 
 test("review inversion reuses catalog-derived authorship", async () => {
-  store.upsert(row("owner", "pi/openai/gpt-6-astra"));
+  store.upsert(row("owner", "pi/openai/gpt-6.2-astra"));
   const author = await authorFamilyFor(pr);
   expect(author).toEqual({ family: "openai", source: "owning session owner" });
   expect(inverseReviewModel(author, "pi/openai/gpt-5.6-sol")?.family).toBe(
@@ -88,7 +88,7 @@ test("review inversion reuses catalog-derived authorship", async () => {
 test("a session that linked the PR owns it; the PR's own runs never do", async () => {
   // The PR's review run sits on the branch itself; it must never be the owner.
   store.upsert({
-    ...row("bks-ghpr-1-review", "pi/openai/gpt-6-astra"),
+    ...row("bks-ghpr-1-review", "pi/openai/gpt-6.2-astra"),
     lastActivity: "2026-09-20T00:00:00Z",
   });
   // Opened the PR from a temporary checkout, then linked it.
@@ -108,7 +108,7 @@ test("a session that linked the PR owns it; the PR's own runs never do", async (
     lastActivity: "2026-09-19T00:00:00Z",
     linkedPrs: [{ repo: "app", branch: "feature", number: 1 }],
   });
-  store.upsert(row("checkout", "pi/openai/gpt-6-astra"));
+  store.upsert(row("checkout", "pi/openai/gpt-6.2-astra"));
   expect(await authorFamilyFor(pr)).toEqual({
     family: "openai",
     source: "owning session checkout",
@@ -118,7 +118,7 @@ test("a session that linked the PR owns it; the PR's own runs never do", async (
 });
 
 test("autofix author model comes from one catalog row, not a session file", async () => {
-  store.upsert(row("bks-ghpr-1-autofix", "pi/openai/gpt-6-astra"));
+  store.upsert(row("bks-ghpr-1-autofix", "pi/openai/gpt-6.2-astra"));
   await updatePrState(
     1,
     "feature",
@@ -159,7 +159,7 @@ test("catalog failures and ambiguous ownership keep the configured reviewer", as
   }
   store.upsertMany(
     Array.from({ length: 26 }, (_, i) =>
-      row(`overflow-${i}`, "pi/openai/gpt-6-astra"),
+      row(`overflow-${i}`, "pi/openai/gpt-6.2-astra"),
     ),
   );
   expect(await authorFamilyFor(pr)).toBeNull();

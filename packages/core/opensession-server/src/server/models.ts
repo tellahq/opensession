@@ -67,6 +67,14 @@ const OPENAI_EFFORTS: SessionEffort[] = [
   "high",
   "xhigh",
 ];
+// GPT-6.2 rejects reasoning effort `none`.
+const OPENAI_REASONING_EFFORTS: SessionEffort[] = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+];
 const CLAUDE_EFFORTS: SessionEffort[] = [
   "low",
   "medium",
@@ -98,6 +106,8 @@ export function modelEfforts(
       : id.slice(0, slash);
   const slug = slash === -1 ? id : id.slice(slash + 1);
 
+  if (provider === "openai" && /^gpt-6\.2-(?:astra|sol)$/.test(slug))
+    return OPENAI_REASONING_EFFORTS;
   if (
     provider === "openai" &&
     /^(?:gpt-6\.1-sol|gpt-6\.1-terra|gpt-6-sol|gpt-6-luna)$/.test(slug)
@@ -172,8 +182,8 @@ export const DEFAULT_BRIDGE_PICKER_MODELS = [
   "claude-opus-5-5",
   "claude-sonnet-5-5",
   "claude-haiku-5-5",
-  "gpt-6-astra",
-  "gpt-6.1-sol",
+  "gpt-6.2-astra",
+  "gpt-6.2-sol",
   "gpt-6.1-terra",
   "gpt-6-luna",
 ] as const;
@@ -257,19 +267,31 @@ export const KNOWN_MODELS: ModelInfo[] = [
     aliases: ["best", "best-available", "best-codex"],
   },
   {
+    id: "gpt-6.2-astra",
+    provider: "codex",
+    label: "GPT-6.2 Astra",
+    aliases: ["astra", "astra6.2", "gpt6"],
+  },
+  {
+    id: "gpt-6.2-sol",
+    provider: "codex",
+    label: "GPT-6.2 Sol",
+    aliases: ["sol", "sol6.2", "codex", "gpt"],
+  },
+  // Superseded by GPT-6.2 Astra and Sol. Kept resolvable for persisted
+  // sessions; dispatch upgrades them through RETIRED_CODEX_REROUTE.
+  {
     id: "gpt-6-astra",
     provider: "codex",
     label: "GPT-6 Astra",
-    aliases: ["astra", "gpt6"],
+    aliases: ["astra6"],
   },
   {
     id: "gpt-6.1-sol",
     provider: "codex",
     label: "GPT-6.1 Sol",
-    aliases: ["sol", "sol6.1", "codex", "gpt"],
+    aliases: ["sol6.1"],
   },
-  // Superseded by GPT-6.1 Sol. Kept resolvable for persisted sessions;
-  // dispatch upgrades it through RETIRED_CODEX_REROUTE.
   {
     id: "gpt-6-sol",
     provider: "codex",
@@ -347,13 +369,13 @@ export const KNOWN_MODELS: ModelInfo[] = [
  */
 const RETIRED_PRESET_MODELS: Record<string, string> = {
   "dial/ultra": "claude-fable-5-2",
-  "dial/high": "gpt-6.1-sol",
-  "dial/medium": "gpt-6.1-sol",
+  "dial/high": "gpt-6.2-sol",
+  "dial/medium": "gpt-6.2-sol",
   "dial/low": "gpt-6-luna",
   "dial/opus-fable": "claude-opus-5-5",
   "orchestrator/fable": "claude-fable-5-2",
   "orchestrator/fable-sol": "claude-fable-5-2",
-  "orchestrator/sol": "gpt-6.1-sol",
+  "orchestrator/sol": "gpt-6.2-sol",
 };
 
 /** The model a retired preset id ran on, or undefined. Strips a leading
@@ -488,8 +510,8 @@ export function refreshPickerModels(): void {
       ...piPickerModels(),
       ...configuredPickerModels(),
     ];
-    // Deduplicate after routing: the seeded native id `gpt-6.1-sol` and a
-    // retained compatibility id `pi/openai/gpt-6.1-sol` are different input
+    // Deduplicate after routing: the seeded native id `gpt-6.2-sol` and a
+    // retained compatibility id `pi/openai/gpt-6.2-sol` are different input
     // strings, but both become the same picker row.
     const ids = new Set<string>();
     for (const configured of configuredModels) {
@@ -507,12 +529,12 @@ export function refreshPickerModels(): void {
 }
 refreshPickerModels();
 
-/** Per-provider defaults: claude-fable-5-2 for Anthropic, gpt-6.1-sol for OpenAI. */
+/** Per-provider defaults: claude-fable-5-2 for Anthropic, gpt-6.2-sol for OpenAI. */
 export const DEFAULT_CLAUDE_MODEL = "claude-fable-5-2";
-export const DEFAULT_CODEX_MODEL = "gpt-6.1-sol";
+export const DEFAULT_CODEX_MODEL = "gpt-6.2-sol";
 export const BEST_AVAILABLE_CODEX_MODEL = "codex-best-available";
 
-const CODEX_MODEL_ORDER = ["gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-luna"];
+const CODEX_MODEL_ORDER = ["gpt-6.2-sol", "gpt-6.1-terra", "gpt-6-luna"];
 
 /**
  * Fallback ROUTING tiers (higher = smarter). NOT an absolute capability
@@ -528,6 +550,8 @@ const CODEX_MODEL_ORDER = ["gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-luna"];
 const FALLBACK_TIER: Record<string, number> = {
   "claude-fable-5-2": 3,
   "claude-fable-5-1": 3,
+  "gpt-6.2-astra": 3,
+  "gpt-6.2-sol": 3,
   "gpt-6-astra": 3,
   "gpt-6.1-sol": 3,
   "gpt-6-sol": 3,
@@ -558,8 +582,8 @@ const FALLBACK_TIER: Record<string, number> = {
  * of, so routing another exhausted model back into it would just re-hit the cap.
  */
 const FALLBACK_DESTINATIONS = [
-  "gpt-6-astra",
-  "gpt-6.1-sol",
+  "gpt-6.2-astra",
+  "gpt-6.2-sol",
   // Prefer Opus before Terra/Luna once Sol is unavailable.
   "claude-opus-5-5",
   // Terra/Luna remain automatic top-tier fallbacks after Opus.
@@ -833,12 +857,14 @@ export function interactiveFallbackModel(
 
 /** Retired OpenAI slugs map onto their current equivalents. */
 const RETIRED_CODEX_REROUTE: Record<string, string> = {
-  "gpt-6-sol": "gpt-6.1-sol",
-  "gpt-5.6-sol": "gpt-6.1-sol",
+  "gpt-6-astra": "gpt-6.2-astra",
+  "gpt-6.1-sol": "gpt-6.2-sol",
+  "gpt-6-sol": "gpt-6.2-sol",
+  "gpt-5.6-sol": "gpt-6.2-sol",
   "gpt-5.6-terra": "gpt-6.1-terra",
   "gpt-5.6-luna": "gpt-6-luna",
-  "gpt-5.5": "gpt-6.1-sol",
-  "gpt-5.4": "gpt-6.1-sol",
+  "gpt-5.5": "gpt-6.2-sol",
+  "gpt-5.4": "gpt-6.2-sol",
   "gpt-5.4-mini": "gpt-6-luna",
   "gpt-5.3-codex-spark": "gpt-6-luna",
 };
@@ -969,7 +995,7 @@ export function interactiveDefaultModel(): string {
   return toPiModel(configured) || toPiModel(getDefaultModel())!;
 }
 
-/** Strip the engine prefix so a mapped id ("Pi/openai/gpt-6.1-sol",
+/** Strip the engine prefix so a mapped id ("Pi/openai/gpt-6.2-sol",
  *  "pi/anthropic/claude-opus-5", "claude/anthropic/claude-opus-5") resolves to
  *  its native key for tier lookup. Native ids pass through unchanged. */
 function nativeModelId(id: string | undefined | null): string {
@@ -1170,6 +1196,8 @@ const CONTEXT_WINDOWS: Record<string, number> = {
   "claude-haiku-4-5": 200_000,
   // Pi's catalog caps GPT-6 at 272K (the long-context price tier starts
   // there), so the engine compacts at that ceiling.
+  "gpt-6.2-astra": 272_000,
+  "gpt-6.2-sol": 272_000,
   "gpt-6.1-sol": 272_000,
   "gpt-6.1-terra": 272_000,
   "gpt-6-sol": 272_000,

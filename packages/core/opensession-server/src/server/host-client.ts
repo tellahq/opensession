@@ -272,7 +272,7 @@ export interface HostedRunOpts {
    *  matching RunHostSpec fields). */
   effort?: string;
   fastMode?: boolean;
-  speed?: SessionSpeed; // unset falls back to fastMode; "ultrafast" needs GPT-6 Astra and a Pro $500 login
+  speed?: SessionSpeed; // unset falls back to fastMode; "ultrafast" needs Astra or Sol and a Pro $500 login
   pstackMode?: boolean;
   accountId?: string;
   accountStrict?: boolean;
