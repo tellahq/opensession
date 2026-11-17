@@ -1317,7 +1317,14 @@ export function WorkspaceSummaryBody({
       className={
         embedded
           ? "flex flex-col gap-2.5 [&_button]:min-h-11 [&_a]:min-h-11"
-          : "contents"
+          : cn(
+              "contents",
+              // An empty section's add row stands in for its heading, so below
+              // the PR band it keeps a section's gap. Flush, it read as part of
+              // the PR. Without a band it is the card's first row and needs
+              // none; the phone card already spaces its groups apart.
+              "[&_.ws-summary-pr-group:has(>.ws-summary-band)~div_.ws-summary-add-row]:mt-2",
+            )
       }
     >
       {/* These two group names are selector hooks: their DOM boxes disappear via
