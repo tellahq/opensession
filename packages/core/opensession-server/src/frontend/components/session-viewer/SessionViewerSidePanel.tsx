@@ -314,8 +314,9 @@ export function SessionViewerSidePanel({
   );
 }
 
-/** The Browser tab's page. Not kept alive: the main strip's Browser tab owns
- *  the workspace's kept frame, and the two can hold different pages. */
+/** The Browser tab's page. A link or the PR preview stays loaded while the
+ *  panel shows another tab or session, in a frame of the session's own (the
+ *  main strip's Browser tab can hold a different page). */
 function PanelBrowser({ content }: { content: PanelBrowserContent }) {
   const { target, sessionId, staging, stagingUrl, shareLink } = content;
   const { onClose, onExpand } = content;
@@ -332,6 +333,8 @@ function PanelBrowser({ content }: { content: PanelBrowserContent }) {
     return (
       <SessionPreviewSurface
         surface={{ kind: "browser", url: target.url }}
+        frameScope={sessionId}
+        inPanel
         commentSessionId={sessionId}
       />
     );
@@ -344,6 +347,8 @@ function PanelBrowser({ content }: { content: PanelBrowserContent }) {
         url: stagingUrl,
         shareLink,
       }}
+      frameScope={sessionId}
+      inPanel
       commentSessionId={sessionId}
     />
   );

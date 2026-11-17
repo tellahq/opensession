@@ -41,6 +41,8 @@ export function AppShell({
           the detail pane. The active session's workspace/sub-agent panel
           portals in here. */}
       <div className={RIGHT_PANEL_SLOT} ref={rightPanelRef} />
+      {/* The panel's Browser pages, kept like the pane's above. */}
+      <KeptFrameLayer panel />
     </div>
   );
 }

@@ -48,9 +48,24 @@ export interface KeptFrame extends KeptFrameSpec {
   shownAt: number;
 }
 
-/** The frame key for a workspace's Browser or Portal view-tab. */
-export function keptFrameKey(kind: "staging" | "portal", scope: string) {
+/**
+ * The frame key for a workspace's Browser or Portal view-tab, or for a
+ * session's side panel Browser tab ("panel", scoped to the session).
+ */
+export function keptFrameKey(
+  kind: "staging" | "portal" | "panel",
+  scope: string,
+) {
   return `${kind}:${scope}`;
+}
+
+/**
+ * Whether `key`'s frame lives in the side panel's layer. The panel sits beside
+ * the detail pane, outside the pane's layer, and a frame never moves between
+ * layers: that would reload it.
+ */
+export function keptFrameInPanel(key: string): boolean {
+  return key.startsWith("panel:");
 }
 
 /**
@@ -129,23 +144,7 @@ export function showKeptFrame(
   const shownAt = ++clock;
   const existing = getKeptFrame(key);
   if (!existing) {
-    commit(
-      evict([
-        ...frames,
-        {
-          ...spec,
-          key,
-          address: spec.url,
-          location: null,
-          history: freshFrameHistory(0),
-          nonce: 0,
-          loading: true,
-          audible: false,
-          slot,
-          shownAt,
-        },
-      ]),
-    );
+    commit(evict([...frames, newFrame(key, spec, slot, shownAt)]));
     return;
   }
   update(key, (frame) => ({
@@ -164,6 +163,36 @@ export function showKeptFrame(
     slot,
     shownAt,
   }));
+}
+
+/**
+ * Starts loading `key`'s page, hidden, before any pane shows it, so the page
+ * is already there when its tab is first opened. A frame that exists keeps
+ * whatever it has.
+ */
+export function preloadKeptFrame(key: string, spec: KeptFrameSpec) {
+  if (getKeptFrame(key)) return;
+  commit(evict([...frames, newFrame(key, spec, null, ++clock)]));
+}
+
+function newFrame(
+  key: string,
+  spec: KeptFrameSpec,
+  slot: HTMLElement | null,
+  shownAt: number,
+): KeptFrame {
+  return {
+    ...spec,
+    key,
+    address: spec.url,
+    location: null,
+    history: freshFrameHistory(0),
+    nonce: 0,
+    loading: true,
+    audible: false,
+    slot,
+    shownAt,
+  };
 }
 
 /** The slot went away; the frame stays loaded and hidden. */

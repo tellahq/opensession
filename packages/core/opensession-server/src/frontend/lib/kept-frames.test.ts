@@ -11,7 +11,9 @@ import {
   keptFrameLoaded,
   keptFrameNavigated,
   keptFrameStepped,
+  keptFrameInPanel,
   loadKeptFrame,
+  preloadKeptFrame,
   resetKeptFrames,
   showKeptFrame,
 } from "./kept-frames";
@@ -35,6 +37,30 @@ test("a hidden frame keeps what it navigated to", () => {
   expect(frame.address).toBe("https://a.example.test/deep");
   expect(frame.loading).toBe(false);
   expect(frame.nonce).toBe(1);
+});
+
+test("a preloaded frame is the one its tab shows, already loaded", () => {
+  preloadKeptFrame("panel:s1", spec("https://pr.example.test/"));
+  expect(getKeptFrame("panel:s1")!.slot).toBeNull();
+  keptFrameLoaded("panel:s1", 1);
+  showKeptFrame("panel:s1", spec("https://pr.example.test/"), slot());
+  const frame = getKeptFrame("panel:s1")!;
+  expect(frame.loading).toBe(false);
+  expect(frame.nonce).toBe(0);
+});
+
+test("preloading leaves an existing frame alone", () => {
+  const el = slot();
+  showKeptFrame("staging:a", spec("https://a.example.test/"), el);
+  preloadKeptFrame("staging:a", spec("https://b.example.test/"));
+  expect(getKeptFrame("staging:a")!.address).toBe("https://a.example.test/");
+  expect(getKeptFrame("staging:a")!.slot).toBe(el);
+});
+
+test("only side panel keys live in the panel's layer", () => {
+  expect(keptFrameInPanel("panel:s1")).toBe(true);
+  expect(keptFrameInPanel("staging:s1")).toBe(false);
+  expect(keptFrameInPanel("portal:panel")).toBe(false);
 });
 
 test("a pane asking for a new URL starts the frame over", () => {

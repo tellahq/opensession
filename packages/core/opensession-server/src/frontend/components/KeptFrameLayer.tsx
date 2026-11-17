@@ -9,6 +9,7 @@ import {
   getKeptFrames,
   keptFrameAudible,
   keptFrameEntered,
+  keptFrameInPanel,
   keptFrameLoaded,
   keptFrameNavigated,
   keptFrameReturned,
@@ -24,8 +25,12 @@ import { BROWSER_FRAME, BrowserLoading } from "./BrowserPane";
  * once as the detail pane's last child, so it survives session switches,
  * slides with the pane on a phone, and paints over the slots it covers while
  * the pane's raised chrome and every popup still paint over it.
+ *
+ * The side panel's frames get a second layer, `panel`, mounted after the
+ * panel's column. Below 920px the panel floats at z-30, so its layer rises
+ * with it; on a phone there is no panel.
  */
-export function KeptFrameLayer() {
+export function KeptFrameLayer({ panel = false }: { panel?: boolean }) {
   const frames = useSyncExternalStore(
     subscribeKeptFrames,
     getKeptFrames,
@@ -35,12 +40,18 @@ export function KeptFrameLayer() {
   return (
     <div
       ref={hostRef}
-      className="pointer-events-none absolute inset-0 overflow-hidden"
+      className={
+        panel
+          ? "pointer-events-none absolute inset-0 overflow-hidden max-[920px]:z-30 phone:hidden"
+          : "pointer-events-none absolute inset-0 overflow-hidden"
+      }
     >
       {/* Keyed and never reordered: moving an iframe reloads it. */}
-      {frames.map((frame) => (
-        <KeptFrameBox key={frame.key} frame={frame} hostRef={hostRef} />
-      ))}
+      {frames
+        .filter((frame) => keptFrameInPanel(frame.key) === panel)
+        .map((frame) => (
+          <KeptFrameBox key={frame.key} frame={frame} hostRef={hostRef} />
+        ))}
     </div>
   );
 }

@@ -38,7 +38,7 @@ function elementChildren(
 }
 
 describe("AppShell", () => {
-  test("keeps pane chrome, content, and the right-panel slot in shell order", () => {
+  test("keeps pane chrome, content, the right-panel slot, and its kept pages in shell order", () => {
     const paneRef = (_node: HTMLElement | null) => {};
     const rightPanelRef = (_node: HTMLDivElement | null) => {};
     const tree = AppShell({
@@ -55,14 +55,17 @@ describe("AppShell", () => {
     expect(tree.props.className).toBe(WORKSPACE_SHELL);
 
     const shellChildren = elementChildren(tree.props.children);
-    expect(shellChildren).toHaveLength(2);
-    const [main, rightPanel] = shellChildren;
+    expect(shellChildren).toHaveLength(3);
+    const [main, rightPanel, panelFrames] = shellChildren;
     expect(main.type).toBe("main");
     expect(main.props.className).toBe(DETAIL_PANE);
     expect(main.props.ref).toBe(paneRef);
     expect(rightPanel.type).toBe("div");
     expect(rightPanel.props.className).toBe(RIGHT_PANEL_SLOT);
     expect(rightPanel.props.ref).toBe(rightPanelRef);
+    // After the panel's slot, so the panel's kept pages paint over it.
+    expect(panelFrames.type).toBe(KeptFrameLayerStub);
+    expect(panelFrames.props.panel).toBe(true);
 
     const paneChildren = elementChildren(main.props.children);
     expect(paneChildren).toHaveLength(4);
