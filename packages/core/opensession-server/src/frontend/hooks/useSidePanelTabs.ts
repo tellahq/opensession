@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { useNavigation } from "./useNavigation";
 import type { ReviewRegion } from "../components/session-viewer/SessionViewerMainRegion";
 import type { PanelBrowserTarget } from "../lib/portal-pin";
@@ -14,7 +14,10 @@ import {
   openSidePanelTab,
   registerSidePanelHost,
   setSidePanelDock,
+  sidePanelDockOf,
+  subscribeSidePanel,
 } from "../lib/side-panel-store";
+import { panelBrowserFrame } from "../lib/panel-browser-frame";
 import { useSessionRecord } from "../lib/session-records";
 import { useIsCoordinating } from "../lib/coordinator-mode";
 import { useSessionRecords } from "../lib/session-records";
@@ -38,6 +41,8 @@ interface PanelState {
   closePanelTab: (tab: SidePanelTab) => void;
   /** An action just opened the panel, so it slides in. */
   panelEntering: boolean;
+  activePanelOpen: boolean;
+  desktopPanelPage: string;
   setPanelTerminalMounted: (mounted: boolean) => void;
 }
 
@@ -146,6 +151,19 @@ export function useSidePanelTabs({
     if (tab === "terminal") setPanelTerminalMounted(false);
   };
 
+  // The summary card previews the Browser tab's page while the panel is not
+  // showing it: Browser opens in the panel, its tab is in the strip, and the
+  // panel is shut or on another tab.
+  const browserDock = useSyncExternalStore(subscribeSidePanel, () =>
+    sidePanelDockOf("browser"),
+  );
+  const summaryBrowser =
+    browserDock === "panel" &&
+    panelTabs.includes("browser") &&
+    !(panel.activePanelOpen && panel.desktopPanelPage === "browser")
+      ? panelBrowserFrame({ ...preview, target: panelBrowser })
+      : null;
+
   const browser: PanelBrowserContent = {
     ...preview,
     target: panelBrowser,
@@ -156,6 +174,7 @@ export function useSidePanelTabs({
   return {
     review: reviewAvailable ? review : null,
     browser,
+    summaryBrowser,
     threads,
     tabs: {
       tabs: panelTabs,

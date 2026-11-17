@@ -8,6 +8,7 @@ import {
   getKeptFrame,
   getKeptFrames,
   hideKeptFrame,
+  hideKeptFrameThumb,
   keptFrameLoaded,
   keptFrameNavigated,
   keptFrameStepped,
@@ -16,6 +17,7 @@ import {
   preloadKeptFrame,
   resetKeptFrames,
   showKeptFrame,
+  showKeptFrameThumb,
 } from "./kept-frames";
 
 // SAFETY: the store only compares slots by identity; it never reads them.
@@ -152,4 +154,31 @@ test("a session's view tabs live under its workspace, worktree, or itself", () =
     "/home/x/worktrees/b",
   );
   expect(viewTabScope({ id: "s1", worktreeDir: "/home/x/repo" })).toBe("s1");
+});
+
+test("a thumbnail shows the same page, loading it when no frame has it", () => {
+  const tile = slot();
+  showKeptFrameThumb("panel:s1", spec("https://pr.example.test/"), tile);
+  expect(getKeptFrame("panel:s1")!.thumb).toBe(tile);
+  keptFrameLoaded("panel:s1", 1);
+  loadKeptFrame("panel:s1", "https://pr.example.test/deep");
+  const pane = slot();
+  showKeptFrame("panel:s1", spec("https://pr.example.test/"), pane);
+  const frame = getKeptFrame("panel:s1")!;
+  // One frame, still where it navigated, now with both places to show.
+  expect(getKeptFrames()).toHaveLength(1);
+  expect(frame.address).toBe("https://pr.example.test/deep");
+  expect([frame.slot, frame.thumb]).toEqual([pane, tile]);
+  hideKeptFrameThumb("panel:s1", tile);
+  expect(getKeptFrame("panel:s1")!.thumb).toBeNull();
+});
+
+test("a frame shown as a thumbnail is not evicted", () => {
+  showKeptFrameThumb("panel:s1", spec("https://a.example.test/"), slot());
+  for (let i = 0; i <= KEPT_FRAME_LIMIT; i++) {
+    const el = slot();
+    showKeptFrame(`staging:${i}`, spec(`https://${i}.example.test/`), el);
+    hideKeptFrame(`staging:${i}`, el);
+  }
+  expect(keys()).toContain("panel:s1");
 });
