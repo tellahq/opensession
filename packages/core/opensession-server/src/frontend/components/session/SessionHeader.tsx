@@ -159,20 +159,6 @@ export function SessionHeader({
             />
           </>
         )}
-        {session.archived && (
-          <Tooltip label="Unarchive session" side="bottom">
-            <Button
-              variant="ghost"
-              size="md"
-              className="shrink-0 text-dim"
-              icon={<IconArchive size={20} aria-hidden />}
-              disabled={archiving}
-              onClick={onArchive}
-            >
-              {archiving ? "Unarchiving…" : "Unarchive"}
-            </Button>
-          </Tooltip>
-        )}
         {renameDraft !== null ? (
           <input
             className={VIEWER_BRANCH_RENAME}
@@ -283,6 +269,22 @@ export function SessionHeader({
             models={models}
             onOpen={openSession}
           />
+        )}
+        {/* An archived session says so right after its name, ahead of the ⋯
+            menu, so the way back sits beside the thing it restores. */}
+        {session.archived && (
+          <Tooltip label="Unarchive session" side="bottom">
+            <Button
+              variant="ghost"
+              size="md"
+              className="shrink-0 text-dim"
+              icon={<IconArchive size={20} aria-hidden />}
+              disabled={archiving}
+              onClick={onArchive}
+            >
+              {archiving ? "Unarchiving…" : "Unarchive"}
+            </Button>
+          </Tooltip>
         )}
         {/* This workspace's own controls, at the end of its own cluster: the
             ⋯ menu, then a contextual action such as the PR-session + or the
