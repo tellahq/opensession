@@ -212,6 +212,12 @@ describe("buildRunInstructions", () => {
     expect(prompt).toContain("◷ **CI**: Running");
     expect(prompt).toContain("✓ **CI**: All checks passed");
     expect(prompt).toContain("never for blockers, questions or deliverables");
+    expect(prompt).toContain("Keep passing verification out of delivery prose");
+    expect(prompt).toContain("no command lists, test counts or build recaps");
+    expect(prompt).toContain("✓ **Checks**: Passed");
+    expect(prompt).toContain(
+      "State failures or missing verification briefly in plain text",
+    );
   });
 
   test("asks for visual proof by default only where walkthroughs are mounted", () => {
