@@ -220,6 +220,11 @@ export const TurnBlock = function TurnBlock({
   ]
     .filter(Boolean)
     .join(" · ");
+  // Tool calls render flat when there is no narration (the outer row is
+  // already the run's summary) or the Tool calls preference keeps them open.
+  // Otherwise grouped rows each name their own counts and ±lines, and the
+  // turn-wide meta line above them read as the same summary twice.
+  const flatTools = pref.tools === "open" || !hasNarration;
   const title = live
     ? "Working"
     : duration
@@ -309,35 +314,27 @@ export const TurnBlock = function TurnBlock({
         <div
           className={cn(
             "mt-0.5",
-            // Open, the work wears a rail: a hairline dropping from the
-            // header, with every row nudged in beside it.
-            // The turn's final answer sits back at the column edge with no
-            // rail beside it, so where the work ends and the answer begins
-            // stays legible however long the fold runs (a divider only marks
-            // the seam; the rail says "still inside the work" from any
-            // scroll position).
-            "relative mb-2 ml-[5px] border-l border-line pl-2.5",
+            // Open, the work's rows sit nudged in under the header, and a
+            // hairline closes the fold, so where the work ends and the
+            // turn's final answer begins stays legible.
+            "mb-3 border-b border-line pb-2 pl-4",
           )}
         >
-          <button
-            type="button"
-            aria-label={`Collapse ${live ? "Working" : "Worked"}`}
-            onClick={() => rememberExpansion(false)}
-            className="absolute inset-y-0 -left-2 w-4 cursor-pointer border-0 bg-transparent p-0 after:absolute after:inset-y-0 after:left-1/2 after:border-l after:border-transparent after:transition-colors hover:after:border-line-strong focus-visible:after:border-line-strong"
-          />
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 py-1 text-meta text-faint">
-            {countsLabel && <span>{countsLabel}</span>}
-            {additions + deletions > 0 && (
-              <TurnLineStatsCard
-                files={editedFiles}
-                additions={additions}
-                deletions={deletions}
-              />
-            )}
-            {toolOnlyAggregate?.mediaLabel && (
-              <span>{toolOnlyAggregate.mediaLabel}</span>
-            )}
-          </div>
+          {flatTools && (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 py-1 text-meta text-faint">
+              {countsLabel && <span>{countsLabel}</span>}
+              {additions + deletions > 0 && (
+                <TurnLineStatsCard
+                  files={editedFiles}
+                  additions={additions}
+                  deletions={deletions}
+                />
+              )}
+              {toolOnlyAggregate?.mediaLabel && (
+                <span>{toolOnlyAggregate.mediaLabel}</span>
+              )}
+            </div>
+          )}
           {sections.map((sec) =>
             sec.kind === "message" ? (
               <MessageBubble
@@ -383,7 +380,7 @@ export const TurnBlock = function TurnBlock({
                   items={sec.items}
                   toolResults={toolResults}
                   live={live}
-                  expandAll={pref.tools === "open" || !hasNarration}
+                  expandAll={flatTools}
                   sessionId={sessionId}
                   onOpenSubagent={onOpenSubagent}
                 />

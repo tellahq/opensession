@@ -240,7 +240,7 @@ export const PR_HEAD =
  *  has a title to leave room for. */
 export const PR_HEAD_ERROR = "max-w-[120px] truncate text-meta text-red";
 /** Sized to the header chip so the pair reads as one control. */
-export const PR_HEAD_BTN = "min-h-[32px] px-[11px]";
+export const PR_HEAD_BTN = "min-h-[32px] px-3.5";
 
 /** Where a PR chip is rendered. `bar`/`head` are the primary chip (half of the
  *  split button, hence the squared end); `sib` is a sibling chip in the header,

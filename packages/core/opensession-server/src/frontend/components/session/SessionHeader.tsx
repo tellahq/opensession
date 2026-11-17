@@ -322,7 +322,7 @@ export function SessionHeader({
                   <Button
                     variant="ghost"
                     size="md"
-                    className="flex-none rounded-control"
+                    className="flex-none"
                     onClick={(event) => {
                       const animate =
                         event.detail > 0 &&

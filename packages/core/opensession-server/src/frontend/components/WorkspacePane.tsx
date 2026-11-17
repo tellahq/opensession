@@ -865,7 +865,7 @@ export function WorkspacePane({
               <Button
                 variant="ghost"
                 size="md"
-                className="flex-none rounded-control"
+                className="flex-none"
                 onClick={(event) => {
                   const reduceMotion = window.matchMedia(
                     "(prefers-reduced-motion: reduce)",
