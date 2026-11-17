@@ -235,7 +235,8 @@ passed`, the whole message and nothing else) draws as one compact row that
   the rest of the web's block catalog (`docs/blocks.md`) renders natively:
   quick-reply chips that send or fill the composer, collapsible file trees
   whose rows open the Changes panel, placed images and videos under their
-  heading with captions, a before/after compare control, Swift Charts for a
+  heading with captions, before/after stills (stacked on iOS, a slider on
+  the Mac), Swift Charts for a
   Vega-Lite subset, locked artifact/SVG frames, slide decks, palettes, data
   grids, JSON trees, ANSI output, washed diffs, display math, callouts and
   metric cards. Every parser lives in `Models/` and falls back to the plain

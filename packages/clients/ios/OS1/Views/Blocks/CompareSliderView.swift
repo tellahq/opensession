@@ -1,11 +1,17 @@
 import SwiftUI
 
-/// A ```compare fence: two stills as one before/after control. The before
-/// still underneath, the after still clipped to the right of a divider, and
-/// a sideways drag or a tap anywhere moves the divider. A vertical swipe that
-/// starts on the stills still scrolls the transcript, and a tall pair is
-/// capped in height so it never fills the screen. Both stills load with the
-/// session's credentials the way every transcript picture does.
+/// A ```compare fence: two stills, before and after. Both load with the
+/// session's credentials the way every transcript picture does, and a tall
+/// pair is capped in height so it never fills the screen.
+///
+/// On iOS the stills stack, Before over After, each under its own pill and
+/// each a full-width tap into the gallery. A divider under a finger fought
+/// the transcript's scroll and covered what it was dragged over, and the
+/// stills it split were too small to compare anyway.
+///
+/// On the Mac they are one before/after control: the before still
+/// underneath, the after still clipped to the right of a divider, and a drag
+/// or a click anywhere moves the divider.
 struct CompareSliderView: View {
     /// The tallest the box gets; a portrait pair shrinks in width to fit.
     private static let maxHeight: CGFloat = 400
@@ -25,18 +31,16 @@ struct CompareSliderView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Group {
-                if let before, let after {
-                    slider(before: before, after: after)
-                } else if failed {
-                    placeholder(symbol: "photo.badge.exclamationmark")
-                } else {
-                    placeholder(symbol: nil)
-                }
-            }
-            .clipShape(BlockChrome.shape)
-            .overlay {
-                BlockChrome.shape.stroke(OS1VisualStyle.border.opacity(0.6), lineWidth: 0.5)
+            if let before, let after {
+                #if os(iOS)
+                stacked(before: before, after: after)
+                #else
+                framed(slider(before: before, after: after))
+                #endif
+            } else if failed {
+                framed(placeholder(symbol: "photo.badge.exclamationmark"))
+            } else {
+                framed(placeholder(symbol: nil))
             }
             if let caption = spec.caption {
                 Text(caption)
@@ -62,6 +66,51 @@ struct CompareSliderView: View {
         return await DisplayableImageData.prepare(raw)
     }
 
+    private func framed(_ content: some View) -> some View {
+        content
+            .clipShape(BlockChrome.shape)
+            .overlay {
+                BlockChrome.shape.stroke(OS1VisualStyle.border.opacity(0.6), lineWidth: 0.5)
+            }
+    }
+
+    #if os(iOS)
+    /// Before over After. The gallery holds both, so a still opened full
+    /// screen pages to the other one.
+    private func stacked(before: Data, after: Data) -> some View {
+        let gallery = [
+            PreviewImage(id: "before", source: .data(before), walkthroughLabel: .before),
+            PreviewImage(id: "after", source: .data(after), walkthroughLabel: .after),
+        ]
+        return VStack(alignment: .leading, spacing: 14) {
+            pane(.before, data: before, gallery: gallery, index: 0)
+            pane(.after, data: after, gallery: gallery, index: 1)
+        }
+    }
+
+    private func pane(
+        _ side: PreviewImage.WalkthroughLabel,
+        data: Data,
+        gallery: [PreviewImage],
+        index: Int
+    ) -> some View {
+        let tone = side == .before ? OS1VisualStyle.redInk : OS1VisualStyle.greenInk
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(side.rawValue)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(tone)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(tone.opacity(0.12), in: Capsule())
+                .accessibilityAddTraits(.isHeader)
+            framed(
+                ExpandableDataImage(data: data, gallery: gallery, galleryIndex: index)
+                    .modifier(CappedAspect(ratio: aspectRatio(of: data), maxHeight: Self.maxHeight))
+            )
+        }
+    }
+    #endif
+
     private func placeholder(symbol: String?) -> some View {
         RoundedRectangle(cornerRadius: 10, style: .continuous)
             .fill(.fill.tertiary)
@@ -75,6 +124,7 @@ struct CompareSliderView: View {
             }
     }
 
+    #if os(macOS)
     private func slider(before: Data, after: Data) -> some View {
         GeometryReader { geometry in
             let width = geometry.size.width
@@ -96,19 +146,12 @@ struct CompareSliderView: View {
                 label("After", alignment: .topTrailing)
             }
             .contentShape(Rectangle())
-            #if os(iOS)
-            .onTapGesture(coordinateSpace: .local) { location in
-                set(location.x / max(width, 1), animated: true)
-            }
-            .gesture(HorizontalPan { x in set(x / max(width, 1), animated: false) })
-            #else
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
                         set(value.location.x / max(width, 1), animated: false)
                     }
             )
-            #endif
         }
         .modifier(CappedAspect(ratio: aspectRatio(of: before), maxHeight: Self.maxHeight))
         .overlay(alignment: .bottomTrailing) { expandButton(before: before, after: after) }
@@ -143,10 +186,6 @@ struct CompareSliderView: View {
 
     @ViewBuilder
     private func expandButton(before: Data, after: Data) -> some View {
-        let gallery = [
-            PreviewImage(id: "before", source: .data(before), walkthroughLabel: .before),
-            PreviewImage(id: "after", source: .data(after), walkthroughLabel: .after),
-        ]
         Button {
             expanded = true
         } label: {
@@ -160,15 +199,9 @@ struct CompareSliderView: View {
         .padding(8)
         .accessibilityLabel("Expand")
         .help("Expand")
-        #if os(iOS)
-        .fullScreenCover(isPresented: $expanded) {
-            FullScreenImagePreview(items: gallery, index: 0)
-        }
-        #else
         .sheet(isPresented: $expanded) {
             MacImagePreview(images: [before, after], index: 0)
         }
-        #endif
     }
 
     private func set(_ value: CGFloat, animated: Bool) {
@@ -179,6 +212,7 @@ struct CompareSliderView: View {
             position = clamped
         }
     }
+    #endif
 
     private func aspectRatio(of data: Data) -> CGFloat {
         #if os(iOS)
@@ -221,34 +255,3 @@ private struct CappedAspect: ViewModifier {
         }
     }
 }
-
-#if os(iOS)
-/// A pan that only begins when the finger first moves sideways. A SwiftUI
-/// `DragGesture` claims every touch on the stills, so a vertical swipe that
-/// starts on a tall pair can't scroll the transcript; this one fails on a
-/// vertical start and leaves the swipe to the scroll view.
-private struct HorizontalPan: UIGestureRecognizerRepresentable {
-    let onChange: (CGFloat) -> Void
-
-    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
-
-    func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
-        let pan = UIPanGestureRecognizer()
-        pan.delegate = context.coordinator
-        return pan
-    }
-
-    func handleUIGestureRecognizerAction(_ recognizer: UIPanGestureRecognizer, context: Context) {
-        guard recognizer.state == .began || recognizer.state == .changed else { return }
-        onChange(context.converter.localLocation.x)
-    }
-
-    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
-        func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
-            guard let pan = recognizer as? UIPanGestureRecognizer else { return true }
-            let velocity = pan.velocity(in: pan.view)
-            return abs(velocity.x) > abs(velocity.y)
-        }
-    }
-}
-#endif
