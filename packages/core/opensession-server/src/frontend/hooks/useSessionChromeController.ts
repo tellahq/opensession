@@ -128,12 +128,7 @@ export function useSessionChromeController({
   }, [infoPageOpen, identity.isPhone, panelPage]);
   useEffect(() => {
     if (!infoPageOpen) return;
-    // On a phone the page covers the window from outside the app root, so the
-    // app behind it goes inert. On desktop it lives inside the session's pane,
-    // next to a sidebar that stays usable.
-    const app = identity.isPhone
-      ? document.querySelector<HTMLElement>(".app")
-      : null;
+    const app = document.querySelector<HTMLElement>(".app");
     app?.setAttribute("inert", "");
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape")
@@ -144,7 +139,7 @@ export function useSessionChromeController({
       window.removeEventListener("keydown", onKeyDown);
       app?.removeAttribute("inert");
     };
-  }, [infoPageOpen, identity.isPhone]);
+  }, [infoPageOpen]);
   useEffect(() => {
     const toggle = () =>
       panelSettersRef.current.setInfoPageOpen((open) => {

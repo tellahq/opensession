@@ -195,28 +195,6 @@ export const PR_SUMMARY_BAND_BG: Record<PrTone, string> = {
   muted: "",
 };
 
-/** The PR as a card on the session overview page: its own plate, the state
- *  as a heading, and the action as one full-width button under it. */
-export const PR_OVERVIEW_CARD =
-  "flex flex-col gap-3 rounded-2xl bg-raised p-4 smooth-shadow-sm";
-
-/** Lets the action fill the card, including a pair (Continue, Archive) or an
- *  undo glyph riding in front of Merge. */
-export const PR_OVERVIEW_ACTION =
-  "flex [&>*]:min-w-0 [&>*]:flex-1 [&_button]:flex-1";
-
-/** The full-width action itself: tall, pill-shaped, body-sized label. */
-export const PR_OVERVIEW_BUTTON = "min-h-12 rounded-[999px] px-5 text-body";
-
-/** The round mark that leads the face pile, filled in the state's tone. */
-export const PR_OVERVIEW_STATUS_DOT: Record<PrTone, string> = {
-  green: "bg-green text-white",
-  purple: "bg-purple text-white",
-  red: "bg-red text-white",
-  yellow: "bg-yellow-soft text-yellow",
-  muted: "bg-hover text-dim",
-};
-
 /** A session that shipped one feature as several PRs: the primary strip plus a
  *  row per sibling, as one continuous block of status. */
 export const PR_BAR_STACK = `flex min-w-0 flex-col ${PR_BAR_IN_CARD}`;

@@ -78,17 +78,7 @@ import {
   WS_SUMMARY_STRIP,
   WS_SUMMARY_STATE,
   WS_SUMMARY_THUMB,
-  OVERVIEW_CAROUSEL,
-  OVERVIEW_DEMO,
-  OVERVIEW_HEADING,
-  OVERVIEW_LIST,
-  OVERVIEW_ROW,
-  OVERVIEW_ROW_MARK,
-  OVERVIEW_ROW_META,
 } from "../lib/workspace-summary-classes";
-import { formatCheckDuration, isDeployment } from "../lib/pr-status-derive";
-import { checkStatusMeta } from "../lib/pr-checks";
-import { Spinner } from "../ui/spinner";
 import {
   WS_SUMMARY_OPEN_EVENT,
   WS_SUMMARY_OPEN_KEY,
@@ -98,12 +88,9 @@ import {
   workspaceSummarySideOffset,
 } from "../lib/workspace-summary-open";
 import {
-  IconArrowUpRight,
-  IconCheck,
   IconChevronDown,
   IconChevronRight,
   IconClock,
-  IconX,
   IconFile,
   IconGitCommit,
   IconListCircles,
@@ -219,13 +206,8 @@ interface Props {
   forceOpen?: boolean;
   /** Open only on request, without changing the standing-card preference. */
   forcePopover?: boolean;
-  /** Render as the session overview page the chat title opens: a header with
-   *  where the work stands, the PR card, Deployments, Demos, then the rest. */
+  /** Render the same quiet rows inside the phone Workspace page. */
   embedded?: boolean;
-  /** Overview page only: the page's name block, led by the title. */
-  hero?: React.ReactNode;
-  /** Overview page only: a quiet line under the status row (repo, model). */
-  heroDetails?: React.ReactNode;
   /** Media already visible in the live transcript, before the overview catches up. */
   liveMedia?: WorkspaceMediaItem[];
   /**
@@ -504,8 +486,6 @@ export function WorkspaceSummaryBody({
   reviewMode = false,
   liveMedia = NO_LIVE_MEDIA,
   prGroupRef,
-  hero,
-  heroDetails,
 }: Omit<Props, "anchor" | "onOpenChange" | "tabStripVisible"> & {
   close: () => void;
   /**
@@ -783,21 +763,11 @@ export function WorkspaceSummaryBody({
   // drawn one way at a time and the heading's toggle says which. A file with
   // nothing to show gets a glyph in the picture's place; a picture in the list
   // gets a thumbnail in the row's rail.
-  // On the overview page pictures and recordings lead as Demos, so the
-  // Assets list under them keeps only the files there is nothing to show of.
-  const isDemoAsset = (path: string) => {
-    const kind = assetPreviewKind(path);
-    return kind === "image" || kind === "video";
-  };
-  const listedAssets = embedded
-    ? assets.filter((file) => !isDemoAsset(file.path))
-    : assets;
-  const listView = embedded ? "list" : assetView;
-  const shown = listedAssets.slice(
+  const shown = assets.slice(
     0,
-    listView === "preview" ? ASSET_FRAMES_SHOWN : ASSETS_SHOWN,
+    assetView === "preview" ? ASSET_FRAMES_SHOWN : ASSETS_SHOWN,
   );
-  const assetsHidden = listedAssets.length - shown.length;
+  const assetsHidden = assets.length - shown.length;
 
   async function rerunOsReview() {
     if (!pr || !canRerunOsReview || reviewStarting) return;
@@ -1321,226 +1291,14 @@ export function WorkspaceSummaryBody({
     );
   }
 
-  /** The page's head: its name, then where the work stands in one line (the
-   *  PR's state, the line totals, how many files and commits), then a quiet
-   *  line of where it runs. */
-  function overviewHeader() {
-    const state = !pr
-      ? showDiffChanges || dirty > 0
-        ? { label: "No PR", tone: "bg-hover text-dim" }
-        : null
-      : pr.state === "MERGED"
-        ? {
-            label: "Merged",
-            tone: "bg-[color-mix(in_srgb,var(--purple)_12%,transparent)] text-purple",
-          }
-        : pr.state === "CLOSED"
-          ? { label: "Closed", tone: "bg-red-soft text-red" }
-          : pr.isDraft
-            ? { label: "Draft", tone: "bg-hover text-dim" }
-            : { label: "Open", tone: "bg-green-soft text-green" };
-    const commitsLabel =
-      commitCount > 0
-        ? `${commitCount} commit${commitCount === 1 ? "" : "s"}`
-        : null;
-    return (
-      <header className="flex flex-col gap-3 px-1 pb-5">
-        {hero}
-        {(state || showDiffChanges || commitsLabel) && (
-          <div className="flex min-h-9 flex-wrap items-center gap-x-2.5 gap-y-1 text-item-title">
-            {state && (
-              <span
-                className={cn(
-                  "inline-flex h-8 items-center rounded-[999px] px-3 text-label font-medium",
-                  state.tone,
-                )}
-              >
-                {state.label}
-              </span>
-            )}
-            {showDiffChanges && (
-              <Button
-                variant="ghost"
-                className="h-auto min-h-0 gap-1.5 px-0 text-[length:inherit] tabular-nums opacity-100 hover:bg-transparent hover:opacity-80"
-                onClick={() => onOpenPanelTab("changes")}
-                aria-label={`${changedFiles} file${changedFiles === 1 ? "" : "s"} changed · open Changes`}
-              >
-                <span className="text-green">+{additions}</span>
-                <span className="text-red">−{deletions}</span>
-                <span className="text-dim">
-                  · {changedFiles} file{changedFiles === 1 ? "" : "s"}
-                </span>
-              </Button>
-            )}
-            {showDiffChanges && commitsLabel && (
-              <span className="h-4 w-px bg-divider" aria-hidden />
-            )}
-            {commitsLabel && <span className="text-dim">{commitsLabel}</span>}
-          </div>
-        )}
-        {heroDetails}
-      </header>
-    );
-  }
-
-  /** The PR's preview deploys, one row each, plus its preview environment. */
-  function deploymentsSection() {
-    if (!pr || pr.state !== "OPEN") return null;
-    const deployments = (pr.checks ?? []).filter(isDeployment);
-    if (deployments.length === 0 && !pr.staging) return null;
-    return (
-      <section>
-        <h2 className={OVERVIEW_HEADING}>Deployments</h2>
-        <div className={OVERVIEW_LIST}>
-          <StagingLink
-            session={session}
-            variant="overview"
-            refreshTick={refreshTick}
-          />
-          {deployments.map((check) => {
-            const status = checkStatusMeta(check);
-            const name = check.name.replace(
-              /^(vercel|preview)\s*([–—-]|\/)\s*/i,
-              "",
-            );
-            const meta =
-              status.kind === "success"
-                ? formatCheckDuration(check)
-                : status.label;
-            return (
-              <a
-                key={check.name}
-                href={check.url || undefined}
-                target="_blank"
-                rel="noopener"
-                aria-disabled={!check.url || undefined}
-                className={OVERVIEW_ROW}
-                title={`${check.name} · ${status.label}`}
-              >
-                <span
-                  className={cn(
-                    OVERVIEW_ROW_MARK,
-                    status.kind === "success"
-                      ? "text-green"
-                      : status.kind === "failure"
-                        ? "text-red"
-                        : "text-dim",
-                  )}
-                >
-                  {status.kind === "pending" ? (
-                    <Spinner size="sm" />
-                  ) : status.kind === "failure" ? (
-                    <IconX size={18} />
-                  ) : (
-                    <IconCheck size={18} />
-                  )}
-                </span>
-                <span className="min-w-0 flex-1 truncate">{name}</span>
-                {meta && <span className={OVERVIEW_ROW_META}>{meta}</span>}
-                {check.url && (
-                  <IconArrowUpRight size={20} className="shrink-0 text-faint" />
-                )}
-              </a>
-            );
-          })}
-        </div>
-      </section>
-    );
-  }
-
-  /** Recordings and pictures of the work, as a sideways strip of wide cards:
-   *  the session's own videos and captures first, then what was shared in the
-   *  conversation. */
-  function demosSection() {
-    const demoAssets = assets.filter((file) => isDemoAsset(file.path));
-    // Recordings lead: a demo of the change says more than a still of it.
-    demoAssets.sort(
-      (a, b) =>
-        Number(assetPreviewKind(b.path) === "video") -
-        Number(assetPreviewKind(a.path) === "video"),
-    );
-    if (demoAssets.length === 0 && media.length === 0) return null;
-    const anyVideo =
-      media.some((item) => item.kind === "video") ||
-      demoAssets.some((file) => assetPreviewKind(file.path) === "video");
-    const frame = (kind: "video" | "image", src: string) =>
-      kind === "video" ? (
-        <>
-          <video
-            src={`${src}#t=0.1`}
-            muted
-            playsInline
-            preload="metadata"
-            className="h-full w-full object-cover"
-          />
-          <span className="pointer-events-none absolute inset-0 grid place-items-center">
-            <span className="grid size-12 place-items-center rounded-full bg-black/40 text-white backdrop-blur-md">
-              <IconPlay size={22} />
-            </span>
-          </span>
-        </>
-      ) : (
-        <img
-          src={src}
-          alt=""
-          loading="lazy"
-          className="h-full w-full object-cover"
-        />
-      );
-    return (
-      <section>
-        <h2 className={OVERVIEW_HEADING}>
-          {anyVideo ? "Demos" : "Screenshots"}
-          <span className="text-faint tabular-nums">
-            {demoAssets.length + media.length}
-          </span>
-        </h2>
-        <div className={OVERVIEW_CAROUSEL}>
-          {[
-            ...demoAssets.map((file) => ({
-              key: file.path,
-              kind:
-                assetPreviewKind(file.path) === "video"
-                  ? ("video" as const)
-                  : ("image" as const),
-              src: sessionAssetPreviewUrl(session.id, file),
-              title: file.path,
-              label: file.path.split("/").pop() || file.path,
-              open: () => openAsset(file.path),
-            })),
-            ...media.map((item, index) => ({
-              key: `${item.sessionId}:${item.at}:${index}`,
-              kind:
-                item.kind === "video" ? ("video" as const) : ("image" as const),
-              src: item.src,
-              title: [item.sessionTitle, fullTime(item.at)]
-                .filter(Boolean)
-                .join(" · "),
-              label: item.kind === "video" ? "Recording" : "Screenshot",
-              open: (target: HTMLElement) => openLightbox(media, index, target),
-            })),
-          ].map((demo) => (
-            <button
-              key={demo.key}
-              type="button"
-              className={OVERVIEW_DEMO}
-              onClick={(event) => demo.open(event.currentTarget)}
-              title={demo.title}
-              aria-label={demo.label}
-            >
-              {frame(demo.kind, demo.src)}
-            </button>
-          ))}
-        </div>
-      </section>
-    );
-  }
-
   // On a phone every group under the PR band shares one card. A card per
   // section stacked grey plates down the page and outweighed their rows.
   const groupClass = embedded ? "flex flex-col empty:hidden" : "contents";
   const prGroupClass = embedded
-    ? "flex flex-col gap-2 empty:hidden"
+    ? cn(
+        "flex flex-col overflow-hidden rounded-2xl bg-raised py-0",
+        " [&_.ws-summary-band]:mx-0 [&_.ws-summary-band]:mb-0 [&_.ws-summary-band]:px-2 [&_.ws-summary-band]:py-3 [&_.ws-summary-band]:[border-radius:inherit]",
+      )
     : prGroupRef
       ? "sticky top-0 z-10 flex flex-col bg-panel-surface pt-2"
       : cn(groupClass, "[&>.ws-summary-band:last-child]:mb-0");
@@ -1549,11 +1307,10 @@ export function WorkspaceSummaryBody({
     <div
       className={
         embedded
-          ? "flex flex-col [&_button]:min-h-11 [&_a]:min-h-11"
+          ? "flex flex-col gap-2.5 [&_button]:min-h-11 [&_a]:min-h-11"
           : "contents"
       }
     >
-      {embedded && overviewHeader()}
       {/* These two group names are selector hooks: their DOM boxes disappear via
 			    `display: contents`, but they are the actual siblings around the PR band. */}
       <div
@@ -1562,11 +1319,9 @@ export function WorkspaceSummaryBody({
       >
         {/* Which PR, where it stands, and the one thing to do about it. The
 				    strip owns all three; this card only says where they go. */}
-        {/* The overview page shows it as a card with its action as a full
-            width button; the side panel as the summary band. */}
         {!workspaceIsPreparing && (
           <PrStatusBar
-            variant={embedded ? "overview" : "summary"}
+            variant="summary"
             sessionId={session.id}
             repo={session.repo || undefined}
             archived={session.archived}
@@ -1589,20 +1344,14 @@ export function WorkspaceSummaryBody({
 				      down when the card is up, the same way it does for the workspace
 				      panel, so the deploy is in exactly one place at a time. Renders
 				      nothing when the PR has no preview. */}
-            {/* The overview lists it under Deployments instead. */}
-            {!embedded && (
-              <StagingLink
-                session={session}
-                variant="summary"
-                refreshTick={refreshTick}
-              />
-            )}
+            <StagingLink
+              session={session}
+              variant="summary"
+              refreshTick={refreshTick}
+            />
           </PrStatusBar>
         )}
       </div>
-
-      {embedded && deploymentsSection()}
-      {embedded && demosSection()}
 
       <SummaryRest embedded={embedded}>
         <div
@@ -1904,7 +1653,7 @@ export function WorkspaceSummaryBody({
           </div>
         )}
 
-        {media.length > 0 && !embedded && (
+        {media.length > 0 && (
           <div className={groupClass}>
             {/* The strip carries recordings too, but screenshots are what
 					    people call the set, so that is the word to head it with. What
@@ -1973,7 +1722,7 @@ export function WorkspaceSummaryBody({
           </div>
         )}
 
-        {listedAssets.length > 0 && (
+        {assets.length > 0 && (
           <div className={groupClass}>
             <div
               className={cn(
@@ -1982,16 +1731,14 @@ export function WorkspaceSummaryBody({
               )}
             >
               <span className="flex items-center gap-1.5">
-                <span>{embedded ? "Files" : "Assets"}</span>
+                <span>Assets</span>
                 <span className={cn(WS_SUMMARY_COUNT, "text-faint")}>
-                  {listedAssets.length}
+                  {assets.length}
                 </span>
               </span>
-              {!embedded && (
-                <AssetViewToggle mode={assetView} onChange={setAssetView} />
-              )}
+              <AssetViewToggle mode={assetView} onChange={setAssetView} />
             </div>
-            {listView === "preview" ? (
+            {assetView === "preview" ? (
               <div className={WS_SUMMARY_STRIP}>
                 {shown.map((file) => (
                   <button
@@ -2086,14 +1833,14 @@ export function WorkspaceSummaryBody({
 					    says the folder ends here. The strip answers it three times over:
 					    the heading carries the count, the sliver of the next frame says
 					    it scrolls, and each tile previews its file on top. */}
-            {listView === "list" && assetsHidden > 0 && (
+            {assetView === "list" && assetsHidden > 0 && (
               <button
                 className={WS_SUMMARY_ROW}
                 onClick={() => go(onOpenAssets)}
               >
                 <span className={WS_SUMMARY_RAIL} />
                 <span className={cn(WS_SUMMARY_LABEL, "text-dim")}>
-                  View all {listedAssets.length}
+                  View all {assets.length}
                 </span>
               </button>
             )}
@@ -2115,7 +1862,7 @@ function SummaryRest({
 }) {
   if (!embedded) return <>{children}</>;
   return (
-    <div className="mt-5 flex flex-col gap-2 overflow-hidden rounded-2xl bg-raised py-2 empty:hidden">
+    <div className="flex flex-col gap-2 overflow-hidden rounded-2xl bg-raised py-2 empty:hidden">
       {children}
     </div>
   );

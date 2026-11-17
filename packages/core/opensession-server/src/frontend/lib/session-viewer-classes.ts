@@ -620,14 +620,6 @@ export const INFO_PAGE =
   "pb-[max(16px,env(safe-area-inset-bottom,0px))] [&>*]:shrink-0 " +
   "[animation:session-info-in_var(--dur)_var(--ease)]";
 
-/** The same page on desktop, over the session's own pane rather than the
- *  window, so the sidebar and side panel stay put. Its content keeps a
- *  readable column in the middle of a wide pane. */
-export const INFO_PAGE_PANE =
-  "absolute inset-0 z-[60] flex flex-col gap-0.5 overflow-y-auto overscroll-contain bg-surface pb-6 [&>*]:shrink-0 " +
-  "[animation:session-info-in_var(--dur)_var(--ease)] " +
-  "[&>.session-info-content]:mx-auto [&>.session-info-content]:w-full [&>.session-info-content]:max-w-[720px] [&>.session-info-content]:pt-4";
-
 const INFO_TOPBAR =
   "session-info-topbar sticky top-0 z-[4] flex items-center " +
   "min-h-[calc(env(safe-area-inset-top,0px)+52px)] " +
@@ -667,12 +659,9 @@ export const INFO_HERO =
 /** 20px in the old sheet — the page's one heading, so it snaps to
  *  `text-page-title` (22px). */
 export const INFO_NAME =
-  "max-w-full text-page-title font-semibold leading-[1.2] tracking-[-0.02em] break-words text-fg";
-/** The quiet line under the status row: repo and model, each its own menu.
- *  Pulled left by the controls' own inset so the words line up with the
- *  title above them. */
+  "mt-[9px] max-w-full text-page-title font-semibold leading-[1.2] tracking-[-0.02em] break-words text-fg";
 export const INFO_SUB =
-  "-ml-1.5 flex min-h-11 max-w-full flex-wrap items-center gap-x-1 text-label font-medium text-dim";
+  "flex min-h-11 w-full max-w-full items-center justify-center gap-x-1 px-6 text-label font-medium text-dim";
 
 /** Phone PR strip frame: spacing + clipping only. The status tone itself
  * reaches the outer radius, so the row does not become a card inside a card. */
@@ -684,8 +673,7 @@ export const INFO_STATUS =
   // `mx-3` + `rounded-lg`, like every plate under it: the page has one edge.
   "session-info-status mx-3 mb-3 overflow-hidden rounded-lg empty:hidden";
 
-/** `session-info-content` is a hook: INFO_PAGE_PANE centres it on desktop. */
-export const INFO_CONTENT = "session-info-content min-h-[320px] pb-2";
+export const INFO_CONTENT = "min-h-[320px] pb-2";
 
 /** The phone Workspace summary's card stack. Each semantic section supplies
  * its own quiet background, so Review, Changes and media can be scanned as

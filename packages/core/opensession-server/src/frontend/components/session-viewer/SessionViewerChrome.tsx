@@ -98,9 +98,9 @@ import {
 } from "../../lib/app-header-classes";
 import {
   INFO_CONTENT,
+  INFO_HERO,
   INFO_NAME,
   INFO_PAGE,
-  INFO_PAGE_PANE,
   INFO_SECTION,
   INFO_SUB,
   INFO_SUMMARY_CARD,
@@ -1047,13 +1047,7 @@ export function SessionViewerChrome({
               onCommitRename={commitRename}
               onCancelRename={() => setRenameDraft(null)}
               canRename={Boolean(onRename)}
-              onOpenOverview={() => {
-                setInfoPageScrolled(false);
-                setInfoPageOpen(true);
-              }}
-              // While the overview covers the pane its own bar carries the
-              // menu, and one menu state cannot drive two popups.
-              menu={infoPageOpen ? null : overflowMenu}
+              menu={overflowMenu}
               menuTrailing={
                 !isPhone && showReview ? (
                   <div
@@ -1227,17 +1221,11 @@ export function SessionViewerChrome({
               }
             />
           );
-          // The chat's overview page. A phone covers the whole screen with it;
-          // desktop covers the session's own pane, header included, and leaves
-          // the sidebar and side panel where they are.
-          const infoPageHost = isPhone
-            ? document.body
-            : (topbarEl?.closest<HTMLElement>(".detail-pane") ?? null);
           const phoneInfoPage =
-            infoPageOpen && infoPageHost
+            isPhone && infoPageOpen
               ? createPortal(
                   <div
-                    className={isPhone ? INFO_PAGE : INFO_PAGE_PANE}
+                    className={INFO_PAGE}
                     ref={infoPageRef}
                     role="dialog"
                     aria-modal="true"
@@ -1339,71 +1327,78 @@ export function SessionViewerChrome({
                       />
                     ) : (
                       <>
+                        <div className={INFO_HERO}>
+                          {session.desk ? (
+                            <IconDesk size={40} className="text-dim" />
+                          ) : (
+                            <RepoTile
+                              name={session.repo || "repository"}
+                              size={40}
+                            />
+                          )}
+                          <h1 className={INFO_NAME} ref={infoHeroNameRef}>
+                            {workspaceName || session.title}
+                          </h1>
+                          <div className={INFO_SUB}>
+                            {!session.desk && hasRepoWork && (
+                              <RepoBar
+                                sessionId={session.id}
+                                primaryRepo={session.repo || "repository"}
+                                branch={session.branch}
+                                initialAttached={session.attachedRepos || []}
+                                variant="hero"
+                              />
+                            )}
+                            {!session.desk &&
+                              hasRepoWork &&
+                              models.length > 0 && (
+                                <span aria-hidden="true">·</span>
+                              )}
+                            {session.source === "opensession" &&
+                            models.length > 0 ? (
+                              <ModelMenuRow
+                                models={models}
+                                model={model}
+                                defaultModel={defaultModel}
+                                onChange={handleModelChange}
+                                prettyLabel={prettyModel}
+                                effort={effort}
+                                onEffortChange={setEffort}
+                                autoFallback={autoFallback}
+                                onAutoFallbackChange={changeAutoFallback}
+                                speed={speed}
+                                onSpeedChange={setSpeed}
+                                accounts={accounts}
+                                accountId={accountId}
+                                onAccountChange={handleAccountChange}
+                                usage={usage}
+                                variant="hero"
+                              />
+                            ) : models.length > 0 ? (
+                              <span className="inline-flex min-h-11 items-center px-1.5">
+                                {metadataModelLabel(effectiveModel, models)}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
                         <div className={INFO_CONTENT}>
+                          <ThreadsDetailsSection
+                            session={session}
+                            onOpenSession={openSession}
+                            onOpenAsset={openAssetFromTranscript}
+                            onLeave={() => setInfoPageOpen(false)}
+                          />
                           <div className={INFO_SUMMARY_CARD}>
+                            {session.sandbox && (
+                              <div className="flex min-h-11 items-center rounded-2xl bg-panel px-5 py-2">
+                                <SandboxBadge
+                                  sessionId={session.id}
+                                  sandbox={session.sandbox}
+                                />
+                              </div>
+                            )}
                             <WorkspaceSummaryBody
                               embedded
-                              hero={
-                                <div className="flex flex-col items-start gap-3">
-                                  {session.desk ? (
-                                    <IconDesk size={36} className="text-dim" />
-                                  ) : null}
-                                  <h1
-                                    className={INFO_NAME}
-                                    ref={infoHeroNameRef}
-                                  >
-                                    {workspaceName || session.title}
-                                  </h1>
-                                </div>
-                              }
-                              heroDetails={
-                                <div className={INFO_SUB}>
-                                  {!session.desk && hasRepoWork && (
-                                    <RepoBar
-                                      sessionId={session.id}
-                                      primaryRepo={session.repo || "repository"}
-                                      branch={session.branch}
-                                      initialAttached={
-                                        session.attachedRepos || []
-                                      }
-                                      variant="hero"
-                                    />
-                                  )}
-                                  {!session.desk &&
-                                    hasRepoWork &&
-                                    models.length > 0 && (
-                                      <span aria-hidden="true">·</span>
-                                    )}
-                                  {session.source === "opensession" &&
-                                  models.length > 0 ? (
-                                    <ModelMenuRow
-                                      models={models}
-                                      model={model}
-                                      defaultModel={defaultModel}
-                                      onChange={handleModelChange}
-                                      prettyLabel={prettyModel}
-                                      effort={effort}
-                                      onEffortChange={setEffort}
-                                      autoFallback={autoFallback}
-                                      onAutoFallbackChange={changeAutoFallback}
-                                      speed={speed}
-                                      onSpeedChange={setSpeed}
-                                      accounts={accounts}
-                                      accountId={accountId}
-                                      onAccountChange={handleAccountChange}
-                                      usage={usage}
-                                      variant="hero"
-                                    />
-                                  ) : models.length > 0 ? (
-                                    <span className="inline-flex min-h-11 items-center px-1.5">
-                                      {metadataModelLabel(
-                                        effectiveModel,
-                                        models,
-                                      )}
-                                    </span>
-                                  ) : null}
-                                </div>
-                              }
                               session={session}
                               onOpenPanelTab={(tab) => {
                                 if (tab === "changes") {
@@ -1446,22 +1441,6 @@ export function SessionViewerChrome({
                               close={() => setInfoPageOpen(false)}
                             />
                           </div>
-                          {session.sandbox && (
-                            <div className={INFO_SECTION}>
-                              <div className="flex min-h-11 items-center rounded-2xl bg-raised px-4 py-2">
-                                <SandboxBadge
-                                  sessionId={session.id}
-                                  sandbox={session.sandbox}
-                                />
-                              </div>
-                            </div>
-                          )}
-                          <ThreadsDetailsSection
-                            session={session}
-                            onOpenSession={openSession}
-                            onOpenAsset={openAssetFromTranscript}
-                            onLeave={() => setInfoPageOpen(false)}
-                          />
                           {(workflowRuns.length > 0 ||
                             subagents.length > 0) && (
                             <div className={INFO_SECTION}>
@@ -1510,7 +1489,7 @@ export function SessionViewerChrome({
                       </>
                     )}
                   </div>,
-                  infoPageHost,
+                  document.body,
                 )
               : null;
           return (
