@@ -262,8 +262,8 @@ export function createWorkspaceGroupingRenderers({
 
   // Activity sections separate live work from idle work, then keep attention and
   // draft rows ahead of the date bands. Idle rows whose PR landed leave the
-  // date bands for Merged at the bottom, below Snoozed, as Done sits in the
-  // status lanes. Rows rank by activity inside each band.
+  // date bands for Merged, which leads the list. Rows rank by activity inside
+  // each band.
   function renderInboxBands(
     rows: WsRow[],
     ns = "",
@@ -284,13 +284,13 @@ export function createWorkspaceGroupingRenderers({
       rows: WsRow[];
       prs: ReviewQueueItem[];
     }> = [
+      { key: "merged", label: "Merged", rows: [], prs: [] },
       { key: "inprogress", label: "In progress", rows: [], prs: [] },
       { key: "needsaction", label: "Needs action", rows: [], prs: [] },
       { key: "drafts", label: "Drafts", rows: [], prs: [] },
       { key: "recent", label: "Recent", rows: [], prs: [] },
       { key: "yesterday", label: "Yesterday", rows: [], prs: [] },
       { key: "earlier", label: "Earlier", rows: [], prs: [] },
-      { key: "merged", label: "Merged", rows: [], prs: [] },
     ];
     const bandFor = (key: ActivityBand) =>
       bands.find((band) => band.key === key)!;
@@ -355,15 +355,8 @@ export function createWorkspaceGroupingRenderers({
           </div>
         );
       });
-    if (snoozedRows.length > 0) {
-      const merged = bandFor("merged");
-      const hasMerged = merged.rows.length > 0 || merged.prs.length > 0;
-      nodes.splice(
-        hasMerged ? nodes.length - 1 : nodes.length,
-        0,
-        renderSnoozedGroup(snoozedRows, ns, nested),
-      );
-    }
+    if (snoozedRows.length > 0)
+      nodes.push(renderSnoozedGroup(snoozedRows, ns, nested));
     return nodes;
   }
 
