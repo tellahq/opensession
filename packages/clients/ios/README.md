@@ -144,7 +144,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
 passed`, the whole message and nothing else) draws as one compact row per
   task: it sits at the latest update, whatever its topic, and takes in the
   check-back fold beside it, so earlier updates and that work are one tap
-  away (`Models/ProgressUpdates.swift`, mirroring the web). A human message,
+  away (`Models/ProgressUpdates.swift`, mirroring the web). Once the task
+  ends in an ordinary answer, its work, statuses and check-backs fold into
+  one `Worked for …` row above that answer. A human message,
   a review handoff or a team note starts a new row; blockers, questions and
   anything with extra prose or attachments stay ordinary messages, and the
   stored transcript is unchanged. On phones, one changed-files summary

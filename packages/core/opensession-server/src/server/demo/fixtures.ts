@@ -1617,23 +1617,11 @@ export function demoSessions(opts: {
         iso(now - 4 * min),
         MODEL_FABLE,
       ),
-      transcriptLineContextInjection(
-        "Check the deployment.",
-        { source: "background-wait" },
-        "progress-deploy",
-        iso(now - 3 * min),
-      ),
-      transcriptLineAssistantText(
-        "Deployment is blocked: the preview service is unavailable. The build passed, but the preview has not been verified.",
-        "progress-blocker",
-        iso(now - 2 * min),
-        MODEL_FABLE,
-      ),
     ],
   });
 
   // A task whose status moves from one topic to the next across background
-  // check-backs: one row, with the check-back work folded under it.
+  // check-backs, then answers: one "Worked" row above the answer.
   const shipSid = "bks-demo-ship";
   sessions.push({
     id: shipSid,
