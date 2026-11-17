@@ -263,7 +263,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             .string()
             .optional()
             .describe(
-              "Optional model id — a tier ('claude-opus-5', 'gpt-6.1-sol') or an engine-prefixed id ('pi/anthropic/claude-opus-5').",
+              "Optional model id — a tier ('claude-opus-5', 'gpt-6.2-sol') or an engine-prefixed id ('pi/anthropic/claude-opus-5').",
             ),
           accountId: z
             .string()
@@ -403,7 +403,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             .string()
             .optional()
             .describe(
-              "Model id — a tier ('claude-opus-5', 'gpt-6.1-sol') or an engine-prefixed id ('pi/anthropic/claude-opus-5'); '' resets to the default.",
+              "Model id — a tier ('claude-opus-5', 'gpt-6.2-sol') or an engine-prefixed id ('pi/anthropic/claude-opus-5'); '' resets to the default.",
             ),
           fallbackModel: z
             .string()

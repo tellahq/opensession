@@ -18,7 +18,7 @@ export interface ModelOption {
   accountProvider?: "claude" | "codex" | "xai";
   /** This model has subscription-backend priority-tier variants configured. */
   fastModeSupported?: boolean;
-  /** GPT-6 Astra: the ChatGPT backend also serves the ultrafast tier. */
+  /** GPT-6.2 Astra and Sol: the ChatGPT backend also serves the ultrafast tier. */
   ultrafastSupported?: boolean;
 }
 

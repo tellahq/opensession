@@ -6,7 +6,7 @@ import {
 
 const models = [
   { id: "pi/anthropic/claude-fable-5-2", efforts: ["low", "high", "max"] },
-  { id: "pi/openai/gpt-6.1-sol", efforts: ["none", "high", "xhigh"] },
+  { id: "pi/openai/gpt-6.2-sol", efforts: ["none", "high", "xhigh"] },
 ];
 const base = {
   models,
@@ -22,14 +22,14 @@ describe("preferredNewSessionModel", () => {
     expect(
       preferredNewSessionModel({
         ...base,
-        modelPref: "pi/openai/gpt-6.1-sol",
+        modelPref: "pi/openai/gpt-6.2-sol",
       }),
-    ).toBe("pi/openai/gpt-6.1-sol");
+    ).toBe("pi/openai/gpt-6.2-sol");
   });
   test("reads a retired preset preference as the model it ran on", () => {
     expect(
       preferredNewSessionModel({ ...base, modelPref: "pi/dial/high" }),
-    ).toBe("pi/openai/gpt-6.1-sol");
+    ).toBe("pi/openai/gpt-6.2-sol");
   });
   test("ignores a model the catalog does not offer", () => {
     expect(
@@ -43,7 +43,7 @@ describe("preferredNewSessionEffort", () => {
     expect(
       preferredNewSessionEffort({
         models,
-        model: "pi/openai/gpt-6.1-sol",
+        model: "pi/openai/gpt-6.2-sol",
         effortPref: "xhigh",
       }),
     ).toBe("xhigh");
@@ -61,7 +61,7 @@ describe("preferredNewSessionEffort", () => {
     expect(
       preferredNewSessionEffort({
         models,
-        model: "pi/openai/gpt-6.1-sol",
+        model: "pi/openai/gpt-6.2-sol",
         effortPref: "",
       }),
     ).toBeUndefined();

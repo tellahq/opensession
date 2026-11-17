@@ -10,13 +10,13 @@ describe("model picker groups", () => {
   test("keeps current Fable and Sol slugs out of legacy", () => {
     const { primary, legacy } = splitModelOptions([
       model("claude-fable-5-2", "claude"),
-      model("gpt-6.1-sol", "codex"),
+      model("gpt-6.2-sol", "codex"),
       model("gpt-5.5", "codex"),
     ]);
 
     expect(primary.map((entry) => entry.id)).toEqual([
       "claude-fable-5-2",
-      "gpt-6.1-sol",
+      "gpt-6.2-sol",
     ]);
     expect(legacy.map((entry) => entry.id)).toEqual(["gpt-5.5"]);
   });
@@ -24,7 +24,7 @@ describe("model picker groups", () => {
   test("keeps Pi-routed models first class", () => {
     const { primary, legacy } = splitModelOptions([
       model("pi/anthropic/claude-fable-5-2", "pi"),
-      model("pi/openai/gpt-6.1-sol", "pi"),
+      model("pi/openai/gpt-6.2-sol", "pi"),
     ]);
     expect(primary).toHaveLength(2);
     expect(legacy).toHaveLength(0);
@@ -66,14 +66,14 @@ describe("model picker groups", () => {
   test("puts Astra first among OpenAI models", () => {
     const { primary } = splitModelOptions([
       model("pi/openai/gpt-6-luna", "pi"),
-      model("pi/openai/gpt-6.1-sol", "pi"),
-      model("pi/openai/gpt-6-astra", "pi"),
+      model("pi/openai/gpt-6.2-sol", "pi"),
+      model("pi/openai/gpt-6.2-astra", "pi"),
       model("pi/openai/gpt-6.1-terra", "pi"),
     ]);
 
     expect(primary.map((entry) => entry.id)).toEqual([
-      "pi/openai/gpt-6-astra",
-      "pi/openai/gpt-6.1-sol",
+      "pi/openai/gpt-6.2-astra",
+      "pi/openai/gpt-6.2-sol",
       "pi/openai/gpt-6.1-terra",
       "pi/openai/gpt-6-luna",
     ]);

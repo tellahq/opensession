@@ -3438,7 +3438,7 @@ async function* runPiAttempt(
     // payload instead. Restrict this to seeded ChatGPT OAuth credentials: API
     // key accounts use ordinary OpenAI billing and are not the subscription
     // fast mode exposed by the clients.
-    // Ultrafast additionally needs GPT-6 Astra and a Pro $500 login; any
+    // Ultrafast additionally needs an Ultrafast model and a Pro $500 login; any
     // other account the picker had to fall back to still runs at Fast.
     const serviceTier = binding.usesOpenaiOAuth
       ? openaiServiceTier({

@@ -188,8 +188,56 @@ class MemoryCredentialStore {
  * compat (grammar tools, tool search) the new model shares. */
 const OPENAI_RELEASE_METADATA: Record<
   string,
-  { name: string; sibling: string; cost: ModelCost }
+  {
+    name: string;
+    sibling: string;
+    cost: ModelCost;
+    /** The API rejects reasoning effort `none`, so `off` maps to nothing. */
+    requiresReasoning?: boolean;
+  }
 > = {
+  // https://developers.openai.com/api/docs/models/gpt-6.2-astra
+  "gpt-6.2-astra": {
+    name: "GPT-6.2 Astra",
+    sibling: "gpt-6.1-sol",
+    requiresReasoning: true,
+    cost: {
+      input: 8,
+      output: 40,
+      cacheRead: 0.4,
+      cacheWrite: 10,
+      tiers: [
+        {
+          inputTokensAbove: 272_000,
+          input: 16,
+          output: 60,
+          cacheRead: 0.8,
+          cacheWrite: 20,
+        },
+      ],
+    },
+  },
+  // https://developers.openai.com/api/docs/models/gpt-6.2-sol
+  "gpt-6.2-sol": {
+    name: "GPT-6.2 Sol",
+    sibling: "gpt-6.1-sol",
+    requiresReasoning: true,
+    cost: {
+      input: 2,
+      output: 10,
+      cacheRead: 0.1,
+      cacheWrite: 2.5,
+      tiers: [
+        {
+          inputTokensAbove: 272_000,
+          input: 4,
+          output: 15,
+          cacheRead: 0.2,
+          cacheWrite: 5,
+        },
+      ],
+    },
+  },
   // https://developers.openai.com/api/docs/models/gpt-6.1-terra
   "gpt-6.1-terra": {
     name: "GPT-6.1 Terra",
@@ -227,7 +275,12 @@ function openaiFallbackModel(
     id: modelID,
     name: release?.name ?? modelID,
     reasoning: true,
-    thinkingLevelMap: { xhigh: "xhigh", max: "max", minimal: "low" },
+    thinkingLevelMap: {
+      xhigh: "xhigh",
+      max: "max",
+      minimal: "low",
+      ...(release?.requiresReasoning ? { off: null } : {}),
+    },
     input: ["text", "image"] as Array<"text" | "image">,
     cost: release?.cost ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 272_000,

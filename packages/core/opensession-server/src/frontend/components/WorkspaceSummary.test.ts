@@ -135,12 +135,17 @@ test("popup review heading keeps a small gap after a lone PR band", () => {
   );
 });
 
-test("an empty section's add row keeps a gap below the PR band", () => {
+test("an empty section's add row keeps a gap only right under the PR band", () => {
   // Flush under the PR band, an empty Collaborators row read as part of it.
   expect(addSource).toContain('cn(WS_SUMMARY_ROW, "ws-summary-add-row")');
   expect(summarySource).toContain(
-    '"[&_.ws-summary-pr-group:has(>.ws-summary-band)~div_.ws-summary-add-row]:mt-2"',
+    '"[&_.ws-summary-pr-group:has(>.ws-summary-band)+div_.ws-summary-add-row]:mt-2"',
   );
+  expect(summarySource).toContain(
+    '"[&_.ws-summary-pr-group:has(>.ws-summary-band)+.ws-summary-review-off+div_.ws-summary-add-row]:mt-2"',
+  );
+  // After Review's rows it is one more row of the list, not a new gap.
+  expect(summarySource).not.toContain("~div_.ws-summary-add-row]");
 });
 
 test("a stale automated review offers an inline re-review action", () => {

@@ -24,7 +24,7 @@ describe("Pi model ids", () => {
     expect(engineModelId("pi", "dial/opus-fable")).toBe(
       "pi/anthropic/claude-opus-5-5",
     );
-    expect(baseModelId("pi/dial/high")).toBe("pi/openai/gpt-6.1-sol");
+    expect(baseModelId("pi/dial/high")).toBe("pi/openai/gpt-6.2-sol");
   });
 
   test("identifies Anthropic models, including retired presets", () => {

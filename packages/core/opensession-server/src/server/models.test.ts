@@ -51,8 +51,8 @@ afterEach(async () => {
 describe("Pi-only model routing", () => {
   test("maps native model ids to Pi", async () => {
     expect(toPiModel("claude-opus-5-5")).toBe("pi/anthropic/claude-opus-5-5");
-    expect(toPiModel("gpt-6-astra")).toBe("pi/openai/gpt-6-astra");
-    expect(toPiModel("gpt-6.1-sol")).toBe("pi/openai/gpt-6.1-sol");
+    expect(toPiModel("gpt-6.2-astra")).toBe("pi/openai/gpt-6.2-astra");
+    expect(toPiModel("gpt-6.2-sol")).toBe("pi/openai/gpt-6.2-sol");
   });
 
   test("upgrades old Opus selections without changing historical labels", async () => {
@@ -144,23 +144,31 @@ describe("Pi-only model routing", () => {
     expect(resolveModel("pi/My-Gateway/Qwen/Qwen3-Coder")?.id).toBe(
       "pi/my-gateway/Qwen/Qwen3-Coder",
     );
-    expect(explicitEngineFor("pi/openai/gpt-6.1-sol")).toBe("pi");
+    expect(explicitEngineFor("pi/openai/gpt-6.2-sol")).toBe("pi");
   });
 
   test("reroutes retired OpenAI slugs", async () => {
-    expect(toPiModel("gpt-5.5")).toBe("pi/openai/gpt-6.1-sol");
-    expect(toPiModel("openai/gpt-5.5")).toBe("pi/openai/gpt-6.1-sol");
+    expect(toPiModel("gpt-5.5")).toBe("pi/openai/gpt-6.2-sol");
+    expect(toPiModel("openai/gpt-5.5")).toBe("pi/openai/gpt-6.2-sol");
     expect(toPiModel("pi/openai/gpt-5.4-mini")).toBe("pi/openai/gpt-6-luna");
-    expect(resolveModel("gpt5.5")?.id).toBe("gpt-6.1-sol");
-    expect(resolveModel("pi/openai/gpt-5.5")?.id).toBe("pi/openai/gpt-6.1-sol");
+    expect(resolveModel("gpt5.5")?.id).toBe("gpt-6.2-sol");
+    expect(resolveModel("pi/openai/gpt-5.5")?.id).toBe("pi/openai/gpt-6.2-sol");
   });
 
-  test("upgrades GPT-6 Sol to GPT-6.1 Sol", async () => {
-    expect(toPiModel("gpt-6-sol")).toBe("pi/openai/gpt-6.1-sol");
-    expect(toPiModel("pi/openai/gpt-6-sol")).toBe("pi/openai/gpt-6.1-sol");
-    expect(resolveModel("sol")?.id).toBe("gpt-6.1-sol");
-    expect(modelLabel("gpt-6-sol")).toBe("GPT-6 Sol");
-    expect(modelLabel("pi/openai/gpt-6-sol")).toBe("GPT-6 Sol");
+  test("upgrades GPT-6 and GPT-6.1 Sol and GPT-6 Astra to GPT-6.2", async () => {
+    for (const [previous, current, label] of [
+      ["gpt-6-sol", "gpt-6.2-sol", "GPT-6 Sol"],
+      ["gpt-6.1-sol", "gpt-6.2-sol", "GPT-6.1 Sol"],
+      ["gpt-6-astra", "gpt-6.2-astra", "GPT-6 Astra"],
+    ]) {
+      expect(toPiModel(previous)).toBe(`pi/openai/${current}`);
+      expect(toPiModel(`pi/openai/${previous}`)).toBe(`pi/openai/${current}`);
+      expect(modelLabel(previous)).toBe(label);
+      expect(modelLabel(`pi/openai/${previous}`)).toBe(label);
+    }
+    expect(resolveModel("sol")?.id).toBe("gpt-6.2-sol");
+    expect(resolveModel("sol6.1")?.id).toBe("gpt-6.2-sol");
+    expect(resolveModel("astra6")?.id).toBe("gpt-6.2-astra");
   });
 
   test("upgrades retired Fable 5 and 5.1 ids to Fable 5.2", async () => {
@@ -182,9 +190,9 @@ describe("Pi-only model routing", () => {
       engine: "pi",
       model: "pi/anthropic/claude-fable-5-2",
     });
-    expect(routeModel("openai/gpt-6.1-sol")).toEqual({
+    expect(routeModel("openai/gpt-6.2-sol")).toEqual({
       engine: "pi",
-      model: "pi/openai/gpt-6.1-sol",
+      model: "pi/openai/gpt-6.2-sol",
     });
   });
 
@@ -237,7 +245,7 @@ describe("Pi-only model routing", () => {
     expect(accountProviderForModel("pi/anthropic/claude-opus-5-5")).toBe(
       "claude",
     );
-    expect(accountProviderForModel("pi/openai/gpt-6.1-sol")).toBe("codex");
+    expect(accountProviderForModel("pi/openai/gpt-6.2-sol")).toBe("codex");
     expect(accountProviderForModel("pi/wafer/glm-5.2")).toBeUndefined();
   });
 
@@ -251,11 +259,11 @@ describe("Pi-only model routing", () => {
     const first = nextFallbackModel(
       "pi/anthropic/claude-fable-5-2",
       new Set(),
-      "pi/openai/gpt-6.1-sol",
+      "pi/openai/gpt-6.2-sol",
     );
     expect(first?.id.startsWith("pi/")).toBe(true);
     expect(
-      fallbackPlan("pi/anthropic/claude-fable-5-2", "pi/openai/gpt-6.1-sol"),
+      fallbackPlan("pi/anthropic/claude-fable-5-2", "pi/openai/gpt-6.2-sol"),
     ).toSatisfy((hops) => hops.every((hop) => hop.id.startsWith("pi/")));
   });
 
@@ -264,14 +272,14 @@ describe("Pi-only model routing", () => {
       "claude-fable-5-2",
       "pi/anthropic/claude-fable-5-2",
     ]) {
-      for (const preferred of ["pi/openai/gpt-6.1-sol", "claude-opus-5-5"]) {
+      for (const preferred of ["pi/openai/gpt-6.2-sol", "claude-opus-5-5"]) {
         expect(nextFallbackModel(primary, new Set(), preferred)).toEqual({
-          id: "pi/openai/gpt-6-astra",
+          id: "pi/openai/gpt-6.2-astra",
           mode: "auto",
         });
         expect(fallbackPlan(primary, preferred).slice(0, 2)).toEqual([
-          { id: "pi/openai/gpt-6-astra", mode: "auto" },
-          { id: "pi/openai/gpt-6.1-sol", mode: "auto" },
+          { id: "pi/openai/gpt-6.2-astra", mode: "auto" },
+          { id: "pi/openai/gpt-6.2-sol", mode: "auto" },
         ]);
       }
     }
@@ -281,10 +289,10 @@ describe("Pi-only model routing", () => {
     expect(
       nextFallbackModel(
         "pi/anthropic/claude-fable-5-2",
-        new Set(["pi/openai/gpt-6-astra"]),
+        new Set(["pi/openai/gpt-6.2-astra"]),
         "claude-opus-5-5",
       ),
-    ).toEqual({ id: "pi/openai/gpt-6.1-sol", mode: "auto" });
+    ).toEqual({ id: "pi/openai/gpt-6.2-sol", mode: "auto" });
   });
 
   test("keeps automatic fallback disabled when requested", async () => {
@@ -305,20 +313,32 @@ describe("Pi-only model routing", () => {
       "pi/openai/gpt-6-luna",
     );
 
-    process.env.OPENSESSION_HAIKU_FALLBACK_MODEL = "gpt-6.1-sol";
+    process.env.OPENSESSION_HAIKU_FALLBACK_MODEL = "gpt-6.2-sol";
     expect(automaticFallbackModel("claude-haiku-4-5")).toBe(
-      "pi/openai/gpt-6.1-sol",
+      "pi/openai/gpt-6.2-sol",
     );
   });
 
   test("labels Pi models without an engine prefix", async () => {
-    expect(modelLabel("pi/openai/gpt-6-astra")).toBe("GPT-6 Astra");
-    expect(modelLabel("pi/openai/gpt-6.1-sol")).toBe("GPT-6.1 Sol");
+    expect(modelLabel("pi/openai/gpt-6.2-astra")).toBe("GPT-6.2 Astra");
+    expect(modelLabel("pi/openai/gpt-6.2-sol")).toBe("GPT-6.2 Sol");
   });
 
-  test("exposes Astra's reasoning efforts and aliases", async () => {
-    expect(resolveModel("astra")?.id).toBe("gpt-6-astra");
-    expect(resolveModel("gpt6")?.id).toBe("gpt-6-astra");
+  test("exposes GPT-6.2's reasoning efforts and aliases", async () => {
+    expect(resolveModel("astra")?.id).toBe("gpt-6.2-astra");
+    expect(resolveModel("gpt6")?.id).toBe("gpt-6.2-astra");
+    // GPT-6.2 rejects reasoning effort `none`.
+    for (const model of ["pi/openai/gpt-6.2-astra", "gpt-6.2-sol"]) {
+      expect(modelEfforts(model)).toEqual([
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+      ]);
+      expect(contextWindowFor(model)).toBe(272_000);
+      expect(fallbackTier(model)).toBe(3);
+    }
     expect(modelEfforts("pi/openai/gpt-6-astra")).toEqual([
       "none",
       "low",
@@ -330,7 +350,8 @@ describe("Pi-only model routing", () => {
 
   test("upgrades Sol, Terra and Luna without changing historical labels", async () => {
     for (const name of ["sol", "terra", "luna"]) {
-      const current = name === "luna" ? "gpt-6-luna" : `gpt-6.1-${name}`;
+      const version = { sol: "6.2", terra: "6.1", luna: "6" }[name];
+      const current = `gpt-${version}-${name}`;
       const previous = `gpt-5.6-${name}`;
       expect(resolveModel(name)?.id).toBe(current);
       for (const prefix of ["", "openai/", "pi/openai/", "codex/openai/"]) {
@@ -340,7 +361,7 @@ describe("Pi-only model routing", () => {
           prefix ? `pi/openai/${current}` : current,
         );
         expect(modelEfforts(`${prefix}${current}`)).toEqual([
-          "none",
+          ...(name === "sol" ? [] : ["none" as const]),
           "low",
           "medium",
           "high",
@@ -352,9 +373,7 @@ describe("Pi-only model routing", () => {
       const label = name.charAt(0).toUpperCase() + name.slice(1);
       expect(modelLabel(previous)).toBe(`GPT-5.6 ${label}`);
       expect(modelLabel(`pi/openai/${previous}`)).toBe(`GPT-5.6 ${label}`);
-      expect(modelLabel(current)).toBe(
-        name === "luna" ? "GPT-6 Luna" : `GPT-6.1 ${label}`,
-      );
+      expect(modelLabel(current)).toBe(`GPT-${version} ${label}`);
       expect(accountProviderForModel(current)).toBe("codex");
       expect(fallbackTier(current)).toBe(3);
     }
@@ -372,8 +391,8 @@ describe("Pi-only model routing", () => {
     const pickerIds = KNOWN_MODELS.filter(
       (model) => model.provider === "pi",
     ).map((model) => model.id);
-    expect(pickerIds).toContain("pi/openai/gpt-6-astra");
-    expect(pickerIds).toContain("pi/openai/gpt-6.1-sol");
+    expect(pickerIds).toContain("pi/openai/gpt-6.2-astra");
+    expect(pickerIds).toContain("pi/openai/gpt-6.2-sol");
     expect(pickerIds).toContain("pi/openai/gpt-6-luna");
     expect(pickerIds).not.toContain("pi/openai/gpt-5.6-sol");
     expect(pickerIds).not.toContain("pi/openai/gpt-6-sol");
@@ -391,7 +410,7 @@ describe("Pi-only model routing", () => {
         pickerModels: [
           "pi/openai/gpt-5.6-sol",
           "pi/openai/gpt-5.6-luna",
-          "pi/openai/gpt-6.1-sol",
+          "pi/openai/gpt-6.2-sol",
           "pi/anthropic/claude-opus-5",
           "pi/anthropic/claude-opus-4-8",
         ],
@@ -403,7 +422,7 @@ describe("Pi-only model routing", () => {
     refreshPickerModels();
 
     expect(
-      KNOWN_MODELS.filter((model) => model.id === "pi/openai/gpt-6.1-sol"),
+      KNOWN_MODELS.filter((model) => model.id === "pi/openai/gpt-6.2-sol"),
     ).toHaveLength(1);
     expect(
       KNOWN_MODELS.filter(
@@ -434,7 +453,7 @@ test("interactive fallback is on by default and a session can opt out", async ()
 });
 
 test("retired preset ids resolve to the model they led", async () => {
-  expect(resolveModel("pi/dial/high")?.id).toBe("gpt-6.1-sol");
+  expect(resolveModel("pi/dial/high")?.id).toBe("gpt-6.2-sol");
   expect(resolveModel("dial/opus-fable")?.id).toBe("claude-opus-5-5");
   expect(toPiModel("pi/orchestrator/fable")).toBe(
     "pi/anthropic/claude-fable-5-2",

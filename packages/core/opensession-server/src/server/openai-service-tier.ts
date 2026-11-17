@@ -4,6 +4,8 @@
 import type { SessionSpeed } from "@tellahq/opensession-protocol/session";
 
 const OPENAI_FAST_MODE_MODELS = new Set([
+  "gpt-6.2-astra",
+  "gpt-6.2-sol",
   "gpt-6-astra",
   "gpt-6.1-sol",
   "gpt-6.1-terra",
@@ -24,7 +26,12 @@ export function supportsOpenaiFastMode(model?: string): boolean {
 }
 
 // https://learn.chatgpt.com/docs/agent-configuration/speed#astra-ultrafast
-const OPENAI_ULTRAFAST_MODELS = new Set(["gpt-6-astra"]);
+const OPENAI_ULTRAFAST_MODELS = new Set([
+  "gpt-6.2-astra",
+  "gpt-6.2-sol",
+  "gpt-6-astra",
+  "gpt-6.1-sol",
+]);
 
 /** Models the ChatGPT backend serves on the ultrafast service tier. */
 export function supportsOpenaiUltrafast(model?: string): boolean {
@@ -54,7 +61,7 @@ export function chatgptPlanFromJwt(jwt: unknown): string | undefined {
 export type OpenaiServiceTier = "priority" | "ultrafast";
 
 /** Service tier for a ChatGPT OAuth turn at the session's speed. Ultrafast
- * needs GPT-6 Astra and a Pro $500 login; short of either it runs as Fast. */
+ * needs an Ultrafast model and a Pro $500 login; short of either it runs as Fast. */
 export function openaiServiceTier(input: {
   speed: SessionSpeed;
   model: string;

@@ -220,7 +220,7 @@ describe("fixed-subscription session runs", () => {
     expect(
       await slashCommands.handleSlashCommand(
         session,
-        "/model pi/openai/gpt-6.1-sol",
+        "/model pi/openai/gpt-6.2-sol",
         "Robin",
       ),
     ).toContain("fixed subscription");

@@ -3,7 +3,7 @@
 Open Session sends every production model turn through the bundled Pi runtime;
 there is no separate `pi` executable to install. Model ids use
 `pi/<provider>/<model>`. Recognized bare ids such as `claude-fable-5-2` and
-`gpt-6.1-sol`, and provider paths such as `openai/gpt-6.1-sol`, normalize to
+`gpt-6.2-sol`, and provider paths such as `openai/gpt-6.2-sol`, normalize to
 that form at dispatch. See the [generated engine catalog](../generated/engines.md)
 for the current routing table.
 
@@ -165,8 +165,8 @@ Haiku-backed runs and derived one-shots instead cross providers to
 `gpt-5.6-luna` when the Claude pool is exhausted or unavailable. Override that
 with `OPENSESSION_HAIKU_FALLBACK_MODEL`, or set it to `none` to disable the
 Haiku-specific fallback. Other one-shots fall over only when their caller
-names a cross-provider chain: the PR merge-risk scorer tries `gpt-6-astra`,
-then `gpt-6.1-sol`, when the review model's pool is dry.
+names a cross-provider chain: the PR merge-risk scorer tries `gpt-6.2-astra`,
+then `gpt-6.2-sol`, when the review model's pool is dry.
 When the current model's whole account pool is unavailable, the runner tries
 configured fallback providers. Equal or stronger hops proceed automatically;
 an interactive downgrade asks first. A cross-provider hop starts a fresh Pi
