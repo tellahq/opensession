@@ -97,26 +97,25 @@ export const FOOTER_LEFT =
   "flex min-w-0 items-center gap-1.5 phone:flex-1 max-[560px]:gap-1";
 export const FOOTER_RIGHT =
   "flex min-w-0 items-center gap-1.5 phone:contents max-[560px]:gap-1";
-/** Round on a phone, where the bar's two controls are discs and the repo is a
- *  pill: a 12px corner among them is the one square thing on the card. The
- *  hover wash rides a pseudo-element, so it has to be rounded with them. */
+/** Round at every width, like the model pill and Create beside them: a 12px
+ *  corner among pills is the one square thing on the card. The hover wash
+ *  rides a pseudo-element, so it has to be rounded with them. */
 export const FOOTER_ICON_BTN = cn(
   paletteIconBtn,
-  "shrink-0 phone:size-11 phone:rounded-[999px] phone:before:rounded-[999px]",
+  "shrink-0 rounded-full before:rounded-full phone:size-11",
 );
-/** Ask mode's toggle. Off, it is one of the footer's quiet icon tools. On, it
- *  wears the same green marker the session composer's toolbar shows for the
- *  same mode, so one mode reads identically in both places — and it names
- *  itself, because the mode governs the whole session and an unlabelled glyph
- *  would leave read-only running silently.
+/** Ask mode, once it is on. Off, it is a row in the footer's overflow menu.
+ *  On, it surfaces in the footer wearing the same green marker the session
+ *  composer's toolbar shows for the same mode, so one mode reads identically in
+ *  both places. It names itself, because the mode governs the whole session
+ *  and read-only running behind a menu would be silent. Pressing it turns the
+ *  mode back off.
  *
- *  A complete string rather than a variant stacked on FOOTER_ICON_BTN: the two
- *  states differ in width, height and colour, and the icon button's square
- *  `size-11` would crush the labelled chip on phones. 32px tall on a desktop,
+ *  32px tall on a desktop,
  *  the size the icon buttons' hover wash paints, so the row keeps one rhythm;
  *  44px on a phone, where the whole row is thumb-sized. */
 export const ASK_BTN_ON =
-  "inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-control px-2.5 text-label font-medium transition-colors phone:min-h-11 phone:rounded-[999px] phone:px-3.5 bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green hover:bg-[color-mix(in_srgb,var(--green)_26%,transparent)] disabled:cursor-default disabled:opacity-50";
+  "inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-label font-medium transition-colors phone:min-h-11 phone:px-3.5 bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green hover:bg-[color-mix(in_srgb,var(--green)_26%,transparent)] disabled:cursor-default disabled:opacity-50";
 /** Ask mode paints the whole card, not just its toggle — the same thing the
  *  session composer does for ask and for note mode, because the mode governs
  *  everything you are about to type rather than one control in the corner.
@@ -137,13 +136,6 @@ export const MODEL_PILL = cn(
   "shrink min-w-0 max-w-none phone:ml-auto phone:min-h-11 phone:[&_[data-effort]]:hidden max-[560px]:px-[9px]",
 );
 
-/* What a create does with the view behind the palette: "open" follows the new
-   session, "background" leaves you where you were, and "more" keeps the palette
-   up for the next task. The order is the dropdown's, so the cycle shortcut and
-   the menu step the same way. */
-export const CREATE_ACTIONS = ["open", "background", "more"] as const;
-export type CreateAction = (typeof CREATE_ACTIONS)[number];
-
 // A dropped socket is recoverable: the same idempotent create is replayed as
 // soon as the connection returns. "failed" is reserved for a server response.
 export type CreateStatus =
@@ -151,51 +143,23 @@ export type CreateStatus =
   | { kind: "creating" }
   | { kind: "reconnecting" }
   | { kind: "failed"; message: string };
-/** ⌘⌥↓ / ⌘⌥↑ (Ctrl+Alt elsewhere). Vertical rather than horizontal because
- *  Chrome and Safari own ⌘⌥← / ⌘⌥→ for tab switching. */
-export const CYCLE_SHORTCUT = isApple ? ["⌘", "⌥", "↓"] : ["Ctrl", "Alt", "↓"];
 /** Held while picking a repo, it adds one instead of replacing the choice. */
 export const MULTI_MODIFIER = isApple ? "⌘" : "Ctrl";
 
-export const CREATE_LABELS: Record<CreateAction, string> = {
-  open: "Create",
-  background: "Create in background",
-  more: "Create more",
-};
+/* One Create button, round like the composer's send disc and the model pill
+   beside it. It used to be half of a split button whose caret picked between
+   opening the new session, staying put, or keeping the palette up for another;
+   a create now always opens what it made.
 
-/* Split button: primary Create action + a caret that opens a mode dropdown.
-   The two halves' corners are scoped to mutually exclusive media queries, so
-   no two radius utilities ever race: phones drop the caret and round the main
-   button out to a full pill.
-
-   Desktop rounds on `rounded-control`, the corner every other button in the
-   chrome shares (the Button primitive, the header CTAs). It used to be
-   `rounded-md` — one step down, 9.45px against 13.5px — which on a 36px-tall
-   plate read visibly square next to its neighbours. */
-export const CREATE_SPLIT =
-  "relative inline-flex shrink-0 items-stretch phone:order-2 phone:mt-0.5 phone:w-full";
-export const CREATE_MAIN =
-  "inline-flex cursor-pointer items-center gap-[7px] border-none bg-accent px-3.5 py-[7px] text-label font-semibold text-on-accent transition-[background-color,opacity] enabled:hover:bg-accent-hover disabled:cursor-default disabled:opacity-40 phone:min-h-11 phone:flex-1 phone:justify-center max-[560px]:px-3";
-/** The desktop corner, split between the two shapes the button takes: half of
- *  a split button beside its caret, or the whole button when there is no caret
- *  (inline). Written as two whole classes rather than one plus an override,
- *  because both set `border-top-left-radius`, and which one wins is decided by
- *  the compiled sheet's order rather than the order they are listed here.
- *
- *  The phone overlay moves Create into its title bar and does not render this
- *  pair. Only the inline card reaches these phone classes, where it has no
- *  caret and rounds the whole button. */
-export const CREATE_MAIN_SPLIT =
-  "desktop:rounded-l-control phone:rounded-l-[999px] phone:rounded-r-none";
-export const CREATE_MAIN_WHOLE =
-  "desktop:rounded-control phone:rounded-[999px]";
-export const CREATE_CARET =
-  "inline-flex cursor-pointer items-center gap-[7px] rounded-r-control phone:min-w-11 phone:justify-center phone:rounded-r-[999px] border-none bg-accent p-[7px] text-label font-semibold text-on-accent shadow-[inset_1px_0_0_rgba(0,0,0,0.14)] transition-[background-color,opacity] enabled:hover:bg-accent-hover disabled:cursor-default disabled:opacity-40";
+   The phone overlay moves Create into its title bar and does not render this.
+   Only the inline card reaches the phone classes, where it spans the row. */
+export const CREATE_BTN =
+  "inline-flex shrink-0 cursor-pointer items-center gap-[7px] rounded-full border-none bg-accent py-[7px] pl-4 pr-3.5 text-label font-semibold text-on-accent transition-[background-color,opacity] enabled:hover:bg-accent-hover disabled:cursor-default disabled:opacity-40 phone:order-2 phone:mt-0.5 phone:min-h-11 phone:w-full phone:justify-center max-[560px]:pl-3.5 max-[560px]:pr-3";
 export const CREATE_KBD = "opacity-70";
-export const CREATE_MENU =
-  "absolute bottom-[calc(100%+6px)] right-0 z-20 min-w-[208px] rounded-control bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] p-[5px] smooth-shadow-ring-md";
-export const CREATE_MENU_ITEM =
-  "flex w-full cursor-pointer items-start gap-[9px] rounded-md border-none bg-transparent px-[9px] py-[7px] text-left text-fg transition-colors hover:bg-hover";
+/** The card's corner, shared by the palette and the inline card. Round enough
+ *  to sit concentric with the pill-shaped Create and model controls at its
+ *  bottom edge: an 18px pill radius plus the 16px clearance around it. */
+export const CARD_RADIUS = "rounded-[calc(34px*var(--rf))]";
 
 /**
  * The same card rendered on the page rather than over a dimmed one: what the
@@ -214,7 +178,8 @@ export const CREATE_MENU_ITEM =
  * HUD; `overflow-hidden` keeps the rows' dividers inside the rounded shell.
  */
 export const INLINE_CARD = cn(
-  "relative flex w-full flex-col overflow-hidden rounded-2xl",
+  "relative flex w-full flex-col overflow-hidden",
+  CARD_RADIUS,
   "max-h-[min(560px,68dvh)]",
   composerBox,
 );

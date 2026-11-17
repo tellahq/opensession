@@ -1,31 +1,33 @@
 import React, { useEffect, useRef, useState } from "react";
 import { fetchOpenPrs, type OpenPr } from "../lib/api";
 import { matchingPullRequests } from "../lib/new-session-prs";
-import { paletteIconBtn } from "../lib/palette-classes";
 import { NO_REPO } from "../lib/session-repo";
 import { cn } from "../ui/cn";
 import { Input } from "../ui/input";
 import { Menu } from "../ui/menu";
-import { Tooltip } from "../ui/tooltip";
-import { IconNewBranch, IconPullRequest, IconSearch } from "./icons";
+import {
+  IconChevronRight,
+  IconNewBranch,
+  IconPullRequest,
+  IconSearch,
+} from "./icons";
 import { RepoTile, repoLabel } from "./RepoTile";
 
 interface Props {
   repo: string;
   selected: OpenPr | null;
-  disabled?: boolean;
   onSelect: (pullRequest: OpenPr) => void;
   onClear: () => void;
 }
 
 /**
- * The new-session composer's PR source picker. The parent owns the selected
- * start point; this component only owns the cached open-PR list and its menu.
+ * The new-session composer's PR source picker, a submenu of the footer's
+ * overflow menu. The parent owns the selected start point; this component only
+ * owns the cached open-PR list and its search.
  */
 export function NewSessionPrPicker({
   repo,
   selected,
-  disabled,
   onSelect,
   onClear,
 }: Props) {
@@ -71,9 +73,6 @@ export function NewSessionPrPicker({
 
   const matches = matchingPullRequests(pullRequests || [], repo, query);
   const hasRepo = repo !== NO_REPO;
-  const label = selected
-    ? `PR #${selected.number}`
-    : "Start from a pull request";
 
   function choose(pullRequest: OpenPr) {
     onSelect(pullRequest);
@@ -81,36 +80,26 @@ export function NewSessionPrPicker({
   }
 
   return (
-    <Menu.Root
+    <Menu.SubmenuRoot
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
         if (!next) setQuery("");
       }}
     >
-      <Tooltip label={label}>
-        <Menu.Trigger
-          type="button"
-          className={cn(
-            selected
-              ? "inline-flex min-h-8 max-w-[130px] shrink-0 items-center gap-1.5 rounded-control bg-accent-soft px-2.5 text-label font-medium text-accent transition-[background,color] hover:bg-hover disabled:cursor-default disabled:opacity-50 phone:min-h-11 phone:max-w-[112px] phone:rounded-[999px] phone:px-3"
-              : cn(
-                  paletteIconBtn,
-                  "shrink-0 phone:size-11 phone:rounded-[999px] phone:before:rounded-[999px]",
-                ),
-          )}
-          disabled={disabled}
-          aria-label={label}
-        >
-          <IconPullRequest className="shrink-0" size={20} />
-          {selected && <span className="truncate">#{selected.number}</span>}
-        </Menu.Trigger>
-      </Tooltip>
-      <Menu.Popup
-        align="start"
-        sideOffset={6}
-        className="w-[min(380px,calc(100vw-1rem))]"
-      >
+      <Menu.SubmenuTrigger className="justify-between gap-3">
+        <span className="flex flex-none items-center gap-2">
+          <IconPullRequest className="shrink-0 text-dim" size={20} />
+          <span>Pull request</span>
+        </span>
+        <span className="flex min-w-0 items-center gap-1 text-dim">
+          <span className="truncate">
+            {selected ? `#${selected.number}` : "None"}
+          </span>
+          <IconChevronRight className="shrink-0 text-faint" size={17} />
+        </span>
+      </Menu.SubmenuTrigger>
+      <Menu.Popup className="w-[min(380px,calc(100vw-1rem))]">
         <Menu.Group>
           <Menu.GroupLabel>Start from</Menu.GroupLabel>
           <Menu.Item onClick={onClear} className="phone:min-h-11">
@@ -205,6 +194,6 @@ export function NewSessionPrPicker({
           })
         )}
       </Menu.Popup>
-    </Menu.Root>
+    </Menu.SubmenuRoot>
   );
 }
