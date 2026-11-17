@@ -40,6 +40,36 @@ describe("buildTranscriptRanges", () => {
     expect(ranges[1]).toMatchObject({ firstSeq: 6, lastSeq: 6 });
   });
 
+  test("keeps a compaction notice inside the work around it", () => {
+    const ranges = buildTranscriptRanges([
+      row(1, "user"),
+      row(2, "tool_use"),
+      row(3, "notice", { noticeKind: "compaction" }),
+      row(4, "tool_use"),
+      row(5, "assistant"),
+      row(6, "notice"),
+    ]);
+    expect(ranges.map((range) => range.entryIds)).toEqual([
+      ["e1", "e2", "e3", "e4", "e5"],
+      ["e6"],
+    ]);
+  });
+
+  test("marks a compaction notice derived from a live payload", () => {
+    expect(
+      transcriptIndexEntryFromPayload({
+        id: "c",
+        type: "system",
+        content: "summary",
+        timestamp: "2026-11-17T10:00:00Z",
+        seq: 3,
+        changeSeq: 3,
+        noticeKind: "compaction",
+        notice: { kind: "compaction", title: "Context compacted" },
+      }),
+    ).toMatchObject({ role: "notice", noticeKind: "compaction" });
+  });
+
   test("keeps hidden seqs in fetch coverage without rendering an item", () => {
     const ranges = buildTranscriptRanges([
       row(1, "hidden"),
