@@ -7,7 +7,8 @@ import SwiftUI
 /// header is one quiet gray line, "Worked for 12s ›". Open, the steps sit
 /// flush under it and a hairline closes the fold; the step count,
 /// failures and line changes head it only when the calls render flat, since
-/// grouped rows already name their own.
+/// grouped rows already name their own. The files the turn touched are not
+/// repeated here: the answer's footer right below names them.
 struct TurnBlockView: View {
     let turn: WorkTurn
     let sessionId: String
@@ -19,8 +20,6 @@ struct TurnBlockView: View {
     /// Resolves each nested tool row's own detail state, which must survive
     /// the row scrolling out of the lazy stack.
     let expansionState: (String, Bool) -> TurnFoldState
-
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -58,8 +57,6 @@ struct TurnBlockView: View {
                         rendersToolCallsInPlace: flatTools,
                         expansionState: expansionState
                     )
-
-                    touchedFileSummary
                 }
                 // The header's touch target already leaves air above the
                 // first step.
@@ -113,43 +110,6 @@ struct TurnBlockView: View {
             .accessibilityHidden(true)
     }
 
-    /// Files named in the open fold before the rest become one chip. A
-    /// refactor can touch thirty, and thirty wrapped chips would bury the
-    /// steps they belong to. A phone chip carries a name and its ± counts, so
-    /// two rarely share a line: there the fold names one and counts the rest.
-    private static let foldFileChips = 6
-    private static let phoneFoldFileChips = 1
-
-    private var foldFileChips: Int {
-        horizontalSizeClass == .compact ? Self.phoneFoldFileChips : Self.foldFileChips
-    }
-
-    /// What the turn changed, by name, closing the open fold.
-    ///
-    /// Shut, the header's trailing detail names the files; open, it steps
-    /// aside and the fold used to say nothing about them at all — so opening
-    /// a turn to see its work took away the one line saying what the work
-    /// came to. These are the same chips the answer's footer ends with, and
-    /// they open the same diff: the header keeps the turn's totals, these
-    /// carry each file's own.
-    @ViewBuilder
-    private var touchedFileSummary: some View {
-        if !turn.touchedFiles.isEmpty {
-            FlowLayout(spacing: 6) {
-                ForEach(turn.touchedFiles.prefix(foldFileChips)) { file in
-                    FileChipView(file: file)
-                }
-                if turn.touchedFiles.count > foldFileChips {
-                    MoreFilesChipView(
-                        sessionId: sessionId,
-                        count: turn.touchedFiles.count - foldFileChips
-                    )
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
     /// "Worked for 12s ›", nothing more, in one quiet gray. The fold is
     /// skippable because the answer sits below it; what the work came to
     /// (steps, failures, lines) is one tap away at the top of the open fold.
@@ -167,7 +127,7 @@ struct TurnBlockView: View {
             // build never looks stalled.
             if !state.expanded, turn.isLive, let preview = turn.livePreview {
                 Text(preview)
-                    .font(.caption)
+                    .font(.footnote)
                     .foregroundStyle(OS1VisualStyle.textFaint)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -438,7 +398,7 @@ private struct ToolRunView: View {
                         // files moved lines. Summed from the rows themselves,
                         // so opening the run adds up to what was on it.
                         if !stats.isEmpty {
-                            LineStatsView(stats: stats)
+                            LineStatsView(stats: stats, font: ToolRowMetrics.metaFont)
                         }
                         // Folded, the sentence alone hides what the run is
                         // waiting on, so a long build looked stalled. Say
@@ -446,7 +406,7 @@ private struct ToolRunView: View {
                         // the run shows the command itself.
                         if let runningStep {
                             Text(runningStep.presentation.family.activityLabel)
-                                .font(.caption)
+                                .font(.footnote)
                                 .foregroundStyle(OS1VisualStyle.textFaint)
                                 .lineLimit(1)
                                 .truncationMode(.middle)

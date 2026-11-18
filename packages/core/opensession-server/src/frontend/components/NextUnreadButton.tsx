@@ -27,7 +27,7 @@ export function NextUnreadButton({ phone = false }: { phone?: boolean }) {
   const chats = availableHeldChats(held, unreadChats);
   const next = chats[0];
   const surface = cn(
-    "relative min-h-[54px] min-w-0 max-w-[min(24rem,85%)] justify-start gap-2 border-x border-t border-b-0 bg-[color-mix(in_srgb,var(--bg-panel)_80%,var(--composer-surface))] px-3.5 pt-2.5 pb-6 text-left text-label font-medium phone:min-h-[58px]",
+    "relative min-h-[54px] min-w-0 max-w-[min(24rem,85%)] justify-start gap-2 border-x border-t border-b-0 bg-[var(--composer-flap-surface)] px-3.5 pt-2.5 pb-6 text-left text-label font-medium phone:min-h-[58px]",
     composerFlapBorder,
     // Softer than the composer's own corner: the tab shows only ~40px above
     // the composer, so the composer radius turned it into a half-pill. The
