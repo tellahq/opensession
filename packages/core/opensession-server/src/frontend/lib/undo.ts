@@ -74,3 +74,26 @@ export function isUndoShortcut(event: KeyboardEvent): boolean {
       : event.ctrlKey && !event.metaKey)
   );
 }
+
+type FieldUndoState = {
+  /** The field's own keydown handler already handled this Command-Z. */
+  claimed: boolean;
+  /** When any text field was last edited, in epoch ms. */
+  lastFieldEditAt: number;
+  /** When the app action Command-Z would undo happened, in epoch ms. */
+  actionAt: number;
+};
+
+/**
+ * Whether a focused field keeps Command-Z for its own text history instead of
+ * an app action. It keeps it only for edits made after that action, or when
+ * its own handler already claimed the key. Archiving a chat leaves focus in the
+ * next composer, and Command-Z there means the archive.
+ */
+export function fieldOwnsUndo({
+  claimed,
+  lastFieldEditAt,
+  actionAt,
+}: FieldUndoState): boolean {
+  return claimed || lastFieldEditAt >= actionAt;
+}
