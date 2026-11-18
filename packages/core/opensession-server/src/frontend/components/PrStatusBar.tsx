@@ -1,5 +1,11 @@
 import { repoLabel } from "../lib/repo-label";
-import React, { useCallback, useEffect, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useState,
+} from "react";
+import { AnimatePresence, motion } from "motion/react";
 import type { PrDetails, WSClientMessage } from "../lib/types";
 import {
   deriveHeadline,
@@ -64,7 +70,14 @@ import {
 } from "../lib/workspace-summary-classes";
 import { Tooltip } from "../ui/tooltip";
 import { ContextMenu, Menu, MENU_ICON } from "../ui/menu";
-import { Spinner } from "../ui/spinner";
+import { TextShimmer } from "../ui/text-shimmer";
+import { duration, ease } from "../ui/motion";
+import {
+  clearPromptPending,
+  markPromptPending,
+  usePromptPending,
+} from "../lib/pr-prompt-pending";
+import { PixelSpinner } from "./PixelSpinner";
 import { Skeleton, SkeletonBar } from "../ui/state";
 import { cn } from "../ui/cn";
 import { useSessionPendingCreation } from "../hooks/useSessionPendingCreation";
@@ -97,6 +110,7 @@ import {
   IconCheck,
   IconPlus,
   IconArchive,
+  IconSparkle,
 } from "./icons";
 
 /**
@@ -191,23 +205,87 @@ interface PrBarButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement>
     | "purple-dashed"
     | "solid";
   icon?: React.ReactNode;
+  /** The session is carrying this action out: the glyph becomes the
+   *  generating wave and the label shimmers until the work is done. */
+  working?: boolean;
 }
+
+/**
+ * Width of `ref`'s box. Read before paint whenever `phase` changes, so the
+ * new label's width is known in the frame it renders and the glide starts
+ * with the crossfade instead of a frame or more behind it. The observer covers
+ * every other change (Merge to Merging…, a late web font).
+ */
+function useMeasuredWidth(
+  ref: React.RefObject<HTMLElement | null>,
+  phase: string,
+) {
+  const [width, setWidth] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el) setWidth(el.offsetWidth);
+  }, [ref, phase]);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => setWidth(el.offsetWidth));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref]);
+  return width;
+}
+
+/** How long a prompted action waits for the session to start a turn before it
+ *  stops claiming the work is under way. */
+const PROMPT_START_GRACE_MS = 15_000;
+
+/** The label and glyph crossfade with a short rise, while the button's width
+ *  glides to the new label's, so "Fix checks" turning into "Fixing…" reads as
+ *  one control changing its mind rather than a second button replacing it. */
+const SWAP_MOTION = {
+  initial: { opacity: 0, y: 5, filter: "blur(2px)" },
+  animate: { opacity: 1, y: 0, filter: "blur(0px)" },
+  // The old label clears out faster than the new one settles, so the two
+  // never sit on top of each other long enough to read as a smear.
+  exit: {
+    opacity: 0,
+    y: -5,
+    filter: "blur(2px)",
+    transition: { type: "tween", duration: duration.micro * 0.7, ease },
+  },
+  transition: { type: "tween", duration: duration.base, ease },
+} as const;
+const WIDTH_TRANSITION = {
+  type: "spring",
+  duration: duration.large,
+  bounce: 0,
+} as const;
 
 function PrBarButton({
   tone,
   icon,
+  working = false,
   className = "",
   children,
   ...props
 }: PrBarButtonProps) {
+  const contentRef = React.useRef<HTMLSpanElement>(null);
+  const glyph = working ? <PixelSpinner className="scale-[1.15]" /> : icon;
+  // The label crossfades when the work starts or ends; any other change of
+  // label (Merge to Merging…) is the same control, so it only glides.
+  const phase = working ? "working" : "idle";
+  const contentWidth = useMeasuredWidth(contentRef, phase);
   const tones = {
     green:
       "bg-[var(--green)] border-[color-mix(in_srgb,var(--green)_78%,black)] text-white",
     purple:
       "bg-[var(--purple)] border-[color-mix(in_srgb,var(--purple)_78%,black)] text-white",
     red: "bg-[var(--red)] border-[color-mix(in_srgb,var(--red)_78%,black)] text-white",
+    // The fix for a red state (Fix checks, Address feedback): red ink on the
+    // card's own surface, so it reads as a clean cut-out of the tinted band
+    // rather than a second, darker tint of the same pink.
     "status-red":
-      "border-[color-mix(in_srgb,var(--red)_45%,transparent)] bg-[color-mix(in_srgb,var(--red)_12%,var(--control-surface))] text-red hover:bg-red-soft hover:brightness-100",
+      "border-line bg-popup text-red hover:bg-[color-mix(in_srgb,var(--red)_6%,var(--popup-surface))] hover:brightness-100",
     "status-yellow":
       "border-[color-mix(in_srgb,var(--yellow)_35%,transparent)] bg-[color-mix(in_srgb,var(--yellow)_10%,var(--control-surface))] text-yellow hover:bg-[color-mix(in_srgb,var(--yellow)_16%,var(--control-surface))] hover:brightness-100",
     solid:
@@ -238,17 +316,42 @@ function PrBarButton({
         // and close the inner gap so the two read as one group rather than
         // two things. Icon-only callers override px themselves, so this
         // never lands on a lone glyph.
-        icon && "gap-1 pl-[6.5px]",
+        glyph && "pl-[6.5px]",
+        // Pressed is still the state, not "unavailable": the wave and the
+        // shimmer say it is in hand, so it keeps its full colour.
+        working && "disabled:opacity-100",
         className,
       )}
+      aria-busy={working || undefined}
       {...props}
     >
-      {icon && (
-        <span className="inline-flex size-[18px] shrink-0 items-center justify-center [&_svg]:block [&_svg]:stroke-[1.7]">
-          {icon}
-        </span>
-      )}
-      {/* Centered on the cap band, not on the em box: `text-box` trims the
+      <motion.span
+        className="inline-flex items-center justify-center [overflow-x:clip]"
+        initial={false}
+        animate={{ width: contentWidth ?? "auto" }}
+        transition={WIDTH_TRANSITION}
+      >
+        <span
+          ref={contentRef}
+          className={cn(
+            "relative inline-flex w-max shrink-0 items-center",
+            glyph ? "gap-1" : "gap-1.5",
+          )}
+        >
+          {glyph && (
+            <span className="relative inline-flex size-[18px] shrink-0 items-center justify-center [&_svg]:block [&_svg]:stroke-[1.7]">
+              <AnimatePresence initial={false} mode="popLayout">
+                <motion.span
+                  key={phase}
+                  className="inline-flex items-center justify-center"
+                  {...SWAP_MOTION}
+                >
+                  {glyph}
+                </motion.span>
+              </AnimatePresence>
+            </span>
+          )}
+          {/* Centered on the cap band, not on the em box: `text-box` trims the
 			    line box down to cap height and baseline, so the flex centering
 			    lands the ink itself in the middle of the button and beside the
 			    icon, whatever font the platform picks. Browsers without
@@ -260,9 +363,17 @@ function PrBarButton({
 			    the geometric center reads a touch high. It settles the label
 			    without going back to a nudge that has to carry the whole
 			    correction. */}
-      <span className="translate-y-[0.5px] [text-box:trim-both_cap_alphabetic]">
-        {children}
-      </span>
+          <AnimatePresence initial={false} mode="popLayout">
+            <motion.span
+              key={phase}
+              className="inline-block translate-y-[0.5px] [text-box:trim-both_cap_alphabetic]"
+              {...SWAP_MOTION}
+            >
+              {children}
+            </motion.span>
+          </AnimatePresence>
+        </span>
+      </motion.span>
     </button>
   );
 }
@@ -551,7 +662,6 @@ export function PrStatusBar({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isArchived, setIsArchived] = useState(!!archived);
-  const [prompted, setPrompted] = useState<string | null>(null);
 
   useEffect(() => setIsArchived(!!archived), [archived]);
 
@@ -581,6 +691,34 @@ export function PrStatusBar({
   }, [refreshTick, load]);
 
   const headline = deriveHeadline(pr, git, prUnavailable);
+
+  // "Fixing…" lasts as long as the work does: until the turn the press started
+  // ends, or the PR leaves the state the action was for. A prompt that never
+  // starts a turn (the socket dropped) lets go after a short wait.
+  const promptKey = `${sessionId}\u0000${pr?.url ?? targetRepo ?? ""}`;
+  const prompted = usePromptPending(promptKey);
+  const promptRunning = React.useRef(false);
+  useEffect(() => {
+    if (!prompted) return;
+    if (prompted.headline !== headline.key) {
+      clearPromptPending(promptKey, prompted);
+      return;
+    }
+    if (running) {
+      promptRunning.current = true;
+      return;
+    }
+    if (promptRunning.current) {
+      promptRunning.current = false;
+      clearPromptPending(promptKey, prompted);
+      return;
+    }
+    const timer = setTimeout(
+      () => clearPromptPending(promptKey, prompted),
+      Math.max(0, prompted.at + PROMPT_START_GRACE_MS - Date.now()),
+    );
+    return () => clearTimeout(timer);
+  }, [prompted, headline.key, running, promptKey]);
 
   // Everything except the primary branch's PR (which the headline covers):
   // attached repos, manual links, and PRs discovered through their body
@@ -744,9 +882,20 @@ export function PrStatusBar({
   // resolution needs judgment, not a button.
   function promptSession(label: string, content: string) {
     if (!send) return;
-    send({ type: "prompt", sessionId, user: getCurrentUser(), content });
-    setPrompted(label);
-    setTimeout(() => setPrompted(null), 6000);
+    promptRunning.current = false;
+    markPromptPending(promptKey, {
+      label,
+      headline: headline.key,
+      at: Date.now(),
+    });
+    // The button turns to "Fixing…" first and the prompt follows once that
+    // has settled: the transcript's response to a sent prompt is a long task
+    // that would otherwise freeze the morph in its first frames.
+    const user = getCurrentUser();
+    setTimeout(
+      () => send({ type: "prompt", sessionId, user, content }),
+      duration.large * 1000,
+    );
   }
 
   // The strip is where this branch stands against the remote and the base: the
@@ -817,13 +966,10 @@ export function PrStatusBar({
             ? "secondary"
             : "status-red";
       return (
-        <PrBarButton
-          className={actionBtn}
-          tone={tone}
-          icon={<Spinner size="sm" />}
-          disabled
-        >
-          {prompted}
+        <PrBarButton className={actionBtn} tone={tone} working disabled>
+          <TextShimmer className="[--text-shimmer-highlight:var(--text)]">
+            {prompted.label}
+          </TextShimmer>
         </PrBarButton>
       );
     }
@@ -957,9 +1103,10 @@ export function PrStatusBar({
           <PrBarButton
             className={actionBtn}
             tone="status-red"
+            icon={<IconSparkle size={18} />}
             onClick={() =>
               promptSession(
-                "Fixing checks…",
+                "Fixing…",
                 `Investigate the failing checks on PR #${pr?.number}, fix the failures, run the relevant tests, commit the changes, and push them.`,
               )
             }
