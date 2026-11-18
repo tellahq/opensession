@@ -80,6 +80,39 @@ describe("PR prompt pending state", () => {
     expect(getPromptPending("idle")).toBeUndefined();
   });
 
+  test("a viewer that comes back mid-fix picks it up from the snapshot", async () => {
+    const requestId = await press("return");
+    observePromptFrame(SESSION, {
+      type: "queue_update",
+      sessionId: SESSION,
+      queued: [{ id: requestId, content: "Fix the checks" }],
+    });
+    // The viewer is gone while the queue drains into the fix's turn. On its
+    // next watch it receives the transcript snapshot, then the queue and the
+    // status.
+    observePromptFrame(SESSION, {
+      ...userEntry("entry-2", [requestId]),
+      type: "transcript_init",
+    });
+    observePromptFrame(SESSION, {
+      type: "queue_update",
+      sessionId: SESSION,
+      queued: [],
+    });
+    observePromptFrame(SESSION, { ...idle, isRunning: true });
+    // Started, so the grace timeout no longer applies to it.
+    expect(getPromptPending("return")?.started).toBe(true);
+  });
+
+  test("the fix's own turn ending clears it while other work runs", async () => {
+    const requestId = await press("workflow");
+    observePromptFrame(SESSION, userEntry(requestId));
+    observePromptFrame(SESSION, { type: "stream_done", sessionId: SESSION });
+    // A background workflow keeps the session reported as running.
+    observePromptFrame(SESSION, { ...idle, isRunning: true });
+    expect(getPromptPending("workflow")).toBeUndefined();
+  });
+
   test("frames from another session leave the prompt alone", async () => {
     const requestId = await press("other");
     observePromptFrame("s-2", userEntry(requestId));

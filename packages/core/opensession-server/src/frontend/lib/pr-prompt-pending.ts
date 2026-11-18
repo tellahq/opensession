@@ -13,8 +13,9 @@ import type { WSClientMessage, WSServerMessage } from "./types";
  * whichever turn happens to be running: a prompt sent while the agent is busy
  * waits in the queue, and the turn ahead of it ending says nothing about the
  * fix. The session viewer feeds its frames to `observePromptFrame`, which
- * marks the prompt started when its user entry lands and clears it when that
- * turn goes idle.
+ * marks the prompt started when its user entry shows up in the transcript
+ * (live, or in the snapshot a remounted viewer receives on watch) and clears
+ * it when that turn's stream ends.
  */
 export interface PendingPrompt {
   label: string;
@@ -135,7 +136,12 @@ export function observePromptFrame(sessionId: string, msg: WSServerMessage) {
         if (queued !== prompt.queued) update(key, { ...prompt, queued });
         break;
       }
-      case "transcript_append": {
+      // A live entry, or the snapshot a viewer gets when it watches again
+      // (a session switch remounts it after the fix may have started).
+      case "transcript_append":
+      case "transcript_init":
+      case "transcript_history":
+      case "transcript_range": {
         if (prompt.started) break;
         const landed = msg.entries.some(
           (entry) =>
@@ -146,6 +152,23 @@ export function observePromptFrame(sessionId: string, msg: WSServerMessage) {
         if (landed) update(key, { ...prompt, queued: false, started: true });
         break;
       }
+      // The outline covers a turn whose user entry is older than the
+      // snapshot's tail. A single prompt's entry takes its request id.
+      case "transcript_index": {
+        if (prompt.started) break;
+        const landed = msg.entries.some(
+          (entry) => entry.role === "user" && entry.id === prompt.requestId,
+        );
+        if (landed) update(key, { ...prompt, queued: false, started: true });
+        break;
+      }
+      // The fix's own turn is over. Session status folds background work
+      // (a workflow) into isRunning, so it stays true past this point.
+      case "stream_done":
+        if (prompt.started) update(key, null);
+        break;
+      // Fallback for a viewer that missed the end frame (it reconnected or
+      // remounted after the turn ended).
       case "session_status":
         if (prompt.started && !msg.isRunning) update(key, null);
         break;
