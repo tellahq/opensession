@@ -85,6 +85,14 @@ struct SessionForkState: Equatable {
     }
 }
 
+/// The last transcript viewport any conversation measured. Every
+/// conversation on a device sits in the same frame, so a new one starts from
+/// this instead of from zero (see `SessionView.viewportHeight`).
+@MainActor
+private enum TranscriptViewport {
+    static var lastHeight: CGFloat = 0
+}
+
 struct SessionView: View {
     @State private var viewModel: SessionViewModel
     private let tabs: [Session]
@@ -231,7 +239,14 @@ struct SessionView: View {
     /// Size of the session surface. Height keeps short transcripts pinned to
     /// the top; width gives custom toolbar content the finite proposal that a
     /// principal ToolbarItem does not provide on its own.
-    @State private var viewportHeight: CGFloat = 0
+    ///
+    /// Height starts from the last conversation's measurement. Starting from
+    /// zero laid a new chat's first frame out with no floor, so its opening
+    /// bubble sat at the bottom under the bottom anchor and then glided to
+    /// the top inside the push animation once the real height came in.
+    @State private var viewportHeight: CGFloat = TranscriptViewport.lastHeight
+    /// This view has measured its own viewport, so the floor above is real.
+    @State private var viewportMeasured = false
     @State private var viewportWidth: CGFloat = 0
 
     /// How close to the bottom (pt) still counts as pinned.
@@ -441,10 +456,11 @@ struct SessionView: View {
                     } action: { old, new in
                         readerTracker.visibleTop = new.offset + new.insetTop
                         readerTracker.visibleHeight = new.containerHeight - new.insetTop - new.insetBottom
+                        readerTracker.contentHeight = new.contentHeight
                         #if DEBUG
                         if ScrollTrace.on {
                             let a = readerTracker.anchor
-                            ScrollTrace.log("geo off=\(Int(new.offset)) h=\(Int(new.contentHeight)) anchor=\(a?.blockId.suffix(8) ?? "-") ao=\(Int(a?.offset ?? 0)) hold=\(prependHold?.blockId.suffix(8) ?? "-") active=\(readerScrollActive)")
+                            ScrollTrace.log("geo off=\(Int(new.offset)) h=\(Int(new.contentHeight)) it=\(Int(new.insetTop)) ib=\(Int(new.insetBottom)) ch=\(Int(new.containerHeight)) vp=\(Int(viewportHeight)) anchor=\(a?.blockId.suffix(8) ?? "-") ao=\(Int(a?.offset ?? 0)) hold=\(prependHold?.blockId.suffix(8) ?? "-") active=\(readerScrollActive)")
                         }
                         #endif
                         let wasFollowing = pinnedToBottom && !readerMovedTowardHistory
@@ -513,6 +529,19 @@ struct SessionView: View {
                     .onScrollGeometryChange(for: CGFloat.self) { geometry in
                         geometry.containerSize.height
                     } action: { _, height in
+                        TranscriptViewport.lastHeight = height
+                        guard viewportMeasured else {
+                            // The first measurement lands while the push is
+                            // still animating; taking it inside that animation
+                            // is what made the opening bubble glide.
+                            var transaction = Transaction()
+                            transaction.disablesAnimations = true
+                            withTransaction(transaction) {
+                                viewportHeight = height
+                                viewportMeasured = true
+                            }
+                            return
+                        }
                         viewportHeight = height
                     }
                     // A way back down. Without it the only route out of a
@@ -1961,6 +1990,10 @@ struct SessionView: View {
                 minHeight: viewportHeight,
                 alignment: .top
             )
+            // With no measurement to start from (the first conversation since
+            // launch), stay out of sight for the frame it takes to measure
+            // rather than drawing rows in a place they then leave.
+            .opacity(viewportMeasured || viewportHeight > 0 ? 1 : 0)
             .coordinateSpace(name: Self.transcriptContentSpace)
             .background(TranscriptScrollNudge(handle: scrollNudge))
         }
@@ -2180,13 +2213,31 @@ struct SessionView: View {
         repin: Bool = true
     ) {
         guard let target = tailId else { return }
+        #if DEBUG
+        ScrollTrace.log("scrollToBottom \(target.suffix(8)) animated=\(animated) repin=\(repin)")
+        #endif
         if repin {
             cancelAnchorRestore()
             if readerMovedTowardHistory { readerMovedTowardHistory = false }
             if !pinnedToBottom { pinnedToBottom = true }
         }
+        // A transcript within a couple of screens has every row realized, so
+        // the lazy-stack blank below cannot happen, and the content's own end
+        // is the exact place. Aiming at a row there could overshoot: on a new
+        // chat whose few rows barely outgrow the screen, a row scroll parked
+        // the opening bubble a hundred points down, past the top, and the
+        // scroll view sometimes left it there.
+        let shortTranscript = readerTracker.contentHeight <= readerTracker.visibleHeight * 2
         if animated {
-            withAnimation(.snappy) { proxy.scrollTo(target, anchor: .bottom) }
+            withAnimation(.snappy) {
+                if shortTranscript {
+                    scrollPosition.scrollTo(edge: .bottom)
+                } else {
+                    proxy.scrollTo(target, anchor: .bottom)
+                }
+            }
+        } else if shortTranscript {
+            scrollPosition.scrollTo(edge: .bottom)
         } else {
             proxy.scrollTo(target, anchor: .bottom)
         }
@@ -3048,8 +3099,13 @@ struct SessionTabsView: View {
                !updatedTabs.contains(where: { $0.id == open.sessionId }) {
                 panel = nil
             }
+            // A new chat's temporary id gives way to the server's: follow it
+            // to that session, not to whichever sibling happens to be first.
+            let resolved = activeId.hasPrefix("pending-")
+                ? updatedTabs.first { $0.id == initialSession.id }
+                : nil
             guard !updatedTabs.contains(where: { $0.id == activeId }),
-                  let fallback = updatedTabs.first
+                  let fallback = resolved ?? updatedTabs.first
             else { return }
 
             var transaction = Transaction()
