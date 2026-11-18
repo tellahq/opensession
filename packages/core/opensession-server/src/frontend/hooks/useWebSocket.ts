@@ -11,6 +11,7 @@ import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import type { WSServerMessage, WSClientMessage } from "../lib/types";
 import { API_BASE, getWebSocketUrl } from "../lib/api";
 import { countSessionPerf } from "../lib/session-performance";
+import { observePromptFrame } from "../lib/pr-prompt-pending";
 import { withMutationRequestId } from "../lib/ws-request-id";
 import { BASE_PATH } from "../lib/base";
 import { toast } from "../ui/toast";
@@ -331,6 +332,9 @@ export function useWebSocket(presenceActive = true) {
             feedEpoch: msg.feedEpoch,
             feedSeq: msg.feedSeq,
           });
+          // The one frame that says whether a turn is running, as opposed to
+          // background work, for a viewer that missed the live stream.
+          observePromptFrame(msg.sessionId, msg);
           // A stale cursor gets one cumulative active snapshot. Recreate the
           // ordinary stream events so every conversation surface shares the
           // same rendering path.
