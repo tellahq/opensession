@@ -5,12 +5,10 @@ import {
   assetToolPath,
   canonicalToolName,
   ToolCallBlock,
-  toolDisplayName,
   toolFamily,
   toolLineStats,
-  toolSummary,
-  useToolPathRoots,
 } from "./ToolCallBlock";
+import { runningToolLabel } from "../lib/busy-activity";
 import {
   MessageBubble,
   ClampedBody,
@@ -123,7 +121,6 @@ export const TurnBlock = function TurnBlock({
   sessionId,
   last = false,
 }: Props) {
-  const pathRoots = useToolPathRoots();
   const allTools = items.filter((it) => it.type === "tool_use");
   const tools = allTools.filter((it) => agentMessageText(it) === null);
   const agentMessages = items.filter((it) => agentMessageText(it) !== null);
@@ -191,12 +188,9 @@ export const TurnBlock = function TurnBlock({
       : lastItem.type === "assistant" && reasoningEntry(lastItem)
         ? reasoningDisplay(lastItem.content).title || "Thinking"
         : lastTool
-          ? `${toolDisplayName(lastTool.toolName)}: ${toolSummary(
-              lastTool.toolName || "Tool",
-              lastTool.toolInput,
-              lastTool.content,
-              pathRoots,
-            )}`
+          ? // In words, not "Bash: <the whole command>": opening the fold
+            // shows the command itself.
+            runningToolLabel(lastTool.toolName)
           : null;
 
   // Memoized against the house rule: a live turn re-renders on every stream
@@ -491,12 +485,12 @@ export function ToolSection(props: ToolSectionProps) {
   }
 
   return runs.map((run) =>
-    // Two reasons a run stays flat. With the work and its tool calls both
-    // always open there is nothing to disclose, so a header and its indent
-    // would only wrap rows already on screen. And a run of one has nothing
-    // to fold: "1 step" hides
-    // a single call behind a click and says less than the call's own row does.
-    run.compact && run.items.length > 1 && !props.expandAll ? (
+    // With the work and its tool calls both always open there is nothing to
+    // disclose, so a header and its indent would only wrap rows already on
+    // screen. Otherwise even a run of one folds: "Ran 1 command" reads as
+    // part of the conversation, where the call's own row dumped the tool
+    // name and its whole command between two messages.
+    run.compact && !props.expandAll ? (
       <ToolRunBlock key={run.items[0].id} {...props} items={run.items} />
     ) : (
       <React.Fragment key={run.items[0].id}>
@@ -554,11 +548,12 @@ function ToolRunBlock({
   const { label, pending, additions, deletions, statusLabel, mediaLabel } =
     toolRunAggregate(items, toolResults, live);
   const summary = workSummaryTitle(items);
-  // Folded, the count alone hides what the run is waiting on. A long build
-  // looked like nothing was happening, so name the step still running.
-  const pathRoots = useToolPathRoots();
+  const groupedSteps = `${items.length} grouped step${items.length === 1 ? "" : "s"}`;
+  // Folded, the sentence alone hides what a longer run is waiting on. A long
+  // build looked like nothing was happening, so say what the running step is
+  // doing. A run of one already says it, and the spinner says it is live.
   const running =
-    pending > 0 && !expanded
+    pending > 0 && !expanded && items.length > 1
       ? items.findLast(
           (entry) => entry.toolUseId && !toolResults.has(entry.toolUseId),
         )
@@ -569,8 +564,8 @@ function ToolRunBlock({
       <button
         type="button"
         aria-expanded={expanded}
-        aria-label={`${expanded ? "Hide" : "Show"} ${items.length} grouped steps: ${label}${statusLabel ? `. ${statusLabel}` : ""}`}
-        title={`${items.length} grouped steps`}
+        aria-label={`${expanded ? "Hide" : "Show"} ${groupedSteps}: ${label}${statusLabel ? `. ${statusLabel}` : ""}`}
+        title={groupedSteps}
         onClick={() => rememberExpansion(!expanded)}
         className="group flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-control border-0 bg-transparent px-1 py-[3px] text-left font-sans transition-colors hover:bg-hover/40 phone:min-h-10"
       >
@@ -610,13 +605,7 @@ function ToolRunBlock({
           <LineStats additions={additions} deletions={deletions} />
         )}
         <span className="min-w-0 flex-1 truncate text-label leading-4 text-faint">
-          {running &&
-            `${toolDisplayName(running.toolName)}: ${toolSummary(
-              running.toolName || "Tool",
-              running.toolInput,
-              running.content,
-              pathRoots,
-            )}`}
+          {running && runningToolLabel(running.toolName)}
         </span>
         {mediaLabel && (
           <span className="flex-shrink-0 text-meta text-faint">

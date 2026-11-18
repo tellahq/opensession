@@ -276,10 +276,11 @@ struct TurnStepsView: View {
                                 worktreeDir: worktreeDir,
                                 state: expansionState("run-\(calls[0].id)", false),
                                 isLive: isLive,
-                                // A run of one has nothing to fold: "1 step"
-                                // hides a call behind a tap and says less
-                                // than the call's own row does.
-                                isCompact: kind == .compact && calls.count > 1,
+                                // Even a run of one folds: "Ran 1 command"
+                                // reads as part of the conversation, where the
+                                // call's own row dumped the tool name and its
+                                // whole command between two messages.
+                                isCompact: kind == .compact,
                                 expansionState: expansionState
                             )
                         }
@@ -482,8 +483,10 @@ private struct ToolRunView: View {
         return title.isEmpty ? "\(items.count) step\(items.count == 1 ? "" : "s")" : title
     }
     private var failureCount: Int { items.filter(\.isError).count }
+    /// A run of one already says what it is doing, and the spinner says it
+    /// is still going.
     private var runningStep: ToolCallItem? {
-        guard isLive, !state.expanded else { return nil }
+        guard isLive, !state.expanded, items.count > 1 else { return nil }
         return items.last(where: \.isPending)
     }
     private var stats: ToolLineStats {
@@ -498,7 +501,7 @@ private struct ToolRunView: View {
     private var mediaCount: Int { media.count }
     private var mediaLabel: String { media.label }
     private var accessibilityLabel: String {
-        var parts = ["\(items.count) grouped steps", label]
+        var parts = [items.count == 1 ? "1 grouped step" : "\(items.count) grouped steps", label]
         if !stats.isEmpty {
             parts.append("plus \(stats.additions), minus \(stats.deletions)")
         }
