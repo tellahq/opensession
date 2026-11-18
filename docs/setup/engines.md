@@ -114,9 +114,14 @@ one of two kinds:
   subject and audience. Enter the organization, federation rule, and service
   account IDs, plus a workspace ID when the rule covers several workspaces.
   Open Session tests the exchange before saving. A token lifetime of one hour
-  keeps exchanges infrequent.
+  keeps exchanges infrequent. With web sign-in on, only the host operator can
+  add a workload identity account, because it spends whatever organization
+  trusts this server's issuer.
 - **API key**: a static `sk-ant-api…` key. Prefer workload identity where a
   program limits long-lived keys.
+
+With web sign-in on, only an API account's owner or the host operator can
+rename, reassign, return, or remove it.
 
 ### Custom OpenAI-compatible providers
 

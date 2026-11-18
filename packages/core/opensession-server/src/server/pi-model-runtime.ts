@@ -2003,6 +2003,18 @@ async function* runSdkAttempt(
               "SDK run failed";
             throw new Error(String(detail));
           }
+          // Claude Code can also report a limit as a successful result with
+          // no assistant message ("5-hour limit reached ∙ resets 3am"). With
+          // no model output or tool calls, the whole result is that notice:
+          // fail like a tagged limit so the turn moves to the next account.
+          if (
+            !cappedStopReason &&
+            !captured.length &&
+            !partial.content.length &&
+            typeof m.result === "string" &&
+            isClaudeAccountNotice(m.result)
+          )
+            throw new Error(m.result);
           // Only fall back to the turn-wide result usage when this step saw
           // no per-request usage at all (see SdkStepUsage).
           if (stepUsage.size === 0 && m.usage)

@@ -92,6 +92,7 @@ import {
 } from "./model-catalog";
 import { bridgePinHeaders } from "./anthropic-bridge-pin";
 import { loadPiConfig } from "./pi-config";
+import { engineStatus } from "./engine-status";
 import { loadModelProviders } from "./model-providers";
 import * as sdk from "@anthropic-ai/claude-agent-sdk";
 import type { EffortLevel } from "@anthropic-ai/claude-agent-sdk";
@@ -1798,6 +1799,46 @@ describe("buildPiAnthropicProvider", () => {
     }
   });
 
+  test("setup readiness counts only Claude accounts that can run the default", async () => {
+    const apiKey = (id: string, owner?: string) => ({
+      id,
+      name: id,
+      token: `sk-ant-api03-${id}`,
+      authKind: "api-key",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      ...(owner ? { owner } : {}),
+    });
+    try {
+      // bridge.accounts names a removed subscription; the one API account is
+      // outside it, so nothing can run any Claude model.
+      await designate(["removed-sub"]);
+      writeFileSync(
+        accountsFile,
+        JSON.stringify({ accounts: [apiKey("new-key")] }),
+      );
+      await accounts.loadClaudeAccounts();
+      let status = engineStatus("Bob");
+      expect(status.provider).toBe("claude");
+      expect(status.ready).toBe(false);
+      // Once designated, the default moves to Mythos and setup is ready.
+      await designate(["new-key"]);
+      status = engineStatus("Bob");
+      expect(status.defaultModel).toContain("mythos");
+      expect(status.ready).toBe(true);
+      // Another user's personal account never makes this user ready.
+      await designate([]);
+      writeFileSync(
+        accountsFile,
+        JSON.stringify({ accounts: [apiKey("alice-key", "Alice")] }),
+      );
+      await accounts.loadClaudeAccounts();
+      expect(engineStatus("Alice").ready).toBe(true);
+      expect(engineStatus("Bob").ready).toBe(false);
+    } finally {
+      await designate([]);
+    }
+  });
+
   test("the bridge benches an account whose result is a limit notice", async () => {
     await designate(["key-a", "key-b"]);
     writeFileSync(
@@ -2019,6 +2060,91 @@ describe("buildPiAnthropicProvider", () => {
     try {
       const provider = buildPiAnthropicProvider({
         unifiedSessionId: "os-tagged-limit",
+        builtinModels: [],
+        ensureModelId: mythos.id,
+        ephemeral: true,
+      }) as any;
+      const events: any[] = [];
+      for await (const ev of provider.streamSimple(mythos, {
+        messages: [{ role: "user", content: "hi" }],
+      }))
+        events.push(ev);
+      expect(keys).toEqual(["sk-ant-api03-key-a", "sk-ant-api03-key-b"]);
+      expect(events.at(-1)?.type).toBe("done");
+      expect(
+        events
+          .filter((ev) => ev.type === "text_delta")
+          .map((ev) => ev.delta)
+          .join(""),
+      ).toBe("Served.");
+    } finally {
+      query.mockRestore();
+      accounts.returnAccountToPool("key-a");
+    }
+  });
+
+  test("an in-process result-only limit notice fails over to the next account", async () => {
+    const [mythos] = buildPiAnthropicModels([], "claude-mythos-5-2");
+    await designate(["key-a", "key-b"]);
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: ["key-a", "key-b"].map((id) => ({
+          id,
+          name: id,
+          token: `sk-ant-api03-${id}`,
+          authKind: "api-key",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        })),
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    accounts.returnAccountToPool("key-a");
+    const keys: unknown[] = [];
+    const query = spyOn(sdk, "query").mockImplementation((input) => {
+      const key = input.options?.env?.ANTHROPIC_API_KEY;
+      keys.push(key);
+      const limited = key === "sk-ant-api03-key-a";
+      // The same sequence the bridge test uses: a successful result whose
+      // whole text is the notice, with no assistant message.
+      const messages: Array<Record<string, any>> = [
+        { type: "system", subtype: "init", session_id: "sdk-result-limit" },
+        ...(limited
+          ? []
+          : [
+              {
+                type: "assistant",
+                message: {
+                  id: `m-${keys.length}`,
+                  content: [{ type: "text", text: "Served." }],
+                },
+              },
+            ]),
+        {
+          type: "result",
+          subtype: "success",
+          is_error: false,
+          result: limited ? "5-hour limit reached ∙ resets 3am" : "Served.",
+          usage: { input_tokens: 1, output_tokens: 1 },
+          session_id: "sdk-result-limit",
+        },
+      ];
+      return {
+        next: async () => {
+          const value = messages.shift();
+          return value
+            ? { value, done: false }
+            : { value: undefined, done: true };
+        },
+        close: () => {},
+        [Symbol.asyncIterator]() {
+          return this;
+        },
+      } as any;
+    });
+    try {
+      const provider = buildPiAnthropicProvider({
+        unifiedSessionId: "os-result-limit",
         builtinModels: [],
         ensureModelId: mythos.id,
         ephemeral: true,

@@ -19,23 +19,30 @@ import {
  * (Mythos), so they do not make the rest of the `anthropic` catalog runnable. */
 export const CLAUDE_API_CAPACITY = "anthropic:api";
 
-/** Provider capacity configured on this server for `user` (the person who
- * would run the model). Temporary exhaustion does not change the catalog or
- * default; adding or removing an account does. */
-export function configuredModelProviders(user?: string): Set<string> {
-  // A bridge designation fences Anthropic runs to the accounts it names, so
-  // only those count: an API account added outside it cannot serve Mythos.
-  // Claude capacity is per person, with the routing owner gate: another
-  // user's personal account (subscription or API) never serves this user's
-  // run. The HTTP bridge carries no run identity, so there only shared
-  // accounts serve anyone.
+/** The Claude accounts that could serve `user`'s runs, usable or not.
+ * A bridge designation fences Anthropic runs to the accounts it names, so
+ * only those count: an API account added outside it cannot serve Mythos.
+ * Claude capacity is per person, with the routing owner gate: another user's
+ * personal account (subscription or API) never serves this user's run. The
+ * HTTP bridge carries no run identity, so there only shared accounts serve
+ * anyone. */
+export function claudeAccountsForUser(
+  user?: string,
+): ReturnType<typeof listAccountsPublic> {
   const designated = designatedBridgeAccountIds();
   const runUser = piAnthropicTransport() === "bridge" ? undefined : user;
-  const claude = listAccountsPublic().filter(
+  return listAccountsPublic().filter(
     (a) =>
       (!designated.length || designated.includes(a.id)) &&
       accountServesUser(a, runUser),
   );
+}
+
+/** Provider capacity configured on this server for `user` (the person who
+ * would run the model). Temporary exhaustion does not change the catalog or
+ * default; adding or removing an account does. */
+export function configuredModelProviders(user?: string): Set<string> {
+  const claude = claudeAccountsForUser(user);
   return new Set([
     ...(claude.some((a) => !isClaudeApiAccount(a)) ? ["anthropic"] : []),
     ...(claude.some(isClaudeApiAccount) ? [CLAUDE_API_CAPACITY] : []),

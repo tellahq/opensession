@@ -197,6 +197,8 @@ export interface ClaudeFederationSetup {
   publicIssuer: boolean;
   subject: string;
   audience: string;
+  /** Only the host operator may add a workload identity account. */
+  canEnroll: boolean;
 }
 
 export function useClaudeFederationSetupResource(

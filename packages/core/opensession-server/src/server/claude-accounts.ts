@@ -1214,9 +1214,25 @@ async function appendAccount(
       return { error: `An account named "${account.name}" already exists` };
     if (account.token && accounts.some((a) => a.token === account.token))
       return { error: duplicateSecretError };
+    const binding = federationBinding(account);
+    if (binding && accounts.some((a) => federationBinding(a) === binding))
+      return { error: "This federation rule is already registered" };
     await writeStore([...accounts, account]);
     return undefined;
   });
+}
+
+/** One key per federation rule, service account, and workspace: a federated
+ *  account stores no secret, so this is what makes two of them the same. */
+function federationBinding(account: ClaudeAccount): string | undefined {
+  const f = account.authKind === "federation" ? account.federation : undefined;
+  if (!f) return undefined;
+  return [
+    f.organizationId,
+    f.federationRuleId,
+    f.serviceAccountId,
+    f.workspaceId ?? "",
+  ].join("|");
 }
 
 /** The owner gate: a personal account (`owner` set) serves only runs whose
@@ -1242,7 +1258,7 @@ export function hasClaudeApiAccounts(): boolean {
  * cannot switch to a model its account would then refuse.
  */
 export function claudeAccountServesModel(
-  account: Pick<ClaudeAccount, "authKind">,
+  account: { authKind?: string },
   model?: string | null,
 ): boolean {
   if (isClaudeApiAccount(account)) return isClaudeApiOnlyModel(model);

@@ -7,10 +7,13 @@
  * next handler (see routes/index.ts for the dispatch order).
  */
 
-import type { RouteContext } from "./context";
+import { requestUser, type RouteContext } from "./context";
+import { isHostOperator } from "./memory-diagnostics";
 import {
+  accountServesUser,
   addAccount,
   addClaudeApiAccount,
+  getAccountById,
   listAccountsPublic,
   refreshAllUsage,
   removeAccount,
@@ -18,7 +21,10 @@ import {
   setAccountLabel,
   setAccountOwner,
 } from "../claude-accounts";
-import { claudeFederationSetup } from "../claude-api-credentials";
+import {
+  claudeFederationSetup,
+  isClaudeApiAccount,
+} from "../claude-api-credentials";
 import { designatedBridgeAccountIds } from "../model-providers";
 import {
   addCodexAccount,
@@ -66,6 +72,32 @@ function isRename(body: unknown): body is { label: string } {
   );
 }
 
+/**
+ * API accounts spend an Anthropic organization's money, so only the host
+ * operator, or the person a personal API account belongs to, may rename,
+ * reassign, return, or remove one. Subscription accounts keep the pool's
+ * existing rules. Undefined means the caller may go ahead (or the account
+ * does not exist, which the route answers itself).
+ */
+function apiAccountChangeForbidden(
+  ctx: RouteContext,
+  id: string,
+): Response | undefined {
+  const account = getAccountById(id);
+  if (!account || !isClaudeApiAccount(account) || isHostOperator(ctx))
+    return undefined;
+  if (account.owner && accountServesUser(account, requestUser(ctx)))
+    return undefined;
+  return Response.json(
+    {
+      error: account.owner
+        ? "Only this account's owner or the host operator can change it."
+        : "Only the host operator can change a shared Claude API account.",
+    },
+    { status: 403 },
+  );
+}
+
 function foundOr404(updated: object | null): Response {
   return updated
     ? Response.json(updated)
@@ -109,6 +141,16 @@ export async function handleAccountsRoutes(
     if (typeof body?.name !== "string" || !body.name.trim()) {
       return Response.json({ error: "name is required" }, { status: 400 });
     }
+    // Federation spends whatever organization trusts this server's issuer,
+    // with no secret from the caller, so enrolling one is the operator's call.
+    if (body.federation != null && !isHostOperator(ctx))
+      return Response.json(
+        {
+          error:
+            "Only the host operator can add a workload identity account. Add a Claude API key instead, or ask the operator.",
+        },
+        { status: 403 },
+      );
     const result = await addClaudeApiAccount({
       name: body.name,
       owner: typeof body.owner === "string" ? body.owner : undefined,
@@ -130,7 +172,10 @@ export async function handleAccountsRoutes(
     path === "/api/claude-accounts/federation-setup" &&
     req.method === "GET"
   ) {
-    return Response.json(await claudeFederationSetup());
+    return Response.json({
+      ...(await claudeFederationSetup()),
+      canEnroll: isHostOperator(ctx),
+    });
   }
 
   if (path === "/api/claude-accounts/refresh" && req.method === "POST") {
@@ -175,10 +220,22 @@ export async function handleAccountsRoutes(
     /^\/api\/claude-accounts\/([^/]+)\/return-to-pool$/,
   );
   if (returnMatch && req.method === "POST") {
+    const forbidden = apiAccountChangeForbidden(
+      ctx,
+      decodeURIComponent(returnMatch[1]),
+    );
+    if (forbidden) return forbidden;
     return foundOr404(returnAccountToPool(decodeURIComponent(returnMatch[1])));
   }
 
   const accountDelMatch = path.match(/^\/api\/claude-accounts\/([^/]+)$/);
+  if (accountDelMatch && (req.method === "DELETE" || req.method === "PUT")) {
+    const forbidden = apiAccountChangeForbidden(
+      ctx,
+      decodeURIComponent(accountDelMatch[1]),
+    );
+    if (forbidden) return forbidden;
+  }
   if (accountDelMatch && req.method === "DELETE") {
     return (await removeAccount(decodeURIComponent(accountDelMatch[1])))
       ? Response.json({ ok: true })

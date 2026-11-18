@@ -1963,11 +1963,13 @@ function AddClaudeApiAccountForm({
     spellCheck: false,
   });
 
+  const enrollBlocked = kind === "federation" && setup?.canEnroll === false;
   const ready = Boolean(
     name.trim() &&
     (kind === "api-key"
       ? apiKey.trim()
-      : federation.organizationId.trim() &&
+      : !enrollBlocked &&
+        federation.organizationId.trim() &&
         federation.federationRuleId.trim() &&
         federation.serviceAccountId.trim()),
   );
@@ -2050,7 +2052,12 @@ function AddClaudeApiAccountForm({
                   rule bound to a service account with these values. No secret
                   is stored here.
                 </SettingRowDescription>
-                {setup ? (
+                {enrollBlocked ? (
+                  <InlineAlert>
+                    Only the host operator can add a workload identity account.
+                    Add a Claude API key instead.
+                  </InlineAlert>
+                ) : setup ? (
                   <>
                     <ReadonlyValue label="Issuer URL" value={setup.issuer} />
                     {setup.publicIssuer ? (

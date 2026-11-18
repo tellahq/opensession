@@ -1,9 +1,13 @@
 /** Shared readiness check for Setup and `opensession doctor`. */
-import { listAccountsPublic } from "./claude-accounts";
+import {
+  claudeAccountServesModel,
+  listAccountsPublic,
+} from "./claude-accounts";
 import { listCodexAccountsPublic } from "./codex-accounts";
 import { listXaiAccountsPublic } from "./xai-accounts";
 import { accountProviderForModel } from "./models";
 import {
+  claudeAccountsForUser,
   configuredInteractiveDefaultModel,
   configuredModelProviders,
 } from "./model-catalog";
@@ -43,9 +47,6 @@ export function engineStatus(user?: string): EngineStatus {
   const xaiAvailable = xaiPool.filter(
     (account) => account.usable && !account.exhaustedUntil,
   ).length;
-  const claudeAvailable = claudePool.filter(
-    (account) => account.usable && !account.exhaustedUntil,
-  ).length;
   const codexAvailable = codexPool.filter(
     (account) => account.usable && !account.exhaustedUntil,
   ).length;
@@ -53,6 +54,15 @@ export function engineStatus(user?: string): EngineStatus {
     configuredModelProviders(user),
   );
   const provider = accountProviderForModel(defaultModel);
+  // Claude readiness uses the runner's account rules: the designation, the
+  // owner gate for this user, and whether the account's kind serves the
+  // default model (API accounts serve only Mythos, subscriptions never do).
+  const claudeAvailable = claudeAccountsForUser(user).filter(
+    (account) =>
+      account.usable &&
+      !account.exhaustedUntil &&
+      claudeAccountServesModel(account, defaultModel),
+  ).length;
   const base = {
     piEnabled: enabled,
     claudeAccounts,
