@@ -93,7 +93,8 @@ export interface ClaudeMythosAccess {
  * Ask the Models API which Mythos releases this account's organization can
  * use. A 200 grants a release, a 403 or 404 denies it, and anything else
  * leaves the check inconclusive. A 401 for a static API key means the key
- * was revoked, which denies every release; enrollment rejects the same 401.
+ * was revoked, and an `invalid_grant` token exchange means the federation
+ * rule no longer trusts this server: both deny every release.
  */
 export async function checkClaudeMythosAccess(
   account: CredentialAccount,
@@ -116,8 +117,10 @@ export async function checkClaudeMythosAccess(
     } else {
       return { models: [], conclusive: true };
     }
-  } catch {
-    return { models: [], conclusive: false };
+  } catch (error) {
+    // A rejected grant (a revoked or changed federation rule) denies every
+    // release; timeouts, rate limits, and 5xx prove nothing.
+    return { models: [], conclusive: isRevokedGrant(error) };
   }
   const models: string[] = [];
   let conclusive = true;
@@ -136,6 +139,19 @@ export async function checkClaudeMythosAccess(
     }
   }
   return { models, conclusive };
+}
+
+/** Whether a token exchange failed because Anthropic refused the grant
+ *  itself, as opposed to being unreachable or overloaded. */
+export function isRevokedGrant(error: unknown): boolean {
+  return (
+    error instanceof FederatedExchangeError &&
+    error.status >= 400 &&
+    error.status < 500 &&
+    error.status !== 408 &&
+    error.status !== 429 &&
+    error.code === "invalid_grant"
+  );
 }
 
 export interface ClaudeFederationSetup {
@@ -216,6 +232,28 @@ export interface FederatedToken {
   lifetimeMs: number;
 }
 
+/** A token exchange Anthropic answered with an error, with its status and
+ *  OAuth error code, so callers can tell a revoked grant from an outage. */
+export class FederatedExchangeError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+  ) {
+    super(message);
+  }
+}
+
+/** The OAuth `error` code of an exchange response, if it has one. */
+function exchangeErrorCode(body: string): string | undefined {
+  try {
+    const error = JSON.parse(body)?.error;
+    return typeof error === "string" ? error : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Keep the response's error, never anything that could be a credential. */
 function exchangeError(status: number, body: string): string {
   let detail = body.slice(0, 300);
@@ -272,7 +310,12 @@ export async function exchangeFederatedToken(
     );
   }
   const text = await res.text().catch(() => "");
-  if (!res.ok) throw new Error(exchangeError(res.status, text));
+  if (!res.ok)
+    throw new FederatedExchangeError(
+      exchangeError(res.status, text),
+      res.status,
+      exchangeErrorCode(text),
+    );
   let parsed: { access_token?: unknown; expires_in?: unknown };
   try {
     parsed = JSON.parse(text);

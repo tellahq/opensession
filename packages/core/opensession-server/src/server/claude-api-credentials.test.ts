@@ -388,6 +388,37 @@ describe("Mythos access", () => {
     ).toEqual({ models: ["claude-mythos-5-2"], conclusive: false });
   });
 
+  test("a refused federation grant denies every release; an outage does not", async () => {
+    const exchange = (status: number, error: string) =>
+      tokenEndpoint(({ url }) =>
+        url.includes("/v1/models/")
+          ? Response.json({})
+          : Response.json({ error }, { status }),
+      );
+    const check = (id: string, status: number, error: string) =>
+      credentials.checkClaudeMythosAccess(
+        { id, token: "", authKind: "federation", federation },
+        exchange(status, error).fetchImpl,
+      );
+    expect(await check("wif-revoked", 403, "invalid_grant")).toEqual({
+      models: [],
+      conclusive: true,
+    });
+    expect(await check("wif-unauthorized", 401, "invalid_grant")).toEqual({
+      models: [],
+      conclusive: true,
+    });
+    for (const [status, error] of [
+      [503, "server_error"],
+      [429, "invalid_grant"],
+      [400, "invalid_request"],
+    ] as const)
+      expect(await check(`wif-${status}`, status, error)).toEqual({
+        models: [],
+        conclusive: false,
+      });
+  });
+
   test("an API account counts only for the releases it was verified for", () => {
     const unverified = { authKind: "api-key" };
     const only51 = { authKind: "api-key", mythosModels: ["claude-mythos-5-1"] };
