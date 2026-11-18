@@ -37,6 +37,7 @@ describe("archive undo ownership", () => {
     expect(appSource).toContain("rememberArchived([viewerSession.id])");
     expect(appSource).toContain("unarchiveSession(currentSession)");
     expect(appSource).toContain("void reopenLastArchivedRef.current()");
+    expect(appSource).toContain("actionAt: at,");
     expect(appSource).toContain("run: () => void reopenLastArchived()");
   });
 
@@ -45,7 +46,10 @@ describe("archive undo ownership", () => {
     expect(hookSource.indexOf("forgetLastSession(ids);")).toBeLessThan(
       hookSource.indexOf("setArchiveUndo((prev)"),
     );
-    expect(hookSource).toContain("entry.filter((id) => !ids.includes(id))");
+    expect(hookSource).toContain(
+      "ids: entry.ids.filter((id) => !ids.includes(id))",
+    );
+    expect(hookSource).toContain("{ ids, at: Date.now() }");
     expect(hookSource).toContain(
       "for (let i = archiveUndo.length - 1; i >= 0; i--)",
     );
@@ -68,9 +72,7 @@ describe("archive undo ownership", () => {
   });
 
   test("keeps latest-value refs for the shortcut", () => {
-    expect(hookSource).toContain(
-      "restorableArchivedRef.current = restorableArchived",
-    );
+    expect(hookSource).toContain("restorableArchivedRef.current = restorable;");
     expect(hookSource).toContain(
       "reopenLastArchivedRef.current = reopenLastArchived",
     );
