@@ -377,7 +377,7 @@ function LinksSection() {
       <SettingCard>
         <SettingRow
           title="Open pull requests on GitHub"
-          desc="Pull request links open on GitHub instead of the review here. On a phone with the GitHub app, they open in the app. Only this device."
+          desc="Uses the GitHub app on a phone. Only this device."
           control={
             <Switch
               aria-label="Open pull requests on GitHub"
@@ -388,7 +388,7 @@ function LinksSection() {
         />
         <SettingRow
           title="Open links in the Browser tab"
-          desc="Web links and preview environments open in a Browser tab next to the session. Turn off to open them in your own browser. Only affects you."
+          desc="Turn off to use your own browser."
           control={
             <Switch
               aria-label="Open links in the Browser tab"
@@ -400,7 +400,7 @@ function LinksSection() {
         {inBrowserTab && (
           <SettingRow
             title="Add a Browser tab for previews"
-            desc="When a pull request's preview environment is ready, a Browser tab with it opens behind what you're viewing. Once per pull request. Only affects you."
+            desc="Opens one when a pull request's preview is ready."
             control={
               <Switch
                 aria-label="Add a Browser tab for previews"
