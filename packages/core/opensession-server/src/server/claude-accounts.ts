@@ -25,7 +25,6 @@ import {
   isClaudeApiAccount,
   checkClaudeMythosAccess,
   claudeMythosModelOf,
-  CLAUDE_MYTHOS_MODELS,
   isClaudeApiOnlyModel,
   parseClaudeFederation,
   validateClaudeApiKey,
@@ -917,21 +916,24 @@ export const CLAUDE_API_NO_MYTHOS =
 
 /** Last Mythos access check per API account, to space out re-checks. */
 const lastMythosCheckAt = new Map<string, number>();
-/** Unverified accounts are re-checked on the next usage poll after this;
- *  accounts missing a release, less often, in case access is granted. */
+/** Unverified accounts are re-checked on the next usage poll after this.
+ *  Verified ones are re-checked too, less often: an organization can gain a
+ *  release, or lose one, and a conclusive denial removes it. A manual
+ *  refresh re-checks every API account. */
 const MYTHOS_RECHECK_UNVERIFIED_MS = 5 * 60_000;
-const MYTHOS_RECHECK_PARTIAL_MS = 6 * 60 * 60_000;
+const MYTHOS_RECHECK_VERIFIED_MS = 6 * 60 * 60_000;
 
-/** Re-check an API account's Mythos access when it is unverified or lacks a
- *  release, and save a conclusive answer on the fresh record. */
-async function refreshMythosAccess(account: ClaudeAccount): Promise<void> {
-  const verified = account.mythosModels;
-  if (verified && verified.length === CLAUDE_MYTHOS_MODELS.length) return;
+/** Re-check an API account's Mythos access when it is due (or `force`), and
+ *  save a conclusive answer on the fresh record. */
+async function refreshMythosAccess(
+  account: ClaudeAccount,
+  force = false,
+): Promise<void> {
   const last = lastMythosCheckAt.get(account.id) ?? 0;
-  const wait = verified
-    ? MYTHOS_RECHECK_PARTIAL_MS
+  const wait = account.mythosModels
+    ? MYTHOS_RECHECK_VERIFIED_MS
     : MYTHOS_RECHECK_UNVERIFIED_MS;
-  if (Date.now() - last < wait) return;
+  if (!force && Date.now() - last < wait) return;
   lastMythosCheckAt.set(account.id, Date.now());
   const access = await checkClaudeMythosAccess(account);
   if (!access.conclusive) return;
@@ -946,12 +948,14 @@ async function refreshMythosAccess(account: ClaudeAccount): Promise<void> {
   });
 }
 
-export async function refreshAllUsage(): Promise<void> {
+export async function refreshAllUsage(
+  opts: { recheckMythos?: boolean } = {},
+): Promise<void> {
   // Sequential, not Promise.all — the endpoint rate-limits aggressively and a
   // burst of N simultaneous requests from one IP makes that worse.
   for (const account of readStore()) {
     if (isClaudeApiAccount(account)) {
-      await refreshMythosAccess(account).catch(() => {});
+      await refreshMythosAccess(account, opts.recheckMythos).catch(() => {});
       continue;
     }
     if (account.usageScope === "missing" && !account.credentialsPath) {
@@ -1379,7 +1383,7 @@ export async function addClaudeApiAccount(input: {
     return { error: CLAUDE_API_NO_MYTHOS };
   }
   if (access.conclusive) account.mythosModels = access.models;
-  else lastMythosCheckAt.set(account.id, Date.now());
+  lastMythosCheckAt.set(account.id, Date.now());
   const appended = await appendAccount(
     account,
     "This key is already registered",

@@ -12,6 +12,7 @@ import {
   isTrustedGithubLogin,
   isTrustedUser,
   personKeyToDisplayName,
+  ownerRefNamesUser,
   signedInUserName,
   trustedGithubTeammate,
 } from "./user-mappings";
@@ -255,6 +256,38 @@ describe("signed-in user name", () => {
       );
     } finally {
       restore();
+    }
+  });
+});
+
+describe("live roster", () => {
+  test("a namesake added after startup is seen without a restart", async () => {
+    const { configPath, getConfigAsync, publishConfigSnapshot } =
+      await import("../config");
+    const path = configPath();
+    const prev = await getConfigAsync();
+    const publish = (team: TeamMember[]) =>
+      publishConfigSnapshot(
+        path,
+        JSON.stringify({ ...prev, identity: { ...prev.identity, team } }),
+      );
+    const rivera = { name: "Alex Rivera", github: "alex-rivera" };
+    try {
+      publish([rivera]);
+      expect(
+        signedInUserName({ login: "alex-rivera", name: "Alex Rivera" }),
+      ).toBe("Alex");
+      expect(ownerRefNamesUser("alex-rivera", "Alex")).toBe(true);
+      // An operator adds Alex Chen through Setup; the module-load snapshot
+      // still lists only Rivera.
+      publish([rivera, { name: "Alex Chen", github: "alex-chen" }]);
+      expect(signedInUserName({ login: "alex-chen", name: "Alex Chen" })).toBe(
+        "Alex Chen",
+      );
+      expect(ownerRefNamesUser("alex-rivera", "Alex Chen")).toBe(false);
+      expect(ownerRefNamesUser("alex-rivera", "Alex")).toBe(false);
+    } finally {
+      publishConfigSnapshot(path, JSON.stringify(prev));
     }
   });
 });

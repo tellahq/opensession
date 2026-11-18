@@ -436,4 +436,37 @@ describe("Mythos access", () => {
       fetchSpy.mockRestore();
     }
   });
+
+  test("a refresh drops a release a verified account lost", async () => {
+    let mythos52 = 200;
+    const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (
+      url: string,
+    ) => {
+      const u = String(url);
+      if (u.endsWith("/v1/models/claude-mythos-5-2"))
+        return new Response("{}", { status: mythos52 });
+      if (u.includes("/v1/models/")) return Response.json({});
+      return Response.json({ data: [] });
+    }) as unknown as typeof fetch);
+    try {
+      const added = await accounts.addClaudeApiAccount({
+        name: "loses-5-2",
+        apiKey: "sk-ant-api03-loses-5-2",
+      });
+      if ("error" in added) throw new Error(added.error);
+      expect(added.mythosModels).toEqual([
+        "claude-mythos-5-2",
+        "claude-mythos-5-1",
+      ]);
+      mythos52 = 404;
+      await accounts.refreshAllUsage({ recheckMythos: true });
+      const after = accounts
+        .listAccountsPublic()
+        .find((a) => a.id === added.id);
+      expect(after?.mythosModels).toEqual(["claude-mythos-5-1"]);
+      await accounts.removeAccount(added.id);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
 });

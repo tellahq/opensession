@@ -192,7 +192,7 @@ export async function handleAccountsRoutes(
   }
 
   if (path === "/api/claude-accounts/refresh" && req.method === "POST") {
-    await refreshAllUsage();
+    await refreshAllUsage({ recheckMythos: true });
     return Response.json({ accounts: listAccountsPublic() });
   }
 

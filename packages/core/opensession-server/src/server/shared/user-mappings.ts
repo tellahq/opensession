@@ -201,9 +201,25 @@ export function signedInUserName(signedIn: {
 }): string {
   const full = signedIn.name.trim();
   const first = full.split(" ")[0] || full;
-  if (rosterMembersNamed(normRef(first)).length <= 1) return first;
-  if (full && rosterMembersNamed(normRef(full)).length <= 1) return full;
-  return signedIn.login.trim() || first;
+  const login = signedIn.login.trim();
+  const lower = login.toLowerCase();
+  // A sign-in the roster does not list (the automation principal) keeps the
+  // historical first name; no personal account can resolve to it anyway.
+  if (
+    !lower ||
+    !liveTeam().some((m) => m.github?.trim().toLowerCase() === lower)
+  )
+    return first;
+  // The chosen name must resolve to this verified login and nobody else.
+  const namesOnlyThem = (ref: string) => {
+    const members = rosterMembersNamed(normRef(ref));
+    return (
+      members.length === 1 && members[0].github?.trim().toLowerCase() === lower
+    );
+  };
+  if (namesOnlyThem(first)) return first;
+  if (full && namesOnlyThem(full)) return full;
+  return login;
 }
 
 /**
@@ -232,10 +248,24 @@ function normRef(ref: string | null | undefined): string {
   return ref?.trim().replace(/^@/, "").toLowerCase() ?? "";
 }
 
+/** The roster as configured now. Authorization reads it live, as web
+ *  sign-in does: `/api/setup/team` edits it without a restart, and the
+ *  module-load `identity` snapshot would then miss a newly added namesake. */
+function liveTeam(): TeamMember[] {
+  if (teamOverrideForTest) return teamOverrideForTest;
+  try {
+    return configuredIdentity().team;
+  } catch {
+    // Config not loaded (some unit tests): the load-time snapshot.
+    return identity.team;
+  }
+}
+let teamOverrideForTest: TeamMember[] | null = null;
+
 /** Roster members a normalized reference (GitHub login, full name, first
  *  name, or alias) can mean. More than one means the reference is ambiguous. */
 function rosterMembersNamed(ref: string): TeamMember[] {
-  return identity.team.filter((m) => {
+  return liveTeam().filter((m) => {
     const name = m.name.trim().toLowerCase();
     return (
       m.github?.trim().toLowerCase() === ref ||
@@ -552,10 +582,13 @@ export function __setIdentitiesForTest(
   slackNames: Record<string, string> = {},
 ): () => void {
   const prev = identity;
+  const prevOverride = teamOverrideForTest;
   identity = { ...prev, team, slackNames };
+  teamOverrideForTest = team;
   applyDerivedTables(deriveIdentityTables(team, slackNames));
   return () => {
     identity = prev;
+    teamOverrideForTest = prevOverride;
     applyDerivedTables(deriveIdentityTables(prev.team, prev.slackNames));
   };
 }
