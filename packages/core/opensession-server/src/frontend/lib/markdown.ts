@@ -139,8 +139,8 @@ let renderedTellaVideos = new Set<string>();
 let renderedPrRefs: Set<string> | null = null;
 
 /** The PRs this conversation is about, keyed like `knownPrStates`. A mention
- *  of one renders as its plain text: its chip would open the conversation the
- *  reader is already in. Reset per renderMarkdown call. */
+ *  of one renders as a plain link instead of a status chip. Reset per
+ *  renderMarkdown call. */
 let renderOwnPrs: ReadonlySet<string> | null = null;
 
 /**
@@ -1159,15 +1159,22 @@ function prMentionLink(
 ): string {
   const contextRepo = repo;
   if (unqualified) repo = resolveBarePrRepo(contextRepo, number);
-  if (
-    renderOwnPrs?.has(prStateKey(repo, number)) ||
-    (unqualified && renderOwnPrs?.has(prStateKey(contextRepo, number)))
-  )
-    return attr(label);
   const href = `${BASE_PATH}/pr/${encodeURIComponent(repo)}/${number}`;
   // `data-pr-gh` is the escape hatch, not the destination: a plain click
   // opens the PR's session here, cmd/ctrl-click leaves for github.com.
   const ghRepo = knownRepos.get(repo);
+  // The conversation's own PR stays a link (cmd/ctrl-click still reaches
+  // GitHub), but as a plain one: a status chip would only repeat the header.
+  if (
+    renderOwnPrs?.has(prStateKey(repo, number)) ||
+    (unqualified && renderOwnPrs?.has(prStateKey(contextRepo, number)))
+  )
+    return (
+      `<a href="${attr(href)}" data-pr-repo="${attr(repo)}"` +
+      ` data-pr-number="${attr(number)}"` +
+      (ghRepo ? ` data-pr-gh="${attr(ghRepo)}"` : "") +
+      ` title="${attr(prRefTitle(repo, number))}">${attr(label)}</a>`
+    );
   const key = prStateKey(repo, number);
   const state = knownPrStates.get(key);
   const repeat = renderedPrRefs?.has(key) ?? false;
@@ -2021,8 +2028,8 @@ export interface MarkdownContext {
    * which is what PR prose needs and what only PR prose should ask for.
    */
   rawHtml?: "escape" | "sanitize";
-  /** The PRs the surrounding conversation is about. Mentions of these stay
-   * plain text: a chip there would only link back to where the reader is. */
+  /** The PRs the surrounding conversation is about. Mentions of these render
+   * as plain links rather than status chips. */
   ownPrs?: readonly { repo: string; number: number }[];
 }
 

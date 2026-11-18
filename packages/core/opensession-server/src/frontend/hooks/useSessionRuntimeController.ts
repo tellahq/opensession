@@ -46,6 +46,9 @@ import {
   getPreviewAutoOpenPref,
   onPreviewAutoOpenChanged,
 } from "../lib/preview-auto-open-pref";
+import { useLinksInBrowserTab } from "../lib/links-in-browser-tab";
+// Loaded with every session so the synced value hydrates before Settings opens.
+import "../lib/links-in-browser-tab-pref";
 import { NavigationContext } from "./useNavigation";
 import type { SessionViewerProps } from "../lib/session-viewer-bindings";
 import { sessionHasWorkspace } from "../lib/session-workspace";
@@ -472,10 +475,12 @@ export function useSessionRuntimeController({
   // it so it is there when the tab is opened. It lands behind whatever is in
   // front, and only once per PR: closing it sticks.
   const navigation = use(NavigationContext);
-  const autoOpenOn = useSyncExternalStore(
+  // It is a Browser tab, so it never opens with links going to the browser.
+  const autoOpenPref = useSyncExternalStore(
     onPreviewAutoOpenChanged,
     getPreviewAutoOpenPref,
   );
+  const autoOpenOn = useLinksInBrowserTab() && autoOpenPref;
   const autoOpenReady =
     autoOpenOn &&
     focused &&

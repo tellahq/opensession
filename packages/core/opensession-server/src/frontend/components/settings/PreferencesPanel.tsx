@@ -133,6 +133,8 @@ import {
   onPreviewAutoOpenChanged,
   setPreviewAutoOpenPref,
 } from "../../lib/preview-auto-open-pref";
+import { setLinksInBrowserTabPref } from "../../lib/links-in-browser-tab-pref";
+import { useLinksInBrowserTab } from "../../lib/links-in-browser-tab";
 import {
   getViewportReadoutPref,
   onViewportReadoutChanged,
@@ -367,6 +369,7 @@ function LinksSection() {
     () => onPreviewAutoOpenChanged(() => setAutoOpen(getPreviewAutoOpenPref())),
     [],
   );
+  const inBrowserTab = useLinksInBrowserTab();
 
   return (
     <>
@@ -374,7 +377,7 @@ function LinksSection() {
       <SettingCard>
         <SettingRow
           title="Open pull requests on GitHub"
-          desc="Pull request links open on GitHub instead of the review here. On a phone with the GitHub app, they open in the app. Only this device."
+          desc="Uses the GitHub app on a phone. Only this device."
           control={
             <Switch
               aria-label="Open pull requests on GitHub"
@@ -384,16 +387,29 @@ function LinksSection() {
           }
         />
         <SettingRow
-          title="Add a Browser tab for previews"
-          desc="When a pull request's preview environment is ready, a Browser tab with it opens behind what you're viewing. Once per pull request. Only affects you."
+          title="Open links in the Browser tab"
+          desc="Turn off to use your own browser."
           control={
             <Switch
-              aria-label="Add a Browser tab for previews"
-              checked={autoOpen}
-              onCheckedChange={setPreviewAutoOpenPref}
+              aria-label="Open links in the Browser tab"
+              checked={inBrowserTab}
+              onCheckedChange={setLinksInBrowserTabPref}
             />
           }
         />
+        {inBrowserTab && (
+          <SettingRow
+            title="Add a Browser tab for previews"
+            desc="Opens one when a pull request's preview is ready."
+            control={
+              <Switch
+                aria-label="Add a Browser tab for previews"
+                checked={autoOpen}
+                onCheckedChange={setPreviewAutoOpenPref}
+              />
+            }
+          />
+        )}
       </SettingCard>
     </>
   );

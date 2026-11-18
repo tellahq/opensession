@@ -29,7 +29,9 @@ export function NextUnreadButton({ phone = false }: { phone?: boolean }) {
   const surface = cn(
     "relative min-h-[54px] min-w-0 max-w-[min(24rem,85%)] justify-start gap-2 border-x border-t border-b-0 bg-[color-mix(in_srgb,var(--bg-panel)_80%,var(--composer-surface))] px-3.5 pt-2.5 pb-6 text-left text-label font-medium phone:min-h-[58px]",
     composerFlapBorder,
-    "rounded-b-none rounded-t-[var(--composer-radius)]",
+    // The all-corner radius replaces Button's `rounded-full` in tailwind-merge;
+    // a top-only radius would leave the pill shape winning on top.
+    "rounded-[var(--composer-radius)] rounded-b-none",
   );
 
   useEffect(() => () => clearTimeout(longPress.current), []);

@@ -3,6 +3,7 @@ import { NavigationContext } from "../hooks/useNavigation";
 import { useSessionPrResource } from "../hooks/useApiResources";
 import { useSessionPendingCreation } from "../hooks/useSessionPendingCreation";
 import { PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
+import { useLinksInBrowserTab } from "../lib/links-in-browser-tab";
 import { previewOpenable, stagingHref } from "../lib/preview-url";
 import type { PrDetails, SessionPrRef } from "../lib/types";
 import { cn } from "../ui/cn";
@@ -56,7 +57,9 @@ export function PrRefStagingMark({
   number?: number;
   className?: string;
 }) {
-  const navigation = use(NavigationContext);
+  // With "Open links in the Browser tab" off, every click is the anchor's own.
+  const shell = use(NavigationContext);
+  const navigation = useLinksInBrowserTab() ? shell : null;
   const openable = previewOpenable(staging);
   const href = stagingHref(staging);
   const subject = number != null ? ` for #${number}` : "";

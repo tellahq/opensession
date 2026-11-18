@@ -1,6 +1,7 @@
 import { type MouseEvent, useState } from "react";
 import { Menu, MENU_ICON } from "../ui/menu";
 import { useCopy } from "../ui/copy";
+import { linksInBrowserTab } from "../lib/links-in-browser-tab";
 import { IconArrowUpRight, IconCheck, IconCopy, IconGlobe } from "./icons";
 
 /**
@@ -32,7 +33,8 @@ interface OpenLinkMenu {
 
 /**
  * Right-clicking a web link in a transcript offers to open it in the
- * workspace's Browser tab. Shift-right-click keeps the browser's own menu.
+ * workspace's Browser tab. Shift-right-click keeps the browser's own menu,
+ * and so does every right-click with "Open links in the Browser tab" off.
  */
 export function useLinkContextMenu(openBrowser: (url: string) => void) {
   const [menu, setMenu] = useState<OpenLinkMenu | null>(null);
@@ -40,6 +42,7 @@ export function useLinkContextMenu(openBrowser: (url: string) => void) {
 
   function onContextMenu(event: MouseEvent) {
     if (event.shiftKey || event.defaultPrevented) return;
+    if (!linksInBrowserTab()) return;
     const url = webLink(anchorHref(event.target), window.location.origin);
     if (!url) return;
     event.preventDefault();
