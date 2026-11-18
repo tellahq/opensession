@@ -96,6 +96,37 @@ describe("visible transcript hydration", () => {
     ).toEqual([]);
   });
 
+  test("defers a group's older ranges when the opening cut into its tail", () => {
+    // A check-back group: the request that started the task, its long first
+    // turn, then check-backs. The bounded opening payload covers only the
+    // newest check-backs, so the first two ranges are history above them.
+    const request = range("request", 1, ["request", "work-1", "work-2"]);
+    const firstCheckBack = range("check-1", 2, ["check-1", "work-3"]);
+    const cut = range("check-2", 3, ["check-2", "loaded-1"]);
+    const latest = range("check-3", 4, ["loaded-2", "loaded-3"]);
+    const group = {
+      key: "group",
+      ranges: [request, firstCheckBack, cut, latest],
+    };
+    expect(
+      visibleTranscriptHydrationDemand([group], new Set([group.key]), (id) =>
+        id.startsWith("loaded"),
+      ),
+    ).toEqual([]);
+  });
+
+  test("still waits for a gap after a group's loaded payload", () => {
+    const request = range("request", 1, ["request", "work-1"]);
+    const loaded = range("check-1", 2, ["loaded-1", "loaded-2"]);
+    const gap = range("check-2", 3, ["missing", "loaded-3"]);
+    const group = { key: "group", ranges: [request, loaded, gap] };
+    expect(
+      visibleTranscriptHydrationDemand([group], new Set([group.key]), (id) =>
+        id.startsWith("loaded"),
+      ),
+    ).toEqual([gap]);
+  });
+
   test("does not claim readiness before the virtualizer reports a window", () => {
     expect(
       visibleTranscriptHydrationDemand(outline, new Set(), () => true),
