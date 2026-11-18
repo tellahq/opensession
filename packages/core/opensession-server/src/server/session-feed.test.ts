@@ -3,6 +3,7 @@ import type { ProtocolServerMessage } from "@tellahq/opensession-protocol/sessio
 import {
   appendSessionFeed,
   beginPromptRun,
+  notePromptDelivered,
   resumeSessionFeed,
   sessionFeedSnapshot,
 } from "./session-feed";
@@ -154,6 +155,32 @@ describe("session feed", () => {
     beginPromptRun(sessionId, ["next-1"]);
     release();
     expect(sessionFeedSnapshot(sessionId).activePromptIds).toEqual(["next-1"]);
+  });
+
+  test("a read steer joins the running turn's prompts", () => {
+    const sessionId = `feed-${crypto.randomUUID()}`;
+    const release = beginPromptRun(sessionId, ["first"]);
+    notePromptDelivered(sessionId, "steer-1");
+    notePromptDelivered(sessionId, "steer-1");
+    expect(sessionFeedSnapshot(sessionId).activePromptIds).toEqual([
+      "first",
+      "steer-1",
+    ]);
+    release();
+    expect(sessionFeedSnapshot(sessionId).activePromptIds).toEqual([]);
+  });
+
+  test("leaves the prompts out for a running turn it has no record of", () => {
+    const sessionId = `feed-${crypto.randomUUID()}`;
+    // Busy as the runner sees it, before an adopted run's first event.
+    expect(
+      sessionFeedSnapshot(sessionId, true).activePromptIds,
+    ).toBeUndefined();
+    // The adopted run rebuilds the active turn with stream_start.
+    appendSessionFeed(sessionId, { type: "stream_start", sessionId });
+    expect(sessionFeedSnapshot(sessionId).activePromptIds).toBeUndefined();
+    appendSessionFeed(sessionId, { type: "stream_done", sessionId });
+    expect(sessionFeedSnapshot(sessionId).activePromptIds).toEqual([]);
   });
 
   test("active snapshot contains only text not yet committed", () => {

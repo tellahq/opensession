@@ -46,8 +46,9 @@ export interface SessionFeedSnapshot {
   };
   /** Delivery ids of the prompts the current turn answers. Present even when
    *  a resume leaves `active` out, so a viewer can tell a running prompt from
-   *  a finished one without the cumulative text. */
-  activePromptIds: string[];
+   *  a finished one without the cumulative text. Absent when a turn runs that
+   *  this process did not record (one adopted after a restart). */
+  activePromptIds?: string[];
 }
 
 /** The running turn, minus its text — that lives in `FeedState.live`. */
@@ -94,6 +95,20 @@ function promptRuns(): Map<string, PromptRun> {
  * returned release runs, whichever comes first, so a viewer that watches in
  * between sees them in `activePromptIds`.
  */
+/**
+ * A steer the engine acknowledged reading (steer_delivered) belongs to the
+ * running turn from here on. Its early transcript row and queue receipt are
+ * not that proof: an unread steer goes back to the queue when its turn ends.
+ */
+export function notePromptDelivered(sessionId: string, id: string): void {
+  const run = promptRuns().get(sessionId);
+  if (run?.ids.includes(id)) return;
+  promptRuns().set(sessionId, {
+    token: run?.token ?? Symbol(sessionId),
+    ids: [...(run?.ids ?? []), id],
+  });
+}
+
 export function beginPromptRun(sessionId: string, ids: string[]): () => void {
   const run = { token: Symbol(sessionId), ids };
   promptRuns().set(sessionId, run);
@@ -222,15 +237,25 @@ export function appendSessionFeed(
   return frame;
 }
 
-export function sessionFeedSnapshot(sessionId: string): SessionFeedSnapshot {
+/**
+ * `primaryBusy`: the session's own turn is running or settling, as the runner
+ * sees it. With no recorded prompts for that turn, which prompts it answers
+ * is unknown, so the snapshot leaves the list out rather than claim none.
+ */
+export function sessionFeedSnapshot(
+  sessionId: string,
+  primaryBusy = false,
+): SessionFeedSnapshot {
   const state = stateFor(sessionId);
+  const run = promptRuns().get(sessionId);
+  const known = !!run || (!state.active && !primaryBusy);
   return {
     type: "feed_snapshot",
     sessionId,
     feedEpoch: state.epoch,
     feedSeq: state.nextSeq - 1,
     active: state.active ? { ...state.active, text: state.live.text } : null,
-    activePromptIds: promptRuns().get(sessionId)?.ids ?? [],
+    ...(known ? { activePromptIds: run?.ids ?? [] } : {}),
   };
 }
 
@@ -242,9 +267,10 @@ export function resumeSessionFeed(
   sessionId: string,
   sinceFeedSeq?: number,
   feedEpoch?: string,
+  primaryBusy = false,
 ): { frames: SessionFeedFrame[]; snapshot: SessionFeedSnapshot } {
   const state = stateFor(sessionId);
-  const snapshot = sessionFeedSnapshot(sessionId);
+  const snapshot = sessionFeedSnapshot(sessionId, primaryBusy);
   if (
     feedEpoch !== state.epoch ||
     typeof sinceFeedSeq !== "number" ||

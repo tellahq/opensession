@@ -215,7 +215,7 @@ import {
 import { noteYouShouldKnowStep } from "./you-should-know";
 import { scheduleSessionHistoryIndex } from "./session-index";
 import { broadcastToSession, sessionWatchers } from "./ws-hub";
-import { beginPromptRun } from "./session-feed";
+import { beginPromptRun, notePromptDelivered } from "./session-feed";
 import { peekWorkspace } from "./workspaces";
 import { coordinatorNoteFor } from "./coordinator";
 import {
@@ -3943,8 +3943,10 @@ async function runSessionPromptInner(
         // Exact engine acknowledgement, consumed internally. Context-only
         // system steers are intentionally absent from the visible transcript,
         // so transcript matching alone cannot retire their receipts.
-        if (event.steerId)
+        if (event.steerId) {
           await acknowledgeSteerDelivery(sessionId, event.steerId);
+          notePromptDelivered(sessionId, event.steerId);
+        }
         break;
       case "activity":
         // Live-only: which phase the run is in. Nothing is persisted; a

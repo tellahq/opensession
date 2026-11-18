@@ -16,6 +16,12 @@ import type { WSClientMessage, WSServerMessage } from "./types";
  * marks the prompt started when its user entry lands and clears it when that
  * turn's stream ends.
  *
+ * The queue outranks the transcript. A steered prompt's entry lands as soon
+ * as it is steered, but it stays a receipt in the queue until the engine
+ * reads it, and goes back to the queue if the turn ends first. So while the
+ * queue lists the prompt it is waiting, whatever the transcript shows, and
+ * it starts when it leaves the queue with its entry already there.
+ *
  * A viewer that remounts (a session switch) or reconnects missed those live
  * frames. Watch sends the queue and then the feed snapshot, whose
  * `activePromptIds` lists the prompts the running turn answers: a prompt in
@@ -32,6 +38,8 @@ export interface PendingPrompt {
   queued: boolean;
   /** Its turn has started: that turn's end clears it. */
   started: boolean;
+  /** Its user entry is in the transcript. */
+  landed: boolean;
   /** The server has shown it, queued or running, at least once. */
   seen: boolean;
 }
@@ -118,6 +126,7 @@ export function sendPrPrompt(
     requestId,
     queued: false,
     started: false,
+    landed: false,
     seen: false,
   });
   setTimeout(
@@ -133,25 +142,34 @@ export function observePromptFrame(sessionId: string, msg: WSServerMessage) {
   for (const [key, prompt] of [...pending]) {
     if (prompt.sessionId !== sessionId) continue;
     switch (msg.type) {
+      // Queued, or steered and not yet read by the engine.
       case "queue_update": {
-        if (prompt.started) break;
         const queued = [...msg.queued, ...(msg.steered ?? [])].some(
           (item) => item.id === prompt.requestId,
         );
-        if (queued !== prompt.queued)
-          update(key, { ...prompt, queued, seen: prompt.seen || queued });
+        if (queued) {
+          if (!prompt.queued || prompt.started)
+            update(key, { ...prompt, queued, started: false, seen: true });
+        } else if (prompt.queued) {
+          update(key, { ...prompt, queued, started: prompt.landed });
+        }
         break;
       }
       case "transcript_append": {
-        if (prompt.started) break;
+        if (prompt.landed) break;
         const landed = msg.entries.some(
           (entry) =>
             entry.type === "user" &&
             (entry.id === prompt.requestId ||
               entry.sourceMessageIds?.includes(prompt.requestId)),
         );
-        if (landed)
-          update(key, { ...prompt, queued: false, started: true, seen: true });
+        if (!landed) break;
+        update(key, {
+          ...prompt,
+          landed,
+          started: !prompt.queued,
+          seen: true,
+        });
         break;
       }
       // Sent on watch after the queue: the prompts the running turn answers,

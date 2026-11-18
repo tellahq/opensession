@@ -315,6 +315,14 @@ async function sendWatchExtras(
       sessionId,
       ws.data.sinceFeedSeq,
       ws.data.feedEpoch,
+      // The run itself, background holds aside: an adopted run this process
+      // has no prompt record for must not read as "no prompt running".
+      session.isRunning ||
+        isAgentSessionBusy(
+          session.claudeSessionId,
+          session.codexThreadId,
+          session.id,
+        ),
     );
     for (const frame of frames) ws.send(JSON.stringify(frame));
     ws.send(JSON.stringify(snapshot));

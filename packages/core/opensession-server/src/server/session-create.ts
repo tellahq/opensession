@@ -100,6 +100,7 @@ import {
   promptDispatches,
   promptQueues,
 } from "./queue-state";
+import { notePromptDelivered } from "./session-feed";
 import type { StagedAttachment } from "./prompt-attachments";
 import { type ImageInput, shouldPersistModelSwitch } from "./run-events";
 import {
@@ -2112,6 +2113,7 @@ export async function openCreatedSession(
         // too, including context-only steers that transcript parsing hides.
         if (event.type === "steer_delivered" && event.steerId) {
           await acknowledgeSteerDelivery(bksId, event.steerId);
+          notePromptDelivered(bksId, event.steerId);
         }
         slackProgress?.event(event);
         if (event.type === "init") {
