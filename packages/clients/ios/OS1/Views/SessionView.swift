@@ -193,7 +193,14 @@ struct SessionView: View {
     @AppStorage("os1.appearance.toolCalls") private var toolCalls = "folded"
     @AppStorage(ThinkingMessages.storageKey) private var thinkingMessages = "latest"
     private var turnActivity: TurnActivity {
-        TurnActivity(work: turnWork, tools: toolCalls)
+        #if DEBUG
+        // `OS1_TURN_ACTIVITY=open` (or `expanded`, which opens tool calls
+        // too) lets the screenshot harness capture open work folds.
+        if let forced = ProcessInfo.processInfo.environment["OS1_TURN_ACTIVITY"] {
+            return TurnActivity(work: forced, tools: nil)
+        }
+        #endif
+        return TurnActivity(work: turnWork, tools: toolCalls)
     }
 
     /// Output arrived while the reader was scrolled up. Turns the return pill

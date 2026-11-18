@@ -61,7 +61,8 @@ struct TurnBlockView: View {
 
                     touchedFileSummary
                 }
-                .padding(.top, 8)
+                // The header's touch target already leaves air above the
+                // first step.
                 .padding(.bottom, 8)
                 .overlay(alignment: .bottom) { foldEnd }
                 .padding(.bottom, 4)
@@ -274,7 +275,7 @@ struct TurnStepsView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             ForEach(sections) { section in
                 switch section {
                 case .message(let entry):
@@ -298,13 +299,15 @@ struct TurnStepsView: View {
                             // Nothing left to disclose: a grouped row and its
                             // indent would only wrap rows already on screen.
                             // Each call still owns its own body.
-                            ForEach(calls) { item in
-                                ToolCallRow(
-                                    item: item,
-                                    sessionId: sessionId,
-                                    worktreeDir: worktreeDir,
-                                    state: expansionState(item.id, item.hasFeaturedMedia)
-                                )
+                            VStack(alignment: .leading, spacing: ToolRowMetrics.rowSpacing) {
+                                ForEach(calls) { item in
+                                    ToolCallRow(
+                                        item: item,
+                                        sessionId: sessionId,
+                                        worktreeDir: worktreeDir,
+                                        state: expansionState(item.id, item.hasFeaturedMedia)
+                                    )
+                                }
                             }
                         } else {
                             ToolRunView(
@@ -383,8 +386,8 @@ struct TurnStepsView: View {
 
 /// What kind of run a consecutive stretch of tool calls forms.
 private enum ToolRunKind: Equatable {
-    /// Routine calls — shell, reads, searches, edits — behind one "N steps"
-    /// line.
+    /// Routine calls (shell, reads, searches, edits) behind one summary
+    /// line: "Ran 3 commands, read 2 files".
     case compact
     /// Stands on its own: an asset write, anything with media — a row whose
     /// content the fold would hide rather than summarize.
@@ -408,33 +411,36 @@ private struct ToolRunView: View {
 
     var body: some View {
         if isCompact {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: ToolRowMetrics.rowSpacing) {
                 Button {
                     withAnimation(.snappy(duration: 0.2, extraBounce: 0)) {
                         state.toggle()
                     }
                 } label: {
-                    HStack(spacing: 7) {
-                        Image(systemName: "square.stack")
-                            .font(.system(size: 10))
-                            .foregroundStyle(OS1VisualStyle.textFaint)
-                            .frame(width: 18)
-                        // Just the count. Which tools ran is what the row is
-                        // folding away, and one tap puts every step back with
-                        // its own glyph, so naming them here only asks to be
-                        // read twice. The names stay in the accessibility
-                        // label, where the count alone would say nothing.
-                        Text("\(items.count) step\(items.count == 1 ? "" : "s")")
+                    HStack(alignment: .firstTextBaseline, spacing: ToolRowMetrics.iconSpacing) {
+                        // Open, the row heads the steps under it, so it
+                        // takes the chevron rather than a stack of what is
+                        // already on screen (as on the web).
+                        ToolRowIcon(
+                            symbol: state.expanded ? "chevron.down" : "rectangle.stack"
+                        )
+                        // What the run did, as a sentence: "Ran 3 commands,
+                        // read 2 files". Which calls those were is what the
+                        // row folds away; one tap puts each back with its own
+                        // glyph. The tool names stay in the accessibility
+                        // label.
+                        Text(summaryTitle)
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(OS1VisualStyle.textDim)
                             .lineLimit(1)
-                        // What the count cannot say: a run that edited files
-                        // moved lines. Summed from the rows themselves, so
-                        // opening the run adds up to what was on it.
+                            .layoutPriority(1)
+                        // What the sentence cannot say: a run that edited
+                        // files moved lines. Summed from the rows themselves,
+                        // so opening the run adds up to what was on it.
                         if !stats.isEmpty {
                             LineStatsView(stats: stats)
                         }
-                        // Folded, the count alone hides what the run is
+                        // Folded, the sentence alone hides what the run is
                         // waiting on, so a long build looked stalled. Say
                         // what the running step is doing, in words; opening
                         // the run shows the command itself.
@@ -461,21 +467,17 @@ private struct ToolRunView: View {
                         if isLive, items.contains(where: \.isPending) {
                             ProgressView()
                                 .controlSize(.mini)
+                                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
                         }
                     }
-                    #if os(iOS)
-                    .frame(minHeight: 44)
-                    #else
-                    .padding(.vertical, 2)
-                    #endif
-                    .contentShape(Rectangle())
+                    .toolRowFrame()
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(accessibilityLabel)
                 .accessibilityHint(state.expanded ? "Hide the steps" : "Show the steps")
 
                 if state.expanded {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: ToolRowMetrics.rowSpacing) {
                         ForEach(items) { item in
                             ToolCallRow(
                                 item: item,
@@ -485,7 +487,9 @@ private struct ToolRunView: View {
                             )
                         }
                     }
-                    .padding(.leading, 20)
+                    // A small step in, so the calls read as the run's own
+                    // without spending a phone's width on a deep indent.
+                    .padding(.leading, ToolRowMetrics.nestedIndent)
                     .transition(.opacity)
                 }
             }
@@ -513,6 +517,10 @@ private struct ToolRunView: View {
         }.joined(separator: " · ")
     }
 
+    private var summaryTitle: String {
+        let title = WorkSummary.title(items)
+        return title.isEmpty ? "\(items.count) step\(items.count == 1 ? "" : "s")" : title
+    }
     private var failureCount: Int { items.filter(\.isError).count }
     private var runningStep: ToolCallItem? {
         guard isLive, !state.expanded else { return nil }

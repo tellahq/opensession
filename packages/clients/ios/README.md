@@ -168,10 +168,11 @@ passed`, the whole message and nothing else) draws as one compact row per
   native derivation remains as an older-server fallback. Expanding one renders
   the tool's own shape: a unified diff
   for an edit, the command for a shell call, file content for a write.
-  A running turn's header and a running step inside an `N steps` run say what
-  is happening in plain words (`Running a command`, `Reading a file`), the same
-  wording as the web, rather than the raw tool name.
-  Routine calls fold into one `N steps` run, and consecutive edits to the same
+  A running turn's header and a run's running step say what is happening in
+  plain words (`Running a command`, `Reading a file`), the same wording as the
+  web, rather than the raw tool name.
+  Routine calls fold into one run named by what it did
+  (`Ran 3 commands, read 2 files`), and consecutive edits to the same
   file into one row — the path once, the summed ±lines, and a `×3` count —
   both opening to the individual calls. The shared Thinking messages preference
   shows none, all, or only the newest provider reasoning row, with Latest as the
