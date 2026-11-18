@@ -629,11 +629,13 @@ enum TranscriptGrouping {
                 text: final.text,
                 timestamp: end,
                 model: final.model,
-                duration: duration(from: start, to: end),
+                // The fold above the answer already reads "Worked for 25m".
+                duration: folded.isEmpty ? duration(from: start, to: end) : nil,
                 files: mergeTouchedFiles(tools),
                 assets: writtenAssets(tools)
             )
-            if !footer.isEmpty { blocks.append(.footer(footer)) }
+            // A turn with work keeps its copy and ⋯ row without the duration.
+            if !footer.isEmpty || !folded.isEmpty { blocks.append(.footer(footer)) }
         }
 
         func flush(isTrailing: Bool) {
