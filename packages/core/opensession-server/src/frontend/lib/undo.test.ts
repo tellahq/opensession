@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import {
   clearUndoAction,
+  fieldOwnsUndo,
   hasUndoAction,
   registerUndoAction,
   undoLatestAction,
@@ -39,5 +40,25 @@ describe("app-wide undo", () => {
     expect(hasUndoAction()).toBe(true);
     expect(clearUndoAction(handle)).toBe(true);
     expect(hasUndoAction()).toBe(false);
+  });
+});
+
+describe("fieldOwnsUndo", () => {
+  test("leaves Command-Z to the archive when the field was not edited since", () => {
+    expect(
+      fieldOwnsUndo({ claimed: false, lastFieldEditAt: 100, actionAt: 200 }),
+    ).toBe(false);
+  });
+
+  test("keeps Command-Z for text typed after the archive", () => {
+    expect(
+      fieldOwnsUndo({ claimed: false, lastFieldEditAt: 300, actionAt: 200 }),
+    ).toBe(true);
+  });
+
+  test("keeps Command-Z when the field's own handler claimed it", () => {
+    expect(
+      fieldOwnsUndo({ claimed: true, lastFieldEditAt: 100, actionAt: 200 }),
+    ).toBe(true);
   });
 });

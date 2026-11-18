@@ -38,6 +38,7 @@ import {
 } from "../lib/asset-overlay-store";
 import { assetSuffix, sessionPath, workspacePanePath } from "../lib/share-link";
 import { matchesShortcut } from "../lib/shortcuts";
+import { fieldOwnsUndo, isEditableUndoTarget } from "../lib/undo";
 import { sidebarWorkspaceIdForSession } from "../lib/sidebar-workspaces";
 import {
   clearTabSplit,
@@ -145,6 +146,7 @@ interface UseSessionTabsOptions {
     openPrefilledSession: ReturnType<
       typeof import("./useNewSessionPalette").useNewSessionPalette
     >["openPrefilledSession"];
+    hidePalette: () => void;
     showToast: (message: string) => void;
     dropStalePins: (sessions: UnifiedSession[]) => void;
   };
@@ -236,8 +238,13 @@ export function useSessionTabs({
     copyLinkPathRef,
   } = pending;
   const { inject, patch, refresh, remove, unstick } = sessionStore;
-  const { refreshWorkspaces, openPrefilledSession, showToast, dropStalePins } =
-    actions;
+  const {
+    refreshWorkspaces,
+    openPrefilledSession,
+    hidePalette,
+    showToast,
+    dropStalePins,
+  } = actions;
   const {
     activeViewTab,
     setActiveViewTabState,
@@ -1184,6 +1191,7 @@ export function useSessionTabs({
     rememberArchived,
     unarchiveSession,
     restorableArchived,
+    restorableArchivedRef,
     reopenLastArchived,
     reopenLastArchivedRef,
   } = useArchiveUndo({
@@ -1193,6 +1201,7 @@ export function useSessionTabs({
     navigate,
     showToast,
     forgetLastSession,
+    hideNewSession: hidePalette,
   });
   const {
     confirmRunningClose,
@@ -1386,21 +1395,31 @@ export function useSessionTabs({
   // covers the undo; where the event does arrive (Safari, the installed PWA,
   // the desktop shell), we take it.
   useEffect(() => {
+    // When a text field was last edited, so ⌘Z can tell whether the newest
+    // undoable thing is that typing or an archive.
+    let lastFieldEditAt = 0;
+    const onInput = (e: Event) => {
+      if (isEditableUndoTarget(e.target)) lastFieldEditAt = Date.now();
+    };
     const onKey = (e: KeyboardEvent) => {
-      // Reopen undoes the last archive. Unlike the archive chords, every
-      // editable keeps it — including the composer textarea, where undoing
-      // what you typed is exactly what ⌘Z should do. Sits above the
-      // no-open-session bail because archiving the workspace you were in
-      // can leave you on Home with nothing selected. (⌘⇧Z is redo
-      // everywhere else, so it is deliberately not one of the defaults.)
+      // Reopen undoes the last archive. Archiving often drops focus into the
+      // next composer, so a focused field only keeps ⌘Z for text typed after
+      // that archive. Sits above the no-open-session bail because archiving
+      // the workspace you were in can leave you on Home with nothing
+      // selected. (⌘⇧Z is redo everywhere else, so it is deliberately not one
+      // of the defaults.)
       if (matchesShortcut(e, "session-reopen")) {
-        const editable =
-          e.target instanceof Element
-            ? e.target.closest(
-                "input, textarea, select, [contenteditable='true'], [contenteditable='']",
-              )
-            : null;
-        if (editable) return;
+        const { sessions, at } = restorableArchivedRef.current;
+        if (
+          isEditableUndoTarget(e.target) &&
+          (!sessions.length ||
+            fieldOwnsUndo({
+              claimed: e.defaultPrevented,
+              lastFieldEditAt,
+              actionAt: at,
+            }))
+        )
+          return;
         e.preventDefault();
         void reopenLastArchivedRef.current();
         return;
@@ -1418,9 +1437,19 @@ export function useSessionTabs({
         void handleNewSessionRef.current("share");
       }
     };
+    window.addEventListener("input", onInput, true);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [showToast, reopenLastArchivedRef, closeSessionRef, currentSessionRef]);
+    return () => {
+      window.removeEventListener("input", onInput, true);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [
+    showToast,
+    restorableArchivedRef,
+    reopenLastArchivedRef,
+    closeSessionRef,
+    currentSessionRef,
+  ]);
 
   const handleSessionRunningChange = (id: string, isRunning: boolean) => {
     // Keep the existing run-start stamp when the session was already running:

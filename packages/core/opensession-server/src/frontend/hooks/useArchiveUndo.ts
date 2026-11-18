@@ -10,7 +10,11 @@ type ArchiveUndoParams = {
   navigate: (next: Route, opts?: { replace?: boolean }) => void;
   showToast: (message: string) => void;
   forgetLastSession: (expected?: string | readonly string[]) => void;
+  /** Close the new-session palette, which archiving a workspace's last chat opens. */
+  hideNewSession: () => void;
 };
+
+type ArchiveUndoEntry = { ids: string[]; at: number };
 
 export function useArchiveUndo({
   sessions,
@@ -19,8 +23,10 @@ export function useArchiveUndo({
   navigate,
   showToast,
   forgetLastSession,
+  hideNewSession,
 }: ArchiveUndoParams) {
-  const [archiveUndo, setArchiveUndo] = useState<string[][]>([]);
+  // Each entry is one archive action: the sessions it tucked away and when.
+  const [archiveUndo, setArchiveUndo] = useState<ArchiveUndoEntry[]>([]);
   const rememberArchived = (ids: string[]) => {
     if (!ids.length) return;
     // Do not let a successful archive remain the PWA's cold-launch target if
@@ -32,9 +38,12 @@ export function useArchiveUndo({
         // An id lives in one entry only: archiving a session again moves it to
         // the top instead of leaving a stale entry underneath.
         ...prev
-          .map((entry) => entry.filter((id) => !ids.includes(id)))
-          .filter((entry) => entry.length),
-        ids,
+          .map((entry) => ({
+            ...entry,
+            ids: entry.ids.filter((id) => !ids.includes(id)),
+          }))
+          .filter((entry) => entry.ids.length),
+        { ids, at: Date.now() },
       ]
         // An undo affordance, not a history.
         .slice(-10),
@@ -72,31 +81,33 @@ export function useArchiveUndo({
   // The newest undo entry that's still restorable, resolved against the live
   // list: an entry whose sessions were unarchived elsewhere (or deleted) falls
   // through to the one below it, so ⌘Z never no-ops on a ghost.
-  const restorableArchived: UnifiedSession[] = (() => {
-    if (!archiveUndo.length) return [];
-    const wanted = new Set(archiveUndo.flat());
+  const restorable: { sessions: UnifiedSession[]; at: number } = (() => {
+    const none = { sessions: [], at: 0 };
+    if (!archiveUndo.length) return none;
+    const wanted = new Set(archiveUndo.flatMap((entry) => entry.ids));
     const byId = new Map<string, UnifiedSession>();
     for (const s of sessions) {
       if (s.archived && wanted.has(s.id)) byId.set(s.id, s);
     }
     for (let i = archiveUndo.length - 1; i >= 0; i--) {
-      const sessions = archiveUndo[i]
+      const sessions = archiveUndo[i].ids
         .map((id) => byId.get(id))
         .filter((s): s is UnifiedSession => !!s);
-      if (sessions.length) return sessions;
+      if (sessions.length) return { sessions, at: archiveUndo[i].at };
     }
-    return [];
+    return none;
   })();
-  const restorableArchivedRef = useRef(restorableArchived);
+  const restorableArchived = restorable.sessions;
+  const restorableArchivedRef = useRef(restorable);
   useLayoutEffect(() => {
-    restorableArchivedRef.current = restorableArchived;
+    restorableArchivedRef.current = restorable;
   });
 
   // ⌘Z (and the palette's "Reopen closed session"): undo the last archive and
   // land on what came back. The entry is only dropped once the server agrees,
   // so a failed restore stays retryable.
   const reopenLastArchived = async () => {
-    const sessions = restorableArchivedRef.current;
+    const { sessions } = restorableArchivedRef.current;
     if (!sessions.length) {
       showToast("Nothing to reopen");
       return;
@@ -105,9 +116,14 @@ export function useArchiveUndo({
     const ids = new Set(sessions.map((c) => c.id));
     setArchiveUndo((prev) =>
       prev
-        .map((entry) => entry.filter((id) => !ids.has(id)))
-        .filter((entry) => entry.length),
+        .map((entry) => ({
+          ...entry,
+          ids: entry.ids.filter((id) => !ids.has(id)),
+        }))
+        .filter((entry) => entry.ids.length),
     );
+    // The palette overlays every view, so it would hide what came back.
+    hideNewSession();
     navigate({ view: "session", id: sessions[0].id });
   };
   const reopenLastArchivedRef = useRef(reopenLastArchived);
@@ -119,6 +135,7 @@ export function useArchiveUndo({
     rememberArchived,
     unarchiveSession,
     restorableArchived,
+    restorableArchivedRef,
     reopenLastArchived,
     reopenLastArchivedRef,
   };
