@@ -1917,35 +1917,125 @@ describe("buildPiAnthropicProvider", () => {
       }),
     );
     await accounts.loadClaudeAccounts();
+    // The tag wins over the result's own wording, success or error.
+    for (const result of [
+      { subtype: "success", is_error: false },
+      { subtype: "error_during_execution", is_error: true },
+    ]) {
+      accounts.returnAccountToPool("key-a");
+      const query = spyOn(sdk, "query").mockImplementation((() =>
+        (async function* () {
+          yield {
+            type: "assistant",
+            error: "rate_limit",
+            message: {
+              content: [{ type: "text", text: "Please slow down." }],
+            },
+          };
+          yield {
+            type: "result",
+            ...result,
+            result: "Please slow down.",
+            session_id: "sdk-tagged",
+          };
+        })()) as any);
+      try {
+        const res = await handleBridgeRequest(
+          new Request("http://127.0.0.1/v1/messages", {
+            method: "POST",
+            headers: { "x-api-key": bridgeKey() },
+            body: JSON.stringify({
+              model: "claude-mythos-5-2",
+              messages: [{ role: "user", content: "hi" }],
+            }),
+          }),
+        );
+        expect(res.status).toBe(400);
+        expect((pickBridgeAccount("claude-mythos-5-2") as any).id).toBe(
+          "key-b",
+        );
+      } finally {
+        query.mockRestore();
+        accounts.returnAccountToPool("key-a");
+      }
+    }
+  });
+
+  test("an in-process reply tagged rate_limit fails over to the next account", async () => {
+    const [mythos] = buildPiAnthropicModels([], "claude-mythos-5-2");
+    await designate(["key-a", "key-b"]);
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: ["key-a", "key-b"].map((id) => ({
+          id,
+          name: id,
+          token: `sk-ant-api03-${id}`,
+          authKind: "api-key",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        })),
+      }),
+    );
+    await accounts.loadClaudeAccounts();
     accounts.returnAccountToPool("key-a");
-    const query = spyOn(sdk, "query").mockImplementation((() =>
-      (async function* () {
-        yield {
+    const keys: unknown[] = [];
+    const query = spyOn(sdk, "query").mockImplementation((input) => {
+      const key = input.options?.env?.ANTHROPIC_API_KEY;
+      keys.push(key);
+      const text =
+        key === "sk-ant-api03-key-a" ? "Please slow down." : "Served.";
+      const messages: Array<Record<string, any>> = [
+        { type: "system", subtype: "init", session_id: "sdk-tag" },
+        {
           type: "assistant",
-          error: "rate_limit",
-          message: { content: [{ type: "text", text: "Please slow down." }] },
-        };
-        yield {
+          ...(key === "sk-ant-api03-key-a" ? { error: "rate_limit" } : {}),
+          message: {
+            id: `m-${keys.length}`,
+            content: [{ type: "text", text }],
+          },
+        },
+        {
           type: "result",
           subtype: "success",
           is_error: false,
-          result: "Please slow down.",
-          session_id: "sdk-tagged",
-        };
-      })()) as any);
+          result: text,
+          usage: { input_tokens: 1, output_tokens: 1 },
+          session_id: "sdk-tag",
+        },
+      ];
+      return {
+        next: async () => {
+          const value = messages.shift();
+          return value
+            ? { value, done: false }
+            : { value: undefined, done: true };
+        },
+        close: () => {},
+        [Symbol.asyncIterator]() {
+          return this;
+        },
+      } as any;
+    });
     try {
-      const res = await handleBridgeRequest(
-        new Request("http://127.0.0.1/v1/messages", {
-          method: "POST",
-          headers: { "x-api-key": bridgeKey() },
-          body: JSON.stringify({
-            model: "claude-mythos-5-2",
-            messages: [{ role: "user", content: "hi" }],
-          }),
-        }),
-      );
-      expect(res.status).toBe(400);
-      expect((pickBridgeAccount("claude-mythos-5-2") as any).id).toBe("key-b");
+      const provider = buildPiAnthropicProvider({
+        unifiedSessionId: "os-tagged-limit",
+        builtinModels: [],
+        ensureModelId: mythos.id,
+        ephemeral: true,
+      }) as any;
+      const events: any[] = [];
+      for await (const ev of provider.streamSimple(mythos, {
+        messages: [{ role: "user", content: "hi" }],
+      }))
+        events.push(ev);
+      expect(keys).toEqual(["sk-ant-api03-key-a", "sk-ant-api03-key-b"]);
+      expect(events.at(-1)?.type).toBe("done");
+      expect(
+        events
+          .filter((ev) => ev.type === "text_delta")
+          .map((ev) => ev.delta)
+          .join(""),
+      ).toBe("Served.");
     } finally {
       query.mockRestore();
       accounts.returnAccountToPool("key-a");

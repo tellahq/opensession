@@ -967,6 +967,9 @@ export async function handleBridgeRequest(req: Request): Promise<Response> {
       if (msg.type === "result") {
         const rm = msg as any;
         sdkSessionId = rm.session_id || sdkSessionId;
+        // A limit tag on a message outranks the result's own wording, even
+        // on an error result, so the account is benched either way.
+        if (limitError) throw new Error(limitError);
         // error_max_turns WITH captured calls is a SUCCESS for this bridge:
         // sequential-tool models (sonnet especially) often answer a blocked
         // call by trying the next tool — a fresh turn each time — and blow
@@ -1005,7 +1008,6 @@ export async function handleBridgeRequest(req: Request): Promise<Response> {
             .filter((b) => b.type === "text")
             .map((b) => b.text)
             .join("\n");
-        if (limitError) throw new Error(limitError);
         if (!captured.length && isClaudeAccountNotice(notice))
           throw new Error(notice);
         usage = {

@@ -1913,12 +1913,16 @@ async function* runSdkAttempt(
             if (isCloudflareBlock(detail)) throw new Error(detail);
           }
           // Claude Code tags a limit it hit on the message itself; that
-          // metadata is authoritative whatever the text reads like.
-          if (isClaudeLimitErrorKind(m.error) && !deferredAccountUnavailable)
-            deferredAccountUnavailable = claudeLimitErrorMessage(
+          // metadata is authoritative whatever the text reads like. Its text
+          // is the CLI's, not the model's, so none of it reaches pi: an empty
+          // step lets the turn retry on the next account.
+          if (isClaudeLimitErrorKind(m.error)) {
+            deferredAccountUnavailable ||= claudeLimitErrorMessage(
               m.error,
               m.message?.content,
             );
+            continue;
+          }
           const assistantAddedForwardedCall =
             captureVisibleSdkAssistantToolUses(
               earlyStop,

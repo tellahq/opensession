@@ -70,12 +70,16 @@ export async function transcribeClip(audio: Blob): Promise<string> {
   return data?.text ?? "";
 }
 
+/** `/models` scoped to the current user, for every read of the catalog. */
+export function modelCatalogPath(): string {
+  return `/models?user=${encodeURIComponent(getCurrentUser())}`;
+}
+
 /** The model catalog for the current user: Claude capacity follows account
  *  owners, so a personal account's models appear only for its owner. With
  *  web sign-in the server uses the verified identity instead. */
 export async function fetchModels(): Promise<ModelCatalog> {
-  const user = encodeURIComponent(getCurrentUser());
-  return request<ModelCatalog>(`/models?user=${user}`, {
+  return request<ModelCatalog>(modelCatalogPath(), {
     label: "Failed to fetch models",
   });
 }

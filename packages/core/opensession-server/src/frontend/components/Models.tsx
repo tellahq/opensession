@@ -1,3 +1,4 @@
+import { modelCatalogPath } from "../lib/api/automations";
 import { BASE_PATH } from "../lib/base";
 import { errorMessage } from "../lib/error-message";
 import { useEffect, useState } from "react";
@@ -65,7 +66,7 @@ function DefaultModelRow({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`${BASE_PATH}/api/models`)
+    fetch(`${BASE_PATH}/api${modelCatalogPath()}`)
       .then((response) => {
         if (!response.ok)
           throw new Error(`Failed to load models (${response.status})`);
@@ -194,7 +195,7 @@ function AutoFallbackRow() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`${BASE_PATH}/api/models`)
+    fetch(`${BASE_PATH}/api${modelCatalogPath()}`)
       .then((response) => {
         if (!response.ok)
           throw new Error(`Failed to load auto-switching (${response.status})`);

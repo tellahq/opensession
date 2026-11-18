@@ -279,6 +279,11 @@ describe("account routing", () => {
       "You've hit your session limit before; it resets after five hours.",
       "The API rate limit resets every minute, so retry after a short wait.",
       "Your plan's usage limit reached its cap yesterday; it resets weekly.",
+      // A valid reset stamp followed by prose is an answer.
+      "You've hit your session limit · resets 12:50pm (UTC), then retry.",
+      "5-hour limit reached ∙ resets 3am, so wait until then.",
+      "You've hit your weekly limit · resets Aug 20, 9am (UTC) unless you upgrade.",
+      "You're out of usage credits. Run /usage-credits to keep using Fable 5.1 or /model to switch models. Then try again.",
     ])
       expect(isClaudeAccountNotice(answer)).toBe(false);
     // Streamed text that opens like a notice is held until it can be judged.
