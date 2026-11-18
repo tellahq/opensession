@@ -16,4 +16,12 @@ final class ModelsPathTests: XCTestCase {
     func testModelsPathOmitsEmptyParameters() {
         XCTAssertEqual(OS1API.modelsPath(workspaceId: nil, user: ""), "/api/models")
     }
+
+    func testSetupStatusPathSendsTheUser() throws {
+        let path = OS1API.setupStatusPath(user: "Alice")
+        let components = try XCTUnwrap(URLComponents(string: path))
+        XCTAssertEqual(components.path, "/api/setup/status")
+        XCTAssertEqual(components.queryItems, [URLQueryItem(name: "user", value: "Alice")])
+        XCTAssertEqual(OS1API.setupStatusPath(user: ""), "/api/setup/status")
+    }
 }

@@ -7,12 +7,12 @@
  * next handler (see routes/index.ts for the dispatch order).
  */
 
-import { requestUser, type RouteContext } from "./context";
+import type { RouteContext } from "./context";
+import { ownerRefNamesSignedInUser } from "../shared/user-mappings";
 import { isHostOperator } from "./memory-diagnostics";
 import {
   type AccountWriteForbidden,
   type AccountWriteGuard,
-  accountServesUser,
   addAccount,
   addClaudeApiAccount,
   getAccountById,
@@ -86,7 +86,7 @@ function isRename(body: unknown): body is { label: string } {
 function apiAccountChangeGuard(ctx: RouteContext): AccountWriteGuard {
   return (account) => {
     if (!isClaudeApiAccount(account) || isHostOperator(ctx)) return undefined;
-    if (account.owner && accountServesUser(account, requestUser(ctx)))
+    if (ctx.authUser && ownerRefNamesSignedInUser(account.owner, ctx.authUser))
       return undefined;
     return account.owner
       ? "Only this account's owner or the host operator can change it."

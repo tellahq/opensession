@@ -165,6 +165,38 @@ export function isTrustedGithubLogin(login?: string | null): boolean {
 }
 
 /**
+ * Whether an owner reference (a picker first name, alias, full name, or GitHub
+ * login) names exactly the verified signed-in person and nobody else. For
+ * authorization, unlike `userMatchesAny`: a first name two roster members
+ * share names neither of them. An owner no roster member answers to matches
+ * only the verified login, full name, or first name.
+ */
+export function ownerRefNamesSignedInUser(
+  owner: string | null | undefined,
+  signedIn: { login: string; name: string },
+): boolean {
+  const ref = owner?.trim().replace(/^@/, "").toLowerCase();
+  const login = signedIn.login.trim().toLowerCase();
+  if (!ref || !login) return false;
+  const candidates = identity.team.filter((m) => {
+    const name = m.name.trim().toLowerCase();
+    return (
+      m.github?.trim().toLowerCase() === ref ||
+      name === ref ||
+      name.split(" ")[0] === ref ||
+      !!m.aliases?.some((a) => a.toLowerCase() === ref)
+    );
+  });
+  if (candidates.length)
+    return (
+      candidates.length === 1 &&
+      candidates[0].github?.trim().toLowerCase() === login
+    );
+  const name = signedIn.name.trim().toLowerCase();
+  return ref === login || ref === name || ref === name.split(" ")[0];
+}
+
+/**
  * The configured teammate a session's driver names, with the roster GitHub
  * login that identifies them, or null. This is the "a known teammate is
  * driving" gate for card-confirmed actions (keychain registration, force

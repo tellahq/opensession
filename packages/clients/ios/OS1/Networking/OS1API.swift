@@ -1976,8 +1976,19 @@ enum OS1API {
         var integrations: [IntegrationSettings]?
     }
 
+    /// Claude readiness is per user when accounts are personal, so name the
+    /// same user session creation sends (the server prefers a verified
+    /// sign-in identity when there is one).
     static func setupStatus() async throws -> SetupStatus {
-        try await get("/api/setup/status")
+        try await get(setupStatusPath())
+    }
+
+    static func setupStatusPath(user: String = ServerConfig.shared.userName) -> String {
+        guard !user.isEmpty else { return "/api/setup/status" }
+        var components = URLComponents()
+        components.path = "/api/setup/status"
+        components.queryItems = [URLQueryItem(name: "user", value: user)]
+        return components.string ?? "/api/setup/status"
     }
 
     /// One repository the instance's GitHub credential can see, as the

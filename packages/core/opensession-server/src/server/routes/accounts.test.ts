@@ -11,6 +11,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import * as accounts from "../claude-accounts";
+import { __setIdentitiesForTest } from "../shared/user-mappings";
 import * as webAuth from "../web-auth";
 import { handleAccountsRoutes } from "./accounts";
 import type { RouteContext } from "./context";
@@ -122,6 +123,46 @@ describe("Claude API account authorization with web sign-in on", () => {
       ctx("PUT", "/api/claude-accounts/alice-key", alice, { label: "Mine" }),
     );
     expect(own?.status).toBe(200);
+  });
+
+  test("a shared first name authorizes neither person", async () => {
+    authRequired = spyOn(webAuth, "webAuthRequired").mockReturnValue(true);
+    const restore = __setIdentitiesForTest([
+      { name: "Alex Rivera", github: "alex-rivera" },
+      { name: "Alex Chen", github: "alex-chen" },
+    ]);
+    try {
+      writeFileSync(
+        accountsFile,
+        JSON.stringify({
+          accounts: [
+            apiAccount("alex-key", "Alex"),
+            apiAccount("rivera-key", "Alex Rivera"),
+          ],
+        }),
+      );
+      await accounts.loadClaudeAccounts();
+      const chen = { login: "alex-chen", name: "Alex Chen" };
+      const rivera = { login: "alex-rivera", name: "Alex Rivera" };
+      for (const user of [chen, rivera]) {
+        const res = await handleAccountsRoutes(
+          ctx("PUT", "/api/claude-accounts/alex-key", user, { label: "Mine" }),
+        );
+        expect(res?.status).toBe(403);
+      }
+      const other = await handleAccountsRoutes(
+        ctx("PUT", "/api/claude-accounts/rivera-key", chen, { label: "Mine" }),
+      );
+      expect(other?.status).toBe(403);
+      const own = await handleAccountsRoutes(
+        ctx("PUT", "/api/claude-accounts/rivera-key", rivera, {
+          label: "Mine",
+        }),
+      );
+      expect(own?.status).toBe(200);
+    } finally {
+      restore();
+    }
   });
 
   test("an owner's pending change is refused once the account is transferred", async () => {

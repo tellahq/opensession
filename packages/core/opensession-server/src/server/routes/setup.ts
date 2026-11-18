@@ -365,7 +365,11 @@ export async function handleSetupRoutes(
       })(),
       // The only non-optional component, and the one this page used to omit —
       // a checklist that went all-green on an instance that couldn't run a turn.
-      engine: engineStatus(requestUser(ctx) || undefined),
+      // Claude readiness follows account owners. With web sign-in off the
+      // client names its picker user, as it does for /api/models.
+      engine: engineStatus(
+        requestUser(ctx, ctx.url.searchParams.get("user")) || undefined,
+      ),
       github: await githubSnapshot(),
       // `always` entries self-gate and need no setup, so they are not
       // presented as onboarding steps.

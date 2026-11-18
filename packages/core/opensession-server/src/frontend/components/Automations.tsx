@@ -155,7 +155,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
   } = useProviderAccounts();
 
   useEffect(() => {
-    fetchModels()
+    fetchModels("automations")
       .then((m) => setDefaultModel(m.default))
       .catch((cause: unknown) =>
         setModelLoadError(errorMessage(cause, "Could not load models")),
@@ -1568,7 +1568,7 @@ function AutomationForm({
   } = useProviderAccounts();
 
   useEffect(() => {
-    fetchModels()
+    fetchModels("automations")
       .then((m) => {
         setModels(m.models);
         setDefaultModel(m.default);
