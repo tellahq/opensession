@@ -169,7 +169,7 @@ passed`, the whole message and nothing else) draws as one compact row per
   the tool's own shape: a unified diff
   for an edit, the command for a shell call, file content for a write.
   Routine calls fold into one run named by what it did (`Ran 3 commands, read
-  2 files`), and consecutive edits to the same
+2 files`), and consecutive edits to the same
   file into one row — the path once, the summed ±lines, and a `×3` count —
   both opening to the individual calls. The shared Thinking messages preference
   shows none, all, or only the newest provider reasoning row, with Latest as the
