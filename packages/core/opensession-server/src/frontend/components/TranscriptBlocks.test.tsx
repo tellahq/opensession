@@ -412,8 +412,8 @@ describe("TranscriptBlocks compact tool runs", () => {
       );
       expect(html).toContain(">Working</span>");
       expect(html).not.toMatch(WORKED_TITLE);
-      expect(html).toContain("cargo test --release zz_timing");
-      expect(html.indexOf("cargo test")).toBeLessThan(
+      expect(html).toContain("Ran 1 command");
+      expect(html.indexOf("Ran 1 command")).toBeLessThan(
         html.indexOf("Are you on option B?"),
       );
     });
@@ -1098,7 +1098,8 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
     expect(running).toContain('data-narration=""');
     expect(running).toContain('data-tool-run="true"');
     expect(running).not.toContain("git status");
-    expect(running).toContain("bun test");
+    expect(running).not.toContain("bun test");
+    expect(running).toContain("Ran 1 command, read 1 file");
 
     const settled = renderToStaticMarkup(
       <TranscriptBlocks entries={narratedTurn} />,
@@ -2377,7 +2378,7 @@ describe("TranscriptBlocks progress rows", () => {
     const open = renderToStaticMarkup(
       <TranscriptBlocks entries={work} reviewLoopsOpen />,
     );
-    expect(open).toContain("check-build");
+    expect(open).toContain("Ran 1 command");
     expect(open).toContain('aria-label="Earlier updates"');
   });
 
@@ -2413,7 +2414,7 @@ describe("TranscriptBlocks progress rows", () => {
     );
     expect(open).toContain("CI: Running");
     expect(open).toContain("Deployment: Running");
-    expect(open).toContain("deploy status");
+    expect(open).toContain("Ran 1 command");
   });
 
   test("an answered task folds the same way across indexed ranges", () => {

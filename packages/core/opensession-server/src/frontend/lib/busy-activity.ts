@@ -15,6 +15,12 @@ export interface BusyActivityStatus {
  * tool's own row says which command or file, this only names the phase. */
 function toolLabel(toolName: string | undefined, count: number): string {
   if (count > 1) return `Running ${count} tools`;
+  return runningToolLabel(toolName);
+}
+
+/** One running tool in words ("Running a command"), for a folded row that
+ * would otherwise name the tool and dump its input. */
+export function runningToolLabel(toolName: string | undefined): string {
   switch (toolFamily(toolName || "")) {
     case "run":
       return "Running a command";

@@ -300,9 +300,22 @@ describe("grouped tool run row", () => {
     ];
     const results = new Map([["use-wait-a", result("wait-a")]]);
 
-    expect(render(items, results, true)).toContain("cargo test --release");
-    expect(render(items, results, true)).not.toContain("git status");
-    expect(render(items, results, false)).not.toContain("cargo test");
+    // In words: the folded row never dumps the tool name and its command.
+    expect(render(items, results, true)).toContain("Running a command");
+    expect(render(items, results, true)).not.toContain("cargo test");
+    expect(render(items, results, false)).not.toContain("Running a command");
+  });
+
+  test("folds a lone routine call into a sentence", () => {
+    const items = [toolUse("lone", "Bash", { command: "sed -i s/a/b/ x.res" })];
+    const results = new Map([["use-lone", result("lone")]]);
+    const settled = render(items, results, false);
+    expect(settled).toContain('data-tool-run="true"');
+    expect(settled).toContain("Ran 1 command");
+    expect(settled).toContain("Show 1 grouped step:");
+    expect(settled).not.toContain("sed -i");
+    // Running, the sentence and the spinner say it all.
+    expect(render(items, new Map(), true)).not.toContain("Running a command");
   });
 
   test("renders identically for identical inputs", () => {
