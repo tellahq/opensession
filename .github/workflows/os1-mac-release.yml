@@ -88,8 +88,8 @@ jobs:
           name: local-server-darwin-arm64
           path: ${{ runner.temp }}/local-server
 
-      # before-pack.js packs the folder this names into the app's resources,
-      # where electron-builder signs its executables with the app.
+      # after-pack.js copies the folder this names into the app's resources
+      # before signing, so its executables are signed with the app.
       - name: Unpack the local server
         if: needs.local-server.result == 'success'
         run: |

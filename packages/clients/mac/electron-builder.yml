@@ -25,6 +25,9 @@ directories:
   buildResources: build
   output: dist
 beforePack: scripts/before-pack.js
+# Packs the server for "This Mac" into the app's resources when the build was
+# given one (OS1_LOCAL_SERVER_RELEASE). Before signing, so it is signed too.
+afterPack: scripts/after-pack.js
 files:
   - src/**/*
 # macOS 26 (Tahoe) renders apps that only ship a legacy .icns on a system
@@ -43,13 +46,6 @@ extraResources:
     to: os-keychain
   - from: build/vendor/os1-voice-audio
     to: os1-voice-audio
-  # "This Mac": the compiled server release, staged by scripts/before-pack.js.
-  # Empty unless the build was given one.
-  - from: build/vendor/server
-    to: server
-    # Named outright: the release keeps an image library under node_modules,
-    # which a default filter may leave out.
-    filter: ["**/*"]
   - from: ../../../LICENSE
     to: LICENSE
   - from: ../../../THIRD-PARTY-NOTICES.md

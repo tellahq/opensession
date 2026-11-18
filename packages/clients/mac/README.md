@@ -148,10 +148,12 @@ Not available on "This Mac": opening sessions from a phone or another computer,
 inbound integrations that need a public address (Slack mentions, GitHub
 webhooks), and teammates. Connect to a team server for those.
 
-Packaging: `scripts/before-pack.js` packs the unpacked release folder named by
-`OS1_LOCAL_SERVER_RELEASE` into `Contents/Resources/server`, where
-electron-builder signs its executables with the app. Without that variable the
-folder is packed empty and **Use this Mac** is never offered. The release
+Packaging: `scripts/after-pack.js` copies the unpacked release folder named by
+`OS1_LOCAL_SERVER_RELEASE` into `Contents/Resources/server` before signing, so
+electron-builder signs its executables with the app. It is not an
+`extraResources` entry because electron-builder leaves `node_modules` folders
+out of those, and the release keeps its image library in one. Without that
+variable nothing is packed and **Use this Mac** is never offered. The release
 workflow builds and packs the server when run manually with **Pack the server
 into the app**, or for every release once the `OS1_BUNDLE_LOCAL_SERVER`
 repository variable is `1`; it then starts the signed server from inside the
