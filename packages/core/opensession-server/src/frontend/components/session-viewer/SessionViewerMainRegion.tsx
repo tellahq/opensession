@@ -1672,8 +1672,9 @@ export function SessionViewerMainRegion({
                       nextAction ? (
                         <>
                           {scrollBesideNext && (
-                            // Centred on the tab's visible 40px, left of it.
-                            <div className="mt-1 mr-2 self-start">
+                            // Centred on the composer, level with the tab's
+                            // visible 40px, as the floating arrow is.
+                            <div className="absolute top-1 left-1/2 -translate-x-1/2">
                               <Tooltip
                                 label="Scroll to the bottom"
                                 shortcut={transcriptDownKeys ?? undefined}
