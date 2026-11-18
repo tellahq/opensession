@@ -35,7 +35,9 @@ import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import { stateDir } from "./paths";
 import {
   engineScopeSystemdArgs,
+  literalScopeArgs,
   stopUserScopeAndWait,
+  systemdRunVersion,
   systemdUserEnv,
   systemdUserScopesAvailable,
   userScopeActive,
@@ -687,6 +689,7 @@ async function launchHost(input: {
         "--collect",
         "--quiet",
         `--unit=${input.unit}`,
+        ...literalScopeArgs(await systemdRunVersion()),
         ...engineScopeSystemdArgs(),
         // The host forwards SIGTERM and waits for the command's own grace.
         "--property=TimeoutStopSec=20",

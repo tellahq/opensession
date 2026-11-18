@@ -42,6 +42,19 @@ describe("workload scope", () => {
     ).toBeTruthy();
   });
 
+  test("systemd 259 does not expand `$` in a scoped command", () => {
+    __setWorkloadScopingForTest(true, 259);
+    const argv = workloadArgv(["sh", "-c", "echo $$ $HOME"], "app");
+    expect(argv.indexOf("--expand-environment=no")).toBeLessThan(
+      argv.indexOf("--"),
+    );
+    expect(argv.at(-1)).toBe("echo $$ $HOME");
+    __setWorkloadScopingForTest(true, 252);
+    expect(workloadArgv(["true"], "app")).not.toContain(
+      "--expand-environment=no",
+    );
+  });
+
   test("a caller can name the scope so a later gateway can stop it", () => {
     __setWorkloadScopingForTest(true);
     const argv = workloadArgv(["bun", "server.ts"], "app", {
