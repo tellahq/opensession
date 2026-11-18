@@ -1,29 +1,59 @@
 import type { PiCatalogModel } from "./pi-model-runtime";
 
+type ReleaseMetadata = Pick<
+  PiCatalogModel,
+  "name" | "cost" | "contextWindow" | "maxTokens"
+> &
+  Partial<Pick<PiCatalogModel, "thinkingLevelMap" | "compat">>;
+
+/** The Fable/Mythos API surface: adaptive thinking always on, no sampling
+ *  parameters, effort up to max. */
+const FABLE_FAMILY_SURFACE: Pick<
+  ReleaseMetadata,
+  "contextWindow" | "maxTokens" | "thinkingLevelMap" | "compat"
+> = {
+  contextWindow: 1_000_000,
+  maxTokens: 128_000,
+  thinkingLevelMap: { off: null, xhigh: "xhigh", max: "max" },
+  compat: {
+    supportsMidConvoEffort: true,
+    supportsMidConvoSystemMessages: true,
+    supportsMidConvoToolChanges: true,
+    forceAdaptiveThinking: true,
+    supportsTemperature: false,
+    supportsStrictTools: true,
+  },
+};
+const FABLE_5_1_COST = {
+  input: 10,
+  output: 50,
+  cacheRead: 0.25,
+  cacheWrite: 12.5,
+};
+const FABLE_5_2_COST = { input: 8, output: 40, cacheRead: 0.2, cacheWrite: 10 };
+
 /** Published limits and USD/MTok pricing for releases newer than pi's
  *  builtin catalog. */
-const RELEASE_METADATA: Record<
-  string,
-  Pick<PiCatalogModel, "name" | "cost" | "contextWindow" | "maxTokens"> &
-    Partial<Pick<PiCatalogModel, "thinkingLevelMap" | "compat">>
-> = {
+const RELEASE_METADATA: Record<string, ReleaseMetadata> = {
   // https://platform.claude.com/docs/en/models/fable-5-2/overview
-  // Same API surface as Fable 5.1: adaptive thinking always on, no sampling
-  // parameters, effort up to max.
   "claude-fable-5-2": {
     name: "Claude Fable 5.2",
-    cost: { input: 8, output: 40, cacheRead: 0.2, cacheWrite: 10 },
-    contextWindow: 1_000_000,
-    maxTokens: 128_000,
-    thinkingLevelMap: { off: null, xhigh: "xhigh", max: "max" },
-    compat: {
-      supportsMidConvoEffort: true,
-      supportsMidConvoSystemMessages: true,
-      supportsMidConvoToolChanges: true,
-      forceAdaptiveThinking: true,
-      supportsTemperature: false,
-      supportsStrictTools: true,
-    },
+    cost: FABLE_5_2_COST,
+    ...FABLE_FAMILY_SURFACE,
+  },
+  // Mythos is Fable for verified organizations, with the same specifications
+  // and pricing as the Fable release of the same version.
+  // https://platform.claude.com/docs/en/models/mythos-5-2/overview
+  "claude-mythos-5-2": {
+    name: "Claude Mythos 5.2",
+    cost: FABLE_5_2_COST,
+    ...FABLE_FAMILY_SURFACE,
+  },
+  // https://platform.claude.com/docs/en/models/mythos-5-1/overview
+  "claude-mythos-5-1": {
+    name: "Claude Mythos 5.1",
+    cost: FABLE_5_1_COST,
+    ...FABLE_FAMILY_SURFACE,
   },
   // https://platform.claude.com/docs/en/models/opus-5-5/overview
   "claude-opus-5-5": {

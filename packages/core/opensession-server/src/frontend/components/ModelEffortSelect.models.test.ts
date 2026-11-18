@@ -54,6 +54,22 @@ describe("model picker groups", () => {
     expect(legacy.map((entry) => entry.id)).toEqual(["claude-fable-5-1"]);
   });
 
+  test("lists Mythos 5.2 and 5.1 after Fable", () => {
+    const { primary, legacy } = splitModelOptions([
+      model("pi/anthropic/claude-opus-5-5", "pi"),
+      model("pi/anthropic/claude-mythos-5-1", "pi"),
+      model("pi/anthropic/claude-mythos-5-2", "pi"),
+      model("pi/anthropic/claude-fable-5-2", "pi"),
+    ]);
+    expect(primary.map((entry) => entry.id)).toEqual([
+      "pi/anthropic/claude-fable-5-2",
+      "pi/anthropic/claude-mythos-5-2",
+      "pi/anthropic/claude-mythos-5-1",
+      "pi/anthropic/claude-opus-5-5",
+    ]);
+    expect(legacy).toEqual([]);
+  });
+
   test("shows Sonnet 5.5 as the current Sonnet", () => {
     const { primary, legacy } = splitModelOptions([
       model("claude-sonnet-5", "claude"),

@@ -81,6 +81,7 @@ import {
 } from "./anthropic-bridge";
 import { isPiUsageLimitShape } from "./pi-runner";
 import * as accounts from "./claude-accounts";
+import * as workloadIdentity from "./workload-identity";
 import { loadPiConfig } from "./pi-config";
 import { loadModelProviders } from "./model-providers";
 import * as sdk from "@anthropic-ai/claude-agent-sdk";
@@ -953,6 +954,29 @@ describe("buildPiAnthropicModels", () => {
     });
   });
 
+  test("registers Mythos 5.1 and 5.2 with their Fable twins' limits and pricing", async () => {
+    const [mythos52] = buildPiAnthropicModels([], "claude-mythos-5-2");
+    expect(mythos52).toMatchObject({
+      id: "claude-mythos-5-2",
+      name: "Claude Mythos 5.2",
+      contextWindow: 1_000_000,
+      maxTokens: 128_000,
+      cost: { input: 8, output: 40, cacheRead: 0.2, cacheWrite: 10 },
+      thinkingLevelMap: { off: null, xhigh: "xhigh", max: "max" },
+      compat: { forceAdaptiveThinking: true, supportsTemperature: false },
+    });
+    const [mythos51] = buildPiAnthropicModels([], "claude-mythos-5-1");
+    expect(mythos51).toMatchObject({
+      id: "claude-mythos-5-1",
+      name: "Claude Mythos 5.1",
+      contextWindow: 1_000_000,
+      maxTokens: 128_000,
+      cost: { input: 10, output: 50, cacheRead: 0.25, cacheWrite: 12.5 },
+      thinkingLevelMap: { off: null, xhigh: "xhigh", max: "max" },
+      compat: { forceAdaptiveThinking: true, supportsTemperature: false },
+    });
+  });
+
   test("registers Opus 5.5 with its published limits and pricing", async () => {
     const [opus] = buildPiAnthropicModels([], "claude-opus-5-5");
     expect(opus).toMatchObject({
@@ -1474,6 +1498,103 @@ describe("buildPiAnthropicProvider", () => {
       expect((pickBridgeAccount(model.id) as any).id).toBe("busy-account");
     } finally {
       query.mockRestore();
+    }
+  });
+
+  test("a federated Claude API account spawns Claude Code with a fresh minted token", async () => {
+    const [mythos] = buildPiAnthropicModels([], "claude-mythos-5-2");
+    await designate(["wif-account"]);
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: [
+          {
+            id: "wif-account",
+            name: "wif-account",
+            token: "",
+            authKind: "federation",
+            federation: {
+              organizationId: "00000000-0000-4000-8000-000000000000",
+              federationRuleId: "fdrl_rule",
+              serviceAccountId: "svac_account",
+            },
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    const sign = spyOn(
+      workloadIdentity,
+      "signServerIdentityToken",
+    ).mockResolvedValue("header.payload.signature");
+    let minted = 0;
+    // An already-expired token, so the next turn exchanges again.
+    const exchange = spyOn(globalThis, "fetch").mockImplementation((async () =>
+      Response.json({
+        access_token: `sk-ant-oat01-minted-${++minted}`,
+        expires_in: 0,
+      })) as unknown as typeof fetch);
+    const envs: Array<Record<string, string | undefined> | undefined> = [];
+    const query = spyOn(sdk, "query").mockImplementation((input) => {
+      envs.push(input.options?.env);
+      const messages: Array<Record<string, any>> = [
+        { type: "system", subtype: "init", session_id: "sdk-wif" },
+        {
+          type: "result",
+          subtype: "success",
+          is_error: false,
+          result: "ok",
+          usage: { input_tokens: 1, output_tokens: 1 },
+          session_id: "sdk-wif",
+        },
+      ];
+      return {
+        next: async () => {
+          const value = messages.shift();
+          return value
+            ? { value, done: false }
+            : { value: undefined, done: true };
+        },
+        close: () => {},
+        [Symbol.asyncIterator]() {
+          return this;
+        },
+      } as any;
+    });
+    const sessionId = `wif-${crypto.randomUUID()}`;
+    try {
+      const provider = buildPiAnthropicProvider({
+        unifiedSessionId: sessionId,
+        builtinModels: [],
+        ensureModelId: mythos.id,
+      }) as any;
+      for (const content of ["hi", "again"]) {
+        for await (const _ of provider.streamSimple(
+          mythos,
+          { messages: [{ role: "user", content }] },
+          { sessionId },
+        )) {
+        }
+      }
+      expect(envs.map((env) => env?.CLAUDE_CODE_OAUTH_TOKEN)).toEqual([
+        "sk-ant-oat01-minted-1",
+        "sk-ant-oat01-minted-2",
+      ]);
+      expect(envs[0]?.ANTHROPIC_API_KEY).toBeUndefined();
+      expect(String(exchange.mock.calls[0]?.[0])).toBe(
+        "https://api.anthropic.com/v1/oauth/token",
+      );
+    } finally {
+      for (const live of [...liveSdkConversations().values()]) {
+        if (live.key.startsWith(`pi:${sessionId}:`)) {
+          live.disposed = true;
+          liveSdkConversations().delete(live.key);
+        }
+      }
+      query.mockRestore();
+      exchange.mockRestore();
+      sign.mockRestore();
     }
   });
 

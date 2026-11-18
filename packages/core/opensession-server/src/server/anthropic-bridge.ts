@@ -87,6 +87,7 @@ import {
   resolveAccount,
   type ClaudeAccount,
 } from "./claude-accounts";
+import { claudeCodeAuth } from "./claude-api-credentials";
 import { cacheCreationUsage } from "./claude-cache-writes";
 import { contextWindowFor } from "./models";
 import { CLAUDE_CODE_BIN } from "./runner-shared";
@@ -734,6 +735,18 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
     });
     return anthropicError(529, "overloaded_error", `bridge: ${account.error}`);
   }
+  let auth: Awaited<ReturnType<typeof claudeCodeAuth>>;
+  try {
+    auth = await claudeCodeAuth(account);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    auditReject(requestId, 401, "credential_unavailable", {
+      engine_session: engineSessionHeader,
+      model,
+      detail,
+    });
+    return anthropicError(401, "authentication_error", `bridge: ${detail}`);
+  }
 
   const key = sessionKeyFor(req, messages);
   const stored = sessions.get(key);
@@ -830,7 +843,7 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
           PATH: process.env.PATH,
           HOME: process.env.HOME,
           LANG: process.env.LANG,
-          CLAUDE_CODE_OAUTH_TOKEN: account.token,
+          ...auth.env,
           ...cliPassthroughEnv({
             contextWindow: contextWindowFor(model),
             maxTokens:

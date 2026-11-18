@@ -20,6 +20,15 @@ import { writeFileAtomicAsync } from "./shared/atomic-write";
 import { userMatchesAny } from "./shared/user-mappings";
 import { stateDir } from "./paths";
 import {
+  federatedAccessToken,
+  forgetFederatedTokens,
+  isClaudeApiAccount,
+  isClaudeApiOnlyModel,
+  parseClaudeFederation,
+  validateClaudeApiKey,
+  type ClaudeFederation,
+} from "./claude-api-credentials";
+import {
   cachedJsonFileCopy,
   cachedJsonFileShared,
   JsonFileNotLoadedError,
@@ -56,6 +65,7 @@ const TOKEN_REFRESH_SLACK_MS = 5 * 60 * 1000;
 // When a run hits a limit but the usage endpoint gives no reset time,
 // sideline the account for this long before retrying it.
 const DEFAULT_EXHAUST_MS = 60 * 60 * 1000;
+const API_RATE_LIMIT_SIDELINE_MS = 60 * 1000;
 // Bridge-wedge sideline: much shorter than a usage-limit window — wedges
 // usually clear once the account's proxy respawns.
 const WEDGE_SIDELINE_MS = 5 * 60 * 1000;
@@ -72,9 +82,16 @@ export interface ClaudeAccount {
   name: string;
   /** Display name a person chose; shown instead of the email when set. */
   label?: string;
+  /** Setup token, or the API key of an "api-key" account. Empty for a
+   *  "federation" account, which stores no secret. */
   token: string;
-  /** Compatibility for OAuth-only records created by an earlier build. */
-  authKind?: "oauth";
+  /** Unset = subscription setup token. "oauth" is compatibility for
+   *  OAuth-only records created by an earlier build. "api-key" and
+   *  "federation" bill an Anthropic API organization (claude-api-credentials.ts)
+   *  and serve only API-only models. */
+  authKind?: "oauth" | "api-key" | "federation";
+  /** Workload Identity Federation settings of a "federation" account. */
+  federation?: ClaudeFederation;
   email?: string;
   plan?: string;
   createdAt: string;
@@ -136,7 +153,9 @@ export interface ClaudeAccountPublic {
   name: string;
   label?: string;
   tokenMasked: string;
-  authKind: "setup-token" | "oauth";
+  authKind: "setup-token" | "oauth" | "api-key" | "federation";
+  /** IDs, not secrets: shown so a person can match them in the Console. */
+  federation?: ClaudeFederation;
   email?: string;
   plan?: string;
   createdAt: string;
@@ -778,6 +797,8 @@ async function usageToken(
   | { error: string }
   | null
 > {
+  // The subscription usage endpoint knows nothing about API organizations.
+  if (isClaudeApiAccount(account)) return null;
   if (account.credentialsPath) {
     const creds = await readCredsFile(account.credentialsPath);
     if (creds) {
@@ -885,6 +906,7 @@ export async function refreshAllUsage(): Promise<void> {
   // Sequential, not Promise.all — the endpoint rate-limits aggressively and a
   // burst of N simultaneous requests from one IP makes that worse.
   for (const account of readStore()) {
+    if (isClaudeApiAccount(account)) continue;
     if (account.usageScope === "missing" && !account.credentialsPath) {
       // Blind to the OAuth endpoint — Meridian-observed fallback (local, cheap).
       await refreshMeridianUsage(account);
@@ -1031,6 +1053,18 @@ function isAccountUsableFor(
   allowExtraUsage?: boolean,
 ): boolean {
   if (isExhausted(a.id)) return false;
+  const required = requiredModels(model);
+  // API accounts serve only API-only models, so metered spend never stands
+  // in for subscription capacity. Once one exists, those models never fall
+  // back to a subscription; without one, they keep the old pool behavior.
+  if (isClaudeApiAccount(a)) {
+    return (
+      required.every((m) => isClaudeApiOnlyModel(m)) &&
+      !required.some((m) => isModelExhausted(a.id, m))
+    );
+  }
+  if (required.some((m) => isClaudeApiOnlyModel(m)) && hasClaudeApiAccounts())
+    return false;
   // OAuth access tokens are short-lived. The startup/usage poll refreshes an
   // expired token, but the picker must not hand out its stale mirror in the
   // small window before that refresh finishes.
@@ -1085,7 +1119,8 @@ function toPublic(a: ClaudeAccount): ClaudeAccountPublic {
     name: a.name,
     ...(a.label ? { label: a.label } : {}),
     tokenMasked: maskToken(a.token),
-    authKind: a.authKind === "oauth" ? "oauth" : "setup-token",
+    authKind: a.authKind ?? "setup-token",
+    ...(a.federation ? { federation: a.federation } : {}),
     email: a.email,
     plan: a.plan,
     createdAt: a.createdAt,
@@ -1171,6 +1206,66 @@ export function hasAccounts(): boolean {
   return readStore().length > 0;
 }
 
+export function hasClaudeApiAccounts(): boolean {
+  return readStore().some(isClaudeApiAccount);
+}
+
+/**
+ * Add a Claude API account: a static API key, or Workload Identity
+ * Federation (no stored secret). Federation is checked with a real token
+ * exchange, so a rule that does not trust this server fails here rather than
+ * on the first run.
+ */
+export async function addClaudeApiAccount(input: {
+  name: string;
+  owner?: string;
+  apiKey?: string;
+  federation?: unknown;
+}): Promise<ClaudeAccountPublic | { error: string }> {
+  const name = input.name.trim();
+  const owner = input.owner?.trim() || undefined;
+  if (!name) return { error: "Name is required" };
+  const accounts = await readStoreFresh();
+  if (accounts.some((a) => a.name === name))
+    return { error: `An account named "${name}" already exists` };
+  const base = {
+    id: crypto.randomUUID(),
+    name,
+    createdAt: new Date().toISOString(),
+    ...(owner ? { owner } : {}),
+  };
+  let account: ClaudeAccount;
+  if (input.federation !== undefined) {
+    const federation = parseClaudeFederation(input.federation);
+    if ("error" in federation) return federation;
+    try {
+      await federatedAccessToken(base.id, federation);
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : String(error) };
+    }
+    account = { ...base, token: "", authKind: "federation", federation };
+  } else {
+    const apiKey = (input.apiKey || "").replace(/\s+/g, "");
+    if (!/^sk-ant-api/.test(apiKey))
+      return {
+        error:
+          "That doesn't look like a Claude API key (expected sk-ant-api…). Create one in the Claude Console.",
+      };
+    if (accounts.some((a) => a.token === apiKey))
+      return { error: "This key is already registered" };
+    const checked = await validateClaudeApiKey(apiKey);
+    if (checked.error) return { error: checked.error };
+    account = { ...base, token: apiKey, authKind: "api-key" };
+  }
+  await mutateStore(async () =>
+    writeStore([...(await readStoreFresh()), account]),
+  );
+  console.log(
+    `[claude-accounts] Added Claude API account ${name} (${account.authKind})`,
+  );
+  return toPublic(account);
+}
+
 export async function addAccount(
   name: string,
   token: string,
@@ -1185,6 +1280,12 @@ export async function addAccount(
   const trimmedOwner = owner?.trim() || undefined;
   const trimmedCredentialsPath = credentialsPath?.trim() || undefined;
   if (!trimmedName) return { error: "Name is required" };
+  if (/^sk-ant-api/.test(trimmedToken)) {
+    return {
+      error:
+        "That's a Claude API key, not a setup token. Add it as a Claude API account instead.",
+    };
+  }
   if (!/^sk-ant-/.test(trimmedToken)) {
     return {
       error:
@@ -1324,6 +1425,7 @@ export async function removeAccount(id: string): Promise<boolean> {
     return true;
   });
   if (!removed) return false;
+  forgetFederatedTokens(id);
   usageCache.delete(id);
   const map = sidelines();
   map.delete(exhaustionKey(id));
@@ -1637,6 +1739,20 @@ export function markExhausted(
   statedResetAt?: number,
 ): void {
   const account = readStore().find((a) => a.id === id);
+  if (account && isClaudeApiAccount(account)) {
+    // An API organization's limits are per-minute rate limits, not
+    // subscription windows: bench it briefly, or until the stated reset.
+    const until =
+      statedResetAt && statedResetAt > Date.now()
+        ? statedResetAt
+        : Date.now() + API_RATE_LIMIT_SIDELINE_MS;
+    sidelines().set(exhaustionKey(id, model), until);
+    persistSidelines();
+    console.warn(
+      `[claude-accounts] ${account.name}${model ? ` (${model})` : ""} rate-limited until ${new Date(until).toISOString()}`,
+    );
+    return;
+  }
   const cached = usageCache.get(id);
   const scoped = scopedEntryForModel(cached, model);
   const resetsAt = scoped?.resetsAt

@@ -120,7 +120,7 @@ export function modelEfforts(
     return OPENAI_EFFORTS;
   if (provider === "anthropic") {
     if (slug.startsWith("claude-haiku-4-5")) return ["high", "max"];
-    if (/^claude-(?:fable|opus|sonnet|haiku)-/.test(slug))
+    if (/^claude-(?:fable|mythos|opus|sonnet|haiku)-/.test(slug))
       return CLAUDE_EFFORTS;
   }
   if (provider === "cerebras" && slug === "gpt-oss-120b")
@@ -179,6 +179,8 @@ function rerouteRetiredClaudeModel(model: string): string {
 
 export const DEFAULT_BRIDGE_PICKER_MODELS = [
   "claude-fable-5-2",
+  "claude-mythos-5-2",
+  "claude-mythos-5-1",
   "claude-opus-5-5",
   "claude-sonnet-5-5",
   "claude-haiku-5-5",
@@ -208,6 +210,20 @@ export const KNOWN_MODELS: ModelInfo[] = [
     provider: "claude",
     label: "Claude Fable 5",
     aliases: ["fable5"],
+  },
+  // Mythos is Fable for organizations verified through Anthropic's
+  // verification programs. Both releases stay selectable.
+  {
+    id: "claude-mythos-5-2",
+    provider: "claude",
+    label: "Claude Mythos 5.2",
+    aliases: ["mythos", "mythos5.2"],
+  },
+  {
+    id: "claude-mythos-5-1",
+    provider: "claude",
+    label: "Claude Mythos 5.1",
+    aliases: ["mythos5.1"],
   },
   {
     id: "claude-opus-5-5",
@@ -550,6 +566,8 @@ const CODEX_MODEL_ORDER = ["gpt-6.2-sol", "gpt-6.1-terra", "gpt-6-luna"];
 const FALLBACK_TIER: Record<string, number> = {
   "claude-fable-5-2": 3,
   "claude-fable-5-1": 3,
+  "claude-mythos-5-2": 3,
+  "claude-mythos-5-1": 3,
   "gpt-6.2-astra": 3,
   "gpt-6.2-sol": 3,
   "gpt-6-astra": 3,
@@ -577,9 +595,10 @@ const FALLBACK_TIER: Record<string, number> = {
  * model walks this list for the next usable one; the per-hop auto/ask mode then
  * comes from the tier comparison (nextFallbackModel).
  *
- * Fable is deliberately ABSENT — it's a fallback *source*, never a destination:
- * its weekly-scoped credit pool is the scarce thing we're usually falling *off*
- * of, so routing another exhausted model back into it would just re-hit the cap.
+ * Fable and Mythos are deliberately ABSENT — they are fallback *sources*, never
+ * destinations: their shared weekly-scoped credit pool is the scarce thing we're
+ * usually falling *off* of, so routing another exhausted model back into it
+ * would just re-hit the cap.
  */
 const FALLBACK_DESTINATIONS = [
   "gpt-6.2-astra",
@@ -1185,6 +1204,8 @@ export function modelLabel(model?: string | null): string {
 const CONTEXT_WINDOWS: Record<string, number> = {
   "claude-fable-5-2": 1_000_000,
   "claude-fable-5-1": 1_000_000,
+  "claude-mythos-5-2": 1_000_000,
+  "claude-mythos-5-1": 1_000_000,
   "claude-opus-5-5": 1_000_000,
   "claude-opus-5": 1_000_000,
   "claude-opus-4-8": 1_000_000,

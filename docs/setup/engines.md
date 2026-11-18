@@ -48,6 +48,9 @@ key under **Settings → Providers**:
 - `pi/anthropic/*` uses the Claude account pool. Add a setup token created with
   `claude setup-token`; a separate Claude sign-in can provide usage and reset
   data.
+- `pi/anthropic/claude-mythos-*` needs a Claude API account: Anthropic offers
+  Mythos to verified API organizations, not to Claude subscriptions. See
+  [Claude API accounts](#claude-api-accounts).
 - `pi/openai/*` uses the OpenAI account pool, which accepts ChatGPT sign-ins or
   OpenAI API keys.
 - Other providers use one API key, an optional base URL, and the provider's
@@ -63,7 +66,7 @@ The UI writes these files with mode `0600`:
 
 | File                                  | Contents                                                                            |
 | ------------------------------------- | ----------------------------------------------------------------------------------- |
-| `~/.opensession/claude-accounts.json` | Claude setup tokens and optional usage credentials                                  |
+| `~/.opensession/claude-accounts.json` | Claude setup tokens, usage credentials, API keys, and federation IDs                |
 | `~/.opensession/codex-accounts.json`  | ChatGPT sign-ins and OpenAI API keys                                                |
 | `~/.opensession/xai-accounts.json`    | SuperGrok / X Premium sign-ins (xAI OAuth tokens)                                   |
 | `~/.opensession/model-providers.json` | Third-party provider keys, base URLs, picker models, and optional pool restrictions |
@@ -88,6 +91,30 @@ Legacy top-level counterparts such as `~/.opensession-claude-accounts.json`
 remain supported when the grouped path is absent. Run `opensession doctor`
 after setup to verify that the engine and the default model have usable
 capacity.
+
+### Claude API accounts
+
+A Claude API account bills an Anthropic API organization instead of a Claude
+subscription. It serves only Mythos runs, so metered API spend never stands in
+for subscription capacity. Once one exists, Mythos runs use API accounts only.
+An API account has no usage meters; a rate limit sidelines it for a minute, or
+until the reset the error states.
+
+Add one under **Settings → Providers → Add account → Claude account**, with
+one of two kinds:
+
+- **Workload identity** (recommended; no stored secret). Open Session signs a
+  short-lived ID token with its workload identity issuer and exchanges it for
+  a short-lived Claude API access token, which it refreshes before expiry. In
+  the Claude Console, register this server's issuer (the dialog shows the
+  issuer URL, or an inline JWKS when Anthropic cannot reach the server), then
+  create a service account and a federation rule that matches the dialog's
+  subject and audience. Enter the organization, federation rule, and service
+  account IDs, plus a workspace ID when the rule covers several workspaces.
+  Open Session tests the exchange before saving. A token lifetime of one hour
+  keeps exchanges infrequent.
+- **API key**: a static `sk-ant-api…` key. Prefer workload identity where a
+  program limits long-lived keys.
 
 ### Custom OpenAI-compatible providers
 

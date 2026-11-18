@@ -74,6 +74,7 @@ export {
   turnImages,
 } from "./anthropic-bridge";
 import { markExhausted, type ClaudeAccount } from "./claude-accounts";
+import { claudeCodeAuth } from "./claude-api-credentials";
 import {
   CACHE_WRITE_5M_FIELD,
   CLAUDE_1H_CACHE_WRITE_INPUT_MULTIPLIER,
@@ -96,6 +97,8 @@ import {
   usageLimitResetAt,
 } from "./runner-shared";
 import { spawnClaudeCodeInWorkload } from "./workload-scope";
+
+type ClaudeCodeAuth = Awaited<ReturnType<typeof claudeCodeAuth>>;
 
 const g = globalThis as any;
 
@@ -964,6 +967,8 @@ export interface LiveSdkConversation {
   disposed: boolean;
   /** Thinking and effort the query started with; fixed for its lifetime. */
   thinkingKey: string;
+  /** The credential the Claude Code process was spawned with (claudeCodeAuth). */
+  credentialKey: string;
 }
 
 /** Live SDK conversations keyed by store key. Exported for tests. */
@@ -1248,6 +1253,7 @@ function queryFacade(live: LiveSdkConversation): LiveQueryFacade {
 function createLiveSdkConversation(input: {
   key: string;
   account: ClaudeAccount;
+  auth: ClaudeCodeAuth;
   model: PiCatalogModel;
   system: string;
   tools: readonly PiToolShape[];
@@ -1312,7 +1318,7 @@ function createLiveSdkConversation(input: {
         PATH: process.env.PATH,
         HOME: process.env.HOME,
         LANG: process.env.LANG,
-        CLAUDE_CODE_OAUTH_TOKEN: input.account.token,
+        ...input.auth.env,
         CLAUDE_CONFIG_DIR: claudeConfigDirFor(input.account.id),
         MCP_TOOL_TIMEOUT: String(LIVE_MCP_TOOL_TIMEOUT_MS),
         ...cliPassthroughEnv(input.model),
@@ -1332,6 +1338,7 @@ function createLiveSdkConversation(input: {
     inUse: false,
     disposed: false,
     thinkingKey: sdkThinkingKey(input.thinking),
+    credentialKey: input.auth.key,
   };
   liveSdkConversations().set(input.key, live);
   prompt.push(inputForPlan(input.plan));
@@ -1341,6 +1348,7 @@ function createLiveSdkConversation(input: {
 function acquireLiveSdkQuery(input: {
   key: string;
   account: ClaudeAccount;
+  auth: ClaudeCodeAuth;
   model: PiCatalogModel;
   system: string;
   tools: readonly PiToolShape[];
@@ -1551,6 +1559,19 @@ async function* runSdkAttempt(
     if ("error" in picked) throw new Error(picked.error);
     account = picked;
     await ensureSdkDirs(account.id);
+    const auth = await claudeCodeAuth(account);
+    // A Claude Code process keeps the credential it was spawned with. When
+    // the account's credential rotated (a refreshed federated token), retire
+    // the live conversation before planning so this turn resumes from the
+    // stored session in a process that carries the new one.
+    const existingLive = liveSdkConversations().get(storeKey);
+    if (
+      existingLive &&
+      !existingLive.inUse &&
+      existingLive.accountId === account.id &&
+      existingLive.credentialKey !== auth.key
+    )
+      disposeLiveSdkConversation(existingLive, "credential refreshed");
 
     // Continuation planning happens with the account known: a stored SDK
     // session lives in ITS account's isolated CLAUDE_CONFIG_DIR, so a turn
@@ -1576,6 +1597,7 @@ async function* runSdkAttempt(
     const q = acquireLiveSdkQuery({
       key: storeKey,
       account,
+      auth,
       model,
       system,
       tools: requestTools,

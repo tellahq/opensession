@@ -64,12 +64,26 @@ import { RenameDialog } from "../RenameDialog";
 // together because the answer to "this one is spent" is an action on the row
 // (hand it an owner, connect its usage, take it out of the pool).
 
+interface ClaudeFederationInfo {
+  organizationId: string;
+  federationRuleId: string;
+  serviceAccountId: string;
+  workspaceId?: string;
+}
+
+function isClaudeApiAccount(account: ClaudeAccountInfo): boolean {
+  return account.authKind === "api-key" || account.authKind === "federation";
+}
+
 interface ClaudeAccountInfo {
   id: string;
   name: string;
   label?: string;
   tokenMasked: string;
-  authKind: "setup-token" | "oauth";
+  /** "api-key" and "federation" bill an Anthropic API organization and serve
+   *  only Mythos; older servers send only the first two. */
+  authKind: "setup-token" | "oauth" | "api-key" | "federation";
+  federation?: ClaudeFederationInfo;
   email?: string;
   plan?: string;
   /** Personal sub of this person; unset = shared pool account. */
@@ -753,12 +767,21 @@ function ClaudeAccountRows({ state }: { state: ClaudeAccountsState }) {
                     .join(" · ")}
                 >
                   Anthropic
+                  {account.authKind === "federation"
+                    ? " · API · workload identity"
+                    : account.authKind === "api-key"
+                      ? " · API key"
+                      : ""}
                   {renamedEmail(account)}
                   {account.plan
                     ? ` · ${account.plan.replace("default_claude_", "")}`
                     : ""}
                 </SettingRowDescription>
-                {account.noUsageScope && !account.usage ? (
+                {isClaudeApiAccount(account) ? (
+                  <div className="mt-1.5 text-meta leading-relaxed text-faint">
+                    Serves Mythos runs, billed to the API organization.
+                  </div>
+                ) : account.noUsageScope && !account.usage ? (
                   <div className="mt-1.5 text-meta leading-relaxed text-faint">
                     Sign in with Claude from the account menu to show usage.
                   </div>
@@ -812,10 +835,12 @@ function ClaudeAccountRows({ state }: { state: ClaudeAccountsState }) {
                         Return to pool
                       </Menu.Item>
                     )}
-                    <Menu.Item onClick={() => state.setSignIn(account)}>
-                      <IconPlug size={16} className="text-faint" />
-                      Connect usage…
-                    </Menu.Item>
+                    {!isClaudeApiAccount(account) && (
+                      <Menu.Item onClick={() => state.setSignIn(account)}>
+                        <IconPlug size={16} className="text-faint" />
+                        Connect usage…
+                      </Menu.Item>
+                    )}
                     {account.authKind === "setup-token" && (
                       <Menu.Item
                         onClick={() => state.setCredentialsPath(account)}
@@ -1828,12 +1853,311 @@ export function ProviderAccountsSection({
 
 // ── Add forms ──────────────────────────────────────────────────────────────
 
-function AddClaudeAccountForm({
+type ClaudeAccountKind = "setup-token" | "federation" | "api-key";
+
+/** How a Claude account is added: a subscription setup token, or an Anthropic
+ *  API organization through workload identity or a static API key. */
+const CLAUDE_KIND_ITEMS: { value: ClaudeAccountKind; label: string }[] = [
+  { value: "setup-token", label: "Claude subscription · setup token" },
+  { value: "federation", label: "Claude API · workload identity" },
+  { value: "api-key", label: "Claude API · API key" },
+];
+
+function ClaudeKindField({
+  value,
+  onChange,
+}: {
+  value: ClaudeAccountKind;
+  onChange: (kind: ClaudeAccountKind) => void;
+}) {
+  return (
+    <Field label="Kind">
+      <Select.Root
+        items={CLAUDE_KIND_ITEMS}
+        value={value}
+        onValueChange={(next) => {
+          const kind = CLAUDE_KIND_ITEMS.find((k) => k.value === next);
+          if (kind) onChange(kind.value);
+        }}
+      >
+        <Select.Trigger aria-label="Kind" />
+        <Select.Popup>
+          {CLAUDE_KIND_ITEMS.map((k) => (
+            <Select.Item key={k.value} value={k.value}>
+              {k.label}
+            </Select.Item>
+          ))}
+        </Select.Popup>
+      </Select.Root>
+    </Field>
+  );
+}
+
+function AddClaudeAccountForm(props: {
+  onAccountAdded: () => void;
+  onDone: () => void;
+}) {
+  const [kind, setKind] = useState<ClaudeAccountKind>("setup-token");
+  return kind === "setup-token" ? (
+    <AddClaudeSubscriptionForm {...props} onKindChange={setKind} />
+  ) : (
+    <AddClaudeApiAccountForm {...props} kind={kind} onKindChange={setKind} />
+  );
+}
+
+/** POST /claude-accounts/api: an API key or federation settings. */
+interface ClaudeApiAccountRequest {
+  name: string;
+  owner?: string;
+  apiKey?: string;
+  federation?: ClaudeFederationInfo;
+}
+
+interface ClaudeFederationSetup {
+  issuer: string;
+  jwksUrl: string;
+  jwks: string;
+  publicIssuer: boolean;
+  subject: string;
+  audience: string;
+}
+
+function ReadonlyValue({ label, value }: { label: string; value: string }) {
+  return (
+    <Field label={label}>
+      <Input
+        readOnly
+        value={value}
+        onFocus={(event) => event.currentTarget.select()}
+        spellCheck={false}
+      />
+    </Field>
+  );
+}
+
+function AddClaudeApiAccountForm({
+  kind,
+  onKindChange,
   onAccountAdded,
   onDone,
 }: {
+  kind: "federation" | "api-key";
+  onKindChange: (kind: ClaudeAccountKind) => void;
   onAccountAdded: () => void;
   onDone: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [owner, setOwner] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [federation, setFederation] = useState<ClaudeFederationInfo>({
+    organizationId: "",
+    federationRuleId: "",
+    serviceAccountId: "",
+    workspaceId: "",
+  });
+  const [setup, setSetup] = useState<ClaudeFederationSetup | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (kind !== "federation" || setup) return;
+    let cancelled = false;
+    void request<ClaudeFederationSetup>("/claude-accounts/federation-setup", {
+      label: "Could not load workload identity settings",
+    }).then(
+      (next) => {
+        if (!cancelled) setSetup(next);
+      },
+      (cause: unknown) => {
+        if (!cancelled)
+          setError(
+            errorMessage(cause, "Could not load workload identity settings"),
+          );
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [kind, setup]);
+
+  const field = (key: keyof ClaudeFederationInfo) => ({
+    value: federation[key] ?? "",
+    onChange: (event: React.ChangeEvent<HTMLInputElement>) =>
+      setFederation((prev) => ({ ...prev, [key]: event.target.value })),
+    autoCapitalize: "none" as const,
+    autoComplete: "off",
+    spellCheck: false,
+  });
+
+  const ready = Boolean(
+    name.trim() &&
+    (kind === "api-key"
+      ? apiKey.trim()
+      : federation.organizationId.trim() &&
+        federation.federationRuleId.trim() &&
+        federation.serviceAccountId.trim()),
+  );
+
+  async function handleAdd() {
+    setSaving(true);
+    setError(null);
+    try {
+      const body: ClaudeApiAccountRequest = { name: name.trim() };
+      if (owner.trim()) body.owner = owner.trim();
+      if (kind === "api-key") body.apiKey = apiKey.replace(/\s+/g, "");
+      else body.federation = federation;
+      const added = await request<ClaudeAccountInfo>("/claude-accounts/api", {
+        method: "POST",
+        body,
+        label: "Could not add Claude API account",
+      });
+      toast(`Added ${providerAccountLabel(added)}`);
+      onAccountAdded();
+      onDone();
+    } catch (cause) {
+      setError(errorMessage(cause, "Could not add Claude API account"));
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <Modal.Header
+        title="Add Claude account"
+        description="A Claude API account serves Mythos, which Anthropic offers to verified API organizations. Its runs are billed to that organization."
+      />
+      <form
+        className="flex flex-col gap-5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (ready && !saving) void handleAdd();
+        }}
+      >
+        <div className="flex flex-col gap-3">
+          <ClaudeKindField value={kind} onChange={onKindChange} />
+          <Field label="Name">
+            <Input
+              required
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Acme API"
+              autoComplete="off"
+            />
+          </Field>
+          {kind === "api-key" ? (
+            <>
+              <Field label="API key">
+                <Input
+                  required
+                  type="password"
+                  autoComplete="off"
+                  value={apiKey}
+                  onChange={(event) => setApiKey(event.target.value)}
+                  placeholder="sk-ant-api03-…"
+                />
+              </Field>
+              <p className="m-0 text-meta leading-relaxed text-faint">
+                Create a key in the Claude Console. Workload identity avoids
+                storing a long-lived key and is required by some programs.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="flex flex-col gap-3 rounded-md bg-surface px-4 py-3">
+                <SettingRowDescription>
+                  In the Claude Console, add an identity issuer and a federation
+                  rule bound to a service account with these values. No secret
+                  is stored here.
+                </SettingRowDescription>
+                {setup ? (
+                  <>
+                    <ReadonlyValue label="Issuer URL" value={setup.issuer} />
+                    {setup.publicIssuer ? (
+                      <ReadonlyValue label="JWKS URL" value={setup.jwksUrl} />
+                    ) : (
+                      <>
+                        <ReadonlyValue label="Inline JWKS" value={setup.jwks} />
+                        <p className="m-0 text-meta leading-relaxed text-faint">
+                          Anthropic can't reach this server's address, so paste
+                          the key set instead of a JWKS URL.
+                        </p>
+                      </>
+                    )}
+                    <ReadonlyValue label="Subject" value={setup.subject} />
+                    <ReadonlyValue label="Audience" value={setup.audience} />
+                  </>
+                ) : !error ? (
+                  <LoadingState placement="row">Loading…</LoadingState>
+                ) : null}
+              </div>
+              <Field label="Organization ID">
+                <Input
+                  required
+                  placeholder="00000000-0000-0000-0000-000000000000"
+                  {...field("organizationId")}
+                />
+              </Field>
+              <Field label="Federation rule ID">
+                <Input
+                  required
+                  placeholder="fdrl_…"
+                  {...field("federationRuleId")}
+                />
+              </Field>
+              <Field label="Service account ID">
+                <Input
+                  required
+                  placeholder="svac_…"
+                  {...field("serviceAccountId")}
+                />
+              </Field>
+              <Field label="Workspace ID (optional)">
+                <Input
+                  placeholder="wrkspc_… or default"
+                  {...field("workspaceId")}
+                />
+              </Field>
+            </>
+          )}
+          <Field
+            label="Owner"
+            title="Personal: this person's Mythos runs use the account first. Automations: only automation runs use it. Shared pool: used by everyone and by automations."
+          >
+            <OwnerSelect value={owner} onChange={setOwner} label="Owner" />
+          </Field>
+        </div>
+
+        {error && <InlineAlert>{error}</InlineAlert>}
+
+        <Modal.Footer>
+          <Modal.Close
+            render={
+              <Button variant="ghost" disabled={saving}>
+                Cancel
+              </Button>
+            }
+          />
+          <Button variant="primary" type="submit" disabled={saving || !ready}>
+            {saving
+              ? kind === "federation"
+                ? "Testing exchange…"
+                : "Validating…"
+              : "Add account"}
+          </Button>
+        </Modal.Footer>
+      </form>
+    </>
+  );
+}
+
+function AddClaudeSubscriptionForm({
+  onAccountAdded,
+  onDone,
+  onKindChange,
+}: {
+  onAccountAdded: () => void;
+  onDone: () => void;
+  onKindChange: (kind: ClaudeAccountKind) => void;
 }) {
   const [account, setAccount] = useState<ClaudeAccountInfo | null>(null);
   const [name, setName] = useState("");
@@ -2015,6 +2339,7 @@ function AddClaudeAccountForm({
         }}
       >
         <div className="flex flex-col gap-3">
+          <ClaudeKindField value="setup-token" onChange={onKindChange} />
           <Field label="Email">
             <Input
               required

@@ -19,7 +19,7 @@ export function ClaudeSignInForm({
     id: string;
     name: string;
     email?: string;
-    authKind: "setup-token" | "oauth";
+    authKind: "setup-token" | "oauth" | "api-key" | "federation";
   };
   onClose: () => void;
   onDone: () => void;

@@ -10,6 +10,7 @@
 import type { RouteContext } from "./context";
 import {
   addAccount,
+  addClaudeApiAccount,
   listAccountsPublic,
   refreshAllUsage,
   removeAccount,
@@ -17,6 +18,7 @@ import {
   setAccountLabel,
   setAccountOwner,
 } from "../claude-accounts";
+import { claudeFederationSetup } from "../claude-api-credentials";
 import {
   addCodexAccount,
   listCodexAccountsPublic,
@@ -97,6 +99,29 @@ export async function handleAccountsRoutes(
     );
     if ("error" in result) return Response.json(result, { status: 400 });
     return Response.json(result);
+  }
+
+  // Claude API accounts (API key or Workload Identity Federation). Keep these
+  // ahead of the generic /claude-accounts/:id matchers.
+  if (path === "/api/claude-accounts/api" && req.method === "POST") {
+    const body = await req.json().catch(() => null);
+    if (typeof body?.name !== "string" || !body.name.trim()) {
+      return Response.json({ error: "name is required" }, { status: 400 });
+    }
+    const result = await addClaudeApiAccount({
+      name: body.name,
+      owner: typeof body.owner === "string" ? body.owner : undefined,
+      apiKey: typeof body.apiKey === "string" ? body.apiKey : undefined,
+      federation: body.federation ?? undefined,
+    });
+    if ("error" in result) return Response.json(result, { status: 400 });
+    return Response.json(result);
+  }
+  if (
+    path === "/api/claude-accounts/federation-setup" &&
+    req.method === "GET"
+  ) {
+    return Response.json(await claudeFederationSetup());
   }
 
   if (path === "/api/claude-accounts/refresh" && req.method === "POST") {
