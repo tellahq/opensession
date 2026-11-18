@@ -1,10 +1,5 @@
 import { repoLabel } from "../lib/repo-label";
-import React, {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import type { PrDetails, WSClientMessage } from "../lib/types";
 import {
@@ -72,11 +67,7 @@ import { Tooltip } from "../ui/tooltip";
 import { ContextMenu, Menu, MENU_ICON } from "../ui/menu";
 import { TextShimmer } from "../ui/text-shimmer";
 import { duration, ease } from "../ui/motion";
-import {
-  clearPromptPending,
-  markPromptPending,
-  usePromptPending,
-} from "../lib/pr-prompt-pending";
+import { sendPrPrompt, usePromptPending } from "../lib/pr-prompt-pending";
 import { PixelSpinner } from "./PixelSpinner";
 import { Skeleton, SkeletonBar } from "../ui/state";
 import { cn } from "../ui/cn";
@@ -194,7 +185,18 @@ interface Props {
   refreshTick?: number;
 }
 
-interface PrBarButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+// The button is a Motion element (its width glides between labels), so the
+// DOM drag and animation handlers, which Motion types differently, are not
+// part of its surface. No caller passes them.
+interface PrBarButtonProps extends Omit<
+  React.ButtonHTMLAttributes<HTMLButtonElement>,
+  | "onDrag"
+  | "onDragStart"
+  | "onDragEnd"
+  | "onAnimationStart"
+  | "onAnimationEnd"
+  | "onAnimationIteration"
+> {
   tone:
     | "green"
     | "purple"
@@ -210,38 +212,10 @@ interface PrBarButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement>
   working?: boolean;
 }
 
-/**
- * Width of `ref`'s box. Read before paint whenever `phase` changes, so the
- * new label's width is known in the frame it renders and the glide starts
- * with the crossfade instead of a frame or more behind it. The observer covers
- * every other change (Merge to Merging…, a late web font).
- */
-function useMeasuredWidth(
-  ref: React.RefObject<HTMLElement | null>,
-  phase: string,
-) {
-  const [width, setWidth] = useState<number | null>(null);
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (el) setWidth(el.offsetWidth);
-  }, [ref, phase]);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const observer = new ResizeObserver(() => setWidth(el.offsetWidth));
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [ref]);
-  return width;
-}
-
-/** How long a prompted action waits for the session to start a turn before it
- *  stops claiming the work is under way. */
-const PROMPT_START_GRACE_MS = 15_000;
-
 /** The label and glyph crossfade with a short rise, while the button's width
- *  glides to the new label's, so "Fix checks" turning into "Fixing…" reads as
- *  one control changing its mind rather than a second button replacing it. */
+ *  glides to the new label's (a Motion layout animation on the button), so
+ *  "Fix checks" turning into "Fixing…" reads as one control changing its mind
+ *  rather than a second button replacing it. */
 const SWAP_MOTION = {
   initial: { opacity: 0, y: 5, filter: "blur(2px)" },
   animate: { opacity: 1, y: 0, filter: "blur(0px)" },
@@ -255,10 +229,8 @@ const SWAP_MOTION = {
   },
   transition: { type: "tween", duration: duration.base, ease },
 } as const;
-const WIDTH_TRANSITION = {
-  type: "spring",
-  duration: duration.large,
-  bounce: 0,
+const LAYOUT_TRANSITION = {
+  layout: { type: "spring", duration: duration.large, bounce: 0 },
 } as const;
 
 function PrBarButton({
@@ -269,12 +241,12 @@ function PrBarButton({
   children,
   ...props
 }: PrBarButtonProps) {
-  const contentRef = React.useRef<HTMLSpanElement>(null);
   const glyph = working ? <PixelSpinner className="scale-[1.15]" /> : icon;
-  // The label crossfades when the work starts or ends; any other change of
-  // label (Merge to Merging…) is the same control, so it only glides.
+  // The label crossfades and the width glides when the work starts or ends.
+  // Any other change of label (Merge to Merging…) is the same control, and
+  // the strip moving around it is not this button's to animate, so the layout
+  // animation runs on this and nothing else.
   const phase = working ? "working" : "idle";
-  const contentWidth = useMeasuredWidth(contentRef, phase);
   const tones = {
     green:
       "bg-[var(--green)] border-[color-mix(in_srgb,var(--green)_78%,black)] text-white",
@@ -303,8 +275,11 @@ function PrBarButton({
       "border-dashed border-[color-mix(in_srgb,var(--purple)_45%,transparent)] bg-transparent text-purple shadow-none hover:bg-[color-mix(in_srgb,var(--purple)_10%,transparent)] hover:brightness-100",
   } as const;
   return (
-    <button
+    <motion.button
       type="button"
+      layout
+      layoutDependency={phase}
+      transition={LAYOUT_TRANSITION}
       className={cn(
         "inline-flex min-h-[30px] items-center justify-center gap-1.5 rounded-full border px-3 py-[5px] text-label leading-none font-semibold whitespace-nowrap smooth-shadow-sm transition-[background-color,border-color,color,filter,transform] duration-150 ease-in-out hover:brightness-[1.08] active:scale-[0.98] active:brightness-[0.98] focus-visible:outline-2 focus-visible:outline-[var(--accent-ink)] focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-60 disabled:shadow-none",
         tones[tone],
@@ -316,7 +291,7 @@ function PrBarButton({
         // and close the inner gap so the two read as one group rather than
         // two things. Icon-only callers override px themselves, so this
         // never lands on a lone glyph.
-        glyph && "pl-[6.5px]",
+        glyph && "gap-1 pl-[6.5px]",
         // Pressed is still the state, not "unavailable": the wave and the
         // shimmer say it is in hand, so it keeps its full colour.
         working && "disabled:opacity-100",
@@ -325,33 +300,25 @@ function PrBarButton({
       aria-busy={working || undefined}
       {...props}
     >
-      <motion.span
-        className="inline-flex items-center justify-center [overflow-x:clip]"
-        initial={false}
-        animate={{ width: contentWidth ?? "auto" }}
-        transition={WIDTH_TRANSITION}
-      >
-        <span
-          ref={contentRef}
-          className={cn(
-            "relative inline-flex w-max shrink-0 items-center",
-            glyph ? "gap-1" : "gap-1.5",
-          )}
+      {glyph && (
+        <motion.span
+          layout
+          layoutDependency={phase}
+          transition={LAYOUT_TRANSITION}
+          className="relative inline-flex size-[18px] shrink-0 items-center justify-center [&_svg]:block [&_svg]:stroke-[1.7]"
         >
-          {glyph && (
-            <span className="relative inline-flex size-[18px] shrink-0 items-center justify-center [&_svg]:block [&_svg]:stroke-[1.7]">
-              <AnimatePresence initial={false} mode="popLayout">
-                <motion.span
-                  key={phase}
-                  className="inline-flex items-center justify-center"
-                  {...SWAP_MOTION}
-                >
-                  {glyph}
-                </motion.span>
-              </AnimatePresence>
-            </span>
-          )}
-          {/* Centered on the cap band, not on the em box: `text-box` trims the
+          <AnimatePresence initial={false} mode="popLayout">
+            <motion.span
+              key={phase}
+              className="inline-flex items-center justify-center"
+              {...SWAP_MOTION}
+            >
+              {glyph}
+            </motion.span>
+          </AnimatePresence>
+        </motion.span>
+      )}
+      {/* Centered on the cap band, not on the em box: `text-box` trims the
 			    line box down to cap height and baseline, so the flex centering
 			    lands the ink itself in the middle of the button and beside the
 			    icon, whatever font the platform picks. Browsers without
@@ -363,18 +330,23 @@ function PrBarButton({
 			    the geometric center reads a touch high. It settles the label
 			    without going back to a nudge that has to carry the whole
 			    correction. */}
-          <AnimatePresence initial={false} mode="popLayout">
-            <motion.span
-              key={phase}
-              className="inline-block translate-y-[0.5px] [text-box:trim-both_cap_alphabetic]"
-              {...SWAP_MOTION}
-            >
-              {children}
-            </motion.span>
-          </AnimatePresence>
-        </span>
+      <motion.span
+        layout
+        layoutDependency={phase}
+        transition={LAYOUT_TRANSITION}
+        className="relative inline-flex"
+      >
+        <AnimatePresence initial={false} mode="popLayout">
+          <motion.span
+            key={phase}
+            className="inline-block translate-y-[0.5px] [text-box:trim-both_cap_alphabetic]"
+            {...SWAP_MOTION}
+          >
+            {children}
+          </motion.span>
+        </AnimatePresence>
       </motion.span>
-    </button>
+    </motion.button>
   );
 }
 
@@ -692,33 +664,13 @@ export function PrStatusBar({
 
   const headline = deriveHeadline(pr, git, prUnavailable);
 
-  // "Fixing…" lasts as long as the work does: until the turn the press started
-  // ends, or the PR leaves the state the action was for. A prompt that never
-  // starts a turn (the socket dropped) lets go after a short wait.
+  // "Fixing…" lasts as long as the prompt the press sent: through the queue
+  // and its own turn (lib/pr-prompt-pending). Once the PR leaves the state the
+  // action was for, the strip has moved on whatever the session is doing.
   const promptKey = `${sessionId}\u0000${pr?.url ?? targetRepo ?? ""}`;
-  const prompted = usePromptPending(promptKey);
-  const promptRunning = React.useRef(false);
-  useEffect(() => {
-    if (!prompted) return;
-    if (prompted.headline !== headline.key) {
-      clearPromptPending(promptKey, prompted);
-      return;
-    }
-    if (running) {
-      promptRunning.current = true;
-      return;
-    }
-    if (promptRunning.current) {
-      promptRunning.current = false;
-      clearPromptPending(promptKey, prompted);
-      return;
-    }
-    const timer = setTimeout(
-      () => clearPromptPending(promptKey, prompted),
-      Math.max(0, prompted.at + PROMPT_START_GRACE_MS - Date.now()),
-    );
-    return () => clearTimeout(timer);
-  }, [prompted, headline.key, running, promptKey]);
+  const pendingPrompt = usePromptPending(promptKey);
+  const prompted =
+    pendingPrompt?.headline === headline.key ? pendingPrompt : undefined;
 
   // Everything except the primary branch's PR (which the headline covers):
   // attached repos, manual links, and PRs discovered through their body
@@ -882,20 +834,14 @@ export function PrStatusBar({
   // resolution needs judgment, not a button.
   function promptSession(label: string, content: string) {
     if (!send) return;
-    promptRunning.current = false;
-    markPromptPending(promptKey, {
+    sendPrPrompt(send, {
+      key: promptKey,
+      sessionId,
+      user: getCurrentUser(),
       label,
       headline: headline.key,
-      at: Date.now(),
+      content,
     });
-    // The button turns to "Fixing…" first and the prompt follows once that
-    // has settled: the transcript's response to a sent prompt is a long task
-    // that would otherwise freeze the morph in its first frames.
-    const user = getCurrentUser();
-    setTimeout(
-      () => send({ type: "prompt", sessionId, user, content }),
-      duration.large * 1000,
-    );
   }
 
   // The strip is where this branch stands against the remote and the base: the
