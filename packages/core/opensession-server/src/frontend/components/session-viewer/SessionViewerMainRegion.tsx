@@ -12,7 +12,7 @@ import type {
   RefObject,
   SetStateAction,
 } from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { duration, ease } from "../../ui/motion";
@@ -44,6 +44,7 @@ import {
   TranscriptSyncing,
   WorkspaceWaiting,
 } from "./busy-indicators";
+import { LiveRunStatusContext, type LiveRunStatus } from "./live-run-status";
 import { Button } from "../../ui/button";
 import { PhoneTopBarAction } from "../../ui/top-bar";
 import { IconChevronLeft } from "../icons";
@@ -90,6 +91,7 @@ import {
 import { TURN_SPACER } from "../../lib/app-shell-classes";
 import { MOBILE_CONTROL_GLASS } from "../../lib/app-header-classes";
 import {
+  NEXT_RISE,
   PILL_CENTRED,
   TRANSCRIPT_ICON_BUTTON,
   TRANSCRIPT_PILL_BUTTON,
@@ -543,6 +545,11 @@ export function SessionViewerMainRegion({
     loadingHistory,
     syncing,
   } = transcript.content;
+  const stopping = stopRequestedAt != null;
+  const liveRunStatus = useMemo<LiveRunStatus>(
+    () => ({ store: liveTurnStore, stopping }),
+    [liveTurnStore, stopping],
+  );
   const {
     openAssetFromTranscript,
     onTranscriptRender,
@@ -594,7 +601,7 @@ export function SessionViewerMainRegion({
     actionBand: hasActionBand,
     quickReplies,
     nextAction,
-    scrollAction,
+    scrollAction: scrollReady,
     isPhone,
     replySuggestions,
     pickReplySuggestion,
@@ -605,6 +612,9 @@ export function SessionViewerMainRegion({
     setMobileActionMenuEl,
     openNewWorkspace,
   } = actionBand;
+  // Desktop puts the arrow left of the Next tab rather than in a band above.
+  const scrollBesideNext = scrollReady && nextAction && !isPhone;
+  const scrollAction = scrollReady && !scrollBesideNext;
   const {
     forkFrom,
     composerResetSeq,
@@ -711,6 +721,7 @@ export function SessionViewerMainRegion({
         className={cn(
           "flex min-h-0 min-w-0 flex-1 flex-col [--session-under:16px]",
           actionClearance,
+          nextAction && NEXT_RISE,
         )}
       >
         {showPortal && portalTarget ? (
@@ -1058,54 +1069,56 @@ export function SessionViewerMainRegion({
                       Empty transcript
                     </div>
                   ) : (
-                    <TranscriptView
-                      openSettlePending={openSettlePending}
-                      assetPaths={assetPaths}
-                      toolPathRoots={toolPathRoots}
-                      liveSubagents={liveSubagents}
-                      openAsset={openAssetFromTranscript}
-                      messageLink={linkToMessage}
-                      onRender={onTranscriptRender}
-                      entries={entries}
-                      optimisticEntries={optimisticTranscriptEntries}
-                      pendingDeliveryIds={pendingTranscriptDeliveryIds}
-                      transcriptIndex={transcriptIndex ?? undefined}
-                      historyLoading={loadingHistory}
-                      transcriptRangeRetryGeneration={
-                        transcriptRangeRetryGeneration
-                      }
-                      onLoadTranscriptRanges={loadTranscriptRanges}
-                      onVisibleRangesSettled={onVisibleRangesSettled}
-                      live={isBusy}
-                      sessionId={session.id}
-                      liveTurnStore={liveTurnStore}
-                      shouldMaintainEnd={shouldMaintainEnd}
-                      onLayout={relayout}
-                      reviewResult={reviewResult}
-                      onEditMessage={editSentMessageInComposer}
-                      // Same gate the composer sends under: a busy session
-                      // is already continuing, and one you cannot type into
-                      // must not offer a button that types for you.
-                      onContinue={
-                        connected && !isBusy && !noEngine
-                          ? continueAfterFailure
-                          : undefined
-                      }
-                      notes={notes}
-                      slackShare={shippedChangeShare}
-                      onFork={canForkSession ? handleFork : undefined}
-                      onOpenSubagent={openSubagent}
-                      // For automation-owned sessions (e.g. a GitHub PR run), the
-                      // automation never *types* a user turn — humans steer them.
-                      // So don't credit un-attributed turns to the automation
-                      // ("GitHub (automation)"); leave the owner unset so they read
-                      // as "You" (explicit [Name] steers still show the teammate).
-                      owner={
-                        session.automation
-                          ? undefined
-                          : session.startedBy || undefined
-                      }
-                    />
+                    <LiveRunStatusContext.Provider value={liveRunStatus}>
+                      <TranscriptView
+                        openSettlePending={openSettlePending}
+                        assetPaths={assetPaths}
+                        toolPathRoots={toolPathRoots}
+                        liveSubagents={liveSubagents}
+                        openAsset={openAssetFromTranscript}
+                        messageLink={linkToMessage}
+                        onRender={onTranscriptRender}
+                        entries={entries}
+                        optimisticEntries={optimisticTranscriptEntries}
+                        pendingDeliveryIds={pendingTranscriptDeliveryIds}
+                        transcriptIndex={transcriptIndex ?? undefined}
+                        historyLoading={loadingHistory}
+                        transcriptRangeRetryGeneration={
+                          transcriptRangeRetryGeneration
+                        }
+                        onLoadTranscriptRanges={loadTranscriptRanges}
+                        onVisibleRangesSettled={onVisibleRangesSettled}
+                        live={isBusy}
+                        sessionId={session.id}
+                        liveTurnStore={liveTurnStore}
+                        shouldMaintainEnd={shouldMaintainEnd}
+                        onLayout={relayout}
+                        reviewResult={reviewResult}
+                        onEditMessage={editSentMessageInComposer}
+                        // Same gate the composer sends under: a busy session
+                        // is already continuing, and one you cannot type into
+                        // must not offer a button that types for you.
+                        onContinue={
+                          connected && !isBusy && !noEngine
+                            ? continueAfterFailure
+                            : undefined
+                        }
+                        notes={notes}
+                        slackShare={shippedChangeShare}
+                        onFork={canForkSession ? handleFork : undefined}
+                        onOpenSubagent={openSubagent}
+                        // For automation-owned sessions (e.g. a GitHub PR run), the
+                        // automation never *types* a user turn — humans steer them.
+                        // So don't credit un-attributed turns to the automation
+                        // ("GitHub (automation)"); leave the owner unset so they read
+                        // as "You" (explicit [Name] steers still show the teammate).
+                        owner={
+                          session.automation
+                            ? undefined
+                            : session.startedBy || undefined
+                        }
+                      />
+                    </LiveRunStatusContext.Provider>
                   )}
                 </AnimatePresence>
 
@@ -1657,7 +1670,35 @@ export function SessionViewerMainRegion({
                     }
                     attachedAction={
                       nextAction ? (
-                        <NextUnreadButton key={session.id} phone={isPhone} />
+                        <>
+                          {scrollBesideNext && (
+                            // Centred on the composer, level with the tab's
+                            // visible 40px, as the floating arrow is.
+                            <div className="absolute top-1 left-1/2 -translate-x-1/2">
+                              <Tooltip
+                                label="Scroll to the bottom"
+                                shortcut={transcriptDownKeys ?? undefined}
+                              >
+                                <button
+                                  className={TRANSCRIPT_ICON_BUTTON}
+                                  type="button"
+                                  aria-label="Scroll to the bottom"
+                                  onClick={() => {
+                                    cancelIndexAnchorHold();
+                                    scrollToLatest("auto");
+                                  }}
+                                >
+                                  <IconArrowDown
+                                    size={13}
+                                    className="text-dim transition-transform group-hover:translate-y-px"
+                                    aria-hidden
+                                  />
+                                </button>
+                              </Tooltip>
+                            </div>
+                          )}
+                          <NextUnreadButton key={session.id} phone={isPhone} />
+                        </>
                       ) : null
                     }
                     sendMenu={

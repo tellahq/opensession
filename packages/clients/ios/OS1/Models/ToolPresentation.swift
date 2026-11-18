@@ -44,8 +44,12 @@ struct ToolPresentation: Equatable, Sendable {
     /// Full label used in rows, collapsed previews and accessibility.
     var displayName: String { labelParts.joined(separator: " · ") }
 
-    /// "Bash: bun test": what a folded row says a step is doing.
-    var stepLabel: String { summary.isEmpty ? displayName : "\(displayName): \(summary)" }
+    /// "Ran bun test"-style: what a folded row says a step is doing. The
+    /// same phrase the step's own row shows, so the two never disagree.
+    var stepLabel: String {
+        let row = rowTitle
+        return row.detail.map { "\(row.title) · \($0)" } ?? row.title
+    }
 }
 
 /// The icon buckets. One glyph per family is what makes a collapsed turn
@@ -57,16 +61,34 @@ enum ToolFamily: String, Equatable, Sendable, CaseIterable {
     var symbol: String {
         switch self {
         case .run: "terminal"
-        case .file: "doc.text"
+        case .file: "text.document"
         case .edit: "pencil"
         case .find: "magnifyingglass"
         case .web: "globe"
         case .agent: "sparkles"
         case .mcp: "powerplug"
-        case .skill: "book"
+        case .skill: "book.closed"
         case .branch: "arrow.triangle.branch"
         case .checklist: "checklist"
         case .other: "wrench.and.screwdriver"
+        }
+    }
+
+    /// What a running step is doing, by family rather than by tool name, for
+    /// the closed Working line: "Running a command", not "Bash: ls -la". The
+    /// step's own row still names the command once the fold is open. Same
+    /// words as the web's busy line (`busy-activity.ts`).
+    var activityLabel: String {
+        switch self {
+        case .run: "Running a command"
+        case .file: "Reading a file"
+        case .edit: "Editing a file"
+        case .find: "Searching"
+        case .web: "Reading the web"
+        case .agent: "Waiting for an agent"
+        case .skill: "Loading a skill"
+        case .checklist: "Updating the plan"
+        case .mcp, .branch, .other: "Calling a tool"
         }
     }
 }

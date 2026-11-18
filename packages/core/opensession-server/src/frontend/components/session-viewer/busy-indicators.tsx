@@ -243,6 +243,7 @@ function BusyStopping({ since }: { since: number }) {
 }
 
 const getFalse = () => false;
+const THINKING: RunActivity = { kind: "thinking" };
 
 export function BusyInline({
   since,
@@ -266,14 +267,22 @@ export function BusyInline({
     liveTurnStore.getActivity,
     liveTurnStore.getNoActivity,
   );
+  const trailingThought = useSyncExternalStore(
+    liveTurnStore.subscribe,
+    liveTurnStore.hasTrailingThought,
+    liveTurnStore.hasTrailingThought,
+  );
   // Once words are visible, the stream itself and its caret are the progress
   // indicator. Keeping a second status row under a growing answer makes every
   // line wrap relocate that row, and under reduced motion those relocations are
   // intentionally instant. Collapse it once instead; stopping always remains
   // explicit even when streamed text is still present, and so do a compaction
-  // and a retry wait, which the words above cannot explain.
+  // and a retry wait, which the words above cannot explain. An open thought
+  // at the tail is not a growing stream, so the row stays and names it:
+  // "Thinking · 15m" at the end, where the run's progress is read.
   const shown =
     !hasPaintedText ||
+    trailingThought ||
     stoppingSince != null ||
     activityInterruptsStream(activity);
   return (
@@ -308,7 +317,10 @@ export function BusyInline({
         {stoppingSince != null ? (
           <BusyStopping since={stoppingSince} />
         ) : (
-          <BusyWorking since={since} activity={activity} />
+          <BusyWorking
+            since={since}
+            activity={trailingThought ? THINKING : activity}
+          />
         )}
       </div>
     </motion.div>

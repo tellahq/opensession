@@ -27,6 +27,7 @@ const { NativeVoiceAudio } = require("./native-voice-audio");
 const { VoiceAudioBridge } = require("./voice-audio-bridge");
 const { MacKeychainReview } = require("./mac-keychain-ui");
 const { LocalFolders } = require("./local-folders");
+const { LocalServer } = require("./local-server");
 const { FRAME_INSPECT_SCRIPT, captureRect } = require("./frame-inspect");
 const { FRAME_AUDIO_SCRIPT } = require("./frame-audio");
 const macKeychainReview = new MacKeychainReview({
@@ -52,6 +53,16 @@ const {
   resumableAccountUrl,
 } = require("./account-navigation");
 const packageConfig = require("../package.json").opensession || {};
+// "This Mac": the server release packed into the app's resources, run by the
+// app itself (local-server.js). A build without it simply never offers it.
+const localServer = new LocalServer({
+  releaseDir:
+    process.env.OS1_LOCAL_SERVER_DIR ||
+    (app.isPackaged
+      ? path.join(process.resourcesPath, "server")
+      : path.join(__dirname, "../build/vendor/server")),
+});
+const LOCAL_ACCOUNT_LABEL = "This Mac";
 const nativeDictation = new NativeDictation();
 const nativeVoiceAudio = new NativeVoiceAudio();
 let voiceAudioBridge = null;
@@ -161,6 +172,7 @@ let win = null;
 const appWindows = new Set();
 const windowData = new WeakMap();
 let quitting = false;
+let localServerStopped = false;
 let appReady = false;
 let pendingDeepLink = null;
 // `os://` is the deep-link scheme. `os1://` stays registered because the web
@@ -239,6 +251,8 @@ function readStoredAccounts() {
             url,
             lastUrl: resumableAccountUrl(url, account.lastUrl),
             tailscaleProfileId: profileId(account.tailscaleProfileId),
+            // The account served by the app's own server (local-server.js).
+            ...(account.local === true ? { local: true } : {}),
           },
         ];
       });
@@ -345,11 +359,122 @@ function writeStoredServer(url, addingAccount = false, accountID = null) {
     stored.accounts.push(account);
     stored.activeId = account.id;
   } else {
+    // Pointing "This Mac" at an address makes it an ordinary organization.
+    if (active.local && url !== active.url) {
+      delete active.local;
+      active.label = new URL(url).host;
+    }
     active.url = url;
     if (!active.label) active.label = new URL(url).host;
   }
   return writeStoredAccounts(stored);
 }
+
+// ---- This Mac ---------------------------------------------------------------
+// One account can be the app's own server. It runs while the app runs: started
+// at launch when that account exists, and stopped on quit.
+
+function localAccount(stored = readStoredAccounts()) {
+  return stored.accounts.find((account) => account.local) || null;
+}
+
+function isLocalAccountUrl(url, account = localAccount()) {
+  if (!account) return false;
+  try {
+    return new URL(url).origin === new URL(account.url).origin;
+  } catch {
+    return false;
+  }
+}
+
+function localServerPage(target) {
+  if (!target || target.isDestroyed()) return false;
+  return target.webContents.getURL().includes("local-server.html");
+}
+
+function localServerStatus() {
+  return {
+    available: localServer.available(),
+    added: !!localAccount(),
+    ...localServer.status(),
+  };
+}
+
+function startLocalServer(retry = false) {
+  if (quitting || !localAccount() || !localServer.available()) return;
+  // The page reports a failure and offers the retry; starting again on every
+  // navigation would loop on a server that cannot start.
+  if (
+    localServer.state !== "stopped" &&
+    !(retry && localServer.state === "failed")
+  )
+    return;
+  localServer.start().catch((err) => {
+    console.error("[local-server]", err);
+  });
+}
+
+// A page for the app's own server cannot load until that server answers. The
+// window waits on a packaged page that knows where it was going.
+function showLocalServerPage(target, next) {
+  if (!target || target.isDestroyed()) return;
+  const data = windowData.get(target);
+  if (data) data.localServerNext = next;
+  clearStallGuard(target);
+  if (!localServerPage(target))
+    target.loadFile(path.join(__dirname, "local-server.html"));
+  startLocalServer();
+}
+
+function onLocalServerState() {
+  const status = localServerStatus();
+  for (const target of appWindows) {
+    if (!localServerPage(target)) continue;
+    target.webContents.send("os1:local-server-state", status);
+  }
+  if (localServer.state !== "ready" || !status.url) return;
+  // The port is kept between launches, but it moves when something else has
+  // taken it. Every stored address follows.
+  const stored = readStoredAccounts();
+  const account = localAccount(stored);
+  if (!account) return;
+  const previous = account.url;
+  if (previous !== status.url) {
+    const moved = (url) => {
+      try {
+        const from = new URL(url);
+        const to = new URL(status.url);
+        to.pathname = from.pathname;
+        to.search = from.search;
+        to.hash = from.hash;
+        return to.toString();
+      } catch {
+        return null;
+      }
+    };
+    account.url = status.url;
+    account.lastUrl = account.lastUrl ? moved(account.lastUrl) : null;
+    writeStoredAccounts(stored);
+    if (APP_URL === previous) setServer(status.url);
+    else refreshAccountOrigins();
+    for (const target of appWindows) {
+      const data = windowData.get(target);
+      if (data?.localServerNext)
+        data.localServerNext = moved(data.localServerNext);
+    }
+  }
+  for (const target of appWindows) {
+    if (!localServerPage(target)) continue;
+    const data = windowData.get(target);
+    const next = data?.localServerNext || status.url;
+    if (data) data.localServerNext = null;
+    loadApp(isLocalAccountUrl(next, account) ? next : status.url, target);
+  }
+  const hidden = backgroundAccountWindows.get(account.id);
+  if (hidden && !hidden.isDestroyed())
+    hidden.loadURL(account.lastUrl || account.url).catch(() => {});
+}
+localServer.on("state", onLocalServerState);
 
 // A profile that has been used before answered this question by working, so an
 // update that adds the question must not put it to everyone whose app already
@@ -459,6 +584,9 @@ function showSetup(
       // A later visit can be called off; the first run has nothing to go back
       // to.
       mode: addingAccount ? "add" : currentURL ? "change" : "first-run",
+      ...(isLocalAccountUrl(currentURL) && !addingAccount
+        ? { local: "1" }
+        : {}),
     },
   });
 }
@@ -509,10 +637,17 @@ async function promptRestartToUpdate() {
     defaultId: 0,
     cancelId: 1,
   });
-  if (response === 0) {
-    quitting = true;
-    autoUpdater.quitAndInstall();
-  }
+  if (response === 0) void quitAndInstallUpdate();
+}
+
+// quitAndInstall closes every window; flip `quitting` first so the last
+// window's close-to-hide behavior does not cancel the relaunch. The app's own
+// server is stopped before the installer replaces the bundle it runs from.
+async function quitAndInstallUpdate() {
+  quitting = true;
+  localServerStopped = true;
+  await localServer.stop().catch(() => {});
+  autoUpdater.quitAndInstall();
 }
 
 function checkForUpdatesFromMenu() {
@@ -929,6 +1064,13 @@ function showWindow(target = activeWindow()) {
 
 function showStatusPage(target = activeWindow()) {
   if (!target || target.isDestroyed()) return;
+  // "Can't reach the server" is the wrong thing to say about a server this
+  // app is starting itself.
+  const accountURL = accountUrlForWindow(target);
+  if (isLocalAccountUrl(accountURL) && localServer.state !== "ready") {
+    showLocalServerPage(target, accountURL);
+    return;
+  }
   clearStallGuard(target);
   target.loadFile(path.join(__dirname, "offline.html"), {
     query: { url: accountUrlForWindow(target) },
@@ -971,6 +1113,10 @@ function armStallGuard(target) {
 // navigation always has a way back.
 function loadApp(url, target = activeWindow()) {
   if (!target || target.isDestroyed()) return;
+  if (isLocalAccountUrl(url) && localServer.state !== "ready") {
+    showLocalServerPage(target, url);
+    return;
+  }
   armStallGuard(target);
   target.loadURL(url);
 }
@@ -1038,6 +1184,7 @@ function createWindow(initialURL = null, initialAccountID = null) {
     addingAccount: false,
     setupReturnDestination: "app",
     accountId: account?.id || null,
+    localServerNext: null,
   };
   appWindows.add(createdWindow);
   windowData.set(createdWindow, data);
@@ -1244,7 +1391,8 @@ async function refreshAccountLabel(accountID, webContents) {
     const account = stored.accounts.find(
       (candidate) => candidate.id === accountID,
     );
-    if (!account || account.label === name.trim()) return;
+    // "This Mac" names where it runs, which no organization name does.
+    if (!account || account.local || account.label === name.trim()) return;
     account.label = name.trim();
     if (writeStoredAccounts(stored)) buildAppMenu();
   } catch {}
@@ -1298,6 +1446,8 @@ function syncBackgroundAccountWindows() {
       refreshAccountLabel(account.id, accountWindow.webContents);
     });
     backgroundAccountWindows.set(account.id, accountWindow);
+    // The app's own server loads here once it answers (onLocalServerState).
+    if (account.local && localServer.state !== "ready") continue;
     accountWindow.loadURL(account.lastUrl || account.url).catch(() => {});
   }
 }
@@ -1762,6 +1912,9 @@ app.whenReady().then(async () => {
     refreshAccountOrigins();
     syncBackgroundAccountWindows();
     buildAppMenu();
+    // Nothing is left to serve once "This Mac" is removed. Its sessions and
+    // folders stay on disk for when it is added again.
+    if (account.local) void localServer.stop();
     return { ok: true };
   });
   ipcMain.on("os1:organizations-manage", (e) => {
@@ -1833,10 +1986,7 @@ app.whenReady().then(async () => {
   ipcMain.on("os1:update-install", (e) => {
     if (!inWindow(e.senderFrame?.url ?? "")) return;
     if (updateState.state !== "downloaded") return;
-    // quitAndInstall closes every window; flip `quitting` first so the last
-    // window's close-to-hide behavior does not cancel the relaunch.
-    quitting = true;
-    autoUpdater.quitAndInstall();
+    void quitAndInstallUpdate();
   });
 
   // The shell's own file:// pages are the only callers allowed here. The app
@@ -1846,7 +1996,71 @@ app.whenReady().then(async () => {
 
   ipcMain.on("os1:server-open", (e) => {
     const target = eventWindow(e);
-    if (fromLocalPage(e, target, "offline.html")) showServerPicker(target);
+    if (
+      fromLocalPage(e, target, "offline.html") ||
+      fromLocalPage(e, target, "local-server.html")
+    )
+      showServerPicker(target);
+  });
+
+  // "This Mac". Only the shell's own pages may ask: a server this window
+  // loads must not be able to start, stop or inspect the one on this machine.
+  ipcMain.handle("os1:local-server-status", (e) =>
+    fromShellPage(e) ? localServerStatus() : null,
+  );
+  ipcMain.on("os1:local-server-retry", (e) => {
+    if (!fromLocalPage(e, eventWindow(e), "local-server.html")) return;
+    startLocalServer(true);
+  });
+  ipcMain.on("os1:local-server-logs", (e) => {
+    if (!fromLocalPage(e, eventWindow(e), "local-server.html")) return;
+    void shell.openPath(localServer.logDir);
+  });
+  ipcMain.handle("os1:local-server-use", async (e) => {
+    const target = eventWindow(e);
+    if (!fromLocalPage(e, target, "setup.html")) return { ok: false };
+    if (!localServer.available()) {
+      return {
+        ok: false,
+        error: "This build of the app does not include the local server.",
+      };
+    }
+    let url;
+    try {
+      url = await localServer.url();
+    } catch {
+      return { ok: false, error: "Couldn't set up a server on this Mac." };
+    }
+    // The page may have been cancelled while the port was being chosen.
+    if (!fromLocalPage(e, target, "setup.html")) return { ok: false };
+    const stored = readStoredAccounts();
+    const firstRun = !stored.accounts.length;
+    let account = localAccount(stored);
+    if (!account) {
+      account = {
+        id: crypto.randomUUID(),
+        label: LOCAL_ACCOUNT_LABEL,
+        url,
+        local: true,
+      };
+      stored.accounts.push(account);
+    }
+    if (firstRun) stored.activeId = account.id;
+    if (!writeStoredAccounts(stored))
+      return { ok: false, error: "Couldn't save that choice." };
+    if (firstRun) {
+      setServer(account.url);
+      const data = windowData.get(target);
+      if (data) data.accountId = account.id;
+      initAutoUpdate();
+      buildAppMenu();
+      if (!flushPendingDeepLink()) openHome(target);
+      return { ok: true };
+    }
+    refreshAccountOrigins();
+    // Let invoke resolve before navigation destroys its renderer.
+    setImmediate(() => switchAccount(account.id, null, target, true));
+    return { ok: true };
   });
   ipcMain.on("os1:server-cancel", (e) => {
     if (!fromShellPage(e)) return;
@@ -1901,6 +2115,7 @@ app.whenReady().then(async () => {
   buildAppMenu();
 
   appReady = true;
+  startLocalServer();
   createWindow(activeAccountResumeUrl());
   syncBackgroundAccountWindows();
 
@@ -1939,7 +2154,20 @@ app.on("continue-activity", (e, _type, _userInfo, details) => {
   }
 });
 
-app.on("before-quit", () => {
+// The app's own server ends with the app. Quitting waits for it, briefly, so
+// a turn in flight is recorded as interrupted rather than cut off mid-write.
+app.on("before-quit", (event) => {
+  if (!localServerStopped && localServer.state !== "stopped") {
+    event.preventDefault();
+    localServerStopped = true;
+    rememberWindowAccountUrl(activeWindow());
+    quitting = true;
+    localServer
+      .stop()
+      .catch(() => {})
+      .finally(() => app.quit());
+    return;
+  }
   rememberWindowAccountUrl(activeWindow());
   quitting = true;
   nativeDictation.cancel();
@@ -1947,6 +2175,10 @@ app.on("before-quit", () => {
   else nativeVoiceAudio.stopAll();
   saveWindowState();
 });
+
+// An exit that skipped the wait above (a crash handler, a forced relaunch)
+// still signals the server instead of leaving it running.
+app.on("will-quit", () => localServer.stopNow());
 
 app.on("window-all-closed", () => {
   // macOS convention: stay in the dock until Cmd+Q.

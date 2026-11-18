@@ -996,7 +996,7 @@ describe("renderMarkdown PR mentions", () => {
     expect(renderMarkdown("Merged #5528.", fusion)).toContain('class="pr-ref"');
   });
 
-  it("leaves the conversation's own PR as plain text", () => {
+  it("links the conversation's own PR plainly, without a chip", () => {
     setKnownRepos([{ id: "tella-fusion", ghRepo: "tellahq/tella-fusion" }]);
     const own = { ...fusion, ownPrs: [{ repo: "tella-fusion", number: 5528 }] };
     const html = renderMarkdown(
@@ -1004,16 +1004,20 @@ describe("renderMarkdown PR mentions", () => {
         "https://github.com/tellahq/tella-fusion/pull/5528 and #5832.",
       own,
     );
-    expect(html).not.toContain('data-pr-number="5528"');
     expect(html).toContain(
-      "Fix the checks on PR #5528, then tella-fusion#5528",
+      '<a href="/pr/tella-fusion/5528" data-pr-repo="tella-fusion" data-pr-number="5528" data-pr-gh="tellahq/tella-fusion"',
     );
-    expect(html).toContain("PR #5528 and ");
-    // Any other PR is still somewhere to go.
-    expect(html).toContain('href="/pr/tella-fusion/5832"');
+    expect(html).toContain("PR <a ");
+    expect(html).toContain(">#5528</a>, then <a ");
+    expect(html).toContain(">tella-fusion#5528</a>");
+    expect(html).not.toMatch(
+      /class="pr-ref[^"]*" data-pr-repo="tella-fusion" data-pr-number="5528"/,
+    );
+    // Any other PR keeps its chip.
+    expect(html).toMatch(/class="pr-ref"[^>]*data-pr-number="5832"/);
     // The same text in another conversation still chips.
-    expect(renderMarkdown("Fix the checks on PR #5528", fusion)).toContain(
-      'href="/pr/tella-fusion/5528"',
+    expect(renderMarkdown("Fix the checks on PR #5528", fusion)).toMatch(
+      /class="pr-ref"[^>]*data-pr-number="5528"/,
     );
   });
 

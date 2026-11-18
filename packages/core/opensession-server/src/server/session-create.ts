@@ -1795,16 +1795,11 @@ export async function openCreatedSession(
       // reader the workspace was up while it was still being assembled.
       if ((spec.needsWorktree && spec.materializeWorktree) || pendingAttach) {
         try {
-          if (spec.needsWorktree && spec.materializeWorktree) {
+          // Deps install runs in the background (worktree.ts). Setup is
+          // plumbing, so it never becomes a line in the chat: the
+          // workspace_status frame below is the only signal viewers need.
+          if (spec.needsWorktree && spec.materializeWorktree)
             await spec.materializeWorktree();
-            // Deps install runs in the background (worktree.ts) — say
-            // so, since builds/tests may not be ready for a beat.
-            io.emit({
-              type: "notice",
-              message:
-                "Workspace ready — installing dependencies in the background.",
-            });
-          }
           if (pendingAttach)
             attachedRepoIds = await attachCreateRepos(
               bksId,

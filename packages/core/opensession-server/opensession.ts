@@ -141,6 +141,7 @@ import { getAllSessions } from "./src/server/sessions";
 import {
   crossSiteViolation,
   ensureAutomationWebSession,
+  foreignHostViolation,
   keypadBearerAuthorized,
   resolveWebAuth,
   type WebIdentity,
@@ -492,6 +493,17 @@ const server: import("bun").Server<WSClientData> = hotServe({
     // that keeps flowing, so each one runs the O(1) staleness check; a
     // confirmed poisoning self-restarts the process (run-ws.ts tripwire).
     timerPoisonRequestCheck();
+    // A machine-local server refuses any request addressed to a name that
+    // is not this machine (web-auth.ts foreignHostViolation).
+    {
+      const violation = foreignHostViolation(req);
+      if (violation) {
+        return Response.json(
+          { error: `Request rejected (${violation})` },
+          { status: 403 },
+        );
+      }
+    }
     const url = new URL(req.url);
     // The bare domain root is the ONLY public URL form (os.tella.dev,
     // 2026-07-10 — prefixes dropped) and handlers below match bare

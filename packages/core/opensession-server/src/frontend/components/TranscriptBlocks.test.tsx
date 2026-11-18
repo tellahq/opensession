@@ -412,8 +412,8 @@ describe("TranscriptBlocks compact tool runs", () => {
       );
       expect(html).toContain(">Working</span>");
       expect(html).not.toMatch(WORKED_TITLE);
-      expect(html).toContain("cargo test --release zz_timing");
-      expect(html.indexOf("cargo test")).toBeLessThan(
+      expect(html).toContain("Ran 1 command");
+      expect(html.indexOf("Ran 1 command")).toBeLessThan(
         html.indexOf("Are you on option B?"),
       );
     });
@@ -565,6 +565,23 @@ describe("TranscriptBlocks compact tool runs", () => {
     // One group, timed across the compaction from its first step to its last.
     expect(html.match(WORKED_TITLES)).toEqual([">Worked for 3s</span>"]);
     expect(html).toContain("The repository is clean.");
+  });
+
+  test("leaves the duration to the Worked fold, not the answer's footer too", () => {
+    setTurnPrefs(null);
+    const footerDuration = /pl-1 text-meta font-medium[^>]*>[^<]+</;
+    const answer: TranscriptEntry = {
+      id: "answer",
+      type: "assistant",
+      content: "The repository is clean.",
+      timestamp: "2026-08-13T06:03:07Z",
+    };
+    const worked = renderToStaticMarkup(
+      <TranscriptBlocks entries={[...toolEntries, answer]} />,
+    );
+    expect(worked).toContain("Worked for");
+    expect(worked).toContain('aria-label="Copy message"');
+    expect(worked).not.toMatch(footerDuration);
   });
 
   test("keeps a compaction between turns as its own line", () => {
@@ -812,9 +829,8 @@ describe("TranscriptBlocks compact tool runs", () => {
       <TranscriptBlocks live entries={toolEntries} />,
     );
 
-    // Nothing to disclose, so no grouped row and no indent under one.
+    // Nothing to disclose, so no grouped row.
     expect(html).not.toContain('data-tool-run="true"');
-    expect(html).not.toContain('class="ml-3"');
     expect(html).toContain("git status");
     expect(html).toContain("package.json");
     setTurnPrefs(null);
@@ -1098,7 +1114,8 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
     expect(running).toContain('data-narration=""');
     expect(running).toContain('data-tool-run="true"');
     expect(running).not.toContain("git status");
-    expect(running).toContain("bun test");
+    expect(running).not.toContain("bun test");
+    expect(running).toContain("Ran 1 command, read 1 file");
 
     const settled = renderToStaticMarkup(
       <TranscriptBlocks entries={narratedTurn} />,
@@ -2377,7 +2394,7 @@ describe("TranscriptBlocks progress rows", () => {
     const open = renderToStaticMarkup(
       <TranscriptBlocks entries={work} reviewLoopsOpen />,
     );
-    expect(open).toContain("check-build");
+    expect(open).toContain("Ran 1 command");
     expect(open).toContain('aria-label="Earlier updates"');
   });
 
@@ -2413,7 +2430,7 @@ describe("TranscriptBlocks progress rows", () => {
     );
     expect(open).toContain("CI: Running");
     expect(open).toContain("Deployment: Running");
-    expect(open).toContain("deploy status");
+    expect(open).toContain("Ran 1 command");
   });
 
   test("an answered task folds the same way across indexed ranges", () => {

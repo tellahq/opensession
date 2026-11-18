@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'none'"
+    />
+    <title>Open Session</title>
+    <link rel="stylesheet" href="shell.css" />
+    <script src="local-server-page.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <img class="mark" src="mark.png" width="76" height="76" alt="" />
+      <h1 id="title">Starting Open Session</h1>
+      <p class="message" id="message">
+        Getting the server on this Mac ready. The first start can take a minute.
+      </p>
+      <div class="actions" id="actions" hidden>
+        <button class="button" id="retry" type="button">Try again</button>
+        <button class="button ghost" id="logs" type="button">Show logs</button>
+        <button class="button ghost" id="change" type="button">
+          Switch server
+        </button>
+      </div>
+      <p id="status" role="status" aria-live="polite"></p>
+    </main>
+  </body>
+</html>

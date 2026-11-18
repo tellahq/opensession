@@ -23,6 +23,7 @@ import { reviewTeamDirectory } from "./people";
 const ENV_KEYS = [
   "OPENSESSION_CONFIG",
   "OPENSESSION_WORKTREES_DIR",
+  "OPENSESSION_REPOS_DIR",
   "OPENSESSION_CLAUDE_BIN",
   "OPENSESSION_PI_BIN",
   "OPENSESSION_MCP_CONFIG",
@@ -140,6 +141,7 @@ describe("config loader", () => {
     expect(paths.worktreesDir).toBe(
       `${process.env.HOME}/.opensession/worktrees`,
     );
+    expect(paths.reposDir).toBe(`${process.env.HOME}/checkouts`);
 
     const identity = configuredIdentity();
     expect(identity).toEqual({
@@ -260,6 +262,7 @@ describe("config loader", () => {
       JSON.stringify({
         paths: {
           worktreesDir: "/from-config/worktrees",
+          reposDir: "/from-config/repos",
           claudeBin: "/from-config/claude",
         },
         repos: { app: { repo: "/from-config/app" } },
@@ -267,14 +270,18 @@ describe("config loader", () => {
     );
     process.env.OPENSESSION_WORKTREES_DIR = "/from-env/worktrees";
     process.env.OPENSESSION_CLAUDE_BIN = "/from-env/claude";
+    process.env.OPENSESSION_REPOS_DIR = "/from-env/repos";
 
     expect(configuredPaths().worktreesDir).toBe("/from-env/worktrees");
+    expect(configuredPaths().reposDir).toBe("/from-env/repos");
     expect(configuredPaths().claudeBin).toBe("/from-env/claude");
     expect(configuredRepos().app.repo).toBe("/from-config/app");
 
     // …and the config value applies once the env var is gone.
     delete process.env.OPENSESSION_WORKTREES_DIR;
+    delete process.env.OPENSESSION_REPOS_DIR;
     expect(configuredPaths().worktreesDir).toBe("/from-config/worktrees");
+    expect(configuredPaths().reposDir).toBe("/from-config/repos");
     expect(configuredRepos().app.repo).toBe("/from-config/app");
   });
 

@@ -629,11 +629,13 @@ enum TranscriptGrouping {
                 text: final.text,
                 timestamp: end,
                 model: final.model,
-                duration: duration(from: start, to: end),
+                // The fold above the answer already reads "Worked for 25m".
+                duration: folded.isEmpty ? duration(from: start, to: end) : nil,
                 files: mergeTouchedFiles(tools),
                 assets: writtenAssets(tools)
             )
-            if !footer.isEmpty { blocks.append(.footer(footer)) }
+            // A turn with work keeps its copy and ⋯ row without the duration.
+            if !footer.isEmpty || !folded.isEmpty { blocks.append(.footer(footer)) }
         }
 
         func flush(isTrailing: Bool) {
@@ -1280,9 +1282,10 @@ enum TranscriptGrouping {
         let start = items.first.flatMap(startTimestamp)
         let end = items.last.flatMap(endTimestamp)
         var preview: String?
-        // Name the step still running, else the latest one.
+        // Say what the step still running is doing, else the latest one, in
+        // words rather than as the raw tool call.
         if isLive, let step = tools.last(where: \.isPending) ?? tools.last {
-            preview = step.presentation.stepLabel
+            preview = step.presentation.family.activityLabel
         }
         return WorkTurn(
             id: firstId,

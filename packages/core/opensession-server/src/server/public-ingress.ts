@@ -225,6 +225,14 @@ export interface PublicIngressHandle {
   stop(closeActive?: boolean): void;
 }
 
+/** A launcher that picks this instance's ports itself (the desktop app's
+ * local server) names the listener's port here, so two instances on one
+ * machine never contend for the default. */
+function publicIngressPortFromEnv(): number | undefined {
+  const port = Number(process.env.OPENSESSION_PUBLIC_INGRESS_PORT);
+  return Number.isInteger(port) && port > 0 && port < 65536 ? port : undefined;
+}
+
 /**
  * Start (or reuse) the public ingress listener per the publicIngress config
  * block. Returns null when disabled. `overrides` exist for the test/verify
@@ -242,7 +250,7 @@ export function startPublicIngress(overrides?: {
   const existing = g.__publicIngressServer as PublicIngressHandle | undefined;
   if (existing) return existing;
   const server = Bun.serve({
-    port: overrides?.port ?? cfg.port,
+    port: overrides?.port ?? publicIngressPortFromEnv() ?? cfg.port,
     hostname: overrides?.host ?? cfg.host,
     fetch(req, srv) {
       return live().ingressFetch(req, srv as unknown as IngressServer);

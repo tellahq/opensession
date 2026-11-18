@@ -210,7 +210,7 @@ export function ComposerAgents({ runs, subagents, plan, onOpenPanel }: Props) {
     // states: open and close are the same click, in the same place.
     <div
       className={cn(
-        "relative -mb-3.5 flex w-full flex-col gap-2.5 rounded-t-[var(--composer-radius)] border-x border-t bg-[color-mix(in_srgb,var(--bg-panel)_80%,var(--composer-surface))] px-3.5 pt-2.5 pb-[22px] text-label font-medium text-fg",
+        "relative -mb-3.5 flex w-full flex-col gap-2.5 rounded-t-[var(--composer-radius)] border-x border-t bg-[var(--composer-flap-surface)] px-3.5 pt-2.5 pb-[22px] text-label font-medium text-fg",
         composerFlapBorder,
       )}
       data-open={open ? "" : undefined}

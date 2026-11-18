@@ -59,7 +59,8 @@ export const TURN_FOOTER_LIFT = "-mt-2.5";
 interface Props {
   /** The turn's final answer entry — copy copies its markdown, fork forks from it. */
   entry: TranscriptEntry;
-  durationMs: number;
+  /** Null when the work fold above the answer already shows it. */
+  durationMs: number | null;
   /** Where the caller puts the row. TURN_FOOTER_LIFT when nothing contains it. */
   className?: string;
   /** Files the turn's tool calls wrote, merged per path in first-touch order. */
@@ -99,7 +100,7 @@ export const TurnFooter = function TurnFooter({
     });
   };
 
-  const duration = formatDuration(durationMs);
+  const duration = durationMs === null ? null : formatDuration(durationMs);
 
   return (
     <div
@@ -284,7 +285,7 @@ function turnFooterPropsEqual(prev: Props, next: Props): boolean {
 }
 
 const BTN =
-  "flex size-6 flex-shrink-0 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 text-faint hover:bg-hover hover:text-dim";
+  "flex size-6 flex-shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-faint hover:bg-hover hover:text-dim";
 
 /** The whole row is always on the page, and muted rather than hidden: an
  * action you can see is one you know exists, and `text-faint` on a transparent

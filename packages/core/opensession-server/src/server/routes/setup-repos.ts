@@ -27,6 +27,7 @@ import { basename, isAbsolute, join } from "path";
 import { audit } from "../audit";
 import {
   codeStorageConfig,
+  configuredPaths,
   configuredRepos,
   configuredSelfDev,
   defaultRepo,
@@ -60,7 +61,6 @@ import {
   githubCredentialHelperCommand,
   installedGithubCredentialHelperCommand,
 } from "../github-git-credential";
-import { homeDir } from "../paths";
 import { fetchWithTimeout } from "../shared/fetch-with-timeout";
 import { validNewRepoName } from "../../shared/repo-name";
 import { shellSafeDefaultBranch } from "../repo-branch";
@@ -507,7 +507,7 @@ async function cloneGithubRepo(
 }
 
 function checkoutsRoot(): string {
-  return `${homeDir()}/checkouts`;
+  return configuredPaths().reposDir;
 }
 
 function setupRepoError(message: string, status: number): Error {

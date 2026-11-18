@@ -201,13 +201,17 @@ describe("buildRunInstructions", () => {
     // Compact reporting and the opt-in progress line add ~700 characters.
     // Leaving CI run state to the builds flap adds ~140: agents posted
     // "CI: Running" lines that repeated the live runs above the input.
-    expect(prompt.length).toBeLessThan(5_800);
+    // Saying what changed in a sentence or two adds ~290: final replies
+    // restated the reported problem and narrated what the proof showed.
+    expect(prompt.length).toBeLessThan(6_100);
   });
 
   test("prefers concise outcomes without hiding blockers or verification limits", () => {
     const prompt = buildRunInstructions({ isAsk: false, hasSession: true });
     expect(prompt).toContain("Lead with the outcome, not a work log");
     expect(prompt).toContain("follow-ups report only what changed");
+    expect(prompt).toContain("do not restate the problem they reported");
+    expect(prompt).toContain("no pointers to proof");
     expect(prompt).toContain(
       "verification limits and required decisions explicit",
     );

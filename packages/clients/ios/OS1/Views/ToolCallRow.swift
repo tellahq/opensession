@@ -19,12 +19,11 @@ struct ToolCallRow: View {
     /// Installed by the iOS session screen; absent everywhere else, which is
     /// what lets the cover offer "Show in Assets" when a stack is available.
     @Environment(\.openPanel) private var openPanel
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private var presentation: ToolPresentation { item.presentation }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 4) {
             Button {
                 withAnimation(.snappy(duration: 0.2, extraBounce: 0)) {
                     state.toggle()
@@ -36,7 +35,9 @@ struct ToolCallRow: View {
 
             if state.expanded {
                 detailBody
-                    .padding(.leading, 22)
+                    // Under the name, not the glyph, as on the web.
+                    .padding(.leading, ToolRowMetrics.textInset)
+                    .padding(.bottom, 6)
                     .transition(.opacity)
             }
         }
@@ -109,39 +110,30 @@ struct ToolCallRow: View {
     // MARK: - Summary line
 
     private var summaryRow: some View {
-        HStack(spacing: 7) {
+        HStack(alignment: .firstTextBaseline, spacing: ToolRowMetrics.iconSpacing) {
             // The glyph doubles as the disclosure control: it turns into a
             // chevron when open, which costs no width on a phone.
-            Image(systemName: state.expanded ? "chevron.down" : presentation.family.symbol)
-                .font(.system(size: 11))
-                .foregroundStyle(
-                    item.isError ? OS1VisualStyle.red : OS1VisualStyle.textFaint
-                )
-                .frame(width: 15)
+            ToolRowIcon(
+                symbol: state.expanded ? "chevron.down" : presentation.family.symbol,
+                tint: item.isError ? OS1VisualStyle.red : OS1VisualStyle.textFaint
+            )
 
-            // "server · tool", the way the web writes it. The server used to
-            // wear a filled pill, but `panel` is `.tertiarySystemBackground` —
-            // pure white in light appearance — so it read as a white box
-            // punched into the row rather than as part of the call's name.
-            //
-            // Priority rather than `fixedSize`: the name outranks the summary
-            // and takes its width first, but it still has to yield to the row.
-            // An MCP call carries its server too — "opensession-walkthrough ·
-            // publish_walkthrough" measures 340pt against a 344pt row on a
-            // phone — and rigid at that width it made the row wider than the
-            // transcript. A vertical `ScrollView` does not clamp content it
-            // can't fit, it CENTERS it, so that one row dragged every
-            // paragraph in the turn off both edges and took the margin with
-            // it.
-            nameText
+            // One phrase, "Read ToolCallRow.swift" or a command, in one
+            // gray: see `ToolRowTitle`. It yields to the trailing chips and
+            // counts rather than pushing the row wider than the transcript;
+            // a vertical ScrollView centres content it can't fit, which
+            // dragged every paragraph in the turn off both edges.
+            Text(rowTitle.title)
+                .font(.subheadline)
+                .foregroundStyle(item.isError ? OS1VisualStyle.redInk : OS1VisualStyle.textDim)
                 .lineLimit(1)
-                // The tool is the half worth keeping; the server prefix
-                // repeats down the fold.
-                .truncationMode(.middle)
                 .layoutPriority(1)
 
-            if !presentation.summary.isEmpty {
-                summaryText
+            if let detail = rowTitle.detail {
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(OS1VisualStyle.textFaint)
+                    .lineLimit(1)
             }
 
             Spacer(minLength: 4)
@@ -172,7 +164,7 @@ struct ToolCallRow: View {
             }
 
             if let stats = presentation.lineStats {
-                LineStatsView(stats: stats)
+                LineStatsView(stats: stats, font: ToolRowMetrics.metaFont)
             }
 
             // What the call cost, in the trailing meta the web puts it in.
@@ -180,7 +172,7 @@ struct ToolCallRow: View {
             // information, so it stays off the row (same floor as the viewer).
             if let label = item.durationLabel {
                 Text(label)
-                    .font(.caption2)
+                    .font(.caption)
                     .monospacedDigit()
                     .foregroundStyle(OS1VisualStyle.textFaint)
                     .fixedSize()
@@ -188,51 +180,19 @@ struct ToolCallRow: View {
 
             statusGlyph
         }
-        .padding(.vertical, 2)
-        .contentShape(Rectangle())
+        .toolRowFrame()
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(presentation.displayName). \(presentation.summary)")
+        .accessibilityLabel(presentation.stepLabel)
     }
 
-    private var nameText: some View {
-        let fullParts = presentation.labelParts
-        let parts = horizontalSizeClass == .compact
-            && fullParts.first == "Open Session"
-            && fullParts.count > 2
-            ? Array(fullParts.dropFirst())
-            : fullParts
-        return HStack(spacing: 4) {
-            ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
-                if index > 0 {
-                    Text("·")
-                        .font(.subheadline)
-                        .foregroundStyle(OS1VisualStyle.textFaint)
-                        .fixedSize()
-                }
-                let isContext = index < parts.count - 1
-                Text(part)
-                    .font(.subheadline.weight(isContext ? .regular : .medium))
-                    .foregroundStyle(
-                        isContext ? OS1VisualStyle.textFaint : OS1VisualStyle.textDim
-                    )
-                    .fixedSize(horizontal: isContext, vertical: false)
-            }
-        }
-    }
-
-    private var summaryText: some View {
-        ToolSummaryText(
-            summary: presentation.summary,
-            isPath: presentation.summaryIsPath,
-            isError: item.isError
-        )
-    }
+    private var rowTitle: ToolRowTitle { presentation.rowTitle }
 
     @ViewBuilder
     private var statusGlyph: some View {
         if item.isPending {
             ProgressView()
                 .controlSize(.mini)
+                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
         } else if item.isError {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.caption2)
@@ -245,6 +205,10 @@ struct ToolCallRow: View {
     @ViewBuilder
     private var detailBody: some View {
         VStack(alignment: .leading, spacing: 8) {
+            // The row names a file by itself; where it lives is here.
+            if presentation.summaryIsPath, presentation.summary.contains("/") {
+                ToolSummaryText(summary: presentation.summary, isPath: true)
+            }
             if let detail {
                 if detail.inputKind != .none {
                     let inputLines = ToolCodeMetrics.lines(detail.inputText)
@@ -312,9 +276,64 @@ struct ToolCallRow: View {
     }
 }
 
+/// The shared geometry of a work fold's rows: a tool call and a grouped run
+/// put their glyph in the same column and their name at the same inset, so
+/// a run opened under a call lines up with it.
+enum ToolRowMetrics {
+    /// The glyph column. Wide enough for the broadest family symbol at
+    /// footnote size, so names never shift between a pencil and a terminal.
+    static let iconWidth: CGFloat = 18
+    static let iconSpacing: CGFloat = 8
+    /// Where a row's name starts, and so where its opened body starts.
+    static let textInset: CGFloat = iconWidth + iconSpacing
+    /// The calls of an opened run step in this far: enough to read as the
+    /// run's own, without spending a phone's width on a deep indent.
+    static let nestedIndent: CGFloat = 12
+    /// Rows carry their own height, so stacking adds nothing between them.
+    static let rowSpacing: CGFloat = 0
+    /// A row's ± counts, at the summary's size so the two read as one line.
+    static let metaFont: Font = .footnote.weight(.medium)
+}
+
+/// A fold row's glyph. Built the same way everywhere it appears, so a row of
+/// mixed families reads as one column: a `Text`-wrapped symbol takes the
+/// row's text baseline, and footnote size scales with Dynamic Type. The
+/// chevron that replaces it on an open row is drawn smaller and heavier,
+/// as a disclosure mark is, so it does not outweigh the glyphs around it.
+struct ToolRowIcon: View {
+    let symbol: String
+    var tint: Color = OS1VisualStyle.textFaint
+
+    var body: some View {
+        Text(Image(systemName: symbol))
+            .font(symbol.hasPrefix("chevron") ? Font.caption2.weight(.semibold) : Font.footnote)
+            .foregroundStyle(tint)
+            .frame(width: ToolRowMetrics.iconWidth)
+            .accessibilityHidden(true)
+    }
+}
+
+extension View {
+    /// One fold row's height and hit area. The rows sit tight, as a list of
+    /// steps, and the hit area reaches a little past each edge so a tap
+    /// between two rows still lands on one.
+    func toolRowFrame() -> some View {
+        self
+            .padding(.vertical, 3)
+            #if os(iOS)
+            .frame(minHeight: 28)
+            #endif
+            .contentShape(Rectangle().inset(by: -2))
+    }
+}
+
 /// What a call is doing, on the row's own line. A path's directory dims, and
 /// middle truncation keeps both its beginning and filename visible only when
 /// the full path cannot fit.
+///
+/// The system font, one step under the name, as the web writes it. It used
+/// to be monospaced caption, which at that size ran wide and thin, fitted a
+/// third less of a command on a phone, and made every row a second typeface.
 struct ToolSummaryText: View {
     let summary: String
     let isPath: Bool
@@ -334,7 +353,7 @@ struct ToolSummaryText: View {
                     )
             }
         }
-        .font(.system(.caption, design: .monospaced))
+        .font(.footnote)
         .lineLimit(1)
         .truncationMode(isPath ? .middle : .tail)
     }

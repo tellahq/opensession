@@ -164,6 +164,20 @@ contextBridge.exposeInMainWorld("os1", {
     probe: (url) => ipcRenderer.invoke("os1:server-probe", url),
     save: (url) => ipcRenderer.invoke("os1:server-save", url),
   },
+  // "This Mac": the server the app runs itself. The shell's own pages only;
+  // main.js refuses these from any page a server supplies.
+  localServer: {
+    status: () => ipcRenderer.invoke("os1:local-server-status"),
+    use: () => ipcRenderer.invoke("os1:local-server-use"),
+    retry: () => ipcRenderer.send("os1:local-server-retry"),
+    logs: () => ipcRenderer.send("os1:local-server-logs"),
+    onState: (cb) => {
+      const listener = (_event, state) => cb(state);
+      ipcRenderer.on("os1:local-server-state", listener);
+      return () =>
+        ipcRenderer.removeListener("os1:local-server-state", listener);
+    },
+  },
   // App auto-update (Squirrel.Mac, driven by main.js). `onState(cb)` reports
   // the current state immediately and again on every change, and returns an
   // unsubscribe. States: idle | available (= downloading) | downloaded.

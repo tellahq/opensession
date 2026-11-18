@@ -143,6 +143,13 @@
 	   pair — see the light block. */
   --composer-surface: var(--control-surface);
   --composer-border: var(--border);
+  /* The fill of the flaps that tuck under the composer (queue, run status,
+	   builds, the Next tab): a step dimmer than the box in front of them. */
+  --composer-flap-surface: color-mix(
+    in srgb,
+    var(--bg-panel) 80%,
+    var(--composer-surface)
+  );
   --composer-shadow:
     0 2px 6px rgba(0, 0, 0, 0.16), 0 14px 36px rgba(0, 0, 0, 0.2);
   /* The composer box's corner. It lives here, not on .composer, because the
@@ -550,6 +557,10 @@ html[data-theme="light"] {
 	   front of them, so the thing on top looked like the thing behind. */
   --composer-surface: #ffffff;
   --composer-border: #dcdcdc;
+  /* Near-white: the 80% panel mix (~#f3f3f3) read as a grey slab on the
+	   white page. Pure white would merge the flap into the box in front of
+	   it, so keep just enough tint to read as the layer behind. */
+  --composer-flap-surface: #fafafa;
   /* A hover card is the composer's case again: a big floating box, and the
 	   ramp's "step away from the page" (darker in light) turns it into a grey
 	   slab dropped on white — the same greyed-out signal, and it drags every

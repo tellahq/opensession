@@ -97,6 +97,10 @@ export class LiveTurnStore {
   /** The phase the engine last reported for the running turn. Held beside the
    * snapshot rather than in it: a phase change must not repaint the bubble. */
   private activity: RunActivity | null = null;
+  /** Open thoughts the live turn currently ends on. While one is on screen
+   * the turn-level row below names the phase "Thinking", and the thought
+   * drops its own shimmering label, so the status is said once, at the end. */
+  private thoughtClaims = 0;
 
   constructor() {
     startSessionPerfObservers();
@@ -116,6 +120,21 @@ export class LiveTurnStore {
   textLength = () => this.buffer.text.length;
   getActivity = () => this.activity;
   getNoActivity = () => null;
+  hasTrailingThought = () => this.thoughtClaims > 0;
+
+  /** A visible open thought is the live turn's tail. Returns the release;
+   * claims count, so two overlapping rows cannot strand it. */
+  claimTrailingThought(): () => void {
+    this.thoughtClaims += 1;
+    if (this.thoughtClaims === 1) this.emit();
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.thoughtClaims -= 1;
+      if (this.thoughtClaims === 0) this.emit();
+    };
+  }
 
   setActivity(activity: RunActivity | null | undefined) {
     const next = activity ?? null;

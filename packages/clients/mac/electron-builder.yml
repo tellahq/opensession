@@ -25,6 +25,9 @@ directories:
   buildResources: build
   output: dist
 beforePack: scripts/before-pack.js
+# Packs the server for "This Mac" into the app's resources when the build was
+# given one (OS1_LOCAL_SERVER_RELEASE). Before signing, so it is signed too.
+afterPack: scripts/after-pack.js
 files:
   - src/**/*
 # macOS 26 (Tahoe) renders apps that only ship a legacy .icns on a system
