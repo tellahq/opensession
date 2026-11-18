@@ -266,14 +266,21 @@ export function BusyInline({
     liveTurnStore.getActivity,
     liveTurnStore.getNoActivity,
   );
+  const inlineStatus = useSyncExternalStore(
+    liveTurnStore.subscribe,
+    liveTurnStore.hasInlineStatus,
+    getFalse,
+  );
   // Once words are visible, the stream itself and its caret are the progress
   // indicator. Keeping a second status row under a growing answer makes every
   // line wrap relocate that row, and under reduced motion those relocations are
   // intentionally instant. Collapse it once instead; stopping always remains
   // explicit even when streamed text is still present, and so do a compaction
-  // and a retry wait, which the words above cannot explain.
+  // and a retry wait, which the words above cannot explain. An open Thinking
+  // header at the tail is the same kind of stand-in: it shimmers and carries
+  // the elapsed time, so "Thinking" over "Still working" never stacks.
   const shown =
-    !hasPaintedText ||
+    (!hasPaintedText && !inlineStatus) ||
     stoppingSince != null ||
     activityInterruptsStream(activity);
   return (
