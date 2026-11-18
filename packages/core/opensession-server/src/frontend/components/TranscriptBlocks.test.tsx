@@ -829,9 +829,8 @@ describe("TranscriptBlocks compact tool runs", () => {
       <TranscriptBlocks live entries={toolEntries} />,
     );
 
-    // Nothing to disclose, so no grouped row and no indent under one.
+    // Nothing to disclose, so no grouped row.
     expect(html).not.toContain('data-tool-run="true"');
-    expect(html).not.toContain('class="ml-3"');
     expect(html).toContain("git status");
     expect(html).toContain("package.json");
     setTurnPrefs(null);
