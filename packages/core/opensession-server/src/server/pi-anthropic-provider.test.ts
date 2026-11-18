@@ -1735,73 +1735,82 @@ describe("buildPiAnthropicProvider", () => {
 
   test("Mythos capacity counts only API accounts that serve the user", async () => {
     await designate([]);
-    writeFileSync(
-      accountsFile,
-      JSON.stringify({
-        accounts: [
-          {
-            id: "alice-key",
-            name: "alice-key",
-            owner: "Alice",
-            token: "sk-ant-api03-alice-key",
-            authKind: "api-key",
-            mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
-            createdAt: "2026-01-01T00:00:00.000Z",
-          },
-        ],
-      }),
-    );
-    await accounts.loadClaudeAccounts();
-    const mythosFor = (user?: string) =>
-      configuredModelProviders(user).has(CLAUDE_API_CAPACITY);
-    const claudeFor = (user?: string) =>
-      configuredModelProviders(user).has("anthropic");
-    expect(mythosFor("Alice")).toBe(true);
-    expect(mythosFor("Bob")).toBe(false);
-    expect(mythosFor()).toBe(false);
-    // Alice's subscription is hers too: with only a shared API key left for
-    // Bob, his catalog offers Mythos and not the subscription models.
-    writeFileSync(
-      accountsFile,
-      JSON.stringify({
-        accounts: [
-          {
-            id: "alice-sub",
-            name: "alice-sub",
-            owner: "Alice",
-            token: "sk-ant-oat01-alice-sub",
-            createdAt: "2026-01-01T00:00:00.000Z",
-          },
-          {
-            id: "shared-key",
-            name: "shared-key",
-            token: "sk-ant-api03-shared-key",
-            authKind: "api-key",
-            mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
-            createdAt: "2026-01-01T00:00:00.000Z",
-          },
-        ],
-      }),
-    );
-    await accounts.loadClaudeAccounts();
-    expect(claudeFor("Bob")).toBe(false);
-    expect(mythosFor("Bob")).toBe(true);
-    expect(claudeFor("Alice")).toBe(true);
-    expect(
-      configuredInteractiveDefaultModel(configuredModelProviders("Bob")),
-    ).toContain("mythos");
-    // The HTTP bridge carries no run identity, so a personal account never
-    // serves there, not even its owner; the shared key still does.
-    writeFileSync(
-      piConfigFile,
-      JSON.stringify({ enabled: true, anthropicTransport: "bridge" }),
-    );
-    await loadPiConfig();
+    const { __setIdentitiesForTest } = await import("./shared/user-mappings");
+    const restore = __setIdentitiesForTest([
+      { name: "Alice Example", github: "alice" },
+      { name: "Bob Example", github: "bob" },
+    ]);
     try {
-      expect(claudeFor("Alice")).toBe(false);
+      writeFileSync(
+        accountsFile,
+        JSON.stringify({
+          accounts: [
+            {
+              id: "alice-key",
+              name: "alice-key",
+              owner: "alice",
+              token: "sk-ant-api03-alice-key",
+              authKind: "api-key",
+              mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
+              createdAt: "2026-01-01T00:00:00.000Z",
+            },
+          ],
+        }),
+      );
+      await accounts.loadClaudeAccounts();
+      const mythosFor = (user?: string) =>
+        configuredModelProviders(user).has(CLAUDE_API_CAPACITY);
+      const claudeFor = (user?: string) =>
+        configuredModelProviders(user).has("anthropic");
       expect(mythosFor("Alice")).toBe(true);
+      expect(mythosFor("Bob")).toBe(false);
+      expect(mythosFor()).toBe(false);
+      // Alice's subscription is hers too: with only a shared API key left for
+      // Bob, his catalog offers Mythos and not the subscription models.
+      writeFileSync(
+        accountsFile,
+        JSON.stringify({
+          accounts: [
+            {
+              id: "alice-sub",
+              name: "alice-sub",
+              owner: "Alice",
+              token: "sk-ant-oat01-alice-sub",
+              createdAt: "2026-01-01T00:00:00.000Z",
+            },
+            {
+              id: "shared-key",
+              name: "shared-key",
+              token: "sk-ant-api03-shared-key",
+              authKind: "api-key",
+              mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
+              createdAt: "2026-01-01T00:00:00.000Z",
+            },
+          ],
+        }),
+      );
+      await accounts.loadClaudeAccounts();
+      expect(claudeFor("Bob")).toBe(false);
+      expect(mythosFor("Bob")).toBe(true);
+      expect(claudeFor("Alice")).toBe(true);
+      expect(
+        configuredInteractiveDefaultModel(configuredModelProviders("Bob")),
+      ).toContain("mythos");
+      // The HTTP bridge carries no run identity, so a personal account never
+      // serves there, not even its owner; the shared key still does.
+      writeFileSync(
+        piConfigFile,
+        JSON.stringify({ enabled: true, anthropicTransport: "bridge" }),
+      );
+      await loadPiConfig();
+      try {
+        expect(claudeFor("Alice")).toBe(false);
+        expect(mythosFor("Alice")).toBe(true);
+      } finally {
+        await designate([]);
+      }
     } finally {
-      await designate([]);
+      restore();
     }
   });
 
@@ -1833,6 +1842,9 @@ describe("buildPiAnthropicProvider", () => {
         const r = accounts.resolveAccount({ user, model: "claude-mythos-5-2" });
         return "account" in r ? r.account.id : undefined;
       };
+      // A stored name, not a login, never spends, even for an unambiguous
+      // full name.
+      expect(mythosFor("Alex Rivera")).toBe(false);
       // "Alex" names both teammates, as owner and as run user: neither spends.
       expect(mythosFor("Alex")).toBe(false);
       expect(mythosFor("Alex Rivera")).toBe(false);
@@ -1868,6 +1880,8 @@ describe("buildPiAnthropicProvider", () => {
   });
 
   test("setup readiness counts only Claude accounts that can run the default", async () => {
+    const { __setIdentitiesForTest } = await import("./shared/user-mappings");
+    let restoreRoster = () => {};
     const apiKey = (id: string, owner?: string) => ({
       id,
       name: id,
@@ -1902,14 +1916,18 @@ describe("buildPiAnthropicProvider", () => {
       expect(engineStatus("Bob").ready).toBe(true);
       // Another user's personal account never makes this user ready.
       await designate([]);
+      restoreRoster = __setIdentitiesForTest([
+        { name: "Alice Example", github: "alice" },
+      ]);
       writeFileSync(
         accountsFile,
-        JSON.stringify({ accounts: [apiKey("alice-key", "Alice")] }),
+        JSON.stringify({ accounts: [apiKey("alice-key", "alice")] }),
       );
       await accounts.loadClaudeAccounts();
       expect(engineStatus("Alice").ready).toBe(true);
       expect(engineStatus("Bob").ready).toBe(false);
     } finally {
+      restoreRoster();
       await designate([]);
     }
   });

@@ -165,30 +165,6 @@ export function isTrustedGithubLogin(login?: string | null): boolean {
 }
 
 /**
- * Whether an owner reference (a picker first name, alias, full name, or GitHub
- * login) names exactly the verified signed-in person and nobody else. For
- * authorization, unlike `userMatchesAny`: a first name two roster members
- * share names neither of them. An owner no roster member answers to matches
- * only the verified login, full name, or first name.
- */
-export function ownerRefNamesSignedInUser(
-  owner: string | null | undefined,
-  signedIn: { login: string; name: string },
-): boolean {
-  const ref = normRef(owner);
-  const login = signedIn.login.trim().toLowerCase();
-  if (!ref || !login) return false;
-  const candidates = rosterMembersNamed(ref);
-  if (candidates.length)
-    return (
-      candidates.length === 1 &&
-      candidates[0].github?.trim().toLowerCase() === login
-    );
-  const name = signedIn.name.trim().toLowerCase();
-  return ref === login || ref === name || ref === name.split(" ")[0];
-}
-
-/**
  * The name a verified signed-in person acts under: their first name, as the
  * picker shows it, unless another roster member answers to that first name.
  * Then it is their full name, or their GitHub login when even that is shared,
@@ -223,25 +199,36 @@ export function signedInUserName(signedIn: {
 }
 
 /**
- * Whether a run's user reference names exactly the person an owner reference
- * names: both must resolve to the same single roster member. For spending
- * gates (personal Claude API accounts), unlike `userMatchesAny`: a first name
- * two roster members share names neither of them, on either side, so an
- * ambiguous run user can never spend an account. An owner no roster member
- * answers to matches only the same string, and only if no roster member
- * answers to the user either.
+ * The GitHub login of the one roster member an owner reference (a picker
+ * first name, alias, full name, or login) names, or undefined when nobody,
+ * several people, or someone without a login answers to it. Personal Claude
+ * API accounts store this login, not the reference: a name can pass to a
+ * later namesake, a login cannot.
  */
-export function ownerRefNamesUser(
-  owner: string | null | undefined,
+export function rosterLoginNamed(
+  ref: string | null | undefined,
+): string | undefined {
+  const members = rosterMembersNamed(normRef(ref));
+  if (members.length !== 1) return undefined;
+  return members[0].github?.trim().replace(/^@/, "") || undefined;
+}
+
+/**
+ * Whether a run's user reference names exactly the roster member with this
+ * GitHub login. For spending gates (personal Claude API accounts), unlike
+ * `userMatchesAny`: a first name two roster members share names neither of
+ * them, and a login nobody on the roster holds any more names nobody, so a
+ * departed owner's account serves no one until it is reassigned.
+ */
+export function userIsRosterLogin(
+  login: string | null | undefined,
   user: string | null | undefined,
 ): boolean {
-  const ownerRef = normRef(owner);
+  const owner = normRef(login);
   const userRef = normRef(user);
-  if (!ownerRef || !userRef) return false;
-  const owners = rosterMembersNamed(ownerRef);
+  if (!owner || !userRef) return false;
   const users = rosterMembersNamed(userRef);
-  if (!owners.length && !users.length) return ownerRef === userRef;
-  return owners.length === 1 && users.length === 1 && owners[0] === users[0];
+  return users.length === 1 && normRef(users[0].github) === owner;
 }
 
 function normRef(ref: string | null | undefined): string {

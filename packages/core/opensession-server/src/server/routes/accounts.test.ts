@@ -58,10 +58,16 @@ function ctx(
 const alice = { login: "alice", name: "Alice Example" };
 const bob = { login: "bob", name: "Bob Example" };
 
+let restoreRoster: () => void = () => {};
 beforeAll(() => {
   process.env.OPENSESSION_CLAUDE_ACCOUNTS_PATH = accountsFile;
+  restoreRoster = __setIdentitiesForTest([
+    { name: "Alice Example", github: "alice" },
+    { name: "Bob Example", github: "bob" },
+  ]);
 });
 afterAll(() => {
+  restoreRoster();
   if (savedPath === undefined)
     delete process.env.OPENSESSION_CLAUDE_ACCOUNTS_PATH;
   else process.env.OPENSESSION_CLAUDE_ACCOUNTS_PATH = savedPath;
@@ -75,7 +81,7 @@ async function seed(): Promise<void> {
   writeFileSync(
     accountsFile,
     JSON.stringify({
-      accounts: [apiAccount("alice-key", "Alice"), apiAccount("shared-key")],
+      accounts: [apiAccount("alice-key", "alice"), apiAccount("shared-key")],
     }),
   );
   await accounts.loadClaudeAccounts();
@@ -112,7 +118,7 @@ describe("Claude API account authorization with web sign-in on", () => {
       ctx("DELETE", "/api/claude-accounts/alice-key", bob),
     );
     expect(del?.status).toBe(403);
-    expect(accounts.getAccountById("alice-key")?.owner).toBe("Alice");
+    expect(accounts.getAccountById("alice-key")?.owner).toBe("alice");
     // A shared API account is the operator's to change.
     const shared = await handleAccountsRoutes(
       ctx("PUT", "/api/claude-accounts/shared-key", bob, { owner: "Bob" }),
@@ -137,7 +143,7 @@ describe("Claude API account authorization with web sign-in on", () => {
         JSON.stringify({
           accounts: [
             apiAccount("alex-key", "Alex"),
-            apiAccount("rivera-key", "Alex Rivera"),
+            apiAccount("rivera-key", "alex-rivera"),
           ],
         }),
       );
@@ -187,8 +193,48 @@ describe("Claude API account authorization with web sign-in on", () => {
     expect(release?.status).toBe(403);
     expect(del?.status).toBe(403);
     const account = accounts.getAccountById("alice-key");
-    expect(account?.owner).toBe("Bob");
+    expect(account?.owner).toBe("bob");
     expect(account?.label).toBeUndefined();
+  });
+
+  test("a personal API account binds to a login, not the name it was given", async () => {
+    authRequired = spyOn(webAuth, "webAuthRequired").mockReturnValue(true);
+    await seed();
+    const operator = {
+      login: "opensession-automation",
+      name: "Automation",
+      automation: true,
+    };
+    const reassign = (owner: string) =>
+      handleAccountsRoutes(
+        ctx("PUT", "/api/claude-accounts/shared-key", operator, { owner }),
+      );
+    const restore = __setIdentitiesForTest([
+      { name: "Alex Rivera", github: "alex-rivera" },
+      { name: "Alex Chen", github: "alex-chen" },
+      { name: "Sam Nologin" },
+    ]);
+    try {
+      // A name that resolves to several people, nobody, or someone without
+      // a login is refused and leaves the account as it was.
+      for (const owner of ["Alex", "Nobody", "Sam"])
+        expect((await reassign(owner))?.status).toBe(400);
+      expect(accounts.getAccountById("shared-key")?.owner).toBeUndefined();
+      expect((await reassign("Alex Rivera"))?.status).toBe(200);
+      expect(accounts.getAccountById("shared-key")?.owner).toBe("alex-rivera");
+      // Rivera leaves and Chen is the only Alex: the account is still
+      // Rivera's, so Chen can neither spend nor change it.
+      __setIdentitiesForTest([{ name: "Alex Chen", github: "alex-chen" }]);
+      const account = accounts.getAccountById("shared-key")!;
+      expect(accounts.accountServesUser(account, "Alex")).toBe(false);
+      const chen = { login: "alex-chen", name: "Alex Chen" };
+      const res = await handleAccountsRoutes(
+        ctx("PUT", "/api/claude-accounts/shared-key", chen, { label: "Mine" }),
+      );
+      expect(res?.status).toBe(403);
+    } finally {
+      restore();
+    }
   });
 
   test("the host operator can change any API account", async () => {

@@ -12,12 +12,20 @@
  */
 
 import { withLabel } from "./provider-account-label";
-import { accountOwnerMode } from "./account-owner";
+import {
+  AUTOMATIONS_ACCOUNT_OWNER,
+  accountOwnerMode,
+  isAutomationsAccountOwner,
+} from "./account-owner";
 import { registerMemoryProbe } from "./memory-probes";
 import { homeDir } from "./paths";
 import { chmod, readFile } from "fs/promises";
 import { writeFileAtomicAsync } from "./shared/atomic-write";
-import { ownerRefNamesUser, userMatchesAny } from "./shared/user-mappings";
+import {
+  rosterLoginNamed,
+  userIsRosterLogin,
+  userMatchesAny,
+} from "./shared/user-mappings";
 import { stateDir } from "./paths";
 import {
   federatedAccessToken,
@@ -1289,18 +1297,41 @@ function federationBinding(account: ClaudeAccount): string | undefined {
 
 /** The owner gate: a personal account (`owner` set) serves only runs whose
  *  user resolves to that person; runs with no user see shared accounts only.
- *  A personal API account bills its owner's organization, so it needs an
- *  unambiguous match (`ownerRefNamesUser`): a first name two teammates share
- *  never spends it. Routing, the model catalog, and Setup all use it. */
+ *  A personal API account bills its owner's organization, so its owner is a
+ *  roster GitHub login (`apiAccountOwner`) and the run user must name exactly
+ *  that roster member (`userIsRosterLogin`): a shared first name, or a
+ *  namesake who joins after the owner left, never spends it. Routing, the
+ *  model catalog, and Setup all use it. */
 export function accountServesUser(
   account: { owner?: string; authKind?: string },
   user?: string,
 ): boolean {
   if (!account.owner) return true;
   if (!user) return false;
-  return isClaudeApiAccount(account)
-    ? ownerRefNamesUser(account.owner, user)
-    : userMatchesAny(user, [account.owner]);
+  if (!isClaudeApiAccount(account))
+    return userMatchesAny(user, [account.owner]);
+  return isAutomationsAccountOwner(account.owner)
+    ? isAutomationsAccountOwner(user)
+    : userIsRosterLogin(account.owner, user);
+}
+
+/** The owner a personal API account stores: the Automations group, or the
+ *  GitHub login of the one teammate the picker's name resolves to. A name
+ *  that resolves to nobody, or to several people, is refused rather than
+ *  saved, since it could later bind to someone else. */
+export function apiAccountOwner(
+  ref?: string,
+): { owner?: string } | { error: string } {
+  const trimmed = ref?.trim();
+  if (!trimmed) return {};
+  if (isAutomationsAccountOwner(trimmed))
+    return { owner: AUTOMATIONS_ACCOUNT_OWNER };
+  const login = rosterLoginNamed(trimmed);
+  return login
+    ? { owner: login }
+    : {
+        error: `"${trimmed}" doesn't name exactly one teammate with a GitHub login. Use their full name or GitHub login.`,
+      };
 }
 
 export function hasClaudeApiAccounts(): boolean {
@@ -1340,8 +1371,10 @@ export async function addClaudeApiAccount(input: {
   federation?: unknown;
 }): Promise<ClaudeAccountPublic | { error: string }> {
   const name = input.name.trim();
-  const owner = input.owner?.trim() || undefined;
   if (!name) return { error: "Name is required" };
+  const bound = apiAccountOwner(input.owner);
+  if ("error" in bound) return bound;
+  const { owner } = bound;
   const accounts = await readStoreFresh();
   if (accounts.some((a) => a.name === name))
     return { error: `An account named "${name}" already exists` };
@@ -1488,19 +1521,32 @@ export interface AccountWriteForbidden {
   forbidden: string;
 }
 
+/** A write refused for its input, with its message. */
+export interface AccountWriteInvalid {
+  invalid: string;
+}
+
 export function setAccountOwner(
   id: string,
   owner: string | undefined,
   credentialsPath?: string | undefined,
   guard?: AccountWriteGuard,
-): Promise<ClaudeAccountPublic | AccountWriteForbidden | null> {
+): Promise<
+  ClaudeAccountPublic | AccountWriteForbidden | AccountWriteInvalid | null
+> {
   return mutateStore(async () => {
     const accounts = await readStoreFresh();
     const idx = accounts.findIndex((a) => a.id === id);
     if (idx === -1) return null;
     const forbidden = guard?.(accounts[idx]);
     if (forbidden) return { forbidden };
-    const trimmed = owner?.trim() || undefined;
+    let trimmed = owner?.trim() || undefined;
+    if (isClaudeApiAccount(accounts[idx])) {
+      // Bind a personal API account to a login, as enrollment does.
+      const bound = apiAccountOwner(trimmed);
+      if ("error" in bound) return { invalid: bound.error };
+      trimmed = bound.owner;
+    }
     const next = { ...accounts[idx] };
     if (trimmed) next.owner = trimmed;
     else delete next.owner;

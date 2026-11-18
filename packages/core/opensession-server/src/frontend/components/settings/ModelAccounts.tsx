@@ -222,11 +222,18 @@ function OwnerSelect({
 }) {
   // The roster reactively, so the list and the pictures both fill in when
   // GET /api/people lands rather than only on the next render.
-  const roster = usePeople().map((p) => p.name);
+  const people = usePeople();
+  const roster = people.map((p) => p.name);
+  // A personal Claude API account stores its owner's GitHub login: show the
+  // person it names.
+  const lower = value.toLowerCase();
+  const shown =
+    (value && people.find((p) => p.github?.toLowerCase() === lower)?.name) ||
+    value;
   // Keep a non-team owner (e.g. set via the API) selectable.
   const owners =
-    value && !isAutomationsAccountOwner(value) && !roster.includes(value)
-      ? [value, ...roster]
+    shown && !isAutomationsAccountOwner(shown) && !roster.includes(shown)
+      ? [shown, ...roster]
       : roster;
   const items = [
     { value: "", label: "Shared pool" },
@@ -247,19 +254,19 @@ function OwnerSelect({
   return (
     <Select.Root
       items={items}
-      value={value}
+      value={shown}
       disabled={disabled}
       onValueChange={(next) => onChange(String(next))}
     >
       <Select.Trigger
         aria-label={label}
         title={title}
-        icon={ownerIcon(value)}
+        icon={ownerIcon(shown)}
         sizeTo={quiet ? undefined : items.map((i) => i.label)}
         children={
           quiet ? (
             <span className="flex h-4 items-center leading-none">
-              {accountOwnerLabel(value) ?? "Shared pool"}
+              {accountOwnerLabel(shown) ?? "Shared pool"}
             </span>
           ) : undefined
         }

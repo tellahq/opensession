@@ -8,10 +8,11 @@
  */
 
 import type { RouteContext } from "./context";
-import { ownerRefNamesSignedInUser } from "../shared/user-mappings";
+import { personalAccountOwner } from "../account-owner";
 import { isHostOperator } from "./memory-diagnostics";
 import {
   type AccountWriteForbidden,
+  type AccountWriteInvalid,
   type AccountWriteGuard,
   addAccount,
   addClaudeApiAccount,
@@ -86,8 +87,10 @@ function isRename(body: unknown): body is { label: string } {
 function apiAccountChangeGuard(ctx: RouteContext): AccountWriteGuard {
   return (account) => {
     if (!isClaudeApiAccount(account) || isHostOperator(ctx)) return undefined;
-    if (ctx.authUser && ownerRefNamesSignedInUser(account.owner, ctx.authUser))
-      return undefined;
+    // A personal API account's owner is the GitHub login it was bound to.
+    const owner = personalAccountOwner(account.owner)?.trim().toLowerCase();
+    const login = ctx.authUser?.login.trim().replace(/^@/, "").toLowerCase();
+    if (owner && login && owner === login) return undefined;
     return account.owner
       ? "Only this account's owner or the host operator can change it."
       : "Only the host operator can change a shared Claude API account.";
@@ -108,10 +111,17 @@ function forbiddenResponse(error: string): Response {
 }
 
 function foundOr404(
-  updated: object | AccountWriteForbidden | null | boolean,
+  updated:
+    | object
+    | AccountWriteForbidden
+    | AccountWriteInvalid
+    | null
+    | boolean,
 ): Response {
   if (updated && typeof updated === "object" && "forbidden" in updated)
     return forbiddenResponse(updated.forbidden);
+  if (updated && typeof updated === "object" && "invalid" in updated)
+    return Response.json({ error: updated.invalid }, { status: 400 });
   return updated
     ? Response.json(updated === true ? { ok: true } : updated)
     : Response.json({ error: "Not found" }, { status: 404 });

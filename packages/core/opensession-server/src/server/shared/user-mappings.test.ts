@@ -12,7 +12,8 @@ import {
   isTrustedGithubLogin,
   isTrustedUser,
   personKeyToDisplayName,
-  ownerRefNamesUser,
+  rosterLoginNamed,
+  userIsRosterLogin,
   signedInUserName,
   trustedGithubTeammate,
 } from "./user-mappings";
@@ -277,15 +278,21 @@ describe("live roster", () => {
       expect(
         signedInUserName({ login: "alex-rivera", name: "Alex Rivera" }),
       ).toBe("Alex");
-      expect(ownerRefNamesUser("alex-rivera", "Alex")).toBe(true);
+      expect(userIsRosterLogin("alex-rivera", "Alex")).toBe(true);
+      expect(rosterLoginNamed("Alex")).toBe("alex-rivera");
       // An operator adds Alex Chen through Setup; the module-load snapshot
       // still lists only Rivera.
       publish([rivera, { name: "Alex Chen", github: "alex-chen" }]);
       expect(signedInUserName({ login: "alex-chen", name: "Alex Chen" })).toBe(
         "Alex Chen",
       );
-      expect(ownerRefNamesUser("alex-rivera", "Alex Chen")).toBe(false);
-      expect(ownerRefNamesUser("alex-rivera", "Alex")).toBe(false);
+      expect(userIsRosterLogin("alex-rivera", "Alex Chen")).toBe(false);
+      expect(userIsRosterLogin("alex-rivera", "Alex")).toBe(false);
+      expect(rosterLoginNamed("Alex")).toBeUndefined();
+      // Rivera leaves: Chen is the only Alex, but Rivera's login names nobody.
+      publish([{ name: "Alex Chen", github: "alex-chen" }]);
+      expect(userIsRosterLogin("alex-rivera", "Alex")).toBe(false);
+      expect(userIsRosterLogin("alex-chen", "Alex")).toBe(true);
     } finally {
       publishConfigSnapshot(path, JSON.stringify(prev));
     }

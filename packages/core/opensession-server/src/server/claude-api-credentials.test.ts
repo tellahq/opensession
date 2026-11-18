@@ -469,4 +469,67 @@ describe("Mythos access", () => {
       fetchSpy.mockRestore();
     }
   });
+
+  test("enrollment binds a personal key to its owner's login", async () => {
+    const { __setIdentitiesForTest } = await import("./shared/user-mappings");
+    const restore = __setIdentitiesForTest([
+      { name: "Alex Rivera", github: "alex-rivera" },
+      { name: "Alex Chen", github: "alex-chen" },
+    ]);
+    const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async () =>
+      Response.json({ data: [] })) as unknown as typeof fetch);
+    try {
+      const ambiguous = await accounts.addClaudeApiAccount({
+        name: "alex-key",
+        owner: "Alex",
+        apiKey: "sk-ant-api03-alex-key",
+      });
+      expect("error" in ambiguous).toBe(true);
+      const added = await accounts.addClaudeApiAccount({
+        name: "rivera-key",
+        owner: "Alex Rivera",
+        apiKey: "sk-ant-api03-rivera-key",
+      });
+      if ("error" in added) throw new Error(added.error);
+      expect(added.owner).toBe("alex-rivera");
+      await accounts.removeAccount(added.id);
+    } finally {
+      fetchSpy.mockRestore();
+      restore();
+    }
+  });
+
+  test("a refresh drops every release when the API key is revoked", async () => {
+    let status = 200;
+    const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (
+      url: string,
+    ) => {
+      if (String(url).includes("/v1/models/"))
+        return new Response("{}", { status });
+      return Response.json({ data: [] });
+    }) as unknown as typeof fetch);
+    try {
+      const added = await accounts.addClaudeApiAccount({
+        name: "revoked",
+        apiKey: "sk-ant-api03-revoked",
+      });
+      if ("error" in added) throw new Error(added.error);
+      expect(added.mythosModels).toEqual([
+        "claude-mythos-5-2",
+        "claude-mythos-5-1",
+      ]);
+      status = 401;
+      await accounts.refreshAllUsage({ recheckMythos: true });
+      const after = accounts
+        .listAccountsPublic()
+        .find((a) => a.id === added.id);
+      expect(after?.mythosModels).toEqual([]);
+      expect(
+        accounts.pickAccount(undefined, undefined, "claude-mythos-5-2")?.id,
+      ).not.toBe(added.id);
+      await accounts.removeAccount(added.id);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
 });

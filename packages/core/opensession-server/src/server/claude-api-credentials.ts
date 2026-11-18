@@ -92,7 +92,8 @@ export interface ClaudeMythosAccess {
 /**
  * Ask the Models API which Mythos releases this account's organization can
  * use. A 200 grants a release, a 403 or 404 denies it, and anything else
- * leaves the check inconclusive.
+ * leaves the check inconclusive. A 401 for a static API key means the key
+ * was revoked, which denies every release; enrollment rejects the same 401.
  */
 export async function checkClaudeMythosAccess(
   account: CredentialAccount,
@@ -127,6 +128,8 @@ export async function checkClaudeMythosAccess(
         signal: AbortSignal.timeout(EXCHANGE_TIMEOUT_MS),
       });
       if (res.ok) models.push(id);
+      else if (res.status === 401 && account.authKind === "api-key")
+        return { models: [], conclusive: true };
       else if (res.status !== 403 && res.status !== 404) conclusive = false;
     } catch {
       conclusive = false;
