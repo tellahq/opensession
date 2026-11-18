@@ -66,9 +66,10 @@ type OwnPrs = NonNullable<MarkdownContext["ownPrs"]>;
 const NO_OWN_PRS: OwnPrs = [];
 
 /**
- * The PRs a session pane's conversation is about. A mention of one renders as
+ * The PR a session pane's conversation is about. A mention of it renders as
  * plain text rather than a chip: the chip exists to go to a PR, and this pane
- * already is that PR's conversation.
+ * already is that PR's conversation. A session with several PRs keeps every
+ * chip, since the chip is how a reader picks which one to open.
  */
 const MarkdownOwnPrsContext = createContext<OwnPrs>(NO_OWN_PRS);
 
@@ -81,21 +82,21 @@ export function MarkdownOwnPrsProvider({
 }) {
   // Session objects are rebuilt on every poll; key the value on its content so
   // a poll that changes nothing keeps every bubble's render context stable.
-  const key = prs
-    .flatMap((pr) =>
+  const entries = new Set(
+    prs.flatMap((pr) =>
       pr.repo && pr.number !== undefined ? [`${pr.repo}#${pr.number}`] : [],
-    )
-    .join(" ");
+    ),
+  );
+  const key = entries.size === 1 ? [...entries][0]! : "";
   const value = useMemo<OwnPrs>(
     () =>
       key
-        ? key.split(" ").map((entry) => {
-            const at = entry.lastIndexOf("#");
-            return {
-              repo: entry.slice(0, at),
-              number: Number(entry.slice(at + 1)),
-            };
-          })
+        ? [
+            {
+              repo: key.slice(0, key.lastIndexOf("#")),
+              number: Number(key.slice(key.lastIndexOf("#") + 1)),
+            },
+          ]
         : NO_OWN_PRS,
     [key],
   );
