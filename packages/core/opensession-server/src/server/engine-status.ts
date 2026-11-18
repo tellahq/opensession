@@ -3,7 +3,10 @@ import { listAccountsPublic } from "./claude-accounts";
 import { listCodexAccountsPublic } from "./codex-accounts";
 import { listXaiAccountsPublic } from "./xai-accounts";
 import { accountProviderForModel } from "./models";
-import { configuredInteractiveDefaultModel } from "./model-catalog";
+import {
+  configuredInteractiveDefaultModel,
+  configuredModelProviders,
+} from "./model-catalog";
 import { modelProviders } from "./model-providers";
 import { piConfigPath, piEngineEnabled } from "./pi-config";
 import { homeDir } from "./paths";
@@ -27,7 +30,9 @@ export interface EngineStatus {
   fixableInApp: boolean;
 }
 
-export function engineStatus(): EngineStatus {
+/** `user` is the person viewing: Claude capacity, and so the default model,
+ *  counts only accounts that serve them. */
+export function engineStatus(user?: string): EngineStatus {
   const enabled = piEngineEnabled();
   const claudePool = listAccountsPublic();
   const codexPool = listCodexAccountsPublic();
@@ -44,7 +49,9 @@ export function engineStatus(): EngineStatus {
   const codexAvailable = codexPool.filter(
     (account) => account.usable && !account.exhaustedUntil,
   ).length;
-  const defaultModel = configuredInteractiveDefaultModel();
+  const defaultModel = configuredInteractiveDefaultModel(
+    configuredModelProviders(user),
+  );
   const provider = accountProviderForModel(defaultModel);
   const base = {
     piEnabled: enabled,

@@ -259,21 +259,31 @@ describe("account routing", () => {
     ).toBeUndefined();
   });
 
-  test("only a whole limit notice counts as one in a successful result", async () => {
-    const { isClaudeLimitNotice } = await import("./runner-shared");
+  test("only a whole account notice counts as one in a successful result", async () => {
+    const { isClaudeAccountNotice, mayBecomeClaudeAccountNotice } =
+      await import("./runner-shared");
     for (const notice of [
       "5-hour limit reached ∙ resets 3am",
       "You've hit your session limit · resets 12:50pm (UTC)",
+      "You've hit your weekly limit · resets Aug 20, 9am (UTC)",
       "Claude AI usage limit reached|1767225600",
+      "You're out of usage credits.",
       "You're out of usage credits. Run /usage-credits to keep using Fable 5.1 or /model to switch models.",
+      "Claude Max subscription issue. Check your subscription status.",
+      "Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access",
     ])
-      expect(isClaudeLimitNotice(notice)).toBe(true);
+      expect(isClaudeAccountNotice(notice)).toBe(true);
     for (const answer of [
       "Use /usage-credits to check your balance before running Claude again.",
+      "You're out of usage credits on the old plan, but the new plan has a separate balance.",
+      "You've hit your session limit before; it resets after five hours.",
       "The API rate limit resets every minute, so retry after a short wait.",
       "Your plan's usage limit reached its cap yesterday; it resets weekly.",
     ])
-      expect(isClaudeLimitNotice(answer)).toBe(false);
+      expect(isClaudeAccountNotice(answer)).toBe(false);
+    // Streamed text that opens like a notice is held until it can be judged.
+    expect(mayBecomeClaudeAccountNotice("You're out of usage cred")).toBe(true);
+    expect(mayBecomeClaudeAccountNotice("Here is the plan")).toBe(false);
   });
 
   test("an API rate limit benches the account briefly", () => {

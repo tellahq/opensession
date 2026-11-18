@@ -94,7 +94,9 @@ import { cacheCreationUsage } from "./claude-cache-writes";
 import { contextWindowFor } from "./models";
 import {
   CLAUDE_CODE_BIN,
-  isClaudeLimitNotice,
+  claudeLimitErrorMessage,
+  isClaudeAccountNotice,
+  isClaudeLimitErrorKind,
   isClaudeUsageLimitError,
   usageLimitResetAt,
 } from "./runner-shared";
@@ -940,11 +942,17 @@ export async function handleBridgeRequest(req: Request): Promise<Response> {
       },
     });
 
+    let limitError: string | undefined;
     for await (const msg of q) {
       if (msg.type === "system" && (msg as any).subtype === "init") {
         sdkSessionId = (msg as any).session_id;
       }
       if (msg.type === "assistant") {
+        if (isClaudeLimitErrorKind((msg as any).error) && !limitError)
+          limitError = claudeLimitErrorMessage(
+            (msg as any).error,
+            (msg as any).message?.content,
+          );
         const blocks = (msg as any).message?.content;
         if (Array.isArray(blocks)) {
           for (const b of blocks) {
@@ -985,8 +993,10 @@ export async function handleBridgeRequest(req: Request): Promise<Response> {
             "SDK run failed";
           throw new Error(detail);
         }
-        // Claude Code reports some usage limits as a successful result whose
-        // whole text is the notice ("5-hour limit reached ∙ resets 3am").
+        // Claude Code reports some usage limits as a successful result: the
+        // message carries a limit error kind, or the whole text is a notice
+        // ("5-hour limit reached ∙ resets 3am"). An answer that only mentions
+        // limits is returned as usual.
         // Treat that as the failure it is, so the account is benched and the
         // notice never reaches the client as the model's answer.
         const notice =
@@ -995,7 +1005,8 @@ export async function handleBridgeRequest(req: Request): Promise<Response> {
             .filter((b) => b.type === "text")
             .map((b) => b.text)
             .join("\n");
-        if (!captured.length && isClaudeLimitNotice(notice))
+        if (limitError) throw new Error(limitError);
+        if (!captured.length && isClaudeAccountNotice(notice))
           throw new Error(notice);
         usage = {
           input_tokens: rm.usage?.input_tokens || 0,

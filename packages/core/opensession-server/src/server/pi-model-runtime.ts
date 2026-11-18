@@ -92,8 +92,12 @@ import {
 import {
   CLAUDE_CODE_BIN,
   describeUsageLimitReset,
+  claudeLimitErrorMessage,
+  isClaudeAccountNotice,
+  isClaudeLimitErrorKind,
   isClaudeSubscriptionError,
   isClaudeUsageLimitError,
+  mayBecomeClaudeAccountNotice,
   usageLimitResetAt,
 } from "./runner-shared";
 import { spawnClaudeCodeInWorkload } from "./workload-scope";
@@ -118,7 +122,7 @@ function isClaudeAccountUnavailable(
 export function shouldDeferClaudeText(text: string): boolean {
   return (
     text.length < ACCOUNT_NOTICE_PROBE_CHARS ||
-    isClaudeAccountUnavailable(text, false)
+    mayBecomeClaudeAccountNotice(text)
   );
 }
 
@@ -1795,10 +1799,9 @@ async function* runSdkAttempt(
               typeof delta.text === "string"
             ) {
               pending.text += delta.text;
-              pending.accountUnavailable ||= isClaudeAccountUnavailable(
-                pending.text,
-                false,
-              );
+              // Judged on the whole text so far, not latched: an answer that
+              // opens like a notice and keeps going is still an answer.
+              pending.accountUnavailable = isClaudeAccountNotice(pending.text);
               if (
                 pending.accountUnavailable ||
                 shouldDeferClaudeText(pending.text)
@@ -1855,10 +1858,7 @@ async function* runSdkAttempt(
             const pending = pendingText.get(sdkIdx);
             if (pending) {
               pendingText.delete(sdkIdx);
-              if (
-                pending.accountUnavailable ||
-                isClaudeAccountUnavailable(pending.text, false)
-              ) {
+              if (isClaudeAccountNotice(pending.text)) {
                 deferredAccountUnavailable = pending.text;
                 continue;
               }
@@ -1912,6 +1912,13 @@ async function* runSdkAttempt(
               .join("\n");
             if (isCloudflareBlock(detail)) throw new Error(detail);
           }
+          // Claude Code tags a limit it hit on the message itself; that
+          // metadata is authoritative whatever the text reads like.
+          if (isClaudeLimitErrorKind(m.error) && !deferredAccountUnavailable)
+            deferredAccountUnavailable = claudeLimitErrorMessage(
+              m.error,
+              m.message?.content,
+            );
           const assistantAddedForwardedCall =
             captureVisibleSdkAssistantToolUses(
               earlyStop,
@@ -1933,7 +1940,7 @@ async function* runSdkAttempt(
               for (const b of blocks) {
                 if (!b || typeof b !== "object" || b.type !== "text" || !b.text)
                   continue;
-                if (isClaudeAccountUnavailable(b.text, false)) {
+                if (isClaudeAccountNotice(b.text)) {
                   deferredAccountUnavailable = b.text;
                   continue;
                 }

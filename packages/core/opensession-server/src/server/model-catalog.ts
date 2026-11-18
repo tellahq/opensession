@@ -25,20 +25,20 @@ export const CLAUDE_API_CAPACITY = "anthropic:api";
 export function configuredModelProviders(user?: string): Set<string> {
   // A bridge designation fences Anthropic runs to the accounts it names, so
   // only those count: an API account added outside it cannot serve Mythos.
+  // Claude capacity is per person, with the routing owner gate: another
+  // user's personal account (subscription or API) never serves this user's
+  // run. The HTTP bridge carries no run identity, so there only shared
+  // accounts serve anyone.
   const designated = designatedBridgeAccountIds();
-  const claude = listAccountsPublic().filter(
-    (a) => !designated.length || designated.includes(a.id),
-  );
-  // Mythos capacity is per person: another user's personal API account never
-  // serves this user's run. The HTTP bridge carries no run identity, so there
-  // only shared API accounts serve anyone.
   const runUser = piAnthropicTransport() === "bridge" ? undefined : user;
-  const api = claude.filter(
-    (a) => isClaudeApiAccount(a) && accountServesUser(a, runUser),
+  const claude = listAccountsPublic().filter(
+    (a) =>
+      (!designated.length || designated.includes(a.id)) &&
+      accountServesUser(a, runUser),
   );
   return new Set([
     ...(claude.some((a) => !isClaudeApiAccount(a)) ? ["anthropic"] : []),
-    ...(api.length ? [CLAUDE_API_CAPACITY] : []),
+    ...(claude.some(isClaudeApiAccount) ? [CLAUDE_API_CAPACITY] : []),
     ...(listCodexAccountsPublic().length ? ["openai"] : []),
     ...(hasXaiAccounts() ? [XAI_OAUTH_PROVIDER] : []),
     ...Object.entries(modelProviders())

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { getCurrentUser } from "../../components/UserPicker";
 import { ApiError, BASE, request } from "./request";
 import {
   accountLimitsFromUsage,
@@ -69,8 +70,12 @@ export async function transcribeClip(audio: Blob): Promise<string> {
   return data?.text ?? "";
 }
 
+/** The model catalog for the current user: Claude capacity follows account
+ *  owners, so a personal account's models appear only for its owner. With
+ *  web sign-in the server uses the verified identity instead. */
 export async function fetchModels(): Promise<ModelCatalog> {
-  return request<ModelCatalog>("/models", {
+  const user = encodeURIComponent(getCurrentUser());
+  return request<ModelCatalog>(`/models?user=${user}`, {
     label: "Failed to fetch models",
   });
 }

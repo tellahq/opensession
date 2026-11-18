@@ -85,7 +85,11 @@ import {
 import { isPiUsageLimitShape } from "./pi-runner";
 import * as accounts from "./claude-accounts";
 import * as workloadIdentity from "./workload-identity";
-import { CLAUDE_API_CAPACITY, configuredModelProviders } from "./model-catalog";
+import {
+  CLAUDE_API_CAPACITY,
+  configuredInteractiveDefaultModel,
+  configuredModelProviders,
+} from "./model-catalog";
 import { bridgePinHeaders } from "./anthropic-bridge-pin";
 import { loadPiConfig } from "./pi-config";
 import { loadModelProviders } from "./model-providers";
@@ -1744,18 +1748,51 @@ describe("buildPiAnthropicProvider", () => {
     await accounts.loadClaudeAccounts();
     const mythosFor = (user?: string) =>
       configuredModelProviders(user).has(CLAUDE_API_CAPACITY);
+    const claudeFor = (user?: string) =>
+      configuredModelProviders(user).has("anthropic");
     expect(mythosFor("Alice")).toBe(true);
     expect(mythosFor("Bob")).toBe(false);
     expect(mythosFor()).toBe(false);
+    // Alice's subscription is hers too: with only a shared API key left for
+    // Bob, his catalog offers Mythos and not the subscription models.
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: [
+          {
+            id: "alice-sub",
+            name: "alice-sub",
+            owner: "Alice",
+            token: "sk-ant-oat01-alice-sub",
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+          {
+            id: "shared-key",
+            name: "shared-key",
+            token: "sk-ant-api03-shared-key",
+            authKind: "api-key",
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    expect(claudeFor("Bob")).toBe(false);
+    expect(mythosFor("Bob")).toBe(true);
+    expect(claudeFor("Alice")).toBe(true);
+    expect(
+      configuredInteractiveDefaultModel(configuredModelProviders("Bob")),
+    ).toContain("mythos");
     // The HTTP bridge carries no run identity, so a personal account never
-    // serves there, not even its owner.
+    // serves there, not even its owner; the shared key still does.
     writeFileSync(
       piConfigFile,
       JSON.stringify({ enabled: true, anthropicTransport: "bridge" }),
     );
     await loadPiConfig();
     try {
-      expect(mythosFor("Alice")).toBe(false);
+      expect(claudeFor("Alice")).toBe(false);
+      expect(mythosFor("Alice")).toBe(true);
     } finally {
       await designate([]);
     }
@@ -1813,7 +1850,7 @@ describe("buildPiAnthropicProvider", () => {
     ).toBe(false);
   });
 
-  test("a bridge answer that mentions /usage-credits is returned, not benched", async () => {
+  test("a bridge answer that opens like a limit notice is returned, not benched", async () => {
     await designate(["key-a", "key-b"]);
     writeFileSync(
       accountsFile,
@@ -1829,7 +1866,7 @@ describe("buildPiAnthropicProvider", () => {
     );
     await accounts.loadClaudeAccounts();
     const answer =
-      "Use /usage-credits to check your balance before running Claude again.";
+      "You're out of usage credits on the old plan, but the new plan has a separate balance. Use /usage-credits to check it.";
     const query = spyOn(sdk, "query").mockImplementation((() =>
       (async function* () {
         yield {
@@ -1859,6 +1896,129 @@ describe("buildPiAnthropicProvider", () => {
       const body = (await res.json()) as any;
       expect(body.content[0].text).toBe(answer);
       // Still first in the designated walk: the account was not benched.
+      expect((pickBridgeAccount("claude-mythos-5-2") as any).id).toBe("key-a");
+    } finally {
+      query.mockRestore();
+    }
+  });
+
+  test("the bridge benches an account whose reply carries a rate-limit tag", async () => {
+    await designate(["key-a", "key-b"]);
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: ["key-a", "key-b"].map((id) => ({
+          id,
+          name: id,
+          token: `sk-ant-api03-${id}`,
+          authKind: "api-key",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        })),
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    accounts.returnAccountToPool("key-a");
+    const query = spyOn(sdk, "query").mockImplementation((() =>
+      (async function* () {
+        yield {
+          type: "assistant",
+          error: "rate_limit",
+          message: { content: [{ type: "text", text: "Please slow down." }] },
+        };
+        yield {
+          type: "result",
+          subtype: "success",
+          is_error: false,
+          result: "Please slow down.",
+          session_id: "sdk-tagged",
+        };
+      })()) as any);
+    try {
+      const res = await handleBridgeRequest(
+        new Request("http://127.0.0.1/v1/messages", {
+          method: "POST",
+          headers: { "x-api-key": bridgeKey() },
+          body: JSON.stringify({
+            model: "claude-mythos-5-2",
+            messages: [{ role: "user", content: "hi" }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(400);
+      expect((pickBridgeAccount("claude-mythos-5-2") as any).id).toBe("key-b");
+    } finally {
+      query.mockRestore();
+      accounts.returnAccountToPool("key-a");
+    }
+  });
+
+  test("an in-process answer that opens like a limit notice reaches pi", async () => {
+    const [mythos] = buildPiAnthropicModels([], "claude-mythos-5-2");
+    await designate(["key-a", "key-b"]);
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: ["key-a", "key-b"].map((id) => ({
+          id,
+          name: id,
+          token: `sk-ant-api03-${id}`,
+          authKind: "api-key",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        })),
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    accounts.returnAccountToPool("key-a");
+    const answer =
+      "You're out of usage credits on the old plan, but the new plan has a separate balance.";
+    const query = spyOn(sdk, "query").mockImplementation(() => {
+      const messages: Array<Record<string, any>> = [
+        { type: "system", subtype: "init", session_id: "sdk-near-notice" },
+        {
+          type: "assistant",
+          message: { id: "m1", content: [{ type: "text", text: answer }] },
+        },
+        {
+          type: "result",
+          subtype: "success",
+          is_error: false,
+          result: answer,
+          usage: { input_tokens: 1, output_tokens: 1 },
+          session_id: "sdk-near-notice",
+        },
+      ];
+      return {
+        next: async () => {
+          const value = messages.shift();
+          return value
+            ? { value, done: false }
+            : { value: undefined, done: true };
+        },
+        close: () => {},
+        [Symbol.asyncIterator]() {
+          return this;
+        },
+      } as any;
+    });
+    try {
+      const provider = buildPiAnthropicProvider({
+        unifiedSessionId: "os-near-notice",
+        builtinModels: [],
+        ensureModelId: mythos.id,
+        ephemeral: true,
+      }) as any;
+      const events: any[] = [];
+      for await (const ev of provider.streamSimple(mythos, {
+        messages: [{ role: "user", content: "hi" }],
+      }))
+        events.push(ev);
+      expect(events.at(-1)?.type).toBe("done");
+      expect(
+        events
+          .filter((ev) => ev.type === "text_delta")
+          .map((ev) => ev.delta)
+          .join(""),
+      ).toBe(answer);
       expect((pickBridgeAccount("claude-mythos-5-2") as any).id).toBe("key-a");
     } finally {
       query.mockRestore();
