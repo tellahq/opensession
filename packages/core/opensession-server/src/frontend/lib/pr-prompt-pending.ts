@@ -17,15 +17,19 @@ import type { WSClientMessage, WSServerMessage } from "./types";
  * turn's stream ends.
  *
  * The queue outranks the transcript. A steered prompt's entry lands as soon
- * as it is steered, but it stays a receipt in the queue until the engine
- * reads it, and goes back to the queue if the turn ends first. So while the
- * queue lists the prompt it is waiting, whatever the transcript shows, and
- * it starts when it leaves the queue with its entry already there.
+ * as it is steered, but the server holds it for delivery until the engine
+ * reads it, and puts it back in the queue if the turn ends first. Such an
+ * already-sent item leaves the composer rows and shows only in the queue's
+ * `pendingDeliveryIds`. So while the queue lists the prompt anywhere it is
+ * waiting, whatever the transcript shows, and it starts when it leaves the
+ * queue with its entry already there.
  *
  * A viewer that remounts (a session switch) or reconnects missed those live
  * frames. Watch sends the queue and then the feed snapshot, whose
  * `activePromptIds` lists the prompts the running turn answers: a prompt in
- * neither, once the server has seen it, is finished.
+ * neither, once the server has seen it, is finished. A snapshot without the
+ * list has a turn running whose prompts the server can't name; a prompt that
+ * already left the queue is taken to be that turn's.
  */
 export interface PendingPrompt {
   label: string;
@@ -142,11 +146,13 @@ export function observePromptFrame(sessionId: string, msg: WSServerMessage) {
   for (const [key, prompt] of [...pending]) {
     if (prompt.sessionId !== sessionId) continue;
     switch (msg.type) {
-      // Queued, or steered and not yet read by the engine.
+      // Queued, steered and not yet read, or held for delivery.
       case "queue_update": {
-        const queued = [...msg.queued, ...(msg.steered ?? [])].some(
-          (item) => item.id === prompt.requestId,
-        );
+        const queued =
+          !!msg.pendingDeliveryIds?.includes(prompt.requestId) ||
+          [...msg.queued, ...(msg.steered ?? [])].some(
+            (item) => item.id === prompt.requestId,
+          );
         if (queued) {
           if (!prompt.queued || prompt.started)
             update(key, { ...prompt, queued, started: false, seen: true });
@@ -175,13 +181,18 @@ export function observePromptFrame(sessionId: string, msg: WSServerMessage) {
       // Sent on watch after the queue: the prompts the running turn answers,
       // whether or not the snapshot carries that turn's text.
       case "feed_snapshot": {
-        if (!msg.activePromptIds) break;
+        if (!msg.activePromptIds) {
+          if (prompt.seen && !prompt.queued && !prompt.started)
+            update(key, { ...prompt, started: true });
+          break;
+        }
         if (msg.activePromptIds.includes(prompt.requestId)) {
           if (!prompt.started)
             update(key, {
               ...prompt,
               queued: false,
               started: true,
+              landed: true,
               seen: true,
             });
         } else if (prompt.started || (prompt.seen && !prompt.queued)) {

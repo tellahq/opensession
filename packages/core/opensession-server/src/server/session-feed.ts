@@ -109,6 +109,17 @@ export function notePromptDelivered(sessionId: string, id: string): void {
   });
 }
 
+/** Record the prompts of a run this process adopted after a restart, unless
+ *  a turn it started itself already has a record. Cleared like any other. */
+export function seedPromptRun(sessionId: string, ids: string[]): void {
+  if (!promptRuns().has(sessionId))
+    promptRuns().set(sessionId, { token: Symbol(sessionId), ids });
+}
+
+export function clearPromptRun(sessionId: string): void {
+  promptRuns().delete(sessionId);
+}
+
 export function beginPromptRun(sessionId: string, ids: string[]): () => void {
   const run = { token: Symbol(sessionId), ids };
   promptRuns().set(sessionId, run);

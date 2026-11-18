@@ -49,8 +49,13 @@ function queue(...ids: string[]) {
   };
 }
 
-function steered(id: string) {
-  return { ...queue(), steered: [{ id, content: "Fix the checks" }] };
+function pendingDelivery(id: string) {
+  return {
+    ...queue(),
+    queued: [{ id: "ordinary", content: "later" }],
+    steered: [],
+    pendingDeliveryIds: [id],
+  };
 }
 
 function feedSnapshot(activePromptIds?: string[]) {
@@ -153,19 +158,24 @@ describe("PR prompt pending state", () => {
     expect(getPromptPending("unseen")).toBeDefined();
   });
 
+  // Once steered, the server hides the item from the composer rows and lists
+  // it only in pendingDeliveryIds, as prepared, accepted, and requeued (the
+  // shapes queue-state-update.test.ts pins for queueDisplayState).
   test("a steer the turn never read goes back to waiting, not done", async () => {
     const requestId = await press("unread");
     observePromptFrame(SESSION, queue(requestId));
-    // Steered: its entry lands at once, the receipt stays in the queue.
+    // Steered: its entry lands at once while the server holds it.
+    observePromptFrame(SESSION, pendingDelivery(requestId));
     observePromptFrame(SESSION, userEntry(requestId));
-    observePromptFrame(SESSION, steered(requestId));
     expect(getPromptPending("unread")?.started).toBe(false);
-    // The turn ends before the engine reads it: back in the queue first.
-    observePromptFrame(SESSION, queue(requestId));
+    // The turn ends before the engine reads it and requeues the hidden item
+    // ahead of stream_done.
+    observePromptFrame(SESSION, pendingDelivery(requestId));
     observePromptFrame(SESSION, { type: "stream_done", sessionId: SESSION });
     observePromptFrame(SESSION, idle);
     expect(getPromptPending("unread")?.queued).toBe(true);
-    // Its own turn later takes it from the queue and ends.
+    // Its own turn later takes it, the runner's journal acknowledges the
+    // dispatch, and the turn ends.
     observePromptFrame(SESSION, queue());
     expect(getPromptPending("unread")?.started).toBe(true);
     observePromptFrame(SESSION, { type: "stream_done", sessionId: SESSION });
@@ -174,7 +184,7 @@ describe("PR prompt pending state", () => {
 
   test("a steer the engine read ends with the turn it joined", async () => {
     const requestId = await press("read");
-    observePromptFrame(SESSION, steered(requestId));
+    observePromptFrame(SESSION, pendingDelivery(requestId));
     observePromptFrame(SESSION, userEntry(requestId));
     expect(getPromptPending("read")?.started).toBe(false);
     // steer_delivered retires the receipt.
@@ -182,6 +192,18 @@ describe("PR prompt pending state", () => {
     expect(getPromptPending("read")?.started).toBe(true);
     observePromptFrame(SESSION, { type: "stream_done", sessionId: SESSION });
     expect(getPromptPending("read")).toBeUndefined();
+  });
+
+  test("a turn the server can't name takes a fix that already left the queue", async () => {
+    const requestId = await press("restart");
+    observePromptFrame(SESSION, queue(requestId));
+    // Back after a restart adopted the running fix, before its prompts were
+    // recovered: the queue no longer lists it and the list is left out.
+    observePromptFrame(SESSION, queue());
+    observePromptFrame(SESSION, feedSnapshot());
+    expect(getPromptPending("restart")?.started).toBe(true);
+    observePromptFrame(SESSION, { type: "stream_done", sessionId: SESSION });
+    expect(getPromptPending("restart")).toBeUndefined();
   });
 
   test("a snapshot that can't name the running turn's prompts changes nothing", async () => {

@@ -3,8 +3,10 @@ import type { ProtocolServerMessage } from "@tellahq/opensession-protocol/sessio
 import {
   appendSessionFeed,
   beginPromptRun,
+  clearPromptRun,
   notePromptDelivered,
   resumeSessionFeed,
+  seedPromptRun,
   sessionFeedSnapshot,
 } from "./session-feed";
 import {
@@ -181,6 +183,26 @@ describe("session feed", () => {
     expect(sessionFeedSnapshot(sessionId).activePromptIds).toBeUndefined();
     appendSessionFeed(sessionId, { type: "stream_done", sessionId });
     expect(sessionFeedSnapshot(sessionId).activePromptIds).toEqual([]);
+  });
+
+  test("an adopted run's recovered prompts fill the list until it ends", () => {
+    const sessionId = `feed-${crypto.randomUUID()}`;
+    seedPromptRun(sessionId, ["batch-entry", "fix-1"]);
+    appendSessionFeed(sessionId, { type: "stream_start", sessionId });
+    expect(sessionFeedSnapshot(sessionId, true).activePromptIds).toEqual([
+      "batch-entry",
+      "fix-1",
+    ]);
+    // A turn this process started keeps its own record.
+    const release = beginPromptRun(sessionId, ["own"]);
+    seedPromptRun(sessionId, ["stale"]);
+    expect(sessionFeedSnapshot(sessionId).activePromptIds).toEqual(["own"]);
+    release();
+    seedPromptRun(sessionId, ["adopted"]);
+    clearPromptRun(sessionId);
+    expect(
+      sessionFeedSnapshot(sessionId, true).activePromptIds,
+    ).toBeUndefined();
   });
 
   test("active snapshot contains only text not yet committed", () => {

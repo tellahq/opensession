@@ -215,7 +215,13 @@ import {
 import { noteYouShouldKnowStep } from "./you-should-know";
 import { scheduleSessionHistoryIndex } from "./session-index";
 import { broadcastToSession, sessionWatchers } from "./ws-hub";
-import { beginPromptRun, notePromptDelivered } from "./session-feed";
+import { transcript } from "./actor-transcript";
+import {
+  beginPromptRun,
+  clearPromptRun,
+  notePromptDelivered,
+  seedPromptRun,
+} from "./session-feed";
 import { peekWorkspace } from "./workspaces";
 import { coordinatorNoteFor } from "./coordinator";
 import {
@@ -1187,9 +1193,31 @@ export async function persistRecoveredRunUsage(
     });
 }
 
+/**
+ * The prompts an adopted run answers, for feed_snapshot.activePromptIds: the
+ * journal's prompt entry, plus the delivery ids of a batch, which only that
+ * entry's sourceMessageIds name. Left unrecorded if the entry can't be read,
+ * so the snapshot omits the list instead of claiming no prompt runs.
+ */
+async function seedRecoveredPromptRun(
+  osSessionId: string,
+  run: ActiveRunRecord,
+): Promise<void> {
+  const promptEntryId = run.promptEntryId;
+  if (!promptEntryId) return;
+  const entry = await transcript
+    .getFullEntry(osSessionId, promptEntryId)
+    .catch(() => null);
+  if (!entry) return;
+  seedPromptRun(osSessionId, [
+    ...new Set([promptEntryId, ...(entry.sourceMessageIds ?? [])]),
+  ]);
+}
+
 export async function recordRecoveredRunEvent(
   osSessionId: string,
   event: StreamEvent,
+  run?: ActiveRunRecord,
 ): Promise<void> {
   const session = findSession(osSessionId);
   if (!session) return;
@@ -1243,6 +1271,7 @@ export async function recordRecoveredRunEvent(
     event.type === "tool_result";
   if (carriesFeedState && !recoveredFeedStarted.has(osSessionId)) {
     recoveredFeedStarted.add(osSessionId);
+    if (run) await seedRecoveredPromptRun(osSessionId, run);
     broadcastToSession(osSessionId, {
       type: "stream_start",
       sessionId: osSessionId,
@@ -1401,6 +1430,7 @@ export async function recordRecoveredRunEvent(
 
   if (event.type === "done" || event.type === "error") {
     recoveredFeedStarted.delete(osSessionId);
+    clearPromptRun(osSessionId);
     // A discussion turn that outlived a gateway restart still owes Plain its
     // answer and IDLE. The in-memory reply is gone with the old process, so
     // the complete final text comes from the transcript the host proxied.
