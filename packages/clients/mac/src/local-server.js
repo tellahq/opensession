@@ -101,6 +101,31 @@ function mergePath(resolved, home) {
   return [...new Set(entries)].join(":");
 }
 
+/** The folder the person's repositories and session workspaces go in. A Mac's
+ * file system ignores case, so `~/OpenSession` is also `~/opensession`, which
+ * someone may already use for something else (a clone of this project, say).
+ * A folder that holds anything but this app's two folders is left alone. */
+function projectsFolder(home) {
+  const ours = (dir) => {
+    try {
+      return fs
+        .readdirSync(dir)
+        .every(
+          (name) =>
+            name.startsWith(".") || name === "repos" || name === "workspaces",
+        );
+    } catch (error) {
+      return error.code === "ENOENT";
+    }
+  };
+  const names = ["OpenSession", "OpenSessionLocal"];
+  for (let n = 2; n < 10; n++) names.push(`OpenSessionLocal${n}`);
+  return path.join(
+    home,
+    names.find((name) => ours(path.join(home, name))) || names[0],
+  );
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -123,8 +148,9 @@ class LocalServer extends EventEmitter {
     releaseDir,
     home = os.homedir(),
     stateDir = path.join(home, ".opensession-app"),
-    reposDir = path.join(home, "OpenSession", "repos"),
-    workspacesDir = path.join(home, "OpenSession", "workspaces"),
+    // Chosen at the first launch (projectsFolder) unless given.
+    reposDir = null,
+    workspacesDir = null,
     env = process.env,
     spawn = childProcess.spawn,
     execFile = childProcess.execFile,
@@ -352,8 +378,6 @@ class LocalServer extends EventEmitter {
    * it alone, so changes made in the app's settings stay. */
   async seedState(childEnv) {
     fs.mkdirSync(this.stateDir, { recursive: true, mode: 0o700 });
-    fs.mkdirSync(this.reposDir, { recursive: true });
-    fs.mkdirSync(this.workspacesDir, { recursive: true });
 
     const engineFile = path.join(this.stateDir, ".opensession-pi.json");
     if (!exists(engineFile))
@@ -361,11 +385,17 @@ class LocalServer extends EventEmitter {
 
     const configFile = path.join(this.stateDir, ".opensession", "config.json");
     if (exists(configFile)) return;
-    const scratch = path.join(this.reposDir, "scratch");
+    const projects = projectsFolder(this.home);
+    const reposDir = this.reposDir || path.join(projects, "repos");
+    const workspacesDir =
+      this.workspacesDir || path.join(projects, "workspaces");
+    fs.mkdirSync(reposDir, { recursive: true });
+    fs.mkdirSync(workspacesDir, { recursive: true });
+    const scratch = path.join(reposDir, "scratch");
     await this.ensureScratchRepo(scratch, childEnv);
     const config = {
       onboardingCompleted: false,
-      paths: { worktreesDir: this.workspacesDir, reposDir: this.reposDir },
+      paths: { worktreesDir: workspacesDir, reposDir },
       repos: {
         scratch: {
           label: "Scratch",
@@ -663,4 +693,5 @@ module.exports = {
   PREFERRED_PORTS,
   loginShellPath,
   mergePath,
+  projectsFolder,
 };

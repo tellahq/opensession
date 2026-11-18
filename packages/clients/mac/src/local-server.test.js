@@ -3,7 +3,12 @@ const fs = require("node:fs");
 const net = require("node:net");
 const os = require("node:os");
 const path = require("node:path");
-const { LocalServer, loginShellPath, mergePath } = require("./local-server");
+const {
+  LocalServer,
+  loginShellPath,
+  mergePath,
+  projectsFolder,
+} = require("./local-server");
 
 // A stand-in for the compiled server: the same three roles, each recording how
 // it was started, with its behavior read from a file beside it.
@@ -301,6 +306,39 @@ describe("LocalServer", () => {
       .filter((call) => call.pid && call.role !== "seed-session-catalogs")
       .map((call) => call.pid);
     expect(await until(() => !pids.some(alive))).toBe(true);
+  });
+});
+
+describe("the folder for repositories and workspaces", () => {
+  test("is ~/OpenSession on a Mac that has none, and again once it is ours", () => {
+    expect(projectsFolder(home)).toBe(path.join(home, "OpenSession"));
+    fs.mkdirSync(path.join(home, "OpenSession", "repos"), { recursive: true });
+    fs.mkdirSync(path.join(home, "OpenSession", "workspaces"));
+    fs.writeFileSync(path.join(home, "OpenSession", ".DS_Store"), "");
+    expect(projectsFolder(home)).toBe(path.join(home, "OpenSession"));
+  });
+
+  test("leaves a folder of that name that holds something else alone", async () => {
+    // What ~/opensession is on a Mac whose file system ignores case.
+    fs.mkdirSync(path.join(home, "OpenSession", ".git"), { recursive: true });
+    fs.writeFileSync(path.join(home, "OpenSession", "package.json"), "{}");
+    expect(projectsFolder(home)).toBe(path.join(home, "OpenSessionLocal"));
+
+    const server = await make();
+    await server.start();
+    const config = JSON.parse(
+      fs.readFileSync(
+        path.join(home, ".opensession-app", ".opensession", "config.json"),
+        "utf8",
+      ),
+    );
+    expect(config.paths.reposDir).toBe(
+      path.join(home, "OpenSessionLocal", "repos"),
+    );
+    expect(fs.readdirSync(path.join(home, "OpenSession")).sort()).toEqual([
+      ".git",
+      "package.json",
+    ]);
   });
 });
 

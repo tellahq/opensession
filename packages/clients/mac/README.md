@@ -121,6 +121,11 @@ from the command line on the same machine:
 | Ports                  | 47850 (app), 47849 (session kernel), 47860 (webhook listener) |
 | Gateway ownership lock | `~/.opensession-app/deploy/`                                  |
 
+The two folders are chosen at the first launch and written to the config. A
+Mac's file system ignores case, so `~/OpenSession` is also `~/opensession`; when
+that folder already holds something else (a clone of this repository, say), the
+app uses `~/OpenSessionLocal` instead and leaves it alone.
+
 The ports are chosen once and kept in `~/.opensession-app/app.json`, because
 the web app stores preferences and drafts per origin. A port something else
 holds is replaced by a free one, and the stored organization follows. The first
