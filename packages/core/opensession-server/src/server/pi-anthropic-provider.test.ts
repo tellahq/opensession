@@ -1799,6 +1799,55 @@ describe("buildPiAnthropicProvider", () => {
     }
   });
 
+  test("a personal API account never serves an ambiguous first name", async () => {
+    await designate([]);
+    const { __setIdentitiesForTest } = await import("./shared/user-mappings");
+    const restore = __setIdentitiesForTest([
+      { name: "Alex Rivera", github: "alex-rivera" },
+      { name: "Alex Chen", github: "alex-chen" },
+    ]);
+    const apiKey = (id: string, owner: string) => ({
+      id,
+      name: id,
+      owner,
+      token: `sk-ant-api03-${id}`,
+      authKind: "api-key",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    try {
+      writeFileSync(
+        accountsFile,
+        JSON.stringify({ accounts: [apiKey("alex-key", "Alex")] }),
+      );
+      await accounts.loadClaudeAccounts();
+      const mythosFor = (user?: string) =>
+        configuredModelProviders(user).has(CLAUDE_API_CAPACITY);
+      const servedFor = (user: string) => {
+        const r = accounts.resolveAccount({ user, model: "claude-mythos-5-2" });
+        return "account" in r ? r.account.id : undefined;
+      };
+      // "Alex" names both teammates, as owner and as run user: neither spends.
+      expect(mythosFor("Alex")).toBe(false);
+      expect(mythosFor("Alex Rivera")).toBe(false);
+      expect(servedFor("Alex")).toBeUndefined();
+      // A login owner serves its own person, by full name or login, but
+      // still not the shared first name.
+      writeFileSync(
+        accountsFile,
+        JSON.stringify({ accounts: [apiKey("alex-key", "alex-rivera")] }),
+      );
+      await accounts.loadClaudeAccounts();
+      expect(mythosFor("Alex Rivera")).toBe(true);
+      expect(mythosFor("alex-rivera")).toBe(true);
+      expect(mythosFor("Alex Chen")).toBe(false);
+      expect(mythosFor("Alex")).toBe(false);
+      expect(servedFor("Alex")).toBeUndefined();
+      expect(servedFor("Alex Rivera")).toBe("alex-key");
+    } finally {
+      restore();
+    }
+  });
+
   test("setup readiness counts only Claude accounts that can run the default", async () => {
     const apiKey = (id: string, owner?: string) => ({
       id,

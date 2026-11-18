@@ -17,7 +17,7 @@ import { registerMemoryProbe } from "./memory-probes";
 import { homeDir } from "./paths";
 import { chmod, readFile } from "fs/promises";
 import { writeFileAtomicAsync } from "./shared/atomic-write";
-import { userMatchesAny } from "./shared/user-mappings";
+import { ownerRefNamesUser, userMatchesAny } from "./shared/user-mappings";
 import { stateDir } from "./paths";
 import {
   federatedAccessToken,
@@ -1237,12 +1237,18 @@ function federationBinding(account: ClaudeAccount): string | undefined {
 
 /** The owner gate: a personal account (`owner` set) serves only runs whose
  *  user resolves to that person; runs with no user see shared accounts only.
- *  Routing and the model catalog both use it. */
+ *  A personal API account bills its owner's organization, so it needs an
+ *  unambiguous match (`ownerRefNamesUser`): a first name two teammates share
+ *  never spends it. Routing, the model catalog, and Setup all use it. */
 export function accountServesUser(
-  account: Pick<ClaudeAccount, "owner">,
+  account: { owner?: string; authKind?: string },
   user?: string,
 ): boolean {
-  return !account.owner || (!!user && userMatchesAny(user, [account.owner]));
+  if (!account.owner) return true;
+  if (!user) return false;
+  return isClaudeApiAccount(account)
+    ? ownerRefNamesUser(account.owner, user)
+    : userMatchesAny(user, [account.owner]);
 }
 
 export function hasClaudeApiAccounts(): boolean {
@@ -1407,6 +1413,10 @@ export async function addAccount(
  * concurrent ownership transfer can make stale. */
 export type AccountWriteGuard = (account: ClaudeAccount) => string | undefined;
 
+/** Why a Claude API account refuses the subscription usage sign-in. */
+export const CLAUDE_API_ACCOUNT_NO_SIGN_IN =
+  "Claude API accounts don't use Claude sign-in.";
+
 /** A write the guard refused, with its message. */
 export interface AccountWriteForbidden {
   forbidden: string;
@@ -1476,12 +1486,16 @@ export async function setAccountUsageCredentials(
   id: string,
   path: string,
   email?: string,
-): Promise<ClaudeAccountPublic | null> {
+): Promise<ClaudeAccountPublic | AccountWriteForbidden | null> {
   const creds = await readCredsFile(path);
   const next = await mutateStore(async () => {
     const accounts = await readStoreFresh();
     const idx = accounts.findIndex((a) => a.id === id);
     if (idx === -1) return null;
+    // Usage sign-in is for subscriptions. An API account has no usage
+    // endpoint, and a subscription credential must never attach to it.
+    if (isClaudeApiAccount(accounts[idx]))
+      return { forbidden: CLAUDE_API_ACCOUNT_NO_SIGN_IN };
     const next: ClaudeAccount = { ...accounts[idx], credentialsPath: path };
     if (next.authKind === "oauth" && creds) next.token = creds.accessToken;
     delete next.usageScope;
@@ -1490,7 +1504,7 @@ export async function setAccountUsageCredentials(
     await writeStore(accounts);
     return next;
   });
-  if (!next) return null;
+  if (!next || "forbidden" in next) return next;
   usageCache.delete(id);
   credentialsRefreshBlockedUntil.delete(path);
   void refreshAccountUsage(next);
@@ -1566,7 +1580,7 @@ function selectAccount(
       )
       .sort((x, y) => x.bucket - y.bucket || x.picked - y.picked)[0]?.a;
   const personal = user
-    ? best(eligible.filter((a) => a.owner && userMatchesAny(user, [a.owner])))
+    ? best(eligible.filter((a) => a.owner && accountServesUser(a, user)))
     : undefined;
   const picked = personal ?? best(eligible.filter((a) => !a.owner));
   if (picked && recordPick) lastPickedAt.set(picked.id, Date.now());
@@ -1919,7 +1933,7 @@ export function earliestPoolReset(
     (a) =>
       (!accountId || a.id === accountId) &&
       (!allowedAccountIds?.length || allowedAccountIds.includes(a.id)) &&
-      (!a.owner || (!!user && userMatchesAny(user, [a.owner]))),
+      accountServesUser(a, user),
   );
   if (candidates.length === 0) return null;
   let min: number | null = null;
@@ -1969,7 +1983,7 @@ async function refreshSidelinedAccounts(
   try {
     for (const a of readStore()) {
       if (signal?.aborted) return;
-      if (a.owner && !(user && userMatchesAny(user, [a.owner]))) continue;
+      if (!accountServesUser(a, user)) continue;
       if (a.usageScope === "missing" && !a.credentialsPath) continue;
       if (isAccountUsableFor(a, model)) continue;
       // Sequential on purpose — see refreshAllUsage.

@@ -175,18 +175,10 @@ export function ownerRefNamesSignedInUser(
   owner: string | null | undefined,
   signedIn: { login: string; name: string },
 ): boolean {
-  const ref = owner?.trim().replace(/^@/, "").toLowerCase();
+  const ref = normRef(owner);
   const login = signedIn.login.trim().toLowerCase();
   if (!ref || !login) return false;
-  const candidates = identity.team.filter((m) => {
-    const name = m.name.trim().toLowerCase();
-    return (
-      m.github?.trim().toLowerCase() === ref ||
-      name === ref ||
-      name.split(" ")[0] === ref ||
-      !!m.aliases?.some((a) => a.toLowerCase() === ref)
-    );
-  });
+  const candidates = rosterMembersNamed(ref);
   if (candidates.length)
     return (
       candidates.length === 1 &&
@@ -194,6 +186,46 @@ export function ownerRefNamesSignedInUser(
     );
   const name = signedIn.name.trim().toLowerCase();
   return ref === login || ref === name || ref === name.split(" ")[0];
+}
+
+/**
+ * Whether a run's user reference names exactly the person an owner reference
+ * names: both must resolve to the same single roster member. For spending
+ * gates (personal Claude API accounts), unlike `userMatchesAny`: a first name
+ * two roster members share names neither of them, on either side, so an
+ * ambiguous run user can never spend an account. An owner no roster member
+ * answers to matches only the same string, and only if no roster member
+ * answers to the user either.
+ */
+export function ownerRefNamesUser(
+  owner: string | null | undefined,
+  user: string | null | undefined,
+): boolean {
+  const ownerRef = normRef(owner);
+  const userRef = normRef(user);
+  if (!ownerRef || !userRef) return false;
+  const owners = rosterMembersNamed(ownerRef);
+  const users = rosterMembersNamed(userRef);
+  if (!owners.length && !users.length) return ownerRef === userRef;
+  return owners.length === 1 && users.length === 1 && owners[0] === users[0];
+}
+
+function normRef(ref: string | null | undefined): string {
+  return ref?.trim().replace(/^@/, "").toLowerCase() ?? "";
+}
+
+/** Roster members a normalized reference (GitHub login, full name, first
+ *  name, or alias) can mean. More than one means the reference is ambiguous. */
+function rosterMembersNamed(ref: string): TeamMember[] {
+  return identity.team.filter((m) => {
+    const name = m.name.trim().toLowerCase();
+    return (
+      m.github?.trim().toLowerCase() === ref ||
+      name === ref ||
+      name.split(" ")[0] === ref ||
+      !!m.aliases?.some((a) => a.trim().toLowerCase() === ref)
+    );
+  });
 }
 
 /**
