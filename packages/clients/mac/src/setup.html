@@ -18,7 +18,7 @@
     <main>
       <img class="mark" src="mark.png" width="76" height="76" alt="" />
       <h1 id="title">Connect to your server</h1>
-      <p class="message">
+      <p class="message" id="message">
         Enter the address of the Open Session server you use.
       </p>
       <form id="form" autocomplete="off">
@@ -37,6 +37,9 @@
           <button class="button" id="submit" type="submit">Continue</button>
           <button class="button ghost" id="anyway" type="button" hidden>
             Use anyway
+          </button>
+          <button class="button ghost" id="this-mac" type="button" hidden>
+            Use this Mac
           </button>
           <button class="button ghost" id="cancel" type="button" hidden>
             Cancel
@@ -84,6 +87,48 @@
       }
 
       let busy = false;
+
+      // "This Mac": the server the app carries and runs itself, for someone
+      // with no server to connect to. Offered only by a build that includes
+      // it, and only until it has been added.
+      const localServer = window.os1 && window.os1.localServer;
+      const thisMac = document.getElementById("this-mac");
+      if (localServer && !params.get("local")) {
+        localServer.status().then(
+          (state) => {
+            if (!state || !state.available || state.added) return;
+            thisMac.hidden = false;
+            if (!changing) {
+              document.getElementById("message").textContent =
+                "Enter the address of the Open Session server you use, or run sessions on this Mac.";
+            }
+          },
+          () => {},
+        );
+      }
+      thisMac.addEventListener("click", async () => {
+        if (busy || !localServer) return;
+        busy = true;
+        submit.disabled = true;
+        thisMac.disabled = true;
+        anyway.hidden = true;
+        // Said before it starts: this is the one choice here that lets an
+        // agent act on this computer.
+        status.textContent =
+          "Starting on this Mac. Agents here run commands as you.";
+        try {
+          const used = await localServer.use();
+          if (!used.ok)
+            status.textContent =
+              used.error || "Couldn't start Open Session on this Mac.";
+        } catch {
+          status.textContent = "Couldn't start Open Session on this Mac.";
+        } finally {
+          busy = false;
+          submit.disabled = false;
+          thisMac.disabled = false;
+        }
+      });
 
       // `check` asks whether anything answers there first. A typo and a server
       // that is simply down look identical from this screen, and only one of

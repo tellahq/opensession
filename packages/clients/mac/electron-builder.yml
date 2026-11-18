@@ -43,6 +43,13 @@ extraResources:
     to: os-keychain
   - from: build/vendor/os1-voice-audio
     to: os1-voice-audio
+  # "This Mac": the compiled server release, staged by scripts/before-pack.js.
+  # Empty unless the build was given one.
+  - from: build/vendor/server
+    to: server
+    # Named outright: the release keeps an image library under node_modules,
+    # which a default filter may leave out.
+    filter: ["**/*"]
   - from: ../../../LICENSE
     to: LICENSE
   - from: ../../../THIRD-PARTY-NOTICES.md

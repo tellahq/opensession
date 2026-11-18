@@ -97,6 +97,78 @@ the first-run screen offers with `opensession.defaultServer` in `package.json`
 (or `OS1_CLOUD_URL`); a profile that already worked keeps using it and is never
 asked.
 
+## This Mac
+
+A build that carries the compiled server can run it itself, so the app works
+with no server set up anywhere. The first-run screen and **Add organization…**
+then offer **Use this Mac**, which adds one organization named "This Mac" next
+to any others. Its sessions, repositories and transcripts exist only on this
+computer. Model requests still go to the model provider.
+
+`src/local-server.js` owns the server. It runs while the app runs: started at
+launch when the "This Mac" organization exists, restarted if a process dies
+(three times in ten minutes, then reported), and stopped on quit. Nothing is
+installed as a background service. It starts the release the way
+`opensession start --foreground` does (session kernel, catalog seed, gateway)
+with these differences, all so it can never collide with a server installed
+from the command line on the same machine:
+
+| What                   | Where                                                         |
+| ---------------------- | ------------------------------------------------------------- |
+| State, config and logs | `~/.opensession-app/` (`logs/` holds one file per process)    |
+| Repositories           | `~/OpenSession/repos/` (`paths.reposDir`)                     |
+| Session workspaces     | `~/OpenSession/workspaces/` (`paths.worktreesDir`)            |
+| Ports                  | 47850 (app), 47849 (session kernel), 47860 (webhook listener) |
+| Gateway ownership lock | `~/.opensession-app/deploy/`                                  |
+
+The ports are chosen once and kept in `~/.opensession-app/app.json`, because
+the web app stores preferences and drafts per origin. A port something else
+holds is replaced by a free one, and the stored organization follows. The first
+launch writes a config with the two folders, switches the engine on and creates
+a `scratch` repository; later launches leave the config alone, so settings
+changed in the app stay.
+
+The server gets a minimal environment: the login shell's `PATH` (where `git`,
+`gh` and `claude` are), `HOME`, and the SSH agent socket. Turns run inside the
+server process (`OPENSESSION_EXECUTOR=0`, `OPENSESSION_PI_DETACH=0`), so
+quitting the app ends them and nothing keeps running in the background. A turn
+that was in flight is recorded as interrupted and can be continued. Processes
+left by a crashed or force-quit app are ended at the next launch, matched by
+executable path and never by pid alone.
+
+Security: the server listens on loopback with no sign-in, like a default
+command-line install, so any process running as the same macOS user can reach
+it, and agents run commands as that user. It sets
+`OPENSESSION_LOOPBACK_HOSTS_ONLY=1`, which refuses requests whose `Host` is not
+a loopback name, so a web page cannot reach it by re-pointing a domain at
+127.0.0.1. Only the shell's own pages can start, stop or inspect it; a server
+the window loads cannot.
+
+Not available on "This Mac": opening sessions from a phone or another computer,
+inbound integrations that need a public address (Slack mentions, GitHub
+webhooks), and teammates. Connect to a team server for those.
+
+Packaging: `scripts/before-pack.js` packs the unpacked release folder named by
+`OS1_LOCAL_SERVER_RELEASE` into `Contents/Resources/server`, where
+electron-builder signs its executables with the app. Without that variable the
+folder is packed empty and **Use this Mac** is never offered. The release
+workflow builds and packs the server when run manually with **Pack the server
+into the app**, or for every release once the `OS1_BUNDLE_LOCAL_SERVER`
+repository variable is `1`; it then starts the signed server from inside the
+packaged app before notarizing.
+
+To try it from source, point the app at any unpacked release:
+
+```sh
+OS1_LOCAL_SERVER_DIR=/path/to/opensession-<version>-darwin-arm64 bun run start
+bun test src/local-server.test.js
+node scripts/smoke-local-server.js /path/to/opensession-<version>-darwin-arm64
+```
+
+The app updates through the server it is pointed at (see Auto-update), and the
+server on this Mac has no release feed configured. An install that only uses
+"This Mac" therefore does not update itself yet.
+
 ## Single-item macOS Keychain access
 
 Agents can request **one generic-password item for one HTTPS API call** through

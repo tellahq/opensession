@@ -11,11 +11,39 @@ function swiftArch(arch) {
   throw new Error(`Unsupported macOS build arch ${arch} for os1-voice-audio`);
 }
 
+// "This Mac" (src/local-server.js) runs the compiled server release from the
+// app's resources. OS1_LOCAL_SERVER_RELEASE names an unpacked release folder
+// (the one holding the `opensession` executable) to pack. Without it the
+// folder is packed empty and the app never offers the feature, so a build
+// that does not carry the server is unchanged.
+function stageLocalServer(root, release) {
+  const target = path.join(root, "build", "vendor", "server");
+  fs.rmSync(target, { recursive: true, force: true });
+  fs.mkdirSync(target, { recursive: true });
+  if (!release) {
+    fs.writeFileSync(
+      path.join(target, "NOT-INCLUDED.txt"),
+      "This build does not include the local server.\n",
+    );
+    return false;
+  }
+  const binary = path.join(release, "opensession");
+  if (!fs.existsSync(binary))
+    throw new Error(
+      `OS1_LOCAL_SERVER_RELEASE has no opensession executable: ${release}`,
+    );
+  fs.cpSync(release, target, { recursive: true, verbatimSymlinks: true });
+  fs.chmodSync(path.join(target, "opensession"), 0o755);
+  return true;
+}
+
+exports.stageLocalServer = stageLocalServer;
 exports.default = async function beforePack(context) {
   if (context.electronPlatformName !== "darwin") return;
   const root = context.packager.projectDir;
   const outputDir = path.join(root, "build", "vendor");
   fs.mkdirSync(outputDir, { recursive: true });
+  stageLocalServer(root, process.env.OS1_LOCAL_SERVER_RELEASE || "");
   for (const helper of [
     {
       name: "DictationHelper",

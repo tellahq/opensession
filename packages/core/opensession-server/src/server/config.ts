@@ -56,6 +56,9 @@ export interface ServerSection {
 export interface PathsSection {
   claudeBin?: string;
   worktreesDir?: string;
+  /** Where repositories registered from the UI are cloned or created.
+   *  Unset = `~/checkouts`. */
+  reposDir?: string;
   mcpConfig?: string;
 }
 
@@ -356,6 +359,7 @@ export interface ResolvedIngress {
 export interface ResolvedPaths {
   claudeBin: string;
   worktreesDir: string;
+  reposDir: string;
   mcpConfig: string;
 }
 
@@ -536,6 +540,7 @@ function parseConfig(text: string): OpenSessionConfig {
       cfg.paths = defined({
         claudeBin: str(paths.claudeBin),
         worktreesDir: str(paths.worktreesDir),
+        reposDir: str(paths.reposDir),
         mcpConfig: str(paths.mcpConfig),
       });
     }
@@ -818,6 +823,12 @@ export function configuredPaths(): ResolvedPaths {
       // statePath, so a dev/demo instance's worktrees land in its own state
       // root instead of the operator's home. Unset ⇒ $HOME (unchanged).
       statePath(".opensession/worktrees"),
+    // The person's code, so it defaults to their home and never to the state
+    // root: uninstalling or resetting an instance must not take it along.
+    reposDir:
+      process.env.OPENSESSION_REPOS_DIR ||
+      p.reposDir ||
+      `${homeDir()}/checkouts`,
     mcpConfig:
       process.env.OPENSESSION_MCP_CONFIG ||
       p.mcpConfig ||

@@ -7,6 +7,11 @@ on:
   push:
     tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
   workflow_dispatch:
+    inputs:
+      local_server:
+        description: "Pack the server into the app (This Mac)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -22,12 +27,77 @@ defaults:
     working-directory: packages/clients/mac
 
 jobs:
+  # "This Mac": the app can carry the compiled server and run it itself
+  # (packages/clients/mac/src/local-server.js). Off unless a manual run asks
+  # for it or the OS1_BUNDLE_LOCAL_SERVER repository variable is 1; without it
+  # this job is skipped and the app is built exactly as before.
+  #
+  # Built here rather than in the signing job on purpose: this installs the
+  # whole server dependency tree, and none of that should execute next to the
+  # Developer ID certificate.
+  local-server:
+    if: github.repository_owner == 'tellahq' && (inputs.local_server == true || vars.OS1_BUNDLE_LOCAL_SERVER == '1')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.4.0
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Build the darwin-arm64 server
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="$(jq -r .version packages/clients/mac/package.json)"
+          if [[ "$TAG" == v[0-9]* ]]; then version="${TAG#v}"; fi
+          out="$RUNNER_TEMP/local-server"
+          mkdir -p "$out"
+          export SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          bun scripts/build-compile.ts --version "$version" --os darwin --arch arm64 --out "$out"
+          test -s "$out/opensession-$version-darwin-arm64.tar.gz"
+          mv "$out/opensession-$version-darwin-arm64.tar.gz" "$out/server.tar.gz"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: local-server-darwin-arm64
+          path: ${{ runner.temp }}/local-server/server.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
   release:
-    if: github.repository_owner == 'tellahq'
+    needs: [local-server]
+    # A skipped local-server job is the ordinary case, and a skipped
+    # dependency would otherwise skip this job too.
+    if: ${{ !cancelled() && github.repository_owner == 'tellahq' && (needs.local-server.result == 'success' || needs.local-server.result == 'skipped') }}
     runs-on: macos-26
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - name: Download the local server
+        if: needs.local-server.result == 'success'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: local-server-darwin-arm64
+          path: ${{ runner.temp }}/local-server
+
+      # before-pack.js packs the folder this names into the app's resources,
+      # where electron-builder signs its executables with the app.
+      - name: Unpack the local server
+        if: needs.local-server.result == 'success'
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/local-server/release"
+          tar -xzf "$RUNNER_TEMP/local-server/server.tar.gz" -C "$RUNNER_TEMP/local-server/release" --strip-components 1
+          test -x "$RUNNER_TEMP/local-server/release/opensession"
+          echo "OS1_LOCAL_SERVER_RELEASE=$RUNNER_TEMP/local-server/release" >> "$GITHUB_ENV"
 
       - name: Prepare release draft
         if: github.ref_type == 'tag'
@@ -176,6 +246,33 @@ jobs:
           codesign -d --entitlements :- "$VOICE_HELPER" | grep -q 'com.apple.security.device.audio-input' ||
             { echo '::error::Voice audio helper lacks the audio-input entitlement'; exit 1; }
           otool -L "$VOICE_HELPER" | grep -E 'AVFAudio\.framework|AVFoundation\.framework'
+
+      # The server is a second runtime inside the bundle. It only works if the
+      # signature lets it JIT under the hardened runtime, so it is run for
+      # real here, before notarization: started the way the app starts it,
+      # asked for its health and its UI, and stopped.
+      - name: Verify the packaged local server
+        if: needs.local-server.result == 'success'
+        run: |
+          set -euo pipefail
+          APP="dist/mac-arm64/$(jq -r .productName package.json).app"
+          SERVER="$APP/Contents/Resources/server/opensession"
+          test -x "$SERVER" || { echo '::error::The local server is missing from the app'; exit 1; }
+          codesign --verify --strict --verbose=2 "$SERVER" ||
+            { echo '::error::Local server signature is invalid'; exit 1; }
+          codesign -d --entitlements :- "$SERVER" | grep -q 'com.apple.security.cs.allow-jit' ||
+            { echo '::error::Local server lacks the JIT entitlement'; exit 1; }
+          while IFS= read -r -d '' native; do
+            codesign --verify --strict "$native" ||
+              { echo "::error::Unsigned native code in the local server: $native"; exit 1; }
+          done < <(find "$APP/Contents/Resources/server" -type f \( -name '*.node' -o -name '*.dylib' \) -print0)
+          # Every file of the release, the image-library sidecar included.
+          diff <(cd "$OS1_LOCAL_SERVER_RELEASE" && find . -type f | sort) \
+            <(cd "$APP/Contents/Resources/server" && find . -type f | sort) ||
+            { echo '::error::The packed local server is missing files'; exit 1; }
+          du -sh "$APP/Contents/Resources/server"
+          bun test src/local-server.test.js
+          node scripts/smoke-local-server.js "$APP/Contents/Resources/server"
 
       - name: Verify packaged locales and report size
         run: |

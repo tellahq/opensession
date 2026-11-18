@@ -335,6 +335,43 @@ export function webAuthToken(req: Request): string | null {
   return tokenFromRequest(req);
 }
 
+// ── Loopback-only hosts (DNS rebinding) ──────────────────────────────────────
+
+function loopbackHostname(hostname: string): boolean {
+  const normalized = hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  return (
+    normalized === "127.0.0.1" ||
+    normalized === "::1" ||
+    normalized === "localhost" ||
+    normalized.endsWith(".localhost")
+  );
+}
+
+/**
+ * A server that only ever answers on this machine (the one a desktop app
+ * runs for itself) sets OPENSESSION_LOOPBACK_HOSTS_ONLY=1. Its address is then
+ * always a loopback name, so a request naming any other host did not come
+ * from its own UI: it is a web page whose domain was re-pointed at 127.0.0.1
+ * (DNS rebinding), which the browser treats as same-origin and the cross-site
+ * check below therefore lets through. Off by default: a server behind a
+ * reverse proxy or a tailnet is addressed by its public name.
+ */
+export function foreignHostViolation(
+  req: Request,
+  env: Record<string, string | undefined> = process.env,
+): string | null {
+  if (env.OPENSESSION_LOOPBACK_HOSTS_ONLY !== "1") return null;
+  const host = req.headers.get("host");
+  if (!host) return "no host";
+  let hostname: string;
+  try {
+    hostname = new URL(`http://${host}`).hostname;
+  } catch {
+    return "malformed host";
+  }
+  return loopbackHostname(hostname) ? null : `host ${hostname}`;
+}
+
 // ── Cross-site request rejection (CSRF belt-and-braces) ──────────────────────
 
 /**

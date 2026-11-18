@@ -445,6 +445,30 @@ folder; any other path is rejected. Automation identities and cross-origin
 requests cannot answer. File contents are untrusted input to the agent, like
 any attachment.
 
+## A server run by the Mac app
+
+The Mac app can carry the compiled server and run it for one person on their
+own computer ("This Mac", see
+[packages/clients/mac/README.md](../packages/clients/mac/README.md)). It is a
+default no-sign-in instance bound to loopback, with the same trust boundary:
+every process running as that macOS user can call it, and agents run commands
+as that user in the folders they are given. What it adds:
+
+- **No rebinding.** It sets `OPENSESSION_LOOPBACK_HOSTS_ONLY=1`. The gateway
+  then refuses any request whose `Host` is not a loopback name before routing
+  it, so a web page cannot turn a domain it controls into a same-origin caller
+  by resolving it to 127.0.0.1. The cross-site check alone would let that
+  through, because the browser reports such a request as same-origin.
+- **Its own state.** State, ports and the gateway ownership lock are separate
+  from a command-line install on the same machine.
+- **No remote control of it.** Starting, stopping and inspecting the server is
+  IPC that the app accepts only from its own packaged pages.
+- **It ends with the app.** Turns run inside the server process and the app
+  stops the server on quit.
+
+Other macOS users on a shared computer can still reach a loopback port. Do not
+use "This Mac" on a computer shared with people you do not trust.
+
 ## Local folders
 
 The interactive-only `opensession-local-folders` server lets a session read,

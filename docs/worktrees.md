@@ -25,6 +25,10 @@ worktrees live. `OPENSESSION_WORKTREES_DIR` overrides it; the normal default is
 worktree root inside that state namespace unless either setting overrides it.
 Directory names use the repository's configured `wtPrefix` and branch.
 
+`paths.reposDir` (or `OPENSESSION_REPOS_DIR`) decides where repositories added
+from the UI are cloned or created. It defaults to `~/checkouts`, which is the
+path the examples below use.
+
 A repository started from Open Session itself (Settings → Repositories → New,
 or "New repository" in the New session palette's Project picker) is what to
 pick for a project that does not exist anywhere yet; a scratch session (Code
