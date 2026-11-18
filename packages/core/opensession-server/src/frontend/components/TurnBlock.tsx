@@ -71,10 +71,7 @@ import {
 import { transcriptDisclosureLedger } from "../lib/transcript-disclosures";
 import { workSummary, workSummaryTitle } from "../lib/work-summary";
 import { turnScrollAnchor } from "../lib/transcript-block-identity";
-import {
-  RunElapsed,
-  useLiveReasoningStatus,
-} from "./session-viewer/live-run-status";
+import { useLiveReasoningStatus } from "./session-viewer/live-run-status";
 
 interface Props {
   /** One turn's tool calls, provider reasoning, and intermediate narration.
@@ -863,28 +860,14 @@ function ReasoningMessage({
   const title = batchedTitle.split("\n").at(-1) ?? "";
   const last = entries[entries.length - 1];
   const live = useLiveReasoningStatus(active);
-  // Some providers expose prose thinking rather than a short status heading.
-  // Keep that prose readable and shimmer a stable activity label.
-  const liveTitle = title || "Thinking";
   return (
     <div className="my-2 px-1" data-eid={last.id} data-reasoning="">
-      {live.thinking ? (
-        // ChatGPT's shape: the thought's own header is the run's status
-        // line, "Thinking · 15m", and no second row repeats it below.
-        <div
-          role={live.ownsStatus ? "status" : undefined}
-          className="flex flex-wrap items-baseline gap-x-2"
-        >
-          <TextShimmer className={cn(msgReasoningTitle, msgReasoningShimmer)}>
-            {liveTitle}
-          </TextShimmer>
-          {live.ownsStatus && (
-            <RunElapsed
-              since={live.since}
-              className="text-meta text-faint tabular-nums"
-            />
-          )}
-        </div>
+      {live.thinking && !live.namedBelow ? (
+        // Some providers expose prose thinking rather than a short status
+        // heading. Keep that prose readable and shimmer a stable label.
+        <TextShimmer className={cn(msgReasoningTitle, msgReasoningShimmer)}>
+          {title || "Thinking"}
+        </TextShimmer>
       ) : title ? (
         <div className={msgReasoningTitle}>{title}</div>
       ) : null}
