@@ -50,7 +50,9 @@ export async function handleModelsRoutes(
     // JSON reads — same "read fresh" contract as /sandbox/status below) so a
     // config change shows up on the next picker open, not the next restart.
     refreshPickerModels();
-    const configuredProviders = configuredModelProviders();
+    const configuredProviders = configuredModelProviders(
+      requestUser(ctx, url.searchParams.get("user")) || undefined,
+    );
     // One list of Pi models. Native claude/codex ids stay resolvable for
     // stored sessions, just not selectable here. Guard: with no engine
     // configured, fall back to the full registry so the picker is never empty.

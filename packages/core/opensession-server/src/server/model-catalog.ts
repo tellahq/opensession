@@ -1,10 +1,11 @@
-import { listAccountsPublic } from "./claude-accounts";
+import { accountServesUser, listAccountsPublic } from "./claude-accounts";
 import {
   isClaudeApiAccount,
   isClaudeApiOnlyModel,
 } from "./claude-api-credentials";
 import { listCodexAccountsPublic } from "./codex-accounts";
 import { designatedBridgeAccountIds, modelProviders } from "./model-providers";
+import { piAnthropicTransport } from "./pi-config";
 import { hasXaiAccounts } from "./xai-accounts";
 import { XAI_OAUTH_PROVIDER } from "./xai-provider-id";
 import {
@@ -18,18 +19,26 @@ import {
  * (Mythos), so they do not make the rest of the `anthropic` catalog runnable. */
 export const CLAUDE_API_CAPACITY = "anthropic:api";
 
-/** Provider capacity configured on this server. Temporary exhaustion does not
- * change the catalog or default; adding or removing an account does. */
-export function configuredModelProviders(): Set<string> {
+/** Provider capacity configured on this server for `user` (the person who
+ * would run the model). Temporary exhaustion does not change the catalog or
+ * default; adding or removing an account does. */
+export function configuredModelProviders(user?: string): Set<string> {
   // A bridge designation fences Anthropic runs to the accounts it names, so
   // only those count: an API account added outside it cannot serve Mythos.
   const designated = designatedBridgeAccountIds();
   const claude = listAccountsPublic().filter(
     (a) => !designated.length || designated.includes(a.id),
   );
+  // Mythos capacity is per person: another user's personal API account never
+  // serves this user's run. The HTTP bridge carries no run identity, so there
+  // only shared API accounts serve anyone.
+  const runUser = piAnthropicTransport() === "bridge" ? undefined : user;
+  const api = claude.filter(
+    (a) => isClaudeApiAccount(a) && accountServesUser(a, runUser),
+  );
   return new Set([
     ...(claude.some((a) => !isClaudeApiAccount(a)) ? ["anthropic"] : []),
-    ...(claude.some(isClaudeApiAccount) ? [CLAUDE_API_CAPACITY] : []),
+    ...(api.length ? [CLAUDE_API_CAPACITY] : []),
     ...(listCodexAccountsPublic().length ? ["openai"] : []),
     ...(hasXaiAccounts() ? [XAI_OAUTH_PROVIDER] : []),
     ...Object.entries(modelProviders())

@@ -147,6 +147,24 @@ export function isClaudeUsageLimitError(
   );
 }
 
+/**
+ * Whether a successful result's whole text is a Claude Code limit notice
+ * rather than a model answer that mentions limits or `/usage-credits`. Each
+ * pattern is anchored at the start of a short text, so an ordinary answer is
+ * never mistaken for one. Only for results reported as success; errors keep
+ * the broader `isClaudeUsageLimitError` heuristics.
+ */
+export function isClaudeLimitNotice(text: string): boolean {
+  const s = text.trim().toLowerCase();
+  if (!s || s.length > 300) return false;
+  return (
+    /^you['’]ve (?:hit|reached) your .{0,30}limit\b/.test(s) ||
+    /^claude (?:ai )?usage limit reached/.test(s) ||
+    /^you(?:['’]re| are) out of (?:usage )?credits\b/.test(s) ||
+    /^[\w\s-]{0,30}limit (?:reached|hit)\b.{0,60}\bresets\b/.test(s)
+  );
+}
+
 const RESET_MONTHS: Record<string, number> = {
   jan: 0,
   feb: 1,

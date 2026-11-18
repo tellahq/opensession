@@ -75,7 +75,10 @@ import {
   resolveCreateSubscriptionPolicy,
   type SubscriptionPolicy,
 } from "./fixed-subscription";
-import { configuredInteractiveDefaultModel } from "./model-catalog";
+import {
+  configuredInteractiveDefaultModel,
+  configuredModelProviders,
+} from "./model-catalog";
 import { notifyMentions } from "./mentions";
 import { newSessionId } from "./paths";
 import { enablesPstackMode, PSTACK_MODE_NOTE } from "./pstack-mode";
@@ -2615,7 +2618,9 @@ export async function handleCreateSessionMessage(
   const model = forkSource
     ? forkSource.model
     : (msg.model ? resolveModel(String(msg.model))?.id : undefined) ||
-      configuredInteractiveDefaultModel();
+      configuredInteractiveDefaultModel(
+        configuredModelProviders(typeof user === "string" ? user : undefined),
+      );
   // Reasoning effort from the New-session palette (forks inherit).
   const createEffort = forkSource
     ? forkSource.effort

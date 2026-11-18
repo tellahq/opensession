@@ -1219,6 +1219,16 @@ async function appendAccount(
   });
 }
 
+/** The owner gate: a personal account (`owner` set) serves only runs whose
+ *  user resolves to that person; runs with no user see shared accounts only.
+ *  Routing and the model catalog both use it. */
+export function accountServesUser(
+  account: Pick<ClaudeAccount, "owner">,
+  user?: string,
+): boolean {
+  return !account.owner || (!!user && userMatchesAny(user, [account.owner]));
+}
+
 export function hasClaudeApiAccounts(): boolean {
   return readStore().some(isClaudeApiAccount);
 }
@@ -1609,8 +1619,7 @@ export interface AccountRequest {
 export function resolveAccount(req: AccountRequest): AccountResolution {
   const { user, model, allowExtraUsage } = req;
   const ids = req.designatedIds;
-  const ownedByUser = (a: ClaudeAccount) =>
-    !a.owner || (!!user && userMatchesAny(user, [a.owner]));
+  const ownedByUser = (a: ClaudeAccount) => accountServesUser(a, user);
   const designated = (id: string) => !ids?.length || ids.includes(id);
   const nameOf = (id: string) => getAccountById(id)?.name || id;
   const excluded = req.excludeIds?.length ? new Set(req.excludeIds) : undefined;

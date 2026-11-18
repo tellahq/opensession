@@ -89,10 +89,12 @@ import {
   type ClaudeAccount,
 } from "./claude-accounts";
 import { claudeCodeAuth } from "./claude-api-credentials";
+import { bridgePinFromHeaders } from "./anthropic-bridge-pin";
 import { cacheCreationUsage } from "./claude-cache-writes";
 import { contextWindowFor } from "./models";
 import {
   CLAUDE_CODE_BIN,
+  isClaudeLimitNotice,
   isClaudeUsageLimitError,
   usageLimitResetAt,
 } from "./runner-shared";
@@ -200,15 +202,16 @@ export function ensureAnthropicBridge(): BridgeInfo {
   return { url: `http://127.0.0.1:${port}`, key: bridgeKey() };
 }
 
-/** Optional account pin for pickBridgeAccount — only the in-process pi
- *  provider passes it (the HTTP bridge has no channel for a pin); a pin never
- *  widens serving beyond what the pick mode allows. */
+/** Optional account pin for pickBridgeAccount: the in-process pi provider
+ *  passes it directly, the HTTP bridge reads it from request headers
+ *  (anthropic-bridge-pin.ts, account and strictness only, never the user); a
+ *  pin never widens serving beyond what the pick mode allows. */
 export interface BridgeAccountPin {
   accountId?: string;
   /** Strict pin: never fall back to the other eligible accounts. */
   accountStrict?: boolean;
   /** Run user, for the pool pick's personal-account preference (same identity
-   *  matching as pickAccount everywhere else). */
+   *  matching as pickAccount everywhere else). Never set on the HTTP bridge. */
   user?: string;
   /** Allow extra-usage credits when judging the pin/walk usability. */
   usageCredits?: boolean;
@@ -235,7 +238,7 @@ export interface BridgeAccountPin {
  *    live on a credits-off account, 2026-08-06), so there is no billing
  *    reason to fence it off from the pool.
  *
- *  A `pin` (in-process pi runs only) is tried first; with accountStrict the
+ *  A `pin` (from either transport) is tried first; with accountStrict the
  *  walk never widens past it. Another user's personal subscription never
  *  serves, on any path — the ordered policy and that owner gate both live in
  *  resolveAccount; this only renders its refusals. The "no designated bridge
@@ -763,14 +766,12 @@ export async function handleBridgeRequest(req: Request): Promise<Response> {
   // rule) is skipped for this request; the next eligible account serves it.
   const skippedIds: string[] = [];
   const credentialErrors: string[] = [];
+  const pin = bridgePinFromHeaders(req.headers);
   let account: ClaudeAccount;
   let auth: Awaited<ReturnType<typeof claudeCodeAuth>>;
   for (;;) {
     if (cancel.signal.aborted) return canceled();
-    const picked = pickBridgeAccount(
-      model,
-      skippedIds.length ? { excludeIds: skippedIds } : undefined,
-    );
+    const picked = pickBridgeAccount(model, { ...pin, excludeIds: skippedIds });
     if ("error" in picked) {
       if (credentialErrors.length) {
         const detail = credentialErrors.join("; ");
@@ -994,7 +995,7 @@ export async function handleBridgeRequest(req: Request): Promise<Response> {
             .filter((b) => b.type === "text")
             .map((b) => b.text)
             .join("\n");
-        if (!captured.length && isClaudeUsageLimitError(notice, false))
+        if (!captured.length && isClaudeLimitNotice(notice))
           throw new Error(notice);
         usage = {
           input_tokens: rm.usage?.input_tokens || 0,

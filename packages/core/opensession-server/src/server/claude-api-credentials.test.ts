@@ -259,6 +259,23 @@ describe("account routing", () => {
     ).toBeUndefined();
   });
 
+  test("only a whole limit notice counts as one in a successful result", async () => {
+    const { isClaudeLimitNotice } = await import("./runner-shared");
+    for (const notice of [
+      "5-hour limit reached ∙ resets 3am",
+      "You've hit your session limit · resets 12:50pm (UTC)",
+      "Claude AI usage limit reached|1767225600",
+      "You're out of usage credits. Run /usage-credits to keep using Fable 5.1 or /model to switch models.",
+    ])
+      expect(isClaudeLimitNotice(notice)).toBe(true);
+    for (const answer of [
+      "Use /usage-credits to check your balance before running Claude again.",
+      "The API rate limit resets every minute, so retry after a short wait.",
+      "Your plan's usage limit reached its cap yesterday; it resets weekly.",
+    ])
+      expect(isClaudeLimitNotice(answer)).toBe(false);
+  });
+
   test("an API rate limit benches the account briefly", () => {
     accounts.markExhausted("api", "claude-mythos-5-2");
     expect(

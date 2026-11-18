@@ -86,6 +86,7 @@ import { isPiUsageLimitShape } from "./pi-runner";
 import * as accounts from "./claude-accounts";
 import * as workloadIdentity from "./workload-identity";
 import { CLAUDE_API_CAPACITY, configuredModelProviders } from "./model-catalog";
+import { bridgePinHeaders } from "./anthropic-bridge-pin";
 import { loadPiConfig } from "./pi-config";
 import { loadModelProviders } from "./model-providers";
 import * as sdk from "@anthropic-ai/claude-agent-sdk";
@@ -1723,6 +1724,43 @@ describe("buildPiAnthropicProvider", () => {
     expect(configuredModelProviders().has(CLAUDE_API_CAPACITY)).toBe(true);
   });
 
+  test("Mythos capacity counts only API accounts that serve the user", async () => {
+    await designate([]);
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: [
+          {
+            id: "alice-key",
+            name: "alice-key",
+            owner: "Alice",
+            token: "sk-ant-api03-alice-key",
+            authKind: "api-key",
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    const mythosFor = (user?: string) =>
+      configuredModelProviders(user).has(CLAUDE_API_CAPACITY);
+    expect(mythosFor("Alice")).toBe(true);
+    expect(mythosFor("Bob")).toBe(false);
+    expect(mythosFor()).toBe(false);
+    // The HTTP bridge carries no run identity, so a personal account never
+    // serves there, not even its owner.
+    writeFileSync(
+      piConfigFile,
+      JSON.stringify({ enabled: true, anthropicTransport: "bridge" }),
+    );
+    await loadPiConfig();
+    try {
+      expect(mythosFor("Alice")).toBe(false);
+    } finally {
+      await designate([]);
+    }
+  });
+
   test("the bridge benches an account whose result is a limit notice", async () => {
     await designate(["key-a", "key-b"]);
     writeFileSync(
@@ -1773,6 +1811,118 @@ describe("buildPiAnthropicProvider", () => {
     expect(
       sidelineLimitedBridgeAccount(first, "claude-mythos-5-2", "Invalid model"),
     ).toBe(false);
+  });
+
+  test("a bridge answer that mentions /usage-credits is returned, not benched", async () => {
+    await designate(["key-a", "key-b"]);
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: ["key-a", "key-b"].map((id) => ({
+          id,
+          name: id,
+          token: `sk-ant-api03-${id}`,
+          authKind: "api-key",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        })),
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    const answer =
+      "Use /usage-credits to check your balance before running Claude again.";
+    const query = spyOn(sdk, "query").mockImplementation((() =>
+      (async function* () {
+        yield {
+          type: "assistant",
+          message: { content: [{ type: "text", text: answer }] },
+        };
+        yield {
+          type: "result",
+          subtype: "success",
+          is_error: false,
+          result: answer,
+          session_id: "sdk-answer",
+        };
+      })()) as any);
+    try {
+      const res = await handleBridgeRequest(
+        new Request("http://127.0.0.1/v1/messages", {
+          method: "POST",
+          headers: { "x-api-key": bridgeKey() },
+          body: JSON.stringify({
+            model: "claude-mythos-5-2",
+            messages: [{ role: "user", content: "how do I check credits?" }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as any;
+      expect(body.content[0].text).toBe(answer);
+      // Still first in the designated walk: the account was not benched.
+      expect((pickBridgeAccount("claude-mythos-5-2") as any).id).toBe("key-a");
+    } finally {
+      query.mockRestore();
+    }
+  });
+
+  test("the bridge honors a fixed session's strict account pin", async () => {
+    await designate(["key-a", "key-b"]);
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: ["key-a", "key-b"].map((id) => ({
+          id,
+          name: id,
+          token: `sk-ant-api03-${id}`,
+          authKind: "api-key",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        })),
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    const keys: unknown[] = [];
+    const query = spyOn(sdk, "query").mockImplementation(((args: any) => {
+      keys.push(args.options.env.ANTHROPIC_API_KEY);
+      return (async function* () {
+        yield {
+          type: "result",
+          subtype: "success",
+          is_error: false,
+          result: "ok",
+          session_id: "sdk-pin",
+        };
+      })();
+    }) as any);
+    const send = (pinned = true) =>
+      handleBridgeRequest(
+        new Request("http://127.0.0.1/v1/messages", {
+          method: "POST",
+          headers: {
+            "x-api-key": bridgeKey(),
+            ...(pinned ? bridgePinHeaders("key-b", true) : {}),
+          },
+          body: JSON.stringify({
+            model: "claude-mythos-5-2",
+            messages: [{ role: "user", content: "hi" }],
+          }),
+        }),
+      );
+    accounts.returnAccountToPool("key-a");
+    accounts.returnAccountToPool("key-b");
+    try {
+      // Unpinned, the designated walk starts at key-a; the pin moves it.
+      expect((await send(false)).status).toBe(200);
+      expect((await send()).status).toBe(200);
+      expect(keys).toEqual(["sk-ant-api03-key-a", "sk-ant-api03-key-b"]);
+      // With the pinned account benched, the strict pin refuses instead of
+      // billing key-a.
+      accounts.markExhausted("key-b", "claude-mythos-5-2");
+      expect((await send()).status).toBe(529);
+      expect(keys).toHaveLength(2);
+    } finally {
+      query.mockRestore();
+      accounts.returnAccountToPool("key-b");
+    }
   });
 
   test("a bridge request canceled during the token exchange never starts Claude Code", async () => {
@@ -2280,7 +2430,7 @@ describe("buildPiAnthropicProvider", () => {
   });
 });
 
-describe("pickBridgeAccount pins (in-process runs only; designation is the ceiling)", () => {
+describe("pickBridgeAccount pins (designation is the ceiling)", () => {
   test("a designated, usable pin is picked first", async () => {
     await designate(["des-a", "des-b"]);
     await seedAccounts(["des-a", "des-b"]);
