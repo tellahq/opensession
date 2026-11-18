@@ -19,7 +19,6 @@ struct ToolCallRow: View {
     /// Installed by the iOS session screen; absent everywhere else, which is
     /// what lets the cover offer "Show in Assets" when a stack is available.
     @Environment(\.openPanel) private var openPanel
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private var presentation: ToolPresentation { item.presentation }
 
@@ -119,29 +118,22 @@ struct ToolCallRow: View {
                 tint: item.isError ? OS1VisualStyle.red : OS1VisualStyle.textFaint
             )
 
-            // "server · tool", the way the web writes it. The server used to
-            // wear a filled pill, but `panel` is `.tertiarySystemBackground` —
-            // pure white in light appearance — so it read as a white box
-            // punched into the row rather than as part of the call's name.
-            //
-            // Priority rather than `fixedSize`: the name outranks the summary
-            // and takes its width first, but it still has to yield to the row.
-            // An MCP call carries its server too — "opensession-walkthrough ·
-            // publish_walkthrough" measures 340pt against a 344pt row on a
-            // phone — and rigid at that width it made the row wider than the
-            // transcript. A vertical `ScrollView` does not clamp content it
-            // can't fit, it CENTERS it, so that one row dragged every
-            // paragraph in the turn off both edges and took the margin with
-            // it.
-            nameText
+            // One phrase, "Read ToolCallRow.swift" or a command, in one
+            // gray: see `ToolRowTitle`. It yields to the trailing chips and
+            // counts rather than pushing the row wider than the transcript;
+            // a vertical ScrollView centres content it can't fit, which
+            // dragged every paragraph in the turn off both edges.
+            Text(rowTitle.title)
+                .font(.subheadline)
+                .foregroundStyle(item.isError ? OS1VisualStyle.redInk : OS1VisualStyle.textDim)
                 .lineLimit(1)
-                // The tool is the half worth keeping; the server prefix
-                // repeats down the fold.
-                .truncationMode(.middle)
                 .layoutPriority(1)
 
-            if !presentation.summary.isEmpty {
-                summaryText
+            if let detail = rowTitle.detail {
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(OS1VisualStyle.textFaint)
+                    .lineLimit(1)
             }
 
             Spacer(minLength: 4)
@@ -190,42 +182,10 @@ struct ToolCallRow: View {
         }
         .toolRowFrame()
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(presentation.displayName). \(presentation.summary)")
+        .accessibilityLabel(presentation.stepLabel)
     }
 
-    private var nameText: some View {
-        let fullParts = presentation.labelParts
-        let parts = horizontalSizeClass == .compact
-            && fullParts.first == "Open Session"
-            && fullParts.count > 2
-            ? Array(fullParts.dropFirst())
-            : fullParts
-        return HStack(alignment: .firstTextBaseline, spacing: 4) {
-            ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
-                if index > 0 {
-                    Text("·")
-                        .font(.subheadline)
-                        .foregroundStyle(OS1VisualStyle.textFaint)
-                        .fixedSize()
-                }
-                let isContext = index < parts.count - 1
-                Text(part)
-                    .font(.subheadline.weight(isContext ? .regular : .medium))
-                    .foregroundStyle(
-                        isContext ? OS1VisualStyle.textFaint : OS1VisualStyle.textDim
-                    )
-                    .fixedSize(horizontal: isContext, vertical: false)
-            }
-        }
-    }
-
-    private var summaryText: some View {
-        ToolSummaryText(
-            summary: presentation.summary,
-            isPath: presentation.summaryIsPath,
-            isError: item.isError
-        )
-    }
+    private var rowTitle: ToolRowTitle { presentation.rowTitle }
 
     @ViewBuilder
     private var statusGlyph: some View {
@@ -245,6 +205,10 @@ struct ToolCallRow: View {
     @ViewBuilder
     private var detailBody: some View {
         VStack(alignment: .leading, spacing: 8) {
+            // The row names a file by itself; where it lives is here.
+            if presentation.summaryIsPath, presentation.summary.contains("/") {
+                ToolSummaryText(summary: presentation.summary, isPath: true)
+            }
             if let detail {
                 if detail.inputKind != .none {
                     let inputLines = ToolCodeMetrics.lines(detail.inputText)

@@ -149,8 +149,9 @@ passed`, the whole message and nothing else) draws as one compact row per
   one `Worked for …` row above that answer. A human message,
   a review handoff or a team note starts a new row; blockers, questions and
   anything with extra prose or attachments stay ordinary messages, and the
-  stored transcript is unchanged. On phones, one changed-files summary
-  replaces the footer chip cloud while opening the same Changes panel. Comment
+  stored transcript is unchanged. An answer's footer carries no touched-file
+  chips: its ⋯ menu lists the changed files and opens each diff, and the
+  Changes panel has the whole set; only assets the turn wrote keep chips. Comment
   threads sit beside that timeline without entering the agent context: a
   thread with no passage is a team note in the timeline (the yellow composer
   mode posts one), and a thread on a passage shows as a quoted chip under the
@@ -165,7 +166,10 @@ passed`, the whole message and nothing else) draws as one compact row per
   apart from the question; only colour changes, on the field's own text view.
   Tool rows use the server's presentation metadata for canonical names,
   humanized MCP server/tool labels, glyph families, summaries and ±lines; the
-  native derivation remains as an older-server fallback. Expanding one renders
+  native derivation remains as an older-server fallback. A row is one plain
+  phrase beside its glyph (`Read ToolCallRow.swift`, a shell call's command,
+  `Publish walkthrough`), never the tool name plus its arguments; see
+  `ToolRowTitle`. Expanding one renders
   the tool's own shape: a unified diff
   for an edit, the command for a shell call, file content for a write.
   Routine calls fold into one run named by what it did
@@ -179,7 +183,7 @@ passed`, the whole message and nothing else) draws as one compact row per
   while incidental media remains inside the producing tool row.
   A `Task` row opens the sub-agent's own transcript in a sheet (polled while
   the worker runs, via `GET /api/sessions/:id/subagent/:agentId`), and a
-  footer's file chip opens that file's diff for the turn. A published
+  changed file in the footer's ⋯ menu opens that file's diff for the turn. A published
   walkthrough (demo recording, writeup, before/after stills) renders as a card
   under the turn that published it. A `suggest_task` proposal renders as a
   card under its work fold, open or shut: Start session creates the session
@@ -768,7 +772,7 @@ OS1/
     NewSessionView.swift     Full-height create-session editor
     LibraryView.swift        Startable recipes and templates
     TranscriptRow.swift      Per-block rendering: bubbles, notices, clamping
-    TurnBlockView.swift      Work fold header + turn footer + file chips
+    TurnBlockView.swift      Work fold header + turn footer + asset chips
     ProgressStatusRow.swift  One agent status row with its update history
     ToolCallRow.swift        Tool rows, bespoke bodies, unified-diff rendering
     SubagentView.swift       A Task call's sub-agent transcript, in a sheet

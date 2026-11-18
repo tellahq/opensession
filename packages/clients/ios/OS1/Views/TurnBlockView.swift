@@ -550,41 +550,23 @@ struct TurnFooterView: View {
     /// "Duplicate from here", as on the web footer's ⋯.
     var onFork: (() -> Void)? = nil
 
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.openPanel) private var openPanel
+    /// The changed file picked from the ⋯ menu, shown as its diff.
+    @State private var diffFile: TouchedFile?
 
-    /// How many chips a footer draws before it points at the whole list
-    /// instead. A refactor can touch thirty files, and thirty wrapped chips
-    /// would bury the answer they belong to.
-    private static let chipLimit = 8
-
-    /// A phone chip carries a name and its ± counts, so two rarely share a
-    /// line and four became a column under every answer. One name plus the
-    /// count of the rest keeps the footer to a single row, matching the web.
-    private static let phoneChipLimit = 1
-
-    private var chipLimit: Int {
-        horizontalSizeClass == .compact ? Self.phoneChipLimit : Self.chipLimit
-    }
-
-    /// Assets come first and are never cut. A touched file is named in the
-    /// Changes list too, so the chip is a shortcut; a scratch file the turn
-    /// wrote is named nowhere else in the transcript, so the chip is the
-    /// only way to it.
-    private var shownFiles: [TouchedFile] {
-        Array(footer.files.prefix(max(0, chipLimit - footer.assets.count)))
-    }
-
-    private var hiddenFileCount: Int {
-        footer.files.count - shownFiles.count
-    }
+    /// How many changed files the ⋯ menu lists before pointing at the rest.
+    private static let menuFileLimit = 20
 
     @State private var copied = false
 
     var body: some View {
-        // One wrapped row, as the web's TurnFooter: how long the turn took,
-        // copy and ⋯ (when, which model, every changed file), then the
-        // assets and touched files. The model name lives in the menu, so
-        // the row under every answer stays short.
+        // One short row: how long the turn took, copy and ⋯ (when, which
+        // model, every changed file), then the files the turn wrote to its
+        // scratch folder. Touched files used to follow as chips, one named
+        // and "+4 more", which on a phone took a second line under every
+        // answer; the ⋯ menu lists them and opens each diff, and the
+        // Changes tab has the whole set. Assets keep their chips: they are
+        // the result, and named nowhere else in the transcript.
         FlowLayout(spacing: 6, alignment: .center) {
             if let duration = footer.duration,
                let label = TranscriptFormat.duration(duration) {
@@ -634,11 +616,23 @@ struct TurnFooterView: View {
                 }
                 if !footer.files.isEmpty {
                     Section("Changed files") {
-                        ForEach(footer.files.prefix(20)) { file in
-                            Text(verbatim: "\(file.basename)  +\(file.additions) −\(file.deletions)")
+                        ForEach(footer.files.prefix(Self.menuFileLimit)) { file in
+                            Button {
+                                diffFile = file
+                            } label: {
+                                Text(verbatim: "\(file.basename)  +\(file.additions) −\(file.deletions)")
+                            }
+                            .disabled(file.hunks.isEmpty)
                         }
-                        if footer.files.count > 20 {
-                            Text(verbatim: "+\(footer.files.count - 20) more")
+                        if footer.files.count > Self.menuFileLimit || openPanel.isAvailable {
+                            Button {
+                                openPanel(.changes(sessionId: sessionId))
+                            } label: {
+                                Text(footer.files.count > Self.menuFileLimit
+                                    ? "+\(footer.files.count - Self.menuFileLimit) more"
+                                    : "All changes")
+                            }
+                            .disabled(!openPanel.isAvailable)
                         }
                     }
                 }
@@ -655,23 +649,17 @@ struct TurnFooterView: View {
             ForEach(footer.assets, id: \.self) { path in
                 AssetChipView(sessionId: sessionId, path: path)
             }
-            ForEach(shownFiles) { file in
-                FileChipView(file: file)
-            }
-            if hiddenFileCount > 0 {
-                MoreFilesChipView(
-                    sessionId: sessionId,
-                    count: hiddenFileCount
-                )
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .sheet(item: $diffFile) { file in
+            FileDiffSheet(file: file)
+        }
         .padding(.top, 1)
         .padding(.bottom, 2)
     }
 }
 
-/// The one shell the footer's three chips share, so a change to the surface
+/// The one shell the footer's chips share, so a change to the surface
 /// can never leave a footer wearing two generations of chip at once. The web
 /// keeps the same promise with a single `CHIP` class string.
 ///
@@ -690,87 +678,6 @@ private extension View {
             .padding(.trailing, trailing)
             .padding(.vertical, 4)
             .background(OS1VisualStyle.chipFill, in: SquircleCapsule())
-    }
-}
-
-/// The files the footer didn't have room to name, as one chip that opens all
-/// of them. A cut that admits how much it cut and where the rest went.
-struct MoreFilesChipView: View {
-    let sessionId: String
-    let count: Int
-
-    @Environment(\.openPanel) private var openPanel
-
-    var body: some View {
-        Button {
-            openPanel(.changes(sessionId: sessionId))
-        } label: {
-            Text("+\(count) more")
-                .font(.caption)
-                .foregroundStyle(OS1VisualStyle.textDim)
-                .footerChip(leading: 9, trailing: 9)
-        }
-        .buttonStyle(.plain)
-        // The Mac app installs no handler; a chip that does nothing when
-        // tapped is worse than one that plainly can't be.
-        .disabled(!openPanel.isAvailable)
-        .accessibilityLabel("\(count) more files")
-        .accessibilityHint("Opens everything this session changed")
-    }
-}
-
-/// One touched file: its language mark, the basename, and its ±.
-///
-/// Tapping opens what actually changed. On a phone the chips are the only
-/// place a turn's edits are named, and a name without a diff is a dead end.
-struct FileChipView: View {
-    let file: TouchedFile
-    @State private var showingDiff = false
-
-    var body: some View {
-        Button {
-            guard !file.hunks.isEmpty else { return }
-            showingDiff = true
-        } label: {
-            chip
-        }
-        .buttonStyle(.plain)
-        .disabled(file.hunks.isEmpty)
-        .sheet(isPresented: $showingDiff) {
-            FileDiffSheet(file: file)
-        }
-    }
-
-    private var chip: some View {
-        HStack(spacing: 6) {
-            ExtBadge(name: file.basename)
-            Text(file.basename)
-                .font(.caption)
-                .foregroundStyle(OS1VisualStyle.textDim)
-                .lineLimit(1)
-            if file.additions > 0 || file.deletions > 0 {
-                LineStatsView(
-                    stats: ToolLineStats(
-                        additions: file.additions,
-                        deletions: file.deletions
-                    ),
-                    font: .caption.weight(.medium)
-                )
-            }
-        }
-        .footerChip(leading: 4, trailing: 8)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text(verbatim: file.path))
-        .accessibilityValue(Text(changeSummary))
-    }
-
-    /// The counts as words. `.combine` would otherwise read the ± glyphs, and
-    /// the label above replaces them with the path to say WHICH file this is.
-    private var changeSummary: String {
-        var parts: [String] = []
-        if file.additions > 0 { parts.append("\(file.additions) added") }
-        if file.deletions > 0 { parts.append("\(file.deletions) removed") }
-        return parts.joined(separator: ", ")
     }
 }
 
