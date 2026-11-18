@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ProtocolServerMessage } from "@tellahq/opensession-protocol/session";
 import {
   appendSessionFeed,
+  beginPromptRun,
   resumeSessionFeed,
   sessionFeedSnapshot,
 } from "./session-feed";
@@ -119,6 +120,40 @@ describe("session feed", () => {
       text.feedSeq,
     ]);
     expect(resumed.snapshot.active).toBeNull();
+  });
+
+  test("lists the running turn's prompts, even on a resume without its text", () => {
+    const sessionId = `feed-${crypto.randomUUID()}`;
+    const release = beginPromptRun(sessionId, ["fix-1", "other-1"]);
+    // Handed to the runner, before its stream starts.
+    expect(sessionFeedSnapshot(sessionId).activePromptIds).toEqual([
+      "fix-1",
+      "other-1",
+    ]);
+    const start = appendSessionFeed(sessionId, {
+      type: "stream_start",
+      sessionId,
+    });
+    appendSessionFeed(sessionId, {
+      type: "stream_text",
+      sessionId,
+      text: "hi",
+    });
+    const resumed = resumeSessionFeed(
+      sessionId,
+      start.feedSeq,
+      start.feedEpoch,
+    );
+    expect(resumed.snapshot.active).toBeNull();
+    expect(resumed.snapshot.activePromptIds).toEqual(["fix-1", "other-1"]);
+
+    appendSessionFeed(sessionId, { type: "stream_done", sessionId });
+    expect(sessionFeedSnapshot(sessionId).activePromptIds).toEqual([]);
+
+    // A late release leaves a newer turn's prompts alone.
+    beginPromptRun(sessionId, ["next-1"]);
+    release();
+    expect(sessionFeedSnapshot(sessionId).activePromptIds).toEqual(["next-1"]);
   });
 
   test("active snapshot contains only text not yet committed", () => {

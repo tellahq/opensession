@@ -44,6 +44,10 @@ export interface SessionFeedSnapshot {
     startedAt: number;
     activity?: RunActivity | null;
   };
+  /** Delivery ids of the prompts the current turn answers. Present even when
+   *  a resume leaves `active` out, so a viewer can tell a running prompt from
+   *  a finished one without the cumulative text. */
+  activePromptIds: string[];
 }
 
 /** The running turn, minus its text — that lives in `FeedState.live`. */
@@ -72,7 +76,32 @@ const MAX_FEED_BYTES = 2 * 1024 * 1024;
 const MAX_SESSIONS = 200;
 const g = globalThis as {
   __osSessionFeeds?: Map<string, FeedState>;
+  __osSessionPromptRuns?: Map<string, PromptRun>;
 };
+
+interface PromptRun {
+  token: symbol;
+  ids: string[];
+}
+
+function promptRuns(): Map<string, PromptRun> {
+  return (g.__osSessionPromptRuns ??= new Map());
+}
+
+/**
+ * Record the delivery ids a turn answers, from the moment the queue hands
+ * them to the runner. They stay listed until that turn's stream ends or the
+ * returned release runs, whichever comes first, so a viewer that watches in
+ * between sees them in `activePromptIds`.
+ */
+export function beginPromptRun(sessionId: string, ids: string[]): () => void {
+  const run = { token: Symbol(sessionId), ids };
+  promptRuns().set(sessionId, run);
+  return () => {
+    if (promptRuns().get(sessionId)?.token === run.token)
+      promptRuns().delete(sessionId);
+  };
+}
 
 function feeds(): Map<string, FeedState> {
   return (g.__osSessionFeeds ??= new Map());
@@ -188,6 +217,7 @@ export function appendSessionFeed(
   if (type === "stream_done") {
     state.active = null;
     state.live.reset();
+    promptRuns().delete(sessionId);
   }
   return frame;
 }
@@ -200,6 +230,7 @@ export function sessionFeedSnapshot(sessionId: string): SessionFeedSnapshot {
     feedEpoch: state.epoch,
     feedSeq: state.nextSeq - 1,
     active: state.active ? { ...state.active, text: state.live.text } : null,
+    activePromptIds: promptRuns().get(sessionId)?.ids ?? [],
   };
 }
 
