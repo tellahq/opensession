@@ -24,7 +24,7 @@ struct ToolCallRow: View {
     private var presentation: ToolPresentation { item.presentation }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 4) {
             Button {
                 withAnimation(.snappy(duration: 0.2, extraBounce: 0)) {
                     state.toggle()
@@ -36,7 +36,9 @@ struct ToolCallRow: View {
 
             if state.expanded {
                 detailBody
-                    .padding(.leading, 22)
+                    // Under the name, not the glyph, as on the web.
+                    .padding(.leading, ToolRowMetrics.textInset)
+                    .padding(.bottom, 6)
                     .transition(.opacity)
             }
         }
@@ -109,15 +111,13 @@ struct ToolCallRow: View {
     // MARK: - Summary line
 
     private var summaryRow: some View {
-        HStack(spacing: 7) {
+        HStack(alignment: .firstTextBaseline, spacing: ToolRowMetrics.iconSpacing) {
             // The glyph doubles as the disclosure control: it turns into a
             // chevron when open, which costs no width on a phone.
-            Image(systemName: state.expanded ? "chevron.down" : presentation.family.symbol)
-                .font(.system(size: 11))
-                .foregroundStyle(
-                    item.isError ? OS1VisualStyle.red : OS1VisualStyle.textFaint
-                )
-                .frame(width: 15)
+            ToolRowIcon(
+                symbol: state.expanded ? "chevron.down" : presentation.family.symbol,
+                tint: item.isError ? OS1VisualStyle.red : OS1VisualStyle.textFaint
+            )
 
             // "server · tool", the way the web writes it. The server used to
             // wear a filled pill, but `panel` is `.tertiarySystemBackground` —
@@ -188,8 +188,7 @@ struct ToolCallRow: View {
 
             statusGlyph
         }
-        .padding(.vertical, 2)
-        .contentShape(Rectangle())
+        .toolRowFrame()
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(presentation.displayName). \(presentation.summary)")
     }
@@ -201,7 +200,7 @@ struct ToolCallRow: View {
             && fullParts.count > 2
             ? Array(fullParts.dropFirst())
             : fullParts
-        return HStack(spacing: 4) {
+        return HStack(alignment: .firstTextBaseline, spacing: 4) {
             ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
                 if index > 0 {
                     Text("·")
@@ -233,6 +232,7 @@ struct ToolCallRow: View {
         if item.isPending {
             ProgressView()
                 .controlSize(.mini)
+                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
         } else if item.isError {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.caption2)
@@ -309,6 +309,55 @@ struct ToolCallRow: View {
                 ProgressView().controlSize(.mini)
             }
         }
+    }
+}
+
+/// The shared geometry of a work fold's rows: a tool call and a grouped run
+/// put their glyph in the same column and their name at the same inset, so
+/// a run opened under a call lines up with it.
+enum ToolRowMetrics {
+    /// The glyph column. Wide enough for the broadest family symbol at
+    /// footnote size, so names never shift between a pencil and a terminal.
+    static let iconWidth: CGFloat = 18
+    static let iconSpacing: CGFloat = 8
+    /// Where a row's name starts, and so where its opened body starts.
+    static let textInset: CGFloat = iconWidth + iconSpacing
+    /// The calls of an opened run step in this far: enough to read as the
+    /// run's own, without spending a phone's width on a deep indent.
+    static let nestedIndent: CGFloat = 12
+    /// Rows carry their own height, so stacking adds nothing between them.
+    static let rowSpacing: CGFloat = 0
+}
+
+/// A fold row's glyph. Built the same way everywhere it appears, so a row of
+/// mixed families reads as one column: a `Text`-wrapped symbol takes the
+/// row's text baseline, and footnote size scales with Dynamic Type. The
+/// chevron that replaces it on an open row is drawn smaller and heavier,
+/// as a disclosure mark is, so it does not outweigh the glyphs around it.
+struct ToolRowIcon: View {
+    let symbol: String
+    var tint: Color = OS1VisualStyle.textFaint
+
+    var body: some View {
+        Text(Image(systemName: symbol))
+            .font(symbol.hasPrefix("chevron") ? Font.caption2.weight(.semibold) : Font.footnote)
+            .foregroundStyle(tint)
+            .frame(width: ToolRowMetrics.iconWidth)
+            .accessibilityHidden(true)
+    }
+}
+
+extension View {
+    /// One fold row's height and hit area. The rows sit tight, as a list of
+    /// steps, and the hit area reaches a little past each edge so a tap
+    /// between two rows still lands on one.
+    func toolRowFrame() -> some View {
+        self
+            .padding(.vertical, 3)
+            #if os(iOS)
+            .frame(minHeight: 28)
+            #endif
+            .contentShape(Rectangle().inset(by: -2))
     }
 }
 

@@ -57,13 +57,13 @@ enum ToolFamily: String, Equatable, Sendable, CaseIterable {
     var symbol: String {
         switch self {
         case .run: "terminal"
-        case .file: "doc.text"
+        case .file: "text.document"
         case .edit: "pencil"
         case .find: "magnifyingglass"
         case .web: "globe"
         case .agent: "sparkles"
         case .mcp: "powerplug"
-        case .skill: "book"
+        case .skill: "book.closed"
         case .branch: "arrow.triangle.branch"
         case .checklist: "checklist"
         case .other: "wrench.and.screwdriver"
