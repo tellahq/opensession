@@ -67,9 +67,8 @@ const NO_OWN_PRS: OwnPrs = [];
 
 /**
  * The PR a session pane's conversation is about. A mention of it renders as
- * plain text rather than a chip: the chip exists to go to a PR, and this pane
- * already is that PR's conversation. A session with several PRs keeps every
- * chip, since the chip is how a reader picks which one to open.
+ * a plain link rather than a status chip, since this pane already is that
+ * PR's conversation. A session with several PRs keeps every chip.
  */
 const MarkdownOwnPrsContext = createContext<OwnPrs>(NO_OWN_PRS);
 
