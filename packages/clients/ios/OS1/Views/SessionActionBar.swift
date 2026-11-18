@@ -132,11 +132,10 @@ struct SessionActionBar: View {
         .fixedSize(horizontal: false, vertical: true)
         .clipShape(Capsule())
         .background { Color.clear.glassSurface(in: Capsule()) }
-        // The arrow takes the leading edge and the capsule centres in what
-        // is left. Reserving the lane on both sides kept it still but cut the
-        // Next label to an ellipsis on a phone.
-        .padding(.leading, scrollToLatest == nil ? 12 : Self.arrowLane)
-        .padding(.trailing, 12)
+        // The arrow's lane is kept on both sides, always, so the capsule sits
+        // centred over the composer and does not move when the arrow comes
+        // and goes. Archive and Next leave the label room for that.
+        .padding(.horizontal, Self.arrowLane)
         .frame(maxWidth: .infinity)
         .overlay(alignment: .leading) {
             if let scrollToLatest {
