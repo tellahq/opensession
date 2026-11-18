@@ -378,6 +378,9 @@ async function buildSharpSidecar(
     for (const d of readdirSync(imgDir))
       if (foreign(d)) rmSync(join(imgDir, d), { recursive: true, force: true });
   }
+  // Command shims nothing runs. Copied, each becomes an absolute link into
+  // this build's temporary folder, which dangles on every other machine.
+  rmSync(join(tmp, "node_modules", ".bin"), { recursive: true, force: true });
   cpSync(join(tmp, "node_modules"), join(stage, "node_modules"), {
     recursive: true,
   });

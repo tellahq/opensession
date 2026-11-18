@@ -20,7 +20,13 @@ function packLocalServer(release, target) {
   }
   fs.rmSync(target, { recursive: true, force: true });
   fs.mkdirSync(path.dirname(target), { recursive: true });
-  fs.cpSync(release, target, { recursive: true, verbatimSymlinks: true });
+  fs.cpSync(release, target, {
+    recursive: true,
+    verbatimSymlinks: true,
+    // Command shims are links nothing runs, and a release built elsewhere
+    // can carry them dangling, which the signing step cannot stat.
+    filter: (source) => path.basename(source) !== ".bin",
+  });
   fs.chmodSync(path.join(target, "opensession"), 0o755);
 }
 

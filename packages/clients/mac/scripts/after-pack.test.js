@@ -30,6 +30,11 @@ beforeEach(() => {
     path.join(release, "node_modules", "sharp", "lib", "sharp.node"),
     "native",
   );
+  fs.mkdirSync(path.join(release, "node_modules", ".bin"));
+  fs.symlinkSync(
+    "/nowhere/on/this/machine/semver.js",
+    path.join(release, "node_modules", ".bin", "semver"),
+  );
   fs.mkdirSync(path.join(base, "out", "Acme.app", "Contents", "Resources"), {
     recursive: true,
   });
@@ -62,6 +67,10 @@ test("packs the whole release, node_modules included, and marks it executable", 
       path.join(server(), "node_modules", "sharp", "lib", "sharp.node"),
     ),
   ).toBe(true);
+  // A dangling command shim would stop the signing step.
+  expect(fs.existsSync(path.join(server(), "node_modules", ".bin"))).toBe(
+    false,
+  );
   expect(fs.statSync(path.join(server(), "opensession")).mode & 0o111).toBe(
     0o111,
   );
