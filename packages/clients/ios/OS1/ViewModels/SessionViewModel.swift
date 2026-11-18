@@ -773,6 +773,22 @@ final class SessionViewModel {
         if !entries.isEmpty { rebuildDisplayItems() }
     }
 
+    /// The optimistic session behind this conversation now has its server id.
+    /// The same view model carries on under it, holding the seeded prompt and
+    /// everything on screen, and only the watch moves to the real id. A fresh
+    /// view model here would rebuild the chat from nothing and redraw the
+    /// opening bubble a second time.
+    func adoptCreatedSession(_ created: Session) {
+        guard created.id != session.id else { return }
+        let wasActive = !stopped
+        if wasActive { stopConnection() }
+        session = created
+        creationRetriesLeft = 40
+        actionCards.sessionId = created.id
+        localFolders.sessionId = created.id
+        if wasActive { startConnection() }
+    }
+
     /// A cached conversation may be reopened from an older list-row snapshot.
     /// Keep its loaded transcript while refreshing title/worktree/PR metadata.
     func updateSessionSnapshot(_ session: Session) {

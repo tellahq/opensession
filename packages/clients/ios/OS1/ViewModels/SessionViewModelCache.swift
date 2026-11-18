@@ -55,6 +55,15 @@ final class SessionViewModelCache {
         return viewModel
     }
 
+    /// An optimistic session resolved to its server id: keep its warm view
+    /// model under the new key instead of building the conversation again.
+    func rekey(from oldId: String, to session: Session) {
+        guard let entry = entries.removeValue(forKey: oldId) else { return }
+        entries.removeValue(forKey: session.id)?.viewModel.stop()
+        entry.viewModel.adoptCreatedSession(session)
+        entries[session.id] = entry
+    }
+
     func remove(sessionId: String) {
         entries.removeValue(forKey: sessionId)?.viewModel.stop()
     }

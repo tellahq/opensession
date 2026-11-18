@@ -19,7 +19,8 @@ import Observation
 @Observable
 @MainActor
 final class SessionActionCardsModel {
-    let sessionId: String
+    /// Re-keyed once, when an optimistic session learns its server id.
+    var sessionId: String
 
     /// A register_credential request. Every viewer sees it; only the verified
     /// driver gets `canAnswer`.

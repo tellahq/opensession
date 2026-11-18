@@ -166,7 +166,7 @@ struct TurnBlockView: View {
             // build never looks stalled.
             if !state.expanded, turn.isLive, let preview = turn.livePreview {
                 Text(preview)
-                    .font(.system(.caption, design: .monospaced))
+                    .font(.caption)
                     .foregroundStyle(OS1VisualStyle.textFaint)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -435,11 +435,12 @@ private struct ToolRunView: View {
                             LineStatsView(stats: stats)
                         }
                         // Folded, the count alone hides what the run is
-                        // waiting on, so a long build looked stalled. Name
-                        // the step still running.
+                        // waiting on, so a long build looked stalled. Say
+                        // what the running step is doing, in words; opening
+                        // the run shows the command itself.
                         if let runningStep {
-                            Text(runningStep.presentation.stepLabel)
-                                .font(.system(.caption, design: .monospaced))
+                            Text(runningStep.presentation.family.activityLabel)
+                                .font(.caption)
                                 .foregroundStyle(OS1VisualStyle.textFaint)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
