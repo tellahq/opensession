@@ -1206,6 +1206,27 @@ export function hasAccounts(): boolean {
   return readStore().length > 0;
 }
 
+/**
+ * Append a validated account in one store transaction: reread, recheck name
+ * and secret uniqueness, write. Callers validate over the network before
+ * this, outside the lock, so a concurrent add that committed meanwhile is
+ * neither overwritten nor duplicated.
+ */
+async function appendAccount(
+  account: ClaudeAccount,
+  duplicateSecretError: string,
+): Promise<{ error: string } | undefined> {
+  return mutateStore(async () => {
+    const accounts = await readStoreFresh();
+    if (accounts.some((a) => a.name === account.name))
+      return { error: `An account named "${account.name}" already exists` };
+    if (account.token && accounts.some((a) => a.token === account.token))
+      return { error: duplicateSecretError };
+    await writeStore([...accounts, account]);
+    return undefined;
+  });
+}
+
 export function hasClaudeApiAccounts(): boolean {
   return readStore().some(isClaudeApiAccount);
 }
@@ -1257,9 +1278,14 @@ export async function addClaudeApiAccount(input: {
     if (checked.error) return { error: checked.error };
     account = { ...base, token: apiKey, authKind: "api-key" };
   }
-  await mutateStore(async () =>
-    writeStore([...(await readStoreFresh()), account]),
+  const appended = await appendAccount(
+    account,
+    "This key is already registered",
   );
+  if (appended) {
+    forgetFederatedTokens(account.id);
+    return appended;
+  }
   console.log(
     `[claude-accounts] Added Claude API account ${name} (${account.authKind})`,
   );
@@ -1328,7 +1354,11 @@ export async function addAccount(
       : {}),
     ...(usage.errorStatus === 403 ? { usageScope: "missing" as const } : {}),
   };
-  await mutateStore(() => writeStore([...accounts, account]));
+  const appended = await appendAccount(
+    account,
+    "This token is already registered",
+  );
+  if (appended) return appended;
   if (!usage.error) usageCache.set(account.id, usage);
   console.log(
     `[claude-accounts] Added account ${trimmedName} (${profile.email || "unknown email"})${trimmedOwner ? ` — personal sub of ${trimmedOwner}` : " — shared pool"}`,

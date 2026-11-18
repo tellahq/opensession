@@ -726,26 +726,46 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
             .join("\n\n")
         : "";
 
-  const account = pickBridgeAccount(model);
-  if ("error" in account) {
-    auditReject(requestId, 529, "no_usable_account", {
-      engine_session: engineSessionHeader,
-      model,
-      detail: account.error,
-    });
-    return anthropicError(529, "overloaded_error", `bridge: ${account.error}`);
-  }
+  // An account whose credential cannot be obtained (a revoked federation
+  // rule) is skipped for this request; the next eligible account serves it.
+  const skippedIds: string[] = [];
+  const credentialErrors: string[] = [];
+  let account: ClaudeAccount;
   let auth: Awaited<ReturnType<typeof claudeCodeAuth>>;
-  try {
-    auth = await claudeCodeAuth(account);
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    auditReject(requestId, 401, "credential_unavailable", {
-      engine_session: engineSessionHeader,
+  for (;;) {
+    const picked = pickBridgeAccount(
       model,
-      detail,
-    });
-    return anthropicError(401, "authentication_error", `bridge: ${detail}`);
+      skippedIds.length ? { excludeIds: skippedIds } : undefined,
+    );
+    if ("error" in picked) {
+      if (credentialErrors.length) {
+        const detail = credentialErrors.join("; ");
+        auditReject(requestId, 401, "credential_unavailable", {
+          engine_session: engineSessionHeader,
+          model,
+          detail,
+        });
+        return anthropicError(401, "authentication_error", `bridge: ${detail}`);
+      }
+      auditReject(requestId, 529, "no_usable_account", {
+        engine_session: engineSessionHeader,
+        model,
+        detail: picked.error,
+      });
+      return anthropicError(529, "overloaded_error", `bridge: ${picked.error}`);
+    }
+    try {
+      auth = await claudeCodeAuth(picked);
+      account = picked;
+      break;
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[bridge] ${picked.name}: credential unavailable, trying another account: ${detail}`,
+      );
+      skippedIds.push(picked.id);
+      credentialErrors.push(detail);
+    }
   }
 
   const key = sessionKeyFor(req, messages);

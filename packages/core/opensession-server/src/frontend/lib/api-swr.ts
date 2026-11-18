@@ -50,6 +50,7 @@ export const apiSWRKey = {
     ["api", "preview-pr", repo, branch] as const,
   previewPrDiff: (repo: string, branch: string) =>
     ["api", "preview-pr-diff", repo, branch] as const,
+  claudeFederationSetup: () => ["api", "claude-federation-setup"] as const,
 };
 
 /**

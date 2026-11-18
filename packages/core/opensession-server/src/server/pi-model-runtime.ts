@@ -1545,21 +1545,45 @@ async function* runSdkAttempt(
     const stickyId =
       liveSdkConversations().get(storeKey)?.accountId ??
       piSdkSessionStore().get(storeKey)?.accountId;
-    const picked =
-      rotate.replayAccount ??
-      pickBridgeAccount(model.id, {
-        accountId: opts.accountId,
-        accountStrict: opts.accountStrict,
-        usageCredits: opts.usageCredits,
-        user: opts.user,
-        excludeIds: excluded.size ? [...excluded] : undefined,
-        stickyId,
-      });
-    rotate.replayAccount = undefined;
-    if ("error" in picked) throw new Error(picked.error);
-    account = picked;
+    // A credential that cannot be obtained (a revoked federation rule) is
+    // that account's problem, not the request's: skip it for this request
+    // and pick again. A strict pin never widens, and when nothing else is
+    // eligible the credential error, not "pool dry", is what the user sees.
+    const acquire = async (): Promise<{
+      account: ClaudeAccount;
+      auth: ClaudeCodeAuth;
+    }> => {
+      let credentialError: Error | undefined;
+      for (;;) {
+        const picked =
+          rotate.replayAccount ??
+          pickBridgeAccount(model.id, {
+            accountId: opts.accountId,
+            accountStrict: opts.accountStrict,
+            usageCredits: opts.usageCredits,
+            user: opts.user,
+            excludeIds: excluded.size ? [...excluded] : undefined,
+            stickyId,
+          });
+        rotate.replayAccount = undefined;
+        if ("error" in picked) throw credentialError ?? new Error(picked.error);
+        try {
+          return { account: picked, auth: await claudeCodeAuth(picked) };
+        } catch (error) {
+          credentialError =
+            error instanceof Error ? error : new Error(String(error));
+          console.warn(
+            `[pi-model-runtime] ${picked.name}: credential unavailable, trying another account: ${credentialError.message}`,
+          );
+          if (opts.accountStrict) throw credentialError;
+          excluded.add(picked.id);
+        }
+      }
+    };
+    const acquired = await acquire();
+    account = acquired.account;
+    const auth = acquired.auth;
     await ensureSdkDirs(account.id);
-    const auth = await claudeCodeAuth(account);
     // A Claude Code process keeps the credential it was spawned with. When
     // the account's credential rotated (a refreshed federated token), retire
     // the live conversation before planning so this turn resumes from the

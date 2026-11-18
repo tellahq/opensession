@@ -1,4 +1,8 @@
 import { listAccountsPublic } from "./claude-accounts";
+import {
+  isClaudeApiAccount,
+  isClaudeApiOnlyModel,
+} from "./claude-api-credentials";
 import { listCodexAccountsPublic } from "./codex-accounts";
 import { modelProviders } from "./model-providers";
 import { hasXaiAccounts } from "./xai-accounts";
@@ -10,11 +14,17 @@ import {
   toPiModel,
 } from "./models";
 
+/** Capacity key for Claude API accounts. They serve only API-only models
+ * (Mythos), so they do not make the rest of the `anthropic` catalog runnable. */
+export const CLAUDE_API_CAPACITY = "anthropic:api";
+
 /** Provider capacity configured on this server. Temporary exhaustion does not
  * change the catalog or default; adding or removing an account does. */
 export function configuredModelProviders(): Set<string> {
+  const claude = listAccountsPublic();
   return new Set([
-    ...(listAccountsPublic().length ? ["anthropic"] : []),
+    ...(claude.some((a) => !isClaudeApiAccount(a)) ? ["anthropic"] : []),
+    ...(claude.some(isClaudeApiAccount) ? [CLAUDE_API_CAPACITY] : []),
     ...(listCodexAccountsPublic().length ? ["openai"] : []),
     ...(hasXaiAccounts() ? [XAI_OAUTH_PROVIDER] : []),
     ...Object.entries(modelProviders())
@@ -38,7 +48,11 @@ export function modelFitsConfiguredProviders(
   configuredProviders: ReadonlySet<string>,
 ): boolean {
   const provider = modelUpstreamProvider(model);
-  return !!provider && configuredProviders.has(provider);
+  if (!provider) return false;
+  // Mythos runs only on Claude API accounts; subscriptions cannot serve it.
+  if (provider === "anthropic" && isClaudeApiOnlyModel(model))
+    return configuredProviders.has(CLAUDE_API_CAPACITY);
+  return configuredProviders.has(provider);
 }
 
 /** Capacity-aware default shared by the picker and untouched session creates. */

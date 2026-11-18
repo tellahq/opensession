@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
+  CLAUDE_API_CAPACITY,
   chooseConfiguredDefaultModel,
+  modelFitsConfiguredProviders,
   modelUpstreamProvider,
   pickerModelId,
 } from "./model-catalog";
@@ -44,5 +46,30 @@ describe("model catalog provider availability", () => {
     expect(chooseConfiguredDefaultModel("claude-opus-5-5", both, [])).toBe(
       "pi/anthropic/claude-opus-5-5",
     );
+  });
+
+  test("Claude API accounts make only Mythos runnable", () => {
+    const apiOnly = new Set([CLAUDE_API_CAPACITY]);
+    const fallbacks = [
+      "pi/anthropic/claude-fable-5-2",
+      "pi/anthropic/claude-mythos-5-2",
+      "pi/anthropic/claude-mythos-5-1",
+    ];
+    expect(
+      chooseConfiguredDefaultModel("claude-fable-5-2", apiOnly, fallbacks),
+    ).toBe("pi/anthropic/claude-mythos-5-2");
+    expect(
+      modelFitsConfiguredProviders("pi/anthropic/claude-opus-5-5", apiOnly),
+    ).toBe(false);
+    // A subscription cannot serve Mythos.
+    expect(
+      modelFitsConfiguredProviders("pi/anthropic/claude-mythos-5-2", both),
+    ).toBe(false);
+    expect(
+      modelFitsConfiguredProviders(
+        "pi/anthropic/claude-mythos-5-2",
+        new Set(["anthropic", CLAUDE_API_CAPACITY]),
+      ),
+    ).toBe(true);
   });
 });

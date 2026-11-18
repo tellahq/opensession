@@ -15,6 +15,7 @@ import {
   providerAccountLabel,
 } from "../../lib/provider-account";
 import { request } from "../../lib/api/request";
+import { useClaudeFederationSetupResource } from "../../hooks/useApiResources";
 import { errorMessage } from "../../lib/error-message";
 import { UserAvatar } from "../UserAvatar";
 import {
@@ -1913,15 +1914,6 @@ interface ClaudeApiAccountRequest {
   federation?: ClaudeFederationInfo;
 }
 
-interface ClaudeFederationSetup {
-  issuer: string;
-  jwksUrl: string;
-  jwks: string;
-  publicIssuer: boolean;
-  subject: string;
-  audience: string;
-}
-
 function ReadonlyValue({ label, value }: { label: string; value: string }) {
   return (
     <Field label={label}>
@@ -1955,30 +1947,12 @@ function AddClaudeApiAccountForm({
     serviceAccountId: "",
     workspaceId: "",
   });
-  const [setup, setSetup] = useState<ClaudeFederationSetup | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (kind !== "federation" || setup) return;
-    let cancelled = false;
-    void request<ClaudeFederationSetup>("/claude-accounts/federation-setup", {
-      label: "Could not load workload identity settings",
-    }).then(
-      (next) => {
-        if (!cancelled) setSetup(next);
-      },
-      (cause: unknown) => {
-        if (!cancelled)
-          setError(
-            errorMessage(cause, "Could not load workload identity settings"),
-          );
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [kind, setup]);
+  const { data: setup, error: setupError } = useClaudeFederationSetupResource(
+    kind === "federation",
+  );
 
   const field = (key: keyof ClaudeFederationInfo) => ({
     value: federation[key] ?? "",
@@ -2086,9 +2060,16 @@ function AddClaudeApiAccountForm({
                     <ReadonlyValue label="Subject" value={setup.subject} />
                     <ReadonlyValue label="Audience" value={setup.audience} />
                   </>
-                ) : !error ? (
+                ) : setupError ? (
+                  <InlineAlert>
+                    {errorMessage(
+                      setupError,
+                      "Could not load workload identity settings",
+                    )}
+                  </InlineAlert>
+                ) : (
                   <LoadingState placement="row">Loading…</LoadingState>
-                ) : null}
+                )}
               </div>
               <Field label="Organization ID">
                 <Input

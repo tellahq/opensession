@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -262,5 +262,46 @@ describe("account routing", () => {
       error:
         "That's a Claude API key, not a setup token. Add it as a Claude API account instead.",
     });
+  });
+
+  test("concurrent adds keep both accounts", async () => {
+    let releaseUsage!: () => void;
+    const usageGate = new Promise<void>((r) => (releaseUsage = r));
+    const sign = spyOn(
+      await import("./workload-identity"),
+      "signServerIdentityToken",
+    ).mockResolvedValue("header.payload.signature");
+    const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (
+      url: string,
+    ) => {
+      if (String(url).endsWith("/v1/oauth/token"))
+        return Response.json({
+          access_token: "sk-ant-oat01-x",
+          expires_in: 3600,
+        });
+      // The subscription add's usage check is still in flight while the API
+      // account commits.
+      await usageGate;
+      return new Response("{}", { status: 403 });
+    }) as unknown as typeof fetch);
+    try {
+      const subscription = accounts.addAccount(
+        "racer-sub",
+        "sk-ant-oat01-racer-subscription-token",
+      );
+      const api = await accounts.addClaudeApiAccount({
+        name: "racer-api",
+        federation: { ...federation, federationRuleId: "fdrl_racer" },
+      });
+      expect("error" in api).toBe(false);
+      releaseUsage();
+      expect("error" in (await subscription)).toBe(false);
+      const names = accounts.listAccountsPublic().map((a) => a.name);
+      expect(names).toContain("racer-sub");
+      expect(names).toContain("racer-api");
+    } finally {
+      fetchSpy.mockRestore();
+      sign.mockRestore();
+    }
   });
 });

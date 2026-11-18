@@ -1598,6 +1598,95 @@ describe("buildPiAnthropicProvider", () => {
     }
   });
 
+  test("a Claude API account whose token exchange fails is skipped for the next one", async () => {
+    const [mythos] = buildPiAnthropicModels([], "claude-mythos-5-2");
+    await designate(["revoked-wif", "key-account"]);
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: [
+          {
+            id: "revoked-wif",
+            name: "revoked-wif",
+            token: "",
+            authKind: "federation",
+            federation: {
+              organizationId: "00000000-0000-4000-8000-000000000000",
+              federationRuleId: "fdrl_revoked",
+              serviceAccountId: "svac_account",
+            },
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+          {
+            id: "key-account",
+            name: "key-account",
+            token: "sk-ant-api03-test-key",
+            authKind: "api-key",
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    const sign = spyOn(
+      workloadIdentity,
+      "signServerIdentityToken",
+    ).mockResolvedValue("header.payload.signature");
+    const exchange = spyOn(globalThis, "fetch").mockImplementation((async () =>
+      Response.json(
+        { error: "invalid_grant", error_description: "rule revoked" },
+        { status: 403 },
+      )) as unknown as typeof fetch);
+    const envs: Array<Record<string, string | undefined> | undefined> = [];
+    const query = spyOn(sdk, "query").mockImplementation((input) => {
+      envs.push(input.options?.env);
+      throw new Error("test SDK reached");
+    });
+    try {
+      const provider = buildPiAnthropicProvider({
+        unifiedSessionId: "os-wif-failover",
+        builtinModels: [],
+        ensureModelId: mythos.id,
+      }) as any;
+      // Whichever account the pick tries first, the turn reaches the SDK on
+      // the API key.
+      for (let i = 0; i < 2; i++) {
+        for await (const _ of provider.streamSimple(mythos, {
+          messages: [{ role: "user", content: "hi" }],
+        })) {
+        }
+      }
+      expect(envs).toHaveLength(2);
+      for (const env of envs) {
+        expect(env?.ANTHROPIC_API_KEY).toBe("sk-ant-api03-test-key");
+        expect(env?.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
+      }
+
+      // A strict pin on the revoked account surfaces the exchange error.
+      const pinned = buildPiAnthropicProvider({
+        unifiedSessionId: "os-wif-pinned",
+        builtinModels: [],
+        ensureModelId: mythos.id,
+        accountId: "revoked-wif",
+        accountStrict: true,
+      }) as any;
+      const events: any[] = [];
+      for await (const ev of pinned.streamSimple(mythos, {
+        messages: [{ role: "user", content: "hi" }],
+      })) {
+        events.push(ev);
+      }
+      expect(events.at(-1)?.error?.errorMessage).toContain(
+        "Anthropic token exchange failed (403)",
+      );
+      expect(envs).toHaveLength(2);
+    } finally {
+      query.mockRestore();
+      exchange.mockRestore();
+      sign.mockRestore();
+    }
+  });
+
   test("the CLI gets pi's limits and never compacts or refuses on its own", async () => {
     // A release newer than the bundled CLI's catalog: the CLI would assume a
     // 200K window and a 32K output cap, auto-compact behind pi's back, and
