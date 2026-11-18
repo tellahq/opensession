@@ -256,7 +256,7 @@ export const composerFlapBorder =
 export const composerQueue =
   "relative -mb-3.5 flex flex-col gap-2 rounded-t-[var(--composer-radius)] border-x border-t " +
   composerFlapBorder +
-  " bg-[color-mix(in_srgb,var(--bg-panel)_80%,var(--composer-surface))] px-3.5 pt-2.5 pb-[26px]";
+  " bg-[var(--composer-flap-surface)] px-3.5 pt-2.5 pb-[26px]";
 export const composerQueueTitle = "text-meta font-semibold text-faint";
 export const composerQueueList = "flex flex-col gap-2";
 /** One queued/steered row. The floor is one line of body text, so a row whose
