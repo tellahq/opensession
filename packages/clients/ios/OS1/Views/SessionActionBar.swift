@@ -62,13 +62,41 @@ struct PhoneSessionNavigation: Equatable {
     }
 }
 
+/// The transcript's way back to the latest, handed to the action pill.
+/// Equatable on what it shows, for the same reason as
+/// `PhoneSessionNavigation`: the closure is fresh on every session update.
+struct ScrollToLatest: Equatable {
+    var hasNewOutput: Bool
+    fileprivate var action: () -> Void
+
+    init(hasNewOutput: Bool, action: @escaping () -> Void) {
+        self.hasNewOutput = hasNewOutput
+        self.action = action
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.hasNewOutput == rhs.hasNewOutput
+    }
+}
+
+/// Whether the action pill is on screen to carry the arrow. While it steps
+/// aside for the keyboard, the transcript floats its own.
+struct ActionBarShownKey: PreferenceKey {
+    static let defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) {
+        value = value || nextValue()
+    }
+}
+
 extension EnvironmentValues {
     @Entry var phoneSessionNavigation = PhoneSessionNavigation()
+    @Entry var actionBarScrollToLatest: ScrollToLatest? = nil
 }
 
 /// Everything the session offers above the composer, as one floating glass
 /// capsule: Archive (and open the next unread chat), the ⋯ menu, New
-/// workspace, and Next, which names the unread session it opens. Next used to
+/// workspace, and Next, which names the unread session it opens, with the
+/// transcript's scroll-to-latest arrow beside it. Next used to
 /// be a tab of its own tucked behind the composer, which stacked two rows of
 /// chrome over the input; one capsule keeps it to one. The navigation bar
 /// keeps only the title, as on the web. It steps aside while the keyboard is
@@ -85,6 +113,9 @@ struct SessionActionBar: View {
     var onNewWorkspace: (() -> Void)?
     /// Where Next goes. nil hides it (the Next chat preference is off).
     var next: PhoneSessionNavigation?
+    /// The transcript's arrow back to the latest, shown left of the capsule
+    /// while the reader is scrolled up. nil hides it.
+    var scrollToLatest: ScrollToLatest?
 
     /// Matches the composer's round controls, so the two read as one system.
     static let control: CGFloat = 44
@@ -125,10 +156,28 @@ struct SessionActionBar: View {
         .fixedSize(horizontal: false, vertical: true)
         .clipShape(Capsule())
         .background { Color.clear.glassSurface(in: Capsule()) }
-        .padding(.horizontal, 12)
+        // The arrow takes the leading edge and the capsule centres in what
+        // is left. Reserving the lane on both sides kept it still but cut the
+        // Next label to an ellipsis on a phone.
+        .padding(.leading, scrollToLatest == nil ? 12 : Self.arrowLane)
+        .padding(.trailing, 12)
         .frame(maxWidth: .infinity)
+        .overlay(alignment: .leading) {
+            if let scrollToLatest {
+                ScrollToLatestButton(hasNewOutput: scrollToLatest.hasNewOutput) {
+                    scrollToLatest.action()
+                }
+                // The button pads its 40pt disc to 44, so this puts the disc
+                // 12pt in, on the capsule's own margin.
+                .padding(.leading, 10)
+                .transition(.opacity.combined(with: .scale(scale: 0.8)))
+            }
+        }
         .padding(.bottom, 8)
     }
+
+    /// The 12pt margin, the arrow's 44pt target, and 8pt before the capsule.
+    private static let arrowLane: CGFloat = 12 + 44 + 8
 
     private var divider: some View {
         Rectangle()

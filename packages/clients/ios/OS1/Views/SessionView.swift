@@ -191,6 +191,12 @@ struct SessionView: View {
     /// Output arrived while the reader was scrolled up. Turns the return pill
     /// from a navigation aid into a notification.
     @State private var newBelow = false
+    #if os(iOS)
+    /// Bumped by the action pill's arrow; the transcript's reader scrolls.
+    @State private var scrollToLatestRequest = 0
+    /// The action pill is carrying the arrow, so the floating one stays away.
+    @State private var actionBarHoldsScroll = false
+    #endif
 
     /// Keep the view welded to the latest for a moment after opening.
     ///
@@ -505,30 +511,21 @@ struct SessionView: View {
                     // A way back down. Without it the only route out of a
                     // scrolled-up transcript is flicking through everything
                     // that arrived meanwhile.
+                    // On the phone it rides the action pill above the
+                    // composer instead (`SessionActionBar`), and floats here
+                    // only while the pill steps aside for the keyboard.
                     .overlay(alignment: .bottom) {
-                        if !pinnedToBottom, !holdingAtLatest,
-                           !viewModel.displayBlocks.isEmpty {
+                        if showsScrollToLatest, !floatingScrollHidden {
                             ScrollToLatestButton(hasNewOutput: newBelow) {
-                                newBelow = false
-                                scrollToBottom(proxy, animated: true)
-                                // Output that lands WHILE the scroll animates
-                                // leaves it short of the end — and it stays
-                                // there, because following only resumes once
-                                // the pin re-arms, which it doesn't at a
-                                // position that far up. So hold at the latest
-                                // for a beat afterwards, exactly like opening
-                                // a conversation does; a scroll gesture ends
-                                // the hold immediately either way.
-                                beginHold(
-                                    proxy,
-                                    seconds: 0.8,
-                                    after: .milliseconds(450)
-                                )
+                                jumpToLatest(proxy)
                             }
                             .padding(.bottom, 10)
                             .transition(.opacity.combined(with: .move(edge: .bottom)))
                         }
                     }
+                    #if os(iOS)
+                    .onChange(of: scrollToLatestRequest) { jumpToLatest(proxy) }
+                    #endif
                     #if os(macOS)
                     .overlay {
                         GeometryReader { geometry in
@@ -1196,6 +1193,15 @@ struct SessionView: View {
                 forkState: $forkState,
                 onForkCreated: onForkCreated
             )
+            #if os(iOS)
+            .environment(
+                \.actionBarScrollToLatest,
+                showsScrollToLatest
+                    ? ScrollToLatest(hasNewOutput: newBelow) { scrollToLatestRequest += 1 }
+                    : nil
+            )
+            .onPreferenceChange(ActionBarShownKey.self) { actionBarHoldsScroll = $0 }
+            #endif
         }
         // The system treats a bottom `safeAreaBar` as adaptive chrome: when
         // dark content scrolls under it, it hands the bar's subtree a DARK
@@ -1601,30 +1607,36 @@ struct SessionView: View {
         )
     }
 
-    /// `#5755 · Opus 5.5 · $6.12`: the web phone's model · cost line, with
-    /// the PR number in front where the session has one (native has no
-    /// Review tab in the strip to carry it). The repo moved to the tile.
+    /// `#5755 Checks running · Opus 5.5`: the PR and where it stands, then
+    /// the model (native has no Review tab in the strip to carry the PR).
+    /// The cost stays out of the bar: it is in the model menu's Conversation
+    /// usage, and the PR's state is what you open a chat to check. The repo
+    /// moved to the tile.
     private var headerSubtitle: String {
         let model = (catalog?.label(for: currentModel) ?? currentModel)
             .replacingOccurrences(of: #"^Claude[\s-]+"#, with: "", options: [.regularExpression, .caseInsensitive])
-        let prNumber = viewModel.prDetails?.number ?? viewModel.session.prNumber
         var parts: [String] = []
-        if let prNumber {
-            parts.append("#\(prNumber)")
+        if let pr = headerPr {
+            parts.append(pr)
         }
         parts.append(model)
-        if let usage = viewModel.usage, usage.turns > 0 {
-            parts.append(usage.costLabel())
-        }
         return parts
             .filter { !$0.isEmpty }
             .joined(separator: " · ")
     }
 
+    /// `#5755 Checks running`, or the bare number while details load.
+    private var headerPr: String? {
+        guard let number = viewModel.prDetails?.number ?? viewModel.session.prNumber
+        else { return nil }
+        guard let summary = viewModel.prDetails?.summary else { return "#\(number)" }
+        return "#\(number) \(summary.label)"
+    }
+
     private var headerSubtitleText: Text {
         var subtitle = AttributedString(headerSubtitle)
-        if let pr = viewModel.prDetails,
-           let range = subtitle.range(of: "#\(pr.number)")
+        if let pr = viewModel.prDetails, let label = headerPr,
+           let range = subtitle.range(of: label)
         {
             subtitle[range].foregroundColor = pr.summary.color
         }
@@ -2102,6 +2114,41 @@ struct SessionView: View {
         prependHold = nil
         prependHoldExpiry?.cancel()
         prependHoldExpiry = nil
+    }
+
+    /// The reader scrolled away from the latest, so offer a way back.
+    private var showsScrollToLatest: Bool {
+        #if DEBUG
+        // `OS1_SCROLL_ARROW_FIXTURE=1`: the arrow for screenshots of a
+        // simulator that takes no scroll gestures.
+        if ProcessInfo.processInfo.environment["OS1_SCROLL_ARROW_FIXTURE"] == "1",
+           !viewModel.displayBlocks.isEmpty {
+            return true
+        }
+        #endif
+        return !pinnedToBottom && !holdingAtLatest && !viewModel.isLoadingConversation
+            && viewModel.conversationLoadError == nil
+            && !viewModel.displayBlocks.isEmpty
+    }
+
+    private var floatingScrollHidden: Bool {
+        #if os(iOS)
+        actionBarHoldsScroll
+        #else
+        false
+        #endif
+    }
+
+    private func jumpToLatest(_ proxy: ScrollViewProxy) {
+        newBelow = false
+        scrollToBottom(proxy, animated: true)
+        // Output that lands WHILE the scroll animates leaves it short of the
+        // end, and it stays there, because following only resumes once the
+        // pin re-arms, which it doesn't at a position that far up. So hold at
+        // the latest for a beat afterwards, exactly like opening a
+        // conversation does; a scroll gesture ends the hold immediately
+        // either way.
+        beginHold(proxy, seconds: 0.8, after: .milliseconds(450))
     }
 
     /// Take the transcript to its last row — the ask card, the run clock, the
@@ -3513,6 +3560,8 @@ private struct SessionInputBar: View {
     var onArchive: (() -> Void)? = nil
     #if os(iOS)
     @Environment(\.phoneSessionNavigation) private var navigation
+    /// The transcript's way back down, carried by the action pill.
+    @Environment(\.actionBarScrollToLatest) private var scrollToLatest
     #endif
     /// For the composer's model + effort pill.
     var catalog: ModelCatalog? = nil
@@ -3671,7 +3720,8 @@ private struct SessionInputBar: View {
                     onNewWorkspace: navigation.canOpenNewWorkspace
                         ? { navigation.openNewWorkspace() }
                         : nil,
-                    next: showNextChatButton ? navigation : nil
+                    next: showNextChatButton ? navigation : nil,
+                    scrollToLatest: scrollToLatest
                 )
                 .transition(.opacity)
             }
@@ -3733,6 +3783,9 @@ private struct SessionInputBar: View {
         #if os(iOS)
         .animation(.smooth(duration: 0.2), value: hasActionBar)
         .animation(.smooth(duration: 0.24), value: navigation)
+        .animation(.smooth(duration: 0.2), value: scrollToLatest)
+        // Tells the transcript whether its arrow has a place in the pill.
+        .preference(key: ActionBarShownKey.self, value: hasActionBar)
         #endif
         .animation(.smooth(duration: 0.18), value: noteMode)
         .animation(.smooth(duration: 0.2), value: viewModel.replySuggestions)
