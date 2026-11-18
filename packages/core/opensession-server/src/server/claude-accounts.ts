@@ -23,6 +23,9 @@ import {
   federatedAccessToken,
   forgetFederatedTokens,
   isClaudeApiAccount,
+  checkClaudeMythosAccess,
+  claudeMythosModelOf,
+  CLAUDE_MYTHOS_MODELS,
   isClaudeApiOnlyModel,
   parseClaudeFederation,
   validateClaudeApiKey,
@@ -92,6 +95,10 @@ export interface ClaudeAccount {
   authKind?: "oauth" | "api-key" | "federation";
   /** Workload Identity Federation settings of a "federation" account. */
   federation?: ClaudeFederation;
+  /** API accounts: the Mythos releases a conclusive Models API check found
+   *  this organization can use. Unset until a check is conclusive; an
+   *  unverified account serves, and counts as capacity for, none. */
+  mythosModels?: string[];
   email?: string;
   plan?: string;
   createdAt: string;
@@ -156,6 +163,8 @@ export interface ClaudeAccountPublic {
   authKind: "setup-token" | "oauth" | "api-key" | "federation";
   /** IDs, not secrets: shown so a person can match them in the Console. */
   federation?: ClaudeFederation;
+  /** API accounts: verified Mythos releases. Unset = not yet verified. */
+  mythosModels?: string[];
   email?: string;
   plan?: string;
   createdAt: string;
@@ -902,11 +911,49 @@ async function refreshAccountUsage(
   return usage;
 }
 
+/** Why an API account whose organization cannot use Mythos is refused. */
+export const CLAUDE_API_NO_MYTHOS =
+  "This organization can't use Claude Mythos yet, and Claude API accounts only run Mythos.";
+
+/** Last Mythos access check per API account, to space out re-checks. */
+const lastMythosCheckAt = new Map<string, number>();
+/** Unverified accounts are re-checked on the next usage poll after this;
+ *  accounts missing a release, less often, in case access is granted. */
+const MYTHOS_RECHECK_UNVERIFIED_MS = 5 * 60_000;
+const MYTHOS_RECHECK_PARTIAL_MS = 6 * 60 * 60_000;
+
+/** Re-check an API account's Mythos access when it is unverified or lacks a
+ *  release, and save a conclusive answer on the fresh record. */
+async function refreshMythosAccess(account: ClaudeAccount): Promise<void> {
+  const verified = account.mythosModels;
+  if (verified && verified.length === CLAUDE_MYTHOS_MODELS.length) return;
+  const last = lastMythosCheckAt.get(account.id) ?? 0;
+  const wait = verified
+    ? MYTHOS_RECHECK_PARTIAL_MS
+    : MYTHOS_RECHECK_UNVERIFIED_MS;
+  if (Date.now() - last < wait) return;
+  lastMythosCheckAt.set(account.id, Date.now());
+  const access = await checkClaudeMythosAccess(account);
+  if (!access.conclusive) return;
+  await mutateStore(async () => {
+    const accounts = await readStoreFresh();
+    const idx = accounts.findIndex(
+      (a) => a.id === account.id && a.token === account.token,
+    );
+    if (idx === -1) return;
+    accounts[idx] = { ...accounts[idx], mythosModels: access.models };
+    await writeStore(accounts);
+  });
+}
+
 export async function refreshAllUsage(): Promise<void> {
   // Sequential, not Promise.all — the endpoint rate-limits aggressively and a
   // burst of N simultaneous requests from one IP makes that worse.
   for (const account of readStore()) {
-    if (isClaudeApiAccount(account)) continue;
+    if (isClaudeApiAccount(account)) {
+      await refreshMythosAccess(account).catch(() => {});
+      continue;
+    }
     if (account.usageScope === "missing" && !account.credentialsPath) {
       // Blind to the OAuth endpoint — Meridian-observed fallback (local, cheap).
       await refreshMeridianUsage(account);
@@ -1113,6 +1160,7 @@ function toPublic(a: ClaudeAccount): ClaudeAccountPublic {
     tokenMasked: maskToken(a.token),
     authKind: a.authKind ?? "setup-token",
     ...(a.federation ? { federation: a.federation } : {}),
+    ...(a.mythosModels ? { mythosModels: a.mythosModels } : {}),
     email: a.email,
     plan: a.plan,
     createdAt: a.createdAt,
@@ -1264,10 +1312,14 @@ export function hasClaudeApiAccounts(): boolean {
  * cannot switch to a model its account would then refuse.
  */
 export function claudeAccountServesModel(
-  account: { authKind?: string },
+  account: { authKind?: string; mythosModels?: readonly string[] },
   model?: string | null,
 ): boolean {
-  if (isClaudeApiAccount(account)) return isClaudeApiOnlyModel(model);
+  if (isClaudeApiAccount(account)) {
+    // Only a release the organization was verified to have access to.
+    const mythos = claudeMythosModelOf(model);
+    return !!mythos && !!account.mythosModels?.includes(mythos);
+  }
   return !isClaudeApiOnlyModel(model) || !hasClaudeApiAccounts();
 }
 
@@ -1318,6 +1370,16 @@ export async function addClaudeApiAccount(input: {
     if (checked.error) return { error: checked.error };
     account = { ...base, token: apiKey, authKind: "api-key" };
   }
+  // A key that works but whose organization cannot use Mythos would count
+  // as Mythos capacity for nothing. An inconclusive check saves the account
+  // unverified; the usage poller checks it again.
+  const access = await checkClaudeMythosAccess(account);
+  if (access.conclusive && !access.models.length) {
+    forgetFederatedTokens(account.id);
+    return { error: CLAUDE_API_NO_MYTHOS };
+  }
+  if (access.conclusive) account.mythosModels = access.models;
+  else lastMythosCheckAt.set(account.id, Date.now());
   const appended = await appendAccount(
     account,
     "This key is already registered",

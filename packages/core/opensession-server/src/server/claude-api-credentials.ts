@@ -68,6 +68,73 @@ export function isClaudeApiOnlyModel(model?: string | null): boolean {
   return !!model && model.toLowerCase().includes("mythos");
 }
 
+/** The Mythos releases, by Models API id. An API account serves one only
+ *  after a Models API check shows its organization can use it. */
+export const CLAUDE_MYTHOS_MODELS = [
+  "claude-mythos-5-2",
+  "claude-mythos-5-1",
+] as const;
+
+/** The Mythos release a model id (bare or `pi/anthropic/…`) names. */
+export function claudeMythosModelOf(model?: string | null): string | undefined {
+  const m = model?.toLowerCase();
+  return m ? CLAUDE_MYTHOS_MODELS.find((id) => m.includes(id)) : undefined;
+}
+
+/** What a Mythos access check found: the releases the organization can use,
+ *  and whether every answer was definite. An inconclusive check (network
+ *  error, 5xx, rate limit, failed token exchange) proves nothing either way. */
+export interface ClaudeMythosAccess {
+  models: string[];
+  conclusive: boolean;
+}
+
+/**
+ * Ask the Models API which Mythos releases this account's organization can
+ * use. A 200 grants a release, a 403 or 404 denies it, and anything else
+ * leaves the check inconclusive.
+ */
+export async function checkClaudeMythosAccess(
+  account: CredentialAccount,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ClaudeMythosAccess> {
+  let headers: Record<string, string>;
+  try {
+    if (account.authKind === "api-key") {
+      headers = { "x-api-key": account.token };
+    } else if (account.authKind === "federation" && account.federation) {
+      const token = await federatedAccessToken(
+        account.id,
+        account.federation,
+        fetchImpl,
+      );
+      headers = {
+        authorization: `Bearer ${token.token}`,
+        "anthropic-beta": "oauth-2025-04-20",
+      };
+    } else {
+      return { models: [], conclusive: true };
+    }
+  } catch {
+    return { models: [], conclusive: false };
+  }
+  const models: string[] = [];
+  let conclusive = true;
+  for (const id of CLAUDE_MYTHOS_MODELS) {
+    try {
+      const res = await fetchImpl(`${CLAUDE_API_BASE_URL}/v1/models/${id}`, {
+        headers: { ...headers, "anthropic-version": "2023-06-01" },
+        signal: AbortSignal.timeout(EXCHANGE_TIMEOUT_MS),
+      });
+      if (res.ok) models.push(id);
+      else if (res.status !== 403 && res.status !== 404) conclusive = false;
+    } catch {
+      conclusive = false;
+    }
+  }
+  return { models, conclusive };
+}
+
 export interface ClaudeFederationSetup {
   issuer: string;
   jwksUrl: string;

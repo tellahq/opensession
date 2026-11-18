@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   CLAUDE_API_CAPACITY,
+  claudeApiModelCapacity,
   chooseConfiguredDefaultModel,
   modelFitsConfiguredProviders,
   modelUpstreamProvider,
@@ -49,7 +50,11 @@ describe("model catalog provider availability", () => {
   });
 
   test("Claude API accounts make only Mythos runnable", () => {
-    const apiOnly = new Set([CLAUDE_API_CAPACITY]);
+    const apiOnly = new Set([
+      CLAUDE_API_CAPACITY,
+      claudeApiModelCapacity("claude-mythos-5-2"),
+      claudeApiModelCapacity("claude-mythos-5-1"),
+    ]);
     const fallbacks = [
       "pi/anthropic/claude-fable-5-2",
       "pi/anthropic/claude-mythos-5-2",
@@ -68,8 +73,27 @@ describe("model catalog provider availability", () => {
     expect(
       modelFitsConfiguredProviders(
         "pi/anthropic/claude-mythos-5-2",
-        new Set(["anthropic", CLAUDE_API_CAPACITY]),
+        new Set(["anthropic", ...apiOnly]),
       ),
     ).toBe(true);
+  });
+
+  test("Mythos fits only the releases an API account was verified for", () => {
+    const only51 = new Set([
+      CLAUDE_API_CAPACITY,
+      claudeApiModelCapacity("claude-mythos-5-1"),
+    ]);
+    expect(
+      modelFitsConfiguredProviders("pi/anthropic/claude-mythos-5-2", only51),
+    ).toBe(false);
+    expect(
+      modelFitsConfiguredProviders("pi/anthropic/claude-mythos-5-1", only51),
+    ).toBe(true);
+    expect(
+      chooseConfiguredDefaultModel("claude-mythos-5-2", only51, [
+        "pi/anthropic/claude-mythos-5-2",
+        "pi/anthropic/claude-mythos-5-1",
+      ]),
+    ).toBe("pi/anthropic/claude-mythos-5-1");
   });
 });

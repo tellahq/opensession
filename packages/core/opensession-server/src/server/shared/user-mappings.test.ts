@@ -12,6 +12,7 @@ import {
   isTrustedGithubLogin,
   isTrustedUser,
   personKeyToDisplayName,
+  signedInUserName,
   trustedGithubTeammate,
 } from "./user-mappings";
 
@@ -230,5 +231,30 @@ describe("commit attribution", () => {
       GIT_COMMITTER_EMAIL: "alice@example.com",
     });
     expect(gitIdentityEnv(null)).toEqual({});
+  });
+});
+
+describe("signed-in user name", () => {
+  test("is the first name unless a teammate shares it", () => {
+    const restore = __setIdentitiesForTest([
+      { name: "Alex Rivera", github: "alex-rivera" },
+      { name: "Alex Chen", github: "alex-chen" },
+      { name: "Sam Lee", github: "sam-a" },
+      { name: "Sam Lee", github: "sam-b" },
+      { name: "Bob Builder", github: "bob" },
+    ]);
+    try {
+      expect(signedInUserName({ login: "bob", name: "Bob Builder" })).toBe(
+        "Bob",
+      );
+      expect(
+        signedInUserName({ login: "alex-rivera", name: "Alex Rivera" }),
+      ).toBe("Alex Rivera");
+      expect(signedInUserName({ login: "sam-b", name: "Sam Lee" })).toBe(
+        "sam-b",
+      );
+    } finally {
+      restore();
+    }
   });
 });

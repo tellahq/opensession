@@ -1,5 +1,6 @@
 import { accountServesUser, listAccountsPublic } from "./claude-accounts";
 import {
+  claudeMythosModelOf,
   isClaudeApiAccount,
   isClaudeApiOnlyModel,
 } from "./claude-api-credentials";
@@ -18,6 +19,12 @@ import {
 /** Capacity key for Claude API accounts. They serve only API-only models
  * (Mythos), so they do not make the rest of the `anthropic` catalog runnable. */
 export const CLAUDE_API_CAPACITY = "anthropic:api";
+
+/** Capacity key for one Mythos release: some API account serving the user
+ *  was verified to have access to it. */
+export function claudeApiModelCapacity(mythosModel: string): string {
+  return `${CLAUDE_API_CAPACITY}:${mythosModel}`;
+}
 
 /** The Claude accounts that could serve `user`'s runs, usable or not.
  * A bridge designation fences Anthropic runs to the accounts it names, so
@@ -43,9 +50,15 @@ export function claudeAccountsForUser(
  * default; adding or removing an account does. */
 export function configuredModelProviders(user?: string): Set<string> {
   const claude = claudeAccountsForUser(user);
+  // An API account counts only for the Mythos releases a Models API check
+  // verified; an unverified one is no capacity at all.
+  const mythos = new Set(
+    claude.filter(isClaudeApiAccount).flatMap((a) => a.mythosModels ?? []),
+  );
   return new Set([
     ...(claude.some((a) => !isClaudeApiAccount(a)) ? ["anthropic"] : []),
-    ...(claude.some(isClaudeApiAccount) ? [CLAUDE_API_CAPACITY] : []),
+    ...(mythos.size ? [CLAUDE_API_CAPACITY] : []),
+    ...[...mythos].map(claudeApiModelCapacity),
     ...(listCodexAccountsPublic().length ? ["openai"] : []),
     ...(hasXaiAccounts() ? [XAI_OAUTH_PROVIDER] : []),
     ...Object.entries(modelProviders())
@@ -71,8 +84,10 @@ export function modelFitsConfiguredProviders(
   const provider = modelUpstreamProvider(model);
   if (!provider) return false;
   // Mythos runs only on Claude API accounts; subscriptions cannot serve it.
-  if (provider === "anthropic" && isClaudeApiOnlyModel(model))
-    return configuredProviders.has(CLAUDE_API_CAPACITY);
+  if (provider === "anthropic" && isClaudeApiOnlyModel(model)) {
+    const mythos = claudeMythosModelOf(model);
+    return !!mythos && configuredProviders.has(claudeApiModelCapacity(mythos));
+  }
   return configuredProviders.has(provider);
 }
 

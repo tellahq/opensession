@@ -1523,6 +1523,7 @@ describe("buildPiAnthropicProvider", () => {
             name: "wif-account",
             token: "",
             authKind: "federation",
+            mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
             federation: {
               organizationId: "00000000-0000-4000-8000-000000000000",
               federationRuleId: "fdrl_rule",
@@ -1620,6 +1621,7 @@ describe("buildPiAnthropicProvider", () => {
             name: "revoked-wif",
             token: "",
             authKind: "federation",
+            mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
             federation: {
               organizationId: "00000000-0000-4000-8000-000000000000",
               federationRuleId: "fdrl_revoked",
@@ -1632,6 +1634,7 @@ describe("buildPiAnthropicProvider", () => {
             name: "key-account",
             token: "sk-ant-api03-test-key",
             authKind: "api-key",
+            mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
             createdAt: "2026-01-01T00:00:00.000Z",
           },
         ],
@@ -1714,6 +1717,7 @@ describe("buildPiAnthropicProvider", () => {
             name: "outside-key",
             token: "sk-ant-api03-outside-key",
             authKind: "api-key",
+            mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
             createdAt: "2026-01-01T00:00:00.000Z",
           },
         ],
@@ -1741,6 +1745,7 @@ describe("buildPiAnthropicProvider", () => {
             owner: "Alice",
             token: "sk-ant-api03-alice-key",
             authKind: "api-key",
+            mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
             createdAt: "2026-01-01T00:00:00.000Z",
           },
         ],
@@ -1772,6 +1777,7 @@ describe("buildPiAnthropicProvider", () => {
             name: "shared-key",
             token: "sk-ant-api03-shared-key",
             authKind: "api-key",
+            mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
             createdAt: "2026-01-01T00:00:00.000Z",
           },
         ],
@@ -1812,6 +1818,7 @@ describe("buildPiAnthropicProvider", () => {
       owner,
       token: `sk-ant-api03-${id}`,
       authKind: "api-key",
+      mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
       createdAt: "2026-01-01T00:00:00.000Z",
     });
     try {
@@ -1843,6 +1850,18 @@ describe("buildPiAnthropicProvider", () => {
       expect(mythosFor("Alex")).toBe(false);
       expect(servedFor("Alex")).toBeUndefined();
       expect(servedFor("Alex Rivera")).toBe("alex-key");
+      // Production paths: a verified sign-in that shares a first name acts
+      // under a name only that person answers to, so Rivera's own key serves
+      // Rivera from the picker, Setup, and turns, and never Chen.
+      const { signedInUserName } = await import("./shared/user-mappings");
+      const { requestUser } = await import("./routes/context");
+      const rivera = { login: "alex-rivera", name: "Alex Rivera" };
+      const chen = { login: "alex-chen", name: "Alex Chen" };
+      expect(signedInUserName(rivera)).toBe("Alex Rivera");
+      const asRivera = requestUser({ authUser: rivera } as never);
+      expect(mythosFor(asRivera)).toBe(true);
+      expect(servedFor(asRivera)).toBe("alex-key");
+      expect(mythosFor(requestUser({ authUser: chen } as never))).toBe(false);
     } finally {
       restore();
     }
@@ -1854,6 +1873,7 @@ describe("buildPiAnthropicProvider", () => {
       name: id,
       token: `sk-ant-api03-${id}`,
       authKind: "api-key",
+      mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
       createdAt: "2026-01-01T00:00:00.000Z",
       ...(owner ? { owner } : {}),
     });
@@ -1904,6 +1924,7 @@ describe("buildPiAnthropicProvider", () => {
           name: id,
           token: `sk-ant-api03-${id}`,
           authKind: "api-key",
+          mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
           createdAt: "2026-01-01T00:00:00.000Z",
         })),
       }),
@@ -1956,6 +1977,7 @@ describe("buildPiAnthropicProvider", () => {
           name: id,
           token: `sk-ant-api03-${id}`,
           authKind: "api-key",
+          mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
           createdAt: "2026-01-01T00:00:00.000Z",
         })),
       }),
@@ -2008,6 +2030,7 @@ describe("buildPiAnthropicProvider", () => {
           name: id,
           token: `sk-ant-api03-${id}`,
           authKind: "api-key",
+          mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
           createdAt: "2026-01-01T00:00:00.000Z",
         })),
       }),
@@ -2068,6 +2091,7 @@ describe("buildPiAnthropicProvider", () => {
           name: id,
           token: `sk-ant-api03-${id}`,
           authKind: "api-key",
+          mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
           createdAt: "2026-01-01T00:00:00.000Z",
         })),
       }),
@@ -2149,6 +2173,7 @@ describe("buildPiAnthropicProvider", () => {
           name: id,
           token: `sk-ant-api03-${id}`,
           authKind: "api-key",
+          mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
           createdAt: "2026-01-01T00:00:00.000Z",
         })),
       }),
@@ -2234,6 +2259,7 @@ describe("buildPiAnthropicProvider", () => {
           name: id,
           token: `sk-ant-api03-${id}`,
           authKind: "api-key",
+          mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
           createdAt: "2026-01-01T00:00:00.000Z",
         })),
       }),
@@ -2306,6 +2332,7 @@ describe("buildPiAnthropicProvider", () => {
           name: id,
           token: `sk-ant-api03-${id}`,
           authKind: "api-key",
+          mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
           createdAt: "2026-01-01T00:00:00.000Z",
         })),
       }),
@@ -2367,6 +2394,7 @@ describe("buildPiAnthropicProvider", () => {
             name: "bridge-cancel-wif",
             token: "",
             authKind: "federation",
+            mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
             federation: {
               organizationId: "00000000-0000-4000-8000-000000000000",
               federationRuleId: "fdrl_bridge_cancel",
@@ -2430,6 +2458,7 @@ describe("buildPiAnthropicProvider", () => {
             name: "cancel-wif",
             token: "",
             authKind: "federation",
+            mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
             federation: {
               organizationId: "00000000-0000-4000-8000-000000000000",
               federationRuleId: "fdrl_cancel",

@@ -189,6 +189,24 @@ export function ownerRefNamesSignedInUser(
 }
 
 /**
+ * The name a verified signed-in person acts under: their first name, as the
+ * picker shows it, unless another roster member answers to that first name.
+ * Then it is their full name, or their GitHub login when even that is shared,
+ * so every gate that resolves the name (personal Claude API accounts need an
+ * unambiguous one) still finds exactly this person.
+ */
+export function signedInUserName(signedIn: {
+  login: string;
+  name: string;
+}): string {
+  const full = signedIn.name.trim();
+  const first = full.split(" ")[0] || full;
+  if (rosterMembersNamed(normRef(first)).length <= 1) return first;
+  if (full && rosterMembersNamed(normRef(full)).length <= 1) return full;
+  return signedIn.login.trim() || first;
+}
+
+/**
  * Whether a run's user reference names exactly the person an owner reference
  * names: both must resolve to the same single roster member. For spending
  * gates (personal Claude API accounts), unlike `userMatchesAny`: a first name

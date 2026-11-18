@@ -35,6 +35,7 @@ writeFileSync(
         name: "api",
         token: "",
         authKind: "federation",
+        mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
         federation,
         createdAt: "2026-01-01T00:00:00.000Z",
       },
@@ -210,7 +211,12 @@ describe("Claude Code auth", () => {
     expect(key.key).not.toContain("sk-ant");
     const { fetchImpl } = tokenEndpoint();
     const federated = await credentials.claudeCodeAuth(
-      { id: "f", token: "", authKind: "federation", federation },
+      {
+        id: "f",
+        token: "",
+        authKind: "federation",
+        federation,
+      },
       fetchImpl,
     );
     expect(federated.env).toEqual({
@@ -328,6 +334,8 @@ describe("account routing", () => {
           access_token: "sk-ant-oat01-x",
           expires_in: 3600,
         });
+      // The API account's Mythos access check.
+      if (String(url).includes("/v1/models/")) return Response.json({});
       // The subscription add's usage check is still in flight while the API
       // account commits.
       await usageGate;
@@ -351,6 +359,81 @@ describe("account routing", () => {
     } finally {
       fetchSpy.mockRestore();
       sign.mockRestore();
+    }
+  });
+});
+
+describe("Mythos access", () => {
+  const models = (status: Record<string, number>) =>
+    tokenEndpoint(({ url }) => {
+      const id = url.split("/v1/models/")[1] ?? "";
+      return new Response("{}", { status: status[id] ?? 404 });
+    });
+
+  test("a definite answer per release is conclusive; anything else is not", async () => {
+    const key = { id: "k", token: "sk-ant-api03-k", authKind: "api-key" };
+    const partial = models({ "claude-mythos-5-2": 200 });
+    expect(
+      await credentials.checkClaudeMythosAccess(key, partial.fetchImpl),
+    ).toEqual({ models: ["claude-mythos-5-2"], conclusive: true });
+    expect(partial.calls[0]!.init.headers).toMatchObject({
+      "x-api-key": "sk-ant-api03-k",
+    });
+    const flaky = models({
+      "claude-mythos-5-2": 200,
+      "claude-mythos-5-1": 503,
+    });
+    expect(
+      await credentials.checkClaudeMythosAccess(key, flaky.fetchImpl),
+    ).toEqual({ models: ["claude-mythos-5-2"], conclusive: false });
+  });
+
+  test("an API account counts only for the releases it was verified for", () => {
+    const unverified = { authKind: "api-key" };
+    const only51 = { authKind: "api-key", mythosModels: ["claude-mythos-5-1"] };
+    expect(
+      accounts.claudeAccountServesModel(unverified, "claude-mythos-5-2"),
+    ).toBe(false);
+    expect(accounts.claudeAccountServesModel(only51, "claude-mythos-5-2")).toBe(
+      false,
+    );
+    expect(
+      accounts.claudeAccountServesModel(
+        only51,
+        "pi/anthropic/claude-mythos-5-1",
+      ),
+    ).toBe(true);
+  });
+
+  test("adding a key refuses an organization without Mythos and saves an unchecked one unverified", async () => {
+    let mythos = 404;
+    const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (
+      url: string,
+    ) => {
+      if (String(url).includes("/v1/models/"))
+        return new Response("{}", { status: mythos });
+      return Response.json({ data: [] });
+    }) as unknown as typeof fetch);
+    try {
+      expect(
+        await accounts.addClaudeApiAccount({
+          name: "no-mythos",
+          apiKey: "sk-ant-api03-no-mythos",
+        }),
+      ).toEqual({ error: accounts.CLAUDE_API_NO_MYTHOS });
+      mythos = 503;
+      const added = await accounts.addClaudeApiAccount({
+        name: "unchecked",
+        apiKey: "sk-ant-api03-unchecked",
+      });
+      if ("error" in added) throw new Error(added.error);
+      expect(added.mythosModels).toBeUndefined();
+      expect(
+        accounts.pickAccount(undefined, undefined, "claude-mythos-5-2")?.id,
+      ).not.toBe(added.id);
+      await accounts.removeAccount(added.id);
+    } finally {
+      fetchSpy.mockRestore();
     }
   });
 });
