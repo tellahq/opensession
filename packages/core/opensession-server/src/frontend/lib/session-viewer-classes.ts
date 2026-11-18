@@ -253,7 +253,7 @@ export const VIEWER_MESSAGES =
   "viewer-messages flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain " +
   // Keep the reader's place when content loads or expands above them.
   "[overflow-anchor:auto] px-5 pt-0 " +
-  "pb-[calc(var(--session-under)_+_var(--suggestions-under,0px)_+_32px)] " +
+  "pb-[calc(var(--session-under)_+_var(--next-rise,0px)_+_var(--suggestions-under,0px)_+_32px)] " +
   // A focused phone composer is fixed and no longer reserves flow height,
   // while the transcript's layout viewport still extends behind the keyboard.
   // Clear both measured obstructions so even a tall draft and the last live
@@ -300,16 +300,16 @@ export const VIEWER_MESSAGES =
  * floating action band, over the transcript.
  */
 export const VIEWER_INPUT =
-  "relative z-[1] mt-[calc(-1*var(--session-under))] shrink-0 px-5 pt-1 pb-3.5 " +
+  "relative z-[1] mt-[calc(-1*(var(--session-under)_+_var(--next-rise,0px)))] shrink-0 px-5 pt-1 pb-3.5 " +
   // The same gutter the transcript keeps, so the input stays on the column's
   // edges rather than reaching past them.
   `${RAIL_GUTTER_CLASS} ` +
   // The fade is a later sibling of the native scroller, so painting it edge to
   // edge also fades an overlay scrollbar. Leave its narrow gutter unpainted;
   // raising the scroller would incorrectly lift transcript content too.
-  "[background:linear-gradient(var(--bg),var(--bg))_left_bottom/calc(100%_-_14px)_calc(100%_-_var(--session-under))_no-repeat] " +
+  "[background:linear-gradient(var(--bg),var(--bg))_left_bottom/calc(100%_-_14px)_calc(100%_-_var(--session-under)_-_var(--next-rise,0px))_no-repeat] " +
   "before:pointer-events-none before:absolute before:left-0 before:right-[14px] before:z-[-1] before:content-[''] " +
-  "before:-top-8 before:h-[calc(32px_+_var(--session-under))] " +
+  "before:top-[calc(var(--next-rise,0px)_-_32px)] before:h-[calc(32px_+_var(--session-under))] " +
   "before:scrim-to-b " +
   // Phone: clear the home indicator rather than jamming the composer against
   // the very bottom edge. That gap is also all the room the composer's shadow
@@ -396,6 +396,15 @@ export const VIEWER_SUGGESTIONS =
  * clear of the input. ReplySuggestions.test.tsx holds the two together.
  */
 export const SUGGESTIONS_CLEARANCE = "[--suggestions-under:34px]";
+
+/**
+ * How far the Next tab stands above the composer box: 54px tall (58 on a
+ * phone), 14px of it tucked under the box. The tab is narrow, so the
+ * transcript runs on beside it: VIEWER_INPUT lifts over the transcript by this
+ * much more and starts its fade and fill at the composer's own top edge, not
+ * the tab's, and VIEWER_MESSAGES pays it back in bottom padding.
+ */
+export const NEXT_RISE = "[--next-rise:40px] phone:[--next-rise:44px]";
 
 /** A 32px reading action plus the action band's 6px standoff. */
 export const SCROLL_ACTION_CLEARANCE = "[--suggestions-under:38px]";

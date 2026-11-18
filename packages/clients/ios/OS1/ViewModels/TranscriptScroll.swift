@@ -271,6 +271,8 @@ final class TranscriptReaderTracker {
     var visibleTop: CGFloat = 0
     /// The visible height between the top and bottom insets.
     var visibleHeight: CGFloat = 0
+    /// The scroll content's measured height.
+    var contentHeight: CGFloat = 0
     private(set) var rows: [String: TranscriptRowExtent] = [:]
 
     func record(_ id: String, _ extent: TranscriptRowExtent) { rows[id] = extent }

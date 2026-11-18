@@ -1280,9 +1280,10 @@ enum TranscriptGrouping {
         let start = items.first.flatMap(startTimestamp)
         let end = items.last.flatMap(endTimestamp)
         var preview: String?
-        // Name the step still running, else the latest one.
+        // Say what the step still running is doing, else the latest one, in
+        // words rather than as the raw tool call.
         if isLive, let step = tools.last(where: \.isPending) ?? tools.last {
-            preview = step.presentation.stepLabel
+            preview = step.presentation.family.activityLabel
         }
         return WorkTurn(
             id: firstId,

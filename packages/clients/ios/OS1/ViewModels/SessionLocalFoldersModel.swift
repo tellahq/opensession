@@ -30,7 +30,8 @@ struct LocalFoldersClient {
 @Observable
 @MainActor
 final class SessionLocalFoldersModel {
-    let sessionId: String
+    /// Re-keyed once, when an optimistic session learns its server id.
+    var sessionId: String
 
     private(set) var folders: [LocalFolder] = []
     /// Keys with a disconnect in flight, so the button cannot fire twice.

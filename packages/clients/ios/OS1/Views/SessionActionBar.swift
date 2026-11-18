@@ -28,7 +28,6 @@ struct PhoneSessionNavigation: Equatable {
     var allRead = false
     fileprivate var openChat: ((String) -> Void)?
     fileprivate var archiveAndNext: (() -> Void)?
-    fileprivate var newWorkspace: (() -> Void)?
 
     init() {}
 
@@ -36,29 +35,24 @@ struct PhoneSessionNavigation: Equatable {
         chats: [UnreadChat],
         allRead: Bool,
         openChat: @escaping (String) -> Void,
-        archiveAndNext: (() -> Void)?,
-        newWorkspace: (() -> Void)?
+        archiveAndNext: (() -> Void)?
     ) {
         self.chats = chats
         self.allRead = allRead
         self.openChat = openChat
         self.archiveAndNext = archiveAndNext
-        self.newWorkspace = newWorkspace
     }
 
     var canArchive: Bool { archiveAndNext != nil }
-    var canOpenNewWorkspace: Bool { newWorkspace != nil }
 
     func open(_ id: String) { openChat?(id) }
     func archive() { archiveAndNext?() }
-    func openNewWorkspace() { newWorkspace?() }
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.chats == rhs.chats
             && lhs.allRead == rhs.allRead
             && (lhs.openChat == nil) == (rhs.openChat == nil)
             && (lhs.archiveAndNext == nil) == (rhs.archiveAndNext == nil)
-            && (lhs.newWorkspace == nil) == (rhs.newWorkspace == nil)
     }
 }
 
@@ -93,14 +87,12 @@ extension EnvironmentValues {
     @Entry var actionBarScrollToLatest: ScrollToLatest? = nil
 }
 
-/// Everything the session offers above the composer, as one floating glass
-/// capsule: Archive (and open the next unread chat), the ⋯ menu, New
-/// workspace, and Next, which names the unread session it opens, with the
-/// transcript's scroll-to-latest arrow beside it. Next used to
-/// be a tab of its own tucked behind the composer, which stacked two rows of
-/// chrome over the input; one capsule keeps it to one. The navigation bar
-/// keeps only the title, as on the web. It steps aside while the keyboard is
-/// up.
+/// What the session offers under the thumb, as one floating glass capsule
+/// above the composer: Archive (and open the next unread chat), and Next,
+/// which names the unread session it opens, with the transcript's
+/// scroll-to-latest arrow beside it. The ⋯ menu sits in the navigation bar
+/// beside the title, and a new workspace starts from the list, not from inside
+/// a chat. It steps aside while the keyboard is up.
 ///
 /// The glass is a background SIBLING of the row, not an ancestor of it. A
 /// `Menu` whose label sits INSIDE a glass subtree makes the system treat that
@@ -108,9 +100,6 @@ extension EnvironmentValues {
 /// as long as the menu is open. See `SessionInputBar.composer`.
 struct SessionActionBar: View {
     var onArchive: (() -> Void)?
-    /// The ⋯ menu (`SessionActionsMenu`), sized to `control` by its label.
-    var menu: AnyView?
-    var onNewWorkspace: (() -> Void)?
     /// Where Next goes. nil hides it (the Next chat preference is off).
     var next: PhoneSessionNavigation?
     /// The transcript's arrow back to the latest, shown left of the capsule
@@ -120,7 +109,6 @@ struct SessionActionBar: View {
     /// Matches the composer's round controls, so the two read as one system.
     static let control: CGFloat = 44
 
-    private var hasActions: Bool { onArchive != nil || menu != nil || onNewWorkspace != nil }
     private var showsNext: Bool {
         guard let next else { return false }
         return !next.chats.isEmpty || next.allRead
@@ -128,23 +116,11 @@ struct SessionActionBar: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            HStack(spacing: 0) {
-                if let onArchive {
-                    iconButton("archivebox", label: "Archive and open next chat", action: onArchive)
-                }
-                if let menu {
-                    menu
-                }
-                if let onNewWorkspace {
-                    if onArchive != nil || menu != nil {
-                        divider
-                    }
-                    iconButton("plus", label: "New workspace", action: onNewWorkspace)
-                }
+            if let onArchive {
+                iconButton("archivebox", label: "Archive and open next chat", action: onArchive)
             }
-            .fixedSize()
             if let next, showsNext {
-                if hasActions {
+                if onArchive != nil {
                     divider
                 }
                 NextUnreadSegment(navigation: next)

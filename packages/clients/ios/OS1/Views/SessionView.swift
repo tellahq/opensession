@@ -85,6 +85,14 @@ struct SessionForkState: Equatable {
     }
 }
 
+/// The last transcript viewport any conversation measured. Every
+/// conversation on a device sits in the same frame, so a new one starts from
+/// this instead of from zero (see `SessionView.viewportHeight`).
+@MainActor
+private enum TranscriptViewport {
+    static var lastHeight: CGFloat = 0
+}
+
 struct SessionView: View {
     @State private var viewModel: SessionViewModel
     private let tabs: [Session]
@@ -231,7 +239,14 @@ struct SessionView: View {
     /// Size of the session surface. Height keeps short transcripts pinned to
     /// the top; width gives custom toolbar content the finite proposal that a
     /// principal ToolbarItem does not provide on its own.
-    @State private var viewportHeight: CGFloat = 0
+    ///
+    /// Height starts from the last conversation's measurement. Starting from
+    /// zero laid a new chat's first frame out with no floor, so its opening
+    /// bubble sat at the bottom under the bottom anchor and then glided to
+    /// the top inside the push animation once the real height came in.
+    @State private var viewportHeight: CGFloat = TranscriptViewport.lastHeight
+    /// This view has measured its own viewport, so the floor above is real.
+    @State private var viewportMeasured = false
     @State private var viewportWidth: CGFloat = 0
 
     /// How close to the bottom (pt) still counts as pinned.
@@ -441,10 +456,11 @@ struct SessionView: View {
                     } action: { old, new in
                         readerTracker.visibleTop = new.offset + new.insetTop
                         readerTracker.visibleHeight = new.containerHeight - new.insetTop - new.insetBottom
+                        readerTracker.contentHeight = new.contentHeight
                         #if DEBUG
                         if ScrollTrace.on {
                             let a = readerTracker.anchor
-                            ScrollTrace.log("geo off=\(Int(new.offset)) h=\(Int(new.contentHeight)) anchor=\(a?.blockId.suffix(8) ?? "-") ao=\(Int(a?.offset ?? 0)) hold=\(prependHold?.blockId.suffix(8) ?? "-") active=\(readerScrollActive)")
+                            ScrollTrace.log("geo off=\(Int(new.offset)) h=\(Int(new.contentHeight)) it=\(Int(new.insetTop)) ib=\(Int(new.insetBottom)) ch=\(Int(new.containerHeight)) vp=\(Int(viewportHeight)) anchor=\(a?.blockId.suffix(8) ?? "-") ao=\(Int(a?.offset ?? 0)) hold=\(prependHold?.blockId.suffix(8) ?? "-") active=\(readerScrollActive)")
                         }
                         #endif
                         let wasFollowing = pinnedToBottom && !readerMovedTowardHistory
@@ -513,6 +529,19 @@ struct SessionView: View {
                     .onScrollGeometryChange(for: CGFloat.self) { geometry in
                         geometry.containerSize.height
                     } action: { _, height in
+                        TranscriptViewport.lastHeight = height
+                        guard viewportMeasured else {
+                            // The first measurement lands while the push is
+                            // still animating; taking it inside that animation
+                            // is what made the opening bubble glide.
+                            var transaction = Transaction()
+                            transaction.disablesAnimations = true
+                            withTransaction(transaction) {
+                                viewportHeight = height
+                                viewportMeasured = true
+                            }
+                            return
+                        }
                         viewportHeight = height
                     }
                     // A way back down. Without it the only route out of a
@@ -875,9 +904,16 @@ struct SessionView: View {
                     PresenceFacepile(viewers: viewModel.otherViewers, size: 24)
                 }
             }
-            // iOS: archive and the ⋯ menu ride the action pill above the
-            // composer (`SessionActionBar`), as on the web phone, so the bar
-            // carries only the title.
+            #if os(iOS)
+            // The session's ⋯ sits beside the title, in the bar's own glass.
+            // Archive and Next stay on the pill above the composer
+            // (`SessionActionBar`), under the thumb.
+            if let actionsMenu {
+                ToolbarItem(placement: .topBarTrailing) {
+                    actionsMenu
+                }
+            }
+            #endif
             #if os(macOS)
             // macOS retains the PR chip in its roomier toolbar; on iOS the
             // same series lives in the title-opened workspace sheet.
@@ -1193,7 +1229,6 @@ struct SessionView: View {
                 horizontalInset: contentInset,
                 autoFocusWhenNeverRan: emptyContent == nil,
                 onNextChat: onNextChat,
-                actionsMenu: actionsMenu,
                 onArchive: onArchiveWorkspace,
                 catalog: catalog,
                 accounts: accounts,
@@ -1221,8 +1256,8 @@ struct SessionView: View {
         .environment(\.colorScheme, appColorScheme)
     }
 
-    /// The ⋯ menu, erased so the toolbar can carry it beside the archive
-    /// button without becoming generic. Built here because every binding it
+    /// The ⋯ menu, erased so the toolbar can carry it without becoming
+    /// generic. Built here because every binding it
     /// writes to is this view's state. nil on the Mac, whose roomier toolbar
     /// keeps its own controls.
     private var actionsMenu: AnyView? {
@@ -1238,7 +1273,6 @@ struct SessionView: View {
                 onNewSession: onNewSession,
                 onFork: canForkSession ? { forkState.enter() } : nil,
                 onRenameWorkspace: onRenameWorkspace,
-                onArchiveWorkspace: onArchiveWorkspace,
                 onDeleteWorkspace: onDeleteWorkspace,
                 showWorktreeInfo: $showWorktreeInfo,
                 showPrPanel: $showPrPanel,
@@ -1490,9 +1524,8 @@ struct SessionView: View {
     }
 
     private var sessionHeaderTrailingInset: CGFloat {
-        // Bar margin. The session's actions moved to the pill above the
-        // composer, so only teammates' faces share the bar with the title.
-        let actions: CGFloat = 16
+        // Bar margin, the ⋯ menu, and the glass overhang.
+        let actions: CGFloat = 16 + 44 + 13
         let viewerCount = viewModel.otherViewers.count
         let shownViewerCount = min(viewerCount, 3) + (viewerCount > 3 ? 1 : 0)
         let facepile: CGFloat = if shownViewerCount > 0 {
@@ -1957,6 +1990,10 @@ struct SessionView: View {
                 minHeight: viewportHeight,
                 alignment: .top
             )
+            // With no measurement to start from (the first conversation since
+            // launch), stay out of sight for the frame it takes to measure
+            // rather than drawing rows in a place they then leave.
+            .opacity(viewportMeasured || viewportHeight > 0 ? 1 : 0)
             .coordinateSpace(name: Self.transcriptContentSpace)
             .background(TranscriptScrollNudge(handle: scrollNudge))
         }
@@ -2176,13 +2213,31 @@ struct SessionView: View {
         repin: Bool = true
     ) {
         guard let target = tailId else { return }
+        #if DEBUG
+        ScrollTrace.log("scrollToBottom \(target.suffix(8)) animated=\(animated) repin=\(repin)")
+        #endif
         if repin {
             cancelAnchorRestore()
             if readerMovedTowardHistory { readerMovedTowardHistory = false }
             if !pinnedToBottom { pinnedToBottom = true }
         }
+        // A transcript within a couple of screens has every row realized, so
+        // the lazy-stack blank below cannot happen, and the content's own end
+        // is the exact place. Aiming at a row there could overshoot: on a new
+        // chat whose few rows barely outgrow the screen, a row scroll parked
+        // the opening bubble a hundred points down, past the top, and the
+        // scroll view sometimes left it there.
+        let shortTranscript = readerTracker.contentHeight <= readerTracker.visibleHeight * 2
         if animated {
-            withAnimation(.snappy) { proxy.scrollTo(target, anchor: .bottom) }
+            withAnimation(.snappy) {
+                if shortTranscript {
+                    scrollPosition.scrollTo(edge: .bottom)
+                } else {
+                    proxy.scrollTo(target, anchor: .bottom)
+                }
+            }
+        } else if shortTranscript {
+            scrollPosition.scrollTo(edge: .bottom)
         } else {
             proxy.scrollTo(target, anchor: .bottom)
         }
@@ -2344,7 +2399,6 @@ private struct SessionActionsMenu: View {
     let onNewSession: (() -> Void)?
     let onFork: (() -> Void)?
     let onRenameWorkspace: ((String) -> Void)?
-    let onArchiveWorkspace: (() -> Void)?
     let onDeleteWorkspace: (() -> Void)?
     @Binding var showWorktreeInfo: Bool
     @Binding var showPrPanel: Bool
@@ -2366,119 +2420,36 @@ private struct SessionActionsMenu: View {
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        // The web phone's ⋯ (SessionViewerChrome): name and share, then
-        // start something, then the PR, then archive and delete. Model
-        // settings ride the composer's pill and the worktree sheet opens
-        // from the title, so neither repeats here; the panel tools share
-        // one submenu so the menu fits a phone without scrolling.
+        // Read top down from the bar: what you look at in this session, its
+        // pull request, starting something, then the workspace itself.
+        // Archive is the pill's job above the composer, model settings ride
+        // the composer's pill and the worktree sheet opens from the title, so
+        // none of them repeat here.
         Menu {
-            Section {
-                if addIntent != nil {
+            // The three views reached for most, as one row of icons.
+            ControlGroup {
+                if openPanel.isAvailable {
                     Button {
-                        SidebarAddition.add(session: viewModel.session, siblings: tabs)
+                        openPanel(.changes(sessionId: viewModel.session.id))
                     } label: {
-                        Label("Add to sidebar", systemImage: "sidebar.left")
+                        Label("Changes", systemImage: "plusminus")
                     }
                 }
-                // The rename itself runs from SessionView's alert; the menu
-                // only raises it, so the callback's presence is the gate.
-                if onRenameWorkspace != nil {
-                    Button {
-                        renameText = workspace?.title ?? viewModel.session.displayTitle
-                        renaming = true
-                    } label: {
-                        Label("Rename workspace", systemImage: "pencil")
-                    }
+                let open = viewModel.comments.openCount
+                Button {
+                    viewModel.comments.showingList = true
+                } label: {
+                    Label(open > 0 ? "Comments (\(open))" : "Comments", systemImage: "text.bubble")
                 }
                 if let workspace, let link = workspace.shareURL {
                     ShareLink(item: link, preview: SharePreview(workspace.title)) {
-                        Label("Share workspace", systemImage: "link")
-                    }
-                }
-                if let workspace, !workspace.isOptimistic,
-                   HideStore.shared.isHidden(workspace), addIntent == nil {
-                    Button {
-                        HideStore.shared.unhide(for: viewModel.session)
-                    } label: {
-                        Label("Restore to sidebar", systemImage: "eye")
+                        Label("Share", systemImage: "square.and.arrow.up")
                     }
                 }
             }
 
-            Section {
-                if let onNewSession {
-                    Button(action: onNewSession) {
-                        Label(
-                            viewModel.session.workspaceId == nil
-                                ? "New session"
-                                : "New session in workspace",
-                            systemImage: "plus"
-                        )
-                    }
-                }
-                if let onFork {
-                    Button(action: onFork) {
-                        Label("Duplicate session", systemImage: "doc.on.doc")
-                    }
-                    .accessibilityHint("Starts a new session from the current history")
-                }
-                if openPanel.isAvailable {
-                    Button {
-                        openPanel(.portals(sessionId: viewModel.session.id))
-                    } label: {
-                        Label("Portals", systemImage: "globe")
-                    }
-                }
-                if canMoveToSandbox {
-                    Menu {
-                        SandboxMoveMenuItems(
-                            model: sandboxMove,
-                            session: viewModel.session,
-                            isRunning: viewModel.isRunning,
-                            onMoved: adoptSandboxMove
-                        )
-                    } label: {
-                        Label("Move to Sandbox", systemImage: "cube")
-                    }
-                }
-                // Panels the web keeps in its side panel. One row here, so
-                // they stay reachable without lengthening the menu.
-                Menu {
-                    let open = viewModel.comments.openCount
-                    Button {
-                        viewModel.comments.showingList = true
-                    } label: {
-                        Label(open > 0 ? "Comments (\(open))" : "Comments", systemImage: "text.bubble")
-                    }
-                    if openPanel.isAvailable {
-                        Button {
-                            openPanel(.changes(sessionId: viewModel.session.id))
-                        } label: {
-                            Label("Changes", systemImage: "plusminus")
-                        }
-                        Button {
-                            openPanel(.assets(sessionId: viewModel.session.id))
-                        } label: {
-                            Label("Assets", systemImage: "folder")
-                        }
-                        Button {
-                            openPanel(.terminal(sessionId: viewModel.session.id))
-                        } label: {
-                            Label("Terminal", systemImage: "apple.terminal")
-                        }
-                        Button {
-                            openPanel(.agents(sessionId: viewModel.session.id))
-                        } label: {
-                            Label("Agents", systemImage: "square.stack.3d.up")
-                        }
-                    }
-                } label: {
-                    Label("Tools", systemImage: "wrench.and.screwdriver")
-                }
-            }
-
-            Section {
-                if let number = viewModel.prDetails?.number ?? viewModel.session.prNumber {
+            if let number = viewModel.prDetails?.number ?? viewModel.session.prNumber {
+                Section {
                     Button {
                         if openPanel.isAvailable {
                             openPanel(.review(sessionId: viewModel.session.id))
@@ -2506,67 +2477,140 @@ private struct SessionActionsMenu: View {
                         .disabled(merging)
                     }
                 }
-                if !workerSessions.isEmpty {
-                    Menu {
-                        ForEach(workerSessions) { worker in
-                            Button {
-                                openWorker(worker)
-                            } label: {
-                                Label(
-                                    worker.displayTitle,
-                                    systemImage: worker.isRunning == true ? "circle.fill" : "circle"
-                                )
-                            }
-                            .accessibilityLabel(
-                                "\(worker.displayTitle), \(worker.isRunning == true ? "running" : "finished")"
-                            )
-                        }
-                    } label: {
+            }
+
+            Section {
+                if let onNewSession {
+                    Button(action: onNewSession) {
                         Label(
-                            "Delegated workers (\(workerSessions.count))",
-                            systemImage: "arrow.down.right"
+                            viewModel.session.workspaceId == nil
+                                ? "New session"
+                                : "New session in workspace",
+                            systemImage: "plus"
                         )
                     }
                 }
-                // Closed sessions hang off the tab strip's history button,
-                // so they appear here exactly when there is no strip.
-                if let workspaceHistory, !workspaceHistory.sessions.isEmpty {
-                    Menu {
-                        SessionHistoryItems(
-                            sessions: workspaceHistory.sessions,
-                            restoringIds: workspaceHistory.restoringIds,
-                            onRestore: workspaceHistory.restore
-                        )
-                    } label: {
-                        Label(
-                            "Archived sessions",
-                            systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90"
-                        )
+                if let onFork {
+                    Button(action: onFork) {
+                        Label("Duplicate session", systemImage: "doc.on.doc")
                     }
+                    .accessibilityHint("Starts a new session from the current history")
+                }
+                // The rarer panels and moves, one row deep.
+                Menu {
+                    if openPanel.isAvailable {
+                        Button {
+                            openPanel(.assets(sessionId: viewModel.session.id))
+                        } label: {
+                            Label("Assets", systemImage: "folder")
+                        }
+                        Button {
+                            openPanel(.terminal(sessionId: viewModel.session.id))
+                        } label: {
+                            Label("Terminal", systemImage: "apple.terminal")
+                        }
+                        Button {
+                            openPanel(.agents(sessionId: viewModel.session.id))
+                        } label: {
+                            Label("Agents", systemImage: "square.stack.3d.up")
+                        }
+                        Button {
+                            openPanel(.portals(sessionId: viewModel.session.id))
+                        } label: {
+                            Label("Portals", systemImage: "globe")
+                        }
+                    }
+                    if canMoveToSandbox {
+                        Menu {
+                            SandboxMoveMenuItems(
+                                model: sandboxMove,
+                                session: viewModel.session,
+                                isRunning: viewModel.isRunning,
+                                onMoved: adoptSandboxMove
+                            )
+                        } label: {
+                            Label("Move to Sandbox", systemImage: "cube")
+                        }
+                    }
+                    if !workerSessions.isEmpty {
+                        Menu {
+                            ForEach(workerSessions) { worker in
+                                Button {
+                                    openWorker(worker)
+                                } label: {
+                                    Label(
+                                        worker.displayTitle,
+                                        systemImage: worker.isRunning == true ? "circle.fill" : "circle"
+                                    )
+                                }
+                                .accessibilityLabel(
+                                    "\(worker.displayTitle), \(worker.isRunning == true ? "running" : "finished")"
+                                )
+                            }
+                        } label: {
+                            Label(
+                                "Delegated workers (\(workerSessions.count))",
+                                systemImage: "arrow.down.right"
+                            )
+                        }
+                    }
+                    // Closed sessions hang off the tab strip's history button,
+                    // so they appear here exactly when there is no strip.
+                    if let workspaceHistory, !workspaceHistory.sessions.isEmpty {
+                        Menu {
+                            SessionHistoryItems(
+                                sessions: workspaceHistory.sessions,
+                                restoringIds: workspaceHistory.restoringIds,
+                                onRestore: workspaceHistory.restore
+                            )
+                        } label: {
+                            Label(
+                                "Archived sessions",
+                                systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90"
+                            )
+                        }
+                    }
+                } label: {
+                    Label("More tools", systemImage: "wrench.and.screwdriver")
                 }
             }
 
-            if let workspace, !workspace.isOptimistic {
-                Section {
-                    if let onArchiveWorkspace {
-                        Button(action: onArchiveWorkspace) {
-                            Label("Archive workspace", systemImage: "archivebox")
-                        }
+            Section {
+                // The rename itself runs from SessionView's alert; the menu
+                // only raises it, so the callback's presence is the gate.
+                if onRenameWorkspace != nil {
+                    Button {
+                        renameText = workspace?.title ?? viewModel.session.displayTitle
+                        renaming = true
+                    } label: {
+                        Label("Rename workspace", systemImage: "pencil")
                     }
-                    if workspace.workspaceId?.isEmpty == false, let onDeleteWorkspace {
-                        Button(role: .destructive, action: onDeleteWorkspace) {
-                            Label("Delete workspace", systemImage: "trash")
-                        }
+                }
+                if addIntent != nil {
+                    Button {
+                        SidebarAddition.add(session: viewModel.session, siblings: tabs)
+                    } label: {
+                        Label("Add to sidebar", systemImage: "sidebar.left")
+                    }
+                } else if let workspace, !workspace.isOptimistic,
+                          HideStore.shared.isHidden(workspace) {
+                    Button {
+                        HideStore.shared.unhide(for: viewModel.session)
+                    } label: {
+                        Label("Restore to sidebar", systemImage: "eye")
+                    }
+                }
+                if let workspace, !workspace.isOptimistic,
+                   workspace.workspaceId?.isEmpty == false, let onDeleteWorkspace {
+                    Button(role: .destructive, action: onDeleteWorkspace) {
+                        Label("Delete workspace", systemImage: "trash")
                     }
                 }
             }
         } label: {
-            // Sized as one of the action pill's round controls.
+            // A toolbar item: the bar sizes it and draws its glass.
             Image(systemName: "ellipsis")
-                .font(.system(size: 19))
-                .foregroundStyle(OS1VisualStyle.textDim)
-                .frame(width: SessionActionBar.control, height: SessionActionBar.control)
-                .contentShape(Rectangle())
+                .foregroundStyle(OS1VisualStyle.text)
         }
         .accessibilityLabel("Session actions")
         .sandboxMovePrompts(sandboxMove, onMoved: adoptSandboxMove)
@@ -3055,8 +3099,13 @@ struct SessionTabsView: View {
                !updatedTabs.contains(where: { $0.id == open.sessionId }) {
                 panel = nil
             }
+            // A new chat's temporary id gives way to the server's: follow it
+            // to that session, not to whichever sibling happens to be first.
+            let resolved = activeId.hasPrefix("pending-")
+                ? updatedTabs.first { $0.id == initialSession.id }
+                : nil
             guard !updatedTabs.contains(where: { $0.id == activeId }),
-                  let fallback = updatedTabs.first
+                  let fallback = resolved ?? updatedTabs.first
             else { return }
 
             var transaction = Transaction()
@@ -3560,8 +3609,6 @@ private struct SessionInputBar: View {
     var autoFocusWhenNeverRan = true
     /// Kept optional so non-sidebar conversations, such as the Desk, draw no row.
     var onNextChat: (() -> Void)?
-    /// The ⋯ menu, for the action pill (iOS).
-    var actionsMenu: AnyView? = nil
     /// Archive without opening anything next (a session not pushed from the
     /// sidebar, such as the Desk). The sidebar's own archive-and-next wins.
     var onArchive: (() -> Void)? = nil
@@ -3723,10 +3770,6 @@ private struct SessionInputBar: View {
             if hasActionBar {
                 SessionActionBar(
                     onArchive: navigation.canArchive ? { navigation.archive() } : onArchive,
-                    menu: actionsMenu,
-                    onNewWorkspace: navigation.canOpenNewWorkspace
-                        ? { navigation.openNewWorkspace() }
-                        : nil,
                     next: showNextChatButton ? navigation : nil,
                     scrollToLatest: scrollToLatest
                 )
@@ -3997,8 +4040,7 @@ private struct SessionInputBar: View {
     /// capsule.
     private var hasActionBar: Bool {
         !inputFocused
-            && (actionsMenu != nil || onArchive != nil || navigation.canArchive
-                || navigation.canOpenNewWorkspace
+            && (onArchive != nil || navigation.canArchive
                 || (showNextChatButton && (!navigation.chats.isEmpty || navigation.allRead)))
     }
     #endif

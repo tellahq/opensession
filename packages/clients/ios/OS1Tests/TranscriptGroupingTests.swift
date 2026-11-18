@@ -557,7 +557,7 @@ final class TranscriptGroupingTests: XCTestCase {
         guard let turn = workTurns().first else { return XCTFail("expected a fold") }
         XCTAssertTrue(turn.isLive, "the turn still running its call reads Working")
         XCTAssertTrue(turn.defaultExpanded(preference: .standard))
-        XCTAssertEqual(turn.livePreview, "cargo test --release zz_timing")
+        XCTAssertEqual(turn.livePreview, "Running a command")
         guard case .tool(let call) = turn.items.last else { return XCTFail("expected the call") }
         XCTAssertTrue(call.isPending, "the step keeps its spinner")
     }

@@ -1455,21 +1455,21 @@ export function SessionViewer({
     !ask &&
     !forkFrom &&
     replySuggestions.length > 0;
-  /* Unread navigation attaches to the composer. Only floating reading and
-     reply controls need additional clearance over the transcript. */
+  /* Unread navigation attaches to the composer (NEXT_RISE). On desktop the
+     scroll arrow joins it there, so it needs no band of its own. */
   const nextAction =
     showNextChatButton &&
     focused &&
     (!!openNextChat || navigation.allChatsRead);
   const scrollAction = showScrollToBottom && entries.length > 0;
-  const actionBand = quickReplies || scrollAction || isPhone;
+  const actionBand = quickReplies || isPhone || (scrollAction && !nextAction);
   const actionClearance = !actionBand
     ? undefined
     : isPhone
       ? isPhone && quickReplies
         ? ACTION_WITH_REPLIES_CLEARANCE
         : ACTION_CLEARANCE
-      : scrollAction
+      : scrollAction && !nextAction
         ? SCROLL_ACTION_CLEARANCE
         : SUGGESTIONS_CLEARANCE;
   // Floating controls change the scroller's bottom padding. Re-pin before the

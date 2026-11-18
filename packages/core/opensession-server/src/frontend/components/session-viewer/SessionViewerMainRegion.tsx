@@ -90,6 +90,7 @@ import {
 import { TURN_SPACER } from "../../lib/app-shell-classes";
 import { MOBILE_CONTROL_GLASS } from "../../lib/app-header-classes";
 import {
+  NEXT_RISE,
   PILL_CENTRED,
   TRANSCRIPT_ICON_BUTTON,
   TRANSCRIPT_PILL_BUTTON,
@@ -594,7 +595,7 @@ export function SessionViewerMainRegion({
     actionBand: hasActionBand,
     quickReplies,
     nextAction,
-    scrollAction,
+    scrollAction: scrollReady,
     isPhone,
     replySuggestions,
     pickReplySuggestion,
@@ -605,6 +606,9 @@ export function SessionViewerMainRegion({
     setMobileActionMenuEl,
     openNewWorkspace,
   } = actionBand;
+  // Desktop puts the arrow left of the Next tab rather than in a band above.
+  const scrollBesideNext = scrollReady && nextAction && !isPhone;
+  const scrollAction = scrollReady && !scrollBesideNext;
   const {
     forkFrom,
     composerResetSeq,
@@ -711,6 +715,7 @@ export function SessionViewerMainRegion({
         className={cn(
           "flex min-h-0 min-w-0 flex-1 flex-col [--session-under:16px]",
           actionClearance,
+          nextAction && NEXT_RISE,
         )}
       >
         {showPortal && portalTarget ? (
@@ -1657,7 +1662,34 @@ export function SessionViewerMainRegion({
                     }
                     attachedAction={
                       nextAction ? (
-                        <NextUnreadButton key={session.id} phone={isPhone} />
+                        <>
+                          {scrollBesideNext && (
+                            // Centred on the tab's visible 40px, left of it.
+                            <div className="mt-1 mr-2 self-start">
+                              <Tooltip
+                                label="Scroll to the bottom"
+                                shortcut={transcriptDownKeys ?? undefined}
+                              >
+                                <button
+                                  className={TRANSCRIPT_ICON_BUTTON}
+                                  type="button"
+                                  aria-label="Scroll to the bottom"
+                                  onClick={() => {
+                                    cancelIndexAnchorHold();
+                                    scrollToLatest("auto");
+                                  }}
+                                >
+                                  <IconArrowDown
+                                    size={13}
+                                    className="text-dim transition-transform group-hover:translate-y-px"
+                                    aria-hidden
+                                  />
+                                </button>
+                              </Tooltip>
+                            </div>
+                          )}
+                          <NextUnreadButton key={session.id} phone={isPhone} />
+                        </>
                       ) : null
                     }
                     sendMenu={

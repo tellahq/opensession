@@ -401,10 +401,11 @@ private struct ToolRunView: View {
                             LineStatsView(stats: stats, font: ToolRowMetrics.metaFont)
                         }
                         // Folded, the sentence alone hides what the run is
-                        // waiting on, so a long build looked stalled. Name
-                        // the step still running.
+                        // waiting on, so a long build looked stalled. Say
+                        // what the running step is doing, in words; opening
+                        // the run shows the command itself.
                         if let runningStep {
-                            Text(runningStep.presentation.stepLabel)
+                            Text(runningStep.presentation.family.activityLabel)
                                 .font(.footnote)
                                 .foregroundStyle(OS1VisualStyle.textFaint)
                                 .lineLimit(1)

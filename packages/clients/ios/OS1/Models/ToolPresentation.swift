@@ -73,6 +73,24 @@ enum ToolFamily: String, Equatable, Sendable, CaseIterable {
         case .other: "wrench.and.screwdriver"
         }
     }
+
+    /// What a running step is doing, by family rather than by tool name, for
+    /// the closed Working line: "Running a command", not "Bash: ls -la". The
+    /// step's own row still names the command once the fold is open. Same
+    /// words as the web's busy line (`busy-activity.ts`).
+    var activityLabel: String {
+        switch self {
+        case .run: "Running a command"
+        case .file: "Reading a file"
+        case .edit: "Editing a file"
+        case .find: "Searching"
+        case .web: "Reading the web"
+        case .agent: "Waiting for an agent"
+        case .skill: "Loading a skill"
+        case .checklist: "Updating the plan"
+        case .mcp, .branch, .other: "Calling a tool"
+        }
+    }
 }
 
 struct ToolLineStats: Equatable, Sendable {

@@ -1907,6 +1907,52 @@ struct SessionsListView: View {
     /// opens one of its comment threads, the way a comment link does.
     private func autoOpenFromEnvironment() {
         let env = ProcessInfo.processInfo.environment
+        #if DEBUG
+        // OS1_NEW_CHAT_FIXTURE=<id>|create: start a new chat the way the
+        // composer does (optimistic row, seeded prompt), so a recording shows
+        // the whole hand-off from the temporary id to the real one.
+        if let id = env["OS1_NEW_CHAT_FIXTURE"] {
+            let prompt = env["OS1_NEW_CHAT_PROMPT"] ?? "Fix the sidebar row spacing"
+            let delay = Double(env["OS1_NEW_CHAT_DELAY"] ?? "") ?? 3
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(delay))
+                let pending = Session.optimistic(
+                    id: "pending-fixture",
+                    title: prompt,
+                    repo: Session.noRepoID,
+                    repoLess: true,
+                    mode: "ask",
+                    model: nil,
+                    effort: nil,
+                    speed: .standard,
+                    startedBy: ServerConfig.shared.userName
+                )
+                openOptimistic(
+                    pending,
+                    seed: SessionViewModel.OptimisticSeed(prompt: prompt, images: [])
+                )
+                // "create" starts a real Ask session, for the whole server
+                // hand-off; any other value resolves to that id after a beat.
+                if id == "create" {
+                    do {
+                        let created = try await OS1API.createSession(
+                            prompt: prompt,
+                            repo: Session.noRepoID,
+                            mode: "ask",
+                            sandbox: SandboxOffering.createValue(SandboxOffering.host)
+                        )
+                        resolveCreate(tempId: pending.id, result: .success(created))
+                    } catch {
+                        resolveCreate(tempId: pending.id, result: .failure(error))
+                    }
+                } else {
+                    try? await Task.sleep(for: .seconds(2.5))
+                    resolveCreate(tempId: pending.id, result: .success(id))
+                }
+            }
+            return
+        }
+        #endif
         guard let id = env["OS1_OPEN_SESSION"] else { return }
         guard let session = viewModel.sessions.first(where: { $0.id == id }) else {
             // Outside the sidebar's lens: open it the way a link would.
@@ -1975,7 +2021,13 @@ struct SessionsListView: View {
         switch result {
         case .success(let id):
             viewModel.resolveOptimistic(tempId: tempId, realId: id)
-            sessionPageCache.remove(sessionId: tempId)
+            // The open conversation keeps its view model across the swap, so
+            // the chat on screen carries on rather than being rebuilt.
+            if let resolved = viewModel.sessions.first(where: { $0.id == id }) {
+                sessionPageCache.rekey(from: tempId, to: resolved)
+            } else {
+                sessionPageCache.remove(sessionId: tempId)
+            }
             resolvedSessionIds[tempId] = id
             if let seed = optimisticSeeds.removeValue(forKey: tempId) {
                 optimisticSeeds[id] = seed
@@ -2556,9 +2608,6 @@ struct SessionsListView: View {
                 workspace.isDraftWorkspace || workspace.isOptimistic ? nil : {
                     archiveAndOpenNext(workspace, from: session)
                 }
-            },
-            newWorkspace: {
-                newSessionRequest = NewSessionRequest(repo: session.effectiveRepo)
             }
         )
     }

@@ -200,6 +200,25 @@ final class SessionViewModelTests: XCTestCase {
         XCTAssertEqual(reopened.session.title, "Updated")
     }
 
+    func testResolvedCreateKeepsTheSeededConversation() {
+        let cache = SessionViewModelCache(capacity: 2)
+        let pending = cache.viewModel(
+            for: Session(id: "pending-1"),
+            scope: serverA,
+            seed: SessionViewModel.OptimisticSeed(prompt: "Fix the bug", images: [])
+        )
+
+        cache.rekey(from: "pending-1", to: Session(id: "bks-9"))
+        let resolved = cache.viewModel(for: Session(id: "bks-9"), scope: serverA)
+
+        XCTAssertTrue(pending === resolved, "the chat on screen is not rebuilt")
+        XCTAssertEqual(resolved.session.id, "bks-9")
+        XCTAssertEqual(resolved.actionCards.sessionId, "bks-9")
+        XCTAssertEqual(resolved.localFolders.sessionId, "bks-9")
+        XCTAssertEqual(resolved.entries.map(\.text), ["Fix the bug"])
+        XCTAssertEqual(cache.cachedSessionIds, ["bks-9"])
+    }
+
     func testPageCacheEvictsLeastRecentlyUsedConversation() {
         let cache = SessionViewModelCache(capacity: 2)
         _ = cache.viewModel(for: Session(id: "bks-1"), scope: serverA)

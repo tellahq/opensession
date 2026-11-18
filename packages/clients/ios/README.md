@@ -172,6 +172,9 @@ passed`, the whole message and nothing else) draws as one compact row per
   `ToolRowTitle`. Expanding one renders
   the tool's own shape: a unified diff
   for an edit, the command for a shell call, file content for a write.
+  A running turn's header and a run's running step say what is happening in
+  plain words (`Running a command`, `Reading a file`), the same wording as the
+  web, rather than the raw tool name.
   Routine calls fold into one run named by what it did
   (`Ran 3 commands, read 2 files`), and consecutive edits to the same
   file into one row — the path once, the summed ±lines, and a `×3` count —
@@ -459,6 +462,17 @@ passed`, the whole message and nothing else) draws as one compact row per
   On macOS, when the prompt is empty, **Start from a recipe** loads
   `/api/library` and prefills the editable prompt, mode, and any still-available
   model.
+  Start opens the conversation at once under a temporary `pending-` id with the
+  prompt already in place. When the server answers, the same view model takes
+  the real id (`SessionViewModel.adoptCreatedSession`, re-keyed in
+  `SessionViewModelCache`), so the opening bubble never reloads or moves. A new
+  conversation's first frame uses the last measured transcript height, and a
+  transcript within two screens scrolls to its content's end rather than to a
+  row, which could overshoot a short one past its top. In DEBUG,
+  `OS1_NEW_CHAT_FIXTURE=create` starts a real Ask session from
+  `OS1_NEW_CHAT_PROMPT` after `OS1_NEW_CHAT_DELAY` seconds (any other value
+  resolves the temporary id to that existing session) for recording the
+  hand-off.
 - **Action Button / Siri / Spotlight — "Start an Agent"** — one App Intent
   (`Intents/StartAgentIntent.swift`), and it deliberately OPENS the app
   (`openAppWhenRun = true`) rather than collecting the idea in the system's
