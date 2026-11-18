@@ -19,6 +19,7 @@ import {
   setAccountOwner,
 } from "../claude-accounts";
 import { claudeFederationSetup } from "../claude-api-credentials";
+import { designatedBridgeAccountIds } from "../model-providers";
 import {
   addCodexAccount,
   listCodexAccountsPublic,
@@ -115,6 +116,14 @@ export async function handleAccountsRoutes(
       federation: body.federation ?? undefined,
     });
     if ("error" in result) return Response.json(result, { status: 400 });
+    // bridge.accounts fences Anthropic runs to the accounts it names; a new
+    // account outside it serves nothing until an operator adds its id.
+    const designated = designatedBridgeAccountIds();
+    if (designated.length && !designated.includes(result.id))
+      return Response.json({
+        ...result,
+        warning: `Mythos runs can't use this account yet: add its id (${result.id}) to bridge.accounts in model-providers.json, which limits Claude runs to the accounts it lists.`,
+      });
     return Response.json(result);
   }
   if (

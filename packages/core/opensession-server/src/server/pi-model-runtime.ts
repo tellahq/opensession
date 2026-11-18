@@ -1549,12 +1549,15 @@ async function* runSdkAttempt(
     // that account's problem, not the request's: skip it for this request
     // and pick again. A strict pin never widens, and when nothing else is
     // eligible the credential error, not "pool dry", is what the user sees.
+    // Null once the turn is canceled: a token exchange can outlast a stop, and
+    // a canceled turn must not try further accounts.
     const acquire = async (): Promise<{
       account: ClaudeAccount;
       auth: ClaudeCodeAuth;
-    }> => {
+    } | null> => {
       let credentialError: Error | undefined;
       for (;;) {
+        if (signal?.aborted) return null;
         const picked =
           rotate.replayAccount ??
           pickBridgeAccount(model.id, {
@@ -1581,9 +1584,20 @@ async function* runSdkAttempt(
       }
     };
     const acquired = await acquire();
+    if (!acquired) {
+      yield fail("aborted", "Request aborted");
+      return;
+    }
     account = acquired.account;
     const auth = acquired.auth;
     await ensureSdkDirs(account.id);
+    // Last await before Claude Code starts: an abort that landed during the
+    // exchange or the directory setup never fires the listener registered
+    // below, so check here or the canceled turn would still start a request.
+    if (signal?.aborted) {
+      yield fail("aborted", "Request aborted");
+      return;
+    }
     // A Claude Code process keeps the credential it was spawned with. When
     // the account's credential rotated (a refreshed federated token), retire
     // the live conversation before planning so this turn resumes from the

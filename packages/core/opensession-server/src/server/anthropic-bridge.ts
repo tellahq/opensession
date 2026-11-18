@@ -84,16 +84,22 @@ import { z } from "zod";
 import { audit, summarizeText } from "./audit";
 import {
   hasAccounts,
+  markExhausted,
   resolveAccount,
   type ClaudeAccount,
 } from "./claude-accounts";
 import { claudeCodeAuth } from "./claude-api-credentials";
 import { cacheCreationUsage } from "./claude-cache-writes";
 import { contextWindowFor } from "./models";
-import { CLAUDE_CODE_BIN } from "./runner-shared";
+import {
+  CLAUDE_CODE_BIN,
+  isClaudeUsageLimitError,
+  usageLimitResetAt,
+} from "./runner-shared";
 import { spawnClaudeCodeInWorkload } from "./workload-scope";
 import {
   bridgePort,
+  designatedBridgeAccountIds,
   readModelProviderConfig,
   configPath as modelProvidersConfigPath,
 } from "./model-providers";
@@ -239,8 +245,7 @@ export function pickBridgeAccount(
   model: string | undefined,
   pin?: BridgeAccountPin,
 ): ClaudeAccount | { error: string } {
-  const cfg = readModelProviderConfig();
-  const ids = cfg?.enabled ? cfg.bridgeAccountIds || [] : [];
+  const ids = designatedBridgeAccountIds();
   const resolved = resolveAccount({
     user: pin?.user,
     model,
@@ -291,6 +296,19 @@ export function pickBridgeAccount(
   return {
     error: "no usable Claude account in the pool (all exhausted or sidelined)",
   };
+}
+
+/** Bench a bridge account whose request failed on a limit it reported (a
+ *  429, a usage limit), until the reset it named when it named one, so the
+ *  next pick moves on. Returns whether the failure was a limit. */
+export function sidelineLimitedBridgeAccount(
+  account: Pick<ClaudeAccount, "id">,
+  model: string,
+  message: string,
+): boolean {
+  if (!isClaudeUsageLimitError(message, true)) return false;
+  markExhausted(account.id, model || undefined, usageLimitResetAt(message));
+  return true;
 }
 
 // ── Anthropic request → SDK prompt mapping ───────────────────────────────────
@@ -821,7 +839,7 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
     ...summarizeText(prompt),
   });
 
-  const run = async () => {
+  const runOnce = async () => {
     const contentOut: ContentBlock[] = [];
     let usage = {
       input_tokens: 0,
@@ -1009,6 +1027,19 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
       ),
     });
     return response;
+  };
+
+  // A limit the account itself reported benches it (until the reset it
+  // named, when it named one) before the error goes back, so the next
+  // request's pick moves to another account. Without this an API account,
+  // which has no usage poll to notice the limit, kept being picked first.
+  const run = async () => {
+    try {
+      return await runOnce();
+    } catch (e: any) {
+      sidelineLimitedBridgeAccount(account, model, e?.message || String(e));
+      throw e;
+    }
   };
 
   if (!wantsStream) {

@@ -1980,12 +1980,19 @@ function AddClaudeApiAccountForm({
       if (owner.trim()) body.owner = owner.trim();
       if (kind === "api-key") body.apiKey = apiKey.replace(/\s+/g, "");
       else body.federation = federation;
-      const added = await request<ClaudeAccountInfo>("/claude-accounts/api", {
-        method: "POST",
-        body,
-        label: "Could not add Claude API account",
-      });
-      toast(`Added ${providerAccountLabel(added)}`);
+      const added = await request<ClaudeAccountInfo & { warning?: string }>(
+        "/claude-accounts/api",
+        {
+          method: "POST",
+          body,
+          label: "Could not add Claude API account",
+        },
+      );
+      toast(
+        added.warning
+          ? `Added ${providerAccountLabel(added)}. ${added.warning}`
+          : `Added ${providerAccountLabel(added)}`,
+      );
       onAccountAdded();
       onDone();
     } catch (cause) {

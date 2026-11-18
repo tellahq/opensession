@@ -98,7 +98,9 @@ A Claude API account bills an Anthropic API organization instead of a Claude
 subscription. It serves only Mythos runs, so metered API spend never stands in
 for subscription capacity. Once one exists, Mythos runs use API accounts only.
 An API account has no usage meters; a rate limit sidelines it for a minute, or
-until the reset the error states.
+until the reset the error states. When `bridge.accounts` in `model-providers.json`
+limits Claude runs to listed accounts, add each new API account's id there;
+until then it serves nothing and the picker does not offer Mythos.
 
 Add one under **Settings → Providers → Add account → Claude account**, with
 one of two kinds:

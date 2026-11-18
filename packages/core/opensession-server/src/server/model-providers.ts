@@ -673,6 +673,13 @@ export function configuredCatalogModel(
 
 /** The loaded config, without I/O; refreshed in the background, so a hand
  * edit or another process's write is seen within a second. */
+/** Claude account ids that alone may serve Anthropic runs (bridge.accounts),
+ *  or an empty list when every account in the pool may. */
+export function designatedBridgeAccountIds(): string[] {
+  const cfg = readModelProviderConfig();
+  return cfg?.enabled ? cfg.bridgeAccountIds || [] : [];
+}
+
 export function readModelProviderConfig(): ModelProviderSettings | null {
   const path = configPath();
   try {

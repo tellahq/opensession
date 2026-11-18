@@ -77,11 +77,13 @@ import {
   flattenMessageText,
   pickBridgeAccount,
   replayConversation,
+  sidelineLimitedBridgeAccount,
   type AnthropicMessage,
 } from "./anthropic-bridge";
 import { isPiUsageLimitShape } from "./pi-runner";
 import * as accounts from "./claude-accounts";
 import * as workloadIdentity from "./workload-identity";
+import { CLAUDE_API_CAPACITY, configuredModelProviders } from "./model-catalog";
 import { loadPiConfig } from "./pi-config";
 import { loadModelProviders } from "./model-providers";
 import * as sdk from "@anthropic-ai/claude-agent-sdk";
@@ -1680,6 +1682,133 @@ describe("buildPiAnthropicProvider", () => {
         "Anthropic token exchange failed (403)",
       );
       expect(envs).toHaveLength(2);
+    } finally {
+      query.mockRestore();
+      exchange.mockRestore();
+      sign.mockRestore();
+    }
+  });
+
+  test("Claude API capacity follows the bridge designation", async () => {
+    await designate(["designated-sub"]);
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: [
+          {
+            id: "designated-sub",
+            name: "designated-sub",
+            token: "sk-ant-oat01-designated-sub",
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+          {
+            id: "outside-key",
+            name: "outside-key",
+            token: "sk-ant-api03-outside-key",
+            authKind: "api-key",
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    // The API account is outside bridge.accounts, so it cannot serve Mythos
+    // and the catalog must not offer it.
+    const fenced = configuredModelProviders();
+    expect(fenced.has("anthropic")).toBe(true);
+    expect(fenced.has(CLAUDE_API_CAPACITY)).toBe(false);
+    await designate(["designated-sub", "outside-key"]);
+    expect(configuredModelProviders().has(CLAUDE_API_CAPACITY)).toBe(true);
+  });
+
+  test("a rate-limited bridge API account is benched so the next pick moves on", async () => {
+    await designate(["key-a", "key-b"]);
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: ["key-a", "key-b"].map((id) => ({
+          id,
+          name: id,
+          token: `sk-ant-api03-${id}`,
+          authKind: "api-key",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        })),
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    const first = pickBridgeAccount("claude-mythos-5-2") as any;
+    expect(
+      sidelineLimitedBridgeAccount(
+        first,
+        "claude-mythos-5-2",
+        "API Error: 429 rate_limit_error",
+      ),
+    ).toBe(true);
+    const next = pickBridgeAccount("claude-mythos-5-2") as any;
+    expect(next.id).not.toBe(first.id);
+    expect(
+      sidelineLimitedBridgeAccount(next, "claude-mythos-5-2", "Invalid model"),
+    ).toBe(false);
+    accounts.returnAccountToPool(first.id);
+  });
+
+  test("a turn canceled during the token exchange never starts Claude Code", async () => {
+    const [mythos] = buildPiAnthropicModels([], "claude-mythos-5-2");
+    await designate(["cancel-wif"]);
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: [
+          {
+            id: "cancel-wif",
+            name: "cancel-wif",
+            token: "",
+            authKind: "federation",
+            federation: {
+              organizationId: "00000000-0000-4000-8000-000000000000",
+              federationRuleId: "fdrl_cancel",
+              serviceAccountId: "svac_account",
+            },
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    const controller = new AbortController();
+    const sign = spyOn(
+      workloadIdentity,
+      "signServerIdentityToken",
+    ).mockResolvedValue("header.payload.signature");
+    const exchange = spyOn(globalThis, "fetch").mockImplementation(
+      (async () => {
+        // The person stops the turn while the exchange is in flight.
+        controller.abort();
+        return Response.json({
+          access_token: "sk-ant-oat01-late",
+          expires_in: 3600,
+        });
+      }) as unknown as typeof fetch,
+    );
+    const query = spyOn(sdk, "query").mockImplementation(() => {
+      throw new Error("test SDK reached");
+    });
+    try {
+      const provider = buildPiAnthropicProvider({
+        unifiedSessionId: "os-wif-cancel",
+        builtinModels: [],
+        ensureModelId: mythos.id,
+      }) as any;
+      const events: any[] = [];
+      for await (const ev of provider.streamSimple(
+        mythos,
+        { messages: [{ role: "user", content: "hi" }] },
+        { signal: controller.signal },
+      )) {
+        events.push(ev);
+      }
+      expect(query).not.toHaveBeenCalled();
+      expect(events.at(-1)?.error?.errorMessage).toBe("Request aborted");
     } finally {
       query.mockRestore();
       exchange.mockRestore();

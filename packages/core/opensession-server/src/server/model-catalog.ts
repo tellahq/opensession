@@ -4,7 +4,7 @@ import {
   isClaudeApiOnlyModel,
 } from "./claude-api-credentials";
 import { listCodexAccountsPublic } from "./codex-accounts";
-import { modelProviders } from "./model-providers";
+import { designatedBridgeAccountIds, modelProviders } from "./model-providers";
 import { hasXaiAccounts } from "./xai-accounts";
 import { XAI_OAUTH_PROVIDER } from "./xai-provider-id";
 import {
@@ -21,7 +21,12 @@ export const CLAUDE_API_CAPACITY = "anthropic:api";
 /** Provider capacity configured on this server. Temporary exhaustion does not
  * change the catalog or default; adding or removing an account does. */
 export function configuredModelProviders(): Set<string> {
-  const claude = listAccountsPublic();
+  // A bridge designation fences Anthropic runs to the accounts it names, so
+  // only those count: an API account added outside it cannot serve Mythos.
+  const designated = designatedBridgeAccountIds();
+  const claude = listAccountsPublic().filter(
+    (a) => !designated.length || designated.includes(a.id),
+  );
   return new Set([
     ...(claude.some((a) => !isClaudeApiAccount(a)) ? ["anthropic"] : []),
     ...(claude.some(isClaudeApiAccount) ? [CLAUDE_API_CAPACITY] : []),
