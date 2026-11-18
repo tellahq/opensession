@@ -4,6 +4,7 @@ import {
   PREVIEW_SLICE,
   controlPlaneWorkloadCommand,
   engineScopeSystemdArgs,
+  literalScopeArgs,
   processRunsInControlPlane,
   previewScopeCommand,
   previewScopeSystemdArgs,
@@ -64,6 +65,7 @@ describe("systemd scope resource controls", () => {
         cgroup:
           "0::/opensession.slice/opensession-control.slice/opensession.service",
         scopesAvailable: true,
+        systemdVersion: 255,
       },
     );
     expect(scoped.unit).toBe("opensession-agent-cmd-test");
@@ -74,6 +76,7 @@ describe("systemd scope resource controls", () => {
       "--collect",
       "--quiet",
       "--unit=opensession-agent-cmd-test",
+      "--expand-environment=no",
       "--slice=opensession-agents.slice",
       "--property=MemoryHigh=6G",
       "--property=MemoryMax=12G",
@@ -101,6 +104,26 @@ describe("systemd scope resource controls", () => {
     ).toEqual({ command, env: { PATH: "/bin" } });
   });
 
+  test("scoped commands stay literal where systemd-run can expand them", async () => {
+    // systemd 259 expands `$$` and `${VAR}` in a scope's argv by default.
+    expect(literalScopeArgs(259)).toEqual(["--expand-environment=no"]);
+    expect(literalScopeArgs(254)).toEqual(["--expand-environment=no"]);
+    // Older releases never expand and reject the flag.
+    expect(literalScopeArgs(252)).toEqual([]);
+    expect(literalScopeArgs(null)).toEqual([]);
+    const old = await previewScopeCommand(
+      ["bash", "-c", "echo $$"],
+      "/w",
+      "web",
+      {
+        env: { PATH: "/bin" },
+        scopesAvailable: true,
+        systemdVersion: 249,
+      },
+    );
+    expect(old.command).not.toContain("--expand-environment=no");
+  });
+
   test("preview unit names are stable without exposing worktree paths", () => {
     const first = previewScopeUnit("/srv/worktrees/a");
     expect(first).toBe(previewScopeUnit("/srv/worktrees/a"));
@@ -121,6 +144,7 @@ describe("systemd scope resource controls", () => {
       {
         env: { PATH: "/bin", HOME: "/tmp" },
         scopesAvailable: true,
+        systemdVersion: 259,
       },
     );
     expect(scoped.unit).toBe(previewScopeUnit("/srv/worktrees/a", "web"));
@@ -131,6 +155,7 @@ describe("systemd scope resource controls", () => {
       "--collect",
       "--quiet",
       `--unit=${scoped.unit}`,
+      "--expand-environment=no",
       "--slice=opensession-previews.slice",
       "--property=MemoryHigh=8G",
       "--property=MemoryMax=12G",
