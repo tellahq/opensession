@@ -651,7 +651,7 @@ async function* singleUserMessage(
   };
 }
 
-async function handleBridgeRequest(req: Request): Promise<Response> {
+export async function handleBridgeRequest(req: Request): Promise<Response> {
   const url = new URL(req.url);
   if (url.pathname === "/health") return Response.json({ ok: true });
   const requestId = crypto.randomUUID();
@@ -744,6 +744,21 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
             .join("\n\n")
         : "";
 
+  // A client that disconnects (a stopped turn) or cancels the stream ends
+  // the request: no further account is tried, Claude Code is not started,
+  // and a running query is stopped, so a canceled turn bills nothing more.
+  const cancel = new AbortController();
+  if (req.signal.aborted) cancel.abort();
+  else
+    req.signal.addEventListener("abort", () => cancel.abort(), { once: true });
+  const canceled = () => {
+    auditReject(requestId, 400, "request_canceled", {
+      engine_session: engineSessionHeader,
+      model,
+    });
+    return anthropicError(400, "invalid_request_error", "bridge: canceled");
+  };
+
   // An account whose credential cannot be obtained (a revoked federation
   // rule) is skipped for this request; the next eligible account serves it.
   const skippedIds: string[] = [];
@@ -751,6 +766,7 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
   let account: ClaudeAccount;
   let auth: Awaited<ReturnType<typeof claudeCodeAuth>>;
   for (;;) {
+    if (cancel.signal.aborted) return canceled();
     const picked = pickBridgeAccount(
       model,
       skippedIds.length ? { excludeIds: skippedIds } : undefined,
@@ -775,6 +791,7 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
     try {
       auth = await claudeCodeAuth(picked);
       account = picked;
+      if (cancel.signal.aborted) return canceled();
       break;
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
@@ -853,10 +870,14 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
     };
     let sdkSessionId = isContinuation ? stored!.sdkSessionId : undefined;
 
+    const cwd = await ensureAnthropicBridgeCwd();
+    // Last await before Claude Code starts.
+    if (cancel.signal.aborted) throw new Error("Request canceled");
     const q = query({
       prompt: promptContent ? singleUserMessage(promptContent) : prompt,
       options: {
-        cwd: await ensureAnthropicBridgeCwd(),
+        cwd,
+        abortController: cancel,
         model: model || undefined,
         resume: sdkSessionId,
         // Turn 1 is the real answer; turn 2 exists because blocked tool calls
@@ -963,6 +984,18 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
             "SDK run failed";
           throw new Error(detail);
         }
+        // Claude Code reports some usage limits as a successful result whose
+        // whole text is the notice ("5-hour limit reached ∙ resets 3am").
+        // Treat that as the failure it is, so the account is benched and the
+        // notice never reaches the client as the model's answer.
+        const notice =
+          (typeof rm.result === "string" && rm.result) ||
+          contentOut
+            .filter((b) => b.type === "text")
+            .map((b) => b.text)
+            .join("\n");
+        if (!captured.length && isClaudeUsageLimitError(notice, false))
+          throw new Error(notice);
         usage = {
           input_tokens: rm.usage?.input_tokens || 0,
           output_tokens: rm.usage?.output_tokens || 0,
@@ -1068,6 +1101,9 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
   const sse = (event: string, data: unknown) =>
     enc.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   const stream = new ReadableStream<Uint8Array>({
+    cancel() {
+      cancel.abort();
+    },
     start(controller) {
       const heartbeat = setInterval(() => {
         try {

@@ -1054,17 +1054,9 @@ function isAccountUsableFor(
 ): boolean {
   if (isExhausted(a.id)) return false;
   const required = requiredModels(model);
-  // API accounts serve only API-only models, so metered spend never stands
-  // in for subscription capacity. Once one exists, those models never fall
-  // back to a subscription; without one, they keep the old pool behavior.
-  if (isClaudeApiAccount(a)) {
-    return (
-      required.every((m) => isClaudeApiOnlyModel(m)) &&
-      !required.some((m) => isModelExhausted(a.id, m))
-    );
-  }
-  if (required.some((m) => isClaudeApiOnlyModel(m)) && hasClaudeApiAccounts())
-    return false;
+  if (required.some((m) => !claudeAccountServesModel(a, m))) return false;
+  if (isClaudeApiAccount(a))
+    return !required.some((m) => isModelExhausted(a.id, m));
   // OAuth access tokens are short-lived. The startup/usage poll refreshes an
   // expired token, but the picker must not hand out its stale mirror in the
   // small window before that refresh finishes.
@@ -1229,6 +1221,22 @@ async function appendAccount(
 
 export function hasClaudeApiAccounts(): boolean {
   return readStore().some(isClaudeApiAccount);
+}
+
+/**
+ * Whether an account's kind may run `model` at all, ignoring usage. API
+ * accounts serve only API-only models, so metered spend never stands in for
+ * subscription capacity. Once one exists, those models never fall back to a
+ * subscription; without one, they keep the old pool behavior. Account picks
+ * and fixed-subscription validation share this rule, so a fixed session
+ * cannot switch to a model its account would then refuse.
+ */
+export function claudeAccountServesModel(
+  account: Pick<ClaudeAccount, "authKind">,
+  model?: string | null,
+): boolean {
+  if (isClaudeApiAccount(account)) return isClaudeApiOnlyModel(model);
+  return !isClaudeApiOnlyModel(model) || !hasClaudeApiAccounts();
 }
 
 /**

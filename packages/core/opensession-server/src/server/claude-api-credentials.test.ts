@@ -242,6 +242,23 @@ describe("account routing", () => {
     ).toBeUndefined();
   });
 
+  test("a fixed session cannot switch to a model its account refuses", async () => {
+    const { fixedSubscriptionModelError } =
+      await import("./fixed-subscription");
+    expect(
+      fixedSubscriptionModelError("sub", "pi/anthropic/claude-mythos-5-2"),
+    ).toMatch(/Mythos runs only on Claude API accounts/);
+    expect(
+      fixedSubscriptionModelError("api", "pi/anthropic/claude-opus-5-5"),
+    ).toMatch(/only runs Mythos/);
+    expect(
+      fixedSubscriptionModelError("api", "pi/anthropic/claude-mythos-5-2"),
+    ).toBeUndefined();
+    expect(
+      fixedSubscriptionModelError("sub", "pi/anthropic/claude-opus-5-5"),
+    ).toBeUndefined();
+  });
+
   test("an API rate limit benches the account briefly", () => {
     accounts.markExhausted("api", "claude-mythos-5-2");
     expect(

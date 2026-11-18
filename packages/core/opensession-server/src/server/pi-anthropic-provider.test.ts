@@ -75,6 +75,8 @@ import {
   flatSdkTurnContent,
   flatSdkTurnText,
   flattenMessageText,
+  bridgeKey,
+  handleBridgeRequest,
   pickBridgeAccount,
   replayConversation,
   sidelineLimitedBridgeAccount,
@@ -1721,7 +1723,7 @@ describe("buildPiAnthropicProvider", () => {
     expect(configuredModelProviders().has(CLAUDE_API_CAPACITY)).toBe(true);
   });
 
-  test("a rate-limited bridge API account is benched so the next pick moves on", async () => {
+  test("the bridge benches an account whose result is a limit notice", async () => {
     await designate(["key-a", "key-b"]);
     writeFileSync(
       accountsFile,
@@ -1737,19 +1739,102 @@ describe("buildPiAnthropicProvider", () => {
     );
     await accounts.loadClaudeAccounts();
     const first = pickBridgeAccount("claude-mythos-5-2") as any;
+    // Claude Code reports this limit as a *successful* result.
+    const query = spyOn(sdk, "query").mockImplementation((() =>
+      (async function* () {
+        yield {
+          type: "result",
+          subtype: "success",
+          is_error: false,
+          result: "5-hour limit reached ∙ resets 3am",
+          session_id: "sdk-limit",
+        };
+      })()) as any);
+    try {
+      const res = await handleBridgeRequest(
+        new Request("http://127.0.0.1/v1/messages", {
+          method: "POST",
+          headers: { "x-api-key": bridgeKey() },
+          body: JSON.stringify({
+            model: "claude-mythos-5-2",
+            messages: [{ role: "user", content: "hi" }],
+          }),
+        }),
+      );
+      expect(query).toHaveBeenCalledTimes(1);
+      expect(res.status).toBe(400);
+      expect(JSON.stringify(await res.json())).toContain("limit reached");
+      const next = pickBridgeAccount("claude-mythos-5-2") as any;
+      expect(next.id).not.toBe(first.id);
+    } finally {
+      query.mockRestore();
+      accounts.returnAccountToPool(first.id);
+    }
     expect(
-      sidelineLimitedBridgeAccount(
-        first,
-        "claude-mythos-5-2",
-        "API Error: 429 rate_limit_error",
-      ),
-    ).toBe(true);
-    const next = pickBridgeAccount("claude-mythos-5-2") as any;
-    expect(next.id).not.toBe(first.id);
-    expect(
-      sidelineLimitedBridgeAccount(next, "claude-mythos-5-2", "Invalid model"),
+      sidelineLimitedBridgeAccount(first, "claude-mythos-5-2", "Invalid model"),
     ).toBe(false);
-    accounts.returnAccountToPool(first.id);
+  });
+
+  test("a bridge request canceled during the token exchange never starts Claude Code", async () => {
+    await designate(["bridge-cancel-wif"]);
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: [
+          {
+            id: "bridge-cancel-wif",
+            name: "bridge-cancel-wif",
+            token: "",
+            authKind: "federation",
+            federation: {
+              organizationId: "00000000-0000-4000-8000-000000000000",
+              federationRuleId: "fdrl_bridge_cancel",
+              serviceAccountId: "svac_account",
+            },
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    const client = new AbortController();
+    const sign = spyOn(
+      workloadIdentity,
+      "signServerIdentityToken",
+    ).mockResolvedValue("header.payload.signature");
+    const exchange = spyOn(globalThis, "fetch").mockImplementation(
+      (async () => {
+        // The client disconnects while the exchange is in flight.
+        client.abort();
+        return Response.json({
+          access_token: "sk-ant-oat01-late",
+          expires_in: 3600,
+        });
+      }) as unknown as typeof fetch,
+    );
+    const query = spyOn(sdk, "query").mockImplementation(() => {
+      throw new Error("test SDK reached");
+    });
+    try {
+      const res = await handleBridgeRequest(
+        new Request("http://127.0.0.1/v1/messages", {
+          method: "POST",
+          headers: { "x-api-key": bridgeKey() },
+          body: JSON.stringify({
+            model: "claude-mythos-5-2",
+            messages: [{ role: "user", content: "hi" }],
+          }),
+          signal: client.signal,
+        }),
+      );
+      expect(exchange).toHaveBeenCalled();
+      expect(query).not.toHaveBeenCalled();
+      expect(JSON.stringify(await res.json())).toContain("canceled");
+    } finally {
+      query.mockRestore();
+      exchange.mockRestore();
+      sign.mockRestore();
+    }
   });
 
   test("a turn canceled during the token exchange never starts Claude Code", async () => {
