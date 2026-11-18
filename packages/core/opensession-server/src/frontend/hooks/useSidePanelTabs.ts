@@ -24,6 +24,7 @@ import {
   getPreviewAutoOpenPref,
   onPreviewAutoOpenChanged,
 } from "../lib/preview-auto-open-pref";
+import { useLinksInBrowserTab } from "../lib/links-in-browser-tab";
 import { useSessionRecord } from "../lib/session-records";
 import { useIsCoordinating } from "../lib/coordinator-mode";
 import { useSessionRecords } from "../lib/session-records";
@@ -128,13 +129,17 @@ export function useSidePanelTabs({
   }, [canHost, coordinating, hostKey]);
 
   // Review needs a workspace to diff; the Browser tab needs a page, either one
-  // handed to the panel or the PR's preview.
+  // handed to the panel or the PR's preview. With links going to the browser,
+  // the preview alone does not offer the tab.
+  const linksInBrowserTab = useLinksInBrowserTab();
   const reviewAvailable = !!openReview && hasWorkspace;
   const availableTabs: SidePanelTab[] = [
     ...(threads ? (["threads"] as const) : []),
     "changes",
     ...(reviewAvailable ? (["review"] as const) : []),
-    ...(panelBrowser || preview.stagingUrl ? (["browser"] as const) : []),
+    ...(panelBrowser || (linksInBrowserTab && preview.stagingUrl)
+      ? (["browser"] as const)
+      : []),
     "portals",
     "agents",
     ...(hasWorkspace ? (["terminal"] as const) : []),
@@ -166,10 +171,11 @@ export function useSidePanelTabs({
   const browserDock = useSyncExternalStore(subscribeSidePanel, () =>
     sidePanelDockOf("browser"),
   );
-  const autoOpen = useSyncExternalStore(
+  const autoOpenPref = useSyncExternalStore(
     onPreviewAutoOpenChanged,
     getPreviewAutoOpenPref,
   );
+  const autoOpen = linksInBrowserTab && autoOpenPref;
   const inPanel = browserDock === "panel";
   const summaryFrame = summaryBrowserFrame({
     ...preview,

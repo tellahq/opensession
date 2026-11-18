@@ -133,6 +133,8 @@ import {
   onPreviewAutoOpenChanged,
   setPreviewAutoOpenPref,
 } from "../../lib/preview-auto-open-pref";
+import { setLinksInBrowserTabPref } from "../../lib/links-in-browser-tab-pref";
+import { useLinksInBrowserTab } from "../../lib/links-in-browser-tab";
 import {
   getViewportReadoutPref,
   onViewportReadoutChanged,
@@ -367,6 +369,7 @@ function LinksSection() {
     () => onPreviewAutoOpenChanged(() => setAutoOpen(getPreviewAutoOpenPref())),
     [],
   );
+  const inBrowserTab = useLinksInBrowserTab();
 
   return (
     <>
@@ -384,16 +387,29 @@ function LinksSection() {
           }
         />
         <SettingRow
-          title="Add a Browser tab for previews"
-          desc="When a pull request's preview environment is ready, a Browser tab with it opens behind what you're viewing. Once per pull request. Only affects you."
+          title="Open links in the Browser tab"
+          desc="Web links and preview environments open in a Browser tab next to the session. Turn off to open them in your own browser. Only affects you."
           control={
             <Switch
-              aria-label="Add a Browser tab for previews"
-              checked={autoOpen}
-              onCheckedChange={setPreviewAutoOpenPref}
+              aria-label="Open links in the Browser tab"
+              checked={inBrowserTab}
+              onCheckedChange={setLinksInBrowserTabPref}
             />
           }
         />
+        {inBrowserTab && (
+          <SettingRow
+            title="Add a Browser tab for previews"
+            desc="When a pull request's preview environment is ready, a Browser tab with it opens behind what you're viewing. Once per pull request. Only affects you."
+            control={
+              <Switch
+                aria-label="Add a Browser tab for previews"
+                checked={autoOpen}
+                onCheckedChange={setPreviewAutoOpenPref}
+              />
+            }
+          />
+        )}
       </SettingCard>
     </>
   );

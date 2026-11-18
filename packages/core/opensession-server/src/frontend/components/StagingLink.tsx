@@ -18,6 +18,7 @@ import { checkClass, isDeployment } from "../lib/pr-status-derive";
 import { useSessionPendingCreation } from "../hooks/useSessionPendingCreation";
 import { useShortcutLabel } from "../hooks/useShortcutBindings";
 import { SUMMARY_MARK_HOVER } from "./PrRefStagingMark";
+import { useLinksInBrowserTab } from "../lib/links-in-browser-tab";
 
 // The open-preview chord's handler lives in SessionViewer: this component
 // mounts once per layout variant, so a listener here would register several
@@ -131,7 +132,10 @@ export function StagingLink({
   const openChord = useShortcutLabel("open-preview");
   // Optional so the link still renders (as a plain external link) outside
   // the app shell, e.g. in isolated component tests.
-  const navigation = use(NavigationContext);
+  // With "Open links in the Browser tab" off, there is no in-app tab to
+  // open: every click is the anchor's own and lands in the browser.
+  const shell = use(NavigationContext);
+  const navigation = useLinksInBrowserTab() ? shell : null;
 
   // A merged/closed PR's alias no longer points at this change. The link is a
   // pre-merge testing affordance. Repos without deployment metadata simply
@@ -265,7 +269,8 @@ export function StagingLink({
   // A plain click opens the preview in the workspace's in-app Preview tab, so
   // testing the change stays next to the session. ⌘/Ctrl-click, shift-click
   // and middle-click keep the anchor's native meaning and open it in the
-  // browser. Copying lives in the right-click menu below.
+  // browser. With "Open links in the Browser tab" off, `navigation` is null and
+  // every click is the anchor's own. Copying lives in the right-click menu.
   const onClick = (e: React.MouseEvent) => {
     // Before the first deploy goes Ready the alias 404s, so swallow a plain
     // click — but never silently (an unexplained dead link reads as a bug).
