@@ -20,6 +20,22 @@ describe("BusyInline", () => {
     );
     expect(html).toContain("Still working");
   });
+
+  test("names a trailing thought, with the elapsed time, at the end", () => {
+    const store = new LiveTurnStore();
+    const release = store.claimTrailingThought();
+    const html = renderToStaticMarkup(
+      <BusyInline
+        since={Date.now() - 15 * 60_000}
+        stoppingSince={null}
+        liveTurnStore={store}
+      />,
+    );
+    expect(html).toMatch(/>Thinking<\/span>/);
+    expect(html).not.toContain("Still working");
+    expect(html).toContain("· 15m");
+    release();
+  });
 });
 
 describe("TranscriptSyncing", () => {

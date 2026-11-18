@@ -547,8 +547,8 @@ export function SessionViewerMainRegion({
   } = transcript.content;
   const stopping = stopRequestedAt != null;
   const liveRunStatus = useMemo<LiveRunStatus>(
-    () => ({ store: liveTurnStore, since: busySince, stopping }),
-    [liveTurnStore, busySince, stopping],
+    () => ({ store: liveTurnStore, stopping }),
+    [liveTurnStore, stopping],
   );
   const {
     openAssetFromTranscript,

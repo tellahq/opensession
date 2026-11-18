@@ -31,58 +31,44 @@ const entries: TranscriptEntry[] = [
   },
 ];
 
-function render(store: LiveTurnStore, stopping = false) {
+function transcript(store: LiveTurnStore, stopping = false) {
   return renderToStaticMarkup(
-    <LiveRunStatusContext.Provider
-      value={{ store, since: Date.now() - 15 * 60_000, stopping }}
-    >
+    <LiveRunStatusContext.Provider value={{ store, stopping }}>
       <TranscriptBlocks live entries={entries} />
     </LiveRunStatusContext.Provider>,
   );
 }
 
-describe("a live thought as the run's status", () => {
-  test("the Thinking header carries the elapsed time", () => {
+describe("a live thought hands its label to the row at the end", () => {
+  test("the thought keeps its prose and drops the shimmering label", () => {
     setTurnPrefs("open", "folded");
-    const html = render(new LiveTurnStore());
-    expect(html).toContain('role="status"');
-    expect(html).toMatch(/>Thinking<\/span>/);
-    expect(html).toContain("· 15m");
-    setTurnPrefs(null);
-  });
-
-  test("a running tool takes the status back from the thought", () => {
-    setTurnPrefs("open", "folded");
-    const store = new LiveTurnStore();
-    store.setActivity({ kind: "tool", toolName: "bash", count: 1 });
-    const html = render(store);
+    const html = transcript(new LiveTurnStore());
+    expect(html).toContain("Try curl next.");
     expect(html).not.toContain('data-text-shimmer=""');
-    expect(html).not.toContain("· 15m");
     setTurnPrefs(null);
   });
 
-  test("a pending stop leaves the elapsed time to the row below", () => {
+  test("a pending stop leaves the thought its own label", () => {
     setTurnPrefs("open", "folded");
-    const html = render(new LiveTurnStore(), true);
-    expect(html).toContain('data-text-shimmer=""');
-    expect(html).not.toContain("· 15m");
+    const html = transcript(new LiveTurnStore(), true);
+    expect(html).toMatch(/>Thinking<\/span>/);
     setTurnPrefs(null);
   });
 });
 
-describe("LiveTurnStore inline status claims", () => {
+describe("LiveTurnStore trailing thought claims", () => {
   test("counts overlapping claims and ignores a double release", () => {
     const store = new LiveTurnStore();
     let emits = 0;
     store.subscribe(() => emits++);
-    const a = store.claimInlineStatus();
-    const b = store.claimInlineStatus();
-    expect(store.hasInlineStatus()).toBe(true);
+    const a = store.claimTrailingThought();
+    const b = store.claimTrailingThought();
+    expect(store.hasTrailingThought()).toBe(true);
     a();
     a();
-    expect(store.hasInlineStatus()).toBe(true);
+    expect(store.hasTrailingThought()).toBe(true);
     b();
-    expect(store.hasInlineStatus()).toBe(false);
+    expect(store.hasTrailingThought()).toBe(false);
     expect(emits).toBe(2);
   });
 });
