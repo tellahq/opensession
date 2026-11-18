@@ -3670,14 +3670,10 @@ private struct SessionInputBar: View {
                     menu: actionsMenu,
                     onNewWorkspace: navigation.canOpenNewWorkspace
                         ? { navigation.openNewWorkspace() }
-                        : nil
+                        : nil,
+                    next: showNextChatButton ? navigation : nil
                 )
                 .transition(.opacity)
-            }
-            // Attached to the composer's top edge, above any queue flap.
-            if showNextChatButton {
-                NextUnreadTab(navigation: navigation, cornerRadius: 22)
-                    .zIndex(0)
             }
             #endif
 
@@ -3937,12 +3933,13 @@ private struct SessionInputBar: View {
     }
 
     #if os(iOS)
-    /// Whether the action bar has anything to hold. Without the Next chat
-    /// preference there is no bar at all rather than an empty capsule.
+    /// Whether the action bar has anything to hold, so there is no empty
+    /// capsule.
     private var hasActionBar: Bool {
         !inputFocused
             && (actionsMenu != nil || onArchive != nil || navigation.canArchive
-                || navigation.canOpenNewWorkspace)
+                || navigation.canOpenNewWorkspace
+                || (showNextChatButton && (!navigation.chats.isEmpty || navigation.allRead)))
     }
     #endif
 
