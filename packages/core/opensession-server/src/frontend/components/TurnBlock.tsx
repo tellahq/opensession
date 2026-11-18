@@ -618,22 +618,20 @@ function ToolRunBlock({
         )}
       </button>
       <Fold open={expanded}>
-        <div className="ml-3">
-          {items.map((entry) => (
-            <ToolCallBlock
-              key={entry.id}
-              entry={entry}
-              sessionId={sessionId}
-              result={
-                entry.toolUseId ? toolResults.get(entry.toolUseId) : undefined
-              }
-              pending={
-                live && !!entry.toolUseId && !toolResults.has(entry.toolUseId)
-              }
-              onOpenSubagent={onOpenSubagent}
-            />
-          ))}
-        </div>
+        {items.map((entry) => (
+          <ToolCallBlock
+            key={entry.id}
+            entry={entry}
+            sessionId={sessionId}
+            result={
+              entry.toolUseId ? toolResults.get(entry.toolUseId) : undefined
+            }
+            pending={
+              live && !!entry.toolUseId && !toolResults.has(entry.toolUseId)
+            }
+            onOpenSubagent={onOpenSubagent}
+          />
+        ))}
       </Fold>
     </div>
   );
