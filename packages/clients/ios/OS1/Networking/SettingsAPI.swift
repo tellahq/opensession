@@ -388,7 +388,9 @@ enum SettingsAPI {
 
     // MARK: - Models and accounts
 
-    static func modelCatalog() async throws -> ModelCatalogSettings { try await request("/api/models") }
+    static func modelCatalog() async throws -> ModelCatalogSettings {
+        try await request(OS1API.modelsPath(workspaceId: nil))
+    }
 
     static func setDefaultModel(_ model: String?) async throws -> ModelDefaults {
         try await request("/api/models/default", method: "PUT", body: ["model": model ?? NSNull()])

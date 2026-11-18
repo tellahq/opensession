@@ -1825,6 +1825,12 @@ describe("buildPiAnthropicProvider", () => {
       status = engineStatus("Bob");
       expect(status.defaultModel).toContain("mythos");
       expect(status.ready).toBe(true);
+      // A rate limit on the default model alone benches the only key for it,
+      // so setup reports the same refusal the runner would.
+      accounts.markExhausted("new-key", status.defaultModel);
+      expect(engineStatus("Bob").ready).toBe(false);
+      accounts.returnAccountToPool("new-key");
+      expect(engineStatus("Bob").ready).toBe(true);
       // Another user's personal account never makes this user ready.
       await designate([]);
       writeFileSync(

@@ -1,18 +1,18 @@
 /** Shared readiness check for Setup and `opensession doctor`. */
-import {
-  claudeAccountServesModel,
-  listAccountsPublic,
-} from "./claude-accounts";
+import { listAccountsPublic, resolveAccount } from "./claude-accounts";
 import { listCodexAccountsPublic } from "./codex-accounts";
 import { listXaiAccountsPublic } from "./xai-accounts";
 import { accountProviderForModel } from "./models";
 import {
-  claudeAccountsForUser,
   configuredInteractiveDefaultModel,
   configuredModelProviders,
 } from "./model-catalog";
-import { modelProviders } from "./model-providers";
-import { piConfigPath, piEngineEnabled } from "./pi-config";
+import { designatedBridgeAccountIds, modelProviders } from "./model-providers";
+import {
+  piAnthropicTransport,
+  piConfigPath,
+  piEngineEnabled,
+} from "./pi-config";
 import { homeDir } from "./paths";
 
 function engineConfigLabel(): string {
@@ -54,15 +54,18 @@ export function engineStatus(user?: string): EngineStatus {
     configuredModelProviders(user),
   );
   const provider = accountProviderForModel(defaultModel);
-  // Claude readiness uses the runner's account rules: the designation, the
-  // owner gate for this user, and whether the account's kind serves the
-  // default model (API accounts serve only Mythos, subscriptions never do).
-  const claudeAvailable = claudeAccountsForUser(user).filter(
-    (account) =>
-      account.usable &&
-      !account.exhaustedUntil &&
-      claudeAccountServesModel(account, defaultModel),
-  ).length;
+  // Claude readiness asks the runner's own selector, as a peek that does not
+  // consume a round-robin turn: the designation, the owner gate for this user
+  // (the HTTP bridge carries no run identity), the account kind, and both
+  // account-wide and per-model sidelines for the default model.
+  const claudeAvailable =
+    "account" in
+    resolveAccount({
+      user: piAnthropicTransport() === "bridge" ? undefined : user,
+      model: defaultModel,
+      designatedIds: designatedBridgeAccountIds(),
+      recordPick: false,
+    });
   const base = {
     piEnabled: enabled,
     claudeAccounts,

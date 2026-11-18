@@ -1401,15 +1401,29 @@ export async function addAccount(
 }
 
 /** Set or clear (empty/undefined) an account's personal owner. */
+/** Authorization a writer re-checks against the account it is about to
+ * change, inside the store transaction: a message refuses the write. A
+ * route's earlier check reads the cached record, which an operator's
+ * concurrent ownership transfer can make stale. */
+export type AccountWriteGuard = (account: ClaudeAccount) => string | undefined;
+
+/** A write the guard refused, with its message. */
+export interface AccountWriteForbidden {
+  forbidden: string;
+}
+
 export function setAccountOwner(
   id: string,
   owner: string | undefined,
   credentialsPath?: string | undefined,
-): Promise<ClaudeAccountPublic | null> {
+  guard?: AccountWriteGuard,
+): Promise<ClaudeAccountPublic | AccountWriteForbidden | null> {
   return mutateStore(async () => {
     const accounts = await readStoreFresh();
     const idx = accounts.findIndex((a) => a.id === id);
     if (idx === -1) return null;
+    const forbidden = guard?.(accounts[idx]);
+    if (forbidden) return { forbidden };
     const trimmed = owner?.trim() || undefined;
     const next = { ...accounts[idx] };
     if (trimmed) next.owner = trimmed;
@@ -1436,11 +1450,14 @@ export function setAccountOwner(
 export function setAccountLabel(
   id: string,
   label: string,
-): Promise<ClaudeAccountPublic | null> {
+  guard?: AccountWriteGuard,
+): Promise<ClaudeAccountPublic | AccountWriteForbidden | null> {
   return mutateStore(async () => {
     const accounts = await readStoreFresh();
     const idx = accounts.findIndex((a) => a.id === id);
     if (idx === -1) return null;
+    const forbidden = guard?.(accounts[idx]);
+    if (forbidden) return { forbidden };
     const next = withLabel(accounts[idx], label);
     accounts[idx] = next;
     await writeStore(accounts);
@@ -1480,15 +1497,22 @@ export async function setAccountUsageCredentials(
   return toPublic(next);
 }
 
-export async function removeAccount(id: string): Promise<boolean> {
-  const removed = await mutateStore(async () => {
-    const accounts = await readStoreFresh();
-    const next = accounts.filter((a) => a.id !== id);
-    if (next.length === accounts.length) return false;
-    await writeStore(next);
-    return true;
-  });
-  if (!removed) return false;
+export async function removeAccount(
+  id: string,
+  guard?: AccountWriteGuard,
+): Promise<boolean | AccountWriteForbidden> {
+  const removed = await mutateStore(
+    async (): Promise<boolean | AccountWriteForbidden> => {
+      const accounts = await readStoreFresh();
+      const account = accounts.find((a) => a.id === id);
+      if (!account) return false;
+      const forbidden = guard?.(account);
+      if (forbidden) return { forbidden };
+      await writeStore(accounts.filter((a) => a.id !== id));
+      return true;
+    },
+  );
+  if (removed !== true) return removed;
   forgetFederatedTokens(id);
   usageCache.delete(id);
   const map = sidelines();

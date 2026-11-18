@@ -124,6 +124,32 @@ describe("Claude API account authorization with web sign-in on", () => {
     expect(own?.status).toBe(200);
   });
 
+  test("an owner's pending change is refused once the account is transferred", async () => {
+    authRequired = spyOn(webAuth, "webAuthRequired").mockReturnValue(true);
+    await seed();
+    // The operator's transfer is queued first; Alice's request passes the
+    // route check against the cached owner, then reaches the writer after it.
+    const transfer = accounts.setAccountOwner("alice-key", "Bob");
+    const [rename, release, del] = await Promise.all([
+      handleAccountsRoutes(
+        ctx("PUT", "/api/claude-accounts/alice-key", alice, { label: "Mine" }),
+      ),
+      handleAccountsRoutes(
+        ctx("PUT", "/api/claude-accounts/alice-key", alice, { owner: "" }),
+      ),
+      handleAccountsRoutes(
+        ctx("DELETE", "/api/claude-accounts/alice-key", alice),
+      ),
+      transfer,
+    ]);
+    expect(rename?.status).toBe(403);
+    expect(release?.status).toBe(403);
+    expect(del?.status).toBe(403);
+    const account = accounts.getAccountById("alice-key");
+    expect(account?.owner).toBe("Bob");
+    expect(account?.label).toBeUndefined();
+  });
+
   test("the host operator can change any API account", async () => {
     authRequired = spyOn(webAuth, "webAuthRequired").mockReturnValue(true);
     await seed();

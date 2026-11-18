@@ -10,6 +10,8 @@
 import { requestUser, type RouteContext } from "./context";
 import { isHostOperator } from "./memory-diagnostics";
 import {
+  type AccountWriteForbidden,
+  type AccountWriteGuard,
   accountServesUser,
   addAccount,
   addClaudeApiAccount,
@@ -79,28 +81,39 @@ function isRename(body: unknown): body is { label: string } {
  * existing rules. Undefined means the caller may go ahead (or the account
  * does not exist, which the route answers itself).
  */
+/** Who may change a Claude API account: its owner or the host operator. The
+ *  writers re-run this against the record inside the store transaction. */
+function apiAccountChangeGuard(ctx: RouteContext): AccountWriteGuard {
+  return (account) => {
+    if (!isClaudeApiAccount(account) || isHostOperator(ctx)) return undefined;
+    if (account.owner && accountServesUser(account, requestUser(ctx)))
+      return undefined;
+    return account.owner
+      ? "Only this account's owner or the host operator can change it."
+      : "Only the host operator can change a shared Claude API account.";
+  };
+}
+
 function apiAccountChangeForbidden(
   ctx: RouteContext,
   id: string,
 ): Response | undefined {
   const account = getAccountById(id);
-  if (!account || !isClaudeApiAccount(account) || isHostOperator(ctx))
-    return undefined;
-  if (account.owner && accountServesUser(account, requestUser(ctx)))
-    return undefined;
-  return Response.json(
-    {
-      error: account.owner
-        ? "Only this account's owner or the host operator can change it."
-        : "Only the host operator can change a shared Claude API account.",
-    },
-    { status: 403 },
-  );
+  const forbidden = account && apiAccountChangeGuard(ctx)(account);
+  return forbidden ? forbiddenResponse(forbidden) : undefined;
 }
 
-function foundOr404(updated: object | null): Response {
+function forbiddenResponse(error: string): Response {
+  return Response.json({ error }, { status: 403 });
+}
+
+function foundOr404(
+  updated: object | AccountWriteForbidden | null | boolean,
+): Response {
+  if (updated && typeof updated === "object" && "forbidden" in updated)
+    return forbiddenResponse(updated.forbidden);
   return updated
-    ? Response.json(updated)
+    ? Response.json(updated === true ? { ok: true } : updated)
     : Response.json({ error: "Not found" }, { status: 404 });
 }
 
@@ -237,9 +250,12 @@ export async function handleAccountsRoutes(
     if (forbidden) return forbidden;
   }
   if (accountDelMatch && req.method === "DELETE") {
-    return (await removeAccount(decodeURIComponent(accountDelMatch[1])))
-      ? Response.json({ ok: true })
-      : Response.json({ error: "Not found" }, { status: 404 });
+    return foundOr404(
+      await removeAccount(
+        decodeURIComponent(accountDelMatch[1]),
+        apiAccountChangeGuard(ctx),
+      ),
+    );
   }
   // Set/clear an account's personal owner ({"owner": "Alex"} or "").
   if (accountDelMatch && req.method === "PUT") {
@@ -249,19 +265,20 @@ export async function handleAccountsRoutes(
         await setAccountLabel(
           decodeURIComponent(accountDelMatch[1]),
           body.label,
+          apiAccountChangeGuard(ctx),
         ),
       );
     }
-    const updated = await setAccountOwner(
-      decodeURIComponent(accountDelMatch[1]),
-      typeof body?.owner === "string" ? body.owner : undefined,
-      typeof body?.credentialsPath === "string"
-        ? body.credentialsPath
-        : undefined,
+    return foundOr404(
+      await setAccountOwner(
+        decodeURIComponent(accountDelMatch[1]),
+        typeof body?.owner === "string" ? body.owner : undefined,
+        typeof body?.credentialsPath === "string"
+          ? body.credentialsPath
+          : undefined,
+        apiAccountChangeGuard(ctx),
+      ),
     );
-    return updated
-      ? Response.json(updated)
-      : Response.json({ error: "Not found" }, { status: 404 });
   }
 
   // ── Codex (OpenAI) account pool ──
