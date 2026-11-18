@@ -172,7 +172,7 @@ struct ToolCallRow: View {
             }
 
             if let stats = presentation.lineStats {
-                LineStatsView(stats: stats)
+                LineStatsView(stats: stats, font: ToolRowMetrics.metaFont)
             }
 
             // What the call cost, in the trailing meta the web puts it in.
@@ -180,7 +180,7 @@ struct ToolCallRow: View {
             // information, so it stays off the row (same floor as the viewer).
             if let label = item.durationLabel {
                 Text(label)
-                    .font(.caption2)
+                    .font(.caption)
                     .monospacedDigit()
                     .foregroundStyle(OS1VisualStyle.textFaint)
                     .fixedSize()
@@ -327,6 +327,8 @@ enum ToolRowMetrics {
     static let nestedIndent: CGFloat = 12
     /// Rows carry their own height, so stacking adds nothing between them.
     static let rowSpacing: CGFloat = 0
+    /// A row's ± counts, at the summary's size so the two read as one line.
+    static let metaFont: Font = .footnote.weight(.medium)
 }
 
 /// A fold row's glyph. Built the same way everywhere it appears, so a row of
@@ -364,6 +366,10 @@ extension View {
 /// What a call is doing, on the row's own line. A path's directory dims, and
 /// middle truncation keeps both its beginning and filename visible only when
 /// the full path cannot fit.
+///
+/// The system font, one step under the name, as the web writes it. It used
+/// to be monospaced caption, which at that size ran wide and thin, fitted a
+/// third less of a command on a phone, and made every row a second typeface.
 struct ToolSummaryText: View {
     let summary: String
     let isPath: Bool
@@ -383,7 +389,7 @@ struct ToolSummaryText: View {
                     )
             }
         }
-        .font(.system(.caption, design: .monospaced))
+        .font(.footnote)
         .lineLimit(1)
         .truncationMode(isPath ? .middle : .tail)
     }
