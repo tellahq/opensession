@@ -13,6 +13,7 @@ import {
   shareURL,
 } from "../lib/native-file-save";
 import { copyImageToClipboard } from "../lib/image-clipboard";
+import { diagramCanvasColor } from "../lib/diagram-media";
 import { copyToClipboard } from "../lib/share-link";
 import { isApple } from "../lib/platform";
 import { eventChord } from "../lib/shortcut-chord";
@@ -221,7 +222,9 @@ export function MediaLightboxGallery({
     });
   };
   const copyImage = () => {
-    void copyImageToClipboard(item.src).then(
+    const background =
+      item.kind === "diagram" ? diagramCanvasColor() : undefined;
+    void copyImageToClipboard(item.src, { background }).then(
       () => setCopiedSrc(item.src),
       () => toast("Could not copy that image"),
     );
@@ -489,6 +492,9 @@ export function MediaLightboxGallery({
       const editingText = Boolean(
         target?.matches("input, textarea, [contenteditable='true']"),
       );
+      // A diagram's right-click menu sits over the viewer and takes its
+      // own keys: Escape there closes the menu, not the viewer.
+      if (target?.closest('[role="menu"]')) return;
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();

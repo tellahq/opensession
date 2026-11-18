@@ -85,6 +85,8 @@ export function MediaLightboxViewer({
           ref={boxRef}
           role="img"
           aria-label="Diagram"
+          // Its right-click menu (DiagramContextMenu.tsx) finds it by this.
+          data-lightbox-diagram=""
           // The same hairline and corner the photo takes, over the well
           // the diagram is drawn on in the transcript: a light-theme
           // chart is near-black ink, which would be unreadable straight
