@@ -236,6 +236,13 @@ export const WS_SUMMARY_FRAME_MEDIA =
   "relative block aspect-video w-full overflow-hidden rounded-md border border-line " +
   "bg-surface transition-colors group-hover/frame:bg-hover";
 
+/** The tile's hairline, drawn again on top of a live page. The page is laid
+ *  over the whole tile, border included, so without it a white page has no
+ *  edge against the card. Same corner as the tile, so the box's clip and the
+ *  line agree. */
+export const WS_SUMMARY_FRAME_EDGE =
+  "pointer-events-none absolute inset-0 z-[1] rounded-md border border-line";
+
 /** The filename under a frame. The picture is the content, but the name is how
  *  you refer to it ("use the dark one"), so it stays. */
 export const WS_SUMMARY_FRAME_CAPTION =

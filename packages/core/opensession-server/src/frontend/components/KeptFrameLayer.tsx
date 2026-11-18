@@ -18,7 +18,10 @@ import {
   type KeptFrame,
 } from "../lib/kept-frames";
 import { addressHost } from "../lib/preview-url";
-import { WS_SUMMARY_FRAME_HOST } from "../lib/workspace-summary-classes";
+import {
+  WS_SUMMARY_FRAME_EDGE,
+  WS_SUMMARY_FRAME_HOST,
+} from "../lib/workspace-summary-classes";
 import { useFrameFocus } from "../hooks/useFrameFocus";
 import { useFrameLocation } from "../hooks/useFrameLocation";
 import { duration, ease } from "../ui/motion";
@@ -157,6 +160,7 @@ function KeptFrameBox({
           sandbox={frame.sandbox}
         />
       </div>
+      {thumb ? <span className={WS_SUMMARY_FRAME_EDGE} /> : null}
       {thumb ? (
         <span className={WS_SUMMARY_FRAME_HOST}>
           {addressHost(frame.location ?? frame.address)}
