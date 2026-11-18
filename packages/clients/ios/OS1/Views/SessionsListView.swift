@@ -2608,9 +2608,6 @@ struct SessionsListView: View {
                 workspace.isDraftWorkspace || workspace.isOptimistic ? nil : {
                     archiveAndOpenNext(workspace, from: session)
                 }
-            },
-            newWorkspace: {
-                newSessionRequest = NewSessionRequest(repo: session.effectiveRepo)
             }
         )
     }
