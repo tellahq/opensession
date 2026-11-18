@@ -25,14 +25,17 @@ import type {
 import {
   SYSTEMD_USER_RUNTIME,
   engineScopeSystemdArgs,
+  literalScopeArgs,
   processRunsInControlPlane,
   selfCgroup,
+  systemdRunVersion,
   systemdUserScopesAvailable,
 } from "./systemd-scopes";
 
 /** Re-check availability now and then: the user manager can come and go. */
 const AVAILABILITY_TTL_MS = 60_000;
-let availability: { at: number; scope: boolean } | null = null;
+let availability: { at: number; scope: boolean; literal: string[] } | null =
+  null;
 let probing: Promise<void> | null = null;
 let generation = 0;
 
@@ -45,7 +48,9 @@ export function refreshWorkloadScoping(): Promise<void> {
       const scope =
         processRunsInControlPlane(await selfCgroup()) &&
         (await systemdUserScopesAvailable());
-      if (started === generation) availability = { at: Date.now(), scope };
+      const literal = scope ? literalScopeArgs(await systemdRunVersion()) : [];
+      if (started === generation)
+        availability = { at: Date.now(), scope, literal };
     } finally {
       probing = null;
     }
@@ -63,9 +68,15 @@ function shouldScope(): boolean {
 }
 
 /** Test seam: force scoping on or off, or `null` to detect again. */
-export function __setWorkloadScopingForTest(scope: boolean | null): void {
+export function __setWorkloadScopingForTest(
+  scope: boolean | null,
+  systemdVersion: number | null = null,
+): void {
   generation++;
-  availability = scope === null ? null : { at: Date.now(), scope };
+  availability =
+    scope === null
+      ? null
+      : { at: Date.now(), scope, literal: literalScopeArgs(systemdVersion) };
 }
 
 /** A unit name that never collides: `opensession-<kind>-<random>`. */
@@ -94,6 +105,7 @@ export function workloadArgv(
     "--collect",
     "--quiet",
     `--unit=${options.unit ?? workloadUnitName(kind)}`,
+    ...(availability?.literal ?? []),
     ...engineScopeSystemdArgs(),
     "--property=TimeoutStopSec=2",
     ...(options.properties ?? []).map((p) => `--property=${p}`),

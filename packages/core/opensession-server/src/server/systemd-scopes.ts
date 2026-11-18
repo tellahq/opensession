@@ -65,6 +65,40 @@ export function systemdUserEnv(
   };
 }
 
+/**
+ * systemd 259 expands `$VAR` and `$$` in a scope's command the way ExecStart=
+ * does; earlier releases passed it through. Scoped commands are shell text
+ * (`echo $$`, `$PORT`), so keep them literal where the flag exists (254+).
+ */
+export function literalScopeArgs(systemdVersion: number | null): string[] {
+  return systemdVersion != null && systemdVersion >= 254
+    ? ["--expand-environment=no"]
+    : [];
+}
+
+let systemdRunVersionProbe: Promise<number | null> | undefined;
+/** The installed systemd-run's major version, read once off the event loop. */
+export function systemdRunVersion(): Promise<number | null> {
+  systemdRunVersionProbe ??= (async () => {
+    try {
+      const proc = Bun.spawn(["systemd-run", "--version"], {
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "ignore",
+      });
+      const [out] = await Promise.all([
+        new Response(proc.stdout).text(),
+        proc.exited,
+      ]);
+      const version = Number(/^systemd (\d+)/.exec(out)?.[1]);
+      return Number.isFinite(version) ? version : null;
+    } catch {
+      return null;
+    }
+  })();
+  return systemdRunVersionProbe;
+}
+
 export async function systemdUserScopesAvailable(): Promise<boolean> {
   return (
     (await pathExists(`${SYSTEMD_USER_RUNTIME}/systemd/private`)) &&
@@ -95,6 +129,7 @@ export async function controlPlaneWorkloadCommand(
     env?: LimitEnv;
     cgroup?: string;
     scopesAvailable?: boolean;
+    systemdVersion?: number | null;
   } = {},
 ): Promise<{ command: string[]; env: Record<string, string>; unit?: string }> {
   const env = options.env ?? process.env;
@@ -110,6 +145,11 @@ export async function controlPlaneWorkloadCommand(
       "--collect",
       "--quiet",
       `--unit=${unit}`,
+      ...literalScopeArgs(
+        options.systemdVersion === undefined
+          ? await systemdRunVersion()
+          : options.systemdVersion,
+      ),
       ...engineScopeSystemdArgs(env),
       "--property=TimeoutStopSec=2",
       "--",
@@ -137,12 +177,21 @@ export async function previewScopeCommand(
   command: string[],
   worktreeDir: string,
   portalName: string,
-  options: { env?: LimitEnv; scopesAvailable?: boolean } = {},
+  options: {
+    env?: LimitEnv;
+    scopesAvailable?: boolean;
+    systemdVersion?: number | null;
+  } = {},
 ): Promise<{ command: string[]; env: Record<string, string>; unit?: string }> {
   const env = options.env ?? process.env;
   if (!(options.scopesAvailable ?? (await systemdUserScopesAvailable())))
     return { command, env: env as Record<string, string> };
   const unit = previewScopeUnit(worktreeDir, portalName);
+  const literal = literalScopeArgs(
+    options.systemdVersion === undefined
+      ? await systemdRunVersion()
+      : options.systemdVersion,
+  );
   return {
     command: [
       "systemd-run",
@@ -151,6 +200,7 @@ export async function previewScopeCommand(
       "--collect",
       "--quiet",
       `--unit=${unit}`,
+      ...literal,
       ...previewScopeSystemdArgs(env),
       "--property=TimeoutStopSec=5",
       "--",
