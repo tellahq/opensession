@@ -1472,7 +1472,9 @@ export function Composer({
       {/* Queued/steered messages fold out from behind the composer box —
           a sibling flap tucked under its top edge, not a box-in-box. */}
       {attachedAction && (
-        <div className="-mb-3.5 flex justify-end px-3">{attachedAction}</div>
+        <div className="relative -mb-3.5 flex justify-end px-3">
+          {attachedAction}
+        </div>
       )}
       {/* Keep the compact action outside the full-width stack so the first
           flap retains its top corners, even when the action is present. */}
