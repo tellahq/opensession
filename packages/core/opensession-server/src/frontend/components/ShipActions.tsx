@@ -95,7 +95,15 @@ export function ShipActions({
     return () => clearTimeout(timer);
   }, [sent]);
   if (!info?.available || !send) return null;
-  const destination = shipDestination(info);
+  // An open PR updates itself when the agent pushes, so the Changes panel
+  // drops "Update PR" and keeps only the repository's own buttons.
+  const updatesPr =
+    !!info.openPr && info.mode === "pull-request" && info.checkout !== "shared";
+  const shown = updatesPr
+    ? info.buttons.filter((button) => !button.primary)
+    : info.buttons;
+  if (shown.length === 0) return null;
+  const destination = updatesPr ? undefined : shipDestination(info);
   const run = (button: ShipButton) => {
     if (!canSend) return;
     send({
@@ -112,7 +120,7 @@ export function ShipActions({
     );
   };
   const busyHint = `${AGENT_NAME} is working. You can ship once the current run finishes.`;
-  const buttons = info.buttons.map((button) => {
+  const buttons = shown.map((button) => {
     const control = (
       <Button
         key={button.id}
@@ -162,9 +170,11 @@ export function ShipActions({
       aria-label="Ship"
     >
       {buttons}
-      <span className="ml-auto min-w-0 text-meta text-dim phone:w-full phone:ml-0">
-        {destination}
-      </span>
+      {destination && (
+        <span className="ml-auto min-w-0 text-meta text-dim phone:w-full phone:ml-0">
+          {destination}
+        </span>
+      )}
     </div>
   );
 }
