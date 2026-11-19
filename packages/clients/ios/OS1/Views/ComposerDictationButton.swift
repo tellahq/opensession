@@ -64,10 +64,18 @@ struct ComposerDictationButton: View {
             }
         } label: {
             Image(systemName: dictation.active ? "waveform" : "mic")
+                #if os(iOS)
+                // Matches the "+": full ink at phone size.
+                .font(.system(size: glyph + 3, weight: .regular))
+                .foregroundStyle(
+                    dictation.active ? OS1VisualStyle.accentInk : OS1VisualStyle.text
+                )
+                #else
                 .font(.system(size: glyph, weight: .medium))
                 .foregroundStyle(
                     dictation.active ? OS1VisualStyle.accentInk : OS1VisualStyle.textDim
                 )
+                #endif
                 .symbolEffect(.variableColor.iterative, isActive: dictation.active)
                 #if os(iOS)
                 .frame(width: 44, height: 44)

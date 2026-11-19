@@ -45,8 +45,12 @@ import {
   suggestedMediaName,
 } from "../lib/media-lightbox";
 import {
-  LIGHTBOX_ACTION_CLASS,
+  LIGHTBOX_COMPOSER_SELECTOR,
   LIGHTBOX_PREVIEW_LABEL,
+  LIGHTBOX_ROUND_BUTTON_CLASS,
+  LIGHTBOX_SCRIM_CLASS,
+  LIGHTBOX_TOOL_CLASS,
+  LIGHTBOX_TOOLBAR_CLASS,
   MAX_VISIBLE_LIGHTBOX_DOTS,
 } from "../lib/media-lightbox-gallery";
 import { MediaLightboxViewer } from "./MediaLightboxViewer";
@@ -102,6 +106,16 @@ export function MediaLightboxGallery({
   // "Copy link" for the item now on screen rather than a stale "Copied".
   const [copiedSrc, setCopiedSrc] = useState<string | null>(null);
   const copied = !!item && copiedSrc === item.src;
+  const [copiedImageSrc, setCopiedImageSrc] = useState<string | null>(null);
+  const copiedImage = !!item && copiedImageSrc === item.src;
+  // The session input stays usable over a desktop viewer: the picture and
+  // its tools fit above it, centred on its column, and the scrim leaves it
+  // lit (LIGHTBOX_COMPOSER_SELECTOR). Null where the page has no input.
+  const [composerBox, setComposerBox] = useState<{
+    top: number;
+    centerX: number;
+  } | null>(null);
+  const composerRef = useRef<HTMLElement | null>(null);
   const [savingSrc, setSavingSrc] = useState<string | null>(null);
   const nativeShare = canUseNativeIOSShare();
   const saving = savingSrc === item.src;
@@ -132,6 +146,7 @@ export function MediaLightboxGallery({
   const [sendingComment, setSendingComment] = useState(false);
   const sendingCommentRef = useRef(false);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const scrimRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
   const commentCardRef = useRef<HTMLFormElement>(null);
@@ -184,15 +199,11 @@ export function MediaLightboxGallery({
   // is what this whole surface is built to avoid. A rejected drag restores the
   // scrim over the same quarter-second that returns the picture.
   const dragScrim = (progress: number) => {
-    const el = dialogRef.current;
+    const el = scrimRef.current;
     if (!el) return;
     el.style.transition =
-      progress === 0 && !reduceMotion
-        ? "background-color 0.24s ease-out"
-        : "none";
-    el.style.backgroundColor = progress
-      ? `rgb(0 0 0 / ${(1 - progress * 0.55).toFixed(3)})`
-      : "";
+      progress === 0 && !reduceMotion ? "opacity 0.24s ease-out" : "none";
+    el.style.opacity = progress ? (1 - progress * 0.55).toFixed(3) : "";
   };
   const togglePhoneChrome = () => {
     if (!isPhone || commenting) return;
@@ -225,7 +236,7 @@ export function MediaLightboxGallery({
     const background =
       item.kind === "diagram" ? diagramCanvasColor() : undefined;
     void copyImageToClipboard(item.src, { background }).then(
-      () => setCopiedSrc(item.src),
+      () => setCopiedImageSrc(item.src),
       () => toast("Could not copy that image"),
     );
   };
@@ -352,10 +363,47 @@ export function MediaLightboxGallery({
   };
 
   useEffect(() => {
-    if (!copiedSrc) return;
-    const t = setTimeout(() => setCopiedSrc(null), 1600);
+    if (!copiedSrc && !copiedImageSrc) return;
+    const t = setTimeout(() => {
+      setCopiedSrc(null);
+      setCopiedImageSrc(null);
+    }, 1600);
     return () => clearTimeout(t);
-  }, [copiedSrc]);
+  }, [copiedSrc, copiedImageSrc]);
+
+  useLayoutEffect(() => {
+    if (isPhone) return;
+    const composer = Array.from(
+      document.querySelectorAll<HTMLElement>(LIGHTBOX_COMPOSER_SELECTOR),
+    ).find((element) => element.getClientRects().length > 0);
+    if (!composer) return;
+    composerRef.current = composer;
+    const root = document.documentElement;
+    root.dataset.lightboxComposer = "";
+    const measure = () => {
+      const rect = composer.getBoundingClientRect();
+      const next = { top: rect.top, centerX: rect.left + rect.width / 2 };
+      setComposerBox((current) =>
+        current &&
+        Math.abs(current.top - next.top) < 0.5 &&
+        Math.abs(current.centerX - next.centerX) < 0.5
+          ? current
+          : next,
+      );
+    };
+    measure();
+    // The input grows upward as a draft wraps, and the window can reflow it.
+    const observer = new ResizeObserver(measure);
+    observer.observe(composer);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+      delete root.dataset.lightboxComposer;
+      composerRef.current = null;
+      setComposerBox(null);
+    };
+  }, [isPhone]);
 
   // The image fits above the phone bar, whose height changes with captions and
   // the home indicator. Measure the rendered bar instead of assuming one size.
@@ -480,6 +528,8 @@ export function MediaLightboxGallery({
     );
     return () => {
       cancelAnimationFrame(frame);
+      // Typing in the input is where the person went next: leave them there.
+      if (composerRef.current?.contains(document.activeElement)) return;
       if (previousFocus?.isConnected) previousFocus.focus(restore);
     };
   }, []);
@@ -494,7 +544,8 @@ export function MediaLightboxGallery({
       );
       // A diagram's right-click menu sits over the viewer and takes its
       // own keys: Escape there closes the menu, not the viewer.
-      if (target?.closest('[role="menu"]')) return;
+      // The input's own suggestion list takes its keys the same way.
+      if (target?.closest('[role="menu"], [role="listbox"]')) return;
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
@@ -526,34 +577,40 @@ export function MediaLightboxGallery({
         e.preventDefault();
         next();
       } else if (e.key === "Tab") {
-        const focusable = Array.from(
-          dialogRef.current?.querySelectorAll<HTMLElement>(
-            'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), video[controls], [tabindex]:not([tabindex="-1"])',
-          ) || [],
-        ).filter(
-          (element) =>
-            element.getClientRects().length > 0 && !element.closest("[inert]"),
-        );
+        // The input kept above the scrim is part of the viewer for Tab.
+        const focusable = [dialogRef.current, composerRef.current]
+          .flatMap((scope) =>
+            Array.from(
+              scope?.querySelectorAll<HTMLElement>(
+                'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), video[controls], [contenteditable="true"], [tabindex]:not([tabindex="-1"])',
+              ) || [],
+            ),
+          )
+          .filter(
+            (element) =>
+              element.getClientRects().length > 0 &&
+              !element.closest("[inert]"),
+          );
         if (focusable.length === 0) {
           e.preventDefault();
           return;
         }
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
         const active = document.activeElement;
-        if (
-          e.shiftKey &&
-          (active === first || !dialogRef.current?.contains(active))
-        ) {
-          e.preventDefault();
-          last.focus();
-        } else if (
-          !e.shiftKey &&
-          (active === last || !dialogRef.current?.contains(active))
-        ) {
-          e.preventDefault();
-          first.focus();
-        }
+        // Composer owns Tab while its field is focused (a prediction takes
+        // it); its own buttons still wrap back here at the end.
+        if (editingText && composerRef.current?.contains(active)) return;
+        // Stepped by hand: the dialog and the input are not neighbours in the
+        // document, so the browser's own order would leave between them.
+        const at = focusable.findIndex((element) => element === active);
+        e.preventDefault();
+        const step = e.shiftKey ? -1 : 1;
+        const nextIndex =
+          at === -1
+            ? e.shiftKey
+              ? focusable.length - 1
+              : 0
+            : (at + step + focusable.length) % focusable.length;
+        focusable[nextIndex].focus();
       }
     }
     window.addEventListener("keydown", onKey, true);
@@ -567,11 +624,17 @@ export function MediaLightboxGallery({
     .filter(Boolean)
     .join(" · ");
   const description = item.description?.trim();
-  // z-10 keeps the chrome floating above a zoomed image, which is free to
-  // spread under it across the whole viewport (z-index applies to flex items
-  // without needing position).
-  const navBtn =
-    "z-10 grid h-10 w-10 shrink-0 place-items-center rounded-full border-0 bg-white/10 p-0 text-white hover:bg-white/20 phone:h-11 phone:w-11";
+  // Desktop centres the picture and its tools on the input's column rather
+  // than the window, so the three stay in line when the sidebars push the
+  // input off centre. The shift is paid as extra padding on the far side.
+  const columnShift =
+    !isPhone && composerBox ? composerBox.centerX - viewport.width / 2 : 0;
+  const columnPadding = !isPhone
+    ? {
+        paddingLeft: 16 + Math.max(0, 2 * columnShift),
+        paddingRight: 16 + Math.max(0, -2 * columnShift),
+      }
+    : undefined;
   // Wide enough for a sentence, never wider than the screen it floats on.
   const commentCardWidth = Math.min(340, Math.max(220, viewport.width - 24));
   const commentAnchor =
@@ -589,16 +652,135 @@ export function MediaLightboxGallery({
   // top and bottom so the image's center stays at the viewport's center.
   const phoneStagePadding = (68 + phoneBottomHeight) / 2;
   const phoneAction =
-    "grid size-11 shrink-0 place-items-center rounded-full border-0 bg-transparent p-0 text-white transition-[transform,background-color,opacity] duration-[var(--dur-micro)] ease-[var(--ease)] active:scale-[0.96] disabled:opacity-[0.35]";
+    "grid size-11 shrink-0 place-items-center rounded-full border-0 bg-transparent p-0 text-fg transition-[transform,background-color,opacity] duration-[var(--dur-micro)] ease-[var(--ease)] active:scale-[0.96] disabled:opacity-[0.35]";
+
+  const downloadName =
+    item.src.startsWith("data:") || item.src.startsWith("blob:")
+      ? suggestedMediaName(item)
+      : undefined;
+  const tools = (
+    <div
+      role="group"
+      aria-label="Media actions"
+      className={LIGHTBOX_TOOLBAR_CLASS}
+    >
+      {commentable && (
+        <Button
+          variant="ghost"
+          icon={<IconMessage size={20} />}
+          className={LIGHTBOX_TOOL_CLASS}
+          onClick={toggleComment}
+          aria-pressed={commenting}
+          aria-keyshortcuts="C"
+          aria-label={commenting ? "Cancel image comment" : "Comment on image"}
+        >
+          Comment
+        </Button>
+      )}
+      {item.kind !== "video" && (
+        <Button
+          variant="ghost"
+          icon={copiedImage ? <IconCheck size={20} /> : <IconCopy size={20} />}
+          className={LIGHTBOX_TOOL_CLASS}
+          onClick={copyImage}
+          aria-label={copiedImage ? "Image copied" : "Copy image"}
+        >
+          {copiedImage ? "Copied" : "Copy image"}
+        </Button>
+      )}
+      {nativeShare ? (
+        <Button
+          variant="ghost"
+          icon={<IconArrowDown size={20} />}
+          className={LIGHTBOX_TOOL_CLASS}
+          onClick={saveItem}
+          disabled={saving}
+          aria-label={saving ? "Preparing download" : "Download"}
+        >
+          {saving ? "Preparing…" : "Download"}
+        </Button>
+      ) : (
+        <Button
+          variant="ghost"
+          icon={<IconArrowDown size={20} />}
+          className={LIGHTBOX_TOOL_CLASS}
+          aria-label="Download"
+          render={<a href={mediaDownloadHref(item)} download={downloadName} />}
+        >
+          Download
+        </Button>
+      )}
+      {!item.src.startsWith("data:") && (
+        <>
+          {/* The file's own URL: what you paste into an upload, a ticket,
+              or a message to someone who can reach this instance. */}
+          <Button
+            variant="ghost"
+            icon={copied ? <IconCheck size={20} /> : <IconLink size={20} />}
+            className={LIGHTBOX_TOOL_CLASS}
+            aria-label={copied ? "Link copied" : "Copy link"}
+            onClick={() =>
+              copyToClipboard(shareableMediaSrc(item), () =>
+                setCopiedSrc(item.src),
+              )
+            }
+          >
+            {copied ? "Copied" : "Copy link"}
+          </Button>
+          {nativeShare ? (
+            <Button
+              variant="ghost"
+              icon={<IconArrowUpRight size={20} />}
+              className={LIGHTBOX_TOOL_CLASS}
+              onClick={openItem}
+              aria-label="Open or share"
+            >
+              Open or share
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              icon={<IconArrowUpRight size={20} />}
+              className={LIGHTBOX_TOOL_CLASS}
+              aria-label="Open"
+              render={
+                <a href={item.src} target="_blank" rel="noopener noreferrer" />
+              }
+            >
+              Open
+            </Button>
+          )}
+        </>
+      )}
+    </div>
+  );
+  // Comment mode swaps the tools for its one instruction until a region is
+  // drawn; the card beside the region takes over from there.
+  const commentHint =
+    commenting && !selection ? (
+      <div className={cn(LIGHTBOX_TOOLBAR_CLASS, "gap-1 py-1 pl-4 pr-1")}>
+        <span className="text-label font-medium">
+          Drag over the part you mean
+        </span>
+        <Button
+          variant="ghost"
+          className={cn(LIGHTBOX_TOOL_CLASS, "phone:min-h-11")}
+          onClick={resetComment}
+        >
+          Cancel
+        </Button>
+      </div>
+    ) : null;
 
   return (
     <motion.div
       ref={dialogRef}
       data-media-lightbox=""
-      className="fixed inset-0 z-[11000] flex flex-col bg-black/85 phone:h-[100dvh] phone:bg-black"
+      className="fixed inset-0 z-[11000] flex flex-col phone:h-[100dvh]"
       role="dialog"
       tabIndex={-1}
-      aria-modal="true"
+      // Not modal while the session input stays usable beside it.
+      aria-modal={composerBox ? undefined : "true"}
       aria-label={LIGHTBOX_PREVIEW_LABEL[item.kind]}
       initial={useHeroTransition ? false : { opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -612,9 +794,10 @@ export function MediaLightboxGallery({
         if (e.target === e.currentTarget) requestClose();
       }}
     >
+      <div ref={scrimRef} className={LIGHTBOX_SCRIM_CLASS} aria-hidden />
       <div
         className={cn(
-          "pointer-events-none absolute left-[calc(12px+env(safe-area-inset-left))] right-[calc(12px+env(safe-area-inset-right))] top-[calc(12px+env(safe-area-inset-top))] z-10 flex items-center justify-center",
+          "pointer-events-none absolute left-[calc(16px+env(safe-area-inset-left))] right-[calc(12px+env(safe-area-inset-right))] top-[calc(12px+env(safe-area-inset-top))] z-10 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3",
           isPhone &&
             "transition-[opacity,transform] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
           isPhone && !chromeVisible && "-translate-y-2 opacity-0",
@@ -622,132 +805,89 @@ export function MediaLightboxGallery({
         inert={isPhone && !chromeVisible ? true : undefined}
         aria-hidden={isPhone && !chromeVisible ? true : undefined}
       >
-        {/* Keep the actions on the viewport's centerline while Close owns the
-				    right corner. Grouping both at the edge made the row read like loose
-				    header controls rather than one action bar. */}
-        <div
-          role="group"
-          aria-label="Media actions"
-          className={
-            isPhone ? "hidden" : "pointer-events-auto flex items-center gap-1"
-          }
-        >
-          {commentable && (
-            <Button
-              variant="overlay"
-              size="md"
-              icon={<IconMessage size={20} />}
-              className={cn(
-                LIGHTBOX_ACTION_CLASS,
-                commenting && "bg-white/15 text-white",
+        {/* What you are looking at, quietly in the corner; the bar above the
+            input is for what you can do with it. */}
+        <div className="min-w-0">
+          {!isPhone && (item.walkthroughLabel || caption || description) && (
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <div className="flex min-w-0 items-center gap-2">
+                {caption && (
+                  <div className="min-w-0 truncate text-sm font-medium text-fg">
+                    {caption}
+                  </div>
+                )}
+                {item.walkthroughLabel && (
+                  <span
+                    className={cn(
+                      WALKTHROUGH_LABEL_CLASS,
+                      WALKTHROUGH_LABEL_TONE[item.walkthroughLabel],
+                    )}
+                  >
+                    {WALKTHROUGH_LABEL_TEXT[item.walkthroughLabel]}
+                  </span>
+                )}
+              </div>
+              {description && (
+                <div className="line-clamp-2 text-sm leading-snug text-dim">
+                  {description}
+                </div>
               )}
-              onClick={toggleComment}
-              aria-pressed={commenting}
-              aria-keyshortcuts="C"
-              aria-label={
-                commenting ? "Cancel image comment" : "Comment on image"
-              }
-            >
-              Comment
-            </Button>
-          )}
-          {nativeShare ? (
-            <Button
-              variant="overlay"
-              size="md"
-              icon={<IconArrowDown size={20} />}
-              className={LIGHTBOX_ACTION_CLASS}
-              onClick={saveItem}
-              disabled={saving}
-              aria-label={saving ? "Preparing download" : "Download"}
-            >
-              {saving ? "Preparing…" : "Download"}
-            </Button>
-          ) : (
-            <Button
-              variant="overlay"
-              size="md"
-              icon={<IconArrowDown size={20} />}
-              className={LIGHTBOX_ACTION_CLASS}
-              aria-label="Download"
-              render={
-                <a
-                  href={mediaDownloadHref(item)}
-                  download={
-                    item.src.startsWith("data:") || item.src.startsWith("blob:")
-                      ? suggestedMediaName(item)
-                      : undefined
-                  }
-                />
-              }
-            >
-              Download
-            </Button>
-          )}
-          {!item.src.startsWith("data:") && (
-            <>
-              {/* The file's own URL: what you paste into an upload, a
-							    ticket, or a message to someone who can reach this instance. */}
-              <Button
-                variant="overlay"
-                size="md"
-                icon={copied ? <IconCheck size={20} /> : <IconLink size={20} />}
-                className={LIGHTBOX_ACTION_CLASS}
-                aria-label={copied ? "Link copied" : "Copy link"}
-                onClick={() =>
-                  copyToClipboard(shareableMediaSrc(item), () =>
-                    setCopiedSrc(item.src),
-                  )
-                }
-              >
-                {copied ? "Copied" : "Copy link"}
-              </Button>
-              {nativeShare ? (
-                <Button
-                  variant="overlay"
-                  size="md"
-                  icon={<IconArrowUpRight size={20} />}
-                  className={LIGHTBOX_ACTION_CLASS}
-                  onClick={openItem}
-                  aria-label="Open or share"
-                >
-                  Open or share
-                </Button>
-              ) : (
-                <Button
-                  variant="overlay"
-                  size="md"
-                  icon={<IconArrowUpRight size={20} />}
-                  className={LIGHTBOX_ACTION_CLASS}
-                  aria-label="Open"
-                  render={
-                    <a
-                      href={item.src}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    />
-                  }
-                >
-                  Open
-                </Button>
-              )}
-            </>
+            </div>
           )}
         </div>
-        <button
+        <div className="pointer-events-auto flex items-center gap-1.5">
+          {many &&
+            !isPhone && (
+              // Dots provide direct jumps; the counter beside them gives the
+              // exact position without making the reader count circles.
+              <>
+                <div className="flex items-center">
+                  {dotIndexes.map((dot, position) => (
+                    <button
+                      key={`${dot}-${items[dot].src}`}
+                      type="button"
+                      onClick={() => go(dot)}
+                      aria-label={`Show ${dot + 1} of ${items.length}`}
+                      aria-current={dot === index ? "true" : undefined}
+                      className="group shrink-0 cursor-pointer border-0 bg-transparent p-1 leading-none"
+                    >
+                      <span
+                        className={cn(
+                          "block size-1.5 rounded-full transition-[scale,background-color]",
+                          ((position === 0 && dotStart > 0) ||
+                            (position === dotIndexes.length - 1 &&
+                              dotStart + dotIndexes.length < items.length)) &&
+                            "scale-[0.67]",
+                          dot === index
+                            ? "bg-fg"
+                            : "bg-fg/25 group-hover:bg-fg/50",
+                        )}
+                      />
+                    </button>
+                  ))}
+                </div>
+                <span className="text-meta font-medium tabular-nums text-dim">
+                  {index + 1} of {items.length}
+                </span>
+              </>
+            )}
+        </div>
+        <Button
           ref={closeRef}
-          type="button"
-          className={cn(navBtn, "pointer-events-auto absolute right-0")}
+          variant="default"
+          icon={<IconX size={20} />}
+          className={cn(
+            LIGHTBOX_ROUND_BUTTON_CLASS,
+            "pointer-events-auto justify-self-end",
+          )}
           onClick={requestClose}
           aria-label="Close"
-        >
-          <IconX size={22} />
-        </button>
+        />
       </div>
 
       <div
         className={cn(
-          "flex min-h-0 flex-1 items-center justify-center gap-3 px-3 pb-2 pt-[calc(56px+env(safe-area-inset-top))] sm:px-4",
+          "flex min-h-0 flex-1 items-center justify-center gap-3 pb-3 pt-[calc(64px+env(safe-area-inset-top))]",
           isPhone && "gap-0 px-0",
         )}
         style={
@@ -759,21 +899,20 @@ export function MediaLightboxGallery({
                   ? "none"
                   : "padding 0.25s cubic-bezier(0.77, 0, 0.175, 1)",
               }
-            : undefined
+            : columnPadding
         }
         onMouseDown={(e) => {
           if (e.target === e.currentTarget) requestClose();
         }}
       >
         {many && !isPhone && (
-          <button
-            type="button"
-            className={navBtn}
+          <Button
+            variant="default"
+            icon={<IconChevronLeft size={22} />}
+            className={LIGHTBOX_ROUND_BUTTON_CLASS}
             onClick={prev}
             aria-label="Previous"
-          >
-            <IconChevronLeft size={24} />
-          </button>
+          />
         )}
         <motion.div
           className="flex min-h-0 min-w-0 flex-1 self-stretch"
@@ -860,20 +999,19 @@ export function MediaLightboxGallery({
                 playsInline
                 // Same hairline as the photo: a dark first frame needs
                 // an edge against the scrim just as much.
-                className="min-h-0 min-w-0 max-h-full max-w-full rounded-2xl border border-white/20"
+                className="min-h-0 min-w-0 max-h-full max-w-full rounded-2xl border border-line smooth-shadow-md"
               />
             </div>
           )}
         </motion.div>
         {many && !isPhone && (
-          <button
-            type="button"
-            className={navBtn}
+          <Button
+            variant="default"
+            icon={<IconChevronRight size={22} />}
+            className={LIGHTBOX_ROUND_BUTTON_CLASS}
             onClick={next}
             aria-label="Next"
-          >
-            <IconChevronRight size={24} />
-          </button>
+          />
         )}
       </div>
 
@@ -881,7 +1019,7 @@ export function MediaLightboxGallery({
         <div
           ref={phoneBottomRef}
           className={cn(
-            "absolute inset-x-0 bottom-0 z-10 flex flex-col gap-3 bg-linear-to-b from-transparent via-black/85 to-black px-0 pb-[max(14px,env(safe-area-inset-bottom))] pt-8 transition-[opacity,transform] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
+            "absolute inset-x-0 bottom-0 z-10 flex flex-col gap-3 bg-linear-to-b from-transparent via-bg/85 to-bg px-0 pb-[max(14px,env(safe-area-inset-bottom))] pt-8 transition-[opacity,transform] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
             !chromeVisible && "pointer-events-none translate-y-3 opacity-0",
           )}
           inert={!chromeVisible ? true : undefined}
@@ -891,7 +1029,7 @@ export function MediaLightboxGallery({
             <div className="flex max-w-full flex-col items-center gap-0.5 px-6 text-center">
               <div className="flex max-w-full items-center justify-center gap-2">
                 {caption && (
-                  <div className="line-clamp-2 min-w-0 max-w-full text-sm font-medium leading-snug text-white">
+                  <div className="line-clamp-2 min-w-0 max-w-full text-sm font-medium leading-snug text-fg">
                     {caption}
                   </div>
                 )}
@@ -907,7 +1045,7 @@ export function MediaLightboxGallery({
                 )}
               </div>
               {description && (
-                <div className="line-clamp-2 max-w-full text-sm leading-snug text-white/75">
+                <div className="line-clamp-2 max-w-full text-sm leading-snug text-dim">
                   {description}
                 </div>
               )}
@@ -937,7 +1075,7 @@ export function MediaLightboxGallery({
                       className={cn(
                         "block overflow-hidden rounded-sm outline outline-1 outline-offset-1 transition-[width,height,opacity] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
                         active
-                          ? "h-11 w-11 opacity-100 outline-white/85"
+                          ? "h-11 w-11 opacity-100 outline-fg/85"
                           : "h-9 w-7 opacity-60 outline-transparent",
                       )}
                     >
@@ -979,11 +1117,7 @@ export function MediaLightboxGallery({
               ) : (
                 <a
                   href={mediaDownloadHref(item)}
-                  download={
-                    item.src.startsWith("data:") || item.src.startsWith("blob:")
-                      ? suggestedMediaName(item)
-                      : undefined
-                  }
+                  download={downloadName}
                   className={phoneAction}
                   aria-label="Download"
                 >
@@ -998,7 +1132,7 @@ export function MediaLightboxGallery({
                 className={cn(
                   phoneAction,
                   "justify-self-center",
-                  commenting && "bg-white/15",
+                  commenting && "bg-fg/10",
                 )}
                 onClick={toggleComment}
                 aria-pressed={commenting}
@@ -1016,28 +1150,17 @@ export function MediaLightboxGallery({
               className={cn(phoneAction, "col-start-3 justify-self-end")}
               onClick={copyImage}
               disabled={item.kind === "video"}
-              aria-label={copied ? "Image copied" : "Copy image"}
+              aria-label={copiedImage ? "Image copied" : "Copy image"}
             >
-              {copied ? <IconCheck size={21} /> : <IconCopy size={21} />}
+              {copiedImage ? <IconCheck size={21} /> : <IconCopy size={21} />}
             </button>
           </div>
         </div>
       )}
 
-      {commenting && !selection && (
+      {isPhone && commentHint && (
         <div className="pointer-events-none absolute inset-x-0 bottom-[calc(16px+env(safe-area-inset-bottom))] z-20 flex justify-center px-4">
-          <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-white/10 bg-black/55 py-1 pl-4 pr-1 shadow-[inset_0_1px_0_rgb(255_255_255/0.08),0_12px_44px_rgb(0_0_0/0.5)] backdrop-blur-2xl backdrop-saturate-150">
-            <span className="text-label font-medium text-white">
-              Drag over the part you mean
-            </span>
-            <button
-              type="button"
-              className="min-h-9 rounded-full px-3 text-label font-medium text-white/70 hover:bg-white/10 hover:text-white phone:min-h-11"
-              onClick={resetComment}
-            >
-              Cancel
-            </button>
-          </div>
+          {commentHint}
         </div>
       )}
 
@@ -1142,83 +1265,21 @@ export function MediaLightboxGallery({
         </motion.form>
       )}
 
-      {/* What you are looking at gets its own line directly under the
-			    picture, in plain white. Actions live above with Close, so a
-			    "Before"/"After" label cannot read as another link. */}
       {!isPhone && (
         <div
-          className={cn(
-            "z-10 flex flex-col items-center gap-1.5 px-4 pb-4 pt-4",
-            (commenting ||
-              (!item.walkthroughLabel && !caption && !description && !many)) &&
-              "hidden",
-          )}
+          className="z-10 flex shrink-0 justify-center"
+          style={{
+            ...columnPadding,
+            // Rests just above the input, or on the window's edge without one.
+            paddingBottom: composerBox
+              ? Math.max(16, viewport.height - composerBox.top + 16)
+              : 20,
+          }}
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) requestClose();
           }}
         >
-          {(item.walkthroughLabel || caption || description) && (
-            <div className="flex max-w-full flex-col items-center gap-0.5 text-center">
-              <div className="flex max-w-full items-center justify-center gap-2">
-                {caption && (
-                  <div className="min-w-0 max-w-full truncate text-sm font-medium text-white">
-                    {caption}
-                  </div>
-                )}
-                {item.walkthroughLabel && (
-                  <span
-                    className={cn(
-                      WALKTHROUGH_LABEL_CLASS,
-                      WALKTHROUGH_LABEL_TONE[item.walkthroughLabel],
-                    )}
-                  >
-                    {WALKTHROUGH_LABEL_TEXT[item.walkthroughLabel]}
-                  </span>
-                )}
-              </div>
-              {description && (
-                <div className="max-w-[min(720px,90vw)] line-clamp-2 text-sm leading-snug text-white/75">
-                  {description}
-                </div>
-              )}
-            </div>
-          )}
-          <div className="flex items-center gap-1.5">
-            {many && (
-              // Dots provide direct jumps; the counter beside them gives the
-              // exact position without making the reader count circles.
-              <div className="flex items-center">
-                {dotIndexes.map((dot, position) => (
-                  <button
-                    key={`${dot}-${items[dot].src}`}
-                    type="button"
-                    onClick={() => go(dot)}
-                    aria-label={`Show ${dot + 1} of ${items.length}`}
-                    aria-current={dot === index ? "true" : undefined}
-                    className="group shrink-0 cursor-pointer border-0 bg-transparent p-1 leading-none"
-                  >
-                    <span
-                      className={cn(
-                        "block size-1.5 rounded-full transition-[scale,background-color]",
-                        ((position === 0 && dotStart > 0) ||
-                          (position === dotIndexes.length - 1 &&
-                            dotStart + dotIndexes.length < items.length)) &&
-                          "scale-[0.67]",
-                        dot === index
-                          ? "bg-white"
-                          : "bg-white/30 group-hover:bg-white/60",
-                      )}
-                    />
-                  </button>
-                ))}
-              </div>
-            )}
-            {many && (
-              <span className="text-meta font-medium tabular-nums text-white/50">
-                {index + 1} of {items.length}
-              </span>
-            )}
-          </div>
+          {commentHint ?? tools}
         </div>
       )}
     </motion.div>
