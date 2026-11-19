@@ -1,5 +1,9 @@
 import * as React from "react";
-import { IconX } from "../components/icons";
+import {
+  IconInfoCircle,
+  IconWarningTriangle,
+  IconX,
+} from "../components/icons";
 import { cn } from "./cn";
 import { PageLoader } from "./page-loader";
 import { Spinner } from "./spinner";
@@ -331,8 +335,27 @@ const alertVariants: Record<AlertVariant, string> = {
   info: "border-blue/40 bg-blue-soft text-blue",
 };
 
+// The plain appearance drops the box for one quiet line led by a tinted glyph,
+// for a note under a control (a composer) where a filled box would outweigh
+// the control itself.
+const alertGlyphs: Record<
+  AlertVariant,
+  (p: React.ComponentProps<typeof IconInfoCircle>) => React.ReactElement
+> = {
+  error: IconWarningTriangle,
+  warn: IconWarningTriangle,
+  info: IconInfoCircle,
+};
+
+const alertTextColors: Record<AlertVariant, string> = {
+  error: "text-red",
+  warn: "text-yellow",
+  info: "text-blue",
+};
+
 export function InlineAlert({
   variant = "error",
+  appearance = "box",
   title,
   onDismiss,
   onRetry,
@@ -343,6 +366,7 @@ export function InlineAlert({
   ...props
 }: Omit<React.ComponentPropsWithoutRef<"div">, "title"> & {
   variant?: AlertVariant;
+  appearance?: "box" | "plain";
   title?: React.ReactNode;
   /** Renders a × and, preserving how these boxes have always behaved, makes
    *  the whole box dismiss on click — the × is what makes that discoverable
@@ -351,6 +375,48 @@ export function InlineAlert({
   onRetry?: () => void;
   retryLabel?: string;
 }) {
+  if (appearance === "plain") {
+    const Glyph = alertGlyphs[variant];
+    return (
+      <div
+        role="alert"
+        className={cn(
+          "flex items-center gap-2 text-supporting text-dim",
+          className,
+        )}
+        onClick={onClick}
+        {...props}
+      >
+        <Glyph
+          aria-hidden
+          className={cn("shrink-0", alertTextColors[variant])}
+        />
+        <div className="min-w-0">
+          {title && <span className="font-medium text-fg">{title} </span>}
+          {children}
+        </div>
+        {onRetry && (
+          <button
+            type="button"
+            className="focus-ring shrink-0 whitespace-nowrap rounded-sm font-medium text-fg underline-offset-2 hover:underline"
+            onClick={onRetry}
+          >
+            {retryLabel}
+          </button>
+        )}
+        {onDismiss && (
+          <button
+            type="button"
+            aria-label="Dismiss"
+            className="focus-ring relative ml-auto flex size-6 shrink-0 items-center justify-center rounded-full text-faint transition-colors hover:text-fg before:absolute before:-inset-2 before:content-['']"
+            onClick={onDismiss}
+          >
+            <IconX size={20} />
+          </button>
+        )}
+      </div>
+    );
+  }
   return (
     <div
       role="alert"

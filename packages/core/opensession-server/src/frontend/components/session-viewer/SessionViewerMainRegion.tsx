@@ -1528,7 +1528,7 @@ export function SessionViewerMainRegion({
                           images.length === 0 &&
                           (noteMode || files.length === 0) &&
                           !forkFrom),
-                      // Tints the composer green and names the mode in a chip above
+                      // Names the mode in a green chip above
                       // the field. Only opensession sessions can promote.
                       askMode: isAsk,
                       askExitPending: promoting,

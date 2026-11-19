@@ -49,6 +49,10 @@ export function SupportPreview({
   }, [draftKey, prompt]);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  // Try again resends what the failed start sent, pasted text included.
+  const lastStartOpts = useRef<{ pastedTexts?: string[] } | undefined>(
+    undefined,
+  );
   const startingRef = useRef(false);
   const startTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
@@ -109,6 +113,7 @@ export function SupportPreview({
   function handleStart(_text: string, opts?: { pastedTexts?: string[] }) {
     const q = prompt.trim();
     const pastedTexts = opts?.pastedTexts ?? [];
+    lastStartOpts.current = opts;
     if ((!q && pastedTexts.length === 0) || starting || !connected) return;
     setStarting(true);
     startingRef.current = true;
@@ -118,9 +123,7 @@ export function SupportPreview({
       if (!startingRef.current) return;
       startingRef.current = false;
       setStarting(false);
-      setStartError(
-        `${AGENT_NAME} didn't respond. Check your connection and try again.`,
-      );
+      setStartError(`${AGENT_NAME} didn't respond.`);
     }, 15_000);
     const message: Extract<WSClientMessage, { type: "create_session" }> = {
       type: "create_session",
@@ -177,7 +180,14 @@ export function SupportPreview({
           }}
         />
         {startError && (
-          <InlineAlert className="mt-2.5">{startError}</InlineAlert>
+          <InlineAlert
+            appearance="plain"
+            className="mt-2 px-4"
+            onRetry={() => handleStart(prompt, lastStartOpts.current)}
+            onDismiss={() => setStartError(null)}
+          >
+            {startError}
+          </InlineAlert>
         )}
       </div>
     </div>
