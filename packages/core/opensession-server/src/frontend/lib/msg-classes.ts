@@ -34,6 +34,9 @@ export const msgRow = `${msgRowBase} mb-4.5`;
 /** An answer inside an opened work fold, spaced like the fold's narration. */
 export const msgStepRow = `${msgRowBase} my-2`;
 
+/** A step inside work that brings its own spacing, like a thinking row. */
+export const msgStepRowBare = msgRowBase;
+
 /**
  * A centered notice pill. Tighter bottom margin than a turn, and no top margin
  * at all: flex margins don't collapse, so the previous row's 18px is the gap.

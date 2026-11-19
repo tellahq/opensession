@@ -11,6 +11,7 @@ import {
 import { runningToolLabel } from "../lib/busy-activity";
 import {
   MessageBubble,
+  ReasoningStep,
   ClampedBody,
   EntryImages,
   EntryVideos,
@@ -38,20 +39,14 @@ import {
   IconChevronDown,
   IconChevronRight,
   IconHistory,
-  IconLightbulb,
   IconStack,
 } from "./icons";
 import { cn } from "../ui/cn";
 import { Fold } from "../ui/fold";
-import { TextShimmer } from "../ui/text-shimmer";
 import { Tooltip } from "../ui/tooltip";
-import {
-  msgBody,
-  msgReasoningBody,
-} from "../lib/msg-classes";
+import { msgBody } from "../lib/msg-classes";
 import {
   isLegacyReasoningHeading,
-  reasoningBody,
   reasoningDisplay,
 } from "../lib/reasoning-display";
 import { formatDuration, fullTime } from "../lib/time";
@@ -70,7 +65,6 @@ import { ProgressStatusLabel } from "./ProgressStatusRow";
 import { plainStatusText, type ProgressUpdate } from "../lib/progress-updates";
 import { workSummary, workSummaryTitle } from "../lib/work-summary";
 import { turnScrollAnchor } from "../lib/transcript-block-identity";
-import { useLiveReasoningStatus } from "./session-viewer/live-run-status";
 
 interface Props {
   /** One turn's tool calls, provider reasoning, and intermediate narration.
@@ -380,7 +374,7 @@ export const TurnBlock = function TurnBlock({
                 }
               />
             ) : sec.kind === "reasoning" ? (
-              <ReasoningMessage
+              <ReasoningStep
                 key={sec.items[0].id}
                 entries={sec.items}
                 active={
@@ -848,141 +842,6 @@ function StepNotice({ entry }: { entry: TranscriptEntry }) {
         <IconHistory size={20} />
       </span>
       <span className="min-w-0 truncate">{entry.notice?.title}</span>
-    </div>
-  );
-}
-
-/** The one line a folded thinking step shows: the latest heading, else the
- * first line of its prose, without Markdown syntax. */
-function reasoningExcerpt(
-  displays: ReadonlyArray<{ title: string; body: string }>,
-): string {
-  const title = displays.findLast((display) => display.title)?.title;
-  if (title) return plainStatusText(title.split("\n").at(-1) ?? "");
-  const body = displays.find((display) => display.body)?.body ?? "";
-  const line = body
-    .split("\n")
-    .map((row) => row.replace(/^\s*(?:[#>*-]+|\d+\.)\s+/, "").trim())
-    .find(Boolean);
-  return line ? plainStatusText(line) : "";
-}
-
-/** One thinking step inside the work rail, drawn like a tool row: a glyph,
- * "Thinking", and one line of what it was about. Opening it shows the full
- * trace. Adjacent provider events join one step instead of a ladder of
- * near-identical traces. */
-function ReasoningMessage({
-  entries,
-  active,
-  expandAll,
-  sessionId,
-}: {
-  entries: TranscriptEntry[];
-  active: boolean;
-  /** The work is always open: show the trace in place. */
-  expandAll: boolean;
-  sessionId?: string;
-}) {
-  const displays = entries.map((entry) => reasoningDisplay(entry.content));
-  const excerpt = reasoningExcerpt(displays);
-  const last = entries[entries.length - 1];
-  const ids = entries.map((entry) => entry.id);
-  const live = useLiveReasoningStatus(active);
-  const [remembered] = useState(() =>
-    transcriptDisclosureLedger.read("reasoning", sessionId, ids),
-  );
-  const [open, setOpen] = useState(remembered ?? expandAll);
-  const hasBody =
-    displays.some((display) => display.body) ||
-    entries.some((entry) => entry.images?.length);
-  const label = live.thinking ? (
-    <TextShimmer className="flex-shrink-0 text-item-title leading-5 font-medium text-dim">
-      Thinking
-    </TextShimmer>
-  ) : (
-    <span className="flex-shrink-0 text-item-title leading-5 font-medium text-dim transition-colors group-hover:text-fg">
-      Thinking
-    </span>
-  );
-  const row = (
-    <>
-      <span className="relative flex size-[22px] flex-shrink-0 self-center items-center justify-center text-faint">
-        <span
-          className={cn(
-            hasBody && "transition-opacity duration-150 group-hover:opacity-0",
-          )}
-        >
-          <IconLightbulb size={20} />
-        </span>
-        {hasBody && (
-          <IconChevronDown
-            size={20}
-            className={cn(
-              "absolute block text-dim opacity-0 transition-[opacity,transform] duration-150 group-hover:opacity-100",
-              open && "rotate-180",
-            )}
-          />
-        )}
-      </span>
-      {label}
-      {excerpt && (
-        <span className="min-w-0 truncate text-label leading-4 text-dim">
-          {excerpt}
-        </span>
-      )}
-    </>
-  );
-  const rowClasses =
-    "flex w-full min-w-0 items-baseline gap-2 rounded-control border-0 bg-transparent px-1 py-[3px] text-left font-sans";
-  return (
-    <div className="-ml-2 -mr-1" data-eid={last.id} data-reasoning="">
-      {hasBody ? (
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={() => {
-            transcriptDisclosureLedger.write(
-              "reasoning",
-              sessionId,
-              ids,
-              !open,
-            );
-            setOpen(!open);
-          }}
-          className={cn(
-            rowClasses,
-            "group cursor-pointer transition-colors hover:bg-hover/40",
-          )}
-        >
-          {row}
-        </button>
-      ) : (
-        <div className={rowClasses}>{row}</div>
-      )}
-      {open && hasBody && (
-        <div className="mb-1 ml-[34px] mr-1">
-          {entries.map((entry, index) => {
-            const body = displays[index].body;
-            return body ? (
-              <ClampedBody
-                key={entry.id}
-                className={cn(msgReasoningBody, "markdown")}
-                content={body}
-                entry={entry}
-                sessionId={sessionId}
-                transformContent={reasoningBody}
-              />
-            ) : null;
-          })}
-          {entries.map((entry) => (
-            <EntryImages
-              key={`${entry.id}:images`}
-              images={entry.images}
-              sessionId={sessionId}
-            />
-          ))}
-        </div>
-      )}
     </div>
   );
 }
