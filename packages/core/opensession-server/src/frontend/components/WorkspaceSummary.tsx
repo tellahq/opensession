@@ -407,7 +407,7 @@ export function WorkspaceSummary({
         <Popover.Trigger
           ref={findColumn}
           className={cn(
-            "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full",
+            "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-control",
             "border-none bg-transparent p-0 text-dim hover:bg-hover hover:text-fg",
             // Open state reads as pressed rather than hovered, so the card
             // and its trigger stay visibly one object.
