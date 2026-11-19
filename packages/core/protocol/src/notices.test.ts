@@ -319,15 +319,15 @@ describe("cross-session notice detection", () => {
 describe("cacheMissNotice", () => {
   it("names the cost in thousands of tokens", () => {
     expect(cacheMissNotice(123_400)).toBe(
-      "This turn re-uploaded the conversation · ~123k tokens re-cached",
+      "Prompt cache missed · ~123k tokens re-sent",
     );
     expect(cacheMissNotice(20_500)).toBe(
-      "This turn re-uploaded the conversation · ~21k tokens re-cached",
+      "Prompt cache missed · ~21k tokens re-sent",
     );
   });
 
   it("drops a count that would round to nothing", () => {
-    const bare = "This turn re-uploaded the conversation";
+    const bare = "Prompt cache missed";
     expect(cacheMissNotice(0)).toBe(bare);
     expect(cacheMissNotice(999)).toBe(bare);
     expect(cacheMissNotice(undefined)).toBe(bare);
@@ -342,7 +342,7 @@ describe("cacheMissNotice", () => {
     });
     expect(classified.notice).toEqual({
       kind: "system",
-      title: "This turn re-uploaded the conversation · ~123k tokens re-cached",
+      title: "Prompt cache missed · ~123k tokens re-sent",
       tone: "info",
     });
   });

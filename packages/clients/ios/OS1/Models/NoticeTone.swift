@@ -5,12 +5,11 @@ import SwiftUI
 /// notice row and the composer's floating chip — so "run failed" never lands
 /// in the same colour as "switched to code mode".
 ///
-/// Durable transcript entries arrive pre-classified (`EntryNotice.tone`, which
-/// the server derives in `packages/core/protocol/src/notices.ts`). The live `notice`
-/// WebSocket frame is a bare string with no tone, so `derived(fromText:)`
-/// mirrors that file's patterns here. Keep the two lists in step: a phrase
-/// added there should be added here, and anything unrecognised stays `info` —
-/// a miss costs a grey line where an amber one belonged, never a false alarm.
+/// Durable transcript entries arrive pre-classified (`EntryNotice.tone`), and
+/// a live `notice` frame carries the tone its writer gave it. Only a frame from
+/// an older server arrives without one, so `derived(fromText:)` mirrors the
+/// legacy wording patterns in `packages/core/protocol/src/notices.ts`. Anything
+/// unrecognised stays `info`: a miss costs a grey line, never a false alarm.
 enum NoticeTone: String, Equatable {
     case info, warn, error
 

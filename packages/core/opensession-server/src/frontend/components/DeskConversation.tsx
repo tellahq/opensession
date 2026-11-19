@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import type { ProtocolClientMessage, TranscriptEntry } from "../lib/types";
+import { noticeText } from "@tellahq/opensession-protocol/notices";
 import { DeskTextNavigationClient } from "../lib/desk-text-navigation-client";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { getCurrentUser } from "./UserPicker";
@@ -370,6 +371,7 @@ export function DeskConversation({
               id: randomUUID(),
               type: "system",
               content: msg.message,
+              noticeTone: msg.tone,
               timestamp: new Date().toISOString(),
             },
           ]);
@@ -387,7 +389,8 @@ export function DeskConversation({
               {
                 id: randomUUID(),
                 type: "system",
-                content: `⚠ Run failed: ${msg.message}`,
+                content: noticeText("Run failed", msg.message),
+                noticeTone: "error",
                 timestamp: new Date().toISOString(),
               },
             ]);

@@ -67,9 +67,23 @@ export function metadataModelLabel(
 }
 // An automatic fallback arrives as by = "auto-switch — <from label> <reason>",
 // which repeats the model the divider already names. Keep only the reason, and
-// take the from-model's name from it, as the server labelled it.
+// take the from-model's name from it, as the server labelled it. The `by`
+// strings are persisted in model history, so their old wording stays matched
+// here and is shortened on the way out.
 const AUTO_SWITCH_BY =
   /^auto-switch — (.+) (out of credits|hit a transient engine error)$/;
+function shortSwitchReason(reason: string): string {
+  if (reason === "hit a transient engine error") return "model error";
+  if (reason === "auto-retry — checking the original selection again")
+    return "back to your pick";
+  return reason;
+}
+
+/** A fallback forced by the provider reads as a heads-up; a person's own
+ *  switch, or the return to their pick, stays neutral. */
+export function switchDividerTone(by?: string): "warn" | undefined {
+  return by && AUTO_SWITCH_BY.test(by) ? "warn" : undefined;
+}
 export function switchDividerText(
   model: string,
   from?: string,
@@ -80,6 +94,7 @@ export function switchDividerText(
   const head = fromName
     ? `Switched ${fromName} → ${prettyModel(model)}`
     : `Switched to ${prettyModel(model)}`;
-  const suffix = auto ? auto[2] : by;
+  const reason = auto ? auto[2] : by;
+  const suffix = reason ? shortSwitchReason(reason) : "";
   return suffix ? `${head} · ${suffix}` : head;
 }
