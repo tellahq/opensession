@@ -2,9 +2,11 @@
 # Run every unit-test file in its own Bun process. The suite intentionally has
 # tests that replace process.env, fetch, module-level path caches, and globalThis
 # state; process boundaries keep those fixtures from changing later files.
+# Files run one per core by default, since each owns its own process, home and
+# ports; set OPENSESSION_TEST_JOBS to change that (CI pins it to 1).
 set -euo pipefail
 
-readonly jobs="${OPENSESSION_TEST_JOBS:-1}"
+readonly jobs="${OPENSESSION_TEST_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)}"
 if ! [[ "$jobs" =~ ^[1-9][0-9]*$ ]]; then
   echo "OPENSESSION_TEST_JOBS must be a positive integer (got: $jobs)" >&2
   exit 2

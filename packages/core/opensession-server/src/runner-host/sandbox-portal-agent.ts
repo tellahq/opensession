@@ -186,7 +186,7 @@ async function respond(
   }
 }
 
-type SocketPayload = string | Buffer;
+type SocketPayload = string | Buffer<ArrayBuffer>;
 export type PortalSocketState = { socket: WebSocket; pending: SocketPayload[] };
 type WebSocketFactory = (url: string, options: unknown) => WebSocket;
 
