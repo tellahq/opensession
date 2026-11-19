@@ -36,6 +36,14 @@ struct ProgressStatusRow: View {
                 Button(action: toggle) {
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
                         status
+                        if work?.trigger != nil,
+                           let duration = work?.duration.flatMap(TranscriptFormat.duration) {
+                            // How long the event's work took, kept whole.
+                            Text("· \(duration)")
+                                .font(.subheadline)
+                                .foregroundStyle(OS1VisualStyle.textFaint)
+                                .fixedSize()
+                        }
                         Image(systemName: "chevron.right")
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(OS1VisualStyle.textFaint)
