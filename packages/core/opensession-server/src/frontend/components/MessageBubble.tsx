@@ -1317,7 +1317,7 @@ export function ReasoningStep({
           }}
           className={cn(
             rowClasses,
-            "group cursor-pointer transition-colors hover:bg-hover/40",
+            "group cursor-pointer transition-colors hover:bg-hover/40 phone:min-h-10 phone:items-center",
           )}
         >
           {row}
