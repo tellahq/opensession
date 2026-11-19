@@ -546,10 +546,9 @@ export function SessionViewerMainRegion({
     loadingHistory,
     syncing,
   } = transcript.content;
-  const stopping = stopRequestedAt != null;
   const liveRunStatus = useMemo<LiveRunStatus>(
-    () => ({ store: liveTurnStore, stopping }),
-    [liveTurnStore, stopping],
+    () => ({ store: liveTurnStore }),
+    [liveTurnStore],
   );
   const {
     openAssetFromTranscript,
