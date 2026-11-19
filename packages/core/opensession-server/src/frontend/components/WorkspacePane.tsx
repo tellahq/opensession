@@ -697,7 +697,7 @@ export function WorkspacePane({
             />
           }
           className={cn(
-            "[corner-shape:squircle]",
+            "rounded-control",
             isPhone &&
               "size-11 min-h-11 rounded-control border-transparent text-dim shadow-none [corner-shape:squircle]",
             overflowOpen && "bg-hover text-fg",
