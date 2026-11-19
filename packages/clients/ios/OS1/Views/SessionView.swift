@@ -4805,10 +4805,11 @@ private struct SessionInputBar: View {
                     in: composerShape
                 )
                 #endif
-                // Ask mode is ambient — it lasts the session's whole life, not
-                // one message — so it's said by tinting the surface you write
-                // on rather than by a chip you'd stop seeing. Same green, and
-                // the same lighter hand, as the web composer's.
+                // Note mode is one message, so it tints the surface you write
+                // on. Ask mode lasts the session's whole life (a read-only
+                // thread an agent started is in it from the start), so like
+                // the web composer it leaves the box its own colour and the
+                // placeholder says read-only instead.
                 //
                 // An overlay, not another `.background`: each background in
                 // this stack sits further back, and the page colour above is
@@ -4817,8 +4818,6 @@ private struct SessionInputBar: View {
                 .overlay {
                     if noteMode {
                         composerShape.fill(OS1VisualStyle.yellow.opacity(0.10))
-                    } else if viewModel.session.mode == "ask" {
-                        composerShape.fill(OS1VisualStyle.green.opacity(0.09))
                     }
                 }
                 #if os(iOS)
@@ -4915,12 +4914,16 @@ private struct SessionInputBar: View {
             || viewModel.session.source == "backstage"
     }
 
+    /// Read-only: the agent can look at the code but not change it.
+    private var isAskMode: Bool { viewModel.session.mode == "ask" }
+
     private var composerPlaceholder: String {
         #if os(iOS)
         // The resting pill is too narrow for the full prompt: the web phone
         // says "Ask <model>" there, and the full one once it opens.
         if isSingleRow, viewModel.safety == nil, !viewModel.workspacePreparing {
-            return noteMode ? "Team note" : "Ask \(shortModelName)"
+            if noteMode { return "Team note" }
+            return isAskMode ? "Ask, read-only" : "Ask \(shortModelName)"
         }
         #endif
         if let shownPrediction { return shownPrediction }
@@ -4930,7 +4933,9 @@ private struct SessionInputBar: View {
         if viewModel.workspacePreparing {
             return "Setting up your workspace · messages queue until it's ready"
         }
-        guard viewModel.isRunning else { return "Message" }
+        guard viewModel.isRunning else {
+            return isAskMode ? "Ask, read-only" : "Message"
+        }
         return busySend == "steer"
             ? "Message — steers this run"
             : "Message — queues for after this run"
