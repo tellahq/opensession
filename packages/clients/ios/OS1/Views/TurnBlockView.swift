@@ -390,11 +390,19 @@ private struct ToolRunView: View {
                         // row folds away; one tap puts each back with its own
                         // glyph. The tool names stay in the accessibility
                         // label.
-                        Text(summaryTitle)
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(OS1VisualStyle.textDim)
-                            .lineLimit(1)
-                            .layoutPriority(1)
+                        // A run of one says what it is doing in its own
+                        // title, so that title shimmers while it runs.
+                        Group {
+                            if shimmersTitle {
+                                ShimmerText(summaryTitle)
+                            } else {
+                                Text(summaryTitle)
+                                    .foregroundStyle(OS1VisualStyle.textDim)
+                            }
+                        }
+                        .font(.subheadline.weight(.medium))
+                        .lineLimit(1)
+                        .layoutPriority(1)
                         // What the sentence cannot say: a run that edited
                         // files moved lines. Summed from the rows themselves,
                         // so opening the run adds up to what was on it.
@@ -405,12 +413,15 @@ private struct ToolRunView: View {
                         // waiting on, so a long build looked stalled. Say
                         // what the running step is doing, in words; opening
                         // the run shows the command itself.
+                        // The shimmer is the sign it is still going.
                         if let runningStep {
-                            Text(runningStep.presentation.family.activityLabel)
-                                .font(.footnote)
-                                .foregroundStyle(OS1VisualStyle.textFaint)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
+                            ShimmerText(
+                                runningStep.presentation.family.activityLabel,
+                                base: OS1VisualStyle.textFaint
+                            )
+                            .font(.footnote)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                         }
                         Spacer(minLength: 4)
                         if mediaCount > 0 {
@@ -424,11 +435,6 @@ private struct ToolRunView: View {
                                 .font(.caption2)
                                 .foregroundStyle(OS1VisualStyle.redInk)
                                 .fixedSize()
-                        }
-                        if isLive, items.contains(where: \.isPending) {
-                            ProgressView()
-                                .controlSize(.mini)
-                                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
                         }
                     }
                     .toolRowFrame()
@@ -483,11 +489,15 @@ private struct ToolRunView: View {
         return title.isEmpty ? "\(items.count) step\(items.count == 1 ? "" : "s")" : title
     }
     private var failureCount: Int { items.filter(\.isError).count }
-    /// A run of one already says what it is doing, and the spinner says it
-    /// is still going.
+    /// A run of one already says what it is doing, and its shimmering title
+    /// says it is still going.
     private var runningStep: ToolCallItem? {
         guard isLive, !state.expanded, items.count > 1 else { return nil }
         return items.last(where: \.isPending)
+    }
+    /// Open, each running step shimmers in its own row instead.
+    private var shimmersTitle: Bool {
+        isLive && !state.expanded && items.count == 1 && items.contains(where: \.isPending)
     }
     private var stats: ToolLineStats {
         items.reduce(ToolLineStats()) { $0 + ($1.presentation.lineStats ?? ToolLineStats()) }
