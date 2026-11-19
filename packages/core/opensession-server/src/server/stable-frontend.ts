@@ -14,7 +14,11 @@ export function stableFrontendSnapshotPath(deployState: string): string {
   return join(deployState, "stable-frontend.json");
 }
 
-const MAX_FALLBACK_ROOTS = 3;
+/** Previous releases whose content-hashed chunks stay servable, so a tab
+ *  still running an older bundle can lazy-load its own chunks. Deploys can
+ *  land minutes apart; release GC keeps the newest 8 releases, the active one
+ *  plus these. */
+export const MAX_FALLBACK_ROOTS = 7;
 
 /** The resolved release root when `candidate` lies under the deploy state's
  *  releases directory, else null. Pure: the caller checks the release marker. */
