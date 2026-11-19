@@ -384,8 +384,8 @@ export const TurnBlock = function TurnBlock({
                 sessionId={sessionId}
               />
             ) : (
-              // Tool icons sit flush with the column on desktop. Phones use
-              // the 1px optical correction for the icon's inset glyph.
+              // Tool icons sit flush with the column on desktop. Phones add
+              // a 1px optical correction for the icon's inset glyph.
               <div
                 key={sec.items[0].id}
                 className="-ml-px desktop:ml-0"
@@ -485,36 +485,43 @@ export function ToolSection(props: ToolSectionProps) {
     else runs.push({ compact, items: [entry] });
   }
 
-  return runs.map((run) =>
-    // With the work and its tool calls both always open there is nothing to
-    // disclose, so a header and its indent would only wrap rows already on
-    // screen. Otherwise even a run of one folds: "Ran 1 command" reads as
-    // part of the conversation, where the call's own row dumped the tool
-    // name and its whole command between two messages.
-    run.compact && !props.expandAll ? (
-      <ToolRunBlock key={run.items[0].id} {...props} items={run.items} />
-    ) : (
-      <React.Fragment key={run.items[0].id}>
-        {run.items.map((entry) => (
-          <ToolCallBlock
-            key={entry.id}
-            entry={entry}
-            sessionId={props.sessionId}
-            result={
-              entry.toolUseId
-                ? props.toolResults.get(entry.toolUseId)
-                : undefined
-            }
-            pending={
-              props.live &&
-              !!entry.toolUseId &&
-              !props.toolResults.has(entry.toolUseId)
-            }
-            onOpenSubagent={props.onOpenSubagent}
-          />
-        ))}
-      </React.Fragment>
-    ),
+  // The rows keep 4px of padding so a hover fill has room around the glyph,
+  // and the wrapper hangs that padding into the gutter: each glyph starts at
+  // the reply column's edge, no indent.
+  return (
+    <div className="-mx-1">
+      {runs.map((run) =>
+        // With the work and its tool calls both always open there is nothing to
+        // disclose, so a header and its indent would only wrap rows already on
+        // screen. Otherwise even a run of one folds: "Ran 1 command" reads as
+        // part of the conversation, where the call's own row dumped the tool
+        // name and its whole command between two messages.
+        run.compact && !props.expandAll ? (
+          <ToolRunBlock key={run.items[0].id} {...props} items={run.items} />
+        ) : (
+          <React.Fragment key={run.items[0].id}>
+            {run.items.map((entry) => (
+              <ToolCallBlock
+                key={entry.id}
+                entry={entry}
+                sessionId={props.sessionId}
+                result={
+                  entry.toolUseId
+                    ? props.toolResults.get(entry.toolUseId)
+                    : undefined
+                }
+                pending={
+                  props.live &&
+                  !!entry.toolUseId &&
+                  !props.toolResults.has(entry.toolUseId)
+                }
+                onOpenSubagent={props.onOpenSubagent}
+              />
+            ))}
+          </React.Fragment>
+        ),
+      )}
+    </div>
   );
 }
 
@@ -797,7 +804,7 @@ function NarrationMessage({
   sessionId?: string;
 }) {
   return (
-    <div className="my-2 px-1" data-eid={entry.id} data-narration="">
+    <div className="my-2" data-eid={entry.id} data-narration="">
       <ClampedBody
         className={cn(msgBody, "markdown text-fg")}
         content={entry.content}
@@ -819,7 +826,7 @@ function NarrationMessage({
 function StepNotice({ entry }: { entry: TranscriptEntry }) {
   return (
     <div
-      className="flex min-w-0 items-center gap-2 px-1 py-[3px] text-item-title leading-5 text-faint"
+      className="flex min-w-0 items-center gap-2 py-[3px] text-item-title leading-5 text-faint"
       data-eid={entry.id}
     >
       <span className="flex size-[22px] flex-shrink-0 items-center justify-center">
@@ -848,7 +855,7 @@ function ReasoningMessage({
   const last = entries[entries.length - 1];
   const live = useLiveReasoningStatus(active);
   return (
-    <div className="my-2 px-1" data-eid={last.id} data-reasoning="">
+    <div className="my-2" data-eid={last.id} data-reasoning="">
       {live.thinking && !live.namedBelow ? (
         // Some providers expose prose thinking rather than a short status
         // heading. Keep that prose readable and shimmer a stable label.

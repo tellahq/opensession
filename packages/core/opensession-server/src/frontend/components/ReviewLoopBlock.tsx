@@ -223,9 +223,7 @@ function LoopDisclosure({
           />
         )}
       </button>
-      {open && (
-        <div className="mt-0.5 pl-2 [&>*:last-child]:mb-0">{children}</div>
-      )}
+      {open && <div className="mt-0.5 [&>*:last-child]:mb-0">{children}</div>}
     </section>
   );
 }
@@ -282,7 +280,7 @@ function ReviewLoopResultRow({
   const passed = result.status === "passed";
   return (
     <div
-      className="mt-1 flex w-full min-w-0 items-baseline gap-2 rounded-control bg-transparent px-1 py-[3px] font-sans"
+      className="mt-1 flex w-full min-w-0 items-baseline gap-2 rounded-control bg-transparent py-[3px] font-sans"
       aria-label={passed ? "Review passed" : "Review failed"}
     >
       <span

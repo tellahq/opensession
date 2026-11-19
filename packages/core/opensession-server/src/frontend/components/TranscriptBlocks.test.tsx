@@ -2075,7 +2075,7 @@ describe("TranscriptBlocks review loops", () => {
     expect(html).toContain("M9.75 12.75L10.1837 13.6744");
     expect(html).toContain("text-faint");
     expect(html).toContain("1 round · 5/5 · 8 checks passed");
-    expect(html).toContain("mt-0.5 pl-2");
+    expect(html).toContain('class="mt-0.5 [&amp;&gt;*:last-child]:mb-0"');
     expect(html).toContain(
       "flex size-[22px] flex-none self-center items-center justify-center",
     );
