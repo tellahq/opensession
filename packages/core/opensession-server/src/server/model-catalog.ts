@@ -35,21 +35,27 @@ export function claudeApiModelCapacity(mythosModel: string): string {
  * anyone. */
 export function claudeAccountsForUser(
   user?: string,
+  billingLogin?: string,
 ): ReturnType<typeof listAccountsPublic> {
   const designated = designatedBridgeAccountIds();
   const runUser = piAnthropicTransport() === "bridge" ? undefined : user;
   return listAccountsPublic().filter(
     (a) =>
       (!designated.length || designated.includes(a.id)) &&
-      accountServesUser(a, runUser),
+      accountServesUser(a, runUser, billingLogin),
   );
 }
 
 /** Provider capacity configured on this server for `user` (the person who
- * would run the model). Temporary exhaustion does not change the catalog or
- * default; adding or removing an account does. */
-export function configuredModelProviders(user?: string): Set<string> {
-  const claude = claudeAccountsForUser(user);
+ * would run the model), with `billingLogin` their verified GitHub login: a
+ * personal Claude API account counts only for its own login. Temporary
+ * exhaustion does not change the catalog or default; adding or removing an
+ * account does. */
+export function configuredModelProviders(
+  user?: string,
+  billingLogin?: string,
+): Set<string> {
+  const claude = claudeAccountsForUser(user, billingLogin);
   // An API account counts only for the Mythos releases a Models API check
   // verified; an unverified one is no capacity at all.
   const mythos = new Set(

@@ -1758,12 +1758,14 @@ describe("buildPiAnthropicProvider", () => {
         }),
       );
       await accounts.loadClaudeAccounts();
-      const mythosFor = (user?: string) =>
-        configuredModelProviders(user).has(CLAUDE_API_CAPACITY);
+      const mythosFor = (user?: string, login?: string) =>
+        configuredModelProviders(user, login).has(CLAUDE_API_CAPACITY);
       const claudeFor = (user?: string) =>
         configuredModelProviders(user).has("anthropic");
-      expect(mythosFor("Alice")).toBe(true);
-      expect(mythosFor("Bob")).toBe(false);
+      expect(mythosFor("Alice", "alice")).toBe(true);
+      // A name with no verified login never spends a personal API account.
+      expect(mythosFor("Alice")).toBe(false);
+      expect(mythosFor("Bob", "bob")).toBe(false);
       expect(mythosFor()).toBe(false);
       // Alice's subscription is hers too: with only a shared API key left for
       // Bob, his catalog offers Mythos and not the subscription models.
@@ -1805,7 +1807,7 @@ describe("buildPiAnthropicProvider", () => {
       await loadPiConfig();
       try {
         expect(claudeFor("Alice")).toBe(false);
-        expect(mythosFor("Alice")).toBe(true);
+        expect(mythosFor("Alice", "alice")).toBe(true);
       } finally {
         await designate([]);
       }
@@ -1836,19 +1838,22 @@ describe("buildPiAnthropicProvider", () => {
         JSON.stringify({ accounts: [apiKey("alex-key", "Alex")] }),
       );
       await accounts.loadClaudeAccounts();
-      const mythosFor = (user?: string) =>
-        configuredModelProviders(user).has(CLAUDE_API_CAPACITY);
-      const servedFor = (user: string) => {
-        const r = accounts.resolveAccount({ user, model: "claude-mythos-5-2" });
+      const mythosFor = (user?: string, login?: string) =>
+        configuredModelProviders(user, login).has(CLAUDE_API_CAPACITY);
+      const servedFor = (user: string, billingLogin?: string) => {
+        const r = accounts.resolveAccount({
+          user,
+          billingLogin,
+          model: "claude-mythos-5-2",
+        });
         return "account" in r ? r.account.id : undefined;
       };
       // A stored name, not a login, never spends, even for an unambiguous
       // full name.
-      expect(mythosFor("Alex Rivera")).toBe(false);
+      expect(mythosFor("Alex Rivera", "alex-rivera")).toBe(false);
       // "Alex" names both teammates, as owner and as run user: neither spends.
-      expect(mythosFor("Alex")).toBe(false);
-      expect(mythosFor("Alex Rivera")).toBe(false);
-      expect(servedFor("Alex")).toBeUndefined();
+      expect(mythosFor("Alex", "alex-rivera")).toBe(false);
+      expect(servedFor("Alex", "alex-rivera")).toBeUndefined();
       // A login owner serves its own person, by full name or login, but
       // still not the shared first name.
       writeFileSync(
@@ -1856,12 +1861,18 @@ describe("buildPiAnthropicProvider", () => {
         JSON.stringify({ accounts: [apiKey("alex-key", "alex-rivera")] }),
       );
       await accounts.loadClaudeAccounts();
-      expect(mythosFor("Alex Rivera")).toBe(true);
-      expect(mythosFor("alex-rivera")).toBe(true);
-      expect(mythosFor("Alex Chen")).toBe(false);
-      expect(mythosFor("Alex")).toBe(false);
-      expect(servedFor("Alex")).toBeUndefined();
-      expect(servedFor("Alex Rivera")).toBe("alex-key");
+      expect(mythosFor("Alex Rivera", "alex-rivera")).toBe(true);
+      expect(mythosFor("alex-rivera", "alex-rivera")).toBe(true);
+      expect(mythosFor("Alex Chen", "alex-chen")).toBe(false);
+      expect(mythosFor("Alex", "alex-rivera")).toBe(false);
+      expect(servedFor("Alex", "alex-rivera")).toBeUndefined();
+      expect(servedFor("Alex Rivera", "alex-rivera")).toBe("alex-key");
+      // A name alone, with no verified login, never spends it.
+      expect(mythosFor("Alex Rivera")).toBe(false);
+      expect(servedFor("Alex Rivera")).toBeUndefined();
+      // Another teammate prompting Rivera's session (creator login
+      // alex-rivera) is not Rivera, so Rivera's key does not serve them.
+      expect(servedFor("Alex Chen", "alex-rivera")).toBeUndefined();
       // Production paths: a verified sign-in that shares a first name acts
       // under a name only that person answers to, so Rivera's own key serves
       // Rivera from the picker, Setup, and turns, and never Chen.
@@ -1871,9 +1882,66 @@ describe("buildPiAnthropicProvider", () => {
       const chen = { login: "alex-chen", name: "Alex Chen" };
       expect(signedInUserName(rivera)).toBe("Alex Rivera");
       const asRivera = requestUser({ authUser: rivera } as never);
-      expect(mythosFor(asRivera)).toBe(true);
-      expect(servedFor(asRivera)).toBe("alex-key");
-      expect(mythosFor(requestUser({ authUser: chen } as never))).toBe(false);
+      expect(mythosFor(asRivera, rivera.login)).toBe(true);
+      expect(servedFor(asRivera, rivera.login)).toBe("alex-key");
+      expect(
+        mythosFor(requestUser({ authUser: chen } as never), chen.login),
+      ).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
+  test("a personal API account bills only the turn's verified login, not a name resolved at dispatch", async () => {
+    await designate([]);
+    const { __setIdentitiesForTest } = await import("./shared/user-mappings");
+    const apiKey = (id: string, owner: string) => ({
+      id,
+      name: id,
+      owner,
+      token: `sk-ant-api03-${id}`,
+      authKind: "api-key",
+      mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: [
+          apiKey("rivera-key", "alex-rivera"),
+          apiKey("chen-key", "alex-chen"),
+        ],
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    const servedFor = (user: string, billingLogin?: string) => {
+      const r = accounts.resolveAccount({
+        user,
+        billingLogin,
+        model: "claude-mythos-5-2",
+      });
+      return "account" in r ? r.account.id : undefined;
+    };
+    // Rivera queues a prompt as "Alex" while he is the only Alex.
+    let restore = __setIdentitiesForTest([
+      { name: "Alex Rivera", github: "alex-rivera" },
+    ]);
+    try {
+      expect(servedFor("Alex", "alex-rivera")).toBe("rivera-key");
+    } finally {
+      restore();
+    }
+    // He leaves and Alex Chen is now the only Alex when the queue drains, or
+    // the old session wakes after a restart. The turn still carries Rivera's
+    // session login, so neither key serves it: "Alex" now names Chen, who is
+    // not the login this turn may bill.
+    restore = __setIdentitiesForTest([
+      { name: "Alex Chen", github: "alex-chen" },
+    ]);
+    try {
+      expect(servedFor("Alex", "alex-rivera")).toBeUndefined();
+      // Chen's own turns still use his key.
+      expect(servedFor("Alex", "alex-chen")).toBe("chen-key");
     } finally {
       restore();
     }
@@ -1924,8 +1992,9 @@ describe("buildPiAnthropicProvider", () => {
         JSON.stringify({ accounts: [apiKey("alice-key", "alice")] }),
       );
       await accounts.loadClaudeAccounts();
-      expect(engineStatus("Alice").ready).toBe(true);
-      expect(engineStatus("Bob").ready).toBe(false);
+      expect(engineStatus("Alice", "alice").ready).toBe(true);
+      expect(engineStatus("Alice").ready).toBe(false);
+      expect(engineStatus("Bob", "bob").ready).toBe(false);
     } finally {
       restoreRoster();
       await designate([]);

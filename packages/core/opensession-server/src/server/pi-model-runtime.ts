@@ -780,6 +780,8 @@ export interface PiAnthropicProviderOpts {
   /** Unified session id — the SDK session-store key and audit attribution. */
   unifiedSessionId: string;
   user?: string;
+  /** Verified login a personal API account may bill (accountServesUser). */
+  billingLogin?: string;
   /** Run-level account pin, honored only within the bridge designation. */
   accountId?: string;
   accountStrict?: boolean;
@@ -1569,6 +1571,7 @@ async function* runSdkAttempt(
             accountStrict: opts.accountStrict,
             usageCredits: opts.usageCredits,
             user: opts.user,
+            billingLogin: opts.billingLogin,
             excludeIds: excluded.size ? [...excluded] : undefined,
             stickyId,
           });
@@ -2191,6 +2194,7 @@ async function* runSdkAttempt(
         accountStrict: opts.accountStrict,
         usageCredits: opts.usageCredits,
         user: opts.user,
+        billingLogin: opts.billingLogin,
         excludeIds: [...excluded],
       });
       if ("error" in next) poolRefusal = next.error;

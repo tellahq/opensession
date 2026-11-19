@@ -1298,21 +1298,38 @@ function federationBinding(account: ClaudeAccount): string | undefined {
 /** The owner gate: a personal account (`owner` set) serves only runs whose
  *  user resolves to that person; runs with no user see shared accounts only.
  *  A personal API account bills its owner's organization, so its owner is a
- *  roster GitHub login (`apiAccountOwner`) and the run user must name exactly
- *  that roster member (`userIsRosterLogin`): a shared first name, or a
- *  namesake who joins after the owner left, never spends it. Routing, the
- *  model catalog, and Setup all use it. */
+ *  roster GitHub login (`apiAccountOwner`), and it serves only when the
+ *  verified `billingLogin` is that login and the run user names exactly that
+ *  roster member (`userIsRosterLogin`). A display name alone never spends
+ *  it: names are resolved again at dispatch, after the roster may have
+ *  changed, so a queued or resumed turn could otherwise reach a namesake's
+ *  account. Runs pass the session creator's verified login; live requests
+ *  pass the signed-in login. Routing, the model catalog, and Setup all use
+ *  it. */
 export function accountServesUser(
   account: { owner?: string; authKind?: string },
   user?: string,
+  billingLogin?: string | null,
 ): boolean {
   if (!account.owner) return true;
   if (!user) return false;
   if (!isClaudeApiAccount(account))
     return userMatchesAny(user, [account.owner]);
-  return isAutomationsAccountOwner(account.owner)
-    ? isAutomationsAccountOwner(user)
-    : userIsRosterLogin(account.owner, user);
+  if (isAutomationsAccountOwner(account.owner))
+    return isAutomationsAccountOwner(user);
+  return (
+    sameGithubLogin(billingLogin, account.owner) &&
+    userIsRosterLogin(account.owner, user)
+  );
+}
+
+function sameGithubLogin(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): boolean {
+  const norm = (v: string | null | undefined) =>
+    v?.trim().replace(/^@/, "").toLowerCase() ?? "";
+  return !!norm(a) && norm(a) === norm(b);
 }
 
 /** The owner a personal API account stores: the Automations group, or the
@@ -1672,6 +1689,7 @@ function selectAccount(
   model?: ClaudeModelRequirement,
   allowExtraUsage?: boolean,
   recordPick = true,
+  billingLogin?: string,
 ): ClaudeAccount | undefined {
   const eligible = readStore().filter(
     (a) => !exclude?.has(a.id) && isAccountUsableFor(a, model, allowExtraUsage),
@@ -1692,7 +1710,11 @@ function selectAccount(
       )
       .sort((x, y) => x.bucket - y.bucket || x.picked - y.picked)[0]?.a;
   const personal = user
-    ? best(eligible.filter((a) => a.owner && accountServesUser(a, user)))
+    ? best(
+        eligible.filter(
+          (a) => a.owner && accountServesUser(a, user, billingLogin),
+        ),
+      )
     : undefined;
   const picked = personal ?? best(eligible.filter((a) => !a.owner));
   if (picked && recordPick) lastPickedAt.set(picked.id, Date.now());
@@ -1751,6 +1773,10 @@ export interface AccountRequest {
   /** Run user, matched against `owner` through the same identity table as
    *  commit attribution. Absent = an automation: pool accounts only. */
   user?: string;
+  /** Verified GitHub login that may be billed (the session creator's, or
+   *  the signed-in viewer's). A personal API account serves only its own
+   *  login here, never a display name alone (accountServesUser). */
+  billingLogin?: string;
   model?: ClaudeModelRequirement;
   /** The session's pinned subscription (NativeSessionFile.accountId). */
   pinnedId?: string;
@@ -1785,7 +1811,8 @@ export interface AccountRequest {
 export function resolveAccount(req: AccountRequest): AccountResolution {
   const { user, model, allowExtraUsage } = req;
   const ids = req.designatedIds;
-  const ownedByUser = (a: ClaudeAccount) => accountServesUser(a, user);
+  const ownedByUser = (a: ClaudeAccount) =>
+    accountServesUser(a, user, req.billingLogin);
   const designated = (id: string) => !ids?.length || ids.includes(id);
   const nameOf = (id: string) => getAccountById(id)?.name || id;
   const excluded = req.excludeIds?.length ? new Set(req.excludeIds) : undefined;
@@ -1840,6 +1867,7 @@ export function resolveAccount(req: AccountRequest): AccountResolution {
     model,
     allowExtraUsage,
     req.recordPick ?? true,
+    req.billingLogin,
   );
   if (picked)
     return { account: picked, reason: picked.owner ? "personal" : "pool" };

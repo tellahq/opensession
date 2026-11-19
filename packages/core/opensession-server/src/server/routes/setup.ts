@@ -369,6 +369,7 @@ export async function handleSetupRoutes(
       // client names its picker user, as it does for /api/models.
       engine: engineStatus(
         requestUser(ctx, ctx.url.searchParams.get("user")) || undefined,
+        ctx.authUser?.login || undefined,
       ),
       github: await githubSnapshot(),
       // `always` entries self-gate and need no setup, so they are not

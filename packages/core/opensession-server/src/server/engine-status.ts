@@ -34,9 +34,13 @@ export interface EngineStatus {
   fixableInApp: boolean;
 }
 
-/** `user` is the person viewing: Claude capacity, and so the default model,
- *  counts only accounts that serve them. */
-export function engineStatus(user?: string): EngineStatus {
+/** `user` is the person viewing, `billingLogin` their verified GitHub login:
+ *  Claude capacity, and so the default model, counts only accounts that
+ *  serve them. */
+export function engineStatus(
+  user?: string,
+  billingLogin?: string,
+): EngineStatus {
   const enabled = piEngineEnabled();
   const claudePool = listAccountsPublic();
   const codexPool = listCodexAccountsPublic();
@@ -51,7 +55,7 @@ export function engineStatus(user?: string): EngineStatus {
     (account) => account.usable && !account.exhaustedUntil,
   ).length;
   const defaultModel = configuredInteractiveDefaultModel(
-    configuredModelProviders(user),
+    configuredModelProviders(user, billingLogin),
   );
   const provider = accountProviderForModel(defaultModel);
   // Claude readiness asks the runner's own selector, as a peek that does not
@@ -62,6 +66,7 @@ export function engineStatus(user?: string): EngineStatus {
     "account" in
     resolveAccount({
       user: piAnthropicTransport() === "bridge" ? undefined : user,
+      billingLogin,
       model: defaultModel,
       designatedIds: designatedBridgeAccountIds(),
       recordPick: false,

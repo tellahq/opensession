@@ -815,7 +815,9 @@ registerSessionControl({
     const model = fork
       ? fork.source.model
       : (modelInput ? resolveModel(String(modelInput))?.id : undefined) ||
-        configuredInteractiveDefaultModel(configuredModelProviders(user));
+        configuredInteractiveDefaultModel(
+          configuredModelProviders(user, createdByLogin),
+        );
     // Same validation as the web palette's create_session: unknown efforts
     // are dropped rather than persisted; images arrive as data URLs. Forks
     // inherit the source's effort/fast-mode/account pin, like the web path.

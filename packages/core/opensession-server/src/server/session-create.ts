@@ -2614,7 +2614,10 @@ export async function handleCreateSessionMessage(
     ? forkSource.model
     : (msg.model ? resolveModel(String(msg.model))?.id : undefined) ||
       configuredInteractiveDefaultModel(
-        configuredModelProviders(typeof user === "string" ? user : undefined),
+        configuredModelProviders(
+          typeof user === "string" ? user : undefined,
+          ws.data?.authLogin || undefined,
+        ),
       );
   // Reasoning effort from the New-session palette (forks inherit).
   const createEffort = forkSource

@@ -215,6 +215,8 @@ export interface BridgeAccountPin {
   /** Run user, for the pool pick's personal-account preference (same identity
    *  matching as pickAccount everywhere else). Never set on the HTTP bridge. */
   user?: string;
+  /** Verified login a personal API account may bill (accountServesUser). */
+  billingLogin?: string;
   /** Allow extra-usage credits when judging the pin/walk usability. */
   usageCredits?: boolean;
   /** Accounts this turn already burned, skipped on every path. Drives the pi
@@ -253,6 +255,7 @@ export function pickBridgeAccount(
   const ids = designatedBridgeAccountIds();
   const resolved = resolveAccount({
     user: pin?.user,
+    billingLogin: pin?.billingLogin,
     model,
     pinnedId: pin?.accountId,
     strictPin: pin?.accountStrict,

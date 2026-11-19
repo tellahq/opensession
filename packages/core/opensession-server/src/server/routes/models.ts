@@ -55,10 +55,12 @@ export async function handleModelsRoutes(
     // asks for accounts as the Automations group (session-actors.ts
     // providerAccountUser), which only narrows the catalog to that group and
     // shared accounts.
+    const forAutomations = url.searchParams.get("for") === "automations";
     const configuredProviders = configuredModelProviders(
-      url.searchParams.get("for") === "automations"
+      forAutomations
         ? AUTOMATIONS_ACCOUNT_OWNER
         : requestUser(ctx, url.searchParams.get("user")) || undefined,
+      forAutomations ? undefined : ctx.authUser?.login || undefined,
     );
     // One list of Pi models. Native claude/codex ids stay resolvable for
     // stored sessions, just not selectable here. Guard: with no engine

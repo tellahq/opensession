@@ -117,6 +117,7 @@ export interface PiRuntimeBindingDependencies {
   buildAnthropicProvider: (input: {
     unifiedSessionId: string;
     user?: string;
+    billingLogin?: string;
     accountId?: string;
     accountStrict?: boolean;
     usageCredits?: boolean;
@@ -144,6 +145,9 @@ export interface CreatePiRuntimeBindingInput {
   affinityKey: string;
   unifiedSessionId: string;
   accountUser?: string;
+  /** Verified login a personal Claude API account may bill: the session
+   *  creator's, never a display name resolved at dispatch. */
+  billingLogin?: string;
   accountId?: string;
   accountStrict?: boolean;
   usageCredits?: boolean;
@@ -455,6 +459,7 @@ export async function createPiRuntimeBinding(
     const provider = deps.buildAnthropicProvider({
       unifiedSessionId: input.unifiedSessionId,
       user: input.accountUser,
+      billingLogin: input.billingLogin,
       accountId: input.accountId,
       accountStrict: input.accountStrict,
       usageCredits: input.usageCredits,
