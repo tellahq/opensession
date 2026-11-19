@@ -9,6 +9,32 @@ import Foundation
 struct ProgressUpdate: Equatable, Sendable {
     enum State: Equatable, Sendable { case running, done }
 
+    /// A reply that opens with a status line and goes on in prose ("◷
+    /// **Native build**: Running", a blank line, then why): the status, and
+    /// the prose after it. The status then names the work row above the
+    /// reply. Mirrors the web's `splitLeadStatus`.
+    static func lead(of entry: TranscriptEntry) -> (update: ProgressUpdate, rest: String)? {
+        guard entry.isAssistant, entry.isReasoning != true, entry.isError != true else { return nil }
+        let text = entry.text.drop { $0.isWhitespace }
+        guard text.hasPrefix("✓ **") || text.hasPrefix("◷ **") else { return nil }
+        // The status, a blank line, then prose.
+        let lines = text.split(maxSplits: 2, omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+        guard lines.count == 3,
+              lines[1].allSatisfy(\.isWhitespace) else { return nil }
+        let prose = lines[2].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prose.isEmpty else { return nil }
+        var line = entry
+        line.content = String(lines[0])
+        line.contentLength = nil
+        line.contentClamped = nil
+        line.pastedTexts = nil
+        line.images = nil
+        line.videos = nil
+        line.files = nil
+        guard let update = ProgressUpdate(line) else { return nil }
+        return (update, prose)
+    }
+
     var topic: String
     var state: State
     var text: String
@@ -262,6 +288,10 @@ struct ProgressProjection: Equatable, Sendable {
             }
             if entry.isUser, entry.turnBoundary != true,
                entry.notice == nil || entry.notice?.kind == "review-handoff" {
+                active = nil
+            } else if entry.isUser, entry.turnBoundary != true, entry.notice?.triggerTitle != nil {
+                // An automated event (a GitHub notice, a worker's report) is
+                // a task of its own, so its status starts a fresh row.
                 active = nil
             }
             guard finals.contains(entry.id), let update = updates[entry.id] else { continue }
