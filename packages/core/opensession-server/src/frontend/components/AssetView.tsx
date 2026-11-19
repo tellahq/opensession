@@ -774,10 +774,11 @@ export function AssetPreview({
         ) : text === null ? (
           <div className="p-4 text-label text-faint">Loading…</div>
         ) : (
-          <div className="min-h-full bg-raised px-6 py-10 sm:px-12 sm:py-14">
+          <div className="@container min-h-full bg-raised px-6 py-10 sm:px-12 sm:py-14">
             <MarkdownBody
               className="markdown markdown-doc"
               html={renderMarkdown(text)}
+              wrapCode={false}
             />
           </div>
         )
