@@ -15,6 +15,7 @@ import {
   keptFrameInPanel,
   loadKeptFrame,
   preloadKeptFrame,
+  reloadKeptFrame,
   resetKeptFrames,
   showKeptFrame,
   showKeptFrameThumb,
@@ -181,4 +182,33 @@ test("a frame shown as a thumbnail is not evicted", () => {
     hideKeptFrame(`staging:${i}`, el);
   }
   expect(keys()).toContain("panel:s1");
+});
+
+test("a fresh deploy reloads the preview where the page stands", () => {
+  const url = "https://pr.example.test/";
+  showKeptFrame("panel:s1", spec(url), slot());
+  keptFrameLoaded("panel:s1", 1);
+  keptFrameNavigated("panel:s1", "https://pr.example.test/videos");
+
+  reloadKeptFrame("panel:s1", url);
+  const frame = getKeptFrame("panel:s1")!;
+  expect(frame.loading).toBe(true);
+  expect(frame.nonce).toBe(1);
+  expect(frame.address).toBe("https://pr.example.test/videos");
+
+  // A second caller while it loads does not load it again.
+  reloadKeptFrame("panel:s1", url);
+  expect(getKeptFrame("panel:s1")!.nonce).toBe(1);
+});
+
+test("a fresh deploy leaves other pages alone", () => {
+  showKeptFrame("panel:s1", spec("https://pr.example.test/"), slot());
+  keptFrameLoaded("panel:s1", 1);
+  loadKeptFrame("panel:s1", "https://elsewhere.example.test/");
+  keptFrameLoaded("panel:s1", 1);
+  reloadKeptFrame("panel:s1", "https://pr.example.test/");
+  expect(getKeptFrame("panel:s1")!.nonce).toBe(1);
+
+  reloadKeptFrame("panel:s2", "https://pr.example.test/");
+  expect(getKeptFrame("panel:s2")).toBeUndefined();
 });

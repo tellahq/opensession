@@ -659,8 +659,8 @@ export function MediaLightboxGallery({
     item.src.startsWith("data:") || item.src.startsWith("blob:")
       ? suggestedMediaName(item)
       : undefined;
-  // Desktop's actions: centred in the top bar over the picture they act on,
-  // so the bottom of the viewer is free for the description and filmstrip.
+  // Desktop's actions: centred in the top bar with the rest of the set, over
+  // the picture they act on, so the bottom is free for its description.
   const tool = (
     label: string,
     icon: React.ReactNode,
@@ -776,11 +776,11 @@ export function MediaLightboxGallery({
     </div>
   );
   // The other pictures in the set, the current one centred and full size.
-  // The phone keeps it above its actions; desktop has it under the picture.
+  // The phone keeps it above its actions; desktop has it in the top bar.
   const filmstrip = (
     <div
       ref={filmstripRef}
-      className="flex h-12 w-full max-w-2xl snap-x snap-mandatory items-center gap-1 overflow-x-auto px-[calc(50%_-_22px)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="flex h-12 w-full snap-x snap-mandatory items-center gap-1 overflow-x-auto px-[calc(50%_-_22px)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       role="group"
       aria-label="Media filmstrip"
     >
@@ -880,21 +880,18 @@ export function MediaLightboxGallery({
       >
         {/* Where it came from, quietly in the corner. What it shows is
             described under the picture itself. */}
-        <div className="flex min-w-0 items-baseline gap-2">
+        <div className="min-w-0">
           {!isPhone && caption && (
             <div className="min-w-0 truncate text-sm font-medium text-fg">
               {caption}
             </div>
           )}
-          {many && !isPhone && (
-            <span className="shrink-0 text-meta font-medium tabular-nums text-dim">
-              {index + 1} of {items.length}
-            </span>
-          )}
         </div>
-        {/* Over the picture's column rather than the window's middle: the
-            margin is the same shift the stage pays as padding. */}
+        {/* The rest of the set and what you can do with this one, over the
+            picture's column rather than the window's middle: the margin is
+            the same shift the stage pays as padding. */}
         <div
+          className="pointer-events-auto flex items-center gap-3"
           style={
             !isPhone
               ? {
@@ -904,6 +901,14 @@ export function MediaLightboxGallery({
               : undefined
           }
         >
+          {many && !isPhone && (
+            <div className="w-[min(360px,32vw)]">{filmstrip}</div>
+          )}
+          {many && !isPhone && (
+            <span className="text-meta font-medium tabular-nums text-dim">
+              {index + 1} of {items.length}
+            </span>
+          )}
           {!isPhone && tools}
         </div>
         <div className="flex min-w-0 items-center justify-self-end gap-2">
@@ -1286,7 +1291,7 @@ export function MediaLightboxGallery({
                 )}
               </div>
             )}
-            {commentHint ?? (many ? filmstrip : null)}
+            {commentHint}
           </div>
         </div>
       )}

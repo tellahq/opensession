@@ -254,6 +254,21 @@ export const WS_SUMMARY_FRAME_HOST =
   "pointer-events-none absolute bottom-2 left-2 z-[1] max-w-[calc(100%_-_16px)] truncate " +
   "rounded-full bg-black/55 px-2.5 py-1 text-meta font-medium text-white backdrop-blur-xl";
 
+/** A newer preview deploy is on its way, laid over the live page's top-right
+ *  corner in the host pill's dark glass. */
+export const WS_SUMMARY_FRAME_DEPLOYING =
+  "pointer-events-none absolute top-2 right-2 z-[1] inline-flex items-center gap-1.5 " +
+  "rounded-full bg-black/55 py-1 pr-2.5 pl-2 text-meta font-medium text-white backdrop-blur-xl";
+
+/** The badge's spinner, in the pill's white ink: the globe's amber is too
+ *  dark to read on the glass. base.css freezes animations under reduced
+ *  motion; a stopped spinner reads as hung, so it restates its own timing
+ *  like the globe's ring does. */
+export const WS_SUMMARY_FRAME_SPINNER =
+  "size-3 shrink-0 rounded-full border-[1.5px] border-white/25 border-t-white " +
+  "animate-[preview-spin_0.7s_linear_infinite] " +
+  "motion-reduce:[animation-duration:0.7s]! motion-reduce:[animation-iteration-count:infinite]!";
+
 /** A picture in the list, centred in the rail the glyphs use. A 16px tile
  *  inside a 20px slot, the same inset the sidebar gives its repo tiles: a
  *  filled image next to line art wants to sit a little smaller than the
