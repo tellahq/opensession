@@ -311,6 +311,30 @@ final class SessionViewModelTests: XCTestCase {
         XCTAssertEqual(noticed.notice?.tone, NoticeTone.warn.rawValue)
     }
 
+    /// The server's tone wins over the wording, and a detail line stays
+    /// behind the title rather than in it.
+    func testServerNoticeToneAndDetail() {
+        let viewModel = makeViewModel()
+        viewModel.handle(.transcriptInit(
+            sessionId: "bks-1",
+            entries: [entry("e1", "assistant", text: "Had a look")],
+            cursor: .empty
+        ))
+
+        viewModel.handle(.notice(
+            "Sandbox unavailable · prompt not run\nconnection refused",
+            tone: .error
+        ))
+
+        guard case .message(let noticed)? = viewModel.displayBlocks.last else {
+            return XCTFail("expected the notice to render as its own block")
+        }
+        XCTAssertEqual(noticed.notice?.title, "Sandbox unavailable · prompt not run")
+        XCTAssertEqual(noticed.notice?.tone, NoticeTone.error.rawValue)
+        XCTAssertEqual(noticed.notice?.body, "collapsed")
+        XCTAssertEqual(noticed.text, "connection refused")
+    }
+
     /// A socket dropping is not an event in the session's history, and it
     /// repeats on every reconnect — so it stays off the transcript.
     func testConnectionChurnStaysOutOfTheTranscript() {

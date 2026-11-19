@@ -1177,6 +1177,13 @@ export function modelLabel(model?: string | null): string {
   );
 }
 
+/** The short reason an automatic model fallback gives in its notice. */
+export function switchReasonLabel(reason?: string | null): string {
+  if (!reason || reason === "fell back") return "unavailable";
+  if (reason === "hit a transient engine error") return "had an error";
+  return reason;
+}
+
 // ── Context windows (for live context reporting) ────────────────────────────
 //
 // USD cost is returned by the engine on each completed provider message. Keep

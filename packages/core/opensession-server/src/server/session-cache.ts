@@ -5,6 +5,7 @@
  */
 
 import { registerMemoryProbe } from "./memory-probes";
+import { noticeText } from "@tellahq/opensession-protocol/notices";
 import {
   isSessionSpeed,
   sessionSpeed,
@@ -1679,11 +1680,12 @@ async function persistRunFailureNotice(
 ): Promise<void> {
   try {
     const m = await import("./transcript-persistence");
-    const line = m.transcriptLineRunnerNotice(
-      `${label}: ${message}`,
-      projectionId,
-      projectedAt,
-    );
+    // A short title, with the raw error behind its show toggle.
+    const line = m.transcriptLineRunnerNotice(noticeText(label, message), {
+      tone: "error",
+      id: projectionId,
+      timestamp: projectedAt,
+    });
     if (strict)
       await m.applyForwardedTranscriptStrict(
         sessionId,

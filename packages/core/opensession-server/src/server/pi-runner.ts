@@ -1287,7 +1287,11 @@ function persistEntries(
     const lines = entries
       .map((e) =>
         e.type === "system"
-          ? transcriptLineRunnerNotice(e.content, e.id, e.timestamp)
+          ? transcriptLineRunnerNotice(e.content, {
+              tone: e.noticeTone,
+              id: e.id,
+              timestamp: e.timestamp,
+            })
           : transcriptLineForEntry(e),
       )
       .filter((l): l is Record<string, unknown> => !!l);
@@ -3762,19 +3766,12 @@ async function* runPiAttempt(
         });
       }
       const calls = turnRepair.toolResults.length;
-      const notice = [
-        "The previous turn stopped unexpectedly.",
-        turnRepair.reply ? "Its unfinished reply is kept above." : "",
-        calls
-          ? `${calls === 1 ? "1 tool call" : `${calls} tool calls`} it was running ${calls === 1 ? "is" : "are"} marked as interrupted.`
-          : "",
-      ]
-        .filter(Boolean)
-        .join(" ");
+      const notice = "Previous turn interrupted";
       recovered.push({
         id: crypto.randomUUID(),
         type: "system",
         content: notice,
+        noticeTone: "warn",
         timestamp: nowIso(),
       });
       persistRunEntries(recovered);
@@ -3788,15 +3785,14 @@ async function* runPiAttempt(
       });
     }
     if (resumeMissNote) {
-      const notice =
-        "Pi couldn't resume the previous engine session. " +
-        "Continuing in a fresh one with the recent transcript.";
+      const notice = "Couldn't resume · continuing in a fresh session";
       push({ type: "runner_notice", text: notice });
       persistRunEntries([
         {
           id: crypto.randomUUID(),
           type: "system",
           content: notice,
+          noticeTone: "warn",
           timestamp: nowIso(),
         },
       ]);
@@ -4114,18 +4110,27 @@ async function* runPiAttempt(
                 maxAttempts: Number(r.maxAttempts) || 1,
                 retryAt: Date.now() + (Number(r.delayMs) || 0),
               });
-              const notice = `pi auto-retry ${r.attempt}/${r.maxAttempts} in ${Math.round(
-                (r.delayMs || 0) / 1000,
-              )}s — ${errText.slice(0, 300)}`;
-              push({ type: "runner_notice", text: notice });
-              persistRunEntries([
-                {
-                  id: crypto.randomUUID(),
-                  type: "system",
-                  content: notice,
-                  timestamp: nowIso(),
-                },
-              ]);
+              // The provider's own words go to the log, not the transcript:
+              // the live status already counts the attempts down, so one
+              // short line per streak is all a reader needs to explain it.
+              console.warn(
+                `[pi-runner] retry ${r.attempt}/${r.maxAttempts} in ${Math.round(
+                  (r.delayMs || 0) / 1000,
+                )}s: ${errText.slice(0, 300)}`,
+              );
+              if ((Number(r.attempt) || 1) === 1) {
+                const notice = "Model error · retrying";
+                push({ type: "runner_notice", text: notice });
+                persistRunEntries([
+                  {
+                    id: crypto.randomUUID(),
+                    type: "system",
+                    content: notice,
+                    noticeTone: "info",
+                    timestamp: nowIso(),
+                  },
+                ]);
+              }
             }
             break;
           }
@@ -4220,8 +4225,7 @@ async function* runPiAttempt(
           lastAssistantRenderableBlocks === 0
         ) {
           emptyFinishRetries++;
-          const notice =
-            "Model returned an empty response — asking it once more to finish its reply";
+          const notice = "Empty reply · asking again";
           push({ type: "runner_notice", text: notice });
           promptOutcome = null;
           void session
@@ -4268,11 +4272,8 @@ async function* runPiAttempt(
         {
           id: crypto.randomUUID(),
           type: "system",
-          content:
-            "The model ended this turn with an empty response (no text or tool calls)" +
-            (emptyFinishRetries > 0
-              ? " and an automatic retry produced nothing too. Send another message to continue."
-              : "."),
+          content: "Empty reply · send a message to continue",
+          noticeTone: "warn",
           timestamp: nowIso(),
         },
       ]);
