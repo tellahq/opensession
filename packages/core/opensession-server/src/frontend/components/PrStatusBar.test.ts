@@ -104,3 +104,40 @@ test("offers Merge instead of Pull when a behind PR has no conflicts", () => {
     ),
   ).toEqual({ key: "conflicts", label: "Merge conflicts", tone: "red" });
 });
+
+test("says a branch-protected PR is blocked instead of ready", () => {
+  const pr: PrDetails = {
+    number: 43,
+    title: "Held by a ruleset",
+    url: "https://github.com/acme/app/pull/43",
+    state: "OPEN",
+    isDraft: false,
+    baseRefName: "main",
+    headRefName: "feature",
+    additions: 1,
+    deletions: 0,
+    changedFiles: 1,
+    reviewDecision: "",
+    author: "octocat",
+    body: "",
+    checks: [],
+    mergeable: "MERGEABLE",
+    mergeStateStatus: "BLOCKED",
+  };
+
+  expect(deriveHeadline(pr, gitStatus())).toEqual({
+    key: "blocked",
+    label: "Blocked",
+    tone: "yellow",
+  });
+  expect(
+    deriveHeadline({ ...pr, reviewDecision: "REVIEW_REQUIRED" }, gitStatus())
+      .label,
+  ).toBe("Review required");
+  expect(
+    deriveHeadline(
+      { ...pr, autoMerge: { method: "squash", enabledBy: "octocat" } },
+      gitStatus(),
+    ),
+  ).toEqual({ key: "blocked", label: "Merges when ready", tone: "green" });
+});
