@@ -145,6 +145,15 @@
 .markdown.markdown-doc .md-code-wrap > pre {
   padding-right: var(--code-pad-right);
 }
+/* Code does not wrap in a document (lib/code-copy.ts starts these blocks
+   unwrapped), so a fence breaks out of the 680px prose measure, centred on
+   it, up to the width of the page (the @container in AssetView). A fence
+   nested in a list keeps the measure of its item. */
+.markdown.markdown-doc > .md-code-wrap {
+  --code-measure: max(100%, min(1040px, 100cqw));
+  width: var(--code-measure);
+  margin-inline-start: calc((100% - var(--code-measure)) / 2);
+}
 
 /* Tables hug their content inside a hairline frame, and still scroll
    sideways on a phone. */

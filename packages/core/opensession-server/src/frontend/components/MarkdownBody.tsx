@@ -126,6 +126,7 @@ export function MarkdownBody({
   enhance = true,
   markdown,
   pillWhenSingleLine = false,
+  wrapCode = true,
 }: {
   html: string;
   className?: string;
@@ -139,6 +140,9 @@ export function MarkdownBody({
   /** Mark the body `data-single-line` while it fits on one line, so a
    *  message bubble can round into a pill (lib/single-line-bubble.ts). */
   pillWhenSingleLine?: boolean;
+  /** Whether code fences start soft-wrapped. Each block's settings switch
+   *  still toggles it. */
+  wrapCode?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   // Read through a ref by the upgrade effect: callers build the context
@@ -313,8 +317,8 @@ export function MarkdownBody({
     if (!enhance) return;
     const el = ref.current;
     if (!el || !html.includes("<pre")) return;
-    decorateCodeBlocks(el);
-  }, [enhance, html, theme, visible]);
+    decorateCodeBlocks(el, { wrap: wrapCode });
+  }, [enhance, html, theme, visible, wrapCode]);
 
   useEffect(() => {
     if (!enhance) return;
