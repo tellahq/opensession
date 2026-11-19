@@ -20,6 +20,7 @@ import { EmptyState, InlineAlert } from "../../ui/state";
 import { AGENT_NAME } from "../../lib/brand";
 import { withQuotes, type Quote } from "../../lib/quotes";
 import { messageLink } from "../../lib/message-link";
+import { closeLightbox } from "../../lib/media-lightbox";
 import {
   fetchFileMentions,
   fetchMentionSuggestions,
@@ -1343,6 +1344,7 @@ export function SessionViewerMainRegion({
 
             <div
               ref={setViewerInput}
+              data-lightbox-composer-host=""
               className={cn(
                 VIEWER_INPUT,
                 // Moves with the transcript above it, or the composer would
@@ -1564,7 +1566,12 @@ export function SessionViewerMainRegion({
                       textareaRef: composerRef,
                     }}
                     actions={{
-                      onSend: handleSend,
+                      // Sent from beside an open image: close it so the
+                      // turn it starts is in view.
+                      onSend: (...args) => {
+                        closeLightbox();
+                        return handleSend(...args);
+                      },
                       onToggleCall: voiceAvailable ? voice.toggle : undefined,
                       onImagesChange: setImages,
                       onFilesChange: setFiles,

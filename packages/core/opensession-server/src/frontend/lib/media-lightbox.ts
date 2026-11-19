@@ -181,13 +181,26 @@ export function nextMediaLightboxId(): number {
   return nextLightboxId;
 }
 
+let hostClose: (() => void) | null = null;
+
 export function registerMediaLightboxHost(
   open: (request: LightboxRequest) => void,
+  close?: () => void,
 ): () => void {
   host = open;
+  hostClose = close ?? null;
   return () => {
-    if (host === open) host = null;
+    if (host === open) {
+      host = null;
+      hostClose = null;
+    }
   };
+}
+
+/** Close whatever the viewer is showing. A message sent from the input kept
+ *  beside it closes it, so the turn it starts is in view. */
+export function closeLightbox() {
+  hostClose?.();
 }
 
 export function openLightbox(
