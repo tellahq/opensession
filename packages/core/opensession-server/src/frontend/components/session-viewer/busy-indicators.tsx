@@ -179,7 +179,15 @@ function BusyWorking({
         </span>
       )}
       {since != null && (
-        <span aria-hidden="true" className="text-meta text-faint tabular-nums">
+        // On its own the time is the row, so it reads at label size; beside
+        // a compaction or retry label it matches that label's size.
+        <span
+          aria-hidden="true"
+          className={cn(
+            "text-faint tabular-nums",
+            status.label ? "text-meta" : "text-label",
+          )}
+        >
           {status.label ? `· ${status.elapsed}` : status.elapsed}
         </span>
       )}
