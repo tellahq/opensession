@@ -1252,7 +1252,7 @@ export function MediaLightboxGallery({
 
       {!isPhone && (
         <div
-          className="z-10 flex shrink-0 justify-center"
+          className="z-10 flex shrink-0 flex-col items-center gap-2"
           style={{
             ...columnPadding,
             // Rests just above the input, or on the window's edge without one.
@@ -1267,7 +1267,7 @@ export function MediaLightboxGallery({
           <div className="flex w-full max-w-2xl min-w-0 flex-col items-center gap-3">
             {/* What the picture shows, read straight under it. Before or
                 After names the picture too, so it leads the line. */}
-            {!commenting && (item.walkthroughLabel || description) && (
+            {(item.walkthroughLabel || description) && (
               <div className="flex max-w-full flex-col items-center gap-1.5 px-4 text-center">
                 {item.walkthroughLabel && (
                   <span
