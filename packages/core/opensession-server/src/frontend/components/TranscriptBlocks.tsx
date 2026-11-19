@@ -15,7 +15,11 @@ import { MessageBubble } from "./MessageBubble";
 import { ProgressStatusLine, ProgressStatusRow } from "./ProgressStatusRow";
 import {
   collectProgressUpdates,
+  foldStatuses,
+  parseProgressUpdate,
+  type FoldStatus,
   type ProgressGroup,
+  type ProgressUpdate,
 } from "../lib/progress-updates";
 import { agentMessageText } from "../lib/agent-message";
 import { NoteBubble } from "./NoteBubble";
@@ -917,14 +921,18 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
       .slice(lastReviewLoop + 1)
       .some((block) => reviewBlockRole(block).kind === "user-message");
 
-  const renderLoopChildren = (block: LoopBlock, isLive: boolean) =>
-    block.blocks.map((inner, innerIndex) => {
+  const renderLoopChildren = (block: LoopBlock, isLive: boolean) => {
+    const statuses = loopFoldStatuses(block.blocks, progressUpdates, isLive);
+    return block.blocks.map((inner, innerIndex) => {
       const innerKey = renderBlockKey(inner, innerIndex, turnMountScope);
+      const status =
+        inner.kind === "entry" ? statuses.get(inner.entry.id) : undefined;
       return (
         <React.Fragment key={innerKey}>
           {inner.kind === "turn" ? (
             <ReviewTurnSteps
               items={inner.items}
+              statuses={statuses}
               toolResults={toolResults}
               live={Boolean(isLive && innerIndex === block.blocks.length - 1)}
               owner={owner}
@@ -940,8 +948,8 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
               assets={inner.assets}
               onFork={onFork}
             />
-          ) : inner.kind === "entry" && progressUpdates.has(inner.entry.id) ? (
-            <ProgressStatusLine entry={inner.entry} />
+          ) : status !== undefined ? (
+            status && <ProgressStatusLine status={status} />
           ) : block.trigger && innerIndex === 0 && inner.kind === "entry" ? (
             // The row already names the event; open, the fold adds what it
             // said in full rather than its title a second time.
@@ -981,6 +989,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
         </React.Fragment>
       );
     });
+  };
 
   // A fold is live until a person speaks after it.
   const isLoopLive = (i: number) =>
@@ -1746,8 +1755,58 @@ function indexedItemEstimate(item: IndexedTimelineItem): number {
 
 /** Review work uses the same grouped step rows as a normal turn, without
  * introducing another outer worker disclosure inside the review loop. */
+/**
+ * Every status a loop's fold shows, by entry id. A turn's own narration
+ * counts too: the "✓ CI: All checks passed" an agent posts mid-turn closes
+ * the wait it reports on, where it used to stand as a full message bubble.
+ */
+function loopFoldStatuses(
+  blocks: RenderBlock[],
+  progressUpdates: ReadonlyMap<string, ProgressGroup | null>,
+  live: boolean,
+): Map<string, FoldStatus | null> {
+  const steps: Array<{
+    id: string;
+    at: string;
+    update: ProgressUpdate | null;
+  }> = [];
+  for (const inner of blocks) {
+    if (inner.kind === "turn") {
+      for (const entry of inner.items)
+        steps.push({
+          id: entry.id,
+          at: entry.timestamp,
+          update:
+            entry.type === "assistant" ? parseProgressUpdate(entry) : null,
+        });
+      continue;
+    }
+    const first = renderBlockEntries(inner)[0];
+    steps.push({
+      id: first?.id ?? "",
+      at: first?.timestamp ?? "",
+      update:
+        inner.kind === "entry" && progressUpdates.has(inner.entry.id)
+          ? parseProgressUpdate(inner.entry)
+          : null,
+    });
+  }
+  const byId = new Map<string, FoldStatus | null>();
+  // Most folds carry no status at all. Do not parse their timestamps.
+  if (!steps.some((step) => step.update)) return byId;
+  foldStatuses(
+    steps.map((step) => step.update),
+    (index) => Date.parse(steps[index]!.at),
+    live,
+  ).forEach((status, index) => {
+    if (status !== undefined) byId.set(steps[index]!.id, status);
+  });
+  return byId;
+}
+
 function ReviewTurnSteps({
   items,
+  statuses,
   toolResults,
   live,
   owner,
@@ -1755,6 +1814,8 @@ function ReviewTurnSteps({
   onOpenSubagent,
 }: {
   items: TranscriptEntry[];
+  /** The fold's status steps (`loopFoldStatuses`); null hides one. */
+  statuses: ReadonlyMap<string, FoldStatus | null>;
   toolResults: Map<string, TranscriptEntry>;
   live: boolean;
   owner?: string;
@@ -1767,9 +1828,14 @@ function ReviewTurnSteps({
   const sections: Array<
     | { kind: "tools"; items: TranscriptEntry[] }
     | { kind: "message"; entry: TranscriptEntry }
+    | { kind: "status"; id: string; status: FoldStatus }
   > = [];
   for (const entry of items) {
-    if (entry.type === "tool_use" && agentMessageText(entry) === null) {
+    const status = statuses.get(entry.id);
+    if (status !== undefined) {
+      // A folded update leaves no gap: the calls either side join one run.
+      if (status) sections.push({ kind: "status", id: entry.id, status });
+    } else if (entry.type === "tool_use" && agentMessageText(entry) === null) {
       const last = sections[sections.length - 1];
       if (last?.kind === "tools") last.items.push(entry);
       else sections.push({ kind: "tools", items: [entry] });
@@ -1779,7 +1845,9 @@ function ReviewTurnSteps({
   }
 
   return sections.map((section) =>
-    section.kind === "tools" ? (
+    section.kind === "status" ? (
+      <ProgressStatusLine key={section.id} status={section.status} />
+    ) : section.kind === "tools" ? (
       <ToolSection
         key={section.items[0].id}
         items={section.items}

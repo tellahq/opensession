@@ -426,4 +426,78 @@ final class ProgressUpdatesTests: XCTestCase {
         XCTAssertTrue(turn.isLive)
         XCTAssertEqual(turn.headerTitle, "Working")
     }
+
+    // MARK: - Status lines inside a work fold (web `foldStatuses`)
+
+    private func update(_ topic: String, _ state: ProgressUpdate.State, _ text: String) -> ProgressUpdate {
+        ProgressUpdate(topic: topic, state: state, text: text)
+    }
+
+    private func minutes(_ at: Double...) -> (Int) -> Date? {
+        { Date(timeIntervalSince1970: at[$0] * 60) }
+    }
+
+    func testFoldStatusNamesTheOutcomeALaterUpdateGave() {
+        let steps = FoldStatus.resolve(
+            [nil, update("CI", .running, "Running"), nil, update("CI", .done, "All checks passed")],
+            startedAt: minutes(0, 1, 5, 5),
+            isLive: false
+        )
+        XCTAssertEqual(steps, [nil, .shown(FoldStatus(text: "CI passed · 4m", isDone: true)), nil, .folded])
+    }
+
+    func testFoldStatusSaysHowLongItWaitedWhenNothingClosedIt() {
+        let steps = FoldStatus.resolve(
+            [update("CI", .running, "Running"), nil, update("Deployment", .running, "Running"), nil],
+            startedAt: minutes(0, 4, 6, 9),
+            isLive: false
+        )
+        XCTAssertEqual(steps, [
+            .shown(FoldStatus(text: "Waited for CI · 4m", isDone: false)),
+            nil,
+            .shown(FoldStatus(text: "Waited for deployment · 3m", isDone: false)),
+            nil,
+        ])
+    }
+
+    func testFoldStatusWaitsInThePresentTenseOnlyWhileNothingHasMovedOn() {
+        let updates = [nil, update("CI", .running, "Running"), nil]
+        XCTAssertEqual(
+            FoldStatus.resolve(
+                updates + [update("Deploy", .running, "Running")],
+                startedAt: minutes(0, 1, 3, 4),
+                isLive: true
+            )[1],
+            .shown(FoldStatus(text: "Waited for CI · 2m", isDone: false))
+        )
+        XCTAssertEqual(
+            FoldStatus.resolve(updates, startedAt: minutes(0, 1, 3), isLive: true)[1],
+            .shown(FoldStatus(text: "Waiting for CI", isDone: false))
+        )
+        XCTAssertEqual(
+            FoldStatus.resolve(updates, startedAt: minutes(0, 1, 3), isLive: false)[1],
+            .shown(FoldStatus(text: "Waited for CI · 2m", isDone: false))
+        )
+    }
+
+    func testFoldStatusKeepsTheAgentsOwnWordsBeyondABareState() {
+        let steps = FoldStatus.resolve(
+            [
+                update("Migration", .running, "3 of 12 tables"),
+                nil,
+                update("Deployment", .done, "Done"),
+                update("Release", .running, "Running"),
+                update("Release", .done, "v2.3 is live"),
+            ],
+            startedAt: minutes(0, 2, 3, 4, 6),
+            isLive: false
+        )
+        XCTAssertEqual(steps, [
+            .shown(FoldStatus(text: "Migration: 3 of 12 tables · 2m", isDone: false)),
+            nil,
+            .shown(FoldStatus(text: "Deployment done", isDone: true)),
+            .shown(FoldStatus(text: "Release: v2.3 is live · 2m", isDone: true)),
+            .folded,
+        ])
+    }
 }

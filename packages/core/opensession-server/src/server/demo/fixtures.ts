@@ -1685,6 +1685,12 @@ export function demoSessions(opts: {
         "✓ main CI · 4m12s",
         now - 8 * min + 5_000,
       ),
+      transcriptLineAssistantText(
+        "✓ **CI**: All checks passed",
+        "ship-ci-done",
+        iso(now - 8 * min + 15_000),
+        MODEL_FABLE,
+      ),
       ...tool(
         shipSid,
         4,
