@@ -80,7 +80,7 @@ export const VIEWER_TITLE =
  * stays selectable and copyable.
  */
 export const VIEWER_BRANCH =
-  "min-w-0 max-w-[420px] -translate-y-px select-text overflow-hidden whitespace-nowrap text-item-title " +
+  "min-w-0 max-w-[420px] select-text overflow-hidden whitespace-nowrap text-item-title " +
   "[-webkit-touch-callout:default] " +
   "[html.wco_&]:[-webkit-app-region:no-drag] [html.wco_&]:[app-region:no-drag] " +
   "[html.desktop-shell_&]:[-webkit-app-region:no-drag] [html.desktop-shell_&]:[app-region:no-drag]";
@@ -92,18 +92,18 @@ export const VIEWER_BRANCH =
  * precedes, since the name is what the bar is about.
  */
 export const VIEWER_CRUMB_UP =
-  "-mx-1.5 -my-[5px] h-7 max-w-[240px] shrink cursor-pointer overflow-hidden text-ellipsis rounded-md px-1.5 pb-0.5 leading-[26px] " +
+  "-mx-1.5 -my-[5px] h-7 max-w-[240px] shrink cursor-pointer overflow-hidden text-ellipsis rounded-md px-1.5 py-px leading-[26px] " +
   "text-label font-medium text-dim transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] " +
   "hover:bg-hover hover:text-fg";
 
 /**
  * Double-clickable to rename, hinted on hover without shifting the row. The
  * hover box matches the header's repo icon button (28px tall, same radius) so
- * the two read as a pair; the text sits a pixel high inside it, standing in for
- * VIEWER_BRANCH's translate, which would lift the box off the icon's.
+ * the two read as a pair. The line box is centred in it, so the cap height
+ * lines up with the icon's middle; lifting the text a pixel left it high.
  */
 export const VIEWER_BRANCH_EDITABLE =
-  "-mx-1.5 -my-[5px] h-7 translate-y-0 cursor-text rounded-md px-1.5 pb-0.5 leading-[26px] hover:bg-hover";
+  "-mx-1.5 -my-[5px] h-7 cursor-text rounded-md px-1.5 py-px leading-[26px] hover:bg-hover";
 
 /** Inline rename input, sized to sit in place of the name. */
 export const VIEWER_BRANCH_RENAME =
@@ -322,7 +322,13 @@ export const VIEWER_INPUT =
   // composer by hundreds of pixels. The painted wrapper keeps the solid tail of
   // the fade behind a compact 8px gap down to the keyboard.
   "phone:[body.kb-open_&]:fixed phone:[body.kb-open_&]:inset-x-0 phone:[body.kb-open_&]:bottom-0 " +
-  "phone:[body.kb-open_&]:pb-2";
+  "phone:[body.kb-open_&]:pb-2 " +
+  // An open media viewer keeps the input (Composer's root, with its queue
+  // flaps) above its scrim. Dropping this box's stacking context lets that
+  // one child out; the fade and the floating actions stay under the blur.
+  "[html[data-lightbox-composer]_&]:z-auto " +
+  "[html[data-lightbox-composer]_&>:has(.composer)]:relative " +
+  "[html[data-lightbox-composer]_&>:has(.composer)]:z-[11001]";
 
 /**
  * The step the transcript and the composer take while the workspace summary
