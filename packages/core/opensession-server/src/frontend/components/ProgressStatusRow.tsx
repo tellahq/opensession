@@ -86,10 +86,7 @@ export function ProgressStatusRow({
       {open && (
         <div className="mt-0.5 [&>*:last-child]:mb-0">
           {history.length > 0 && (
-            <ol
-              className="m-0 mb-2 list-none space-y-2 py-1 pr-2 text-dim"
-              aria-label="Earlier updates"
-            >
+            <ol className="m-0 mb-2 list-none p-0" aria-label="Earlier updates">
               {history.map((entry) => {
                 const update = parseProgressUpdate(entry)!;
                 // Same topic reads as a step of the latest; a different one
@@ -97,14 +94,11 @@ export function ProgressStatusRow({
                 const sameTopic =
                   update.topic.toLowerCase() === latest.topic.toLowerCase();
                 return (
-                  <li key={entry.id} className="flex items-start gap-2">
-                    <StatusIcon update={update} />
-                    <span className="min-w-0 break-words">
-                      {sameTopic
-                        ? update.text
-                        : `${update.topic}: ${update.text}`}
-                    </span>
-                  </li>
+                  <StatusStep key={entry.id} as="li" update={update}>
+                    {sameTopic
+                      ? update.text
+                      : `${update.topic}: ${update.text}`}
+                  </StatusStep>
                 );
               })}
             </ol>
@@ -116,18 +110,40 @@ export function ProgressStatusRow({
   );
 }
 
-/** A status message inside a work fold: the same line as an earlier update,
- * not a full message bubble. */
+/** A status message inside a work fold, drawn as one more step: the tool
+ * row's 22px glyph slot, type and pitch, so "CI: Running" between two runs of
+ * commands reads as part of the same list. */
 export function ProgressStatusLine({ entry }: { entry: TranscriptEntry }) {
   const update = parseProgressUpdate(entry);
   if (!update) return null;
   return (
-    <div className="mb-2 flex items-start gap-2 text-label leading-5 text-dim">
-      <StatusIcon update={update} />
-      <span className="min-w-0 break-words">
-        {update.topic}: {update.text}
-      </span>
-    </div>
+    <StatusStep update={update}>
+      {update.topic}: {update.text}
+    </StatusStep>
+  );
+}
+
+/** One status as a fold step. An open status row's earlier updates use it
+ * too, so the two lists keep one pitch. */
+function StatusStep({
+  update,
+  as: Row = "div",
+  children,
+}: {
+  update: ProgressUpdate;
+  as?: "div" | "li";
+  children: React.ReactNode;
+}) {
+  return (
+    <Row className="flex min-w-0 items-start gap-2 py-[3px] text-item-title leading-5 text-dim">
+      <StatusIcon
+        update={update}
+        className="size-[22px] justify-center text-faint"
+      />
+      {/* 1px each side centres a one-line status on the 22px glyph slot and
+          still lets a long one wrap under itself. */}
+      <span className="min-w-0 break-words py-px">{children}</span>
+    </Row>
   );
 }
 
