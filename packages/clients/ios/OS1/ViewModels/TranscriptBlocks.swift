@@ -124,6 +124,9 @@ struct ReviewLoop: Identifiable, Equatable {
     var settled: ReviewSettledOutcome?
     /// On a work fold: from the task's first work to its answer.
     var duration: TimeInterval?
+    /// On a work fold an automated event started (its first block): the
+    /// event's one-line name, which the row reads instead of "Worked".
+    var trigger: String?
 
     /// What the closed row says. A live loop is always working, whatever
     /// GitHub last reported about the PR.
@@ -1043,6 +1046,11 @@ enum TranscriptGrouping {
             }
             return false
         }
+        func triggerTitle(_ block: TranscriptBlock?) -> String? {
+            guard case .message(let entry)? = block, entry.isUser,
+                  entry.turnBoundary != true else { return nil }
+            return entry.notice?.triggerTitle
+        }
         var folded: [TranscriptBlock] = []
         var run: [TranscriptBlock] = []
         for (index, block) in blocks.enumerated() {
@@ -1051,10 +1059,21 @@ enum TranscriptGrouping {
             case .settled, .userMessage: inReview = false
             case .checkBack, .other: break
             }
+            // An automated event (a GitHub notice, a worker's report) opens a
+            // task of its own: the event, its work and any interim answers
+            // fold into one row named by the event, above the answer.
+            if !inReview, triggerTitle(block) != nil {
+                folded += run
+                run = [block]
+                continue
+            }
+            let trigger: String? = run.contains(where: { if case .work = $0 { true } else { false } })
+                ? triggerTitle(run.first)
+                : nil
             if case .message(let answer) = block, answer.isAssistant,
                !progress.contains(answer.id),
                !(live && index == blocks.count - 1),
-               run.contains(where: continuesTask),
+               trigger != nil || run.contains(where: continuesTask),
                !pickedBackUp(after: index) {
                 // A status's footer says nothing the fold does not.
                 let work = run.filter { inner in
@@ -1072,7 +1091,8 @@ enum TranscriptGrouping {
                     rounds: 0,
                     isLive: false,
                     blocks: work,
-                    duration: duration
+                    duration: duration,
+                    trigger: trigger
                 )))
                 folded.append(block)
                 run = []
