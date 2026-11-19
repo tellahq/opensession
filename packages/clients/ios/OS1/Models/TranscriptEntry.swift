@@ -233,6 +233,31 @@ struct EntryNotice: Decodable, Equatable, Sendable {
         let sessionId: String
     }
 
+    /// Notices delivered as a message that start work with no person behind
+    /// them: a GitHub event, a workflow result, a worker's report, a message
+    /// from another session. Mirrors the protocol's `automatedTriggerTitle`.
+    private static let triggerKinds: Set<String> = [
+        "system", "workflow", "worker-report", "session-notice",
+    ]
+
+    /// The event's one-line name for the row that folds it and its work
+    /// above the agent's answer ("PR #5682 now has merge conflicts with its
+    /// base branch · 10m"): its opening sentence, without the PR's quoted
+    /// title, which the session already names. Nil for any other notice.
+    var triggerTitle: String? {
+        guard Self.triggerKinds.contains(kind) else { return nil }
+        var text = title.replacingOccurrences(
+            of: #"^((?:PR|Issue) #\d+)\s+(?:“[^”]*”|"[^"]*")"#,
+            with: "$1",
+            options: .regularExpression
+        )
+        if let sentence = text.range(of: #"^.+?[.!?](?=\s)"#, options: .regularExpression) {
+            text = String(text[sentence])
+        }
+        text = text.replacingOccurrences(of: #"[\s.:]+$"#, with: "", options: .regularExpression)
+        return text.isEmpty ? title : text
+    }
+
     var showsBodyInline: Bool { body == "inline" }
     var isCollapsible: Bool { body == "collapsed" }
 

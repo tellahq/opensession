@@ -26,6 +26,7 @@ import {
 import { useFrameFocus } from "../hooks/useFrameFocus";
 import { useFrameLocation } from "../hooks/useFrameLocation";
 import { Button } from "../ui/button";
+import { cn } from "../ui/cn";
 import { Input } from "../ui/input";
 import { PageLoader } from "../ui/page-loader";
 import { BrowserAnnotationLayer } from "./BrowserAnnotationLayer";
@@ -314,6 +315,7 @@ function BrowserToolbar({
       <Button
         variant="ghost"
         size="md"
+        className="rounded-control"
         icon={<IconChevronLeft size={16} />}
         onClick={() => step(-1)}
         disabled={!canStep(-1)}
@@ -323,6 +325,7 @@ function BrowserToolbar({
       <Button
         variant="ghost"
         size="md"
+        className="rounded-control"
         icon={<IconChevronRight size={16} />}
         onClick={() => step(1)}
         disabled={!canStep(1)}
@@ -332,6 +335,7 @@ function BrowserToolbar({
       <Button
         variant="ghost"
         size="md"
+        className="rounded-control"
         icon={<IconRestore size={16} />}
         onClick={() => onLoad(address)}
         aria-label={`Reload ${name}`}
@@ -365,8 +369,14 @@ function BrowserToolbar({
       />
       {annotating !== undefined ? (
         <Button
-          variant={annotating ? "soft" : "ghost"}
+          variant="ghost"
           size="md"
+          // On reads as a light wash, not the soft plate: the toolbar already
+          // sits on a grey strip, where the soft fill went heavy.
+          className={cn(
+            "rounded-control",
+            annotating && "bg-hover text-fg hover:bg-pressed",
+          )}
           icon={<IconMessage size={16} />}
           onClick={() => onAnnotate?.(!annotating)}
           aria-pressed={annotating}
@@ -379,6 +389,7 @@ function BrowserToolbar({
       <Button
         variant="ghost"
         size="md"
+        className="rounded-control"
         icon={<IconArrowUpRight size={16} />}
         onClick={() => window.open(address, openWindowName, "noopener")}
         aria-label={`Open ${name} in a new browser tab`}

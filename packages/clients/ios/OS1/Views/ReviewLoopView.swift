@@ -68,9 +68,22 @@ struct ReviewLoopView: View {
     /// the transcript.
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 5) {
-            Text(headerText)
-                .font(.subheadline)
-                .multilineTextAlignment(.leading)
+            if let trigger = loop.trigger {
+                // The event's name gives way first; how long the work took
+                // stays whole beside it.
+                Text(trigger)
+                    .font(.subheadline)
+                    .lineLimit(1)
+                if !loop.detail.isEmpty {
+                    Text("· \(loop.detail)")
+                        .font(.subheadline)
+                        .fixedSize()
+                }
+            } else {
+                Text(headerText)
+                    .font(.subheadline)
+                    .multilineTextAlignment(.leading)
+            }
             chevron
             if loop.isLive {
                 ProgressView()
@@ -140,7 +153,7 @@ struct ReviewLoopView: View {
     }
 
     private var accessibilityLabel: String {
-        var parts = [titleText, loop.isLive ? "Working" : loop.detail]
+        var parts = [loop.trigger ?? titleText, loop.isLive ? "Working" : loop.detail]
         if let prNumber = loop.prNumber { parts.append("PR #\(prNumber)") }
         return parts.filter { !$0.isEmpty }.joined(separator: ", ")
     }
@@ -162,7 +175,16 @@ struct LoopWorkRows: View {
             // The settle notice stays: it is the loop's own last word, and the
             // verdict row below only exists while GitHub still has one. Wait
             // boundaries are structural, never a row.
-            if !isHandoff(block), !isTurnBoundary(block) {
+            if loop.trigger != nil, block.id == loop.blocks.first?.id,
+               case .message(let entry) = block {
+                // The header already names the event; open, the fold adds
+                // what it said in full rather than its title a second time.
+                Text(entry.text)
+                    .font(.footnote)
+                    .foregroundStyle(OS1VisualStyle.textDim)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if !isHandoff(block), !isTurnBoundary(block) {
                 row(for: block)
             }
         }

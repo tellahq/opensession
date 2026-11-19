@@ -1054,6 +1054,39 @@ function classifyDelivery(entry: TranscriptEntry): TranscriptEntry {
   return { ...entry, content: attribution.body, sender: attribution.name };
 }
 
+/** Notices delivered as a message that start work with no person behind
+ *  them: a GitHub event, a workflow result, a worker's report, a message from
+ *  another session. Scheduled check-backs and review handoffs have folds of
+ *  their own. */
+const TRIGGER_KINDS: ReadonlySet<NoticeKind> = new Set([
+  "system",
+  "workflow",
+  "worker-report",
+  "session-notice",
+]);
+
+/**
+ * The one-line name of the automated event that started a turn, for the row
+ * that folds the event and its work above the agent's answer
+ * ("PR #5682 now has merge conflicts with its base branch · 10m"), or null
+ * when the entry is not one. A PR's quoted title is dropped: the session
+ * already names its PR, and on a phone the title pushed the event off the line.
+ * The PR title goes first so a period inside it cannot end the sentence.
+ */
+export function automatedTriggerTitle(entry: TranscriptEntry): string | null {
+  if (entry.type !== "user" || entry.turnBoundary) return null;
+  const notice = classifyEntry(entry).notice;
+  if (!notice || !TRIGGER_KINDS.has(notice.kind)) return null;
+  // Its opening sentence: a short notice is its own title, and the rest
+  // ("… This session is assigned to handle it") is plumbing.
+  const title = notice.title.replace(
+    /^((?:PR|Issue) #\d+)\s+(?:“[^”]*”|"[^"]*")/,
+    "$1",
+  );
+  const sentence = title.match(/^.+?[.!?](?=\s)/)?.[0] ?? title;
+  return sentence.replace(/[\s.:]+$/, "") || notice.title;
+}
+
 /** Classify a batch; returns the same array when nothing needed tagging. */
 export function classifyEntries(entries: TranscriptEntry[]): TranscriptEntry[] {
   let changed = false;

@@ -662,15 +662,30 @@ export function EntryImages({
   images,
   sessionId,
   right,
+  above,
 }: {
   images?: string[];
   sessionId?: string;
   /** Attachments under a right-aligned bubble hug its edge. */
   right?: boolean;
+  /** The pictures a person sent sit over their bubble, like a phone's
+   *  messages app. One keeps its shape at a preview height; several shrink
+   *  to a row of square tiles (the native app's size) so a batch of
+   *  screenshots does not push the words a viewport down. The lightbox
+   *  still opens each one whole. */
+  above?: boolean;
 }) {
   if (!images || images.length === 0) return null;
+  const tiles = above && images.length > 1;
   return (
-    <div className={cn(msgMedia, right && "justify-end")}>
+    <div
+      className={cn(
+        msgMedia,
+        above && "mt-0 mb-1.5",
+        tiles && "gap-1.5",
+        right && "justify-end",
+      )}
+    >
       {images.map((raw, i) => {
         const src = resolveEntryImageSrc(raw, sessionId);
         return (
@@ -681,7 +696,17 @@ export function EntryImages({
             rel="noopener noreferrer"
             className="md-image-link"
           >
-            <img className="md-image" src={src} alt="" loading="lazy" />
+            {/* md-image is what opens the lightbox (MediaLightbox.tsx). */}
+            <img
+              className={cn(
+                "md-image",
+                above && "m-0 max-h-60",
+                tiles && "size-24 rounded-control object-cover",
+              )}
+              src={src}
+              alt=""
+              loading="lazy"
+            />
           </a>
         );
       })}
@@ -1030,13 +1055,13 @@ export const MessageBubble = function MessageBubble({
           {e.sender} · via Slack
           <MsgTime ts={e.timestamp} />
         </div>
+        <EntryImages images={e.images} sessionId={sessionId} right above />
         <ClampedBody
           className={cn(msgBubbleHuman, "markdown")}
           content={displayContent}
           entry={e}
           sessionId={sessionId}
         />
-        <EntryImages images={e.images} sessionId={sessionId} right />
         <EntryVideos videos={e.videos} right />
         <EntryFiles files={e.files} right />
         <EntryPastedTexts entry={e} sessionId={sessionId} right />
@@ -1120,6 +1145,7 @@ export const MessageBubble = function MessageBubble({
                   }
             }
           />
+          <EntryImages images={e.images} sessionId={sessionId} right above />
           {displayContent && (
             <ClampedBody
               // Only your own words wear the accent; a teammate's stay neutral.
@@ -1130,7 +1156,6 @@ export const MessageBubble = function MessageBubble({
               sessionId={sessionId}
             />
           )}
-          <EntryImages images={e.images} sessionId={sessionId} right />
           <EntryVideos videos={e.videos} right />
           <EntryFiles files={e.files} right />
           <EntryPastedTexts entry={e} sessionId={sessionId} right />

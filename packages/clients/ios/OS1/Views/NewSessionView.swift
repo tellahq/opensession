@@ -164,16 +164,13 @@ struct NewSessionView: View {
                 #if os(iOS)
                 ToolbarItem(placement: .principal) { repoChip }
 
-                // Both ends draw their own circle, so both hide the toolbar's
-                // glass: a capsule around the send disc read as a white ring on
-                // the black accent, and the ✕'s glass — white on a white sheet —
-                // was nearly invisible next to it. Hiding it on one side only
-                // also cost 4pt of symmetry: iOS insets a glass item and a bare
-                // one differently.
+                // Both ends are the system's own Liquid Glass buttons: the ✕
+                // takes the close role's glass circle and send takes the
+                // confirm role's prominent glass, tinted with the accent. iOS
+                // sizes and insets them as a pair, so neither needs a hand-drawn
+                // disc or an edge correction.
                 ToolbarItem(placement: .confirmationAction) { startButton }
-                    .sharedBackgroundVisibility(.hidden)
                 ToolbarItem(placement: .cancellationAction) { cancelButton }
-                    .sharedBackgroundVisibility(.hidden)
 
                 // Two native Liquid Glass groups: attachment and session
                 // options on the left, model and voice on the right. The
@@ -358,39 +355,23 @@ struct NewSessionView: View {
     }
 
     /// Starting a session is the same gesture as sending a message, so on iOS
-    /// it wears the composer's send disc rather than the word "Start", with the
+    /// it wears the composer's send arrow rather than the word "Start", with the
     /// ✕ that dismisses the sheet as its pair. The Mac keeps text buttons — a
     /// bare glyph in a sheet toolbar reads as unfinished there.
     @ViewBuilder
     private var startButton: some View {
         #if os(iOS)
-        Button { create() } label: {
-            Image(systemName: "arrow.up")
-                .font(.system(size: 15, weight: .semibold))
+        // The confirm role in a toolbar draws prominent Liquid Glass, tinted
+        // with the accent like the composer's send disc.
+        Button(role: .confirm) { create() } label: {
+            Label("Start session", systemImage: "arrow.up")
                 .foregroundStyle(
                     startDisabled ? OS1VisualStyle.textDim : OS1VisualStyle.onAccent
                 )
-                // 44pt, not the composer's 32: this disc replaces a toolbar
-                // item's own glass circle, and iOS draws that at 44 — the ✕
-                // across the bar measures exactly that. At 32 the pair read as
-                // two different kinds of control, and the primary action was
-                // the one below the tap-target floor.
-                .frame(width: 44, height: 44)
-                .background(
-                    startDisabled
-                        ? AnyShapeStyle(OS1VisualStyle.hover)
-                        : AnyShapeStyle(OS1VisualStyle.accent),
-                    in: Circle()
-                )
         }
-        .buttonStyle(.plain)
+        .tint(OS1VisualStyle.accent)
         .disabled(startDisabled)
-        // A bare toolbar item sits 20pt off the edge; the sheet's own column —
-        // the chips below, and the prompt under them — is 16. Pull both circles
-        // onto it so the header has one left and one right edge.
-        .padding(.trailing, -4)
         .keyboardShortcut(.return, modifiers: .command)
-        .accessibilityLabel("Start session")
         #else
         Button("Start") { create() }
             .keyboardShortcut(.return, modifiers: .command)
@@ -401,21 +382,14 @@ struct NewSessionView: View {
     @ViewBuilder
     private var cancelButton: some View {
         #if os(iOS)
-        // The send disc's twin: same 44pt circle, same glyph size, and the
-        // neutral fill the sheet's own chips wear. Only the role colour differs,
-        // so the bar reads as a pair — a bare glyph opposite a solid accent disc
-        // left the sheet lopsided.
-        Button { exitComposer() } label: {
-            Image(systemName: "xmark")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(OS1VisualStyle.text)
-                .frame(width: 44, height: 44)
-                .background(OS1VisualStyle.hover, in: Circle())
-        }
-        .buttonStyle(.plain)
-        .disabled(savingDraft)
-        .padding(.leading, -4)
-        .accessibilityLabel(savingDraft ? "Saving draft" : "Cancel")
+        // The close role draws the system ✕ in a Liquid Glass circle, the same
+        // control every iOS 26 sheet closes with.
+        Button(role: .close) { exitComposer() }
+            // The system ✕ otherwise takes the app's tint; a neutral glyph
+            // keeps the colour for the send button across the bar.
+            .tint(OS1VisualStyle.text)
+            .disabled(savingDraft)
+            .accessibilityLabel(savingDraft ? "Saving draft" : "Cancel")
         #else
         Button(savingDraft ? "Saving…" : "Cancel") { exitComposer() }
             .disabled(savingDraft)
