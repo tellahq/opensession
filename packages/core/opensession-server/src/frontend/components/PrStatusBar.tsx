@@ -337,11 +337,10 @@ function PrBarButton({
 			    `text-box` (Firefox) center the em box, which lands within a pixel
 			    of it.
 
-			    The half pixel on top is deliberate and is the only part chosen by
-			    eye: a word carries more mass under its cap band than over it, so
-			    the geometric center reads a touch high. It settles the label
-			    without going back to a nudge that has to carry the whole
-			    correction. An icon-only button has no label: an empty span would
+			    No nudge on top of that: a half pixel down was once added by eye,
+			    but measured, it left the word 0.6px under centre and beside a
+			    glyph that sits centred, so it read as low. An icon-only button
+			    has no label: an empty span would
 			    still take the flex gap and push the glyph off center. */}
       {children != null && (
         <motion.span
@@ -353,7 +352,7 @@ function PrBarButton({
           <AnimatePresence initial={false} mode="popLayout">
             <motion.span
               key={phase}
-              className="inline-block translate-y-[0.5px] [text-box:trim-both_cap_alphabetic]"
+              className="inline-block [text-box:trim-both_cap_alphabetic]"
               {...SWAP_MOTION}
             >
               {children}
