@@ -43,7 +43,7 @@ import {
   useCodeOrganizationSettings,
 } from "../hooks/useCodeDisplaySettings";
 import { errorMessage } from "../lib/error-message";
-import { DirectShipNotice, ShipActions } from "./ShipActions";
+import { DirectShipNotice } from "./ShipActions";
 
 interface Props {
   sessionId: string;
@@ -62,9 +62,6 @@ interface Props {
   /** Shown when Review can switch between its PR and live worktree diffs. */
   source?: "pull-request" | "worktree";
   onSourceChange?: (source: "pull-request" | "worktree") => void;
-  /** Show Ship and the repository's own buttons above the diff. Off where
-   *  a parent bar already carries them (Review's no-PR toolbar). */
-  showShipActions?: boolean;
   /** Bumped when the session's git state changes (pushes, PR events). */
   gitRefreshTick?: number;
   /** Open the shipped-change Slack composer for a direct ship. */
@@ -151,7 +148,6 @@ export function DiffPanel({
   showFileList = true,
   source,
   onSourceChange,
-  showShipActions = true,
   gitRefreshTick,
   onShareShipped,
 }: Props) {
@@ -594,14 +590,6 @@ export function DiffPanel({
       className={`@container flex min-h-0 flex-col ${multi ? "[--review-file-header-top:calc(var(--diff-panel-top,0px)+87px)] phone:[--review-file-header-top:calc(var(--diff-panel-top,0px)+97px)]" : "[--review-file-header-top:calc(var(--diff-panel-top,0px)+50px)]"}`}
       ref={panelRef}
     >
-      {showShipActions && toolbarTarget === undefined && (
-        <ShipActions
-          sessionId={sessionId}
-          canSend={canSend}
-          send={send}
-          refreshTick={shipRevision}
-        />
-      )}
       {multi && (
         <div className="sticky top-[var(--diff-panel-top,0px)] z-2 flex gap-1 overflow-x-auto border-b border-divider bg-panel-surface px-2.5 py-1.5">
           {changed.map((r, i) => {
