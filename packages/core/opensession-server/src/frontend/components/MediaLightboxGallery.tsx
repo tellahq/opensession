@@ -56,7 +56,7 @@ import {
 } from "../lib/media-lightbox-gallery";
 import { MediaLightboxViewer } from "./MediaLightboxViewer";
 import {
-  IconArrowDown,
+  IconDownload,
   IconArrowUp,
   IconArrowUpRight,
   IconCheck,
@@ -661,11 +661,11 @@ export function MediaLightboxGallery({
     item.src.startsWith("data:") || item.src.startsWith("blob:")
       ? suggestedMediaName(item)
       : undefined;
-  // Desktop's actions: on the right beside Close, so the top centre is
-  // the rest of the set. `text` gives one its name in words, not a tooltip.
+  // Desktop's actions: on the right beside Close. `text` gives one its name
+  // in words rather than a tooltip, and a null icon leaves it words only.
   const tool = (
     label: string,
-    icon: React.ReactNode,
+    icon: React.ReactNode | null,
     props: Omit<React.ComponentProps<typeof Button>, "icon" | "variant">,
     text?: string,
   ) =>
@@ -714,13 +714,7 @@ export function MediaLightboxGallery({
         <Menu.Root>
           <Menu.Trigger
             render={
-              <Button
-                variant="ghost"
-                icon={
-                  copiedAny ? <IconCheck size={20} /> : <IconCopy size={20} />
-                }
-                className={LIGHTBOX_TOOL_BASE_CLASS}
-              >
+              <Button variant="ghost" className={LIGHTBOX_TOOL_BASE_CLASS}>
                 {copiedAny ? "Copied" : "Copy"}
               </Button>
             }
@@ -739,7 +733,7 @@ export function MediaLightboxGallery({
       ) : canCopyImage ? (
         tool(
           copiedImage ? "Copied" : "Copy image",
-          copiedImage ? <IconCheck size={20} /> : <IconCopy size={20} />,
+          null,
           {
             onClick: copyImage,
             "aria-label": copiedImage ? "Image copied" : "Copy image",
@@ -749,7 +743,7 @@ export function MediaLightboxGallery({
       ) : canCopyLink ? (
         tool(
           copied ? "Copied" : "Copy link",
-          copied ? <IconCheck size={20} /> : <IconLink size={20} />,
+          null,
           {
             onClick: copyLink,
             "aria-label": copied ? "Link copied" : "Copy link",
@@ -758,16 +752,12 @@ export function MediaLightboxGallery({
         )
       ) : null}
       {nativeShare
-        ? tool(
-            saving ? "Preparing…" : "Download",
-            <IconArrowDown size={20} />,
-            {
-              onClick: saveItem,
-              disabled: saving,
-              "aria-label": saving ? "Preparing download" : "Download",
-            },
-          )
-        : tool("Download", <IconArrowDown size={20} />, {
+        ? tool(saving ? "Preparing…" : "Download", <IconDownload size={20} />, {
+            onClick: saveItem,
+            disabled: saving,
+            "aria-label": saving ? "Preparing download" : "Download",
+          })
+        : tool("Download", <IconDownload size={20} />, {
             "aria-label": "Download",
             render: (
               <a href={mediaDownloadHref(item)} download={downloadName} />
@@ -788,7 +778,7 @@ export function MediaLightboxGallery({
     </div>
   );
   // The other pictures in the set, the current one centred and full size.
-  // The phone keeps it above its actions; desktop has it in the top bar.
+  // The phone keeps it above its actions; desktop has it under the picture.
   const filmstrip = (
     <div
       ref={filmstripRef}
@@ -899,9 +889,9 @@ export function MediaLightboxGallery({
             </div>
           )}
         </div>
-        {/* The rest of the set, over the picture's column rather than the
-            window's middle: the margin is the same shift the stage pays as
-            padding. */}
+        {/* Where you are in the set, over the picture's column rather than
+            the window's middle: the margin is the same shift the stage pays
+            as padding. */}
         <div
           className="pointer-events-auto flex items-center gap-3"
           style={
@@ -913,9 +903,6 @@ export function MediaLightboxGallery({
               : undefined
           }
         >
-          {many && !isPhone && (
-            <div className="w-[min(360px,32vw)]">{filmstrip}</div>
-          )}
           {many && !isPhone && (
             <span className="text-meta font-medium tabular-nums text-dim">
               {index + 1} of {items.length}
@@ -1123,7 +1110,7 @@ export function MediaLightboxGallery({
                   className={phoneAction}
                   aria-label="Download"
                 >
-                  <IconArrowDown size={21} />
+                  <IconDownload size={21} />
                 </a>
               )}
             </div>
@@ -1303,7 +1290,11 @@ export function MediaLightboxGallery({
                 )}
               </div>
             )}
-            {commentHint}
+            {/* The rest of the set under that, the way a photo viewer's
+                filmstrip runs along the bottom. Comment mode borrows the
+                row for its one instruction. */}
+            {commentHint ??
+              (many && <div className="w-[min(480px,60vw)]">{filmstrip}</div>)}
           </div>
         </div>
       )}
