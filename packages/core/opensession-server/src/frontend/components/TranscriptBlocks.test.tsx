@@ -567,6 +567,23 @@ describe("TranscriptBlocks compact tool runs", () => {
     expect(html).toContain("The repository is clean.");
   });
 
+  test("leaves the duration to the Worked fold, not the answer's footer too", () => {
+    setTurnPrefs(null);
+    const footerDuration = /pl-1 text-meta font-medium[^>]*>[^<]+</;
+    const answer: TranscriptEntry = {
+      id: "answer",
+      type: "assistant",
+      content: "The repository is clean.",
+      timestamp: "2026-08-13T06:03:07Z",
+    };
+    const worked = renderToStaticMarkup(
+      <TranscriptBlocks entries={[...toolEntries, answer]} />,
+    );
+    expect(worked).toContain("Worked for");
+    expect(worked).toContain('aria-label="Copy message"');
+    expect(worked).not.toMatch(footerDuration);
+  });
+
   test("keeps a compaction between turns as its own line", () => {
     setTurnPrefs(null);
     const html = renderToStaticMarkup(

@@ -106,6 +106,10 @@ export function buildRunInstructions(input: {
     "## Finish your turns\nComplete promised actions, then briefly report the outcome and " +
       "relevant links. Lead with the outcome, not a work log. Routine success needs one line; " +
       "follow-ups report only what changed. Omit implementation narration and resolved local errors. " +
+      "Say what changed for the person in a sentence or two, not how it was built: do not restate " +
+      "the problem they reported, describe the old behavior, or walk through cases the visual " +
+      "proof already shows. No lead-ins like `Here's how it looks now`, no pointers to proof " +
+      "that renders anyway. " +
       "Keep meaningful blockers, uncertainty, verification limits and required decisions explicit. " +
       "Give detail when requested or needed to act. " +
       "For a routine progress-only reply, use exactly one Markdown line: " +

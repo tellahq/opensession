@@ -95,3 +95,11 @@ export function readDiagramSvg(markup: string): DiagramMedia | null {
 export function diagramDataUrl(svg: string): string {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
+
+/** The well a diagram is drawn on, so a copy pastes the way it looks here. */
+export function diagramCanvasColor(): string | undefined {
+  const color = getComputedStyle(document.documentElement)
+    .getPropertyValue("--diagram-canvas")
+    .trim();
+  return color || undefined;
+}

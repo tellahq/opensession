@@ -75,7 +75,8 @@ type RenderBlock =
   | {
       kind: "footer";
       entry: TranscriptEntry;
-      durationMs: number;
+      /** Null when a "Worked for …" fold above the answer already says it. */
+      durationMs: number | null;
       files: TouchedFile[];
       assets: string[];
     }
@@ -794,9 +795,14 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
       blocks.push({
         kind: "footer",
         entry: final,
+        // The fold above the answer reads "Worked for 25m"; a "25m" under the
+        // answer said it twice (or, once foldReportedTasks widens the fold to
+        // the whole task, gave a second, smaller number).
         durationMs:
-          new Date(final.timestamp).getTime() -
-          new Date(start.timestamp).getTime(),
+          work.length > 0
+            ? null
+            : new Date(final.timestamp).getTime() -
+              new Date(start.timestamp).getTime(),
         files: turnTouchedFiles(turn),
         assets: collectWrittenAssets(turn),
       });
