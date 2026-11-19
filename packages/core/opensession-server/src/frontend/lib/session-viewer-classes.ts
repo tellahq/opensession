@@ -362,6 +362,13 @@ export const VIEWER_ACTION_ROW =
 export const VIEWER_ACTION_ROW_WITH_SCROLL =
   "desktop:grid desktop:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]";
 
+/** The reading action is 32px against the chips' 28px, and it only appears
+ * once you scroll away from the end. Taking the difference back in margin
+ * keeps the row at the chips' height, so they stay put as it comes and goes
+ * instead of the centred row lifting them 2px on every scroll. The 2px it
+ * overhangs at each end stays inside SCROLL_ACTION_CLEARANCE. */
+export const SCROLL_ACTION_BESIDE_REPLIES = "-my-0.5";
+
 /**
  * The band the session's own offers hang in: the quick-reply chips and the
  * Next action (VIEWER_ACTION_ROW).
