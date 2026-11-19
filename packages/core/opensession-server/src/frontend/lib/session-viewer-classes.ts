@@ -322,7 +322,13 @@ export const VIEWER_INPUT =
   // composer by hundreds of pixels. The painted wrapper keeps the solid tail of
   // the fade behind a compact 8px gap down to the keyboard.
   "phone:[body.kb-open_&]:fixed phone:[body.kb-open_&]:inset-x-0 phone:[body.kb-open_&]:bottom-0 " +
-  "phone:[body.kb-open_&]:pb-2";
+  "phone:[body.kb-open_&]:pb-2 " +
+  // An open media viewer keeps the input (Composer's root, with its queue
+  // flaps) above its scrim. Dropping this box's stacking context lets that
+  // one child out; the fade and the floating actions stay under the blur.
+  "[html[data-lightbox-composer]_&]:z-auto " +
+  "[html[data-lightbox-composer]_&>:has(.composer)]:relative " +
+  "[html[data-lightbox-composer]_&>:has(.composer)]:z-[11001]";
 
 /**
  * The step the transcript and the composer take while the workspace summary
