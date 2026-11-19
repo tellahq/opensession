@@ -12,9 +12,6 @@ import {
 export const GALLERY_SELECTOR =
   "img.md-image, video.md-video, .md-compare > img, .md-mermaid > svg, .md-chart-canvas > svg";
 
-/** Apple's page control keeps a small moving window for long galleries. */
-export const MAX_VISIBLE_LIGHTBOX_DOTS = 7;
-
 /** The viewer frosts the page behind it in the page's own colour. Thin
  *  enough that the session still shows through, so the picture reads as
  *  lifted off the chat rather than opened on a blank page. */

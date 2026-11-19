@@ -27,6 +27,7 @@ import { useIsPhone } from "../hooks/useIsPhone";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { toast } from "../ui/toast";
+import { Tooltip } from "../ui/tooltip";
 import {
   anchoredCommentPosition,
   type ImageRegion,
@@ -51,7 +52,6 @@ import {
   LIGHTBOX_SCRIM_CLASS,
   LIGHTBOX_TOOL_CLASS,
   LIGHTBOX_TOOLBAR_CLASS,
-  MAX_VISIBLE_LIGHTBOX_DOTS,
 } from "../lib/media-lightbox-gallery";
 import { MediaLightboxViewer } from "./MediaLightboxViewer";
 import {
@@ -93,14 +93,6 @@ export function MediaLightboxGallery({
   const phoneBottomRef = useRef<HTMLDivElement>(null);
   const filmstripRef = useRef<HTMLDivElement>(null);
   const filmstripIndexRef = useRef(index);
-  const dotStart = Math.min(
-    Math.max(0, index - Math.floor(MAX_VISIBLE_LIGHTBOX_DOTS / 2)),
-    Math.max(0, items.length - MAX_VISIBLE_LIGHTBOX_DOTS),
-  );
-  const dotIndexes = Array.from(
-    { length: Math.min(items.length, MAX_VISIBLE_LIGHTBOX_DOTS) },
-    (_, offset) => dotStart + offset,
-  );
   const [imageZoomed, setImageZoomed] = useState(false);
   // Which file the copy receipt belongs to, so a page turn shows the fresh
   // "Copy link" for the item now on screen rather than a stale "Copied".
@@ -426,7 +418,6 @@ export function MediaLightboxGallery({
   // Swiping the main image and tapping a thumbnail keep the active still in
   // the middle of the strip. The first positioning is immediate.
   useEffect(() => {
-    if (!isPhone) return;
     const changed = filmstripIndexRef.current !== index;
     filmstripIndexRef.current = index;
     filmstripRef.current
@@ -658,102 +649,146 @@ export function MediaLightboxGallery({
     item.src.startsWith("data:") || item.src.startsWith("blob:")
       ? suggestedMediaName(item)
       : undefined;
+  // Desktop's actions: plain icons in the top bar beside Close, named by
+  // their tooltips, so the bottom of the viewer is free for the filmstrip.
+  const tool = (
+    label: string,
+    icon: React.ReactNode,
+    props: Omit<React.ComponentProps<typeof Button>, "icon" | "variant">,
+  ) => (
+    <Tooltip label={label} side="bottom">
+      <Button
+        variant="ghost"
+        icon={icon}
+        className="size-10 rounded-full text-fg/70 hover:text-fg aria-pressed:bg-hover aria-pressed:text-fg"
+        {...props}
+      />
+    </Tooltip>
+  );
   const tools = (
     <div
       role="group"
       aria-label="Media actions"
-      className={LIGHTBOX_TOOLBAR_CLASS}
+      className="pointer-events-auto flex items-center gap-0.5"
     >
-      {commentable && (
-        <Button
-          variant="ghost"
-          icon={<IconMessage size={20} />}
-          className={LIGHTBOX_TOOL_CLASS}
-          onClick={toggleComment}
-          aria-pressed={commenting}
-          aria-keyshortcuts="C"
-          aria-label={commenting ? "Cancel image comment" : "Comment on image"}
-        >
-          Comment
-        </Button>
-      )}
-      {item.kind !== "video" && (
-        <Button
-          variant="ghost"
-          icon={copiedImage ? <IconCheck size={20} /> : <IconCopy size={20} />}
-          className={LIGHTBOX_TOOL_CLASS}
-          onClick={copyImage}
-          aria-label={copiedImage ? "Image copied" : "Copy image"}
-        >
-          {copiedImage ? "Copied" : "Copy image"}
-        </Button>
-      )}
-      {nativeShare ? (
-        <Button
-          variant="ghost"
-          icon={<IconArrowDown size={20} />}
-          className={LIGHTBOX_TOOL_CLASS}
-          onClick={saveItem}
-          disabled={saving}
-          aria-label={saving ? "Preparing download" : "Download"}
-        >
-          {saving ? "Preparing…" : "Download"}
-        </Button>
-      ) : (
-        <Button
-          variant="ghost"
-          icon={<IconArrowDown size={20} />}
-          className={LIGHTBOX_TOOL_CLASS}
-          aria-label="Download"
-          render={<a href={mediaDownloadHref(item)} download={downloadName} />}
-        >
-          Download
-        </Button>
-      )}
-      {!item.src.startsWith("data:") && (
-        <>
-          {/* The file's own URL: what you paste into an upload, a ticket,
-              or a message to someone who can reach this instance. */}
-          <Button
-            variant="ghost"
-            icon={copied ? <IconCheck size={20} /> : <IconLink size={20} />}
-            className={LIGHTBOX_TOOL_CLASS}
-            aria-label={copied ? "Link copied" : "Copy link"}
-            onClick={() =>
+      {commentable &&
+        tool(
+          commenting ? "Cancel comment" : "Comment",
+          <IconMessage size={20} />,
+          {
+            onClick: toggleComment,
+            "aria-pressed": commenting,
+            "aria-keyshortcuts": "C",
+            "aria-label": commenting
+              ? "Cancel image comment"
+              : "Comment on image",
+          },
+        )}
+      {item.kind !== "video" &&
+        tool(
+          copiedImage ? "Copied" : "Copy image",
+          copiedImage ? <IconCheck size={20} /> : <IconCopy size={20} />,
+          {
+            onClick: copyImage,
+            "aria-label": copiedImage ? "Image copied" : "Copy image",
+          },
+        )}
+      {nativeShare
+        ? tool(
+            saving ? "Preparing…" : "Download",
+            <IconArrowDown size={20} />,
+            {
+              onClick: saveItem,
+              disabled: saving,
+              "aria-label": saving ? "Preparing download" : "Download",
+            },
+          )
+        : tool("Download", <IconArrowDown size={20} />, {
+            "aria-label": "Download",
+            render: (
+              <a href={mediaDownloadHref(item)} download={downloadName} />
+            ),
+          })}
+      {/* The file's own URL: what you paste into an upload, a ticket, or a
+          message to someone who can reach this instance. */}
+      {!item.src.startsWith("data:") &&
+        tool(
+          copied ? "Copied" : "Copy link",
+          copied ? <IconCheck size={20} /> : <IconLink size={20} />,
+          {
+            "aria-label": copied ? "Link copied" : "Copy link",
+            onClick: () =>
               copyToClipboard(shareableMediaSrc(item), () =>
                 setCopiedSrc(item.src),
-              )
-            }
-          >
-            {copied ? "Copied" : "Copy link"}
-          </Button>
-          {nativeShare ? (
-            <Button
-              variant="ghost"
-              icon={<IconArrowUpRight size={20} />}
-              className={LIGHTBOX_TOOL_CLASS}
-              onClick={openItem}
-              aria-label="Open or share"
-            >
-              Open or share
-            </Button>
-          ) : (
-            <Button
-              variant="ghost"
-              icon={<IconArrowUpRight size={20} />}
-              className={LIGHTBOX_TOOL_CLASS}
-              aria-label="Open"
-              render={
+              ),
+          },
+        )}
+      {!item.src.startsWith("data:") &&
+        (nativeShare
+          ? tool("Open or share", <IconArrowUpRight size={20} />, {
+              onClick: openItem,
+              "aria-label": "Open or share",
+            })
+          : tool("Open", <IconArrowUpRight size={20} />, {
+              "aria-label": "Open",
+              render: (
                 <a href={item.src} target="_blank" rel="noopener noreferrer" />
-              }
-            >
-              Open
-            </Button>
-          )}
-        </>
-      )}
+              ),
+            }))}
     </div>
   );
+  // The other pictures in the set, the current one centred and full size.
+  // The phone keeps it above its actions; desktop has it under the picture.
+  const filmstrip = (
+    <div
+      ref={filmstripRef}
+      className="flex h-12 w-full max-w-2xl snap-x snap-mandatory items-center gap-1 overflow-x-auto px-[calc(50%_-_22px)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      role="group"
+      aria-label="Media filmstrip"
+    >
+      {items.map((thumb, thumbIndex) => {
+        const active = thumbIndex === index;
+        return (
+          <button
+            key={`${thumb.src}-${thumbIndex}`}
+            type="button"
+            data-lightbox-thumb={thumbIndex}
+            className="grid size-11 shrink-0 snap-center place-items-center border-0 bg-transparent p-0"
+            onClick={() => go(thumbIndex)}
+            aria-label={`Show ${thumb.kind} ${thumbIndex + 1} of ${items.length}`}
+            aria-current={active ? "true" : undefined}
+          >
+            <span
+              className={cn(
+                "block overflow-hidden rounded-sm outline outline-1 outline-offset-1 transition-[width,height,opacity] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
+                active
+                  ? "h-11 w-11 opacity-100 outline-fg/85"
+                  : "h-9 w-7 opacity-60 outline-transparent hover:opacity-90",
+              )}
+            >
+              {thumb.kind === "video" ? (
+                <video
+                  src={thumb.src}
+                  muted
+                  playsInline
+                  preload="metadata"
+                  className="size-full object-cover"
+                />
+              ) : (
+                <img
+                  src={thumb.src}
+                  alt=""
+                  loading="lazy"
+                  className="size-full object-cover"
+                />
+              )}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+
   // Comment mode swaps the tools for its one instruction until a region is
   // drawn; the card beside the region takes over from there.
   const commentHint =
@@ -836,53 +871,23 @@ export function MediaLightboxGallery({
               {WALKTHROUGH_LABEL_TEXT[item.walkthroughLabel]}
             </span>
           )}
-          {many &&
-            !isPhone && (
-              // Dots provide direct jumps; the counter beside them gives the
-              // exact position without making the reader count circles.
-              <div className="flex items-center gap-1.5">
-                <div className="flex items-center">
-                  {dotIndexes.map((dot, position) => (
-                    <button
-                      key={`${dot}-${items[dot].src}`}
-                      type="button"
-                      onClick={() => go(dot)}
-                      aria-label={`Show ${dot + 1} of ${items.length}`}
-                      aria-current={dot === index ? "true" : undefined}
-                      className="group shrink-0 cursor-pointer border-0 bg-transparent p-1 leading-none"
-                    >
-                      <span
-                        className={cn(
-                          "block size-1.5 rounded-full transition-[scale,background-color]",
-                          ((position === 0 && dotStart > 0) ||
-                            (position === dotIndexes.length - 1 &&
-                              dotStart + dotIndexes.length < items.length)) &&
-                            "scale-[0.67]",
-                          dot === index
-                            ? "bg-fg"
-                            : "bg-fg/25 group-hover:bg-fg/50",
-                        )}
-                      />
-                    </button>
-                  ))}
-                </div>
-                <span className="text-meta font-medium tabular-nums text-dim">
-                  {index + 1} of {items.length}
-                </span>
-              </div>
-            )}
-        </div>
-        <Button
-          ref={closeRef}
-          variant="default"
-          icon={<IconX size={20} />}
-          className={cn(
-            LIGHTBOX_ROUND_BUTTON_CLASS,
-            "pointer-events-auto justify-self-end",
+          {many && !isPhone && (
+            <span className="text-meta font-medium tabular-nums text-dim">
+              {index + 1} of {items.length}
+            </span>
           )}
-          onClick={requestClose}
-          aria-label="Close"
-        />
+        </div>
+        <div className="flex min-w-0 items-center justify-self-end gap-2">
+          {!isPhone && tools}
+          <Button
+            ref={closeRef}
+            variant="default"
+            icon={<IconX size={20} />}
+            className={cn(LIGHTBOX_ROUND_BUTTON_CLASS, "pointer-events-auto")}
+            onClick={requestClose}
+            aria-label="Close"
+          />
+        </div>
       </div>
 
       <div
@@ -1052,55 +1057,7 @@ export function MediaLightboxGallery({
             </div>
           )}
 
-          {many && (
-            <div
-              ref={filmstripRef}
-              className="flex h-12 snap-x snap-mandatory items-center gap-1 overflow-x-auto px-[calc(50%_-_22px)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-              role="group"
-              aria-label="Media filmstrip"
-            >
-              {items.map((thumb, thumbIndex) => {
-                const active = thumbIndex === index;
-                return (
-                  <button
-                    key={`${thumb.src}-${thumbIndex}`}
-                    type="button"
-                    data-lightbox-thumb={thumbIndex}
-                    className="grid size-11 shrink-0 snap-center place-items-center border-0 bg-transparent p-0"
-                    onClick={() => go(thumbIndex)}
-                    aria-label={`Show ${thumb.kind} ${thumbIndex + 1} of ${items.length}`}
-                    aria-current={active ? "true" : undefined}
-                  >
-                    <span
-                      className={cn(
-                        "block overflow-hidden rounded-sm outline outline-1 outline-offset-1 transition-[width,height,opacity] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
-                        active
-                          ? "h-11 w-11 opacity-100 outline-fg/85"
-                          : "h-9 w-7 opacity-60 outline-transparent",
-                      )}
-                    >
-                      {thumb.kind === "video" ? (
-                        <video
-                          src={thumb.src}
-                          muted
-                          playsInline
-                          preload="metadata"
-                          className="size-full object-cover"
-                        />
-                      ) : (
-                        <img
-                          src={thumb.src}
-                          alt=""
-                          loading="lazy"
-                          className="size-full object-cover"
-                        />
-                      )}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          {many && filmstrip}
 
           <div className="grid grid-cols-3 items-center px-5">
             <div className="justify-self-start">
@@ -1279,7 +1236,7 @@ export function MediaLightboxGallery({
             if (e.target === e.currentTarget) requestClose();
           }}
         >
-          {commentHint ?? tools}
+          {commentHint ?? (many ? filmstrip : null)}
         </div>
       )}
     </motion.div>

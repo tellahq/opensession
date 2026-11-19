@@ -1397,7 +1397,6 @@ export function PrPanel({
                 sessionId={sessionId}
                 canSend={!!editGate}
                 send={send}
-                layout="inline"
               />
             )}
             {linkable && (
@@ -1437,7 +1436,6 @@ export function PrPanel({
                 canSend={!!send && !!editGate}
                 send={send ?? NOOP_SEND}
                 toolbarTarget={worktreeToolbarTarget}
-                showShipActions={false}
               />
             </div>
           ) : (
