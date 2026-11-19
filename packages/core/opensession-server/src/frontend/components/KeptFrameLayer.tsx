@@ -149,8 +149,12 @@ function KeptFrameBox({
       className={
         thumb
           ? // Above the card it sits in (its popup's z), and out of the
-            // pointer's way so a click lands on the tile under it.
-            "pointer-events-none absolute z-[2147483646] hidden bg-white"
+            // pointer's way so a click lands on the tile under it. An open
+            // media viewer drops the shell's stacking context to lift the
+            // composer, so the thumbnail steps just under the viewer (z
+            // 11000) or it would paint over the open image.
+            "pointer-events-none absolute z-[2147483646] hidden bg-white " +
+            "[html[data-lightbox-composer]_&]:z-[10999]"
           : panel
             ? "pointer-events-auto absolute hidden bg-white max-[920px]:z-30"
             : "pointer-events-auto absolute hidden bg-white"
