@@ -764,6 +764,10 @@ export function PrStatusBar({
           ? "text-green"
           : "text-faint";
   const checksLabel = `${checksSummary.total} check${checksSummary.total === 1 ? "" : "s"}`;
+  // "2 checks failed" and "3 checks pending…" already give the count that
+  // matters, so a total beside them would only say "checks" twice.
+  const headlineCountsChecks =
+    headline.key === "failing" || headline.key === "running";
 
   async function run<Result>(name: string, fn: () => Promise<Result>) {
     if (busy) return;
@@ -1040,7 +1044,7 @@ export function PrStatusBar({
             Resolve
           </PrBarButton>
         ) : null;
-      // "N checks pending…" / "Checks failed" IS the affordance: hovering the
+      // "N checks pending…" / "N checks failed" IS the affordance: hovering the
       // headline shows the checks, clicking it opens Review's Checks tab. A
       // View checks button beside it would be the same action twice.
       case "running":
@@ -1206,7 +1210,7 @@ export function PrStatusBar({
           <span className="min-w-0 truncate text-item-title text-fg">
             {headlineLabel}
           </span>
-          {checksPr && (
+          {checksPr && !headlineCountsChecks && (
             <span className={cn("shrink-0 text-meta", checksTone)}>
               {checksLabel}
             </span>

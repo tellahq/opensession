@@ -85,7 +85,11 @@ export function deriveHeadline(
       return { key: "conflicts", label: "Merge conflicts", tone: "red" };
     const checks = summarizeChecks(pr);
     if (checks.failed > 0)
-      return { key: "failing", label: "Checks failed", tone: "red" };
+      return {
+        key: "failing",
+        label: `${checks.failed} check${checks.failed === 1 ? "" : "s"} failed`,
+        tone: "red",
+      };
     if (checks.pending > 0)
       return {
         key: "running",
