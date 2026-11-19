@@ -35,7 +35,7 @@ type Viewer = {
   runnerId?: string;
   upstream?: WebSocket;
   /** Browser bytes sent before the upstream socket opened. */
-  queue: Uint8Array[];
+  queue: Uint8Array<ArrayBuffer>[];
 };
 const state = globalThis as {
   __opensessionVmDisplayViewers?: Map<string, Viewer>;
