@@ -598,7 +598,6 @@ describe("TranscriptBlocks compact tool runs", () => {
     expect(html).not.toMatch(WORKED_TITLE);
     expect(html).toContain("PR #5682 is conflict-free.");
 
-    // Opened, the event's full text leads the work, once.
     const open = renderToStaticMarkup(
       <TranscriptBlocks
         reviewLoopsOpen
@@ -614,9 +613,41 @@ describe("TranscriptBlocks compact tool runs", () => {
         ]}
       />,
     );
-    expect(open.match(/This session is assigned to handle it/g)).toHaveLength(
-      1,
+    // Opened, no instructions meant for the agent and no link to the PR
+    // the row already names.
+    expect(open).not.toContain("assigned to handle it");
+    expect(open).not.toContain("pull/5682");
+  });
+
+  test("an opened CI failure row lists each failed check as a short link", () => {
+    setTurnPrefs(null);
+    const open = renderToStaticMarkup(
+      <TranscriptBlocks
+        reviewLoopsOpen
+        entries={[
+          {
+            id: "ci",
+            type: "user",
+            content:
+              "[GitHub] CI failed on PR #563 at db9dba6729:\n- Secret scan (failure): https://github.com/acme/app/actions/runs/1\n\nThis session is assigned to handle it. Read the failing jobs' logs, fix the cause and push.",
+            timestamp: "2026-08-13T05:50:00Z",
+          },
+          ...toolEntries.slice(1),
+          {
+            id: "answer",
+            type: "assistant",
+            content: "The failure is not from this PR.",
+            timestamp: "2026-08-13T06:01:00Z",
+          },
+        ]}
+      />,
     );
+    expect(open).toContain(">CI failed on PR #563 at db9dba6729</span>");
+    expect(open).toContain(
+      'href="https://github.com/acme/app/actions/runs/1" target="_blank" rel="noopener">Secret scan · failure</a>',
+    );
+    expect(open).not.toContain("assigned to handle it");
+    expect(open.match(/>CI failed on PR #563/g)).toHaveLength(1);
   });
 
   test("an automated event answered with a status is one status row", () => {
@@ -648,9 +679,10 @@ describe("TranscriptBlocks compact tool runs", () => {
     const open = renderToStaticMarkup(
       <TranscriptBlocks reviewLoopsOpen entries={entries} />,
     );
-    expect(open.match(/This session is assigned to handle it/g)).toHaveLength(
-      1,
-    );
+    // Opened, no instructions meant for the agent and no link to the PR
+    // the row already names.
+    expect(open).not.toContain("assigned to handle it");
+    expect(open).not.toContain("pull/5682");
     expect(open).toContain("Ran 1 command, read 1 file");
   });
 

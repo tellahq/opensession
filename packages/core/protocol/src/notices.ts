@@ -1120,6 +1120,62 @@ export function automatedTriggerTitle(entry: TranscriptEntry): string | null {
   return sentence.replace(/[\s.:]+$/, "") || notice.title;
 }
 
+/** One line of what an automated event said beyond its title. */
+export interface TriggerDetailLine {
+  text: string;
+  url?: string;
+}
+
+/**
+ * What an automated event said beyond its title, for the folded row opened:
+ * short lines, never the title a second time or the instructions meant for
+ * the agent ("This session is assigned to handle it. Read the failing
+ * jobs' logs…"). A failed check reads "Secret scan · failure" linked to its
+ * run; a link to the PR or issue the title already names is dropped.
+ * Mirrored by the iOS app's `EntryNotice.triggerDetail`.
+ */
+export function automatedTriggerDetail(
+  entry: TranscriptEntry,
+): TriggerDetailLine[] {
+  const { content, notice } = classifyEntry(entry);
+  // A worker's report or another session's message is titled by its kind,
+  // so its text is the whole message.
+  if (notice?.kind === "worker-report" || notice?.kind === "session-notice")
+    return content.trim() ? [{ text: content.trim() }] : [];
+  const text = content
+    .replace(/^((?:PR|Issue) #\d+)\s+(?:“[^”]*”|"[^"]*")/, "$1")
+    // The opening sentence, or the whole first line when it has none.
+    .replace(/^[^\n]*?[.!?](?=\s)|^[^\n]*/, "")
+    .replace(/\bThis session is assigned to handle it\b[\s\S]*$/, "");
+  const lines: TriggerDetailLine[] = [];
+  for (const raw of text.split("\n")) {
+    const line = raw.trim().replace(/^[-*•]\s+/, "");
+    if (!line) continue;
+    if (/^https?:\/\/\S+$/.test(line)) {
+      if (
+        !/^https?:\/\/github\.com\/[^/]+\/[^/]+\/(?:pull|issues)\/\d+\/?$/.test(
+          line,
+        )
+      )
+        lines.push({
+          text: line.replace(/^https?:\/\/(?:www\.)?/, ""),
+          url: line,
+        });
+      continue;
+    }
+    const linked = line.match(/^(.+?):\s*(https?:\/\/\S+)$/);
+    if (linked) {
+      lines.push({
+        text: linked[1]!.replace(/\s*\(([^()]+)\)$/, " · $1"),
+        url: linked[2]!,
+      });
+      continue;
+    }
+    lines.push({ text: line });
+  }
+  return lines;
+}
+
 /** Classify a batch; returns the same array when nothing needed tagging. */
 export function classifyEntries(entries: TranscriptEntry[]): TranscriptEntry[] {
   let changed = false;
