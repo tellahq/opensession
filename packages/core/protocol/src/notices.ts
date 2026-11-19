@@ -37,15 +37,30 @@ import type { TranscriptEntry } from "./session";
 /**
  * How loudly a notice reads.
  *
- * These lines are free text on the wire — the `<runner-notice>` marker carries
- * no metadata, and the thousands already persisted never will — so the tone is
- * derived from the stable phrasings the writing call sites use. Anything
- * unrecognised stays neutral: a miss costs a grey pill where a red one
- * belonged, never a false alarm on a routine notice.
+ * The writer decides: a runner notice is persisted as
+ * `<runner-notice tone="error">`, and the live `notice` frame carries `tone`.
+ * Only lines without one (everything persisted before the attribute existed,
+ * and messages delivered as user turns) fall back to `noticeTone`, which reads
+ * the stable phrasings below. Anything unrecognised stays neutral: a miss
+ * costs a grey pill where a red one belonged, never a false alarm.
  */
 export type NoticeTone = "error" | "warn" | "info";
 
-/** The run is over and it did not do what was asked — a human has to act. */
+export function isNoticeTone(value: unknown): value is NoticeTone {
+  return value === "error" || value === "warn" || value === "info";
+}
+
+/**
+ * The text of a notice with a short title and an optional detail. The title is
+ * what the transcript shows; the detail (a raw provider error, say) sits
+ * behind the title's show toggle, so a reader is never handed it unasked.
+ */
+export function noticeText(title: string, detail?: string | null): string {
+  const more = detail?.trim();
+  return more && more !== title ? `${title}\n${more}` : title;
+}
+
+/** Legacy wording only: the run is over and it did not do what was asked. */
 const ERROR_PATTERNS: RegExp[] = [
   // run-session.ts, both terminal-failure choke points.
   /^run (failed|stopped):/,
@@ -60,7 +75,7 @@ const ERROR_PATTERNS: RegExp[] = [
   /^frontend rebuild failed\b/,
 ];
 
-/** Something went sideways, but the work continued — worth noticing, not alarming. */
+/** Legacy wording only: something went sideways, but the work continued. */
 const WARN_PATTERNS: RegExp[] = [
   /^sandbox unavailable\b/,
   /^couldn't\b/,
@@ -578,10 +593,10 @@ export function parseSessionNotice(
  * re-cached. Dropped below 1k, where "~0k" would say less than nothing.
  */
 export function cacheMissNotice(cacheCreationTokens?: number): string {
-  const head = "This turn re-uploaded the conversation";
+  const head = "Prompt cache missed";
   const tokens = cacheCreationTokens ?? 0;
   if (tokens < 1000) return head;
-  return `${head} · ~${Math.round(tokens / 1000)}k tokens re-cached`;
+  return `${head} · ~${Math.round(tokens / 1000)}k tokens re-sent`;
 }
 
 // ---------------------------------------------------------------------------
@@ -793,9 +808,13 @@ export function parseAskRecord(
  * branches that build one, so a runner notice, a GitHub event and a workflow
  * result cannot drift into three different readings of the same sentence.
  */
-function statusNotice(kind: NoticeKind, body: string): EntryNotice {
+function statusNotice(
+  kind: NoticeKind,
+  body: string,
+  writerTone?: NoticeTone,
+): EntryNotice {
   const title = statusTitle(body);
-  const tone = noticeTone(title);
+  const tone = writerTone ?? noticeTone(title);
   const icon = tone === "info" ? noticeIcon(title) : undefined;
   return {
     kind,
@@ -833,6 +852,15 @@ export function statusTitle(body: string): string {
     title = `${(space > 80 ? cut.slice(0, space) : cut).trimEnd()}…`;
   }
   return title || text.slice(0, STATUS_TITLE_MAX);
+}
+
+/** A notice whose title is its own first line (noticeText) shows only the
+ *  lines below it when opened, rather than the title twice. */
+function withoutTitleLine(content: string, notice: EntryNotice): string {
+  if (!notice.body) return content;
+  const nl = content.indexOf("\n");
+  if (nl === -1 || content.slice(0, nl).trim() !== notice.title) return content;
+  return content.slice(nl + 1).trim() || content;
 }
 
 /**
@@ -907,7 +935,12 @@ function classifyDelivery(entry: TranscriptEntry): TranscriptEntry {
     const parsed = entry.noticeKind && PARSED_NOTICES[entry.noticeKind];
     if (parsed) return { ...entry, notice: { tone: "info", ...parsed } };
     const content = stripNoticeGlyph(entry.content);
-    return { ...entry, content, notice: statusNotice("system", content) };
+    const notice = statusNotice(
+      "system",
+      content,
+      isNoticeTone(entry.noticeTone) ? entry.noticeTone : undefined,
+    );
+    return { ...entry, content: withoutTitleLine(content, notice), notice };
   }
 
   if (entry.type !== "user") return entry;

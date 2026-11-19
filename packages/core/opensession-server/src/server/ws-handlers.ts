@@ -1806,8 +1806,8 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
               JSON.stringify({
                 type: "notice",
                 sessionId,
-                message:
-                  "Could not steer that queued message right now. It is still queued.",
+                message: "Couldn't steer · still queued",
+                tone: "warn",
               }),
             );
           }
@@ -1821,8 +1821,8 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
               JSON.stringify({
                 type: "notice",
                 sessionId,
-                message:
-                  "Could not interrupt with that message right now. It is still queued.",
+                message: "Couldn't interrupt · still queued",
+                tone: "warn",
               }),
             );
           }
@@ -1874,8 +1874,8 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
                 try {
                   await appendTranscriptEntries(session.claudeSessionId, [
                     transcriptLineRunnerNotice(
-                      `Stopped by ${data.user || "someone"}.`,
-                      `stop-${msg.requestId}`,
+                      `Stopped by ${data.user || "someone"}`,
+                      { tone: "info", id: `stop-${msg.requestId}` },
                     ),
                   ]);
                 } catch {}
@@ -1884,7 +1884,8 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
             if (requeued > 0) {
               broadcastToSession(sessionId, {
                 type: "notice",
-                message: `Stopped — ${requeued} steered message${requeued === 1 ? "" : "s"} returned to the queue.`,
+                message: `Stopped · ${requeued} back in queue`,
+                tone: "info",
               });
             }
           }
