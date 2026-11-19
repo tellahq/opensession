@@ -63,6 +63,7 @@ import type {
 } from "../lib/types";
 import { toast } from "../ui/toast";
 import type { SessionSocketSend } from "./useSessionSocket";
+import { useReloadOnFreshDeploy } from "./useStagingDeploy";
 
 interface RuntimeControllerOptions {
   identity: {
@@ -462,6 +463,9 @@ export function useSessionRuntimeController({
     stagingPrUrl,
   ]);
   const stagingUrl = staging ? stagingHref(staging, session.previewPath) : null;
+  // A page open on the preview says "Deploying" while a newer deploy is on
+  // its way, and catches up once it lands.
+  useReloadOnFreshDeploy(session, gitRefreshTick);
   // The Preview environment pane is a top-strip view-tab now (App owns whether it's
   // foregrounded). Merging or closing the PR keeps its last preview, so the
   // tab stays open. Only when the PR has no preview at all (or the session

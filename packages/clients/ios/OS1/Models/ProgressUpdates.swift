@@ -102,6 +102,99 @@ struct ProgressUpdate: Equatable, Sendable {
     }
 }
 
+/// What a status line inside a work fold says. A fold reads after the fact,
+/// so "CI: Running" from ten minutes ago says the wrong thing: each wait
+/// becomes one step where it started, "CI passed · 4m" once a later `✓` of
+/// the same topic says how it went, "Waited for CI · 4m" when nothing did,
+/// "Waiting for CI" while the fold is live and no later status has moved on
+/// from it. Agent wording beyond a bare
+/// state word is kept. Mirrors the web's `foldStatuses`.
+struct FoldStatus: Equatable, Sendable {
+    var text: String
+    var isDone: Bool
+
+    enum Step: Equatable, Sendable {
+        case shown(FoldStatus)
+        /// A later update of a topic an earlier step already stands for.
+        case folded
+    }
+
+    /// One slot per fold step, nil where the step is not a status.
+    /// `startedAt` is only read around a status.
+    static func resolve(
+        _ updates: [ProgressUpdate?],
+        startedAt: (Int) -> Date?,
+        isLive: Bool
+    ) -> [Step?] {
+        var out = [Step?](repeating: nil, count: updates.count)
+        for i in updates.indices {
+            guard let first = updates[i], out[i] == nil else { continue }
+            let key = first.topic.lowercased()
+            var last = i
+            var close: Int? = first.state == .done ? i : nil
+            var j = i + 1
+            while close == nil, j < updates.count {
+                if let update = updates[j], update.topic.lowercased() == key {
+                    out[j] = .folded
+                    last = j
+                    if update.state == .done { close = j }
+                }
+                j += 1
+            }
+            if let close, let closing = updates[close] {
+                out[i] = .shown(FoldStatus(
+                    text: outcome(closing) + (close > i ? took(startedAt(i), startedAt(close)) : ""),
+                    isDone: true
+                ))
+                continue
+            }
+            guard let latest = updates[last] else { continue }
+            let bare = isBareRunning(latest.text)
+            let isCurrent = isLive && !updates[(last + 1)...].contains { $0 != nil }
+            let words = bare
+                ? "\(isCurrent ? "Waiting" : "Waited") for \(noun(first.topic))"
+                : latest.label
+            let hasNext = !isCurrent && last + 1 < updates.count
+            out[i] = .shown(FoldStatus(
+                text: words + (hasNext ? took(startedAt(i), startedAt(last + 1)) : ""),
+                isDone: false
+            ))
+        }
+        return out
+    }
+
+    private static func took(_ start: Date?, _ stop: Date?) -> String {
+        guard let start, let stop,
+              let label = TranscriptFormat.duration(stop.timeIntervalSince(start))
+        else { return "" }
+        return " · \(label)"
+    }
+
+    private static func isBareRunning(_ text: String) -> Bool {
+        text.wholeMatch(
+            of: #/(running|in progress|pending|queued|started|starting|waiting|building|deploying|underway)(\.{0,3}|…)/#.ignoresCase()
+        ) != nil
+    }
+
+    private static func outcome(_ update: ProgressUpdate) -> String {
+        let bare = update.text.wholeMatch(
+            of: #/(done|passed|green|complete|completed|finished|succeeded|success|successful|ok|(all )?(checks|tests) (passed|green))\.?/#.ignoresCase()
+        ) != nil
+        guard bare else { return update.label }
+        let checks = update.topic.firstMatch(
+            of: #/\b(ci|checks?|tests?|builds?|lint|typecheck|e2e)\b/#.ignoresCase()
+        ) != nil
+        return "\(update.topic) \(checks ? "passed" : "done")"
+    }
+
+    /// "Deployment" reads as a noun mid-sentence; "CI" and "PR #12" keep case.
+    private static func noun(_ topic: String) -> String {
+        let letters = Array(topic.prefix(2))
+        guard letters.count == 2, letters[0].isUppercase, letters[1].isLowercase else { return topic }
+        return letters[0].lowercased() + topic.dropFirst()
+    }
+}
+
 /// One status row: a task's newest update, and every update the row stands
 /// for, oldest first, whatever their topics. The last entry is the one shown.
 struct ProgressGroup: Equatable, Sendable {
