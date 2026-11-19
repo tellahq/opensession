@@ -1,5 +1,6 @@
 import { repoLabel } from "../lib/repo-label";
 import React, { useCallback, useEffect, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import type { PrDetails, WSClientMessage } from "../lib/types";
 import {
   deriveHeadline,
@@ -63,7 +64,10 @@ import {
 } from "../lib/workspace-summary-classes";
 import { Tooltip } from "../ui/tooltip";
 import { ContextMenu, Menu, MENU_ICON } from "../ui/menu";
-import { Spinner } from "../ui/spinner";
+import { TextShimmer } from "../ui/text-shimmer";
+import { duration, ease } from "../ui/motion";
+import { sendPrPrompt, usePromptPending } from "../lib/pr-prompt-pending";
+import { PixelSpinner } from "./PixelSpinner";
 import { Skeleton, SkeletonBar } from "../ui/state";
 import { cn } from "../ui/cn";
 import { useSessionPendingCreation } from "../hooks/useSessionPendingCreation";
@@ -104,6 +108,7 @@ import {
   IconCheck,
   IconPlus,
   IconArchive,
+  IconSparkle,
   IconChevronDown,
   IconWarningTriangle,
 } from "./icons";
@@ -189,7 +194,18 @@ interface Props {
   refreshTick?: number;
 }
 
-interface PrBarButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+// The button is a Motion element (its width glides between labels), so the
+// DOM drag and animation handlers, which Motion types differently, are not
+// part of its surface. No caller passes them.
+interface PrBarButtonProps extends Omit<
+  React.ButtonHTMLAttributes<HTMLButtonElement>,
+  | "onDrag"
+  | "onDragStart"
+  | "onDragEnd"
+  | "onAnimationStart"
+  | "onAnimationEnd"
+  | "onAnimationIteration"
+> {
   tone:
     | "green"
     | "purple"
@@ -200,23 +216,60 @@ interface PrBarButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement>
     | "purple-dashed"
     | "solid";
   icon?: React.ReactNode;
+  /** The session is carrying this action out: the glyph becomes the
+   *  generating wave and the label shimmers until the work is done. */
+  working?: boolean;
 }
+
+/** The label and glyph crossfade with a short rise, while the button's width
+ *  glides to the new label's (a Motion layout animation on the button), so
+ *  "Fix checks" turning into "Fixing…" reads as one control changing its mind
+ *  rather than a second button replacing it. */
+const SWAP_MOTION = {
+  initial: { opacity: 0, y: 5, filter: "blur(2px)" },
+  animate: { opacity: 1, y: 0, filter: "blur(0px)" },
+  // The old label clears out faster than the new one settles, so the two
+  // never sit on top of each other long enough to read as a smear.
+  exit: {
+    opacity: 0,
+    y: -5,
+    filter: "blur(2px)",
+    transition: { type: "tween", duration: duration.micro * 0.7, ease },
+  },
+  transition: { type: "tween", duration: duration.base, ease },
+} as const;
+const LAYOUT_TRANSITION = {
+  layout: { type: "spring", duration: duration.large, bounce: 0 },
+} as const;
 
 function PrBarButton({
   tone,
   icon,
+  working = false,
   className = "",
   children,
   ...props
 }: PrBarButtonProps) {
+  const glyph = working ? <PixelSpinner className="scale-[1.15]" /> : icon;
+  // The label crossfades and the width glides when the work starts or ends.
+  // Any other change of label (Merge to Merging…) is the same control, and
+  // the strip moving around it is not this button's to animate, so the layout
+  // animation runs on this and nothing else.
+  const phase = working ? "working" : "idle";
   const tones = {
     green:
       "bg-[var(--green)] border-[color-mix(in_srgb,var(--green)_78%,black)] text-white",
     purple:
       "bg-[var(--purple)] border-[color-mix(in_srgb,var(--purple)_78%,black)] text-white",
-    red: "bg-[var(--red)] border-[color-mix(in_srgb,var(--red)_78%,black)] text-white",
+    // The fix on a red band (Resolve, Fix checks). Like the card pill below,
+    // it takes no shadow: on the tinted band a grey shadow only smudges.
+    red: "bg-[var(--red)] border-[color-mix(in_srgb,var(--red)_78%,black)] text-white shadow-none",
+    // The fix for a review state (Address feedback): red ink on the
+    // card's own surface, so it reads as a clean cut-out of the tinted band
+    // rather than a second, darker tint of the same pink. The hairline is
+    // enough lift: a grey shadow on the pink band only reads as a smudge.
     "status-red":
-      "border-[color-mix(in_srgb,var(--red)_45%,transparent)] bg-[color-mix(in_srgb,var(--red)_12%,var(--control-surface))] text-red hover:bg-red-soft hover:brightness-100",
+      "border-line bg-popup text-red shadow-none hover:bg-[color-mix(in_srgb,var(--red)_6%,var(--popup-surface))] hover:brightness-100",
     "status-yellow":
       "border-[color-mix(in_srgb,var(--yellow)_35%,transparent)] bg-[color-mix(in_srgb,var(--yellow)_10%,var(--control-surface))] text-yellow hover:bg-[color-mix(in_srgb,var(--yellow)_16%,var(--control-surface))] hover:brightness-100",
     solid:
@@ -234,8 +287,11 @@ function PrBarButton({
       "border-dashed border-[color-mix(in_srgb,var(--purple)_45%,transparent)] bg-transparent text-purple shadow-none hover:bg-[color-mix(in_srgb,var(--purple)_10%,transparent)] hover:brightness-100",
   } as const;
   return (
-    <button
+    <motion.button
       type="button"
+      layout
+      layoutDependency={phase}
+      transition={LAYOUT_TRANSITION}
       className={cn(
         "inline-flex min-h-[30px] items-center justify-center gap-1.5 rounded-full border px-3 py-[5px] text-label leading-none font-semibold whitespace-nowrap smooth-shadow-sm transition-[background-color,border-color,color,filter,transform] duration-150 ease-in-out hover:brightness-[1.08] active:scale-[0.98] active:brightness-[0.98] focus-visible:outline-2 focus-visible:outline-[var(--accent-ink)] focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-60 disabled:shadow-none",
         tones[tone],
@@ -247,15 +303,32 @@ function PrBarButton({
         // and close the inner gap so the two read as one group rather than
         // two things. Icon-only callers override px themselves, so this
         // never lands on a lone glyph.
-        icon && "gap-1 pl-[6.5px]",
+        glyph && "gap-1 pl-[6.5px]",
+        // Pressed is still the state, not "unavailable": the wave and the
+        // shimmer say it is in hand, so it keeps its full colour.
+        working && "disabled:opacity-100",
         className,
       )}
+      aria-busy={working || undefined}
       {...props}
     >
-      {icon && (
-        <span className="inline-flex size-[18px] shrink-0 items-center justify-center [&_svg]:block [&_svg]:stroke-[1.7]">
-          {icon}
-        </span>
+      {glyph && (
+        <motion.span
+          layout
+          layoutDependency={phase}
+          transition={LAYOUT_TRANSITION}
+          className="relative inline-flex size-[18px] shrink-0 items-center justify-center [&_svg]:block [&_svg]:stroke-[1.7]"
+        >
+          <AnimatePresence initial={false} mode="popLayout">
+            <motion.span
+              key={phase}
+              className="inline-flex items-center justify-center"
+              {...SWAP_MOTION}
+            >
+              {glyph}
+            </motion.span>
+          </AnimatePresence>
+        </motion.span>
       )}
       {/* Centered on the cap band, not on the em box: `text-box` trims the
 			    line box down to cap height and baseline, so the flex centering
@@ -264,18 +337,30 @@ function PrBarButton({
 			    `text-box` (Firefox) center the em box, which lands within a pixel
 			    of it.
 
-			    The half pixel on top is deliberate and is the only part chosen by
-			    eye: a word carries more mass under its cap band than over it, so
-			    the geometric center reads a touch high. It settles the label
-			    without going back to a nudge that has to carry the whole
-			    correction. An icon-only button has no label: an empty span would
+			    No nudge on top of that: a half pixel down was once added by eye,
+			    but measured, it left the word 0.6px under centre and beside a
+			    glyph that sits centred, so it read as low. An icon-only button
+			    has no label: an empty span would
 			    still take the flex gap and push the glyph off center. */}
       {children != null && (
-        <span className="translate-y-[0.5px] [text-box:trim-both_cap_alphabetic]">
-          {children}
-        </span>
+        <motion.span
+          layout
+          layoutDependency={phase}
+          transition={LAYOUT_TRANSITION}
+          className="relative inline-flex"
+        >
+          <AnimatePresence initial={false} mode="popLayout">
+            <motion.span
+              key={phase}
+              className="inline-block [text-box:trim-both_cap_alphabetic]"
+              {...SWAP_MOTION}
+            >
+              {children}
+            </motion.span>
+          </AnimatePresence>
+        </motion.span>
       )}
-    </button>
+    </motion.button>
   );
 }
 
@@ -563,7 +648,6 @@ export function PrStatusBar({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isArchived, setIsArchived] = useState(!!archived);
-  const [prompted, setPrompted] = useState<string | null>(null);
   const [confirmForce, forceConfirmation] = useConfirm();
 
   useEffect(() => setIsArchived(!!archived), [archived]);
@@ -594,6 +678,14 @@ export function PrStatusBar({
   }, [refreshTick, load]);
 
   const headline = deriveHeadline(pr, git, prUnavailable);
+
+  // "Fixing…" lasts as long as the prompt the press sent: through the queue
+  // and its own turn (lib/pr-prompt-pending). Once the PR leaves the state the
+  // action was for, the strip has moved on whatever the session is doing.
+  const promptKey = `${sessionId}\u0000${pr?.url ?? targetRepo ?? ""}`;
+  const pendingPrompt = usePromptPending(promptKey);
+  const prompted =
+    pendingPrompt?.headline === headline.key ? pendingPrompt : undefined;
 
   // Everything except the primary branch's PR (which the headline covers):
   // attached repos, manual links, and PRs discovered through their body
@@ -686,6 +778,10 @@ export function PrStatusBar({
           ? "text-green"
           : "text-faint";
   const checksLabel = `${checksSummary.total} check${checksSummary.total === 1 ? "" : "s"}`;
+  // "2 checks failed" and "3 checks pending…" already give the count that
+  // matters, so a total beside them would only say "checks" twice.
+  const headlineCountsChecks =
+    headline.key === "failing" || headline.key === "running";
 
   async function run<Result>(name: string, fn: () => Promise<Result>) {
     if (busy) return;
@@ -810,9 +906,14 @@ export function PrStatusBar({
   // resolution needs judgment, not a button.
   function promptSession(label: string, content: string) {
     if (!send) return;
-    send({ type: "prompt", sessionId, user: getCurrentUser(), content });
-    setPrompted(label);
-    setTimeout(() => setPrompted(null), 6000);
+    sendPrPrompt(send, {
+      key: promptKey,
+      sessionId,
+      user: getCurrentUser(),
+      label,
+      headline: headline.key,
+      content,
+    });
   }
 
   // The strip is where this branch stands against the remote and the base: the
@@ -895,22 +996,37 @@ export function PrStatusBar({
       </>
     );
   }
+  // Fix checks leads with the sparkle, and "Fixing…" with the wave. Both
+  // reach nearer their box's edge than the glyph padding allows for, so on
+  // the card the label sat 1.6px left of centre, and on the header's even
+  // padding as far right. These pads leave equal room either side of the ink
+  // and keep the button's width.
+  const fixPad =
+    variant === "header" ? "pl-[13px] pr-[15px]" : "pl-[8px] pr-[10.5px]";
   function renderActionButton(): React.ReactNode {
     if (prompted) {
       const tone: PrBarButtonProps["tone"] =
-        headline.key === "conflicts"
+        headline.key === "conflicts" || headline.key === "failing"
           ? "red"
           : headline.key === "no-pr"
             ? "secondary"
             : "status-red";
       return (
         <PrBarButton
-          className={actionBtn}
+          className={cn(actionBtn, headline.key === "failing" && fixPad)}
           tone={tone}
-          icon={<Spinner size="sm" />}
+          working
           disabled
         >
-          {prompted}
+          <TextShimmer
+            className={
+              tone === "red"
+                ? "text-[color-mix(in_srgb,white_70%,var(--red))] [--text-shimmer-highlight:white]"
+                : "[--text-shimmer-highlight:var(--text)]"
+            }
+          >
+            {prompted.label}
+          </TextShimmer>
         </PrBarButton>
       );
     }
@@ -1034,7 +1150,7 @@ export function PrStatusBar({
             Resolve
           </PrBarButton>
         ) : null;
-      // "N checks pending…" / "Checks failed" IS the affordance: hovering the
+      // "N checks pending…" / "N checks failed" IS the affordance: hovering the
       // headline shows the checks, clicking it opens Review's Checks tab. A
       // View checks button beside it would be the same action twice.
       case "running":
@@ -1042,11 +1158,12 @@ export function PrStatusBar({
       case "failing":
         return send ? (
           <PrBarButton
-            className={actionBtn}
-            tone="status-red"
+            className={cn(actionBtn, fixPad)}
+            tone="red"
+            icon={<IconSparkle size={18} />}
             onClick={() =>
               promptSession(
-                "Fixing checks…",
+                "Fixing…",
                 `Investigate the failing checks on PR #${pr?.number}, fix the failures, run the relevant tests, commit the changes, and push them.`,
               )
             }
@@ -1284,7 +1401,7 @@ export function PrStatusBar({
           <span className="min-w-0 truncate text-item-title text-fg">
             {headlineLabel}
           </span>
-          {checksPr && (
+          {checksPr && !headlineCountsChecks && (
             <span className={cn("shrink-0 text-meta", checksTone)}>
               {checksLabel}
             </span>

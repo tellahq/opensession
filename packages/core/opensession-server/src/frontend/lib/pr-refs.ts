@@ -137,7 +137,7 @@ export function refAction(ref: SessionPrRef): {
     return {
       label: "Fix checks",
       pending: "Fixing…",
-      tone: "status-red",
+      tone: "red",
       prompt: `Investigate the failing checks on ${pr}, fix the failures on that branch, run the relevant tests, commit the changes, and push them.`,
     };
   if (ref.reviewDecision === "CHANGES_REQUESTED")

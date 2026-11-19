@@ -40,6 +40,7 @@ import type {
 import { otherTyping, type TypingPresence } from "../lib/typing";
 import type { LiveTurnStore } from "../lib/live-turn-store";
 import { toast } from "../ui/toast";
+import { observePromptFrame } from "../lib/pr-prompt-pending";
 import type { ReplySuggestion } from "../lib/reply-suggestions";
 import type {
   SessionSocketAddHandler,
@@ -255,6 +256,9 @@ export function useSessionViewerSubscription({
       if ("sessionId" in msg && msg.sessionId && msg.sessionId !== session.id) {
         return;
       }
+      // A PR action's "Fixing…" follows its own prompt through the queue and
+      // its turn. This viewer outlives the strips that show it.
+      observePromptFrame(session.id, msg);
       switch (msg.type) {
         case "workflow_update": {
           // Dynamic workflows: upsert the live run snapshot (already

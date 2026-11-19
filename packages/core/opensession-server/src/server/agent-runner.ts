@@ -1642,7 +1642,11 @@ export async function resumeInterruptedRuns(
   reposNoteFor?: (
     osSessionId: string,
   ) => string | undefined | Promise<string | undefined>,
-  onEvent?: (osSessionId: string, event: StreamEvent) => void | Promise<void>,
+  onEvent?: (
+    osSessionId: string,
+    event: StreamEvent,
+    run: ActiveRunRecord,
+  ) => void | Promise<void>,
   snapshotLocalHostRuns: ActiveRunRecord[] = [],
   deferRecovery?: (run: ActiveRunRecord) => boolean | Promise<boolean>,
 ): Promise<string[]> {
@@ -1659,7 +1663,7 @@ export async function resumeInterruptedRuns(
   ): Promise<void> => {
     if (!run.osSessionId) return;
     try {
-      await onEvent?.(run.osSessionId, event);
+      await onEvent?.(run.osSessionId, event, run);
     } catch (e) {
       console.error(
         `[runner] Recovered event observer failed for ${run.runKey}:`,
