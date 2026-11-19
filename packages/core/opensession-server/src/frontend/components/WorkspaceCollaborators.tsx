@@ -32,10 +32,7 @@ import { Menu, MENU_ICON } from "../ui/menu";
 import { IconChevronDown, IconChevronRight, IconPeople } from "./icons";
 import { UserAvatar } from "./UserAvatar";
 import { getCurrentUser, TEAM } from "./UserPicker";
-import {
-  WorkspaceSummaryAdd,
-  WorkspaceSummaryAddRow,
-} from "./WorkspaceSummaryAdd";
+import { WorkspaceSummaryAdd } from "./WorkspaceSummaryAdd";
 
 /**
  * Add/remove state for a workspace's collaborators, shared by the info
@@ -215,8 +212,8 @@ export function CollaboratorsSubmenu({
 /**
  * The same control in the header's summary card, in that card's row grammar:
  * a heading with a "+" that opens the picker, then one row per collaborator.
- * With nobody added yet it is a single add row, so the first collaborator can
- * be added from here even when you are the only one viewing.
+ * With nobody added yet the card shows nothing; the first collaborator is
+ * added from the header's ⋯ menu (CollaboratorsSubmenu).
  */
 export function WorkspaceSummaryCollaborators({
   state,
@@ -226,18 +223,7 @@ export function WorkspaceSummaryCollaborators({
   groupClass: string;
 }) {
   const { collaborators, error } = state;
-  const errorRow = error && (
-    <div className="px-4 py-1 text-meta font-medium text-red">{error}</div>
-  );
-  if (!collaborators.length)
-    return (
-      <div className={groupClass}>
-        <WorkspaceSummaryAddRow label="Collaborators" action="Add collaborator">
-          <CollaboratorMenuItems {...state} />
-        </WorkspaceSummaryAddRow>
-        {errorRow}
-      </div>
-    );
+  if (!collaborators.length) return null;
   return (
     <div className={groupClass}>
       <div className={cn(WS_SUMMARY_SECTION, "gap-2")}>
@@ -259,7 +245,9 @@ export function WorkspaceSummaryCollaborators({
           <span className={cn(WS_SUMMARY_STATE, "text-dim")}>added</span>
         </div>
       ))}
-      {errorRow}
+      {error && (
+        <div className="px-4 py-1 text-meta font-medium text-red">{error}</div>
+      )}
     </div>
   );
 }

@@ -115,13 +115,16 @@ test("adding a reviewer is a + on the Review heading", () => {
   expect(summarySource).toContain('reviewEmpty && "hidden"');
 });
 
-test("collaborators are added from the summary card and the ⋯ menu, not the presence pile", () => {
+test("collaborators are added from the ⋯ menu, and the summary card lists them once there are any", () => {
   expect(summarySource).toContain("<WorkspaceSummaryCollaborators");
   expect(collaboratorsSource).toContain(
     '<WorkspaceSummaryAdd label="Add collaborator">',
   );
-  // An empty section is one add row, so the first collaborator needs no pile.
-  expect(collaboratorsSource).toContain('action="Add collaborator"');
+  // With nobody added the card has no Collaborators row; the ⋯ menu adds one.
+  expect(collaboratorsSource).not.toContain('action="Add collaborator"');
+  expect(collaboratorsSource).toContain(
+    "if (!collaborators.length) return null;",
+  );
   expect(collaboratorsSource).not.toContain("export function HeaderPeople(");
   expect(collaboratorsSource).toContain(
     "export function CollaboratorsSubmenu(",
