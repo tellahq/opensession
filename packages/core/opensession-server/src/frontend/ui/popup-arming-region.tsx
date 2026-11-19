@@ -13,9 +13,10 @@ const FOCUSABLE =
  *
  * Arming re-renders the deferred triggers as Base UI triggers, which
  * remounts their elements. So it happens before anyone presses them: a
- * hovering mouse or pen with no button down, a keyboard focus (the focused
- * element is put back after the swap), or a click, after its handlers ran. A
- * touch arms on its click; until then a plain menu trigger opens its own menu.
+ * mouse or pen moving over the row with no button down, a keyboard focus
+ * (the focused element is put back after the swap), or a click, after its
+ * handlers ran. A touch arms on its click; until then a plain menu trigger
+ * opens its own menu.
  */
 export function PopupArmingRegion({
   className,
@@ -42,11 +43,19 @@ export function PopupArmingRegion({
     <div
       ref={ref}
       className={className}
-      onPointerEnter={
+      onPointerMove={
         armed
           ? undefined
           : (event) => {
-              if (event.pointerType !== "touch" && event.buttons === 0) arm();
+              // A move, not an enter: rows scrolling or growing under a
+              // resting cursor get pointerenter too, and arming each of them
+              // remounts its triggers mid-scroll.
+              if (
+                event.pointerType !== "touch" &&
+                event.buttons === 0 &&
+                (event.movementX !== 0 || event.movementY !== 0)
+              )
+                arm();
             }
       }
       onFocus={

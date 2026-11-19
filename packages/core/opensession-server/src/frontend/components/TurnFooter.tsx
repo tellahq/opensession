@@ -59,7 +59,8 @@ export const TURN_FOOTER_LIFT = "-mt-2.5";
 interface Props {
   /** The turn's final answer entry — copy copies its markdown, fork forks from it. */
   entry: TranscriptEntry;
-  durationMs: number;
+  /** Null when the work fold above the answer already shows it. */
+  durationMs: number | null;
   /** Where the caller puts the row. TURN_FOOTER_LIFT when nothing contains it. */
   className?: string;
   /** Files the turn's tool calls wrote, merged per path in first-touch order. */
@@ -99,7 +100,7 @@ export const TurnFooter = function TurnFooter({
     });
   };
 
-  const duration = formatDuration(durationMs);
+  const duration = durationMs === null ? null : formatDuration(durationMs);
 
   return (
     <div
