@@ -3,7 +3,10 @@ import { readFile } from "node:fs/promises";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import type { TranscriptEntry } from "./types";
-import type { AnsweredAskData } from "@tellahq/opensession-protocol/notices";
+import type {
+  AnsweredAskData,
+  NoticeTone,
+} from "@tellahq/opensession-protocol/notices";
 import type { ImageInput } from "./run-events";
 import { parseJsonlLinesWithMedia } from "./jsonl-parser";
 import { appendTranscriptEvents } from "./actor-transcript";
@@ -263,18 +266,25 @@ export function transcriptLineUser(
   };
 }
 
-/** Runner operational notice ("usage limit hit; switched account and
- *  retrying") as a durable transcript line. Rides a user-role line — the only
- *  role the runner can inject without claiming the model said something — with
- *  a harness marker the jsonl parser maps to a `system` entry (same pattern as
+/** Runner operational notice ("Run failed", "Model error · retrying") as a
+ *  durable transcript line. Rides a user-role line (the only role the runner
+ *  can inject without claiming the model said something) with a harness
+ *  marker the jsonl parser maps to a `system` entry (same pattern as
  *  `<task-notification>`), so it renders as a system chip instead of a user
  *  bubble and never confuses pending-bubble/steer reconciliation. */
 export function transcriptLineRunnerNotice(
   text: string,
-  id?: string,
-  ts?: string,
+  opts: { tone?: NoticeTone; id?: string; timestamp?: string } = {},
 ): JsonlLine {
-  return transcriptLineUser(`<runner-notice>${text}</runner-notice>`, id, ts);
+  // The tone rides the marker so the reader never guesses it from the words.
+  const open = opts.tone
+    ? `<runner-notice tone="${opts.tone}">`
+    : "<runner-notice>";
+  return transcriptLineUser(
+    `${open}${text}</runner-notice>`,
+    opts.id,
+    opts.timestamp,
+  );
 }
 
 /** Engine context-compaction summary (engine compaction: a synthetic user

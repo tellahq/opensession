@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { TranscriptEntry, UnifiedSession } from "../../lib/types";
-import { switchDividerText } from "./model-labels";
+import { switchDividerText, switchDividerTone } from "./model-labels";
 import { withModelSwitches } from "./model-switches";
 
 const history = (
@@ -69,5 +69,25 @@ describe("withModelSwitches", () => {
 
     expect(merged[0]?.id).toBe("model-switch-2026-08-31T13:59:00.000Z");
     expect(merged[0]?.timestamp).toBe("2026-08-31T13:59:00.000Z");
+  });
+});
+
+describe("switchDividerText", () => {
+  test("shortens an automatic fallback and marks it as a heads-up", () => {
+    const by = "auto-switch — GPT-5.6 hit a transient engine error";
+    expect(switchDividerText("claude-fable-5-2", "gpt-5.6-sol", by)).toBe(
+      "Switched GPT-5.6 → " +
+        switchDividerText("claude-fable-5-2").replace("Switched to ", "") +
+        " · model error",
+    );
+    expect(switchDividerTone(by)).toBe("warn");
+  });
+
+  test("the return to the original pick stays neutral", () => {
+    const by = "auto-retry — checking the original selection again";
+    expect(switchDividerText("claude-fable-5-2", "gpt-5.6-sol", by)).toEndWith(
+      " · back to your pick",
+    );
+    expect(switchDividerTone(by)).toBeUndefined();
   });
 });

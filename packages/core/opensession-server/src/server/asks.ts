@@ -8,7 +8,7 @@
 
 import { rm } from "fs/promises";
 import { readTextIfExists } from "./shared/async-fs";
-import { personaName, productName } from "./config";
+import { personaName } from "./config";
 import {
   awaitBlockingAnswer,
   cancelAsk,
@@ -1023,7 +1023,8 @@ async function escalateAskToSlack(
     });
     broadcastToSession(sessionId, {
       type: "notice",
-      message: `No answer in ${productName()} — asked ${person.name} over Slack.`,
+      message: `No answer here · asked ${person.name} on Slack`,
+      tone: "info",
     });
     return { askId: ask.id, personName: person.name };
   } catch (e) {
