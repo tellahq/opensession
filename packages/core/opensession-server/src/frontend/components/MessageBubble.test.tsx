@@ -3,7 +3,46 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import "./TranscriptBlocks.test-setup";
 
-const { ClampedBody } = await import("./MessageBubble");
+const { ClampedBody, MessageBubble } = await import("./MessageBubble");
+
+describe("images a person sends", () => {
+  const entry = (images: string[]) => ({
+    id: "u1",
+    type: "user" as const,
+    timestamp: "2026-09-14T00:00:00.000Z",
+    content: "cool",
+    images,
+  });
+
+  test("sit above the bubble as square tiles when there are several", () => {
+    const html = renderToStaticMarkup(
+      <MessageBubble
+        entry={entry([
+          "https://example.test/a.png",
+          "https://example.test/b.png",
+        ])}
+        sessionId="session"
+      />,
+    );
+    expect(html.indexOf("example.test/a.png")).toBeLessThan(
+      html.indexOf("cool"),
+    );
+    expect(html.match(/size-24/g)).toHaveLength(2);
+  });
+
+  test("keep one picture at its own shape, still above the words", () => {
+    const html = renderToStaticMarkup(
+      <MessageBubble
+        entry={entry(["https://example.test/a.png"])}
+        sessionId="session"
+      />,
+    );
+    expect(html.indexOf("example.test/a.png")).toBeLessThan(
+      html.indexOf("cool"),
+    );
+    expect(html).not.toContain("size-24");
+  });
+});
 
 describe("message expander threshold", () => {
   test.each([24_000, 24_001, 29_999])(
