@@ -5,6 +5,7 @@ import {
   assetPathForMediaSrc,
   assetPreviewKind,
   formatAssetSize,
+  groupAssetsByFolder,
   isVisualAsset,
   resolvedAssetPath,
 } from "./asset-preview";
@@ -104,5 +105,23 @@ describe("asset previews", () => {
     ).toBeNull();
     expect(assetPathForMediaSrc("", paths)).toBeNull();
     expect(assetPathForMediaSrc("blob:whatever", paths)).toBeNull();
+  });
+
+  test("groups files under folder captions, top-level first", () => {
+    const file = (path: string) => ({ path, size: 1, mtime: "" });
+    const groups = groupAssetsByFolder([
+      file("screens/b.png"),
+      file("v10.html"),
+      file("data/summary.json"),
+      file("v2.html"),
+      file("screens/a.png"),
+      file("data/raw/x.csv"),
+    ]);
+    expect(groups.map((g) => [g.folder, g.files.map((f) => f.path)])).toEqual([
+      [null, ["v2.html", "v10.html"]],
+      ["data", ["data/summary.json"]],
+      ["data/raw", ["data/raw/x.csv"]],
+      ["screens", ["screens/a.png", "screens/b.png"]],
+    ]);
   });
 });

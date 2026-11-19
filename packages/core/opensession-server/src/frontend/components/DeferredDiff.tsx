@@ -10,7 +10,6 @@ import { deferredExport } from "./deferred";
  */
 const renderers = () => import("./diff-renderers");
 
-export const AssetsTree = deferredExport(renderers, "AssetsTree");
 export const CommentableDiff = deferredExport(renderers, "CommentableDiff");
 export const PatchDiffs = deferredExport(renderers, "PatchDiffs");
 export const PatchFileDiff = deferredExport(renderers, "PatchFileDiff");
