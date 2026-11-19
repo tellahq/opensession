@@ -1398,7 +1398,7 @@ export async function mergePr(
         ).then((r) => ("error" in r ? r : { ...r, landed: true }));
       // Drop cached PR/diff so the UI reflects the change on the next poll.
       cache.delete(cacheKey(repo, branch));
-      if ("error" in result) return result;
+      if ("error" in result) return { error: shortMergeError(result.error) };
       const merged = mode === "now" || mode === "admin" || !!result.landed;
       if (merged) diffCache.delete(cacheKey(repo, branch));
       return {
@@ -1420,6 +1420,30 @@ export function parseAutoMerge(raw: any): PrAutoMerge | null {
     enabledBy: raw.enabledBy?.login || "",
     enabledAt: raw.enabledAt || undefined,
   };
+}
+
+/**
+ * gh's merge refusal, cut down to what a person reads in a status card. gh
+ * writes a paragraph of CLI advice (`--auto`, `--admin`) after the reason;
+ * the UI offers those as buttons, so the advice goes and the common reasons
+ * get one short sentence each.
+ */
+export function shortMergeError(raw: string): string {
+  const text = raw
+    .replace(/^\s*[X✗!]\s+/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (/base branch policy prohibits the merge/i.test(text))
+    return "Branch protection is blocking the merge.";
+  if (/merge commit cannot be cleanly created/i.test(text))
+    return "The branch has merge conflicts.";
+  if (/not up to date with the base branch/i.test(text))
+    return "The branch is behind its base.";
+  const kept = text
+    .split(/(?<=\.)\s+/)
+    .filter((sentence) => !/`--[a-z-]+`/.test(sentence))
+    .join(" ");
+  return (kept || text).slice(0, 300);
 }
 
 /** The `gh pr merge` argv for one merge request. */

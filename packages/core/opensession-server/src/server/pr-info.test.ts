@@ -9,6 +9,7 @@ import {
   knownPrNumberForBranch,
   latestWorkflowChecks,
   mergePrArgs,
+  shortMergeError,
   notePrNumberForBranch,
   parseAutoMerge,
   parsePrFileLines,
@@ -259,6 +260,27 @@ describe("parsePrFileLines", () => {
       { path: "a.rs", additions: 3, deletions: 1 },
       { path: "b/c.rs", additions: 0, deletions: 9 },
     ]);
+  });
+});
+
+describe("shortMergeError", () => {
+  test("turns gh's branch policy refusal into one sentence", () => {
+    expect(
+      shortMergeError(
+        "X Pull request acme/app#12 is not mergeable: the base branch policy prohibits the merge.\nTo have the pull request merged after all the requirements have been met, add the `--auto` flag.\nTo use administrator privileges to immediately merge the pull request, add the `--admin` flag.\n",
+      ),
+    ).toBe("Branch protection is blocking the merge.");
+  });
+
+  test("drops gh's flag advice from other refusals", () => {
+    expect(
+      shortMergeError(
+        "X Pull request acme/app#12 is not mergeable: something new.\nTo merge anyway, add the `--admin` flag.",
+      ),
+    ).toBe("Pull request acme/app#12 is not mergeable: something new.");
+    expect(shortMergeError("GraphQL: Head branch was modified")).toBe(
+      "GraphQL: Head branch was modified",
+    );
   });
 });
 
