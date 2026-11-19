@@ -808,25 +808,13 @@ export function MediaLightboxGallery({
         {/* What you are looking at, quietly in the corner; the bar above the
             input is for what you can do with it. */}
         <div className="min-w-0">
-          {!isPhone && (item.walkthroughLabel || caption || description) && (
+          {!isPhone && (caption || description) && (
             <div className="flex min-w-0 flex-col gap-0.5">
-              <div className="flex min-w-0 items-center gap-2">
-                {caption && (
-                  <div className="min-w-0 truncate text-sm font-medium text-fg">
-                    {caption}
-                  </div>
-                )}
-                {item.walkthroughLabel && (
-                  <span
-                    className={cn(
-                      WALKTHROUGH_LABEL_CLASS,
-                      WALKTHROUGH_LABEL_TONE[item.walkthroughLabel],
-                    )}
-                  >
-                    {WALKTHROUGH_LABEL_TEXT[item.walkthroughLabel]}
-                  </span>
-                )}
-              </div>
+              {caption && (
+                <div className="min-w-0 truncate text-sm font-medium text-fg">
+                  {caption}
+                </div>
+              )}
               {description && (
                 <div className="line-clamp-2 text-sm leading-snug text-dim">
                   {description}
@@ -835,12 +823,24 @@ export function MediaLightboxGallery({
             </div>
           )}
         </div>
-        <div className="pointer-events-auto flex items-center gap-1.5">
+        <div className="pointer-events-auto flex items-center gap-3">
+          {/* Before or After names the picture itself, so it sits centred
+              over it rather than in a corner. */}
+          {!isPhone && item.walkthroughLabel && (
+            <span
+              className={cn(
+                WALKTHROUGH_LABEL_CLASS,
+                WALKTHROUGH_LABEL_TONE[item.walkthroughLabel],
+              )}
+            >
+              {WALKTHROUGH_LABEL_TEXT[item.walkthroughLabel]}
+            </span>
+          )}
           {many &&
             !isPhone && (
               // Dots provide direct jumps; the counter beside them gives the
               // exact position without making the reader count circles.
-              <>
+              <div className="flex items-center gap-1.5">
                 <div className="flex items-center">
                   {dotIndexes.map((dot, position) => (
                     <button
@@ -869,7 +869,7 @@ export function MediaLightboxGallery({
                 <span className="text-meta font-medium tabular-nums text-dim">
                   {index + 1} of {items.length}
                 </span>
-              </>
+              </div>
             )}
         </div>
         <Button
