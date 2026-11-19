@@ -69,11 +69,13 @@ import {
   IconX,
 } from "./icons";
 
-/** Desktop's actions: quiet ghosts beside Close. The ones you reach for
- *  most say their name; the rest are icons named by their tooltips. */
-const LIGHTBOX_TOOL_BASE_CLASS =
-  "h-10 rounded-full text-fg/70 hover:text-fg aria-pressed:bg-hover aria-pressed:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg";
-const LIGHTBOX_ICON_TOOL_CLASS = `${LIGHTBOX_TOOL_BASE_CLASS} w-10`;
+/** Desktop's actions: the same raised glass circles as Close, so the
+ *  corner reads as one row of buttons. Comment is the one that says its
+ *  name, as a pill; the rest are icons named by their tooltips. */
+const LIGHTBOX_TOOL_CLASS_STATES =
+  "aria-pressed:border-fg/30 aria-pressed:bg-bg/85 data-[popup-open]:bg-bg/85";
+const LIGHTBOX_ICON_TOOL_CLASS = `${LIGHTBOX_ROUND_BUTTON_CLASS} ${LIGHTBOX_TOOL_CLASS_STATES}`;
+const LIGHTBOX_TEXT_TOOL_CLASS = `${LIGHTBOX_ROUND_BUTTON_CLASS} ${LIGHTBOX_TOOL_CLASS_STATES} w-auto px-4`;
 
 export function MediaLightboxGallery({
   items,
@@ -662,18 +664,18 @@ export function MediaLightboxGallery({
       ? suggestedMediaName(item)
       : undefined;
   // Desktop's actions: on the right beside Close. `text` gives one its name
-  // in words rather than a tooltip, and a null icon leaves it words only.
+  // in words rather than a tooltip.
   const tool = (
     label: string,
-    icon: React.ReactNode | null,
+    icon: React.ReactNode,
     props: Omit<React.ComponentProps<typeof Button>, "icon" | "variant">,
     text?: string,
   ) =>
     text ? (
       <Button
-        variant="ghost"
+        variant="default"
         icon={icon}
-        className={LIGHTBOX_TOOL_BASE_CLASS}
+        className={LIGHTBOX_TEXT_TOOL_CLASS}
         {...props}
       >
         {text}
@@ -681,7 +683,7 @@ export function MediaLightboxGallery({
     ) : (
       <Tooltip label={label} side="bottom">
         <Button
-          variant="ghost"
+          variant="default"
           icon={icon}
           className={LIGHTBOX_ICON_TOOL_CLASS}
           {...props}
@@ -692,7 +694,7 @@ export function MediaLightboxGallery({
     <div
       role="group"
       aria-label="Media actions"
-      className="pointer-events-auto flex items-center gap-0.5"
+      className="pointer-events-auto flex items-center gap-1.5"
     >
       {commentable &&
         tool(
@@ -712,13 +714,20 @@ export function MediaLightboxGallery({
           for a paste into a document, its URL for a ticket or a message. */}
       {canCopyImage && canCopyLink ? (
         <Menu.Root>
-          <Menu.Trigger
-            render={
-              <Button variant="ghost" className={LIGHTBOX_TOOL_BASE_CLASS}>
-                {copiedAny ? "Copied" : "Copy"}
-              </Button>
-            }
-          />
+          <Tooltip label={copiedAny ? "Copied" : "Copy"} side="bottom">
+            <Menu.Trigger
+              render={
+                <Button
+                  variant="default"
+                  icon={
+                    copiedAny ? <IconCheck size={20} /> : <IconCopy size={20} />
+                  }
+                  className={LIGHTBOX_ICON_TOOL_CLASS}
+                  aria-label={copiedAny ? "Copied" : "Copy"}
+                />
+              }
+            />
+          </Tooltip>
           <Menu.Popup side="bottom" align="end" sideOffset={6}>
             <Menu.Item onClick={copyImage}>
               <IconCopy size={18} className={MENU_ICON} />
@@ -733,22 +742,20 @@ export function MediaLightboxGallery({
       ) : canCopyImage ? (
         tool(
           copiedImage ? "Copied" : "Copy image",
-          null,
+          copiedImage ? <IconCheck size={20} /> : <IconCopy size={20} />,
           {
             onClick: copyImage,
             "aria-label": copiedImage ? "Image copied" : "Copy image",
           },
-          copiedImage ? "Copied" : "Copy image",
         )
       ) : canCopyLink ? (
         tool(
           copied ? "Copied" : "Copy link",
-          null,
+          copied ? <IconCheck size={20} /> : <IconLink size={20} />,
           {
             onClick: copyLink,
             "aria-label": copied ? "Link copied" : "Copy link",
           },
-          copied ? "Copied" : "Copy link",
         )
       ) : null}
       {nativeShare
@@ -870,6 +877,19 @@ export function MediaLightboxGallery({
       }}
     >
       <div ref={scrimRef} className={LIGHTBOX_SCRIM_CLASS} aria-hidden />
+      {/* Where you are in the set, centred on the picture rather than on
+          the top bar: the bar's sides differ in width (window controls on
+          the left, the actions on the right), and the picture follows the
+          input's column, which the sidebars can push off the window's
+          middle. */}
+      {many && !isPhone && (
+        <div
+          className="pointer-events-none absolute top-[calc(12px+env(safe-area-inset-top))] z-10 flex h-10 -translate-x-1/2 items-center text-meta font-medium tabular-nums text-dim"
+          style={{ left: `calc(50% + ${columnShift}px)` }}
+        >
+          {index + 1} of {items.length}
+        </div>
+      )}
       <div
         className={cn(
           "pointer-events-none absolute left-[calc(16px+env(safe-area-inset-left))] [html.wco_&]:left-[max(16px,calc(env(titlebar-area-x,78px)+8px))] right-[calc(12px+env(safe-area-inset-right))] top-[calc(12px+env(safe-area-inset-top))] z-10 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3",
@@ -889,27 +909,8 @@ export function MediaLightboxGallery({
             </div>
           )}
         </div>
-        {/* Where you are in the set, over the picture's column rather than
-            the window's middle: the margin is the same shift the stage pays
-            as padding. */}
-        <div
-          className="pointer-events-auto flex items-center gap-3"
-          style={
-            !isPhone
-              ? {
-                  marginLeft: Math.max(0, 2 * columnShift),
-                  marginRight: Math.max(0, -2 * columnShift),
-                }
-              : undefined
-          }
-        >
-          {many && !isPhone && (
-            <span className="text-meta font-medium tabular-nums text-dim">
-              {index + 1} of {items.length}
-            </span>
-          )}
-        </div>
-        <div className="flex min-w-0 items-center justify-self-end gap-2">
+        <div />
+        <div className="flex min-w-0 items-center justify-self-end gap-1.5">
           {!isPhone && tools}
           <Button
             ref={closeRef}
