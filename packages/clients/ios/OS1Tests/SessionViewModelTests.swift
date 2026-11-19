@@ -799,7 +799,12 @@ final class SessionViewModelTests: XCTestCase {
         )
 
         viewModel.start()
-        try? await Task.sleep(for: .milliseconds(50))
+        // The deadline runs on the main actor, and a busy CI runner can hold
+        // it well past a fixed 50ms. Wait for the failure, with a cap.
+        let deadline = Date().addingTimeInterval(2)
+        while viewModel.isLoadingConversation, Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
 
         XCTAssertFalse(viewModel.isLoadingConversation)
         XCTAssertNotNil(viewModel.conversationLoadError)
