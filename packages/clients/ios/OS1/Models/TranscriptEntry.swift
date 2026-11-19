@@ -258,6 +258,78 @@ struct EntryNotice: Decodable, Equatable, Sendable {
         return text.isEmpty ? title : text
     }
 
+    /// One line of what an automated event said beyond its title.
+    struct TriggerDetailLine: Equatable, Sendable {
+        let text: String
+        var url: URL?
+    }
+
+    /// What the event said beyond its title, for the folded row opened:
+    /// short lines, never the title a second time or the instructions meant
+    /// for the agent ("This session is assigned to handle it…"). A failed
+    /// check reads "Secret scan · failure" linked to its run; a link to the
+    /// PR or issue the title already names is dropped. Mirrors the
+    /// protocol's `automatedTriggerDetail`.
+    func triggerDetail(_ content: String) -> [TriggerDetailLine] {
+        let whole = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        // A worker's report or another session's message is titled by its
+        // kind, so its text is the whole message.
+        if kind == "worker-report" || kind == "session-notice" {
+            return whole.isEmpty ? [] : [TriggerDetailLine(text: whole)]
+        }
+        let text = content
+            .replacingOccurrences(
+                of: #"^((?:PR|Issue) #\d+)\s+(?:“[^”]*”|"[^"]*")"#,
+                with: "$1",
+                options: .regularExpression
+            )
+            // The opening sentence, or the whole first line when it has none.
+            .replacingOccurrences(
+                of: #"^(?:[^\n]*?[.!?](?=\s)|[^\n]*)"#,
+                with: "",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: #"\bThis session is assigned to handle it\b[\s\S]*$"#,
+                with: "",
+                options: .regularExpression
+            )
+        var lines: [TriggerDetailLine] = []
+        for raw in text.components(separatedBy: "\n") {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+                .replacingOccurrences(of: #"^[-*•]\s+"#, with: "", options: .regularExpression)
+            if line.isEmpty { continue }
+            if line.range(of: #"^https?://\S+$"#, options: .regularExpression) != nil {
+                let names = line.range(
+                    of: #"^https?://github\.com/[^/]+/[^/]+/(?:pull|issues)/\d+/?$"#,
+                    options: .regularExpression
+                ) != nil
+                if !names {
+                    lines.append(TriggerDetailLine(
+                        text: line.replacingOccurrences(
+                            of: #"^https?://(?:www\.)?"#, with: "", options: .regularExpression
+                        ),
+                        url: URL(string: line)
+                    ))
+                }
+                continue
+            }
+            if let match = line.range(of: #":\s*https?://\S+$"#, options: .regularExpression) {
+                let label = String(line[..<match.lowerBound])
+                let link = line[match].drop { $0 == ":" || $0.isWhitespace }
+                lines.append(TriggerDetailLine(
+                    text: label.replacingOccurrences(
+                        of: #"\s*\(([^()]+)\)$"#, with: " · $1", options: .regularExpression
+                    ),
+                    url: URL(string: String(link))
+                ))
+                continue
+            }
+            lines.append(TriggerDetailLine(text: line))
+        }
+        return lines
+    }
+
     var showsBodyInline: Bool { body == "inline" }
     var isCollapsible: Bool { body == "collapsed" }
 
