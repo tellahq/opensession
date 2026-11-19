@@ -14,8 +14,29 @@ export const GALLERY_SELECTOR =
 /** Apple's page control keeps a small moving window for long galleries. */
 export const MAX_VISIBLE_LIGHTBOX_DOTS = 7;
 
-/** Quiet top-cluster actions shared by Download, Copy link, and Open. */
-export const LIGHTBOX_ACTION_CLASS = "shrink-0 cursor-pointer";
+/** The viewer frosts the page behind it in the page's own colour, so the
+ *  session stays recognisable while the picture is in front of it. */
+export const LIGHTBOX_SCRIM_CLASS =
+  "pointer-events-none absolute inset-0 bg-bg/80 backdrop-blur-2xl backdrop-saturate-150";
+
+/** The tools sit in one inverse pill above the input, so they read as a
+ *  single object over the frosted page rather than loose labels on it. */
+export const LIGHTBOX_TOOLBAR_CLASS =
+  "pointer-events-auto flex max-w-full items-center gap-0.5 overflow-x-auto rounded-full bg-fg p-1 text-bg smooth-shadow-md [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+
+/** One tool in that pill. Ghost buttons re-inked for the inverse fill. */
+export const LIGHTBOX_TOOL_CLASS =
+  "shrink-0 cursor-pointer text-bg/80 hover:bg-bg/15 hover:text-bg aria-pressed:bg-bg/15 aria-pressed:text-bg";
+
+/** Close and the page arrows: raised round buttons on the frosted page. */
+export const LIGHTBOX_ROUND_BUTTON_CLASS =
+  "z-10 size-10 shrink-0 rounded-full text-fg smooth-shadow-sm phone:size-11";
+
+/** The session input a desktop viewer keeps above its scrim: the child of
+ *  the marked host that holds Composer's box (`.composer`), lifted by
+ *  VIEWER_INPUT while `html[data-lightbox-composer]` is set. */
+export const LIGHTBOX_COMPOSER_SELECTOR =
+  "[data-lightbox-composer-host] > :has(.composer)";
 export const LIGHTBOX_PREVIEW_LABEL: Record<LightboxItem["kind"], string> = {
   image: "Image preview",
   video: "Video preview",
