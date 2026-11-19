@@ -507,49 +507,15 @@ struct ReasoningSummaryRow: View {
     }
 }
 
-/// A small isolated animation subtree. Its timeline redraws only this title,
-/// never the transcript row or lazy stack around it. Reduce Motion does not
-/// instantiate a timeline and uses the brighter, static endpoint instead.
+/// The title of reasoning still in progress, swept by the shared shimmer.
 private struct ActiveReasoningTitle: View {
     let title: String
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     var body: some View {
-        Group {
-            if reduceMotion {
-                label.foregroundStyle(OS1VisualStyle.text)
-            } else {
-                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-                    let cycle = context.date.timeIntervalSinceReferenceDate
-                        .truncatingRemainder(dividingBy: 1.8) / 1.8
-                    label
-                        .foregroundStyle(OS1VisualStyle.textDim)
-                        .overlay {
-                            label
-                                .foregroundStyle(OS1VisualStyle.text)
-                                .mask {
-                                    GeometryReader { geometry in
-                                        let width = max(36, geometry.size.width * 0.42)
-                                        LinearGradient(
-                                            colors: [.clear, .black, .clear],
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
-                                        .frame(width: width)
-                                        .offset(x: (geometry.size.width + width) * cycle - width)
-                                    }
-                                }
-                        }
-                }
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(title)
-    }
-
-    private var label: some View {
-        Text(title).font(.body)
+        ShimmerText(title)
+            .font(.body)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(title)
     }
 }
 
