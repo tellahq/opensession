@@ -299,13 +299,14 @@ not inherit the mode; they do the work, each on its own branch, which the
 workspace adds to its branch list. A coordinating workspace carries a small
 mark in the sidebar.
 
-Any conversation that has started threads shows them: each as a live card in
-the transcript with what it is doing right now, and all of them in the side
-panel's **Threads** tab (the top of the details page on a phone), grouped by
-where they stand: blocked, ready to ship, working, idle, shipped. Clicking a
-card opens the thread beside the conversation, where you can read it and
-message its agent without leaving. A coordinating session's panel opens on
-the Threads tab.
+Any conversation that has started threads shows them: under the turn that
+started them, one card lists each thread with an agent mark, its state dot and
+where it stands (its current step while it works), and the side panel's
+**Threads** tab (the top of the details page on a phone) lists all of them,
+grouped by where they stand: blocked, ready to ship, working, idle, shipped.
+Clicking a thread opens it in its own tab (its own page on a phone), where you
+can read it and message its agent; closing the tab returns to the
+conversation. A coordinating session's panel opens on the Threads tab.
 
 Workspaces made as "spaces" before coordinator mode was a setting keep their
 root session coordinating until someone switches it off.
