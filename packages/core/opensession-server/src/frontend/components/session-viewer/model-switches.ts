@@ -3,7 +3,7 @@ import {
   mergeTranscriptEntries,
   orderTranscriptEntries,
 } from "../../lib/transcript-state";
-import { switchDividerText } from "./model-labels";
+import { switchDividerText, switchDividerTone } from "./model-labels";
 
 const LIVE_SWITCH_PREFIX = "model-switch-live-";
 const LIVE_SWITCH_MATCH_WINDOW_MS = 60_000;
@@ -46,6 +46,7 @@ export function withModelSwitches(
   const currentIds = new Set(entries.map((entry) => entry.id));
   const switches: TranscriptEntry[] = (history || []).map((h) => {
     const content = switchDividerText(h.model, h.from, h.by);
+    const noticeTone = switchDividerTone(h.by);
     const durableId = `model-switch-${h.at}`;
     const live = currentIds.has(durableId)
       ? undefined
@@ -54,6 +55,7 @@ export function withModelSwitches(
       id: live?.id ?? durableId,
       type: "system" as const,
       content,
+      noticeTone,
       timestamp: live?.timestamp ?? h.at,
     };
   });

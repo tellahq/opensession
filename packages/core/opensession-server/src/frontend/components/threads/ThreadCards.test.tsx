@@ -19,10 +19,15 @@ function thread(overrides: Partial<UnifiedSession> = {}): UnifiedSession {
   };
 }
 
-const render = (overrides: Partial<UnifiedSession> = {}) =>
-  renderToStaticMarkup(<ThreadCardSummary thread={thread(overrides)} />);
+const render = (
+  overrides: Partial<UnifiedSession> = {},
+  activity: string | null = null,
+) =>
+  renderToStaticMarkup(
+    <ThreadCardSummary thread={thread(overrides)} activity={activity} />,
+  );
 
-describe("compact delegated thread rows", () => {
+describe("thread cards under a turn", () => {
   test("shows the title and one outcome instead of Idle and Answered", () => {
     const html = render();
     expect(html).toContain("Review changes");
@@ -34,6 +39,18 @@ describe("compact delegated thread rows", () => {
     const html = render({ isRunning: true });
     expect(html.match(/Working/g)).toHaveLength(1);
     expect(html).toContain("motion-safe:animate-pulse");
+  });
+
+  test("a working thread says which step it is on", () => {
+    const html = render({ isRunning: true }, "Editing checkout.ts");
+    expect(html).toContain("Working");
+    expect(html).toContain("Editing checkout.ts");
+  });
+
+  test("a settled thread drops a stale step", () => {
+    const html = render({}, "Editing checkout.ts");
+    expect(html).toContain("Answered");
+    expect(html).not.toContain("Editing checkout.ts");
   });
 
   test("preserves blockers and failure status", () => {

@@ -5,6 +5,7 @@ import {
   classifyEntries,
   hiddenTurnStart,
   parseAnsweredAskData,
+  type NoticeTone,
 } from "@tellahq/opensession-protocol/notices";
 import { withToolPresentations } from "@tellahq/opensession-protocol/tool-presentation";
 import { SLACK_ID_TO_NAME } from "./shared/user-mappings";
@@ -242,6 +243,11 @@ function harnessEntryId(
   return blockIndex > 0 ? `${base}-b${blockIndex}` : base;
 }
 
+// `<runner-notice>` or `<runner-notice tone="warn">` (transcriptLineRunnerNotice).
+const RUNNER_NOTICE_OPEN_RE = /^<runner-notice(?:>|\s)/;
+const RUNNER_NOTICE_RE =
+  /^<runner-notice(?:\s+tone="(error|warn|info)")?[^>]*>([\s\S]*?)<\/runner-notice>/;
+
 function harnessEntryFor(
   text: string,
   ts: string,
@@ -267,11 +273,21 @@ function harnessEntryFor(
   // Runner-injected operational notice (account rotation, transient-error
   // retry — transcriptLineRunnerNotice in pi-transcript.ts): render as a
   // system chip, never as a user bubble.
-  if (t.startsWith("<runner-notice>")) {
-    const body = t
-      .match(/<runner-notice>([\s\S]*?)<\/runner-notice>/)?.[1]
-      ?.trim();
-    return body ? [{ id, type: "system", content: body, timestamp: ts }] : [];
+  if (RUNNER_NOTICE_OPEN_RE.test(t)) {
+    const m = t.match(RUNNER_NOTICE_RE);
+    const body = m?.[2]?.trim();
+    const tone = m?.[1] as NoticeTone | undefined;
+    return body
+      ? [
+          {
+            id,
+            type: "system",
+            content: body,
+            timestamp: ts,
+            ...(tone ? { noticeTone: tone } : {}),
+          },
+        ]
+      : [];
   }
   // An answered question card (transcriptLineAskRecord in
   // transcript-persistence.ts, written by asks.ts when the ask resolves). The

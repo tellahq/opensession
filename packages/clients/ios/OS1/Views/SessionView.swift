@@ -4730,18 +4730,7 @@ private struct SessionInputBar: View {
                     // same seat whether or not a turn is in flight — stop
                     // appears between it and send instead of displacing it.
                     ComposerDictationButton(dictation: dictation, draft: $viewModel.draft)
-                    if voiceAvailable { callButton }
-                    // Stop is the only meaningful action while a turn runs
-                    // with nothing typed; once there IS a draft, send joins
-                    // it rather than replacing it — queueing the next message
-                    // mid-run is the common case, and the two-row layout has
-                    // always shown both.
-                    if viewModel.isRunning {
-                        stopButton
-                    }
-                    if noteMode || !viewModel.isRunning || canSubmit {
-                        sendButton
-                    }
+                    trailingDiscs
                 }
             }
             // Keep the existing 4pt inset in every one-row state. The resting
@@ -4759,16 +4748,10 @@ private struct SessionInputBar: View {
                     modelPill.layoutPriority(1)
                     #endif
 
+                    // No hide-keyboard seat: a swipe down the transcript or
+                    // the box puts the keyboard away.
                     ComposerDictationButton(dictation: dictation, draft: $viewModel.draft)
-                    // The keyboard goes away with a swipe down the
-                    // transcript, so this seat is the call button's alone.
-                    if voiceAvailable { callButton }
-
-                    if viewModel.isRunning {
-                        stopButton
-                    }
-
-                    sendButton
+                    trailingDiscs
                 }
                 .padding(.horizontal, controlRowInset.horizontal)
                 .padding(.bottom, controlRowInset.bottom)
@@ -4805,10 +4788,11 @@ private struct SessionInputBar: View {
                     in: composerShape
                 )
                 #endif
-                // Ask mode is ambient — it lasts the session's whole life, not
-                // one message — so it's said by tinting the surface you write
-                // on rather than by a chip you'd stop seeing. Same green, and
-                // the same lighter hand, as the web composer's.
+                // Note mode is one message, so it tints the surface you write
+                // on. Ask mode lasts the session's whole life (a read-only
+                // thread an agent started is in it from the start), so like
+                // the web composer it leaves the box its own colour and the
+                // placeholder says read-only instead.
                 //
                 // An overlay, not another `.background`: each background in
                 // this stack sits further back, and the page colour above is
@@ -4817,8 +4801,6 @@ private struct SessionInputBar: View {
                 .overlay {
                     if noteMode {
                         composerShape.fill(OS1VisualStyle.yellow.opacity(0.10))
-                    } else if viewModel.session.mode == "ask" {
-                        composerShape.fill(OS1VisualStyle.green.opacity(0.09))
                     }
                 }
                 #if os(iOS)
@@ -4915,12 +4897,16 @@ private struct SessionInputBar: View {
             || viewModel.session.source == "backstage"
     }
 
+    /// Read-only: the agent can look at the code but not change it.
+    private var isAskMode: Bool { viewModel.session.mode == "ask" }
+
     private var composerPlaceholder: String {
         #if os(iOS)
         // The resting pill is too narrow for the full prompt: the web phone
         // says "Ask <model>" there, and the full one once it opens.
         if isSingleRow, viewModel.safety == nil, !viewModel.workspacePreparing {
-            return noteMode ? "Team note" : "Ask \(shortModelName)"
+            if noteMode { return "Team note" }
+            return isAskMode ? "Ask, read-only" : "Ask \(shortModelName)"
         }
         #endif
         if let shownPrediction { return shownPrediction }
@@ -4930,7 +4916,9 @@ private struct SessionInputBar: View {
         if viewModel.workspacePreparing {
             return "Setting up your workspace · messages queue until it's ready"
         }
-        guard viewModel.isRunning else { return "Message" }
+        guard viewModel.isRunning else {
+            return isAskMode ? "Ask, read-only" : "Message"
+        }
         return busySend == "steer"
             ? "Message — steers this run"
             : "Message — queues for after this run"
@@ -5042,7 +5030,34 @@ private struct SessionInputBar: View {
             && ["opensession", "slack"].contains(viewModel.session.source ?? "opensession")
     }
 
-    private var callButton: some View {
+    /// The discs at the trailing edge, as on the web composer. Stop is its
+    /// own red disc and never shares the send circle: it sits before send,
+    /// and while a turn runs with nothing typed it is the only one, since
+    /// there is nothing to send and a call would talk over the run. Once
+    /// there IS a draft, send joins it (queueing mid-run is the common case).
+    @ViewBuilder private var trailingDiscs: some View {
+        if viewModel.isRunning {
+            stopButton
+        }
+        if showsCallDisc {
+            callDisc
+        } else if noteMode || !viewModel.isRunning || canSubmit {
+            sendButton
+        }
+    }
+
+    /// Nothing to send, so the send circle starts a voice call instead
+    /// (the web's `voiceChat`), and while one is live it goes back to it.
+    /// That saves the separate phone button the row used to carry.
+    private var showsCallDisc: Bool {
+        guard voiceAvailable, !dictation.active, forkState.point == nil else { return false }
+        let empty = viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && viewModel.attachedImages.isEmpty && viewModel.attachedFiles.isEmpty
+        guard empty else { return false }
+        return call?.active == true || !viewModel.isRunning
+    }
+
+    private var callDisc: some View {
         let active = call?.active == true
         return Button {
             if active, let call {
@@ -5052,21 +5067,40 @@ private struct SessionInputBar: View {
             Haptics.play(.armed)
             startCall()
         } label: {
-            Image(systemName: active ? "phone.fill" : "phone")
+            Group {
+                if active {
+                    Image(systemName: "phone.fill")
+                        .font(.system(size: callGlyph * 0.75, weight: .semibold))
+                } else {
+                    // The web composer's own voice glyph, not SF's waveform.
+                    VoiceBarsGlyph(size: callGlyph)
+                }
+            }
                 #if os(iOS)
-                .font(.system(size: 20, weight: .regular))
-                .foregroundStyle(active ? OS1VisualStyle.red : OS1VisualStyle.text)
-                .frame(width: 44, height: 44)
+                .frame(width: 36, height: 36)
                 #else
-                .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(active ? OS1VisualStyle.red : OS1VisualStyle.textDim)
-                .frame(width: 27, height: 27)
+                .frame(width: 32, height: 32)
                 #endif
-                .contentShape(Circle())
+                .foregroundStyle(active ? Color.white : OS1VisualStyle.onAccent)
+                // The send disc's own plate, so the circle reads as the same
+                // control in both states; red while a call is live.
+                .background(active ? OS1VisualStyle.red : OS1VisualStyle.accent, in: Circle())
         }
         .buttonStyle(.plain)
-        .disabled(dictation.active)
-        .accessibilityLabel(active ? "Return to the voice call" : "Start a voice call")
+        .frame(width: 44, height: 44)
+        .contentShape(Circle())
+        .accessibilityLabel(active ? "Return to the voice call" : "Start voice chat")
+        .help(active ? "Return to the voice call" : "Start voice chat")
+    }
+
+    /// The voice glyph's box: the web's 24px glyph in its 32px disc, kept in
+    /// proportion on the phone's 36pt disc.
+    private var callGlyph: CGFloat {
+        #if os(iOS)
+        22
+        #else
+        20
+        #endif
     }
 
     private func startCall() {
@@ -5805,5 +5839,34 @@ struct ContextFillRing: View {
             .frame(width: size, height: size)
             .accessibilityLabel("Context \(Int((fraction * 100).rounded())) percent full")
         }
+    }
+}
+
+/// The web composer's `IconVoice`: five round-capped bars on its 24-unit
+/// grid at the icon set's 1.5 stroke, so the voice disc reads the same on
+/// every client.
+private struct VoiceBarsGlyph: View {
+    let size: CGFloat
+
+    /// (x, top, bottom) of each bar on the 24-unit grid.
+    private static let bars: [(CGFloat, CGFloat, CGFloat)] = [
+        (4.75, 10.5, 13.5),
+        (8.375, 7.75, 16.25),
+        (12, 4.75, 19.25),
+        (15.625, 7.75, 16.25),
+        (19.25, 10.5, 13.5),
+    ]
+
+    var body: some View {
+        let unit = size / 24
+        Path { path in
+            for (x, top, bottom) in Self.bars {
+                path.move(to: CGPoint(x: x * unit, y: top * unit))
+                path.addLine(to: CGPoint(x: x * unit, y: bottom * unit))
+            }
+        }
+        .stroke(style: StrokeStyle(lineWidth: 1.5 * unit, lineCap: .round))
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
     }
 }

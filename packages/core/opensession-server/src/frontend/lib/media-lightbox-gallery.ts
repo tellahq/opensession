@@ -1,3 +1,4 @@
+import { COMPARE_AFTER_CLASS, COMPARE_CLASS } from "./compare-block";
 import { diagramDataUrl, readDiagramSvg } from "./diagram-media";
 import {
   commentSessionIdFor,
@@ -14,10 +15,11 @@ export const GALLERY_SELECTOR =
 /** Apple's page control keeps a small moving window for long galleries. */
 export const MAX_VISIBLE_LIGHTBOX_DOTS = 7;
 
-/** The viewer frosts the page behind it in the page's own colour, so the
- *  session stays recognisable while the picture is in front of it. */
+/** The viewer frosts the page behind it in the page's own colour. Thin
+ *  enough that the session still shows through, so the picture reads as
+ *  lifted off the chat rather than opened on a blank page. */
 export const LIGHTBOX_SCRIM_CLASS =
-  "pointer-events-none absolute inset-0 bg-bg/80 backdrop-blur-2xl backdrop-saturate-150";
+  "pointer-events-none absolute inset-0 bg-bg/55 backdrop-blur-md backdrop-saturate-150";
 
 /** The tools sit in one inverse pill above the input, so they read as a
  *  single object over the frosted page rather than loose labels on it. */
@@ -28,9 +30,10 @@ export const LIGHTBOX_TOOLBAR_CLASS =
 export const LIGHTBOX_TOOL_CLASS =
   "shrink-0 cursor-pointer text-bg/80 hover:bg-bg/15 hover:text-bg aria-pressed:bg-bg/15 aria-pressed:text-bg";
 
-/** Close and the page arrows: raised round buttons on the frosted page. */
+/** Close and the page arrows: frosted glass discs, so the page shows
+ *  through them the way it does through the scrim. */
 export const LIGHTBOX_ROUND_BUTTON_CLASS =
-  "z-10 size-10 shrink-0 rounded-full text-fg smooth-shadow-sm phone:size-11";
+  "z-10 size-10 shrink-0 rounded-full border-fg/10 bg-bg/60 text-fg backdrop-blur-xl backdrop-saturate-150 smooth-shadow-sm hover:bg-bg/85 phone:size-11";
 
 /** The session input a desktop viewer keeps above its scrim: the child of
  *  the marked host that holds Composer's box (`.composer`), lifted by
@@ -46,6 +49,18 @@ export const LIGHTBOX_PREVIEW_LABEL: Record<LightboxItem["kind"], string> = {
 /** One node as an item, or null when it cannot be shown. */
 function galleryItem(node: Element): LightboxItem | null {
   if (node instanceof HTMLImageElement) {
+    // A slider's stills say which side they are with the same red and
+    // green pill a walkthrough uses, not their alt text as a caption.
+    if (node.parentElement?.classList.contains(COMPARE_CLASS)) {
+      return {
+        kind: "image",
+        src: node.currentSrc || node.src,
+        commentSessionId: commentSessionIdFor(node),
+        walkthroughLabel: node.classList.contains(COMPARE_AFTER_CLASS)
+          ? "after"
+          : "before",
+      };
+    }
     return {
       kind: "image",
       src: node.currentSrc || node.src,

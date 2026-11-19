@@ -99,6 +99,7 @@ import {
   TRANSCRIPT_PILL_TOP,
   VIEWER_ACTION_ROW,
   VIEWER_ACTION_ROW_WITH_SCROLL,
+  SCROLL_ACTION_BESIDE_REPLIES,
   VIEWER_INPUT,
   VIEWER_MESSAGES,
   VIEWER_MESSAGES_REGION,
@@ -546,10 +547,9 @@ export function SessionViewerMainRegion({
     loadingHistory,
     syncing,
   } = transcript.content;
-  const stopping = stopRequestedAt != null;
   const liveRunStatus = useMemo<LiveRunStatus>(
-    () => ({ store: liveTurnStore, stopping }),
-    [liveTurnStore, stopping],
+    () => ({ store: liveTurnStore }),
+    [liveTurnStore],
   );
   const {
     openAssetFromTranscript,
@@ -1395,7 +1395,12 @@ export function SessionViewerMainRegion({
                           />
                         )}
                         {scrollAction && !isPhone && (
-                          <div className="pointer-events-auto col-start-2 row-start-1 shrink-0 justify-self-center">
+                          <div
+                            className={cn(
+                              "pointer-events-auto col-start-2 row-start-1 shrink-0 justify-self-center",
+                              quickReplies && SCROLL_ACTION_BESIDE_REPLIES,
+                            )}
+                          >
                             <Tooltip
                               label="Scroll to the bottom"
                               shortcut={transcriptDownKeys ?? undefined}
@@ -1523,7 +1528,7 @@ export function SessionViewerMainRegion({
                           images.length === 0 &&
                           (noteMode || files.length === 0) &&
                           !forkFrom),
-                      // Tints the composer green and names the mode in a chip above
+                      // Names the mode in a green chip above
                       // the field. Only opensession sessions can promote.
                       askMode: isAsk,
                       askExitPending: promoting,
