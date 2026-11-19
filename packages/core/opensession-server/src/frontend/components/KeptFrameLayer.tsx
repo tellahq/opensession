@@ -14,13 +14,16 @@ import {
   keptFrameLoaded,
   keptFrameNavigated,
   keptFrameReturned,
+  keptPageDeploying,
   subscribeKeptFrames,
   type KeptFrame,
 } from "../lib/kept-frames";
 import { addressHost } from "../lib/preview-url";
 import {
+  WS_SUMMARY_FRAME_DEPLOYING,
   WS_SUMMARY_FRAME_EDGE,
   WS_SUMMARY_FRAME_HOST,
+  WS_SUMMARY_FRAME_SPINNER,
 } from "../lib/workspace-summary-classes";
 import { useFrameFocus } from "../hooks/useFrameFocus";
 import { useFrameLocation } from "../hooks/useFrameLocation";
@@ -88,6 +91,14 @@ function KeptFrameBox({
   // Held back until the page has painted something: a loader scaled down to
   // a thumbnail is a smudge, and the card's tile says "Loading" itself.
   const thumbReady = !frame.loading;
+  // A newer deploy of this preview is on its way; the page reloads by itself
+  // once it lands (see useReloadOnFreshDeploy).
+  const readDeploying = () => keptPageDeploying(frame.url);
+  const deploying = useSyncExternalStore(
+    subscribeKeptFrames,
+    readDeploying,
+    readDeploying,
+  );
   useFrameFocus(
     frameRef,
     () => keptFrameEntered(key),
@@ -168,6 +179,12 @@ function KeptFrameBox({
       {thumb ? (
         <span className={WS_SUMMARY_FRAME_HOST}>
           {addressHost(frame.location ?? frame.address)}
+        </span>
+      ) : null}
+      {thumb && deploying ? (
+        <span className={WS_SUMMARY_FRAME_DEPLOYING}>
+          <span className={WS_SUMMARY_FRAME_SPINNER} aria-hidden="true" />
+          Deploying
         </span>
       ) : null}
     </div>
