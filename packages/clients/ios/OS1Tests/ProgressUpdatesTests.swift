@@ -503,7 +503,7 @@ final class ProgressUpdatesTests: XCTestCase {
             startedAt: minutes(0, 1, 5, 5),
             isLive: false
         )
-        XCTAssertEqual(steps, [nil, .shown(FoldStatus(text: "CI passed · 4m", isDone: true)), nil, .folded])
+        XCTAssertEqual(steps, [nil, .shown(FoldStatus(topic: "CI", text: "CI passed · 4m", isDone: true)), nil, .folded])
     }
 
     func testFoldStatusSaysHowLongItWaitedWhenNothingClosedIt() {
@@ -513,9 +513,9 @@ final class ProgressUpdatesTests: XCTestCase {
             isLive: false
         )
         XCTAssertEqual(steps, [
-            .shown(FoldStatus(text: "Waited for CI · 4m", isDone: false)),
+            .shown(FoldStatus(topic: "CI", text: "Waited for CI · 4m", isDone: false)),
             nil,
-            .shown(FoldStatus(text: "Waited for deployment · 3m", isDone: false)),
+            .shown(FoldStatus(topic: "Deployment", text: "Waited for deployment · 3m", isDone: false)),
             nil,
         ])
     }
@@ -528,15 +528,15 @@ final class ProgressUpdatesTests: XCTestCase {
                 startedAt: minutes(0, 1, 3, 4),
                 isLive: true
             )[1],
-            .shown(FoldStatus(text: "Waited for CI · 2m", isDone: false))
+            .shown(FoldStatus(topic: "CI", text: "Waited for CI · 2m", isDone: false))
         )
         XCTAssertEqual(
             FoldStatus.resolve(updates, startedAt: minutes(0, 1, 3), isLive: true)[1],
-            .shown(FoldStatus(text: "Waiting for CI", isDone: false))
+            .shown(FoldStatus(topic: "CI", text: "Waiting for CI", isDone: false))
         )
         XCTAssertEqual(
             FoldStatus.resolve(updates, startedAt: minutes(0, 1, 3), isLive: false)[1],
-            .shown(FoldStatus(text: "Waited for CI · 2m", isDone: false))
+            .shown(FoldStatus(topic: "CI", text: "Waited for CI · 2m", isDone: false))
         )
     }
 
@@ -553,11 +553,18 @@ final class ProgressUpdatesTests: XCTestCase {
             isLive: false
         )
         XCTAssertEqual(steps, [
-            .shown(FoldStatus(text: "Migration: 3 of 12 tables · 2m", isDone: false)),
+            .shown(FoldStatus(topic: "Migration", text: "Migration: 3 of 12 tables · 2m", isDone: false)),
             nil,
-            .shown(FoldStatus(text: "Deployment done", isDone: true)),
-            .shown(FoldStatus(text: "Release: v2.3 is live · 2m", isDone: true)),
+            .shown(FoldStatus(topic: "Deployment", text: "Deployment done", isDone: true)),
+            .shown(FoldStatus(topic: "Release", text: "Release: v2.3 is live · 2m", isDone: true)),
             .folded,
         ])
+    }
+
+    func testCheckTopicsTakeACheckRunsGlyphs() {
+        XCTAssertEqual(ProgressUpdate.symbol(topic: "CI", isDone: false), "circle.dashed")
+        XCTAssertEqual(ProgressUpdate.symbol(topic: "Native build", isDone: true), "checkmark.circle")
+        XCTAssertEqual(ProgressUpdate.symbol(topic: "Deployment", isDone: false), "clock")
+        XCTAssertEqual(ProgressUpdate.symbol(topic: "Deployment", isDone: true), "checkmark")
     }
 }

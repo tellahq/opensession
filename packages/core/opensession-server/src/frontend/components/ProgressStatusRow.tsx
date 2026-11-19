@@ -1,9 +1,16 @@
 import React from "react";
 import type { TranscriptEntry } from "@tellahq/opensession-protocol/session";
 import { cn } from "../ui/cn";
-import { IconCheck, IconClock, IconChevronRight } from "./icons";
+import {
+  IconCheck,
+  IconCheckCircle,
+  IconChevronRight,
+  IconClock,
+  IconStatusRing,
+} from "./icons";
 import { useLoopOpen } from "./ReviewLoopBlock";
 import {
+  isCheckTopic,
   parseProgressUpdate,
   type FoldStatus,
   type ProgressGroup,
@@ -40,6 +47,7 @@ export function ProgressStatusRow({
   const status = (
     <span className="flex min-w-0 items-start gap-2">
       <StatusIcon
+        topic={latest.topic}
         done={latest.state === "done"}
         className={latest.state === "done" ? "text-green" : "text-dim"}
       />
@@ -102,6 +110,7 @@ export function ProgressStatusRow({
                   <StatusStep
                     key={entry.id}
                     as="li"
+                    topic={update.topic}
                     done={update.state === "done"}
                   >
                     {sameTopic
@@ -124,6 +133,7 @@ export function ProgressStatusLabel({ update }: { update: ProgressUpdate }) {
   return (
     <span className="flex min-w-0 items-center gap-1.5">
       <StatusIcon
+        topic={update.topic}
         done={update.state === "done"}
         className={update.state === "done" ? "text-green" : "text-dim"}
       />
@@ -139,17 +149,23 @@ export function ProgressStatusLabel({ update }: { update: ProgressUpdate }) {
  * row's 22px glyph slot, type and pitch, so "CI passed · 4m" between two runs
  * of commands reads as part of the same list. `foldStatuses` words it. */
 export function ProgressStatusLine({ status }: { status: FoldStatus }) {
-  return <StatusStep done={status.done}>{status.text}</StatusStep>;
+  return (
+    <StatusStep topic={status.topic} done={status.done}>
+      {status.text}
+    </StatusStep>
+  );
 }
 
 /** One status as a fold step. An open status row's earlier updates use it
  * too, so the two lists keep one pitch. Like a tool row, it hangs its glyph
  * slot 4px into the gutter, where the icon's ink starts inside the slot. */
 function StatusStep({
+  topic,
   done,
   as: Row = "div",
   children,
 }: {
+  topic: string;
   done: boolean;
   as?: "div" | "li";
   children: React.ReactNode;
@@ -157,6 +173,7 @@ function StatusStep({
   return (
     <Row className="-ml-1 flex min-w-0 items-start gap-2 py-[3px] text-item-title leading-5 text-dim">
       <StatusIcon
+        topic={topic}
         done={done}
         className="size-[22px] justify-center text-faint"
       />
@@ -167,19 +184,36 @@ function StatusStep({
   );
 }
 
+/** A clock while waiting, a check once done. A CI or test status takes a
+ * check run's own marks instead, as GitHub draws them: a dashed ring while it
+ * runs, a circled check once it passes, so it reads as CI at a glance rather
+ * than as one more timer. */
 function StatusIcon({
+  topic,
   done,
   className,
 }: {
+  topic: string;
   done: boolean;
   className?: string;
 }) {
+  const checks = isCheckTopic(topic);
   return (
     <span
       className={cn("flex h-5 shrink-0 items-center", className)}
       aria-hidden="true"
     >
-      {done ? <IconCheck size={20} /> : <IconClock size={20} />}
+      {checks ? (
+        done ? (
+          <IconCheckCircle size={20} />
+        ) : (
+          <IconStatusRing size={20} />
+        )
+      ) : done ? (
+        <IconCheck size={20} />
+      ) : (
+        <IconClock size={20} />
+      )}
     </span>
   );
 }

@@ -184,7 +184,7 @@ describe("status lines inside a work fold", () => {
       ),
     ).toEqual([
       undefined,
-      { text: "CI passed · 4m", done: true },
+      { topic: "CI", text: "CI passed · 4m", done: true },
       undefined,
       null,
     ]);
@@ -198,9 +198,9 @@ describe("status lines inside a work fold", () => {
         false,
       ),
     ).toEqual([
-      { text: "Waited for CI · 4m", done: false },
+      { topic: "CI", text: "Waited for CI · 4m", done: false },
       undefined,
-      { text: "Waited for deployment · 3m", done: false },
+      { topic: "Deployment", text: "Waited for deployment · 3m", done: false },
       undefined,
     ]);
   });
@@ -213,12 +213,14 @@ describe("status lines inside a work fold", () => {
         minutes(0, 1, 3, 4),
         true,
       )[1],
-    ).toEqual({ text: "Waited for CI · 2m", done: false });
+    ).toEqual({ topic: "CI", text: "Waited for CI · 2m", done: false });
     expect(foldStatuses(updates, minutes(0, 1, 3), true)[1]).toEqual({
+      topic: "CI",
       text: "Waiting for CI",
       done: false,
     });
     expect(foldStatuses(updates, minutes(0, 1, 3), false)[1]).toEqual({
+      topic: "CI",
       text: "Waited for CI · 2m",
       done: false,
     });
@@ -238,10 +240,14 @@ describe("status lines inside a work fold", () => {
         false,
       ),
     ).toEqual([
-      { text: "Migration: 3 of 12 tables · 2m", done: false },
+      {
+        topic: "Migration",
+        text: "Migration: 3 of 12 tables · 2m",
+        done: false,
+      },
       undefined,
-      { text: "Deployment done", done: true },
-      { text: "Release: v2.3 is live · 2m", done: true },
+      { topic: "Deployment", text: "Deployment done", done: true },
+      { topic: "Release", text: "Release: v2.3 is live · 2m", done: true },
       null,
     ]);
   });
