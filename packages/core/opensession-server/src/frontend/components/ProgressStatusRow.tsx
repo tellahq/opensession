@@ -84,10 +84,10 @@ export function ProgressStatusRow({
         <div className={rowClasses}>{status}</div>
       )}
       {open && (
-        <div className="mt-0.5 pl-2 [&>*:last-child]:mb-0">
+        <div className="mt-0.5 [&>*:last-child]:mb-0">
           {history.length > 0 && (
             <ol
-              className="m-0 mb-2 list-none space-y-2 py-1 pl-1 pr-2 text-dim"
+              className="m-0 mb-2 list-none space-y-2 py-1 pr-2 text-dim"
               aria-label="Earlier updates"
             >
               {history.map((entry) => {
@@ -122,7 +122,7 @@ export function ProgressStatusLine({ entry }: { entry: TranscriptEntry }) {
   const update = parseProgressUpdate(entry);
   if (!update) return null;
   return (
-    <div className="mb-2 flex items-start gap-2 px-1 text-label leading-5 text-dim">
+    <div className="mb-2 flex items-start gap-2 text-label leading-5 text-dim">
       <StatusIcon update={update} />
       <span className="min-w-0 break-words">
         {update.topic}: {update.text}

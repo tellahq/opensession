@@ -307,6 +307,52 @@ final class ProgressUpdatesTests: XCTestCase {
         XCTAssertEqual(last.id, "c")
     }
 
+    /// An automated event and the work it started read as one row named by
+    /// the event, above the answer: no centered notice, no "Worked" row.
+    func testAnAutomatedEventFoldsWithItsWorkIntoOneRow() {
+        var event = TranscriptEntry(
+            id: "e",
+            type: "user",
+            content: "PR #5682 “Add a toggle. Again” now has merge conflicts with its base branch. https://github.com/acme/app/pull/5682 This session is assigned to handle it.",
+            timestamp: "2026-01-01T00:00:00Z"
+        )
+        event.notice = EntryNotice(
+            kind: "system",
+            title: "PR #5682 “Add a toggle. Again” now has merge conflicts with its base branch",
+            tone: "info",
+            body: "collapsed",
+            link: nil,
+            ask: nil,
+            icon: nil
+        )
+        let result = blocks([
+            event,
+            toolUse("t1"), toolResult("t1"),
+            say("a", "PR #5682 is conflict-free.", at: 600),
+        ])
+        let folds = workFolds(result)
+        XCTAssertEqual(folds.count, 1)
+        XCTAssertEqual(folds.first?.trigger, "PR #5682 now has merge conflicts with its base branch")
+        XCTAssertEqual(folds.first?.duration ?? 0, 600, accuracy: 1)
+        XCTAssertEqual(folds.first?.blocks.first?.id, event.id)
+        XCTAssertFalse(result.contains { block in
+            if case .message(let entry) = block { return entry.id == "e" }
+            if case .work = block { return true }
+            return false
+        })
+    }
+
+    /// An event the agent answered without any work stays its own notice.
+    func testAnAutomatedEventWithoutWorkStaysANotice() {
+        var event = user("e", "PR #12 was merged into main by Kent.")
+        event.notice = EntryNotice(
+            kind: "system", title: "PR #12 was merged into main by Kent.", tone: "info",
+            body: nil, link: nil, ask: nil, icon: "merge"
+        )
+        let result = blocks([event, say("a", "Merged.")])
+        XCTAssertTrue(workFolds(result).isEmpty)
+    }
+
     func testARunningTaskKeepsItsStatusRow() {
         let result = blocks(Array(shipped.dropLast()), live: true)
         XCTAssertEqual(progressRows(result).first?.latest.label, "Deployment: Running")

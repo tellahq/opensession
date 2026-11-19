@@ -35,7 +35,16 @@ function galleryItem(node: Element): LightboxItem | null {
   if (node instanceof HTMLVideoElement) {
     return { kind: "video", src: node.src };
   }
-  const diagram = readDiagramSvg(node.outerHTML);
+  return diagramItem(node);
+}
+
+/** A rendered diagram or chart as a lightbox item, or null when its markup
+ *  does not say how big it is. Serialized as XML, not outerHTML: the item is
+ *  also a standalone file (Download, Copy image), and HTML serialization
+ *  writes a label's line break as an unclosed <br>, which no SVG parser
+ *  will draw. */
+export function diagramItem(svg: Element): LightboxItem | null {
+  const diagram = readDiagramSvg(new XMLSerializer().serializeToString(svg));
   return diagram
     ? { kind: "diagram", src: diagramDataUrl(diagram.svg), diagram }
     : null;
@@ -82,6 +91,31 @@ export function lightboxBlockMediaFor(target: Element): Element | null {
   return null;
 }
 
+/** True while the reader has text selected inside `node`: copying a label,
+ *  which a click or right-click must not take over. */
+function selectingIn(node: Element): boolean {
+  const selection = window.getSelection();
+  return Boolean(
+    selection &&
+    !selection.isCollapsed &&
+    selection.anchorNode &&
+    node.contains(selection.anchorNode),
+  );
+}
+
+/**
+ * The diagram or chart a right-click landed on, in the transcript or open in
+ * the viewer. Inline SVG gets no "Copy image" from the browser, so these take
+ * the app's own menu instead. A text selection inside keeps the browser's.
+ */
+export function contextMenuDiagramFor(target: Element): Element | null {
+  const svg = target
+    .closest?.(".md-mermaid, .md-chart-canvas, [data-lightbox-diagram]")
+    ?.querySelector(":scope > svg");
+  if (!svg || selectingIn(svg)) return null;
+  return svg;
+}
+
 /**
  * Resolve the diagram a click is about. A live text selection inside the SVG
  * is copying, not an attempt to open the viewer. A chart is interactive in
@@ -98,11 +132,5 @@ export function lightboxDiagramFor(target: Element): Element | null {
     ?.querySelector(".md-mermaid > svg");
   if (!svg) return null;
   if (target.closest?.("button.md-diagram-expand")) return svg;
-  const selection = window.getSelection();
-  const selecting =
-    selection &&
-    !selection.isCollapsed &&
-    selection.anchorNode &&
-    svg.contains(selection.anchorNode);
-  return selecting ? null : svg;
+  return selectingIn(svg) ? null : svg;
 }
