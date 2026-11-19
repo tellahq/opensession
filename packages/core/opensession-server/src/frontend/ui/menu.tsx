@@ -122,7 +122,13 @@ function Popup({
 }) {
   if (useDeferredPopupRoot()) return null;
   return (
-    <BaseMenu.Portal>
+    <BaseMenu.Portal
+      // Base UI otherwise inherits a containing popup's portal target. The
+      // workspace summary card portals into the header's actions row, whose
+      // low stacking layer would trap its menus under the Browser thumbnail
+      // drawn over the card. Mount at the page root so the menu paints above.
+      container={typeof document !== "undefined" ? document.body : undefined}
+    >
       <BaseMenu.Positioner
         side={side}
         align={align}
