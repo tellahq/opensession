@@ -12,10 +12,13 @@ import {
   turnScrollAnchor,
 } from "../lib/transcript-block-identity";
 import { MessageBubble } from "./MessageBubble";
+import { formatDuration } from "../lib/time";
 import { ProgressStatusLine, ProgressStatusRow } from "./ProgressStatusRow";
 import {
   collectProgressUpdates,
+  splitLeadStatus,
   type ProgressGroup,
+  type ProgressUpdate,
 } from "../lib/progress-updates";
 import { agentMessageText } from "../lib/agent-message";
 import { NoteBubble } from "./NoteBubble";
@@ -74,7 +77,13 @@ type RenderBlock =
        *  instead of drawn as its own "Checked back" row. */
       checkBack?: LoopBlock;
     }
-  | { kind: "turn"; items: TranscriptEntry[]; expandWhileRunning: boolean }
+  | {
+      kind: "turn";
+      items: TranscriptEntry[];
+      expandWhileRunning: boolean;
+      /** The status line the reply below opened with (liftLeadStatuses). */
+      status?: ProgressUpdate;
+    }
   | {
       kind: "footer";
       entry: TranscriptEntry;
@@ -441,6 +450,34 @@ function foldReportedTasks(
       i++;
       continue;
     }
+    // An automated event handled with nothing left for the person gets a
+    // one-line status answer ("✓ **Merge conflicts**: Resolved"). The event
+    // and its work then fold under that status row (projectProgressBlocks),
+    // so the whole thing is one line.
+    if (
+      trigger &&
+      block.kind === "entry" &&
+      progress.get(block.entry.id) &&
+      !pickedBackUp(i + 1)
+    ) {
+      const first = run.flatMap(renderBlockEntries)[0];
+      folded.push({
+        kind: "review-loop",
+        variant: "work",
+        trigger,
+        // Interim statuses are the row's own history.
+        blocks: run.filter((inner) => !isStatus(inner)),
+        prNumber: null,
+        rounds: 0,
+        settled: null,
+        durationMs: first
+          ? Date.parse(block.entry.timestamp) - Date.parse(first.timestamp)
+          : undefined,
+      });
+      folded.push(block);
+      run = [];
+      continue;
+    }
     if (foldable(block)) {
       run.push(block);
       continue;
@@ -450,6 +487,46 @@ function foldReportedTasks(
   }
   folded.push(...run);
   return folded;
+}
+
+/** A reply that opens with a status line ("◷ **Native build**: Running", then
+ * prose) hands that line to the work row right above it, "◷ Native build:
+ * Running · 35s ›", and keeps only its prose. Without a work row above it the
+ * reply is left as written. The footer keeps the original entry, so Copy
+ * copies the whole message. */
+// Per entry, so a rerender hands TurnBlock and MessageBubble the same status
+// and entry objects and their memo comparators can bail.
+const leadStatusCache = new WeakMap<
+  TranscriptEntry,
+  { update: ProgressUpdate; entry: TranscriptEntry } | null
+>();
+
+function leadStatusOf(entry: TranscriptEntry) {
+  let cached = leadStatusCache.get(entry);
+  if (cached === undefined) {
+    const split = splitLeadStatus(entry);
+    cached = split
+      ? { update: split.update, entry: { ...entry, content: split.rest } }
+      : null;
+    leadStatusCache.set(entry, cached);
+  }
+  return cached;
+}
+
+function liftLeadStatuses(blocks: RenderBlock[]): RenderBlock[] {
+  let lifted: RenderBlock[] | null = null;
+  for (let i = 1; i < blocks.length; i++) {
+    const block = blocks[i]!;
+    const prev = (lifted ?? blocks)[i - 1]!;
+    if (block.kind !== "entry" || block.entry.type !== "assistant") continue;
+    if (prev.kind !== "turn" || prev.status) continue;
+    const split = leadStatusOf(block.entry);
+    if (!split) continue;
+    lifted ??= [...blocks];
+    lifted[i - 1] = { ...prev, status: split.update };
+    lifted[i] = { ...block, entry: split.entry };
+  }
+  return lifted ?? blocks;
 }
 
 /** One status row per task. Status messages leave their folds; the check-back
@@ -479,6 +556,16 @@ function projectProgressBlocks(
       continue;
     }
     flush();
+    // An automated event's work, answered by a status: that row's work.
+    if (
+      block.kind === "review-loop" &&
+      block.trigger &&
+      blocks[index + 1] &&
+      isOwner(blocks[index + 1]!)
+    ) {
+      pending = block;
+      continue;
+    }
     if (block.kind !== "review-loop" || block.variant === "work") {
       projected.push(block);
       continue;
@@ -875,12 +962,14 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
       at++;
     }
   }
-  const groupedBlocks = projectProgressBlocks(
-    groupCheckBacks(
-      groupReviewLoops(foldReportedTasks(blocks, progressUpdates)),
+  const groupedBlocks = liftLeadStatuses(
+    projectProgressBlocks(
+      groupCheckBacks(
+        groupReviewLoops(foldReportedTasks(blocks, progressUpdates)),
+        progressUpdates,
+      ),
       progressUpdates,
     ),
-    progressUpdates,
   );
   const isConversationBoundary = (block: RenderBlock) =>
     block.kind === "entry" &&
@@ -1083,11 +1172,24 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
       const content = progress ? (
         <ProgressStatusRow
           group={progress}
-          live={Boolean(checkBack) && isLoopLive(i) && isCheckBackTail(i)}
+          live={
+            checkBack?.variant === "check-back" &&
+            isLoopLive(i) &&
+            isCheckBackTail(i)
+          }
+          meta={
+            checkBack?.trigger && checkBack.durationMs !== undefined
+              ? (formatDuration(checkBack.durationMs) ?? undefined)
+              : undefined
+          }
           defaultOpen={reviewLoopsOpen}
           onOpenChange={onReviewLoopOpenChange}
         >
-          {checkBack && renderLoopChildren(checkBack, isLoopLive(i))}
+          {checkBack &&
+            renderLoopChildren(
+              checkBack,
+              checkBack.variant === "check-back" && isLoopLive(i),
+            )}
         </ProgressStatusRow>
       ) : block.kind === "turn" ? (
         <TurnBlock
@@ -1098,6 +1200,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
           onOpenSubagent={onOpenSubagent}
           sessionId={sessionId}
           last={i === lastContentBlock}
+          status={block.status}
         />
       ) : block.kind === "note" ? (
         <NoteBubble thread={block.note} sessionId={sessionId} />

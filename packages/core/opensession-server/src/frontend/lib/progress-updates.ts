@@ -2,7 +2,10 @@ import type {
   TranscriptEntry,
   TranscriptIndexEntry,
 } from "@tellahq/opensession-protocol/session";
-import { classifyEntry } from "@tellahq/opensession-protocol/notices";
+import {
+  automatedTriggerTitle,
+  classifyEntry,
+} from "@tellahq/opensession-protocol/notices";
 import { agentMessageText } from "./agent-message";
 
 export interface ProgressUpdate {
@@ -49,6 +52,32 @@ export function parseProgressUpdate(
     state: match[1] === "✓" ? "done" : "running",
     text: match[3]!.trim(),
   };
+}
+
+/** A reply that opens with a status line and goes on in prose ("◷ **Native
+ * build**: Running", a blank line, then why): the status, and the prose after
+ * it. The status then names the work row above the reply instead of standing
+ * as a bold line of its own. */
+export function splitLeadStatus(
+  entry: TranscriptEntry,
+): { update: ProgressUpdate; rest: string } | null {
+  if (entry.type !== "assistant" || entry.isReasoning || entry.isError)
+    return null;
+  const match = /^([^\r\n]+)\r?\n\s*\n([\s\S]*\S[\s\S]*)$/.exec(
+    entry.content.trimStart(),
+  );
+  if (!match) return null;
+  const update = parseProgressUpdate({
+    ...entry,
+    content: match[1]!,
+    contentLength: undefined,
+    contentClamped: undefined,
+    pastedTexts: undefined,
+    images: undefined,
+    videos: undefined,
+    files: undefined,
+  });
+  return update ? { update, rest: match[2]!.trim() } : null;
 }
 
 /** One row per task: every update between two human messages or team notes
@@ -124,6 +153,9 @@ export function collectProgressUpdates(
       (!classified.notice || classified.notice.kind === "review-handoff")
     )
       active = null;
+    // An automated event (a GitHub notice, a worker's report) is a task of
+    // its own, so its status starts a fresh row.
+    else if (automatedTriggerTitle(entry)) active = null;
     const update = finals.has(entry.id) ? updates.get(entry.id) : null;
     if (!update) continue;
     if (active) {
