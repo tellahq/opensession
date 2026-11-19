@@ -619,6 +619,66 @@ describe("TranscriptBlocks compact tool runs", () => {
     );
   });
 
+  test("an automated event answered with a status is one status row", () => {
+    setTurnPrefs(null);
+    const entries: TranscriptEntry[] = [
+      {
+        id: "conflict",
+        type: "user",
+        content:
+          "[GitHub] PR #5682 “Add a toggle” now has merge conflicts with its base branch. https://github.com/acme/app/pull/5682 This session is assigned to handle it.",
+        timestamp: "2026-08-13T05:50:00Z",
+      },
+      ...toolEntries.slice(1),
+      {
+        id: "status",
+        type: "assistant",
+        content: "✓ **Merge conflicts**: Resolved",
+        timestamp: "2026-08-13T06:01:00Z",
+      },
+    ];
+    const html = renderToStaticMarkup(<TranscriptBlocks entries={entries} />);
+    expect(html.match(/data-progress-topic=/g)).toHaveLength(1);
+    expect(html).toContain('<span class="flex-none text-faint">· 11m</span>');
+    // No event row, Worked row or answer footer beside it.
+    expect(html).not.toContain("now has merge conflicts");
+    expect(html).not.toMatch(WORKED_TITLE);
+    expect(html).not.toContain('aria-label="Copy message"');
+
+    const open = renderToStaticMarkup(
+      <TranscriptBlocks reviewLoopsOpen entries={entries} />,
+    );
+    expect(open.match(/This session is assigned to handle it/g)).toHaveLength(
+      1,
+    );
+    expect(open).toContain("Ran 1 command, read 1 file");
+  });
+
+  test("a reply that opens with a status names the work row above it", () => {
+    setTurnPrefs(null);
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        entries={[
+          ...toolEntries,
+          {
+            id: "answer",
+            type: "assistant",
+            content:
+              "◷ **Native build**: Running\n\nI didn't start a new build: one is already queued.",
+            timestamp: "2026-08-13T06:00:35Z",
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain(
+      '<span class="font-medium text-fg">Native build</span>',
+    );
+    expect(html).toContain('<span class="flex-none">· 3s</span>');
+    expect(html).not.toMatch(WORKED_TITLE);
+    expect(html).not.toContain("<strong>Native build</strong>");
+    expect(html).toContain("one is already queued");
+  });
+
   test("leaves the duration to the Worked fold, not the answer's footer too", () => {
     setTurnPrefs(null);
     const footerDuration = /pl-1 text-meta font-medium[^>]*>[^<]+</;
@@ -2480,9 +2540,26 @@ describe("TranscriptBlocks progress rows", () => {
     const open = renderToStaticMarkup(
       <TranscriptBlocks entries={shipped} reviewLoopsOpen />,
     );
-    expect(open).toContain("CI: Running");
-    expect(open).toContain("Deployment: Running");
+    // Read after the fact, a status says what the wait was, not "Running".
+    expect(open).toContain("Waited for CI · 1s");
+    expect(open).toContain("Waited for deployment · 1s");
+    expect(open).not.toContain("CI: Running");
     expect(open).toContain("Ran 1 command");
+  });
+
+  test("a mid-turn update closes the wait it reports on", () => {
+    const closed = [
+      ...shipped.slice(0, 4),
+      row("ci-done", "assistant", "✓ **CI**: All checks passed", 4),
+      ...shipped.slice(4),
+    ];
+    const open = renderToStaticMarkup(
+      <TranscriptBlocks entries={closed} reviewLoopsOpen />,
+    );
+    expect(open).toContain("CI passed · 2s");
+    expect(open).not.toContain("All checks passed");
+    expect(open).not.toContain("Waited for CI");
+    expect(open).toContain("Waited for deployment · 1s");
   });
 
   test("an answered task folds the same way across indexed ranges", () => {

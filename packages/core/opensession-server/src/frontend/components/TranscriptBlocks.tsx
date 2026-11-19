@@ -12,10 +12,16 @@ import {
   turnScrollAnchor,
 } from "../lib/transcript-block-identity";
 import { MessageBubble } from "./MessageBubble";
+import { formatDuration } from "../lib/time";
 import { ProgressStatusLine, ProgressStatusRow } from "./ProgressStatusRow";
 import {
   collectProgressUpdates,
+  foldStatuses,
+  parseProgressUpdate,
+  splitLeadStatus,
+  type FoldStatus,
   type ProgressGroup,
+  type ProgressUpdate,
 } from "../lib/progress-updates";
 import { agentMessageText } from "../lib/agent-message";
 import { NoteBubble } from "./NoteBubble";
@@ -74,7 +80,13 @@ type RenderBlock =
        *  instead of drawn as its own "Checked back" row. */
       checkBack?: LoopBlock;
     }
-  | { kind: "turn"; items: TranscriptEntry[]; expandWhileRunning: boolean }
+  | {
+      kind: "turn";
+      items: TranscriptEntry[];
+      expandWhileRunning: boolean;
+      /** The status line the reply below opened with (liftLeadStatuses). */
+      status?: ProgressUpdate;
+    }
   | {
       kind: "footer";
       entry: TranscriptEntry;
@@ -441,6 +453,34 @@ function foldReportedTasks(
       i++;
       continue;
     }
+    // An automated event handled with nothing left for the person gets a
+    // one-line status answer ("✓ **Merge conflicts**: Resolved"). The event
+    // and its work then fold under that status row (projectProgressBlocks),
+    // so the whole thing is one line.
+    if (
+      trigger &&
+      block.kind === "entry" &&
+      progress.get(block.entry.id) &&
+      !pickedBackUp(i + 1)
+    ) {
+      const first = run.flatMap(renderBlockEntries)[0];
+      folded.push({
+        kind: "review-loop",
+        variant: "work",
+        trigger,
+        // Interim statuses are the row's own history.
+        blocks: run.filter((inner) => !isStatus(inner)),
+        prNumber: null,
+        rounds: 0,
+        settled: null,
+        durationMs: first
+          ? Date.parse(block.entry.timestamp) - Date.parse(first.timestamp)
+          : undefined,
+      });
+      folded.push(block);
+      run = [];
+      continue;
+    }
     if (foldable(block)) {
       run.push(block);
       continue;
@@ -450,6 +490,46 @@ function foldReportedTasks(
   }
   folded.push(...run);
   return folded;
+}
+
+/** A reply that opens with a status line ("◷ **Native build**: Running", then
+ * prose) hands that line to the work row right above it, "◷ Native build:
+ * Running · 35s ›", and keeps only its prose. Without a work row above it the
+ * reply is left as written. The footer keeps the original entry, so Copy
+ * copies the whole message. */
+// Per entry, so a rerender hands TurnBlock and MessageBubble the same status
+// and entry objects and their memo comparators can bail.
+const leadStatusCache = new WeakMap<
+  TranscriptEntry,
+  { update: ProgressUpdate; entry: TranscriptEntry } | null
+>();
+
+function leadStatusOf(entry: TranscriptEntry) {
+  let cached = leadStatusCache.get(entry);
+  if (cached === undefined) {
+    const split = splitLeadStatus(entry);
+    cached = split
+      ? { update: split.update, entry: { ...entry, content: split.rest } }
+      : null;
+    leadStatusCache.set(entry, cached);
+  }
+  return cached;
+}
+
+function liftLeadStatuses(blocks: RenderBlock[]): RenderBlock[] {
+  let lifted: RenderBlock[] | null = null;
+  for (let i = 1; i < blocks.length; i++) {
+    const block = blocks[i]!;
+    const prev = (lifted ?? blocks)[i - 1]!;
+    if (block.kind !== "entry" || block.entry.type !== "assistant") continue;
+    if (prev.kind !== "turn" || prev.status) continue;
+    const split = leadStatusOf(block.entry);
+    if (!split) continue;
+    lifted ??= [...blocks];
+    lifted[i - 1] = { ...prev, status: split.update };
+    lifted[i] = { ...block, entry: split.entry };
+  }
+  return lifted ?? blocks;
 }
 
 /** One status row per task. Status messages leave their folds; the check-back
@@ -479,6 +559,16 @@ function projectProgressBlocks(
       continue;
     }
     flush();
+    // An automated event's work, answered by a status: that row's work.
+    if (
+      block.kind === "review-loop" &&
+      block.trigger &&
+      blocks[index + 1] &&
+      isOwner(blocks[index + 1]!)
+    ) {
+      pending = block;
+      continue;
+    }
     if (block.kind !== "review-loop" || block.variant === "work") {
       projected.push(block);
       continue;
@@ -875,12 +965,14 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
       at++;
     }
   }
-  const groupedBlocks = projectProgressBlocks(
-    groupCheckBacks(
-      groupReviewLoops(foldReportedTasks(blocks, progressUpdates)),
+  const groupedBlocks = liftLeadStatuses(
+    projectProgressBlocks(
+      groupCheckBacks(
+        groupReviewLoops(foldReportedTasks(blocks, progressUpdates)),
+        progressUpdates,
+      ),
       progressUpdates,
     ),
-    progressUpdates,
   );
   const isConversationBoundary = (block: RenderBlock) =>
     block.kind === "entry" &&
@@ -917,14 +1009,18 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
       .slice(lastReviewLoop + 1)
       .some((block) => reviewBlockRole(block).kind === "user-message");
 
-  const renderLoopChildren = (block: LoopBlock, isLive: boolean) =>
-    block.blocks.map((inner, innerIndex) => {
+  const renderLoopChildren = (block: LoopBlock, isLive: boolean) => {
+    const statuses = loopFoldStatuses(block.blocks, progressUpdates, isLive);
+    return block.blocks.map((inner, innerIndex) => {
       const innerKey = renderBlockKey(inner, innerIndex, turnMountScope);
+      const status =
+        inner.kind === "entry" ? statuses.get(inner.entry.id) : undefined;
       return (
         <React.Fragment key={innerKey}>
           {inner.kind === "turn" ? (
             <ReviewTurnSteps
               items={inner.items}
+              statuses={statuses}
               toolResults={toolResults}
               live={Boolean(isLive && innerIndex === block.blocks.length - 1)}
               owner={owner}
@@ -940,8 +1036,8 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
               assets={inner.assets}
               onFork={onFork}
             />
-          ) : inner.kind === "entry" && progressUpdates.has(inner.entry.id) ? (
-            <ProgressStatusLine entry={inner.entry} />
+          ) : status !== undefined ? (
+            status && <ProgressStatusLine status={status} />
           ) : block.trigger && innerIndex === 0 && inner.kind === "entry" ? (
             // The row already names the event; open, the fold adds what it
             // said in full rather than its title a second time.
@@ -981,6 +1077,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
         </React.Fragment>
       );
     });
+  };
 
   // A fold is live until a person speaks after it.
   const isLoopLive = (i: number) =>
@@ -1083,11 +1180,24 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
       const content = progress ? (
         <ProgressStatusRow
           group={progress}
-          live={Boolean(checkBack) && isLoopLive(i) && isCheckBackTail(i)}
+          live={
+            checkBack?.variant === "check-back" &&
+            isLoopLive(i) &&
+            isCheckBackTail(i)
+          }
+          meta={
+            checkBack?.trigger && checkBack.durationMs !== undefined
+              ? (formatDuration(checkBack.durationMs) ?? undefined)
+              : undefined
+          }
           defaultOpen={reviewLoopsOpen}
           onOpenChange={onReviewLoopOpenChange}
         >
-          {checkBack && renderLoopChildren(checkBack, isLoopLive(i))}
+          {checkBack &&
+            renderLoopChildren(
+              checkBack,
+              checkBack.variant === "check-back" && isLoopLive(i),
+            )}
         </ProgressStatusRow>
       ) : block.kind === "turn" ? (
         <TurnBlock
@@ -1098,6 +1208,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
           onOpenSubagent={onOpenSubagent}
           sessionId={sessionId}
           last={i === lastContentBlock}
+          status={block.status}
         />
       ) : block.kind === "note" ? (
         <NoteBubble thread={block.note} sessionId={sessionId} />
@@ -1746,8 +1857,58 @@ function indexedItemEstimate(item: IndexedTimelineItem): number {
 
 /** Review work uses the same grouped step rows as a normal turn, without
  * introducing another outer worker disclosure inside the review loop. */
+/**
+ * Every status a loop's fold shows, by entry id. A turn's own narration
+ * counts too: the "✓ CI: All checks passed" an agent posts mid-turn closes
+ * the wait it reports on, where it used to stand as a full message bubble.
+ */
+function loopFoldStatuses(
+  blocks: RenderBlock[],
+  progressUpdates: ReadonlyMap<string, ProgressGroup | null>,
+  live: boolean,
+): Map<string, FoldStatus | null> {
+  const steps: Array<{
+    id: string;
+    at: string;
+    update: ProgressUpdate | null;
+  }> = [];
+  for (const inner of blocks) {
+    if (inner.kind === "turn") {
+      for (const entry of inner.items)
+        steps.push({
+          id: entry.id,
+          at: entry.timestamp,
+          update:
+            entry.type === "assistant" ? parseProgressUpdate(entry) : null,
+        });
+      continue;
+    }
+    const first = renderBlockEntries(inner)[0];
+    steps.push({
+      id: first?.id ?? "",
+      at: first?.timestamp ?? "",
+      update:
+        inner.kind === "entry" && progressUpdates.has(inner.entry.id)
+          ? parseProgressUpdate(inner.entry)
+          : null,
+    });
+  }
+  const byId = new Map<string, FoldStatus | null>();
+  // Most folds carry no status at all. Do not parse their timestamps.
+  if (!steps.some((step) => step.update)) return byId;
+  foldStatuses(
+    steps.map((step) => step.update),
+    (index) => Date.parse(steps[index]!.at),
+    live,
+  ).forEach((status, index) => {
+    if (status !== undefined) byId.set(steps[index]!.id, status);
+  });
+  return byId;
+}
+
 function ReviewTurnSteps({
   items,
+  statuses,
   toolResults,
   live,
   owner,
@@ -1755,6 +1916,8 @@ function ReviewTurnSteps({
   onOpenSubagent,
 }: {
   items: TranscriptEntry[];
+  /** The fold's status steps (`loopFoldStatuses`); null hides one. */
+  statuses: ReadonlyMap<string, FoldStatus | null>;
   toolResults: Map<string, TranscriptEntry>;
   live: boolean;
   owner?: string;
@@ -1767,9 +1930,14 @@ function ReviewTurnSteps({
   const sections: Array<
     | { kind: "tools"; items: TranscriptEntry[] }
     | { kind: "message"; entry: TranscriptEntry }
+    | { kind: "status"; id: string; status: FoldStatus }
   > = [];
   for (const entry of items) {
-    if (entry.type === "tool_use" && agentMessageText(entry) === null) {
+    const status = statuses.get(entry.id);
+    if (status !== undefined) {
+      // A folded update leaves no gap: the calls either side join one run.
+      if (status) sections.push({ kind: "status", id: entry.id, status });
+    } else if (entry.type === "tool_use" && agentMessageText(entry) === null) {
       const last = sections[sections.length - 1];
       if (last?.kind === "tools") last.items.push(entry);
       else sections.push({ kind: "tools", items: [entry] });
@@ -1779,7 +1947,9 @@ function ReviewTurnSteps({
   }
 
   return sections.map((section) =>
-    section.kind === "tools" ? (
+    section.kind === "status" ? (
+      <ProgressStatusLine key={section.id} status={section.status} />
+    ) : section.kind === "tools" ? (
       <ToolSection
         key={section.items[0].id}
         items={section.items}
