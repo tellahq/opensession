@@ -2,6 +2,7 @@ import {
   sessionSpeed,
   type SessionSpeed,
 } from "@tellahq/opensession-protocol/session";
+import { noticeText } from "@tellahq/opensession-protocol/notices";
 import { canJoinCreateWorkspace } from "../shared/session-create-workspace";
 /**
  * Session creation — the ONE create path shared by the web UI and the
@@ -68,6 +69,7 @@ import {
   accountProviderForModel,
   interactiveFallbackModel,
   modelLabel,
+  switchReasonLabel,
   providerFor,
   resolveModel,
 } from "./models";
@@ -605,9 +607,11 @@ async function attachCreateRepos(
     } catch (e) {
       io.emit({
         type: "notice",
-        message: `Couldn't add ${repoId} to this session: ${
-          e instanceof Error ? e.message : String(e)
-        }. The other repos are ready; add this one from the repo menu when it is.`,
+        message: noticeText(
+          `Couldn't add ${repoId}`,
+          `${e instanceof Error ? e.message : String(e)}. Add it from the repo menu later.`,
+        ),
+        tone: "warn",
       });
     }
   }
@@ -923,7 +927,11 @@ async function reportSetupFailure(
   await recordRunOutcome(sessionId, `Session setup failed: ${message}`);
   io.emit({ type: "error", message });
   io.emit({ type: "stream_done" });
-  io.emit({ type: "notice", message: `Session setup failed: ${message}` });
+  io.emit({
+    type: "notice",
+    message: noticeText("Session setup failed", message),
+    tone: "error",
+  });
   io.emit({ type: "session_status", isRunning: false });
 }
 
@@ -1782,7 +1790,8 @@ export async function openCreatedSession(
       releaseOpeningTurn = await acquireOpeningTurn((ahead) =>
         io.emit({
           type: "notice",
-          message: `Waiting for a free start slot (position ${ahead + 1} in queue).`,
+          message: `Waiting to start · ${ahead + 1} in line`,
+          tone: "info",
         }),
       );
 
@@ -2166,7 +2175,8 @@ export async function openCreatedSession(
             } else {
               io.emit({
                 type: "notice",
-                message: `${modelLabel(event.fromModel)} ${event.switchReason || "fell back"} — using ${modelLabel(to)} for this turn only.`,
+                message: `Using ${modelLabel(to)} this turn · ${modelLabel(event.fromModel)} ${switchReasonLabel(event.switchReason)}`,
+                tone: "warn",
               });
             }
           }

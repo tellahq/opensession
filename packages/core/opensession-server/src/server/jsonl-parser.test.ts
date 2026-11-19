@@ -399,6 +399,20 @@ describe("parseTranscript", () => {
       'Claude usage limit hit on account "A"; switched to "B" and retrying.',
     );
     expect(entries[2].content).toBe("Transient engine error — retrying once.");
+    expect(entries[2].noticeTone).toBeUndefined();
+  });
+
+  it("keeps the tone a runner notice was written with", async () => {
+    const path = writeFixture([
+      userLine(
+        "n1",
+        '<runner-notice tone="error">Run failed\nprovider said no</runner-notice>',
+      ),
+    ]);
+    const [entry] = await parseTranscript(path);
+    expect(entry.type).toBe("system");
+    expect(entry.noticeTone).toBe("error");
+    expect(entry.content).toBe("Run failed\nprovider said no");
   });
 
   it("maps compaction-summary lines to system entries tagged for the classifier", async () => {

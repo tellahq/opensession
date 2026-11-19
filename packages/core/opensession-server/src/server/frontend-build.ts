@@ -1265,7 +1265,8 @@ export function scheduleFrontendRebuild(
         lastBuildErrorKey = fail.key;
         broadcastToAll({
           type: "notice",
-          message: "App update paused. No action needed.",
+          message: "App update paused · no action needed",
+          tone: "info",
         });
       }
       if (

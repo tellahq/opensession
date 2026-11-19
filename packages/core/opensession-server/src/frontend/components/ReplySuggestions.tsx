@@ -54,20 +54,22 @@ import { cn } from "../ui/cn";
  * What keeps the row quiet is its ink, not its surface: dim at medium weight,
  * no icon, against the near-black semibold of the transcript's own pills.
  *
+ * Round ends rather than squircled ones: `rounded-full` is the one radius
+ * base.css leaves out of its squircle rule, and a pill this small reads as a
+ * blunt lozenge under it.
+ *
  * The 28px height is fixed rather than left to the label, because
  * SUGGESTIONS_CLEARANCE is measured from it and inherited leading would
  * otherwise decide how much of the answer the row covers.
  */
 const chip =
-  "relative inline-flex h-7 w-full items-center whitespace-nowrap rounded-[999px] px-3 " +
+  "relative inline-flex h-7 w-full items-center whitespace-nowrap rounded-full px-3 " +
   "bg-[var(--composer-surface)] " +
   "[--smooth-ring-color:var(--composer-border)] smooth-shadow-ring-md " +
   "text-label font-medium text-dim transition-[color,scale] " +
   "hover:text-fg focus-visible:text-fg active:scale-[0.96] " +
   // The hover wash layers over the lid rather than replacing it, so it paints
-  // on a pseudo-element, which needs the pill's corner treatment of its own:
-  // base.css grants `corner-shape` by matching `rounded-*` on an ELEMENT, and
-  // a pseudo-element matches no selector.
+  // on a pseudo-element, which inherits the pill's radius and corner shape.
   "before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] " +
   "before:[corner-shape:inherit] before:bg-transparent before:transition-colors " +
   "before:content-[''] hover:before:bg-hover focus-visible:before:bg-hover " +

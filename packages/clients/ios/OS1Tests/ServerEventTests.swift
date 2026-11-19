@@ -359,10 +359,17 @@ final class ServerEventTests: XCTestCase {
     }
 
     func testNoticeAndError() {
-        guard case .notice(let message) = parse(#"{"type":"notice","message":"heads up"}"#) else {
+        guard case .notice(let message, let tone) = parse(#"{"type":"notice","message":"heads up"}"#) else {
             return XCTFail("expected .notice")
         }
         XCTAssertEqual(message, "heads up")
+        XCTAssertNil(tone)
+        guard case .notice(_, let sent) = parse(
+            #"{"type":"notice","message":"Engine stalled · continuing","tone":"warn"}"#
+        ) else {
+            return XCTFail("expected .notice")
+        }
+        XCTAssertEqual(sent, .warn)
         guard case .serverError(let error) = parse(#"{"type":"error"}"#) else {
             return XCTFail("expected .serverError")
         }
