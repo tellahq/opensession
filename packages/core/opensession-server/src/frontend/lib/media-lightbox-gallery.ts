@@ -12,9 +12,6 @@ import {
 export const GALLERY_SELECTOR =
   "img.md-image, video.md-video, .md-compare > img, .md-mermaid > svg, .md-chart-canvas > svg";
 
-/** Apple's page control keeps a small moving window for long galleries. */
-export const MAX_VISIBLE_LIGHTBOX_DOTS = 7;
-
 /** The viewer frosts the page behind it in the page's own colour, so the
  *  session stays recognisable while the picture is in front of it. */
 export const LIGHTBOX_SCRIM_CLASS =
