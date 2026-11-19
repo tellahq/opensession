@@ -57,7 +57,7 @@ const ROW_ACTION =
 const ROW_ACTION_TONE = {
   red: "border-[color-mix(in_srgb,var(--red)_78%,black)] bg-[var(--red)] text-white hover:brightness-[1.08]",
   "status-red":
-    "border-[color-mix(in_srgb,var(--red)_45%,transparent)] bg-[color-mix(in_srgb,var(--red)_12%,var(--control-surface))] text-red hover:bg-red-soft",
+    "border-line bg-popup text-red hover:bg-[color-mix(in_srgb,var(--red)_6%,var(--popup-surface))]",
 } as const;
 
 export function PrSeriesRow({

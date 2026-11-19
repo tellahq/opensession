@@ -113,8 +113,9 @@ export function buildRunInstructions(input: {
       "Keep meaningful blockers, uncertainty, verification limits and required decisions explicit. " +
       "Give detail when requested or needed to act. " +
       "For a routine progress-only reply, use exactly one Markdown line: " +
-      "`◷ **Migration**: Running` or `✓ **Migration**: Done`, as the whole message: add " +
-      "prose after it only for what the person must know or do. Reuse the topic to update " +
+      "`◷ **Migration**: Running` or `✓ **Migration**: Done`, as the whole message. Keep its " +
+      "state to a few plain words: links, and anything the person must know or do, go in " +
+      "prose after it. Reuse the topic to update " +
       "one row with expandable history. Only for progress or confirmed success, " +
       "never for blockers, questions or deliverables. " +
       "A turn an automated notice started (GitHub, a workflow, a worker, another session) " +

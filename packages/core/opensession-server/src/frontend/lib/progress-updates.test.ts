@@ -7,6 +7,7 @@ import {
   collectProgressUpdates,
   foldStatuses,
   parseProgressUpdate,
+  plainStatusText,
   type ProgressUpdate,
 } from "./progress-updates";
 
@@ -46,6 +47,29 @@ describe("explicit progress updates", () => {
     ]) {
       expect(parseProgressUpdate(entry("a", content))).toBeNull();
     }
+  });
+
+  test("shows the words of Markdown in a status, not its syntax", () => {
+    expect(
+      parseProgressUpdate(
+        entry(
+          "a",
+          "◷ **Image corners PR**: [#11046](https://github.com/acme/app/pull/11046) will merge itself once CI passes",
+        ),
+      )?.text,
+    ).toBe("#11046 will merge itself once CI passes");
+    expect(
+      plainStatusText(
+        "https://github.com/acme/app/pull/12 and <https://github.com/acme/web/issues/3#top> are `queued`",
+      ),
+    ).toBe("app#12 and web#3 are queued");
+    expect(plainStatusText("**Deploying** to https://example.test/x")).toBe(
+      "Deploying to https://example.test/x",
+    );
+    expect(plainStatusText("3 * 4 of [the tables](https://example.test)")).toBe(
+      "3 * 4 of the tables",
+    );
+    expect(parseProgressUpdate(entry("a", "✓ **CI**: ** **"))).toBeNull();
   });
 
   test("never folds reasoning, user text, errors, attachments or clamped content", () => {
@@ -184,7 +208,7 @@ describe("status lines inside a work fold", () => {
       ),
     ).toEqual([
       undefined,
-      { text: "CI passed · 4m", done: true },
+      { topic: "CI", text: "CI passed · 4m", done: true },
       undefined,
       null,
     ]);
@@ -198,9 +222,9 @@ describe("status lines inside a work fold", () => {
         false,
       ),
     ).toEqual([
-      { text: "Waited for CI · 4m", done: false },
+      { topic: "CI", text: "Waited for CI · 4m", done: false },
       undefined,
-      { text: "Waited for deployment · 3m", done: false },
+      { topic: "Deployment", text: "Waited for deployment · 3m", done: false },
       undefined,
     ]);
   });
@@ -213,12 +237,14 @@ describe("status lines inside a work fold", () => {
         minutes(0, 1, 3, 4),
         true,
       )[1],
-    ).toEqual({ text: "Waited for CI · 2m", done: false });
+    ).toEqual({ topic: "CI", text: "Waited for CI · 2m", done: false });
     expect(foldStatuses(updates, minutes(0, 1, 3), true)[1]).toEqual({
+      topic: "CI",
       text: "Waiting for CI",
       done: false,
     });
     expect(foldStatuses(updates, minutes(0, 1, 3), false)[1]).toEqual({
+      topic: "CI",
       text: "Waited for CI · 2m",
       done: false,
     });
@@ -238,10 +264,14 @@ describe("status lines inside a work fold", () => {
         false,
       ),
     ).toEqual([
-      { text: "Migration: 3 of 12 tables · 2m", done: false },
+      {
+        topic: "Migration",
+        text: "Migration: 3 of 12 tables · 2m",
+        done: false,
+      },
       undefined,
-      { text: "Deployment done", done: true },
-      { text: "Release: v2.3 is live · 2m", done: true },
+      { topic: "Deployment", text: "Deployment done", done: true },
+      { topic: "Release", text: "Release: v2.3 is live · 2m", done: true },
       null,
     ]);
   });

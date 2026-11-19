@@ -1089,13 +1089,15 @@ function classifyDelivery(entry: TranscriptEntry): TranscriptEntry {
 
 /** Notices delivered as a message that start work with no person behind
  *  them: a GitHub event, a workflow result, a worker's report, a message from
- *  another session. Scheduled check-backs and review handoffs have folds of
- *  their own. */
+ *  another session, a review that settled outside its loop (a person's
+ *  message came between). Scheduled check-backs and review handoffs have
+ *  folds of their own, and a settle notice that closes its loop folds there. */
 const TRIGGER_KINDS: ReadonlySet<NoticeKind> = new Set([
   "system",
   "workflow",
   "worker-report",
   "session-notice",
+  "review-settled",
 ]);
 
 /**
@@ -1138,6 +1140,8 @@ export function automatedTriggerDetail(
   entry: TranscriptEntry,
 ): TriggerDetailLine[] {
   const { content, notice } = classifyEntry(entry);
+  // A settled review's text past its title is instructions for the agent.
+  if (notice?.kind === "review-settled") return [];
   // A worker's report or another session's message is titled by its kind,
   // so its text is the whole message.
   if (notice?.kind === "worker-report" || notice?.kind === "session-notice")

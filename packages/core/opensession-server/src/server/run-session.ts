@@ -217,6 +217,13 @@ import {
 import { noteYouShouldKnowStep } from "./you-should-know";
 import { scheduleSessionHistoryIndex } from "./session-index";
 import { broadcastToSession, sessionWatchers } from "./ws-hub";
+import { transcript } from "./actor-transcript";
+import {
+  beginPromptRun,
+  clearPromptRun,
+  notePromptDelivered,
+  seedPromptRun,
+} from "./session-feed";
 import { peekWorkspace } from "./workspaces";
 import { coordinatorNoteFor } from "./coordinator";
 import {
@@ -741,6 +748,7 @@ export async function steerQueuedPrompt(
     // now promotes the row into the conversation and dispatches it as its own
     // immediate turn. The exact prompt id lets the runner upsert that visible
     // line instead of appending a second copy.
+    const endPromptRun = beginPromptRun(sessionId, item.id ? [item.id] : []);
     await beginPromptDispatch(
       sessionId,
       [sentItem],
@@ -759,6 +767,7 @@ export async function steerQueuedPrompt(
         { required: true },
       );
     } catch (error) {
+      endPromptRun();
       await failPromptDispatch(sessionId, promptEntryId);
       throw error;
     }
@@ -779,10 +788,12 @@ export async function steerQueuedPrompt(
       undefined,
       promptEntryId,
       [item.id],
-    ).catch(async (e) => {
-      console.error(`[queue] Send-now delivery failed for ${sessionId}:`, e);
-      await failPromptDispatch(sessionId, promptEntryId);
-    });
+    )
+      .catch(async (e) => {
+        console.error(`[queue] Send-now delivery failed for ${sessionId}:`, e);
+        await failPromptDispatch(sessionId, promptEntryId);
+      })
+      .finally(endPromptRun);
     return true;
   }
   // Files can't ride a steer (the fold path is text+images only). GitHub FYI
@@ -1184,9 +1195,31 @@ export async function persistRecoveredRunUsage(
     });
 }
 
+/**
+ * The prompts an adopted run answers, for feed_snapshot.activePromptIds: the
+ * journal's prompt entry, plus the delivery ids of a batch, which only that
+ * entry's sourceMessageIds name. Left unrecorded if the entry can't be read,
+ * so the snapshot omits the list instead of claiming no prompt runs.
+ */
+async function seedRecoveredPromptRun(
+  osSessionId: string,
+  run: ActiveRunRecord,
+): Promise<void> {
+  const promptEntryId = run.promptEntryId;
+  if (!promptEntryId) return;
+  const entry = await transcript
+    .getFullEntry(osSessionId, promptEntryId)
+    .catch(() => null);
+  if (!entry) return;
+  seedPromptRun(osSessionId, [
+    ...new Set([promptEntryId, ...(entry.sourceMessageIds ?? [])]),
+  ]);
+}
+
 export async function recordRecoveredRunEvent(
   osSessionId: string,
   event: StreamEvent,
+  run?: ActiveRunRecord,
 ): Promise<void> {
   const session = findSession(osSessionId);
   if (!session) return;
@@ -1240,6 +1273,7 @@ export async function recordRecoveredRunEvent(
     event.type === "tool_result";
   if (carriesFeedState && !recoveredFeedStarted.has(osSessionId)) {
     recoveredFeedStarted.add(osSessionId);
+    if (run) await seedRecoveredPromptRun(osSessionId, run);
     broadcastToSession(osSessionId, {
       type: "stream_start",
       sessionId: osSessionId,
@@ -1398,6 +1432,7 @@ export async function recordRecoveredRunEvent(
 
   if (event.type === "done" || event.type === "error") {
     recoveredFeedStarted.delete(osSessionId);
+    clearPromptRun(osSessionId);
     // A discussion turn that outlived a gateway restart still owes Plain its
     // answer and IDLE. The in-memory reply is gone with the old process, so
     // the complete final text comes from the transcript the host proxied.
@@ -1605,55 +1640,62 @@ async function drainQueueInner(sessionId: string): Promise<void> {
     }
     queueHoldNotified.delete(sessionId);
     const { batch, promptEntryId, interrupted } = claim;
-    await broadcastQueue(sessionId);
-    let combined = batch
-      .map((m) =>
-        batch.length > 1 && m.user ? `[${m.user}] ${m.content}` : m.content,
-      )
-      .join("\n\n");
-    // Interrupt delivery (busy-send aborted the turn to land this batch):
-    // append the fenced steer note so the model resumes the interrupted work
-    // instead of acknowledge-and-parking. Fenced, so the transcript shows
-    // only the user's text.
-    if (interrupted) {
-      combined = `${combined}\n\n${wrapContext(INTERRUPT_STEER_NOTE, "steer-note")}`;
-    }
-    // Attachments queued alongside the text ride the drained turn: images are
-    // decoded to ImageInput, files handed through as staged/inline refs.
-    const combinedImages = await parseImageDataUrls(
-      batch.flatMap((m) => m.images ?? []),
-    );
-    const combinedFiles = batch.flatMap((m) =>
-      Array.isArray(m.files) ? m.files : [],
-    );
-    const contextSessions = [
-      ...new Set(batch.flatMap((m) => m.contextSessions ?? [])),
-    ];
-    // A queued Slack-thread reply carries its origin thread — the turn's answer
-    // mirrors back there. Last one wins if a batch somehow spans threads.
-    const slackReplyTo = [...batch]
-      .reverse()
-      .find((m) => m.slackReplyTo)?.slackReplyTo;
     const sourceMessageIds = batch.flatMap((item) =>
       item.id ? [item.id] : [],
     );
+    // The batch has left the queue: a viewer that watches from here on sees
+    // it as running (feed_snapshot.activePromptIds) until its turn ends.
+    const endPromptRun = beginPromptRun(sessionId, sourceMessageIds);
     try {
-      await runSessionPrompt(
-        sessionId,
-        combined,
-        batch[0].user,
-        combinedImages,
-        combinedFiles.length ? combinedFiles : undefined,
-        contextSessions.length ? contextSessions : undefined,
-        slackReplyTo,
-        promptEntryId,
-        sourceMessageIds,
+      await broadcastQueue(sessionId);
+      let combined = batch
+        .map((m) =>
+          batch.length > 1 && m.user ? `[${m.user}] ${m.content}` : m.content,
+        )
+        .join("\n\n");
+      // Interrupt delivery (busy-send aborted the turn to land this batch):
+      // append the fenced steer note so the model resumes the interrupted work
+      // instead of acknowledge-and-parking. Fenced, so the transcript shows
+      // only the user's text.
+      if (interrupted) {
+        combined = `${combined}\n\n${wrapContext(INTERRUPT_STEER_NOTE, "steer-note")}`;
+      }
+      // Attachments queued alongside the text ride the drained turn: images are
+      // decoded to ImageInput, files handed through as staged/inline refs.
+      const combinedImages = await parseImageDataUrls(
+        batch.flatMap((m) => m.images ?? []),
       );
-    } catch (e) {
-      // The batch was already spliced out and persisted away — put it back at
-      // the front of the queue so a throw doesn't lose the messages.
-      await failPromptDispatch(sessionId, promptEntryId);
-      throw e;
+      const combinedFiles = batch.flatMap((m) =>
+        Array.isArray(m.files) ? m.files : [],
+      );
+      const contextSessions = [
+        ...new Set(batch.flatMap((m) => m.contextSessions ?? [])),
+      ];
+      // A queued Slack-thread reply carries its origin thread — the turn's answer
+      // mirrors back there. Last one wins if a batch somehow spans threads.
+      const slackReplyTo = [...batch]
+        .reverse()
+        .find((m) => m.slackReplyTo)?.slackReplyTo;
+      try {
+        await runSessionPrompt(
+          sessionId,
+          combined,
+          batch[0].user,
+          combinedImages,
+          combinedFiles.length ? combinedFiles : undefined,
+          contextSessions.length ? contextSessions : undefined,
+          slackReplyTo,
+          promptEntryId,
+          sourceMessageIds,
+        );
+      } catch (e) {
+        // The batch was already spliced out and persisted away — put it back at
+        // the front of the queue so a throw doesn't lose the messages.
+        await failPromptDispatch(sessionId, promptEntryId);
+        throw e;
+      }
+    } finally {
+      endPromptRun();
     }
   }
 }
@@ -3945,8 +3987,10 @@ async function runSessionPromptInner(
         // Exact engine acknowledgement, consumed internally. Context-only
         // system steers are intentionally absent from the visible transcript,
         // so transcript matching alone cannot retire their receipts.
-        if (event.steerId)
+        if (event.steerId) {
           await acknowledgeSteerDelivery(sessionId, event.steerId);
+          notePromptDelivered(sessionId, event.steerId);
+        }
         break;
       case "activity":
         // Live-only: which phase the run is in. Nothing is persisted; a

@@ -56,7 +56,7 @@ import {
 } from "../lib/media-lightbox-gallery";
 import { MediaLightboxViewer } from "./MediaLightboxViewer";
 import {
-  IconArrowDown,
+  IconDownload,
   IconArrowUp,
   IconArrowUpRight,
   IconCheck,
@@ -69,9 +69,13 @@ import {
   IconX,
 } from "./icons";
 
-/** Desktop's actions: plain icons, named by their tooltips. */
-const LIGHTBOX_ICON_TOOL_CLASS =
-  "size-10 rounded-full text-fg/70 hover:text-fg aria-pressed:bg-hover aria-pressed:text-fg";
+/** Desktop's actions: the same raised glass circles as Close, so the
+ *  corner reads as one row of buttons. Comment is the one that says its
+ *  name, as a pill; the rest are icons named by their tooltips. */
+const LIGHTBOX_TOOL_CLASS_STATES =
+  "aria-pressed:border-fg/30 aria-pressed:bg-bg/85 data-[popup-open]:bg-bg/85";
+const LIGHTBOX_ICON_TOOL_CLASS = `${LIGHTBOX_ROUND_BUTTON_CLASS} ${LIGHTBOX_TOOL_CLASS_STATES}`;
+const LIGHTBOX_TEXT_TOOL_CLASS = `${LIGHTBOX_ROUND_BUTTON_CLASS} ${LIGHTBOX_TOOL_CLASS_STATES} w-auto px-4`;
 
 export function MediaLightboxGallery({
   items,
@@ -659,27 +663,38 @@ export function MediaLightboxGallery({
     item.src.startsWith("data:") || item.src.startsWith("blob:")
       ? suggestedMediaName(item)
       : undefined;
-  // Desktop's actions: centred in the top bar with the rest of the set, over
-  // the picture they act on, so the bottom is free for its description.
+  // Desktop's actions: on the right beside Close. `text` gives one its name
+  // in words rather than a tooltip.
   const tool = (
     label: string,
     icon: React.ReactNode,
     props: Omit<React.ComponentProps<typeof Button>, "icon" | "variant">,
-  ) => (
-    <Tooltip label={label} side="bottom">
+    text?: string,
+  ) =>
+    text ? (
       <Button
-        variant="ghost"
+        variant="default"
         icon={icon}
-        className={LIGHTBOX_ICON_TOOL_CLASS}
+        className={LIGHTBOX_TEXT_TOOL_CLASS}
         {...props}
-      />
-    </Tooltip>
-  );
+      >
+        {text}
+      </Button>
+    ) : (
+      <Tooltip label={label} side="bottom">
+        <Button
+          variant="default"
+          icon={icon}
+          className={LIGHTBOX_ICON_TOOL_CLASS}
+          {...props}
+        />
+      </Tooltip>
+    );
   const tools = (
     <div
       role="group"
       aria-label="Media actions"
-      className="pointer-events-auto flex items-center gap-0.5"
+      className="pointer-events-auto flex items-center gap-1.5"
     >
       {commentable &&
         tool(
@@ -693,6 +708,7 @@ export function MediaLightboxGallery({
               ? "Cancel image comment"
               : "Comment on image",
           },
+          "Comment",
         )}
       {/* One Copy for both things a picture can be copied as: its pixels
           for a paste into a document, its URL for a ticket or a message. */}
@@ -702,20 +718,17 @@ export function MediaLightboxGallery({
             <Menu.Trigger
               render={
                 <Button
-                  variant="ghost"
+                  variant="default"
                   icon={
                     copiedAny ? <IconCheck size={20} /> : <IconCopy size={20} />
                   }
-                  className={cn(
-                    LIGHTBOX_ICON_TOOL_CLASS,
-                    "data-[popup-open]:bg-hover data-[popup-open]:text-fg",
-                  )}
+                  className={LIGHTBOX_ICON_TOOL_CLASS}
                   aria-label={copiedAny ? "Copied" : "Copy"}
                 />
               }
             />
           </Tooltip>
-          <Menu.Popup side="bottom" align="center" sideOffset={6}>
+          <Menu.Popup side="bottom" align="end" sideOffset={6}>
             <Menu.Item onClick={copyImage}>
               <IconCopy size={18} className={MENU_ICON} />
               Copy image
@@ -746,16 +759,12 @@ export function MediaLightboxGallery({
         )
       ) : null}
       {nativeShare
-        ? tool(
-            saving ? "Preparing…" : "Download",
-            <IconArrowDown size={20} />,
-            {
-              onClick: saveItem,
-              disabled: saving,
-              "aria-label": saving ? "Preparing download" : "Download",
-            },
-          )
-        : tool("Download", <IconArrowDown size={20} />, {
+        ? tool(saving ? "Preparing…" : "Download", <IconDownload size={20} />, {
+            onClick: saveItem,
+            disabled: saving,
+            "aria-label": saving ? "Preparing download" : "Download",
+          })
+        : tool("Download", <IconDownload size={20} />, {
             "aria-label": "Download",
             render: (
               <a href={mediaDownloadHref(item)} download={downloadName} />
@@ -776,7 +785,7 @@ export function MediaLightboxGallery({
     </div>
   );
   // The other pictures in the set, the current one centred and full size.
-  // The phone keeps it above its actions; desktop has it in the top bar.
+  // The phone keeps it above its actions; desktop has it under the picture.
   const filmstrip = (
     <div
       ref={filmstripRef}
@@ -868,6 +877,19 @@ export function MediaLightboxGallery({
       }}
     >
       <div ref={scrimRef} className={LIGHTBOX_SCRIM_CLASS} aria-hidden />
+      {/* Where you are in the set, centred on the picture rather than on
+          the top bar: the bar's sides differ in width (window controls on
+          the left, the actions on the right), and the picture follows the
+          input's column, which the sidebars can push off the window's
+          middle. */}
+      {many && !isPhone && (
+        <div
+          className="pointer-events-none absolute top-[calc(12px+env(safe-area-inset-top))] z-10 flex h-10 -translate-x-1/2 items-center text-meta font-medium tabular-nums text-dim"
+          style={{ left: `calc(50% + ${columnShift}px)` }}
+        >
+          {index + 1} of {items.length}
+        </div>
+      )}
       <div
         className={cn(
           "pointer-events-none absolute left-[calc(16px+env(safe-area-inset-left))] [html.wco_&]:left-[max(16px,calc(env(titlebar-area-x,78px)+8px))] right-[calc(12px+env(safe-area-inset-right))] top-[calc(12px+env(safe-area-inset-top))] z-10 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3",
@@ -887,31 +909,9 @@ export function MediaLightboxGallery({
             </div>
           )}
         </div>
-        {/* The rest of the set and what you can do with this one, over the
-            picture's column rather than the window's middle: the margin is
-            the same shift the stage pays as padding. */}
-        <div
-          className="pointer-events-auto flex items-center gap-3"
-          style={
-            !isPhone
-              ? {
-                  marginLeft: Math.max(0, 2 * columnShift),
-                  marginRight: Math.max(0, -2 * columnShift),
-                }
-              : undefined
-          }
-        >
-          {many && !isPhone && (
-            <div className="w-[min(360px,32vw)]">{filmstrip}</div>
-          )}
-          {many && !isPhone && (
-            <span className="text-meta font-medium tabular-nums text-dim">
-              {index + 1} of {items.length}
-            </span>
-          )}
+        <div />
+        <div className="flex min-w-0 items-center justify-self-end gap-1.5">
           {!isPhone && tools}
-        </div>
-        <div className="flex min-w-0 items-center justify-self-end gap-2">
           <Button
             ref={closeRef}
             variant="default"
@@ -1111,7 +1111,7 @@ export function MediaLightboxGallery({
                   className={phoneAction}
                   aria-label="Download"
                 >
-                  <IconArrowDown size={21} />
+                  <IconDownload size={21} />
                 </a>
               )}
             </div>
@@ -1291,7 +1291,11 @@ export function MediaLightboxGallery({
                 )}
               </div>
             )}
-            {commentHint}
+            {/* The rest of the set under that, the way a photo viewer's
+                filmstrip runs along the bottom. Comment mode borrows the
+                row for its one instruction. */}
+            {commentHint ??
+              (many && <div className="w-[min(480px,60vw)]">{filmstrip}</div>)}
           </div>
         </div>
       )}

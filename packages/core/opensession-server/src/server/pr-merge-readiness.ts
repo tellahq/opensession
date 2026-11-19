@@ -39,6 +39,13 @@ export interface PrBranchRules {
   requiredApprovals: number;
   /** A ruleset requires the head to be up to date with the base. */
   strictUpToDate: boolean;
+  /**
+   * A ruleset restricts updates to the branch: only its bypass list may push
+   * or merge into it. The bot is usually outside that list, so GitHub reports
+   * every PR into the branch as BLOCKED to the bot while the people it lets
+   * through see the real state.
+   */
+  restrictsUpdates?: boolean;
 }
 
 /** Everything the verdict is computed from. */
@@ -131,6 +138,8 @@ export interface PrMergeVerdict {
     requiredChecks: string[];
     requiredApprovals: number;
     strictUpToDate: boolean;
+    /** A ruleset limits who may update the base; see PrBranchRules. */
+    restrictsUpdates?: boolean;
   };
 }
 
@@ -294,13 +303,21 @@ export function assessPrMergeReadiness(src: PrReadinessSource): PrMergeVerdict {
     const mss = src.mergeStateStatus.toUpperCase();
     if (mss === "BEHIND")
       blockers.push(`the branch is behind ${base} and needs updating`);
-    else if (mss === "BLOCKED" && !blockers.length)
-      // Everything readable looks fine, yet GitHub says no: a rule this
-      // token cannot see (classic branch protection, code owners, a
-      // deployment gate). Say so rather than call it ready.
-      blockers.push(
-        "GitHub reports the merge is blocked by a branch rule that is not readable here",
-      );
+    else if (mss === "BLOCKED" && !blockers.length) {
+      // Everything readable looks fine, yet GitHub says no. Under an update
+      // restriction that refusal is the bot's own: a person on the bypass
+      // list can merge. Otherwise it is a rule this token cannot see (classic
+      // branch protection, code owners, a deployment gate), so say so rather
+      // than call it ready.
+      if (rules.restrictsUpdates)
+        warnings.push(
+          `a ruleset limits who can update ${base}, so only someone it allows can merge this`,
+        );
+      else
+        blockers.push(
+          "GitHub reports the merge is blocked by a branch rule that is not readable here",
+        );
+    }
 
     if (!src.rules)
       warnings.push(
@@ -377,6 +394,7 @@ export function assessPrMergeReadiness(src: PrReadinessSource): PrMergeVerdict {
       requiredChecks: rules.requiredChecks,
       requiredApprovals: rules.requiredApprovals,
       strictUpToDate: rules.strictUpToDate,
+      restrictsUpdates: !!rules.restrictsUpdates,
     },
   };
 }
@@ -425,7 +443,9 @@ export function formatPrMergeVerdict(v: PrMergeVerdict): string {
   lines.push(
     v.rules.readable
       ? `Branch rules on ${v.pr.base}: ${
-          v.rules.requiredChecks.length || v.rules.requiredApprovals
+          v.rules.requiredChecks.length ||
+          v.rules.requiredApprovals ||
+          v.rules.restrictsUpdates
             ? [
                 v.rules.requiredChecks.length
                   ? `required checks ${v.rules.requiredChecks.join(", ")}`
@@ -434,6 +454,7 @@ export function formatPrMergeVerdict(v: PrMergeVerdict): string {
                   ? `${plural(v.rules.requiredApprovals, "approval")} required`
                   : "",
                 v.rules.strictUpToDate ? "must be up to date" : "",
+                v.rules.restrictsUpdates ? "updates restricted" : "",
               ]
                 .filter(Boolean)
                 .join(" · ")
@@ -464,7 +485,7 @@ async function gh(args: string[], credential: GithubCredential) {
 }
 
 /** Rulesets that apply to the base branch; null when the token cannot read them. */
-async function fetchBranchRules(
+export async function fetchBranchRules(
   ghRepo: string,
   branch: string,
   credential: GithubCredential,
@@ -498,10 +519,37 @@ async function fetchBranchRules(
       const n = Number(params.required_approving_review_count ?? 0);
       if (Number.isFinite(n) && n > result.requiredApprovals)
         result.requiredApprovals = n;
+    } else if (rule?.type === "update") {
+      result.restrictsUpdates = true;
     }
   }
   result.requiredChecks = [...new Set(result.requiredChecks)];
   return result;
+}
+
+/**
+ * Is a BLOCKED merge state only the bot's? GitHub computes mergeStateStatus
+ * for the token asking, and a ruleset that restricts updates to the base
+ * blocks the bot on every PR. When every rule the bot can read is met (each
+ * required check reported and passed, no review outstanding), the people the
+ * ruleset lets through can merge, and the merge itself runs as them.
+ */
+export function blockedOnlyForBot(input: {
+  rules: PrBranchRules | null;
+  checks: PrCheck[];
+  reviewDecision: string;
+  approvals: number;
+}): boolean {
+  const { rules } = input;
+  if (!rules?.restrictsUpdates) return false;
+  const decision = input.reviewDecision.toUpperCase();
+  if (decision === "REVIEW_REQUIRED" || decision === "CHANGES_REQUESTED")
+    return false;
+  if (rules.requiredApprovals > input.approvals) return false;
+  return rules.requiredChecks.every((required) => {
+    const check = input.checks.find((c) => checkMatches(c, required));
+    return !!check && checkOutcome(check) === "passing";
+  });
 }
 
 // GitHub computes `mergeable` lazily: after the base moves, every open PR

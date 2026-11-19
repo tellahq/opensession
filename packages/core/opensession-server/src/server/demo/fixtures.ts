@@ -1666,6 +1666,13 @@ export function demoSessions(opts: {
         now - 12 * min,
       ),
       transcriptLineAssistantText(
+        "**Waiting on CI before deploying**\n\nThe push landed on main and CI started. Deploying before it passes would ship an untested build, so I'll wait for the run to finish and check it then.",
+        "ship-think",
+        iso(now - 12 * min + 2_000),
+        MODEL_FABLE,
+        true,
+      ),
+      transcriptLineAssistantText(
         "◷ **CI**: Running",
         "ship-ci",
         iso(now - 12 * min + 5_000),
@@ -1700,7 +1707,7 @@ export function demoSessions(opts: {
         now - 7 * min,
       ),
       transcriptLineAssistantText(
-        "◷ **Deployment**: Running",
+        "◷ **Deployment**: [#42](https://github.com/acme/app/pull/42) goes live once the rollout finishes",
         "ship-deploy",
         iso(now - 7 * min + 5_000),
         MODEL_FABLE,

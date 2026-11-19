@@ -34,9 +34,14 @@ import {
   IconCopy,
   IconExpand,
   IconFileText2,
+  IconLightbulb,
   IconLink,
   IconPencil,
 } from "./icons";
+import { TextShimmer } from "../ui/text-shimmer";
+import { plainStatusText } from "../lib/progress-updates";
+import { transcriptDisclosureLedger } from "../lib/transcript-disclosures";
+import { useLiveReasoningStatus } from "./session-viewer/live-run-status";
 import { useMessageLink } from "../lib/message-link";
 import { Collapsible, collapsiblePanelClasses } from "../ui/collapsible";
 import { pastedTextLineLabel } from "@tellahq/opensession-protocol/pasted-text";
@@ -64,8 +69,9 @@ import {
   msgMedia,
   msgOwnTurn,
   msgReasoningBody,
-  msgReasoningTitle,
   msgRow,
+  msgStepRow,
+  msgStepRowBare,
   msgSystemRow,
   msgSystemText,
   msgSystemTone,
@@ -650,6 +656,10 @@ interface Props {
    *  up. Passed only for the notice a person can still act on — the last one,
    *  on an idle session (see TranscriptBlocks). */
   onContinue?: () => void;
+  /** A step inside an opened fold, between tool rows that sit flush: the
+   *  answer takes a narration's even 8px either side instead of a turn's 18px
+   *  below and nothing above. */
+  step?: boolean;
 }
 
 /** Inline images carried on an entry (Read-of-image results, pasted images).
@@ -932,6 +942,7 @@ export const MessageBubble = function MessageBubble({
   onEdit,
   optimistic,
   onContinue,
+  step = false,
 }: Props) {
   const me = useCurrentUser();
   // How this entry reads — an operational notice, someone else's words, or an
@@ -1176,23 +1187,14 @@ export const MessageBubble = function MessageBubble({
   }
 
   if (reasoning || e.isReasoning) {
-    const { title, body } = reasoningDisplay(displayContent);
     return (
-      <div
-        className={cn(msgRow, "mb-2", enterClass)}
-        data-eid={e.id}
-        data-reasoning=""
-      >
-        {title && <div className={msgReasoningTitle}>{title}</div>}
-        {body && (
-          <ClampedBody
-            className={cn(msgReasoningBody, "markdown")}
-            content={body}
-            entry={e}
-            sessionId={sessionId}
-            transformContent={reasoningBody}
-          />
-        )}
+      <div className={cn(msgStepRowBare, enterClass)}>
+        <ReasoningStep
+          entries={[{ ...e, content: displayContent }]}
+          active={enter}
+          expandAll={false}
+          sessionId={sessionId}
+        />
       </div>
     );
   }
@@ -1200,7 +1202,7 @@ export const MessageBubble = function MessageBubble({
   // Ordinary replies need no speaker label: the conversation header identifies
   // this agent. Only agent-to-agent messages need the extra routing context.
   return (
-    <div className={cn(msgRow, enterClass)} data-eid={e.id}>
+    <div className={cn(step ? msgStepRow : msgRow, enterClass)} data-eid={e.id}>
       <ClampedBody
         className={cn(msgBody, "markdown text-fg")}
         content={displayContent}
@@ -1215,3 +1217,138 @@ export const MessageBubble = function MessageBubble({
     </div>
   );
 };
+
+/** The one line a folded thinking step shows: the latest heading, else the
+ * first line of its prose, without Markdown syntax. */
+function reasoningExcerpt(
+  displays: ReadonlyArray<{ title: string; body: string }>,
+): string {
+  const title = displays.findLast((display) => display.title)?.title;
+  if (title) return plainStatusText(title.split("\n").at(-1) ?? "");
+  const body = displays.find((display) => display.body)?.body ?? "";
+  const line = body
+    .split("\n")
+    .map((row) => row.replace(/^\s*(?:[#>*-]+|\d+\.)\s+/, "").trim())
+    .find(Boolean);
+  return line ? plainStatusText(line) : "";
+}
+
+/** One thinking step inside the work rail, drawn like a tool row: a glyph,
+ * "Thinking", and one line of what it was about. Opening it shows the full
+ * trace. Adjacent provider events join one step instead of a ladder of
+ * near-identical traces. */
+export function ReasoningStep({
+  entries,
+  active,
+  expandAll,
+  sessionId,
+}: {
+  entries: TranscriptEntry[];
+  active: boolean;
+  /** The work is always open: show the trace in place. */
+  expandAll: boolean;
+  sessionId?: string;
+}) {
+  const displays = entries.map((entry) => reasoningDisplay(entry.content));
+  const excerpt = reasoningExcerpt(displays);
+  const last = entries[entries.length - 1];
+  const ids = entries.map((entry) => entry.id);
+  const live = useLiveReasoningStatus(active);
+  const [remembered] = useState(() =>
+    transcriptDisclosureLedger.read("reasoning", sessionId, ids),
+  );
+  const [open, setOpen] = useState(remembered ?? expandAll);
+  const hasBody =
+    displays.some((display) => display.body) ||
+    entries.some((entry) => entry.images?.length);
+  const label = live.thinking ? (
+    <TextShimmer className="flex-shrink-0 text-item-title leading-5 font-medium text-dim">
+      Thinking
+    </TextShimmer>
+  ) : (
+    <span className="flex-shrink-0 text-item-title leading-5 font-medium text-dim transition-colors group-hover:text-fg">
+      Thinking
+    </span>
+  );
+  const row = (
+    <>
+      <span className="relative flex size-[22px] flex-shrink-0 self-center items-center justify-center text-faint">
+        <span
+          className={cn(
+            hasBody && "transition-opacity duration-150 group-hover:opacity-0",
+          )}
+        >
+          <IconLightbulb size={20} />
+        </span>
+        {hasBody && (
+          <IconChevronDown
+            size={20}
+            className={cn(
+              "absolute block text-dim opacity-0 transition-[opacity,transform] duration-150 group-hover:opacity-100",
+              open && "rotate-180",
+            )}
+          />
+        )}
+      </span>
+      {label}
+      {excerpt && (
+        <span className="min-w-0 truncate text-label leading-4 text-dim">
+          {excerpt}
+        </span>
+      )}
+    </>
+  );
+  const rowClasses =
+    "flex w-full min-w-0 items-baseline gap-2 rounded-control border-0 bg-transparent px-1 py-[3px] text-left font-sans";
+  return (
+    <div className="-ml-2 -mr-1" data-eid={last.id} data-reasoning="">
+      {hasBody ? (
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => {
+            transcriptDisclosureLedger.write(
+              "reasoning",
+              sessionId,
+              ids,
+              !open,
+            );
+            setOpen(!open);
+          }}
+          className={cn(
+            rowClasses,
+            "group cursor-pointer transition-colors hover:bg-hover/40 phone:min-h-10 phone:items-center",
+          )}
+        >
+          {row}
+        </button>
+      ) : (
+        <div className={rowClasses}>{row}</div>
+      )}
+      {open && hasBody && (
+        <div className="mb-1 ml-[34px] mr-1">
+          {entries.map((entry, index) => {
+            const body = displays[index].body;
+            return body ? (
+              <ClampedBody
+                key={entry.id}
+                className={cn(msgReasoningBody, "markdown")}
+                content={body}
+                entry={entry}
+                sessionId={sessionId}
+                transformContent={reasoningBody}
+              />
+            ) : null;
+          })}
+          {entries.map((entry) => (
+            <EntryImages
+              key={`${entry.id}:images`}
+              images={entry.images}
+              sessionId={sessionId}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

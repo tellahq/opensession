@@ -222,7 +222,7 @@ export function forceMergeBypasses(v: PrMergeVerdict): ForceMergeBypass[] {
       kind: "branch",
       detail: `Branch is behind ${v.pr.base}`,
     });
-  else if (mss === "BLOCKED" && !bypass.length)
+  else if (mss === "BLOCKED" && !bypass.length && !v.rules.restrictsUpdates)
     bypass.push({
       kind: "branch",
       detail: "Blocked by a branch rule that is not readable here",

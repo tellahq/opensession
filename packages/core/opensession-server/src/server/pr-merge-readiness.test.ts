@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   assessPrMergeReadiness,
+  blockedOnlyForBot,
   formatPrMergeVerdict,
   type PrReadinessSource,
 } from "./pr-merge-readiness";
@@ -47,6 +48,80 @@ function source(overrides: Partial<PrReadinessSource> = {}): PrReadinessSource {
     ...overrides,
   };
 }
+
+describe("blockedOnlyForBot", () => {
+  const rules = {
+    requiredChecks: ["Install", "Gate"],
+    requiredApprovals: 0,
+    strictUpToDate: false,
+    restrictsUpdates: true,
+  };
+  const green = [
+    check("Install", "SUCCESS"),
+    check("Gate", "SUCCESS", { workflowName: undefined }),
+    check("Optional", "SKIPPED"),
+  ];
+
+  test("is the bot's alone when every readable rule is met", () => {
+    expect(
+      blockedOnlyForBot({
+        rules,
+        checks: green,
+        reviewDecision: "",
+        approvals: 0,
+      }),
+    ).toBe(true);
+  });
+
+  test("stays blocked without an update restriction", () => {
+    expect(
+      blockedOnlyForBot({
+        rules: { ...rules, restrictsUpdates: false },
+        checks: green,
+        reviewDecision: "",
+        approvals: 0,
+      }),
+    ).toBe(false);
+    expect(
+      blockedOnlyForBot({
+        rules: null,
+        checks: green,
+        reviewDecision: "",
+        approvals: 0,
+      }),
+    ).toBe(false);
+  });
+
+  test("stays blocked while a required check fails, runs or never reported", () => {
+    for (const checks of [
+      [check("Install", "SUCCESS"), check("Gate", "ACTION_REQUIRED")],
+      [check("Install", "SUCCESS"), check("Gate", "")],
+      [check("Install", "SUCCESS")],
+    ])
+      expect(
+        blockedOnlyForBot({ rules, checks, reviewDecision: "", approvals: 0 }),
+      ).toBe(false);
+  });
+
+  test("stays blocked while a review is outstanding", () => {
+    expect(
+      blockedOnlyForBot({
+        rules,
+        checks: green,
+        reviewDecision: "REVIEW_REQUIRED",
+        approvals: 0,
+      }),
+    ).toBe(false);
+    expect(
+      blockedOnlyForBot({
+        rules: { ...rules, requiredApprovals: 1 },
+        checks: green,
+        reviewDecision: "",
+        approvals: 0,
+      }),
+    ).toBe(false);
+  });
+});
 
 describe("assessPrMergeReadiness", () => {
   test("an open, clean, green PR with no review rule is ready", () => {
@@ -192,6 +267,7 @@ describe("assessPrMergeReadiness", () => {
       requiredChecks: ["Type-check and tests", "Secret scan"],
       requiredApprovals: 0,
       strictUpToDate: true,
+      restrictsUpdates: false,
     });
   });
 
@@ -217,6 +293,26 @@ describe("assessPrMergeReadiness", () => {
     expect(v.warnings[0]).toBe(
       "branch rules could not be read, so the verdict leans on GitHub's merge state",
     );
+  });
+
+  test("BLOCKED under an update restriction is the bot's own block, not the PR's", () => {
+    const v = assessPrMergeReadiness(
+      source({
+        mergeStateStatus: "BLOCKED",
+        rules: {
+          requiredChecks: ["Install"],
+          requiredApprovals: 0,
+          strictUpToDate: false,
+          restrictsUpdates: true,
+        },
+      }),
+    );
+    expect(v.ready).toBe(true);
+    expect(v.blockers).toEqual([]);
+    expect(v.warnings).toContain(
+      "a ruleset limits who can update main, so only someone it allows can merge this",
+    );
+    expect(v.rules.restrictsUpdates).toBe(true);
   });
 
   test("BEHIND asks for an update", () => {

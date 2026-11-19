@@ -94,11 +94,22 @@ struct ProgressUpdate: Equatable, Sendable {
     /// SF Symbol for this state. A clock for in progress, a check for
     /// confirmed success. There is no failure glyph on purpose: failures are
     /// normal replies.
-    var symbol: String {
-        switch state {
-        case .running: "clock"
-        case .done: "checkmark"
-        }
+    var symbol: String { Self.symbol(topic: topic, isDone: state == .done) }
+
+    /// A CI or test status takes a check run's own marks instead, as GitHub
+    /// draws them: a dashed ring while it runs, a circled check once it
+    /// passes, so it reads as CI at a glance rather than as one more timer.
+    /// Mirrors the web's `StatusIcon`.
+    static func symbol(topic: String, isDone: Bool) -> String {
+        if isCheckTopic(topic) { return isDone ? "checkmark.circle" : "circle.dashed" }
+        return isDone ? "checkmark" : "clock"
+    }
+
+    /// CI, checks, tests and builds (web `isCheckTopic`).
+    static func isCheckTopic(_ topic: String) -> Bool {
+        topic.firstMatch(
+            of: #/\b(ci|checks?|tests?|builds?|lint|typecheck|e2e)\b/#.ignoresCase()
+        ) != nil
     }
 }
 
@@ -110,6 +121,8 @@ struct ProgressUpdate: Equatable, Sendable {
 /// from it. Agent wording beyond a bare
 /// state word is kept. Mirrors the web's `foldStatuses`.
 struct FoldStatus: Equatable, Sendable {
+    /// Picks the glyph (`ProgressUpdate.symbol(topic:isDone:)`).
+    var topic: String
     var text: String
     var isDone: Bool
 
@@ -143,6 +156,7 @@ struct FoldStatus: Equatable, Sendable {
             }
             if let close, let closing = updates[close] {
                 out[i] = .shown(FoldStatus(
+                    topic: first.topic,
                     text: outcome(closing) + (close > i ? took(startedAt(i), startedAt(close)) : ""),
                     isDone: true
                 ))
@@ -156,6 +170,7 @@ struct FoldStatus: Equatable, Sendable {
                 : latest.label
             let hasNext = !isCurrent && last + 1 < updates.count
             out[i] = .shown(FoldStatus(
+                topic: first.topic,
                 text: words + (hasNext ? took(startedAt(i), startedAt(last + 1)) : ""),
                 isDone: false
             ))
@@ -181,9 +196,7 @@ struct FoldStatus: Equatable, Sendable {
             of: #/(done|passed|green|complete|completed|finished|succeeded|success|successful|ok|(all )?(checks|tests) (passed|green))\.?/#.ignoresCase()
         ) != nil
         guard bare else { return update.label }
-        let checks = update.topic.firstMatch(
-            of: #/\b(ci|checks?|tests?|builds?|lint|typecheck|e2e)\b/#.ignoresCase()
-        ) != nil
+        let checks = ProgressUpdate.isCheckTopic(update.topic)
         return "\(update.topic) \(checks ? "passed" : "done")"
     }
 

@@ -11,6 +11,7 @@ import {
 import { runningToolLabel } from "../lib/busy-activity";
 import {
   MessageBubble,
+  ReasoningStep,
   ClampedBody,
   EntryImages,
   EntryVideos,
@@ -42,17 +43,10 @@ import {
 } from "./icons";
 import { cn } from "../ui/cn";
 import { Fold } from "../ui/fold";
-import { TextShimmer } from "../ui/text-shimmer";
 import { Tooltip } from "../ui/tooltip";
-import {
-  msgBody,
-  msgReasoningBody,
-  msgReasoningShimmer,
-  msgReasoningTitle,
-} from "../lib/msg-classes";
+import { msgBody } from "../lib/msg-classes";
 import {
   isLegacyReasoningHeading,
-  reasoningBody,
   reasoningDisplay,
 } from "../lib/reasoning-display";
 import { formatDuration, fullTime } from "../lib/time";
@@ -68,10 +62,9 @@ import {
 } from "./TurnFooter";
 import { transcriptDisclosureLedger } from "../lib/transcript-disclosures";
 import { ProgressStatusLabel } from "./ProgressStatusRow";
-import type { ProgressUpdate } from "../lib/progress-updates";
+import { plainStatusText, type ProgressUpdate } from "../lib/progress-updates";
 import { workSummary, workSummaryTitle } from "../lib/work-summary";
 import { turnScrollAnchor } from "../lib/transcript-block-identity";
-import { useLiveReasoningStatus } from "./session-viewer/live-run-status";
 
 interface Props {
   /** One turn's tool calls, provider reasoning, and intermediate narration.
@@ -381,13 +374,14 @@ export const TurnBlock = function TurnBlock({
                 }
               />
             ) : sec.kind === "reasoning" ? (
-              <ReasoningMessage
+              <ReasoningStep
                 key={sec.items[0].id}
                 entries={sec.items}
                 active={
                   activeReasoning !== undefined &&
                   sec.items.includes(activeReasoning)
                 }
+                expandAll={flatTools}
                 sessionId={sessionId}
               />
             ) : sec.kind === "notice" ? (
@@ -848,58 +842,6 @@ function StepNotice({ entry }: { entry: TranscriptEntry }) {
         <IconHistory size={20} />
       </span>
       <span className="min-w-0 truncate">{entry.notice?.title}</span>
-    </div>
-  );
-}
-
-/** One visible reasoning step inside the work rail. Adjacent provider events
- * revise its heading instead of producing a ladder of near-identical traces. */
-function ReasoningMessage({
-  entries,
-  active,
-  sessionId,
-}: {
-  entries: TranscriptEntry[];
-  active: boolean;
-  sessionId?: string;
-}) {
-  const displays = entries.map((entry) => reasoningDisplay(entry.content));
-  const batchedTitle =
-    displays.findLast((display) => display.title)?.title ?? "";
-  const title = batchedTitle.split("\n").at(-1) ?? "";
-  const last = entries[entries.length - 1];
-  const live = useLiveReasoningStatus(active);
-  return (
-    <div className="my-2" data-eid={last.id} data-reasoning="">
-      {live.thinking ? (
-        // Some providers expose prose thinking rather than a short status
-        // heading. Keep that prose readable and shimmer a stable label.
-        <TextShimmer className={cn(msgReasoningTitle, msgReasoningShimmer)}>
-          {title || "Thinking"}
-        </TextShimmer>
-      ) : title ? (
-        <div className={msgReasoningTitle}>{title}</div>
-      ) : null}
-      {entries.map((entry, index) => {
-        const body = displays[index].body;
-        return body ? (
-          <ClampedBody
-            key={entry.id}
-            className={cn(msgReasoningBody, "markdown")}
-            content={body}
-            entry={entry}
-            sessionId={sessionId}
-            transformContent={reasoningBody}
-          />
-        ) : null;
-      })}
-      {entries.map((entry) => (
-        <EntryImages
-          key={`${entry.id}:images`}
-          images={entry.images}
-          sessionId={sessionId}
-        />
-      ))}
     </div>
   );
 }

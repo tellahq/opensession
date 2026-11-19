@@ -2,7 +2,11 @@ import { describe, expect, test } from "bun:test";
 import type { ProtocolServerMessage } from "@tellahq/opensession-protocol/session";
 import {
   appendSessionFeed,
+  beginPromptRun,
+  clearPromptRun,
+  notePromptDelivered,
   resumeSessionFeed,
+  seedPromptRun,
   sessionFeedSnapshot,
 } from "./session-feed";
 import {
@@ -119,6 +123,86 @@ describe("session feed", () => {
       text.feedSeq,
     ]);
     expect(resumed.snapshot.active).toBeNull();
+  });
+
+  test("lists the running turn's prompts, even on a resume without its text", () => {
+    const sessionId = `feed-${crypto.randomUUID()}`;
+    const release = beginPromptRun(sessionId, ["fix-1", "other-1"]);
+    // Handed to the runner, before its stream starts.
+    expect(sessionFeedSnapshot(sessionId).activePromptIds).toEqual([
+      "fix-1",
+      "other-1",
+    ]);
+    const start = appendSessionFeed(sessionId, {
+      type: "stream_start",
+      sessionId,
+    });
+    appendSessionFeed(sessionId, {
+      type: "stream_text",
+      sessionId,
+      text: "hi",
+    });
+    const resumed = resumeSessionFeed(
+      sessionId,
+      start.feedSeq,
+      start.feedEpoch,
+    );
+    expect(resumed.snapshot.active).toBeNull();
+    expect(resumed.snapshot.activePromptIds).toEqual(["fix-1", "other-1"]);
+
+    appendSessionFeed(sessionId, { type: "stream_done", sessionId });
+    expect(sessionFeedSnapshot(sessionId).activePromptIds).toEqual([]);
+
+    // A late release leaves a newer turn's prompts alone.
+    beginPromptRun(sessionId, ["next-1"]);
+    release();
+    expect(sessionFeedSnapshot(sessionId).activePromptIds).toEqual(["next-1"]);
+  });
+
+  test("a read steer joins the running turn's prompts", () => {
+    const sessionId = `feed-${crypto.randomUUID()}`;
+    const release = beginPromptRun(sessionId, ["first"]);
+    notePromptDelivered(sessionId, "steer-1");
+    notePromptDelivered(sessionId, "steer-1");
+    expect(sessionFeedSnapshot(sessionId).activePromptIds).toEqual([
+      "first",
+      "steer-1",
+    ]);
+    release();
+    expect(sessionFeedSnapshot(sessionId).activePromptIds).toEqual([]);
+  });
+
+  test("leaves the prompts out for a running turn it has no record of", () => {
+    const sessionId = `feed-${crypto.randomUUID()}`;
+    // Busy as the runner sees it, before an adopted run's first event.
+    expect(
+      sessionFeedSnapshot(sessionId, true).activePromptIds,
+    ).toBeUndefined();
+    // The adopted run rebuilds the active turn with stream_start.
+    appendSessionFeed(sessionId, { type: "stream_start", sessionId });
+    expect(sessionFeedSnapshot(sessionId).activePromptIds).toBeUndefined();
+    appendSessionFeed(sessionId, { type: "stream_done", sessionId });
+    expect(sessionFeedSnapshot(sessionId).activePromptIds).toEqual([]);
+  });
+
+  test("an adopted run's recovered prompts fill the list until it ends", () => {
+    const sessionId = `feed-${crypto.randomUUID()}`;
+    seedPromptRun(sessionId, ["batch-entry", "fix-1"]);
+    appendSessionFeed(sessionId, { type: "stream_start", sessionId });
+    expect(sessionFeedSnapshot(sessionId, true).activePromptIds).toEqual([
+      "batch-entry",
+      "fix-1",
+    ]);
+    // A turn this process started keeps its own record.
+    const release = beginPromptRun(sessionId, ["own"]);
+    seedPromptRun(sessionId, ["stale"]);
+    expect(sessionFeedSnapshot(sessionId).activePromptIds).toEqual(["own"]);
+    release();
+    seedPromptRun(sessionId, ["adopted"]);
+    clearPromptRun(sessionId);
+    expect(
+      sessionFeedSnapshot(sessionId, true).activePromptIds,
+    ).toBeUndefined();
   });
 
   test("active snapshot contains only text not yet committed", () => {

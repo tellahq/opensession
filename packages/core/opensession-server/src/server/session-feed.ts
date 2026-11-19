@@ -44,6 +44,11 @@ export interface SessionFeedSnapshot {
     startedAt: number;
     activity?: RunActivity | null;
   };
+  /** Delivery ids of the prompts the current turn answers. Present even when
+   *  a resume leaves `active` out, so a viewer can tell a running prompt from
+   *  a finished one without the cumulative text. Absent when a turn runs that
+   *  this process did not record (one adopted after a restart). */
+  activePromptIds?: string[];
 }
 
 /** The running turn, minus its text — that lives in `FeedState.live`. */
@@ -72,7 +77,57 @@ const MAX_FEED_BYTES = 2 * 1024 * 1024;
 const MAX_SESSIONS = 200;
 const g = globalThis as {
   __osSessionFeeds?: Map<string, FeedState>;
+  __osSessionPromptRuns?: Map<string, PromptRun>;
 };
+
+interface PromptRun {
+  token: symbol;
+  ids: string[];
+}
+
+function promptRuns(): Map<string, PromptRun> {
+  return (g.__osSessionPromptRuns ??= new Map());
+}
+
+/**
+ * Record the delivery ids a turn answers, from the moment the queue hands
+ * them to the runner. They stay listed until that turn's stream ends or the
+ * returned release runs, whichever comes first, so a viewer that watches in
+ * between sees them in `activePromptIds`.
+ */
+/**
+ * A steer the engine acknowledged reading (steer_delivered) belongs to the
+ * running turn from here on. Its early transcript row and queue receipt are
+ * not that proof: an unread steer goes back to the queue when its turn ends.
+ */
+export function notePromptDelivered(sessionId: string, id: string): void {
+  const run = promptRuns().get(sessionId);
+  if (run?.ids.includes(id)) return;
+  promptRuns().set(sessionId, {
+    token: run?.token ?? Symbol(sessionId),
+    ids: [...(run?.ids ?? []), id],
+  });
+}
+
+/** Record the prompts of a run this process adopted after a restart, unless
+ *  a turn it started itself already has a record. Cleared like any other. */
+export function seedPromptRun(sessionId: string, ids: string[]): void {
+  if (!promptRuns().has(sessionId))
+    promptRuns().set(sessionId, { token: Symbol(sessionId), ids });
+}
+
+export function clearPromptRun(sessionId: string): void {
+  promptRuns().delete(sessionId);
+}
+
+export function beginPromptRun(sessionId: string, ids: string[]): () => void {
+  const run = { token: Symbol(sessionId), ids };
+  promptRuns().set(sessionId, run);
+  return () => {
+    if (promptRuns().get(sessionId)?.token === run.token)
+      promptRuns().delete(sessionId);
+  };
+}
 
 function feeds(): Map<string, FeedState> {
   return (g.__osSessionFeeds ??= new Map());
@@ -188,18 +243,30 @@ export function appendSessionFeed(
   if (type === "stream_done") {
     state.active = null;
     state.live.reset();
+    promptRuns().delete(sessionId);
   }
   return frame;
 }
 
-export function sessionFeedSnapshot(sessionId: string): SessionFeedSnapshot {
+/**
+ * `primaryBusy`: the session's own turn is running or settling, as the runner
+ * sees it. With no recorded prompts for that turn, which prompts it answers
+ * is unknown, so the snapshot leaves the list out rather than claim none.
+ */
+export function sessionFeedSnapshot(
+  sessionId: string,
+  primaryBusy = false,
+): SessionFeedSnapshot {
   const state = stateFor(sessionId);
+  const run = promptRuns().get(sessionId);
+  const known = !!run || (!state.active && !primaryBusy);
   return {
     type: "feed_snapshot",
     sessionId,
     feedEpoch: state.epoch,
     feedSeq: state.nextSeq - 1,
     active: state.active ? { ...state.active, text: state.live.text } : null,
+    ...(known ? { activePromptIds: run?.ids ?? [] } : {}),
   };
 }
 
@@ -211,9 +278,10 @@ export function resumeSessionFeed(
   sessionId: string,
   sinceFeedSeq?: number,
   feedEpoch?: string,
+  primaryBusy = false,
 ): { frames: SessionFeedFrame[]; snapshot: SessionFeedSnapshot } {
   const state = stateFor(sessionId);
-  const snapshot = sessionFeedSnapshot(sessionId);
+  const snapshot = sessionFeedSnapshot(sessionId, primaryBusy);
   if (
     feedEpoch !== state.epoch ||
     typeof sinceFeedSeq !== "number" ||

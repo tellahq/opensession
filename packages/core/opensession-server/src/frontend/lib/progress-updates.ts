@@ -48,11 +48,46 @@ export function parseProgressUpdate(
     match[3]!.includes("?")
   )
     return null;
+  const text = plainStatusText(match[3]!);
+  if (!text) return null;
   return {
     topic: match[2]!.trim(),
     state: match[1] === "✓" ? "done" : "running",
-    text: match[3]!.trim(),
+    text,
   };
+}
+
+const GITHUB_REF =
+  /^https?:\/\/(?:www\.)?github\.com\/[^/\s]+\/([^/\s]+)\/(?:pull|issues)\/(\d+)(?:[/?#]\S*)?$/i;
+
+/** "[#11046](https://github.com/acme/app/pull/11046)" reads "#11046", a bare
+ * PR URL "app#11046". */
+function linkLabel(label: string, url: string): string {
+  const ref = GITHUB_REF.exec(url);
+  if (label && label !== url) return label;
+  return ref ? `${ref[1]}#${ref[2]}` : url;
+}
+
+/** A status row is one quiet line of plain text, often inside a button, so
+ * the Markdown an agent writes in it (links, bold, code) shows as its words. */
+export function plainStatusText(text: string): string {
+  return text
+    .replace(
+      /\[([^\]\r\n]*)\]\(<?([^)\s>]+)>?\)/g,
+      (_, label: string, url: string) => linkLabel(label.trim(), url),
+    )
+    .replace(/<(https?:\/\/[^>\s]+)>/g, (_, url: string) => linkLabel("", url))
+    .replace(
+      /(^|[\s(])(https?:\/\/\S+)/g,
+      (whole, lead: string, url: string) =>
+        GITHUB_REF.test(url) ? lead + linkLabel("", url) : whole,
+    )
+    .replace(
+      /\*\*([^*]+)\*\*|__([^_]+)__|`([^`]+)`/g,
+      (_, a, b, c) => a ?? b ?? c,
+    )
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /** A reply that opens with a status line and goes on in prose ("◷ **Native
@@ -175,8 +210,9 @@ export function collectProgressUpdates(
   return projection;
 }
 
-/** What a status line inside a work fold says. */
+/** What a status line inside a work fold says. `topic` picks its glyph. */
 export interface FoldStatus {
+  topic: string;
   text: string;
   done: boolean;
 }
@@ -186,6 +222,11 @@ const BARE_RUNNING =
 const BARE_DONE =
   /^(done|passed|green|complete|completed|finished|succeeded|success|successful|ok|(all )?(checks|tests) (passed|green))\.?$/i;
 const CHECK_TOPIC = /\b(ci|checks?|tests?|builds?|lint|typecheck|e2e)\b/i;
+
+/** CI, checks, tests and builds: a status a check run's own glyph fits. */
+export function isCheckTopic(topic: string): boolean {
+  return CHECK_TOPIC.test(topic);
+}
 
 /** "Deployment" reads as a noun mid-sentence; "CI" and "PR #12" keep case. */
 function topicNoun(topic: string): string {
@@ -234,6 +275,7 @@ export function foldStatuses(
     };
     if (close >= 0) {
       out[i] = {
+        topic: first.topic,
         text: outcome(updates[close]!) + (close > i ? took(close) : ""),
         done: true,
       };
@@ -243,6 +285,7 @@ export function foldStatuses(
     const bare = BARE_RUNNING.test(latest.text);
     if (live && !updates.slice(last + 1).some(Boolean)) {
       out[i] = {
+        topic: first.topic,
         text: bare
           ? `Waiting for ${topicNoun(first.topic)}`
           : `${latest.topic}: ${latest.text}`,
@@ -251,6 +294,7 @@ export function foldStatuses(
       continue;
     }
     out[i] = {
+      topic: first.topic,
       text:
         (bare
           ? `Waited for ${topicNoun(first.topic)}`

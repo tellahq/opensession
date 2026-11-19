@@ -1,4 +1,8 @@
-export type TranscriptDisclosureKind = "turn" | "tool-run" | "tool-call";
+export type TranscriptDisclosureKind =
+  | "turn"
+  | "tool-run"
+  | "tool-call"
+  | "reasoning";
 
 export interface TranscriptDisclosureLedger {
   read(

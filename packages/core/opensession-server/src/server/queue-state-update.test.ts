@@ -16,6 +16,7 @@ import {
   promoteQueuedPrompt,
   queueDisplayState,
   recoverUnownedPromptDispatch,
+  requeueSteerReceipts,
   steeredReceipts,
   settlePromptInterrupt,
   takeQueuedPrompt,
@@ -127,6 +128,35 @@ test("sent queue fallbacks stay in chat and pending until exact engine acknowled
   // crossed its delivery boundary.
   expect(undeliveredSteers([item], ["[Kent] read this next"])).toEqual([item]);
 });
+test("an unread sent steer stays a pending delivery when its turn requeues it", async () => {
+  const sessionId = `requeued-steer-${crypto.randomUUID()}`;
+  const item = {
+    id: "fix-request",
+    promptEntryId: "fix-request",
+    content: "Fix the checks",
+    user: "Kent",
+  };
+  try {
+    // Accepted by the engine's steer channel, not yet read.
+    await steeredReceipts.set(sessionId, [item]);
+    expect(await queueDisplayState(sessionId)).toEqual({
+      queued: [],
+      steered: [],
+      pendingDeliveryIds: ["fix-request"],
+    });
+    // The turn ends before the engine reads it.
+    expect(await requeueSteerReceipts(sessionId, [], false)).toBe(1);
+    expect(await queueDisplayState(sessionId)).toEqual({
+      queued: [],
+      steered: [],
+      pendingDeliveryIds: ["fix-request"],
+    });
+  } finally {
+    await promptQueues.delete(sessionId);
+    await steeredReceipts.delete(sessionId);
+  }
+});
+
 describe("takeQueuedPrompt", () => {
   beforeEach(async () => {
     await promptDispatches.clear();

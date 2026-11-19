@@ -235,9 +235,10 @@ struct EntryNotice: Decodable, Equatable, Sendable {
 
     /// Notices delivered as a message that start work with no person behind
     /// them: a GitHub event, a workflow result, a worker's report, a message
-    /// from another session. Mirrors the protocol's `automatedTriggerTitle`.
+    /// from another session, a review that settled outside its loop. Mirrors
+    /// the protocol's `automatedTriggerTitle`.
     private static let triggerKinds: Set<String> = [
-        "system", "workflow", "worker-report", "session-notice",
+        "system", "workflow", "worker-report", "session-notice", "review-settled",
     ]
 
     /// The event's one-line name for the row that folds it and its work
@@ -272,6 +273,8 @@ struct EntryNotice: Decodable, Equatable, Sendable {
     /// protocol's `automatedTriggerDetail`.
     func triggerDetail(_ content: String) -> [TriggerDetailLine] {
         let whole = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        // A settled review's text past its title is instructions for the agent.
+        if kind == "review-settled" { return [] }
         // A worker's report or another session's message is titled by its
         // kind, so its text is the whole message.
         if kind == "worker-report" || kind == "session-notice" {

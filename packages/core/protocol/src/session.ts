@@ -754,6 +754,11 @@ export type ProtocolServerMessage =
         /** The phase the turn is in, for a viewer that joins mid-run. */
         activity?: RunActivity | null;
       };
+      /** Delivery ids (prompt request ids) the current turn answers, empty
+       *  when none. Sent even when a resume leaves `active` out; absent when
+       *  the server runs a turn it has no record of (adopted on restart). A
+       *  steer joins the list once the engine acknowledges reading it. */
+      activePromptIds?: string[];
     }
   // The same live-turn frames a feed server wraps in session_feed.event.
   | SessionLiveEvent
