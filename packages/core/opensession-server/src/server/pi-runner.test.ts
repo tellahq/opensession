@@ -1173,7 +1173,7 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
       expect(
         events.find((event) => event.type === "runner_notice"),
       ).toMatchObject({
-        text: expect.stringContaining("1 tool call it was running is marked"),
+        text: "Previous turn interrupted",
       });
       expect(events.find((event) => event.type === "done")).toBeDefined();
       expect(existsSync(checkpointPath)).toBe(false);

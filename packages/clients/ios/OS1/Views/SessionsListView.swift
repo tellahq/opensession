@@ -45,6 +45,10 @@ private struct WorkspaceDeletionConfirmation: ViewModifier {
 /// in both places. The controls live in `SessionsFilterPanel`.
 struct SessionsListView: View {
     @State private var viewModel = SessionsListViewModel()
+    #if os(iOS)
+    /// Draws the pinned band heading over the list; see `StickyBandTracker`.
+    @State private var stickyBand = StickyBandTracker()
+    #endif
     @State private var showSettings = false
     @State private var settingsAutomationId: String?
     @State private var showDesk = false
@@ -2787,6 +2791,16 @@ struct SessionsListView: View {
         .background(OS1VisualStyle.background)
         .listSectionSpacing(10)
         .contentMargins(.top, 4, for: .scrollContent)
+        .overlay {
+            StickyBandOverlay(tracker: stickyBand, insets: bandHeaderInsets) { heading in
+                groupHeaderLabel(
+                    title: heading.title,
+                    count: heading.count,
+                    repo: heading.repo,
+                    collapseKey: heading.collapseKey
+                )
+            }
+        }
         .overlay { emptyFilterOverlay }
         .refreshable {
             await viewModel.refresh()
@@ -4485,6 +4499,35 @@ struct SessionsListView: View {
     }
 
     private func groupHeader(
+        title: String,
+        count: Int,
+        repo: String? = nil,
+        collapseKey: String
+    ) -> some View {
+        let label = groupHeaderLabel(title: title, count: count, repo: repo, collapseKey: collapseKey)
+        #if os(iOS)
+        return label
+            .stickyBandHeader(
+                .init(title: title, count: count, repo: repo, collapseKey: collapseKey),
+                insets: bandHeaderInsets,
+                tracker: stickyBand
+            )
+            .listRowInsets(bandHeaderInsets)
+        #else
+        return label
+        #endif
+    }
+
+    #if os(iOS)
+    /// A band header's list insets, spelled out at the values the plain list
+    /// gives a section header anyway, so the sticky copy (`StickyBandOverlay`)
+    /// can lay out and back the whole header rather than just its content.
+    private let bandHeaderInsets = EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16)
+    #endif
+
+    /// The band heading itself, without the reporting that lets the phone draw
+    /// its sticky copy (`StickyBandOverlay`), which is drawn from this too.
+    private func groupHeaderLabel(
         title: String,
         count: Int,
         repo: String? = nil,
