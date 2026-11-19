@@ -2542,6 +2542,9 @@ describe("TranscriptBlocks progress rows", () => {
     );
     // Read after the fact, a status says what the wait was, not "Running".
     expect(open).toContain("Waited for CI · 1s");
+    // A CI wait without a result keeps the dashed ring; others keep the clock.
+    expect(open).toContain('stroke-dasharray="2.6 2.6"');
+    expect(open).toContain("M12 8.25V12L14.75 14.25");
     expect(open).toContain("Waited for deployment · 1s");
     expect(open).not.toContain("CI: Running");
     expect(open).toContain("Ran 1 command");
@@ -2557,6 +2560,8 @@ describe("TranscriptBlocks progress rows", () => {
       <TranscriptBlocks entries={closed} reviewLoopsOpen />,
     );
     expect(open).toContain("CI passed · 2s");
+    // CI takes a check run's circled check, not the plain one.
+    expect(open).toContain("M4.75 12C4.75 7.99594");
     expect(open).not.toContain("All checks passed");
     expect(open).not.toContain("Waited for CI");
     expect(open).toContain("Waited for deployment · 1s");

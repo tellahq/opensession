@@ -158,7 +158,7 @@ struct ProgressStatusLine: View {
     /// A fold step, worded by `FoldStatus.resolve`.
     init(status: FoldStatus) {
         text = status.text
-        symbol = status.isDone ? "checkmark" : "clock"
+        symbol = ProgressUpdate.symbol(topic: status.topic, isDone: status.isDone)
     }
 
     /// An open status row's earlier update, which drops a repeated topic.
