@@ -997,6 +997,13 @@ export function PrStatusBar({
       </>
     );
   }
+  // Fix checks leads with the sparkle, and "Fixing…" with the wave. Both
+  // reach nearer their box's edge than the glyph padding allows for, so on
+  // the card the label sat 1.6px left of centre, and on the header's even
+  // padding as far right. These pads leave equal room either side of the ink
+  // and keep the button's width.
+  const fixPad =
+    variant === "header" ? "pl-[13px] pr-[15px]" : "pl-[8px] pr-[10.5px]";
   function renderActionButton(): React.ReactNode {
     if (prompted) {
       const tone: PrBarButtonProps["tone"] =
@@ -1006,7 +1013,12 @@ export function PrStatusBar({
             ? "secondary"
             : "status-red";
       return (
-        <PrBarButton className={actionBtn} tone={tone} working disabled>
+        <PrBarButton
+          className={cn(actionBtn, headline.key === "failing" && fixPad)}
+          tone={tone}
+          working
+          disabled
+        >
           <TextShimmer
             className={
               tone === "red"
@@ -1147,7 +1159,7 @@ export function PrStatusBar({
       case "failing":
         return send ? (
           <PrBarButton
-            className={actionBtn}
+            className={cn(actionBtn, fixPad)}
             tone="red"
             icon={<IconSparkle size={18} />}
             onClick={() =>
