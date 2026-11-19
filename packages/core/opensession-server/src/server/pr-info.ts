@@ -34,6 +34,11 @@ import { githubToken, githubInstallationCredential } from "./github-app";
 import { reviewRequestRemovalSpecs } from "./github-review-requests";
 import { noteGithubGraphqlCall } from "./github-budget";
 import { getPrStack, unmergedLayersBelow } from "./pr-stack";
+import {
+  blockedOnlyForBot,
+  fetchBranchRules,
+  type PrBranchRules,
+} from "./pr-merge-readiness";
 import type {
   MergeMethod,
   MergePrOptions,
@@ -1772,6 +1777,59 @@ function isPermanentPrApiError(msg: string): boolean {
   );
 }
 
+// Base-branch rulesets change rarely, and only a BLOCKED PR needs them.
+const BRANCH_RULES_TTL_MS = 5 * 60_000;
+const branchRulesCache = new Map<
+  string,
+  { at: number; rules: Promise<PrBranchRules | null> }
+>();
+
+function cachedBranchRules(
+  repo: string,
+  branch: string,
+): Promise<PrBranchRules | null> {
+  const key = `${repo}#${branch}`;
+  const hit = branchRulesCache.get(key);
+  if (hit && Date.now() - hit.at < BRANCH_RULES_TTL_MS) return hit.rules;
+  const rules = resolveGithubCredential(serviceGithubCredential, { repo })
+    .then((credential) => fetchBranchRules(repo, branch, credential))
+    .catch(() => null);
+  setBounded(
+    branchRulesCache,
+    key,
+    { at: Date.now(), rules },
+    { maxEntries: 200 },
+  );
+  return rules;
+}
+
+/**
+ * GitHub answers mergeStateStatus for the token asking, and PR details are
+ * read as the bot. A ruleset that keeps the bot from updating the base makes
+ * every PR BLOCKED to it, while the person pressing Merge (whose credential
+ * the merge runs with) can land it. When nothing readable holds the PR, show
+ * the state that person would see.
+ */
+async function mergeStateForPeople(
+  repo: string,
+  data: PrDetails,
+): Promise<string> {
+  if (data.state !== "OPEN" || data.mergeStateStatus !== "BLOCKED")
+    return data.mergeStateStatus;
+  const rules = await cachedBranchRules(repo, data.baseRefName);
+  const blocked = !blockedOnlyForBot({
+    rules,
+    checks: data.checks,
+    reviewDecision: data.reviewDecision,
+    approvals: data.reviewers.filter((r) => r.state === "APPROVED").length,
+  });
+  if (blocked) return data.mergeStateStatus;
+  const settled = data.checks.every((c) =>
+    /^(SUCCESS|NEUTRAL|SKIPPED)$/i.test(c.conclusion || ""),
+  );
+  return settled ? "CLEAN" : "UNSTABLE";
+}
+
 // The App permission set includes Checks: read, so every PR details query asks
 // for the rollup and fails visibly if the installation is misconfigured.
 async function fetchPrDetails(
@@ -1906,6 +1964,7 @@ async function fetchPrDetails(
     // second call — paid once per cache miss, and never fatal: getPrStack
     // swallows its own failures and answers null.
     data.stack = await getPrStack(repo, pr.number);
+    data.mergeStateStatus = await mergeStateForPeople(repo, data);
   } catch (e: any) {
     const msg = String(e?.stderr || e?.message || e).slice(0, 300);
     if (!isNoPrError(msg)) {
