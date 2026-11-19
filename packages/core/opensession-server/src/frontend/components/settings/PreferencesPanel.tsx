@@ -150,6 +150,7 @@ import {
   onSessionContextRowChanged,
   setSessionContextRowPref,
 } from "../../lib/session-context-pref";
+import { setUsageBarPref, useUsageBarPref } from "../../lib/usage-bar-pref";
 import { Input, Textarea } from "../../ui/input";
 import { Button } from "../../ui/button";
 import {
@@ -901,6 +902,7 @@ export function PreferencesPanel() {
       ),
     [],
   );
+  const usageBar = useUsageBarPref();
   const [liveTyping, setLiveTyping] = useState<boolean>(getLiveTypingPref);
   useEffect(
     () => onLiveTypingChanged(() => setLiveTyping(getLiveTypingPref())),
@@ -1090,6 +1092,17 @@ export function PreferencesPanel() {
               aria-label="Next button"
               checked={nextChatButton}
               onCheckedChange={setNextChatButtonPref}
+            />
+          }
+        />
+        <SettingRow
+          title="Usage bar"
+          desc="Show context, spend, limits and the account above the composer."
+          control={
+            <Switch
+              aria-label="Usage bar"
+              checked={usageBar}
+              onCheckedChange={setUsageBarPref}
             />
           }
         />

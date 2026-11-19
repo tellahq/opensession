@@ -51,6 +51,7 @@ import {
   type WeeklyRemainingRow,
 } from "../lib/account-limits";
 import { UsageCost, UsageDetails } from "./UsageMeter";
+import { setUsageBarPref, useUsageBarPref } from "../lib/usage-bar-pref";
 
 export const EFFORTS = [
   { id: "none", label: "None" },
@@ -356,6 +357,7 @@ export function ModelEffortSelect({
     reset: onReset,
   } = actions;
   const effectiveModel = model || defaultModel;
+  const usageBarOn = useUsageBarPref();
   const [open, setOpen] = React.useState(false);
   const setMenuOpen = (nextOpen: boolean) => {
     setOpen(nextOpen);
@@ -876,6 +878,16 @@ export function ModelEffortSelect({
                 <UsageDetails usage={usage} className="p-1.5" />
               </Menu.Popup>
             </Menu.SubmenuRoot>
+            {/* The same readout, kept in view above the composer. */}
+            <Menu.CheckboxItem
+              checked={usageBarOn}
+              onCheckedChange={setUsageBarPref}
+              closeOnClick
+              className="justify-between gap-3 phone:min-h-11"
+            >
+              <span className="min-w-0 truncate">Show usage bar</span>
+              <Menu.Check on={usageBarOn} className="text-dim" />
+            </Menu.CheckboxItem>
             <Menu.Separator className="my-1" />
           </>
         )}

@@ -40,6 +40,7 @@ const windowSchema = z
  */
 export const accountUsageSchema = z
   .object({
+    fiveHour: windowSchema,
     sevenDay: windowSchema,
     scopedLimits: z
       .array(
@@ -79,6 +80,15 @@ export function accountLimitsFromUsage(
   if (!usage) return [];
   if (provider === "claude") {
     const out: AccountLimit[] = [];
+    // The 5-hour window is not weekly, so the weekly overview skips it; the
+    // composer's usage bar reads it, because it is what stops the next turn.
+    const fiveHour = usage.fiveHour;
+    if (fiveHour && fiveHour.utilization != null)
+      out.push({
+        utilization: fiveHour.utilization,
+        resetsAt: fiveHour.resetsAt ?? null,
+        weekly: false,
+      });
     const week = usage.sevenDay;
     if (week && week.utilization != null)
       out.push({
@@ -342,4 +352,118 @@ export function weeklyRemainingReadout({
     best(candidates.filter(({ account }) => !account.owner)) ??
     lowestRemaining(providerRows)
   );
+}
+
+/** One limit as the usage bar reads it: how much is used, and when it frees. */
+export interface SessionLimit {
+  /** Whole percent used, 0-100. */
+  used: number;
+  resetsAt: string | null;
+  /** Model the cap is scoped to ("Fable"), or undefined for the account. */
+  scope?: string;
+}
+
+export interface SessionLimits<A extends AccountLimitSource> {
+  account: A;
+  /** True when routing picks the account; false for a pin. */
+  auto: boolean;
+  /** The short rolling window (5 hours), when the account reports one. */
+  short?: SessionLimit;
+  /** The weekly budget that applies to `model`. */
+  week?: SessionLimit;
+}
+
+/**
+ * The account a session's next turn will most likely run on, and the two
+ * limits that can stop it there: the short rolling window and the week. A
+ * usable pin wins; on auto it is the account the model menu's weekly readout
+ * picks (personal before the pool, most headroom first), or else the first
+ * usable account the viewer may spend. This is the client's best guess, not
+ * the runner's record: auto routing decides at the start of each turn.
+ */
+export function sessionLimits<A extends AccountLimitSource>({
+  accounts,
+  viewer,
+  provider,
+  model,
+  accountId,
+  now = Date.now(),
+}: {
+  accounts: A[];
+  viewer: string;
+  provider?: AccountLimitSource["provider"];
+  model: string;
+  accountId?: string;
+  now?: number;
+}): SessionLimits<A> | undefined {
+  if (!provider) return undefined;
+  const mine = accounts.filter(
+    (account) =>
+      account.provider === provider && accountAvailableTo(account, viewer),
+  );
+  const pinned = accountId
+    ? accounts.find((account) => account.id === accountId)
+    : undefined;
+  const rows = weeklyRemainingRows(mine, viewer, now);
+  const readout = pinned
+    ? undefined
+    : weeklyRemainingReadout({ rows, accounts: mine, viewer, provider, model });
+  const account =
+    pinned ??
+    mine.find((candidate) => candidate.id === readout?.accountId) ??
+    mine.find((candidate) => candidate.usable !== false && !!candidate.owner) ??
+    mine.find((candidate) => candidate.usable !== false);
+  if (!account) return undefined;
+
+  let short: SessionLimit | undefined;
+  for (const limit of account.limits ?? []) {
+    if (limit.weekly) continue;
+    const used = liveUtilization(
+      { label: "", utilization: limit.utilization, resetsAt: limit.resetsAt },
+      now,
+    );
+    if (used === null || (short && short.used >= used)) continue;
+    short = { used: clampPercent(used), resetsAt: limit.resetsAt };
+  }
+
+  const weekRow = lowestRemaining(
+    rowsForModel(
+      rows.filter((row) => row.accountId === account.id),
+      model,
+    ),
+  );
+  const weekLimit = weekRow
+    ? (account.limits ?? []).find(
+        (limit) => limit.weekly && limit.scope === weekRow.scope,
+      )
+    : undefined;
+  let week: SessionLimit | undefined;
+  if (weekRow) {
+    week = {
+      used: 100 - weekRow.remaining,
+      resetsAt: weekLimit?.resetsAt ?? null,
+    };
+    if (weekRow.scope) week.scope = weekRow.scope;
+  }
+
+  const result: SessionLimits<A> = { account, auto: !pinned };
+  if (short) result.short = short;
+  if (week) result.week = week;
+  return result;
+}
+
+function clampPercent(n: number): number {
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+/** "3h", "40m", "2d": how long until a limit frees up, or "" when unknown. */
+export function resetsIn(resetsAt: string | null, now = Date.now()): string {
+  const t = resetsAt ? Date.parse(resetsAt) : NaN;
+  if (!Number.isFinite(t)) return "";
+  const mins = Math.round((t - now) / 60_000);
+  if (mins <= 0) return "now";
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.round(hours / 24)}d`;
 }

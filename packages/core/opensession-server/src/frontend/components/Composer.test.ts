@@ -38,9 +38,10 @@ test("full-width flaps have their own stack outside the compact action", async (
   const component = await source("./Composer.tsx");
 
   // Every flap below another one squares its top, so a stack reads as one
-  // panel. A next-chat action must not count as that preceding sibling.
+  // panel. A next-chat action must not count as that preceding sibling. The
+  // usage bar, when switched on, is the top flap of the same stack.
   expect(component).toContain(
-    '<div className="flex flex-col [&>*:not(:first-child)]:rounded-t-none">\n          {attached}',
+    '<div className="flex flex-col [&>*:not(:first-child)]:rounded-t-none">\n          {usageBar}\n          {attached}',
   );
 });
 

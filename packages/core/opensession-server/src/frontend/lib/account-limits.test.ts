@@ -4,6 +4,8 @@ import {
   accountUsageSchema,
   lowestRemaining,
   remainingTone,
+  resetsIn,
+  sessionLimits,
   weeklyRemainingReadout,
   weeklyRemainingRows,
   type AccountLimitSource,
@@ -13,7 +15,7 @@ const NOW = Date.parse("2026-09-03T20:40:00Z");
 const inHours = (h: number) => new Date(NOW + h * 3_600_000).toISOString();
 
 describe("accountLimitsFromUsage", () => {
-  test("Claude: the 7-day window and each scoped weekly cap; not the 5h", () => {
+  test("Claude: the 5h window, the 7-day window and each scoped weekly cap", () => {
     expect(
       accountLimitsFromUsage(
         "claude",
@@ -27,6 +29,7 @@ describe("accountLimitsFromUsage", () => {
         }),
       ),
     ).toEqual([
+      { utilization: 60, resetsAt: inHours(2), weekly: false },
       { utilization: 97, resetsAt: inHours(70), weekly: true },
       { scope: "Fable", utilization: 45, resetsAt: inHours(100), weekly: true },
     ]);
@@ -376,5 +379,110 @@ describe("weeklyRemainingReadout", () => {
         model: "claude-fable-5-2",
       }),
     ).toMatchObject({ accountId: "pool", remaining: 60 });
+  });
+});
+
+describe("sessionLimits", () => {
+  const accounts: AccountLimitSource[] = [
+    {
+      id: "pool",
+      name: "Pool",
+      provider: "claude",
+      usable: true,
+      limits: [
+        { utilization: 10, resetsAt: inHours(3), weekly: false },
+        { utilization: 20, resetsAt: inHours(50), weekly: true },
+      ],
+    },
+    {
+      id: "mine",
+      name: "Mine",
+      provider: "claude",
+      owner: "Ada",
+      usable: true,
+      limits: [
+        { utilization: 64.4, resetsAt: inHours(2), weekly: false },
+        { utilization: 40, resetsAt: inHours(70), weekly: true },
+        {
+          scope: "Fable",
+          utilization: 75,
+          resetsAt: inHours(100),
+          weekly: true,
+        },
+      ],
+    },
+    {
+      id: "theirs",
+      name: "Theirs",
+      provider: "claude",
+      owner: "Grace",
+      usable: true,
+      limits: [{ utilization: 0, resetsAt: inHours(70), weekly: true }],
+    },
+  ];
+
+  test("auto: the viewer's own subscription, with its 5h and week", () => {
+    expect(
+      sessionLimits({
+        accounts,
+        viewer: "Ada",
+        provider: "claude",
+        model: "claude-opus-5-5",
+        now: NOW,
+      }),
+    ).toEqual({
+      account: accounts[1]!,
+      auto: true,
+      short: { used: 64, resetsAt: inHours(2) },
+      week: { used: 40, resetsAt: inHours(70) },
+    });
+  });
+
+  test("a model with its own weekly cap reads that cap", () => {
+    expect(
+      sessionLimits({
+        accounts,
+        viewer: "Ada",
+        provider: "claude",
+        model: "claude-fable-5-2",
+        now: NOW,
+      })?.week,
+    ).toEqual({ used: 75, resetsAt: inHours(100), scope: "Fable" });
+  });
+
+  test("a pin wins over routing", () => {
+    const limits = sessionLimits({
+      accounts,
+      viewer: "Ada",
+      provider: "claude",
+      model: "claude-opus-5-5",
+      accountId: "pool",
+      now: NOW,
+    });
+    expect(limits?.account.id).toBe("pool");
+    expect(limits?.auto).toBe(false);
+  });
+
+  test("no provider or no account reads as unknown", () => {
+    expect(
+      sessionLimits({ accounts, viewer: "Ada", model: "x", now: NOW }),
+    ).toBeUndefined();
+    expect(
+      sessionLimits({
+        accounts: [],
+        viewer: "Ada",
+        provider: "codex",
+        model: "gpt-6.2-sol",
+        now: NOW,
+      }),
+    ).toBeUndefined();
+  });
+
+  test("resetsIn reads the time left", () => {
+    expect(resetsIn(inHours(2), NOW)).toBe("2h");
+    expect(resetsIn(inHours(0.5), NOW)).toBe("30m");
+    expect(resetsIn(inHours(-1), NOW)).toBe("now");
+    expect(resetsIn(inHours(72), NOW)).toBe("3d");
+    expect(resetsIn(null, NOW)).toBe("");
   });
 });

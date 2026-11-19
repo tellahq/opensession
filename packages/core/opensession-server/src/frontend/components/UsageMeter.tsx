@@ -6,6 +6,7 @@ import type {
 } from "@tellahq/opensession-protocol/events";
 import { Popover } from "../ui/popover";
 import { cn } from "../ui/cn";
+import { fmtTokens, fmtUsd } from "../lib/usage-format";
 
 /**
  * Compact live cost + context readout for the mobile session bar. Shows the
@@ -15,23 +16,6 @@ import { cn } from "../ui/cn";
  * comes directly from the engine's completed provider messages. Hidden until
  * the first run reports usage.
  */
-
-function fmtUsd(n: number): string {
-  if (n <= 0) return "$0.00";
-  if (n < 0.01) return "<$0.01";
-  if (n < 100) return `$${n.toFixed(2)}`;
-  return `$${Math.round(n).toLocaleString()}`;
-}
-
-const compact = new Intl.NumberFormat(undefined, {
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
-
-function fmtTokens(n: number): string {
-  if (n < 1000) return String(n);
-  return compact.format(n);
-}
 
 /** Fill-level color: neutral under 85%, red once the window is nearly full. */
 function fillTone(frac: number) {

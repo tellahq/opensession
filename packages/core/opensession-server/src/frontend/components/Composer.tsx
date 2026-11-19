@@ -141,6 +141,8 @@ import {
   type ComposerMenu,
 } from "./composer/ComposerControls";
 import { ModelRow } from "./composer/ModelRow";
+import { UsageBar } from "./composer/UsageBar";
+import { useUsageBarPref } from "../lib/usage-bar-pref";
 import { VoiceAudioOptions } from "./composer/VoiceAudioSettings";
 import type { VoiceInputControl } from "./VoiceInput";
 import { VoiceControl } from "./composer/VoiceControl";
@@ -541,6 +543,22 @@ export function Composer({
   // Dictation keeps the field in view: the transcript lands in it.
   const minimized =
     isPhone && !focused && !hasContent && !modelMenuOpen && !dictating;
+  // The usage bar rides the top of the flap stack while it is switched on and
+  // the conversation has reported usage. It is not content: it never holds the
+  // phone composer open, and the resting pill has no room for it.
+  const usageBarOn = useUsageBarPref();
+  const usageBar =
+    usageBarOn && usage && usage.turns > 0 && !minimized ? (
+      <UsageBar
+        usage={usage}
+        models={models}
+        model={model}
+        defaultModel={defaultModel}
+        accounts={accounts}
+        accountId={accountId}
+      />
+    ) : null;
+  const flaps = usageBar || attached;
   // A predicted next message stands in for the placeholder only where the
   // placeholder is the generic prompt: a team note or a quote has its own.
   const shownPrediction =
@@ -1480,8 +1498,9 @@ export function Composer({
           flap retains its top corners, even when the action is present. */}
       {/* Stacked flaps read as one panel: only the top one keeps its rounded
           corners, and each later one meets it with a straight seam. */}
-      {attached && (
+      {flaps && (
         <div className="flex flex-col [&>*:not(:first-child)]:rounded-t-none">
+          {usageBar}
           {attached}
         </div>
       )}
@@ -1520,16 +1539,8 @@ export function Composer({
         // action instead tucks behind its rounded top edge with a small inset.
         initial={false}
         animate={{
-          borderTopLeftRadius: minimized
-            ? 999
-            : attached
-              ? 0
-              : composerRadius(),
-          borderTopRightRadius: minimized
-            ? 999
-            : attached
-              ? 0
-              : composerRadius(),
+          borderTopLeftRadius: minimized ? 999 : flaps ? 0 : composerRadius(),
+          borderTopRightRadius: minimized ? 999 : flaps ? 0 : composerRadius(),
           borderBottomLeftRadius: minimized ? 999 : composerRadius(),
           borderBottomRightRadius: minimized ? 999 : composerRadius(),
         }}
