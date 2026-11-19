@@ -1665,6 +1665,18 @@ export function IconIssue(p: IconProps) {
   );
 }
 
+// iconic-pro rotate-clockwise: IconRestore mirrored, for reload rather than undo.
+export function IconRefresh(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path
+        {...stroke}
+        d="M11 18.25A6.25 6.25 0 1 1 17.25 12v2.385m-2.5-1.635L17 15.25l2.25-2.5"
+      />
+    </Svg>
+  );
+}
+
 // iconic-pro rotate-anti-clockwise — the ⟲ "restore" glyph.
 export function IconRestore(p: IconProps) {
   return (

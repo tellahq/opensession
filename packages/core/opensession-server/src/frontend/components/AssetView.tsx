@@ -587,23 +587,29 @@ export function AssetActions({
   return (
     <div
       className={cn(
-        "flex shrink-0 items-center gap-2 border-b border-divider px-3 py-2",
+        "flex min-h-[var(--desktop-header-h)] shrink-0 items-center gap-2 border-b border-divider py-2 pr-2 pl-4",
         className,
       )}
     >
       <div className="min-w-0 flex-1" title={file.path}>
-        <div className="truncate text-label font-medium text-fg">{name}</div>
+        <div className="flex min-w-0 items-baseline gap-2">
+          <span className="truncate text-item-title font-semibold text-fg">
+            {name}
+          </span>
+          {folder && (
+            <span className="min-w-0 shrink truncate text-label text-faint">
+              {folder}
+            </span>
+          )}
+        </div>
         {file.description && (
-          <div className="line-clamp-2 text-supporting leading-snug text-dim">
+          <div className="mt-0.5 line-clamp-2 text-label text-dim">
             {file.description}
           </div>
         )}
-        {folder && (
-          <div className="truncate text-meta text-faint">{folder}</div>
-        )}
       </div>
       {showSize && (
-        <span className="shrink-0 text-meta text-faint">
+        <span className="shrink-0 text-meta tabular-nums text-faint">
           {formatAssetSize(file.size)}
         </span>
       )}
