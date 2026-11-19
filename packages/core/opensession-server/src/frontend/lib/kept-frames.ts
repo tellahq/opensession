@@ -253,6 +253,42 @@ export function loadKeptFrame(key: string, address: string) {
 }
 
 /**
+ * Preview URLs a newer deploy is on its way to. Kept by URL rather than on a
+ * frame, so a page that loads mid-deploy (a preload, a frame evicted and
+ * opened again) still says so. A frame showing one of them is a push behind
+ * until reloadKeptFrame catches it up.
+ */
+let deploying: ReadonlySet<string> = new Set();
+
+export function setKeptPageDeploying(url: string, on: boolean) {
+  if (deploying.has(url) === on) return;
+  const next = new Set(deploying);
+  if (on) next.add(url);
+  else next.delete(url);
+  deploying = next;
+  for (const listener of listeners) listener();
+}
+
+/** Whether `url` is mid-deploy; read it through subscribeKeptFrames. */
+export function keptPageDeploying(url: string): boolean {
+  return deploying.has(url);
+}
+
+/**
+ * A newer deploy of `url` went live: reload the page where it stands, so it
+ * shows the latest push. Only a frame still showing that preview reloads,
+ * not one the person typed another address into, and one already loading is
+ * fetching the new deploy anyway (which also keeps two callers from loading
+ * it twice).
+ */
+export function reloadKeptFrame(key: string, url: string) {
+  const frame = getKeptFrame(key);
+  if (!frame || frame.url !== url || frame.address !== url) return;
+  if (frame.loading) return;
+  loadKeptFrame(key, frame.location ?? frame.address);
+}
+
+/**
  * The frame element finished a load: its first, which starts its history, or
  * a later one, which is navigation inside the page.
  */
@@ -332,6 +368,7 @@ export function dropKeptFrame(key: string) {
 /** Test seam: forget every frame. */
 export function resetKeptFrames() {
   clock = 0;
+  deploying = new Set();
   commit([]);
 }
 

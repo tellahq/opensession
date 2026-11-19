@@ -35,7 +35,7 @@ import {
   setModelProvider,
   type ModelProviderConfig,
 } from "../model-providers";
-import { discoverProviderModels } from "../model-discovery";
+import { canDiscoverModels, discoverProviderModels } from "../model-discovery";
 import {
   isPiModelId,
   piEngineEnabled,
@@ -61,6 +61,7 @@ function publicProvider(
     ...(p.discoverModels ? { discoverModels: true } : {}),
     ...(p.discovered?.at ? { discoveredAt: p.discovered.at } : {}),
     ...(p.catalogFile ? { catalogFile: p.catalogFile } : {}),
+    ...(canDiscoverModels(id, p) ? { canDiscover: true } : {}),
     catalogModels: catalogIds.length,
     models: pickerModels.filter((m) => m.startsWith(`pi/${id}/`)),
   };
@@ -605,7 +606,11 @@ export async function handleConnectionsRoutes(
       }
       let discovery: { added: number; models: string[] } | undefined;
       let discoveryError: string | undefined;
-      if (discoverModels && savedProvider?.baseURL && savedProvider.apiKey) {
+      if (
+        discoverModels &&
+        savedProvider?.apiKey &&
+        canDiscoverModels(id, savedProvider)
+      ) {
         try {
           discovery = await discoverProviderModels(id);
         } catch (e: any) {

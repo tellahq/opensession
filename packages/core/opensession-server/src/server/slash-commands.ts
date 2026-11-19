@@ -335,8 +335,8 @@ export async function handleSlashCommand(
     broadcastToSession(session.id, {
       type: "notice",
       sessionId: session.id,
-      message:
-        "Compacting context — the next reply continues from a summary of the conversation so far.",
+      message: "Compacting context",
+      tone: "info",
     });
     return null; // fall through: the SDK runs its built-in /compact on this turn
   }

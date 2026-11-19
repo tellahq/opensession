@@ -229,6 +229,8 @@ export function waferModelName(model: string): string {
 export function defaultPickerModelsForProvider(id: string): readonly string[] {
   if (id === "cerebras") return CEREBRAS_PICKER_MODELS;
   if (id === "wafer") return WAFER_PICKER_MODELS;
+  // Gemini API keys: models Pi already describes. Discovery adds newer ones.
+  if (id === "google") return ["gemini-3.5-flash", "gemini-3.1-pro-preview"];
   return [];
 }
 

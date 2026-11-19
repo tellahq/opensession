@@ -10,6 +10,7 @@ import {
   hideKeptFrame,
   keptFrameElement,
   keptFrameStepped,
+  keptPageDeploying,
   loadKeptFrame,
   showKeptFrame,
   subscribeKeptFrames,
@@ -26,6 +27,7 @@ import {
 import { useFrameFocus } from "../hooks/useFrameFocus";
 import { useFrameLocation } from "../hooks/useFrameLocation";
 import { Button } from "../ui/button";
+import { cn } from "../ui/cn";
 import { Input } from "../ui/input";
 import { PageLoader } from "../ui/page-loader";
 import { BrowserAnnotationLayer } from "./BrowserAnnotationLayer";
@@ -216,6 +218,15 @@ function KeptBrowserPane({
   }, [key, slot, url, name, frameTitle, allow, sandbox]);
 
   const address = frame?.url === url ? (frame.location ?? frame.address) : url;
+  // A newer deploy of this preview is on its way; the page reloads by itself
+  // once it lands (see useReloadOnFreshDeploy). The pane's own status, when
+  // it passes one, already says so.
+  const readDeploying = () => keptPageDeploying(url);
+  const deploying = useSyncExternalStore(
+    subscribeKeptFrames,
+    readDeploying,
+    readDeploying,
+  );
 
   return (
     <div className={BROWSER_PANE}>
@@ -225,7 +236,12 @@ function KeptBrowserPane({
         history={frame?.url === url ? frame.history : undefined}
         onLoad={(next) => loadKeptFrame(key, next)}
         onStep={(delta, length) => keptFrameStepped(key, delta, length)}
-        leading={leading}
+        leading={
+          leading ??
+          (deploying ? (
+            <span className="mr-1 shrink-0 text-xs text-dim">Deploying…</span>
+          ) : undefined)
+        }
         actions={actions}
         openWindowName={openWindowName}
         annotating={commentSessionId ? annotating : undefined}
@@ -314,6 +330,7 @@ function BrowserToolbar({
       <Button
         variant="ghost"
         size="md"
+        className="rounded-control"
         icon={<IconChevronLeft size={16} />}
         onClick={() => step(-1)}
         disabled={!canStep(-1)}
@@ -323,6 +340,7 @@ function BrowserToolbar({
       <Button
         variant="ghost"
         size="md"
+        className="rounded-control"
         icon={<IconChevronRight size={16} />}
         onClick={() => step(1)}
         disabled={!canStep(1)}
@@ -332,6 +350,7 @@ function BrowserToolbar({
       <Button
         variant="ghost"
         size="md"
+        className="rounded-control"
         icon={<IconRestore size={16} />}
         onClick={() => onLoad(address)}
         aria-label={`Reload ${name}`}
@@ -365,8 +384,14 @@ function BrowserToolbar({
       />
       {annotating !== undefined ? (
         <Button
-          variant={annotating ? "soft" : "ghost"}
+          variant="ghost"
           size="md"
+          // On reads as a light wash, not the soft plate: the toolbar already
+          // sits on a grey strip, where the soft fill went heavy.
+          className={cn(
+            "rounded-control",
+            annotating && "bg-hover text-fg hover:bg-pressed",
+          )}
           icon={<IconMessage size={16} />}
           onClick={() => onAnnotate?.(!annotating)}
           aria-pressed={annotating}
@@ -379,6 +404,7 @@ function BrowserToolbar({
       <Button
         variant="ghost"
         size="md"
+        className="rounded-control"
         icon={<IconArrowUpRight size={16} />}
         onClick={() => window.open(address, openWindowName, "noopener")}
         aria-label={`Open ${name} in a new browser tab`}

@@ -4,7 +4,11 @@ import { useEffect, useEffectEvent } from "react";
 import { z } from "zod";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { withModelSwitches } from "../components/session-viewer/model-switches";
-import { switchDividerText } from "../components/session-viewer/model-labels";
+import {
+  switchDividerText,
+  switchDividerTone,
+} from "../components/session-viewer/model-labels";
+import { noticeText } from "@tellahq/opensession-protocol/notices";
 import type { SlackSent } from "../components/ShippedChangeComposer";
 import { getCurrentUser } from "../components/UserPicker";
 import type { FileAttachment } from "../lib/images";
@@ -648,6 +652,7 @@ export function useSessionViewerSubscription({
                 id: `model-switch-live-${Date.now()}`,
                 type: "system",
                 content: switchDividerText(msg.model, msg.from, msg.by),
+                noticeTone: switchDividerTone(msg.by),
                 timestamp: new Date().toISOString(),
               },
             ]);
@@ -674,6 +679,7 @@ export function useSessionViewerSubscription({
               id: restartQueueNoticeEntryId(msg.message) ?? randomUUID(),
               type: "system",
               content: msg.message,
+              noticeTone: msg.tone,
               timestamp: new Date().toISOString(),
             },
           ]);
@@ -689,7 +695,8 @@ export function useSessionViewerSubscription({
               {
                 id: randomUUID(),
                 type: "system",
-                content: `⚠ Run failed: ${msg.message}`,
+                content: noticeText("Run failed", msg.message),
+                noticeTone: "error",
                 timestamp: new Date().toISOString(),
               },
             ]);

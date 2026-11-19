@@ -274,7 +274,8 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
     const chip = store
       .readTail(sid, 50)
       .entries.find((e) => e.type === "system");
-    expect(chip?.content).toBe("Run failed: boom: unrecoverable test failure");
+    expect(chip?.content).toBe("Run failed\nboom: unrecoverable test failure");
+    expect(chip?.noticeTone).toBe("error");
   });
 
   test("usage-limit stop is worded as a stop, and a runner-written notice wins", async () => {
@@ -308,7 +309,7 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
       .entries.filter((e) => e.type === "system");
     expect(chips).toHaveLength(1);
     expect(chips[0].content).toBe(
-      "Run stopped: Usage limit reached on every account",
+      "Run stopped\nUsage limit reached on every account",
     );
   });
 
@@ -338,7 +339,7 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
       .readTail(sid, 50)
       .entries.find((entry) => entry.type === "system");
     expect(chip?.content).toBe(
-      "Run failed: Restart recovery stopped unexpectedly. Send the prompt again to continue.",
+      "Run failed\nRestart recovery stopped unexpectedly. Send the prompt again to continue.",
     );
   });
 

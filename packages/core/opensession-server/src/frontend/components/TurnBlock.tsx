@@ -67,6 +67,8 @@ import {
   TurnLineStatsCard,
 } from "./TurnFooter";
 import { transcriptDisclosureLedger } from "../lib/transcript-disclosures";
+import { ProgressStatusLabel } from "./ProgressStatusRow";
+import type { ProgressUpdate } from "../lib/progress-updates";
 import { workSummary, workSummaryTitle } from "../lib/work-summary";
 import { turnScrollAnchor } from "../lib/transcript-block-identity";
 import { useLiveReasoningStatus } from "./session-viewer/live-run-status";
@@ -87,6 +89,9 @@ interface Props {
    * hairline that divides the work from what comes next has nothing to
    * divide. */
   last?: boolean;
+  /** The status line the reply below opened with, named here instead:
+   *  "◷ Native build: Running · 35s ›". */
+  status?: ProgressUpdate;
 }
 
 /** The two Settings → Preferences answers for how work folds, kept live. */
@@ -121,6 +126,7 @@ export const TurnBlock = function TurnBlock({
   onOpenSubagent,
   sessionId,
   last = false,
+  status,
 }: Props) {
   const allTools = items.filter((it) => it.type === "tool_use");
   const tools = allTools.filter((it) => agentMessageText(it) === null);
@@ -225,11 +231,13 @@ export const TurnBlock = function TurnBlock({
   ]
     .filter(Boolean)
     .join(" · ");
-  // Tool calls render flat when there is no narration (the outer row is
-  // already the run's summary) or the Tool calls preference keeps them open.
-  // Otherwise grouped rows each name their own counts and ±lines, and the
-  // turn-wide meta line above them read as the same summary twice.
-  const flatTools = pref.tools === "open" || !hasNarration;
+  // Tool calls render flat only when the Tool calls preference keeps them
+  // open. Otherwise every fold, narrated or not, shows the same closed "Ran 4
+  // commands" rows: a tool-only fold that opened to a lowercase "ran 4
+  // commands" line and its calls read differently from the fold below it.
+  // Grouped rows name their own counts and ±lines, so the turn-wide meta line
+  // stays only with flat calls.
+  const flatTools = pref.tools === "open";
   const title = live
     ? "Working"
     : duration
@@ -310,7 +318,14 @@ export const TurnBlock = function TurnBlock({
         className="-mx-2 flex w-fit max-w-[calc(100%+16px)] min-w-0 cursor-pointer items-baseline gap-1.5 rounded-control border-0 bg-transparent px-2 py-1 text-left font-sans text-item-title leading-5 text-faint transition-colors hover:text-dim phone:min-h-11 phone:items-center"
       >
         <Tooltip label={!live ? fullTime(timing.completedAt) : ""}>
-          <span className="flex-shrink-0">{title}</span>
+          {status && !live ? (
+            <span className="flex min-w-0 items-center gap-1.5">
+              <ProgressStatusLabel update={status} />
+              {duration && <span className="flex-none">· {duration}</span>}
+            </span>
+          ) : (
+            <span className="flex-shrink-0">{title}</span>
+          )}
         </Tooltip>
         <span
           className={cn(
@@ -391,11 +406,6 @@ export const TurnBlock = function TurnBlock({
                 className="-ml-px desktop:ml-0"
                 data-eid={`${sec.items[sec.items.length - 1].id}#sec`}
               >
-                {/* The outer Working row is already a tool-only run's
-                    summary. If someone opens it, reveal the calls directly
-                    instead of inserting a second, identical disclosure. A
-                    narrated turn still lets the Tool calls preference fold
-                    routine calls between its updates. */}
                 <ToolSection
                   items={sec.items}
                   toolResults={toolResults}
@@ -626,20 +636,24 @@ function ToolRunBlock({
         )}
       </button>
       <Fold open={expanded}>
-        {items.map((entry) => (
-          <ToolCallBlock
-            key={entry.id}
-            entry={entry}
-            sessionId={sessionId}
-            result={
-              entry.toolUseId ? toolResults.get(entry.toolUseId) : undefined
-            }
-            pending={
-              live && !!entry.toolUseId && !toolResults.has(entry.toolUseId)
-            }
-            onOpenSubagent={onOpenSubagent}
-          />
-        ))}
+        {/* A small step in, so the opened steps read as the run's own rather
+            than more rows of the turn. */}
+        <div className="ml-2">
+          {items.map((entry) => (
+            <ToolCallBlock
+              key={entry.id}
+              entry={entry}
+              sessionId={sessionId}
+              result={
+                entry.toolUseId ? toolResults.get(entry.toolUseId) : undefined
+              }
+              pending={
+                live && !!entry.toolUseId && !toolResults.has(entry.toolUseId)
+              }
+              onOpenSubagent={onOpenSubagent}
+            />
+          ))}
+        </div>
       </Fold>
     </div>
   );
@@ -857,7 +871,7 @@ function ReasoningMessage({
   const live = useLiveReasoningStatus(active);
   return (
     <div className="my-2" data-eid={last.id} data-reasoning="">
-      {live.thinking && !live.namedBelow ? (
+      {live.thinking ? (
         // Some providers expose prose thinking rather than a short status
         // heading. Keep that prose readable and shimmer a stable label.
         <TextShimmer className={cn(msgReasoningTitle, msgReasoningShimmer)}>
@@ -1050,6 +1064,7 @@ function SuggestedTasks({
 function turnBlockPropsEqual(prev: Props, next: Props): boolean {
   if (prev.live !== next.live) return false;
   if (prev.last !== next.last) return false;
+  if (prev.status !== next.status) return false;
   if (prev.expandWhileRunning !== next.expandWhileRunning) return false;
   if (prev.onOpenSubagent !== next.onOpenSubagent) return false;
   if (prev.sessionId !== next.sessionId) return false;

@@ -690,7 +690,7 @@ describe("session Portal supervisor", () => {
       sessionId: "os-portal-test",
       worktreeDir: worktree,
       name: "same-port",
-      port: 18_702,
+      port: await freePort(),
       command,
     });
     await stopPortalService({
@@ -718,6 +718,7 @@ describe("session Portal supervisor", () => {
 
   test("a status read during the settle window keeps the start starting", async () => {
     process.env.OPENSESSION_PORTAL_READY_SETTLE_MS = "1500";
+    const port = await freePort();
     try {
       // Binds, then dies before the settle window ends (like Next crashing
       // on its config after it opened the port).
@@ -725,7 +726,7 @@ describe("session Portal supervisor", () => {
         sessionId: "os-portal-test",
         worktreeDir: worktree,
         name: "settle-crash",
-        port: 18_704,
+        port,
         command:
           "bun -e 'Bun.serve({port:Number(process.env.PORT),fetch(){return new Response(\"ok\")}}); setTimeout(()=>process.exit(1),700)'",
       });
@@ -744,7 +745,7 @@ describe("session Portal supervisor", () => {
           record?.pid &&
           (await Bun.connect({
             hostname: "127.0.0.1",
-            port: 18_704,
+            port,
             socket: { data() {} },
           }).then(
             (sock) => (sock.end(), true),
@@ -818,24 +819,25 @@ describe("session Portal supervisor", () => {
 
   test("starting over a failed Portal reaps its leftover process group", async () => {
     const leftover = Bun.spawn(["sleep", "60"]);
+    const port = await freePort();
     const record = {
       name: "web-retry",
       key: "WEBAPP_PORT",
       command: "just dev",
-      port: 18_778,
+      port,
       state: "failed",
       pid: leftover.pid,
       lastError: "The service is no longer listening.",
     };
     writeFileSync(
       join(worktree, ".ports.conf"),
-      `${PREFIX(record)}\nWEBAPP_PORT=18778\n`,
+      `${PREFIX(record)}\nWEBAPP_PORT=${port}\n`,
     );
     const portal = await startPortalService({
       sessionId: "os-retry-test",
       worktreeDir: worktree,
       name: "web-retry",
-      port: 18_778,
+      port,
       command:
         "bun -e 'Bun.serve({port:Number(process.env.PORT),fetch(){return new Response(\"ok\")}})'",
     });
@@ -1041,7 +1043,7 @@ describe("session Portal supervisor", () => {
       sessionId: "owner",
       worktreeDir: worktree,
       name: "shared",
-      port: 18_705,
+      port: await freePort(),
       command:
         "bun -e 'Bun.serve({port:Number(process.env.PORT),fetch(){return new Response(\"shared\")}})'",
     });

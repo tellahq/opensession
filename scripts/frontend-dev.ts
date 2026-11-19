@@ -141,7 +141,10 @@ async function proxy(req: Request): Promise<Response> {
   return new Response(res.body, { status: res.status, headers: h });
 }
 
-type Bridge = { up: WebSocket; buf: (string | Uint8Array)[] | null };
+type Bridge = {
+  up: WebSocket;
+  buf: Parameters<WebSocket["send"]>[0][] | null;
+};
 
 const spaRoutes = [
   "/",

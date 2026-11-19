@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+  automatedTriggerDetail,
   automatedTriggerTitle,
   cacheMissNotice,
   isGitHubAttribution,
@@ -319,15 +320,15 @@ describe("cross-session notice detection", () => {
 describe("cacheMissNotice", () => {
   it("names the cost in thousands of tokens", () => {
     expect(cacheMissNotice(123_400)).toBe(
-      "This turn re-uploaded the conversation · ~123k tokens re-cached",
+      "Prompt cache missed · ~123k tokens re-sent",
     );
     expect(cacheMissNotice(20_500)).toBe(
-      "This turn re-uploaded the conversation · ~21k tokens re-cached",
+      "Prompt cache missed · ~21k tokens re-sent",
     );
   });
 
   it("drops a count that would round to nothing", () => {
-    const bare = "This turn re-uploaded the conversation";
+    const bare = "Prompt cache missed";
     expect(cacheMissNotice(0)).toBe(bare);
     expect(cacheMissNotice(999)).toBe(bare);
     expect(cacheMissNotice(undefined)).toBe(bare);
@@ -342,7 +343,7 @@ describe("cacheMissNotice", () => {
     });
     expect(classified.notice).toEqual({
       kind: "system",
-      title: "This turn re-uploaded the conversation · ~123k tokens re-cached",
+      title: "Prompt cache missed · ~123k tokens re-sent",
       tone: "info",
     });
   });
@@ -777,5 +778,43 @@ describe("automatedTriggerTitle", () => {
         timestamp: "2026-01-01T00:00:00Z",
       }),
     ).toBeNull();
+  });
+});
+
+describe("automatedTriggerDetail", () => {
+  const user = (content: string): TranscriptEntry => ({
+    id: "e",
+    type: "user",
+    content,
+    timestamp: "2026-01-01T00:00:00Z",
+  });
+
+  it("lists failed checks as short links, without the title or instructions", () => {
+    expect(
+      automatedTriggerDetail(
+        user(
+          "[GitHub] CI failed on PR #563 at db9dba6729:\n- Secret scan (failure): https://github.com/acme/app/actions/runs/1\n- Lint (timed_out): https://github.com/acme/app/actions/runs/2\n\nThis session is assigned to handle it. Read the failing jobs' logs, fix the cause and push.",
+        ),
+      ),
+    ).toEqual([
+      {
+        text: "Secret scan · failure",
+        url: "https://github.com/acme/app/actions/runs/1",
+      },
+      {
+        text: "Lint · timed_out",
+        url: "https://github.com/acme/app/actions/runs/2",
+      },
+    ]);
+  });
+
+  it("drops a link to the PR the title already names", () => {
+    expect(
+      automatedTriggerDetail(
+        user(
+          "[GitHub] PR #5682 “Add a toggle. Again” now has merge conflicts with its base branch. https://github.com/acme/app/pull/5682 This session is assigned to handle it.",
+        ),
+      ),
+    ).toEqual([]);
   });
 });

@@ -1,3 +1,4 @@
+import { COMPARE_AFTER_CLASS, COMPARE_CLASS } from "./compare-block";
 import { diagramDataUrl, readDiagramSvg } from "./diagram-media";
 import {
   commentSessionIdFor,
@@ -11,11 +12,31 @@ import {
 export const GALLERY_SELECTOR =
   "img.md-image, video.md-video, .md-compare > img, .md-mermaid > svg, .md-chart-canvas > svg";
 
-/** Apple's page control keeps a small moving window for long galleries. */
-export const MAX_VISIBLE_LIGHTBOX_DOTS = 7;
+/** The viewer frosts the page behind it in the page's own colour. Thin
+ *  enough that the session still shows through, so the picture reads as
+ *  lifted off the chat rather than opened on a blank page. */
+export const LIGHTBOX_SCRIM_CLASS =
+  "pointer-events-none absolute inset-0 bg-bg/55 backdrop-blur-md backdrop-saturate-150";
 
-/** Quiet top-cluster actions shared by Download, Copy link, and Open. */
-export const LIGHTBOX_ACTION_CLASS = "shrink-0 cursor-pointer";
+/** The tools sit in one inverse pill above the input, so they read as a
+ *  single object over the frosted page rather than loose labels on it. */
+export const LIGHTBOX_TOOLBAR_CLASS =
+  "pointer-events-auto flex max-w-full items-center gap-0.5 overflow-x-auto rounded-full bg-fg p-1 text-bg smooth-shadow-md [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+
+/** One tool in that pill. Ghost buttons re-inked for the inverse fill. */
+export const LIGHTBOX_TOOL_CLASS =
+  "shrink-0 cursor-pointer text-bg/80 hover:bg-bg/15 hover:text-bg aria-pressed:bg-bg/15 aria-pressed:text-bg";
+
+/** Close and the page arrows: frosted glass discs, so the page shows
+ *  through them the way it does through the scrim. */
+export const LIGHTBOX_ROUND_BUTTON_CLASS =
+  "z-10 size-10 shrink-0 rounded-full border-fg/10 bg-bg/60 text-fg backdrop-blur-xl backdrop-saturate-150 smooth-shadow-sm hover:bg-bg/85 phone:size-11";
+
+/** The session input a desktop viewer keeps above its scrim: the child of
+ *  the marked host that holds Composer's box (`.composer`), lifted by
+ *  VIEWER_INPUT while `html[data-lightbox-composer]` is set. */
+export const LIGHTBOX_COMPOSER_SELECTOR =
+  "[data-lightbox-composer-host] > :has(.composer)";
 export const LIGHTBOX_PREVIEW_LABEL: Record<LightboxItem["kind"], string> = {
   image: "Image preview",
   video: "Video preview",
@@ -25,11 +46,25 @@ export const LIGHTBOX_PREVIEW_LABEL: Record<LightboxItem["kind"], string> = {
 /** One node as an item, or null when it cannot be shown. */
 function galleryItem(node: Element): LightboxItem | null {
   if (node instanceof HTMLImageElement) {
+    // A slider's stills say which side they are with the same red and
+    // green pill a walkthrough uses, not their alt text as a caption.
+    if (node.parentElement?.classList.contains(COMPARE_CLASS)) {
+      return {
+        kind: "image",
+        src: node.currentSrc || node.src,
+        commentSessionId: commentSessionIdFor(node),
+        walkthroughLabel: node.classList.contains(COMPARE_AFTER_CLASS)
+          ? "after"
+          : "before",
+      };
+    }
     return {
       kind: "image",
       src: node.currentSrc || node.src,
       commentSessionId: commentSessionIdFor(node),
-      sessionTitle: node.alt.trim() || undefined,
+      // The caption written under the image marker: what the picture
+      // shows, so the viewer reads it under the picture, not as a title.
+      description: node.alt.trim() || undefined,
     };
   }
   if (node instanceof HTMLVideoElement) {

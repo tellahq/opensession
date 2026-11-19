@@ -1778,15 +1778,22 @@ final class SessionViewModel {
     /// says something about the session while covering the thing it changed.
     /// A resync drops it, which is the right lifetime for a line nothing
     /// durable backs. Internal so tests can drive it without a live server.
-    func noteLocally(_ title: String, tone: NoticeTone = .info) {
+    func noteLocally(_ text: String, tone: NoticeTone = .info) {
         localNoticeSeq += 1
+        // A server notice may carry a detail line under its title (a raw
+        // provider error). The title is the row; the detail opens on tap.
+        let lines = text.split(separator: "\n", maxSplits: 1)
+        let title = lines.first.map(String.init) ?? text
+        let detail = lines.count > 1
+            ? lines[1].trimmingCharacters(in: .whitespacesAndNewlines) : ""
         entries.append(TranscriptEntry(
             id: "local-notice-\(localNoticeSeq)",
             type: "system",
-            content: title,
+            content: detail.isEmpty ? title : detail,
             timestamp: ISO8601DateFormatter().string(from: .now),
             notice: EntryNotice(
-                kind: "system", title: title, tone: tone.rawValue, body: nil, link: nil,
+                kind: "system", title: title, tone: tone.rawValue,
+                body: detail.isEmpty ? nil : "collapsed", link: nil,
                 ask: nil, icon: nil
             )
         ))
@@ -2720,7 +2727,7 @@ final class SessionViewModel {
                 )
             }
 
-        case .notice(let message), .serverError(let message):
+        case .notice(let message, _), .serverError(let message):
             #if DEBUG
             if holdsScreenshotFixture && message == "Session not found" { break }
             #endif
@@ -2737,13 +2744,24 @@ final class SessionViewModel {
             // reconnect would write the transcript full of it.
             // An empty frame is the server clearing, not an event.
             guard !message.isEmpty else { notice = nil; break }
-            let normalized = message.lowercased()
+            // Only the title says what kind of notice it is; a detail line
+            // under it (a raw error) can mention a connection either way.
+            let normalized = (message.split(separator: "\n", maxSplits: 1).first
+                .map(String.init) ?? message).lowercased()
             let isConnectionChurn =
                 normalized.contains("connect") || normalized.contains("socket")
             if isConnectionChurn {
                 if case .connected = connectionState {} else { break }
             }
-            noteLocally(message, tone: NoticeTone.derived(fromText: message))
+            let tone: NoticeTone
+            if case .notice(_, let sent?) = event {
+                tone = sent
+            } else if case .serverError = event {
+                tone = .error
+            } else {
+                tone = NoticeTone.derived(fromText: message)
+            }
+            noteLocally(message, tone: tone)
 
         default:
             break
