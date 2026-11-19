@@ -23,7 +23,13 @@ import {
 import { Menu } from "../ui/menu";
 import { Checkbox } from "../ui/checkbox";
 import { IconTile } from "./BrandTile";
-import { IconDotsHorizontal, IconPlus, IconSearch, IconTrash } from "./icons";
+import {
+  IconDotsHorizontal,
+  IconPlus,
+  IconRefresh,
+  IconSearch,
+  IconTrash,
+} from "./icons";
 import { errorMessage } from "../lib/error-message";
 import { modelProviderSettingsPayload } from "../lib/model-provider-settings";
 
@@ -44,11 +50,18 @@ interface ProviderInfo {
   discoverModels?: boolean;
   discoveredAt?: string;
   catalogFile?: string;
+  /** The server can list this provider's models (base URL, or Gemini). */
+  canDiscover?: boolean;
   /** Rows in the operator catalog (inline, file, or discovered). */
   catalogModels: number;
   /** Full picker ids (pi/<provider>/<model>) registered for it. */
   models: string[];
 }
+
+/** Pi's slug for the Gemini API (a Google AI Studio key). */
+const GEMINI_PROVIDER_ID = "google";
+const GEMINI_KEY_URL = "https://aistudio.google.com/apikey";
+const GEMINI_BILLING_URL = "https://aistudio.google.com/billing";
 
 /** Common pi provider slugs, offered as datalist suggestions. */
 const COMMON_PROVIDER_IDS = [
@@ -132,8 +145,20 @@ export function ModelProvidersPanel() {
     });
   }
 
+  const gemini = providers?.find((p) => p.id === GEMINI_PROVIDER_ID);
+  const ownProviders =
+    providers?.filter((p) => p.id !== GEMINI_PROVIDER_ID) ?? [];
+
   return (
     <>
+      <GeminiKeySection
+        provider={gemini}
+        loaded={providers !== null}
+        onSaved={load}
+        onDiscover={handleDiscover}
+        onRemove={handleRemove}
+      />
+
       <SettingsGroupLabel
         actions={
           <Button
@@ -161,77 +186,19 @@ export function ModelProvidersPanel() {
       <SettingCard>
         {!providers ? (
           <LoadingState placement="row">Loading providers…</LoadingState>
-        ) : providers.length === 0 ? (
+        ) : ownProviders.length === 0 ? (
           <EmptyState placement="row">
             No providers yet. Add one to run sessions on models beyond the
             Anthropic/OpenAI subscriptions.
           </EmptyState>
         ) : (
-          providers.map((p) => (
-            <SettingRow key={p.id} className="items-start gap-x-3">
-              <IconTile name={p.id} size={28} />
-              <SettingRowText>
-                <SettingRowTitle>
-                  {p.name || p.id}
-                  {p.name && (
-                    <span className="ml-1.5 text-meta text-faint">{p.id}</span>
-                  )}
-                </SettingRowTitle>
-                <SettingRowDescription className="truncate">
-                  {p.apiKeyMasked || "no API key stored"}
-                  {p.baseURL && ` · ${p.baseURL}`}
-                  {p.api && " · OpenAI-compatible"}
-                  {p.catalogModels > 0 &&
-                    ` · ${p.catalogModels} catalog ${
-                      p.catalogModels === 1 ? "row" : "rows"
-                    }`}
-                  {p.discoverModels && " · discovery on"}
-                </SettingRowDescription>
-                {p.models.length > 0 ? (
-                  <div className="mt-1.5 flex flex-wrap gap-1">
-                    {p.models.map((m) => (
-                      <span
-                        key={m}
-                        className="rounded-sm bg-active px-1.5 py-px text-meta text-dim"
-                        title={m}
-                      >
-                        {m.split("/").slice(2).join("/")}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="mt-1 text-supporting text-faint">
-                    No picker models, so its models are type-in only (pi/{p.id}
-                    /&lt;model&gt;).
-                  </div>
-                )}
-              </SettingRowText>
-              <SettingRowControl>
-                <Menu.Root>
-                  <Menu.Trigger
-                    className={rowMenuTriggerClasses}
-                    aria-label={`Manage ${p.id}`}
-                  >
-                    <IconDotsHorizontal size={18} />
-                  </Menu.Trigger>
-                  <Menu.Popup align="end" sideOffset={4}>
-                    {p.baseURL && (
-                      <Menu.Item onClick={() => handleDiscover(p)}>
-                        <IconSearch size={16} />
-                        Discover models
-                      </Menu.Item>
-                    )}
-                    <Menu.Item
-                      onClick={() => handleRemove(p)}
-                      className="text-red data-[highlighted]:bg-red-soft"
-                    >
-                      <IconTrash size={16} />
-                      Remove provider
-                    </Menu.Item>
-                  </Menu.Popup>
-                </Menu.Root>
-              </SettingRowControl>
-            </SettingRow>
+          ownProviders.map((p) => (
+            <ProviderRow
+              key={p.id}
+              provider={p}
+              onDiscover={handleDiscover}
+              onRemove={handleRemove}
+            />
           ))
         )}
       </SettingCard>
@@ -247,6 +214,268 @@ export function ModelProvidersPanel() {
         pricing come from a catalog in model-providers.json.
       </SettingsHint>
     </>
+  );
+}
+
+/** Gemini gets its own row ahead of the generic list: a key from Google AI
+ * Studio is the supported way to run Gemini in a third-party agent, and a
+ * Google AI Pro or Ultra plan pays for it through monthly developer credits.
+ * Saving lists the key's models from the Gemini API. */
+function GeminiKeySection({
+  provider,
+  loaded,
+  onSaved,
+  onDiscover,
+  onRemove,
+}: {
+  provider: ProviderInfo | undefined;
+  loaded: boolean;
+  onSaved: () => void;
+  onDiscover: (p: ProviderInfo) => void;
+  onRemove: (p: ProviderInfo) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const showForm = editing || (loaded && !provider);
+
+  return (
+    <>
+      <SettingsGroupLabel>Gemini</SettingsGroupLabel>
+      <SettingCard>
+        {!loaded ? (
+          <LoadingState placement="row">Loading Gemini…</LoadingState>
+        ) : showForm ? (
+          <GeminiKeyForm
+            replacing={!!provider}
+            onCancel={provider ? () => setEditing(false) : undefined}
+            onSaved={() => {
+              setEditing(false);
+              onSaved();
+            }}
+          />
+        ) : provider ? (
+          <ProviderRow
+            provider={provider}
+            title="Gemini API"
+            tile="gemini"
+            onDiscover={onDiscover}
+            onRemove={onRemove}
+            menuItems={
+              <Menu.Item onClick={() => setEditing(true)}>
+                <IconRefresh size={16} />
+                Replace key
+              </Menu.Item>
+            }
+          />
+        ) : null}
+      </SettingCard>
+      <SettingsHint>
+        Google AI Pro and Ultra plans include monthly developer credits that pay
+        for this key. Claim them in{" "}
+        <a
+          href={GEMINI_BILLING_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="text-link underline"
+        >
+          AI Studio billing
+        </a>
+        . Signing in with the plan itself is not offered: Google does not allow
+        its subscription sign-in in third-party agents.
+      </SettingsHint>
+    </>
+  );
+}
+
+function GeminiKeyForm({
+  replacing,
+  onCancel,
+  onSaved,
+}: {
+  replacing: boolean;
+  onCancel?: () => void;
+  onSaved: () => void;
+}) {
+  const [apiKey, setApiKey] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    await (async () => {
+      const res = await fetch(
+        `${BASE_PATH}/api/settings/model-providers/${GEMINI_PROVIDER_ID}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            apiKey: apiKey.replace(/\s+/g, ""),
+            discoverModels: true,
+          }),
+        },
+      );
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+      if (body.discoveryError) {
+        toast(`Gemini key saved. ${body.discoveryError}`, { variant: "error" });
+      } else if (body.discovery) {
+        toast(
+          `Gemini key saved, ${body.discovery.models.length} models available`,
+        );
+      } else toast("Gemini key saved");
+      setSaving(false);
+      onSaved();
+    })().catch(async (error) => {
+      setError(errorMessage(error, "Failed to save the Gemini key"));
+      setSaving(false);
+    });
+  }
+
+  return (
+    <form
+      className="flex flex-col gap-3 px-5 py-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (apiKey.trim() && !saving) void handleSave();
+      }}
+    >
+      <div className="flex items-start gap-x-3">
+        <IconTile name="gemini" size={28} />
+        <SettingRowText>
+          <SettingRowTitle>
+            {replacing ? "Replace Gemini API key" : "Gemini API key"}
+          </SettingRowTitle>
+          <SettingRowDescription>
+            Create a key in{" "}
+            <a
+              href={GEMINI_KEY_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="text-link underline"
+            >
+              Google AI Studio
+            </a>{" "}
+            and paste it here. Its models appear in the picker as{" "}
+            <code>pi/google/&lt;model&gt;</code>.
+          </SettingRowDescription>
+        </SettingRowText>
+      </div>
+      <SettingsFormRow className="grid-cols-1">
+        <SettingsField className="mb-0">
+          API key
+          <input
+            className={settingsInputClass}
+            type="password"
+            autoComplete="off"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="AIza…"
+          />
+        </SettingsField>
+      </SettingsFormRow>
+      {error && <InlineAlert>{error}</InlineAlert>}
+      <SettingsFormActions>
+        {onCancel && (
+          <Button variant="soft" onClick={onCancel} disabled={saving}>
+            Cancel
+          </Button>
+        )}
+        <Button
+          variant="primary"
+          type="submit"
+          disabled={saving || !apiKey.trim()}
+        >
+          {saving ? "Saving…" : "Save key"}
+        </Button>
+      </SettingsFormActions>
+    </form>
+  );
+}
+
+function ProviderRow({
+  provider: p,
+  title,
+  tile,
+  menuItems,
+  onDiscover,
+  onRemove,
+}: {
+  provider: ProviderInfo;
+  /** Replaces the id-based title (the Gemini row names the product). */
+  title?: string;
+  /** Brand tile name, when it differs from the provider id. */
+  tile?: string;
+  /** Extra menu items ahead of Discover and Remove. */
+  menuItems?: React.ReactNode;
+  onDiscover: (p: ProviderInfo) => void;
+  onRemove: (p: ProviderInfo) => void;
+}) {
+  return (
+    <SettingRow className="items-start gap-x-3">
+      <IconTile name={tile || p.id} size={28} />
+      <SettingRowText>
+        <SettingRowTitle>
+          {title || p.name || p.id}
+          {(title || p.name) && (
+            <span className="ml-1.5 text-meta text-faint">{p.id}</span>
+          )}
+        </SettingRowTitle>
+        <SettingRowDescription className="truncate">
+          {p.apiKeyMasked || "no API key stored"}
+          {p.baseURL && ` · ${p.baseURL}`}
+          {p.api && " · OpenAI-compatible"}
+          {p.catalogModels > 0 &&
+            ` · ${p.catalogModels} catalog ${
+              p.catalogModels === 1 ? "row" : "rows"
+            }`}
+          {p.discoverModels && " · discovery on"}
+        </SettingRowDescription>
+        {p.models.length > 0 ? (
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {p.models.map((m) => (
+              <span
+                key={m}
+                className="rounded-sm bg-active px-1.5 py-px text-meta text-dim"
+                title={m}
+              >
+                {m.split("/").slice(2).join("/")}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-1 text-supporting text-faint">
+            No picker models, so its models are type-in only (pi/{p.id}
+            /&lt;model&gt;).
+          </div>
+        )}
+      </SettingRowText>
+      <SettingRowControl>
+        <Menu.Root>
+          <Menu.Trigger
+            className={rowMenuTriggerClasses}
+            aria-label={`Manage ${p.id}`}
+          >
+            <IconDotsHorizontal size={18} />
+          </Menu.Trigger>
+          <Menu.Popup align="end" sideOffset={4}>
+            {menuItems}
+            {p.canDiscover && (
+              <Menu.Item onClick={() => onDiscover(p)}>
+                <IconSearch size={16} />
+                Discover models
+              </Menu.Item>
+            )}
+            <Menu.Item
+              onClick={() => onRemove(p)}
+              className="text-red data-[highlighted]:bg-red-soft"
+            >
+              <IconTrash size={16} />
+              Remove provider
+            </Menu.Item>
+          </Menu.Popup>
+        </Menu.Root>
+      </SettingRowControl>
+    </SettingRow>
   );
 }
 

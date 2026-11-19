@@ -21,14 +21,13 @@ interface LocaleWeekInfo {
   firstDay: number;
 }
 
-declare global {
-  namespace Intl {
-    interface Locale {
-      getWeekInfo?: () => LocaleWeekInfo;
-      readonly weekInfo?: LocaleWeekInfo;
-    }
-  }
-}
+/** Week info as Chrome (a method) and Safari (a property) ship it. Newer
+ * TypeScript libs declare the method and older ones neither, so this is a
+ * local view rather than a global augmentation that would clash with one. */
+type LocaleWithWeekInfo = Intl.Locale & {
+  getWeekInfo?: () => LocaleWeekInfo;
+  readonly weekInfo?: LocaleWeekInfo;
+};
 
 function utcMs(day: IsoDay): number {
   return Date.UTC(
@@ -118,7 +117,9 @@ export function clampDay(day: IsoDay, min?: IsoDay, max?: IsoDay): IsoDay {
  */
 export function weekStartFor(locale?: string): number {
   try {
-    const info = new Intl.Locale(locale ?? resolvedLocale());
+    const info: LocaleWithWeekInfo = new Intl.Locale(
+      locale ?? resolvedLocale(),
+    );
     const first = info.getWeekInfo?.().firstDay ?? info.weekInfo?.firstDay;
     // Intl counts Monday 1 through Sunday 7; JS counts Sunday 0.
     if (first !== undefined) return first % 7;

@@ -105,6 +105,20 @@ export function IconArrowDown(p: IconProps) {
   );
 }
 
+/** Arrow down into a tray: save a file, where IconArrowDown is a direction. */
+export function IconDownload(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path
+        {...stroke}
+        d="M4.75 14.75v1.5a3 3 0 0 0 3 3h8.5a3 3 0 0 0 3-3v-1.5"
+      />
+      <path {...stroke} d="M8.75 10.75L12 14.25L15.25 10.75" />
+      <path {...stroke} d="M12 14.25V4.75" />
+    </Svg>
+  );
+}
+
 export function IconMic(p: IconProps) {
   return (
     <Svg {...p}>

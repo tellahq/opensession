@@ -62,7 +62,9 @@ function galleryItem(node: Element): LightboxItem | null {
       kind: "image",
       src: node.currentSrc || node.src,
       commentSessionId: commentSessionIdFor(node),
-      sessionTitle: node.alt.trim() || undefined,
+      // The caption written under the image marker: what the picture
+      // shows, so the viewer reads it under the picture, not as a title.
+      description: node.alt.trim() || undefined,
     };
   }
   if (node instanceof HTMLVideoElement) {

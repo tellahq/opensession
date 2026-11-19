@@ -37,7 +37,7 @@ jobs:
       # (v2.2.0 at time of pinning.)
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          bun-version: 1.4.0
+          bun-version: 1.4.3
 
       - name: Install ripgrep
         run: |
@@ -61,11 +61,14 @@ jobs:
 
       # Test files replace process.env, fetch, module-level path caches, and
       # globalThis state. Run each file in a fresh process so those intentional
-      # fixtures cannot make later files depend on discovery order. Keep the
-      # required gate sequential by default: several process-heavy integration
-      # fixtures have tight readiness budgets under shared-runner contention.
+      # fixtures cannot make later files depend on discovery order. Locally the
+      # files run one per core; keep the required gate sequential here: several
+      # process-heavy integration fixtures have tight readiness budgets under
+      # shared-runner contention.
       - name: Unit tests
         run: scripts/test-unit-isolated.sh
+        env:
+          OPENSESSION_TEST_JOBS: "1"
 
       # A deterministic local fixture drives the production transcript stack
       # without credentials, sessions, or API traffic. Chrome is preinstalled

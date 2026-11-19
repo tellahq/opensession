@@ -109,6 +109,32 @@ final class TranscriptGroupingTests: XCTestCase {
         XCTAssertEqual(ids, ["u1", "work", "u2", "a1", "work", "a3"])
     }
 
+    /// Text after a step is progress narration, not the answer to the
+    /// message, so the work below the message stays one fold.
+    func testTextAfterAStepFollowingAMidTurnMessageStaysFolded() {
+        append([
+            TranscriptEntry(id: "u1", type: "user", content: "fix it"),
+            toolUse("t1", name: "Bash", input: ["command": .string("cargo build")]),
+            TranscriptEntry(id: "u2", type: "user", content: "how long is left?"),
+            toolResult("t1", text: "ok"),
+            toolUse("t2", name: "Bash", input: ["command": .string("git fetch")]),
+            toolResult("t2", text: "ok"),
+            TranscriptEntry(id: "a1", type: "assistant", content: "Writing the web side now."),
+            toolUse("t3", name: "Bash", input: ["command": .string("bun run check")]),
+            toolResult("t3", text: "ok"),
+            TranscriptEntry(id: "a2", type: "assistant", content: "Fixed."),
+        ])
+
+        let ids: [String] = viewModel.displayBlocks.compactMap { block in
+            switch block {
+            case .message(let entry): entry.id
+            case .work: "work"
+            default: nil
+            }
+        }
+        XCTAssertEqual(ids, ["u1", "work", "u2", "work", "a2"])
+    }
+
     func testNarrationAfterAMessageSentBetweenTurnsStaysFolded() {
         append([
             TranscriptEntry(id: "u1", type: "user", content: "fix it"),
@@ -622,9 +648,9 @@ final class TranscriptGroupingTests: XCTestCase {
         }
         XCTAssertFalse(turn.hasNarration)
         XCTAssertFalse(turn.defaultExpanded(preference: .standard))
-        XCTAssertTrue(
+        XCTAssertFalse(
             turn.rendersToolCallsInPlace(preference: .standard),
-            "opening the only summary must reveal calls without another step row"
+            "a tool-only fold opens to the same closed group as a narrated one"
         )
         XCTAssertEqual(turn.lineStats, ToolLineStats(additions: 2, deletions: 1))
     }

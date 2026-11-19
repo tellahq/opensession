@@ -1,9 +1,10 @@
 import React from "react";
+import { importOrReload } from "../lib/chunk-reload";
 
 type SettingsProps = React.ComponentProps<typeof import("./Settings").Settings>;
 
 const SettingsComponent = React.lazy(async () => {
-  const { Settings } = await import("./Settings");
+  const { Settings } = await importOrReload(() => import("./Settings"));
   return { default: Settings };
 });
 

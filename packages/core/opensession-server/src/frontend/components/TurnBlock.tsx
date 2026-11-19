@@ -231,11 +231,13 @@ export const TurnBlock = function TurnBlock({
   ]
     .filter(Boolean)
     .join(" · ");
-  // Tool calls render flat when there is no narration (the outer row is
-  // already the run's summary) or the Tool calls preference keeps them open.
-  // Otherwise grouped rows each name their own counts and ±lines, and the
-  // turn-wide meta line above them read as the same summary twice.
-  const flatTools = pref.tools === "open" || !hasNarration;
+  // Tool calls render flat only when the Tool calls preference keeps them
+  // open. Otherwise every fold, narrated or not, shows the same closed "Ran 4
+  // commands" rows: a tool-only fold that opened to a lowercase "ran 4
+  // commands" line and its calls read differently from the fold below it.
+  // Grouped rows name their own counts and ±lines, so the turn-wide meta line
+  // stays only with flat calls.
+  const flatTools = pref.tools === "open";
   const title = live
     ? "Working"
     : duration
@@ -404,11 +406,6 @@ export const TurnBlock = function TurnBlock({
                 className="-ml-px desktop:ml-0"
                 data-eid={`${sec.items[sec.items.length - 1].id}#sec`}
               >
-                {/* The outer Working row is already a tool-only run's
-                    summary. If someone opens it, reveal the calls directly
-                    instead of inserting a second, identical disclosure. A
-                    narrated turn still lets the Tool calls preference fold
-                    routine calls between its updates. */}
                 <ToolSection
                   items={sec.items}
                   toolResults={toolResults}

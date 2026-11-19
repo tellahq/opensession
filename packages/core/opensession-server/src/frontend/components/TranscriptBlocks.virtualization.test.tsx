@@ -502,7 +502,7 @@ describe("TranscriptBlocks indexed ranges", () => {
           entries={scenario.entries}
         />,
       );
-      expect(expanded).toContain("ran 3 commands");
+      expect(expanded).toContain("Ran 3 commands");
       expect(expanded).toContain('data-eid="indexed-6#turn"');
       setTurnPrefs(null);
     }

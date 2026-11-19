@@ -358,7 +358,7 @@ describe("TranscriptBlocks compact tool runs", () => {
     expect(html).not.toContain("package.json");
   });
 
-  test("opens tool-only work directly without repeating its group", () => {
+  test("opens tool-only work to the same closed group a narrated fold has", () => {
     setTurnPrefs("open", "folded");
     const html = renderToStaticMarkup(
       <TranscriptBlocks live entries={toolEntries} />,
@@ -366,11 +366,10 @@ describe("TranscriptBlocks compact tool runs", () => {
 
     expect(html).toContain('aria-expanded="true"');
     expect(html).toContain(">Working</span>");
-    expect(html).toContain("ran 1 command, read 1 file</span>");
-    expect(html).not.toContain('data-tool-run="true"');
-    expect(html).not.toContain("Show 2 grouped steps");
-    expect(html).toContain("git status");
-    expect(html).toContain("package.json");
+    expect(html).toContain("Ran 1 command, read 1 file");
+    expect(html).not.toContain("ran 1 command, read 1 file");
+    expect(html.match(/data-tool-run="true"/g)).toHaveLength(1);
+    expect(html).toContain("Show 2 grouped steps");
     setTurnPrefs(null);
   });
 
@@ -537,6 +536,43 @@ describe("TranscriptBlocks compact tool runs", () => {
     expect(html).not.toContain("Reading the lockfile next.");
   });
 
+  test("keeps one fold when the text after a mid-turn message follows a step", () => {
+    setTurnPrefs(null);
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        entries={[
+          ...toolEntries.slice(0, 3),
+          {
+            id: "steer",
+            type: "user",
+            content: "How long is left?",
+            timestamp: "2026-08-13T06:00:03.500Z",
+          },
+          ...bashCall(2, "git fetch"),
+          {
+            id: "progress",
+            type: "assistant",
+            content: "Writing the web side now.",
+            timestamp: "2026-08-13T06:00:05.500Z",
+          },
+          ...bashCall(3, "bun test"),
+          {
+            id: "answer",
+            type: "assistant",
+            content: "Finished both checks.",
+            timestamp: "2026-08-13T06:00:09Z",
+          },
+        ]}
+      />,
+    );
+
+    // One fold above the message and one below it, not two below it.
+    const below = html.slice(html.indexOf("How long is left?"));
+    expect(below.match(WORKED_TITLES)).toHaveLength(1);
+    expect(html).not.toContain("Writing the web side now.");
+    expect(html).toContain("Finished both checks.");
+  });
+
   test("keeps a mid-turn compaction inside one Worked group", () => {
     setTurnPrefs(null);
     const compaction: TranscriptEntry = {
@@ -598,7 +634,6 @@ describe("TranscriptBlocks compact tool runs", () => {
     expect(html).not.toMatch(WORKED_TITLE);
     expect(html).toContain("PR #5682 is conflict-free.");
 
-    // Opened, the event's full text leads the work, once.
     const open = renderToStaticMarkup(
       <TranscriptBlocks
         reviewLoopsOpen
@@ -614,9 +649,41 @@ describe("TranscriptBlocks compact tool runs", () => {
         ]}
       />,
     );
-    expect(open.match(/This session is assigned to handle it/g)).toHaveLength(
-      1,
+    // Opened, no instructions meant for the agent and no link to the PR
+    // the row already names.
+    expect(open).not.toContain("assigned to handle it");
+    expect(open).not.toContain("pull/5682");
+  });
+
+  test("an opened CI failure row lists each failed check as a short link", () => {
+    setTurnPrefs(null);
+    const open = renderToStaticMarkup(
+      <TranscriptBlocks
+        reviewLoopsOpen
+        entries={[
+          {
+            id: "ci",
+            type: "user",
+            content:
+              "[GitHub] CI failed on PR #563 at db9dba6729:\n- Secret scan (failure): https://github.com/acme/app/actions/runs/1\n\nThis session is assigned to handle it. Read the failing jobs' logs, fix the cause and push.",
+            timestamp: "2026-08-13T05:50:00Z",
+          },
+          ...toolEntries.slice(1),
+          {
+            id: "answer",
+            type: "assistant",
+            content: "The failure is not from this PR.",
+            timestamp: "2026-08-13T06:01:00Z",
+          },
+        ]}
+      />,
     );
+    expect(open).toContain(">CI failed on PR #563 at db9dba6729</span>");
+    expect(open).toContain(
+      'href="https://github.com/acme/app/actions/runs/1" target="_blank" rel="noopener">Secret scan · failure</a>',
+    );
+    expect(open).not.toContain("assigned to handle it");
+    expect(open.match(/>CI failed on PR #563/g)).toHaveLength(1);
   });
 
   test("an automated event answered with a status is one status row", () => {
@@ -648,9 +715,10 @@ describe("TranscriptBlocks compact tool runs", () => {
     const open = renderToStaticMarkup(
       <TranscriptBlocks reviewLoopsOpen entries={entries} />,
     );
-    expect(open.match(/This session is assigned to handle it/g)).toHaveLength(
-      1,
-    );
+    // Opened, no instructions meant for the agent and no link to the PR
+    // the row already names.
+    expect(open).not.toContain("assigned to handle it");
+    expect(open).not.toContain("pull/5682");
     expect(open).toContain("Ran 1 command, read 1 file");
   });
 
@@ -827,7 +895,7 @@ describe("TranscriptBlocks compact tool runs", () => {
     );
 
     expect(html.match(WORKED_TITLES)).toHaveLength(1);
-    expect(html).toContain("ran 1 command, read 1 file");
+    expect(html).toContain("Ran 1 command, read 1 file");
     setTurnPrefs(null);
   });
 
@@ -878,13 +946,14 @@ describe("TranscriptBlocks compact tool runs", () => {
     setTurnPrefs("open");
     const html = render();
 
-    expect(html).not.toContain('data-tool-run="true"');
+    // Open, the calls sit in one closed group that carries the counts.
+    expect(html.match(/data-tool-run="true"/g)).toHaveLength(1);
     expect(html).toContain('aria-expanded="true"');
-    expect(html).toContain("edited 2 files, ran 1 command");
+    expect(html).toContain("Edited 2 files, ran 1 command");
     expect(html).toContain("+3");
     expect(html).toContain("-3");
-    expect(html).not.toContain("Show 4 grouped steps");
-    expect(html).toContain('data-eid="edit-1"');
+    expect(html).toContain("Show 4 grouped steps");
+    expect(html).not.toContain('data-eid="edit-1"');
     setTurnPrefs(null);
   });
 
@@ -928,10 +997,10 @@ describe("TranscriptBlocks compact tool runs", () => {
     const html = render();
 
     expect(html).toContain(">Working</span>");
-    expect(html).toContain("edited 1 file</span>");
+    expect(html).toContain("Edited 1 file");
     expect(html).toContain("+400");
     expect(html).toContain("-23");
-    expect(html).not.toContain('data-tool-run="true"');
+    expect(html).toContain('data-tool-run="true"');
     setTurnPrefs(null);
   });
 

@@ -29,7 +29,6 @@ import {
   useSessionShipResource,
 } from "../hooks/useApiResources";
 import { getCurrentUser } from "./UserPicker";
-import { providerFromUrl } from "../lib/provider";
 import { isApple } from "../lib/platform";
 import { sessionPrPresentation } from "../lib/session-prs";
 import { errorMessage } from "../lib/error-message";
@@ -80,6 +79,14 @@ import {
   scheduleDeferredMerge,
 } from "../lib/deferred-merge";
 import { toast } from "../ui/toast";
+import { useConfirm } from "../ui/confirm";
+import { prCapabilities, providerFromUrl } from "../lib/provider";
+import {
+  MERGE_CHOICE_LABEL,
+  MERGE_CHOICE_SHORT,
+  MERGE_CHOICE_TITLE,
+  mergeChoices,
+} from "../lib/merge-choices";
 import { BrandMark } from "./BrandTile";
 import { PrChecksPopover } from "./PrChecksPopover";
 import { PrSeriesRows } from "./PrSeriesRows";
@@ -97,6 +104,8 @@ import {
   IconCheck,
   IconPlus,
   IconArchive,
+  IconChevronDown,
+  IconWarningTriangle,
 } from "./icons";
 
 /**
@@ -259,10 +268,13 @@ function PrBarButton({
 			    eye: a word carries more mass under its cap band than over it, so
 			    the geometric center reads a touch high. It settles the label
 			    without going back to a nudge that has to carry the whole
-			    correction. */}
-      <span className="translate-y-[0.5px] [text-box:trim-both_cap_alphabetic]">
-        {children}
-      </span>
+			    correction. An icon-only button has no label: an empty span would
+			    still take the flex gap and push the glyph off center. */}
+      {children != null && (
+        <span className="translate-y-[0.5px] [text-box:trim-both_cap_alphabetic]">
+          {children}
+        </span>
+      )}
     </button>
   );
 }
@@ -552,6 +564,7 @@ export function PrStatusBar({
   const [error, setError] = useState<string | null>(null);
   const [isArchived, setIsArchived] = useState(!!archived);
   const [prompted, setPrompted] = useState<string | null>(null);
+  const [confirmForce, forceConfirmation] = useConfirm();
 
   useEffect(() => setIsArchived(!!archived), [archived]);
 
@@ -739,6 +752,59 @@ export function PrStatusBar({
     });
   }
 
+  // Branch protection holds the merge: let the host land it once the rules
+  // pass, or go around them with the viewer's own rights. Auto-merge is a host
+  // setting the person can turn off again, so it takes no confirm.
+  function handleAutoMerge() {
+    const prNumber = pr?.number;
+    void run("auto-merge", async () => {
+      const result = await mergePrApi(
+        sessionId,
+        "squash",
+        targetRepo,
+        targetBranch,
+        { mode: "auto" },
+      );
+      toast(
+        result.merged
+          ? `Merged #${prNumber}`
+          : `#${prNumber} will merge when ready`,
+      );
+    });
+  }
+
+  function handleForceMerge(bypasses: string[]) {
+    if (!pr || !mergeKey || busy || mergePhase !== "idle") return;
+    const { number: prNumber, headRefOid: headSha } = pr;
+    const host = providerFromUrl(pr.url)?.name ?? "host";
+    confirmForce({
+      title: `Force merge #${prNumber}?`,
+      description: `Squash into ${pr.baseRefName} now${bypasses.length ? `, skipping ${bypasses.join(", ")}` : ""}, using your ${host} permissions.`,
+      confirmLabel: "Force merge",
+      destructive: true,
+      onConfirm: () =>
+        scheduleDeferredMerge(mergeKey, async () => {
+          await run("merge", async () => {
+            try {
+              await mergePrApi(sessionId, "squash", targetRepo, targetBranch, {
+                mode: "admin",
+                headSha,
+              });
+            } catch (error) {
+              toast(
+                mergeFailedMessage(
+                  prNumber,
+                  errorMessage(error, "unknown error"),
+                ),
+                { variant: "error" },
+              );
+              throw error;
+            }
+          });
+        }),
+    });
+  }
+
   // Session-driven actions: ask the agent instead of doing bare git plumbing —
   // a session-authored PR gets a real title/description, and conflict
   // resolution needs judgment, not a button.
@@ -808,7 +874,28 @@ export function PrStatusBar({
   // session header it sizes up to the header's other bordered controls, so the
   // chip and the action read as a matched pair.
   const actionBtn = variant === "header" ? PR_HEAD_BTN : "";
+  function withMergeUndo(button: React.ReactNode) {
+    if (mergePhase !== "scheduled") return button;
+    return (
+      <span className="inline-flex shrink-0 items-center gap-1">
+        <MergeUndoControl
+          className={variant === "header" ? undefined : "min-h-[30px]"}
+          deadline={mergeDeadline}
+          onUndo={handleMerge}
+        />
+        {button}
+      </span>
+    );
+  }
   function renderAction(): React.ReactNode {
+    return (
+      <>
+        {renderActionButton()}
+        {forceConfirmation}
+      </>
+    );
+  }
+  function renderActionButton(): React.ReactNode {
     if (prompted) {
       const tone: PrBarButtonProps["tone"] =
         headline.key === "conflicts"
@@ -1062,14 +1149,99 @@ export function PrStatusBar({
           </PrBarButton>
         );
         if (!mergeScheduled) return mergeButton;
+        return withMergeUndo(mergeButton);
+      }
+      // The host refuses a plain merge, so Merge would only fail. Offer what
+      // gets it through instead: auto-merge once the rules pass, and force
+      // merge behind the chevron. With auto-merge already on there is nothing
+      // to press; the headline says it will land.
+      case "blocked": {
+        if (!pr || pr.autoMerge) return null;
+        const choices = mergeChoices(
+          pr,
+          checksSummary,
+          prCapabilities(pr.capabilities),
+        );
+        const canAuto = choices.all.includes("auto");
+        const canForce = choices.all.includes("force");
+        if (mergePhase !== "idle" || busy === "merge")
+          return withMergeUndo(
+            <PrBarButton className={actionBtn} tone="green" disabled>
+              Merging…
+            </PrBarButton>,
+          );
+        const forceItem = (
+          <Menu.Item
+            onClick={() => handleForceMerge(choices.bypasses)}
+            className="text-red data-[highlighted]:bg-red-soft"
+          >
+            <IconWarningTriangle size={18} className="text-red" />
+            <span className="min-w-0 flex-1 truncate">
+              {MERGE_CHOICE_LABEL.force}
+            </span>
+          </Menu.Item>
+        );
+        if (!canAuto)
+          return canForce ? (
+            <Menu.Root>
+              <Menu.Trigger
+                render={
+                  <PrBarButton
+                    className={actionBtn}
+                    tone="status-yellow"
+                    disabled={!!busy}
+                    title="Merge options"
+                  />
+                }
+              >
+                Merge
+                <IconChevronDown size={14} className="-mr-0.5 opacity-60" />
+              </Menu.Trigger>
+              <Menu.Popup align="end" sideOffset={6} className="min-w-[200px]">
+                {forceItem}
+              </Menu.Popup>
+            </Menu.Root>
+          ) : null;
         return (
           <span className="inline-flex shrink-0 items-center gap-1">
-            <MergeUndoControl
-              className={variant === "header" ? undefined : "min-h-[30px]"}
-              deadline={mergeDeadline}
-              onUndo={handleMerge}
-            />
-            {mergeButton}
+            <PrBarButton
+              className={actionBtn}
+              tone="green"
+              disabled={!!busy}
+              onClick={handleAutoMerge}
+              title={MERGE_CHOICE_TITLE.auto}
+            >
+              {busy === "auto-merge" ? "Turning on…" : MERGE_CHOICE_SHORT.auto}
+            </PrBarButton>
+            {canForce && (
+              <Menu.Root>
+                <Menu.Trigger
+                  // The glyph rides in the icon slot, not the label's
+                  // cap-trimmed span, so it sits in the middle of the box.
+                  // A soft square, not a pill: at 30px wide a pill is a disc.
+                  render={
+                    <PrBarButton
+                      className={cn(
+                        actionBtn,
+                        "w-[30px] rounded-md border-transparent bg-transparent px-0 text-dim",
+                      )}
+                      tone="secondary"
+                      disabled={!!busy}
+                      aria-label="Merge options"
+                      title="Merge options"
+                      icon={<IconChevronDown size={14} />}
+                    />
+                  }
+                />
+                <Menu.Popup
+                  align="end"
+                  sideOffset={6}
+                  className="min-w-[200px]"
+                >
+                  {forceItem}
+                </Menu.Popup>
+              </Menu.Root>
+            )}
           </span>
         );
       }
@@ -1270,10 +1442,13 @@ export function PrStatusBar({
             {prLoadError}
           </p>
         )}
+        {/* Two lines at most: the headline and its button already say what
+            to do next, so a long host refusal keeps the rest in its title. */}
         {error && (
           <p
             role="alert"
-            className="mx-5 mb-2 mt-1 text-meta leading-snug text-red"
+            title={error}
+            className="mx-5 mb-2 mt-1 line-clamp-2 text-meta leading-snug text-red"
           >
             {error}
           </p>

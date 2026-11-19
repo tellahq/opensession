@@ -21,6 +21,10 @@ describe("modelBrandKey", () => {
 
   test("leaves unknown vendors unbranded", () => {
     expect(modelBrandKey("pi/workspace-preset/ws-1/opus", "pi")).toBeNull();
-    expect(modelBrandKey("pi/google/gemini-3", "pi")).toBeNull();
+    expect(modelBrandKey("pi/acme/model-1", "pi")).toBeNull();
+  });
+
+  test("draws the Gemini mark for Gemini API models", () => {
+    expect(modelBrandKey("pi/google/gemini-3.5-flash", "pi")).toBe("gemini");
   });
 });

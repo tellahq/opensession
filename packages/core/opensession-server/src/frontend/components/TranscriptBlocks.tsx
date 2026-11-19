@@ -44,6 +44,7 @@ import {
 } from "../lib/transcript-state";
 import { collectWrittenAssets } from "../lib/open-asset";
 import {
+  automatedTriggerDetail,
   automatedTriggerTitle,
   classifyEntry,
 } from "@tellahq/opensession-protocol/notices";
@@ -368,6 +369,34 @@ function groupCheckBacks(
     });
   }
   return grouped;
+}
+
+/** What an automated event said beyond the title its folded row shows:
+ *  a failed check as a short link to its run, a report as its text. */
+function TriggerDetail({ entry }: { entry: TranscriptEntry }) {
+  const lines = automatedTriggerDetail(entry);
+  if (lines.length === 0) return null;
+  return (
+    <div className="mx-auto mb-2 flex w-full max-w-[var(--session-col)] flex-col text-meta leading-5 text-dim">
+      {lines.map((line, i) =>
+        line.url ? (
+          <a
+            key={i}
+            className="w-fit max-w-full truncate text-dim no-underline hover:text-fg hover:underline"
+            href={line.url}
+            target="_blank"
+            rel="noopener"
+          >
+            {line.text}
+          </a>
+        ) : (
+          <p key={i} className="whitespace-pre-wrap break-words">
+            {line.text}
+          </p>
+        ),
+      )}
+    </div>
+  );
 }
 
 /** A task the agent reported on with status lines, or picked back up on its
@@ -844,13 +873,22 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
     // A message sent mid-turn reaches the model between steps, so its answer
     // is followed by more work and would otherwise fold away as narration.
     // Keep that first reply beside the message it answers.
+    // Only a reply before any tool call answers the message (the prompt asks
+    // for exactly that). Text after a few steps is progress narration, and
+    // pulling it out split one run into two "Worked for" folds.
     const reply = turnAnswersSteer
       ? turn.findIndex(
-          (entry) => entry.type === "assistant" && !entry.isReasoning,
+          (entry) =>
+            entry.type === "tool_use" ||
+            (entry.type === "assistant" && !entry.isReasoning),
         )
       : -1;
     turnAnswersSteer = false;
-    if (reply >= 0 && reply < turn.length - 1) {
+    if (
+      reply >= 0 &&
+      reply < turn.length - 1 &&
+      turn[reply]!.type !== "tool_use"
+    ) {
       const before = arrangeThinkingMessages(
         turn.slice(0, reply),
         thinkingMessages,
@@ -1039,11 +1077,9 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
           ) : status !== undefined ? (
             status && <ProgressStatusLine status={status} />
           ) : block.trigger && innerIndex === 0 && inner.kind === "entry" ? (
-            // The row already names the event; open, the fold adds what it
-            // said in full rather than its title a second time.
-            <p className="mx-auto mb-2 w-full max-w-[var(--session-col)] whitespace-pre-wrap break-words text-meta leading-5 text-dim">
-              {classifyEntry(inner.entry).content}
-            </p>
+            // The row already names the event; open, the fold adds only what
+            // it said beyond that, a short line each.
+            <TriggerDetail entry={inner.entry} />
           ) : inner.kind === "entry" &&
             !inner.entry.turnBoundary &&
             reviewBlockRole(inner).kind !== "handoff" ? (

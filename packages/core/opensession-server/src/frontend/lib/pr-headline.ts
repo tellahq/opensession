@@ -11,6 +11,7 @@ export interface PrHeadline {
     | "draft"
     | "changes-requested"
     | "stack-blocked"
+    | "blocked"
     | "ready"
     | "ahead"
     | "behind"
@@ -106,6 +107,20 @@ export function deriveHeadline(
         label: `Draft #${draftBelow.number} below it`,
         tone: "yellow",
       };
+    // Nothing above holds it, yet the host still refuses the merge: a ruleset,
+    // a required review, or a required check that never reported. Saying
+    // "Ready to merge" there only sends the person into gh's refusal.
+    if (pr.mergeStateStatus === "BLOCKED")
+      return pr.autoMerge
+        ? { key: "blocked", label: "Merges when ready", tone: "green" }
+        : {
+            key: "blocked",
+            label:
+              pr.reviewDecision === "REVIEW_REQUIRED"
+                ? "Review required"
+                : "Blocked",
+            tone: "yellow",
+          };
     return { key: "ready", label: "Ready to merge", tone: "green" };
   }
   // This branch state belongs to the instance as a whole. It cannot safely be

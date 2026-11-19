@@ -50,6 +50,8 @@ key under **Settings → Providers**:
   data.
 - `pi/openai/*` uses the OpenAI account pool, which accepts ChatGPT sign-ins or
   OpenAI API keys.
+- `pi/google/*` uses a Gemini API key from Google AI Studio, added under
+  **Gemini**. See [Gemini and Google AI plans](#gemini-and-google-ai-plans).
 - Other providers use one API key, an optional base URL, and the provider's
   model ids under **Your own providers**. `anthropic` and `openai` cannot be
   configured there because they use the account pools.
@@ -83,6 +85,34 @@ Sandboxes never hold the xAI refresh grant. They receive a scoped copy with
 fresh access tokens and no refresh token, so a sandbox can neither rotate nor
 kill the host's sign-in;
 the host keeps every stored token ahead of expiry on its own.
+
+### Gemini and Google AI plans
+
+Gemini runs on a Gemini API key. Create one at
+[aistudio.google.com/apikey](https://aistudio.google.com/apikey) and paste it
+under **Settings → Providers → Gemini**. Saving reads the key's model list from
+the Gemini API (`GET /v1beta/models`), adds the newest chat models to the
+picker as `pi/google/<model>`, and records Google's context and output limits
+for models newer than Pi's bundled catalog. **Discover models** in the row's
+menu reads the list again. The key is stored as the `google` provider in
+`model-providers.json`.
+
+There is no Google AI Pro or Ultra subscription sign-in. Google's terms do not
+allow third-party agents to use the Gemini CLI or Antigravity sign-in, and
+accounts that do can be suspended. Google AI Pro and Ultra plans instead come
+with monthly Google Cloud developer credits that pay for Gemini API usage:
+
+1. Subscribe to the plan as the primary member. Family members cannot use the
+   credits.
+2. In [AI Studio billing](https://aistudio.google.com/billing), create your
+   Google Developer Program profile, claim the credits, and link a Cloud
+   billing account. Credits are issued monthly from the date you first claim
+   them and stay valid for 12 months.
+3. Keep the prepayment balance Google requires for credits to draw down.
+4. Create the API key in that billing project and add it under **Gemini**.
+
+When the credits run out, usage is billed to the linked billing account.
+Set a budget on it if that should not happen.
 
 Legacy top-level counterparts such as `~/.opensession-claude-accounts.json`
 remain supported when the grouped path is absent. Run `opensession doctor`

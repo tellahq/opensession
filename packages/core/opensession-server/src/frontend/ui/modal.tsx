@@ -179,7 +179,15 @@ function Content({
     </BaseDialog.Popup>
   );
   return (
-    <BaseDialog.Portal keepMounted={keepMounted}>
+    // Always body. Base UI nests a portal inside its parent's portal node, so
+    // a dialog opened from a popover (the PR card's force merge confirm) would
+    // land inside the popover's anchor and its stacking context. There the
+    // page's own z-[1] layers (the composer, the transcript fades) paint over
+    // the scrim.
+    <BaseDialog.Portal
+      keepMounted={keepMounted}
+      container={typeof document === "undefined" ? undefined : document.body}
+    >
       {/* A floating panel has no backdrop at all: the page stays live under
 			    it, and there is no `palette-backdrop` marker, so the window-level
 			    chords keep working while it is open (lib/blocking-overlay). */}
