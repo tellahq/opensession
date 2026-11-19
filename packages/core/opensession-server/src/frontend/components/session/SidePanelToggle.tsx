@@ -23,7 +23,9 @@ export function SidePanelToggle({
         // Passed as `icon` (not children) so the primitive keeps its 32px
         // icon-only square, the size of the ⋯ and share buttons beside it.
         className={cn(
-          "text-dim hover:bg-hover hover:text-fg",
+          // A squircle like the huddle, link and Portal buttons beside it in
+          // the header, not the primitive's circle.
+          "rounded-control text-dim hover:bg-hover hover:text-fg",
           // Land on the header's spot: its actions end 18px from the edge,
           // the strip's px-2 gives 8, and the strip's bottom border pulls
           // centered content half a pixel up.

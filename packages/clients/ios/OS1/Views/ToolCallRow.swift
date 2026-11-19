@@ -123,11 +123,19 @@ struct ToolCallRow: View {
             // counts rather than pushing the row wider than the transcript;
             // a vertical ScrollView centres content it can't fit, which
             // dragged every paragraph in the turn off both edges.
-            Text(rowTitle.title)
-                .font(.subheadline)
-                .foregroundStyle(item.isError ? OS1VisualStyle.redInk : OS1VisualStyle.textDim)
-                .lineLimit(1)
-                .layoutPriority(1)
+            // While it runs, the title shimmers rather than a spinner
+            // sitting beside it.
+            Group {
+                if item.isPending {
+                    ShimmerText(rowTitle.title)
+                } else {
+                    Text(rowTitle.title)
+                        .foregroundStyle(item.isError ? OS1VisualStyle.redInk : OS1VisualStyle.textDim)
+                }
+            }
+            .font(.subheadline)
+            .lineLimit(1)
+            .layoutPriority(1)
 
             if let detail = rowTitle.detail {
                 Text(detail)
@@ -189,11 +197,7 @@ struct ToolCallRow: View {
 
     @ViewBuilder
     private var statusGlyph: some View {
-        if item.isPending {
-            ProgressView()
-                .controlSize(.mini)
-                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
-        } else if item.isError {
+        if item.isError, !item.isPending {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.caption2)
                 .foregroundStyle(OS1VisualStyle.red)

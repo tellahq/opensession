@@ -539,6 +539,7 @@ export function SessionViewerChrome({
                     size={22}
                   />
                 }
+                className="rounded-control"
                 onClick={handleShare}
                 title="Copy a link to this session"
                 aria-label="Share"
@@ -965,7 +966,7 @@ export function SessionViewerChrome({
                     )
                   }
                   className={cn(
-                    !infoPageOpen && "[corner-shape:squircle]",
+                    !infoPageOpen && "rounded-control",
                     !infoPageOpen &&
                       isPhone &&
                       "size-11 min-h-11 rounded-control border-transparent text-dim shadow-none [corner-shape:squircle]",
