@@ -98,7 +98,7 @@ import {
 } from "../lib/composer-prediction";
 import { useComposerAutocomplete } from "../hooks/useComposerAutocomplete";
 import { paletteIconBtn } from "../lib/palette-classes";
-import { askSurface, noteSurface } from "../lib/tinted-surface";
+import { noteSurface } from "../lib/tinted-surface";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
 import { Button } from "../ui/button";
@@ -1458,15 +1458,13 @@ export function Composer({
   }
 
   const effectiveModel = model || defaultModel;
-  // Ask mode paints the box itself; note mode paints the `before:` layer over
-  // it, so note wins for the message you are writing while ask keeps the
-  // session's own colour underneath.
+  // Note mode paints the `before:` layer, one message at a time. Ask mode
+  // leaves the box its ordinary colour: it lasts the session's whole life
+  // (a read-only thread an agent started is in it from the first message),
+  // so the green Ask chip above the field names it instead.
   const surfaceStyle: React.CSSProperties & { "--composer-note-bg": string } = {
     "--composer-note-bg": noteSurface("var(--composer-surface)"),
   };
-  if (askMode) {
-    surfaceStyle.backgroundColor = askSurface("var(--composer-surface)");
-  }
   return (
     <div className="mx-auto w-full max-w-[calc(var(--session-col)+40px)]">
       {/* Queued/steered messages fold out from behind the composer box —
@@ -1791,14 +1789,17 @@ export function Composer({
             )}
             // In the resting pill the full prompt would clip, so show a short
             // "Ask <model>" (ChatGPT-style) that fits the single row; the
-            // descriptive placeholder returns once it expands.
+            // descriptive placeholder returns once it expands. The pill has
+            // no room for the Ask chip, so read-only takes the model's place.
             placeholder={
               noteMode
                 ? minimized
                   ? "Team note"
                   : "Only your team will see this"
                 : minimized
-                  ? `Ask ${shortModelLabel(effectiveModel, models)}`
+                  ? askMode
+                    ? "Ask, read-only"
+                    : `Ask ${shortModelLabel(effectiveModel, models)}`
                   : quote
                     ? "Chat with selected text"
                     : shownPrediction

@@ -5,7 +5,6 @@ import type {
   DirectShip,
   SessionShipInfo,
   ShipButton,
-  ShipModeReason,
   WSClientMessage,
 } from "../lib/types";
 import { fullTime } from "../lib/time";
@@ -15,41 +14,6 @@ import { toast } from "../ui/toast";
 import { Tooltip } from "../ui/tooltip";
 import { getCurrentUser } from "./UserPicker";
 import { IconPullRequest, IconRocket } from "./icons";
-
-type ShippableInfo = Extract<SessionShipInfo, { available: true }>;
-
-/** Why a Direct choice fell back to the PR flow, as a short clause. */
-function forcedPrReason(reason: ShipModeReason): string | undefined {
-  switch (reason) {
-    case "open-pr":
-      return "this branch already has a PR";
-    case "stacked":
-      return "this branch is stacked";
-    case "existing-branch":
-      return "this branch came from a PR";
-    case "pstack":
-      return "pstack sessions open PRs";
-    case "automation":
-      return "automations open PRs";
-    default:
-      return undefined;
-  }
-}
-
-/** Where Ship sends the change, in the person's terms. */
-export function shipDestination(info: ShippableInfo): string {
-  if (info.checkout === "shared")
-    return `Pushes to ${info.target} from this checkout`;
-  if (info.mode === "direct") return `Pushes to ${info.target}`;
-  const forced =
-    info.requested === "direct" ? forcedPrReason(info.reason) : undefined;
-  const base = info.openPr
-    ? `Updates PR #${info.openPr.number}`
-    : info.buttons[0]?.label === "Push branch"
-      ? "Pushes the branch for review"
-      : "Opens a pull request";
-  return forced ? `${base}, since ${forced}` : base;
-}
 
 /** The newest ship, and whether the remote has confirmed it. */
 export function latestDirectShip(
@@ -66,16 +30,15 @@ function useShipInfo(sessionId: string, refreshTick?: string | number) {
 }
 
 /**
- * Ship plus the repository's own buttons (`shipActions` in config). Each one
- * sends its prompt to the session's agent, the way Create PR always has; the
- * server decides what Ship says for this session's ship mode.
+ * Ship plus the repository's own buttons (`shipActions` in config), inline in
+ * Review's no-PR toolbar. Each one sends its prompt to the session's agent;
+ * the server decides what Ship says for this session's ship mode.
  */
 export function ShipActions({
   sessionId,
   canSend,
   send,
   refreshTick,
-  layout = "row",
   className,
 }: {
   sessionId: string;
@@ -83,8 +46,6 @@ export function ShipActions({
   send?: (msg: WSClientMessage) => void;
   /** Refetch when this changes (git events, a new diff). */
   refreshTick?: string | number;
-  /** "row" is the Changes panel's own band; "inline" sits in a toolbar. */
-  layout?: "row" | "inline";
   className?: string;
 }) {
   const info = useShipInfo(sessionId, refreshTick);
@@ -95,15 +56,6 @@ export function ShipActions({
     return () => clearTimeout(timer);
   }, [sent]);
   if (!info?.available || !send) return null;
-  // An open PR updates itself when the agent pushes, so the Changes panel
-  // drops "Update PR" and keeps only the repository's own buttons.
-  const updatesPr =
-    !!info.openPr && info.mode === "pull-request" && info.checkout !== "shared";
-  const shown = updatesPr
-    ? info.buttons.filter((button) => !button.primary)
-    : info.buttons;
-  if (shown.length === 0) return null;
-  const destination = updatesPr ? undefined : shipDestination(info);
   const run = (button: ShipButton) => {
     if (!canSend) return;
     send({
@@ -120,7 +72,7 @@ export function ShipActions({
     );
   };
   const busyHint = `${AGENT_NAME} is working. You can ship once the current run finishes.`;
-  const buttons = shown.map((button) => {
+  const buttons = info.buttons.map((button) => {
     const control = (
       <Button
         key={button.id}
@@ -154,28 +106,10 @@ export function ShipActions({
       </Tooltip>
     );
   });
-  if (layout === "inline")
-    return (
-      <span className={cn("inline-flex items-center gap-2", className)}>
-        {buttons}
-      </span>
-    );
   return (
-    <div
-      className={cn(
-        "flex flex-wrap items-center gap-2 border-b border-divider px-3.5 py-2.5 phone:px-4 phone:py-3",
-        className,
-      )}
-      role="group"
-      aria-label="Ship"
-    >
+    <span className={cn("inline-flex items-center gap-2", className)}>
       {buttons}
-      {destination && (
-        <span className="ml-auto min-w-0 text-meta text-dim phone:w-full phone:ml-0">
-          {destination}
-        </span>
-      )}
-    </div>
+    </span>
   );
 }
 
