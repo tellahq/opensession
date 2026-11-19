@@ -250,7 +250,7 @@ describe("recordSetupTimeout", () => {
       append: async (id, text) => void notices.push([id, text]),
     });
     expect(notified).toEqual(["a"]);
-    expect(notices[0]?.[1]).toContain("Workspace setup timed out after 15 min");
+    expect(notices[0]?.[1]).toContain("Setup timed out after 15 min");
   });
 });
 

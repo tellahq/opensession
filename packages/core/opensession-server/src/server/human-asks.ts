@@ -696,8 +696,9 @@ export async function deliverAsk(
     broadcastToSession(a.sessionId, {
       type: "notice",
       message: a.uiFirst
-        ? `No answer in ${productName()} — asked **${a.person.name}** on Slack.`
-        : `📨 Asked **${a.person.name}** on Slack — _${shortQ(a)}_`,
+        ? `No answer here · asked ${a.person.name} on Slack`
+        : `Asked ${a.person.name} on Slack · ${shortQ(a)}`,
+      tone: "info",
     });
   }
   return true;

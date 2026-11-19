@@ -1,5 +1,10 @@
 import { test, expect, describe } from "bun:test";
-import { noticeTone, stripNoticeGlyph } from "./notices";
+import {
+  classifyEntry,
+  noticeText,
+  noticeTone,
+  stripNoticeGlyph,
+} from "./notices";
 
 // The strings below are copied from the call sites that write them, so this
 // test fails if a message is reworded without re-checking its tone.
@@ -103,4 +108,39 @@ test("stripNoticeGlyph drops a leading glyph the tone re-supplies", () => {
   expect(
     stripNoticeGlyph("Turn stopped after 3 minutes — it hit ⚠ the limit"),
   ).toBe("Turn stopped after 3 minutes — it hit ⚠ the limit");
+});
+
+describe("writer tone", () => {
+  const system = (content: string, noticeTone?: "error" | "warn" | "info") =>
+    classifyEntry({
+      id: "n1",
+      type: "system",
+      content,
+      timestamp: "2026-11-19T00:00:00.000Z",
+      ...(noticeTone ? { noticeTone } : {}),
+    });
+
+  test("wins over the wording", () => {
+    expect(system("Model error · retrying", "info").notice?.tone).toBe("info");
+    expect(system("Previous turn interrupted", "warn").notice?.tone).toBe(
+      "warn",
+    );
+    // A line whose wording alone would read as an error stays what it says.
+    expect(system("Run failed: oops", "info").notice?.tone).toBe("info");
+  });
+
+  test("untagged lines still read from their wording", () => {
+    expect(system("Run failed: oops").notice?.tone).toBe("error");
+  });
+
+  test("a detail sits behind the title, not under it twice", () => {
+    const entry = system(noticeText("Run failed", "429 rate limited"), "error");
+    expect(entry.notice).toMatchObject({
+      title: "Run failed",
+      tone: "error",
+      body: "collapsed",
+    });
+    expect(entry.content).toBe("429 rate limited");
+    expect(noticeText("Run failed", "")).toBe("Run failed");
+  });
 });
