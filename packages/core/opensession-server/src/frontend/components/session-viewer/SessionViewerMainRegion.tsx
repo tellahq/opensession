@@ -20,6 +20,7 @@ import { EmptyState, InlineAlert } from "../../ui/state";
 import { AGENT_NAME } from "../../lib/brand";
 import { withQuotes, type Quote } from "../../lib/quotes";
 import { messageLink } from "../../lib/message-link";
+import { closeLightbox } from "../../lib/media-lightbox";
 import {
   fetchFileMentions,
   fetchMentionSuggestions,
@@ -98,6 +99,7 @@ import {
   TRANSCRIPT_PILL_TOP,
   VIEWER_ACTION_ROW,
   VIEWER_ACTION_ROW_WITH_SCROLL,
+  SCROLL_ACTION_BESIDE_REPLIES,
   VIEWER_INPUT,
   VIEWER_MESSAGES,
   VIEWER_MESSAGES_REGION,
@@ -545,10 +547,9 @@ export function SessionViewerMainRegion({
     loadingHistory,
     syncing,
   } = transcript.content;
-  const stopping = stopRequestedAt != null;
   const liveRunStatus = useMemo<LiveRunStatus>(
-    () => ({ store: liveTurnStore, since: busySince, stopping }),
-    [liveTurnStore, busySince, stopping],
+    () => ({ store: liveTurnStore }),
+    [liveTurnStore],
   );
   const {
     openAssetFromTranscript,
@@ -1342,6 +1343,7 @@ export function SessionViewerMainRegion({
 
             <div
               ref={setViewerInput}
+              data-lightbox-composer-host=""
               className={cn(
                 VIEWER_INPUT,
                 // Moves with the transcript above it, or the composer would
@@ -1393,7 +1395,12 @@ export function SessionViewerMainRegion({
                           />
                         )}
                         {scrollAction && !isPhone && (
-                          <div className="pointer-events-auto col-start-2 row-start-1 shrink-0 justify-self-center">
+                          <div
+                            className={cn(
+                              "pointer-events-auto col-start-2 row-start-1 shrink-0 justify-self-center",
+                              quickReplies && SCROLL_ACTION_BESIDE_REPLIES,
+                            )}
+                          >
                             <Tooltip
                               label="Scroll to the bottom"
                               shortcut={transcriptDownKeys ?? undefined}
@@ -1521,7 +1528,7 @@ export function SessionViewerMainRegion({
                           images.length === 0 &&
                           (noteMode || files.length === 0) &&
                           !forkFrom),
-                      // Tints the composer green and names the mode in a chip above
+                      // Names the mode in a green chip above
                       // the field. Only opensession sessions can promote.
                       askMode: isAsk,
                       askExitPending: promoting,
@@ -1558,7 +1565,12 @@ export function SessionViewerMainRegion({
                       textareaRef: composerRef,
                     }}
                     actions={{
-                      onSend: handleSend,
+                      // Sent from beside an open image: close it so the
+                      // turn it starts is in view.
+                      onSend: (...args) => {
+                        closeLightbox();
+                        return handleSend(...args);
+                      },
                       onToggleCall: voiceAvailable ? voice.toggle : undefined,
                       onImagesChange: setImages,
                       onFilesChange: setFiles,
@@ -1672,8 +1684,9 @@ export function SessionViewerMainRegion({
                       nextAction ? (
                         <>
                           {scrollBesideNext && (
-                            // Centred on the tab's visible 40px, left of it.
-                            <div className="mt-1 mr-2 self-start">
+                            // Centred on the composer, level with the tab's
+                            // visible 40px, as the floating arrow is.
+                            <div className="absolute top-1 left-1/2 -translate-x-1/2">
                               <Tooltip
                                 label="Scroll to the bottom"
                                 shortcut={transcriptDownKeys ?? undefined}

@@ -2197,7 +2197,7 @@ export async function* reconcileUncertainHostEvents(
         reportedUncertain = true;
         yield {
           type: "runner_notice",
-          text: `${label} launch outcome remains uncertain. Recovery ownership was retained.`,
+          text: `${label} may still be starting`,
         };
       }
       console.warn(`[host-client] ${label} remains uncertain:`, error);

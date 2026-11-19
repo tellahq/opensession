@@ -9,6 +9,32 @@ import Foundation
 struct ProgressUpdate: Equatable, Sendable {
     enum State: Equatable, Sendable { case running, done }
 
+    /// A reply that opens with a status line and goes on in prose ("◷
+    /// **Native build**: Running", a blank line, then why): the status, and
+    /// the prose after it. The status then names the work row above the
+    /// reply. Mirrors the web's `splitLeadStatus`.
+    static func lead(of entry: TranscriptEntry) -> (update: ProgressUpdate, rest: String)? {
+        guard entry.isAssistant, entry.isReasoning != true, entry.isError != true else { return nil }
+        let text = entry.text.drop { $0.isWhitespace }
+        guard text.hasPrefix("✓ **") || text.hasPrefix("◷ **") else { return nil }
+        // The status, a blank line, then prose.
+        let lines = text.split(maxSplits: 2, omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+        guard lines.count == 3,
+              lines[1].allSatisfy(\.isWhitespace) else { return nil }
+        let prose = lines[2].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prose.isEmpty else { return nil }
+        var line = entry
+        line.content = String(lines[0])
+        line.contentLength = nil
+        line.contentClamped = nil
+        line.pastedTexts = nil
+        line.images = nil
+        line.videos = nil
+        line.files = nil
+        guard let update = ProgressUpdate(line) else { return nil }
+        return (update, prose)
+    }
+
     var topic: String
     var state: State
     var text: String
@@ -68,11 +94,117 @@ struct ProgressUpdate: Equatable, Sendable {
     /// SF Symbol for this state. A clock for in progress, a check for
     /// confirmed success. There is no failure glyph on purpose: failures are
     /// normal replies.
-    var symbol: String {
-        switch state {
-        case .running: "clock"
-        case .done: "checkmark"
+    var symbol: String { Self.symbol(topic: topic, isDone: state == .done) }
+
+    /// A CI or test status takes a check run's own marks instead, as GitHub
+    /// draws them: a dashed ring while it runs, a circled check once it
+    /// passes, so it reads as CI at a glance rather than as one more timer.
+    /// Mirrors the web's `StatusIcon`.
+    static func symbol(topic: String, isDone: Bool) -> String {
+        if isCheckTopic(topic) { return isDone ? "checkmark.circle" : "circle.dashed" }
+        return isDone ? "checkmark" : "clock"
+    }
+
+    /// CI, checks, tests and builds (web `isCheckTopic`).
+    static func isCheckTopic(_ topic: String) -> Bool {
+        topic.firstMatch(
+            of: #/\b(ci|checks?|tests?|builds?|lint|typecheck|e2e)\b/#.ignoresCase()
+        ) != nil
+    }
+}
+
+/// What a status line inside a work fold says. A fold reads after the fact,
+/// so "CI: Running" from ten minutes ago says the wrong thing: each wait
+/// becomes one step where it started, "CI passed · 4m" once a later `✓` of
+/// the same topic says how it went, "Waited for CI · 4m" when nothing did,
+/// "Waiting for CI" while the fold is live and no later status has moved on
+/// from it. Agent wording beyond a bare
+/// state word is kept. Mirrors the web's `foldStatuses`.
+struct FoldStatus: Equatable, Sendable {
+    /// Picks the glyph (`ProgressUpdate.symbol(topic:isDone:)`).
+    var topic: String
+    var text: String
+    var isDone: Bool
+
+    enum Step: Equatable, Sendable {
+        case shown(FoldStatus)
+        /// A later update of a topic an earlier step already stands for.
+        case folded
+    }
+
+    /// One slot per fold step, nil where the step is not a status.
+    /// `startedAt` is only read around a status.
+    static func resolve(
+        _ updates: [ProgressUpdate?],
+        startedAt: (Int) -> Date?,
+        isLive: Bool
+    ) -> [Step?] {
+        var out = [Step?](repeating: nil, count: updates.count)
+        for i in updates.indices {
+            guard let first = updates[i], out[i] == nil else { continue }
+            let key = first.topic.lowercased()
+            var last = i
+            var close: Int? = first.state == .done ? i : nil
+            var j = i + 1
+            while close == nil, j < updates.count {
+                if let update = updates[j], update.topic.lowercased() == key {
+                    out[j] = .folded
+                    last = j
+                    if update.state == .done { close = j }
+                }
+                j += 1
+            }
+            if let close, let closing = updates[close] {
+                out[i] = .shown(FoldStatus(
+                    topic: first.topic,
+                    text: outcome(closing) + (close > i ? took(startedAt(i), startedAt(close)) : ""),
+                    isDone: true
+                ))
+                continue
+            }
+            guard let latest = updates[last] else { continue }
+            let bare = isBareRunning(latest.text)
+            let isCurrent = isLive && !updates[(last + 1)...].contains { $0 != nil }
+            let words = bare
+                ? "\(isCurrent ? "Waiting" : "Waited") for \(noun(first.topic))"
+                : latest.label
+            let hasNext = !isCurrent && last + 1 < updates.count
+            out[i] = .shown(FoldStatus(
+                topic: first.topic,
+                text: words + (hasNext ? took(startedAt(i), startedAt(last + 1)) : ""),
+                isDone: false
+            ))
         }
+        return out
+    }
+
+    private static func took(_ start: Date?, _ stop: Date?) -> String {
+        guard let start, let stop,
+              let label = TranscriptFormat.duration(stop.timeIntervalSince(start))
+        else { return "" }
+        return " · \(label)"
+    }
+
+    private static func isBareRunning(_ text: String) -> Bool {
+        text.wholeMatch(
+            of: #/(running|in progress|pending|queued|started|starting|waiting|building|deploying|underway)(\.{0,3}|…)/#.ignoresCase()
+        ) != nil
+    }
+
+    private static func outcome(_ update: ProgressUpdate) -> String {
+        let bare = update.text.wholeMatch(
+            of: #/(done|passed|green|complete|completed|finished|succeeded|success|successful|ok|(all )?(checks|tests) (passed|green))\.?/#.ignoresCase()
+        ) != nil
+        guard bare else { return update.label }
+        let checks = ProgressUpdate.isCheckTopic(update.topic)
+        return "\(update.topic) \(checks ? "passed" : "done")"
+    }
+
+    /// "Deployment" reads as a noun mid-sentence; "CI" and "PR #12" keep case.
+    private static func noun(_ topic: String) -> String {
+        let letters = Array(topic.prefix(2))
+        guard letters.count == 2, letters[0].isUppercase, letters[1].isLowercase else { return topic }
+        return letters[0].lowercased() + topic.dropFirst()
     }
 }
 
@@ -169,6 +301,10 @@ struct ProgressProjection: Equatable, Sendable {
             }
             if entry.isUser, entry.turnBoundary != true,
                entry.notice == nil || entry.notice?.kind == "review-handoff" {
+                active = nil
+            } else if entry.isUser, entry.turnBoundary != true, entry.notice?.triggerTitle != nil {
+                // An automated event (a GitHub notice, a worker's report) is
+                // a task of its own, so its status starts a fresh row.
                 active = nil
             }
             guard finals.contains(entry.id), let update = updates[entry.id] else { continue }

@@ -21,7 +21,12 @@
  * breaks one. Unknown frame types must be ignored by clients.
  */
 
-import type { AnsweredAskData, EntryNotice, NoticeKind } from "./notices";
+import type {
+  AnsweredAskData,
+  EntryNotice,
+  NoticeKind,
+  NoticeTone,
+} from "./notices";
 import type { ToolPresentation } from "./tool-presentation";
 import type { ContextBreakdown, RunActivity } from "./events";
 
@@ -157,6 +162,10 @@ export interface TranscriptEntry {
    *  the marker is gone by the time an entry reaches the classifier; adding a
    *  kind must not add another boolean here. */
   noticeKind?: NoticeKind;
+  /** The tone the writer gave this system line (`<runner-notice tone="…">`).
+   *  classifyEntry uses it as the notice's tone. Lines written before the
+   *  attribute existed carry none, and fall back to their wording. */
+  noticeTone?: NoticeTone;
   /** Structured payload parsed from a durable answered-question record. The
    *  classifier moves it onto `notice.ask`; title + markdown content remain the
    *  compatibility path for clients that predate the richer card. */
@@ -1020,7 +1029,14 @@ export type ProtocolServerMessage =
       /** Failed validation is terminal; transient ownership/storage failures stay queued. */
       terminal?: boolean;
     }
-  | { type: "notice"; sessionId?: string; message: string }
+  | {
+      type: "notice";
+      sessionId?: string;
+      message: string;
+      /** How loudly it reads. Absent from older servers: derive it from
+       *  `message` (noticeTone). */
+      tone?: NoticeTone;
+    }
   | { type: "pong" }
   | { type: "error"; sessionId?: string; message: string };
 

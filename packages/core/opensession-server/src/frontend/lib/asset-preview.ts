@@ -139,3 +139,42 @@ export function adjacentAssetPath(
   if (index === -1 || paths.length < 2) return null;
   return paths[(index + direction + paths.length) % paths.length] ?? null;
 }
+
+export type AssetFolderGroup = {
+  /** The folder's path, or null for files at the top of the assets folder. */
+  folder: string | null;
+  files: SessionAssetFile[];
+};
+
+/**
+ * The Assets tab's list order: top-level files first, then one group per
+ * folder (by full path, so `a/b` follows `a`), each sorted by name. Folders
+ * hold a few related files at most, so a caption over each reads better than
+ * a collapsible tree.
+ */
+export function groupAssetsByFolder(
+  files: readonly SessionAssetFile[],
+): AssetFolderGroup[] {
+  const groups = new Map<string, SessionAssetFile[]>();
+  for (const file of files) {
+    const slash = file.path.lastIndexOf("/");
+    const folder = slash === -1 ? "" : file.path.slice(0, slash);
+    const group = groups.get(folder);
+    if (group) group.push(file);
+    else groups.set(folder, [file]);
+  }
+  const byPath = (a: SessionAssetFile, b: SessionAssetFile) =>
+    a.path.localeCompare(b.path, undefined, { numeric: true });
+  return [...groups.keys()]
+    .sort((a, b) =>
+      a === ""
+        ? -1
+        : b === ""
+          ? 1
+          : a.localeCompare(b, undefined, { numeric: true }),
+    )
+    .map((folder) => ({
+      folder: folder || null,
+      files: [...(groups.get(folder) ?? [])].sort(byPath),
+    }));
+}

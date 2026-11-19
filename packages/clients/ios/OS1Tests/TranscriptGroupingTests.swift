@@ -59,7 +59,7 @@ final class TranscriptGroupingTests: XCTestCase {
         ])
 
         let blocks = viewModel.displayBlocks
-        XCTAssertEqual(blocks.count, 3, "prompt, fold, answer — the footer needs timestamps")
+        XCTAssertEqual(blocks.count, 4, "prompt, fold, answer, footer")
         guard case .message(let prompt) = blocks[0] else {
             return XCTFail("first block should be the prompt")
         }
@@ -76,6 +76,11 @@ final class TranscriptGroupingTests: XCTestCase {
             return XCTFail("the final answer must escape the fold")
         }
         XCTAssertEqual(answer.id, "a2")
+
+        guard case .footer(let footer) = blocks[3] else {
+            return XCTFail("a turn with work keeps its footer row")
+        }
+        XCTAssertNil(footer.duration, "the fold above the answer already shows the time")
     }
 
     func testReplyToAMessageSentMidTurnEscapesTheFold() {
@@ -102,6 +107,32 @@ final class TranscriptGroupingTests: XCTestCase {
         }
         // Only the first reply leaves the fold; later narration is still work.
         XCTAssertEqual(ids, ["u1", "work", "u2", "a1", "work", "a3"])
+    }
+
+    /// Text after a step is progress narration, not the answer to the
+    /// message, so the work below the message stays one fold.
+    func testTextAfterAStepFollowingAMidTurnMessageStaysFolded() {
+        append([
+            TranscriptEntry(id: "u1", type: "user", content: "fix it"),
+            toolUse("t1", name: "Bash", input: ["command": .string("cargo build")]),
+            TranscriptEntry(id: "u2", type: "user", content: "how long is left?"),
+            toolResult("t1", text: "ok"),
+            toolUse("t2", name: "Bash", input: ["command": .string("git fetch")]),
+            toolResult("t2", text: "ok"),
+            TranscriptEntry(id: "a1", type: "assistant", content: "Writing the web side now."),
+            toolUse("t3", name: "Bash", input: ["command": .string("bun run check")]),
+            toolResult("t3", text: "ok"),
+            TranscriptEntry(id: "a2", type: "assistant", content: "Fixed."),
+        ])
+
+        let ids: [String] = viewModel.displayBlocks.compactMap { block in
+            switch block {
+            case .message(let entry): entry.id
+            case .work: "work"
+            default: nil
+            }
+        }
+        XCTAssertEqual(ids, ["u1", "work", "u2", "work", "a2"])
     }
 
     func testNarrationAfterAMessageSentBetweenTurnsStaysFolded() {
@@ -154,7 +185,7 @@ final class TranscriptGroupingTests: XCTestCase {
         // The agent picked the task back up itself: one work row, one answer.
         XCTAssertEqual(
             viewModel.displayBlocks.map(\.id),
-            ["u1", "work:tool-t1", "final"]
+            ["u1", "work:tool-t1", "final", "final:footer"]
         )
         XCTAssertFalse(viewModel.displayBlocks.contains { $0.id == "wake" })
     }
@@ -617,9 +648,9 @@ final class TranscriptGroupingTests: XCTestCase {
         }
         XCTAssertFalse(turn.hasNarration)
         XCTAssertFalse(turn.defaultExpanded(preference: .standard))
-        XCTAssertTrue(
+        XCTAssertFalse(
             turn.rendersToolCallsInPlace(preference: .standard),
-            "opening the only summary must reveal calls without another step row"
+            "a tool-only fold opens to the same closed group as a narrated one"
         )
         XCTAssertEqual(turn.lineStats, ToolLineStats(additions: 2, deletions: 1))
     }
@@ -1342,7 +1373,7 @@ final class TranscriptGroupingTests: XCTestCase {
         ])
 
         let blocks = viewModel.displayBlocks
-        XCTAssertEqual(blocks.map(\.id), ["u1", "work:a1", "a2"])
+        XCTAssertEqual(blocks.map(\.id), ["u1", "work:a1", "a2", "a2:footer"])
         XCTAssertTrue(checkBacks(in: blocks).isEmpty)
         let fold = workFolds(in: blocks).first
         XCTAssertEqual(fold?.blocks.flatMap(\.entryIds), ["a1", "w1", "t1", "tr-t1"])
@@ -1357,7 +1388,7 @@ final class TranscriptGroupingTests: XCTestCase {
         ])
 
         let blocks = viewModel.displayBlocks
-        XCTAssertEqual(blocks.map(\.id), ["work:a0", "a1"])
+        XCTAssertEqual(blocks.map(\.id), ["work:a0", "a1", "a1:footer"])
         XCTAssertEqual(
             workFolds(in: blocks).first?.blocks.flatMap(\.entryIds),
             ["a0", "s1", "t1"],
@@ -1381,7 +1412,7 @@ final class TranscriptGroupingTests: XCTestCase {
         ])
 
         let blocks = viewModel.displayBlocks
-        XCTAssertEqual(blocks.map(\.id), ["u1", "work:a0", "a3"])
+        XCTAssertEqual(blocks.map(\.id), ["u1", "work:a0", "a3", "a3:footer"])
         let folded = workFolds(in: blocks).first?.blocks.flatMap(\.entryIds) ?? []
         XCTAssertTrue(
             folded.contains("a0") && folded.contains("a1") && folded.contains("a2"),
@@ -1408,7 +1439,7 @@ final class TranscriptGroupingTests: XCTestCase {
         let blocks = viewModel.displayBlocks
         XCTAssertEqual(
             blocks.map(\.id),
-            ["u1", "work:a0", "a1", "u2", "work:w2", "a3"],
+            ["u1", "work:a0", "a1", "a1:footer", "u2", "work:w2", "a3"],
             "the second fold takes in the later wake, so its last answer reports"
         )
         XCTAssertTrue(workFolds(in: blocks)[1].blocks.flatMap(\.entryIds).contains("a2"))
@@ -1470,7 +1501,7 @@ final class TranscriptGroupingTests: XCTestCase {
 
         // Settled, the task reads as one message: its work above its answer.
         viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: false))
-        XCTAssertEqual(viewModel.displayBlocks.map(\.id), ["u1", "work:a0", "a1"])
+        XCTAssertEqual(viewModel.displayBlocks.map(\.id), ["u1", "work:a0", "a1", "a1:footer"])
         XCTAssertTrue(checkBacks(in: viewModel.displayBlocks).isEmpty)
     }
 

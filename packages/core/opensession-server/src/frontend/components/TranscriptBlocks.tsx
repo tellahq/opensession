@@ -12,10 +12,16 @@ import {
   turnScrollAnchor,
 } from "../lib/transcript-block-identity";
 import { MessageBubble } from "./MessageBubble";
+import { formatDuration } from "../lib/time";
 import { ProgressStatusLine, ProgressStatusRow } from "./ProgressStatusRow";
 import {
   collectProgressUpdates,
+  foldStatuses,
+  parseProgressUpdate,
+  splitLeadStatus,
+  type FoldStatus,
   type ProgressGroup,
+  type ProgressUpdate,
 } from "../lib/progress-updates";
 import { agentMessageText } from "../lib/agent-message";
 import { NoteBubble } from "./NoteBubble";
@@ -37,7 +43,11 @@ import {
   type OptimisticTranscriptEntry,
 } from "../lib/transcript-state";
 import { collectWrittenAssets } from "../lib/open-asset";
-import { classifyEntry } from "@tellahq/opensession-protocol/notices";
+import {
+  automatedTriggerDetail,
+  automatedTriggerTitle,
+  classifyEntry,
+} from "@tellahq/opensession-protocol/notices";
 import {
   CheckBackBlock,
   ReviewLoopBlock,
@@ -71,11 +81,18 @@ type RenderBlock =
        *  instead of drawn as its own "Checked back" row. */
       checkBack?: LoopBlock;
     }
-  | { kind: "turn"; items: TranscriptEntry[]; expandWhileRunning: boolean }
+  | {
+      kind: "turn";
+      items: TranscriptEntry[];
+      expandWhileRunning: boolean;
+      /** The status line the reply below opened with (liftLeadStatuses). */
+      status?: ProgressUpdate;
+    }
   | {
       kind: "footer";
       entry: TranscriptEntry;
-      durationMs: number;
+      /** Null when a "Worked for …" fold above the answer already says it. */
+      durationMs: number | null;
       files: TouchedFile[];
       assets: string[];
     }
@@ -88,6 +105,9 @@ type RenderBlock =
       variant: "review" | "check-back" | "work";
       /** On a work fold: from the task's first work to its answer. */
       durationMs?: number;
+      /** On a work fold an automated event started (its first block): the
+       *  event's one-line name, which the row reads instead of "Worked". */
+      trigger?: string;
       blocks: RenderBlock[];
       prNumber: number | null;
       /** Review rounds, or check-back turns. */
@@ -351,6 +371,34 @@ function groupCheckBacks(
   return grouped;
 }
 
+/** What an automated event said beyond the title its folded row shows:
+ *  a failed check as a short link to its run, a report as its text. */
+function TriggerDetail({ entry }: { entry: TranscriptEntry }) {
+  const lines = automatedTriggerDetail(entry);
+  if (lines.length === 0) return null;
+  return (
+    <div className="mx-auto mb-2 flex w-full max-w-[var(--session-col)] flex-col text-meta leading-5 text-dim">
+      {lines.map((line, i) =>
+        line.url ? (
+          <a
+            key={i}
+            className="w-fit max-w-full truncate text-dim no-underline hover:text-fg hover:underline"
+            href={line.url}
+            target="_blank"
+            rel="noopener"
+          >
+            {line.text}
+          </a>
+        ) : (
+          <p key={i} className="whitespace-pre-wrap break-words">
+            {line.text}
+          </p>
+        ),
+      )}
+    </div>
+  );
+}
+
 /** A task the agent reported on with status lines, or picked back up on its
  * own (a wait waking it, its scheduled check-back), and then answered reads as
  * one message: "Worked for 7m ›" above its last answer. The statuses,
@@ -370,6 +418,8 @@ function foldReportedTasks(
     block.kind === "entry" && progress.has(block.entry.id);
   const isCheckBack = (block: RenderBlock) =>
     !inReview && reviewBlockRole(block).kind === "check-back";
+  const triggerOf = (block: RenderBlock | undefined) =>
+    block?.kind === "entry" ? automatedTriggerTitle(block.entry) : null;
   // A nudge to continue is self-started too, so it never ends the task, but
   // on its own it does not make the answer before it interim.
   const foldable = (block: RenderBlock) =>
@@ -397,15 +447,28 @@ function foldReportedTasks(
       !isStatus(block) &&
       next?.kind === "footer" &&
       next.entry.id === block.entry.id;
+    // An automated event (a GitHub notice, a worker's report) opens a task
+    // of its own: the event, its work and any interim answers fold into one
+    // row named by the event, above the answer.
+    if (!inReview && triggerOf(block)) {
+      folded.push(...run);
+      run = [block];
+      continue;
+    }
+    const trigger =
+      triggerOf(run[0]) && run.some((inner) => inner.kind === "turn")
+        ? triggerOf(run[0])!
+        : undefined;
     if (
       answer &&
-      run.some((inner) => isStatus(inner) || isCheckBack(inner)) &&
+      (trigger || run.some((inner) => isStatus(inner) || isCheckBack(inner))) &&
       !pickedBackUp(i + 2)
     ) {
       const first = run.flatMap(renderBlockEntries)[0];
       folded.push({
         kind: "review-loop",
         variant: "work",
+        trigger,
         blocks: run,
         prNumber: null,
         rounds: 0,
@@ -419,6 +482,34 @@ function foldReportedTasks(
       i++;
       continue;
     }
+    // An automated event handled with nothing left for the person gets a
+    // one-line status answer ("✓ **Merge conflicts**: Resolved"). The event
+    // and its work then fold under that status row (projectProgressBlocks),
+    // so the whole thing is one line.
+    if (
+      trigger &&
+      block.kind === "entry" &&
+      progress.get(block.entry.id) &&
+      !pickedBackUp(i + 1)
+    ) {
+      const first = run.flatMap(renderBlockEntries)[0];
+      folded.push({
+        kind: "review-loop",
+        variant: "work",
+        trigger,
+        // Interim statuses are the row's own history.
+        blocks: run.filter((inner) => !isStatus(inner)),
+        prNumber: null,
+        rounds: 0,
+        settled: null,
+        durationMs: first
+          ? Date.parse(block.entry.timestamp) - Date.parse(first.timestamp)
+          : undefined,
+      });
+      folded.push(block);
+      run = [];
+      continue;
+    }
     if (foldable(block)) {
       run.push(block);
       continue;
@@ -428,6 +519,46 @@ function foldReportedTasks(
   }
   folded.push(...run);
   return folded;
+}
+
+/** A reply that opens with a status line ("◷ **Native build**: Running", then
+ * prose) hands that line to the work row right above it, "◷ Native build:
+ * Running · 35s ›", and keeps only its prose. Without a work row above it the
+ * reply is left as written. The footer keeps the original entry, so Copy
+ * copies the whole message. */
+// Per entry, so a rerender hands TurnBlock and MessageBubble the same status
+// and entry objects and their memo comparators can bail.
+const leadStatusCache = new WeakMap<
+  TranscriptEntry,
+  { update: ProgressUpdate; entry: TranscriptEntry } | null
+>();
+
+function leadStatusOf(entry: TranscriptEntry) {
+  let cached = leadStatusCache.get(entry);
+  if (cached === undefined) {
+    const split = splitLeadStatus(entry);
+    cached = split
+      ? { update: split.update, entry: { ...entry, content: split.rest } }
+      : null;
+    leadStatusCache.set(entry, cached);
+  }
+  return cached;
+}
+
+function liftLeadStatuses(blocks: RenderBlock[]): RenderBlock[] {
+  let lifted: RenderBlock[] | null = null;
+  for (let i = 1; i < blocks.length; i++) {
+    const block = blocks[i]!;
+    const prev = (lifted ?? blocks)[i - 1]!;
+    if (block.kind !== "entry" || block.entry.type !== "assistant") continue;
+    if (prev.kind !== "turn" || prev.status) continue;
+    const split = leadStatusOf(block.entry);
+    if (!split) continue;
+    lifted ??= [...blocks];
+    lifted[i - 1] = { ...prev, status: split.update };
+    lifted[i] = { ...block, entry: split.entry };
+  }
+  return lifted ?? blocks;
 }
 
 /** One status row per task. Status messages leave their folds; the check-back
@@ -457,6 +588,16 @@ function projectProgressBlocks(
       continue;
     }
     flush();
+    // An automated event's work, answered by a status: that row's work.
+    if (
+      block.kind === "review-loop" &&
+      block.trigger &&
+      blocks[index + 1] &&
+      isOwner(blocks[index + 1]!)
+    ) {
+      pending = block;
+      continue;
+    }
     if (block.kind !== "review-loop" || block.variant === "work") {
       projected.push(block);
       continue;
@@ -732,13 +873,22 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
     // A message sent mid-turn reaches the model between steps, so its answer
     // is followed by more work and would otherwise fold away as narration.
     // Keep that first reply beside the message it answers.
+    // Only a reply before any tool call answers the message (the prompt asks
+    // for exactly that). Text after a few steps is progress narration, and
+    // pulling it out split one run into two "Worked for" folds.
     const reply = turnAnswersSteer
       ? turn.findIndex(
-          (entry) => entry.type === "assistant" && !entry.isReasoning,
+          (entry) =>
+            entry.type === "tool_use" ||
+            (entry.type === "assistant" && !entry.isReasoning),
         )
       : -1;
     turnAnswersSteer = false;
-    if (reply >= 0 && reply < turn.length - 1) {
+    if (
+      reply >= 0 &&
+      reply < turn.length - 1 &&
+      turn[reply]!.type !== "tool_use"
+    ) {
       const before = arrangeThinkingMessages(
         turn.slice(0, reply),
         thinkingMessages,
@@ -794,9 +944,14 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
       blocks.push({
         kind: "footer",
         entry: final,
+        // The fold above the answer reads "Worked for 25m"; a "25m" under the
+        // answer said it twice (or, once foldReportedTasks widens the fold to
+        // the whole task, gave a second, smaller number).
         durationMs:
-          new Date(final.timestamp).getTime() -
-          new Date(start.timestamp).getTime(),
+          work.length > 0
+            ? null
+            : new Date(final.timestamp).getTime() -
+              new Date(start.timestamp).getTime(),
         files: turnTouchedFiles(turn),
         assets: collectWrittenAssets(turn),
       });
@@ -848,12 +1003,14 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
       at++;
     }
   }
-  const groupedBlocks = projectProgressBlocks(
-    groupCheckBacks(
-      groupReviewLoops(foldReportedTasks(blocks, progressUpdates)),
+  const groupedBlocks = liftLeadStatuses(
+    projectProgressBlocks(
+      groupCheckBacks(
+        groupReviewLoops(foldReportedTasks(blocks, progressUpdates)),
+        progressUpdates,
+      ),
       progressUpdates,
     ),
-    progressUpdates,
   );
   const isConversationBoundary = (block: RenderBlock) =>
     block.kind === "entry" &&
@@ -890,14 +1047,18 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
       .slice(lastReviewLoop + 1)
       .some((block) => reviewBlockRole(block).kind === "user-message");
 
-  const renderLoopChildren = (block: LoopBlock, isLive: boolean) =>
-    block.blocks.map((inner, innerIndex) => {
+  const renderLoopChildren = (block: LoopBlock, isLive: boolean) => {
+    const statuses = loopFoldStatuses(block.blocks, progressUpdates, isLive);
+    return block.blocks.map((inner, innerIndex) => {
       const innerKey = renderBlockKey(inner, innerIndex, turnMountScope);
+      const status =
+        inner.kind === "entry" ? statuses.get(inner.entry.id) : undefined;
       return (
         <React.Fragment key={innerKey}>
           {inner.kind === "turn" ? (
             <ReviewTurnSteps
               items={inner.items}
+              statuses={statuses}
               toolResults={toolResults}
               live={Boolean(isLive && innerIndex === block.blocks.length - 1)}
               owner={owner}
@@ -913,8 +1074,12 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
               assets={inner.assets}
               onFork={onFork}
             />
-          ) : inner.kind === "entry" && progressUpdates.has(inner.entry.id) ? (
-            <ProgressStatusLine entry={inner.entry} />
+          ) : status !== undefined ? (
+            status && <ProgressStatusLine status={status} />
+          ) : block.trigger && innerIndex === 0 && inner.kind === "entry" ? (
+            // The row already names the event; open, the fold adds only what
+            // it said beyond that, a short line each.
+            <TriggerDetail entry={inner.entry} />
           ) : inner.kind === "entry" &&
             !inner.entry.turnBoundary &&
             reviewBlockRole(inner).kind !== "handoff" ? (
@@ -943,11 +1108,16 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
                   : onEditMessage
               }
               optimistic={optimisticEntryIds.has(inner.entry.id)}
+              // Between the fold's flush tool rows an answer spaces like
+              // narration. One with its footer under it keeps the turn's
+              // margin, which the lifted footer sits in.
+              step={block.blocks[innerIndex + 1]?.kind !== "footer"}
             />
           ) : null}
         </React.Fragment>
       );
     });
+  };
 
   // A fold is live until a person speaks after it.
   const isLoopLive = (i: number) =>
@@ -1000,6 +1170,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
             block.variant === "work" ? (
               <WorkFoldBlock
                 durationMs={block.durationMs}
+                trigger={block.trigger}
                 defaultOpen={reviewLoopsOpen}
                 onOpenChange={onReviewLoopOpenChange}
               >
@@ -1049,11 +1220,24 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
       const content = progress ? (
         <ProgressStatusRow
           group={progress}
-          live={Boolean(checkBack) && isLoopLive(i) && isCheckBackTail(i)}
+          live={
+            checkBack?.variant === "check-back" &&
+            isLoopLive(i) &&
+            isCheckBackTail(i)
+          }
+          meta={
+            checkBack?.trigger && checkBack.durationMs !== undefined
+              ? (formatDuration(checkBack.durationMs) ?? undefined)
+              : undefined
+          }
           defaultOpen={reviewLoopsOpen}
           onOpenChange={onReviewLoopOpenChange}
         >
-          {checkBack && renderLoopChildren(checkBack, isLoopLive(i))}
+          {checkBack &&
+            renderLoopChildren(
+              checkBack,
+              checkBack.variant === "check-back" && isLoopLive(i),
+            )}
         </ProgressStatusRow>
       ) : block.kind === "turn" ? (
         <TurnBlock
@@ -1064,6 +1248,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
           onOpenSubagent={onOpenSubagent}
           sessionId={sessionId}
           last={i === lastContentBlock}
+          status={block.status}
         />
       ) : block.kind === "note" ? (
         <NoteBubble thread={block.note} sessionId={sessionId} />
@@ -1712,8 +1897,58 @@ function indexedItemEstimate(item: IndexedTimelineItem): number {
 
 /** Review work uses the same grouped step rows as a normal turn, without
  * introducing another outer worker disclosure inside the review loop. */
+/**
+ * Every status a loop's fold shows, by entry id. A turn's own narration
+ * counts too: the "✓ CI: All checks passed" an agent posts mid-turn closes
+ * the wait it reports on, where it used to stand as a full message bubble.
+ */
+function loopFoldStatuses(
+  blocks: RenderBlock[],
+  progressUpdates: ReadonlyMap<string, ProgressGroup | null>,
+  live: boolean,
+): Map<string, FoldStatus | null> {
+  const steps: Array<{
+    id: string;
+    at: string;
+    update: ProgressUpdate | null;
+  }> = [];
+  for (const inner of blocks) {
+    if (inner.kind === "turn") {
+      for (const entry of inner.items)
+        steps.push({
+          id: entry.id,
+          at: entry.timestamp,
+          update:
+            entry.type === "assistant" ? parseProgressUpdate(entry) : null,
+        });
+      continue;
+    }
+    const first = renderBlockEntries(inner)[0];
+    steps.push({
+      id: first?.id ?? "",
+      at: first?.timestamp ?? "",
+      update:
+        inner.kind === "entry" && progressUpdates.has(inner.entry.id)
+          ? parseProgressUpdate(inner.entry)
+          : null,
+    });
+  }
+  const byId = new Map<string, FoldStatus | null>();
+  // Most folds carry no status at all. Do not parse their timestamps.
+  if (!steps.some((step) => step.update)) return byId;
+  foldStatuses(
+    steps.map((step) => step.update),
+    (index) => Date.parse(steps[index]!.at),
+    live,
+  ).forEach((status, index) => {
+    if (status !== undefined) byId.set(steps[index]!.id, status);
+  });
+  return byId;
+}
+
 function ReviewTurnSteps({
   items,
+  statuses,
   toolResults,
   live,
   owner,
@@ -1721,6 +1956,8 @@ function ReviewTurnSteps({
   onOpenSubagent,
 }: {
   items: TranscriptEntry[];
+  /** The fold's status steps (`loopFoldStatuses`); null hides one. */
+  statuses: ReadonlyMap<string, FoldStatus | null>;
   toolResults: Map<string, TranscriptEntry>;
   live: boolean;
   owner?: string;
@@ -1733,9 +1970,14 @@ function ReviewTurnSteps({
   const sections: Array<
     | { kind: "tools"; items: TranscriptEntry[] }
     | { kind: "message"; entry: TranscriptEntry }
+    | { kind: "status"; id: string; status: FoldStatus }
   > = [];
   for (const entry of items) {
-    if (entry.type === "tool_use" && agentMessageText(entry) === null) {
+    const status = statuses.get(entry.id);
+    if (status !== undefined) {
+      // A folded update leaves no gap: the calls either side join one run.
+      if (status) sections.push({ kind: "status", id: entry.id, status });
+    } else if (entry.type === "tool_use" && agentMessageText(entry) === null) {
       const last = sections[sections.length - 1];
       if (last?.kind === "tools") last.items.push(entry);
       else sections.push({ kind: "tools", items: [entry] });
@@ -1745,7 +1987,9 @@ function ReviewTurnSteps({
   }
 
   return sections.map((section) =>
-    section.kind === "tools" ? (
+    section.kind === "status" ? (
+      <ProgressStatusLine key={section.id} status={section.status} />
+    ) : section.kind === "tools" ? (
       <ToolSection
         key={section.items[0].id}
         items={section.items}
@@ -1768,6 +2012,7 @@ function ReviewTurnSteps({
         reasoning={isLegacyReasoningHeading(section.entry.content)}
         owner={owner}
         sessionId={sessionId}
+        step
       />
     ),
   );

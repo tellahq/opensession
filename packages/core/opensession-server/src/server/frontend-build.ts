@@ -19,7 +19,10 @@ import type { BunFile, BunPlugin } from "bun";
 import { EMBEDDED_FRONTEND } from "./embedded-frontend";
 import { activeRunRecords } from "./run-journal";
 import { writeFileAtomicAsync } from "./shared/atomic-write";
-import { publishStableFrontendSnapshot } from "./stable-frontend";
+import {
+  MAX_FALLBACK_ROOTS,
+  publishStableFrontendSnapshot,
+} from "./stable-frontend";
 import { stateDir } from "./paths";
 import { gitIdentityFor } from "./shared/user-mappings";
 import { broadcastToAll } from "./ws-hub";
@@ -746,7 +749,7 @@ async function activateFrontendReleaseNow(
     ...((g.__opensessionFrontendFallbackRoots as string[] | undefined) ?? []),
   ]
     .filter((root, index, roots) => roots.indexOf(root) === index)
-    .slice(0, 3);
+    .slice(0, MAX_FALLBACK_ROOTS);
   g.__opensessionFrontendReleaseRoot = prepared.root;
   const store = frontendStore();
   store.indexHtml = prepared.indexHtml;
@@ -1265,7 +1268,8 @@ export function scheduleFrontendRebuild(
         lastBuildErrorKey = fail.key;
         broadcastToAll({
           type: "notice",
-          message: "App update paused. No action needed.",
+          message: "App update paused · no action needed",
+          tone: "info",
         });
       }
       if (

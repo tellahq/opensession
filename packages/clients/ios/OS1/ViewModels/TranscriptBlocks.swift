@@ -124,6 +124,9 @@ struct ReviewLoop: Identifiable, Equatable {
     var settled: ReviewSettledOutcome?
     /// On a work fold: from the task's first work to its answer.
     var duration: TimeInterval?
+    /// On a work fold an automated event started (its first block): the
+    /// event's one-line name, which the row reads instead of "Worked".
+    var trigger: String?
 
     /// What the closed row says. A live loop is always working, whatever
     /// GitHub last reported about the PR.
@@ -382,6 +385,9 @@ struct WorkTurn: Identifiable, Equatable {
     /// "Bash: bun test" — what the fold is doing right now, shown while it is
     /// live and collapsed so the work never looks stalled.
     var livePreview: String?
+    /// The status line the reply below opened with, named here instead:
+    /// "◷ Native build: Running · 35s ›" (`liftLeadStatuses`).
+    var leadStatus: ProgressUpdate?
 
     var hasFailure: Bool { failureCount > 0 }
     var hasNarration: Bool
@@ -398,8 +404,10 @@ struct WorkTurn: Identifiable, Equatable {
         return preference.defaultExpanded(isLive: isLive)
     }
 
+    /// Only when the Tool calls preference keeps them open. Otherwise every
+    /// fold, narrated or not, shows the same closed "Ran 4 commands" rows.
     func rendersToolCallsInPlace(preference: TurnActivity) -> Bool {
-        !hasNarration || preference.rendersToolCallsInPlace
+        preference.rendersToolCallsInPlace
     }
 }
 
@@ -629,11 +637,13 @@ enum TranscriptGrouping {
                 text: final.text,
                 timestamp: end,
                 model: final.model,
-                duration: duration(from: start, to: end),
+                // The fold above the answer already reads "Worked for 25m".
+                duration: folded.isEmpty ? duration(from: start, to: end) : nil,
                 files: mergeTouchedFiles(tools),
                 assets: writtenAssets(tools)
             )
-            if !footer.isEmpty { blocks.append(.footer(footer)) }
+            // A turn with work keeps its copy and ⋯ row without the duration.
+            if !footer.isEmpty || !folded.isEmpty { blocks.append(.footer(footer)) }
         }
 
         func flush(isTrailing: Bool) {
@@ -644,9 +654,13 @@ enum TranscriptGrouping {
             let start = turn.first.flatMap(startTimestamp)
             // A message sent mid-turn reaches the model between steps, so its
             // answer is followed by more work and would otherwise fold away as
-            // narration. Keep that first reply beside the message it answers.
+            // narration. Keep that first reply beside the message it answers,
+            // when it comes before any tool call: text after a few steps is
+            // progress narration, and pulling it out split one run into two
+            // "Worked for" folds.
             if answersSteer,
                let reply = turn.firstIndex(where: { item in
+                   if case .tool = item { return true }
                    guard case .message(let entry) = item else { return false }
                    return entry.isReasoning != true
                        && !ReasoningSummaryDisplay.isLegacyHeading(entry.text)
@@ -738,7 +752,26 @@ enum TranscriptGrouping {
             live: live,
             progress: progress
         )
-        return thinkingMessages.visibleBlocks(project(progress, into: grouped))
+        return thinkingMessages.visibleBlocks(liftLeadStatuses(project(progress, into: grouped)))
+    }
+
+    /// A reply that opens with a status line hands it to the work row right
+    /// above it and keeps only its prose. Without a work row above it the
+    /// reply is left as written. The footer keeps the whole text, so Copy
+    /// copies the whole message. Mirrors the web's `liftLeadStatuses`.
+    private static func liftLeadStatuses(_ blocks: [TranscriptBlock]) -> [TranscriptBlock] {
+        var blocks = blocks
+        for index in blocks.indices.dropFirst() {
+            guard case .message(var entry) = blocks[index],
+                  case .work(var turn) = blocks[index - 1],
+                  turn.leadStatus == nil,
+                  let lead = ProgressUpdate.lead(of: entry) else { continue }
+            turn.leadStatus = lead.update
+            entry.content = lead.rest
+            blocks[index - 1] = .work(turn)
+            blocks[index] = .message(entry)
+        }
+        return blocks
     }
 
     /// Where the run of person and system messages closing the transcript
@@ -1021,6 +1054,10 @@ enum TranscriptGrouping {
             if case .message(let entry) = block { return progress.contains(entry.id) }
             return false
         }
+        func isStatusFooter(_ block: TranscriptBlock) -> Bool {
+            if case .footer(let footer) = block { return progress.contains(footer.entryId) }
+            return false
+        }
         func isFoldable(_ block: TranscriptBlock) -> Bool {
             switch block {
             case .work, .footer, .tool: true
@@ -1041,6 +1078,11 @@ enum TranscriptGrouping {
             }
             return false
         }
+        func triggerTitle(_ block: TranscriptBlock?) -> String? {
+            guard case .message(let entry)? = block, entry.isUser,
+                  entry.turnBoundary != true else { return nil }
+            return entry.notice?.triggerTitle
+        }
         var folded: [TranscriptBlock] = []
         var run: [TranscriptBlock] = []
         for (index, block) in blocks.enumerated() {
@@ -1049,10 +1091,21 @@ enum TranscriptGrouping {
             case .settled, .userMessage: inReview = false
             case .checkBack, .other: break
             }
+            // An automated event (a GitHub notice, a worker's report) opens a
+            // task of its own: the event, its work and any interim answers
+            // fold into one row named by the event, above the answer.
+            if !inReview, triggerTitle(block) != nil {
+                folded += run
+                run = [block]
+                continue
+            }
+            let trigger: String? = run.contains(where: { if case .work = $0 { true } else { false } })
+                ? triggerTitle(run.first)
+                : nil
             if case .message(let answer) = block, answer.isAssistant,
                !progress.contains(answer.id),
                !(live && index == blocks.count - 1),
-               run.contains(where: continuesTask),
+               trigger != nil || run.contains(where: continuesTask),
                !pickedBackUp(after: index) {
                 // A status's footer says nothing the fold does not.
                 let work = run.filter { inner in
@@ -1070,7 +1123,35 @@ enum TranscriptGrouping {
                     rounds: 0,
                     isLive: false,
                     blocks: work,
-                    duration: duration
+                    duration: duration,
+                    trigger: trigger
+                )))
+                folded.append(block)
+                run = []
+                continue
+            }
+            // An automated event handled with nothing left for the person
+            // gets a one-line status answer ("✓ **Merge conflicts**:
+            // Resolved"). The event and its work then fold under that status
+            // row (`project`), so the whole thing is one line.
+            if let trigger, case .message(let answer) = block,
+               progress.owners[answer.id] != nil,
+               !pickedBackUp(after: index) {
+                // Interim statuses are the row's own history.
+                let work = run.filter { !isStatus($0) && !isStatusFooter($0) }
+                let first = work.lazy.flatMap(\.entryIds).compactMap(start).first
+                var duration: TimeInterval?
+                if let first, let end = answer.timestampDate {
+                    duration = end.timeIntervalSince(first)
+                }
+                folded.append(.reviewLoop(ReviewLoop(
+                    id: "work:\(work.first?.id ?? answer.id)",
+                    kind: .work,
+                    rounds: 0,
+                    isLive: false,
+                    blocks: work,
+                    duration: duration,
+                    trigger: trigger
                 )))
                 folded.append(block)
                 run = []
@@ -1119,6 +1200,12 @@ enum TranscriptGrouping {
             }
             if let loop = pending { projected.append(.reviewLoop(loop)) }
             pending = nil
+            // An automated event's work, answered by a status: that row's work.
+            if case .reviewLoop(let loop) = block, loop.trigger != nil,
+               index + 1 < blocks.count, owner(blocks[index + 1]) != nil {
+                pending = loop
+                continue
+            }
             guard case .reviewLoop(var loop) = block, loop.kind != .work else {
                 projected.append(block)
                 continue

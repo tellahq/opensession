@@ -85,11 +85,13 @@ export function MediaLightboxViewer({
           ref={boxRef}
           role="img"
           aria-label="Diagram"
+          // Its right-click menu (DiagramContextMenu.tsx) finds it by this.
+          data-lightbox-diagram=""
           // The same hairline and corner the photo takes, over the well
           // the diagram is drawn on in the transcript: a light-theme
           // chart is near-black ink, which would be unreadable straight
           // on the scrim.
-          className="box-border shrink-0 rounded-2xl border border-white/20 bg-[var(--diagram-canvas)] p-4 [transform-origin:0_0] [&>svg]:block [&>svg]:h-full [&>svg]:w-full"
+          className="box-border shrink-0 rounded-2xl border border-line bg-[var(--diagram-canvas)] p-4 [transform-origin:0_0] [&>svg]:block [&>svg]:h-full [&>svg]:w-full"
           style={{ width: fit?.w, height: fit?.h, viewTransitionName }}
           // The markup is mermaid's own output, already rendered into the
           // transcript by MarkdownBody; this is the same SVG, resized.
@@ -105,16 +107,15 @@ export function MediaLightboxViewer({
             // object-contain sizes the box from the decoded picture, so the
             // box before load is not the box after it.
             onLoad={onMediaLoad}
-            // The scrim is near-black in both themes, so a dark screenshot
-            // opened full size has no edge of its own and bleeds into it.
-            // A white hairline rather than border-line-strong: this surface
-            // is always dark, like the rest of the lightbox chrome.
+            // The scrim is the page's own colour, frosted, so a screenshot in
+            // the same theme has no edge of its own and bleeds into it. The
+            // theme's hairline gives it one in both, as the video has.
             // The top of the radius scale, because this is the largest
             // floating surface in the app and a card-sized corner on a
             // screen-sized photo reads as a crop rather than a shape.
             // Anything rounder would leave the scale, and it starts
             // clipping content that sits in a screenshot's own corner.
-            className="min-h-0 min-w-0 max-h-full max-w-full rounded-2xl border border-white/20 object-contain [transform-origin:0_0]"
+            className="min-h-0 min-w-0 max-h-full max-w-full rounded-2xl border border-line object-contain [transform-origin:0_0]"
             style={{ viewTransitionName }}
           />
           {commentMode && shownRegionBox && imageBox && (

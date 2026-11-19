@@ -188,11 +188,15 @@ struct ComposerAddMenu: View {
     /// full-size tap target, so the row reads as one set of controls.
     private var icon: some View {
         Image(systemName: "plus")
-            .font(.system(size: 18, weight: .medium))
-            .foregroundStyle(OS1VisualStyle.textDim)
             #if os(iOS)
+            // Phone-sized: a full-ink 22pt glyph like the system's own chat
+            // inputs, not the Mac's small grey toolbar mark.
+            .font(.system(size: 22, weight: .regular))
+            .foregroundStyle(OS1VisualStyle.text)
             .frame(width: 44, height: 44)
             #else
+            .font(.system(size: 18, weight: .medium))
+            .foregroundStyle(OS1VisualStyle.textDim)
             .frame(width: 27, height: 27)
             #endif
             .contentShape(Circle())

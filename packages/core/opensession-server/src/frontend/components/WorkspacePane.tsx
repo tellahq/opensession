@@ -311,6 +311,10 @@ export function WorkspacePane({
   }, [prompt, parksServerDraft, pushServerDraft]);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  // Try again resends what the failed start sent, pasted text included.
+  const lastStartOpts = useRef<{ pastedTexts?: string[] } | undefined>(
+    undefined,
+  );
   const startingRef = useRef(false);
   const startTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
@@ -551,6 +555,7 @@ export function WorkspacePane({
   function handleStart(_text: string, opts?: { pastedTexts?: string[] }) {
     const q = prompt.trim();
     const pastedTexts = opts?.pastedTexts ?? [];
+    lastStartOpts.current = opts;
     if (
       (!q &&
         images.length === 0 &&
@@ -569,9 +574,7 @@ export function WorkspacePane({
       if (!startingRef.current) return;
       startingRef.current = false;
       setStarting(false);
-      setStartError(
-        `${AGENT_NAME} didn't respond. Check your connection and try again.`,
-      );
+      setStartError(`${AGENT_NAME} didn't respond.`);
     }, 15_000);
     // PR-backed workspaces keep their existing branch. A parked draft with a
     // repo starts in Code on a fresh branch, matching the New session palette
@@ -697,7 +700,7 @@ export function WorkspacePane({
             />
           }
           className={cn(
-            "[corner-shape:squircle]",
+            "rounded-control",
             isPhone &&
               "size-11 min-h-11 rounded-control border-transparent text-dim shadow-none [corner-shape:squircle]",
             overflowOpen && "bg-hover text-fg",
@@ -1089,7 +1092,14 @@ export function WorkspacePane({
           }}
         />
         {startError && (
-          <InlineAlert className="mt-2.5">{startError}</InlineAlert>
+          <InlineAlert
+            appearance="plain"
+            className="mt-2 px-4"
+            onRetry={() => handleStart(prompt, lastStartOpts.current)}
+            onDismiss={() => setStartError(null)}
+          >
+            {startError}
+          </InlineAlert>
         )}
       </div>
     </div>,

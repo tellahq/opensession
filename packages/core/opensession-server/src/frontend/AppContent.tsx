@@ -859,6 +859,7 @@ export function AppContent({
     actions: {
       refreshWorkspaces,
       openPrefilledSession,
+      hidePalette,
       showToast,
       dropStalePins,
     },

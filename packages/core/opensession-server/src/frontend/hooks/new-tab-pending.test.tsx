@@ -62,7 +62,7 @@ test("PR and git reads wait until a new tab's create lands", async () => {
   for (const path of [
     "../components/PrStatusBar.tsx",
     "../components/WorkspaceSummary.tsx",
-    "../components/StagingLink.tsx",
+    "./useStagingDeploy.ts",
     "../components/WorkspaceInfo.tsx",
   ]) {
     const file = await source(path);

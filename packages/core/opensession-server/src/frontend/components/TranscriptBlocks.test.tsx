@@ -358,7 +358,7 @@ describe("TranscriptBlocks compact tool runs", () => {
     expect(html).not.toContain("package.json");
   });
 
-  test("opens tool-only work directly without repeating its group", () => {
+  test("opens tool-only work to the same closed group a narrated fold has", () => {
     setTurnPrefs("open", "folded");
     const html = renderToStaticMarkup(
       <TranscriptBlocks live entries={toolEntries} />,
@@ -366,11 +366,10 @@ describe("TranscriptBlocks compact tool runs", () => {
 
     expect(html).toContain('aria-expanded="true"');
     expect(html).toContain(">Working</span>");
-    expect(html).toContain("ran 1 command, read 1 file</span>");
-    expect(html).not.toContain('data-tool-run="true"');
-    expect(html).not.toContain("Show 2 grouped steps");
-    expect(html).toContain("git status");
-    expect(html).toContain("package.json");
+    expect(html).toContain("Ran 1 command, read 1 file");
+    expect(html).not.toContain("ran 1 command, read 1 file");
+    expect(html.match(/data-tool-run="true"/g)).toHaveLength(1);
+    expect(html).toContain("Show 2 grouped steps");
     setTurnPrefs(null);
   });
 
@@ -412,8 +411,8 @@ describe("TranscriptBlocks compact tool runs", () => {
       );
       expect(html).toContain(">Working</span>");
       expect(html).not.toMatch(WORKED_TITLE);
-      expect(html).toContain("cargo test --release zz_timing");
-      expect(html.indexOf("cargo test")).toBeLessThan(
+      expect(html).toContain("Ran 1 command");
+      expect(html.indexOf("Ran 1 command")).toBeLessThan(
         html.indexOf("Are you on option B?"),
       );
     });
@@ -537,6 +536,43 @@ describe("TranscriptBlocks compact tool runs", () => {
     expect(html).not.toContain("Reading the lockfile next.");
   });
 
+  test("keeps one fold when the text after a mid-turn message follows a step", () => {
+    setTurnPrefs(null);
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        entries={[
+          ...toolEntries.slice(0, 3),
+          {
+            id: "steer",
+            type: "user",
+            content: "How long is left?",
+            timestamp: "2026-08-13T06:00:03.500Z",
+          },
+          ...bashCall(2, "git fetch"),
+          {
+            id: "progress",
+            type: "assistant",
+            content: "Writing the web side now.",
+            timestamp: "2026-08-13T06:00:05.500Z",
+          },
+          ...bashCall(3, "bun test"),
+          {
+            id: "answer",
+            type: "assistant",
+            content: "Finished both checks.",
+            timestamp: "2026-08-13T06:00:09Z",
+          },
+        ]}
+      />,
+    );
+
+    // One fold above the message and one below it, not two below it.
+    const below = html.slice(html.indexOf("How long is left?"));
+    expect(below.match(WORKED_TITLES)).toHaveLength(1);
+    expect(html).not.toContain("Writing the web side now.");
+    expect(html).toContain("Finished both checks.");
+  });
+
   test("keeps a mid-turn compaction inside one Worked group", () => {
     setTurnPrefs(null);
     const compaction: TranscriptEntry = {
@@ -565,6 +601,167 @@ describe("TranscriptBlocks compact tool runs", () => {
     // One group, timed across the compaction from its first step to its last.
     expect(html.match(WORKED_TITLES)).toEqual([">Worked for 3s</span>"]);
     expect(html).toContain("The repository is clean.");
+  });
+
+  test("folds an automated event and its work into one row named by the event", () => {
+    setTurnPrefs(null);
+    const event: TranscriptEntry = {
+      id: "conflict",
+      type: "user",
+      content:
+        "[GitHub] PR #5682 “Add a toggle” now has merge conflicts with its base branch. https://github.com/acme/app/pull/5682 This session is assigned to handle it.",
+      timestamp: "2026-08-13T05:50:00Z",
+    };
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        entries={[
+          event,
+          ...toolEntries.slice(1),
+          {
+            id: "answer",
+            type: "assistant",
+            content: "PR #5682 is conflict-free.",
+            timestamp: "2026-08-13T06:01:00Z",
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain(
+      '>PR #5682 now has merge conflicts with its base branch</span><span class="flex-none">· 11m</span>',
+    );
+    // Neither the event's centered notice nor a second "Worked" row.
+    expect(html).not.toContain("Add a toggle");
+    expect(html).not.toMatch(WORKED_TITLE);
+    expect(html).toContain("PR #5682 is conflict-free.");
+
+    const open = renderToStaticMarkup(
+      <TranscriptBlocks
+        reviewLoopsOpen
+        entries={[
+          event,
+          ...toolEntries.slice(1),
+          {
+            id: "answer",
+            type: "assistant",
+            content: "PR #5682 is conflict-free.",
+            timestamp: "2026-08-13T06:01:00Z",
+          },
+        ]}
+      />,
+    );
+    // Opened, no instructions meant for the agent and no link to the PR
+    // the row already names.
+    expect(open).not.toContain("assigned to handle it");
+    expect(open).not.toContain("pull/5682");
+  });
+
+  test("an opened CI failure row lists each failed check as a short link", () => {
+    setTurnPrefs(null);
+    const open = renderToStaticMarkup(
+      <TranscriptBlocks
+        reviewLoopsOpen
+        entries={[
+          {
+            id: "ci",
+            type: "user",
+            content:
+              "[GitHub] CI failed on PR #563 at db9dba6729:\n- Secret scan (failure): https://github.com/acme/app/actions/runs/1\n\nThis session is assigned to handle it. Read the failing jobs' logs, fix the cause and push.",
+            timestamp: "2026-08-13T05:50:00Z",
+          },
+          ...toolEntries.slice(1),
+          {
+            id: "answer",
+            type: "assistant",
+            content: "The failure is not from this PR.",
+            timestamp: "2026-08-13T06:01:00Z",
+          },
+        ]}
+      />,
+    );
+    expect(open).toContain(">CI failed on PR #563 at db9dba6729</span>");
+    expect(open).toContain(
+      'href="https://github.com/acme/app/actions/runs/1" target="_blank" rel="noopener">Secret scan · failure</a>',
+    );
+    expect(open).not.toContain("assigned to handle it");
+    expect(open.match(/>CI failed on PR #563/g)).toHaveLength(1);
+  });
+
+  test("an automated event answered with a status is one status row", () => {
+    setTurnPrefs(null);
+    const entries: TranscriptEntry[] = [
+      {
+        id: "conflict",
+        type: "user",
+        content:
+          "[GitHub] PR #5682 “Add a toggle” now has merge conflicts with its base branch. https://github.com/acme/app/pull/5682 This session is assigned to handle it.",
+        timestamp: "2026-08-13T05:50:00Z",
+      },
+      ...toolEntries.slice(1),
+      {
+        id: "status",
+        type: "assistant",
+        content: "✓ **Merge conflicts**: Resolved",
+        timestamp: "2026-08-13T06:01:00Z",
+      },
+    ];
+    const html = renderToStaticMarkup(<TranscriptBlocks entries={entries} />);
+    expect(html.match(/data-progress-topic=/g)).toHaveLength(1);
+    expect(html).toContain('<span class="flex-none text-faint">· 11m</span>');
+    // No event row, Worked row or answer footer beside it.
+    expect(html).not.toContain("now has merge conflicts");
+    expect(html).not.toMatch(WORKED_TITLE);
+    expect(html).not.toContain('aria-label="Copy message"');
+
+    const open = renderToStaticMarkup(
+      <TranscriptBlocks reviewLoopsOpen entries={entries} />,
+    );
+    // Opened, no instructions meant for the agent and no link to the PR
+    // the row already names.
+    expect(open).not.toContain("assigned to handle it");
+    expect(open).not.toContain("pull/5682");
+    expect(open).toContain("Ran 1 command, read 1 file");
+  });
+
+  test("a reply that opens with a status names the work row above it", () => {
+    setTurnPrefs(null);
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        entries={[
+          ...toolEntries,
+          {
+            id: "answer",
+            type: "assistant",
+            content:
+              "◷ **Native build**: Running\n\nI didn't start a new build: one is already queued.",
+            timestamp: "2026-08-13T06:00:35Z",
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain(
+      '<span class="font-medium text-fg">Native build</span>',
+    );
+    expect(html).toContain('<span class="flex-none">· 3s</span>');
+    expect(html).not.toMatch(WORKED_TITLE);
+    expect(html).not.toContain("<strong>Native build</strong>");
+    expect(html).toContain("one is already queued");
+  });
+
+  test("leaves the duration to the Worked fold, not the answer's footer too", () => {
+    setTurnPrefs(null);
+    const footerDuration = /pl-1 text-meta font-medium[^>]*>[^<]+</;
+    const answer: TranscriptEntry = {
+      id: "answer",
+      type: "assistant",
+      content: "The repository is clean.",
+      timestamp: "2026-08-13T06:03:07Z",
+    };
+    const worked = renderToStaticMarkup(
+      <TranscriptBlocks entries={[...toolEntries, answer]} />,
+    );
+    expect(worked).toContain("Worked for");
+    expect(worked).toContain('aria-label="Copy message"');
+    expect(worked).not.toMatch(footerDuration);
   });
 
   test("keeps a compaction between turns as its own line", () => {
@@ -698,7 +895,7 @@ describe("TranscriptBlocks compact tool runs", () => {
     );
 
     expect(html.match(WORKED_TITLES)).toHaveLength(1);
-    expect(html).toContain("ran 1 command, read 1 file");
+    expect(html).toContain("Ran 1 command, read 1 file");
     setTurnPrefs(null);
   });
 
@@ -749,13 +946,14 @@ describe("TranscriptBlocks compact tool runs", () => {
     setTurnPrefs("open");
     const html = render();
 
-    expect(html).not.toContain('data-tool-run="true"');
+    // Open, the calls sit in one closed group that carries the counts.
+    expect(html.match(/data-tool-run="true"/g)).toHaveLength(1);
     expect(html).toContain('aria-expanded="true"');
-    expect(html).toContain("edited 2 files, ran 1 command");
+    expect(html).toContain("Edited 2 files, ran 1 command");
     expect(html).toContain("+3");
     expect(html).toContain("-3");
-    expect(html).not.toContain("Show 4 grouped steps");
-    expect(html).toContain('data-eid="edit-1"');
+    expect(html).toContain("Show 4 grouped steps");
+    expect(html).not.toContain('data-eid="edit-1"');
     setTurnPrefs(null);
   });
 
@@ -799,10 +997,10 @@ describe("TranscriptBlocks compact tool runs", () => {
     const html = render();
 
     expect(html).toContain(">Working</span>");
-    expect(html).toContain("edited 1 file</span>");
+    expect(html).toContain("Edited 1 file");
     expect(html).toContain("+400");
     expect(html).toContain("-23");
-    expect(html).not.toContain('data-tool-run="true"');
+    expect(html).toContain('data-tool-run="true"');
     setTurnPrefs(null);
   });
 
@@ -812,9 +1010,8 @@ describe("TranscriptBlocks compact tool runs", () => {
       <TranscriptBlocks live entries={toolEntries} />,
     );
 
-    // Nothing to disclose, so no grouped row and no indent under one.
+    // Nothing to disclose, so no grouped row.
     expect(html).not.toContain('data-tool-run="true"');
-    expect(html).not.toContain('class="ml-3"');
     expect(html).toContain("git status");
     expect(html).toContain("package.json");
     setTurnPrefs(null);
@@ -1098,7 +1295,8 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
     expect(running).toContain('data-narration=""');
     expect(running).toContain('data-tool-run="true"');
     expect(running).not.toContain("git status");
-    expect(running).toContain("bun test");
+    expect(running).not.toContain("bun test");
+    expect(running).toContain("Ran 1 command, read 1 file");
 
     const settled = renderToStaticMarkup(
       <TranscriptBlocks entries={narratedTurn} />,
@@ -2075,7 +2273,7 @@ describe("TranscriptBlocks review loops", () => {
     expect(html).toContain("M9.75 12.75L10.1837 13.6744");
     expect(html).toContain("text-faint");
     expect(html).toContain("1 round · 5/5 · 8 checks passed");
-    expect(html).toContain("mt-0.5 pl-2");
+    expect(html).toContain('class="mt-0.5 [&amp;&gt;*:last-child]:mb-0"');
     expect(html).toContain(
       "flex size-[22px] flex-none self-center items-center justify-center",
     );
@@ -2254,6 +2452,62 @@ describe("TranscriptBlocks review loops", () => {
     expect(open).toContain("PR #42 review passed");
     expect(open).toContain("Where things stand: the retry path");
   });
+
+  test("spaces a message between an opened loop's tool rows evenly", () => {
+    const bash = (id: string): TranscriptEntry[] => [
+      {
+        id,
+        type: "tool_use",
+        content: "",
+        timestamp: "2026-08-12T12:01:00Z",
+        toolName: "Bash",
+        toolUseId: `use-${id}`,
+        toolInput: { command: "git status" },
+      },
+      {
+        id: `res-${id}`,
+        type: "tool_result",
+        content: "ok",
+        timestamp: "2026-08-12T12:01:01Z",
+        toolUseId: `use-${id}`,
+      },
+    ];
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        reviewLoopsOpen
+        entries={[
+          {
+            id: "review",
+            type: "user",
+            content:
+              "[GitHub] <!--os:review-handoff-->\n🔍 This session's PR #42 was just reviewed and is not merge-ready.",
+            timestamp: "2026-08-12T12:00:00Z",
+          },
+          ...bash("a"),
+          {
+            id: "mid",
+            type: "assistant",
+            content: "The finding does not hold.",
+            timestamp: "2026-08-12T12:02:00Z",
+          },
+          ...bash("b"),
+          {
+            id: "wrap",
+            type: "assistant",
+            content: "I left the code unchanged.",
+            timestamp: "2026-08-12T12:03:00Z",
+          },
+        ]}
+      />,
+    );
+    const row = (id: string) =>
+      html.match(new RegExp(`<div class="([^"]*)" data-eid="${id}"`))?.[1];
+    // Tool rows sit flush, so the message carries the gap on both sides
+    // rather than a turn's 18px below and nothing above.
+    expect(row("mid")).toContain("my-2");
+    expect(row("mid")).not.toContain("mb-4.5");
+    expect(row("wrap")).toContain("mb-4.5");
+  });
 });
 
 describe("TranscriptBlocks progress rows", () => {
@@ -2377,7 +2631,7 @@ describe("TranscriptBlocks progress rows", () => {
     const open = renderToStaticMarkup(
       <TranscriptBlocks entries={work} reviewLoopsOpen />,
     );
-    expect(open).toContain("check-build");
+    expect(open).toContain("Ran 1 command");
     expect(open).toContain('aria-label="Earlier updates"');
   });
 
@@ -2411,9 +2665,31 @@ describe("TranscriptBlocks progress rows", () => {
     const open = renderToStaticMarkup(
       <TranscriptBlocks entries={shipped} reviewLoopsOpen />,
     );
-    expect(open).toContain("CI: Running");
-    expect(open).toContain("Deployment: Running");
-    expect(open).toContain("deploy status");
+    // Read after the fact, a status says what the wait was, not "Running".
+    expect(open).toContain("Waited for CI · 1s");
+    // A CI wait without a result keeps the dashed ring; others keep the clock.
+    expect(open).toContain('stroke-dasharray="2.6 2.6"');
+    expect(open).toContain("M12 8.25V12L14.75 14.25");
+    expect(open).toContain("Waited for deployment · 1s");
+    expect(open).not.toContain("CI: Running");
+    expect(open).toContain("Ran 1 command");
+  });
+
+  test("a mid-turn update closes the wait it reports on", () => {
+    const closed = [
+      ...shipped.slice(0, 4),
+      row("ci-done", "assistant", "✓ **CI**: All checks passed", 4),
+      ...shipped.slice(4),
+    ];
+    const open = renderToStaticMarkup(
+      <TranscriptBlocks entries={closed} reviewLoopsOpen />,
+    );
+    expect(open).toContain("CI passed · 2s");
+    // CI takes a check run's circled check, not the plain one.
+    expect(open).toContain("M4.75 12C4.75 7.99594");
+    expect(open).not.toContain("All checks passed");
+    expect(open).not.toContain("Waited for CI");
+    expect(open).toContain("Waited for deployment · 1s");
   });
 
   test("an answered task folds the same way across indexed ranges", () => {

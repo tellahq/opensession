@@ -307,6 +307,112 @@ final class ProgressUpdatesTests: XCTestCase {
         XCTAssertEqual(last.id, "c")
     }
 
+    /// An automated event and the work it started read as one row named by
+    /// the event, above the answer: no centered notice, no "Worked" row.
+    func testAnAutomatedEventFoldsWithItsWorkIntoOneRow() {
+        var event = TranscriptEntry(
+            id: "e",
+            type: "user",
+            content: "PR #5682 “Add a toggle. Again” now has merge conflicts with its base branch. https://github.com/acme/app/pull/5682 This session is assigned to handle it.",
+            timestamp: "2026-01-01T00:00:00Z"
+        )
+        event.notice = EntryNotice(
+            kind: "system",
+            title: "PR #5682 “Add a toggle. Again” now has merge conflicts with its base branch",
+            tone: "info",
+            body: "collapsed",
+            link: nil,
+            ask: nil,
+            icon: nil
+        )
+        let result = blocks([
+            event,
+            toolUse("t1"), toolResult("t1"),
+            say("a", "PR #5682 is conflict-free.", at: 600),
+        ])
+        let folds = workFolds(result)
+        XCTAssertEqual(folds.count, 1)
+        XCTAssertEqual(folds.first?.trigger, "PR #5682 now has merge conflicts with its base branch")
+        XCTAssertEqual(folds.first?.duration ?? 0, 600, accuracy: 1)
+        XCTAssertEqual(folds.first?.blocks.first?.id, event.id)
+        XCTAssertFalse(result.contains { block in
+            if case .message(let entry) = block { return entry.id == "e" }
+            if case .work = block { return true }
+            return false
+        })
+    }
+
+    /// Handled with nothing for the person, the event's status answer is the
+    /// one row, with the event and its work folded under it.
+    func testAnAutomatedEventAnsweredWithAStatusIsOneRow() {
+        var event = TranscriptEntry(
+            id: "e",
+            type: "user",
+            content: "PR #5682 now has merge conflicts with its base branch. This session is assigned to handle it.",
+            timestamp: "2026-01-01T00:00:00Z"
+        )
+        event.notice = EntryNotice(
+            kind: "system",
+            title: "PR #5682 now has merge conflicts with its base branch",
+            tone: "info",
+            body: "collapsed",
+            link: nil,
+            ask: nil,
+            icon: nil
+        )
+        let result = blocks([
+            say("a", "◷ **CI**: Running"),
+            event,
+            toolUse("t1"), toolResult("t1"),
+            say("s", "✓ **Merge conflicts**: Resolved", at: 600),
+        ])
+        let rows = progressRows(result)
+        XCTAssertEqual(rows.map(\.latest.label), ["CI: Running", "Merge conflicts: Resolved"])
+        guard let work = progressWork(result).last ?? nil else {
+            return XCTFail("the event's work folds under its status row")
+        }
+        XCTAssertEqual(work.trigger, "PR #5682 now has merge conflicts with its base branch")
+        XCTAssertEqual(work.duration ?? 0, 600, accuracy: 1)
+        XCTAssertEqual(work.blocks.first?.id, "e")
+        XCTAssertFalse(result.contains { block in
+            switch block {
+            case .message(let entry): return entry.id == "e" || entry.id == "s"
+            case .work, .footer, .reviewLoop: return true
+            default: return false
+            }
+        })
+    }
+
+    /// A reply that opens with a status line names the work row above it and
+    /// keeps only its prose.
+    func testALeadingStatusNamesTheWorkRow() {
+        let result = blocks([
+            user("u", "Build it"),
+            toolUse("t1"), toolResult("t1"),
+            say("a", "◷ **Native build**: Running\n\nOne is already queued.", at: 35),
+        ])
+        guard let turn = result.lazy.compactMap({ block -> WorkTurn? in
+            if case .work(let turn) = block { turn } else { nil }
+        }).first else { return XCTFail("expected the work row") }
+        XCTAssertEqual(turn.leadStatus?.label, "Native build: Running")
+        XCTAssertTrue(result.contains { block in
+            if case .message(let entry) = block { return entry.text == "One is already queued." }
+            return false
+        })
+        XCTAssertTrue(progressRows(result).isEmpty)
+    }
+
+    /// An event the agent answered without any work stays its own notice.
+    func testAnAutomatedEventWithoutWorkStaysANotice() {
+        var event = user("e", "PR #12 was merged into main by Kent.")
+        event.notice = EntryNotice(
+            kind: "system", title: "PR #12 was merged into main by Kent.", tone: "info",
+            body: nil, link: nil, ask: nil, icon: "merge"
+        )
+        let result = blocks([event, say("a", "Merged.")])
+        XCTAssertTrue(workFolds(result).isEmpty)
+    }
+
     func testARunningTaskKeepsItsStatusRow() {
         let result = blocks(Array(shipped.dropLast()), live: true)
         XCTAssertEqual(progressRows(result).first?.latest.label, "Deployment: Running")
@@ -379,5 +485,86 @@ final class ProgressUpdatesTests: XCTestCase {
         else { return XCTFail("the running call should fold") }
         XCTAssertTrue(turn.isLive)
         XCTAssertEqual(turn.headerTitle, "Working")
+    }
+
+    // MARK: - Status lines inside a work fold (web `foldStatuses`)
+
+    private func update(_ topic: String, _ state: ProgressUpdate.State, _ text: String) -> ProgressUpdate {
+        ProgressUpdate(topic: topic, state: state, text: text)
+    }
+
+    private func minutes(_ at: Double...) -> (Int) -> Date? {
+        { Date(timeIntervalSince1970: at[$0] * 60) }
+    }
+
+    func testFoldStatusNamesTheOutcomeALaterUpdateGave() {
+        let steps = FoldStatus.resolve(
+            [nil, update("CI", .running, "Running"), nil, update("CI", .done, "All checks passed")],
+            startedAt: minutes(0, 1, 5, 5),
+            isLive: false
+        )
+        XCTAssertEqual(steps, [nil, .shown(FoldStatus(topic: "CI", text: "CI passed · 4m", isDone: true)), nil, .folded])
+    }
+
+    func testFoldStatusSaysHowLongItWaitedWhenNothingClosedIt() {
+        let steps = FoldStatus.resolve(
+            [update("CI", .running, "Running"), nil, update("Deployment", .running, "Running"), nil],
+            startedAt: minutes(0, 4, 6, 9),
+            isLive: false
+        )
+        XCTAssertEqual(steps, [
+            .shown(FoldStatus(topic: "CI", text: "Waited for CI · 4m", isDone: false)),
+            nil,
+            .shown(FoldStatus(topic: "Deployment", text: "Waited for deployment · 3m", isDone: false)),
+            nil,
+        ])
+    }
+
+    func testFoldStatusWaitsInThePresentTenseOnlyWhileNothingHasMovedOn() {
+        let updates = [nil, update("CI", .running, "Running"), nil]
+        XCTAssertEqual(
+            FoldStatus.resolve(
+                updates + [update("Deploy", .running, "Running")],
+                startedAt: minutes(0, 1, 3, 4),
+                isLive: true
+            )[1],
+            .shown(FoldStatus(topic: "CI", text: "Waited for CI · 2m", isDone: false))
+        )
+        XCTAssertEqual(
+            FoldStatus.resolve(updates, startedAt: minutes(0, 1, 3), isLive: true)[1],
+            .shown(FoldStatus(topic: "CI", text: "Waiting for CI", isDone: false))
+        )
+        XCTAssertEqual(
+            FoldStatus.resolve(updates, startedAt: minutes(0, 1, 3), isLive: false)[1],
+            .shown(FoldStatus(topic: "CI", text: "Waited for CI · 2m", isDone: false))
+        )
+    }
+
+    func testFoldStatusKeepsTheAgentsOwnWordsBeyondABareState() {
+        let steps = FoldStatus.resolve(
+            [
+                update("Migration", .running, "3 of 12 tables"),
+                nil,
+                update("Deployment", .done, "Done"),
+                update("Release", .running, "Running"),
+                update("Release", .done, "v2.3 is live"),
+            ],
+            startedAt: minutes(0, 2, 3, 4, 6),
+            isLive: false
+        )
+        XCTAssertEqual(steps, [
+            .shown(FoldStatus(topic: "Migration", text: "Migration: 3 of 12 tables · 2m", isDone: false)),
+            nil,
+            .shown(FoldStatus(topic: "Deployment", text: "Deployment done", isDone: true)),
+            .shown(FoldStatus(topic: "Release", text: "Release: v2.3 is live · 2m", isDone: true)),
+            .folded,
+        ])
+    }
+
+    func testCheckTopicsTakeACheckRunsGlyphs() {
+        XCTAssertEqual(ProgressUpdate.symbol(topic: "CI", isDone: false), "circle.dashed")
+        XCTAssertEqual(ProgressUpdate.symbol(topic: "Native build", isDone: true), "checkmark.circle")
+        XCTAssertEqual(ProgressUpdate.symbol(topic: "Deployment", isDone: false), "clock")
+        XCTAssertEqual(ProgressUpdate.symbol(topic: "Deployment", isDone: true), "checkmark")
     }
 }

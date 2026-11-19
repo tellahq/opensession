@@ -109,16 +109,11 @@ export interface ComposerConfig {
    * tints yellow so the state is unmistakable. */
   noteMode?: boolean;
   /**
-   * Ask mode lets the session read the checkout but not change it. It washes
-   * the writing surface green and names itself in a chip above the field, the
-   * same pair note mode takes.
-   *
-   * The pair is the point. The wash alone could not carry the state: at 7%
-   * green under note mode's 10% yellow the two surfaces were one faint tint
-   * apart (8.6 dE in light, less in dark), and you never see them side by side
-   * to compare, so a tinted composer stopped saying which mode was active.
-   * With a named chip on both, the wash says something is different and the
-   * chip says what, so neither state can be mistaken for the other.
+   * Ask mode lets the session read the checkout but not change it. It names
+   * itself in a green chip above the field and leaves the writing surface its
+   * ordinary colour: the mode lasts the session's whole life, and a box that
+   * stays green reads as a different input rather than a state. Note mode,
+   * one message long, keeps its wash as well as its chip.
    */
   askMode?: boolean;
   /** The exit is in flight: the chip says so and its close button stops taking

@@ -740,11 +740,11 @@ export function PrPanel({
     const prNumber = pr.number;
     const headSha = pr.headRefOid;
     const bypassing = bypasses.length
-      ? ` Bypasses ${bypasses.join(", ")}.`
+      ? `, skipping ${bypasses.join(", ")}`
       : "";
     confirmMerge({
       title: `Force merge #${pr.number}?`,
-      description: `Squash “${pr.title}” into ${pr.baseRefName} now.${bypassing} Uses your own ${provider.name} permissions, so it only works if you may bypass branch protection.`,
+      description: `Squash into ${pr.baseRefName} now${bypassing}, using your ${provider.name} permissions.`,
       confirmLabel: "Force merge",
       destructive: true,
       onConfirm: () => {
@@ -1397,7 +1397,6 @@ export function PrPanel({
                 sessionId={sessionId}
                 canSend={!!editGate}
                 send={send}
-                layout="inline"
               />
             )}
             {linkable && (
@@ -1437,7 +1436,6 @@ export function PrPanel({
                 canSend={!!send && !!editGate}
                 send={send ?? NOOP_SEND}
                 toolbarTarget={worktreeToolbarTarget}
-                showShipActions={false}
               />
             </div>
           ) : (

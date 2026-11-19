@@ -116,7 +116,9 @@ enum ServerEvent: Sendable {
     /// A git-host webhook changed PR, review, or check state for this branch.
     /// This frame is app-wide and therefore has no session id.
     case prUpdated(repo: String, branch: String)
-    case notice(String)
+    /// `tone` is the server's own call; older servers send none, and the
+    /// client falls back to reading the wording (`NoticeTone.derived`).
+    case notice(String, tone: NoticeTone? = nil)
     case serverError(String)
     // Shell output, for the session's terminal panel. Each frame carries the
     // `termId` its sender chose, so one socket could run several shells; the
@@ -337,7 +339,10 @@ enum ServerEvent: Sendable {
             guard let repo = frame.repo, let branch = frame.branch else { return .ignored }
             return .prUpdated(repo: repo, branch: branch)
         case "notice":
-            return .notice(frame.message ?? "")
+            return .notice(
+                frame.message ?? "",
+                tone: frame.tone.flatMap(NoticeTone.init(rawValue:))
+            )
         case "error":
             return .serverError(frame.message ?? "Unknown server error")
         case "term_ready":
@@ -668,6 +673,8 @@ private struct RawFrame: Decodable {
     let repo: String?
     let branch: String?
     let message: String?
+    /// A `notice` frame's tone ("info", "warn", "error").
+    let tone: String?
     let queueId: String?
     let truncated: Bool?
     let startOffset: Int?

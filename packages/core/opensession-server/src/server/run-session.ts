@@ -67,6 +67,7 @@ import {
   contextWindowFor,
   interactiveFallbackModel,
   modelLabel,
+  switchReasonLabel,
   providerFor,
   type Provider,
   routeModel,
@@ -80,6 +81,7 @@ import {
 import {
   cacheMissNotice,
   loopTickMessage,
+  noticeText,
 } from "@tellahq/opensession-protocol/notices";
 import { loopExpired, loopTickNote } from "./session-loop";
 import { RESTART_QUEUE_NOTICE_MESSAGE } from "@tellahq/opensession-protocol/session";
@@ -1629,7 +1631,8 @@ async function drainQueueInner(sessionId: string): Promise<void> {
         broadcastToSession(sessionId, {
           type: "notice",
           sessionId,
-          message: `Holding ${claim.heldCount} queued message${claim.heldCount === 1 ? "" : "s"} until the agent fully completes (worker sessions still running). Steer sends one in sooner.`,
+          message: `Holding ${claim.heldCount} queued message${claim.heldCount === 1 ? "" : "s"} until workers finish`,
+          tone: "info",
         });
       }
       watchExternalRunAndDrain(sessionId);
@@ -2571,7 +2574,11 @@ export async function maybeLaunchSandboxedRun(
     );
     broadcastToSession(session.id, {
       type: "notice",
-      message: `Sandbox unavailable (${reason}) — the prompt was not run. Retry when ${sbProvider} is healthy or explicitly choose another environment for a new session.${dialBackHint}`,
+      message: noticeText(
+        "Sandbox unavailable · prompt not run",
+        `${reason}. Retry when ${sbProvider} is healthy, or pick another environment for a new session.${dialBackHint}`,
+      ),
+      tone: "error",
     });
     throw new Error(`Sandbox unavailable: ${reason}`);
   }
@@ -2675,8 +2682,8 @@ export async function maybeQueueAutoContinue(opts: {
         });
         broadcastToSession(sessionId, {
           type: "notice",
-          message:
-            "The interrupted turn never read the latest message(s) — auto-continuing so they're addressed.",
+          message: "Catching up on unread messages",
+          tone: "info",
         });
         await enqueuePrompt(
           sessionId,
@@ -2704,8 +2711,8 @@ export async function maybeQueueAutoContinue(opts: {
           });
           broadcastToSession(sessionId, {
             type: "notice",
-            message:
-              "Turn was cut short by an engine stall — auto-continuing (state preserved).",
+            message: "Engine stalled · continuing",
+            tone: "warn",
           });
           await enqueuePrompt(
             sessionId,
@@ -2744,10 +2751,11 @@ export async function maybeQueueAutoContinue(opts: {
   broadcastToSession(sessionId, {
     type: "notice",
     message: endedOnFabricatedTranscript
-      ? "Turn ended on a narrated (never-executed) tool call — auto-continuing with a correction."
+      ? "Last step never ran · continuing"
       : queuedBehind > 0
-        ? `Still mid-task — auto-continuing first; ${queuedBehind} queued message${queuedBehind === 1 ? "" : "s"} deliver once the agent fully finishes.`
-        : "Turn ended on an announced next step without doing it — auto-continuing.",
+        ? `Continuing first · ${queuedBehind} queued`
+        : "Continuing unfinished step",
+    tone: "info",
   });
   // Fenced so the transcript never shows it as a user bubble: the parsers
   // strip <opensession:context> from user text and skip the then-empty entry,
@@ -3152,7 +3160,8 @@ async function runSessionPromptInner(
     if (session.branch) {
       broadcastToSession(sessionId, {
         type: "notice",
-        message: `Worktree missing. Recreating it from ${session.branch}…`,
+        message: "Worktree missing · recreating it",
+        tone: "info",
       });
       let revived = false;
       try {
@@ -3161,7 +3170,11 @@ async function runSessionPromptInner(
       } catch (e) {
         broadcastToSession(sessionId, {
           type: "notice",
-          message: `Couldn't recreate the worktree: ${e instanceof Error ? e.message : e}. Running in the main checkout.`,
+          message: noticeText(
+            "Couldn't recreate worktree · using main checkout",
+            e instanceof Error ? e.message : String(e),
+          ),
+          tone: "warn",
         });
         cwd = repo.repo;
       }
@@ -3182,8 +3195,8 @@ async function runSessionPromptInner(
     } else {
       broadcastToSession(sessionId, {
         type: "notice",
-        message:
-          "This session's worktree is gone; running in the main checkout.",
+        message: "Worktree gone · using main checkout",
+        tone: "warn",
       });
       cwd = repo.repo;
     }
@@ -3876,7 +3889,8 @@ async function runSessionPromptInner(
         if (to && !persistSwitch) {
           broadcastToSession(sessionId, {
             type: "notice",
-            message: `${modelLabel(event.fromModel)} ${event.switchReason || "fell back"} — using ${modelLabel(to)} for this turn only.`,
+            message: `Using ${modelLabel(to)} this turn · ${modelLabel(event.fromModel)} ${switchReasonLabel(event.switchReason)}`,
+            tone: "warn",
           });
         }
         if (persistSwitch && session.source === "opensession") {
@@ -4045,6 +4059,7 @@ async function runSessionPromptInner(
               await appendTranscriptEntries(ocId, [
                 transcriptLineRunnerNotice(
                   cacheMissNotice(event.usage?.cacheCreationTokens),
+                  { tone: "info" },
                 ),
               ]);
             } catch {}
@@ -4064,8 +4079,8 @@ async function runSessionPromptInner(
           watchExternalRunAndDrain(sessionId);
           broadcastToSession(sessionId, {
             type: "notice",
-            message:
-              "Session was busy — message queued; it sends when the current run finishes.",
+            message: "Queued · sends after this run",
+            tone: "info",
           });
           return;
         }

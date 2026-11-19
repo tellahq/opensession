@@ -51,9 +51,6 @@ struct TurnBlockView: View {
                         worktreeDir: worktreeDir,
                         isLive: turn.isLive,
                         showsTools: true,
-                        // The turn header already summarizes a tool-only run.
-                        // Opening it reveals calls directly instead of adding
-                        // a second row with the same step count.
                         rendersToolCallsInPlace: flatTools,
                         expansionState: expansionState
                     )
@@ -117,12 +114,28 @@ struct TurnBlockView: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 5) {
-                Text(turn.headerTitle)
-                    .font(.subheadline)
-                    .monospacedDigit()
+                if let status = turn.leadStatus, !turn.isLive {
+                    // The reply's own status names its work: one row.
+                    Image(systemName: status.symbol)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(status.state == .done ? OS1VisualStyle.greenInk : OS1VisualStyle.textDim)
+                    Text("\(Text(status.topic).fontWeight(.medium).foregroundStyle(OS1VisualStyle.text))\(Text(": \(status.text)").foregroundStyle(OS1VisualStyle.textDim))")
+                        .font(.subheadline)
+                        .lineLimit(1)
+                    if let duration = turn.durationLabel {
+                        Text("· \(duration)")
+                            .font(.subheadline)
+                            .monospacedDigit()
+                            .fixedSize()
+                    }
+                } else {
+                    Text(turn.headerTitle)
+                        .font(.subheadline)
+                        .monospacedDigit()
+                        .fixedSize()
+                }
                 chevron
             }
-            .fixedSize()
             // While a closed fold is live, name the step it is on so a long
             // build never looks stalled.
             if !state.expanded, turn.isLive, let preview = turn.livePreview {
@@ -177,7 +190,10 @@ struct TurnBlockView: View {
         }
     }
 
-    private var accessibilityLabel: String { turn.headerTitle }
+    private var accessibilityLabel: String {
+        guard let status = turn.leadStatus, !turn.isLive else { return turn.headerTitle }
+        return [status.label, turn.durationLabel].compactMap { $0 }.joined(separator: ", ")
+    }
 }
 
 extension WorkTurn {
@@ -209,6 +225,9 @@ extension WorkTurn {
 /// another makes a reader open two things to see one.
 struct TurnStepsView: View {
     let items: [TurnItem]
+    /// A loop fold's status steps by entry id (`LoopWorkRows`), drawn as
+    /// one quiet line or, folded into an earlier one, not at all.
+    var statuses: [String: FoldStatus.Step] = [:]
     let sessionId: String
     var worktreeDir: String?
     let isLive: Bool
@@ -224,11 +243,13 @@ struct TurnStepsView: View {
 
     private enum TurnSection: Identifiable {
         case message(TranscriptEntry)
+        case status(id: String, FoldStatus)
         case tools([ToolCallItem], kind: ToolRunKind)
 
         var id: String {
             switch self {
             case .message(let entry): entry.id
+            case .status(let id, _): id
             case .tools(let items, _): "tools-\(items.first?.id ?? "empty")"
             }
         }
@@ -238,6 +259,8 @@ struct TurnStepsView: View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(sections) { section in
                 switch section {
+                case .status(_, let status):
+                    ProgressStatusLine(status: status)
                 case .message(let entry):
                     if entry.isReasoning == true {
                         ReasoningSummaryRow(
@@ -276,10 +299,11 @@ struct TurnStepsView: View {
                                 worktreeDir: worktreeDir,
                                 state: expansionState("run-\(calls[0].id)", false),
                                 isLive: isLive,
-                                // A run of one has nothing to fold: "1 step"
-                                // hides a call behind a tap and says less
-                                // than the call's own row does.
-                                isCompact: kind == .compact && calls.count > 1,
+                                // Even a run of one folds: "Ran 1 command"
+                                // reads as part of the conversation, where the
+                                // call's own row dumped the tool name and its
+                                // whole command between two messages.
+                                isCompact: kind == .compact,
                                 expansionState: expansionState
                             )
                         }
@@ -307,7 +331,12 @@ struct TurnStepsView: View {
         for item in items {
             switch item {
             case .message(let entry):
-                sections.append(.message(entry))
+                switch statuses[entry.id] {
+                case .shown(let status): sections.append(.status(id: entry.id, status))
+                // Folded into an earlier step: the calls either side join one run.
+                case .folded: break
+                case nil: sections.append(.message(entry))
+                }
             case .tool(let call):
                 let kind = runKind(call)
                 if let last = sections.last,
@@ -389,11 +418,19 @@ private struct ToolRunView: View {
                         // row folds away; one tap puts each back with its own
                         // glyph. The tool names stay in the accessibility
                         // label.
-                        Text(summaryTitle)
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(OS1VisualStyle.textDim)
-                            .lineLimit(1)
-                            .layoutPriority(1)
+                        // A run of one says what it is doing in its own
+                        // title, so that title shimmers while it runs.
+                        Group {
+                            if shimmersTitle {
+                                ShimmerText(summaryTitle)
+                            } else {
+                                Text(summaryTitle)
+                                    .foregroundStyle(OS1VisualStyle.textDim)
+                            }
+                        }
+                        .font(.subheadline.weight(.medium))
+                        .lineLimit(1)
+                        .layoutPriority(1)
                         // What the sentence cannot say: a run that edited
                         // files moved lines. Summed from the rows themselves,
                         // so opening the run adds up to what was on it.
@@ -404,12 +441,15 @@ private struct ToolRunView: View {
                         // waiting on, so a long build looked stalled. Say
                         // what the running step is doing, in words; opening
                         // the run shows the command itself.
+                        // The shimmer is the sign it is still going.
                         if let runningStep {
-                            Text(runningStep.presentation.family.activityLabel)
-                                .font(.footnote)
-                                .foregroundStyle(OS1VisualStyle.textFaint)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
+                            ShimmerText(
+                                runningStep.presentation.family.activityLabel,
+                                base: OS1VisualStyle.textFaint
+                            )
+                            .font(.footnote)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                         }
                         Spacer(minLength: 4)
                         if mediaCount > 0 {
@@ -423,11 +463,6 @@ private struct ToolRunView: View {
                                 .font(.caption2)
                                 .foregroundStyle(OS1VisualStyle.redInk)
                                 .fixedSize()
-                        }
-                        if isLive, items.contains(where: \.isPending) {
-                            ProgressView()
-                                .controlSize(.mini)
-                                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
                         }
                     }
                     .toolRowFrame()
@@ -482,9 +517,15 @@ private struct ToolRunView: View {
         return title.isEmpty ? "\(items.count) step\(items.count == 1 ? "" : "s")" : title
     }
     private var failureCount: Int { items.filter(\.isError).count }
+    /// A run of one already says what it is doing, and its shimmering title
+    /// says it is still going.
     private var runningStep: ToolCallItem? {
-        guard isLive, !state.expanded else { return nil }
+        guard isLive, !state.expanded, items.count > 1 else { return nil }
         return items.last(where: \.isPending)
+    }
+    /// Open, each running step shimmers in its own row instead.
+    private var shimmersTitle: Bool {
+        isLive && !state.expanded && items.count == 1 && items.contains(where: \.isPending)
     }
     private var stats: ToolLineStats {
         items.reduce(ToolLineStats()) { $0 + ($1.presentation.lineStats ?? ToolLineStats()) }
@@ -498,7 +539,7 @@ private struct ToolRunView: View {
     private var mediaCount: Int { media.count }
     private var mediaLabel: String { media.label }
     private var accessibilityLabel: String {
-        var parts = ["\(items.count) grouped steps", label]
+        var parts = [items.count == 1 ? "1 grouped step" : "\(items.count) grouped steps", label]
         if !stats.isEmpty {
             parts.append("plus \(stats.additions), minus \(stats.deletions)")
         }

@@ -114,23 +114,28 @@ export function CheckBackBlock({
  */
 export function WorkFoldBlock({
   durationMs,
+  trigger,
   children,
   defaultOpen = false,
   onOpenChange,
 }: {
   durationMs?: number;
+  /** The automated event that started the task, named instead of "Worked":
+   *  "PR #5682 now has merge conflicts · 10m ›". */
+  trigger?: string;
   children: React.ReactNode;
   defaultOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
   const [open, toggle] = useLoopOpen(defaultOpen, onOpenChange);
   const duration = durationMs === undefined ? null : formatDuration(durationMs);
-  const text = duration ? `Worked for ${duration}` : "Worked";
+  const worked = duration ? `Worked for ${duration}` : "Worked";
   return (
     <LoopDisclosure
       title="Worked"
-      text={text}
-      label={text}
+      text={trigger ?? worked}
+      meta={trigger ? (duration ?? undefined) : undefined}
+      label={trigger ? `${trigger}, ${worked.toLowerCase()}` : worked}
       live={false}
       liveLabel=""
       open={open}
@@ -179,6 +184,7 @@ function checkBackCount(rounds: number): string {
 function LoopDisclosure({
   title,
   text,
+  meta,
   label,
   live,
   liveLabel,
@@ -188,6 +194,8 @@ function LoopDisclosure({
 }: {
   title: string;
   text: string;
+  /** Kept whole after `text`, which truncates first. */
+  meta?: string;
   label: string;
   live: boolean;
   liveLabel: string;
@@ -208,6 +216,7 @@ function LoopDisclosure({
         className="-mx-2 flex w-fit max-w-[calc(100%+16px)] min-w-0 cursor-pointer items-baseline gap-1.5 rounded-control border-0 bg-transparent px-2 py-1 text-left font-sans text-item-title leading-5 text-faint transition-colors hover:text-dim phone:min-h-11 phone:items-center"
       >
         <span className="min-w-0 truncate">{text}</span>
+        {meta && <span className="flex-none">· {meta}</span>}
         <span
           className={cn(
             "grid size-5 flex-none self-center place-items-center leading-none transition-transform duration-150",
@@ -223,9 +232,7 @@ function LoopDisclosure({
           />
         )}
       </button>
-      {open && (
-        <div className="mt-0.5 pl-2 [&>*:last-child]:mb-0">{children}</div>
-      )}
+      {open && <div className="mt-0.5 [&>*:last-child]:mb-0">{children}</div>}
     </section>
   );
 }
@@ -282,7 +289,7 @@ function ReviewLoopResultRow({
   const passed = result.status === "passed";
   return (
     <div
-      className="mt-1 flex w-full min-w-0 items-baseline gap-2 rounded-control bg-transparent px-1 py-[3px] font-sans"
+      className="-ml-1 mt-1 flex w-full min-w-0 items-baseline gap-2 rounded-control bg-transparent py-[3px] font-sans"
       aria-label={passed ? "Review passed" : "Review failed"}
     >
       <span

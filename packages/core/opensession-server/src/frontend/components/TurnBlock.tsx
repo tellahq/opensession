@@ -5,12 +5,10 @@ import {
   assetToolPath,
   canonicalToolName,
   ToolCallBlock,
-  toolDisplayName,
   toolFamily,
   toolLineStats,
-  toolSummary,
-  useToolPathRoots,
 } from "./ToolCallBlock";
+import { runningToolLabel } from "../lib/busy-activity";
 import {
   MessageBubble,
   ClampedBody,
@@ -69,12 +67,11 @@ import {
   TurnLineStatsCard,
 } from "./TurnFooter";
 import { transcriptDisclosureLedger } from "../lib/transcript-disclosures";
+import { ProgressStatusLabel } from "./ProgressStatusRow";
+import type { ProgressUpdate } from "../lib/progress-updates";
 import { workSummary, workSummaryTitle } from "../lib/work-summary";
 import { turnScrollAnchor } from "../lib/transcript-block-identity";
-import {
-  RunElapsed,
-  useLiveReasoningStatus,
-} from "./session-viewer/live-run-status";
+import { useLiveReasoningStatus } from "./session-viewer/live-run-status";
 
 interface Props {
   /** One turn's tool calls, provider reasoning, and intermediate narration.
@@ -92,6 +89,9 @@ interface Props {
    * hairline that divides the work from what comes next has nothing to
    * divide. */
   last?: boolean;
+  /** The status line the reply below opened with, named here instead:
+   *  "◷ Native build: Running · 35s ›". */
+  status?: ProgressUpdate;
 }
 
 /** The two Settings → Preferences answers for how work folds, kept live. */
@@ -126,8 +126,8 @@ export const TurnBlock = function TurnBlock({
   onOpenSubagent,
   sessionId,
   last = false,
+  status,
 }: Props) {
-  const pathRoots = useToolPathRoots();
   const allTools = items.filter((it) => it.type === "tool_use");
   const tools = allTools.filter((it) => agentMessageText(it) === null);
   const agentMessages = items.filter((it) => agentMessageText(it) !== null);
@@ -195,12 +195,9 @@ export const TurnBlock = function TurnBlock({
       : lastItem.type === "assistant" && reasoningEntry(lastItem)
         ? reasoningDisplay(lastItem.content).title || "Thinking"
         : lastTool
-          ? `${toolDisplayName(lastTool.toolName)}: ${toolSummary(
-              lastTool.toolName || "Tool",
-              lastTool.toolInput,
-              lastTool.content,
-              pathRoots,
-            )}`
+          ? // In words, not "Bash: <the whole command>": opening the fold
+            // shows the command itself.
+            runningToolLabel(lastTool.toolName)
           : null;
 
   // Memoized against the house rule: a live turn re-renders on every stream
@@ -234,11 +231,13 @@ export const TurnBlock = function TurnBlock({
   ]
     .filter(Boolean)
     .join(" · ");
-  // Tool calls render flat when there is no narration (the outer row is
-  // already the run's summary) or the Tool calls preference keeps them open.
-  // Otherwise grouped rows each name their own counts and ±lines, and the
-  // turn-wide meta line above them read as the same summary twice.
-  const flatTools = pref.tools === "open" || !hasNarration;
+  // Tool calls render flat only when the Tool calls preference keeps them
+  // open. Otherwise every fold, narrated or not, shows the same closed "Ran 4
+  // commands" rows: a tool-only fold that opened to a lowercase "ran 4
+  // commands" line and its calls read differently from the fold below it.
+  // Grouped rows name their own counts and ±lines, so the turn-wide meta line
+  // stays only with flat calls.
+  const flatTools = pref.tools === "open";
   const title = live
     ? "Working"
     : duration
@@ -319,7 +318,14 @@ export const TurnBlock = function TurnBlock({
         className="-mx-2 flex w-fit max-w-[calc(100%+16px)] min-w-0 cursor-pointer items-baseline gap-1.5 rounded-control border-0 bg-transparent px-2 py-1 text-left font-sans text-item-title leading-5 text-faint transition-colors hover:text-dim phone:min-h-11 phone:items-center"
       >
         <Tooltip label={!live ? fullTime(timing.completedAt) : ""}>
-          <span className="flex-shrink-0">{title}</span>
+          {status && !live ? (
+            <span className="flex min-w-0 items-center gap-1.5">
+              <ProgressStatusLabel update={status} />
+              {duration && <span className="flex-none">· {duration}</span>}
+            </span>
+          ) : (
+            <span className="flex-shrink-0">{title}</span>
+          )}
         </Tooltip>
         <span
           className={cn(
@@ -393,18 +399,13 @@ export const TurnBlock = function TurnBlock({
                 sessionId={sessionId}
               />
             ) : (
-              // Tool icons sit flush with the column on desktop. Phones use
-              // the 1px optical correction for the icon's inset glyph.
+              // Tool icons sit flush with the column on desktop. Phones add
+              // a 1px optical correction for the icon's inset glyph.
               <div
                 key={sec.items[0].id}
                 className="-ml-px desktop:ml-0"
                 data-eid={`${sec.items[sec.items.length - 1].id}#sec`}
               >
-                {/* The outer Working row is already a tool-only run's
-                    summary. If someone opens it, reveal the calls directly
-                    instead of inserting a second, identical disclosure. A
-                    narrated turn still lets the Tool calls preference fold
-                    routine calls between its updates. */}
                 <ToolSection
                   items={sec.items}
                   toolResults={toolResults}
@@ -494,36 +495,44 @@ export function ToolSection(props: ToolSectionProps) {
     else runs.push({ compact, items: [entry] });
   }
 
-  return runs.map((run) =>
-    // Two reasons a run stays flat. With the work and its tool calls both
-    // always open there is nothing to disclose, so a header and its indent
-    // would only wrap rows already on screen. And a run of one has nothing
-    // to fold: "1 step" hides
-    // a single call behind a click and says less than the call's own row does.
-    run.compact && run.items.length > 1 && !props.expandAll ? (
-      <ToolRunBlock key={run.items[0].id} {...props} items={run.items} />
-    ) : (
-      <React.Fragment key={run.items[0].id}>
-        {run.items.map((entry) => (
-          <ToolCallBlock
-            key={entry.id}
-            entry={entry}
-            sessionId={props.sessionId}
-            result={
-              entry.toolUseId
-                ? props.toolResults.get(entry.toolUseId)
-                : undefined
-            }
-            pending={
-              props.live &&
-              !!entry.toolUseId &&
-              !props.toolResults.has(entry.toolUseId)
-            }
-            onOpenSubagent={props.onOpenSubagent}
-          />
-        ))}
-      </React.Fragment>
-    ),
+  // The rows keep 4px of padding so a hover fill has room around the glyph,
+  // and the wrapper hangs that padding into the gutter. The 22px glyph slot
+  // also hangs out by the 4px its icon's ink sits inside it, so the drawn
+  // glyph, not its box, starts at the reply column's edge.
+  return (
+    <div className="-ml-2 -mr-1">
+      {runs.map((run) =>
+        // With the work and its tool calls both always open there is nothing to
+        // disclose, so a header and its indent would only wrap rows already on
+        // screen. Otherwise even a run of one folds: "Ran 1 command" reads as
+        // part of the conversation, where the call's own row dumped the tool
+        // name and its whole command between two messages.
+        run.compact && !props.expandAll ? (
+          <ToolRunBlock key={run.items[0].id} {...props} items={run.items} />
+        ) : (
+          <React.Fragment key={run.items[0].id}>
+            {run.items.map((entry) => (
+              <ToolCallBlock
+                key={entry.id}
+                entry={entry}
+                sessionId={props.sessionId}
+                result={
+                  entry.toolUseId
+                    ? props.toolResults.get(entry.toolUseId)
+                    : undefined
+                }
+                pending={
+                  props.live &&
+                  !!entry.toolUseId &&
+                  !props.toolResults.has(entry.toolUseId)
+                }
+                onOpenSubagent={props.onOpenSubagent}
+              />
+            ))}
+          </React.Fragment>
+        ),
+      )}
+    </div>
   );
 }
 
@@ -558,11 +567,12 @@ function ToolRunBlock({
   const { label, pending, additions, deletions, statusLabel, mediaLabel } =
     toolRunAggregate(items, toolResults, live);
   const summary = workSummaryTitle(items);
-  // Folded, the count alone hides what the run is waiting on. A long build
-  // looked like nothing was happening, so name the step still running.
-  const pathRoots = useToolPathRoots();
+  const groupedSteps = `${items.length} grouped step${items.length === 1 ? "" : "s"}`;
+  // Folded, the sentence alone hides what a longer run is waiting on. A long
+  // build looked like nothing was happening, so say what the running step is
+  // doing. A run of one already says it, and the spinner says it is live.
   const running =
-    pending > 0 && !expanded
+    pending > 0 && !expanded && items.length > 1
       ? items.findLast(
           (entry) => entry.toolUseId && !toolResults.has(entry.toolUseId),
         )
@@ -573,8 +583,8 @@ function ToolRunBlock({
       <button
         type="button"
         aria-expanded={expanded}
-        aria-label={`${expanded ? "Hide" : "Show"} ${items.length} grouped steps: ${label}${statusLabel ? `. ${statusLabel}` : ""}`}
-        title={`${items.length} grouped steps`}
+        aria-label={`${expanded ? "Hide" : "Show"} ${groupedSteps}: ${label}${statusLabel ? `. ${statusLabel}` : ""}`}
+        title={groupedSteps}
         onClick={() => rememberExpansion(!expanded)}
         className="group flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-control border-0 bg-transparent px-1 py-[3px] text-left font-sans transition-colors hover:bg-hover/40 phone:min-h-10"
       >
@@ -614,13 +624,7 @@ function ToolRunBlock({
           <LineStats additions={additions} deletions={deletions} />
         )}
         <span className="min-w-0 flex-1 truncate text-label leading-4 text-faint">
-          {running &&
-            `${toolDisplayName(running.toolName)}: ${toolSummary(
-              running.toolName || "Tool",
-              running.toolInput,
-              running.content,
-              pathRoots,
-            )}`}
+          {running && runningToolLabel(running.toolName)}
         </span>
         {mediaLabel && (
           <span className="flex-shrink-0 text-meta text-faint">
@@ -632,7 +636,9 @@ function ToolRunBlock({
         )}
       </button>
       <Fold open={expanded}>
-        <div className="ml-3">
+        {/* A small step in, so the opened steps read as the run's own rather
+            than more rows of the turn. */}
+        <div className="ml-2">
           {items.map((entry) => (
             <ToolCallBlock
               key={entry.id}
@@ -813,7 +819,7 @@ function NarrationMessage({
   sessionId?: string;
 }) {
   return (
-    <div className="my-2 px-1" data-eid={entry.id} data-narration="">
+    <div className="my-2" data-eid={entry.id} data-narration="">
       <ClampedBody
         className={cn(msgBody, "markdown text-fg")}
         content={entry.content}
@@ -835,7 +841,7 @@ function NarrationMessage({
 function StepNotice({ entry }: { entry: TranscriptEntry }) {
   return (
     <div
-      className="flex min-w-0 items-center gap-2 px-1 py-[3px] text-item-title leading-5 text-faint"
+      className="-ml-1 flex min-w-0 items-center gap-2 py-[3px] text-item-title leading-5 text-faint"
       data-eid={entry.id}
     >
       <span className="flex size-[22px] flex-shrink-0 items-center justify-center">
@@ -863,28 +869,14 @@ function ReasoningMessage({
   const title = batchedTitle.split("\n").at(-1) ?? "";
   const last = entries[entries.length - 1];
   const live = useLiveReasoningStatus(active);
-  // Some providers expose prose thinking rather than a short status heading.
-  // Keep that prose readable and shimmer a stable activity label.
-  const liveTitle = title || "Thinking";
   return (
-    <div className="my-2 px-1" data-eid={last.id} data-reasoning="">
+    <div className="my-2" data-eid={last.id} data-reasoning="">
       {live.thinking ? (
-        // ChatGPT's shape: the thought's own header is the run's status
-        // line, "Thinking · 15m", and no second row repeats it below.
-        <div
-          role={live.ownsStatus ? "status" : undefined}
-          className="flex flex-wrap items-baseline gap-x-2"
-        >
-          <TextShimmer className={cn(msgReasoningTitle, msgReasoningShimmer)}>
-            {liveTitle}
-          </TextShimmer>
-          {live.ownsStatus && (
-            <RunElapsed
-              since={live.since}
-              className="text-meta text-faint tabular-nums"
-            />
-          )}
-        </div>
+        // Some providers expose prose thinking rather than a short status
+        // heading. Keep that prose readable and shimmer a stable label.
+        <TextShimmer className={cn(msgReasoningTitle, msgReasoningShimmer)}>
+          {title || "Thinking"}
+        </TextShimmer>
       ) : title ? (
         <div className={msgReasoningTitle}>{title}</div>
       ) : null}
@@ -1072,6 +1064,7 @@ function SuggestedTasks({
 function turnBlockPropsEqual(prev: Props, next: Props): boolean {
   if (prev.live !== next.live) return false;
   if (prev.last !== next.last) return false;
+  if (prev.status !== next.status) return false;
   if (prev.expandWhileRunning !== next.expandWhileRunning) return false;
   if (prev.onOpenSubagent !== next.onOpenSubagent) return false;
   if (prev.sessionId !== next.sessionId) return false;

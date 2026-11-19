@@ -77,7 +77,7 @@ export function WalkthroughCard({
           kind: "image",
           src: mediaUrl(path),
           walkthroughLabel: side,
-          sessionTitle: shot.caption,
+          description: shot.caption,
         });
       }
     });

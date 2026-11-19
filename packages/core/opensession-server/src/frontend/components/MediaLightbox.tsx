@@ -19,6 +19,7 @@ import {
   lightboxDiagramFor,
   openGalleryFrom,
 } from "../lib/media-lightbox-gallery";
+import { DiagramContextMenu } from "./DiagramContextMenu";
 import { MediaLightboxGallery } from "./MediaLightboxGallery";
 
 /**
@@ -40,6 +41,8 @@ export function MediaLightboxHost() {
   const [state, setState] = useState<LightboxState | null>(null);
   const activeTransition = useRef<ViewTransition | null>(null);
   const activeSourceCleanup = useRef<(() => void) | null>(null);
+  // The latest close for the open viewer, for closeLightbox() callers.
+  const closeRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     const open = (request: LightboxRequest) => {
       const id = nextMediaLightboxId();
@@ -94,7 +97,9 @@ export function MediaLightboxHost() {
         setState(next);
       }
     };
-    const unregister = registerMediaLightboxHost(open);
+    const unregister = registerMediaLightboxHost(open, () =>
+      closeRef.current?.(),
+    );
     return () => {
       unregister();
       activeTransition.current?.skipTransition();
@@ -205,6 +210,10 @@ export function MediaLightboxHost() {
     }
   }
 
+  useEffect(() => {
+    closeRef.current = state ? () => close(state) : null;
+  });
+
   const lightbox = state ? (
     <MediaLightboxGallery
       key={state.id}
@@ -234,6 +243,7 @@ export function MediaLightboxHost() {
       ) : (
         <AnimatePresence initial={false}>{lightbox}</AnimatePresence>
       )}
+      <DiagramContextMenu />
     </>
   );
 }

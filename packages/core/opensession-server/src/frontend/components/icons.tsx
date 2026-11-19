@@ -105,6 +105,20 @@ export function IconArrowDown(p: IconProps) {
   );
 }
 
+/** Arrow down into a tray: save a file, where IconArrowDown is a direction. */
+export function IconDownload(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path
+        {...stroke}
+        d="M4.75 14.75v1.5a3 3 0 0 0 3 3h8.5a3 3 0 0 0 3-3v-1.5"
+      />
+      <path {...stroke} d="M8.75 10.75L12 14.25L15.25 10.75" />
+      <path {...stroke} d="M12 14.25V4.75" />
+    </Svg>
+  );
+}
+
 export function IconMic(p: IconProps) {
   return (
     <Svg {...p}>
@@ -1661,6 +1675,18 @@ export function IconIssue(p: IconProps) {
     <Svg {...p}>
       <circle {...stroke} cx="12" cy="12" r="8.25" />
       <circle {...stroke} cx="12" cy="12" r="2.25" />
+    </Svg>
+  );
+}
+
+// iconic-pro rotate-clockwise: IconRestore mirrored, for reload rather than undo.
+export function IconRefresh(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path
+        {...stroke}
+        d="M11 18.25A6.25 6.25 0 1 1 17.25 12v2.385m-2.5-1.635L17 15.25l2.25-2.5"
+      />
     </Svg>
   );
 }

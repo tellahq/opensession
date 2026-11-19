@@ -204,15 +204,25 @@ describe("worktreesInUse", () => {
     if (inUse !== null) expect(inUse.has(cwd)).toBe(false);
   });
 
+  /** A shell copied under a build tool's name. Not `sleep`: Ubuntu 26.04's
+   *  multicall coreutils refuse to run under any name but their own. */
+  function fakeBuild(path: string) {
+    if (process.platform === "darwin") symlinkSync("/bin/bash", path);
+    else copyFileSync("/bin/bash", path);
+  }
+
   it("detects a real build process's cwd as in use", async () => {
     const wt = join(root, "wt-building");
     mkdirSync(wt, { recursive: true });
-    // `cargo` is in BUILD_PROCESS_NAMES; sleep under that name stands in for a
-    // build so the test needs no toolchain and leaves nothing to clean up.
+    // `cargo` is in BUILD_PROCESS_NAMES; an idle shell under that name stands
+    // in for a build so the test needs no toolchain and leaves nothing to
+    // clean up.
     const fakeCargo = join(root, "cargo");
-    if (process.platform === "darwin") symlinkSync("/bin/sleep", fakeCargo);
-    else copyFileSync("/bin/sleep", fakeCargo);
-    const proc = Bun.spawn([fakeCargo, "30"], { cwd: wt });
+    fakeBuild(fakeCargo);
+    const proc = Bun.spawn([fakeCargo, "-c", "read -t 30"], {
+      cwd: wt,
+      stdin: "pipe",
+    });
     try {
       await Bun.sleep(150);
       const inUse = await worktreesInUse(root);
@@ -227,9 +237,11 @@ describe("worktreesInUse", () => {
     const wt = join(root, "wt-rescript");
     mkdirSync(wt, { recursive: true });
     const fakeBsc = join(root, "bsc.exe");
-    if (process.platform === "darwin") symlinkSync("/bin/sleep", fakeBsc);
-    else copyFileSync("/bin/sleep", fakeBsc);
-    const proc = Bun.spawn([fakeBsc, "30"], { cwd: wt });
+    fakeBuild(fakeBsc);
+    const proc = Bun.spawn([fakeBsc, "-c", "read -t 30"], {
+      cwd: wt,
+      stdin: "pipe",
+    });
     try {
       await Bun.sleep(150);
       const inUse = await worktreesInUse(root);
