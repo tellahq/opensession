@@ -776,7 +776,7 @@ export function PrStatusBar({
     const host = providerFromUrl(pr.url)?.name ?? "host";
     confirmForce({
       title: `Force merge #${prNumber}?`,
-      description: `Squash “${pr.title}” into ${pr.baseRefName} now.${bypasses.length ? ` Bypasses ${bypasses.join(", ")}.` : ""} Uses your own ${host} permissions, so it only works if you may bypass branch protection.`,
+      description: `Squash into ${pr.baseRefName} now${bypasses.length ? `, skipping ${bypasses.join(", ")}` : ""}, using your ${host} permissions.`,
       confirmLabel: "Force merge",
       destructive: true,
       onConfirm: () =>
