@@ -49,7 +49,7 @@ export function WorkspaceSummaryAdd({
 }
 
 /**
- * An empty section (no reviewers, no collaborators) as one row instead of a
+ * An empty section (no reviewers yet) as one row instead of a
  * heading. A lone heading reads as the label of whatever row comes next, so
  * the empty case carries its own glyph like every other row, and the whole
  * row opens the picker.
