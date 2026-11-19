@@ -268,10 +268,13 @@ function PrBarButton({
 			    eye: a word carries more mass under its cap band than over it, so
 			    the geometric center reads a touch high. It settles the label
 			    without going back to a nudge that has to carry the whole
-			    correction. */}
-      <span className="translate-y-[0.5px] [text-box:trim-both_cap_alphabetic]">
-        {children}
-      </span>
+			    correction. An icon-only button has no label: an empty span would
+			    still take the flex gap and push the glyph off center. */}
+      {children != null && (
+        <span className="translate-y-[0.5px] [text-box:trim-both_cap_alphabetic]">
+          {children}
+        </span>
+      )}
     </button>
   );
 }
@@ -1213,21 +1216,23 @@ export function PrStatusBar({
             {canForce && (
               <Menu.Root>
                 <Menu.Trigger
+                  // The glyph rides in the icon slot, not the label's
+                  // cap-trimmed span, so it sits in the middle of the box.
+                  // A soft square, not a pill: at 30px wide a pill is a disc.
                   render={
                     <PrBarButton
                       className={cn(
                         actionBtn,
-                        "w-[30px] border-transparent bg-transparent px-0 text-dim",
+                        "w-[30px] rounded-md border-transparent bg-transparent px-0 text-dim",
                       )}
                       tone="secondary"
                       disabled={!!busy}
                       aria-label="Merge options"
                       title="Merge options"
+                      icon={<IconChevronDown size={14} />}
                     />
                   }
-                >
-                  <IconChevronDown size={14} />
-                </Menu.Trigger>
+                />
                 <Menu.Popup
                   align="end"
                   sideOffset={6}
