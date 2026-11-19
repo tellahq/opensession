@@ -19,7 +19,7 @@ const socket = new WebSocket(url, {
 } as unknown as string[]);
 socket.binaryType = "arraybuffer";
 
-const pending: Uint8Array[] = [];
+const pending: Uint8Array<ArrayBuffer>[] = [];
 let connected = false;
 socket.onopen = () => {
   connected = true;
