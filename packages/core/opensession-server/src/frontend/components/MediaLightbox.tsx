@@ -19,6 +19,7 @@ import {
   lightboxDiagramFor,
   openGalleryFrom,
 } from "../lib/media-lightbox-gallery";
+import { DiagramContextMenu } from "./DiagramContextMenu";
 import { MediaLightboxGallery } from "./MediaLightboxGallery";
 
 /**
@@ -234,6 +235,7 @@ export function MediaLightboxHost() {
       ) : (
         <AnimatePresence initial={false}>{lightbox}</AnimatePresence>
       )}
+      <DiagramContextMenu />
     </>
   );
 }

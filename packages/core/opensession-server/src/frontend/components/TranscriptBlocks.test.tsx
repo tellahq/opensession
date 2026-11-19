@@ -567,6 +567,58 @@ describe("TranscriptBlocks compact tool runs", () => {
     expect(html).toContain("The repository is clean.");
   });
 
+  test("folds an automated event and its work into one row named by the event", () => {
+    setTurnPrefs(null);
+    const event: TranscriptEntry = {
+      id: "conflict",
+      type: "user",
+      content:
+        "[GitHub] PR #5682 “Add a toggle” now has merge conflicts with its base branch. https://github.com/acme/app/pull/5682 This session is assigned to handle it.",
+      timestamp: "2026-08-13T05:50:00Z",
+    };
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        entries={[
+          event,
+          ...toolEntries.slice(1),
+          {
+            id: "answer",
+            type: "assistant",
+            content: "PR #5682 is conflict-free.",
+            timestamp: "2026-08-13T06:01:00Z",
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain(
+      '>PR #5682 now has merge conflicts with its base branch</span><span class="flex-none">· 11m</span>',
+    );
+    // Neither the event's centered notice nor a second "Worked" row.
+    expect(html).not.toContain("Add a toggle");
+    expect(html).not.toMatch(WORKED_TITLE);
+    expect(html).toContain("PR #5682 is conflict-free.");
+
+    // Opened, the event's full text leads the work, once.
+    const open = renderToStaticMarkup(
+      <TranscriptBlocks
+        reviewLoopsOpen
+        entries={[
+          event,
+          ...toolEntries.slice(1),
+          {
+            id: "answer",
+            type: "assistant",
+            content: "PR #5682 is conflict-free.",
+            timestamp: "2026-08-13T06:01:00Z",
+          },
+        ]}
+      />,
+    );
+    expect(open.match(/This session is assigned to handle it/g)).toHaveLength(
+      1,
+    );
+  });
+
   test("leaves the duration to the Worked fold, not the answer's footer too", () => {
     setTurnPrefs(null);
     const footerDuration = /pl-1 text-meta font-medium[^>]*>[^<]+</;
@@ -2092,7 +2144,7 @@ describe("TranscriptBlocks review loops", () => {
     expect(html).toContain("M9.75 12.75L10.1837 13.6744");
     expect(html).toContain("text-faint");
     expect(html).toContain("1 round · 5/5 · 8 checks passed");
-    expect(html).toContain("mt-0.5 pl-2");
+    expect(html).toContain('class="mt-0.5 [&amp;&gt;*:last-child]:mb-0"');
     expect(html).toContain(
       "flex size-[22px] flex-none self-center items-center justify-center",
     );

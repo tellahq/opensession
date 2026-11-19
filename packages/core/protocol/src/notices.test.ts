@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+  automatedTriggerTitle,
   cacheMissNotice,
   isGitHubAttribution,
   parseAttribution,
@@ -737,5 +738,44 @@ describe("loop tick detection", () => {
 
   it("leaves ticks from before the sentinel as the person's turn", () => {
     expect(parseLoopTick(`[Michiel (loop)] ${prompt}`)).toBeNull();
+  });
+});
+
+describe("automatedTriggerTitle", () => {
+  const user = (content: string): TranscriptEntry => ({
+    id: "e",
+    type: "user",
+    content,
+    timestamp: "2026-01-01T00:00:00Z",
+  });
+
+  it("names a GitHub event by its opening sentence, without the PR title", () => {
+    expect(
+      automatedTriggerTitle(
+        user(
+          "[GitHub] PR #5682 “Add a toggle. Again” now has merge conflicts with its base branch. https://github.com/acme/app/pull/5682 This session is assigned to handle it.",
+        ),
+      ),
+    ).toBe("PR #5682 now has merge conflicts with its base branch");
+    expect(
+      automatedTriggerTitle(
+        user('[GitHub] PR #12 "Fix it" was merged into main by Kent.'),
+      ),
+    ).toBe("PR #12 was merged into main by Kent");
+  });
+
+  it("is null for people, check-backs and review handoffs", () => {
+    expect(automatedTriggerTitle(user("Please fix the build"))).toBeNull();
+    expect(
+      automatedTriggerTitle({ ...user(""), turnBoundary: true }),
+    ).toBeNull();
+    expect(
+      automatedTriggerTitle({
+        id: "a",
+        type: "assistant",
+        content: "[GitHub] PR #1 merged.",
+        timestamp: "2026-01-01T00:00:00Z",
+      }),
+    ).toBeNull();
   });
 });
