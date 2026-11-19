@@ -62,6 +62,7 @@ export const BRANDS = defineRegistry<{ bg: string; fg?: string }>({
   wafer: { bg: "#000000" },
   openrouter: { bg: "#000000", fg: "#c8ff00" },
   deepseek: { bg: "#4d6bfe" },
+  gemini: { bg: "#1f1f1f", fg: "#8ab4f8" },
   // Engines. Not connectable services, but the same marks under the same
   // registry: an engine picker and a connection row should not draw one brand
   // two ways.
@@ -76,6 +77,7 @@ const DISPLAY_NAMES = defineRegistry<string>({
   moonshotai: "Moonshot AI",
   openrouter: "OpenRouter",
   deepseek: "DeepSeek",
+  gemini: "Gemini",
   workos: "WorkOS",
   posthog: "PostHog",
   elevenlabs: "ElevenLabs",
@@ -315,6 +317,12 @@ export const BRAND_LOGOS = defineRegistry<BrandLogo>({
       "M15.407 10.836a2.24 2.24 0 00-.51-.409 1.084 1.084 0 00-.544-.152c-.255 0-.483.047-.684.14a1.58 1.58 0 00-.84.912c-.074.203-.11.416-.11.631 0 .218.036.43.11.631a1.594 1.594 0 00.84.913c.2.093.43.14.684.14.216 0 .417-.046.602-.135.188-.09.35-.225.475-.392l.928 1.006c-.14.14-.3.261-.482.363a3.367 3.367 0 01-1.083.38c-.17.026-.317.04-.44.04a3.315 3.315 0 01-1.182-.21 2.825 2.825 0 01-.961-.597 2.816 2.816 0 01-.644-.929 2.987 2.987 0 01-.238-1.21c0-.444.08-.847.238-1.21.15-.35.368-.666.643-.929.278-.261.605-.464.962-.596a3.315 3.315 0 011.182-.21c.355 0 .712.068 1.072.204.361.138.685.36.944.649l-.962.97z",
     ],
     evenOdd: true,
+  },
+  gemini: {
+    viewBox: "0 0 24 24",
+    paths: [
+      "M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81",
+    ],
   },
   openrouter: {
     viewBox: "0 0 24 24",
