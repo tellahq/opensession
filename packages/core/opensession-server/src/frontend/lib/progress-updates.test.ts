@@ -5,7 +5,9 @@ import type {
 } from "@tellahq/opensession-protocol/session";
 import {
   collectProgressUpdates,
+  foldStatuses,
   parseProgressUpdate,
+  type ProgressUpdate,
 } from "./progress-updates";
 
 const entry = (
@@ -154,5 +156,93 @@ describe("explicit progress updates", () => {
     ]);
     expect(groups.has("a")).toBe(false);
     expect(groups.get("b")?.entries).toHaveLength(1);
+  });
+});
+
+describe("status lines inside a work fold", () => {
+  const running = (topic: string, text = "Running"): ProgressUpdate => ({
+    topic,
+    state: "running",
+    text,
+  });
+  const done = (topic: string, text: string): ProgressUpdate => ({
+    topic,
+    state: "done",
+    text,
+  });
+  const minutes =
+    (...at: number[]) =>
+    (i: number) =>
+      at[i]! * 60_000;
+
+  test("names the outcome a later update of the same topic gave", () => {
+    expect(
+      foldStatuses(
+        [null, running("CI"), null, done("CI", "All checks passed")],
+        minutes(0, 1, 5, 5),
+        false,
+      ),
+    ).toEqual([
+      undefined,
+      { text: "CI passed · 4m", done: true },
+      undefined,
+      null,
+    ]);
+  });
+
+  test("says how long it waited when no update closed it", () => {
+    expect(
+      foldStatuses(
+        [running("CI"), null, running("Deployment"), null],
+        minutes(0, 4, 6, 9),
+        false,
+      ),
+    ).toEqual([
+      { text: "Waited for CI · 4m", done: false },
+      undefined,
+      { text: "Waited for deployment · 3m", done: false },
+      undefined,
+    ]);
+  });
+
+  test("waits in the present tense only while nothing has moved on", () => {
+    const updates = [null, running("CI"), null];
+    expect(
+      foldStatuses(
+        [...updates, running("Deploy")],
+        minutes(0, 1, 3, 4),
+        true,
+      )[1],
+    ).toEqual({ text: "Waited for CI · 2m", done: false });
+    expect(foldStatuses(updates, minutes(0, 1, 3), true)[1]).toEqual({
+      text: "Waiting for CI",
+      done: false,
+    });
+    expect(foldStatuses(updates, minutes(0, 1, 3), false)[1]).toEqual({
+      text: "Waited for CI · 2m",
+      done: false,
+    });
+  });
+
+  test("keeps the agent's own words beyond a bare state", () => {
+    expect(
+      foldStatuses(
+        [
+          running("Migration", "3 of 12 tables"),
+          null,
+          done("Deployment", "Done"),
+          running("Release"),
+          done("Release", "v2.3 is live"),
+        ],
+        minutes(0, 2, 3, 4, 6),
+        false,
+      ),
+    ).toEqual([
+      { text: "Migration: 3 of 12 tables · 2m", done: false },
+      undefined,
+      { text: "Deployment done", done: true },
+      { text: "Release: v2.3 is live · 2m", done: true },
+      null,
+    ]);
   });
 });

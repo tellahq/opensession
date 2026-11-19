@@ -650,7 +650,7 @@ export function MediaLightboxGallery({
       ? suggestedMediaName(item)
       : undefined;
   // Desktop's actions: plain icons in the top bar beside Close, named by
-  // their tooltips, so the bottom of the viewer is free for the filmstrip.
+  // their tooltips, so the bottom of the viewer is free for its label.
   const tool = (
     label: string,
     icon: React.ReactNode,
@@ -738,11 +738,11 @@ export function MediaLightboxGallery({
     </div>
   );
   // The other pictures in the set, the current one centred and full size.
-  // The phone keeps it above its actions; desktop has it under the picture.
+  // The phone keeps it above its actions; desktop has it in the top bar.
   const filmstrip = (
     <div
       ref={filmstripRef}
-      className="flex h-12 w-full max-w-2xl snap-x snap-mandatory items-center gap-1 overflow-x-auto px-[calc(50%_-_22px)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="flex h-12 w-full snap-x snap-mandatory items-center gap-1 overflow-x-auto px-[calc(50%_-_22px)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       role="group"
       aria-label="Media filmstrip"
     >
@@ -858,7 +858,12 @@ export function MediaLightboxGallery({
             </div>
           )}
         </div>
+        {/* The rest of the set rides in the top bar, so the bottom is left
+            to the picture's own label. */}
         <div className="pointer-events-auto flex items-center gap-3">
+          {many && !isPhone && (
+            <div className="w-[min(360px,32vw)]">{filmstrip}</div>
+          )}
           {many && !isPhone && (
             <span className="text-meta font-medium tabular-nums text-dim">
               {index + 1} of {items.length}
@@ -1225,7 +1230,7 @@ export function MediaLightboxGallery({
           }}
         >
           {/* Before or After names the picture itself, so it sits centred
-              right under it, above the rest of the set. */}
+              right under it. */}
           {item.walkthroughLabel && (
             <span
               className={cn(
@@ -1236,7 +1241,7 @@ export function MediaLightboxGallery({
               {WALKTHROUGH_LABEL_TEXT[item.walkthroughLabel]}
             </span>
           )}
-          {commentHint ?? (many ? filmstrip : null)}
+          {commentHint}
         </div>
       )}
     </motion.div>

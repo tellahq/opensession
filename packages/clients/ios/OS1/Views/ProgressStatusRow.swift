@@ -152,14 +152,25 @@ struct ProgressStatusRow: View {
 /// commands reads as part of the same list. Mirrors the web's
 /// `ProgressStatusLine`.
 struct ProgressStatusLine: View {
-    let update: ProgressUpdate
-    /// An open status row's earlier update drops a repeated topic.
-    var text: String?
+    let text: String
+    let symbol: String
+
+    /// A fold step, worded by `FoldStatus.resolve`.
+    init(status: FoldStatus) {
+        text = status.text
+        symbol = status.isDone ? "checkmark" : "clock"
+    }
+
+    /// An open status row's earlier update, which drops a repeated topic.
+    init(update: ProgressUpdate, text: String? = nil) {
+        self.text = text ?? update.label
+        symbol = update.symbol
+    }
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: ToolRowMetrics.iconSpacing) {
-            ToolRowIcon(symbol: update.symbol)
-            Text(text ?? update.label)
+            ToolRowIcon(symbol: symbol)
+            Text(text)
                 .font(.subheadline)
                 .foregroundStyle(OS1VisualStyle.textDim)
                 .fixedSize(horizontal: false, vertical: true)

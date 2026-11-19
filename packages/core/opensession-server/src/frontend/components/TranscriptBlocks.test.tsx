@@ -2577,9 +2577,26 @@ describe("TranscriptBlocks progress rows", () => {
     const open = renderToStaticMarkup(
       <TranscriptBlocks entries={shipped} reviewLoopsOpen />,
     );
-    expect(open).toContain("CI: Running");
-    expect(open).toContain("Deployment: Running");
+    // Read after the fact, a status says what the wait was, not "Running".
+    expect(open).toContain("Waited for CI · 1s");
+    expect(open).toContain("Waited for deployment · 1s");
+    expect(open).not.toContain("CI: Running");
     expect(open).toContain("Ran 1 command");
+  });
+
+  test("a mid-turn update closes the wait it reports on", () => {
+    const closed = [
+      ...shipped.slice(0, 4),
+      row("ci-done", "assistant", "✓ **CI**: All checks passed", 4),
+      ...shipped.slice(4),
+    ];
+    const open = renderToStaticMarkup(
+      <TranscriptBlocks entries={closed} reviewLoopsOpen />,
+    );
+    expect(open).toContain("CI passed · 2s");
+    expect(open).not.toContain("All checks passed");
+    expect(open).not.toContain("Waited for CI");
+    expect(open).toContain("Waited for deployment · 1s");
   });
 
   test("an answered task folds the same way across indexed ranges", () => {

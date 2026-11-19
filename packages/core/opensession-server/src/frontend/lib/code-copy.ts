@@ -83,9 +83,14 @@ function closeSettings(except?: HTMLElement): void {
 /**
  * Give every code fence under `root` its controls. Idempotent: a fence that
  * already sits in a wrapper is left alone, so this can run again after a
- * re-render without stacking controls.
+ * re-render without stacking controls. `wrap` is where each block's wrapping
+ * switch starts: on in chat, where a fence reads at the turn's width, and off
+ * in a document, where code keeps its lines and scrolls sideways.
  */
-export function decorateCodeBlocks(root: HTMLElement): void {
+export function decorateCodeBlocks(
+  root: HTMLElement,
+  { wrap: wrapLines = true }: { wrap?: boolean } = {},
+): void {
   for (const pre of Array.from(root.querySelectorAll("pre"))) {
     if (pre.parentElement?.classList.contains(WRAP_CLASS)) continue;
     // A ```mermaid or ```vega-lite fence is on its way to becoming a diagram
@@ -96,7 +101,7 @@ export function decorateCodeBlocks(root: HTMLElement): void {
     if (pre.querySelector(REPLACED_FENCE_SELECTOR)) continue;
     const wrap = document.createElement("div");
     wrap.className = WRAP_CLASS;
-    wrap.dataset.wrapped = "true";
+    wrap.dataset.wrapped = String(wrapLines);
 
     const controls = document.createElement("div");
     controls.className = CONTROLS_CLASS;
@@ -141,11 +146,13 @@ export function decorateCodeBlocks(root: HTMLElement): void {
     const wrapButton = document.createElement("button");
     wrapButton.type = "button";
     wrapButton.className = WRAP_BUTTON_CLASS;
-    wrapButton.title = "Turn off code wrapping";
+    wrapButton.title = wrapLines
+      ? "Turn off code wrapping"
+      : "Turn on code wrapping";
     wrapButton.setAttribute("role", "switch");
     wrapButton.setAttribute("aria-labelledby", titleId);
     wrapButton.setAttribute("aria-describedby", descriptionId);
-    wrapButton.setAttribute("aria-checked", "true");
+    wrapButton.setAttribute("aria-checked", String(wrapLines));
     settings.append(wrapButton);
 
     pre.replaceWith(wrap);
