@@ -1,12 +1,9 @@
 import { use } from "react";
-import { PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { NavigationContext } from "../hooks/useNavigation";
 import { isApple } from "../lib/platform";
-import { useSessionPrResource } from "../hooks/useApiResources";
-import type { PrCheck, UnifiedSession } from "../lib/types";
-import { worstPrRef } from "../lib/pr-refs";
-import { sessionPrPresentation } from "../lib/session-prs";
-import { previewOpenable, stagingHref } from "../lib/preview-url";
+import type { UnifiedSession } from "../lib/types";
+import { useStagingDeploy } from "../hooks/useStagingDeploy";
+import { stagingHref } from "../lib/preview-url";
 import { WS_SUMMARY_ICON } from "../lib/workspace-summary-classes";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
@@ -14,8 +11,6 @@ import { toast } from "../ui/toast";
 import { CopyCheck, useCopy } from "../ui/copy";
 import { ContextMenu, MENU_ICON } from "../ui/menu";
 import { IconArrowUpRight, IconCheck, IconCopy, IconGlobe } from "./icons";
-import { checkClass, isDeployment } from "../lib/pr-status-derive";
-import { useSessionPendingCreation } from "../hooks/useSessionPendingCreation";
 import { useShortcutLabel } from "../hooks/useShortcutBindings";
 import { SUMMARY_MARK_HOVER } from "./PrRefStagingMark";
 import { useLinksInBrowserTab } from "../lib/links-in-browser-tab";
@@ -137,34 +132,10 @@ export function StagingLink({
   const shell = use(NavigationContext);
   const navigation = useLinksInBrowserTab() ? shell : null;
 
-  // A merged/closed PR's alias no longer points at this change. The link is a
-  // pre-merge testing affordance. Repos without deployment metadata simply
-  // return no staging URL. PR refs are shared across a workspace, so a tab
-  // without a PR of its own deliberately targets one of the workspace's refs.
-  const presentation = sessionPrPresentation(session.prs);
-  const target = presentation.primary ?? worstPrRef(presentation.additional);
-  const relevant = target
-    ? (target.state ??
-        (target.source === "primary" ? session.prState : undefined)) === "OPEN"
-    : !!session.prUrl && session.prState === "OPEN";
-  const pendingCreation = useSessionPendingCreation();
-  const prResource = useSessionPrResource(
-    session.id,
-    target?.repo || session.repo || undefined,
-    target?.branch,
-    {
-      enabled: relevant && !pendingCreation,
-      refreshInterval: PR_WEBHOOK_FALLBACK_POLL_MS,
-      revision: refreshTick,
-    },
-  );
-  const staging = prResource.data?.staging ?? null;
-  // A Vercel preview deploy is queued/running but butler hasn't posted the URL
-  // comment yet. That is enough to show a loading placeholder, not enough to link.
-  const deployPending = !!prResource.data?.checks?.some(
-    (c: PrCheck) =>
-      isDeployment(c) && checkClass(c.status, c.conclusion) === "check-pending",
-  );
+  // The link is a pre-merge testing affordance. Repos without deployment
+  // metadata simply return no staging URL.
+  const { relevant, staging, deployPending, building, rebuilding } =
+    useStagingDeploy(session, refreshTick);
 
   if (!relevant) return null;
 
@@ -254,14 +225,9 @@ export function StagingLink({
   // staging.status alone leaves the globe green while a rebuild is in flight.
   // The branch alias keeps serving the last Ready deploy until the new one
   // lands, so a rebuild only means "possibly one push behind", never a dead
-  // link — keep it clickable, spin the globe, and say so in the tooltip.
-  // The deploy bot can also flip its own row back to Building on a push; the
-  // server's probe still sees the previous deploy serving (`live`), so that is
-  // a rebuild too. Only a first deploy with nothing behind the alias yet gets a
-  // dead (swallowed) click: before that the alias 404s.
-  const openable = previewOpenable(staging);
-  const building = !openable;
-  const rebuilding = openable && (deployPending || staging.status !== "Ready");
+  // link: keep it clickable, spin the globe, and say so in the tooltip. Only a
+  // first deploy with nothing behind the alias yet gets a dead (swallowed)
+  // click: before that the alias 404s. useStagingDeploy decides which.
   // Deep-link to the agent-flagged route (set_preview_path) so the button
   // opens the feature under test, not the app root.
   const href = stagingHref(staging, session.previewPath);
