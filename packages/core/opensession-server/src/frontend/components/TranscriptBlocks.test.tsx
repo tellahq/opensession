@@ -2752,6 +2752,75 @@ describe("TranscriptBlocks progress rows", () => {
     }
   });
 
+  test("a wrap-up stays visible above a check-back's answer", () => {
+    const settled =
+      "[GitHub] <!--os:review-settled:passed-->\n✅ This session's PR #7 “Add a toggle” passed review. Write a short wrap-up.";
+    const wrapUp =
+      "PR #7 passed review.\n\n**Still to do**\n\n- Decide how to split the menus.";
+    const entries = [
+      row("ask", "user", "Is the menu weird?", 1),
+      row("reply", "assistant", "Somewhat, yes.", 2),
+      row("settled", "user", settled, 3),
+      row("tool", "tool_use", "", 4, {
+        toolName: "Bash",
+        toolUseId: "tool",
+        toolInput: { command: "gh pr checks 7" },
+      }),
+      row("wrap", "assistant", wrapUp, 30),
+      row("wake", "user", "", 90, { turnBoundary: true }),
+      row("final", "assistant", "No checks failed on PR #7.", 95),
+    ];
+    const index = entries.map((entry) => ({
+      id: entry.id,
+      seq: entry.seq!,
+      changeSeq: entry.seq!,
+      timestampMs: Date.parse(entry.timestamp),
+      contentLength: entry.content.length,
+      role: entry.turnBoundary
+        ? ("check_back" as const)
+        : entry.id === "settled"
+          ? ("notice" as const)
+          : entry.type,
+    }));
+    const loaded = renderToStaticMarkup(<TranscriptBlocks entries={entries} />);
+    const indexed = renderToStaticMarkup(
+      <TranscriptBlocks entries={entries} transcriptIndex={index} />,
+    );
+    for (const html of [loaded, indexed]) {
+      // The settle notice names the work it started, like any GitHub event.
+      expect(html).toContain(
+        '>PR #7 review passed</span><span class="flex-none">· 27s</span>',
+      );
+      expect(html).toContain("Still to do");
+      // The wake did no work, so its answer just follows.
+      expect(html).not.toMatch(/>Worked for/);
+      expect(html).toContain("No checks failed on PR #7.");
+    }
+    const open = renderToStaticMarkup(
+      <TranscriptBlocks entries={entries} reviewLoopsOpen />,
+    );
+    expect(open).not.toContain("Write a short wrap-up");
+  });
+
+  test("a check-back that worked gets its own row under a kept answer", () => {
+    const entries = [
+      row("ask", "user", "Ship it", 1),
+      row("plan", "assistant", "Shipped.\n\n- Should I also tag a release?", 2),
+      row("wake", "user", "", 60, { turnBoundary: true }),
+      row("tool", "tool_use", "", 61, {
+        toolName: "Bash",
+        toolUseId: "tool",
+        toolInput: { command: "gh pr checks" },
+      }),
+      row("final", "assistant", "CI is green.", 70),
+    ];
+    const html = renderToStaticMarkup(<TranscriptBlocks entries={entries} />);
+    expect(html).toContain("Should I also tag a release?");
+    expect(html.match(/>Worked for 10s<\/span>/g)).toHaveLength(1);
+    expect(html).toContain("CI is green.");
+    expect(html).not.toContain("Checked back");
+  });
+
   test("a running task keeps its status row", () => {
     const html = renderToStaticMarkup(
       <TranscriptBlocks entries={shipped.slice(0, -1)} live />,

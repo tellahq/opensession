@@ -1038,12 +1038,25 @@ enum TranscriptGrouping {
     /// A task the agent reported on with status lines, or picked back up on
     /// its own (a wait waking it, its scheduled check-back), and then
     /// answered reads as one message: "Worked for 7m ›" above its last
-    /// answer. The statuses, check-backs and earlier answers were interim,
-    /// and the last answer is the report. A running answer, or one the agent
-    /// picks back up after, does not close a task, so a live one keeps its
-    /// row. Human messages, notes, notices and review loops are never folded
-    /// in, and check-backs inside a review loop stay with that loop. Mirrors
-    /// the web's `foldReportedTasks`.
+    /// answer. Statuses, check-backs and short interim notes fold in; an
+    /// earlier answer with more to it (a list, a question, a wrap-up) stays
+    /// visible, with its own row above it. A check-back that did no work and
+    /// said nothing in between gets no row: its answer just follows. A
+    /// running answer does not close a task, so a live one keeps its row.
+    /// Human messages, notes, notices and review loops are never folded in,
+    /// and check-backs inside a review loop stay with that loop. Mirrors the
+    /// web's `foldReportedTasks`.
+    /// An answer the agent picked back up after that only said where things
+    /// stood ("Pushed; waiting on CI."): one short plain paragraph, no list,
+    /// heading or question. Mirrors the web's `isInterimNote`.
+    static func isInterimNote(_ content: String) -> Bool {
+        let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.count <= 280 && text.range(
+            of: #"(?m)\n\s*\n|^\s*(?:[-*+]|\d+\.|#)\s|\?"#,
+            options: .regularExpression
+        ) == nil
+    }
+
     private static func foldReportedTasks(
         _ blocks: [TranscriptBlock],
         progress: ProgressProjection,
@@ -1085,7 +1098,17 @@ enum TranscriptGrouping {
         }
         var folded: [TranscriptBlock] = []
         var run: [TranscriptBlock] = []
+        // An answer left outside the fold takes its footer along.
+        var keptAnswer: String?
         for (index, block) in blocks.enumerated() {
+            if case .footer(let footer) = block, footer.entryId == keptAnswer {
+                folded.append(block)
+                keptAnswer = nil
+                continue
+            }
+            // Read before this block updates it: a settle notice that closes
+            // a loop stays with that loop, one outside any loop is an event.
+            let event = !inReview && triggerTitle(block) != nil
             switch reviewBlockRole(block) {
             case .handoff: inReview = true
             case .settled, .userMessage: inReview = false
@@ -1094,7 +1117,7 @@ enum TranscriptGrouping {
             // An automated event (a GitHub notice, a worker's report) opens a
             // task of its own: the event, its work and any interim answers
             // fold into one row named by the event, above the answer.
-            if !inReview, triggerTitle(block) != nil {
+            if event {
                 folded += run
                 run = [block]
                 continue
@@ -1104,9 +1127,27 @@ enum TranscriptGrouping {
                 : nil
             if case .message(let answer) = block, answer.isAssistant,
                !progress.contains(answer.id),
-               !(live && index == blocks.count - 1),
-               trigger != nil || run.contains(where: continuesTask),
-               !pickedBackUp(after: index) {
+               !(live && index == blocks.count - 1) {
+                // An interim note folds into the task the agent goes on with.
+                if pickedBackUp(after: index), isInterimNote(answer.text) {
+                    run.append(block)
+                    continue
+                }
+                keptAnswer = answer.id
+                let said = run.contains { inner in
+                    if case .work = inner { return true }
+                    if case .message(let entry) = inner { return entry.isAssistant }
+                    return false
+                }
+                guard trigger != nil || run.contains(where: isStatus)
+                    || (said && run.contains(where: continuesTask)) else {
+                    // Nothing to fold: plain work keeps its own turn row, and
+                    // a lone wake boundary renders nothing.
+                    folded += run
+                    folded.append(block)
+                    run = []
+                    continue
+                }
                 // A status's footer says nothing the fold does not.
                 let work = run.filter { inner in
                     if case .footer(let footer) = inner { return !progress.contains(footer.entryId) }

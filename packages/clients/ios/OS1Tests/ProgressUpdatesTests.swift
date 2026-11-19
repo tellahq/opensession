@@ -342,6 +342,67 @@ final class ProgressUpdatesTests: XCTestCase {
         })
     }
 
+    /// A wrap-up a check-back follows stays visible: a review that settled
+    /// outside its loop names the work it started, and a wake that did no
+    /// work gets no row of its own.
+    func testAWrapUpStaysVisibleAboveACheckBacksAnswer() {
+        var settled = TranscriptEntry(
+            id: "settled",
+            type: "user",
+            content: "This session's PR #7 passed review. Write a short wrap-up.",
+            timestamp: "2026-01-01T00:00:00Z"
+        )
+        settled.notice = EntryNotice(
+            kind: "review-settled",
+            title: "PR #7 review passed",
+            tone: "info",
+            body: "collapsed",
+            link: nil,
+            ask: nil,
+            icon: "done"
+        )
+        let result = blocks([
+            user("ask", "Is the menu weird?"),
+            say("reply", "Somewhat, yes."),
+            settled,
+            toolUse("t1"), toolResult("t1"),
+            say("wrap", "PR #7 passed review.\n\n**Still to do**\n\n- Decide how to split the menus.", at: 30),
+            wake("w1"),
+            say("final", "No checks failed on PR #7.", at: 95),
+        ])
+        let folds = workFolds(result)
+        XCTAssertEqual(folds.count, 1)
+        XCTAssertEqual(folds.first?.trigger, "PR #7 review passed")
+        XCTAssertEqual(folds.first?.duration ?? 0, 30, accuracy: 1)
+        let messages = result.compactMap { block -> String? in
+            if case .message(let entry) = block { return entry.id }
+            return nil
+        }
+        XCTAssertEqual(messages, ["ask", "reply", "wrap", "final"])
+        XCTAssertEqual(settled.notice?.triggerDetail(settled.text), [])
+    }
+
+    /// A short interim note still folds into the task the agent went on with.
+    func testAnInterimNoteFoldsIntoTheCheckBack() {
+        let result = blocks([
+            user("ask", "Merge main"),
+            toolUse("t1"), toolResult("t1"),
+            say("pushed", "Pushed; waiting on CI.", at: 2),
+            wake("w1"),
+            toolUse("t2"), toolResult("t2"),
+            say("done", "CI is green.", at: 20),
+        ])
+        XCTAssertEqual(workFolds(result).count, 1)
+        let messages = result.compactMap { block -> String? in
+            if case .message(let entry) = block { return entry.id }
+            return nil
+        }
+        XCTAssertEqual(messages, ["ask", "done"])
+        XCTAssertTrue(TranscriptGrouping.isInterimNote("Pushed; waiting on CI."))
+        XCTAssertFalse(TranscriptGrouping.isInterimNote("Shipped.\n\n- Tag a release?"))
+        XCTAssertFalse(TranscriptGrouping.isInterimNote("Should I merge?"))
+    }
+
     /// Handled with nothing for the person, the event's status answer is the
     /// one row, with the event and its work folded under it.
     func testAnAutomatedEventAnsweredWithAStatusIsOneRow() {

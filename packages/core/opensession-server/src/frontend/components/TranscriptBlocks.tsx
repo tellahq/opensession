@@ -399,14 +399,26 @@ function TriggerDetail({ entry }: { entry: TranscriptEntry }) {
   );
 }
 
+/** An answer the agent picked back up after that only said where things
+ *  stood ("Pushed; waiting on CI."): one short plain paragraph, no list,
+ *  heading or question. Anything more is for the person to read. */
+function isInterimNote(entry: TranscriptEntry): boolean {
+  const text = entry.content.trim();
+  return (
+    text.length <= 280 && !/\n\s*\n|^\s*(?:[-*+]|\d+\.|#)\s|\?/m.test(text)
+  );
+}
+
 /** A task the agent reported on with status lines, or picked back up on its
  * own (a wait waking it, its scheduled check-back), and then answered reads as
- * one message: "Worked for 7m ›" above its last answer. The statuses,
- * check-backs and earlier answers were interim, and the last answer is the
- * report. Only a settled answer (its footer is down) that nothing self-started
- * follows closes a task, so a running one keeps its live row. Human messages,
- * notes, notices and review loops are never folded in, and check-backs inside
- * a review loop stay with that loop. */
+ * one message: "Worked for 7m ›" above its last answer. Statuses, check-backs
+ * and short interim notes fold in; an earlier answer with more to it (a list,
+ * a question, a wrap-up) stays visible, with its own row above it. A
+ * check-back that did no work and said nothing in between gets no row: its
+ * answer just follows. Only a settled answer (its footer is down) closes a
+ * task, so a running one keeps its live row. Human messages, notes, notices
+ * and review loops are never folded in, and check-backs inside a review loop
+ * stay with that loop. */
 function foldReportedTasks(
   blocks: RenderBlock[],
   progress: ReadonlyMap<string, ProgressGroup | null>,
@@ -439,6 +451,9 @@ function foldReportedTasks(
     const block = blocks[i]!;
     const next = blocks[i + 1];
     const role = reviewBlockRole(block).kind;
+    // Read before this block updates it: a settle notice that closes a loop
+    // stays with that loop, one outside any loop is an event of its own.
+    const event = !inReview && triggerOf(block);
     if (role === "handoff") inReview = true;
     else if (role === "settled" || role === "user-message") inReview = false;
     const answer =
@@ -450,7 +465,7 @@ function foldReportedTasks(
     // An automated event (a GitHub notice, a worker's report) opens a task
     // of its own: the event, its work and any interim answers fold into one
     // row named by the event, above the answer.
-    if (!inReview && triggerOf(block)) {
+    if (event) {
       folded.push(...run);
       run = [block];
       continue;
@@ -459,11 +474,26 @@ function foldReportedTasks(
       triggerOf(run[0]) && run.some((inner) => inner.kind === "turn")
         ? triggerOf(run[0])!
         : undefined;
-    if (
-      answer &&
-      (trigger || run.some((inner) => isStatus(inner) || isCheckBack(inner))) &&
-      !pickedBackUp(i + 2)
-    ) {
+    // An interim note folds into the task the agent goes on with.
+    if (answer && pickedBackUp(i + 2) && isInterimNote(block.entry)) {
+      run.push(block, next);
+      i++;
+      continue;
+    }
+    if (answer) {
+      const said = run.some(
+        (inner) =>
+          inner.kind === "turn" ||
+          (inner.kind === "entry" && inner.entry.type === "assistant"),
+      );
+      if (!trigger && !run.some(isStatus) && !(said && run.some(isCheckBack))) {
+        // Nothing to fold: plain work keeps its own turn row, and a lone
+        // wake boundary renders nothing (groupCheckBacks drops it).
+        folded.push(...run, block, next);
+        run = [];
+        i++;
+        continue;
+      }
       const first = run.flatMap(renderBlockEntries)[0];
       folded.push({
         kind: "review-loop",
