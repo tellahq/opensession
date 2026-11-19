@@ -461,13 +461,13 @@ export async function recordSetupTimeout(
     options.sessions ??
     (await (await import("./session-cache")).getCachedSessionsAsync());
   const minutes = Math.round(timeoutMs / 60_000);
-  const text = `Workspace setup timed out after ${minutes} min and was stopped. Dependencies may be missing, so install them before building.`;
+  const text = `Setup timed out after ${minutes} min · dependencies may be missing`;
   const append =
     options.append ??
     (async (sessionId: string, line: string) => {
       const m = await import("./transcript-persistence");
       await m.applyForwardedTranscript(sessionId, sessionId, [
-        m.transcriptLineRunnerNotice(line),
+        m.transcriptLineRunnerNotice(line, { tone: "warn" }),
       ]);
     });
   const notified: string[] = [];

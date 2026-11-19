@@ -26,6 +26,7 @@ import {
   transcriptLineYouShouldKnow,
 } from "../transcript-persistence";
 import type { NativeSessionFile } from "../types";
+import { noticeText } from "@tellahq/opensession-protocol/notices";
 import { MONITOR_FIT_PAGE } from "./monitor-fit-page";
 import {
   loopTickMessage,
@@ -435,7 +436,7 @@ export function demoSessions(opts: {
         usage: usage(0.31, 9_400, 1_100, 2, iso(now - 290 * min)),
         lastRunError: {
           message:
-            "Usage limit reached on every configured account — retry after the window resets",
+            "Usage limit reached on every configured account. Retry after the window resets.",
           at: iso(now - 290 * min),
         },
       }),
@@ -459,10 +460,21 @@ export function demoSessions(opts: {
           "snapshot-1.heap written (84MB)\nsnapshot-2.heap written (121MB)",
           t0 + 30_000,
         ),
+        transcriptLineRunnerNotice("Model error · retrying", {
+          tone: "info",
+          id: "demo-failed-n0",
+          timestamp: iso(t0 + 45_000),
+        }),
         transcriptLineRunnerNotice(
-          "Run failed: usage limit reached on every configured account — retry after the window resets",
-          "demo-failed-n1",
-          iso(t0 + 60_000),
+          noticeText(
+            "Run failed",
+            "Usage limit reached on every configured account. Retry after the window resets.",
+          ),
+          {
+            tone: "error",
+            id: "demo-failed-n1",
+            timestamp: iso(t0 + 60_000),
+          },
         ),
       ],
     });
@@ -495,11 +507,11 @@ export function demoSessions(opts: {
           "src/upload.ts:12\nsrc/upload.ts:31",
           t0 + 20_000,
         ),
-        transcriptLineRunnerNotice(
-          "Run cancelled by Alex",
-          "demo-cancelled-n1",
-          iso(t0 + 45_000),
-        ),
+        transcriptLineRunnerNotice("Stopped by Alex", {
+          tone: "info",
+          id: "demo-cancelled-n1",
+          timestamp: iso(t0 + 45_000),
+        }),
       ],
     });
   }
