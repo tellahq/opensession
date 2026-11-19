@@ -37,7 +37,10 @@ import {
   type OptimisticTranscriptEntry,
 } from "../lib/transcript-state";
 import { collectWrittenAssets } from "../lib/open-asset";
-import { classifyEntry } from "@tellahq/opensession-protocol/notices";
+import {
+  automatedTriggerTitle,
+  classifyEntry,
+} from "@tellahq/opensession-protocol/notices";
 import {
   CheckBackBlock,
   ReviewLoopBlock,
@@ -89,6 +92,9 @@ type RenderBlock =
       variant: "review" | "check-back" | "work";
       /** On a work fold: from the task's first work to its answer. */
       durationMs?: number;
+      /** On a work fold an automated event started (its first block): the
+       *  event's one-line name, which the row reads instead of "Worked". */
+      trigger?: string;
       blocks: RenderBlock[];
       prNumber: number | null;
       /** Review rounds, or check-back turns. */
@@ -371,6 +377,8 @@ function foldReportedTasks(
     block.kind === "entry" && progress.has(block.entry.id);
   const isCheckBack = (block: RenderBlock) =>
     !inReview && reviewBlockRole(block).kind === "check-back";
+  const triggerOf = (block: RenderBlock | undefined) =>
+    block?.kind === "entry" ? automatedTriggerTitle(block.entry) : null;
   // A nudge to continue is self-started too, so it never ends the task, but
   // on its own it does not make the answer before it interim.
   const foldable = (block: RenderBlock) =>
@@ -398,15 +406,28 @@ function foldReportedTasks(
       !isStatus(block) &&
       next?.kind === "footer" &&
       next.entry.id === block.entry.id;
+    // An automated event (a GitHub notice, a worker's report) opens a task
+    // of its own: the event, its work and any interim answers fold into one
+    // row named by the event, above the answer.
+    if (!inReview && triggerOf(block)) {
+      folded.push(...run);
+      run = [block];
+      continue;
+    }
+    const trigger =
+      triggerOf(run[0]) && run.some((inner) => inner.kind === "turn")
+        ? triggerOf(run[0])!
+        : undefined;
     if (
       answer &&
-      run.some((inner) => isStatus(inner) || isCheckBack(inner)) &&
+      (trigger || run.some((inner) => isStatus(inner) || isCheckBack(inner))) &&
       !pickedBackUp(i + 2)
     ) {
       const first = run.flatMap(renderBlockEntries)[0];
       folded.push({
         kind: "review-loop",
         variant: "work",
+        trigger,
         blocks: run,
         prNumber: null,
         rounds: 0,
@@ -921,6 +942,12 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
             />
           ) : inner.kind === "entry" && progressUpdates.has(inner.entry.id) ? (
             <ProgressStatusLine entry={inner.entry} />
+          ) : block.trigger && innerIndex === 0 && inner.kind === "entry" ? (
+            // The row already names the event; open, the fold adds what it
+            // said in full rather than its title a second time.
+            <p className="mx-auto mb-2 w-full max-w-[var(--session-col)] whitespace-pre-wrap break-words text-meta leading-5 text-dim">
+              {classifyEntry(inner.entry).content}
+            </p>
           ) : inner.kind === "entry" &&
             !inner.entry.turnBoundary &&
             reviewBlockRole(inner).kind !== "handoff" ? (
@@ -1006,6 +1033,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
             block.variant === "work" ? (
               <WorkFoldBlock
                 durationMs={block.durationMs}
+                trigger={block.trigger}
                 defaultOpen={reviewLoopsOpen}
                 onOpenChange={onReviewLoopOpenChange}
               >
