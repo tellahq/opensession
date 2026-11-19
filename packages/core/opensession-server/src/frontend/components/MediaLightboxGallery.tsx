@@ -859,18 +859,6 @@ export function MediaLightboxGallery({
           )}
         </div>
         <div className="pointer-events-auto flex items-center gap-3">
-          {/* Before or After names the picture itself, so it sits centred
-              over it rather than in a corner. */}
-          {!isPhone && item.walkthroughLabel && (
-            <span
-              className={cn(
-                WALKTHROUGH_LABEL_CLASS,
-                WALKTHROUGH_LABEL_TONE[item.walkthroughLabel],
-              )}
-            >
-              {WALKTHROUGH_LABEL_TEXT[item.walkthroughLabel]}
-            </span>
-          )}
           {many && !isPhone && (
             <span className="text-meta font-medium tabular-nums text-dim">
               {index + 1} of {items.length}
@@ -1224,7 +1212,7 @@ export function MediaLightboxGallery({
 
       {!isPhone && (
         <div
-          className="z-10 flex shrink-0 justify-center"
+          className="z-10 flex shrink-0 flex-col items-center gap-2"
           style={{
             ...columnPadding,
             // Rests just above the input, or on the window's edge without one.
@@ -1236,6 +1224,18 @@ export function MediaLightboxGallery({
             if (e.target === e.currentTarget) requestClose();
           }}
         >
+          {/* Before or After names the picture itself, so it sits centred
+              right under it, above the rest of the set. */}
+          {item.walkthroughLabel && (
+            <span
+              className={cn(
+                WALKTHROUGH_LABEL_CLASS,
+                WALKTHROUGH_LABEL_TONE[item.walkthroughLabel],
+              )}
+            >
+              {WALKTHROUGH_LABEL_TEXT[item.walkthroughLabel]}
+            </span>
+          )}
           {commentHint ?? (many ? filmstrip : null)}
         </div>
       )}
