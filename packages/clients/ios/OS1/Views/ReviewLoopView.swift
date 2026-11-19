@@ -179,12 +179,8 @@ struct LoopWorkRows: View {
             if loop.trigger != nil, block.id == loop.blocks.first?.id,
                case .message(let entry) = block {
                 // The header already names the event; open, the fold adds
-                // what it said in full rather than its title a second time.
-                Text(entry.text)
-                    .font(.footnote)
-                    .foregroundStyle(OS1VisualStyle.textDim)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                // only what it said beyond that, a short line each.
+                TriggerDetailView(lines: entry.notice?.triggerDetail(entry.text) ?? [])
             } else if !isHandoff(block), !isTurnBoundary(block) {
                 row(for: block, status: statuses[block.id], statuses: statuses)
             }
@@ -393,5 +389,32 @@ private struct ReviewLoopResultRow: View {
             .reduce(Text(""), +)
             .font(.caption2)
             .foregroundStyle(OS1VisualStyle.textFaint)
+    }
+}
+
+/// What an automated event said beyond the title its folded row shows: a
+/// failed check as a short link to its run, a report as its text. Mirrors the
+/// web's `TriggerDetail`.
+private struct TriggerDetailView: View {
+    let lines: [EntryNotice.TriggerDetailLine]
+
+    var body: some View {
+        if !lines.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                    if let url = line.url {
+                        Link(destination: url) {
+                            Text(line.text).lineLimit(1)
+                        }
+                    } else {
+                        Text(line.text).textSelection(.enabled)
+                    }
+                }
+            }
+            .font(.footnote)
+            .foregroundStyle(OS1VisualStyle.textDim)
+            .tint(OS1VisualStyle.textDim)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
