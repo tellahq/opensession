@@ -20,6 +20,7 @@ import {
 } from "./config";
 import { stateDir } from "./paths";
 import { pathExists } from "./run-fs";
+import { gitFetchArgv } from "./git-fetch";
 import { workloadArgv } from "./workload-scope";
 import {
   assertSetupPipelineLive,
@@ -564,7 +565,7 @@ async function refreshAskCheckoutLocked(
   dir: string,
 ): Promise<void> {
   const fetch =
-    await $`${workloadArgv(["git", "-C", dir, "fetch", "origin", repo.defaultBranch, "--quiet"], "git")}`
+    await $`${workloadArgv(gitFetchArgv(dir, ["origin", repo.defaultBranch, "--quiet"]), "git")}`
       .quiet()
       .nothrow();
   if (fetch.exitCode !== 0) {
@@ -640,7 +641,7 @@ export async function ensureAskCheckout(repoId?: string): Promise<string> {
       }
       return dir;
     }
-    await $`${workloadArgv(["git", "-C", repo.repo, "fetch", "origin", repo.defaultBranch, "--quiet"], "git")}`.nothrow();
+    await $`${workloadArgv(gitFetchArgv(repo.repo, ["origin", repo.defaultBranch, "--quiet"]), "git")}`.nothrow();
     await $`git -C ${repo.repo} worktree prune`.quiet().nothrow();
     const add =
       await $`${workloadArgv(["git", "-C", repo.repo, "worktree", "add", "--detach", dir, `origin/${repo.defaultBranch}`], "git")}`
@@ -812,7 +813,7 @@ export async function reviveWorktree(
           .nothrow();
     } else {
       const fetchBranch =
-        await $`${workloadArgv(["git", "-C", repo.repo, "fetch", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`, "--quiet"], "git")}`
+        await $`${workloadArgv(gitFetchArgv(repo.repo, ["origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`, "--quiet"]), "git")}`
           .quiet()
           .nothrow();
       const hasRemote =
@@ -821,7 +822,7 @@ export async function reviveWorktree(
           await $`git -C ${repo.repo} show-ref --verify --quiet refs/remotes/origin/${branch}`.nothrow()
         ).exitCode === 0;
       if (!hasRemote) {
-        await $`${workloadArgv(["git", "-C", repo.repo, "fetch", "origin", repo.defaultBranch, "--quiet"], "git")}`;
+        await $`${workloadArgv(gitFetchArgv(repo.repo, ["origin", repo.defaultBranch, "--quiet"]), "git")}`;
       }
       const startPoint = hasRemote
         ? `origin/${branch}`
@@ -866,7 +867,7 @@ async function fetchBranchesWithTracking(
     (b) => `+refs/heads/${b}:refs/remotes/origin/${b}`,
   );
   if (specs.length === 0) return;
-  await $`${workloadArgv(["git", "-C", gitDir, "fetch", "origin", ...specs, "--quiet"], "git")}`.env(
+  await $`${workloadArgv(gitFetchArgv(gitDir, ["origin", ...specs, "--quiet"]), "git")}`.env(
     await githubServiceGitEnv(ghRepo),
   );
 }
@@ -889,7 +890,7 @@ export async function createWorktreeForPrBranch(
   const reused = await withGitLock(repo.repo, async () => {
     await fetchBranchesWithTracking(repo.repo, repo.ghRepo, headRef);
     if (await pathExists(wtPath)) {
-      await $`${workloadArgv(["git", "-C", wtPath, "fetch", "origin", headRef, "--quiet"], "git")}`
+      await $`${workloadArgv(gitFetchArgv(wtPath, ["origin", headRef, "--quiet"]), "git")}`
         .env(await githubServiceGitEnv(repo.ghRepo))
         .nothrow();
       await $`${workloadArgv(["git", "-C", wtPath, "reset", "--hard", `origin/${headRef}`], "git")}`
@@ -985,7 +986,7 @@ export async function createWorktreeForFollowup(
   await withGitLock(repo.repo, async () => {
     await $`git -C ${repo.repo} worktree prune`.quiet();
     if (await pathExists(wtPath)) return; // pruned stale registration; dir already usable
-    await $`${workloadArgv(["git", "-C", repo.repo, "fetch", "origin", baseRef, "--quiet"], "git")}`.nothrow();
+    await $`${workloadArgv(gitFetchArgv(repo.repo, ["origin", baseRef, "--quiet"]), "git")}`.nothrow();
     const startPoint =
       (
         await $`git -C ${repo.repo} rev-parse --verify --quiet origin/${baseRef}`.nothrow()
