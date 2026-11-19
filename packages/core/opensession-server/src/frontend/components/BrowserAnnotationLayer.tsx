@@ -28,6 +28,7 @@ import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { duration } from "../ui/motion";
 import { toast } from "../ui/toast";
+import { Tooltip } from "../ui/tooltip";
 import { IconArrowUp, IconX } from "./icons";
 
 /** How long a page gets to answer an inspect request before we go without. */
@@ -311,24 +312,28 @@ export function BrowserAnnotationLayer({
               }}
               className="block min-h-9 w-full flex-1 resize-none appearance-none border-0 bg-transparent px-2.5 py-2 text-body leading-snug text-fg outline-none [scrollbar-width:none] placeholder:text-faint phone:min-h-11 phone:text-input-phone [&::-webkit-scrollbar]:hidden"
             />
-            <Button
-              variant="ghost"
-              size="lg"
-              icon={<IconX size={16} />}
-              className="shrink-0 rounded-[999px] phone:size-11"
-              onClick={reset}
-              disabled={sending}
-              aria-label="Cancel comment"
-            />
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              icon={<IconArrowUp size={17} />}
-              className="shrink-0 rounded-[999px] phone:size-11"
-              disabled={!text.trim() || sending}
-              aria-label={sending ? "Sending comment" : "Send comment"}
-            />
+            <Tooltip label="Cancel" shortcut={["Esc"]}>
+              <Button
+                variant="ghost"
+                size="lg"
+                icon={<IconX size={16} />}
+                className="shrink-0 rounded-[999px] phone:size-11"
+                onClick={reset}
+                disabled={sending}
+                aria-label="Cancel comment"
+              />
+            </Tooltip>
+            <Tooltip label="Send" shortcut={["↵"]}>
+              <Button
+                type="submit"
+                variant="primary"
+                size="lg"
+                icon={<IconArrowUp size={17} />}
+                className="shrink-0 rounded-[999px] phone:size-11"
+                disabled={!text.trim() || sending}
+                aria-label={sending ? "Sending comment" : "Send comment"}
+              />
+            </Tooltip>
           </div>
           {error ? (
             <div className="px-2.5 pb-1 text-label text-red" role="alert">
