@@ -132,6 +132,7 @@ function SessionStagingPane({
             <Button
               variant="ghost"
               size="md"
+              className="rounded-control"
               icon={<IconCopy size={16} />}
               onClick={() => shareLink(url, { toast: "Link copied" })}
               aria-label="Copy preview link"
