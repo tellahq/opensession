@@ -31,44 +31,29 @@ const entries: TranscriptEntry[] = [
   },
 ];
 
-function transcript(store: LiveTurnStore, stopping = false) {
+function transcript(store: LiveTurnStore) {
   return renderToStaticMarkup(
-    <LiveRunStatusContext.Provider value={{ store, stopping }}>
+    <LiveRunStatusContext.Provider value={{ store }}>
       <TranscriptBlocks live entries={entries} />
     </LiveRunStatusContext.Provider>,
   );
 }
 
-describe("a live thought hands its label to the row at the end", () => {
-  test("the thought keeps its prose and drops the shimmering label", () => {
+describe("a live thought names itself", () => {
+  test("shimmers its own label above its prose while the model thinks", () => {
     setTurnPrefs("open", "folded");
     const html = transcript(new LiveTurnStore());
     expect(html).toContain("Try curl next.");
-    expect(html).not.toContain('data-text-shimmer=""');
+    expect(html).toContain('data-text-shimmer=""');
     setTurnPrefs(null);
   });
 
-  test("a pending stop leaves the thought its own label", () => {
+  test("stops shimmering once the engine has moved on to a tool", () => {
     setTurnPrefs("open", "folded");
-    const html = transcript(new LiveTurnStore(), true);
-    expect(html).toMatch(/>Thinking<\/span>/);
-    setTurnPrefs(null);
-  });
-});
-
-describe("LiveTurnStore trailing thought claims", () => {
-  test("counts overlapping claims and ignores a double release", () => {
     const store = new LiveTurnStore();
-    let emits = 0;
-    store.subscribe(() => emits++);
-    const a = store.claimTrailingThought();
-    const b = store.claimTrailingThought();
-    expect(store.hasTrailingThought()).toBe(true);
-    a();
-    a();
-    expect(store.hasTrailingThought()).toBe(true);
-    b();
-    expect(store.hasTrailingThought()).toBe(false);
-    expect(emits).toBe(2);
+    store.setActivity({ kind: "tool", toolName: "bash", count: 1 });
+    const html = transcript(store);
+    expect(html).not.toMatch(/data-text-shimmer[^>]*>Thinking/);
+    setTurnPrefs(null);
   });
 });

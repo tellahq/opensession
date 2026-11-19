@@ -861,7 +861,7 @@ function ReasoningMessage({
   const live = useLiveReasoningStatus(active);
   return (
     <div className="my-2" data-eid={last.id} data-reasoning="">
-      {live.thinking && !live.namedBelow ? (
+      {live.thinking ? (
         // Some providers expose prose thinking rather than a short status
         // heading. Keep that prose readable and shimmer a stable label.
         <TextShimmer className={cn(msgReasoningTitle, msgReasoningShimmer)}>

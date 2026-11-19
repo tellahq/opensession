@@ -1,3 +1,4 @@
+import { COMPARE_AFTER_CLASS, COMPARE_CLASS } from "./compare-block";
 import { diagramDataUrl, readDiagramSvg } from "./diagram-media";
 import {
   commentSessionIdFor,
@@ -46,6 +47,18 @@ export const LIGHTBOX_PREVIEW_LABEL: Record<LightboxItem["kind"], string> = {
 /** One node as an item, or null when it cannot be shown. */
 function galleryItem(node: Element): LightboxItem | null {
   if (node instanceof HTMLImageElement) {
+    // A slider's stills say which side they are with the same red and
+    // green pill a walkthrough uses, not their alt text as a caption.
+    if (node.parentElement?.classList.contains(COMPARE_CLASS)) {
+      return {
+        kind: "image",
+        src: node.currentSrc || node.src,
+        commentSessionId: commentSessionIdFor(node),
+        walkthroughLabel: node.classList.contains(COMPARE_AFTER_CLASS)
+          ? "after"
+          : "before",
+      };
+    }
     return {
       kind: "image",
       src: node.currentSrc || node.src,
