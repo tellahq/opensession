@@ -61,21 +61,16 @@ struct ProgressStatusRow: View {
             if state.expanded {
                 VStack(alignment: .leading, spacing: 8) {
                     if !history.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
+                        // Fold steps, flush with the column, at the same
+                        // pitch as the work rows below them.
+                        VStack(alignment: .leading, spacing: ToolRowMetrics.rowSpacing) {
                             ForEach(history, id: \.id) { item in
-                                HStack(alignment: .firstTextBaseline, spacing: Self.iconSpacing) {
-                                    icon(item.update, tint: OS1VisualStyle.textFaint)
-                                    Text(historyText(item.update))
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                                .accessibilityElement(children: .combine)
+                                ProgressStatusLine(
+                                    update: item.update,
+                                    text: historyText(item.update)
+                                )
                             }
                         }
-                        .font(.footnote)
-                        .foregroundStyle(OS1VisualStyle.textDim)
-                        // Under the status text, clear of its icon.
-                        .padding(.leading, iconWidth + Self.iconSpacing)
-                        .padding(.vertical, 2)
                         .accessibilityElement(children: .contain)
                         .accessibilityLabel("Earlier updates")
                     }
@@ -89,7 +84,6 @@ struct ProgressStatusRow: View {
                         )
                     }
                 }
-                .padding(.leading, 6)
                 .transition(.opacity)
             }
         }
@@ -145,24 +139,25 @@ struct ProgressStatusRow: View {
     }
 }
 
-/// A status message inside a work fold: the same quiet line as an earlier
-/// update in an open status row. Mirrors the web's `ProgressStatusLine`.
+/// A status message inside a work fold, drawn as one more step: the tool
+/// row's glyph column, type and height, so "CI: Running" between two runs of
+/// commands reads as part of the same list. Mirrors the web's
+/// `ProgressStatusLine`.
 struct ProgressStatusLine: View {
     let update: ProgressUpdate
-    @ScaledMetric(relativeTo: .footnote) private var iconWidth: CGFloat = 16
+    /// An open status row's earlier update drops a repeated topic.
+    var text: String?
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Image(systemName: update.symbol)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(OS1VisualStyle.textFaint)
-                .frame(width: iconWidth)
-                .accessibilityHidden(true)
-            Text(update.label)
+        HStack(alignment: .firstTextBaseline, spacing: ToolRowMetrics.iconSpacing) {
+            ToolRowIcon(symbol: update.symbol)
+            Text(text ?? update.label)
+                .font(.subheadline)
+                .foregroundStyle(OS1VisualStyle.textDim)
                 .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
         }
-        .font(.footnote)
-        .foregroundStyle(OS1VisualStyle.textDim)
+        .toolRowFrame()
         .accessibilityElement(children: .combine)
     }
 }

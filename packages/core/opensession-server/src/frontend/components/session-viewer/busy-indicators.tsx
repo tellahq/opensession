@@ -7,10 +7,7 @@ import { Spinner } from "../../ui/spinner";
 import { PulseDot } from "../../ui/status";
 import { cn } from "../../ui/cn";
 import { TextShimmer } from "../../ui/text-shimmer";
-import {
-  activityInterruptsStream,
-  busyActivityStatus,
-} from "../../lib/busy-activity";
+import { busyActivityStatus } from "../../lib/busy-activity";
 import type { RunActivity } from "@tellahq/opensession-protocol/events";
 import { msgActivityShimmer, msgRow } from "../../lib/msg-classes";
 import { TRANSCRIPT_SYNC_SPOT } from "../../lib/session-viewer-classes";
@@ -118,13 +115,15 @@ export function TranscriptSyncing() {
   );
 }
 
-// Persistent turn-level status. With a phase from the engine it names that
-// phase (waiting for the model, running a command, compacting, retrying);
-// without one it only claims what the client knows: the request is active.
-// The 1Hz ticker stays inside this tiny node instead of re-rendering the
-// transcript, and the elapsed value is hidden from assistive tech so it is
-// not announced every second. A retry countdown is hidden for the same
-// reason: its label would otherwise be re-announced on every tick.
+// Persistent turn-level status: the dot and the run's elapsed time, counted
+// from its first second. A tool, a thought or a reply already shows itself
+// in the transcript above, so the row adds no words of its own except for a
+// compaction or a retry wait, which nothing above explains. The phase is
+// still announced to assistive tech through a hidden label; the elapsed value
+// is hidden from it so it is not read out every second, and so is a retry
+// countdown, whose label would otherwise be re-announced on every tick. The
+// ticker stays inside this tiny node instead of re-rendering the transcript,
+// and it lands on the run's own second boundaries so the count never skips.
 function BusyWorking({
   since,
   activity,
@@ -136,10 +135,16 @@ function BusyWorking({
   const ticking = since != null || activity?.kind === "retrying";
   useEffect(() => {
     if (!ticking) return;
-    setNow(Date.now());
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [ticking]);
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      const at = Date.now();
+      setNow(at);
+      const into = since == null ? 0 : (((at - since) % 1000) + 1000) % 1000;
+      timer = setTimeout(tick, 1000 - into);
+    };
+    tick();
+    return () => clearTimeout(timer);
+  }, [ticking, since]);
   const status = busyActivityStatus(
     since == null ? 0 : now - since,
     activity,
@@ -154,24 +159,28 @@ function BusyWorking({
         aria-label={countingDown ? "Retrying" : undefined}
         className="inline-flex"
       >
-        <TextShimmer
-          className={cn(
-            "text-meta font-medium",
-            countingDown && "tabular-nums",
-            msgActivityShimmer,
-          )}
-        >
-          {status.label}
-        </TextShimmer>
+        {status.label ? (
+          <TextShimmer
+            className={cn(
+              "text-meta font-medium",
+              countingDown && "tabular-nums",
+              msgActivityShimmer,
+            )}
+          >
+            {status.label}
+          </TextShimmer>
+        ) : (
+          <span className="sr-only">{status.spoken}</span>
+        )}
       </span>
       {status.detail && (
         <span className="text-meta text-faint tabular-nums">
           · {status.detail}
         </span>
       )}
-      {status.elapsed && (
+      {since != null && (
         <span aria-hidden="true" className="text-meta text-faint tabular-nums">
-          · {status.elapsed}
+          {status.label ? `· ${status.elapsed}` : status.elapsed}
         </span>
       )}
     </>
@@ -242,9 +251,6 @@ function BusyStopping({ since }: { since: number }) {
   );
 }
 
-const getFalse = () => false;
-const THINKING: RunActivity = { kind: "thinking" };
-
 export function BusyInline({
   since,
   stoppingSince,
@@ -257,38 +263,18 @@ export function BusyInline({
   onLayout?: () => void;
 }) {
   const reducedMotion = useReducedMotion();
-  const hasPaintedText = useSyncExternalStore(
-    liveTurnStore.subscribe,
-    liveTurnStore.hasPaintedText,
-    getFalse,
-  );
   const activity = useSyncExternalStore(
     liveTurnStore.subscribe,
     liveTurnStore.getActivity,
     liveTurnStore.getNoActivity,
   );
-  const trailingThought = useSyncExternalStore(
-    liveTurnStore.subscribe,
-    liveTurnStore.hasTrailingThought,
-    liveTurnStore.hasTrailingThought,
-  );
-  // Once words are visible, the stream itself and its caret are the progress
-  // indicator. Keeping a second status row under a growing answer makes every
-  // line wrap relocate that row, and under reduced motion those relocations are
-  // intentionally instant. Collapse it once instead; stopping always remains
-  // explicit even when streamed text is still present, and so do a compaction
-  // and a retry wait, which the words above cannot explain. An open thought
-  // at the tail is not a growing stream, so the row stays and names it:
-  // "Thinking · 15m" at the end, where the run's progress is read.
-  const shown =
-    !hasPaintedText ||
-    trailingThought ||
-    stoppingSince != null ||
-    activityInterruptsStream(activity);
+  // The row stays for the whole run, under streamed words too: it is one
+  // dot and a short count, so a line wrap above moves it without the jolt a
+  // sentence of status copy used to make.
   return (
     <motion.div
       initial={reducedMotion ? false : { height: 0, opacity: 0 }}
-      animate={{ height: shown ? "auto" : 0, opacity: shown ? 1 : 0 }}
+      animate={{ height: "auto", opacity: 1 }}
       exit={{ height: 0, opacity: 0 }}
       transition={{
         type: "tween",
@@ -317,10 +303,7 @@ export function BusyInline({
         {stoppingSince != null ? (
           <BusyStopping since={stoppingSince} />
         ) : (
-          <BusyWorking
-            since={since}
-            activity={trailingThought ? THINKING : activity}
-          />
+          <BusyWorking since={since} activity={activity} />
         )}
       </div>
     </motion.div>

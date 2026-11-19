@@ -1,18 +1,10 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useSyncExternalStore,
-} from "react";
+import { createContext, useContext, useSyncExternalStore } from "react";
 import type { RunActivity } from "@tellahq/opensession-protocol/events";
-import { activityInterruptsStream } from "../../lib/busy-activity";
 import type { LiveTurnStore } from "../../lib/live-turn-store";
 
-/** What a transcript thought needs to hand its label to the turn-level row. */
+/** What a transcript thought needs to know about the run it belongs to. */
 export interface LiveRunStatus {
   store: LiveTurnStore;
-  /** A stop is pending: the row below says "Stopping…", not "Thinking". */
-  stopping: boolean;
 }
 
 export const LiveRunStatusContext = createContext<LiveRunStatus | null>(null);
@@ -34,11 +26,9 @@ function stillThinking(activity: RunActivity | null): boolean {
 /**
  * The live state of a trailing reasoning block. `thinking` is false once the
  * engine has moved on (writing, preparing or running a tool), so the thought
- * stops shimmering and the turn-level row names the new phase instead.
- * `namedBelow` means the row at the end of the transcript says "Thinking"
- * with the elapsed time, so the thought drops its own shimmering label and
- * the status is said once. A stop, a compaction or a retry keeps the row's
- * own wording and leaves the thought its label.
+ * stops shimmering and the transcript row of the new phase takes over. The
+ * row at the end of the transcript only carries the dot and the elapsed time,
+ * so the thought names itself.
  */
 export function useLiveReasoningStatus(active: boolean) {
   const run = useContext(LiveRunStatusContext);
@@ -48,16 +38,5 @@ export function useLiveReasoningStatus(active: boolean) {
     getActivity,
     getActivity,
   );
-  const thinking = active && (!run || stillThinking(activity));
-  const namedBelow =
-    thinking &&
-    run != null &&
-    !run.stopping &&
-    !activityInterruptsStream(activity);
-  const store = run?.store;
-  useEffect(() => {
-    if (!namedBelow || !store) return;
-    return store.claimTrailingThought();
-  }, [namedBelow, store]);
-  return { thinking, namedBelow };
+  return { thinking: active && (!run || stillThinking(activity)) };
 }
