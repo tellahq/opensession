@@ -486,10 +486,11 @@ export function ToolSection(props: ToolSectionProps) {
   }
 
   // The rows keep 4px of padding so a hover fill has room around the glyph,
-  // and the wrapper hangs that padding into the gutter: each glyph starts at
-  // the reply column's edge, no indent.
+  // and the wrapper hangs that padding into the gutter. The 22px glyph slot
+  // also hangs out by the 4px its icon's ink sits inside it, so the drawn
+  // glyph, not its box, starts at the reply column's edge.
   return (
-    <div className="-mx-1">
+    <div className="-ml-2 -mr-1">
       {runs.map((run) =>
         // With the work and its tool calls both always open there is nothing to
         // disclose, so a header and its indent would only wrap rows already on
@@ -826,7 +827,7 @@ function NarrationMessage({
 function StepNotice({ entry }: { entry: TranscriptEntry }) {
   return (
     <div
-      className="flex min-w-0 items-center gap-2 py-[3px] text-item-title leading-5 text-faint"
+      className="-ml-1 flex min-w-0 items-center gap-2 py-[3px] text-item-title leading-5 text-faint"
       data-eid={entry.id}
     >
       <span className="flex size-[22px] flex-shrink-0 items-center justify-center">
