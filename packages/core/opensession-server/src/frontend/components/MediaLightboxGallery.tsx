@@ -27,6 +27,7 @@ import { useIsPhone } from "../hooks/useIsPhone";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { toast } from "../ui/toast";
+import { Menu, MENU_ICON } from "../ui/menu";
 import { Tooltip } from "../ui/tooltip";
 import {
   anchoredCommentPosition,
@@ -67,6 +68,10 @@ import {
   IconShare,
   IconX,
 } from "./icons";
+
+/** Desktop's actions: plain icons, named by their tooltips. */
+const LIGHTBOX_ICON_TOOL_CLASS =
+  "size-10 rounded-full text-fg/70 hover:text-fg aria-pressed:bg-hover aria-pressed:text-fg";
 
 export function MediaLightboxGallery({
   items,
@@ -232,6 +237,8 @@ export function MediaLightboxGallery({
       () => toast("Could not copy that image"),
     );
   };
+  const copyLink = () =>
+    copyToClipboard(shareableMediaSrc(item), () => setCopiedSrc(item.src));
   const commentable =
     item.kind === "image" &&
     (Boolean(item.onRegionComment) ||
@@ -645,12 +652,15 @@ export function MediaLightboxGallery({
   const phoneAction =
     "grid size-11 shrink-0 place-items-center rounded-full border-0 bg-transparent p-0 text-fg transition-[transform,background-color,opacity] duration-[var(--dur-micro)] ease-[var(--ease)] active:scale-[0.96] disabled:opacity-[0.35]";
 
+  const canCopyImage = item.kind !== "video";
+  const canCopyLink = !item.src.startsWith("data:");
+  const copiedAny = copied || copiedImage;
   const downloadName =
     item.src.startsWith("data:") || item.src.startsWith("blob:")
       ? suggestedMediaName(item)
       : undefined;
-  // Desktop's actions: plain icons in the top bar beside Close, named by
-  // their tooltips, so the bottom of the viewer is free for the filmstrip.
+  // Desktop's actions: centred in the top bar over the picture they act on,
+  // so the bottom of the viewer is free for the description and filmstrip.
   const tool = (
     label: string,
     icon: React.ReactNode,
@@ -660,7 +670,7 @@ export function MediaLightboxGallery({
       <Button
         variant="ghost"
         icon={icon}
-        className="size-10 rounded-full text-fg/70 hover:text-fg aria-pressed:bg-hover aria-pressed:text-fg"
+        className={LIGHTBOX_ICON_TOOL_CLASS}
         {...props}
       />
     </Tooltip>
@@ -684,7 +694,39 @@ export function MediaLightboxGallery({
               : "Comment on image",
           },
         )}
-      {item.kind !== "video" &&
+      {/* One Copy for both things a picture can be copied as: its pixels
+          for a paste into a document, its URL for a ticket or a message. */}
+      {canCopyImage && canCopyLink ? (
+        <Menu.Root>
+          <Tooltip label={copiedAny ? "Copied" : "Copy"} side="bottom">
+            <Menu.Trigger
+              render={
+                <Button
+                  variant="ghost"
+                  icon={
+                    copiedAny ? <IconCheck size={20} /> : <IconCopy size={20} />
+                  }
+                  className={cn(
+                    LIGHTBOX_ICON_TOOL_CLASS,
+                    "data-[popup-open]:bg-hover data-[popup-open]:text-fg",
+                  )}
+                  aria-label={copiedAny ? "Copied" : "Copy"}
+                />
+              }
+            />
+          </Tooltip>
+          <Menu.Popup side="bottom" align="center" sideOffset={6}>
+            <Menu.Item onClick={copyImage}>
+              <IconCopy size={18} className={MENU_ICON} />
+              Copy image
+            </Menu.Item>
+            <Menu.Item onClick={copyLink}>
+              <IconLink size={18} className={MENU_ICON} />
+              Copy link
+            </Menu.Item>
+          </Menu.Popup>
+        </Menu.Root>
+      ) : canCopyImage ? (
         tool(
           copiedImage ? "Copied" : "Copy image",
           copiedImage ? <IconCheck size={20} /> : <IconCopy size={20} />,
@@ -692,7 +734,17 @@ export function MediaLightboxGallery({
             onClick: copyImage,
             "aria-label": copiedImage ? "Image copied" : "Copy image",
           },
-        )}
+        )
+      ) : canCopyLink ? (
+        tool(
+          copied ? "Copied" : "Copy link",
+          copied ? <IconCheck size={20} /> : <IconLink size={20} />,
+          {
+            onClick: copyLink,
+            "aria-label": copied ? "Link copied" : "Copy link",
+          },
+        )
+      ) : null}
       {nativeShare
         ? tool(
             saving ? "Preparing…" : "Download",
@@ -709,20 +761,6 @@ export function MediaLightboxGallery({
               <a href={mediaDownloadHref(item)} download={downloadName} />
             ),
           })}
-      {/* The file's own URL: what you paste into an upload, a ticket, or a
-          message to someone who can reach this instance. */}
-      {!item.src.startsWith("data:") &&
-        tool(
-          copied ? "Copied" : "Copy link",
-          copied ? <IconCheck size={20} /> : <IconLink size={20} />,
-          {
-            "aria-label": copied ? "Link copied" : "Copy link",
-            onClick: () =>
-              copyToClipboard(shareableMediaSrc(item), () =>
-                setCopiedSrc(item.src),
-              ),
-          },
-        )}
       {!item.src.startsWith("data:") &&
         (nativeShare
           ? tool("Open or share", <IconArrowUpRight size={20} />, {
@@ -832,7 +870,7 @@ export function MediaLightboxGallery({
       <div ref={scrimRef} className={LIGHTBOX_SCRIM_CLASS} aria-hidden />
       <div
         className={cn(
-          "pointer-events-none absolute left-[calc(16px+env(safe-area-inset-left))] right-[calc(12px+env(safe-area-inset-right))] top-[calc(12px+env(safe-area-inset-top))] z-10 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3",
+          "pointer-events-none absolute left-[calc(16px+env(safe-area-inset-left))] [html.wco_&]:left-[max(16px,calc(env(titlebar-area-x,78px)+8px))] right-[calc(12px+env(safe-area-inset-right))] top-[calc(12px+env(safe-area-inset-top))] z-10 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3",
           isPhone &&
             "transition-[opacity,transform] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
           isPhone && !chromeVisible && "-translate-y-2 opacity-0",
@@ -840,45 +878,35 @@ export function MediaLightboxGallery({
         inert={isPhone && !chromeVisible ? true : undefined}
         aria-hidden={isPhone && !chromeVisible ? true : undefined}
       >
-        {/* What you are looking at, quietly in the corner; the bar above the
-            input is for what you can do with it. */}
-        <div className="min-w-0">
-          {!isPhone && (caption || description) && (
-            <div className="flex min-w-0 flex-col gap-0.5">
-              {caption && (
-                <div className="min-w-0 truncate text-sm font-medium text-fg">
-                  {caption}
-                </div>
-              )}
-              {description && (
-                <div className="line-clamp-2 text-sm leading-snug text-dim">
-                  {description}
-                </div>
-              )}
+        {/* Where it came from, quietly in the corner. What it shows is
+            described under the picture itself. */}
+        <div className="flex min-w-0 items-baseline gap-2">
+          {!isPhone && caption && (
+            <div className="min-w-0 truncate text-sm font-medium text-fg">
+              {caption}
             </div>
           )}
-        </div>
-        <div className="pointer-events-auto flex items-center gap-3">
-          {/* Before or After names the picture itself, so it sits centred
-              over it rather than in a corner. */}
-          {!isPhone && item.walkthroughLabel && (
-            <span
-              className={cn(
-                WALKTHROUGH_LABEL_CLASS,
-                WALKTHROUGH_LABEL_TONE[item.walkthroughLabel],
-              )}
-            >
-              {WALKTHROUGH_LABEL_TEXT[item.walkthroughLabel]}
-            </span>
-          )}
           {many && !isPhone && (
-            <span className="text-meta font-medium tabular-nums text-dim">
+            <span className="shrink-0 text-meta font-medium tabular-nums text-dim">
               {index + 1} of {items.length}
             </span>
           )}
         </div>
-        <div className="flex min-w-0 items-center justify-self-end gap-2">
+        {/* Over the picture's column rather than the window's middle: the
+            margin is the same shift the stage pays as padding. */}
+        <div
+          style={
+            !isPhone
+              ? {
+                  marginLeft: Math.max(0, 2 * columnShift),
+                  marginRight: Math.max(0, -2 * columnShift),
+                }
+              : undefined
+          }
+        >
           {!isPhone && tools}
+        </div>
+        <div className="flex min-w-0 items-center justify-self-end gap-2">
           <Button
             ref={closeRef}
             variant="default"
@@ -1236,7 +1264,30 @@ export function MediaLightboxGallery({
             if (e.target === e.currentTarget) requestClose();
           }}
         >
-          {commentHint ?? (many ? filmstrip : null)}
+          <div className="flex w-full max-w-2xl min-w-0 flex-col items-center gap-3">
+            {/* What the picture shows, read straight under it. Before or
+                After names the picture too, so it leads the line. */}
+            {!commenting && (item.walkthroughLabel || description) && (
+              <div className="flex max-w-full flex-col items-center gap-1.5 px-4 text-center">
+                {item.walkthroughLabel && (
+                  <span
+                    className={cn(
+                      WALKTHROUGH_LABEL_CLASS,
+                      WALKTHROUGH_LABEL_TONE[item.walkthroughLabel],
+                    )}
+                  >
+                    {WALKTHROUGH_LABEL_TEXT[item.walkthroughLabel]}
+                  </span>
+                )}
+                {description && (
+                  <p className="m-0 line-clamp-3 max-w-full text-sm leading-snug text-dim">
+                    {description}
+                  </p>
+                )}
+              </div>
+            )}
+            {commentHint ?? (many ? filmstrip : null)}
+          </div>
         </div>
       )}
     </motion.div>
