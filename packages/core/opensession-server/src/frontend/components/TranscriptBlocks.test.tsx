@@ -2452,6 +2452,62 @@ describe("TranscriptBlocks review loops", () => {
     expect(open).toContain("PR #42 review passed");
     expect(open).toContain("Where things stand: the retry path");
   });
+
+  test("spaces a message between an opened loop's tool rows evenly", () => {
+    const bash = (id: string): TranscriptEntry[] => [
+      {
+        id,
+        type: "tool_use",
+        content: "",
+        timestamp: "2026-08-12T12:01:00Z",
+        toolName: "Bash",
+        toolUseId: `use-${id}`,
+        toolInput: { command: "git status" },
+      },
+      {
+        id: `res-${id}`,
+        type: "tool_result",
+        content: "ok",
+        timestamp: "2026-08-12T12:01:01Z",
+        toolUseId: `use-${id}`,
+      },
+    ];
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        reviewLoopsOpen
+        entries={[
+          {
+            id: "review",
+            type: "user",
+            content:
+              "[GitHub] <!--os:review-handoff-->\n🔍 This session's PR #42 was just reviewed and is not merge-ready.",
+            timestamp: "2026-08-12T12:00:00Z",
+          },
+          ...bash("a"),
+          {
+            id: "mid",
+            type: "assistant",
+            content: "The finding does not hold.",
+            timestamp: "2026-08-12T12:02:00Z",
+          },
+          ...bash("b"),
+          {
+            id: "wrap",
+            type: "assistant",
+            content: "I left the code unchanged.",
+            timestamp: "2026-08-12T12:03:00Z",
+          },
+        ]}
+      />,
+    );
+    const row = (id: string) =>
+      html.match(new RegExp(`<div class="([^"]*)" data-eid="${id}"`))?.[1];
+    // Tool rows sit flush, so the message carries the gap on both sides
+    // rather than a turn's 18px below and nothing above.
+    expect(row("mid")).toContain("my-2");
+    expect(row("mid")).not.toContain("mb-4.5");
+    expect(row("wrap")).toContain("mb-4.5");
+  });
 });
 
 describe("TranscriptBlocks progress rows", () => {

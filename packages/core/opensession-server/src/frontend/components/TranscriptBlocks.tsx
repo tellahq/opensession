@@ -1108,6 +1108,10 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
                   : onEditMessage
               }
               optimistic={optimisticEntryIds.has(inner.entry.id)}
+              // Between the fold's flush tool rows an answer spaces like
+              // narration. One with its footer under it keeps the turn's
+              // margin, which the lifted footer sits in.
+              step={block.blocks[innerIndex + 1]?.kind !== "footer"}
             />
           ) : null}
         </React.Fragment>
@@ -2008,6 +2012,7 @@ function ReviewTurnSteps({
         reasoning={isLegacyReasoningHeading(section.entry.content)}
         owner={owner}
         sessionId={sessionId}
+        step
       />
     ),
   );

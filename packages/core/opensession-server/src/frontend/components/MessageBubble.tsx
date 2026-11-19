@@ -66,6 +66,7 @@ import {
   msgReasoningBody,
   msgReasoningTitle,
   msgRow,
+  msgStepRow,
   msgSystemRow,
   msgSystemText,
   msgSystemTone,
@@ -650,6 +651,10 @@ interface Props {
    *  up. Passed only for the notice a person can still act on — the last one,
    *  on an idle session (see TranscriptBlocks). */
   onContinue?: () => void;
+  /** A step inside an opened fold, between tool rows that sit flush: the
+   *  answer takes a narration's even 8px either side instead of a turn's 18px
+   *  below and nothing above. */
+  step?: boolean;
 }
 
 /** Inline images carried on an entry (Read-of-image results, pasted images).
@@ -932,6 +937,7 @@ export const MessageBubble = function MessageBubble({
   onEdit,
   optimistic,
   onContinue,
+  step = false,
 }: Props) {
   const me = useCurrentUser();
   // How this entry reads — an operational notice, someone else's words, or an
@@ -1200,7 +1206,7 @@ export const MessageBubble = function MessageBubble({
   // Ordinary replies need no speaker label: the conversation header identifies
   // this agent. Only agent-to-agent messages need the extra routing context.
   return (
-    <div className={cn(msgRow, enterClass)} data-eid={e.id}>
+    <div className={cn(step ? msgStepRow : msgRow, enterClass)} data-eid={e.id}>
       <ClampedBody
         className={cn(msgBody, "markdown text-fg")}
         content={displayContent}
