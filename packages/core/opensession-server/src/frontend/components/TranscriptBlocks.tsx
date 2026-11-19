@@ -1805,14 +1805,18 @@ function groupIndexedReviewLoops(
       grouped.push(atom);
       continue;
     }
-    // A check-back continues the request above it: that request's range
-    // joins the group, so a task that ends in an answer can fold its first
-    // work and its check-backs into one row (`foldReportedTasks`).
+    // A check-back continues the task above it, whether a person asked for
+    // it or an automated event (a GitHub notice, a worker's report) started
+    // it: that range joins the group, so a task that ends in an answer folds
+    // its first work and its check-backs into one row (`foldReportedTasks`),
+    // as the loaded path does, instead of a fold for the last wake alone.
     const request = grouped.at(-1);
     const head =
       atom.range.headRole === "check_back" &&
       request?.kind === "range" &&
-      request.range.headRole === "user"
+      (request.range.headRole === "user" ||
+        request.range.headRole === "notice" ||
+        request.range.headRole === "agent_message")
         ? grouped.pop()!
         : null;
     const loop: IndexedTimelineAtom[] =

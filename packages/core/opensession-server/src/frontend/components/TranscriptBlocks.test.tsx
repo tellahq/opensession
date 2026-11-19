@@ -2710,6 +2710,48 @@ describe("TranscriptBlocks progress rows", () => {
     expect(html).toContain("Live: the change is out.");
   });
 
+  test("a check-back joins a task an automated event started, across indexed ranges", () => {
+    const conflict =
+      "[GitHub] PR #7 “Add a toggle” now has merge conflicts with its base branch. This session is assigned to handle it.";
+    const entries = [
+      row("event", "user", conflict, 1),
+      row("tool", "tool_use", "", 2, {
+        toolName: "Bash",
+        toolUseId: "tool",
+        toolInput: { command: "git merge origin/main" },
+      }),
+      row("report", "assistant", "Merged main in. Waiting on CI.", 30),
+      row("wake", "user", "", 90, { turnBoundary: true }),
+      row("final", "assistant", "No checks failed on PR #7.", 95),
+    ];
+    const index = entries.map((entry) => ({
+      id: entry.id,
+      seq: entry.seq!,
+      changeSeq: entry.seq!,
+      timestampMs: Date.parse(entry.timestamp),
+      contentLength: entry.content.length,
+      role: entry.turnBoundary
+        ? ("check_back" as const)
+        : entry.id === "event"
+          ? ("notice" as const)
+          : entry.type,
+    }));
+    const loaded = renderToStaticMarkup(<TranscriptBlocks entries={entries} />);
+    const indexed = renderToStaticMarkup(
+      <TranscriptBlocks entries={entries} transcriptIndex={index} />,
+    );
+    for (const html of [loaded, indexed]) {
+      // One row for the whole task, named by the event and timed from it,
+      // not a "Worked for 5s" row for the wake turn alone.
+      expect(html).toContain(
+        '>PR #7 now has merge conflicts with its base branch</span><span class="flex-none">· 1m</span>',
+      );
+      expect(html).not.toMatch(/>Worked for/);
+      expect(html).not.toContain("Merged main in");
+      expect(html).toContain("No checks failed on PR #7.");
+    }
+  });
+
   test("a running task keeps its status row", () => {
     const html = renderToStaticMarkup(
       <TranscriptBlocks entries={shipped.slice(0, -1)} live />,
