@@ -404,8 +404,10 @@ struct WorkTurn: Identifiable, Equatable {
         return preference.defaultExpanded(isLive: isLive)
     }
 
+    /// Only when the Tool calls preference keeps them open. Otherwise every
+    /// fold, narrated or not, shows the same closed "Ran 4 commands" rows.
     func rendersToolCallsInPlace(preference: TurnActivity) -> Bool {
-        !hasNarration || preference.rendersToolCallsInPlace
+        preference.rendersToolCallsInPlace
     }
 }
 
@@ -652,9 +654,13 @@ enum TranscriptGrouping {
             let start = turn.first.flatMap(startTimestamp)
             // A message sent mid-turn reaches the model between steps, so its
             // answer is followed by more work and would otherwise fold away as
-            // narration. Keep that first reply beside the message it answers.
+            // narration. Keep that first reply beside the message it answers,
+            // when it comes before any tool call: text after a few steps is
+            // progress narration, and pulling it out split one run into two
+            // "Worked for" folds.
             if answersSteer,
                let reply = turn.firstIndex(where: { item in
+                   if case .tool = item { return true }
                    guard case .message(let entry) = item else { return false }
                    return entry.isReasoning != true
                        && !ReasoningSummaryDisplay.isLegacyHeading(entry.text)

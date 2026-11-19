@@ -1,4 +1,5 @@
 import React from "react";
+import { importOrReload } from "../lib/chunk-reload";
 
 /*
  * A pane that loads when first rendered instead of at boot. The bundler
@@ -8,12 +9,15 @@ import React from "react";
  * chunk is content-hashed and cached by the service worker after its first
  * fetch, so later opens cost nothing. The fallback is empty: on a warm cache
  * the wait is a few milliseconds, and a spinner that flashes for that long
- * reads as a glitch.
+ * reads as a glitch. A chunk a later deploy removed reloads the page
+ * (lib/chunk-reload.ts) instead of unmounting the app.
  */
 export function deferred<P extends object>(
   load: () => Promise<React.ComponentType<P>>,
 ): React.ComponentType<P> {
-  const Lazy = React.lazy(async () => ({ default: await load() }));
+  const Lazy = React.lazy(async () => ({
+    default: await importOrReload(load),
+  }));
   return function Deferred(props: P) {
     return (
       <React.Suspense fallback={null}>

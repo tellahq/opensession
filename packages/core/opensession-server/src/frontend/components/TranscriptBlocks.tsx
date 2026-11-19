@@ -873,13 +873,22 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
     // A message sent mid-turn reaches the model between steps, so its answer
     // is followed by more work and would otherwise fold away as narration.
     // Keep that first reply beside the message it answers.
+    // Only a reply before any tool call answers the message (the prompt asks
+    // for exactly that). Text after a few steps is progress narration, and
+    // pulling it out split one run into two "Worked for" folds.
     const reply = turnAnswersSteer
       ? turn.findIndex(
-          (entry) => entry.type === "assistant" && !entry.isReasoning,
+          (entry) =>
+            entry.type === "tool_use" ||
+            (entry.type === "assistant" && !entry.isReasoning),
         )
       : -1;
     turnAnswersSteer = false;
-    if (reply >= 0 && reply < turn.length - 1) {
+    if (
+      reply >= 0 &&
+      reply < turn.length - 1 &&
+      turn[reply]!.type !== "tool_use"
+    ) {
       const before = arrangeThinkingMessages(
         turn.slice(0, reply),
         thinkingMessages,
