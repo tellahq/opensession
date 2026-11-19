@@ -295,7 +295,7 @@ export function BusyInline({
       <div
         className={cn(
           msgRow,
-          "mt-0.5 flex-row items-center gap-2 px-1 py-1.25 text-dim",
+          "mt-0.5 flex-row items-center gap-0.5 px-1 py-1.25 text-dim",
         )}
       >
         {/* The 8px pull hangs off the DOT, not off the row: msgRow centres
