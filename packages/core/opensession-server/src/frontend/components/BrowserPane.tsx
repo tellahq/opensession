@@ -10,6 +10,7 @@ import {
   hideKeptFrame,
   keptFrameElement,
   keptFrameStepped,
+  keptPageDeploying,
   loadKeptFrame,
   showKeptFrame,
   subscribeKeptFrames,
@@ -217,6 +218,15 @@ function KeptBrowserPane({
   }, [key, slot, url, name, frameTitle, allow, sandbox]);
 
   const address = frame?.url === url ? (frame.location ?? frame.address) : url;
+  // A newer deploy of this preview is on its way; the page reloads by itself
+  // once it lands (see useReloadOnFreshDeploy). The pane's own status, when
+  // it passes one, already says so.
+  const readDeploying = () => keptPageDeploying(url);
+  const deploying = useSyncExternalStore(
+    subscribeKeptFrames,
+    readDeploying,
+    readDeploying,
+  );
 
   return (
     <div className={BROWSER_PANE}>
@@ -226,7 +236,12 @@ function KeptBrowserPane({
         history={frame?.url === url ? frame.history : undefined}
         onLoad={(next) => loadKeptFrame(key, next)}
         onStep={(delta, length) => keptFrameStepped(key, delta, length)}
-        leading={leading}
+        leading={
+          leading ??
+          (deploying ? (
+            <span className="mr-1 shrink-0 text-xs text-dim">Deploying…</span>
+          ) : undefined)
+        }
         actions={actions}
         openWindowName={openWindowName}
         annotating={commentSessionId ? annotating : undefined}

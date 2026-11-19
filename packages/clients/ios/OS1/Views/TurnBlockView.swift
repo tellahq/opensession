@@ -228,6 +228,9 @@ extension WorkTurn {
 /// another makes a reader open two things to see one.
 struct TurnStepsView: View {
     let items: [TurnItem]
+    /// A loop fold's status steps by entry id (`LoopWorkRows`), drawn as
+    /// one quiet line or, folded into an earlier one, not at all.
+    var statuses: [String: FoldStatus.Step] = [:]
     let sessionId: String
     var worktreeDir: String?
     let isLive: Bool
@@ -243,11 +246,13 @@ struct TurnStepsView: View {
 
     private enum TurnSection: Identifiable {
         case message(TranscriptEntry)
+        case status(id: String, FoldStatus)
         case tools([ToolCallItem], kind: ToolRunKind)
 
         var id: String {
             switch self {
             case .message(let entry): entry.id
+            case .status(let id, _): id
             case .tools(let items, _): "tools-\(items.first?.id ?? "empty")"
             }
         }
@@ -257,6 +262,8 @@ struct TurnStepsView: View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(sections) { section in
                 switch section {
+                case .status(_, let status):
+                    ProgressStatusLine(status: status)
                 case .message(let entry):
                     if entry.isReasoning == true {
                         ReasoningSummaryRow(
@@ -327,7 +334,12 @@ struct TurnStepsView: View {
         for item in items {
             switch item {
             case .message(let entry):
-                sections.append(.message(entry))
+                switch statuses[entry.id] {
+                case .shown(let status): sections.append(.status(id: entry.id, status))
+                // Folded into an earlier step: the calls either side join one run.
+                case .folded: break
+                case nil: sections.append(.message(entry))
+                }
             case .tool(let call):
                 let kind = runKind(call)
                 if let last = sections.last,

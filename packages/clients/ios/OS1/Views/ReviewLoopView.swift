@@ -169,6 +169,7 @@ struct LoopWorkRows: View {
     var activity = TurnActivity.standard
 
     var body: some View {
+        let statuses = foldStatuses
         ForEach(loop.blocks) { block in
             // The handoff itself is what the header stands for; drawing it
             // again inside would say the same thing twice, one indent apart.
@@ -181,19 +182,64 @@ struct LoopWorkRows: View {
                 // only what it said beyond that, a short line each.
                 TriggerDetailView(lines: entry.notice?.triggerDetail(entry.text) ?? [])
             } else if !isHandoff(block), !isTurnBoundary(block) {
-                row(for: block)
+                row(for: block, status: statuses[block.id], statuses: statuses)
             }
         }
+    }
+
+    /// How each status step reads, by entry id. A turn's own narration
+    /// counts too: the "✓ CI: All checks passed" an agent posts mid-turn
+    /// closes the wait it reports on. Most folds have no status, and those
+    /// parse no dates.
+    private var foldStatuses: [String: FoldStatus.Step] {
+        var steps: [(id: String, update: ProgressUpdate?, at: () -> Date?)] = []
+        for block in loop.blocks {
+            switch block {
+            case .message(let entry):
+                steps.append((entry.id, ProgressUpdate(entry), { entry.timestampDate }))
+            case .work(let turn):
+                for item in turn.items {
+                    switch item {
+                    case .message(let entry):
+                        steps.append((entry.id, ProgressUpdate(entry), { entry.timestampDate }))
+                    case .tool(let call):
+                        steps.append((call.id, nil, { (call.use ?? call.result)?.timestampDate }))
+                    }
+                }
+            case .tool(let call):
+                steps.append((call.id, nil, { (call.use ?? call.result)?.timestampDate }))
+            case .footer(let footer):
+                steps.append((footer.id, nil, { footer.timestamp }))
+            default:
+                steps.append((block.id, nil, { nil }))
+            }
+        }
+        guard steps.contains(where: { $0.update != nil }) else { return [:] }
+        let resolved = FoldStatus.resolve(
+            steps.map { $0.update },
+            startedAt: { steps[$0].at() },
+            isLive: loop.isLive
+        )
+        var byId: [String: FoldStatus.Step] = [:]
+        for (step, status) in zip(steps, resolved) {
+            if let status { byId[step.id] = status }
+        }
+        return byId
     }
 
     /// Review work uses the turn's own step rows, without a second worker
     /// disclosure inside this one.
     @ViewBuilder
-    private func row(for block: TranscriptBlock) -> some View {
+    private func row(
+        for block: TranscriptBlock,
+        status: FoldStatus.Step?,
+        statuses: [String: FoldStatus.Step]
+    ) -> some View {
         switch block {
         case .work(let turn):
             TurnStepsView(
                 items: turn.items,
+                statuses: statuses,
                 sessionId: sessionId,
                 worktreeDir: worktreeDir,
                 // Only the loop's newest work can still be running.
@@ -211,9 +257,11 @@ struct LoopWorkRows: View {
         case .footer(let footer):
             TurnFooterView(footer: footer, sessionId: sessionId)
         case .message(let entry):
-            if let update = ProgressUpdate(entry) {
+            if let status {
                 // A status inside a fold is one quiet line, not a message.
-                ProgressStatusLine(update: update)
+                if case .shown(let shown) = status {
+                    ProgressStatusLine(status: shown)
+                }
             } else if let notice = entry.notice {
                 NoticeRow(
                     entry: entry,
