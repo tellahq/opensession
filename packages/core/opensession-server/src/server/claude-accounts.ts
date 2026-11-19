@@ -1323,6 +1323,18 @@ export function accountServesUser(
   );
 }
 
+/** The login a run may bill a personal Claude API account with: the
+ *  session creator's verified login, and only while GitHub sign-in is on.
+ *  Without sign-in the run user is a name any client can claim (or one
+ *  queued while sign-in was off), so a login stored earlier must not vouch
+ *  for it: personal API accounts then fail closed and shared ones serve. */
+export function runBillingLogin(
+  creatorLogin: string | null | undefined,
+  signInActive: boolean,
+): string | undefined {
+  return (signInActive && creatorLogin?.trim()) || undefined;
+}
+
 function sameGithubLogin(
   a: string | null | undefined,
   b: string | null | undefined,

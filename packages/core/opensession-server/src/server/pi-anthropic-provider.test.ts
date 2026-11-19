@@ -1947,6 +1947,15 @@ describe("buildPiAnthropicProvider", () => {
     }
   });
 
+  test("a run bills a personal API account only while GitHub sign-in is on", () => {
+    // With sign-in off the run user is a claimed name, so the creator's
+    // stored login must not vouch for it.
+    expect(accounts.runBillingLogin("alex-rivera", true)).toBe("alex-rivera");
+    expect(accounts.runBillingLogin("alex-rivera", false)).toBeUndefined();
+    expect(accounts.runBillingLogin(undefined, true)).toBeUndefined();
+    expect(accounts.runBillingLogin("  ", true)).toBeUndefined();
+  });
+
   test("setup readiness counts only Claude accounts that can run the default", async () => {
     const { __setIdentitiesForTest } = await import("./shared/user-mappings");
     let restoreRoster = () => {};
