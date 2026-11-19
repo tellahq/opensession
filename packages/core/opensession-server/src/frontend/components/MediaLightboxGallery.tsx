@@ -69,9 +69,11 @@ import {
   IconX,
 } from "./icons";
 
-/** Desktop's actions: plain icons, named by their tooltips. */
-const LIGHTBOX_ICON_TOOL_CLASS =
-  "size-10 rounded-full text-fg/70 hover:text-fg aria-pressed:bg-hover aria-pressed:text-fg";
+/** Desktop's actions: quiet ghosts beside Close. The ones you reach for
+ *  most say their name; the rest are icons named by their tooltips. */
+const LIGHTBOX_TOOL_BASE_CLASS =
+  "h-10 rounded-full text-fg/70 hover:text-fg aria-pressed:bg-hover aria-pressed:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg";
+const LIGHTBOX_ICON_TOOL_CLASS = `${LIGHTBOX_TOOL_BASE_CLASS} w-10`;
 
 export function MediaLightboxGallery({
   items,
@@ -659,22 +661,33 @@ export function MediaLightboxGallery({
     item.src.startsWith("data:") || item.src.startsWith("blob:")
       ? suggestedMediaName(item)
       : undefined;
-  // Desktop's actions: centred in the top bar with the rest of the set, over
-  // the picture they act on, so the bottom is free for its description.
+  // Desktop's actions: on the right beside Close, so the top centre is
+  // the rest of the set. `text` gives one its name in words, not a tooltip.
   const tool = (
     label: string,
     icon: React.ReactNode,
     props: Omit<React.ComponentProps<typeof Button>, "icon" | "variant">,
-  ) => (
-    <Tooltip label={label} side="bottom">
+    text?: string,
+  ) =>
+    text ? (
       <Button
         variant="ghost"
         icon={icon}
-        className={LIGHTBOX_ICON_TOOL_CLASS}
+        className={LIGHTBOX_TOOL_BASE_CLASS}
         {...props}
-      />
-    </Tooltip>
-  );
+      >
+        {text}
+      </Button>
+    ) : (
+      <Tooltip label={label} side="bottom">
+        <Button
+          variant="ghost"
+          icon={icon}
+          className={LIGHTBOX_ICON_TOOL_CLASS}
+          {...props}
+        />
+      </Tooltip>
+    );
   const tools = (
     <div
       role="group"
@@ -693,29 +706,26 @@ export function MediaLightboxGallery({
               ? "Cancel image comment"
               : "Comment on image",
           },
+          "Comment",
         )}
       {/* One Copy for both things a picture can be copied as: its pixels
           for a paste into a document, its URL for a ticket or a message. */}
       {canCopyImage && canCopyLink ? (
         <Menu.Root>
-          <Tooltip label={copiedAny ? "Copied" : "Copy"} side="bottom">
-            <Menu.Trigger
-              render={
-                <Button
-                  variant="ghost"
-                  icon={
-                    copiedAny ? <IconCheck size={20} /> : <IconCopy size={20} />
-                  }
-                  className={cn(
-                    LIGHTBOX_ICON_TOOL_CLASS,
-                    "data-[popup-open]:bg-hover data-[popup-open]:text-fg",
-                  )}
-                  aria-label={copiedAny ? "Copied" : "Copy"}
-                />
-              }
-            />
-          </Tooltip>
-          <Menu.Popup side="bottom" align="center" sideOffset={6}>
+          <Menu.Trigger
+            render={
+              <Button
+                variant="ghost"
+                icon={
+                  copiedAny ? <IconCheck size={20} /> : <IconCopy size={20} />
+                }
+                className={LIGHTBOX_TOOL_BASE_CLASS}
+              >
+                {copiedAny ? "Copied" : "Copy"}
+              </Button>
+            }
+          />
+          <Menu.Popup side="bottom" align="end" sideOffset={6}>
             <Menu.Item onClick={copyImage}>
               <IconCopy size={18} className={MENU_ICON} />
               Copy image
@@ -734,6 +744,7 @@ export function MediaLightboxGallery({
             onClick: copyImage,
             "aria-label": copiedImage ? "Image copied" : "Copy image",
           },
+          copiedImage ? "Copied" : "Copy image",
         )
       ) : canCopyLink ? (
         tool(
@@ -743,6 +754,7 @@ export function MediaLightboxGallery({
             onClick: copyLink,
             "aria-label": copied ? "Link copied" : "Copy link",
           },
+          copied ? "Copied" : "Copy link",
         )
       ) : null}
       {nativeShare
@@ -887,9 +899,9 @@ export function MediaLightboxGallery({
             </div>
           )}
         </div>
-        {/* The rest of the set and what you can do with this one, over the
-            picture's column rather than the window's middle: the margin is
-            the same shift the stage pays as padding. */}
+        {/* The rest of the set, over the picture's column rather than the
+            window's middle: the margin is the same shift the stage pays as
+            padding. */}
         <div
           className="pointer-events-auto flex items-center gap-3"
           style={
@@ -909,9 +921,9 @@ export function MediaLightboxGallery({
               {index + 1} of {items.length}
             </span>
           )}
-          {!isPhone && tools}
         </div>
         <div className="flex min-w-0 items-center justify-self-end gap-2">
+          {!isPhone && tools}
           <Button
             ref={closeRef}
             variant="default"
