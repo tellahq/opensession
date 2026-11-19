@@ -3,14 +3,20 @@ import { useNavigation } from "../../hooks/useNavigation";
 import { openThreadTab } from "../../lib/thread-tabs";
 import type { UnifiedSession } from "../../lib/types";
 import { useSessionRecord } from "../../lib/session-records";
-import { threadState, threadStatusLine } from "../../lib/session-threads";
+import {
+  threadState,
+  threadStatusLine,
+  type ThreadState,
+} from "../../lib/session-threads";
 import { cn } from "../../ui/cn";
 import {
   MessageActionButtons,
   MessageThreadSummary,
 } from "../comments/MessageActions";
 import { ListRow } from "../../ui/list-row";
+import { IconRobot } from "../icons";
 import { THREAD_DOT } from "./thread-classes";
+import { useThreadActivity } from "./useThreadActivity";
 
 /** A thread the turn started, and the prompt it was started on. */
 export interface SpawnedThread {
@@ -21,12 +27,14 @@ export interface SpawnedThread {
 }
 
 /**
- * Delegated work stays reachable below the fold as quiet nested rows.
- * Show one current status, not a second copy of the worker's report.
+ * The threads a turn started, as cards under the turn: an agent mark, what
+ * it was asked to do, and one line on where it stands (its current step
+ * while it works). Not a second copy of its report: the turn's reply says
+ * what it found.
  */
 export function ThreadCards({ threads }: { threads: SpawnedThread[] }) {
   return (
-    <div className="mt-0.5 flex flex-col pl-5 pr-1">
+    <div className="mt-1 flex flex-col rounded-xl bg-panel p-1">
       {threads.map((thread) => (
         <ThreadCard key={thread.id} spawned={thread} />
       ))}
@@ -45,7 +53,7 @@ function ThreadCard({ spawned }: { spawned: SpawnedThread }) {
   };
   return (
     <div className="flex flex-col gap-1">
-      <div className="group/card flex items-center gap-1">
+      <div className="group/card flex items-center gap-0.5">
         <ThreadCardBody spawned={spawned} fallbackTitle={fallbackTitle} />
         <div className="flex shrink-0 items-center gap-0.5 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-hover/card:opacity-100 [@media(hover:hover)]:group-focus-within/card:opacity-100">
           <MessageActionButtons message={message} className="phone:size-11" />
@@ -66,9 +74,11 @@ function ThreadCardBody({
   const navigation = useNavigation();
   const thread = useSessionRecord(spawned.threadId);
   const phone = useIsPhone();
+  const working = thread ? threadState(thread) === "working" : false;
+  const activity = useThreadActivity(spawned.threadId, working);
   return (
     <ListRow
-      className="items-center py-1 font-sans"
+      className="items-center gap-3 rounded-lg py-1.5 pl-2 font-sans"
       aria-label={`Open thread: ${thread?.title || fallbackTitle}${thread ? `, ${threadStatusLine(thread)}` : ""}`}
       onClick={() => {
         // A tab of its own beside the conversation on desktop; a phone
@@ -78,54 +88,83 @@ function ThreadCardBody({
       }}
     >
       {thread ? (
-        <ThreadCardSummary thread={thread} />
+        <ThreadCardSummary thread={thread} activity={activity} />
       ) : (
         <>
-          <span
-            aria-hidden="true"
-            className="flex size-5 shrink-0 items-center justify-center phone:self-start"
-          >
-            <span className="size-1.5 rounded-full bg-line-strong" />
-          </span>
-          <span className="min-w-0 truncate text-label text-dim">
-            {fallbackTitle}
-          </span>
+          <AgentMark state={null} />
+          <ThreadCardText title={fallbackTitle} status="Thread" />
         </>
       )}
     </ListRow>
   );
 }
 
-export function ThreadCardSummary({ thread }: { thread: UnifiedSession }) {
+/** A robot on a round tile, with the thread's state dot on its corner. */
+function AgentMark({ state }: { state: ThreadState | null }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="relative flex size-7 shrink-0 items-center justify-center rounded-full bg-bg text-dim"
+    >
+      <IconRobot size={16} />
+      <span
+        className={cn(
+          "absolute right-0 bottom-0 size-2.5 rounded-full ring-2 ring-panel",
+          state ? THREAD_DOT[state] : "bg-line-strong",
+          state === "working" && "motion-safe:animate-pulse",
+        )}
+      />
+    </span>
+  );
+}
+
+function ThreadCardText({
+  title,
+  status,
+  activity,
+  blocked = false,
+}: {
+  title: string;
+  status: string;
+  activity?: string | null;
+  blocked?: boolean;
+}) {
+  return (
+    <span className="flex min-w-0 flex-1 flex-col">
+      <span className="truncate text-label font-medium leading-5 text-fg">
+        {title}
+      </span>
+      <span className="truncate text-meta leading-4 text-faint">
+        <span className={cn(blocked && "text-blue")}>{status}</span>
+        {activity && (
+          <span aria-live="polite" title={activity}>
+            {" "}
+            · {activity}
+          </span>
+        )}
+      </span>
+    </span>
+  );
+}
+
+export function ThreadCardSummary({
+  thread,
+  activity,
+}: {
+  thread: UnifiedSession;
+  /** The step a working thread is on now ("Editing checkout.ts"). */
+  activity?: string | null;
+}) {
   const state = threadState(thread);
-  const status = threadStatusLine(thread);
   return (
     <>
-      <span
-        aria-hidden="true"
-        className="flex size-5 shrink-0 items-center justify-center phone:self-start"
-      >
-        <span
-          className={cn(
-            "size-1.5 rounded-full",
-            THREAD_DOT[state],
-            state === "working" && "motion-safe:animate-pulse",
-          )}
-        />
-      </span>
-      <span className="flex min-w-0 flex-1 items-baseline gap-2 phone:flex-col phone:items-start phone:gap-0.5">
-        <span className="min-w-0 truncate text-label text-dim phone:max-w-full">
-          {thread.title}
-        </span>
-        <span
-          className={cn(
-            "shrink-0 text-meta",
-            state === "blocked" ? "text-blue" : "text-faint",
-          )}
-        >
-          {status}
-        </span>
-      </span>
+      <AgentMark state={state} />
+      <ThreadCardText
+        title={thread.title}
+        status={threadStatusLine(thread)}
+        activity={state === "working" ? activity : null}
+        blocked={state === "blocked"}
+      />
     </>
   );
 }

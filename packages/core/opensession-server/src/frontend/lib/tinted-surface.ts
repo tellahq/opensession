@@ -16,12 +16,14 @@
  * colour and its reach; the chip is its name. Neither does the job alone.
  *
  * Strength follows duty cycle. Ask mode is ambient, on for the session's whole
- * life, so it is the lighter of the two; note mode is one message, so it is
- * allowed to be louder, and it paints OVER ask in the composer that has both.
+ * life, so it is the lighter of the two, and in the session composer it is
+ * not painted at all: a box you type into all day that stays green reads as
+ * a different input, not a mode, so only its chip remains there. Note mode is
+ * one message, so it is allowed to be louder.
  *
  * The base is the surface the wash actually covers, and it matters:
  *
- * · The composer and the Plain reply box pass `--composer-surface`, which is
+ * · The note composer and the Plain reply box pass `--composer-surface`, which is
  *   white in light mode. `--control-surface` is a grey there, so mixing into it
  *   sank the box a step darker than its resting state and the tint read as
  *   dirt rather than as colour.
@@ -39,7 +41,9 @@ function tint(ink: string, percent: number, base: string): string {
   return `color-mix(in srgb, ${ink} ${percent}%, ${base})`;
 }
 
-/** Read-only mode, wherever you meet it: the session composer, the palette. */
+/** Read-only mode in the new-session palette, where it is one choice among
+ *  others. The session composer does not wash for it: ask lasts the whole
+ *  session, so its chip alone names it there. */
 export function askSurface(base: string): string {
   return tint("var(--green)", 7, base);
 }
