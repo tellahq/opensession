@@ -255,9 +255,10 @@ function PrBarButton({
     red: "bg-[var(--red)] border-[color-mix(in_srgb,var(--red)_78%,black)] text-white",
     // The fix for a red state (Fix checks, Address feedback): red ink on the
     // card's own surface, so it reads as a clean cut-out of the tinted band
-    // rather than a second, darker tint of the same pink.
+    // rather than a second, darker tint of the same pink. The hairline is
+    // enough lift: a grey shadow on the pink band only reads as a smudge.
     "status-red":
-      "border-line bg-popup text-red hover:bg-[color-mix(in_srgb,var(--red)_6%,var(--popup-surface))] hover:brightness-100",
+      "border-line bg-popup text-red shadow-none hover:bg-[color-mix(in_srgb,var(--red)_6%,var(--popup-surface))] hover:brightness-100",
     "status-yellow":
       "border-[color-mix(in_srgb,var(--yellow)_35%,transparent)] bg-[color-mix(in_srgb,var(--yellow)_10%,var(--control-surface))] text-yellow hover:bg-[color-mix(in_srgb,var(--yellow)_16%,var(--control-surface))] hover:brightness-100",
     solid:
