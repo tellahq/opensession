@@ -252,8 +252,10 @@ function PrBarButton({
       "bg-[var(--green)] border-[color-mix(in_srgb,var(--green)_78%,black)] text-white",
     purple:
       "bg-[var(--purple)] border-[color-mix(in_srgb,var(--purple)_78%,black)] text-white",
-    red: "bg-[var(--red)] border-[color-mix(in_srgb,var(--red)_78%,black)] text-white",
-    // The fix for a red state (Fix checks, Address feedback): red ink on the
+    // The fix on a red band (Resolve, Fix checks). Like the card pill below,
+    // it takes no shadow: on the tinted band a grey shadow only smudges.
+    red: "bg-[var(--red)] border-[color-mix(in_srgb,var(--red)_78%,black)] text-white shadow-none",
+    // The fix for a review state (Address feedback): red ink on the
     // card's own surface, so it reads as a clean cut-out of the tinted band
     // rather than a second, darker tint of the same pink. The hairline is
     // enough lift: a grey shadow on the pink band only reads as a smudge.
@@ -911,14 +913,20 @@ export function PrStatusBar({
   function renderAction(): React.ReactNode {
     if (prompted) {
       const tone: PrBarButtonProps["tone"] =
-        headline.key === "conflicts"
+        headline.key === "conflicts" || headline.key === "failing"
           ? "red"
           : headline.key === "no-pr"
             ? "secondary"
             : "status-red";
       return (
         <PrBarButton className={actionBtn} tone={tone} working disabled>
-          <TextShimmer className="[--text-shimmer-highlight:var(--text)]">
+          <TextShimmer
+            className={
+              tone === "red"
+                ? "text-[color-mix(in_srgb,white_70%,var(--red))] [--text-shimmer-highlight:white]"
+                : "[--text-shimmer-highlight:var(--text)]"
+            }
+          >
             {prompted.label}
           </TextShimmer>
         </PrBarButton>
@@ -1053,7 +1061,7 @@ export function PrStatusBar({
         return send ? (
           <PrBarButton
             className={actionBtn}
-            tone="status-red"
+            tone="red"
             icon={<IconSparkle size={18} />}
             onClick={() =>
               promptSession(
