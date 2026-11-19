@@ -1446,9 +1446,14 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
 
     expect(html.match(/data-reasoning=""/g)).toHaveLength(2);
     expect(html).not.toContain("Inspecting the current state");
-    expect(html).toContain("The first probe found an older release.");
+    // A thinking step reads like a tool row: its latest heading, the trace
+    // behind it one click away.
+    expect(html).not.toContain("The first probe found an older release.");
     expect(html).toContain("Checking deployment status");
     expect(html).toContain("Verifying the release");
+    setTurnPrefs("open", "open");
+    const open = renderToStaticMarkup(<TranscriptBlocks entries={entries} />);
+    expect(open).toContain("The first probe found an older release.");
     setTurnPrefs(null);
     setThinkingMessagesPref(null);
   });
