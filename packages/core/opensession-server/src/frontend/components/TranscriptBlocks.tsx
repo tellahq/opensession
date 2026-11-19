@@ -12,6 +12,7 @@ import {
   turnScrollAnchor,
 } from "../lib/transcript-block-identity";
 import { MessageBubble } from "./MessageBubble";
+import { formatDuration } from "../lib/time";
 import { ProgressStatusLine, ProgressStatusRow } from "./ProgressStatusRow";
 import {
   collectProgressUpdates,
@@ -441,6 +442,34 @@ function foldReportedTasks(
       i++;
       continue;
     }
+    // An automated event handled with nothing left for the person gets a
+    // one-line status answer ("✓ **Merge conflicts**: Resolved"). The event
+    // and its work then fold under that status row (projectProgressBlocks),
+    // so the whole thing is one line.
+    if (
+      trigger &&
+      block.kind === "entry" &&
+      progress.get(block.entry.id) &&
+      !pickedBackUp(i + 1)
+    ) {
+      const first = run.flatMap(renderBlockEntries)[0];
+      folded.push({
+        kind: "review-loop",
+        variant: "work",
+        trigger,
+        // Interim statuses are the row's own history.
+        blocks: run.filter((inner) => !isStatus(inner)),
+        prNumber: null,
+        rounds: 0,
+        settled: null,
+        durationMs: first
+          ? Date.parse(block.entry.timestamp) - Date.parse(first.timestamp)
+          : undefined,
+      });
+      folded.push(block);
+      run = [];
+      continue;
+    }
     if (foldable(block)) {
       run.push(block);
       continue;
@@ -479,6 +508,16 @@ function projectProgressBlocks(
       continue;
     }
     flush();
+    // An automated event's work, answered by a status: that row's work.
+    if (
+      block.kind === "review-loop" &&
+      block.trigger &&
+      blocks[index + 1] &&
+      isOwner(blocks[index + 1]!)
+    ) {
+      pending = block;
+      continue;
+    }
     if (block.kind !== "review-loop" || block.variant === "work") {
       projected.push(block);
       continue;
@@ -1083,11 +1122,24 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
       const content = progress ? (
         <ProgressStatusRow
           group={progress}
-          live={Boolean(checkBack) && isLoopLive(i) && isCheckBackTail(i)}
+          live={
+            checkBack?.variant === "check-back" &&
+            isLoopLive(i) &&
+            isCheckBackTail(i)
+          }
+          meta={
+            checkBack?.trigger && checkBack.durationMs !== undefined
+              ? (formatDuration(checkBack.durationMs) ?? undefined)
+              : undefined
+          }
           defaultOpen={reviewLoopsOpen}
           onOpenChange={onReviewLoopOpenChange}
         >
-          {checkBack && renderLoopChildren(checkBack, isLoopLive(i))}
+          {checkBack &&
+            renderLoopChildren(
+              checkBack,
+              checkBack.variant === "check-back" && isLoopLive(i),
+            )}
         </ProgressStatusRow>
       ) : block.kind === "turn" ? (
         <TurnBlock

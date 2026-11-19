@@ -116,6 +116,9 @@ export function buildRunInstructions(input: {
       "`◷ **Migration**: Running` or `✓ **Migration**: Done`. Reuse the topic to update " +
       "one row with expandable history. Only for progress or confirmed success, " +
       "never for blockers, questions or deliverables. " +
+      "A turn an automated notice started (GitHub, a workflow, a worker, another session) " +
+      "that you handled with nothing left for the person ends in one such line: " +
+      "`✓ **Merge conflicts**: Resolved`. " +
       (showsBuilds
         ? "CI and deploy runs show live above the input: post no line that only " +
           "repeats their state, only what they cannot show, like merge readiness. "

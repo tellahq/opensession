@@ -170,6 +170,10 @@ struct ProgressProjection: Equatable, Sendable {
             if entry.isUser, entry.turnBoundary != true,
                entry.notice == nil || entry.notice?.kind == "review-handoff" {
                 active = nil
+            } else if entry.isUser, entry.turnBoundary != true, entry.notice?.triggerTitle != nil {
+                // An automated event (a GitHub notice, a worker's report) is
+                // a task of its own, so its status starts a fresh row.
+                active = nil
             }
             guard finals.contains(entry.id), let update = updates[entry.id] else { continue }
             if let index = active {

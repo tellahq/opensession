@@ -1026,6 +1026,10 @@ enum TranscriptGrouping {
             if case .message(let entry) = block { return progress.contains(entry.id) }
             return false
         }
+        func isStatusFooter(_ block: TranscriptBlock) -> Bool {
+            if case .footer(let footer) = block { return progress.contains(footer.entryId) }
+            return false
+        }
         func isFoldable(_ block: TranscriptBlock) -> Bool {
             switch block {
             case .work, .footer, .tool: true
@@ -1098,6 +1102,33 @@ enum TranscriptGrouping {
                 run = []
                 continue
             }
+            // An automated event handled with nothing left for the person
+            // gets a one-line status answer ("✓ **Merge conflicts**:
+            // Resolved"). The event and its work then fold under that status
+            // row (`project`), so the whole thing is one line.
+            if let trigger, case .message(let answer) = block,
+               progress.owners[answer.id] != nil,
+               !pickedBackUp(after: index) {
+                // Interim statuses are the row's own history.
+                let work = run.filter { !isStatus($0) && !isStatusFooter($0) }
+                let first = work.lazy.flatMap(\.entryIds).compactMap(start).first
+                var duration: TimeInterval?
+                if let first, let end = answer.timestampDate {
+                    duration = end.timeIntervalSince(first)
+                }
+                folded.append(.reviewLoop(ReviewLoop(
+                    id: "work:\(work.first?.id ?? answer.id)",
+                    kind: .work,
+                    rounds: 0,
+                    isLive: false,
+                    blocks: work,
+                    duration: duration,
+                    trigger: trigger
+                )))
+                folded.append(block)
+                run = []
+                continue
+            }
             if isFoldable(block) {
                 run.append(block)
             } else {
@@ -1141,6 +1172,12 @@ enum TranscriptGrouping {
             }
             if let loop = pending { projected.append(.reviewLoop(loop)) }
             pending = nil
+            // An automated event's work, answered by a status: that row's work.
+            if case .reviewLoop(let loop) = block, loop.trigger != nil,
+               index + 1 < blocks.count, owner(blocks[index + 1]) != nil {
+                pending = loop
+                continue
+            }
             guard case .reviewLoop(var loop) = block, loop.kind != .work else {
                 projected.append(block)
                 continue

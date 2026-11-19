@@ -16,6 +16,7 @@ import {
 export function ProgressStatusRow({
   group,
   live = false,
+  meta,
   defaultOpen = false,
   onOpenChange,
   children,
@@ -23,6 +24,8 @@ export function ProgressStatusRow({
   group: ProgressGroup;
   /** A check-back folded under this row is still running. */
   live?: boolean;
+  /** How long the folded work took, kept whole after the status. */
+  meta?: string;
   defaultOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
   /** The check-back work this row reports on. */
@@ -43,6 +46,7 @@ export function ProgressStatusRow({
         <span className="font-medium text-fg">{latest.topic}</span>
         <span className="text-dim">: {latest.text}</span>
       </span>
+      {meta && <span className="flex-none text-faint">· {meta}</span>}
     </span>
   );
   const rowClasses =

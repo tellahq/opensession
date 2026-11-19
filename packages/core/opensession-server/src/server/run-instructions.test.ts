@@ -203,7 +203,9 @@ describe("buildRunInstructions", () => {
     // "CI: Running" lines that repeated the live runs above the input.
     // Saying what changed in a sentence or two adds ~290: final replies
     // restated the reported problem and narrated what the proof showed.
-    expect(prompt.length).toBeLessThan(6_100);
+    // Ending a handled automated notice in one status line adds ~200: those
+    // replies were paragraphs nobody needed to read.
+    expect(prompt.length).toBeLessThan(6_300);
   });
 
   test("prefers concise outcomes without hiding blockers or verification limits", () => {
@@ -212,6 +214,7 @@ describe("buildRunInstructions", () => {
     expect(prompt).toContain("follow-ups report only what changed");
     expect(prompt).toContain("do not restate the problem they reported");
     expect(prompt).toContain("no pointers to proof");
+    expect(prompt).toContain("`✓ **Merge conflicts**: Resolved`");
     expect(prompt).toContain(
       "verification limits and required decisions explicit",
     );

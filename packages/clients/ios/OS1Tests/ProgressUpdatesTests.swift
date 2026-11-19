@@ -342,6 +342,47 @@ final class ProgressUpdatesTests: XCTestCase {
         })
     }
 
+    /// Handled with nothing for the person, the event's status answer is the
+    /// one row, with the event and its work folded under it.
+    func testAnAutomatedEventAnsweredWithAStatusIsOneRow() {
+        var event = TranscriptEntry(
+            id: "e",
+            type: "user",
+            content: "PR #5682 now has merge conflicts with its base branch. This session is assigned to handle it.",
+            timestamp: "2026-01-01T00:00:00Z"
+        )
+        event.notice = EntryNotice(
+            kind: "system",
+            title: "PR #5682 now has merge conflicts with its base branch",
+            tone: "info",
+            body: "collapsed",
+            link: nil,
+            ask: nil,
+            icon: nil
+        )
+        let result = blocks([
+            say("a", "◷ **CI**: Running"),
+            event,
+            toolUse("t1"), toolResult("t1"),
+            say("s", "✓ **Merge conflicts**: Resolved", at: 600),
+        ])
+        let rows = progressRows(result)
+        XCTAssertEqual(rows.map(\.latest.label), ["CI: Running", "Merge conflicts: Resolved"])
+        guard let work = progressWork(result).last ?? nil else {
+            return XCTFail("the event's work folds under its status row")
+        }
+        XCTAssertEqual(work.trigger, "PR #5682 now has merge conflicts with its base branch")
+        XCTAssertEqual(work.duration ?? 0, 600, accuracy: 1)
+        XCTAssertEqual(work.blocks.first?.id, "e")
+        XCTAssertFalse(result.contains { block in
+            switch block {
+            case .message(let entry): return entry.id == "e" || entry.id == "s"
+            case .work, .footer, .reviewLoop: return true
+            default: return false
+            }
+        })
+    }
+
     /// An event the agent answered without any work stays its own notice.
     func testAnAutomatedEventWithoutWorkStaysANotice() {
         var event = user("e", "PR #12 was merged into main by Kent.")
