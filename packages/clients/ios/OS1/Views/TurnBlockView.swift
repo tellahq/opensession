@@ -51,9 +51,6 @@ struct TurnBlockView: View {
                         worktreeDir: worktreeDir,
                         isLive: turn.isLive,
                         showsTools: true,
-                        // The turn header already summarizes a tool-only run.
-                        // Opening it reveals calls directly instead of adding
-                        // a second row with the same step count.
                         rendersToolCallsInPlace: flatTools,
                         expansionState: expansionState
                     )
