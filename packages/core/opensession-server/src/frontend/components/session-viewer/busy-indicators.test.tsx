@@ -4,37 +4,32 @@ import { LiveTurnStore } from "../../lib/live-turn-store";
 import { BusyInline, TranscriptSyncing } from "./busy-indicators";
 
 describe("BusyInline", () => {
-  test("centers the shimmer label with its dot and elapsed time", () => {
+  // The engine's phase reaches the row through useSyncExternalStore, which a
+  // static render reads as no phase; busy-activity.test.ts covers the words.
+  test("is the dot and the elapsed time, the phase only for screen readers", () => {
     const html = renderToStaticMarkup(
       <BusyInline
-        since={Date.now() - 12_000}
+        since={Date.now() - 24_000}
         stoppingSince={null}
         liveTurnStore={new LiveTurnStore()}
       />,
     );
-
-    // TextShimmer is an inline block. Its status wrapper must shrink to that
-    // line box instead of inheriting the taller transcript line box.
     expect(html).toContain(
-      '<span role="status" aria-live="polite" class="inline-flex">',
+      '<span role="status" aria-live="polite" class="inline-flex"><span class="sr-only">Working</span></span>',
     );
-    expect(html).toContain("Still working");
+    expect(html).not.toContain("data-text-shimmer");
+    expect(html).toMatch(/>24s<\/span>/);
   });
 
-  test("names a trailing thought, with the elapsed time, at the end", () => {
-    const store = new LiveTurnStore();
-    const release = store.claimTrailingThought();
+  test("counts from the first second", () => {
     const html = renderToStaticMarkup(
       <BusyInline
-        since={Date.now() - 15 * 60_000}
+        since={Date.now()}
         stoppingSince={null}
-        liveTurnStore={store}
+        liveTurnStore={new LiveTurnStore()}
       />,
     );
-    expect(html).toMatch(/>Thinking<\/span>/);
-    expect(html).not.toContain("Still working");
-    expect(html).toContain("· 15m");
-    release();
+    expect(html).toMatch(/>0s<\/span>/);
   });
 });
 
