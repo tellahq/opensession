@@ -654,6 +654,31 @@ describe("TranscriptBlocks compact tool runs", () => {
     expect(open).toContain("Ran 1 command, read 1 file");
   });
 
+  test("a reply that opens with a status names the work row above it", () => {
+    setTurnPrefs(null);
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        entries={[
+          ...toolEntries,
+          {
+            id: "answer",
+            type: "assistant",
+            content:
+              "◷ **Native build**: Running\n\nI didn't start a new build: one is already queued.",
+            timestamp: "2026-08-13T06:00:35Z",
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain(
+      '<span class="font-medium text-fg">Native build</span>',
+    );
+    expect(html).toContain('<span class="flex-none">· 3s</span>');
+    expect(html).not.toMatch(WORKED_TITLE);
+    expect(html).not.toContain("<strong>Native build</strong>");
+    expect(html).toContain("one is already queued");
+  });
+
   test("leaves the duration to the Worked fold, not the answer's footer too", () => {
     setTurnPrefs(null);
     const footerDuration = /pl-1 text-meta font-medium[^>]*>[^<]+</;

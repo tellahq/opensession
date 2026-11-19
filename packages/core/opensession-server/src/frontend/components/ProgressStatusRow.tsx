@@ -120,6 +120,22 @@ export function ProgressStatusRow({
   );
 }
 
+/** A status as the work row's title: "◷ Native build: Running". */
+export function ProgressStatusLabel({ update }: { update: ProgressUpdate }) {
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <StatusIcon
+        update={update}
+        className={update.state === "done" ? "text-green" : "text-dim"}
+      />
+      <span className="min-w-0 truncate">
+        <span className="font-medium text-fg">{update.topic}</span>
+        <span className="text-dim">: {update.text}</span>
+      </span>
+    </span>
+  );
+}
+
 /** A status message inside a work fold: the same line as an earlier update,
  * not a full message bubble. */
 export function ProgressStatusLine({ entry }: { entry: TranscriptEntry }) {

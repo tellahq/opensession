@@ -16,7 +16,9 @@ import { formatDuration } from "../lib/time";
 import { ProgressStatusLine, ProgressStatusRow } from "./ProgressStatusRow";
 import {
   collectProgressUpdates,
+  splitLeadStatus,
   type ProgressGroup,
+  type ProgressUpdate,
 } from "../lib/progress-updates";
 import { agentMessageText } from "../lib/agent-message";
 import { NoteBubble } from "./NoteBubble";
@@ -75,7 +77,13 @@ type RenderBlock =
        *  instead of drawn as its own "Checked back" row. */
       checkBack?: LoopBlock;
     }
-  | { kind: "turn"; items: TranscriptEntry[]; expandWhileRunning: boolean }
+  | {
+      kind: "turn";
+      items: TranscriptEntry[];
+      expandWhileRunning: boolean;
+      /** The status line the reply below opened with (liftLeadStatuses). */
+      status?: ProgressUpdate;
+    }
   | {
       kind: "footer";
       entry: TranscriptEntry;
@@ -479,6 +487,46 @@ function foldReportedTasks(
   }
   folded.push(...run);
   return folded;
+}
+
+/** A reply that opens with a status line ("◷ **Native build**: Running", then
+ * prose) hands that line to the work row right above it, "◷ Native build:
+ * Running · 35s ›", and keeps only its prose. Without a work row above it the
+ * reply is left as written. The footer keeps the original entry, so Copy
+ * copies the whole message. */
+// Per entry, so a rerender hands TurnBlock and MessageBubble the same status
+// and entry objects and their memo comparators can bail.
+const leadStatusCache = new WeakMap<
+  TranscriptEntry,
+  { update: ProgressUpdate; entry: TranscriptEntry } | null
+>();
+
+function leadStatusOf(entry: TranscriptEntry) {
+  let cached = leadStatusCache.get(entry);
+  if (cached === undefined) {
+    const split = splitLeadStatus(entry);
+    cached = split
+      ? { update: split.update, entry: { ...entry, content: split.rest } }
+      : null;
+    leadStatusCache.set(entry, cached);
+  }
+  return cached;
+}
+
+function liftLeadStatuses(blocks: RenderBlock[]): RenderBlock[] {
+  let lifted: RenderBlock[] | null = null;
+  for (let i = 1; i < blocks.length; i++) {
+    const block = blocks[i]!;
+    const prev = (lifted ?? blocks)[i - 1]!;
+    if (block.kind !== "entry" || block.entry.type !== "assistant") continue;
+    if (prev.kind !== "turn" || prev.status) continue;
+    const split = leadStatusOf(block.entry);
+    if (!split) continue;
+    lifted ??= [...blocks];
+    lifted[i - 1] = { ...prev, status: split.update };
+    lifted[i] = { ...block, entry: split.entry };
+  }
+  return lifted ?? blocks;
 }
 
 /** One status row per task. Status messages leave their folds; the check-back
@@ -914,12 +962,14 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
       at++;
     }
   }
-  const groupedBlocks = projectProgressBlocks(
-    groupCheckBacks(
-      groupReviewLoops(foldReportedTasks(blocks, progressUpdates)),
+  const groupedBlocks = liftLeadStatuses(
+    projectProgressBlocks(
+      groupCheckBacks(
+        groupReviewLoops(foldReportedTasks(blocks, progressUpdates)),
+        progressUpdates,
+      ),
       progressUpdates,
     ),
-    progressUpdates,
   );
   const isConversationBoundary = (block: RenderBlock) =>
     block.kind === "entry" &&
@@ -1150,6 +1200,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
           onOpenSubagent={onOpenSubagent}
           sessionId={sessionId}
           last={i === lastContentBlock}
+          status={block.status}
         />
       ) : block.kind === "note" ? (
         <NoteBubble thread={block.note} sessionId={sessionId} />

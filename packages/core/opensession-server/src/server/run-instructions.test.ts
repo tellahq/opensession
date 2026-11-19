@@ -205,7 +205,9 @@ describe("buildRunInstructions", () => {
     // restated the reported problem and narrated what the proof showed.
     // Ending a handled automated notice in one status line adds ~200: those
     // replies were paragraphs nobody needed to read.
-    expect(prompt.length).toBeLessThan(6_300);
+    // "As the whole message" adds ~90: replies put a status line on top of
+    // a paragraph that said the same thing.
+    expect(prompt.length).toBeLessThan(6_400);
   });
 
   test("prefers concise outcomes without hiding blockers or verification limits", () => {

@@ -383,6 +383,25 @@ final class ProgressUpdatesTests: XCTestCase {
         })
     }
 
+    /// A reply that opens with a status line names the work row above it and
+    /// keeps only its prose.
+    func testALeadingStatusNamesTheWorkRow() {
+        let result = blocks([
+            user("u", "Build it"),
+            toolUse("t1"), toolResult("t1"),
+            say("a", "◷ **Native build**: Running\n\nOne is already queued.", at: 35),
+        ])
+        guard let turn = result.lazy.compactMap({ block -> WorkTurn? in
+            if case .work(let turn) = block { turn } else { nil }
+        }).first else { return XCTFail("expected the work row") }
+        XCTAssertEqual(turn.leadStatus?.label, "Native build: Running")
+        XCTAssertTrue(result.contains { block in
+            if case .message(let entry) = block { return entry.text == "One is already queued." }
+            return false
+        })
+        XCTAssertTrue(progressRows(result).isEmpty)
+    }
+
     /// An event the agent answered without any work stays its own notice.
     func testAnAutomatedEventWithoutWorkStaysANotice() {
         var event = user("e", "PR #12 was merged into main by Kent.")

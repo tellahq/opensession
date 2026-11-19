@@ -54,6 +54,32 @@ export function parseProgressUpdate(
   };
 }
 
+/** A reply that opens with a status line and goes on in prose ("◷ **Native
+ * build**: Running", a blank line, then why): the status, and the prose after
+ * it. The status then names the work row above the reply instead of standing
+ * as a bold line of its own. */
+export function splitLeadStatus(
+  entry: TranscriptEntry,
+): { update: ProgressUpdate; rest: string } | null {
+  if (entry.type !== "assistant" || entry.isReasoning || entry.isError)
+    return null;
+  const match = /^([^\r\n]+)\r?\n\s*\n([\s\S]*\S[\s\S]*)$/.exec(
+    entry.content.trimStart(),
+  );
+  if (!match) return null;
+  const update = parseProgressUpdate({
+    ...entry,
+    content: match[1]!,
+    contentLength: undefined,
+    contentClamped: undefined,
+    pastedTexts: undefined,
+    images: undefined,
+    videos: undefined,
+    files: undefined,
+  });
+  return update ? { update, rest: match[2]!.trim() } : null;
+}
+
 /** One row per task: every update between two human messages or team notes
  * joins it, whatever its topic, so "CI: Running" then "Deployment: Running"
  * reads as one row that moved on rather than a stale row and a new one. The
