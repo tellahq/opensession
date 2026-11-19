@@ -51,6 +51,13 @@ export function deriveStatus(pr: PrDetails): StatusLine {
       qualifier: "Review required",
       tone: "yellow",
     };
+  if (pr.mergeStateStatus === "BLOCKED")
+    return {
+      key: "blocked",
+      label: "Open",
+      qualifier: pr.autoMerge ? "Merges when ready" : "Merge blocked",
+      tone: pr.autoMerge ? "green" : "yellow",
+    };
   return {
     key: "ready",
     label: "Open",
