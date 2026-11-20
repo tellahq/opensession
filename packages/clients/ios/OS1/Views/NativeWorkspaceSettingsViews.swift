@@ -16,14 +16,25 @@ struct ProvidersSettingsView: View {
     @State private var reload = 0
 
     var body: some View {
-        List {
-            ModelDefaultsSections(reload: reload)
-            ProviderAccountSections(reload: reload)
-            ModelProvidersSections(reload: reload)
+        ScrollViewReader { proxy in
+            List {
+                ModelDefaultsSections(reload: reload)
+                ProviderAccountSections(reload: reload)
+                ModelProvidersSections(reload: reload)
+            }
+            .insetGroupedListCompat()
+            .navigationTitle("Providers")
+            .refreshable { reload += 1 }
+            #if DEBUG
+            // Screenshot hook: `OS1_PROVIDERS_SCROLL=gemini` brings the Gemini
+            // card, below every account meter, into view.
+            .task {
+                guard ProcessInfo.processInfo.environment["OS1_PROVIDERS_SCROLL"] == "gemini" else { return }
+                try? await Task.sleep(for: .seconds(4))
+                proxy.scrollTo(ModelProvidersSections.geminiAnchor, anchor: .top)
+            }
+            #endif
         }
-        .insetGroupedListCompat()
-        .navigationTitle("Providers")
-        .refreshable { reload += 1 }
     }
 }
 
@@ -105,6 +116,7 @@ private struct ProviderNotice {
 }
 
 struct ModelProvidersSections: View {
+    static let geminiAnchor = "providers-gemini"
     /// Bumped by the enclosing pane's pull-to-refresh; re-runs `task`.
     var reload: Int
     /// `nil` until this device has an answer — from the cache on entry, or from
@@ -223,7 +235,7 @@ struct ModelProvidersSections: View {
             }
             if let geminiNotice { noticeRow(geminiNotice) }
         } header: {
-            Text("Gemini")
+            Text("Gemini").id(Self.geminiAnchor)
         } footer: {
             Text("Google AI Pro and Ultra plans include monthly developer credits that pay for this key. Claim them in [AI Studio billing](https://aistudio.google.com/billing). Signing in with the plan itself is not offered: Google does not allow its subscription sign-in in third-party agents.")
         }
