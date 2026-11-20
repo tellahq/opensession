@@ -2237,6 +2237,20 @@ extension TranscriptGroupingTests {
         XCTAssertTrue(viewModel.isRunning)
     }
 
+    func testAStopAfterTheModelTurnEndedShowsNoStopping() {
+        viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
+        viewModel.handle(.streamStart(sessionId: "bks-1"))
+        // The turn ends; a workflow it launched keeps the session busy.
+        viewModel.handle(.streamDone(sessionId: "bks-1"))
+        viewModel.cancelRun()
+        XCTAssertNil(viewModel.stoppingSince, "no model turn left to unwind")
+
+        // The next model turn can be stopped again.
+        viewModel.handle(.streamStart(sessionId: "bks-1"))
+        viewModel.cancelRun()
+        XCTAssertNotNil(viewModel.stoppingSince)
+    }
+
     func testAReconnectForgetsAnUnconfirmedStop() {
         viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
         viewModel.cancelRun()

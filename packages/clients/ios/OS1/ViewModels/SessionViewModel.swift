@@ -598,6 +598,10 @@ final class SessionViewModel {
     private var isAway = false
     /// stream_done arrived; the durable entry lands via the next transcript_append.
     private var streamEnded = true
+    /// The model's turn sent `stream_done` while the session stays busy (a
+    /// workflow it launched holds it). A Stop then has no turn to unwind, so
+    /// it does not show "Stopping…". Unknown counts as a turn in flight.
+    private var modelTurnEnded = false
     /// Optimistic local user messages, removed once the server echoes them back.
     private var localEchoIds: Set<String> = []
     /// Server user entries that landed here, with the CLIENT-clock moment they
@@ -1986,7 +1990,7 @@ final class SessionViewModel {
     }
 
     func cancelRun() {
-        if isRunning, stoppingSince == nil { stoppingSince = Date() }
+        if isRunning, !modelTurnEnded, stoppingSince == nil { stoppingSince = Date() }
         socket?.cancelWatchedRun()
     }
 
@@ -2567,10 +2571,12 @@ final class SessionViewModel {
             stoppingSince = nil
             isStreaming = true
             streamEnded = false
+            modelTurnEnded = false
             rebuildDisplayItems()
 
         case .streamText(let id, let text, let blockId) where id == session.id:
             isStreaming = true
+            modelTurnEnded = false
             // Live typing is the account's choice (Settings > Preferences),
             // default off. Dropping the frame is the whole implementation:
             // the block still arrives as a durable entry over
@@ -2609,6 +2615,7 @@ final class SessionViewModel {
             if holdsRunFixture { break }
             #endif
             streamEnded = true
+            modelTurnEnded = true
             runActivity = nil
             // The model turn is over, so the stop it was waiting on landed. A
             // workflow can keep the session busy past it; the row then goes
@@ -2621,6 +2628,8 @@ final class SessionViewModel {
             if holdsRunFixture { break }
             #endif
             runActivity = activity
+            // A phase is the model at work again.
+            if activity != nil { modelTurnEnded = false }
 
         case .feedSnapshot(let id, let activity) where id == session.id:
             #if DEBUG
@@ -2654,6 +2663,8 @@ final class SessionViewModel {
                 runStartedAt = nil
                 runActivity = nil
                 stoppingSince = nil
+                // The next run starts with its model turn in flight.
+                modelTurnEnded = false
             }
             isRunning = effectiveRunning
             if !effectiveRunning {
