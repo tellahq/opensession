@@ -55,6 +55,26 @@ export interface DiscussionApprovalResolvedPayload {
   toolCallId: string;
   status: "APPROVED" | "DENIED" | string;
   reviewerNote: string | null;
+  /** The teammate who decided (`internalActor`: a user or machine user). */
+  resolvedBy?: { actorType: string; userId?: string } | null;
+}
+
+export interface DiscussionQuestionResolvedPayload {
+  eventType?: "discussion.question_resolved";
+  discussion: DiscussionRef;
+  questionRequestId: string;
+  status: "ANSWERED" | "DISMISSED" | string;
+  questions: Array<{
+    id: string;
+    question: string;
+    isMultiSelect?: boolean;
+    options: Array<{ id: string; label: string; description?: string }>;
+  }>;
+  selections: Array<{
+    questionId: string;
+    optionIds: string[];
+    otherText: string | null;
+  }>;
 }
 
 export interface DiscussionWebhook {
@@ -62,7 +82,8 @@ export interface DiscussionWebhook {
   payload:
     | DiscussionMessageCreatedPayload
     | DiscussionTurnStopRequestedPayload
-    | DiscussionApprovalResolvedPayload;
+    | DiscussionApprovalResolvedPayload
+    | DiscussionQuestionResolvedPayload;
 }
 
 /**
@@ -96,7 +117,13 @@ function seenBefore(messageId: string): boolean {
 // --- Approval registry -----------------------------------------------------
 
 export type ApprovalOutcome =
-  | { status: "APPROVED"; reviewerNote: string | null }
+  | {
+      status: "APPROVED";
+      reviewerNote: string | null;
+      /** Plain user id (`u_…`) of the teammate who approved, when a person
+       *  did: an approved customer reply is sent as them. */
+      approvedByUserId?: string;
+    }
   | { status: "DENIED"; reviewerNote: string | null }
   | { status: "CANCELLED" }
   | { status: "TIMEOUT" };
@@ -154,6 +181,76 @@ export function cancelApprovalsFor(discussionId: string): number {
 
 export function pendingApprovalCount(): number {
   return pendingApprovals.size;
+}
+
+// --- Question registry -----------------------------------------------------
+
+export type QuestionOutcome =
+  | { status: "ANSWERED"; answer: string }
+  | { status: "DISMISSED" }
+  | { status: "CANCELLED" }
+  | { status: "TIMEOUT" };
+
+/** Plain merges a second ask into the card already open on a discussion, so
+ *  there is at most one card, and one waiter, per discussion. */
+const pendingQuestions = new Map<
+  string,
+  { resolve: (outcome: QuestionOutcome) => void }
+>();
+
+export function hasPendingQuestion(discussionId: string): boolean {
+  return pendingQuestions.has(discussionId);
+}
+
+/** Wait for the teammate to answer or dismiss the discussion's question
+ *  card, or time out. Register before publishing the card. */
+export function awaitQuestion(
+  discussionId: string,
+  timeoutMs: number,
+): Promise<QuestionOutcome> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      pendingQuestions.delete(discussionId);
+      resolve({ status: "TIMEOUT" });
+    }, timeoutMs);
+    pendingQuestions.set(discussionId, {
+      resolve: (outcome) => {
+        clearTimeout(timer);
+        pendingQuestions.delete(discussionId);
+        resolve(outcome);
+      },
+    });
+  });
+}
+
+export function resolveQuestion(
+  discussionId: string,
+  outcome: QuestionOutcome,
+): boolean {
+  const pending = pendingQuestions.get(discussionId);
+  if (!pending) return false;
+  pending.resolve(outcome);
+  return true;
+}
+
+/** The teammate's answers as text for the model: each question with the
+ *  labels they picked and anything typed in the card's Other box. */
+export function formatQuestionAnswer(
+  payload: Pick<DiscussionQuestionResolvedPayload, "questions" | "selections">,
+): string {
+  return payload.questions
+    .map((q) => {
+      const selection = payload.selections.find((s) => s.questionId === q.id);
+      const picked = (selection?.optionIds ?? [])
+        .map((id) => q.options.find((o) => o.id === id)?.label)
+        .filter((label): label is string => !!label);
+      const other = selection?.otherText?.trim();
+      const answer = [...picked, ...(other ? [`Other: ${other}`] : [])].join(
+        "; ",
+      );
+      return `Q: ${q.question}\nA: ${answer || "(no answer)"}`;
+    })
+    .join("\n\n");
 }
 
 // --- Active actions --------------------------------------------------------
@@ -218,7 +315,8 @@ export function discussionOpeningPrompt(
       discussion.threadId
         ? `The discussion was opened on support thread ${discussion.threadId}; its context follows.`
         : `The discussion was opened from Plain's home, not on a thread.`,
-      `To send a reply to the customer, or to run a Stripe refund/cancellation, use the opensession-plain-discussion tools. They show the teammate an Approve/Deny card in Plain and wait for the decision — never claim to have sent or refunded anything you did not do through them.`,
+      `To send a reply to the customer, or to run a Stripe refund/cancellation, use the opensession-plain-discussion tools. They show the teammate an Approve/Deny card in Plain and wait for the decision — never claim to have sent or refunded anything you did not do through them. An approved reply goes out under the approving teammate's name when Plain allows it.`,
+      `When a choice only the teammate can make blocks you, ask it with opensession-plain-discussion's ask_teammate (a question card with options) instead of guessing.`,
       `The teammate can only see this discussion, not ${productName()}; put everything they need in your reply.`,
     ].join("\n"),
     "preamble",
@@ -405,6 +503,7 @@ async function onTurnStopRequested(
   // flight for this discussion, so a Stop during creation reaches the
   // announced session.
   const cancelledApprovals = cancelApprovalsFor(discussion.id);
+  resolveQuestion(discussion.id, { status: "CANCELLED" });
   const abortedActions = abortDiscussionActions(discussion.id);
   await withMessageOrder(discussion.id, async () => {
     const session = await findDiscussionSession(discussion.id);
@@ -425,13 +524,32 @@ async function onTurnStopRequested(
 }
 
 function onApprovalResolved(payload: DiscussionApprovalResolvedPayload): void {
+  const approver =
+    payload.resolvedBy?.actorType === "user"
+      ? payload.resolvedBy.userId
+      : undefined;
   const outcome: ApprovalOutcome =
     payload.status === "APPROVED"
-      ? { status: "APPROVED", reviewerNote: payload.reviewerNote }
+      ? {
+          status: "APPROVED",
+          reviewerNote: payload.reviewerNote,
+          ...(approver ? { approvedByUserId: approver } : {}),
+        }
       : { status: "DENIED", reviewerNote: payload.reviewerNote };
   const matched = resolveApproval(payload.toolCallId, outcome);
   console.log(
     `[plain] Approval ${payload.status} for ${payload.toolCallId} on discussion ${payload.discussion.id}${matched ? "" : " (no tool waiting — restarted since?)"}`,
+  );
+}
+
+function onQuestionResolved(payload: DiscussionQuestionResolvedPayload): void {
+  const outcome: QuestionOutcome =
+    payload.status === "ANSWERED"
+      ? { status: "ANSWERED", answer: formatQuestionAnswer(payload) }
+      : { status: "DISMISSED" };
+  const matched = resolveQuestion(payload.discussion.id, outcome);
+  console.log(
+    `[plain] Question ${payload.questionRequestId} ${payload.status} on discussion ${payload.discussion.id}${matched ? "" : " (no tool waiting — restarted since?)"}`,
   );
 }
 
@@ -456,6 +574,9 @@ export function handleDiscussionEvent(webhook: DiscussionWebhook): Response {
       break;
     case "discussion.tool_call_approval_resolved":
       onApprovalResolved(webhook.payload as DiscussionApprovalResolvedPayload);
+      break;
+    case "discussion.question_resolved":
+      onQuestionResolved(webhook.payload as DiscussionQuestionResolvedPayload);
       break;
     default:
       break;

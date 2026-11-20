@@ -93,9 +93,11 @@ configuration for the run.
   user, gets no AWS credentials (unless the instance opts untrusted runs in
   with `integrations.aws.untrustedRuns`), and mounts only
   `opensession-plain-discussion`
-  (the Approve/Deny-gated customer reply and Stripe execution) in place of the
-  interactive set. The run-rpc fallback builder serves that same set, so a
-  hosted or sandboxed turn cannot ask for more.
+  (the Approve/Deny-gated customer reply and Stripe execution, and a question
+  card) in place of the interactive set. The run-rpc fallback builder serves
+  that same set, so a hosted or sandboxed turn cannot ask for more. An
+  approved reply is sent as the Plain user id in the approval webhook's
+  `resolvedBy`, which the signed webhook supplies and the model cannot choose.
 - `mode` is per automation. Ask has guarded read/find/grep/ls/bash tools but
   no Write/Edit. For an unsandboxed ordinary repository it uses a stable,
   shared detached worktree pinned to `origin/<defaultBranch>`; only a

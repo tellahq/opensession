@@ -111,11 +111,15 @@ function guideFor(integration: SetupIntegration, publicBaseUrl: string): Guide {
         description:
           "Connect a Plain machine user and send support webhooks to Open Session.",
         steps: [
-          <>In Plain, create a machine user and generate its API key.</>,
+          <>
+            In Plain, open <strong>Agents</strong>, add a connected agent, and
+            generate its API key.
+          </>,
           <>
             Create a webhook for <strong>thread created</strong>,{" "}
-            <strong>thread status transitioned</strong>, and{" "}
-            <strong>thread note created</strong>. Use this endpoint:
+            <strong>thread status transitioned</strong>,{" "}
+            <strong>thread note created</strong>, and{" "}
+            <strong>note mention created</strong>. Use this endpoint:
             <Value value={url("/plain/webhook")} />
           </>,
           <>
@@ -134,6 +138,10 @@ function guideFor(integration: SetupIntegration, publicBaseUrl: string): Guide {
           <>
             Keep customer replies human-controlled; the built-in triage flow
             writes an internal note, not a customer reply.
+          </>,
+          <>
+            To send replies as the teammate instead of the agent, add your team
+            to the API key's <strong>Impersonation</strong> allow list.
           </>,
         ],
       };

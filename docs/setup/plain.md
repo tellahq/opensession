@@ -16,7 +16,7 @@ customer or change thread state.
 | `PLAIN_WEBHOOK_SECRET`        | webhook intake  | **fail-closed**: unset or empty means every Plain webhook returns 401                                                                                                               |
 | `PLAIN_SPAM_CHECK_MODEL`      | optional        | tool-less pre-triage router model; default `claude-haiku-5-5`                                                                                                                       |
 | `PLAIN_REFUND_INTENT_MODEL`   | optional        | tool-less classifier for the legacy mention flow's refund/cancellation approval; default `claude-haiku-5-5`                                                                         |
-| `PLAIN_AGENT_API_KEY`         | optional        | key of a separate **Custom agent** machine user for Ask Sidekick (see [Internal agent](#internal-agent-ask-sidekick)); unset, the discussions use `PLAIN_API_KEY`                   |
+| `PLAIN_AGENT_API_KEY`         | optional        | key of a separate **Agent** machine user for Ask Sidekick (see [Internal agent](#internal-agent-ask-sidekick)); unset, the discussions use `PLAIN_API_KEY`                          |
 | `PLAIN_AGENT_MACHINE_USER_ID` | optional        | pins the agent's `mu_…` id instead of resolving it with `myMachineUser` at first use                                                                                                |
 
 Put server secrets and an optional enable flag in `~/.opensession.env`; the
@@ -61,8 +61,13 @@ up on the next run.
 
 ## Setup checklist
 
-1. Create a Plain machine-user API key and a webhook endpoint signing secret,
-   then add them to `~/.opensession.env` as shown above.
+1. In Plain, open **Agents** and click **Add agent** under **Connected
+   agents** (or **Settings → Machine users & agents → Add machine user**, type
+   **Agent**). Its **Public name** is what customers see on a reply the agent
+   sends as itself. Create an API key and a webhook endpoint signing secret,
+   then add them to `~/.opensession.env` as shown above. To send customer
+   replies as teammates, set up the key's
+   [impersonation allow list](#replying-as-a-teammate).
 2. Set `persona.name`, `persona.company`, and `persona.product`, then configure
    `integrations.plain` in `~/.opensession/config.json`.
 3. Configure the `plain` MCP server and any other MCP servers the triage
@@ -70,7 +75,7 @@ up on the next run.
 4. Create and enable the "Support ticket triage" template in Automations. A
    fresh install does not create it automatically.
 5. Expose Public ingress, create a Plain webhook for `POST /plain/webhook`, and
-   subscribe it to the three events listed below.
+   subscribe it to the thread events listed below.
 6. Run `opensession restart` because integration loading, env vars, and the
    mention handle are boot-time state. Then run `opensession doctor` and use
    `opensession logs -f` while sending a test ticket.
@@ -91,14 +96,19 @@ Subscribe the endpoint to these events
 - `thread.thread_status_transitioned`: when the new status is `DONE`, archive
   every non-archived Open Session session linked to that thread, resolving
   each session's auto-triage discussion first (see below).
-- `thread.note_created`: when a note contains the configured mention and its
-  author has `actorType === "user"`, deliver it to the newest live linked
+- `thread.note_mention_created`: when a teammate @-mentions the agent's
+  machine user (the `PLAIN_API_KEY` one or the `PLAIN_AGENT_API_KEY` one) in
+  a note, handle the note as below, with the `<@mu_…>` mention tokens
+  removed.
+- `thread.note_created`: when a note contains the configured text handle and
+  its author has `actorType === "user"`, deliver it to the newest live linked
   session. If no linked session can accept it, run the legacy mention flow.
-  Customer, machine-user, and system notes are ignored.
+  Customer, machine-user, and system notes are ignored. A note that arrives
+  through both events is handled once.
 - `discussion.message_created`, `discussion.turn_stop_requested`,
-  `discussion.tool_call_approval_resolved`: the internal agent, below. Pin the
-  webhook target to version `2026-09-14` or later; the turn-stop event does
-  not exist on earlier versions.
+  `discussion.tool_call_approval_resolved`, `discussion.question_resolved`:
+  the internal agent, below. Pin the webhook target to version `2026-10-26`
+  or later; the question event does not exist on earlier versions.
 
 A separate archive safety sweep starts even when the Plain agent is disabled.
 With `PLAIN_API_KEY` set, it first runs 60 seconds after boot and then every 15
@@ -185,7 +195,10 @@ agent against the default repository checkout with all otherwise eligible MCP
 servers. It can draft a customer reply, but posts the draft as an internal note
 first. A second verified teammate note such as `@<handle> yes` while the
 roughly 30-minute pending confirmation remains active sends the reply as the
-Plain machine user and snoozes the thread as waiting for the customer. A
+teammate who wrote that note (see
+[Replying as a teammate](#replying-as-a-teammate)), or as the Plain machine
+user when Plain refuses that, and snoozes the thread as waiting for the
+customer. A
 five-minute cleanup timer removes confirmations older than 30 minutes.
 
 The same legacy flow contains the only exception for Stripe money-moving tools.
@@ -229,9 +242,16 @@ Nothing posted in a discussion reaches the customer. Instead of the Plain MCP
 writes the session carries the `opensession-plain-discussion` tools:
 
 - `reply_to_customer`: shows the exact reply on an **Approve / Deny** card in
-  the discussion and waits for the decision. Approved: the reply is sent as the
-  triage machine user and the thread is snoozed as waiting for the customer.
-  Denied: nothing is sent and the reviewer note goes back to the model.
+  the discussion and waits for the decision. Approved: the reply is sent as
+  the teammate who approved it (see
+  [Replying as a teammate](#replying-as-a-teammate)), or as the triage machine
+  user when Plain refuses that, and the thread is snoozed as waiting for the
+  customer. Denied: nothing is sent and the reviewer note goes back to the
+  model.
+- `ask_teammate`: shows a question card (1 to 4 questions, 2 to 4 options
+  each; Plain adds an **Other** box and **Skip**) and waits for the answer,
+  which goes back to the model. A skipped card tells the model to stop and
+  wait for the teammate's next message.
 - `execute_stripe_action`: the same card for a specific refund or
   cancellation. Approved: the money-tools execution turn the
   `@<handle> go ahead` note flow uses runs with a discussion prompt that
@@ -241,24 +261,27 @@ writes the session carries the `opensession-plain-discussion` tools:
 
 A decision that arrives after a restart finds no waiting tool; the card stays
 answered in Plain and the model is told nothing ran. Waiting tools give up
-after 30 minutes.
+after 30 minutes. A turn's reply is posted in parts of at most 6,000
+characters, Plain's limit for a discussion message.
 
 ### Setup
 
-1. **Settings → Machine users & API keys**: open the machine user whose key
-   is `PLAIN_API_KEY` and set **Type** to **Custom agent** (that is what
-   lists it in Ask Sidekick; the picker shows the machine user's name, so
-   name it `Open Session`). Its key must carry `threadDiscussion:read`,
-   `threadDiscussion:edit`, `threadDiscussionMessage:create`,
-   `threadDiscussionMessage:edit`, `thread:read`, `customer:read`.
+1. **Agents → Connected agents** (or **Settings → Machine users & agents**):
+   use the machine user whose key is `PLAIN_API_KEY`, of type **Agent** (that
+   is what lists it in Ask Sidekick; the button shows its name, so name it
+   `Open Session`). Its key must carry `threadDiscussion:read`,
+   `threadDiscussion:edit`, `threadDiscussionMessage:read`,
+   `threadDiscussionMessage:create`, `threadDiscussionMessage:edit`,
+   `thread:read`, `customer:read`.
 2. To keep the agent identity separate from the triage machine user instead,
    add a second machine user with the same type and permissions and store its
    key as `PLAIN_AGENT_API_KEY`; the triage code keeps using `PLAIN_API_KEY`.
 3. **Settings → Webhooks → Add webhook target** for `POST /plain/webhook`
-   (or edit the existing one), version `2026-09-14`, subscribed to
-   `discussion.message_created`, `discussion.turn_stop_requested` and
-   `discussion.tool_call_approval_resolved`. The signing secret is the
-   workspace's, so `PLAIN_WEBHOOK_SECRET` stays as it is.
+   (or edit the existing one), version `2026-10-26`, subscribed to
+   `discussion.message_created`, `discussion.turn_stop_requested`,
+   `discussion.tool_call_approval_resolved` and
+   `discussion.question_resolved`. The signing secret is the workspace's, so
+   `PLAIN_WEBHOOK_SECRET` stays as it is.
 4. `opensession restart`, then open Ask Sidekick, pick **Open Session** and
    send a prompt.
 
@@ -296,6 +319,40 @@ down) the run still fires, without one. The discussion id is recorded in the
 run's durable intent the moment Plain returns it, before the discussion is
 marked in progress or the run does anything else, so a run replayed after a
 restart reports into the same discussion instead of opening a second one.
+
+## Replying as a teammate
+
+Plain's `replyToThread` can send a reply as a team member instead of the
+machine user (`impersonation.asUser`). The customer sees the teammate's name
+and, on chat, their avatar; Plain's timeline shows the teammate as the author
+with a tag naming the machine user that sent it. Open Session uses it on every
+human-approved reply:
+
+| Reply                               | Sent as                                         |
+| ----------------------------------- | ----------------------------------------------- |
+| Support UI reply box                | the signed-in teammate, matched by roster email |
+| `reply_to_customer` in a discussion | the teammate who clicked **Approve**            |
+| `@<handle> yes` on a drafted reply  | the teammate who wrote the confirming note      |
+
+The Support UI matches the teammate by the `email` and then `linearEmails` of
+their `identity.team` entry, so that email must be their Plain login. It only
+does this for a verified GitHub web sign-in; a client-claimed user name never
+picks whose name a reply goes out under.
+
+To enable it, open the `PLAIN_API_KEY` key from its machine user's page in
+Plain and, under **Impersonation**, add who it may reply as: individual
+teammates, everyone with a built-in role (Owner, Admin, Support), or everyone
+with a custom role. The allow list belongs to the API key, not the machine
+user. The key needs `thread:reply`.
+
+When Plain refuses (the teammate is not on the allow list, their role cannot
+reply, the thread is on MS Teams or Discord, or the teammate has not connected
+Slack in Plain for a Slack thread), the reply goes out as the machine user
+instead; from the Support UI it then ends with the teammate's first name as a
+sign-off. If Plain gives no clear answer (a timeout or a server error), the
+reply is not retried as the machine user, because it may already have been
+sent; the Support UI says to check the thread first. Internal notes always
+post as the machine user, since Plain's `createNote` cannot impersonate.
 
 ## Internal notes in English
 

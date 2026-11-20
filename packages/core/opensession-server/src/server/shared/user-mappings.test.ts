@@ -12,6 +12,7 @@ import {
   isTrustedGithubLogin,
   isTrustedUser,
   personKeyToDisplayName,
+  rosterEmailsForLogin,
   rosterLoginNamed,
   userIsRosterLogin,
   signedInUserName,
@@ -233,6 +234,29 @@ describe("commit attribution", () => {
       GIT_COMMITTER_EMAIL: "alice@example.com",
     });
     expect(gitIdentityEnv(null)).toEqual({});
+  });
+});
+
+describe("roster emails for a login", () => {
+  test("lists the git email then Linear emails, without noreply addresses or repeats", () => {
+    const restore = __setIdentitiesForTest([
+      {
+        name: "Sam Support",
+        email: "12345+sam@users.noreply.github.com",
+        github: "sam",
+        linearEmails: ["sam@acme.test", "SAM@acme.test", "sam@other.test"],
+      },
+    ]);
+    try {
+      expect(rosterEmailsForLogin("Sam")).toEqual([
+        "sam@acme.test",
+        "sam@other.test",
+      ]);
+      expect(rosterEmailsForLogin("someone-else")).toEqual([]);
+      expect(rosterEmailsForLogin("")).toEqual([]);
+    } finally {
+      restore();
+    }
   });
 });
 

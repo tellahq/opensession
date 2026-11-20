@@ -14,6 +14,31 @@ const PLAIN_API_KEY = process.env.PLAIN_API_KEY || "";
 
 export const plain = new PlainClient({ apiKey: PLAIN_API_KEY });
 
+let keyMachineUserId: Promise<string> | null = null;
+
+/** The machine user behind `PLAIN_API_KEY` (the triage identity), resolved
+ *  once. A failed lookup is retried on the next call. */
+export function plainMachineUserId(): Promise<string> {
+  if (!keyMachineUserId) {
+    keyMachineUserId = plain
+      .rawRequest({ query: `query { myMachineUser { id } }`, variables: {} })
+      .then((result) => {
+        const id = (result.data as { myMachineUser?: { id?: string } | null })
+          ?.myMachineUser?.id;
+        if (result.error || !id)
+          throw new Error(
+            `myMachineUser failed for PLAIN_API_KEY: ${result.error?.message ?? "no machine user"}`,
+          );
+        return id;
+      })
+      .catch((e) => {
+        keyMachineUserId = null;
+        throw e;
+      });
+  }
+  return keyMachineUserId;
+}
+
 /** Upload one file to Plain and return the attachment id accepted by reply/note mutations. */
 export async function uploadPlainAttachment(
   customerId: string,
@@ -713,30 +738,48 @@ export async function markWaitingForCustomer(
 }
 
 /**
+ * A Plain team member a customer reply is sent as. Plain's `replyToThread`
+ * impersonation (`impersonation.asUser`) delivers the reply under that
+ * person's name; the thread timeline shows them as the author, tagged with the
+ * machine user that sent it. It works only when the user is on the
+ * impersonation allow list of `PLAIN_API_KEY` (Plain: the machine user's API
+ * key → Impersonation).
+ */
+export type PlainReplyAuthor = { userId: string } | { emailAddress: string };
+
+export interface CustomerReplyOptions {
+  /** Team members to send as, tried in order: an email that is not a Plain
+   *  user is skipped and the next one tried. Empty sends as the machine user. */
+  asUser?: PlainReplyAuthor[];
+  /** Per-user Plain OAuth token, tried after impersonation. Auth failures
+   *  fall through to the machine user. */
+  userToken?: string;
+  /** Text to send when the reply goes out as the machine user instead, for a
+   *  sign-off naming the person who sent it. Defaults to `text`. */
+  machineUserText?: string;
+  attachmentIds?: string[];
+}
+
+export interface CustomerReplyResult {
+  ok: boolean;
+  /** "user": sent as a team member. "system": sent as the machine user. */
+  sentAs: "user" | "system";
+  /** Why impersonation was not used when it was asked for. */
+  impersonationError?: string;
+}
+
+/**
  * Send a reply to the customer (email/chat based on thread type), then move
  * the thread to Waiting for customer. A failed status change does not fail
  * the send: the reply already went out.
  */
 export async function sendCustomerReply(
   threadId: string,
-  customerId: string,
+  _customerId: string,
   text: string,
-  /** Per-user Plain OAuth token — the reply is then attributed to that
-   *  person instead of the workspace machine user. Auth failures fall back
-   *  to the system key so the customer still gets the reply. */
-  userToken?: string,
-  attachmentIds: string[] = [],
-): Promise<{
-  ok: boolean;
-  sentAs: "user" | "system";
-  waitingForCustomer: boolean;
-}> {
-  const sent = await deliverCustomerReply(
-    threadId,
-    text,
-    userToken,
-    attachmentIds,
-  );
+  options: CustomerReplyOptions = {},
+): Promise<CustomerReplyResult & { waitingForCustomer: boolean }> {
+  const sent = await deliverCustomerReply(threadId, text, options);
   if (!sent.ok) return { ...sent, waitingForCustomer: false };
   return {
     ...sent,
@@ -744,13 +787,113 @@ export async function sendCustomerReply(
   };
 }
 
+const REPLY_AS_USER_MUTATION = `mutation ReplyToThreadAsUser($input: ReplyToThreadInput!) {
+  replyToThread(input: $input) {
+    error { __typename message type code fields { field message type } }
+  }
+}`;
+
+type ImpersonatedReply =
+  | { status: "sent" }
+  /** Plain refused this identity (not a user, a machine user): try the next. */
+  | { status: "unknown_user"; message: string }
+  /** Plain refused impersonation itself (allow list, role, channel, no
+   *  Slack connection): the machine user may still send. */
+  | { status: "refused"; message: string }
+  /** No clear answer (network, 5xx): the reply may have gone out, so
+   *  sending it again as the machine user could duplicate it. */
+  | { status: "unknown"; message: string };
+
+function describePlainError(error: {
+  message?: string;
+  errorDetails?: { code?: string };
+}): string {
+  const code = error.errorDetails?.code;
+  return `${error.message || "Plain error"}${code ? ` (${code})` : ""}`;
+}
+
+async function replyAsUser(
+  threadId: string,
+  text: string,
+  author: PlainReplyAuthor,
+  attachmentIds: string[],
+): Promise<ImpersonatedReply> {
+  const result = await plain.rawRequest({
+    query: REPLY_AS_USER_MUTATION,
+    variables: {
+      input: {
+        threadId,
+        textContent: text,
+        ...(attachmentIds.length ? { attachmentIds } : {}),
+        impersonation: { asUser: { userIdentifier: author } },
+      },
+    },
+  });
+  // Read the mutation's own error too: the SDK only lifts one into
+  // `result.error` when the response matches its exact error shape.
+  const payloadError = (
+    result.data as
+      | {
+          replyToThread?: {
+            error?: { message?: string; code?: string } | null;
+          };
+        }
+      | undefined
+  )?.replyToThread?.error;
+  const error = result.error as
+    | { type?: string; message?: string; errorDetails?: { code?: string } }
+    | undefined;
+  if (!error && !payloadError) return { status: "sent" };
+  if (payloadError || error?.type === "mutation_error") {
+    const code = payloadError?.code ?? error?.errorDetails?.code;
+    const message = describePlainError({
+      message: payloadError?.message ?? error?.message,
+      errorDetails: { code },
+    });
+    return code === "not_found" || code === "input_validation"
+      ? { status: "unknown_user", message }
+      : { status: "refused", message };
+  }
+  const message = describePlainError(error ?? {});
+  if (error?.type === "forbidden" || error?.type === "bad_request")
+    return { status: "refused", message };
+  return { status: "unknown", message };
+}
+
+function describeAuthor(author: PlainReplyAuthor): string {
+  return "userId" in author ? author.userId : author.emailAddress;
+}
+
 async function deliverCustomerReply(
   threadId: string,
   text: string,
-  userToken: string | undefined,
-  attachmentIds: string[],
-): Promise<{ ok: boolean; sentAs: "user" | "system" }> {
+  options: CustomerReplyOptions,
+): Promise<CustomerReplyResult> {
   const cleanText = cleanDraftText(text);
+  const attachmentIds = options.attachmentIds ?? [];
+  let impersonationError: string | undefined;
+  for (const author of options.asUser ?? []) {
+    let outcome: ImpersonatedReply;
+    try {
+      outcome = await replyAsUser(threadId, cleanText, author, attachmentIds);
+    } catch (e) {
+      outcome = { status: "unknown", message: String(e) };
+    }
+    if (outcome.status === "sent") {
+      console.log(
+        `[plain] Sent reply in thread ${threadId} as ${describeAuthor(author)}`,
+      );
+      return { ok: true, sentAs: "user" };
+    }
+    impersonationError = outcome.message;
+    console.warn(
+      `[plain] Reply in ${threadId} as ${describeAuthor(author)} failed: ${outcome.message}`,
+    );
+    if (outcome.status === "unknown")
+      return { ok: false, sentAs: "user", impersonationError };
+    if (outcome.status === "refused") break;
+  }
+  const userToken = options.userToken;
   if (userToken) {
     try {
       const asUser = new PlainClient({ apiKey: userToken });
@@ -776,23 +919,26 @@ async function deliverCustomerReply(
       );
     }
   }
+  const withImpersonationError = impersonationError
+    ? { impersonationError }
+    : {};
   try {
     const result = await plain.replyToThread({
       threadId,
-      textContent: cleanText,
+      textContent: cleanDraftText(options.machineUserText ?? text),
       ...(attachmentIds.length ? { attachmentIds } : {}),
     });
 
     if (result.error) {
       console.error("Error sending reply:", result.error);
-      return { ok: false, sentAs: "system" };
+      return { ok: false, sentAs: "system", ...withImpersonationError };
     }
 
     console.log(`[plain] Sent reply to customer in thread ${threadId}`);
-    return { ok: true, sentAs: "system" };
+    return { ok: true, sentAs: "system", ...withImpersonationError };
   } catch (e) {
     console.error("Error sending reply:", e);
-    return { ok: false, sentAs: "system" };
+    return { ok: false, sentAs: "system", ...withImpersonationError };
   }
 }
 

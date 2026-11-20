@@ -231,6 +231,33 @@ export function userIsRosterLogin(
   return users.length === 1 && normRef(users[0].github) === owner;
 }
 
+/**
+ * The work emails of the roster member with this verified GitHub login: the
+ * configured `email`, then `linearEmails`, deduplicated, without GitHub
+ * noreply addresses (those name no account in another tool). Empty for a
+ * login the roster does not list. Callers look the person up in another
+ * tool by these, so pass only a login web sign-in verified.
+ */
+export function rosterEmailsForLogin(
+  login: string | null | undefined,
+): string[] {
+  const lower = normRef(login);
+  if (!lower) return [];
+  const member = liveTeam().find((m) => normRef(m.github) === lower);
+  if (!member) return [];
+  const seen = new Set<string>();
+  const emails: string[] = [];
+  for (const raw of [member.email, ...(member.linearEmails ?? [])]) {
+    const email = raw?.trim();
+    const key = email?.toLowerCase();
+    if (!email || !key || seen.has(key) || key.endsWith("noreply.github.com"))
+      continue;
+    seen.add(key);
+    emails.push(email);
+  }
+  return emails;
+}
+
 function normRef(ref: string | null | undefined): string {
   return ref?.trim().replace(/^@/, "").toLowerCase() ?? "";
 }

@@ -60,7 +60,7 @@ touches an in-process tool:
 | [`opensession-gpu`](#opensession-gpu) | 3 | interactive | Needs a session id. |
 | [`opensession-local-files`](#opensession-local-files) | 1 | interactive | Needs a session id. |
 | [`opensession-local-folders`](#opensession-local-folders) | 10 | interactive | Needs a session id. |
-| [`opensession-plain-discussion`](#opensession-plain-discussion) | 2 | interactive | Only a session that answers a Plain discussion (plainDiscussionId): an Ask Sidekick session carries this server alone instead of the interactive set; an auto-triage session that reports into a discussion carries it beside the automation-bar set on its later turns. |
+| [`opensession-plain-discussion`](#opensession-plain-discussion) | 3 | interactive | Only a session that answers a Plain discussion (plainDiscussionId): an Ask Sidekick session carries this server alone instead of the interactive set; an auto-triage session that reports into a discussion carries it beside the automation-bar set on its later turns. |
 | [`opensession-ask`](#opensession-ask) | 1 | interactive, Slack loop | Needs a session id. |
 | [`opensession-workflows`](#opensession-workflows) | 8 | interactive, automation | Automation runs get it ONLY with the human-set `workflows` flag. |
 | [`opensession-assets`](#opensession-assets) | 4 | interactive | Needs a session id. Works in read-only Ask mode — assets land outside the checkout. |
@@ -80,7 +80,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-39 servers, 188 tools.
+39 servers, 189 tools.
 
 ## opensession-sessions
 
@@ -1072,11 +1072,17 @@ Reply to the customer or run a Stripe action from a Plain Ask Sidekick discussio
 - **Runs** interactive
 - **Condition** Only a session that answers a Plain discussion (plainDiscussionId): an Ask Sidekick session carries this server alone instead of the interactive set; an auto-triage session that reports into a discussion carries it beside the automation-bar set on its later turns.
 
+### `ask_teammate`
+
+`mcp__opensession-plain-discussion__ask_teammate` · input: `questions` (object[], required)
+
+Ask the teammate in this Plain discussion to choose before you carry on: Plain shows a card with each question and its options, plus its own Other box and Skip. Waits for the answer and returns it. Use it when a real choice blocks you (which invoice, which account, which of two fixes), not for yes/no on an action: reply_to_customer and execute_stripe_action carry their own Approve/Deny card. Never call it in an unattended run nobody is watching.
+
 ### `reply_to_customer`
 
 `mcp__opensession-plain-discussion__reply_to_customer` · input: `text` (string, required), `threadId` (string)
 
-Send a reply to the customer on the support thread, after the teammate approves it in Plain. Shows them the exact text on an Approve/Deny card and waits for the decision; on approval the reply is sent and the thread is snoozed as waiting for the customer. Nothing is sent on a denial. Use only when the teammate asked for a reply to go out.
+Send a reply to the customer on the support thread, after the teammate approves it in Plain. Shows them the exact text on an Approve/Deny card and waits for the decision; on approval the reply is sent under the approving teammate's name when Plain allows it (otherwise as the support machine user) and the thread is snoozed as waiting for the customer. Nothing is sent on a denial. Use only when the teammate asked for a reply to go out.
 
 ### `execute_stripe_action`
 

@@ -3,7 +3,7 @@
  *
  * Raw GraphQL over fetch: the pinned @team-plain/typescript-sdk predates
  * discussions and has none of these mutations. The agent uses its own API key
- * (`PLAIN_AGENT_API_KEY`, the Custom-agent machine user) so the picker entry
+ * (`PLAIN_AGENT_API_KEY`, an Agent-type machine user) so the picker entry
  * and the thread-triage machine user stay separate identities; it falls back
  * to `PLAIN_API_KEY` for a single-key install.
  *
@@ -14,6 +14,10 @@ import { plainApiUrl } from "../../server/config";
 
 export type DiscussionAgentStatus = "IN_PROGRESS" | "IDLE";
 export type DiscussionToolCallStatus = "PENDING" | "SUCCESS" | "ERROR";
+
+/** Plain rejects a discussion message over this many characters
+ *  (`schema_validation_failed`); split longer content into several. */
+export const DISCUSSION_MESSAGE_MAX_CHARS = 6000;
 
 /** Plain's documented limits for tool-call reports. */
 export const TOOL_CALL_TEXT_MAX_CHARS = 2000;
@@ -239,4 +243,63 @@ export async function requestDiscussionToolCallApproval(input: {
     "requestDiscussionToolCallApproval",
     d.requestDiscussionToolCallApproval.error,
   );
+}
+
+/** Plain's limits for a question card (requestDiscussionQuestion). */
+export const QUESTION_LIMITS = {
+  questionsPerAsk: 4,
+  questionChars: 500,
+  optionsMin: 2,
+  optionsMax: 4,
+  labelChars: 80,
+  descriptionChars: 240,
+} as const;
+
+export interface DiscussionQuestionInput {
+  question: string;
+  isMultiSelect?: boolean;
+  options: Array<{ label: string; description: string }>;
+}
+
+/** Show a question card in the discussion. Plain adds its own Other box and
+ *  Skip, and moves the discussion to TOOL_CALL_APPROVAL_PENDING while the
+ *  card is open; the answer arrives as `discussion.question_resolved`.
+ *  Returns the card's id. */
+export async function requestDiscussionQuestion(input: {
+  discussionId: string;
+  questions: DiscussionQuestionInput[];
+}): Promise<string> {
+  const d = await gql<{
+    requestDiscussionQuestion: {
+      question: { questionRequestId: string } | null;
+      error: MutationError;
+    };
+  }>(
+    `mutation($input: RequestDiscussionQuestionInput!) {
+      requestDiscussionQuestion(input: $input) {
+        question { questionRequestId }
+        error { message code }
+      }
+    }`,
+    {
+      input: {
+        discussionId: input.discussionId,
+        questions: input.questions.map((q) => ({
+          question: q.question.slice(0, QUESTION_LIMITS.questionChars),
+          isMultiSelect: q.isMultiSelect ?? false,
+          options: q.options.map((o) => ({
+            label: o.label.slice(0, QUESTION_LIMITS.labelChars),
+            description: o.description.slice(
+              0,
+              QUESTION_LIMITS.descriptionChars,
+            ),
+          })),
+        })),
+      },
+    },
+  );
+  assertOk("requestDiscussionQuestion", d.requestDiscussionQuestion.error);
+  const id = d.requestDiscussionQuestion.question?.questionRequestId;
+  if (!id) throw new Error("requestDiscussionQuestion returned no card");
+  return id;
 }
