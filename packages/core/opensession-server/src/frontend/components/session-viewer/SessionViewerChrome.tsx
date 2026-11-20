@@ -1065,6 +1065,7 @@ export function SessionViewerChrome({
               openNewSession={openNewSession}
               tabStripVisible={tabStripVisible}
               workspaceSessionCount={workspaceSessions?.length}
+              workspaceSessions={workspaceSessions}
               newSiblingKeys={newSiblingKeys}
               headerRef={headerRef}
               headerActionsRef={headerActionsRef}

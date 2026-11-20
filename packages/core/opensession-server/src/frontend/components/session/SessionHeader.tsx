@@ -10,7 +10,6 @@ import { SOURCE_CHIP, sourceChipTone } from "../../lib/source-chip-classes";
 import type { UnifiedSession } from "../../lib/types";
 import {
   VIEWER_BRANCH,
-  VIEWER_BRANCH_EDITABLE,
   VIEWER_BRANCH_RENAME,
   VIEWER_CRUMB_UP,
   VIEWER_HEADER,
@@ -19,7 +18,6 @@ import {
 } from "../../lib/session-viewer-classes";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
-import { OverflowFadeText } from "../../ui/overflow-fade-text";
 import { Tooltip } from "../../ui/tooltip";
 import { TopBar, TopBarActions, TopBarLeading } from "../../ui/top-bar";
 import { BrandMark } from "../BrandMark";
@@ -35,6 +33,7 @@ import { RepoTile } from "../RepoTile";
 import { SandboxBadge } from "../SandboxBadge";
 import { RenameDialog } from "../RenameDialog";
 import { SessionRelations, type RelatedSession } from "../SessionRelations";
+import { WorkspaceTitlePopover } from "./WorkspaceTitlePopover";
 
 interface SessionHeaderProps {
   session: UnifiedSession;
@@ -57,6 +56,8 @@ interface SessionHeaderProps {
   openNewSession?: NavigationActions["openNewSessionInWorkspace"];
   tabStripVisible?: boolean;
   workspaceSessionCount?: number;
+  /** The workspace's sessions, totalled in the title card. */
+  workspaceSessions?: UnifiedSession[];
   newSiblingKeys?: string[] | null;
   actions: ReactNode;
   headerRef: Ref<HTMLDivElement>;
@@ -86,6 +87,7 @@ export function SessionHeader({
   openNewSession,
   tabStripVisible,
   workspaceSessionCount,
+  workspaceSessions,
   newSiblingKeys,
   actions,
   headerRef,
@@ -161,32 +163,28 @@ export function SessionHeader({
             }}
           />
         ) : (
-          <OverflowFadeText
-            className={`${VIEWER_BRANCH} ${canRename ? VIEWER_BRANCH_EDITABLE : ""}`}
+          <WorkspaceTitlePopover
+            session={session}
             title={
-              parentSession
-                ? canRename
-                  ? `${session.title} · double-click to rename`
-                  : session.title
-                : workspaceName
-                  ? `${session.title} · double-click to rename the workspace`
-                  : canRename
-                    ? "Double-click to rename"
-                    : session.title
+              parentSession ? session.title : workspaceName || session.title
             }
-            onDoubleClick={
-              canRename
-                ? () =>
-                    onRenameDraftChange(
-                      parentSession
-                        ? session.title
-                        : workspaceName || session.title,
-                    )
-                : undefined
+            sessions={
+              parentSession || !workspaceSessions?.length
+                ? [session]
+                : workspaceSessions
             }
-          >
-            {parentSession ? session.title : workspaceName || session.title}
-          </OverflowFadeText>
+            canRename={canRename}
+            renameLabel={
+              !parentSession && session.workspaceId
+                ? "Rename workspace"
+                : "Rename session"
+            }
+            onRename={() =>
+              onRenameDraftChange(
+                parentSession ? session.title : workspaceName || session.title,
+              )
+            }
+          />
         )}
         {/* Where the session came FROM, as a quiet mark AFTER the name. It
             used to be a tinted pill at the head of the row, which made the
