@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ModelOption } from "../lib/api";
+import { decodeTopModelOrder } from "../lib/top-model-order";
 import { pickTopModels, splitModelOptions } from "./ModelEffortSelect";
 
 function model(id: string, provider: ModelOption["provider"]): ModelOption {
@@ -148,5 +149,38 @@ describe("top-level models", () => {
       "pi/meta/llama-5",
     ]);
     expect(more).toEqual([]);
+  });
+});
+
+describe("dragged top-model order", () => {
+  const ids = (list: { id: string }[]) => list.map((entry) => entry.id);
+  const top = [
+    "pi/anthropic/claude-fable-5-2",
+    "pi/anthropic/claude-opus-5-5",
+    "pi/anthropic/claude-sonnet-5-5",
+    "pi/openai/gpt-6.2-astra",
+    "pi/openai/gpt-6.2-sol",
+    "pi/openai/gpt-6-luna",
+  ].map((id) => model(id, "pi"));
+
+  test("reorders the five without changing which five they are", () => {
+    const picked = pickTopModels(top, [
+      "gpt-6.2-sol",
+      "gpt-6-luna",
+      "claude-opus-5-5",
+    ]);
+    expect(ids(picked.top)).toEqual([
+      "pi/openai/gpt-6.2-sol",
+      "pi/anthropic/claude-opus-5-5",
+      "pi/anthropic/claude-fable-5-2",
+      "pi/anthropic/claude-sonnet-5-5",
+      "pi/openai/gpt-6.2-astra",
+    ]);
+    expect(ids(picked.more)).toEqual(["pi/openai/gpt-6-luna"]);
+  });
+
+  test("decodes the stored order", () => {
+    expect(decodeTopModelOrder(" a, b,,a ,c")).toEqual(["a", "b", "c"]);
+    expect(decodeTopModelOrder("")).toEqual([]);
   });
 });
