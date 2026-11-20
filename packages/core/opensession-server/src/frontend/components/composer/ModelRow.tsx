@@ -66,7 +66,7 @@ export function ModelRow({
   effortUpLabel,
   onOpenChange,
 }: ModelRowProps) {
-  // With the usage bar hidden, its readouts fold down to a ring beside the
+  // With the usage bar hidden, its readouts fold down to a ring after the
   // pill. It rides in the pill's box so phones reorder the two together.
   const usageBarOn = useUsageBarPref();
   const showRing = !usageBarOn && !!usage && usage.turns > 0;
@@ -79,17 +79,6 @@ export function ModelRow({
           {...composerChipMotion}
           className={composerToolbarSelect}
         >
-          {showRing && (
-            <UsageRing
-              usage={usage}
-              models={models}
-              model={model}
-              defaultModel={defaultModel}
-              accounts={accounts}
-              accountId={accountId}
-              onOpenChange={onOpenChange}
-            />
-          )}
           <ModelEffortSelect
             selection={{
               models,
@@ -131,6 +120,17 @@ export function ModelRow({
               changeOpen: onOpenChange,
             }}
           />
+          {showRing && (
+            <UsageRing
+              usage={usage}
+              models={models}
+              model={model}
+              defaultModel={defaultModel}
+              accounts={accounts}
+              accountId={accountId}
+              onOpenChange={onOpenChange}
+            />
+          )}
         </motion.div>
       )}
     </AnimatePresence>
