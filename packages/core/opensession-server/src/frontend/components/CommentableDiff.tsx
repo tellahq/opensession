@@ -53,6 +53,10 @@ import {
   rememberedDiffExpansion,
   setDiffFileOpen,
 } from "../lib/diff-expansion";
+import {
+  createDiffMountBudget,
+  type DiffMountBudget,
+} from "../lib/diff-mount-budget";
 import { diffFilesFromNewText } from "../lib/diff-expand";
 import { noAutofill } from "../lib/composer-autofill";
 import { Tooltip } from "../ui/tooltip";
@@ -335,8 +339,11 @@ export function CommentableDiff({ patch, options }: Props) {
     rememberDiffExpansion(expansionKey, expansion);
   }, [expansionKey, expansion]);
   // How many of the currently-open files may mount their FileDiff. Grows a
-  // batch per frame until it covers them all (see MOUNT_FIRST_BATCH).
-  const [mountBudget, setMountBudget] = useState(MOUNT_FIRST_BATCH);
+  // batch per frame until it covers them all (see MOUNT_FIRST_BATCH). A store,
+  // not state: each batch re-renders only the MountWhenBudgeted gates.
+  const [mountBudget] = useState(() =>
+    createDiffMountBudget(MOUNT_FIRST_BATCH, MOUNT_PER_FRAME),
+  );
   const setFileOpen = (name: string, open: boolean) =>
     setExpansion((prev) => setDiffFileOpen(prev, name, open));
   const toggle = (name: string) =>
@@ -657,15 +664,10 @@ export function CommentableDiff({ patch, options }: Props) {
     if (isOpenAt(file, index)) mountRank.set(index, mountRank.size);
   });
 
-  useEffect(() => {
-    if (mountBudget >= mountRank.size) return;
-    // A frame apart, and as a transition, so a click or a scroll lands before
-    // the next batch of files rather than behind it.
-    const frame = requestAnimationFrame(() =>
-      startTransition(() => setMountBudget((n) => n + MOUNT_PER_FRAME)),
-    );
-    return () => cancelAnimationFrame(frame);
-  }, [mountBudget, mountRank.size]);
+  useEffect(
+    () => mountBudget.grow(mountRank.size),
+    [mountBudget, mountRank.size],
+  );
 
   if (files.length === 0) {
     return <EmptyState>Nothing to display</EmptyState>;
@@ -682,7 +684,7 @@ export function CommentableDiff({ patch, options }: Props) {
       expanded.has(file.name) || isDraftFile || pend.length > 0 || isEditing;
     // Open, but its turn to parse has not come round yet — the header is
     // already drawn open, and the diff drops in a frame or two later.
-    const mounted = (mountRank.get(i) ?? 0) < mountBudget;
+    const mountAt = mountRank.get(i) ?? 0;
     const isViewed = viewed.has(file.name);
     const isChanged = !isViewed && !!changedFiles?.has(file.name);
     const resolved = resolvedByFile.get(file.name) || [];
@@ -1048,24 +1050,26 @@ export function CommentableDiff({ patch, options }: Props) {
             {isOpen &&
               (imageSrcs && IMAGE_EXT.test(file.name) ? (
                 <ImageDiffRow file={file} srcs={imageSrcs(file)} />
-              ) : !mounted ? null : (
-                <FileDiffRow
-                  key={theme}
-                  file={file}
-                  fileIndex={i}
-                  theme={theme}
-                  diffStyle={diffStyle}
-                  wrapLines={wrapLines}
-                  structuralHighlighting={structuralHighlighting}
-                  annotations={annotations}
-                  selectedLines={isDraftFile ? draft!.range : null}
-                  onSelect={handleSelect}
-                  renderAnnotation={renderAnnotation}
-                  editing={isEditing}
-                  createEditor={isEditing ? createEditor : undefined}
-                  loadDiffFiles={isEditing ? loadDiffFiles : loadContextFiles}
-                  phone={isPhone}
-                />
+              ) : (
+                <MountWhenBudgeted budget={mountBudget} rank={mountAt}>
+                  <FileDiffRow
+                    key={theme}
+                    file={file}
+                    fileIndex={i}
+                    theme={theme}
+                    diffStyle={diffStyle}
+                    wrapLines={wrapLines}
+                    structuralHighlighting={structuralHighlighting}
+                    annotations={annotations}
+                    selectedLines={isDraftFile ? draft!.range : null}
+                    onSelect={handleSelect}
+                    renderAnnotation={renderAnnotation}
+                    editing={isEditing}
+                    createEditor={isEditing ? createEditor : undefined}
+                    loadDiffFiles={isEditing ? loadDiffFiles : loadContextFiles}
+                    phone={isPhone}
+                  />
+                </MountWhenBudgeted>
               ))}
             {resolved.length > 0 && (
               <div className="flex flex-col gap-1.5 border-t border-divider-soft bg-raised p-2">
@@ -1457,6 +1461,29 @@ const CommentForm = function CommentForm({
     </div>
   );
 };
+
+/**
+ * Mount `children` once the staged budget reaches this file's rank among the
+ * open files. Each batch is a transition, a frame apart, so a click or a
+ * scroll lands before the next batch of files rather than behind it.
+ */
+function MountWhenBudgeted({
+  budget,
+  rank,
+  children,
+}: {
+  budget: DiffMountBudget;
+  rank: number;
+  children: React.ReactNode;
+}) {
+  const [limit, setLimit] = useState(budget.read);
+  useEffect(() => {
+    const sync = () => startTransition(() => setLimit(budget.read()));
+    sync();
+    return budget.subscribe(sync);
+  }, [budget]);
+  return rank < limit ? children : null;
+}
 
 /**
  * One file's diff. Memoized so an unrelated re-render (another file's selection,
