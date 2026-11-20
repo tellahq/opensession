@@ -1111,11 +1111,23 @@ enum OS1API {
 
     /// Merge the session's PR. `method` is squash (the default), merge or
     /// rebase; the server refuses a merge a stack layer below still blocks.
-    static func mergePr(sessionId: String, method: String = "squash") async throws {
+    ///
+    /// `mode` is the server's `MergeMode`: "now" merges, "auto" turns on
+    /// auto-merge, "admin" force merges past branch protection (refused if
+    /// the head moved past `headSha`).
+    static func mergePr(
+        sessionId: String,
+        method: String = "squash",
+        mode: String = "now",
+        headSha: String? = nil
+    ) async throws {
         struct MergeResponse: Decodable { let ok: Bool? }
+        var body: [String: Any] = ["method": method]
+        if mode != "now" { body["mode"] = mode }
+        if let headSha, !headSha.isEmpty { body["headSha"] = headSha }
         let _: MergeResponse = try await post(
             "/api/sessions/\(sessionId)/pr-merge",
-            body: ["method": method]
+            body: body
         )
     }
 

@@ -24,7 +24,13 @@ struct PrDetails: Decodable, Equatable {
     /// MERGEABLE | CONFLICTING | UNKNOWN — the provider's conflict probe.
     var mergeable: String?
     /// CLEAN | BEHIND | BLOCKED | DIRTY | UNSTABLE | … — merge-box state.
+    /// The server already reads past a rule that only bars its own bot, so a
+    /// BLOCKED here is a real block for the person too.
     var mergeStateStatus: String?
+    /// The commit the PR's head is at; a force merge refuses a moved head.
+    var headRefOid: String?
+    /// Auto-merge, when it is on: the host lands the PR once it may.
+    var autoMerge: PrAutoMerge?
     /// The agent's last reading of this pull request, when one has run.
     var osReview: OsReviewSummary?
     /// A review pass is running on the PR right now.
@@ -49,6 +55,20 @@ struct PrHostCapabilities: Decodable, Equatable {
     /// Per-viewer "Viewed" state. Without it, review marks stay on device.
     var viewedState: Bool?
     var reviewComments: Bool?
+    /// Queue a merge that lands once requirements pass.
+    var autoMerge: Bool?
+    /// Merge past branch protection with the viewer's own rights.
+    var forceMerge: Bool?
+}
+
+/// `PrAutoMerge` in pr-contract.ts (`parseAutoMerge` in pr-info.ts). The
+/// server sends `null` when auto-merge is off.
+struct PrAutoMerge: Decodable, Equatable {
+    /// squash | merge | rebase
+    var method: String?
+    /// The GitHub login that turned it on; empty when unknown.
+    var enabledBy: String?
+    var enabledAt: String?
 }
 
 struct PrCommit: Decodable, Equatable, Identifiable {
@@ -198,6 +218,68 @@ extension PrDetails {
         if ranks.contains(.failure) { return .failing }
         if ranks.contains(.pending) { return .pending }
         return .passing
+    }
+}
+
+extension PrDetails {
+    /// What holds an open PR whose checks, review and conflicts all allow a
+    /// merge, yet the host still refuses one (a ruleset, a required review,
+    /// a required check that never reported). The web's `deriveHeadline`
+    /// "blocked" branch.
+    enum MergeBlock: Equatable {
+        /// Auto-merge is on: the host lands it once the rules pass.
+        case mergesWhenReady
+        case reviewRequired
+        case blocked
+
+        /// The merge card's headline.
+        var headline: String {
+            switch self {
+            case .mergesWhenReady: "Merges when ready"
+            case .reviewRequired: "Review required"
+            case .blocked: "Blocked"
+            }
+        }
+
+        /// The Review tab's status line (`deriveStatus` qualifier).
+        var statusLine: String {
+            self == .mergesWhenReady ? "Merges when ready" : "Merge blocked"
+        }
+
+        /// Green once it will land by itself, yellow while it waits on
+        /// someone.
+        var isGreen: Bool { self == .mergesWhenReady }
+    }
+
+    /// Nil unless the host is holding back an otherwise clean merge. Earlier
+    /// causes (draft, conflicts, failing or running checks, requested
+    /// changes) keep their own labels, as on the web.
+    var mergeBlock: MergeBlock? {
+        guard summary == .passing,
+              mergeable != "CONFLICTING",
+              reviewDecision != "CHANGES_REQUESTED",
+              mergeStateStatus == "BLOCKED"
+        else { return nil }
+        if autoMerge != nil { return .mergesWhenReady }
+        return reviewDecision == "REVIEW_REQUIRED" ? .reviewRequired : .blocked
+    }
+
+    /// Whether the host can queue an auto-merge (absent means yes).
+    var canAutoMerge: Bool { capabilities?.autoMerge != false }
+    /// Whether the host can merge past protection (absent means yes).
+    var canForceMerge: Bool { capabilities?.forceMerge != false }
+
+    /// What a force merge goes around, for its confirmation. The web's
+    /// `mergeChoices` bypasses.
+    var forceMergeBypasses: [String] {
+        var out: [String] = []
+        if reviewDecision == "CHANGES_REQUESTED" {
+            out.append("requested changes")
+        } else if reviewDecision == "REVIEW_REQUIRED" {
+            out.append("a required review")
+        }
+        if mergeStateStatus == "BLOCKED", out.isEmpty { out.append("branch protection") }
+        return out
     }
 }
 
