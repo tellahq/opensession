@@ -786,10 +786,13 @@ function refreshGrant(name: string, slot: GrantSlot): Promise<void> {
       if (record.failedAt && Date.now() - record.failedAt < REFRESH_BACKOFF_MS)
         return;
       if (lock) {
-        await writeRefreshRecord(lock, { inDoubt: tokenHash(spent) });
-        // The lock file may be new: sync its directory entry too, or a crash
-        // after the provider spends the token could drop the guard with it.
+        // Sync the directory before replacing the guard. The store read above
+        // may be a rename a crashed process never synced: overwriting an
+        // earlier token's guard first could let a machine crash restore that
+        // token with nothing stopping its replay. This also makes a newly
+        // created lock file's entry durable before the request goes out.
         await syncStoreDir();
+        await writeRefreshRecord(lock, { inDoubt: tokenHash(spent) });
       }
       let outcome: RefreshOutcome;
       try {
