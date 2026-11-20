@@ -133,7 +133,9 @@ export function WorkspaceTitlePopover({
         elevation="lg"
         initialFocus
         aria-label="Workspace details"
-        className="w-[min(340px,calc(100vw-24px))] p-4"
+        // Less at the bottom: the last row's 32px box already leaves ~7px
+        // under its text, so pb-2.5 lands the gap level with the top's 16px.
+        className="w-[min(340px,calc(100vw-24px))] p-4 pb-2.5"
       >
         {draft !== null ? (
           <textarea
