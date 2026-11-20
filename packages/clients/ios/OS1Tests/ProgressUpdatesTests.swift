@@ -96,6 +96,53 @@ final class ProgressUpdatesTests: XCTestCase {
         }
     }
 
+    func testShowsTheWordsOfMarkdownInAStatusNotItsSyntax() {
+        XCTAssertEqual(
+            ProgressUpdate(say(
+                "a",
+                "◷ **Image corners PR**: [#11046](https://github.com/acme/app/pull/11046) will merge itself once CI passes"
+            ))?.text,
+            "#11046 will merge itself once CI passes"
+        )
+        // An angle-bracketed link target, and a link whose label is its URL.
+        XCTAssertEqual(
+            ProgressUpdate.plainText("[docs](<https://example.test/docs>) are up"),
+            "docs are up"
+        )
+        XCTAssertEqual(
+            ProgressUpdate.plainText(
+                "[https://github.com/acme/app/pull/7](https://github.com/acme/app/pull/7) merged"
+            ),
+            "app#7 merged"
+        )
+        XCTAssertEqual(
+            ProgressUpdate.plainText(
+                "https://github.com/acme/app/pull/12 and <https://github.com/acme/web/issues/3#top> are `queued`"
+            ),
+            "app#12 and web#3 are queued"
+        )
+        XCTAssertEqual(
+            ProgressUpdate.plainText("<https://example.test/x> is live"),
+            "https://example.test/x is live"
+        )
+        XCTAssertEqual(
+            ProgressUpdate.plainText("**Deploying** to https://example.test/x"),
+            "Deploying to https://example.test/x"
+        )
+        XCTAssertEqual(ProgressUpdate.plainText("__Merged__   into  `main`"), "Merged into main")
+        XCTAssertEqual(
+            ProgressUpdate.plainText("3 * 4 of [the tables](https://example.test)"),
+            "3 * 4 of the tables"
+        )
+        XCTAssertNil(ProgressUpdate(say("a", "✓ **CI**: ** **")))
+        // A leading status reads plain too.
+        let lead = ProgressUpdate.lead(of: say(
+            "a",
+            "◷ **Merge**: [#9](https://github.com/acme/app/pull/9) queued\n\nIt lands once CI passes."
+        ))
+        XCTAssertEqual(lead?.update.text, "#9 queued")
+    }
+
     func testNeverFoldsReasoningUserTextErrorsAttachmentsOrClampedContent() {
         var variants: [TranscriptEntry] = []
         var entry = say("a", "✓ **CI**: Passed")
