@@ -2,17 +2,19 @@ import { afterAll, afterEach, beforeAll, expect, spyOn, test } from "bun:test";
 import {
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "fs";
 import { tmpdir } from "os";
-import { dirname, join } from "path";
+import { basename, dirname, join } from "path";
 import { statePath } from "./paths";
 import {
   loadMcpOauthStore,
   mcpFreshGrantHeader,
   mcpGrantExists,
+  mcpRelayGrant,
   mcpSharedGrantHeader,
   refreshExpiringMcpGrants,
 } from "./mcp-oauth";
@@ -75,7 +77,16 @@ beforeAll(() => mkdirSync(dirname(storePath), { recursive: true }));
 afterEach(() => endpoint?.server.stop(true));
 afterAll(() => rmSync(storePath, { force: true }));
 
+/** Drop per-grant lock files, which also carry the refresh backoff. */
+function clearLocks() {
+  const dir = dirname(storePath);
+  for (const f of readdirSync(dir))
+    if (f.startsWith(`${basename(storePath)}.`) && f.endsWith(".lock"))
+      rmSync(join(dir, f), { force: true });
+}
+
 async function seed(ageMs: number) {
+  clearLocks();
   endpoint = rotatingTokenEndpoint();
   writeFileSync(storePath, JSON.stringify(storeWith(endpoint.url, ageMs)));
   await loadMcpOauthStore();
@@ -186,4 +197,61 @@ test("a grant another process refreshed is read back after a no-op refresh", asy
   writeFileSync(storePath, JSON.stringify(store));
   expect(await mcpFreshGrantHeader("Acme")).toBe("Bearer at-9");
   expect(endpoint.state.posts).toBe(0);
+});
+
+test("a failed refresh is not retried at once", async () => {
+  await seed(310_000);
+  endpoint.state.current = "rt-other";
+  const error = spyOn(console, "error").mockImplementation(() => {});
+  try {
+    expect(await mcpFreshGrantHeader("Acme")).toBeUndefined();
+    expect(await mcpFreshGrantHeader("Acme")).toBeUndefined();
+    await refreshExpiringMcpGrants();
+    expect(endpoint.state.posts).toBe(1);
+  } finally {
+    error.mockRestore();
+  }
+});
+
+test("a slow token endpoint does not hold up another grant's refresh", async () => {
+  clearLocks();
+  endpoint = rotatingTokenEndpoint();
+  const slow = Bun.serve({
+    port: 0,
+    async fetch() {
+      await Bun.sleep(3_000);
+      return Response.json(
+        { error: "temporarily_unavailable" },
+        { status: 503 },
+      );
+    },
+  });
+  try {
+    const store = {
+      ...storeWith(endpoint.url, 310_000),
+      Slow: storeWith(`http://127.0.0.1:${slow.port}/token`, 310_000).Acme,
+    };
+    writeFileSync(storePath, JSON.stringify(store));
+    await loadMcpOauthStore();
+    const error = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const slowRefresh = mcpFreshGrantHeader("Slow");
+      await Bun.sleep(50);
+      const started = Date.now();
+      expect(await mcpFreshGrantHeader("Acme")).toBe("Bearer at-1");
+      expect(Date.now() - started).toBeLessThan(1_500);
+      expect(await slowRefresh).toBeUndefined();
+    } finally {
+      error.mockRestore();
+    }
+  } finally {
+    slow.stop(true);
+  }
+}, 15_000);
+
+test("the relay grant names no person when it falls back to the shared grant", async () => {
+  await seed(10_000);
+  expect(await mcpRelayGrant("Acme", ["nobody@example.test"])).toEqual({
+    header: "Bearer at-0",
+  });
 });

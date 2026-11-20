@@ -185,17 +185,20 @@ async function loadFlock(): Promise<Flock | null> {
   return flockFn;
 }
 
-/** Hold the cross-process store lock. Polls a non-blocking flock so the
+/** Hold a cross-process lock on `path`. Polls a non-blocking flock so the
  *  waiting never blocks this thread. Close the handle to release. */
-async function acquireStoreLock(): Promise<FileHandle | undefined> {
+async function acquireLock(
+  path: string,
+  what: string,
+): Promise<FileHandle | undefined> {
   const flock = await loadFlock();
   if (!flock) return undefined;
-  const handle = await open(LOCK_PATH, "a", 0o600);
+  const handle = await open(path, "a+", 0o600);
   const deadline = Date.now() + LOCK_WAIT_MS;
   try {
     while (flock(handle.fd, LOCK_EX | LOCK_NB) !== 0) {
       if (Date.now() > deadline)
-        throw new Error("Timed out waiting for the MCP OAuth store lock");
+        throw new Error(`Timed out waiting for the MCP OAuth ${what} lock`);
       await new Promise((r) => setTimeout(r, 25 + Math.random() * 50));
     }
     return handle;
@@ -205,18 +208,21 @@ async function acquireStoreLock(): Promise<FileHandle | undefined> {
   }
 }
 
+function acquireStoreLock(): Promise<FileHandle | undefined> {
+  return acquireLock(LOCK_PATH, "store");
+}
+
 // Each change reads the store from disk under the lock, applies `fn` and
 // writes it back, one at a time, so two grant updates cannot drop each
-// other's change. `fn` may await (a refresh holds the lock across its token
-// request). A change that writes nothing still publishes what it read, so a
+// other's change. Keep `fn` short: no network inside it. A change that writes nothing still publishes what it read, so a
 // token another process just refreshed is what the next sync read returns.
 let storeUpdate: Promise<unknown> = Promise.resolve();
-function updateStore<T>(fn: (store: Store) => T | Promise<T>): Promise<T> {
+function updateStore<T>(fn: (store: Store) => T): Promise<T> {
   const run = storeUpdate.then(async () => {
     const lock = await acquireStoreLock();
     try {
       const store = await readStoreUnderLock();
-      const result = await fn(store);
+      const result = fn(store);
       if (result !== (false as T)) await writeStore(store);
       else publishJsonFile(STORE_PATH, store);
       return result;
@@ -646,26 +652,68 @@ function isExpired(grant: Grant): boolean {
 /** One refresh per grant at a time in this process. */
 const refreshing = new Map<string, Promise<void>>();
 
+/** After a failed refresh, how long every process leaves that grant alone.
+ *  A timeout is ambiguous: the provider may have rotated the token and lost
+ *  the reply, and posting the old one again right away could revoke it. */
+const REFRESH_BACKOFF_MS = 60_000;
+
+function grantKey(name: string, slot: GrantSlot): string {
+  return `${name}\0${slot.kind}\0${slotLabel(slot)}`;
+}
+
+/** One lock file per grant, so a slow token endpoint only holds up refreshes
+ *  of that grant. It also records the last failed attempt (a timestamp), so
+ *  the backoff holds across processes. */
+function grantLockPath(key: string): string {
+  return `${STORE_PATH}.${createHash("sha256").update(key).digest("hex").slice(0, 16)}.lock`;
+}
+
 /**
  * Refresh one grant if it still needs it. Providers that rotate refresh
  * tokens (AuthKit) accept each one once and treat a second use as theft,
  * revoking the whole grant. So the decision and the token request happen
- * under the store lock, on the grant as stored right now: when another
+ * under that grant's lock, on the grant as stored right now: when another
  * process refreshed it first, this sees the new expiry and does nothing.
+ * The store lock is taken only to write the result.
  */
 function refreshGrant(name: string, slot: GrantSlot): Promise<void> {
-  const key = `${name}\0${slot.kind}\0${slotLabel(slot)}`;
+  const key = grantKey(name, slot);
   const running = refreshing.get(key);
   if (running) return running;
-  const run = updateStore(async (store) => {
-    const auth = store[name];
-    const ref = grantRef(auth, slot);
-    if (!auth || !ref || !needsRefresh(ref.grant)) return false;
-    const next = await requestRefresh(name, auth, ref);
-    if (!next) return false;
-    writeGrant(auth, slot, next);
-  })
-    .then(() => {})
+  const run = (async () => {
+    const path = grantLockPath(key);
+    const lock = await acquireLock(path, "grant");
+    try {
+      const failedAt = Number(
+        (await readFile(path, "utf8").catch(() => "")).trim(),
+      );
+      if (failedAt && Date.now() - failedAt < REFRESH_BACKOFF_MS) return;
+      const store = await readStoreUnderLock();
+      publishJsonFile(STORE_PATH, store);
+      const auth = store[name];
+      const ref = grantRef(auth, slot);
+      if (!auth || !ref || !needsRefresh(ref.grant)) return;
+      const spent = ref.grant.tokens.refreshToken;
+      let next: Grant | undefined;
+      try {
+        next = await requestRefresh(name, auth, ref);
+      } finally {
+        await lock?.truncate(0);
+        if (!next) await lock?.write(`${Date.now()}\n`);
+      }
+      if (!next) return;
+      await updateStore((fresh) => {
+        const entry = fresh[name];
+        const current = grantRef(entry, slot);
+        // Reconnected or removed meanwhile: that newer grant wins.
+        if (!entry || current?.grant.tokens.refreshToken !== spent)
+          return false;
+        writeGrant(entry, slot, next);
+      });
+    } finally {
+      await lock?.close();
+    }
+  })()
     .catch((e) => {
       console.error(
         `[mcp-oauth] refresh failed for ${name}/${slotLabel(slot)}:`,
@@ -806,11 +854,15 @@ export function mcpSharedGrantHeader(name: string): string | undefined {
   return grantHeader(name, { kind: "shared" });
 }
 
-function grantHeader(name: string, slot: GrantSlot): string | undefined {
+function grantHeader(
+  name: string,
+  slot: GrantSlot,
+  kick = true,
+): string | undefined {
   ensureTicker();
   const ref = grantRef(readStore()[name], slot);
   if (!ref) return undefined;
-  if (needsRefresh(ref.grant)) void refreshGrant(name, slot);
+  if (kick && needsRefresh(ref.grant)) void refreshGrant(name, slot);
   if (isExpired(ref.grant)) return undefined;
   return `Bearer ${ref.grant.tokens.accessToken}`;
 }
@@ -840,9 +892,29 @@ export async function mcpFreshGrantHeader(
   ensureTicker();
   const before = grantRef(readStore()[name], slot);
   if (!before) return undefined;
-  if (isExpired(before.grant) && before.grant.tokens.refreshToken)
-    await refreshGrant(name, slot);
-  return grantHeader(name, slot);
+  if (!isExpired(before.grant) || !before.grant.tokens.refreshToken)
+    return grantHeader(name, slot);
+  await refreshGrant(name, slot);
+  // No second kick: if that refresh failed, posting the same token again at
+  // once could revoke a grant the provider already rotated.
+  return grantHeader(name, slot, false);
+}
+
+/**
+ * The credential the relay sends for a run: each identity's own grant in
+ * order, then the shared grant, each refreshed first if expired. `user` is
+ * the identity whose grant it is (absent: the shared grant). The relay and
+ * the runtime's audit both call this, so the audit names the grant in use.
+ */
+export async function mcpRelayGrant(
+  name: string,
+  users: readonly string[],
+): Promise<{ header: string; user?: string } | undefined> {
+  for (const user of [...users, undefined]) {
+    const header = await mcpFreshGrantHeader(name, user);
+    if (header) return { header, ...(user ? { user } : {}) };
+  }
+  return undefined;
 }
 
 /** Connection status for the UI: who's connected on each grant. */

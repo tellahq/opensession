@@ -21,7 +21,7 @@ import {
   toolsCacheKey,
   writeCachedTools,
 } from "./mcp-tools-cache";
-import { mcpFreshGrantHeader, mcpGrantExists } from "./mcp-oauth";
+import { mcpGrantExists, mcpRelayGrant } from "./mcp-oauth";
 import { mcpRelayUrl, mintMcpRelayToken } from "./mcp-relay";
 import type { InProcessMcpServer } from "./inprocess-mcp";
 import { RPC_TOOL_CALL_TIMEOUT_MS } from "./run-rpc-protocol";
@@ -373,8 +373,16 @@ export async function createMcpRuntime(opts: {
   const ownTimeoutMs =
     opts.ownServerCallTimeoutMs ?? OWN_SERVER_CALL_TIMEOUT_MS;
   const grantUsers = [opts.mcpGrantUser, opts.user];
-  // Which personal grant each connected server used, for the audit trail.
-  const grantedBy = new Map<string, string>();
+  // Grant identities of each server reached through the relay. The audit
+  // asks per call which grant the relay sends (mcpRelayGrant, the relay's
+  // own choice), since a personal grant can stop refreshing mid-run.
+  const relayed = new Map<string, string[]>();
+  const grantUserFor = async (server: string) => {
+    const users = relayed.get(server);
+    return users
+      ? (await mcpRelayGrant(server, users).catch(() => undefined))?.user
+      : undefined;
+  };
   let closed = false;
   const live = new Set<ServerConn>();
   const conns = new Map<string, Promise<ServerConn>>();
@@ -392,24 +400,13 @@ export async function createMcpRuntime(opts: {
     let transport: Transport;
     if (cfg.type === "http" || cfg.type === "sse" || cfg.url) {
       const candidates = mcpGrantCandidates(name, opts);
-      // The audit names the personal grant the relay will use: the first
-      // candidate whose token is valid, refreshed first if it had expired.
-      // One whose refresh fails is skipped here exactly as the relay skips
-      // it, rather than credited while the shared grant does the work.
-      let personal: string | undefined;
-      for (const user of candidates)
-        if (await mcpFreshGrantHeader(name, user)) {
-          personal = user;
-          break;
-        }
-      if (personal) grantedBy.set(name, personal);
       // Routing only needs a stored grant: even one whose token is expired
       // goes through the relay, which refreshes per request, never out
       // directly with no Authorization at all.
       const hasGrant =
-        !!personal ||
         mcpGrantExists(name) ||
         candidates.some((user) => mcpGrantExists(name, user));
+      if (hasGrant) relayed.set(name, candidates);
       let url = String(cfg.url);
       let headers = { ...((cfg.headers as Record<string, string>) || {}) };
       if (hasGrant) {
@@ -659,6 +656,7 @@ export async function createMcpRuntime(opts: {
           );
         throw new Error(`MCP tool "${name}" not found on server "${server}".`);
       }
+      let grantUser: string | undefined;
       try {
         if (closed) throw new Error("MCP runtime is closed");
         const conn = await withTimeout(
@@ -675,6 +673,8 @@ export async function createMcpRuntime(opts: {
         const sent = opts.rewriteArgs
           ? opts.rewriteArgs({ server: tool.server, name: tool.name }, args)
           : args;
+        // Asked just before the request, as the relay does when it sends it.
+        grantUser = await grantUserFor(tool.server);
         const result = (await conn.client.callTool(
           {
             name: tool.name,
@@ -700,7 +700,7 @@ export async function createMcpRuntime(opts: {
           server: tool.server,
           tool: tool.name,
           ok: true,
-          grantUser: grantedBy.get(tool.server),
+          grantUser,
           ms: Date.now() - started,
         });
         return { content };
@@ -709,7 +709,7 @@ export async function createMcpRuntime(opts: {
           server: tool.server,
           tool: tool.name,
           ok: false,
-          grantUser: grantedBy.get(tool.server),
+          grantUser,
           ms: Date.now() - started,
         });
         throw error instanceof Error ? error : new Error(String(error));
