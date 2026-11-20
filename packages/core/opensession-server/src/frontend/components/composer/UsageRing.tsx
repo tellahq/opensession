@@ -13,7 +13,7 @@ const row = "flex items-baseline justify-between gap-4";
 const value = "flex min-w-0 items-center gap-1.5 tabular-nums";
 
 /**
- * The usage bar folded down to a ring beside the model pill, for when the bar
+ * The usage bar folded down to a small ring after the model pill, for when the bar
  * is hidden. The ring is the context fill; hover or tap opens the bar's
  * readouts as one compact card, with a way to bring the bar back.
  */
@@ -34,11 +34,20 @@ export function UsageRing({
         openOnHover
         delay={200}
         closeDelay={100}
-        className={cn(paletteIconBtn, "shrink-0 self-center data-[popup-open]:text-fg")}
+        // A quiet glance, not a control: smaller than the toolbar's icon
+        // buttons and muted until the context is nearly full.
+        className={cn(
+          paletteIconBtn,
+          "size-7 shrink-0 self-center before:inset-0.5 phone:size-9 phone:[&_svg]:size-3.5",
+        )}
         aria-label={`Usage: context ${pct}% full, ${fmtUsd(input.usage.costUsd)} spent`}
         data-usage-ring
       >
-        <ContextRing frac={fill.frac} tone={fill.tone.stroke} size={18} />
+        <ContextRing
+          frac={fill.frac}
+          tone={nearlyFull ? "stroke-red" : "stroke-faint"}
+          size={12}
+        />
       </Popover.Trigger>
       <Popover.Popup side="top" align="end" className="w-64 p-3 text-xs">
         <div className="space-y-1.5">
