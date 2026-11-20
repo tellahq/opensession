@@ -123,6 +123,18 @@ export interface StickySession {
   serverSeen: boolean;
 }
 
+/** The applied response text to keep when the route changes the query.
+ * Identical text is the same rows whichever route asked for it, and only a
+ * sticky row reads the selected session when a response is applied. Without
+ * one, an identical scoped response stays a no-op instead of re-rendering
+ * the app on every session switch. */
+export function appliedTextAfterQueryChange(
+  lastText: string | null,
+  sticky: ReadonlyMap<string, StickySession>,
+): string | null {
+  return sticky.size > 0 ? null : lastText;
+}
+
 /** Keep a just-created row available while its session remains selected. */
 export function reconcileStickySessions(
   sessions: UnifiedSession[],

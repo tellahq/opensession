@@ -18,6 +18,7 @@ import { errorMessage } from "../lib/error-message";
 import * as SessionListRuntime from "../lib/session-list-runtime";
 import {
   ARCHIVED_QUERY,
+  appliedTextAfterQueryChange,
   LIVE_POLL_FALLBACK_MS,
   LIVE_QUERY,
   restoreSharedPrs,
@@ -121,7 +122,10 @@ export function useSessions({
     if (appliedLiveQueryRef.current === liveQuery) return;
     appliedLiveQueryRef.current = liveQuery;
     etagRef.current = null;
-    lastTextRef.current = null;
+    lastTextRef.current = appliedTextAfterQueryChange(
+      lastTextRef.current,
+      stickyRef.current,
+    );
   }, [liveQuery]);
   // Optimistically-injected sessions the server hasn't caught up to yet (a
   // just-created workspace/session). A plain poll replaces the whole array and
@@ -170,7 +174,10 @@ export function useSessions({
       if (appliedLiveQueryRef.current !== requestQuery) {
         appliedLiveQueryRef.current = requestQuery;
         etagRef.current = null;
-        lastTextRef.current = null;
+        lastTextRef.current = appliedTextAfterQueryChange(
+          lastTextRef.current,
+          stickyRef.current,
+        );
       }
       const startedAt = Date.now();
       const snapshotRuntimeRevision = runtimeRevisionRef.current;
