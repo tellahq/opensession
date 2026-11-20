@@ -174,13 +174,19 @@ async function writeStore(store: Store): Promise<void> {
     await rm(tmp, { force: true }).catch(() => {});
     throw e;
   }
+  await syncStoreDir();
+  publishJsonFile(STORE_PATH, store);
+}
+
+/** Fsync the store's directory, so a rename or a newly created file in it
+ *  survives a machine crash. */
+async function syncStoreDir(): Promise<void> {
   const dir = await open(dirname(STORE_PATH), "r");
   try {
     await dir.sync();
   } finally {
     await dir.close();
   }
-  publishJsonFile(STORE_PATH, store);
 }
 
 // The gateway and every detached run host load this module and share one
@@ -779,7 +785,12 @@ function refreshGrant(name: string, slot: GrantSlot): Promise<void> {
       }
       if (record.failedAt && Date.now() - record.failedAt < REFRESH_BACKOFF_MS)
         return;
-      if (lock) await writeRefreshRecord(lock, { inDoubt: tokenHash(spent) });
+      if (lock) {
+        await writeRefreshRecord(lock, { inDoubt: tokenHash(spent) });
+        // The lock file may be new: sync its directory entry too, or a crash
+        // after the provider spends the token could drop the guard with it.
+        await syncStoreDir();
+      }
       let outcome: RefreshOutcome;
       try {
         outcome = await requestRefresh(name, auth, ref);
