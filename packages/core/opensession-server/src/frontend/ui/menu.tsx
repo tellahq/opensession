@@ -92,6 +92,7 @@ function Trigger({
 
 function Popup({
   className,
+  scrollClassName,
   positionerClassName,
   side,
   align,
@@ -102,6 +103,9 @@ function Popup({
   children,
 }: {
   className?: string;
+  /** Extra classes for the scroller inside the surface, e.g. a taller cap
+   * for a menu that should rarely scroll. */
+  scrollClassName?: string;
   /** Override the portal layer when this menu opens inside a higher popup. */
   positionerClassName?: string;
   side?: React.ComponentProps<typeof BaseMenu.Positioner>["side"];
@@ -146,7 +150,9 @@ function Popup({
           className={cn(POPUP_HOOK, popupSurfaceClasses, className)}
           finalFocus={finalFocus}
         >
-          <div className={popupScrollClasses}>{children}</div>
+          <div className={cn(popupScrollClasses, scrollClassName)}>
+            {children}
+          </div>
         </BaseMenu.Popup>
       </BaseMenu.Positioner>
     </BaseMenu.Portal>
