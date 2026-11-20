@@ -26,12 +26,19 @@
  * disables dynamic registration).
  */
 import { randomBytes, createHash } from "crypto";
-import { open, readFile, writeFile, type FileHandle } from "node:fs/promises";
+import {
+  open,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+  type FileHandle,
+} from "node:fs/promises";
+import { dirname } from "node:path";
 import { discoverMcpOauth, OauthDiscoveryError } from "./mcp-oauth-discovery";
 import { configuredIngress, configuredServer, productName } from "./config";
 import { statePath } from "./paths";
 import { resolveTeammate } from "./shared/user-mappings";
-import { writeFileAtomicAsync } from "./shared/atomic-write";
 import {
   cachedJsonFileCopy,
   loadJsonFileCopy,
@@ -142,13 +149,37 @@ async function readStoreUnderLock(): Promise<Store> {
   return JSON.parse(text) as Store;
 }
 
+/**
+ * Replace the store by rename, so a reader in another process never sees
+ * half a file, and make it durable (file and directory fsynced) before
+ * returning: a refresh clears its replay guard right after this, and a
+ * machine crash must not keep that cleared guard while losing the rotated
+ * token it protected.
+ */
 async function writeStore(store: Store): Promise<void> {
-  // Replaced by rename: a reader in another process never sees half a file.
-  await writeFileAtomicAsync(
-    STORE_PATH,
-    JSON.stringify(store, null, 2) + "\n",
-    0o600,
-  );
+  const tmp = `${STORE_PATH}.tmp.${process.pid}.${randomBytes(6).toString("hex")}`;
+  const handle = await open(tmp, "wx", 0o600);
+  try {
+    await handle.writeFile(JSON.stringify(store, null, 2) + "\n");
+    await handle.sync();
+  } catch (e) {
+    await handle.close().catch(() => {});
+    await rm(tmp, { force: true }).catch(() => {});
+    throw e;
+  }
+  await handle.close();
+  try {
+    await rename(tmp, STORE_PATH);
+  } catch (e) {
+    await rm(tmp, { force: true }).catch(() => {});
+    throw e;
+  }
+  const dir = await open(dirname(STORE_PATH), "r");
+  try {
+    await dir.sync();
+  } finally {
+    await dir.close();
+  }
   publishJsonFile(STORE_PATH, store);
 }
 
