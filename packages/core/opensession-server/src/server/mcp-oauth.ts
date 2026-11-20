@@ -812,18 +812,21 @@ function refreshGrant(name: string, slot: GrantSlot): Promise<void> {
         await writeRefreshRecord(lock, { failedAt: Date.now() });
       if (outcome.kind !== "ok") return;
       const next = outcome.grant;
-      await updateStore((fresh) => {
+      const saved = await updateStore((fresh) => {
         const entry = fresh[name];
         const current = grantRef(entry, slot);
         // Reconnected or removed meanwhile: that newer grant wins.
         if (!entry || current?.grant.tokens.refreshToken !== spent)
           return false;
         writeGrant(entry, slot, next);
+        return true;
       });
-      // Only now is the spent token off disk. Clearing the guard any earlier
-      // let a crash between the reply and this write leave the spent token
-      // stored with nothing stopping its replay.
-      if (lock) await writeRefreshRecord(lock, {});
+      // Only now is the spent token durably off disk. Clearing the guard any
+      // earlier let a crash between the reply and this write leave the spent
+      // token stored with nothing stopping its replay. When this refresh
+      // wrote nothing, the newer grant it saw may not be durable yet, so the
+      // guard stays; it only matches the spent token, so it blocks nothing else.
+      if (lock && saved) await writeRefreshRecord(lock, {});
     } finally {
       await lock?.close();
     }
