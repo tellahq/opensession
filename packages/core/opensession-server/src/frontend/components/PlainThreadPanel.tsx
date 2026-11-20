@@ -74,6 +74,7 @@ import {
 } from "./icons";
 import { FileChips } from "./FileChips";
 import { UserAvatar } from "./UserAvatar";
+import { SUPPORT_PRIORITY_GROUPS } from "../lib/sidebar-filter";
 import { errorMessage } from "../lib/error-message";
 
 interface Props {
@@ -408,6 +409,12 @@ export function PlainThreadActions({
   // for both, and keeps the words.
   const verbLabel = (text: string) => (inBar ? false : text);
 
+  const labels = thread.labels || [];
+  const priorityTone =
+    thread.priority != null && thread.priority <= 1
+      ? SUPPORT_PRIORITY_GROUPS[thread.priority].cls
+      : undefined;
+
   // The way out to Plain, for the few things this pane cannot do. It belongs
   // with the ticket's other actions rather than beside them as a link: it
   // used to be a blue anchor at the end of the bar, which made the quietest
@@ -513,7 +520,10 @@ export function PlainThreadActions({
               <Button
                 size="sm"
                 variant="default"
-                icon={<IconFlag size={20} />}
+                // The flag takes the priority's queue colour, so the pill
+                // and the ticket's dot in the list say the same thing.
+                icon={<IconFlag size={20} className={priorityTone} />}
+                iconTone={priorityTone ? "full" : "muted"}
                 caret
                 disabled={busy}
                 title="Change priority in Plain"
@@ -545,11 +555,30 @@ export function PlainThreadActions({
               <Button
                 size="sm"
                 variant="default"
-                icon={<IconPerson size={20} />}
+                // An assigned ticket leads with the person's picture, the
+                // way the Assign menu lists them. It sits in the pill's
+                // round end, so it is round too and tucks in closer than a
+                // glyph, which carries its own side bearing.
+                icon={
+                  thread.assignee && !usersLoadError ? (
+                    <UserAvatar
+                      name={thread.assignee.name}
+                      size={18}
+                      className="rounded-full"
+                    />
+                  ) : (
+                    <IconPerson size={20} />
+                  )
+                }
+                iconTone={thread.assignee ? "full" : "muted"}
+                className={cn(thread.assignee && !usersLoadError && "pl-1")}
                 caret
                 disabled={busy}
                 title={
-                  usersLoadError ?? "Assign this thread to a teammate in Plain"
+                  usersLoadError ??
+                  (thread.assignee
+                    ? `Assigned to ${thread.assignee.name} in Plain`
+                    : "Assign this thread to a teammate in Plain")
                 }
               >
                 {usersLoadError
@@ -615,18 +644,34 @@ export function PlainThreadActions({
                   caret
                   disabled={busy}
                   title={
-                    labelTypesLoadError ?? "Labels on this thread in Plain"
+                    labelTypesLoadError ??
+                    (labels.length > 0
+                      ? labels.map((l) => l.name).join(", ")
+                      : "Labels on this thread in Plain")
                   }
                 >
-                  {labelTypesLoadError
-                    ? "Labels unavailable"
-                    : (thread.labels?.length || 0) > 0
-                      ? `${thread.labels![0].name}${
-                          thread.labels!.length > 1
-                            ? ` +${thread.labels!.length - 1}`
-                            : ""
-                        }`
-                      : "Labels"}
+                  {labelTypesLoadError ? (
+                    "Labels unavailable"
+                  ) : labels.length > 1 ? (
+                    // The first label is the value and the rest a count on a
+                    // chip of its own, so "question +1" reads as one label
+                    // and one more rather than as a two-word name. The
+                    // tooltip names them all. Both are flex items of the
+                    // button, so each trims to its cap band like a plain
+                    // string label does.
+                    <>
+                      <span className="[text-box:trim-both_cap_alphabetic]">
+                        {labels[0].name}
+                      </span>
+                      <span className="inline-flex h-4 items-center rounded-full bg-active px-1.5 text-meta tabular-nums text-dim">
+                        <span className="[text-box:trim-both_cap_alphabetic]">
+                          +{labels.length - 1}
+                        </span>
+                      </span>
+                    </>
+                  ) : (
+                    (labels[0]?.name ?? "Labels")
+                  )}
                 </Button>
               }
             />
