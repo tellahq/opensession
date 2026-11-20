@@ -47,6 +47,8 @@ import {
 } from "../lib/account-limits";
 import { UsageCost, UsageDetails } from "./UsageMeter";
 import { setUsageBarPref, useUsageBarPref } from "../lib/usage-bar-pref";
+import { setTopModelOrder, useTopModelOrder } from "../lib/top-model-order";
+import { Reorder } from "motion/react";
 
 export const EFFORTS = [
   { id: "none", label: "None" },
@@ -85,13 +87,21 @@ const TOP_MODEL_TAILS = [
   "gpt-6.2-sol",
 ];
 
+const idTail = (id: string) => id.split("/").pop() || "";
+
 /**
  * Split the picker's first-class entries into the top-level five and the rest.
  * The curated best come first; a catalog missing some of them fills the gap
  * from its own order, so the top level is never short while models remain.
+ * `order` is the person's dragged order (id tails): it reorders the five but
+ * never changes which five they are. A model it does not name keeps its
+ * curated place after the ones it does.
  */
-export function pickTopModels<T extends { id: string }>(options: readonly T[]) {
-  const tail = (o: T) => o.id.split("/").pop() || "";
+export function pickTopModels<T extends { id: string }>(
+  options: readonly T[],
+  order: readonly string[] = [],
+) {
+  const tail = (o: T) => idTail(o.id);
   const curated = TOP_MODEL_TAILS.flatMap((t) => {
     const option = options.find((o) => tail(o) === t);
     return option ? [option] : [];
@@ -100,7 +110,15 @@ export function pickTopModels<T extends { id: string }>(options: readonly T[]) {
     ...curated,
     ...options.filter((o) => !curated.includes(o)),
   ].slice(0, TOP_MODEL_COUNT);
-  return { top, more: options.filter((o) => !top.includes(o)) };
+  const rank = (o: T) => {
+    const i = order.indexOf(tail(o));
+    return i === -1 ? order.length : i;
+  };
+  const ordered = top
+    .map((o, i) => [o, i] as const)
+    .sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1])
+    .map(([o]) => o);
+  return { top: ordered, more: options.filter((o) => !top.includes(o)) };
 }
 
 /** Engine display names, keyed by ModelOption.provider — only used for the
@@ -386,6 +404,14 @@ export function ModelEffortSelect({
   } = actions;
   const effectiveModel = model || defaultModel;
   const usageBarOn = useUsageBarPref();
+  const savedTopOrder = useTopModelOrder();
+  // Mid-drag, Motion's in-flight order of the top five (option ids); saved as
+  // the person's order when the row is dropped.
+  const [draftTopIds, setDraftTopIds] = React.useState<string[] | null>(null);
+  const [draggingTopId, setDraggingTopId] = React.useState<string | null>(null);
+  const draftTopIdsRef = React.useRef<string[] | null>(null);
+  // A drop ends in a click on the row under the pointer; it must not pick it.
+  const justDragged = React.useRef(false);
   const [open, setOpen] = React.useState(false);
   const setMenuOpen = (nextOpen: boolean) => {
     setOpen(nextOpen);
@@ -626,8 +652,10 @@ export function ModelEffortSelect({
       .filter((g) => g.options.length > 0);
     // The best five sit at the top level; the rest of the main list moves
     // under "More models".
-    const { top: topOptions, more: morePrimaryOptions } =
-      pickTopModels(primaryOptions);
+    const { top: topOptions, more: morePrimaryOptions } = pickTopModels(
+      primaryOptions,
+      savedTopOrder,
+    );
     // "More models" sections by upstream provider (Anthropic / OpenAI / xAI /
     // …): a flat list stops scanning well once third-party providers join the
     // picker. Falls back to flat when everything is one provider.
@@ -688,6 +716,24 @@ export function ModelEffortSelect({
       : undefined;
   const hasMoreModels =
     morePrimaryOptions.length > 0 || otherOptions.length > 0;
+  const topById = new Map(topOptions.map((option) => [option.id, option]));
+  const shownTopOptions = draftTopIds
+    ? draftTopIds.flatMap((id) => {
+        const option = topById.get(id);
+        return option ? [option] : [];
+      })
+    : topOptions;
+  const updateTopDraft = (ids: string[]) => {
+    draftTopIdsRef.current = ids;
+    setDraftTopIds(ids);
+  };
+  const dropTopModel = () => {
+    const ids = draftTopIdsRef.current;
+    draftTopIdsRef.current = null;
+    setDraftTopIds(null);
+    setDraggingTopId(null);
+    if (ids) setTopModelOrder(ids.map(idTail));
+  };
 
   const renderModelOption = (option: ModelMenuOption) => {
     const selected = isSelected(option);
@@ -866,8 +912,46 @@ export function ModelEffortSelect({
           menuRowTrigger && "min-w-[220px]",
         )}
       >
-        {/* The best five sit right here; the rest are one hop away. */}
-        {topOptions.map((option) => renderModelOption(option))}
+        {/* The best five sit right here; the rest are one hop away. A row
+            drags straight away to put the five in the person's order. */}
+        <Reorder.Group
+          as="div"
+          axis="y"
+          values={shownTopOptions.map((option) => option.id)}
+          onReorder={updateTopDraft}
+        >
+          {shownTopOptions.map((option) => (
+            <Reorder.Item
+              as="div"
+              key={option.id}
+              value={option.id}
+              dragListener={shownTopOptions.length > 1}
+              onPointerDownCapture={() => {
+                justDragged.current = false;
+              }}
+              onDragStart={() => {
+                justDragged.current = true;
+                setDraggingTopId(option.id);
+                updateTopDraft(shownTopOptions.map((o) => o.id));
+              }}
+              onDragEnd={dropTopModel}
+              onClickCapture={(event: React.MouseEvent) => {
+                if (!justDragged.current) return;
+                justDragged.current = false;
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              whileDrag={{ scale: 1.02, zIndex: 1 }}
+              className={cn(
+                "relative rounded-md",
+                draggingTopId === option.id &&
+                  "bg-popup [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm",
+              )}
+            >
+              {renderModelOption(option)}
+            </Reorder.Item>
+          ))}
+        </Reorder.Group>
         {hasMoreModels && (
           <Menu.SubmenuRoot>
             <Menu.SubmenuTrigger className="justify-between gap-3">
