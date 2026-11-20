@@ -21,7 +21,7 @@ import {
   toolsCacheKey,
   writeCachedTools,
 } from "./mcp-tools-cache";
-import { mcpSharedGrantHeader, mcpUserGrantHeader } from "./mcp-oauth";
+import { mcpGrantExists } from "./mcp-oauth";
 import { mcpRelayUrl, mintMcpRelayToken } from "./mcp-relay";
 import type { InProcessMcpServer } from "./inprocess-mcp";
 import { RPC_TOOL_CALL_TIMEOUT_MS } from "./run-rpc-protocol";
@@ -392,11 +392,12 @@ export async function createMcpRuntime(opts: {
     let transport: Transport;
     if (cfg.type === "http" || cfg.type === "sse" || cfg.url) {
       const candidates = mcpGrantCandidates(name, opts);
-      const personal = candidates.find((user) =>
-        mcpUserGrantHeader(name, user),
-      );
+      // Any stored grant routes through the relay, even one whose access
+      // token just expired: the relay refreshes it per request, while a
+      // direct connection would go out with no Authorization at all.
+      const personal = candidates.find((user) => mcpGrantExists(name, user));
       if (personal) grantedBy.set(name, personal);
-      const hasGrant = !!personal || !!mcpSharedGrantHeader(name);
+      const hasGrant = !!personal || mcpGrantExists(name);
       let url = String(cfg.url);
       let headers = { ...((cfg.headers as Record<string, string>) || {}) };
       if (hasGrant) {
