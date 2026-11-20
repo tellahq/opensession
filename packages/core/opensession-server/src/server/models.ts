@@ -557,8 +557,8 @@ const CODEX_MODEL_ORDER = ["gpt-6.2-sol", "gpt-6.1-terra", "gpt-6-luna"];
  * ranking — it encodes the configured rotation policy: keep a run going on
  * an equal-or-smarter model automatically, but ASK a human before dropping to a
  * dumber one. "smart→smart / medium→smart = fine (auto); smart→dumb /
- * medium→dumb = ask." Concrete edges that policy yields: Fable→Astra auto,
- * Fable→Opus auto, Opus→Sol auto, and Opus→Sonnet ask.
+ * medium→dumb = ask." Concrete edges that policy yields: Fable→Opus auto,
+ * Fable→Astra auto, Opus→Astra auto, and Opus→Sonnet ask.
  *
  * Unlisted models default to tier 1 (treated as a downgrade from any premium
  * primary, so the human is asked — the safe default).
@@ -614,6 +614,19 @@ const FALLBACK_DESTINATIONS = [
   "claude-sonnet-5-5",
   "claude-haiku-5-5",
 ];
+
+/** Leaving the Fable/Mythos credit pool goes to Opus first, then the usual
+ *  OpenAI chain. Other models keep FALLBACK_DESTINATIONS order. */
+const FABLE_FALLBACK_DESTINATIONS = [
+  "claude-opus-5-5",
+  ...FALLBACK_DESTINATIONS.filter((id) => id !== "claude-opus-5-5"),
+];
+
+function fallbackDestinations(currentModel: string): readonly string[] {
+  return /^claude-(fable|mythos)-/.test(nativeModelId(currentModel))
+    ? FABLE_FALLBACK_DESTINATIONS
+    : FALLBACK_DESTINATIONS;
+}
 
 /**
  * Persisted override for the global default model, set from the Connections UI
@@ -1045,7 +1058,7 @@ export interface FallbackHop {
  * we keep the strongest usable model. Returns null when nothing is left.
  *
  * `mode` is the tier comparison against the model we're LEAVING: equal-or-higher
- * tier ⇒ "auto" (Fable→Astra, Astra→Sol), lower ⇒ "ask" (Opus→Sonnet).
+ * tier ⇒ "auto" (Fable→Opus, Astra→Sol), lower ⇒ "ask" (Opus→Sonnet).
  * Fallbacks preserve an explicit Pi engine choice; legacy and
  * unrouted primaries keep mapping onto Pi.
  */
@@ -1075,15 +1088,15 @@ export function nextFallbackModel(
     if (!resolveModel(routed)) return;
     candidates.push(routed);
   };
+  const destinations = fallbackDestinations(currentRouted);
   if (preferredFallbackModel && preferredFallbackModel !== "none")
     add(preferredFallbackModel);
-  for (const id of FALLBACK_DESTINATIONS) add(id);
+  for (const id of destinations) add(id);
   if (!candidates.length) return null;
 
   // Auto-eligible models stay ahead of downgrades. Within a tier, use the
-  // explicit destination order rather than candidate insertion order: the
-  // configured Opus fallback is added first above, but Astra must remain the
-  // first hop off Fable.
+  // explicit destination order rather than candidate insertion order, so the
+  // first hop off Fable is Opus regardless of the configured preference.
   candidates.sort((a, b) => {
     const aDown = fallbackTier(a) >= currentTier ? 0 : 1;
     const bDown = fallbackTier(b) >= currentTier ? 0 : 1;
@@ -1092,7 +1105,7 @@ export function nextFallbackModel(
     if (tierDelta) return tierDelta;
     const destinationRank = (id: string) => {
       const native = nativeModelId(id);
-      const rank = FALLBACK_DESTINATIONS.indexOf(native);
+      const rank = destinations.indexOf(native);
       return rank < 0 ? Number.MAX_SAFE_INTEGER : rank;
     };
     return destinationRank(a) - destinationRank(b);

@@ -196,12 +196,14 @@ describe("fake engine through runAgent", () => {
     expect(events[1]).toMatchObject({
       type: "model_switch",
       fromModel: "pi/anthropic/claude-fable-5-2",
-      toModel: "pi/openai/gpt-6.2-astra",
+      toModel: "pi/anthropic/claude-opus-5-5",
     });
     expect(fake.calls).toHaveLength(2);
     expect(fake.calls[0].model).toBe("pi/anthropic/claude-fable-5-2");
-    expect(fake.calls[1].model).toBe("pi/openai/gpt-6.2-astra");
-    expect(fake.calls[1].sessionId).toBeUndefined();
+    expect(fake.calls[1].model).toBe("pi/anthropic/claude-opus-5-5");
+    // Fable and Opus share the Anthropic family, so Opus resumes the partial
+    // Pi session instead of starting fresh.
+    expect(fake.calls[1].sessionId).toBe("pi_partial");
   });
 
   test("known-dry Claude pool skips the doomed engine attempt and enters fallback directly", async () => {
