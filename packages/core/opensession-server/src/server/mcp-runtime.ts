@@ -21,7 +21,7 @@ import {
   toolsCacheKey,
   writeCachedTools,
 } from "./mcp-tools-cache";
-import { mcpGrantExists, mcpRelayGrant } from "./mcp-oauth";
+import { MCP_RELAY_GRANT_HEADER, mcpGrantExists } from "./mcp-oauth";
 import { mcpRelayUrl, mintMcpRelayToken } from "./mcp-relay";
 import type { InProcessMcpServer } from "./inprocess-mcp";
 import { RPC_TOOL_CALL_TIMEOUT_MS } from "./run-rpc-protocol";
@@ -334,6 +334,25 @@ export function mcpGrantCandidates(
   ].filter((user): user is string => !!user);
 }
 
+/** Tool call ids of the tools/call messages in one JSON-RPC POST body. */
+export function toolCallIdsIn(body: string): string[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return [];
+  }
+  return (Array.isArray(parsed) ? parsed : [parsed]).flatMap((m) => {
+    const id =
+      (m as { method?: unknown; params?: { _meta?: Record<string, unknown> } })
+        ?.method === "tools/call"
+        ? (m as { params?: { _meta?: Record<string, unknown> } }).params?._meta
+            ?.opensessionToolCallId
+        : undefined;
+    return typeof id === "string" ? [id] : [];
+  });
+}
+
 export async function createMcpRuntime(opts: {
   mcpServers: McpScope;
   user?: string;
@@ -373,15 +392,23 @@ export async function createMcpRuntime(opts: {
   const ownTimeoutMs =
     opts.ownServerCallTimeoutMs ?? OWN_SERVER_CALL_TIMEOUT_MS;
   const grantUsers = [opts.mcpGrantUser, opts.user];
-  // Grant identities of each server reached through the relay. The audit
-  // asks per call which grant the relay sends (mcpRelayGrant, the relay's
-  // own choice), since a personal grant can stop refreshing mid-run.
-  const relayed = new Map<string, string[]>();
-  const grantUserFor = async (server: string) => {
-    const users = relayed.get(server);
-    return users
-      ? (await mcpRelayGrant(server, users).catch(() => undefined))?.user
-      : undefined;
+  // The personal grant the relay forwarded each tool call with, by tool
+  // call id, read from the relay's response header. The relay decides per
+  // request, and a personal grant can stop refreshing mid-run, so only its
+  // own answer is a faithful audit.
+  const relayGrantUsers = new Map<string, string | undefined>();
+  const relayFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const response = await fetch(input, init);
+    const used = response.headers.get(MCP_RELAY_GRANT_HEADER);
+    if (used !== null && typeof init?.body === "string")
+      for (const id of toolCallIdsIn(init.body))
+        relayGrantUsers.set(id, used ? decodeURIComponent(used) : undefined);
+    return response;
+  }) as typeof fetch;
+  const takeGrantUser = (toolCallId: string) => {
+    const user = relayGrantUsers.get(toolCallId);
+    relayGrantUsers.delete(toolCallId);
+    return user;
   };
   let closed = false;
   const live = new Set<ServerConn>();
@@ -406,7 +433,6 @@ export async function createMcpRuntime(opts: {
       const hasGrant =
         mcpGrantExists(name) ||
         candidates.some((user) => mcpGrantExists(name, user));
-      if (hasGrant) relayed.set(name, candidates);
       let url = String(cfg.url);
       let headers = { ...((cfg.headers as Record<string, string>) || {}) };
       if (hasGrant) {
@@ -415,10 +441,14 @@ export async function createMcpRuntime(opts: {
         headers = rest;
       }
       const requestInit = Object.keys(headers).length ? { headers } : undefined;
+      const fetchOpt = hasGrant ? { fetch: relayFetch } : {};
       transport =
         cfg.type === "sse"
-          ? new SSEClientTransport(new URL(url), { requestInit })
-          : new StreamableHTTPClientTransport(new URL(url), { requestInit });
+          ? new SSEClientTransport(new URL(url), { requestInit, ...fetchOpt })
+          : new StreamableHTTPClientTransport(new URL(url), {
+              requestInit,
+              ...fetchOpt,
+            });
     } else if (cfg.command) {
       transport = new StdioClientTransport({
         ...workloadCommand(
@@ -656,7 +686,6 @@ export async function createMcpRuntime(opts: {
           );
         throw new Error(`MCP tool "${name}" not found on server "${server}".`);
       }
-      let grantUser: string | undefined;
       try {
         if (closed) throw new Error("MCP runtime is closed");
         const conn = await withTimeout(
@@ -673,8 +702,6 @@ export async function createMcpRuntime(opts: {
         const sent = opts.rewriteArgs
           ? opts.rewriteArgs({ server: tool.server, name: tool.name }, args)
           : args;
-        // Asked just before the request, as the relay does when it sends it.
-        grantUser = await grantUserFor(tool.server);
         const result = (await conn.client.callTool(
           {
             name: tool.name,
@@ -700,7 +727,7 @@ export async function createMcpRuntime(opts: {
           server: tool.server,
           tool: tool.name,
           ok: true,
-          grantUser,
+          grantUser: takeGrantUser(options.toolCallId),
           ms: Date.now() - started,
         });
         return { content };
@@ -709,7 +736,7 @@ export async function createMcpRuntime(opts: {
           server: tool.server,
           tool: tool.name,
           ok: false,
-          grantUser,
+          grantUser: takeGrantUser(options.toolCallId),
           ms: Date.now() - started,
         });
         throw error instanceof Error ? error : new Error(String(error));

@@ -652,10 +652,58 @@ function isExpired(grant: Grant): boolean {
 /** One refresh per grant at a time in this process. */
 const refreshing = new Map<string, Promise<void>>();
 
-/** After a failed refresh, how long every process leaves that grant alone.
- *  A timeout is ambiguous: the provider may have rotated the token and lost
- *  the reply, and posting the old one again right away could revoke it. */
+/** After a rejected refresh, how long every process leaves that grant
+ *  alone. */
 const REFRESH_BACKOFF_MS = 60_000;
+
+/** Relay response header naming the personal grant a request carried. */
+export const MCP_RELAY_GRANT_HEADER = "x-opensession-grant-user";
+
+/**
+ * What a grant's lock file records between attempts. `inDoubt` is the hash
+ * of a refresh token whose request went out without a definite answer
+ * (timeout, dropped connection, crash): the provider may have rotated it and
+ * lost the reply, and presenting it again would revoke the grant. It is
+ * written before the request and cleared once one comes back, so a crash
+ * mid-request leaves it set too.
+ */
+interface RefreshRecord {
+  failedAt?: number;
+  inDoubt?: string;
+}
+
+function tokenHash(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+async function readRefreshRecord(path: string): Promise<RefreshRecord> {
+  try {
+    const parsed = JSON.parse(await readFile(path, "utf8")) as unknown;
+    return parsed && typeof parsed === "object"
+      ? (parsed as RefreshRecord)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+async function writeRefreshRecord(
+  lock: FileHandle,
+  record: RefreshRecord,
+): Promise<void> {
+  await lock.truncate(0);
+  await lock.write(JSON.stringify(record) + "\n", 0);
+  await lock.sync();
+}
+
+/** Connection errors that mean the request never reached the provider. */
+const NOT_SENT_ERRORS = new Set([
+  "ConnectionRefused",
+  "ECONNREFUSED",
+  "FailedToOpenSocket",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+]);
 
 function grantKey(name: string, slot: GrantSlot): string {
   return `${name}\0${slot.kind}\0${slotLabel(slot)}`;
@@ -684,24 +732,44 @@ function refreshGrant(name: string, slot: GrantSlot): Promise<void> {
     const path = grantLockPath(key);
     const lock = await acquireLock(path, "grant");
     try {
-      const failedAt = Number(
-        (await readFile(path, "utf8").catch(() => "")).trim(),
-      );
-      if (failedAt && Date.now() - failedAt < REFRESH_BACKOFF_MS) return;
+      const record = await readRefreshRecord(path);
       const store = await readStoreUnderLock();
       publishJsonFile(STORE_PATH, store);
       const auth = store[name];
       const ref = grantRef(auth, slot);
       if (!auth || !ref || !needsRefresh(ref.grant)) return;
-      const spent = ref.grant.tokens.refreshToken;
-      let next: Grant | undefined;
-      try {
-        next = await requestRefresh(name, auth, ref);
-      } finally {
-        await lock?.truncate(0);
-        if (!next) await lock?.write(`${Date.now()}\n`);
+      const spent = ref.grant.tokens.refreshToken!;
+      if (record.inDoubt === tokenHash(spent)) {
+        // Never replayed: reconnecting stores a new refresh token.
+        console.error(
+          `[mcp-oauth] refresh skipped for ${name}/${slotLabel(slot)}: an earlier attempt with this refresh token got no answer; reconnect to restore it`,
+        );
+        return;
       }
-      if (!next) return;
+      if (record.failedAt && Date.now() - record.failedAt < REFRESH_BACKOFF_MS)
+        return;
+      if (lock) await writeRefreshRecord(lock, { inDoubt: tokenHash(spent) });
+      let outcome: RefreshOutcome;
+      try {
+        outcome = await requestRefresh(name, auth, ref);
+      } catch (e) {
+        const code = (e as { code?: unknown }).code;
+        outcome =
+          typeof code === "string" && NOT_SENT_ERRORS.has(code)
+            ? { kind: "rejected" }
+            : { kind: "unknown" };
+        console.error(
+          `[mcp-oauth] refresh request failed for ${name}/${slotLabel(slot)}:`,
+          e instanceof Error ? e.message : e,
+        );
+      }
+      if (lock && outcome.kind !== "unknown")
+        await writeRefreshRecord(
+          lock,
+          outcome.kind === "rejected" ? { failedAt: Date.now() } : {},
+        );
+      if (outcome.kind !== "ok") return;
+      const next = outcome.grant;
       await updateStore((fresh) => {
         const entry = fresh[name];
         const current = grantRef(entry, slot);
@@ -735,11 +803,18 @@ const OAUTH_TOKEN_ERRORS = new Set([
   "invalid_scope",
 ]);
 
+/** `rejected`: the provider answered and kept the old refresh token valid
+ *  (or never got the request). `unknown`: it may have rotated it. */
+type RefreshOutcome =
+  | { kind: "ok"; grant: Grant }
+  | { kind: "rejected" }
+  | { kind: "unknown" };
+
 async function requestRefresh(
   name: string,
   auth: ServerAuth,
   ref: GrantRef,
-): Promise<Grant | undefined> {
+): Promise<RefreshOutcome> {
   const { grant } = ref;
   const body = new URLSearchParams({
     grant_type: "refresh_token",
@@ -771,9 +846,10 @@ async function requestRefresh(
     console.error(
       `[mcp-oauth] refresh rejected for ${name}/${slotLabel(ref)}: HTTP ${response.status} ${code}`,
     );
-    return undefined;
+    // A success status without a usable body may still have rotated.
+    return response.ok ? { kind: "unknown" } : { kind: "rejected" };
   }
-  return {
+  const next: Grant = {
     ...grant,
     tokens: {
       accessToken: res.access_token,
@@ -784,6 +860,7 @@ async function requestRefresh(
     },
     updatedAt: new Date().toISOString(),
   };
+  return { kind: "ok", grant: next };
 }
 
 function grantSlots(auth: ServerAuth): GrantSlot[] {
@@ -903,8 +980,8 @@ export async function mcpFreshGrantHeader(
 /**
  * The credential the relay sends for a run: each identity's own grant in
  * order, then the shared grant, each refreshed first if expired. `user` is
- * the identity whose grant it is (absent: the shared grant). The relay and
- * the runtime's audit both call this, so the audit names the grant in use.
+ * the identity whose grant it is (absent: the shared grant). The relay
+ * reports it back to the runtime in MCP_RELAY_GRANT_HEADER for the audit.
  */
 export async function mcpRelayGrant(
   name: string,

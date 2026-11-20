@@ -10,6 +10,7 @@ import {
 import { tmpdir } from "os";
 import { basename, dirname, join } from "path";
 import { statePath } from "./paths";
+import { toolCallIdsIn } from "./mcp-runtime";
 import {
   loadMcpOauthStore,
   mcpFreshGrantHeader,
@@ -254,4 +255,58 @@ test("the relay grant names no person when it falls back to the shared grant", a
   expect(await mcpRelayGrant("Acme", ["nobody@example.test"])).toEqual({
     header: "Bearer at-0",
   });
+});
+
+test("a refresh with no definite answer is never replayed with the same token", async () => {
+  await seed(310_000);
+  // A success status with an unreadable body: the provider may have rotated.
+  endpoint.server.reload({
+    async fetch() {
+      endpoint.state.posts++;
+      return new Response("<html>", { status: 200 });
+    },
+  });
+  const error = spyOn(console, "error").mockImplementation(() => {});
+  try {
+    expect(await mcpFreshGrantHeader("Acme")).toBeUndefined();
+    await refreshExpiringMcpGrants();
+    expect(await mcpFreshGrantHeader("Acme")).toBeUndefined();
+    expect(endpoint.state.posts).toBe(1);
+    expect(error.mock.calls.map((c) => c.join(" ")).join("\n")).toContain(
+      "reconnect to restore it",
+    );
+  } finally {
+    error.mockRestore();
+  }
+  // Reconnecting stores a new refresh token, which refreshes normally.
+  endpoint.server.stop(true);
+  endpoint = rotatingTokenEndpoint();
+  const store = storeWith(endpoint.url, 310_000);
+  store.Acme.shared.tokens.refreshToken = "rt-0";
+  writeFileSync(storePath, JSON.stringify(store));
+  await loadMcpOauthStore();
+  // Same refresh token as the doubtful attempt: still held back.
+  expect(await mcpFreshGrantHeader("Acme")).toBeUndefined();
+  expect(endpoint.state.posts).toBe(0);
+  endpoint.state.current = "rt-new";
+  store.Acme.shared.tokens.refreshToken = "rt-new";
+  writeFileSync(storePath, JSON.stringify(store));
+  await loadMcpOauthStore();
+  expect(await mcpFreshGrantHeader("Acme")).toBe("Bearer at-1");
+});
+
+test("tool call ids are read from single and batched JSON-RPC bodies", () => {
+  const call = (id: string) => ({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "tools/call",
+    params: { name: "x", _meta: { opensessionToolCallId: id } },
+  });
+  expect(toolCallIdsIn(JSON.stringify(call("a")))).toEqual(["a"]);
+  expect(
+    toolCallIdsIn(
+      JSON.stringify([call("b"), { jsonrpc: "2.0", method: "ping" }]),
+    ),
+  ).toEqual(["b"]);
+  expect(toolCallIdsIn("not json")).toEqual([]);
 });

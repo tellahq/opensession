@@ -100,7 +100,15 @@ async function upstreamAuthorization(
     "acme",
     token,
   );
-  return ((await res.json()) as { authorization: string | null }).authorization;
+  const authorization = ((await res.json()) as { authorization: string | null })
+    .authorization;
+  // The relay reports whose personal grant it forwarded, for the audit.
+  expect(res.headers.get("x-opensession-grant-user")).toBe(
+    authorization === "Bearer ada-token"
+      ? encodeURIComponent("Ada Lovelace")
+      : "",
+  );
+  return authorization;
 }
 
 describe("automation runs with Run MCP sign-ins as", () => {
