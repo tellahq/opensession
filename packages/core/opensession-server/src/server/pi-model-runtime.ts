@@ -975,6 +975,8 @@ export interface LiveSdkConversation {
   thinkingKey: string;
   /** The credential the Claude Code process was spawned with (claudeCodeAuth). */
   credentialKey: string;
+  /** The API request whose usage the last finished step reported. */
+  reportedRequest?: SdkReportedRequest;
 }
 
 /** Live SDK conversations keyed by store key. Exported for tests. */
@@ -1074,11 +1076,36 @@ const SDK_USAGE_FIELDS = [
  * per-step figure: its output count spans every step of the turn. */
 export type SdkStepUsage = Map<string, Record<string, number>>;
 
+/** The last API request a finished step reported, with the output tokens it
+ * counted. A step that ends at a tool call reports its usage as soon as the
+ * tool call arrives, before that request's closing `message_delta`, which the
+ * next step of the same live conversation then reads. Its input and cache
+ * figures were already reported; counting them again would make every later
+ * step of the turn report about twice its prompt, and pi compacts on that. */
+export interface SdkReportedRequest {
+  id: string;
+  output: number;
+}
+
 export function recordSdkStepUsage(
   step: SdkStepUsage,
   id: string,
   usage: Readonly<Record<string, unknown>>,
+  reported?: SdkReportedRequest,
 ): void {
+  if (reported && id === reported.id) {
+    // Only output the earlier step had not seen yet belongs to this step.
+    const output = usage.output_tokens;
+    if (typeof output === "number" && output > reported.output) {
+      const entry = step.get(id) ?? {};
+      entry.output_tokens = Math.max(
+        entry.output_tokens ?? 0,
+        output - reported.output,
+      );
+      step.set(id, entry);
+    }
+    return;
+  }
   const entry = step.get(id) ?? {};
   for (const field of SDK_USAGE_FIELDS) {
     const value = usage[field];
@@ -1088,6 +1115,20 @@ export function recordSdkStepUsage(
   const fiveMinute = reportedFiveMinuteWrites(usage);
   if (fiveMinute !== undefined) entry[CACHE_WRITE_5M_FIELD] = fiveMinute;
   step.set(id, entry);
+}
+
+/** The request this step reports last, for the next step's recordSdkStepUsage. */
+export function lastSdkStepRequest(
+  step: SdkStepUsage,
+  reported?: SdkReportedRequest,
+): SdkReportedRequest | undefined {
+  const id = [...step.keys()].at(-1);
+  if (id === undefined) return reported;
+  const output = step.get(id)?.output_tokens ?? 0;
+  return {
+    id,
+    output: id === reported?.id ? reported.output + output : output,
+  };
 }
 
 export function sumSdkStepUsage(
@@ -1656,6 +1697,11 @@ async function* runSdkAttempt(
 
     let sdkSessionId: string | undefined;
     const stepUsage: SdkStepUsage = new Map();
+    const reportedBefore = q.live.reportedRequest;
+    const reportStepUsage = () => {
+      q.live.reportedRequest = lastSdkStepRequest(stepUsage, reportedBefore);
+      return usageFromSdkResult(model, sumSdkStepUsage(stepUsage));
+    };
     let streamMessageId: string | undefined;
     const noteStreamUsage = (ev: Record<string, any>) => {
       if (ev.type === "message_start") {
@@ -1665,9 +1711,17 @@ async function* runSdkAttempt(
             stepUsage,
             streamMessageId ?? "stream",
             ev.message.usage,
+            reportedBefore,
           );
       } else if (ev.type === "message_delta" && ev.usage) {
-        recordSdkStepUsage(stepUsage, streamMessageId ?? "stream", ev.usage);
+        // A delta before this step's message_start closes the request the
+        // previous step ended on.
+        recordSdkStepUsage(
+          stepUsage,
+          streamMessageId ?? reportedBefore?.id ?? "stream",
+          ev.usage,
+          reportedBefore,
+        );
       }
     };
     let reachedResult = false;
@@ -1731,7 +1785,7 @@ async function* runSdkAttempt(
       }
       emittedCaptures = Math.min(emittedCaptures, captured.length);
       clientDone = true;
-      const usage = usageFromSdkResult(model, sumSdkStepUsage(stepUsage));
+      const usage = reportStepUsage();
       partial.usage = usage;
       const message: PiAssistantMessageShape = {
         ...partial,
@@ -1938,6 +1992,7 @@ async function* runSdkAttempt(
               stepUsage,
               String(m.message.id || m.uuid || "") || "assistant",
               m.message.usage,
+              reportedBefore,
             );
           if (!clientDone && !sawStreamContent) {
             // Fallback (no partial stream events from the CLI): emit each text
@@ -2074,7 +2129,9 @@ async function* runSdkAttempt(
       );
     }
 
-    const usage = usageFromSdkResult(model, sumSdkStepUsage(stepUsage));
+    const usage = clientDone
+      ? usageFromSdkResult(model, sumSdkStepUsage(stepUsage))
+      : reportStepUsage();
     partial.usage = usage;
     const stopReason: "toolUse" | "stop" | "length" =
       cappedStopReason ?? (captured.length ? "toolUse" : "stop");
