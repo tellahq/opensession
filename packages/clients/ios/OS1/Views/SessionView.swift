@@ -3777,6 +3777,11 @@ private struct SessionInputBar: View {
             }
             #endif
 
+            // Directly on the composer, under the action bar, as the web
+            // folds it out from behind the field. Its own view struct, so the
+            // usage it reads re-renders the strip alone.
+            ComposerUsageBar(viewModel: viewModel, catalog: catalog, accounts: accounts)
+
             ComposerMentionPalette(
                 text: projectedDraft.wrappedValue,
                 selection: inputSelection,
@@ -5817,27 +5822,34 @@ private struct SessionInputBar: View {
     }
 }
 
-/// How full the model's context window is, as the web's `ContextRing`
-/// (UsageMeter.tsx): accent until 85%, red past it. Nothing without a window.
+/// How full the model's context is, as the web's `ContextRing`
+/// (UsageMeter.tsx): it fills toward the point the engine compacts, when
+/// that sits under the window, and turns red once the window itself is 85%
+/// full. Nothing without a window.
 struct ContextFillRing: View {
     let usage: SessionUsage
     var size: CGFloat = 12
 
     var body: some View {
-        if usage.contextWindow > 0 {
-            let fraction = min(max(Double(usage.contextTokens) / Double(usage.contextWindow), 0), 1)
+        let fill = usage.contextFill
+        if fill.limit > 0 {
+            let fraction = fill.fraction
             ZStack {
                 Circle().stroke(OS1VisualStyle.border, lineWidth: 2)
                 Circle()
                     .trim(from: 0, to: fraction)
                     .stroke(
-                        fraction >= 0.85 ? OS1VisualStyle.red : OS1VisualStyle.accent,
+                        fill.isTight ? OS1VisualStyle.red : OS1VisualStyle.accent,
                         style: StrokeStyle(lineWidth: 2, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
             }
             .frame(width: size, height: size)
-            .accessibilityLabel("Context \(Int((fraction * 100).rounded())) percent full")
+            .accessibilityLabel(
+                fill.compacts
+                    ? "Context \(fill.percent) percent of the way to compaction"
+                    : "Context \(fill.percent) percent full"
+            )
         }
     }
 }

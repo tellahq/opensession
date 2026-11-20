@@ -3,6 +3,19 @@ import XCTest
 
 @MainActor
 final class PreferenceHydrationTests: XCTestCase {
+    /// The web's `usage-bar` pref: "on"/"off" under the same key, and any
+    /// other value is no answer rather than a switch.
+    func testUsageBarPrefMatchesTheWebShape() {
+        XCTAssertEqual(UsageBarPref.prefKey, "usage-bar")
+        XCTAssertEqual(UsageBarPref.decode("on"), true)
+        XCTAssertEqual(UsageBarPref.decode("off"), false)
+        XCTAssertNil(UsageBarPref.decode(nil))
+        XCTAssertNil(UsageBarPref.decode("true"))
+        XCTAssertEqual(UsageBarPref.encode(true), "on")
+        XCTAssertEqual(UsageBarPref.encode(false), "off")
+        XCTAssertFalse(UsageBarPref.standard)
+    }
+
     func testDefaultRepositoryPreferenceNormalizesRetiredAuto() {
         XCTAssertNil(NativePreferences.normalizedDefaultRepository(nil))
         XCTAssertEqual(NativePreferences.normalizedDefaultRepository(""), "")

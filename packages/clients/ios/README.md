@@ -237,7 +237,14 @@ passed`, the whole message and nothing else) draws as one compact row per
   on the account the current model will run on, over a breakdown of every
   subscription account you can spend, yours first and then the shared pool,
   each with its refill day. Choosing one for the current model's pool pins it
-  for the session through `/account`. Completed native sessions can also fork from the current transcript tip
+  for the session through `/account`. Its Show usage bar switch (also in
+  Settings → Preferences) is the account's synced `usage-bar` pref: when on,
+  a strip above the composer shows context, spend, the account's 5-hour and
+  weekly limits and which account the session runs on. Context readouts (the
+  header ring, Conversation usage, the strip's detail) fill toward the
+  engine's compaction point and break the prompt down by part (messages,
+  summary, system prompt, instructions, tools, MCP tools, skills, Other).
+  Completed native sessions can also fork from the current transcript tip
   or a message menu; the composer names the source and opens the new session
   after creation. A bounded cache keeps
   recently visited conversations loaded while their
