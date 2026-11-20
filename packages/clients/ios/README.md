@@ -21,8 +21,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   flat single-line workspace rows with live/PR status marks and a running-time
   ticker, larger mobile type, and the web client's warm dark palette. Inbox
   keeps Active work in stable creation order with a nearby Snoozed shelf,
-  sharing `/api/snoozes` with the web sidebar. Activity restores Needs action,
-  Recent, Yesterday, and Earlier; Status remains the dynamic lane view. Group
+  sharing `/api/snoozes` with the web sidebar. Activity restores Merged, Needs
+  action, Recent, Yesterday, and Earlier (idle rows whose PR merged collect in
+  Merged at the top, as on the web); Status remains the dynamic lane view. Group
   by project is an independent switch for all three modes. The
   compact toolbar search/filter finds session metadata (title, repository,
   branch, workspace name) with the web's typo-tolerant matcher

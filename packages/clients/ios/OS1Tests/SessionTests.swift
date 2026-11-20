@@ -505,15 +505,45 @@ final class SessionTests: XCTestCase {
             calendar: calendar
         )
 
-        XCTAssertEqual(bands.map(\.band), [.needsAction, .recent, .yesterday, .earlier])
+        XCTAssertEqual(bands.map(\.band), [.merged, .needsAction, .recent, .yesterday, .earlier])
         XCTAssertEqual(bands.map { $0.workspaces.map(\.mainSession.id) }, [
+            // Idle merged work leaves its date band for Merged, shown first.
+            ["merged-today"],
             ["blocked"],
-            // Merged work stays in its activity band instead of moving to Done.
             // A live row is recent whatever its day, but ranks by activity.
-            ["today-late", "merged-today", "today-early", "running-old"],
+            ["today-late", "today-early", "running-old"],
             ["yesterday"],
             ["earlier"],
         ])
+    }
+
+    func testInboxBandsMergedKeepsNeedsActionAndLiveRowsInTheirBands() throws {
+        let sessions = try JSONDecoder().decode(
+            [Session].self,
+            from: Data(
+                #"[{"id":"merged-blocked","prState":"MERGED","waitingForInput":true,"lastActivity":"2026-08-04T09:00:00Z"},{"id":"merged-running","prState":"MERGED","isRunning":true,"lastActivity":"2026-08-04T08:00:00Z"},{"id":"merged-old","prState":"MERGED","lastActivity":"2026-07-01T09:00:00Z"},{"id":"merged-new","prState":"MERGED","lastActivity":"2026-08-04T10:00:00Z"},{"id":"open-old","prState":"OPEN","lastActivity":"2026-07-02T09:00:00Z"},{"id":"main","workspaceId":"ws-1","prState":"OPEN","lastActivity":"2026-08-04T06:00:00Z"},{"id":"sibling","workspaceId":"ws-1","prState":"MERGED","lastActivity":"2026-08-04T05:00:00Z"}]"#.utf8
+            )
+        )
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+
+        let bands = SessionsListViewModel.inboxBands(
+            SessionsListViewModel.sidebarWorkspaces(in: sessions),
+            now: try XCTUnwrap(Session.parseISO("2026-08-04T12:00:00Z")),
+            calendar: calendar
+        )
+
+        XCTAssertEqual(bands.map(\.band), [.merged, .needsAction, .recent, .earlier])
+        XCTAssertEqual(bands.first?.band.label, "Merged")
+        let ids = bands.map { $0.workspaces.flatMap { $0.sessions.map(\.id) }.sorted() }
+        XCTAssertEqual(ids, [
+            // A workspace counts as merged when any of its sessions merged.
+            ["main", "merged-new", "merged-old", "sibling"],
+            ["merged-blocked"],
+            ["merged-running"],
+            ["open-old"],
+        ])
+        XCTAssertEqual(bands[0].workspaces.first?.sessions.map(\.id), ["merged-new"])
     }
 
     func testSidebarManualRenameWinsOverFallbackBranch() throws {
