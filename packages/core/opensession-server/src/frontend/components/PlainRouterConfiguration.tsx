@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { modelCatalogPath } from "../lib/api/automations";
 import { BASE_PATH } from "../lib/base";
 import { errorMessage } from "../lib/error-message";
 import { Button } from "../ui/button";
@@ -48,7 +49,7 @@ export function PlainRouterConfiguration() {
       .catch((cause: unknown) => {
         setLoadError(errorMessage(cause, "Could not load the triage router"));
       });
-    void fetch(`${BASE_PATH}/api/models`)
+    void fetch(`${BASE_PATH}/api${modelCatalogPath()}`)
       .then((response) => {
         if (!response.ok)
           throw new Error(`Could not load models (${response.status})`);

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { getCurrentUser } from "../../components/UserPicker";
 import { ApiError, BASE, request } from "./request";
 import {
   accountLimitsFromUsage,
@@ -69,8 +70,22 @@ export async function transcribeClip(audio: Blob): Promise<string> {
   return data?.text ?? "";
 }
 
-export async function fetchModels(): Promise<ModelCatalog> {
-  return request<ModelCatalog>("/models", {
+/** `/models` scoped to the current user, for every read of the catalog.
+ *  `automations` asks for what a scheduled automation turn can run instead:
+ *  the Automations account group and shared accounts. */
+export function modelCatalogPath(context?: "automations"): string {
+  return context === "automations"
+    ? "/models?for=automations"
+    : `/models?user=${encodeURIComponent(getCurrentUser())}`;
+}
+
+/** The model catalog for the current user: Claude capacity follows account
+ *  owners, so a personal account's models appear only for its owner. With
+ *  web sign-in the server uses the verified identity instead. */
+export async function fetchModels(
+  context?: "automations",
+): Promise<ModelCatalog> {
+  return request<ModelCatalog>(modelCatalogPath(context), {
     label: "Failed to fetch models",
   });
 }

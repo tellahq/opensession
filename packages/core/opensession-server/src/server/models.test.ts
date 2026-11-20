@@ -185,6 +185,25 @@ describe("Pi-only model routing", () => {
     expect(modelLabel("claude-fable-5-1")).toBe("Claude Fable 5.1");
   });
 
+  test("keeps Mythos 5.1 and 5.2 as distinct Fable-tier models", async () => {
+    expect(resolveModel("mythos")?.id).toBe("claude-mythos-5-2");
+    expect(resolveModel("mythos5.1")?.id).toBe("claude-mythos-5-1");
+    for (const [id, label] of [
+      ["claude-mythos-5-2", "Claude Mythos 5.2"],
+      ["claude-mythos-5-1", "Claude Mythos 5.1"],
+    ] as const) {
+      expect(toPiModel(id)).toBe(`pi/anthropic/${id}`);
+      expect(toPiModel(`pi/anthropic/${id}`)).toBe(`pi/anthropic/${id}`);
+      expect(modelLabel(id)).toBe(label);
+      expect(accountProviderForModel(`pi/anthropic/${id}`)).toBe("claude");
+      expect(modelEfforts(`pi/anthropic/${id}`)).toEqual(
+        modelEfforts("pi/anthropic/claude-fable-5-2"),
+      );
+      expect(fallbackTier(id)).toBe(fallbackTier("claude-fable-5-2"));
+      expect(contextWindowFor(`pi/anthropic/${id}`)).toBe(1_000_000);
+    }
+  });
+
   test("routes every accepted id to Pi", async () => {
     expect(routeModel("claude-fable-5-2")).toEqual({
       engine: "pi",

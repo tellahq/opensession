@@ -1214,6 +1214,21 @@ final class SessionViewModel {
         await refreshPr()
     }
 
+    /// Turn on auto-merge: the host lands the PR once its rules pass.
+    func autoMergePr(method: String = "squash") async throws {
+        try await OS1API.mergePr(sessionId: session.id, method: method, mode: "auto")
+        await refreshPr()
+    }
+
+    /// Merge past branch protection with the person's own rights, refused if
+    /// the head moved past the commit they saw.
+    func forceMergePr(method: String = "squash", headSha: String?) async throws {
+        try await OS1API.mergePr(
+            sessionId: session.id, method: method, mode: "admin", headSha: headSha
+        )
+        await refreshPr()
+    }
+
     /// Close this session's PR without merging it.
     func closePr() async throws {
         try await OS1API.closePr(sessionId: session.id)

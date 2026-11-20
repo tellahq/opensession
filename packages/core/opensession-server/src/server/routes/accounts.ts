@@ -8,8 +8,15 @@
  */
 
 import type { RouteContext } from "./context";
+import { personalAccountOwner } from "../account-owner";
+import { isHostOperator } from "./memory-diagnostics";
 import {
+  type AccountWriteForbidden,
+  type AccountWriteInvalid,
+  type AccountWriteGuard,
   addAccount,
+  addClaudeApiAccount,
+  getAccountById,
   listAccountsPublic,
   refreshAllUsage,
   removeAccount,
@@ -17,6 +24,11 @@ import {
   setAccountLabel,
   setAccountOwner,
 } from "../claude-accounts";
+import {
+  claudeFederationSetup,
+  isClaudeApiAccount,
+} from "../claude-api-credentials";
+import { designatedBridgeAccountIds } from "../model-providers";
 import {
   addCodexAccount,
   listCodexAccountsPublic,
@@ -63,9 +75,55 @@ function isRename(body: unknown): body is { label: string } {
   );
 }
 
-function foundOr404(updated: object | null): Response {
+/**
+ * API accounts spend an Anthropic organization's money, so only the host
+ * operator, or the person a personal API account belongs to, may rename,
+ * reassign, return, or remove one. Subscription accounts keep the pool's
+ * existing rules. Undefined means the caller may go ahead (or the account
+ * does not exist, which the route answers itself).
+ */
+/** Who may change a Claude API account: its owner or the host operator. The
+ *  writers re-run this against the record inside the store transaction. */
+function apiAccountChangeGuard(ctx: RouteContext): AccountWriteGuard {
+  return (account) => {
+    if (!isClaudeApiAccount(account) || isHostOperator(ctx)) return undefined;
+    // A personal API account's owner is the GitHub login it was bound to.
+    const owner = personalAccountOwner(account.owner)?.trim().toLowerCase();
+    const login = ctx.authUser?.login.trim().replace(/^@/, "").toLowerCase();
+    if (owner && login && owner === login) return undefined;
+    return account.owner
+      ? "Only this account's owner or the host operator can change it."
+      : "Only the host operator can change a shared Claude API account.";
+  };
+}
+
+function apiAccountChangeForbidden(
+  ctx: RouteContext,
+  id: string,
+): Response | undefined {
+  const account = getAccountById(id);
+  const forbidden = account && apiAccountChangeGuard(ctx)(account);
+  return forbidden ? forbiddenResponse(forbidden) : undefined;
+}
+
+function forbiddenResponse(error: string): Response {
+  return Response.json({ error }, { status: 403 });
+}
+
+function foundOr404(
+  updated:
+    | object
+    | AccountWriteForbidden
+    | AccountWriteInvalid
+    | null
+    | boolean,
+): Response {
+  if (updated && typeof updated === "object" && "forbidden" in updated)
+    return forbiddenResponse(updated.forbidden);
+  if (updated && typeof updated === "object" && "invalid" in updated)
+    return Response.json({ error: updated.invalid }, { status: 400 });
   return updated
-    ? Response.json(updated)
+    ? Response.json(updated === true ? { ok: true } : updated)
     : Response.json({ error: "Not found" }, { status: 404 });
 }
 
@@ -99,8 +157,52 @@ export async function handleAccountsRoutes(
     return Response.json(result);
   }
 
+  // Claude API accounts (API key or Workload Identity Federation). Keep these
+  // ahead of the generic /claude-accounts/:id matchers.
+  if (path === "/api/claude-accounts/api" && req.method === "POST") {
+    const body = await req.json().catch(() => null);
+    if (typeof body?.name !== "string" || !body.name.trim()) {
+      return Response.json({ error: "name is required" }, { status: 400 });
+    }
+    // Federation spends whatever organization trusts this server's issuer,
+    // with no secret from the caller, so enrolling one is the operator's call.
+    if (body.federation != null && !isHostOperator(ctx))
+      return Response.json(
+        {
+          error:
+            "Only the host operator can add a workload identity account. Add a Claude API key instead, or ask the operator.",
+        },
+        { status: 403 },
+      );
+    const result = await addClaudeApiAccount({
+      name: body.name,
+      owner: typeof body.owner === "string" ? body.owner : undefined,
+      apiKey: typeof body.apiKey === "string" ? body.apiKey : undefined,
+      federation: body.federation ?? undefined,
+    });
+    if ("error" in result) return Response.json(result, { status: 400 });
+    // bridge.accounts fences Anthropic runs to the accounts it names; a new
+    // account outside it serves nothing until an operator adds its id.
+    const designated = designatedBridgeAccountIds();
+    if (designated.length && !designated.includes(result.id))
+      return Response.json({
+        ...result,
+        warning: `Mythos runs can't use this account yet: add its id (${result.id}) to bridge.accounts in model-providers.json, which limits Claude runs to the accounts it lists.`,
+      });
+    return Response.json(result);
+  }
+  if (
+    path === "/api/claude-accounts/federation-setup" &&
+    req.method === "GET"
+  ) {
+    return Response.json({
+      ...(await claudeFederationSetup()),
+      canEnroll: isHostOperator(ctx),
+    });
+  }
+
   if (path === "/api/claude-accounts/refresh" && req.method === "POST") {
-    await refreshAllUsage();
+    await refreshAllUsage({ recheckMythos: true });
     return Response.json({ accounts: listAccountsPublic() });
   }
 
@@ -141,14 +243,29 @@ export async function handleAccountsRoutes(
     /^\/api\/claude-accounts\/([^/]+)\/return-to-pool$/,
   );
   if (returnMatch && req.method === "POST") {
+    const forbidden = apiAccountChangeForbidden(
+      ctx,
+      decodeURIComponent(returnMatch[1]),
+    );
+    if (forbidden) return forbidden;
     return foundOr404(returnAccountToPool(decodeURIComponent(returnMatch[1])));
   }
 
   const accountDelMatch = path.match(/^\/api\/claude-accounts\/([^/]+)$/);
+  if (accountDelMatch && (req.method === "DELETE" || req.method === "PUT")) {
+    const forbidden = apiAccountChangeForbidden(
+      ctx,
+      decodeURIComponent(accountDelMatch[1]),
+    );
+    if (forbidden) return forbidden;
+  }
   if (accountDelMatch && req.method === "DELETE") {
-    return (await removeAccount(decodeURIComponent(accountDelMatch[1])))
-      ? Response.json({ ok: true })
-      : Response.json({ error: "Not found" }, { status: 404 });
+    return foundOr404(
+      await removeAccount(
+        decodeURIComponent(accountDelMatch[1]),
+        apiAccountChangeGuard(ctx),
+      ),
+    );
   }
   // Set/clear an account's personal owner ({"owner": "Alex"} or "").
   if (accountDelMatch && req.method === "PUT") {
@@ -158,19 +275,20 @@ export async function handleAccountsRoutes(
         await setAccountLabel(
           decodeURIComponent(accountDelMatch[1]),
           body.label,
+          apiAccountChangeGuard(ctx),
         ),
       );
     }
-    const updated = await setAccountOwner(
-      decodeURIComponent(accountDelMatch[1]),
-      typeof body?.owner === "string" ? body.owner : undefined,
-      typeof body?.credentialsPath === "string"
-        ? body.credentialsPath
-        : undefined,
+    return foundOr404(
+      await setAccountOwner(
+        decodeURIComponent(accountDelMatch[1]),
+        typeof body?.owner === "string" ? body.owner : undefined,
+        typeof body?.credentialsPath === "string"
+          ? body.credentialsPath
+          : undefined,
+        apiAccountChangeGuard(ctx),
+      ),
     );
-    return updated
-      ? Response.json(updated)
-      : Response.json({ error: "Not found" }, { status: 404 });
   }
 
   // ── Codex (OpenAI) account pool ──
