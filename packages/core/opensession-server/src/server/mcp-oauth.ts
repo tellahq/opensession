@@ -26,7 +26,15 @@
  * disables dynamic registration).
  */
 import { randomBytes, createHash } from "crypto";
-import { readFile, writeFile } from "node:fs/promises";
+import {
+  open,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+  type FileHandle,
+} from "node:fs/promises";
+import { dirname } from "node:path";
 import { discoverMcpOauth, OauthDiscoveryError } from "./mcp-oauth-discovery";
 import { configuredIngress, configuredServer, productName } from "./config";
 import { statePath } from "./paths";
@@ -127,22 +135,137 @@ async function readStoreFresh(): Promise<Store> {
   }
 }
 
+/** The store straight from disk, bypassing the shared cache: a cached read
+ *  that started before another process's write must never answer inside
+ *  the lock, or it could hand back a refresh token already spent. */
+async function readStoreUnderLock(): Promise<Store> {
+  let text: string;
+  try {
+    text = await readFile(STORE_PATH, "utf8");
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return {};
+    throw e;
+  }
+  return JSON.parse(text) as Store;
+}
+
+/**
+ * Replace the store by rename, so a reader in another process never sees
+ * half a file, and make it durable (file and directory fsynced) before
+ * returning: a refresh clears its replay guard right after this, and a
+ * machine crash must not keep that cleared guard while losing the rotated
+ * token it protected.
+ */
 async function writeStore(store: Store): Promise<void> {
-  await writeFile(STORE_PATH, JSON.stringify(store, null, 2) + "\n", {
-    mode: 0o600,
-  });
+  const tmp = `${STORE_PATH}.tmp.${process.pid}.${randomBytes(6).toString("hex")}`;
+  const handle = await open(tmp, "wx", 0o600);
+  try {
+    await handle.writeFile(JSON.stringify(store, null, 2) + "\n");
+    await handle.sync();
+  } catch (e) {
+    await handle.close().catch(() => {});
+    await rm(tmp, { force: true }).catch(() => {});
+    throw e;
+  }
+  await handle.close();
+  try {
+    await rename(tmp, STORE_PATH);
+  } catch (e) {
+    await rm(tmp, { force: true }).catch(() => {});
+    throw e;
+  }
+  await syncStoreDir();
   publishJsonFile(STORE_PATH, store);
 }
 
-// Each change reads the store fresh, applies `fn` and writes it back, one at
-// a time, so two concurrent grant updates cannot drop each other's change.
+/** Fsync the store's directory, so a rename or a newly created file in it
+ *  survives a machine crash. */
+async function syncStoreDir(): Promise<void> {
+  const dir = await open(dirname(STORE_PATH), "r");
+  try {
+    await dir.sync();
+  } finally {
+    await dir.close();
+  }
+}
+
+// The gateway and every detached run host load this module and share one
+// file. A per-process queue alone let two processes each read the store, then
+// write it back, so one could spend a refresh token another had already
+// rotated. Changes therefore also hold an flock(2) on a lock file. The
+// kernel drops it when the holder's file closes or its process dies, so
+// there is no stale lock to detect and no one can remove another's lock.
+const LOCK_PATH = `${STORE_PATH}.lock`;
+const LOCK_WAIT_MS = 90_000;
+const LOCK_EX = 2;
+const LOCK_NB = 4;
+
+type Flock = (fd: number, operation: number) => number;
+let flockFn: Flock | null | undefined;
+
+async function loadFlock(): Promise<Flock | null> {
+  if (flockFn !== undefined) return flockFn;
+  try {
+    const { dlopen, FFIType } = await import("bun:ffi");
+    const lib = dlopen(
+      process.platform === "darwin" ? "libc.dylib" : "libc.so.6",
+      { flock: { args: [FFIType.i32, FFIType.i32], returns: FFIType.i32 } },
+    );
+    flockFn = (fd, operation) => lib.symbols.flock(fd, operation);
+  } catch (e) {
+    console.error(
+      "[mcp-oauth] flock unavailable; store changes are serialized in this process only:",
+      e instanceof Error ? e.message : e,
+    );
+    flockFn = null;
+  }
+  return flockFn;
+}
+
+/** Hold a cross-process lock on `path`. Polls a non-blocking flock so the
+ *  waiting never blocks this thread. Close the handle to release. */
+async function acquireLock(
+  path: string,
+  what: string,
+): Promise<FileHandle | undefined> {
+  const flock = await loadFlock();
+  if (!flock) return undefined;
+  const handle = await open(path, "a+", 0o600);
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  try {
+    while (flock(handle.fd, LOCK_EX | LOCK_NB) !== 0) {
+      if (Date.now() > deadline)
+        throw new Error(`Timed out waiting for the MCP OAuth ${what} lock`);
+      await new Promise((r) => setTimeout(r, 25 + Math.random() * 50));
+    }
+    return handle;
+  } catch (e) {
+    await handle.close();
+    throw e;
+  }
+}
+
+function acquireStoreLock(): Promise<FileHandle | undefined> {
+  return acquireLock(LOCK_PATH, "store");
+}
+
+// Each change reads the store from disk under the lock, applies `fn` and
+// writes it back, one at a time, so two grant updates cannot drop each
+// other's change. Keep `fn` short: no network inside it. A change that writes nothing still publishes what it read, so a
+// token another process just refreshed is what the next sync read returns.
 let storeUpdate: Promise<unknown> = Promise.resolve();
 function updateStore<T>(fn: (store: Store) => T): Promise<T> {
   const run = storeUpdate.then(async () => {
-    const store = await readStoreFresh();
-    const result = fn(store);
-    if (result !== (false as T)) await writeStore(store);
-    return result;
+    const lock = await acquireStoreLock();
+    try {
+      const store = await readStoreUnderLock();
+      const result = fn(store);
+      if (result !== (false as T)) await writeStore(store);
+      else publishJsonFile(STORE_PATH, store);
+      return result;
+    } finally {
+      await lock?.close();
+    }
   });
   storeUpdate = run.catch(() => {});
   return run;
@@ -535,77 +658,289 @@ export async function completeMcpOauthFlow(
 
 const REFRESH_AHEAD_MS = 5 * 60_000;
 
-async function refreshGrant(
-  name: string,
-  auth: ServerAuth,
-  ref: GrantRef,
-): Promise<void> {
-  const { grant } = ref;
-  if (!grant.tokens.refreshToken) return;
-  const body = new URLSearchParams({
-    grant_type: "refresh_token",
-    refresh_token: grant.tokens.refreshToken,
-    client_id: auth.clientInfo.clientId,
-  });
-  if (auth.resource) body.set("resource", auth.resource);
+/** How long before expiry to refresh: five minutes, or half the token's
+ *  lifetime when that is shorter. A five-minute token (AuthKit) otherwise
+ *  sat inside the window from the moment it was issued, so every use and
+ *  every tick spent its rotating refresh token again. */
+function refreshAheadMs(grant: Grant): number {
+  const { expiresAt } = grant.tokens;
+  const issuedAt = Date.parse(grant.updatedAt);
+  if (!expiresAt || !Number.isFinite(issuedAt)) return REFRESH_AHEAD_MS;
+  const lifetime = expiresAt - issuedAt;
+  return lifetime > 0
+    ? Math.min(REFRESH_AHEAD_MS, lifetime / 2)
+    : REFRESH_AHEAD_MS;
+}
+
+function needsRefresh(grant: Grant): boolean {
+  const { expiresAt } = grant.tokens;
+  return (
+    !!grant.tokens.refreshToken &&
+    !!expiresAt &&
+    expiresAt - Date.now() < refreshAheadMs(grant)
+  );
+}
+
+function isExpired(grant: Grant): boolean {
+  const { expiresAt } = grant.tokens;
+  return !!expiresAt && expiresAt < Date.now();
+}
+
+/** One refresh per grant at a time in this process. */
+const refreshing = new Map<string, Promise<void>>();
+
+/** After a rejected refresh, how long every process leaves that grant
+ *  alone. */
+const REFRESH_BACKOFF_MS = 60_000;
+
+/** Relay response header naming the personal grant a request carried. */
+export const MCP_RELAY_GRANT_HEADER = "x-opensession-grant-user";
+
+/**
+ * What a grant's lock file records between attempts. `inDoubt` is the hash
+ * of a refresh token whose request went out without a definite answer
+ * (timeout, dropped connection, crash): the provider may have rotated it and
+ * lost the reply, and presenting it again would revoke the grant. It is
+ * written before the request and cleared once one comes back, so a crash
+ * mid-request leaves it set too.
+ */
+interface RefreshRecord {
+  failedAt?: number;
+  inDoubt?: string;
+}
+
+function tokenHash(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+async function readRefreshRecord(path: string): Promise<RefreshRecord> {
   try {
-    const res = (await (
-      await fetch(auth.endpoints.token, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body,
-        signal: AbortSignal.timeout(15_000),
-      })
-    ).json()) as {
-      access_token?: string;
-      refresh_token?: string;
-      expires_in?: number;
-    };
-    if (!res.access_token) return;
-    const next: Grant = {
-      ...grant,
-      tokens: {
-        accessToken: res.access_token,
-        refreshToken: res.refresh_token || grant.tokens.refreshToken,
-        ...(res.expires_in
-          ? { expiresAt: Date.now() + res.expires_in * 1000 }
-          : {}),
-      },
-      updatedAt: new Date().toISOString(),
-    };
-    await updateStore((store) => {
-      const entry = store[name];
-      if (!entry) return false;
-      writeGrant(entry, ref, next);
-    });
-  } catch (e) {
-    console.error(
-      `[mcp-oauth] refresh failed for ${name}/${slotLabel(ref)}:`,
-      e,
-    );
+    const parsed = JSON.parse(await readFile(path, "utf8")) as unknown;
+    return parsed && typeof parsed === "object"
+      ? (parsed as RefreshRecord)
+      : {};
+  } catch {
+    return {};
   }
 }
 
-async function refreshExpiring(): Promise<void> {
-  const store = await readStoreFresh();
-  for (const [name, auth] of Object.entries(store)) {
-    const slots: GrantSlot[] = [
-      ...(auth.shared ? [{ kind: "shared" } as const] : []),
-      ...Object.keys(auth.users || {}).map(
-        (teamName) => ({ kind: "user", teamName }) as const,
-      ),
-    ];
-    for (const slot of slots) {
+async function writeRefreshRecord(
+  lock: FileHandle,
+  record: RefreshRecord,
+): Promise<void> {
+  await lock.truncate(0);
+  await lock.write(JSON.stringify(record) + "\n", 0);
+  await lock.sync();
+}
+
+/** Connection errors that mean the request never reached the provider. */
+const NOT_SENT_ERRORS = new Set([
+  "ConnectionRefused",
+  "ECONNREFUSED",
+  "FailedToOpenSocket",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+]);
+
+function grantKey(name: string, slot: GrantSlot): string {
+  return `${name}\0${slot.kind}\0${slotLabel(slot)}`;
+}
+
+/** One lock file per grant, so a slow token endpoint only holds up refreshes
+ *  of that grant. It also records the last failed attempt (a timestamp), so
+ *  the backoff holds across processes. */
+function grantLockPath(key: string): string {
+  return `${STORE_PATH}.${createHash("sha256").update(key).digest("hex").slice(0, 16)}.lock`;
+}
+
+/**
+ * Refresh one grant if it still needs it. Providers that rotate refresh
+ * tokens (AuthKit) accept each one once and treat a second use as theft,
+ * revoking the whole grant. So the decision and the token request happen
+ * under that grant's lock, on the grant as stored right now: when another
+ * process refreshed it first, this sees the new expiry and does nothing.
+ * The store lock is taken only to write the result.
+ */
+function refreshGrant(name: string, slot: GrantSlot): Promise<void> {
+  const key = grantKey(name, slot);
+  const running = refreshing.get(key);
+  if (running) return running;
+  const run = (async () => {
+    const path = grantLockPath(key);
+    const lock = await acquireLock(path, "grant");
+    try {
+      const record = await readRefreshRecord(path);
+      const store = await readStoreUnderLock();
+      publishJsonFile(STORE_PATH, store);
+      const auth = store[name];
       const ref = grantRef(auth, slot);
-      const exp = ref?.grant.tokens.expiresAt;
-      if (
-        ref?.grant.tokens.refreshToken &&
-        exp &&
-        exp - Date.now() < REFRESH_AHEAD_MS
-      )
-        await refreshGrant(name, auth, ref);
+      if (!auth || !ref || !needsRefresh(ref.grant)) return;
+      const spent = ref.grant.tokens.refreshToken!;
+      if (record.inDoubt === tokenHash(spent)) {
+        // Never replayed: reconnecting stores a new refresh token.
+        console.error(
+          `[mcp-oauth] refresh skipped for ${name}/${slotLabel(slot)}: an earlier attempt with this refresh token got no answer; reconnect to restore it`,
+        );
+        return;
+      }
+      if (record.failedAt && Date.now() - record.failedAt < REFRESH_BACKOFF_MS)
+        return;
+      if (lock) {
+        // Sync the directory before replacing the guard. The store read above
+        // may be a rename a crashed process never synced: overwriting an
+        // earlier token's guard first could let a machine crash restore that
+        // token with nothing stopping its replay. This also makes a newly
+        // created lock file's entry durable before the request goes out.
+        await syncStoreDir();
+        await writeRefreshRecord(lock, { inDoubt: tokenHash(spent) });
+      }
+      let outcome: RefreshOutcome;
+      try {
+        outcome = await requestRefresh(name, auth, ref);
+      } catch (e) {
+        const code = (e as { code?: unknown }).code;
+        outcome =
+          typeof code === "string" && NOT_SENT_ERRORS.has(code)
+            ? { kind: "rejected" }
+            : { kind: "unknown" };
+        console.error(
+          `[mcp-oauth] refresh request failed for ${name}/${slotLabel(slot)}:`,
+          e instanceof Error ? e.message : e,
+        );
+      }
+      if (lock && outcome.kind === "rejected")
+        await writeRefreshRecord(lock, { failedAt: Date.now() });
+      if (outcome.kind !== "ok") return;
+      const next = outcome.grant;
+      const saved = await updateStore((fresh) => {
+        const entry = fresh[name];
+        const current = grantRef(entry, slot);
+        // Reconnected or removed meanwhile: that newer grant wins.
+        if (!entry || current?.grant.tokens.refreshToken !== spent)
+          return false;
+        writeGrant(entry, slot, next);
+        return true;
+      });
+      // Only now is the spent token durably off disk. Clearing the guard any
+      // earlier let a crash between the reply and this write leave the spent
+      // token stored with nothing stopping its replay. When this refresh
+      // wrote nothing, the newer grant it saw may not be durable yet, so the
+      // guard stays; it only matches the spent token, so it blocks nothing else.
+      if (lock && saved) await writeRefreshRecord(lock, {});
+    } finally {
+      await lock?.close();
     }
+  })()
+    .catch((e) => {
+      console.error(
+        `[mcp-oauth] refresh failed for ${name}/${slotLabel(slot)}:`,
+        e instanceof Error ? e.message : e,
+      );
+    })
+    .finally(() => refreshing.delete(key));
+  refreshing.set(key, run);
+  return run;
+}
+
+/** RFC 6749 section 5.2 token endpoint error codes. */
+const OAUTH_TOKEN_ERRORS = new Set([
+  "invalid_request",
+  "invalid_client",
+  "invalid_grant",
+  "unauthorized_client",
+  "unsupported_grant_type",
+  "invalid_scope",
+]);
+
+/** `rejected`: the provider answered and kept the old refresh token valid
+ *  (or never got the request). `unknown`: it may have rotated it. */
+type RefreshOutcome =
+  | { kind: "ok"; grant: Grant }
+  | { kind: "rejected" }
+  | { kind: "unknown" };
+
+async function requestRefresh(
+  name: string,
+  auth: ServerAuth,
+  ref: GrantRef,
+): Promise<RefreshOutcome> {
+  const { grant } = ref;
+  const body = new URLSearchParams({
+    grant_type: "refresh_token",
+    refresh_token: grant.tokens.refreshToken!,
+    client_id: auth.clientInfo.clientId,
+  });
+  if (auth.resource) body.set("resource", auth.resource);
+  const response = await fetch(auth.endpoints.token, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+    signal: AbortSignal.timeout(15_000),
+  });
+  const res = (await response.json().catch(() => ({}))) as {
+    access_token?: string;
+    refresh_token?: string;
+    expires_in?: number;
+    error?: unknown;
+  };
+  if (!response.ok || !res.access_token) {
+    // The status and a standard OAuth error code only. Provider text could
+    // echo the refresh token back, so it never reaches the log.
+    const code =
+      typeof res.error === "string" && OAUTH_TOKEN_ERRORS.has(res.error)
+        ? res.error
+        : res.error === undefined
+          ? "no access_token"
+          : "unrecognized error";
+    console.error(
+      `[mcp-oauth] refresh rejected for ${name}/${slotLabel(ref)}: HTTP ${response.status} ${code}`,
+    );
+    // Definite only when the authorization server itself refused: a 4xx with
+    // a standard OAuth error body. A 5xx or 504 from a proxy, or a success
+    // status without a usable body, can follow a rotation that went through.
+    const refused =
+      response.status >= 400 &&
+      response.status < 500 &&
+      typeof res.error === "string" &&
+      OAUTH_TOKEN_ERRORS.has(res.error);
+    return refused ? { kind: "rejected" } : { kind: "unknown" };
   }
+  const next: Grant = {
+    ...grant,
+    tokens: {
+      accessToken: res.access_token,
+      refreshToken: res.refresh_token || grant.tokens.refreshToken,
+      ...(res.expires_in
+        ? { expiresAt: Date.now() + res.expires_in * 1000 }
+        : {}),
+    },
+    updatedAt: new Date().toISOString(),
+  };
+  return { kind: "ok", grant: next };
+}
+
+function grantSlots(auth: ServerAuth): GrantSlot[] {
+  return [
+    ...(auth.shared ? [{ kind: "shared" } as const] : []),
+    ...Object.keys(auth.users || {}).map(
+      (teamName) => ({ kind: "user", teamName }) as const,
+    ),
+  ];
+}
+
+/** Refresh every grant that is close to expiry. Exported for tests. */
+export async function refreshExpiringMcpGrants(): Promise<void> {
+  const store = await readStoreFresh();
+  await Promise.all(
+    Object.entries(store).flatMap(([name, auth]) =>
+      grantSlots(auth)
+        .filter((slot) => {
+          const ref = grantRef(auth, slot);
+          return !!ref && needsRefresh(ref.grant);
+        })
+        .map((slot) => refreshGrant(name, slot)),
+    ),
+  );
 }
 
 // Lazy 2-minute refresh ticker (parked on globalThis; started on first store
@@ -614,20 +949,27 @@ function ensureTicker(): void {
   const g = globalThis as any;
   if (g.__osMcpOauthTicker) return;
   g.__osMcpOauthTicker = setInterval(() => {
-    refreshExpiring().catch(() => {});
+    refreshExpiringMcpGrants().catch(() => {});
   }, 2 * 60_000);
-  refreshExpiring().catch(() => {});
+  g.__osMcpOauthTicker.unref?.();
+  refreshExpiringMcpGrants().catch(() => {});
 }
 
 /**
  * The Authorization header value for a server, for a run by `user` — the
  * user's own grant first (per-user MCP identity), else the shared grant.
- * Sync (called from filterMcpServers); a stale token still gets returned
- * while the ticker refreshes in the background — the server 401s at worst,
- * which reads as "tools unavailable this turn", never a crashed run.
+ * Sync (called from filterMcpServers); an expiring token kicks a background
+ * refresh, and an expired one reads as no header until it lands. Callers
+ * that can wait (the relay) use mcpFreshGrantHeader instead.
  */
 export function mcpAuthHeader(name: string, user?: string): string | undefined {
   return mcpUserGrantHeader(name, user) ?? mcpSharedGrantHeader(name);
+}
+
+function userSlot(user?: string): GrantSlot | undefined {
+  if (!user) return undefined;
+  const teamName = resolveTeammate(user)?.name;
+  return teamName ? { kind: "user", teamName } : undefined;
 }
 
 /** The user's own grant ONLY (no shared fallback) — lets callers order
@@ -636,10 +978,8 @@ export function mcpUserGrantHeader(
   name: string,
   user?: string,
 ): string | undefined {
-  if (!user) return undefined;
-  const teamName = resolveTeammate(user)?.name;
-  if (!teamName) return undefined;
-  return grantHeader(name, { kind: "user", teamName });
+  const slot = userSlot(user);
+  return slot ? grantHeader(name, slot) : undefined;
 }
 
 /** The workspace-wide grant ONLY. */
@@ -647,16 +987,67 @@ export function mcpSharedGrantHeader(name: string): string | undefined {
   return grantHeader(name, { kind: "shared" });
 }
 
-function grantHeader(name: string, slot: GrantSlot): string | undefined {
+function grantHeader(
+  name: string,
+  slot: GrantSlot,
+  kick = true,
+): string | undefined {
   ensureTicker();
-  const auth = readStore()[name];
-  const ref = grantRef(auth, slot);
-  if (!auth || !ref) return undefined;
-  const { accessToken, expiresAt, refreshToken } = ref.grant.tokens;
-  if (expiresAt && expiresAt - Date.now() < REFRESH_AHEAD_MS && refreshToken)
-    refreshGrant(name, auth, ref).catch(() => {});
-  if (expiresAt && expiresAt < Date.now()) return undefined;
-  return `Bearer ${accessToken}`;
+  const ref = grantRef(readStore()[name], slot);
+  if (!ref) return undefined;
+  if (kick && needsRefresh(ref.grant)) void refreshGrant(name, slot);
+  if (isExpired(ref.grant)) return undefined;
+  return `Bearer ${ref.grant.tokens.accessToken}`;
+}
+
+/**
+ * Whether a grant is stored for this identity (`user` absent: the shared
+ * grant), whatever the state of its access token. Decides routing: a grant
+ * whose token just expired still belongs behind the relay, which refreshes
+ * it, not on a direct unauthenticated connection.
+ */
+export function mcpGrantExists(name: string, user?: string): boolean {
+  const slot = user ? userSlot(user) : { kind: "shared" as const };
+  return !!slot && !!grantRef(readStore()[name], slot);
+}
+
+/**
+ * The Authorization header for one identity (`user` absent: the shared
+ * grant), waiting for a refresh when the stored token is expired or about to
+ * be. For callers that can await, like the relay.
+ */
+export async function mcpFreshGrantHeader(
+  name: string,
+  user?: string,
+): Promise<string | undefined> {
+  const slot = user ? userSlot(user) : { kind: "shared" as const };
+  if (!slot) return undefined;
+  ensureTicker();
+  const before = grantRef(readStore()[name], slot);
+  if (!before) return undefined;
+  if (!isExpired(before.grant) || !before.grant.tokens.refreshToken)
+    return grantHeader(name, slot);
+  await refreshGrant(name, slot);
+  // No second kick: if that refresh failed, posting the same token again at
+  // once could revoke a grant the provider already rotated.
+  return grantHeader(name, slot, false);
+}
+
+/**
+ * The credential the relay sends for a run: each identity's own grant in
+ * order, then the shared grant, each refreshed first if expired. `user` is
+ * the identity whose grant it is (absent: the shared grant). The relay
+ * reports it back to the runtime in MCP_RELAY_GRANT_HEADER for the audit.
+ */
+export async function mcpRelayGrant(
+  name: string,
+  users: readonly string[],
+): Promise<{ header: string; user?: string } | undefined> {
+  for (const user of [...users, undefined]) {
+    const header = await mcpFreshGrantHeader(name, user);
+    if (header) return { header, ...(user ? { user } : {}) };
+  }
+  return undefined;
 }
 
 /** Connection status for the UI: who's connected on each grant. */
