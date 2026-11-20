@@ -310,3 +310,46 @@ test("tool call ids are read from single and batched JSON-RPC bodies", () => {
   ).toEqual(["b"]);
   expect(toolCallIdsIn("not json")).toEqual([]);
 });
+
+/** Contents of the per-grant lock files (not the store lock). */
+function grantRecords(): string[] {
+  const dir = dirname(storePath);
+  const base = basename(storePath);
+  return readdirSync(dir)
+    .filter(
+      (f) =>
+        /^[0-9a-f]{16}\.lock$/.test(f.slice(base.length + 1)) &&
+        f.startsWith(`${base}.`),
+    )
+    .map((f) => readFileSync(join(dir, f), "utf8"));
+}
+
+test("a 5xx from the token endpoint is in doubt, not a rejection", async () => {
+  await seed(310_000);
+  endpoint.server.reload({
+    async fetch() {
+      endpoint.state.posts++;
+      return new Response("Bad gateway", { status: 502 });
+    },
+  });
+  const error = spyOn(console, "error").mockImplementation(() => {});
+  try {
+    expect(await mcpFreshGrantHeader("Acme")).toBeUndefined();
+    // Recorded as in doubt (never resent), not as a rejection that retries.
+    const records = grantRecords();
+    expect(records).toHaveLength(1);
+    expect(records[0]).toContain("inDoubt");
+    expect(records[0]).not.toContain("failedAt");
+    await refreshExpiringMcpGrants();
+    expect(endpoint.state.posts).toBe(1);
+  } finally {
+    error.mockRestore();
+  }
+});
+
+test("a successful refresh clears the replay guard only after saving", async () => {
+  await seed(310_000);
+  expect(await mcpFreshGrantHeader("Acme")).toBe("Bearer at-1");
+  expect(grantRecords().map((r) => r.trim())).toEqual(["{}"]);
+  expect(storedTokens().refreshToken).toBe("rt-1");
+});

@@ -763,11 +763,8 @@ function refreshGrant(name: string, slot: GrantSlot): Promise<void> {
           e instanceof Error ? e.message : e,
         );
       }
-      if (lock && outcome.kind !== "unknown")
-        await writeRefreshRecord(
-          lock,
-          outcome.kind === "rejected" ? { failedAt: Date.now() } : {},
-        );
+      if (lock && outcome.kind === "rejected")
+        await writeRefreshRecord(lock, { failedAt: Date.now() });
       if (outcome.kind !== "ok") return;
       const next = outcome.grant;
       await updateStore((fresh) => {
@@ -778,6 +775,10 @@ function refreshGrant(name: string, slot: GrantSlot): Promise<void> {
           return false;
         writeGrant(entry, slot, next);
       });
+      // Only now is the spent token off disk. Clearing the guard any earlier
+      // let a crash between the reply and this write leave the spent token
+      // stored with nothing stopping its replay.
+      if (lock) await writeRefreshRecord(lock, {});
     } finally {
       await lock?.close();
     }
@@ -846,8 +847,15 @@ async function requestRefresh(
     console.error(
       `[mcp-oauth] refresh rejected for ${name}/${slotLabel(ref)}: HTTP ${response.status} ${code}`,
     );
-    // A success status without a usable body may still have rotated.
-    return response.ok ? { kind: "unknown" } : { kind: "rejected" };
+    // Definite only when the authorization server itself refused: a 4xx with
+    // a standard OAuth error body. A 5xx or 504 from a proxy, or a success
+    // status without a usable body, can follow a rotation that went through.
+    const refused =
+      response.status >= 400 &&
+      response.status < 500 &&
+      typeof res.error === "string" &&
+      OAUTH_TOKEN_ERRORS.has(res.error);
+    return refused ? { kind: "rejected" } : { kind: "unknown" };
   }
   const next: Grant = {
     ...grant,
