@@ -14,6 +14,7 @@ import SwiftUI
 /// time one of them moves.
 struct ModelSettingsMenu: View {
     @AppStorage("os1.composer.defaultModel") private var preferredModel = ""
+    @AppStorage(UsageBarPref.storageKey) private var usageBarOn = UsageBarPref.standard
 
     let viewModel: SessionViewModel
     let catalog: ModelCatalog?
@@ -26,8 +27,16 @@ struct ModelSettingsMenu: View {
     var showsUsage = true
 
     var body: some View {
-        if showsUsage {
-            UsageMenuSection(usage: viewModel.usage)
+        Section {
+            if showsUsage {
+                UsageMenuSection(usage: viewModel.usage)
+            }
+            // The same readout, kept in view above the composer. Here even
+            // where the usage row is not: this menu is where the web keeps
+            // the switch, and the composer's own menu is the one to hand.
+            Toggle(isOn: Binding(get: { usageBarOn }, set: { UsageBarPref.set($0) })) {
+                Label("Show usage bar", systemImage: "chart.bar.xaxis")
+            }
         }
         if !weeklyRows.isEmpty {
             weeklyRemainingMenu

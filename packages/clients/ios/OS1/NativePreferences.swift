@@ -89,6 +89,7 @@ enum NativePreferences {
                 ?? "[]"
             prefs[ActiveOrder.prefKey] = defaults.string(forKey: ActiveOrder.storageKey)
                 ?? "[]"
+            prefs[UsageBarPref.prefKey] = UsageBarPref.encode(UsageBarPref.isOn)
         }
         let previousIdentity = defaults.string(forKey: identityKey)
         let previousBucket = defaults.string(forKey: bucketKey)
@@ -207,6 +208,15 @@ enum NativePreferences {
             default: false,
             key: "os1.transcript.liveTyping",
             resetMissing: changedIdentity,
+            in: defaults
+        )
+        // The composer's usage bar. The account's, like the web's own
+        // `usage-bar` pref, so a missing value means off.
+        setBool(
+            UsageBarPref.decode(prefs[UsageBarPref.prefKey]),
+            default: UsageBarPref.standard,
+            key: UsageBarPref.storageKey,
+            resetMissing: true,
             in: defaults
         )
         set(
