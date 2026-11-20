@@ -3,7 +3,8 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import "./TranscriptBlocks.test-setup";
 
-const { ClampedBody, MessageBubble } = await import("./MessageBubble");
+const { ClampedBody, MessageBubble, ReasoningStep } =
+  await import("./MessageBubble");
 
 describe("images a person sends", () => {
   const entry = (images: string[]) => ({
@@ -97,5 +98,34 @@ describe("message expander threshold", () => {
       />,
     );
     expect(html).toContain("Show full message");
+  });
+});
+
+describe("thinking step", () => {
+  const entries = [
+    {
+      id: "r1",
+      type: "assistant" as const,
+      timestamp: "2026-09-14T00:00:00.000Z",
+      content: "Checking the deploy state before the rollout.",
+      isReasoning: true,
+    },
+  ];
+  const excerpt = /<span class="[^"]*truncate[^"]*">Checking the deploy/;
+
+  test("a folded step shows one line of what it was about", () => {
+    const html = renderToStaticMarkup(
+      <ReasoningStep entries={entries} active={false} expandAll={false} />,
+    );
+    expect(html).toMatch(excerpt);
+  });
+
+  test("an open step drops that line, since the trace shows below", () => {
+    const html = renderToStaticMarkup(
+      <ReasoningStep entries={entries} active={false} expandAll />,
+    );
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).not.toMatch(excerpt);
+    expect(html).toContain("Checking the deploy state before the rollout.");
   });
 });
