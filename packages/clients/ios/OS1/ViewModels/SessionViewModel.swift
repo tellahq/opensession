@@ -2366,10 +2366,16 @@ final class SessionViewModel {
             // A phase from before the drop may have moved on unseen, and a
             // re-watch without the feed does not replay it: forget it until
             // the next `stream_activity` names the current one.
+            // A stop may have landed unseen too (its `stream_done` lost with
+            // the socket), so the stop indicator goes with it.
             #if DEBUG
-            if !holdsRunFixture { runActivity = nil }
+            if !holdsRunFixture {
+                runActivity = nil
+                stoppingSince = nil
+            }
             #else
             runActivity = nil
+            stoppingSince = nil
             #endif
             // Watch after the handshake frame so the send cannot race the upgrade.
             socket?.watch(sessionId: session.id, resume: transcriptResume)

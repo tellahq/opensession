@@ -2236,4 +2236,12 @@ extension TranscriptGroupingTests {
         XCTAssertNil(viewModel.runActivity)
         XCTAssertTrue(viewModel.isRunning)
     }
+
+    func testAReconnectForgetsAnUnconfirmedStop() {
+        viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
+        viewModel.cancelRun()
+        XCTAssertNotNil(viewModel.stoppingSince)
+        viewModel.handle(.hello(bootId: "boot-2"))
+        XCTAssertNil(viewModel.stoppingSince)
+    }
 }
