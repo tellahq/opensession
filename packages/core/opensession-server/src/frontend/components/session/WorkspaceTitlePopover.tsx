@@ -37,6 +37,8 @@ import { RepoTile } from "../RepoTile";
  */
 export function WorkspaceTitlePopover({
   session,
+  leading,
+  repoControl,
   title,
   sessions,
   canRename,
@@ -44,6 +46,10 @@ export function WorkspaceTitlePopover({
   onRename,
 }: {
   session: UnifiedSession;
+  /** The repo tile (or repo-less mark) drawn inside the title button. */
+  leading?: ReactNode;
+  /** The repo switch/attach menu, shown as the Repository value. */
+  repoControl?: ReactNode;
   title: string;
   /** Whose cost, tokens and age the card totals: the workspace's sessions,
    *  or just this one for a worker or a workspace-less session. */
@@ -88,9 +94,10 @@ export function WorkspaceTitlePopover({
         className={cn(
           VIEWER_BRANCH,
           VIEWER_BRANCH_EDITABLE,
-          "flex cursor-pointer items-center text-left",
+          "flex cursor-pointer items-center gap-2 text-left",
           "data-[popup-open]:bg-hover",
         )}
+        aria-label={title}
         onDoubleClick={
           canRename
             ? () => {
@@ -100,6 +107,7 @@ export function WorkspaceTitlePopover({
             : undefined
         }
       >
+        {leading}
         <OverflowFadeText>{title}</OverflowFadeText>
       </Popover.Trigger>
       <Popover.Popup
@@ -135,9 +143,13 @@ export function WorkspaceTitlePopover({
         <dl className="m-0 mt-3 flex flex-col">
           {repoId && (
             <Fact icon={<IconRepo size={20} />} label="Repository">
-              <span className="flex min-w-0 items-center gap-2">
-                <RepoTile name={repoId} size={20} />
-                <span className="truncate">{repo?.label || repoId}</span>
+              <span className="flex min-w-0 items-center gap-1">
+                {repoControl ?? (
+                  <span className="flex min-w-0 items-center gap-2">
+                    <RepoTile name={repoId} size={20} />
+                    <span className="truncate">{repo?.label || repoId}</span>
+                  </span>
+                )}
                 {repo?.ghRepo && (
                   <a
                     href={`https://github.com/${repo.ghRepo}`}

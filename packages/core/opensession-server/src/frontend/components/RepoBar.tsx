@@ -12,7 +12,13 @@ import {
 import { Menu } from "../ui/menu";
 import { Button } from "../ui/button";
 import { Modal } from "../ui/modal";
-import { IconCheck, IconPlus, IconX, IconChevronRight } from "./icons";
+import {
+  IconCheck,
+  IconPlus,
+  IconX,
+  IconChevronRight,
+  IconChevronsUpDown,
+} from "./icons";
 import { RepoTile, repoLabel } from "./RepoTile";
 import { errorMessage } from "../lib/error-message";
 
@@ -28,8 +34,9 @@ interface Props {
    *  - "menu-row": a full-width row styled like the ⋯ overflow menu's other
    *    items.
    *  - "hero": the compact repository link below the phone Workspace title.
+   *  - "card": the Repository value in the header title's details card.
    */
-  variant?: "breadcrumb" | "menu-row" | "hero";
+  variant?: "breadcrumb" | "menu-row" | "hero" | "card";
 }
 
 /**
@@ -227,6 +234,21 @@ export function RepoBar({
           </span>
         </span>
         <IconChevronRight size={16} className="shrink-0 text-faint" />
+      </Menu.Trigger>
+    ) : variant === "card" ? (
+      // The title card's Repository row: the value itself opens the menu, so
+      // the switch/attach control sits where the repo is named.
+      <Menu.Trigger
+        className="-mr-1.5 flex h-7 min-w-0 cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-1.5 text-label text-fg transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-hover data-[popup-open]:bg-hover"
+        title="Switch or attach another repo"
+        aria-label={`Repository: ${repoLabel(primary)}. Change repository`}
+      >
+        <RepoTile name={primary} size={20} />
+        <span className="truncate">{busy ?? repoLabel(primary)}</span>
+        {attached.length > 0 && (
+          <span className="text-faint">+{attached.length}</span>
+        )}
+        <IconChevronsUpDown size={20} className="-ml-1 shrink-0 text-faint" />
       </Menu.Trigger>
     ) : variant === "hero" ? (
       <Menu.Trigger

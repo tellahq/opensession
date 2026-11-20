@@ -95,38 +95,67 @@ export function SessionHeader({
   topbarEl,
   headerActionsEl,
 }: SessionHeaderProps) {
+  const showRepo = !session.desk && session.worktreeDir && hasWorkspace;
+  // Repo-less sessions get a static mark instead of the repo switch/attach
+  // menu: scratch names the feed it came from, an Ask session with the repo
+  // turned off says so.
+  const repoLessMark = session.repoLess ? (
+    <span
+      className="flex shrink-0 items-center"
+      title={
+        session.mode === "scratch"
+          ? `Scratch session · ${session.externalRefs?.[0]?.kind || "no repo"}`
+          : "Ask session · no repo"
+      }
+    >
+      {session.mode === "scratch" ? (
+        <RepoTile name={session.externalRefs?.[0]?.kind || "scratch"} />
+      ) : (
+        <IconEye size={16} className="shrink-0 text-faint" />
+      )}
+    </span>
+  ) : null;
+  const attachedCount = session.attachedRepos?.length ?? 0;
+  const repoBar =
+    showRepo && !session.repoLess ? (
+      <RepoBar
+        sessionId={session.id}
+        primaryRepo={session.repo || "repository"}
+        branch={session.branch}
+        initialAttached={session.attachedRepos || []}
+        variant="card"
+      />
+    ) : null;
+  // The glyph inside the title button: the repo's tile (switching moved into
+  // the card's Repository row), or the repo-less mark.
+  const repoGlyph = !showRepo ? null : session.repoLess ? (
+    repoLessMark
+  ) : (
+    <span className="flex shrink-0 items-center gap-1">
+      <RepoTile name={session.repo || "repository"} />
+      {attachedCount > 0 && (
+        <span className="text-label text-dim">+{attachedCount}</span>
+      )}
+    </span>
+  );
+  // A worker's own crumb: the repo menu as before.
+  const repoMark = !showRepo ? null : session.repoLess ? (
+    repoLessMark
+  ) : (
+    <RepoBar
+      sessionId={session.id}
+      primaryRepo={session.repo || "repository"}
+      branch={session.branch}
+      initialAttached={session.attachedRepos || []}
+    />
+  );
   const header = (
     <TopBar className={VIEWER_HEADER} ref={headerRef}>
       <TopBarLeading className={VIEWER_TITLE}>
-        {!session.desk &&
-          session.worktreeDir &&
-          hasWorkspace &&
-          // Repo-less sessions get a static tile instead of the repo
-          // switch/attach menu: scratch names the feed it came from,
-          // an Ask session with the repo turned off says so.
-          (session.repoLess ? (
-            <span
-              className="flex shrink-0 items-center"
-              title={
-                session.mode === "scratch"
-                  ? `Scratch session · ${session.externalRefs?.[0]?.kind || "no repo"}`
-                  : "Ask session · no repo"
-              }
-            >
-              {session.mode === "scratch" ? (
-                <RepoTile name={session.externalRefs?.[0]?.kind || "scratch"} />
-              ) : (
-                <IconEye size={16} className="shrink-0 text-faint" />
-              )}
-            </span>
-          ) : (
-            <RepoBar
-              sessionId={session.id}
-              primaryRepo={session.repo || "repository"}
-              branch={session.branch}
-              initialAttached={session.attachedRepos || []}
-            />
-          ))}
+        {/* A worker keeps the repo as its own crumb, ahead of the parent
+            crumb; everywhere else the repo glyph rides inside the title
+            button, so the two read and hover as one thing. */}
+        {parentSession ? repoMark : null}
         {/* A worker session sits UNDER the session that spawned it, so the
             bar reads repo > session > worker and the middle crumb is the way
             back up. It replaces the "worker of …" chip that used to trail the
@@ -149,22 +178,27 @@ export function SessionHeader({
           </>
         )}
         {renameDraft !== null ? (
-          <input
-            className={VIEWER_BRANCH_RENAME}
-            value={renameDraft}
-            autoFocus
-            onChange={(event) => onRenameDraftChange(event.target.value)}
-            onFocus={(event) => event.target.select()}
-            onBlur={onCommitRename}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") onCommitRename();
-              else if (event.key === "Escape") onCancelRename();
-              event.stopPropagation();
-            }}
-          />
+          <>
+            {!parentSession && repoGlyph}
+            <input
+              className={VIEWER_BRANCH_RENAME}
+              value={renameDraft}
+              autoFocus
+              onChange={(event) => onRenameDraftChange(event.target.value)}
+              onFocus={(event) => event.target.select()}
+              onBlur={onCommitRename}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") onCommitRename();
+                else if (event.key === "Escape") onCancelRename();
+                event.stopPropagation();
+              }}
+            />
+          </>
         ) : (
           <WorkspaceTitlePopover
             session={session}
+            leading={parentSession ? null : repoGlyph}
+            repoControl={repoBar}
             title={
               parentSession ? session.title : workspaceName || session.title
             }
