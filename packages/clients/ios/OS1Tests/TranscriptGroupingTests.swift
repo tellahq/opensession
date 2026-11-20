@@ -2205,6 +2205,7 @@ extension TranscriptGroupingTests {
         XCTAssertNil(viewModel.stoppingSince, "nothing to stop")
 
         viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
+        viewModel.handle(.streamStart(sessionId: "bks-1"))
         viewModel.cancelRun()
         let since = viewModel.stoppingSince
         XCTAssertNotNil(since)
@@ -2217,6 +2218,7 @@ extension TranscriptGroupingTests {
 
     func testAStopLandsWhenTheModelTurnEndsEvenIfTheSessionStaysBusy() {
         viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
+        viewModel.handle(.streamStart(sessionId: "bks-1"))
         viewModel.cancelRun()
         XCTAssertNotNil(viewModel.stoppingSince)
 
@@ -2251,8 +2253,26 @@ extension TranscriptGroupingTests {
         XCTAssertNotNil(viewModel.stoppingSince)
     }
 
+    func testAStopWithTheModelTurnUnknownShowsNoStopping() {
+        // Opened (or reconnected) while busy: no frame yet says a model
+        // turn is running, and a workflow may be all that holds the session.
+        viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
+        viewModel.cancelRun()
+        XCTAssertNil(viewModel.stoppingSince)
+
+        viewModel.handle(.streamStart(sessionId: "bks-1"))
+        viewModel.handle(.hello(bootId: "boot-2"))
+        viewModel.cancelRun()
+        XCTAssertNil(viewModel.stoppingSince, "a reconnect forgets the turn it saw")
+
+        viewModel.handle(.streamActivity(sessionId: "bks-1", activity: .writing))
+        viewModel.cancelRun()
+        XCTAssertNotNil(viewModel.stoppingSince, "a phase proves a turn in flight")
+    }
+
     func testAReconnectForgetsAnUnconfirmedStop() {
         viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
+        viewModel.handle(.streamStart(sessionId: "bks-1"))
         viewModel.cancelRun()
         XCTAssertNotNil(viewModel.stoppingSince)
         viewModel.handle(.hello(bootId: "boot-2"))
