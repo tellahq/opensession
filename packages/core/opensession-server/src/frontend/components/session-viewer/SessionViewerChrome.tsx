@@ -197,7 +197,7 @@ interface ChromeSessionActions {
   onRestoreSession: ((session: UnifiedSession) => void) | undefined;
   onRename: ((id: string, title: string) => void) | undefined;
   setRenameDraft: Dispatch<SetStateAction<string | null>>;
-  commitRename: () => void;
+  commitRename: (title?: string) => void;
   handleFork: (messageId?: string) => void;
   send: SessionSocketSend;
   connected: boolean;

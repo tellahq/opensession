@@ -854,11 +854,14 @@ export function useSessionHeaderActions({
       toast,
     });
   }
-  function commitRename() {
-    if (setters.renameDraft !== null) {
+  /** Commit the header's rename draft, or `title` from an editor that keeps
+   *  its own draft (the header title card). */
+  function commitRename(title?: string) {
+    const draft = title ?? setters.renameDraft;
+    if (draft !== null) {
       if (identity.session.workspaceId && onRenameWorkspace)
-        onRenameWorkspace(setters.renameDraft.trim());
-      else onRename?.(identity.session.id, setters.renameDraft.trim());
+        onRenameWorkspace(draft.trim());
+      else onRename?.(identity.session.id, draft.trim());
     }
     setters.setRenameDraft(null);
   }

@@ -47,7 +47,8 @@ interface SessionHeaderProps {
   onArchive: () => void;
   renameDraft: string | null;
   onRenameDraftChange: (draft: string) => void;
-  onCommitRename: () => void;
+  /** Commits the draft, or `title` when the title card edited it. */
+  onCommitRename: (title?: string) => void;
   onCancelRename: () => void;
   canRename: boolean;
   menu: ReactNode;
@@ -186,7 +187,7 @@ export function SessionHeader({
               autoFocus
               onChange={(event) => onRenameDraftChange(event.target.value)}
               onFocus={(event) => event.target.select()}
-              onBlur={onCommitRename}
+              onBlur={() => onCommitRename()}
               onKeyDown={(event) => {
                 if (event.key === "Enter") onCommitRename();
                 else if (event.key === "Escape") onCancelRename();
@@ -213,6 +214,7 @@ export function SessionHeader({
                 ? "Rename workspace"
                 : "Rename session"
             }
+            onRenameTo={onCommitRename}
             onRename={() =>
               onRenameDraftChange(
                 parentSession ? session.title : workspaceName || session.title,

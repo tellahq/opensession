@@ -9,18 +9,15 @@ import {
 import { fullTime } from "../../lib/time";
 import type { SessionUsage, UnifiedSession } from "../../lib/types";
 import { fmtTokens, fmtUsd, totalTokens } from "../../lib/usage-format";
-import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
 import { OverflowFadeText } from "../../ui/overflow-fade-text";
 import { Popover } from "../../ui/popover";
-import { Tooltip } from "../../ui/tooltip";
 import {
   IconArrowUpRight,
   IconBranches,
   IconClock,
   IconDollarCircle,
   IconGitMerge,
-  IconPencil,
   IconRepo,
   IconTokens,
 } from "../icons";
@@ -44,6 +41,7 @@ export function WorkspaceTitlePopover({
   canRename,
   renameLabel,
   onRename,
+  onRenameTo,
 }: {
   session: UnifiedSession;
   /** The repo tile (or repo-less mark) drawn inside the title button. */
@@ -57,8 +55,19 @@ export function WorkspaceTitlePopover({
   canRename: boolean;
   renameLabel: string;
   onRename: () => void;
+  onRenameTo?: (title: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  // The card's title edits in place: hover shows it is a field, a click
+  // turns it into one. Its own draft, so the header's inline rename input
+  // does not open behind the card.
+  const [draft, setDraft] = useState<string | null>(null);
+  const editable = canRename && Boolean(onRenameTo);
+  const commit = () => {
+    if (draft !== null && draft.trim() && draft.trim() !== title)
+      onRenameTo?.(draft);
+    setDraft(null);
+  };
   const repoId = !session.repoLess && !session.desk ? session.repo : undefined;
   const repo = repoId
     ? cachedRepos().find((info) => info.id === repoId)
@@ -89,7 +98,13 @@ export function WorkspaceTitlePopover({
     rows.length > 1 ? `Across ${rows.length} sessions` : "This session";
 
   return (
-    <Popover.Root open={open} onOpenChange={setOpen}>
+    <Popover.Root
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) commit();
+        setOpen(next);
+      }}
+    >
       <Popover.Trigger
         className={cn(
           VIEWER_BRANCH,
@@ -120,26 +135,50 @@ export function WorkspaceTitlePopover({
         aria-label="Workspace details"
         className="w-[min(340px,calc(100vw-24px))] p-4"
       >
-        <div className="flex items-start gap-2">
-          <h2 className="m-0 min-w-0 flex-1 text-body font-medium text-fg [overflow-wrap:anywhere]">
-            {title}
+        {draft !== null ? (
+          <textarea
+            aria-label={renameLabel}
+            className={cn(
+              CARD_TITLE,
+              "block w-full resize-none bg-surface outline outline-1 outline-accent",
+            )}
+            rows={1}
+            value={draft}
+            autoFocus
+            onFocus={(event) => event.target.select()}
+            onChange={(event) =>
+              setDraft(event.target.value.replace(/\n/g, " "))
+            }
+            onBlur={commit}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                commit();
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                setDraft(null);
+              }
+            }}
+          />
+        ) : editable ? (
+          <h2 className="m-0">
+            <button
+              type="button"
+              title={renameLabel}
+              aria-label={`${title}. ${renameLabel}`}
+              className={cn(
+                CARD_TITLE,
+                "block w-full cursor-text text-left transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-hover",
+              )}
+              onClick={() => setDraft(title)}
+            >
+              {title}
+            </button>
           </h2>
-          {canRename && (
-            <Tooltip label={renameLabel} side="bottom">
-              <Button
-                variant="ghost"
-                size="md"
-                className="-my-1 -mr-1.5 flex-none text-dim"
-                icon={<IconPencil size={20} />}
-                aria-label={renameLabel}
-                onClick={() => {
-                  setOpen(false);
-                  onRename();
-                }}
-              />
-            </Tooltip>
-          )}
-        </div>
+        ) : (
+          <h2 className={cn(CARD_TITLE, "m-0")}>{title}</h2>
+        )}
         <dl className="m-0 mt-3 flex flex-col">
           {repoId && (
             <Fact icon={<IconRepo size={20} />} label="Repository">
@@ -204,6 +243,12 @@ export function WorkspaceTitlePopover({
     </Popover.Root>
   );
 }
+
+/** The card's title, read or edited: the same box either way, so the text
+ *  does not move when the field opens. Pulled out by its own padding so the
+ *  words stay aligned with the rows under them. */
+const CARD_TITLE =
+  "-mx-1.5 -my-1 rounded-md border-0 px-1.5 py-1 font-[inherit] text-body font-medium text-fg [overflow-wrap:anywhere] [field-sizing:content]";
 
 function Fact({
   icon,
