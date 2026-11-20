@@ -207,7 +207,9 @@ describe("buildRunInstructions", () => {
     // replies were paragraphs nobody needed to read.
     // "As the whole message" adds ~90: replies put a status line on top of
     // a paragraph that said the same thing.
-    expect(prompt.length).toBeLessThan(6_400);
+    // Cause, Fix and Checked paragraphs for bug fixes add ~150: one labeled
+    // paragraph each makes a fix report quick to parse.
+    expect(prompt.length).toBeLessThan(6_550);
   });
 
   test("prefers concise outcomes without hiding blockers or verification limits", () => {
@@ -224,6 +226,9 @@ describe("buildRunInstructions", () => {
     expect(prompt).toContain("✓ **Migration**: Done");
     expect(prompt).toContain("never for blockers, questions or deliverables");
     expect(prompt).toContain("Leave passing verification out");
+    expect(prompt).toContain(
+      "add short `Cause:`, `Fix:` and `Checked:` paragraphs",
+    );
     expect(prompt).toContain("no command lists, test counts, build recaps");
     expect(prompt).not.toContain("**Checks**: Passed");
     expect(prompt).toContain(
