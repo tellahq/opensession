@@ -26,7 +26,7 @@
  * disables dynamic registration).
  */
 import { randomBytes, createHash } from "crypto";
-import { readFile, rm, stat, writeFile } from "node:fs/promises";
+import { open, readFile, writeFile, type FileHandle } from "node:fs/promises";
 import { discoverMcpOauth, OauthDiscoveryError } from "./mcp-oauth-discovery";
 import { configuredIngress, configuredServer, productName } from "./config";
 import { statePath } from "./paths";
@@ -50,6 +50,13 @@ interface OauthEndpoints {
 interface Grant {
   tokens: {
     accessToken: string;
+    /** Refresh token, under a name releases before the store lock never
+     *  read. A run host started on such a release can outlive a deploy and
+     *  refreshes without the lock; it only sees `refreshToken`, so with the
+     *  token stored here it leaves the grant alone. */
+    rotatingRefreshToken?: string;
+    /** Where releases before the store lock kept the refresh token. Read as
+     *  a fallback and moved to `rotatingRefreshToken` on the next change. */
     refreshToken?: string;
     /** ms epoch; absent = no known expiry. */
     expiresAt?: number;
@@ -105,6 +112,18 @@ function grantRef(
   return grant ? { ...slot, grant } : undefined;
 }
 
+function refreshTokenOf(grant: Grant): string | undefined {
+  return grant.tokens.rotatingRefreshToken ?? grant.tokens.refreshToken;
+}
+
+/** Move a legacy `refreshToken` to `rotatingRefreshToken`. True if changed. */
+function hideLegacyRefreshToken(grant: Grant): boolean {
+  const { refreshToken, ...rest } = grant.tokens;
+  if (!refreshToken) return false;
+  grant.tokens = { ...rest, rotatingRefreshToken: refreshTokenOf(grant) };
+  return true;
+}
+
 function writeGrant(entry: ServerAuth, slot: GrantSlot, grant: Grant): void {
   if (slot.kind === "shared") entry.shared = grant;
   else entry.users = { ...(entry.users || {}), [slot.teamName]: grant };
@@ -128,6 +147,20 @@ async function readStoreFresh(): Promise<Store> {
   }
 }
 
+/** The store straight from disk, bypassing the shared cache: a cached read
+ *  that started before another process's write must never answer inside
+ *  the lock, or it could hand back a refresh token already spent. */
+async function readStoreUnderLock(): Promise<Store> {
+  let text: string;
+  try {
+    text = await readFile(STORE_PATH, "utf8");
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return {};
+    throw e;
+  }
+  return JSON.parse(text) as Store;
+}
+
 async function writeStore(store: Store): Promise<void> {
   // Replaced by rename: a reader in another process never sees half a file.
   await writeFileAtomicAsync(
@@ -140,49 +173,78 @@ async function writeStore(store: Store): Promise<void> {
 
 // The gateway and every detached run host load this module and share one
 // file. A per-process queue alone let two processes each read the store, then
-// write it back, so one could restore a refresh token the provider had already
-// rotated away. Changes therefore also hold a lock file across processes.
+// write it back, so one could spend a refresh token another had already
+// rotated. Changes therefore also hold an flock(2) on a lock file. The
+// kernel drops it when the holder's file closes or its process dies, so
+// there is no stale lock to detect and no one can remove another's lock.
 const LOCK_PATH = `${STORE_PATH}.lock`;
-/** Longer than a refresh's 15 s token request, so a live holder is never
- *  mistaken for a crashed one. */
-const LOCK_STALE_MS = 60_000;
 const LOCK_WAIT_MS = 90_000;
+const LOCK_EX = 2;
+const LOCK_NB = 4;
 
-async function acquireStoreLock(): Promise<void> {
+type Flock = (fd: number, operation: number) => number;
+let flockFn: Flock | null | undefined;
+
+async function loadFlock(): Promise<Flock | null> {
+  if (flockFn !== undefined) return flockFn;
+  try {
+    const { dlopen, FFIType } = await import("bun:ffi");
+    const lib = dlopen(
+      process.platform === "darwin" ? "libc.dylib" : "libc.so.6",
+      { flock: { args: [FFIType.i32, FFIType.i32], returns: FFIType.i32 } },
+    );
+    flockFn = (fd, operation) => lib.symbols.flock(fd, operation);
+  } catch (e) {
+    console.error(
+      "[mcp-oauth] flock unavailable; store changes are serialized in this process only:",
+      e instanceof Error ? e.message : e,
+    );
+    flockFn = null;
+  }
+  return flockFn;
+}
+
+/** Hold the cross-process store lock. Polls a non-blocking flock so the
+ *  waiting never blocks this thread. Close the handle to release. */
+async function acquireStoreLock(): Promise<FileHandle | undefined> {
+  const flock = await loadFlock();
+  if (!flock) return undefined;
+  const handle = await open(LOCK_PATH, "a", 0o600);
   const deadline = Date.now() + LOCK_WAIT_MS;
-  for (;;) {
-    try {
-      await writeFile(LOCK_PATH, `${process.pid}\n`, {
-        flag: "wx",
-        mode: 0o600,
-      });
-      return;
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+  try {
+    while (flock(handle.fd, LOCK_EX | LOCK_NB) !== 0) {
+      if (Date.now() > deadline)
+        throw new Error("Timed out waiting for the MCP OAuth store lock");
+      await new Promise((r) => setTimeout(r, 25 + Math.random() * 50));
     }
-    const held = await stat(LOCK_PATH).catch(() => undefined);
-    if (held && Date.now() - held.mtimeMs > LOCK_STALE_MS)
-      await rm(LOCK_PATH, { force: true });
-    else if (Date.now() > deadline)
-      throw new Error("Timed out waiting for the MCP OAuth store lock");
-    else await new Promise((r) => setTimeout(r, 25 + Math.random() * 50));
+    return handle;
+  } catch (e) {
+    await handle.close();
+    throw e;
   }
 }
 
-// Each change reads the store fresh under the lock, applies `fn` and writes
-// it back, one at a time, so two grant updates cannot drop each other's
-// change. `fn` may await (a refresh holds the lock across its token request).
+// Each change reads the store from disk under the lock, applies `fn` and
+// writes it back, one at a time, so two grant updates cannot drop each
+// other's change. `fn` may await (a refresh holds the lock across its token
+// request). Every write also moves legacy refresh tokens out of sight of
+// pre-lock releases (see Grant.tokens).
 let storeUpdate: Promise<unknown> = Promise.resolve();
 function updateStore<T>(fn: (store: Store) => T | Promise<T>): Promise<T> {
   const run = storeUpdate.then(async () => {
-    await acquireStoreLock();
+    const lock = await acquireStoreLock();
     try {
-      const store = await readStoreFresh();
+      const store = await readStoreUnderLock();
+      let migrated = false;
+      for (const auth of Object.values(store))
+        for (const slot of grantSlots(auth))
+          if (hideLegacyRefreshToken(grantRef(auth, slot)!.grant))
+            migrated = true;
       const result = await fn(store);
-      if (result !== (false as T)) await writeStore(store);
+      if (result !== (false as T) || migrated) await writeStore(store);
       return result;
     } finally {
-      await rm(LOCK_PATH, { force: true });
+      await lock?.close();
     }
   });
   storeUpdate = run.catch(() => {});
@@ -511,7 +573,7 @@ export async function completeMcpOauthFlow(
     const grant: Grant = {
       tokens: {
         accessToken: tok.accessToken,
-        ...(tok.refreshToken ? { refreshToken: tok.refreshToken } : {}),
+        ...(tok.refreshToken ? { rotatingRefreshToken: tok.refreshToken } : {}),
         ...(tok.expiresIn
           ? { expiresAt: Date.now() + tok.expiresIn * 1000 }
           : {}),
@@ -558,7 +620,7 @@ export async function completeMcpOauthFlow(
   const grant: Grant = {
     tokens: {
       accessToken: res.access_token,
-      ...(res.refresh_token ? { refreshToken: res.refresh_token } : {}),
+      ...(res.refresh_token ? { rotatingRefreshToken: res.refresh_token } : {}),
       ...(res.expires_in
         ? { expiresAt: Date.now() + res.expires_in * 1000 }
         : {}),
@@ -591,9 +653,9 @@ function refreshAheadMs(grant: Grant): number {
 }
 
 function needsRefresh(grant: Grant): boolean {
-  const { expiresAt, refreshToken } = grant.tokens;
+  const { expiresAt } = grant.tokens;
   return (
-    !!refreshToken &&
+    !!refreshTokenOf(grant) &&
     !!expiresAt &&
     expiresAt - Date.now() < refreshAheadMs(grant)
   );
@@ -638,6 +700,16 @@ function refreshGrant(name: string, slot: GrantSlot): Promise<void> {
   return run;
 }
 
+/** RFC 6749 section 5.2 token endpoint error codes. */
+const OAUTH_TOKEN_ERRORS = new Set([
+  "invalid_request",
+  "invalid_client",
+  "invalid_grant",
+  "unauthorized_client",
+  "unsupported_grant_type",
+  "invalid_scope",
+]);
+
 async function requestRefresh(
   name: string,
   auth: ServerAuth,
@@ -646,7 +718,7 @@ async function requestRefresh(
   const { grant } = ref;
   const body = new URLSearchParams({
     grant_type: "refresh_token",
-    refresh_token: grant.tokens.refreshToken!,
+    refresh_token: refreshTokenOf(grant)!,
     client_id: auth.clientInfo.clientId,
   });
   if (auth.resource) body.set("resource", auth.resource);
@@ -660,15 +732,19 @@ async function requestRefresh(
     access_token?: string;
     refresh_token?: string;
     expires_in?: number;
-    error?: string;
-    error_description?: string;
+    error?: unknown;
   };
   if (!response.ok || !res.access_token) {
-    // Status and the provider's error code only: never the tokens.
+    // The status and a standard OAuth error code only. Provider text could
+    // echo the refresh token back, so it never reaches the log.
+    const code =
+      typeof res.error === "string" && OAUTH_TOKEN_ERRORS.has(res.error)
+        ? res.error
+        : res.error === undefined
+          ? "no access_token"
+          : "unrecognized error";
     console.error(
-      `[mcp-oauth] refresh rejected for ${name}/${slotLabel(ref)}: HTTP ${response.status}` +
-        (res.error ? ` ${res.error}` : "") +
-        (res.error_description ? ` (${res.error_description})` : ""),
+      `[mcp-oauth] refresh rejected for ${name}/${slotLabel(ref)}: HTTP ${response.status} ${code}`,
     );
     return undefined;
   }
@@ -676,7 +752,7 @@ async function requestRefresh(
     ...grant,
     tokens: {
       accessToken: res.access_token,
-      refreshToken: res.refresh_token || grant.tokens.refreshToken,
+      rotatingRefreshToken: res.refresh_token || refreshTokenOf(grant),
       ...(res.expires_in
         ? { expiresAt: Date.now() + res.expires_in * 1000 }
         : {}),
@@ -718,6 +794,8 @@ function ensureTicker(): void {
     refreshExpiringMcpGrants().catch(() => {});
   }, 2 * 60_000);
   g.__osMcpOauthTicker.unref?.();
+  // A write with nothing else to change still moves legacy refresh tokens.
+  updateStore(() => false).catch(() => {});
   refreshExpiringMcpGrants().catch(() => {});
 }
 
@@ -787,7 +865,7 @@ export async function mcpFreshGrantHeader(
   ensureTicker();
   const before = grantRef(readStore()[name], slot);
   if (!before) return undefined;
-  if (isExpired(before.grant) && before.grant.tokens.refreshToken)
+  if (isExpired(before.grant) && refreshTokenOf(before.grant))
     await refreshGrant(name, slot);
   return grantHeader(name, slot);
 }

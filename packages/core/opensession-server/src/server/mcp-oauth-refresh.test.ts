@@ -1,5 +1,11 @@
 import { afterAll, afterEach, beforeAll, expect, spyOn, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "fs";
 import { tmpdir } from "os";
 import { dirname, join } from "path";
 import { statePath } from "./paths";
@@ -9,6 +15,7 @@ import {
   mcpGrantExists,
   mcpSharedGrantHeader,
   refreshExpiringMcpGrants,
+  removeMcpOauthGrant,
 } from "./mcp-oauth";
 
 /**
@@ -101,7 +108,8 @@ test("processes sharing the store refresh a rotating grant once", async () => {
     );
     expect(endpoint.state).toMatchObject({ posts: 1, revoked: false });
     const stored = JSON.parse(readFileSync(path, "utf8")).Acme.shared.tokens;
-    expect(stored.refreshToken).toBe(endpoint.state.current);
+    expect(stored.rotatingRefreshToken).toBe(endpoint.state.current);
+    expect(stored.refreshToken).toBeUndefined();
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -123,7 +131,7 @@ test("one process refreshes an expiring grant once however often it is read", as
     refreshExpiringMcpGrants(),
   ]);
   expect(endpoint.state).toMatchObject({ posts: 1, revoked: false });
-  expect(storedTokens().refreshToken).toBe("rt-1");
+  expect(storedTokens().rotatingRefreshToken).toBe("rt-1");
 });
 
 test("an expired grant still exists, and the relay waits for its refresh", async () => {
@@ -142,9 +150,34 @@ test("a rejected refresh is logged without tokens and keeps the grant", async ()
     expect(await mcpFreshGrantHeader("Acme")).toBeUndefined();
     const logged = error.mock.calls.map((c) => c.join(" ")).join("\n");
     expect(logged).toContain("HTTP 400 invalid_grant");
+    // The provider's description is not logged: it could echo the token.
+    expect(logged).not.toContain("reused");
     expect(logged).not.toContain("rt-0");
-    expect(storedTokens().refreshToken).toBe("rt-0");
+    expect(storedTokens().rotatingRefreshToken).toBe("rt-0");
   } finally {
     error.mockRestore();
   }
+});
+
+test("the first change hides a legacy refresh token from pre-lock releases", async () => {
+  await seed(10_000);
+  expect(storedTokens().refreshToken).toBe("rt-0");
+  // Any locked change migrates, even one that changes nothing else.
+  await removeMcpOauthGrant("Missing");
+  expect(storedTokens()).toMatchObject({ rotatingRefreshToken: "rt-0" });
+  expect(storedTokens().refreshToken).toBeUndefined();
+  expect(endpoint.state.posts).toBe(0);
+});
+
+test("a lock held by a process that died does not block the next change", async () => {
+  await seed(310_000);
+  const code = `const { dlopen, FFIType } = await import("bun:ffi");
+const lib = dlopen(process.platform === "darwin" ? "libc.dylib" : "libc.so.6", { flock: { args: [FFIType.i32, FFIType.i32], returns: FFIType.i32 } });
+const h = await (await import("fs/promises")).open(${JSON.stringify(`${storePath}.lock`)}, "a");
+if (lib.symbols.flock(h.fd, 2) !== 0) process.exit(2);
+process.kill(process.pid, "SIGKILL");`;
+  const holder = Bun.spawn([process.execPath, "-e", code]);
+  await holder.exited;
+  expect(holder.signalCode).toBe("SIGKILL");
+  expect(await mcpFreshGrantHeader("Acme")).toBe("Bearer at-1");
 });
