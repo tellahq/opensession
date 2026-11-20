@@ -1988,8 +1988,19 @@ enum OS1API {
         var integrations: [IntegrationSettings]?
     }
 
+    /// Claude readiness is per user when accounts are personal, so name the
+    /// same user session creation sends (the server prefers a verified
+    /// sign-in identity when there is one).
     static func setupStatus() async throws -> SetupStatus {
-        try await get("/api/setup/status")
+        try await get(setupStatusPath())
+    }
+
+    static func setupStatusPath(user: String = ServerConfig.shared.userName) -> String {
+        guard !user.isEmpty else { return "/api/setup/status" }
+        var components = URLComponents()
+        components.path = "/api/setup/status"
+        components.queryItems = [URLQueryItem(name: "user", value: user)]
+        return components.string ?? "/api/setup/status"
     }
 
     /// One repository the instance's GitHub credential can see, as the
@@ -2138,11 +2149,22 @@ enum OS1API {
         try await get(modelsPath(workspaceId: workspaceId))
     }
 
-    static func modelsPath(workspaceId: String?) -> String {
-        guard let workspaceId, !workspaceId.isEmpty else { return "/api/models" }
+    /// `user` is who would run the model: with web sign-in off the server
+    /// needs it to include that person's own Claude accounts, matching the
+    /// `user` session creation sends.
+    static func modelsPath(
+        workspaceId: String?,
+        user: String = ServerConfig.shared.userName
+    ) -> String {
+        var items: [URLQueryItem] = []
+        if let workspaceId, !workspaceId.isEmpty {
+            items.append(URLQueryItem(name: "workspace", value: workspaceId))
+        }
+        if !user.isEmpty { items.append(URLQueryItem(name: "user", value: user)) }
+        guard !items.isEmpty else { return "/api/models" }
         var components = URLComponents()
         components.path = "/api/models"
-        components.queryItems = [URLQueryItem(name: "workspace", value: workspaceId)]
+        components.queryItems = items
         return components.string ?? "/api/models"
     }
 

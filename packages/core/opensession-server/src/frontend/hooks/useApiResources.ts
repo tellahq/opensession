@@ -10,6 +10,7 @@ import {
   type SessionAssetFile,
   type WorkspaceOverview,
 } from "../lib/api";
+import { request } from "../lib/api/request";
 import { apiResourceSWRConfig, apiSWRKey } from "../lib/api-swr";
 import type {
   GitStatusInfo,
@@ -185,4 +186,30 @@ export function useWorkspaceOverviewResource(
   );
   useRevisionRevalidation(revision, resource.mutate);
   return resource;
+}
+
+/** What to register in the Claude Console to trust this server's workload
+ *  identity issuer (GET /claude-accounts/federation-setup). */
+export interface ClaudeFederationSetup {
+  issuer: string;
+  jwksUrl: string;
+  jwks: string;
+  publicIssuer: boolean;
+  subject: string;
+  audience: string;
+  /** Only the host operator may add a workload identity account. */
+  canEnroll: boolean;
+}
+
+export function useClaudeFederationSetupResource(
+  enabled: boolean,
+): SWRResponse<ClaudeFederationSetup> {
+  return useSWR<ClaudeFederationSetup>(
+    enabled ? apiSWRKey.claudeFederationSetup() : null,
+    () =>
+      request<ClaudeFederationSetup>("/claude-accounts/federation-setup", {
+        label: "Could not load workload identity settings",
+      }),
+    apiResourceSWRConfig(0),
+  );
 }

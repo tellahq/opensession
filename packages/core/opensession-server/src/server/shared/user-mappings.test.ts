@@ -12,6 +12,9 @@ import {
   isTrustedGithubLogin,
   isTrustedUser,
   personKeyToDisplayName,
+  rosterLoginNamed,
+  userIsRosterLogin,
+  signedInUserName,
   trustedGithubTeammate,
 } from "./user-mappings";
 
@@ -230,5 +233,68 @@ describe("commit attribution", () => {
       GIT_COMMITTER_EMAIL: "alice@example.com",
     });
     expect(gitIdentityEnv(null)).toEqual({});
+  });
+});
+
+describe("signed-in user name", () => {
+  test("is the first name unless a teammate shares it", () => {
+    const restore = __setIdentitiesForTest([
+      { name: "Alex Rivera", github: "alex-rivera" },
+      { name: "Alex Chen", github: "alex-chen" },
+      { name: "Sam Lee", github: "sam-a" },
+      { name: "Sam Lee", github: "sam-b" },
+      { name: "Bob Builder", github: "bob" },
+    ]);
+    try {
+      expect(signedInUserName({ login: "bob", name: "Bob Builder" })).toBe(
+        "Bob",
+      );
+      expect(
+        signedInUserName({ login: "alex-rivera", name: "Alex Rivera" }),
+      ).toBe("Alex Rivera");
+      expect(signedInUserName({ login: "sam-b", name: "Sam Lee" })).toBe(
+        "sam-b",
+      );
+    } finally {
+      restore();
+    }
+  });
+});
+
+describe("live roster", () => {
+  test("a namesake added after startup is seen without a restart", async () => {
+    const { configPath, getConfigAsync, publishConfigSnapshot } =
+      await import("../config");
+    const path = configPath();
+    const prev = await getConfigAsync();
+    const publish = (team: TeamMember[]) =>
+      publishConfigSnapshot(
+        path,
+        JSON.stringify({ ...prev, identity: { ...prev.identity, team } }),
+      );
+    const rivera = { name: "Alex Rivera", github: "alex-rivera" };
+    try {
+      publish([rivera]);
+      expect(
+        signedInUserName({ login: "alex-rivera", name: "Alex Rivera" }),
+      ).toBe("Alex");
+      expect(userIsRosterLogin("alex-rivera", "Alex")).toBe(true);
+      expect(rosterLoginNamed("Alex")).toBe("alex-rivera");
+      // An operator adds Alex Chen through Setup; the module-load snapshot
+      // still lists only Rivera.
+      publish([rivera, { name: "Alex Chen", github: "alex-chen" }]);
+      expect(signedInUserName({ login: "alex-chen", name: "Alex Chen" })).toBe(
+        "Alex Chen",
+      );
+      expect(userIsRosterLogin("alex-rivera", "Alex Chen")).toBe(false);
+      expect(userIsRosterLogin("alex-rivera", "Alex")).toBe(false);
+      expect(rosterLoginNamed("Alex")).toBeUndefined();
+      // Rivera leaves: Chen is the only Alex, but Rivera's login names nobody.
+      publish([{ name: "Alex Chen", github: "alex-chen" }]);
+      expect(userIsRosterLogin("alex-rivera", "Alex")).toBe(false);
+      expect(userIsRosterLogin("alex-chen", "Alex")).toBe(true);
+    } finally {
+      publishConfigSnapshot(path, JSON.stringify(prev));
+    }
   });
 });

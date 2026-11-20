@@ -27,6 +27,7 @@ import {
   modelFitsConfiguredProviders,
   pickerModelId,
 } from "../model-catalog";
+import { AUTOMATIONS_ACCOUNT_OWNER } from "../account-owner";
 import { type Sandbox } from "../sandbox";
 import { suggestBranchName } from "../suggest-branch";
 import { MAX_AUDIO_BYTES, transcribeAudio } from "../transcribe";
@@ -50,7 +51,17 @@ export async function handleModelsRoutes(
     // JSON reads — same "read fresh" contract as /sandbox/status below) so a
     // config change shows up on the next picker open, not the next restart.
     refreshPickerModels();
-    const configuredProviders = configuredModelProviders();
+    // `for=automations` lists what a scheduled automation turn can run: it
+    // asks for accounts as the Automations group (session-actors.ts
+    // providerAccountUser), which only narrows the catalog to that group and
+    // shared accounts.
+    const forAutomations = url.searchParams.get("for") === "automations";
+    const configuredProviders = configuredModelProviders(
+      forAutomations
+        ? AUTOMATIONS_ACCOUNT_OWNER
+        : requestUser(ctx, url.searchParams.get("user")) || undefined,
+      forAutomations ? undefined : ctx.authUser?.login || undefined,
+    );
     // One list of Pi models. Native claude/codex ids stay resolvable for
     // stored sessions, just not selectable here. Guard: with no engine
     // configured, fall back to the full registry so the picker is never empty.

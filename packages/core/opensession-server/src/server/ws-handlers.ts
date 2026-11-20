@@ -1,3 +1,4 @@
+import { signedInUserName } from "./shared/user-mappings";
 import { registerMemoryProbe } from "./memory-probes";
 import { huddles } from "./huddles-live";
 import { noteSessionHumanActivity } from "./sandbox/idle";
@@ -719,7 +720,9 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
           );
           return;
         }
-        const firstName = identity.name.split(" ")[0] || identity.name;
+        // The first name, or a name only this person answers to when a
+        // teammate shares it (signedInUserName).
+        const firstName = signedInUserName(identity);
         ws.data.authUser = firstName;
         ws.data.user = firstName;
         msg.user = firstName;

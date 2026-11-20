@@ -346,18 +346,7 @@ async function signToken(
   audience: string,
   ttlSeconds: number,
 ): Promise<string> {
-  const now = Math.floor(Date.now() / 1_000);
-  const key = await signingKey();
-  const header = base64Url(
-    JSON.stringify({ alg: "RS256", typ: "JWT", kid: key.kid }),
-  );
-  const claims: Record<string, string | number> = {
-    iss: workloadIdentityIssuer(),
-    aud: audience,
-    sub: subject(context),
-    iat: now,
-    exp: now + ttlSeconds,
-    jti: randomUUID(),
+  const claims: Record<string, string> = {
     sandbox_id: context.sandboxId,
     sandbox_provider: context.provider,
     lifecycle: context.lifecycle,
@@ -367,6 +356,47 @@ async function signToken(
   if (context.repoId) claims.repo_id = context.repoId;
   if (context.userId) claims.user_id = context.userId;
   if (context.trustProfile) claims.trust_profile = context.trustProfile;
+  return await signClaims(subject(context), audience, ttlSeconds, claims);
+}
+
+/**
+ * Sign an ID token for this server itself (not a sandbox), for a relying
+ * party that trusts this issuer. Each call carries a fresh `jti`, so a
+ * relying party that rejects replays sees a new token on every exchange.
+ */
+export async function signServerIdentityToken(input: {
+  subject: string;
+  audience: string;
+  ttlSeconds: number;
+}): Promise<string> {
+  if (!validAudience(input.audience)) throw new Error("Invalid audience");
+  const ttl = validTtl(input.ttlSeconds);
+  if (ttl === null) throw new Error("Invalid identity token lifetime");
+  return await signClaims(input.subject, input.audience, ttl, {
+    token_use: "server",
+  });
+}
+
+async function signClaims(
+  sub: string,
+  audience: string,
+  ttlSeconds: number,
+  extra: Record<string, string>,
+): Promise<string> {
+  const now = Math.floor(Date.now() / 1_000);
+  const key = await signingKey();
+  const header = base64Url(
+    JSON.stringify({ alg: "RS256", typ: "JWT", kid: key.kid }),
+  );
+  const claims: Record<string, string | number> = {
+    iss: workloadIdentityIssuer(),
+    aud: audience,
+    sub,
+    iat: now,
+    exp: now + ttlSeconds,
+    jti: randomUUID(),
+    ...extra,
+  };
   const payload = base64Url(JSON.stringify(claims));
   const signed = `${header}.${payload}`;
   const privateKey = await crypto.subtle.importKey(
@@ -431,9 +461,12 @@ async function discovery(): Promise<Response> {
   });
 }
 
-async function jwks(): Promise<Response> {
+/** The public key set, for a relying party that cannot fetch jwks_uri. */
+export async function workloadIdentityJwks(): Promise<{
+  keys: Array<Record<string, string | undefined>>;
+}> {
   const key = await signingKey();
-  return Response.json({
+  return {
     keys: [
       {
         kty: key.publicKey.kty,
@@ -444,7 +477,11 @@ async function jwks(): Promise<Response> {
         e: key.publicKey.e,
       },
     ],
-  });
+  };
+}
+
+async function jwks(): Promise<Response> {
+  return Response.json(await workloadIdentityJwks());
 }
 
 async function token(req: Request): Promise<Response> {

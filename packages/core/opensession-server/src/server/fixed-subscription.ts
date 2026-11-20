@@ -16,8 +16,9 @@
  *
  * Unmanaged sessions (no policy) keep their soft-pin behavior.
  */
-import { getAccountById } from "./claude-accounts";
+import { claudeAccountServesModel, getAccountById } from "./claude-accounts";
 import { getCodexAccountById } from "./codex-accounts";
+import { isClaudeApiAccount } from "./claude-api-credentials";
 import { accountProviderForModel } from "./models";
 import { getXaiAccountById } from "./xai-accounts";
 
@@ -62,6 +63,13 @@ export function fixedSubscriptionModelError(
   const modelProvider = accountProviderForModel(model);
   if (modelProvider !== accountProvider)
     return `This session has a fixed subscription on a ${providerLabel(accountProvider)} account, so it cannot run ${model || "the default model"}. Pick a ${providerLabel(accountProvider)} model, or start a new session.`;
+  // Same provider is not enough for Claude: API accounts run only API-only
+  // models (Mythos) and subscriptions then never do.
+  const claude = accountProvider === "claude" && getAccountById(accountId);
+  if (claude && !claudeAccountServesModel(claude, model))
+    return isClaudeApiAccount(claude)
+      ? `This session is fixed to a Claude API account, which only runs Mythos, so it cannot run ${model || "the default model"}. Pick a Mythos model, or start a new session.`
+      : `This session is fixed to a Claude subscription, and Mythos runs only on Claude API accounts. Pick another Claude model, or start a new session.`;
   return undefined;
 }
 

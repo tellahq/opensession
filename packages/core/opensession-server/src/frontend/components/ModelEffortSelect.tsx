@@ -64,6 +64,8 @@ export const EFFORTS = [
 
 const PRIMARY_MODEL_IDS = [
   "claude-fable-5-2",
+  "claude-mythos-5-2",
+  "claude-mythos-5-1",
   "claude-opus-5-5",
   "claude-sonnet-5-5",
   "claude-haiku-5-5",
@@ -215,6 +217,8 @@ const PROVIDER_ORDER = [
  * unlisted keeps its registry/config order after these. */
 const MODEL_TAIL_ORDER = [
   "claude-fable-5-2",
+  "claude-mythos-5-2",
+  "claude-mythos-5-1",
   "claude-opus-5-5",
   "claude-opus-4-8",
   "claude-sonnet-5-5",
