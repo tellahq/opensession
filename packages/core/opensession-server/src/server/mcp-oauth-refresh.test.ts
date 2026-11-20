@@ -295,6 +295,36 @@ test("a refresh with no definite answer is never replayed with the same token", 
   expect(await mcpFreshGrantHeader("Acme")).toBe("Bearer at-1");
 });
 
+test("a refresh that finds the grant reconnected keeps the spent token's guard", async () => {
+  await seed(310_000);
+  // The token endpoint answers after a reconnect has replaced the grant.
+  endpoint.server.reload({
+    async fetch() {
+      endpoint.state.posts++;
+      const store = JSON.parse(readFileSync(storePath, "utf8"));
+      store.Acme.shared.tokens.refreshToken = "rt-new";
+      writeFileSync(storePath, JSON.stringify(store));
+      return Response.json({
+        access_token: "at-1",
+        refresh_token: "rt-1",
+        expires_in: 300,
+      });
+    },
+  });
+  expect(await mcpFreshGrantHeader("Acme")).toBeUndefined();
+  expect(storedTokens().refreshToken).toBe("rt-new");
+  // Should the reconnect be lost, rt-0 is still never presented again.
+  writeFileSync(storePath, JSON.stringify(storeWith(endpoint.url, 310_000)));
+  await loadMcpOauthStore();
+  const error = spyOn(console, "error").mockImplementation(() => {});
+  try {
+    expect(await mcpFreshGrantHeader("Acme")).toBeUndefined();
+  } finally {
+    error.mockRestore();
+  }
+  expect(endpoint.state.posts).toBe(1);
+});
+
 test("tool call ids are read from single and batched JSON-RPC bodies", () => {
   const call = (id: string) => ({
     jsonrpc: "2.0",

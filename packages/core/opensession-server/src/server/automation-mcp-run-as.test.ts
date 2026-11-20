@@ -100,6 +100,12 @@ async function upstreamAuthorization(
     "acme",
     token,
   );
+  // No usable credential: the relay refuses locally, never forwarding the
+  // call upstream unsigned.
+  if (res.status === 401) {
+    expect(res.headers.get("x-opensession-grant-user")).toBe("");
+    return null;
+  }
   const authorization = ((await res.json()) as { authorization: string | null })
     .authorization;
   // The relay reports whose personal grant it forwarded, for the audit.
