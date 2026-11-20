@@ -243,12 +243,16 @@ struct TurnStepsView: View {
 
     private enum TurnSection: Identifiable {
         case message(TranscriptEntry)
+        /// Adjacent thinking events, as one step (web: `reasoning` section).
+        case reasoning([TranscriptEntry])
         case status(id: String, FoldStatus)
+        case notice(TranscriptEntry)
         case tools([ToolCallItem], kind: ToolRunKind)
 
         var id: String {
             switch self {
-            case .message(let entry): entry.id
+            case .message(let entry), .notice(let entry): entry.id
+            case .reasoning(let entries): "reasoning-\(entries.first?.id ?? "empty")"
             case .status(let id, _): id
             case .tools(let items, _): "tools-\(items.first?.id ?? "empty")"
             }
@@ -261,21 +265,24 @@ struct TurnStepsView: View {
                 switch section {
                 case .status(_, let status):
                     ProgressStatusLine(status: status)
-                case .message(let entry):
-                    if entry.isReasoning == true {
-                        ReasoningSummaryRow(
-                            entry: entry,
-                            isActive: entry.id == activeReasoningId
+                case .notice(let entry):
+                    StepNoticeRow(entry: entry)
+                case .reasoning(let entries):
+                    ReasoningSummaryRow(
+                        entries: entries,
+                        isActive: entries.contains { $0.id == activeReasoningId },
+                        // Opens with the tool calls when they render in place.
+                        state: expansionState(
+                            "reasoning-\(entries[0].id)", rendersToolCallsInPlace
                         )
+                    )
+                case .message(let entry):
+                    // Narration is prose to read, just like the final answer.
+                    // The fold and its indent distinguish it; only tool rows
+                    // keep the dimmed treatment.
+                    MarkdownBody(entry.text)
+                        .environment(\.transcriptAnchorEntryId, entry.id)
                         .padding(.trailing, 16)
-                    } else {
-                        // Narration is prose to read, just like the final answer.
-                        // The fold and its indent distinguish it; only tool rows
-                        // keep the dimmed treatment.
-                        MarkdownBody(entry.text)
-                            .environment(\.transcriptAnchorEntryId, entry.id)
-                            .padding(.trailing, 16)
-                    }
                 case .tools(let calls, let kind):
                     if showsTools {
                         if rendersToolCallsInPlace {
@@ -335,8 +342,19 @@ struct TurnStepsView: View {
                 case .shown(let status): sections.append(.status(id: entry.id, status))
                 // Folded into an earlier step: the calls either side join one run.
                 case .folded: break
-                case nil: sections.append(.message(entry))
+                case nil:
+                    if entry.isReasoning == true {
+                        if case .reasoning(let existing) = sections.last {
+                            sections[sections.count - 1] = .reasoning(existing + [entry])
+                        } else {
+                            sections.append(.reasoning([entry]))
+                        }
+                    } else {
+                        sections.append(.message(entry))
+                    }
                 }
+            case .notice(let entry):
+                sections.append(.notice(entry))
             case .tool(let call):
                 let kind = runKind(call)
                 if let last = sections.last,
@@ -370,6 +388,27 @@ struct TurnStepsView: View {
               item.result?.featuredMedia?.isEmpty != false
         else { return .single }
         return .compact
+    }
+}
+
+/// A notice that happened between two steps, such as a context compaction
+/// the engine ran before it carried on: one more quiet step, with the tool
+/// row's glyph column and type. Outside a fold the same notice is a centered
+/// line between turns. Mirrors the web's `StepNotice`.
+struct StepNoticeRow: View {
+    let entry: TranscriptEntry
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: ToolRowMetrics.iconSpacing) {
+            ToolRowIcon(symbol: "clock.arrow.trianglehead.counterclockwise.rotate.90")
+            Text(entry.notice?.title ?? entry.text)
+                .font(.subheadline)
+                .foregroundStyle(OS1VisualStyle.textFaint)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .toolRowFrame()
+        .accessibilityElement(children: .combine)
     }
 }
 

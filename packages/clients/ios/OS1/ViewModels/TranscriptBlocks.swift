@@ -339,17 +339,21 @@ enum TurnItem: Identifiable, Equatable {
     /// Intermediate assistant prose — narration between tool calls.
     case message(TranscriptEntry)
     case tool(ToolCallItem)
+    /// A notice that happened between two steps, such as a context
+    /// compaction the engine ran before it carried on (`compactsMidTurn`).
+    /// Drawn as one more quiet step, never as the turn's answer.
+    case notice(TranscriptEntry)
 
     var id: String {
         switch self {
-        case .message(let entry): entry.id
+        case .message(let entry), .notice(let entry): entry.id
         case .tool(let item): item.id
         }
     }
 
     var entryIds: [String] {
         switch self {
-        case .message(let entry): [entry.id]
+        case .message(let entry), .notice(let entry): [entry.id]
         case .tool(let item): [item.use?.id, item.result?.id].compactMap { $0 }
         }
     }
@@ -469,6 +473,36 @@ struct ReasoningSummaryDisplay: Equatable {
     func activityTitle(isActive: Bool) -> String? {
         if !title.isEmpty { return title }
         return isActive ? "Thinking" : nil
+    }
+
+    /// The one line a folded thinking step shows: the latest heading, else
+    /// the first line of its prose, without Markdown syntax. Mirrors the
+    /// web's `reasoningExcerpt`.
+    static func excerpt(_ contents: [String]) -> String {
+        let displays = contents.map(ReasoningSummaryDisplay.init)
+        if let title = displays.last(where: { !$0.title.isEmpty })?.title {
+            let line = title.split(separator: "\n", omittingEmptySubsequences: false).last ?? ""
+            return plain(String(line))
+        }
+        guard let body = displays.first(where: { !$0.body.isEmpty })?.body else { return "" }
+        for row in body.split(separator: "\n") {
+            let line = String(row)
+                .replacing(#/^\s*(?:[#>*\-]+|\d+\.)\s+/#, with: "")
+                .trimmingCharacters(in: .whitespaces)
+            if !line.isEmpty { return plain(line) }
+        }
+        return ""
+    }
+
+    /// Inline Markdown reduced to its words: links to their label, and bold,
+    /// underscore bold and code spans to their text.
+    private static func plain(_ text: String) -> String {
+        text
+            .replacing(#/\[([^\]\r\n]*)\]\(<?[^)\s>]+>?\)/#) { String($0.output.1) }
+            .replacing(#/\*\*([^*]+)\*\*/#) { String($0.output.1) }
+            .replacing(#/__([^_]+)__/#) { String($0.output.1) }
+            .replacing(#/`([^`]+)`/#) { String($0.output.1) }
+            .trimmingCharacters(in: .whitespaces)
     }
 
     /// A tolerant compatibility check for the old bold-heading-only shape.
@@ -598,7 +632,7 @@ enum TranscriptGrouping {
             guard !tools.isEmpty else {
                 blocks.append(contentsOf: normalized.map { item in
                     switch item {
-                    case .message(let entry): TranscriptBlock.message(entry)
+                    case .message(let entry), .notice(let entry): TranscriptBlock.message(entry)
                     case .tool(let call): TranscriptBlock.tool(call)
                     }
                 })
@@ -700,6 +734,10 @@ enum TranscriptGrouping {
                 blocks.append(.message(entry))
             case .entry(let entry) where entry.isAssistant:
                 turn.append(.message(entry))
+            case .entry(let entry) where compactsMidTurn(
+                turn: turn, items: items, index: index, live: live
+            ):
+                turn.append(.notice(entry))
             case .entry(let entry) where entry.isTool:
                 // Orphan tool_result — same compact treatment inside the fold.
                 turn.append(.tool(ToolCallItem(
@@ -789,13 +827,45 @@ enum TranscriptGrouping {
         return start > 0 && start < items.count ? start : nil
     }
 
+    /// Whether the entry at `index` is a context compaction in the middle of
+    /// a turn. The engine compacts between steps and carries on with the same
+    /// work, so the notice belongs inside the fold where it happened; ending
+    /// the turn there made one run read as two "Worked for" folds, the first
+    /// with no answer under it. A compaction after the turn's answer, before
+    /// the next message, still stands between turns. Mirrors the web's
+    /// `compactsMidTurn`.
+    static func compactsMidTurn(
+        turn: [TurnItem],
+        items: [SessionViewModel.DisplayItem],
+        index: Int,
+        live: Bool
+    ) -> Bool {
+        guard case .entry(let entry) = items[index],
+              entry.notice?.kind == "compaction",
+              let last = turn.last
+        else { return false }
+        for next in items[(index + 1)...] {
+            switch next {
+            case .toolCall: return true
+            // An orphan result is part of the step before it.
+            case .entry(let entry) where entry.isTool: continue
+            case .entry(let entry): return entry.isAssistant && entry.turnBoundary != true
+            }
+        }
+        // Nothing after it yet. A running turn is still working through it,
+        // unless it already ended on what may be its answer.
+        guard live else { return false }
+        if case .message(let entry) = last { return entry.isReasoning == true }
+        return true
+    }
+
     /// Whether a user message was sent while the agent was still working. A
     /// message admitted mid-turn is written before the step it waited behind,
     /// so it follows a tool call or reasoning rather than a final answer.
     static func sentMidTurn(_ previousTurn: [TurnItem]) -> Bool {
         switch previousTurn.last {
         case nil: false
-        case .tool: true
+        case .tool, .notice: true
         case .message(let entry): entry.isReasoning == true
         }
     }
@@ -1479,14 +1549,14 @@ enum TranscriptGrouping {
 
     private static func startTimestamp(_ item: TurnItem) -> Date? {
         switch item {
-        case .message(let entry): entry.timestampDate
+        case .message(let entry), .notice(let entry): entry.timestampDate
         case .tool(let call): (call.use ?? call.result)?.timestampDate
         }
     }
 
     private static func endTimestamp(_ item: TurnItem) -> Date? {
         switch item {
-        case .message(let entry): entry.timestampDate
+        case .message(let entry), .notice(let entry): entry.timestampDate
         case .tool(let call): (call.result ?? call.use)?.timestampDate
         }
     }

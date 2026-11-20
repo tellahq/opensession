@@ -46,6 +46,13 @@ final class SessionViewModel {
     /// server's journaled run start (from the sessions list row); a run that
     /// starts while watching anchors to the status flip.
     private(set) var runStartedAt: Date?
+    /// The phase the running turn reported last (`stream_activity`), nil
+    /// when none or when the run ends. Read only by the busy row at the end
+    /// of the transcript, so a phase change re-renders that row alone.
+    private(set) var runActivity: RunActivity?
+    /// When this viewer asked the run to stop. The busy row says "Stopping…"
+    /// until the run actually settles; it clears on the next run or the stop.
+    private(set) var stoppingSince: Date?
     /// Before the watch answers, the sessions row is the only queue summary
     /// available. Once detailed queue state arrives, derive the count from its
     /// items so a stale list snapshot cannot contradict the visible queue.
@@ -55,6 +62,9 @@ final class SessionViewModel {
     /// ordinary status snapshot after the launch hook installs it.
     private var holdsSafetyScreenshot = false
     private var holdsScreenshotFixture = false
+    /// Keeps `showWorkStepsForScreenshot`'s running state from being
+    /// settled by the watch's ordinary status frames.
+    private var holdsRunFixture = false
     #endif
     var queuedCount: Int {
         hasDetailedQueue ? queuedItems.count : session.queuedCount ?? 0
@@ -327,6 +337,78 @@ final class SessionViewModel {
         rebuildDisplayItems()
     }
 
+    /// One run whose work holds a thinking step and a mid-turn compaction,
+    /// for `OS1_SHOW_WORK_STEPS`. `settled` ends it on an answer; `live`,
+    /// `compacting` and `retrying` leave it running in that phase, with the
+    /// busy row counting from 1m 13s. Local only and held against the
+    /// watch's own status frames.
+    func showWorkStepsForScreenshot(_ variant: String) async {
+        holdsScreenshotFixture = true
+        for _ in 0..<100 where isLoadingConversation {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        try? await Task.sleep(for: .seconds(2))
+        let live = variant != "settled"
+        let base = Date.now.addingTimeInterval(live ? -73 : -200)
+        let stamp = { (offset: TimeInterval) in
+            ISO8601DateFormatter().string(from: base.addingTimeInterval(offset))
+        }
+        func use(_ id: String, _ name: String, _ input: [String: JSONValue], at offset: TimeInterval) -> TranscriptEntry {
+            TranscriptEntry(
+                id: id, type: "tool_use", content: "Using \(name)", timestamp: stamp(offset),
+                toolName: name, toolInput: .object(input), toolUseId: id
+            )
+        }
+        func result(_ id: String, at offset: TimeInterval) -> TranscriptEntry {
+            TranscriptEntry(id: "tr-\(id)", type: "tool_result", content: "ok", timestamp: stamp(offset), toolUseId: id)
+        }
+        var fixture: [TranscriptEntry] = [
+            TranscriptEntry(id: "fx-ask", type: "user", content: "Why does the export stall at 90%?", timestamp: stamp(0)),
+            use("fx-t1", "Bash", ["command": .string("rg -n \"onProgress\" src/export")], at: 2),
+            result("fx-t1", at: 3),
+            TranscriptEntry(
+                id: "fx-think", type: "assistant",
+                content: "**Tracing the progress callback**\n\nThe encoder reports progress per chunk, but the final mux step never calls back, so the bar sits at 90% until the file lands.",
+                timestamp: stamp(5), isReasoning: true
+            ),
+            use("fx-t2", "Read", ["file_path": .string("src/export/mux.ts")], at: 8),
+            result("fx-t2", at: 9),
+            TranscriptEntry(
+                id: "fx-compact", type: "system", content: "Handoff summary", timestamp: stamp(20),
+                notice: EntryNotice(kind: "compaction", title: "Context compacted", tone: "info", body: nil, link: nil, ask: nil, icon: nil)
+            ),
+            use("fx-t3", "Edit", ["file_path": .string("src/export/mux.ts"), "old_string": .string("await mux(file)"), "new_string": .string("await mux(file, onProgress)")], at: 40),
+            result("fx-t3", at: 41),
+            use("fx-t4", "Bash", ["command": .string("bun test src/export")], at: 60),
+        ]
+        if live {
+            isRunning = true
+            runStartedAt = base
+            runActivity = switch variant {
+            case "compacting": .compacting
+            case "retrying": .retrying(attempt: 2, maxAttempts: 3, retryAt: .now.addingTimeInterval(60))
+            default: .tool(toolName: "Bash", count: 1)
+            }
+        } else {
+            isRunning = false
+            runActivity = nil
+            fixture += [
+                result("fx-t4", at: 150),
+                TranscriptEntry(
+                    id: "fx-answer", type: "assistant",
+                    content: "The mux step now reports progress, so the bar moves from 90% to 100% while the file is written. The export tests pass.",
+                    timestamp: stamp(155)
+                ),
+            ]
+        }
+        holdsRunFixture = true
+        entries = fixture
+        liveEntries = []
+        liveText = ""
+        isLoadingConversation = false
+        rebuildDisplayItems()
+    }
+
     /// A team note tagging two teammates, one of whom has seen it, for
     /// `OS1_SHOW_NOTE_RECEIPT`. Local only: nothing is posted.
     func showNoteReceiptForScreenshot() async {
@@ -516,6 +598,12 @@ final class SessionViewModel {
     private var isAway = false
     /// stream_done arrived; the durable entry lands via the next transcript_append.
     private var streamEnded = true
+    /// This connection has seen the model's turn at work (`stream_start`,
+    /// `stream_text` or a phase) and not yet its `stream_done`. Only then does
+    /// a Stop have a turn to unwind and show "Stopping…". A session can stay
+    /// busy with no model turn (a workflow it launched holds it), and after
+    /// opening or reconnecting that is unknown, so unknown counts as none.
+    private var modelTurnInFlight = false
     /// Optimistic local user messages, removed once the server echoes them back.
     private var localEchoIds: Set<String> = []
     /// Server user entries that landed here, with the CLIENT-clock moment they
@@ -829,11 +917,17 @@ final class SessionViewModel {
         if session.safety != nil {
             isRunning = false
             runStartedAt = nil
+            runActivity = nil
+            stoppingSince = nil
             streamEnded = true
             isStreaming = false
         } else if let running = session.isRunning {
             isRunning = running
             runStartedAt = running ? session.runStartedDate : nil
+            if !running {
+                runActivity = nil
+                stoppingSince = nil
+            }
             if !running {
                 streamEnded = true
                 isStreaming = false
@@ -1913,6 +2007,7 @@ final class SessionViewModel {
     }
 
     func cancelRun() {
+        if isRunning, modelTurnInFlight, stoppingSince == nil { stoppingSince = Date() }
         socket?.cancelWatchedRun()
     }
 
@@ -2289,6 +2384,22 @@ final class SessionViewModel {
             // before joining the session so a background reconnect never
             // flashes (or remains) as an active viewer.
             if isAway { socket?.setAway(true) }
+            // A phase from before the drop may have moved on unseen, and a
+            // re-watch without the feed does not replay it: forget it until
+            // the next `stream_activity` names the current one.
+            // A stop may have landed unseen too (its `stream_done` lost with
+            // the socket), so the stop indicator goes with it.
+            #if DEBUG
+            if !holdsRunFixture {
+                runActivity = nil
+                stoppingSince = nil
+                modelTurnInFlight = false
+            }
+            #else
+            runActivity = nil
+            stoppingSince = nil
+            modelTurnInFlight = false
+            #endif
             // Watch after the handshake frame so the send cannot race the upgrade.
             socket?.watch(sessionId: session.id, resume: transcriptResume)
             // Cards are announced by broadcast, which a socket that was not
@@ -2461,6 +2572,9 @@ final class SessionViewModel {
             removeCommentThread(id: threadId)
 
         case .streamStart(let id) where id == session.id:
+            #if DEBUG
+            if holdsRunFixture { break }
+            #endif
             liveFlushTask?.cancel()
             liveFlushTask = nil
             pendingLiveText = ""
@@ -2472,12 +2586,16 @@ final class SessionViewModel {
             resyncAssistantCandidates = []
             replySuggestions = []
             composerPrediction = nil
+            runActivity = nil
+            stoppingSince = nil
             isStreaming = true
             streamEnded = false
+            modelTurnInFlight = true
             rebuildDisplayItems()
 
         case .streamText(let id, let text, let blockId) where id == session.id:
             isStreaming = true
+            modelTurnInFlight = true
             // Live typing is the account's choice (Settings > Preferences),
             // default off. Dropping the frame is the whole implementation:
             // the block still arrives as a durable entry over
@@ -2512,8 +2630,31 @@ final class SessionViewModel {
             rebuildDisplayItems()
 
         case .streamDone(let id) where id == session.id:
+            #if DEBUG
+            if holdsRunFixture { break }
+            #endif
             streamEnded = true
+            modelTurnInFlight = false
+            runActivity = nil
+            // The model turn is over, so the stop it was waiting on landed. A
+            // workflow can keep the session busy past it; the row then goes
+            // back to counting instead of saying "Still stopping…".
+            stoppingSince = nil
             flushLiveTextNow()
+
+        case .streamActivity(let id, let activity) where id == session.id:
+            #if DEBUG
+            if holdsRunFixture { break }
+            #endif
+            runActivity = activity
+            // A phase is the model at work again.
+            if activity != nil { modelTurnInFlight = true }
+
+        case .feedSnapshot(let id, let activity) where id == session.id:
+            #if DEBUG
+            if holdsRunFixture { break }
+            #endif
+            runActivity = activity
 
         case .presence(let id, let viewers) where id == session.id:
             otherViewers = Self.otherViewers(viewers, me: ServerConfig.shared.userName)
@@ -2528,7 +2669,7 @@ final class SessionViewModel {
 
         case .sessionStatus(let id, let running, let safety) where id == session.id:
             #if DEBUG
-            if holdsSafetyScreenshot { break }
+            if holdsSafetyScreenshot || holdsRunFixture { break }
             #endif
             session.safety = safety
             let effectiveRunning = safety == nil && running
@@ -2539,6 +2680,9 @@ final class SessionViewModel {
                 }
             } else {
                 runStartedAt = nil
+                runActivity = nil
+                stoppingSince = nil
+                modelTurnInFlight = false
             }
             isRunning = effectiveRunning
             if !effectiveRunning {
