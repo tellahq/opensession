@@ -535,14 +535,29 @@ enum SettingsAPI {
         try await request("/api/settings/model-providers")
     }
 
-    static func upsertModelProvider(id: String, apiKey: String? = nil, baseURL: String? = nil, models: [String]? = nil) async throws -> ModelProvider {
-        struct Response: Decodable, Sendable { var provider: ModelProvider? }
+    /// `discoverModels: true` also lists the provider's models into the
+    /// picker when the server can (a base URL, or the Gemini API); the result
+    /// carries the count or the error, and the key is saved either way.
+    @discardableResult
+    static func upsertModelProvider(
+        id: String,
+        apiKey: String? = nil,
+        baseURL: String? = nil,
+        models: [String]? = nil,
+        discoverModels: Bool? = nil,
+        connection: Connection? = nil,
+        session: URLSession = .shared
+    ) async throws -> ModelProviderSaveResult {
         var body: [String: Any] = [:]
         if let apiKey { body["apiKey"] = apiKey }
         if let baseURL { body["baseURL"] = baseURL }
         if let models { body["models"] = models }
-        let response: Response = try await request("/api/settings/model-providers/\(segment(id))", method: "PUT", body: body)
-        return response.provider ?? ModelProvider(id: id, apiKeyMasked: nil, baseURL: nil, models: nil)
+        if let discoverModels { body["discoverModels"] = discoverModels }
+        return try await request("/api/settings/model-providers/\(segment(id))", method: "PUT", body: body, connection: connection, session: session)
+    }
+
+    static func discoverModelProviderModels(id: String, connection: Connection? = nil, session: URLSession = .shared) async throws -> ModelDiscoveryResult {
+        try await request("/api/settings/model-providers/\(segment(id))/discover", method: "POST", connection: connection, session: session)
     }
 
     static func deleteModelProvider(id: String) async throws -> SettingsOK {

@@ -231,6 +231,65 @@ struct ModelProvider: Codable, Sendable, Identifiable {
     var apiKeyMasked: String?
     var baseURL: String?
     var models: [String]?
+    var name: String?
+    /// Stored opt-in: saves and the discover route read the model list.
+    var discoverModels: Bool?
+    /// The server can list this provider's models: it has a base URL, or it
+    /// is the Gemini API, which needs none.
+    var canDiscover: Bool?
+
+    /// Pi's slug for the Gemini API. A Google AI Studio key is stored under it.
+    static let geminiID = "google"
+
+    var isGemini: Bool { id == Self.geminiID }
+
+    /// The models after `pi/<id>/`, as the picker shows them.
+    var modelNames: [String] {
+        (models ?? []).map { model in
+            let parts = model.split(separator: "/", omittingEmptySubsequences: false)
+            return parts.count > 2 && parts[0] == "pi" ? parts.dropFirst(2).joined(separator: "/") : model
+        }
+    }
+
+    /// Gemini gets its own card ahead of the generic list, as on the web.
+    static func splitGemini(_ providers: [ModelProvider]) -> (gemini: ModelProvider?, own: [ModelProvider]) {
+        let named = providers.filter { $0.id?.isEmpty == false }
+        return (named.first(where: \.isGemini), named.filter { !$0.isGemini })
+    }
+
+    /// Pasted keys often carry line-wrap newlines; the server strips them too.
+    static func cleanKey(_ key: String) -> String {
+        key.filter { !$0.isWhitespace }
+    }
+}
+
+/// `PUT /api/settings/model-providers/:id`. `discovery` or `discoveryError`
+/// is present only when the save asked for `discoverModels`.
+struct ModelProviderSaveResult: Decodable, Sendable {
+    struct Discovery: Decodable, Sendable {
+        var added: Int?
+        var models: [String]?
+    }
+    var provider: ModelProvider?
+    var discovery: Discovery?
+    var discoveryError: String?
+
+    /// The line the Gemini card shows after a save, worded as on the web.
+    var geminiSummary: String {
+        if let discoveryError { return "Gemini key saved. \(discoveryError)" }
+        if let discovery { return "Gemini key saved, \(discovery.models?.count ?? 0) models available" }
+        return "Gemini key saved"
+    }
+    var discoveryFailed: Bool { discoveryError != nil }
+}
+
+/// `POST /api/settings/model-providers/:id/discover`.
+struct ModelDiscoveryResult: Decodable, Sendable {
+    var added: Int?
+    var models: [String]?
+    var provider: ModelProvider?
+
+    var summary: String { "\(models?.count ?? 0) models listed, \(added ?? 0) added to the picker" }
 }
 
 struct ModelProvidersResponse: Codable, Sendable {

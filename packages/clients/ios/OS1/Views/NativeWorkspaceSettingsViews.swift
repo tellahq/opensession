@@ -98,6 +98,12 @@ struct ModelDefaultsSections: View {
     private func saveFallback(_ value: Bool) async { do { _ = try await SettingsAPI.setModelAutoFallback(value) } catch { self.error = error.localizedDescription } }
 }
 
+/// A result line under a providers section: a save or discovery outcome.
+private struct ProviderNotice {
+    var text: String
+    var failed = false
+}
+
 struct ModelProvidersSections: View {
     /// Bumped by the enclosing pane's pull-to-refresh; re-runs `task`.
     var reload: Int
@@ -109,6 +115,12 @@ struct ModelProvidersSections: View {
     @State private var error: String?
     @State private var editor: ModelProvider?
     @State private var deleting: ModelProvider?
+    @State private var notice: ProviderNotice?
+    @State private var geminiNotice: ProviderNotice?
+    @State private var geminiKey = ""
+    @State private var replacingGeminiKey = false
+    @State private var savingGemini = false
+    @State private var discovering: String?
 
     init(reload: Int) {
         self.reload = reload
@@ -116,39 +128,143 @@ struct ModelProvidersSections: View {
     }
 
     var body: some View {
-        Section("Your own providers") {
-            if loading, providers == nil { settingsLoadingRow }
-            if let error { settingsErrorRow(error) { Task { await load() } } }
-            if let providers {
-                if providers.isEmpty {
-                    Text("No providers yet. Add one to use models beyond the Anthropic and OpenAI subscriptions.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                ForEach(providers.filter { $0.id?.isEmpty == false }, id: \.id) { provider in
-                    Button { editor = provider } label: {
-                        VStack(alignment: .leading) {
-                            Text(provider.id ?? "Provider")
-                            Text(provider.baseURL ?? provider.apiKeyMasked ?? "No endpoint configured").font(.caption).foregroundStyle(.secondary)
+        let split = ModelProvider.splitGemini(providers ?? [])
+        Group {
+            geminiSection(split.gemini)
+            Section("Your own providers") {
+                if loading, providers == nil { settingsLoadingRow }
+                if let error { settingsErrorRow(error) { Task { await load() } } }
+                if let notice { noticeRow(notice) }
+                if providers != nil {
+                    if split.own.isEmpty {
+                        Text("No providers yet. Add one to use models beyond the Anthropic and OpenAI subscriptions.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(split.own, id: \.id) { provider in
+                        Button { editor = provider } label: {
+                            VStack(alignment: .leading) {
+                                Text(provider.id ?? "Provider")
+                                Text(provider.baseURL ?? provider.apiKeyMasked ?? "No endpoint configured").font(.caption).foregroundStyle(.secondary)
+                            }
                         }
-                    }.foregroundStyle(.primary)
+                        .foregroundStyle(.primary)
+                        .contextMenu {
+                            if provider.canDiscover == true {
+                                Button { Task { await discover(provider) } } label: { Label("Discover models", systemImage: "magnifyingglass") }
+                            }
+                        }
+                    }
+                    Button { editor = ModelProvider(id: "", apiKeyMasked: nil, baseURL: nil, models: nil) } label: { Label("Add provider", systemImage: "plus") }
                 }
-                Button { editor = ModelProvider(id: "", apiKeyMasked: nil, baseURL: nil, models: nil) } label: { Label("Add provider", systemImage: "plus") }
             }
         }
         .task(id: reload) { await load() }
         .sheet(item: $editor) { provider in
-            ModelProviderEditor(provider: provider, onSave: save, onDelete: { deleting = provider })
+            ModelProviderEditor(
+                provider: provider,
+                onSave: save,
+                onDiscover: { editor = nil; Task { await discover(provider) } },
+                onDelete: { deleting = provider }
+            )
         }
         .alert("Delete provider?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), presenting: deleting) { provider in
             Button("Delete", role: .destructive) { Task { await delete(provider) } }; Button("Cancel", role: .cancel) {}
-        } message: { provider in Text("Remove \(provider.id ?? "this provider")?") }
+        } message: { provider in Text(provider.isGemini ? "Remove the Gemini API key and its picker models?" : "Remove \(provider.id ?? "this provider")?") }
     }
+
+    /// Gemini runs on a Google AI Studio key, stored as the `google` provider.
+    /// Saving turns discovery on, so the key's models reach the picker without
+    /// a base URL. There is no subscription sign-in: Google does not allow it
+    /// in third-party agents.
+    @ViewBuilder
+    private func geminiSection(_ gemini: ModelProvider?) -> some View {
+        Section {
+            if loading, providers == nil {
+                settingsLoadingRow
+            } else if let gemini, !replacingGeminiKey {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Gemini API")
+                    Text([gemini.apiKeyMasked ?? "No API key stored", gemini.discoverModels == true ? "discovery on" : nil].compactMap { $0 }.joined(separator: " · "))
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text(gemini.modelNames.isEmpty ? "No picker models, so its models are type-in only (pi/google/<model>)." : gemini.modelNames.joined(separator: ", "))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                if gemini.canDiscover == true {
+                    Button { Task { await discover(gemini) } } label: {
+                        HStack {
+                            Label("Discover models", systemImage: "magnifyingglass")
+                            if discovering == gemini.id { Spacer(); ProgressView() }
+                        }
+                    }
+                    .disabled(discovering != nil)
+                }
+                Button { replacingGeminiKey = true; geminiNotice = nil } label: { Label("Replace key", systemImage: "arrow.clockwise") }
+                Button(role: .destructive) { deleting = gemini } label: { Label("Remove", systemImage: "trash") }
+            } else if providers != nil {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(gemini == nil ? "Gemini API key" : "Replace Gemini API key")
+                    Text("Create a key in [Google AI Studio](https://aistudio.google.com/apikey) and paste it here. Its models appear in the picker as `pi/google/<model>`.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                SecureField("API key", text: $geminiKey, prompt: Text("AIza…"))
+                    .disabled(savingGemini)
+                    .onSubmit { Task { await saveGemini() } }
+                Button { Task { await saveGemini() } } label: {
+                    HStack {
+                        Text(savingGemini ? "Saving…" : "Save key")
+                        if savingGemini { Spacer(); ProgressView() }
+                    }
+                }
+                .disabled(savingGemini || ModelProvider.cleanKey(geminiKey).isEmpty)
+                if gemini != nil {
+                    Button("Cancel") { replacingGeminiKey = false; geminiKey = "" }.disabled(savingGemini)
+                }
+            }
+            if let geminiNotice { noticeRow(geminiNotice) }
+        } header: {
+            Text("Gemini")
+        } footer: {
+            Text("Google AI Pro and Ultra plans include monthly developer credits that pay for this key. Claim them in [AI Studio billing](https://aistudio.google.com/billing). Signing in with the plan itself is not offered: Google does not allow its subscription sign-in in third-party agents.")
+        }
+    }
+
+    private func noticeRow(_ notice: ProviderNotice) -> some View {
+        Text(notice.text).font(.caption).foregroundStyle(notice.failed ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
+    }
+
     private func load() async { loading = true; error = nil; do { let fetched = try await SettingsAPI.modelProviders().providers ?? []; providers = fetched; SettingsCache.save("model-providers", fetched) } catch { self.error = error.localizedDescription }; loading = false }
     private func save(id: String, key: String, url: String, models: [String]) async {
-        do { _ = try await SettingsAPI.upsertModelProvider(id: id, apiKey: key.isEmpty ? nil : key, baseURL: url.isEmpty ? nil : url, models: models); editor = nil; await load() } catch { self.error = error.localizedDescription }
+        do { try await SettingsAPI.upsertModelProvider(id: id, apiKey: key.isEmpty ? nil : key, baseURL: url.isEmpty ? nil : url, models: models); editor = nil; await load() } catch { self.error = error.localizedDescription }
     }
-    private func delete(_ provider: ModelProvider) async { guard let id = provider.id, !id.isEmpty else { return }; do { _ = try await SettingsAPI.deleteModelProvider(id: id); providers?.removeAll { $0.id == id }; if let providers { SettingsCache.save("model-providers", providers) } } catch { self.error = error.localizedDescription }; deleting = nil }
+    private func saveGemini() async {
+        let key = ModelProvider.cleanKey(geminiKey)
+        guard !key.isEmpty, !savingGemini else { return }
+        savingGemini = true; geminiNotice = nil
+        do {
+            let result = try await SettingsAPI.upsertModelProvider(id: ModelProvider.geminiID, apiKey: key, discoverModels: true)
+            geminiNotice = ProviderNotice(text: result.geminiSummary, failed: result.discoveryFailed)
+            geminiKey = ""; replacingGeminiKey = false
+            await load()
+        } catch {
+            geminiNotice = ProviderNotice(text: error.localizedDescription.isEmpty ? "Failed to save the Gemini key" : error.localizedDescription, failed: true)
+        }
+        savingGemini = false
+    }
+    private func discover(_ provider: ModelProvider) async {
+        guard let id = provider.id, !id.isEmpty, discovering == nil else { return }
+        discovering = id
+        let outcome: ProviderNotice
+        do {
+            outcome = ProviderNotice(text: try await SettingsAPI.discoverModelProviderModels(id: id).summary)
+        } catch {
+            outcome = ProviderNotice(text: error.localizedDescription, failed: true)
+        }
+        if provider.isGemini { geminiNotice = outcome } else { notice = outcome }
+        discovering = nil
+        await load()
+    }
+    private func delete(_ provider: ModelProvider) async { guard let id = provider.id, !id.isEmpty else { return }; do { _ = try await SettingsAPI.deleteModelProvider(id: id); providers?.removeAll { $0.id == id }; if let providers { SettingsCache.save("model-providers", providers) }; if provider.isGemini { geminiNotice = nil } } catch { self.error = error.localizedDescription }; deleting = nil }
 }
 
 struct ConnectionsSettingsView: View {
@@ -1055,10 +1171,10 @@ struct XaiDeviceLoginView: View {
 }
 
 private struct ModelProviderEditor: View {
-    let provider: ModelProvider; let onSave: (String, String, String, [String]) async -> Void; let onDelete: () -> Void
+    let provider: ModelProvider; let onSave: (String, String, String, [String]) async -> Void; let onDiscover: () -> Void; let onDelete: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var id = ""; @State private var key = ""; @State private var url = ""; @State private var modelText = ""
-    var body: some View { NavigationStack { Form { TextField("Provider ID", text: $id); SecureField("API key (leave blank to keep)", text: $key); TextField("Base URL", text: $url); TextField("Model IDs, comma separated", text: $modelText); if !provider.id.orEmpty.isEmpty { Button("Delete provider", role: .destructive) { onDelete(); dismiss() } } } .navigationTitle(provider.id.orEmpty.isEmpty ? "Add Provider" : "Edit Provider").onAppear { id = provider.id ?? ""; url = provider.baseURL ?? ""; modelText = (provider.models ?? []).joined(separator: ", ") }.toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button("Save") { Task { await onSave(id, key, url, modelText.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }) } }.disabled(id.isEmpty) } } } }
+    var body: some View { NavigationStack { Form { TextField("Provider ID", text: $id); SecureField("API key (leave blank to keep)", text: $key); TextField("Base URL", text: $url); TextField("Model IDs, comma separated", text: $modelText); if provider.canDiscover == true { Button("Discover models") { onDiscover() } }; if !provider.id.orEmpty.isEmpty { Button("Delete provider", role: .destructive) { onDelete(); dismiss() } } } .navigationTitle(provider.id.orEmpty.isEmpty ? "Add Provider" : "Edit Provider").onAppear { id = provider.id ?? ""; url = provider.baseURL ?? ""; modelText = (provider.models ?? []).joined(separator: ", ") }.toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button("Save") { Task { await onSave(id, key, url, modelText.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }) } }.disabled(id.isEmpty) } } } }
 }
 
 private struct MCPConnectionEditor: View {
