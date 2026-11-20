@@ -38,6 +38,7 @@ import {
   buildPiAnthropicProvider,
   IMAGE_ONLY_PROMPT,
   MAX_TURN_IMAGES,
+  lastSdkStepRequest,
   recordSdkStepUsage,
   sumSdkStepUsage,
   piImageBlockToAnthropic,
@@ -1126,6 +1127,62 @@ describe("SdkStepUsage", () => {
     });
   });
 
+  test("a step after a tool boundary adds only the output the previous request had left", async () => {
+    // Step 1 ends at the tool call, before its request's message_delta.
+    const first = new Map();
+    const opening = {
+      input_tokens: 2,
+      output_tokens: 6,
+      cache_read_input_tokens: 0,
+      cache_creation_input_tokens: 168_162,
+    };
+    recordSdkStepUsage(first, "msg_1", opening);
+    recordSdkStepUsage(first, "msg_1", opening);
+    expect(sumSdkStepUsage(first)).toEqual(opening);
+    const reported = lastSdkStepRequest(first);
+    expect(reported).toEqual({ id: "msg_1", output: 6 });
+
+    // Step 2 reads that delta first, then its own request.
+    const second = new Map();
+    recordSdkStepUsage(
+      second,
+      "msg_1",
+      { ...opening, output_tokens: 305 },
+      reported,
+    );
+    recordSdkStepUsage(
+      second,
+      "msg_2",
+      {
+        input_tokens: 4,
+        output_tokens: 1,
+        cache_read_input_tokens: 168_162,
+        cache_creation_input_tokens: 526,
+      },
+      reported,
+    );
+    recordSdkStepUsage(second, "msg_2", { output_tokens: 40 }, reported);
+    expect(sumSdkStepUsage(second)).toEqual({
+      input_tokens: 4,
+      output_tokens: 299 + 40,
+      cache_read_input_tokens: 168_162,
+      cache_creation_input_tokens: 526,
+    });
+    expect(lastSdkStepRequest(second, reported)).toEqual({
+      id: "msg_2",
+      output: 40,
+    });
+
+    // A step that only sees the earlier delta keeps counting from it.
+    const third = new Map();
+    recordSdkStepUsage(third, "msg_1", { output_tokens: 305 }, reported);
+    expect(lastSdkStepRequest(third, reported)).toEqual({
+      id: "msg_1",
+      output: 305,
+    });
+    expect(lastSdkStepRequest(new Map(), reported)).toBe(reported);
+  });
+
   test("ignores non-numeric fields and reports nothing for an empty step", async () => {
     const step = new Map();
     expect(sumSdkStepUsage(step)).toBeUndefined();
@@ -1402,6 +1459,157 @@ describe("buildPiAnthropicProvider", () => {
         expect.stringMatching(/codemode$/),
       ]);
     } finally {
+      query.mockRestore();
+    }
+  });
+
+  test("the step after a live tool boundary does not count the previous request again", async () => {
+    await designate(["boundary-account"]);
+    await seedAccounts(["boundary-account"]);
+    accounts.__setUsageCacheForTest("boundary-account", freshUsage);
+    const stream = (event: Record<string, unknown>) => ({
+      type: "stream_event",
+      event,
+      session_id: "sdk-boundary",
+    });
+    const first = {
+      input_tokens: 2,
+      output_tokens: 6,
+      cache_read_input_tokens: 0,
+      cache_creation_input_tokens: 168_162,
+    };
+    const second = {
+      input_tokens: 4,
+      output_tokens: 1,
+      cache_read_input_tokens: 168_162,
+      cache_creation_input_tokens: 526,
+    };
+    // Claude Code's order: the tool_use assistant message comes before its
+    // request's message_delta, so the facade ends step 1 first and step 2
+    // reads that delta.
+    const messages: Array<Record<string, any>> = [
+      { type: "system", subtype: "init", session_id: "sdk-boundary" },
+      stream({
+        type: "message_start",
+        message: { id: "msg_1", usage: first },
+      }),
+      {
+        type: "assistant",
+        uuid: "asst-1",
+        session_id: "sdk-boundary",
+        message: {
+          id: "msg_1",
+          usage: first,
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_1",
+              name: "mcp__oc__bash",
+              input: { command: "ls" },
+            },
+          ],
+        },
+      },
+      stream({
+        type: "message_delta",
+        usage: { ...first, output_tokens: 305 },
+      }),
+      stream({ type: "message_stop" }),
+      stream({
+        type: "message_start",
+        message: { id: "msg_2", usage: second },
+      }),
+      {
+        type: "assistant",
+        uuid: "asst-2",
+        session_id: "sdk-boundary",
+        message: {
+          id: "msg_2",
+          usage: second,
+          content: [{ type: "text", text: "done" }],
+        },
+      },
+      stream({
+        type: "message_delta",
+        usage: { ...second, output_tokens: 40 },
+      }),
+      stream({ type: "message_stop" }),
+      {
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        result: "done",
+        usage: { ...second, output_tokens: 346 },
+        session_id: "sdk-boundary",
+      },
+    ];
+    const query = spyOn(sdk, "query").mockImplementation(
+      () =>
+        ({
+          next: async () => {
+            const value = messages.shift();
+            return value
+              ? { value, done: false }
+              : { value: undefined, done: true };
+          },
+          close: () => {},
+          [Symbol.asyncIterator]() {
+            return this;
+          },
+        }) as any,
+    );
+    const sessionId = `boundary-${crypto.randomUUID()}`;
+    try {
+      const provider = buildPiAnthropicProvider({
+        unifiedSessionId: sessionId,
+        builtinModels: [model],
+      }) as any;
+      const run = async (context: Record<string, unknown>) => {
+        let done: any;
+        for await (const ev of provider.streamSimple(model, context, {
+          sessionId,
+        }))
+          if (ev.type === "done") done = ev.message;
+        return done;
+      };
+      const user = { role: "user", content: "list files" };
+      const step1 = await run({ messages: [user] });
+      expect(step1.stopReason).toBe("toolUse");
+      expect(step1.usage).toMatchObject({
+        input: 2,
+        output: 6,
+        cacheRead: 0,
+        cacheWrite: 168_162,
+      });
+      const step2 = await run({
+        messages: [
+          user,
+          step1,
+          {
+            role: "toolResult",
+            toolCallId: "toolu_1",
+            toolName: "bash",
+            content: [{ type: "text", text: "a.txt" }],
+            isError: false,
+            timestamp: Date.now(),
+          },
+        ],
+      });
+      expect(query).toHaveBeenCalledTimes(1);
+      expect(step2.stopReason).toBe("stop");
+      expect(step2.usage).toMatchObject({
+        input: 4,
+        output: 299 + 40,
+        cacheRead: 168_162,
+        cacheWrite: 526,
+      });
+    } finally {
+      for (const live of [...liveSdkConversations().values()]) {
+        if (live.key.startsWith(`pi:${sessionId}:`)) {
+          live.disposed = true;
+          liveSdkConversations().delete(live.key);
+        }
+      }
       query.mockRestore();
     }
   });
