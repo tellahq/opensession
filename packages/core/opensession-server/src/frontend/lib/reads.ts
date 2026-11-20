@@ -9,6 +9,7 @@
 // looked at (other people's, automations you don't follow) don't all light up
 // as unread — the flag means "new since you last read it", not "never seen".
 
+import { useRef, useSyncExternalStore } from "react";
 import { z } from "zod";
 import { fetchReads, saveReadsApi } from "./api";
 import { getCurrentUser } from "../components/UserPicker";
@@ -24,6 +25,7 @@ const USER_CHANGE_EVENT = "opensession-user-changed";
 const CAP = 500;
 
 type ReadMap = Record<string, string>;
+type UnreadSession = { id: string; lastActivity: string; isRunning: boolean };
 
 function userKey(user: string): string {
   return `${KEY_PREFIX}${user.trim().toLowerCase() || "anonymous"}`;
@@ -73,6 +75,20 @@ function write(user: string, map: ReadMap): void {
 
 export function getReads(): ReadMap {
   return read();
+}
+
+// The last parsed map, reused while the stored JSON is unchanged, so a render
+// path can read the marks without parsing localStorage each time.
+let parsed: { key: string; raw: string | null; map: ReadMap } | null = null;
+
+function readsSnapshot(): ReadMap {
+  const user = getCurrentUser();
+  const key = userKey(user);
+  const raw = localStorage.getItem(key);
+  if (parsed?.key === key && parsed.raw === raw) return parsed.map;
+  const map = read(user);
+  parsed = { key, raw: localStorage.getItem(key), map };
+  return map;
 }
 
 // Mirror the full read map to the server (fire-and-forget) so consumers that
@@ -191,14 +207,41 @@ export function markUnread(id: string): void {
  * streaming output move `lastActivity`, but there is nothing to read until the
  * turn completes.
  */
-export function isUnread(
-  session: { id: string; lastActivity: string; isRunning: boolean },
-  reads: ReadMap,
-): boolean {
+export function isUnread(session: UnreadSession, reads: ReadMap): boolean {
   if (session.isRunning) return false;
   const mark = reads[session.id];
   if (!mark) return false;
   return new Date(session.lastActivity).getTime() > new Date(mark).getTime();
+}
+
+/**
+ * Keep `previous` when it flags exactly the same `sessions` unread as `next`.
+ * A mark that flips no flag (the open session re-marking itself read on each
+ * activity tick, a running session's mark) then changes nothing downstream.
+ */
+export function readsForUnread(
+  sessions: readonly UnreadSession[],
+  previous: ReadMap | null,
+  next: ReadMap,
+): ReadMap {
+  if (!previous || previous === next) return next;
+  for (const session of sessions) {
+    if (isUnread(session, previous) !== isUnread(session, next)) return next;
+  }
+  return previous;
+}
+
+/**
+ * The current user's read marks, for deriving `sessions`' unread flags. It
+ * re-renders only when a mark change flips one of those flags, so the open
+ * session marking itself read as it streams does not re-render the caller.
+ */
+export function useReadsFor(sessions: readonly UnreadSession[]): ReadMap {
+  const last = useRef<ReadMap | null>(null);
+  return useSyncExternalStore(onReadsChanged, () => {
+    last.current = readsForUnread(sessions, last.current, readsSnapshot());
+    return last.current;
+  });
 }
 
 export function onReadsChanged(handler: () => void): () => void {

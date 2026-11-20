@@ -19,7 +19,7 @@ import {
 import { getLane, getLanes, onLanesChanged } from "../lib/lanes";
 import { mentionFor, onMentionsChanged } from "../lib/mentions";
 import { usePeople } from "../lib/people";
-import { getReads, isUnread, markUnread, onReadsChanged } from "../lib/reads";
+import { isUnread, markUnread, useReadsFor } from "../lib/reads";
 import { getRecents, onRecentsChanged } from "../lib/recents";
 import { setRepoOrder } from "../lib/repo-order";
 import type { ReviewQueueItem } from "../lib/review-queue";
@@ -230,7 +230,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   const [recents, setRecents] = useState<string[]>(getRecents);
   // Per-session last-read marks, driving the unread dot. Kept in sync via the
   // same event the viewer fires when it marks a session read.
-  const [reads, setReads] = useState(getReads);
+  const reads = useReadsFor(sessions);
   const currentUser = useCurrentUser();
   // The team with live status attached, for the Home entry's face pile.
   const team = useTeamPresence({ sessions, teamViewing, currentUser });
@@ -315,7 +315,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   const [lanes, setLanesState] = useState<Record<string, string>>(getLanes);
   useEffect(() => onLanesChanged(() => setLanesState(getLanes())), []);
   useEffect(() => onRecentsChanged(() => setRecents(getRecents())), []);
-  useEffect(() => onReadsChanged(() => setReads(getReads())), []);
   // Sessions where a teammate tagged you. Server-owned, so it re-renders on
   // the socket push as well as on your own clears. The counter is a render
   // trigger: the rows read mentionFor() during render, so a push that
