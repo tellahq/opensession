@@ -1,6 +1,12 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { fetchSupportThreads } from "../lib/api";
+import { errorMessage } from "../lib/error-message";
+import type { TicketChange } from "../lib/plain-ticket";
+import {
+  applyTicketChange,
+  sendTicketChange,
+} from "../lib/support-ticket-changes";
 import {
   SIDEBAR_GROUP_HEADER,
   SIDEBAR_GROUP_HEADER_INSET,
@@ -31,8 +37,11 @@ import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { Menu, MENU_ICON } from "../ui/menu";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
+import { toast } from "../ui/toast";
 import { ConversationPane } from "./ConversationPane";
 import { IconMail, IconTag } from "./icons";
+import { SupportTicketContextMenu } from "./SupportTicketContextMenu";
+import { useCurrentUser } from "./UserPicker";
 
 /**
  * The Plain queue as a place of its own: the tickets in a column beside the
@@ -116,31 +125,57 @@ export function SupportInbox({
     writeSupportLabel(next);
   };
 
+  const currentUser = useCurrentUser();
+  // Bumped when the queue changes the open ticket, so the pane beside it
+  // shows the new state now rather than at its next poll.
+  const [paneVersion, setPaneVersion] = useState(0);
+  const aliveRef = useRef(true);
+
+  // A poll that fails while tickets are already on screen keeps them: the
+  // list is the queue as of the last good answer, not an error page.
+  const load = () =>
+    fetchSupportThreads()
+      .then((t) => {
+        if (!aliveRef.current) return;
+        setThreads(t);
+        setError(null);
+      })
+      .catch((e) => {
+        if (aliveRef.current)
+          setError(e?.message || "Failed to load the queue");
+      });
+  const poll = useEffectEvent(() => void load());
+
   // The same gentle cadence the sidebar polls Plain on (the server caches
-  // ~60s). A poll that fails while tickets are already on screen keeps them:
-  // the list is the queue as of the last good answer, not an error page.
+  // ~60s, and drops that cache on every edit made from here).
   useEffect(() => {
-    let alive = true;
-    const load = () =>
-      fetchSupportThreads()
-        .then((t) => {
-          if (!alive) return;
-          setThreads(t);
-          setError(null);
-        })
-        .catch((e) => {
-          if (alive) setError(e?.message || "Failed to load the queue");
-        });
-    void load();
+    aliveRef.current = true;
+    poll();
     const timer = setInterval(() => {
       if (document.visibilityState === "hidden") return;
-      void load();
+      poll();
     }, 60_000);
     return () => {
-      alive = false;
+      aliveRef.current = false;
       clearInterval(timer);
     };
   }, []);
+
+  // An edit from a row's right-click menu. The row changes first, so the
+  // queue answers the click rather than Plain's round trip: a closed,
+  // snoozed or spam ticket leaves the Todo queue, a new priority moves it to
+  // that lane. Then the queue is fetched again either way, which keeps the
+  // edit when Plain took it and puts the row back when it did not.
+  async function changeTicket(t: SupportThread, change: TicketChange) {
+    setThreads((prev) => prev && applyTicketChange(prev, t.id, change));
+    try {
+      await sendTicketChange(t.id, change, currentUser);
+    } catch (e) {
+      toast(errorMessage(e, "Plain update failed"), { variant: "error" });
+    }
+    void load();
+    if (t.id === threadId) setPaneVersion((v) => v + 1);
+  }
 
   // Newest live session per thread — the same rule the sidebar's Support rows
   // use to decide what their dot says.
@@ -175,36 +210,41 @@ export function SupportInbox({
         : SUPPORT_PRIORITY_DOT[t.priority ?? 2]) || "var(--text-faint)";
     const stamp = t.statusChangedAt || t.createdAt;
     return (
-      <button
+      <SupportTicketContextMenu
         key={t.id}
-        type="button"
-        className={ROW}
-        data-active={(threadId === t.id && !isPhone) || undefined}
-        onClick={() => onSelectThread(t.id)}
+        thread={t}
+        onChange={(change) => void changeTicket(t, change)}
       >
-        <span className={SIDEBAR_RAIL}>
-          <span
-            className="size-[7px] rounded-full"
-            style={{ backgroundColor: dot }}
-          />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className={ROW_HEAD}>
-            <span className={ROW_NAME}>{customer}</span>
-            {stamp && (
-              <span
-                className={ROW_TIME}
-                title={new Date(stamp).toLocaleString()}
-              >
-                {shortTime(stamp)}
-              </span>
-            )}
+        <button
+          type="button"
+          className={ROW}
+          data-active={(threadId === t.id && !isPhone) || undefined}
+          onClick={() => onSelectThread(t.id)}
+        >
+          <span className={SIDEBAR_RAIL}>
+            <span
+              className="size-[7px] rounded-full"
+              style={{ backgroundColor: dot }}
+            />
           </span>
-          <span className={ROW_SUBJECT}>
-            {t.title || t.previewText || "No subject"}
+          <span className="min-w-0 flex-1">
+            <span className={ROW_HEAD}>
+              <span className={ROW_NAME}>{customer}</span>
+              {stamp && (
+                <span
+                  className={ROW_TIME}
+                  title={new Date(stamp).toLocaleString()}
+                >
+                  {shortTime(stamp)}
+                </span>
+              )}
+            </span>
+            <span className={ROW_SUBJECT}>
+              {t.title || t.previewText || "No subject"}
+            </span>
           </span>
-        </span>
-      </button>
+        </button>
+      </SupportTicketContextMenu>
     );
   }
 
@@ -336,6 +376,8 @@ export function SupportInbox({
               onOpenSession={onOpenSession}
               session={sessionByThread.get(threadId) || null}
               headerInBar
+              refreshKey={paneVersion}
+              onTicketChanged={() => void load()}
             />
           ) : (
             <div className="flex min-h-0 flex-1 items-center justify-center p-8">

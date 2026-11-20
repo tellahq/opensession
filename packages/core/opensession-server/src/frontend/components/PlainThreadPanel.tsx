@@ -1,17 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type {
   PlainEntryAttachment,
-  PlainLabelType,
   PlainThread,
   PlainTimelineEntry,
-  PlainWorkspaceUser,
 } from "../lib/types";
 import {
   API_BASE,
   changePlainThreadLabelsApi,
-  fetchPlainLabelTypesApi,
   fetchPlainThreadApi,
-  fetchPlainUsersApi,
   PLAIN_ATTACHMENTS_MAX_COUNT,
   PLAIN_ATTACHMENT_MAX_BYTES,
   PLAIN_NOTE_ATTACHMENTS_MAX_BYTES,
@@ -25,7 +21,7 @@ import {
   uploadPlainAttachmentApi,
 } from "../lib/api";
 import { BASE_PATH } from "../lib/base";
-import { Menu } from "../ui/menu";
+import { MENU_ICON, Menu } from "../ui/menu";
 import { renderMarkdown } from "../lib/markdown";
 import { MarkdownBody } from "./MarkdownBody";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
@@ -74,7 +70,24 @@ import {
 } from "./icons";
 import { FileChips } from "./FileChips";
 import { UserAvatar } from "./UserAvatar";
-import { SUPPORT_PRIORITY_GROUPS } from "../lib/sidebar-filter";
+import { usePlainDirectory } from "../hooks/usePlainDirectory";
+import {
+  STATUS_LABEL,
+  plainStatusIcon,
+  plainStatusInk,
+} from "../lib/plain-status";
+import {
+  priorityLabel,
+  priorityTone,
+  type PlainStatusChoice,
+  type TicketLabel,
+} from "../lib/plain-ticket";
+import {
+  PlainAssigneeItems,
+  PlainLabelItems,
+  PlainPriorityItems,
+  PlainStatusItems,
+} from "./PlainTicketMenuItems";
 import { errorMessage } from "../lib/error-message";
 
 interface Props {
@@ -248,44 +261,25 @@ export function PlainThreadPanel({ sessionId, threadId, plainUrl }: Props) {
   );
 }
 
-/** Plain thread priorities, as Plain's own UI names them. */
-const PRIORITY_LABELS = new Map([
-  [0, "Urgent"],
-  [1, "High"],
-  [2, "Normal"],
-  [3, "Low"],
-]);
-
-const SNOOZE_OPTIONS: { label: string; seconds: number }[] = [
-  { label: "1 hour", seconds: 3_600 },
-  { label: "4 hours", seconds: 4 * 3_600 },
-  { label: "1 day", seconds: 86_400 },
-  { label: "3 days", seconds: 3 * 86_400 },
-  { label: "1 week", seconds: 7 * 86_400 },
-];
-
-/** A checkmark on the current choice, at the trailing edge — the app's own menu
- *  grammar (see Archived.tsx), where this row used to lead with a "✓" glyph in
- *  a hand-measured 16px gutter. */
-function MenuTick({ on }: { on: boolean }) {
-  return <Menu.Check on={on} className="ml-auto" />;
-}
-
 /**
  * Quick thread actions mirroring Plain's own inbox: status (Todo / Snoozed /
- * Done), priority, and mark-as-spam. Spam lives on the customer in Plain, so
- * marking spam also closes the thread. Shared by the session viewer's Plain
- * tab and the Support ticket preview — like the reply box, these are the
- * human gate: agent runs never get Plain writes as tools.
+ * Done), priority, assignee, labels, and mark-as-spam. Spam lives on the
+ * customer in Plain, so marking spam also closes the thread. Shared by the
+ * session viewer's Plain tab and the Support ticket preview — like the reply
+ * box, these are the human gate: agent runs never get Plain writes as tools.
+ *
+ * The row leads with the ticket's status as a picker that names it: the
+ * state's glyph in its colour, the word, and a caret. It used to be a bare
+ * badge beside a glyph-only check and clock, which left you to work out that
+ * the badge was the state and the two glyphs were the ways to change it. Now
+ * the state is the control, and the one change made most often, closing the
+ * ticket, is a labelled button beside it.
  *
  * Two layouts. `stack` is the row above a thread: it wraps onto a second line
  * when it runs out of width, and reports a failure underneath. `bar` is the
  * Support inbox's top bar, where there is one line and no room to grow, so the
  * row cannot wrap, a failure reads beside the controls instead of below them,
- * the two rarely-used actions (rename, spam) fold into an overflow menu, and
- * Done and Snooze drop to their glyphs. Those folds are what make the set fit
- * next to a subject, which is the difference between a readable ticket title
- * and an ellipsis.
+ * and the two rarely-used actions (rename, spam) fold into an overflow menu.
  */
 export function PlainThreadActions({
   threadId,
@@ -305,44 +299,8 @@ export function PlainThreadActions({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const currentUser = useCurrentUser();
-
-  // Assign/Labels menu data — server-cached (~5 min), so fetching per mount
-  // is cheap. Each menu owns its loader error so mutation feedback keeps the
-  // action row's existing error slot.
-  const [users, setUsers] = useState<PlainWorkspaceUser[] | null>(null);
-  const [usersLoadError, setUsersLoadError] = useState<string | null>(null);
-  const [labelTypes, setLabelTypes] = useState<PlainLabelType[] | null>(null);
-  const [labelTypesLoadError, setLabelTypesLoadError] = useState<string | null>(
-    null,
-  );
-  useEffect(() => {
-    let alive = true;
-    fetchPlainUsersApi()
-      .then((u) => {
-        if (!alive) return;
-        setUsers(u);
-        setUsersLoadError(null);
-      })
-      .catch((error) => {
-        if (alive)
-          setUsersLoadError(errorMessage(error, "Failed to load Plain users"));
-      });
-    fetchPlainLabelTypesApi()
-      .then((lt) => {
-        if (!alive) return;
-        setLabelTypes(lt);
-        setLabelTypesLoadError(null);
-      })
-      .catch((error) => {
-        if (alive)
-          setLabelTypesLoadError(
-            errorMessage(error, "Failed to load Plain labels"),
-          );
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
+  const { users, usersError, labelTypes, labelTypesError } =
+    usePlainDirectory();
 
   async function run(fn: () => Promise<void>) {
     if (busy) return;
@@ -361,10 +319,7 @@ export function PlainThreadActions({
   }
 
   const status = thread.status;
-  const setStatus = (
-    s: "todo" | "done" | "snoozed",
-    durationSeconds?: number,
-  ) =>
+  const setStatus = (s: PlainStatusChoice, durationSeconds?: number) =>
     run(() =>
       setPlainThreadStatusApi(threadId, s, {
         durationSeconds,
@@ -399,21 +354,14 @@ export function PlainThreadActions({
     ? "This customer is marked as spam in Plain. Click to undo."
     : "Mark this customer as spam in Plain (also closes the thread)";
 
-  // Every control carries its field's glyph, so the row reads as icons first:
-  // what "Low", "Johnny" and "Mac App +2" each MEAN is otherwise something you
-  // work out from the words. That costs the bar 96px it does not have (see
-  // ACTIONS_IN_BAR_MIN in ConversationPane), and the ticket's subject is what
-  // pays. So in the bar the two verbs go glyph-only and hand the width back:
-  // a check and a clock say Done and Snooze on their own, where a flag or a
-  // tag without its value would say nothing. The thread's own row has space
-  // for both, and keeps the words.
-  const verbLabel = (text: string) => (inBar ? false : text);
-
-  const labels = thread.labels || [];
-  const priorityTone =
-    thread.priority != null && thread.priority <= 1
-      ? SUPPORT_PRIORITY_GROUPS[thread.priority].cls
-      : undefined;
+  const labels: TicketLabel[] = (thread.labels || []).map((l) => ({
+    id: l.id,
+    typeId: l.labelTypeId,
+    name: l.name,
+  }));
+  const flagTone = priorityTone(thread.priority);
+  const StatusIcon = plainStatusIcon(status || "");
+  const statusLabel = status ? STATUS_LABEL[status] || status : "Status";
 
   // The way out to Plain, for the few things this pane cannot do. It belongs
   // with the ticket's other actions rather than beside them as a link: it
@@ -444,6 +392,32 @@ export function PlainThreadActions({
           inBar ? "flex-nowrap" : "flex-wrap",
         )}
       >
+        <Menu.Root>
+          <Menu.Trigger
+            render={
+              <Button
+                size="sm"
+                variant="default"
+                icon={
+                  <StatusIcon
+                    size={20}
+                    className={plainStatusInk(status || "")}
+                  />
+                }
+                iconTone="full"
+                caret
+                disabled={busy}
+                aria-label={`Status: ${statusLabel}. Change status`}
+                title="Change status in Plain"
+              >
+                {statusLabel}
+              </Button>
+            }
+          />
+          <Menu.Popup align="start" className="min-w-[200px]">
+            <PlainStatusItems status={status} onPick={setStatus} />
+          </Menu.Popup>
+        </Menu.Root>
         {status === "DONE" ? (
           <Button
             size="sm"
@@ -451,68 +425,22 @@ export function PlainThreadActions({
             icon={<IconRestore size={20} />}
             disabled={busy}
             onClick={() => setStatus("todo")}
-            aria-label="Reopen this thread (back to Todo)"
             title="Reopen this thread (back to Todo)"
           >
-            {verbLabel("Reopen")}
+            Reopen
           </Button>
         ) : (
-          <>
-            <Button
-              size="sm"
-              variant="default"
-              icon={<IconCheck size={20} />}
-              className="hover:text-green"
-              disabled={busy}
-              onClick={() => setStatus("done")}
-              aria-label="Mark this thread Done in Plain"
-              title="Mark this thread Done in Plain"
-            >
-              {verbLabel("Done")}
-            </Button>
-            {status === "SNOOZED" ? (
-              <Button
-                size="sm"
-                variant="default"
-                icon={<IconRestore size={20} />}
-                disabled={busy}
-                onClick={() => setStatus("todo")}
-                aria-label="Unsnooze, back to Todo"
-                title="Unsnooze, back to Todo"
-              >
-                {verbLabel("Unsnooze")}
-              </Button>
-            ) : (
-              <Menu.Root>
-                <Menu.Trigger
-                  render={
-                    <Button
-                      size="sm"
-                      variant="default"
-                      icon={<IconClock size={20} />}
-                      caret
-                      className={cn(inBar && "w-auto px-2")}
-                      disabled={busy}
-                      aria-label="Snooze this thread"
-                      title="Snooze this thread"
-                    >
-                      {verbLabel("Snooze")}
-                    </Button>
-                  }
-                />
-                <Menu.Popup align="start">
-                  {SNOOZE_OPTIONS.map((o) => (
-                    <Menu.Item
-                      key={o.seconds}
-                      onClick={() => setStatus("snoozed", o.seconds)}
-                    >
-                      {o.label}
-                    </Menu.Item>
-                  ))}
-                </Menu.Popup>
-              </Menu.Root>
-            )}
-          </>
+          <Button
+            size="sm"
+            variant="default"
+            icon={<IconCheck size={20} />}
+            className="hover:text-green"
+            disabled={busy}
+            onClick={() => setStatus("done")}
+            title="Mark this thread Done in Plain"
+          >
+            Mark done
+          </Button>
         )}
         <Menu.Root>
           <Menu.Trigger
@@ -522,31 +450,23 @@ export function PlainThreadActions({
                 variant="default"
                 // The flag takes the priority's queue colour, so the pill
                 // and the ticket's dot in the list say the same thing.
-                icon={<IconFlag size={20} className={priorityTone} />}
-                iconTone={priorityTone ? "full" : "muted"}
+                icon={<IconFlag size={20} className={flagTone} />}
+                iconTone={flagTone ? "full" : "muted"}
                 caret
                 disabled={busy}
                 title="Change priority in Plain"
               >
-                {thread.priority != null
-                  ? (PRIORITY_LABELS.get(thread.priority) ??
-                    `P${thread.priority}`)
-                  : "Priority"}
+                {priorityLabel(thread.priority)}
               </Button>
             }
           />
           <Menu.Popup align="start">
-            {([0, 1, 2, 3] as const).map((p) => (
-              <Menu.Item
-                key={p}
-                onClick={() =>
-                  run(() => setPlainThreadPriorityApi(threadId, p, currentUser))
-                }
-              >
-                <span className="min-w-0 flex-1">{PRIORITY_LABELS.get(p)}</span>
-                <MenuTick on={thread.priority === p} />
-              </Menu.Item>
-            ))}
+            <PlainPriorityItems
+              priority={thread.priority}
+              onPick={(p) =>
+                run(() => setPlainThreadPriorityApi(threadId, p, currentUser))
+              }
+            />
           </Menu.Popup>
         </Menu.Root>
         <Menu.Root>
@@ -560,7 +480,7 @@ export function PlainThreadActions({
                 // round end, so it is round too and tucks in closer than a
                 // glyph, which carries its own side bearing.
                 icon={
-                  thread.assignee && !usersLoadError ? (
+                  thread.assignee && !usersError ? (
                     <UserAvatar
                       name={thread.assignee.name}
                       size={18}
@@ -571,17 +491,17 @@ export function PlainThreadActions({
                   )
                 }
                 iconTone={thread.assignee ? "full" : "muted"}
-                className={cn(thread.assignee && !usersLoadError && "pl-1")}
+                className={cn(thread.assignee && !usersError && "pl-1")}
                 caret
                 disabled={busy}
                 title={
-                  usersLoadError ??
+                  usersError ??
                   (thread.assignee
                     ? `Assigned to ${thread.assignee.name} in Plain`
                     : "Assign this thread to a teammate in Plain")
                 }
               >
-                {usersLoadError
+                {usersError
                   ? "Assign unavailable"
                   : thread.assignee
                     ? thread.assignee.name
@@ -590,50 +510,19 @@ export function PlainThreadActions({
             }
           />
           <Menu.Popup align="start">
-            {usersLoadError ? (
-              <div
-                role="alert"
-                className="max-w-[240px] px-2.5 py-1.5 text-label leading-snug text-red"
-              >
-                {usersLoadError}
-              </div>
-            ) : users === null ? (
-              <div className="px-2.5 py-1.5 text-label text-faint">
-                Loading…
-              </div>
-            ) : (
-              users.map((u) => (
-                <Menu.Item
-                  key={u.id}
-                  onClick={() =>
-                    run(() =>
-                      setPlainThreadAssigneeApi(threadId, u.id, currentUser),
-                    )
-                  }
-                >
-                  <UserAvatar name={u.name} size={18} />
-                  <span className="min-w-0 flex-1 truncate">{u.name}</span>
-                  <MenuTick on={thread.assignee?.id === u.id} />
-                </Menu.Item>
-              ))
-            )}
-            {thread.assignee && (
-              <>
-                <Menu.Separator />
-                <Menu.Item
-                  onClick={() =>
-                    run(() =>
-                      setPlainThreadAssigneeApi(threadId, null, currentUser),
-                    )
-                  }
-                >
-                  Unassign
-                </Menu.Item>
-              </>
-            )}
+            <PlainAssigneeItems
+              assigneeId={thread.assignee?.id}
+              users={users}
+              error={usersError}
+              onPick={(userId) =>
+                run(() =>
+                  setPlainThreadAssigneeApi(threadId, userId, currentUser),
+                )
+              }
+            />
           </Menu.Popup>
         </Menu.Root>
-        {(labelTypesLoadError || (labelTypes?.length || 0) > 0) && (
+        {(labelTypesError || (labelTypes?.length || 0) > 0) && (
           <Menu.Root>
             <Menu.Trigger
               render={
@@ -644,13 +533,13 @@ export function PlainThreadActions({
                   caret
                   disabled={busy}
                   title={
-                    labelTypesLoadError ??
+                    labelTypesError ??
                     (labels.length > 0
                       ? labels.map((l) => l.name).join(", ")
                       : "Labels on this thread in Plain")
                   }
                 >
-                  {labelTypesLoadError ? (
+                  {labelTypesError ? (
                     "Labels unavailable"
                   ) : labels.length > 1 ? (
                     // The first label is the value and the rest a count on a
@@ -676,56 +565,34 @@ export function PlainThreadActions({
               }
             />
             <Menu.Popup align="start">
-              {labelTypesLoadError ? (
-                <div
-                  role="alert"
-                  className="max-w-[240px] px-2.5 py-1.5 text-label leading-snug text-red"
-                >
-                  {labelTypesLoadError}
-                </div>
-              ) : (
-                labelTypes!.map((lt) => {
-                  const existing = (thread.labels || []).find(
-                    (l) => l.labelTypeId === lt.id,
-                  );
-                  return (
-                    <Menu.CheckboxItem
-                      key={lt.id}
-                      checked={!!existing}
-                      closeOnClick={false}
-                      onClick={() =>
-                        run(() =>
-                          changePlainThreadLabelsApi(
-                            threadId,
-                            existing
-                              ? { removeLabelIds: [existing.id] }
-                              : { addLabelTypeIds: [lt.id] },
-                            currentUser,
-                          ),
-                        )
-                      }
-                    >
-                      <span className="min-w-0 flex-1">{lt.name}</span>
-                      <MenuTick on={!!existing} />
-                    </Menu.CheckboxItem>
-                  );
-                })
-              )}
+              <PlainLabelItems
+                labels={labels}
+                labelTypes={labelTypes}
+                error={labelTypesError}
+                onToggle={(lt, existing) =>
+                  run(() =>
+                    changePlainThreadLabelsApi(
+                      threadId,
+                      existing
+                        ? { removeLabelIds: [existing.id] }
+                        : { addLabelTypeIds: [lt.id] },
+                      currentUser,
+                    ),
+                  )
+                }
+              />
             </Menu.Popup>
           </Menu.Root>
         )}
-        {plainUrl && (
+        {plainUrl && !inBar && (
           <Button
             size="sm"
             variant="default"
             trailing={<IconArrowUpRight size={14} />}
-            // In the bar the destination is the whole label: the row
-            // there is already at the width the subject pays for, and
-            // the arrow says "open" on its own.
             render={<a href={plainUrl} target="_blank" rel="noreferrer" />}
             title="Open this thread in Plain"
           >
-            {inBar ? "Plain" : "Open in Plain"}
+            Open in Plain
           </Button>
         )}
         {inBar ? (
@@ -743,9 +610,29 @@ export function PlainThreadActions({
               }
             />
             <Menu.Popup align="end">
-              <Menu.Item onClick={renameThread}>Rename</Menu.Item>
+              {/* In the bar the way out to Plain folds in here with the
+                  two rare actions: the labelled status picker and Mark
+                  done took the width it had, and a ticket's subject
+                  needs it more than a link does. */}
+              {plainUrl && (
+                <Menu.Item
+                  render={
+                    <a href={plainUrl} target="_blank" rel="noreferrer" />
+                  }
+                >
+                  <IconArrowUpRight size={20} className={MENU_ICON} />
+                  <span className="grow">Open in Plain</span>
+                </Menu.Item>
+              )}
+              <Menu.Item onClick={renameThread}>
+                <IconPencil size={20} className={MENU_ICON} />
+                <span className="grow">Rename</span>
+              </Menu.Item>
               <Menu.Item onClick={toggleSpam}>
-                {isSpam ? "Not spam" : "Mark as spam"}
+                <IconForbid size={20} className={MENU_ICON} />
+                <span className="grow">
+                  {isSpam ? "Not spam" : "Mark as spam"}
+                </span>
               </Menu.Item>
             </Menu.Popup>
           </Menu.Root>
