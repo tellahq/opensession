@@ -17,14 +17,22 @@ import {
   SUPPORT_PRIORITY_GROUPS,
 } from "../lib/sidebar-filter";
 import { SUPPORT_COLUMN_BAR } from "../lib/support-classes";
+import {
+  filterSupportThreadsByLabel,
+  readSupportLabel,
+  supportLabelOptions,
+  writeSupportLabel,
+} from "../lib/support-labels";
 import { mineStatus } from "../lib/sidebar-lanes";
 import { MINE_STATUS_META } from "../lib/sidebar-types";
 import { shortTime } from "../lib/time";
 import type { SupportThread, UnifiedSession } from "../lib/types";
+import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
+import { Menu, MENU_ICON } from "../ui/menu";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 import { ConversationPane } from "./ConversationPane";
-import { IconMail } from "./icons";
+import { IconMail, IconTag } from "./icons";
 
 /**
  * The Plain queue as a place of its own: the tickets in a column beside the
@@ -54,8 +62,7 @@ const COLUMN =
 const COLUMN_TITLE =
   "m-0 text-item-title font-semibold text-fg phone:text-section-title";
 
-const COLUMN_COUNT =
-  "ml-auto shrink-0 text-meta font-medium tabular-nums text-faint";
+const COLUMN_COUNT = "shrink-0 text-meta font-medium tabular-nums text-faint";
 
 const LIST =
   "min-h-0 flex-1 overflow-y-auto px-1.5 pt-2 pb-3 " +
@@ -102,6 +109,12 @@ export function SupportInbox({
   const isPhone = useIsPhone();
   const [threads, setThreads] = useState<SupportThread[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // One Plain label narrowing the queue, like Plain's own Labels list.
+  const [label, setLabelState] = useState(readSupportLabel);
+  const setLabel = (next: string) => {
+    setLabelState(next);
+    writeSupportLabel(next);
+  };
 
   // The same gentle cadence the sidebar polls Plain on (the server caches
   // ~60s). A poll that fails while tickets are already on screen keeps them:
@@ -141,6 +154,13 @@ export function SupportInbox({
     }
     return m;
   })();
+
+  const labelOptions = threads ? supportLabelOptions(threads) : [];
+  // A picked label nobody carries right now stays listed, so it can be
+  // seen and cleared rather than silently emptying the queue.
+  if (label && !labelOptions.some((o) => o.name === label))
+    labelOptions.push({ name: label, count: 0 });
+  const shown = threads ? filterSupportThreadsByLabel(threads, label) : null;
 
   // Phone: list and ticket are separate pages, with a back button between.
   const showList = !isPhone || !threadId;
@@ -194,10 +214,58 @@ export function SupportInbox({
         <aside className={COLUMN}>
           <div className={SUPPORT_COLUMN_BAR}>
             <h1 className={COLUMN_TITLE}>Support</h1>
-            {threads && <span className={COLUMN_COUNT}>{threads.length}</span>}
+            {shown && <span className={COLUMN_COUNT}>{shown.length}</span>}
+            {labelOptions.length > 0 && (
+              <Menu.Root>
+                <Menu.Trigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={cn("ml-auto min-w-0", label && "text-accent")}
+                      icon={<IconTag size={16} />}
+                      iconTone={label ? "full" : "muted"}
+                      caret
+                    >
+                      <span className="max-w-[140px] truncate">
+                        {label || "All labels"}
+                      </span>
+                    </Button>
+                  }
+                />
+                <Menu.Popup
+                  align="end"
+                  className="max-h-[min(480px,70vh)] min-w-[220px] max-w-[300px]"
+                >
+                  <Menu.RadioGroup
+                    value={label}
+                    onValueChange={(value) => setLabel(String(value))}
+                  >
+                    <Menu.RadioItem value="" closeOnClick>
+                      <span className="size-[18px] shrink-0" />
+                      <span className="min-w-0 flex-1 truncate">
+                        All labels
+                      </span>
+                      <Menu.Shortcut>{threads?.length}</Menu.Shortcut>
+                      <Menu.Check on={!label} />
+                    </Menu.RadioItem>
+                    {labelOptions.map((o) => (
+                      <Menu.RadioItem key={o.name} value={o.name} closeOnClick>
+                        <IconTag size={18} className={MENU_ICON} />
+                        <span className="min-w-0 flex-1 truncate">
+                          {o.name}
+                        </span>
+                        <Menu.Shortcut>{o.count}</Menu.Shortcut>
+                        <Menu.Check on={label === o.name} />
+                      </Menu.RadioItem>
+                    ))}
+                  </Menu.RadioGroup>
+                </Menu.Popup>
+              </Menu.Root>
+            )}
           </div>
           <div className={LIST}>
-            {threads === null ? (
+            {threads === null || shown === null ? (
               <LoadingState>Loading tickets…</LoadingState>
             ) : error && threads.length === 0 ? (
               <InlineAlert className="mt-2">{error}</InlineAlert>
@@ -205,9 +273,16 @@ export function SupportInbox({
               <div className="px-3 py-6 text-center text-label text-faint">
                 Nothing waiting in Plain.
               </div>
+            ) : shown.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 px-3 py-6 text-center text-label text-faint">
+                No tickets labelled {label}.
+                <Button variant="ghost" size="sm" onClick={() => setLabel("")}>
+                  Show all labels
+                </Button>
+              </div>
             ) : (
               SUPPORT_PRIORITY_GROUPS.map((group) => {
-                const items = threads.filter(
+                const items = shown.filter(
                   (t) => (t.priority ?? 2) === group.p,
                 );
                 if (items.length === 0) return null;

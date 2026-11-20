@@ -34,7 +34,10 @@ export function UsageRing({
         openOnHover
         delay={200}
         closeDelay={100}
-        className={cn(paletteIconBtn, "shrink-0 self-center data-[popup-open]:text-fg")}
+        className={cn(
+          paletteIconBtn,
+          "shrink-0 self-center data-[popup-open]:text-fg",
+        )}
         aria-label={`Usage: context ${pct}% full, ${fmtUsd(input.usage.costUsd)} spent`}
         data-usage-ring
       >
