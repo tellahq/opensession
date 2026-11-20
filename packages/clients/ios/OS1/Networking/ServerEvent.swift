@@ -26,6 +26,12 @@ enum ServerEvent: Sendable {
     case streamText(sessionId: String, text: String, blockId: String?)
     case streamEntry(sessionId: String, entry: TranscriptEntry)
     case streamDone(sessionId: String)
+    /// The running turn entered a phase worth naming, or (nil) left one. A
+    /// kind this build does not know arrives as nil.
+    case streamActivity(sessionId: String, activity: RunActivity?)
+    /// A feed resume's snapshot of the running turn. Only its phase is read:
+    /// `active` is nil when nothing runs.
+    case feedSnapshot(sessionId: String, activity: RunActivity?)
     case sessionStatus(
         sessionId: String,
         isRunning: Bool,
@@ -181,6 +187,12 @@ enum ServerEvent: Sendable {
         case "stream_done":
             guard let id = frame.sessionId else { return .ignored }
             return .streamDone(sessionId: id)
+        case "stream_activity":
+            guard let id = frame.sessionId else { return .ignored }
+            return .streamActivity(sessionId: id, activity: frame.activity?.value)
+        case "feed_snapshot":
+            guard let id = frame.sessionId else { return .ignored }
+            return .feedSnapshot(sessionId: id, activity: frame.active?.activity?.value)
         case "session_status":
             guard let id = frame.sessionId else { return .ignored }
             return .sessionStatus(
@@ -630,6 +642,18 @@ private struct RawFrame: Decodable {
     let threadId: String?
     let text: String?
     let blockId: String?
+    /// `stream_activity`'s phase; tolerant, so a newer shape drops only it.
+    let activity: RunActivity.Wire?
+    /// `feed_snapshot`'s running turn, read only for its phase.
+    struct WireActiveTurn: Decodable {
+        let activity: RunActivity.Wire?
+        private enum Keys: String, CodingKey { case activity }
+        init(from decoder: Decoder) throws {
+            let c = try? decoder.container(keyedBy: Keys.self)
+            activity = (try? c?.decodeIfPresent(RunActivity.Wire.self, forKey: .activity)) ?? nil
+        }
+    }
+    let active: WireActiveTurn?
     struct WireViewing: Decodable {
         let user: String?
         let sessionId: String?

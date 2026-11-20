@@ -432,4 +432,128 @@ final class ServerEventTests: XCTestCase {
         }
         XCTAssertNil(cleared)
     }
+
+    // MARK: - Run activity
+
+    private func activity(
+        _ json: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> RunActivity? {
+        guard case .streamActivity(let id, let activity) = parse(
+            #"{"type":"stream_activity","sessionId":"bks-1","activity":\#(json)}"#
+        ) else {
+            XCTFail("expected .streamActivity", file: file, line: line)
+            return nil
+        }
+        XCTAssertEqual(id, "bks-1", file: file, line: line)
+        return activity
+    }
+
+    func testStreamActivityDecodesEveryKind() {
+        XCTAssertEqual(activity(#"{"kind":"waiting"}"#), .some(.waiting))
+        XCTAssertEqual(activity(#"{"kind":"thinking"}"#), .some(.thinking))
+        XCTAssertEqual(activity(#"{"kind":"writing"}"#), .some(.writing))
+        XCTAssertEqual(
+            activity(#"{"kind":"preparing","toolName":"Bash"}"#),
+            .some(.preparing(toolName: "Bash"))
+        )
+        XCTAssertEqual(
+            activity(#"{"kind":"tool","toolName":"Read","count":2}"#),
+            .some(.tool(toolName: "Read", count: 2))
+        )
+        XCTAssertEqual(activity(#"{"kind":"compacting"}"#), .some(.compacting))
+        XCTAssertEqual(
+            activity(#"{"kind":"retrying","attempt":2,"maxAttempts":3,"retryAt":1790000000000}"#),
+            .some(.retrying(
+                attempt: 2,
+                maxAttempts: 3,
+                retryAt: Date(timeIntervalSince1970: 1_790_000_000)
+            ))
+        )
+    }
+
+    func testStreamActivityReadsNullAndUnknownKindsAsNoActivity() {
+        XCTAssertNil(activity("null"), "null: the run left its phase")
+        XCTAssertNil(activity(#"{"kind":"dreaming"}"#), "a newer server's kind")
+        XCTAssertNil(activity(#"{"kind":"retrying","attempt":2}"#), "a retry without its numbers")
+        XCTAssertNil(activity(#""compacting""#), "not an object")
+        guard case .streamActivity(_, let missing) = parse(
+            #"{"type":"stream_activity","sessionId":"bks-1"}"#
+        ) else { return XCTFail("a frame without its activity still parses") }
+        XCTAssertNil(missing)
+    }
+
+    func testStreamActivityNeedsASession() {
+        guard case .ignored = parse(#"{"type":"stream_activity","activity":{"kind":"writing"}}"#) else {
+            return XCTFail("expected .ignored without a session id")
+        }
+    }
+
+    func testFeedSnapshotCarriesTheRunningTurnsPhase() {
+        guard case .feedSnapshot(let id, let running) = parse(
+            #"{"type":"feed_snapshot","sessionId":"bks-1","feedEpoch":"e","feedSeq":4,"active":{"runId":"r","turnId":"t","entryId":"s","text":"","startedAt":1,"activity":{"kind":"compacting"}}}"#
+        ) else { return XCTFail("expected .feedSnapshot") }
+        XCTAssertEqual(id, "bks-1")
+        XCTAssertEqual(running, .compacting)
+
+        guard case .feedSnapshot(_, let idle) = parse(
+            #"{"type":"feed_snapshot","sessionId":"bks-1","feedEpoch":"e","feedSeq":4,"active":null}"#
+        ) else { return XCTFail("expected .feedSnapshot") }
+        XCTAssertNil(idle)
+    }
+
+    // MARK: - Busy row
+
+    func testBusyRowCountsUpFromTheFirstSecond() {
+        XCTAssertEqual(BusyActivityStatus.liveElapsed(0), "0s")
+        XCTAssertEqual(BusyActivityStatus.liveElapsed(59.9), "59s")
+        XCTAssertEqual(BusyActivityStatus.liveElapsed(65), "1m 05s")
+        XCTAssertEqual(BusyActivityStatus.liveElapsed(3_725), "1h 02m")
+        XCTAssertEqual(BusyActivityStatus.liveElapsed(-3), "0s")
+    }
+
+    func testBusyRowNamesOnlyAPauseNothingAboveExplains() {
+        for quiet in [nil, RunActivity.waiting, .thinking, .writing,
+                      .preparing(toolName: "Bash"), .tool(toolName: "Bash", count: 1)] {
+            let status = BusyActivityStatus(elapsed: 12, activity: quiet)
+            XCTAssertNil(status.label, "\(String(describing: quiet)) shows only the time")
+            XCTAssertEqual(status.elapsed, "12s")
+        }
+        XCTAssertEqual(BusyActivityStatus(elapsed: 0, activity: nil).spoken, "Working")
+        XCTAssertEqual(
+            BusyActivityStatus(elapsed: 0, activity: .tool(toolName: "Bash", count: 1)).spoken,
+            "Running a command"
+        )
+        XCTAssertEqual(
+            BusyActivityStatus(elapsed: 0, activity: .tool(toolName: "Read", count: 3)).spoken,
+            "Running 3 tools"
+        )
+        XCTAssertEqual(
+            BusyActivityStatus(elapsed: 0, activity: .preparing(toolName: "Edit")).spoken,
+            "Writing an edit"
+        )
+
+        let compacting = BusyActivityStatus(elapsed: 5, activity: .compacting)
+        XCTAssertEqual(compacting.label, "Compacting the conversation")
+        XCTAssertNil(compacting.detail)
+    }
+
+    func testBusyRowCountsDownToARetry() {
+        let now = Date(timeIntervalSince1970: 1_000)
+        let waiting = BusyActivityStatus(
+            elapsed: 30,
+            activity: .retrying(attempt: 2, maxAttempts: 3, retryAt: now.addingTimeInterval(7.2)),
+            now: now
+        )
+        XCTAssertEqual(waiting.label, "Retrying in 8s")
+        XCTAssertEqual(waiting.detail, "attempt 2 of 3")
+
+        let due = BusyActivityStatus(
+            elapsed: 30,
+            activity: .retrying(attempt: 2, maxAttempts: 3, retryAt: now.addingTimeInterval(-1)),
+            now: now
+        )
+        XCTAssertEqual(due.label, "Retrying")
+    }
 }

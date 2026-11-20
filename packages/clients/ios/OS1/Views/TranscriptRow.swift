@@ -106,7 +106,11 @@ struct TranscriptRow: View {
                     onFork: onForkMessage
                 )
             } else if entry.isAssistant, entry.isReasoning == true {
-                ReasoningSummaryRow(entry: entry, isActive: isActiveReasoning)
+                ReasoningSummaryRow(
+                    entry: entry,
+                    isActive: isActiveReasoning,
+                    state: expansionState("reasoning-\(entry.id)", false)
+                )
             } else if entry.isAssistant {
                 AssistantMessage(
                     entry: entry,
@@ -462,48 +466,114 @@ private struct OutboxMessageStatus: View {
     }
 }
 
-/// Provider reasoning is visible activity, not an answer. A generated bold
-/// heading is normalized to regular-weight quiet text; any body keeps markdown
-/// structure at the same dimmed hierarchy.
+/// One thinking step, drawn like a tool call: a lightbulb, "Thinking", and
+/// one line of what it was about. Opening it shows the full trace, dimmed.
+/// Adjacent provider events join one step instead of a ladder of
+/// near-identical traces. Mirrors the web's `ReasoningStep`.
 struct ReasoningSummaryRow: View {
-    let entry: TranscriptEntry
+    let entries: [TranscriptEntry]
     var isActive = false
+    /// The step's open state, which follows the Tool calls preference until
+    /// the reader taps it.
+    let state: TurnFoldState
 
-    private var display: ReasoningSummaryDisplay {
-        ReasoningSummaryDisplay(entry.text)
+    init(entries: [TranscriptEntry], isActive: Bool = false, state: TurnFoldState) {
+        self.entries = entries
+        self.isActive = isActive
+        self.state = state
+    }
+
+    init(entry: TranscriptEntry, isActive: Bool = false, state: TurnFoldState) {
+        self.init(entries: [entry], isActive: isActive, state: state)
+    }
+
+    private struct Trace: Identifiable {
+        let id: String
+        let text: String
+    }
+
+    private var traces: [Trace] {
+        entries.compactMap { entry in
+            let body = ReasoningSummaryDisplay(entry.text).body
+            return body.isEmpty ? nil : Trace(id: entry.id, text: body)
+        }
+    }
+
+    private var excerpt: String {
+        ReasoningSummaryDisplay.excerpt(entries.map(\.text))
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if let title = display.activityTitle(isActive: isActive) {
-                if isActive {
-                    ActiveReasoningTitle(title: title)
-                } else {
-                    Text(title)
-                        .font(.body)
-                        .foregroundStyle(OS1VisualStyle.textDim)
+        let traces = traces
+        VStack(alignment: .leading, spacing: 4) {
+            if traces.isEmpty {
+                row(hasBody: false)
+            } else {
+                Button {
+                    withAnimation(.snappy(duration: 0.2, extraBounce: 0)) {
+                        state.toggle()
+                    }
+                } label: {
+                    row(hasBody: true)
                 }
+                .buttonStyle(.plain)
+                .accessibilityHint(state.expanded ? "Hide the thinking" : "Show the thinking")
             }
-            if !display.body.isEmpty {
-                MarkdownBody(display.body, dimmed: true)
+            if state.expanded, !traces.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(traces) { trace in
+                        MarkdownBody(trace.text, dimmed: true)
+                            .environment(\.transcriptAnchorEntryId, trace.id)
+                    }
+                }
+                // Under the name, not the glyph, as a tool call opens.
+                .padding(.leading, ToolRowMetrics.textInset)
+                .padding(.trailing, 16)
+                .padding(.bottom, 6)
+                .textSelection(.enabled)
+                .transition(.opacity)
             }
         }
-        .padding(.vertical, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .textSelection(.enabled)
         #if os(macOS)
         // On iOS the long press selects text instead (see AssistantMessage).
         .contextMenu {
             Button {
-                copyToPasteboard(entry.text)
+                copyToPasteboard(entries.map(\.text).joined(separator: "\n\n"))
             } label: {
                 Label("Copy reasoning summary", systemImage: "doc.on.doc")
             }
-            TimestampLabel(date: entry.timestampDate)
+            TimestampLabel(date: entries.last?.timestampDate)
         }
         #endif
-        .accessibilityLabel(isActive ? "Active reasoning" : "Reasoning summary")
-        .accessibilityValue(entry.text)
+    }
+
+    private func row(hasBody: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: ToolRowMetrics.iconSpacing) {
+            ToolRowIcon(symbol: hasBody && state.expanded ? "chevron.down" : "lightbulb")
+            Group {
+                if isActive {
+                    ShimmerText("Thinking")
+                } else {
+                    Text("Thinking")
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                }
+            }
+            .font(.subheadline.weight(.medium))
+            .fixedSize()
+            let excerpt = excerpt
+            if !excerpt.isEmpty {
+                Text(excerpt)
+                    .font(.footnote)
+                    .foregroundStyle(OS1VisualStyle.textFaint)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .toolRowFrame()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(isActive ? "Thinking" : "Thought")
+        .accessibilityValue(excerpt)
     }
 }
 
@@ -928,40 +998,97 @@ struct StreamingBubble: View {
     }
 }
 
-/// The live run, at the end of the transcript: an amber pulse and the
-/// ticking clock, sitting directly under the last message so it reads as
-/// something that message is still doing. It used to ride the composer, which
-/// put the state on the field you type in rather than on the work.
+/// The live run, at the end of the transcript: an amber pulse and the run's
+/// elapsed time, counted from its first second, sitting directly under the
+/// last message so it reads as something that message is still doing. It
+/// stays for the whole run, under streamed text too. A tool, a thought or a
+/// reply already shows itself above, so the row adds words only for a stop,
+/// a compaction or a retry wait; every other phase is named for VoiceOver
+/// alone. Mirrors the web's `BusyInline`.
+///
+/// Takes the view model rather than its values so the phase and the stop are
+/// read in this body only: a phase change re-renders this row, not the
+/// transcript (see the observation notes in AGENTS.md).
 struct RunStatusFooter: View {
+    let viewModel: SessionViewModel
+
+    var body: some View {
+        RunStatusRow(
+            since: viewModel.runStartedAt,
+            activity: viewModel.runActivity,
+            stoppingSince: viewModel.stoppingSince
+        )
+    }
+}
+
+/// The busy row's drawing, apart from where its values come from, so a
+/// screenshot fixture can show any phase.
+struct RunStatusRow: View {
     let since: Date?
+    var activity: RunActivity?
+    var stoppingSince: Date?
+
+    /// How long a stop may sit there before the label stops sounding sure.
+    private static let stopSlow: TimeInterval = 5
 
     var body: some View {
         HStack(spacing: 6) {
-            // Amber is the in-progress colour everywhere else in the app —
+            // Amber is the in-progress colour everywhere else in the app:
             // the sessions list's in-progress lane, the tab strip's running
-            // pill — so the transcript says "running" in the same voice.
+            // pill. So the transcript says "running" in the same voice.
             PulsingDot(color: OS1VisualStyle.yellowInk, size: 6)
-            // The web's BusyWorking copy: "Working", then after ten seconds
-            // "Still working · 24s". It only claims what is known, that the
-            // run is active. Ticks once a second, inside this node only.
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                let elapsed = since.map { context.date.timeIntervalSince($0) } ?? 0
-                HStack(spacing: 4) {
-                    Text(elapsed < 10 ? "Working" : "Still working")
-                        .foregroundStyle(OS1VisualStyle.textDim)
-                    if elapsed >= 10, let label = TranscriptFormat.duration(elapsed) {
-                        Text(verbatim: "· \(label)")
-                            .monospacedDigit()
-                            .foregroundStyle(OS1VisualStyle.textFaint)
-                            .accessibilityHidden(true)
+            if let stoppingSince {
+                // Counts nothing: the engine really is still unwinding, and
+                // after a few seconds the words admit the stop has not landed.
+                TimelineView(.periodic(from: stoppingSince, by: 1)) { context in
+                    Text(context.date.timeIntervalSince(stoppingSince) >= Self.stopSlow
+                        ? "Still stopping…" : "Stopping…")
+                        .font(.footnote)
+                        .foregroundStyle(OS1VisualStyle.textFaint)
+                }
+            } else {
+                // Ticks on the run's own second boundaries, inside this node
+                // only, so the count never skips and nothing else re-renders.
+                TimelineView(.periodic(from: since ?? .now, by: 1)) { context in
+                    let status = BusyActivityStatus(
+                        elapsed: since.map { context.date.timeIntervalSince($0) } ?? 0,
+                        activity: activity,
+                        now: context.date
+                    )
+                    HStack(spacing: 4) {
+                        if let label = status.label {
+                            ShimmerText(label)
+                                .font(.footnote.weight(.medium))
+                                .monospacedDigit()
+                        }
+                        if let detail = status.detail {
+                            Text(verbatim: "· \(detail)")
+                                .font(.footnote)
+                                .monospacedDigit()
+                                .foregroundStyle(OS1VisualStyle.textFaint)
+                        }
+                        if since != nil {
+                            Text(verbatim: status.label == nil ? status.elapsed : "· \(status.elapsed)")
+                                .font(.footnote)
+                                .monospacedDigit()
+                                .foregroundStyle(OS1VisualStyle.textFaint)
+                        }
                     }
+                    .lineLimit(1)
                 }
             }
-            .font(.footnote.weight(.medium))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Working")
+        // The phase in words, never the ticking time or a countdown, which
+        // would be read out again every second.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(spoken)
+    }
+
+    private var spoken: String {
+        if stoppingSince != nil { return "Stopping" }
+        if case .retrying = activity { return "Retrying" }
+        return BusyActivityStatus(elapsed: 0, activity: activity).spoken
     }
 }
 
