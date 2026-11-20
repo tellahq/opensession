@@ -629,8 +629,9 @@ final class SessionsListViewModel {
     }
 
     /// Workspace rows split into the web sidebar's Inbox bands. The bands are
-    /// exclusive, with priority needs-action > live-or-today > yesterday >
-    /// earlier, and every band ranks by last activity — deliberately ignoring
+    /// exclusive, with priority needs-action > idle-and-merged > live-or-today
+    /// > yesterday > earlier. Merged is listed first, like the web's, and every
+    /// band ranks by last activity — deliberately ignoring
     /// the "Created" sort, since an inbox orders by what moved last. Empty
     /// bands are dropped.
     nonisolated static func inboxBands(
@@ -651,6 +652,10 @@ final class SessionsListViewModel {
             if workspace.lane == .needsInput
                 || workspace.sessions.contains(where: { mentionedSessionIds.contains($0.id) }) {
                 band = .needsAction
+            } else if !workspace.isRunning, workspace.lane != .inProgress,
+                      workspace.isPrMerged {
+                // Landed work leaves the date bands, like the web's Merged band.
+                band = .merged
             } else if workspace.isRunning || date >= dayStart {
                 // A live row is recent whatever its day — work in flight is
                 // recent by definition — but ranks by activity like the rest.
@@ -1395,10 +1400,11 @@ enum SessionHistoryPlacement: Equatable {
 /// The web sidebar's Inbox bands: an email-style split of the rows by when
 /// they last moved, with "blocked on you" lifted out in front.
 enum InboxBand: String, CaseIterable {
-    case needsAction, recent, yesterday, earlier
+    case merged, needsAction, recent, yesterday, earlier
 
     var label: String {
         switch self {
+        case .merged: "Merged"
         case .needsAction: "Needs action"
         case .recent: "Recent"
         case .yesterday: "Yesterday"
@@ -1476,6 +1482,10 @@ struct SidebarWorkspace: Identifiable, Equatable, Sendable {
     /// blocked sibling owns its lane.
     var isRunning: Bool {
         sessions.contains { $0.safety == nil && $0.isRunning == true }
+    }
+    /// Any session's PR has merged, the web sidebar's `wsPrMerged`.
+    var isPrMerged: Bool {
+        sessions.contains { $0.prState == "MERGED" }
     }
     var lastActivityDate: Date {
         if let draft = workspace?.draft,

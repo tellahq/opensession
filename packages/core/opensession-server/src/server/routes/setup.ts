@@ -25,7 +25,7 @@ import { audit } from "../audit";
 import { GITHUB_APP_GRANT_PERMISSIONS } from "../../shared/github-app-permissions";
 import type { IntegrationSpec } from "../integrations/registry";
 import { setupAccessSnapshot } from "../setup-access";
-import type { RouteContext } from "./context";
+import { requestUser, type RouteContext } from "./context";
 import { handleSetupCodestorageRoutes } from "./setup-codestorage";
 import { handleSetupGithubManifestRoutes } from "./setup-github-manifest";
 import { handleSetupRepoRoutes } from "./setup-repos";
@@ -365,7 +365,12 @@ export async function handleSetupRoutes(
       })(),
       // The only non-optional component, and the one this page used to omit —
       // a checklist that went all-green on an instance that couldn't run a turn.
-      engine: engineStatus(),
+      // Claude readiness follows account owners. With web sign-in off the
+      // client names its picker user, as it does for /api/models.
+      engine: engineStatus(
+        requestUser(ctx, ctx.url.searchParams.get("user")) || undefined,
+        ctx.authUser?.login || undefined,
+      ),
       github: await githubSnapshot(),
       // `always` entries self-gate and need no setup, so they are not
       // presented as onboarding steps.

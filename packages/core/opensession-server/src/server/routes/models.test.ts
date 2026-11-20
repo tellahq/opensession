@@ -15,6 +15,7 @@ let previousStore: SessionKernelStore | undefined;
 let configured = new Set(["anthropic", "openai"]);
 let preferred = "pi/anthropic/claude-opus-5-5";
 const restores: Array<() => void> = [];
+const catalogUsers: Array<string | undefined> = [];
 beforeEach(async () => {
   store = new SessionKernelStore(":memory:");
   previousStore = __setSessionKernelStoreForTest(store);
@@ -23,9 +24,10 @@ beforeEach(async () => {
   preferred = "pi/anthropic/claude-opus-5-5";
   const mocks = [
     spyOn(pi, "piEngineEnabled").mockReturnValue(true),
-    spyOn(catalog, "configuredModelProviders").mockImplementation(
-      () => configured,
-    ),
+    spyOn(catalog, "configuredModelProviders").mockImplementation((user) => {
+      catalogUsers.push(user);
+      return configured;
+    }),
     spyOn(models, "interactiveDefaultModel").mockImplementation(
       () => preferred,
     ),
@@ -43,13 +45,17 @@ afterEach(() => {
   __resetWorkspaceProjectionForTest();
 });
 
-async function modelCatalog() {
-  const url = new URL("http://example.test/api/models");
+async function modelCatalog(
+  query = "",
+  authUser?: { login: string; name: string },
+) {
+  const url = new URL(`http://example.test/api/models${query}`);
   const response = await handleModelsRoutes({
     req: new Request(url),
     url,
     path: url.pathname,
     publicPrefix: "",
+    authUser,
   });
   return (await response!.json()) as {
     models: Array<{ id: string; label: string }>;
@@ -82,4 +88,14 @@ test("the catalog respects provider availability", async () => {
   expect(
     result.models.every((model) => model.id.startsWith("pi/openai/")),
   ).toBe(true);
+});
+
+test("the automations catalog asks as the Automations account group", async () => {
+  catalogUsers.length = 0;
+  await modelCatalog("?for=automations", {
+    login: "alice",
+    name: "Alice Example",
+  });
+  await modelCatalog("?user=Bob");
+  expect(catalogUsers).toEqual(["@automations", "Bob"]);
 });

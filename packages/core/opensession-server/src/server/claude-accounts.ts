@@ -12,13 +12,32 @@
  */
 
 import { withLabel } from "./provider-account-label";
-import { accountOwnerMode } from "./account-owner";
+import {
+  AUTOMATIONS_ACCOUNT_OWNER,
+  accountOwnerMode,
+  isAutomationsAccountOwner,
+} from "./account-owner";
 import { registerMemoryProbe } from "./memory-probes";
 import { homeDir } from "./paths";
 import { chmod, readFile } from "fs/promises";
 import { writeFileAtomicAsync } from "./shared/atomic-write";
-import { userMatchesAny } from "./shared/user-mappings";
+import {
+  rosterLoginNamed,
+  userIsRosterLogin,
+  userMatchesAny,
+} from "./shared/user-mappings";
 import { stateDir } from "./paths";
+import {
+  federatedAccessToken,
+  forgetFederatedTokens,
+  isClaudeApiAccount,
+  checkClaudeMythosAccess,
+  claudeMythosModelOf,
+  isClaudeApiOnlyModel,
+  parseClaudeFederation,
+  validateClaudeApiKey,
+  type ClaudeFederation,
+} from "./claude-api-credentials";
 import {
   cachedJsonFileCopy,
   cachedJsonFileShared,
@@ -56,6 +75,7 @@ const TOKEN_REFRESH_SLACK_MS = 5 * 60 * 1000;
 // When a run hits a limit but the usage endpoint gives no reset time,
 // sideline the account for this long before retrying it.
 const DEFAULT_EXHAUST_MS = 60 * 60 * 1000;
+const API_RATE_LIMIT_SIDELINE_MS = 60 * 1000;
 // Bridge-wedge sideline: much shorter than a usage-limit window — wedges
 // usually clear once the account's proxy respawns.
 const WEDGE_SIDELINE_MS = 5 * 60 * 1000;
@@ -72,9 +92,20 @@ export interface ClaudeAccount {
   name: string;
   /** Display name a person chose; shown instead of the email when set. */
   label?: string;
+  /** Setup token, or the API key of an "api-key" account. Empty for a
+   *  "federation" account, which stores no secret. */
   token: string;
-  /** Compatibility for OAuth-only records created by an earlier build. */
-  authKind?: "oauth";
+  /** Unset = subscription setup token. "oauth" is compatibility for
+   *  OAuth-only records created by an earlier build. "api-key" and
+   *  "federation" bill an Anthropic API organization (claude-api-credentials.ts)
+   *  and serve only API-only models. */
+  authKind?: "oauth" | "api-key" | "federation";
+  /** Workload Identity Federation settings of a "federation" account. */
+  federation?: ClaudeFederation;
+  /** API accounts: the Mythos releases a conclusive Models API check found
+   *  this organization can use. Unset until a check is conclusive; an
+   *  unverified account serves, and counts as capacity for, none. */
+  mythosModels?: string[];
   email?: string;
   plan?: string;
   createdAt: string;
@@ -136,7 +167,11 @@ export interface ClaudeAccountPublic {
   name: string;
   label?: string;
   tokenMasked: string;
-  authKind: "setup-token" | "oauth";
+  authKind: "setup-token" | "oauth" | "api-key" | "federation";
+  /** IDs, not secrets: shown so a person can match them in the Console. */
+  federation?: ClaudeFederation;
+  /** API accounts: verified Mythos releases. Unset = not yet verified. */
+  mythosModels?: string[];
   email?: string;
   plan?: string;
   createdAt: string;
@@ -778,6 +813,8 @@ async function usageToken(
   | { error: string }
   | null
 > {
+  // The subscription usage endpoint knows nothing about API organizations.
+  if (isClaudeApiAccount(account)) return null;
   if (account.credentialsPath) {
     const creds = await readCredsFile(account.credentialsPath);
     if (creds) {
@@ -881,10 +918,54 @@ async function refreshAccountUsage(
   return usage;
 }
 
-export async function refreshAllUsage(): Promise<void> {
+/** Why an API account whose organization cannot use Mythos is refused. */
+export const CLAUDE_API_NO_MYTHOS =
+  "This organization can't use Claude Mythos yet, and Claude API accounts only run Mythos.";
+
+/** Last Mythos access check per API account, to space out re-checks. */
+const lastMythosCheckAt = new Map<string, number>();
+/** Unverified accounts are re-checked on the next usage poll after this.
+ *  Verified ones are re-checked too, less often: an organization can gain a
+ *  release, or lose one, and a conclusive denial removes it. A manual
+ *  refresh re-checks every API account. */
+const MYTHOS_RECHECK_UNVERIFIED_MS = 5 * 60_000;
+const MYTHOS_RECHECK_VERIFIED_MS = 6 * 60 * 60_000;
+
+/** Re-check an API account's Mythos access when it is due (or `force`), and
+ *  save a conclusive answer on the fresh record. */
+async function refreshMythosAccess(
+  account: ClaudeAccount,
+  force = false,
+): Promise<void> {
+  const last = lastMythosCheckAt.get(account.id) ?? 0;
+  const wait = account.mythosModels
+    ? MYTHOS_RECHECK_VERIFIED_MS
+    : MYTHOS_RECHECK_UNVERIFIED_MS;
+  if (!force && Date.now() - last < wait) return;
+  lastMythosCheckAt.set(account.id, Date.now());
+  const access = await checkClaudeMythosAccess(account);
+  if (!access.conclusive) return;
+  await mutateStore(async () => {
+    const accounts = await readStoreFresh();
+    const idx = accounts.findIndex(
+      (a) => a.id === account.id && a.token === account.token,
+    );
+    if (idx === -1) return;
+    accounts[idx] = { ...accounts[idx], mythosModels: access.models };
+    await writeStore(accounts);
+  });
+}
+
+export async function refreshAllUsage(
+  opts: { recheckMythos?: boolean } = {},
+): Promise<void> {
   // Sequential, not Promise.all — the endpoint rate-limits aggressively and a
   // burst of N simultaneous requests from one IP makes that worse.
   for (const account of readStore()) {
+    if (isClaudeApiAccount(account)) {
+      await refreshMythosAccess(account, opts.recheckMythos).catch(() => {});
+      continue;
+    }
     if (account.usageScope === "missing" && !account.credentialsPath) {
       // Blind to the OAuth endpoint — Meridian-observed fallback (local, cheap).
       await refreshMeridianUsage(account);
@@ -1031,6 +1112,10 @@ function isAccountUsableFor(
   allowExtraUsage?: boolean,
 ): boolean {
   if (isExhausted(a.id)) return false;
+  const required = requiredModels(model);
+  if (required.some((m) => !claudeAccountServesModel(a, m))) return false;
+  if (isClaudeApiAccount(a))
+    return !required.some((m) => isModelExhausted(a.id, m));
   // OAuth access tokens are short-lived. The startup/usage poll refreshes an
   // expired token, but the picker must not hand out its stale mirror in the
   // small window before that refresh finishes.
@@ -1085,7 +1170,9 @@ function toPublic(a: ClaudeAccount): ClaudeAccountPublic {
     name: a.name,
     ...(a.label ? { label: a.label } : {}),
     tokenMasked: maskToken(a.token),
-    authKind: a.authKind === "oauth" ? "oauth" : "setup-token",
+    authKind: a.authKind ?? "setup-token",
+    ...(a.federation ? { federation: a.federation } : {}),
+    ...(a.mythosModels ? { mythosModels: a.mythosModels } : {}),
     email: a.email,
     plan: a.plan,
     createdAt: a.createdAt,
@@ -1171,6 +1258,208 @@ export function hasAccounts(): boolean {
   return readStore().length > 0;
 }
 
+/**
+ * Append a validated account in one store transaction: reread, recheck name
+ * and secret uniqueness, write. Callers validate over the network before
+ * this, outside the lock, so a concurrent add that committed meanwhile is
+ * neither overwritten nor duplicated.
+ */
+async function appendAccount(
+  account: ClaudeAccount,
+  duplicateSecretError: string,
+): Promise<{ error: string } | undefined> {
+  return mutateStore(async () => {
+    const accounts = await readStoreFresh();
+    if (accounts.some((a) => a.name === account.name))
+      return { error: `An account named "${account.name}" already exists` };
+    if (account.token && accounts.some((a) => a.token === account.token))
+      return { error: duplicateSecretError };
+    const binding = federationBinding(account);
+    if (binding && accounts.some((a) => federationBinding(a) === binding))
+      return { error: "This federation rule is already registered" };
+    await writeStore([...accounts, account]);
+    return undefined;
+  });
+}
+
+/** One key per federation rule, service account, and workspace: a federated
+ *  account stores no secret, so this is what makes two of them the same. */
+function federationBinding(account: ClaudeAccount): string | undefined {
+  const f = account.authKind === "federation" ? account.federation : undefined;
+  if (!f) return undefined;
+  return [
+    f.organizationId,
+    f.federationRuleId,
+    f.serviceAccountId,
+    f.workspaceId ?? "",
+  ].join("|");
+}
+
+/** The owner gate: a personal account (`owner` set) serves only runs whose
+ *  user resolves to that person; runs with no user see shared accounts only.
+ *  A personal API account bills its owner's organization, so its owner is a
+ *  roster GitHub login (`apiAccountOwner`), and it serves only when the
+ *  verified `billingLogin` is that login and the run user names exactly that
+ *  roster member (`userIsRosterLogin`). A display name alone never spends
+ *  it: names are resolved again at dispatch, after the roster may have
+ *  changed, so a queued or resumed turn could otherwise reach a namesake's
+ *  account. Runs pass the session creator's verified login; live requests
+ *  pass the signed-in login. Routing, the model catalog, and Setup all use
+ *  it. */
+export function accountServesUser(
+  account: { owner?: string; authKind?: string },
+  user?: string,
+  billingLogin?: string | null,
+): boolean {
+  if (!account.owner) return true;
+  if (!user) return false;
+  if (!isClaudeApiAccount(account))
+    return userMatchesAny(user, [account.owner]);
+  if (isAutomationsAccountOwner(account.owner))
+    return isAutomationsAccountOwner(user);
+  return (
+    sameGithubLogin(billingLogin, account.owner) &&
+    userIsRosterLogin(account.owner, user)
+  );
+}
+
+/** The login a run may bill a personal Claude API account with: the
+ *  session creator's verified login, and only while GitHub sign-in is on.
+ *  Without sign-in the run user is a name any client can claim (or one
+ *  queued while sign-in was off), so a login stored earlier must not vouch
+ *  for it: personal API accounts then fail closed and shared ones serve. */
+export function runBillingLogin(
+  creatorLogin: string | null | undefined,
+  signInActive: boolean,
+): string | undefined {
+  return (signInActive && creatorLogin?.trim()) || undefined;
+}
+
+function sameGithubLogin(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): boolean {
+  const norm = (v: string | null | undefined) =>
+    v?.trim().replace(/^@/, "").toLowerCase() ?? "";
+  return !!norm(a) && norm(a) === norm(b);
+}
+
+/** The owner a personal API account stores: the Automations group, or the
+ *  GitHub login of the one teammate the picker's name resolves to. A name
+ *  that resolves to nobody, or to several people, is refused rather than
+ *  saved, since it could later bind to someone else. */
+export function apiAccountOwner(
+  ref?: string,
+): { owner?: string } | { error: string } {
+  const trimmed = ref?.trim();
+  if (!trimmed) return {};
+  if (isAutomationsAccountOwner(trimmed))
+    return { owner: AUTOMATIONS_ACCOUNT_OWNER };
+  const login = rosterLoginNamed(trimmed);
+  return login
+    ? { owner: login }
+    : {
+        error: `"${trimmed}" doesn't name exactly one teammate with a GitHub login. Use their full name or GitHub login.`,
+      };
+}
+
+export function hasClaudeApiAccounts(): boolean {
+  return readStore().some(isClaudeApiAccount);
+}
+
+/**
+ * Whether an account's kind may run `model` at all, ignoring usage. API
+ * accounts serve only API-only models, so metered spend never stands in for
+ * subscription capacity. Once one exists, those models never fall back to a
+ * subscription; without one, they keep the old pool behavior. Account picks
+ * and fixed-subscription validation share this rule, so a fixed session
+ * cannot switch to a model its account would then refuse.
+ */
+export function claudeAccountServesModel(
+  account: { authKind?: string; mythosModels?: readonly string[] },
+  model?: string | null,
+): boolean {
+  if (isClaudeApiAccount(account)) {
+    // Only a release the organization was verified to have access to.
+    const mythos = claudeMythosModelOf(model);
+    return !!mythos && !!account.mythosModels?.includes(mythos);
+  }
+  return !isClaudeApiOnlyModel(model) || !hasClaudeApiAccounts();
+}
+
+/**
+ * Add a Claude API account: a static API key, or Workload Identity
+ * Federation (no stored secret). Federation is checked with a real token
+ * exchange, so a rule that does not trust this server fails here rather than
+ * on the first run.
+ */
+export async function addClaudeApiAccount(input: {
+  name: string;
+  owner?: string;
+  apiKey?: string;
+  federation?: unknown;
+}): Promise<ClaudeAccountPublic | { error: string }> {
+  const name = input.name.trim();
+  if (!name) return { error: "Name is required" };
+  const bound = apiAccountOwner(input.owner);
+  if ("error" in bound) return bound;
+  const { owner } = bound;
+  const accounts = await readStoreFresh();
+  if (accounts.some((a) => a.name === name))
+    return { error: `An account named "${name}" already exists` };
+  const base = {
+    id: crypto.randomUUID(),
+    name,
+    createdAt: new Date().toISOString(),
+    ...(owner ? { owner } : {}),
+  };
+  let account: ClaudeAccount;
+  if (input.federation !== undefined) {
+    const federation = parseClaudeFederation(input.federation);
+    if ("error" in federation) return federation;
+    try {
+      await federatedAccessToken(base.id, federation);
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : String(error) };
+    }
+    account = { ...base, token: "", authKind: "federation", federation };
+  } else {
+    const apiKey = (input.apiKey || "").replace(/\s+/g, "");
+    if (!/^sk-ant-api/.test(apiKey))
+      return {
+        error:
+          "That doesn't look like a Claude API key (expected sk-ant-api…). Create one in the Claude Console.",
+      };
+    if (accounts.some((a) => a.token === apiKey))
+      return { error: "This key is already registered" };
+    const checked = await validateClaudeApiKey(apiKey);
+    if (checked.error) return { error: checked.error };
+    account = { ...base, token: apiKey, authKind: "api-key" };
+  }
+  // A key that works but whose organization cannot use Mythos would count
+  // as Mythos capacity for nothing. An inconclusive check saves the account
+  // unverified; the usage poller checks it again.
+  const access = await checkClaudeMythosAccess(account);
+  if (access.conclusive && !access.models.length) {
+    forgetFederatedTokens(account.id);
+    return { error: CLAUDE_API_NO_MYTHOS };
+  }
+  if (access.conclusive) account.mythosModels = access.models;
+  lastMythosCheckAt.set(account.id, Date.now());
+  const appended = await appendAccount(
+    account,
+    "This key is already registered",
+  );
+  if (appended) {
+    forgetFederatedTokens(account.id);
+    return appended;
+  }
+  console.log(
+    `[claude-accounts] Added Claude API account ${name} (${account.authKind})`,
+  );
+  return toPublic(account);
+}
+
 export async function addAccount(
   name: string,
   token: string,
@@ -1185,6 +1474,12 @@ export async function addAccount(
   const trimmedOwner = owner?.trim() || undefined;
   const trimmedCredentialsPath = credentialsPath?.trim() || undefined;
   if (!trimmedName) return { error: "Name is required" };
+  if (/^sk-ant-api/.test(trimmedToken)) {
+    return {
+      error:
+        "That's a Claude API key, not a setup token. Add it as a Claude API account instead.",
+    };
+  }
   if (!/^sk-ant-/.test(trimmedToken)) {
     return {
       error:
@@ -1227,7 +1522,11 @@ export async function addAccount(
       : {}),
     ...(usage.errorStatus === 403 ? { usageScope: "missing" as const } : {}),
   };
-  await mutateStore(() => writeStore([...accounts, account]));
+  const appended = await appendAccount(
+    account,
+    "This token is already registered",
+  );
+  if (appended) return appended;
   if (!usage.error) usageCache.set(account.id, usage);
   console.log(
     `[claude-accounts] Added account ${trimmedName} (${profile.email || "unknown email"})${trimmedOwner ? ` — personal sub of ${trimmedOwner}` : " — shared pool"}`,
@@ -1236,16 +1535,47 @@ export async function addAccount(
 }
 
 /** Set or clear (empty/undefined) an account's personal owner. */
+/** Authorization a writer re-checks against the account it is about to
+ * change, inside the store transaction: a message refuses the write. A
+ * route's earlier check reads the cached record, which an operator's
+ * concurrent ownership transfer can make stale. */
+export type AccountWriteGuard = (account: ClaudeAccount) => string | undefined;
+
+/** Why a Claude API account refuses the subscription usage sign-in. */
+export const CLAUDE_API_ACCOUNT_NO_SIGN_IN =
+  "Claude API accounts don't use Claude sign-in.";
+
+/** A write the guard refused, with its message. */
+export interface AccountWriteForbidden {
+  forbidden: string;
+}
+
+/** A write refused for its input, with its message. */
+export interface AccountWriteInvalid {
+  invalid: string;
+}
+
 export function setAccountOwner(
   id: string,
   owner: string | undefined,
   credentialsPath?: string | undefined,
-): Promise<ClaudeAccountPublic | null> {
+  guard?: AccountWriteGuard,
+): Promise<
+  ClaudeAccountPublic | AccountWriteForbidden | AccountWriteInvalid | null
+> {
   return mutateStore(async () => {
     const accounts = await readStoreFresh();
     const idx = accounts.findIndex((a) => a.id === id);
     if (idx === -1) return null;
-    const trimmed = owner?.trim() || undefined;
+    const forbidden = guard?.(accounts[idx]);
+    if (forbidden) return { forbidden };
+    let trimmed = owner?.trim() || undefined;
+    if (isClaudeApiAccount(accounts[idx])) {
+      // Bind a personal API account to a login, as enrollment does.
+      const bound = apiAccountOwner(trimmed);
+      if ("error" in bound) return { invalid: bound.error };
+      trimmed = bound.owner;
+    }
     const next = { ...accounts[idx] };
     if (trimmed) next.owner = trimmed;
     else delete next.owner;
@@ -1271,11 +1601,14 @@ export function setAccountOwner(
 export function setAccountLabel(
   id: string,
   label: string,
-): Promise<ClaudeAccountPublic | null> {
+  guard?: AccountWriteGuard,
+): Promise<ClaudeAccountPublic | AccountWriteForbidden | null> {
   return mutateStore(async () => {
     const accounts = await readStoreFresh();
     const idx = accounts.findIndex((a) => a.id === id);
     if (idx === -1) return null;
+    const forbidden = guard?.(accounts[idx]);
+    if (forbidden) return { forbidden };
     const next = withLabel(accounts[idx], label);
     accounts[idx] = next;
     await writeStore(accounts);
@@ -1294,12 +1627,16 @@ export async function setAccountUsageCredentials(
   id: string,
   path: string,
   email?: string,
-): Promise<ClaudeAccountPublic | null> {
+): Promise<ClaudeAccountPublic | AccountWriteForbidden | null> {
   const creds = await readCredsFile(path);
   const next = await mutateStore(async () => {
     const accounts = await readStoreFresh();
     const idx = accounts.findIndex((a) => a.id === id);
     if (idx === -1) return null;
+    // Usage sign-in is for subscriptions. An API account has no usage
+    // endpoint, and a subscription credential must never attach to it.
+    if (isClaudeApiAccount(accounts[idx]))
+      return { forbidden: CLAUDE_API_ACCOUNT_NO_SIGN_IN };
     const next: ClaudeAccount = { ...accounts[idx], credentialsPath: path };
     if (next.authKind === "oauth" && creds) next.token = creds.accessToken;
     delete next.usageScope;
@@ -1308,22 +1645,30 @@ export async function setAccountUsageCredentials(
     await writeStore(accounts);
     return next;
   });
-  if (!next) return null;
+  if (!next || "forbidden" in next) return next;
   usageCache.delete(id);
   credentialsRefreshBlockedUntil.delete(path);
   void refreshAccountUsage(next);
   return toPublic(next);
 }
 
-export async function removeAccount(id: string): Promise<boolean> {
-  const removed = await mutateStore(async () => {
-    const accounts = await readStoreFresh();
-    const next = accounts.filter((a) => a.id !== id);
-    if (next.length === accounts.length) return false;
-    await writeStore(next);
-    return true;
-  });
-  if (!removed) return false;
+export async function removeAccount(
+  id: string,
+  guard?: AccountWriteGuard,
+): Promise<boolean | AccountWriteForbidden> {
+  const removed = await mutateStore(
+    async (): Promise<boolean | AccountWriteForbidden> => {
+      const accounts = await readStoreFresh();
+      const account = accounts.find((a) => a.id === id);
+      if (!account) return false;
+      const forbidden = guard?.(account);
+      if (forbidden) return { forbidden };
+      await writeStore(accounts.filter((a) => a.id !== id));
+      return true;
+    },
+  );
+  if (removed !== true) return removed;
+  forgetFederatedTokens(id);
   usageCache.delete(id);
   const map = sidelines();
   map.delete(exhaustionKey(id));
@@ -1356,6 +1701,7 @@ function selectAccount(
   model?: ClaudeModelRequirement,
   allowExtraUsage?: boolean,
   recordPick = true,
+  billingLogin?: string,
 ): ClaudeAccount | undefined {
   const eligible = readStore().filter(
     (a) => !exclude?.has(a.id) && isAccountUsableFor(a, model, allowExtraUsage),
@@ -1376,7 +1722,11 @@ function selectAccount(
       )
       .sort((x, y) => x.bucket - y.bucket || x.picked - y.picked)[0]?.a;
   const personal = user
-    ? best(eligible.filter((a) => a.owner && userMatchesAny(user, [a.owner])))
+    ? best(
+        eligible.filter(
+          (a) => a.owner && accountServesUser(a, user, billingLogin),
+        ),
+      )
     : undefined;
   const picked = personal ?? best(eligible.filter((a) => !a.owner));
   if (picked && recordPick) lastPickedAt.set(picked.id, Date.now());
@@ -1435,6 +1785,10 @@ export interface AccountRequest {
   /** Run user, matched against `owner` through the same identity table as
    *  commit attribution. Absent = an automation: pool accounts only. */
   user?: string;
+  /** Verified GitHub login that may be billed (the session creator's, or
+   *  the signed-in viewer's). A personal API account serves only its own
+   *  login here, never a display name alone (accountServesUser). */
+  billingLogin?: string;
   model?: ClaudeModelRequirement;
   /** The session's pinned subscription (NativeSessionFile.accountId). */
   pinnedId?: string;
@@ -1470,7 +1824,7 @@ export function resolveAccount(req: AccountRequest): AccountResolution {
   const { user, model, allowExtraUsage } = req;
   const ids = req.designatedIds;
   const ownedByUser = (a: ClaudeAccount) =>
-    !a.owner || (!!user && userMatchesAny(user, [a.owner]));
+    accountServesUser(a, user, req.billingLogin);
   const designated = (id: string) => !ids?.length || ids.includes(id);
   const nameOf = (id: string) => getAccountById(id)?.name || id;
   const excluded = req.excludeIds?.length ? new Set(req.excludeIds) : undefined;
@@ -1525,6 +1879,7 @@ export function resolveAccount(req: AccountRequest): AccountResolution {
     model,
     allowExtraUsage,
     req.recordPick ?? true,
+    req.billingLogin,
   );
   if (picked)
     return { account: picked, reason: picked.owner ? "personal" : "pool" };
@@ -1637,6 +1992,20 @@ export function markExhausted(
   statedResetAt?: number,
 ): void {
   const account = readStore().find((a) => a.id === id);
+  if (account && isClaudeApiAccount(account)) {
+    // An API organization's limits are per-minute rate limits, not
+    // subscription windows: bench it briefly, or until the stated reset.
+    const until =
+      statedResetAt && statedResetAt > Date.now()
+        ? statedResetAt
+        : Date.now() + API_RATE_LIMIT_SIDELINE_MS;
+    sidelines().set(exhaustionKey(id, model), until);
+    persistSidelines();
+    console.warn(
+      `[claude-accounts] ${account.name}${model ? ` (${model})` : ""} rate-limited until ${new Date(until).toISOString()}`,
+    );
+    return;
+  }
   const cached = usageCache.get(id);
   const scoped = scopedEntryForModel(cached, model);
   const resetsAt = scoped?.resetsAt
@@ -1716,7 +2085,7 @@ export function earliestPoolReset(
     (a) =>
       (!accountId || a.id === accountId) &&
       (!allowedAccountIds?.length || allowedAccountIds.includes(a.id)) &&
-      (!a.owner || (!!user && userMatchesAny(user, [a.owner]))),
+      accountServesUser(a, user),
   );
   if (candidates.length === 0) return null;
   let min: number | null = null;
@@ -1766,7 +2135,7 @@ async function refreshSidelinedAccounts(
   try {
     for (const a of readStore()) {
       if (signal?.aborted) return;
-      if (a.owner && !(user && userMatchesAny(user, [a.owner]))) continue;
+      if (!accountServesUser(a, user)) continue;
       if (a.usageScope === "missing" && !a.credentialsPath) continue;
       if (isAccountUsableFor(a, model)) continue;
       // Sequential on purpose — see refreshAllUsage.

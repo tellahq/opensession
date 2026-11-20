@@ -265,6 +265,8 @@ struct PrPanelView: View {
     /// so a request the person can no longer see never goes out.
     @State private var deferredMerge = DeferredMerge()
     @State private var confirmingClose = false
+    /// A force merge of a blocked PR, waiting on its confirmation.
+    @State private var confirmingForceMerge = false
     @State private var slackShare: PrSlackShareRequest?
     /// Which of the canvas's two pages is showing. Two, not the six tabs this
     /// had before: everything countable about a pull request answers a
@@ -443,6 +445,19 @@ struct PrPanelView: View {
                 Button("Cancel", role: .cancel) { pendingMerge = nil }
             } message: {
                 Text(mergeConfirmMessage(pr))
+            }
+            .confirmationDialog(
+                "Force merge #\(pr.number)?",
+                isPresented: $confirmingForceMerge,
+                titleVisibility: .visible
+            ) {
+                Button("Force merge", role: .destructive) {
+                    let headSha = pr.headRefOid
+                    run(.merge) { try await viewModel.forceMergePr(headSha: headSha) }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(forceMergeConfirmMessage(pr))
             }
             .confirmationDialog(
                 "Close this pull request?",
@@ -727,6 +742,13 @@ struct PrPanelView: View {
                     tint: OS1VisualStyle.yellowInk,
                     last: decision == nil && quality == nil && risk == nil
                 )
+            } else if let block = pr.mergeBlock {
+                infoRow(
+                    "Merge",
+                    value: block.statusLine,
+                    tint: block.isGreen ? OS1VisualStyle.greenInk : OS1VisualStyle.yellowInk,
+                    last: decision == nil && quality == nil && risk == nil
+                )
             } else if pr.isOpen {
                 infoRow(
                     "Merge",
@@ -754,9 +776,11 @@ struct PrPanelView: View {
                 infoRow("Merge risk", value: risk.value, tint: risk.tint, last: true)
             }
             if let error = actionError {
+                // The server's refusal is already one short sentence.
                 Text(error)
                     .font(.footnote)
                     .foregroundStyle(OS1VisualStyle.redInk)
+                    .lineLimit(2)
                     .padding(.horizontal, 14)
                     .padding(.bottom, 11)
             }
@@ -1061,14 +1085,23 @@ struct PrPanelView: View {
                 if pr.isOpen {
                     let conflicting = pr.mergeable == "CONFLICTING"
                     Divider().padding(.leading, 14)
-                    summaryRow(
-                        symbol: conflicting ? "exclamationmark.triangle.fill" : "arrow.triangle.merge",
-                        title: "Merge",
-                        value: conflicting
-                            ? "Conflicts with \(pr.baseRefName ?? "the base")"
-                            : "No conflicts",
-                        tint: conflicting ? OS1VisualStyle.yellowInk : OS1VisualStyle.greenInk
-                    )
+                    if let block = pr.mergeBlock {
+                        summaryRow(
+                            symbol: block.isGreen ? "clock" : "lock.fill",
+                            title: "Merge",
+                            value: block.statusLine,
+                            tint: block.isGreen ? OS1VisualStyle.greenInk : OS1VisualStyle.yellowInk
+                        )
+                    } else {
+                        summaryRow(
+                            symbol: conflicting ? "exclamationmark.triangle.fill" : "arrow.triangle.merge",
+                            title: "Merge",
+                            value: conflicting
+                                ? "Conflicts with \(pr.baseRefName ?? "the base")"
+                                : "No conflicts",
+                            tint: conflicting ? OS1VisualStyle.yellowInk : OS1VisualStyle.greenInk
+                        )
+                    }
                 }
             }
             .background(
@@ -1192,7 +1225,28 @@ struct PrPanelView: View {
                     }
                     .disabled(deferredMerge.phase != .idle)
                 }
-                if deferredMerge.phase == .idle {
+                if let block = pr.mergeBlock, deferredMerge.phase == .idle {
+                    // A plain merge would only be refused. Auto-merge lands
+                    // it once the rules pass; force merge goes around them.
+                    // With auto-merge on, the status says it will land.
+                    if block != .mergesWhenReady, pr.canAutoMerge || pr.canForceMerge {
+                        Menu {
+                            if pr.canAutoMerge {
+                                Button("Merge when ready") {
+                                    run(.merge) { try await viewModel.autoMergePr() }
+                                }
+                            }
+                            if pr.canForceMerge {
+                                Button("Force merge", role: .destructive) {
+                                    actionError = nil
+                                    confirmingForceMerge = true
+                                }
+                            }
+                        } label: {
+                            Label("Merge", systemImage: "arrow.triangle.merge")
+                        }
+                    }
+                } else if deferredMerge.phase == .idle {
                     Menu {
                         Button("Squash and merge") { pendingMerge = "squash" }
                         Button("Create a merge commit") { pendingMerge = "merge" }
@@ -1350,6 +1404,14 @@ struct PrPanelView: View {
         let base = pr.baseRefName ?? "the base branch"
         guard !warnings.isEmpty else { return "This merges into \(base)." }
         return "This merges into \(base) even though \(warnings.joined(separator: ", "))."
+    }
+
+    /// The web's force-merge wording: what lands where, what it skips.
+    private func forceMergeConfirmMessage(_ pr: PrDetails) -> String {
+        let base = pr.baseRefName ?? "the base branch"
+        let bypasses = pr.forceMergeBypasses
+        let skipping = bypasses.isEmpty ? "" : ", skipping \(bypasses.joined(separator: ", "))"
+        return "Squash into \(base) now\(skipping), using your GitHub permissions."
     }
 
     private func checkRow(_ check: PrCheck) -> some View {

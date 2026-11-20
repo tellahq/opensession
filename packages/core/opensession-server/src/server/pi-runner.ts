@@ -63,7 +63,10 @@ import {
   type PiProviderCatalog,
 } from "./model-providers";
 import { markCodexExhausted, type CodexAccount } from "./codex-accounts";
-import { pickAccount as pickClaudeAccount } from "./claude-accounts";
+import {
+  pickAccount as pickClaudeAccount,
+  runBillingLogin,
+} from "./claude-accounts";
 import {
   bindXaiAccount,
   markXaiExhausted,
@@ -2819,6 +2822,11 @@ async function* runPiAttempt(
       affinityKey: opts.accountAffinityKey || journal?.osSessionId || cwd,
       unifiedSessionId: unifiedSessionId || runKey,
       accountUser,
+      // The creator's verified login, stored on the session: the only
+      // identity a personal Claude API account bills, since `accountUser`
+      // is a name resolved against the roster as it is now. Only while
+      // GitHub sign-in is on (runBillingLogin).
+      billingLogin: runBillingLogin(opts.mcpGrantUser, githubUserAuthActive()),
       accountId: opts.accountId,
       accountStrict: opts.accountStrict,
       usageCredits: opts.usageCredits,

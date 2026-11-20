@@ -21,8 +21,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   flat single-line workspace rows with live/PR status marks and a running-time
   ticker, larger mobile type, and the web client's warm dark palette. Inbox
   keeps Active work in stable creation order with a nearby Snoozed shelf,
-  sharing `/api/snoozes` with the web sidebar. Activity restores Needs action,
-  Recent, Yesterday, and Earlier; Status remains the dynamic lane view. Group
+  sharing `/api/snoozes` with the web sidebar. Activity restores Merged, Needs
+  action, Recent, Yesterday, and Earlier (idle rows whose PR merged collect in
+  Merged at the top, as on the web); Status remains the dynamic lane view. Group
   by project is an independent switch for all three modes. The
   compact toolbar search/filter finds session metadata (title, repository,
   branch, workspace name) with the web's typo-tolerant matcher
@@ -266,7 +267,11 @@ passed`, the whole message and nothing else) draws as one compact row per
   merge", reviewers and the checks rollup, base ← head with a merge-method
   menu, and a `SlideToMerge` track: the slide is the confirmation, and a PR
   with conflicts, failing or running checks, a draft or requested changes
-  still asks first; VoiceOver activates it as a button), a
+  still asks first; VoiceOver activates it as a button). A PR GitHub reports
+  as BLOCKED reads "Blocked" or "Review required", slides to auto-merge, and
+  keeps Force merge in the method menu; with auto-merge on it reads "Merges
+  when ready" and has no slide. A refused merge shows the server's sentence
+  on the card. Then a
   Deployments list (the PR's preview environment plus deploy checks such as
   Vercel), and a Demos carousel of the conversation's and assets' pictures and
   recordings, videos first. Below that: repository and branch metadata, local

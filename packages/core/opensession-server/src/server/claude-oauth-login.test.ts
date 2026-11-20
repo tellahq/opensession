@@ -1,12 +1,20 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
   addAccount,
   listAccountsPublic,
+  loadClaudeAccounts,
   pickAccount,
   refreshAllUsage,
+  setAccountUsageCredentials,
 } from "./claude-accounts";
 import { completeClaudeLogin, startClaudeLogin } from "./claude-oauth-login";
 
@@ -107,5 +115,60 @@ describe("Claude OAuth usage setup", () => {
     ).toMatchObject({
       accounts: [{ token: "sk-ant-test-placeholder", credentialsPath }],
     });
+  });
+
+  const writeAccounts = async (authKind?: "api-key") => {
+    writeFileSync(
+      process.env.OPENSESSION_CLAUDE_ACCOUNTS_PATH!,
+      JSON.stringify({
+        accounts: [
+          {
+            id: "acct",
+            name: "acct",
+            token: authKind ? "sk-ant-api03-acct" : "sk-ant-oat01-acct",
+            ...(authKind ? { authKind } : {}),
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    await loadClaudeAccounts();
+  };
+  const storedAccount = () =>
+    JSON.parse(
+      readFileSync(process.env.OPENSESSION_CLAUDE_ACCOUNTS_PATH!, "utf8"),
+    ).accounts[0];
+
+  test("refuses Claude sign-in for an API account", async () => {
+    await writeAccounts("api-key");
+    expect(await startClaudeLogin("acct")).toHaveProperty("error");
+    const credentialsPath = join(dir, "creds.json");
+    writeFileSync(credentialsPath, "{}");
+    expect(
+      await setAccountUsageCredentials(
+        "acct",
+        credentialsPath,
+        "alex@example.com",
+      ),
+    ).toHaveProperty("forbidden");
+    const stored = storedAccount();
+    expect(stored.credentialsPath).toBeUndefined();
+    expect(stored.email).toBeUndefined();
+  });
+
+  test("refuses to finish a sign-in once the account is an API account", async () => {
+    await writeAccounts();
+    const started = await startClaudeLogin("acct");
+    if ("error" in started) throw new Error(started.error);
+    await writeAccounts("api-key");
+    const completed = await completeClaudeLogin(
+      started.id,
+      "authorization-code#state",
+    );
+    expect(completed).toHaveProperty("error");
+    const stored = storedAccount();
+    expect(stored.credentialsPath).toBeUndefined();
+    expect(stored.email).toBeUndefined();
+    expect(existsSync(join(dir, "claude-oauth", "acct.json"))).toBe(false);
   });
 });

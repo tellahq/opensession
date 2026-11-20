@@ -68,11 +68,60 @@ struct ProgressUpdate: Equatable, Sendable {
               )
         else { return nil }
         let topic = String(match.output.2).trimmingCharacters(in: .whitespaces)
-        let text = String(match.output.3).trimmingCharacters(in: .whitespaces)
-        guard !topic.isEmpty, !text.isEmpty, !text.contains("?") else { return nil }
+        let raw = String(match.output.3)
+        guard !topic.isEmpty,
+              !raw.trimmingCharacters(in: .whitespaces).isEmpty,
+              !raw.contains("?") else { return nil }
+        let text = Self.plainText(raw)
+        guard !text.isEmpty else { return nil }
         self.topic = topic
         self.state = match.output.1 == "✓" ? .done : .running
         self.text = text
+    }
+
+    /// A status row is one quiet line of plain text, so the Markdown an agent
+    /// writes in it (links, bold, code) shows as its words: `[#11046](…)`
+    /// reads "#11046", a bare GitHub PR or issue URL "app#11046", and other
+    /// bare URLs stay. An empty result means the line is not a status.
+    /// Mirrors the web's `plainStatusText`.
+    static func plainText(_ text: String) -> String {
+        text
+            .replacing(#/\[([^\]\r\n]*)\]\(<?([^)\s>]+)>?\)/#) { match in
+                linkLabel(
+                    String(match.output.1).trimmingCharacters(in: .whitespacesAndNewlines),
+                    String(match.output.2)
+                )
+            }
+            .replacing(#/<(https?://[^>\s]+)>/#) { match in
+                linkLabel("", String(match.output.1))
+            }
+            .replacing(#/(^|[\s(])(https?://\S+)/#) { match in
+                let url = String(match.output.2)
+                return githubRef(url) == nil
+                    ? String(match.output.0)
+                    : match.output.1 + linkLabel("", url)
+            }
+            .replacing(#/\*\*([^*]+)\*\*|__([^_]+)__|`([^`]+)`/#) { match in
+                match.output.1 ?? match.output.2 ?? match.output.3 ?? ""
+            }
+            .replacing(#/\s+/#, with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// "repo#123" for a GitHub PR or issue URL (web `GITHUB_REF`).
+    private static func githubRef(_ url: String) -> String? {
+        guard let match = url.wholeMatch(
+            of: #/https?://(?:www\.)?github\.com/[^/\s]+/([^/\s]+)/(?:pull|issues)/(\d+)(?:[/?#]\S*)?/#
+                .ignoresCase()
+        ) else { return nil }
+        return "\(match.output.1)#\(match.output.2)"
+    }
+
+    /// A link's own label, else the URL, read as "repo#123" when it is a
+    /// GitHub PR or issue (web `linkLabel`).
+    private static func linkLabel(_ label: String, _ url: String) -> String {
+        if !label.isEmpty, label != url { return label }
+        return githubRef(url) ?? url
     }
 
     private static func isEmpty(_ files: JSONValue?) -> Bool {
