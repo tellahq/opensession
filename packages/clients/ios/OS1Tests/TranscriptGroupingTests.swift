@@ -2214,4 +2214,26 @@ extension TranscriptGroupingTests {
         viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: false))
         XCTAssertNil(viewModel.stoppingSince)
     }
+
+    func testAStopLandsWhenTheModelTurnEndsEvenIfTheSessionStaysBusy() {
+        viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
+        viewModel.cancelRun()
+        XCTAssertNotNil(viewModel.stoppingSince)
+
+        // A workflow the turn launched keeps the session running.
+        viewModel.handle(.streamDone(sessionId: "bks-1"))
+        XCTAssertTrue(viewModel.isRunning)
+        XCTAssertNil(viewModel.stoppingSince)
+    }
+
+    func testAReconnectForgetsAPhaseItMayHaveMissed() {
+        viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
+        viewModel.handle(.streamActivity(
+            sessionId: "bks-1",
+            activity: .retrying(attempt: 2, maxAttempts: 3, retryAt: .now.addingTimeInterval(30))
+        ))
+        viewModel.handle(.hello(bootId: "boot-2"))
+        XCTAssertNil(viewModel.runActivity)
+        XCTAssertTrue(viewModel.isRunning)
+    }
 }

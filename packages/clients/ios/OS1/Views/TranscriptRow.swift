@@ -492,10 +492,19 @@ struct ReasoningSummaryRow: View {
         let text: String
     }
 
+    /// What the step opens to. A lone event's heading is already the
+    /// header's excerpt, so only its body follows. Grouped events keep each
+    /// heading, since the header names only the latest.
     private var traces: [Trace] {
-        entries.compactMap { entry in
-            let body = ReasoningSummaryDisplay(entry.text).body
-            return body.isEmpty ? nil : Trace(id: entry.id, text: body)
+        let keepsHeadings = entries.count > 1
+        return entries.compactMap { entry in
+            let display = ReasoningSummaryDisplay(entry.text)
+            let text = keepsHeadings && !display.title.isEmpty
+                ? (display.body.isEmpty
+                    ? "**\(display.title)**"
+                    : "**\(display.title)**\n\n\(display.body)")
+                : display.body
+            return text.isEmpty ? nil : Trace(id: entry.id, text: text)
         }
     }
 

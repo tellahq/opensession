@@ -2363,6 +2363,14 @@ final class SessionViewModel {
             // before joining the session so a background reconnect never
             // flashes (or remains) as an active viewer.
             if isAway { socket?.setAway(true) }
+            // A phase from before the drop may have moved on unseen, and a
+            // re-watch without the feed does not replay it: forget it until
+            // the next `stream_activity` names the current one.
+            #if DEBUG
+            if !holdsRunFixture { runActivity = nil }
+            #else
+            runActivity = nil
+            #endif
             // Watch after the handshake frame so the send cannot race the upgrade.
             socket?.watch(sessionId: session.id, resume: transcriptResume)
             // Cards are announced by broadcast, which a socket that was not
@@ -2596,6 +2604,10 @@ final class SessionViewModel {
             #endif
             streamEnded = true
             runActivity = nil
+            // The model turn is over, so the stop it was waiting on landed. A
+            // workflow can keep the session busy past it; the row then goes
+            // back to counting instead of saying "Still stopping…".
+            stoppingSince = nil
             flushLiveTextNow()
 
         case .streamActivity(let id, let activity) where id == session.id:
