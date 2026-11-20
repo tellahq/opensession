@@ -15,7 +15,6 @@ import {
   mcpGrantExists,
   mcpSharedGrantHeader,
   refreshExpiringMcpGrants,
-  removeMcpOauthGrant,
 } from "./mcp-oauth";
 
 /**
@@ -108,8 +107,7 @@ test("processes sharing the store refresh a rotating grant once", async () => {
     );
     expect(endpoint.state).toMatchObject({ posts: 1, revoked: false });
     const stored = JSON.parse(readFileSync(path, "utf8")).Acme.shared.tokens;
-    expect(stored.rotatingRefreshToken).toBe(endpoint.state.current);
-    expect(stored.refreshToken).toBeUndefined();
+    expect(stored.refreshToken).toBe(endpoint.state.current);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -131,7 +129,7 @@ test("one process refreshes an expiring grant once however often it is read", as
     refreshExpiringMcpGrants(),
   ]);
   expect(endpoint.state).toMatchObject({ posts: 1, revoked: false });
-  expect(storedTokens().rotatingRefreshToken).toBe("rt-1");
+  expect(storedTokens().refreshToken).toBe("rt-1");
 });
 
 test("an expired grant still exists, and the relay waits for its refresh", async () => {
@@ -153,20 +151,10 @@ test("a rejected refresh is logged without tokens and keeps the grant", async ()
     // The provider's description is not logged: it could echo the token.
     expect(logged).not.toContain("reused");
     expect(logged).not.toContain("rt-0");
-    expect(storedTokens().rotatingRefreshToken).toBe("rt-0");
+    expect(storedTokens().refreshToken).toBe("rt-0");
   } finally {
     error.mockRestore();
   }
-});
-
-test("the first change hides a legacy refresh token from pre-lock releases", async () => {
-  await seed(10_000);
-  expect(storedTokens().refreshToken).toBe("rt-0");
-  // Any locked change migrates, even one that changes nothing else.
-  await removeMcpOauthGrant("Missing");
-  expect(storedTokens()).toMatchObject({ rotatingRefreshToken: "rt-0" });
-  expect(storedTokens().refreshToken).toBeUndefined();
-  expect(endpoint.state.posts).toBe(0);
 });
 
 test("a lock held by a process that died does not block the next change", async () => {
@@ -180,4 +168,22 @@ process.kill(process.pid, "SIGKILL");`;
   await holder.exited;
   expect(holder.signalCode).toBe("SIGKILL");
   expect(await mcpFreshGrantHeader("Acme")).toBe("Bearer at-1");
+});
+
+test("a grant another process refreshed is read back after a no-op refresh", async () => {
+  await seed(310_000);
+  expect(mcpSharedGrantHeader("Acme")).toBeUndefined();
+  // Another process refreshes and writes the store; this one's cache is stale.
+  const store = JSON.parse(readFileSync(storePath, "utf8"));
+  store.Acme.shared = {
+    tokens: {
+      accessToken: "at-9",
+      refreshToken: "rt-9",
+      expiresAt: Date.now() + 300_000,
+    },
+    updatedAt: new Date().toISOString(),
+  };
+  writeFileSync(storePath, JSON.stringify(store));
+  expect(await mcpFreshGrantHeader("Acme")).toBe("Bearer at-9");
+  expect(endpoint.state.posts).toBe(0);
 });

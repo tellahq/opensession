@@ -50,13 +50,6 @@ interface OauthEndpoints {
 interface Grant {
   tokens: {
     accessToken: string;
-    /** Refresh token, under a name releases before the store lock never
-     *  read. A run host started on such a release can outlive a deploy and
-     *  refreshes without the lock; it only sees `refreshToken`, so with the
-     *  token stored here it leaves the grant alone. */
-    rotatingRefreshToken?: string;
-    /** Where releases before the store lock kept the refresh token. Read as
-     *  a fallback and moved to `rotatingRefreshToken` on the next change. */
     refreshToken?: string;
     /** ms epoch; absent = no known expiry. */
     expiresAt?: number;
@@ -110,18 +103,6 @@ function grantRef(
   const grant =
     slot.kind === "shared" ? auth?.shared : auth?.users?.[slot.teamName];
   return grant ? { ...slot, grant } : undefined;
-}
-
-function refreshTokenOf(grant: Grant): string | undefined {
-  return grant.tokens.rotatingRefreshToken ?? grant.tokens.refreshToken;
-}
-
-/** Move a legacy `refreshToken` to `rotatingRefreshToken`. True if changed. */
-function hideLegacyRefreshToken(grant: Grant): boolean {
-  const { refreshToken, ...rest } = grant.tokens;
-  if (!refreshToken) return false;
-  grant.tokens = { ...rest, rotatingRefreshToken: refreshTokenOf(grant) };
-  return true;
 }
 
 function writeGrant(entry: ServerAuth, slot: GrantSlot, grant: Grant): void {
@@ -227,21 +208,17 @@ async function acquireStoreLock(): Promise<FileHandle | undefined> {
 // Each change reads the store from disk under the lock, applies `fn` and
 // writes it back, one at a time, so two grant updates cannot drop each
 // other's change. `fn` may await (a refresh holds the lock across its token
-// request). Every write also moves legacy refresh tokens out of sight of
-// pre-lock releases (see Grant.tokens).
+// request). A change that writes nothing still publishes what it read, so a
+// token another process just refreshed is what the next sync read returns.
 let storeUpdate: Promise<unknown> = Promise.resolve();
 function updateStore<T>(fn: (store: Store) => T | Promise<T>): Promise<T> {
   const run = storeUpdate.then(async () => {
     const lock = await acquireStoreLock();
     try {
       const store = await readStoreUnderLock();
-      let migrated = false;
-      for (const auth of Object.values(store))
-        for (const slot of grantSlots(auth))
-          if (hideLegacyRefreshToken(grantRef(auth, slot)!.grant))
-            migrated = true;
       const result = await fn(store);
-      if (result !== (false as T) || migrated) await writeStore(store);
+      if (result !== (false as T)) await writeStore(store);
+      else publishJsonFile(STORE_PATH, store);
       return result;
     } finally {
       await lock?.close();
@@ -573,7 +550,7 @@ export async function completeMcpOauthFlow(
     const grant: Grant = {
       tokens: {
         accessToken: tok.accessToken,
-        ...(tok.refreshToken ? { rotatingRefreshToken: tok.refreshToken } : {}),
+        ...(tok.refreshToken ? { refreshToken: tok.refreshToken } : {}),
         ...(tok.expiresIn
           ? { expiresAt: Date.now() + tok.expiresIn * 1000 }
           : {}),
@@ -620,7 +597,7 @@ export async function completeMcpOauthFlow(
   const grant: Grant = {
     tokens: {
       accessToken: res.access_token,
-      ...(res.refresh_token ? { rotatingRefreshToken: res.refresh_token } : {}),
+      ...(res.refresh_token ? { refreshToken: res.refresh_token } : {}),
       ...(res.expires_in
         ? { expiresAt: Date.now() + res.expires_in * 1000 }
         : {}),
@@ -655,7 +632,7 @@ function refreshAheadMs(grant: Grant): number {
 function needsRefresh(grant: Grant): boolean {
   const { expiresAt } = grant.tokens;
   return (
-    !!refreshTokenOf(grant) &&
+    !!grant.tokens.refreshToken &&
     !!expiresAt &&
     expiresAt - Date.now() < refreshAheadMs(grant)
   );
@@ -718,7 +695,7 @@ async function requestRefresh(
   const { grant } = ref;
   const body = new URLSearchParams({
     grant_type: "refresh_token",
-    refresh_token: refreshTokenOf(grant)!,
+    refresh_token: grant.tokens.refreshToken!,
     client_id: auth.clientInfo.clientId,
   });
   if (auth.resource) body.set("resource", auth.resource);
@@ -752,7 +729,7 @@ async function requestRefresh(
     ...grant,
     tokens: {
       accessToken: res.access_token,
-      rotatingRefreshToken: res.refresh_token || refreshTokenOf(grant),
+      refreshToken: res.refresh_token || grant.tokens.refreshToken,
       ...(res.expires_in
         ? { expiresAt: Date.now() + res.expires_in * 1000 }
         : {}),
@@ -794,8 +771,6 @@ function ensureTicker(): void {
     refreshExpiringMcpGrants().catch(() => {});
   }, 2 * 60_000);
   g.__osMcpOauthTicker.unref?.();
-  // A write with nothing else to change still moves legacy refresh tokens.
-  updateStore(() => false).catch(() => {});
   refreshExpiringMcpGrants().catch(() => {});
 }
 
@@ -865,7 +840,7 @@ export async function mcpFreshGrantHeader(
   ensureTicker();
   const before = grantRef(readStore()[name], slot);
   if (!before) return undefined;
-  if (isExpired(before.grant) && refreshTokenOf(before.grant))
+  if (isExpired(before.grant) && before.grant.tokens.refreshToken)
     await refreshGrant(name, slot);
   return grantHeader(name, slot);
 }

@@ -21,7 +21,7 @@ import {
   toolsCacheKey,
   writeCachedTools,
 } from "./mcp-tools-cache";
-import { mcpGrantExists } from "./mcp-oauth";
+import { mcpFreshGrantHeader, mcpGrantExists } from "./mcp-oauth";
 import { mcpRelayUrl, mintMcpRelayToken } from "./mcp-relay";
 import type { InProcessMcpServer } from "./inprocess-mcp";
 import { RPC_TOOL_CALL_TIMEOUT_MS } from "./run-rpc-protocol";
@@ -392,12 +392,24 @@ export async function createMcpRuntime(opts: {
     let transport: Transport;
     if (cfg.type === "http" || cfg.type === "sse" || cfg.url) {
       const candidates = mcpGrantCandidates(name, opts);
-      // Any stored grant routes through the relay, even one whose access
-      // token just expired: the relay refreshes it per request, while a
-      // direct connection would go out with no Authorization at all.
-      const personal = candidates.find((user) => mcpGrantExists(name, user));
+      // The audit names the personal grant the relay will use: the first
+      // candidate whose token is valid, refreshed first if it had expired.
+      // One whose refresh fails is skipped here exactly as the relay skips
+      // it, rather than credited while the shared grant does the work.
+      let personal: string | undefined;
+      for (const user of candidates)
+        if (await mcpFreshGrantHeader(name, user)) {
+          personal = user;
+          break;
+        }
       if (personal) grantedBy.set(name, personal);
-      const hasGrant = !!personal || mcpGrantExists(name);
+      // Routing only needs a stored grant: even one whose token is expired
+      // goes through the relay, which refreshes per request, never out
+      // directly with no Authorization at all.
+      const hasGrant =
+        !!personal ||
+        mcpGrantExists(name) ||
+        candidates.some((user) => mcpGrantExists(name, user));
       let url = String(cfg.url);
       let headers = { ...((cfg.headers as Record<string, string>) || {}) };
       if (hasGrant) {
