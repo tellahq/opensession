@@ -149,7 +149,7 @@ function compactionNote(
 }
 
 /** SVG progress ring for how full the context window is. */
-function ContextRing({
+export function ContextRing({
   frac,
   tone,
   size = 14,
