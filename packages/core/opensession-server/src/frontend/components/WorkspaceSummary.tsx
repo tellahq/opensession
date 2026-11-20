@@ -24,6 +24,7 @@ import {
   useWorkspaceOverviewResource,
 } from "../hooks/useApiResources";
 import { useSessionPendingCreation } from "../hooks/useSessionPendingCreation";
+import { useDrawsNothing } from "../hooks/useDrawsNothing";
 import { PatchDiffs, PatchFileDiff } from "./DeferredDiff";
 import { patchFileNames } from "../lib/patch-file-names";
 import { assetPreviewKind, isVisualAsset } from "../lib/asset-preview";
@@ -328,6 +329,12 @@ export function WorkspaceSummary({
   const findColumn = (trigger: HTMLElement | null) => {
     if (trigger) setColumn(trigger.closest(".detail-pane"));
   };
+  /** The card's rows. Every section stands down when it has nothing to say,
+   *  so a session with no PR, changes, reviewers or files (a support triage
+   *  that only filed an issue) leaves none. The card then draws nothing
+   *  rather than an empty frame, and stays open for the first row to land. */
+  const [content, setContent] = useState<HTMLDivElement | null>(null);
+  const drawsNothing = useDrawsNothing(content);
   // One report of what is actually on screen, so the viewer's copy follows
   // every route in: the preference changing in another tab, the person opening
   // the card by hand, the pane narrowing under it.
@@ -448,7 +455,7 @@ export function WorkspaceSummary({
         // text it reads as a box drawn around them rather than the card's own
         // edge. Softened so the corner is what you see.
         ring="soft"
-        className={WS_SUMMARY_CARD}
+        className={cn(WS_SUMMARY_CARD, drawsNothing && "invisible")}
         // Take focus when someone opens the card, so the keyboard reaches its
         // controls. Not when it merely mounts already-open: the card is
         // pinned across sessions, and opening a session would otherwise land
@@ -465,6 +472,7 @@ export function WorkspaceSummary({
           browser={open ? body.browser : null}
           reviewMode={reviewMode}
           close={dismissAfterRouting}
+          contentRef={setContent}
         />
       </Popover.Popup>
     </Popover.Root>
@@ -495,8 +503,12 @@ export function WorkspaceSummaryBody({
   reviewMode = false,
   liveMedia = NO_LIVE_MEDIA,
   prGroupRef,
+  contentRef,
 }: Omit<Props, "anchor" | "onOpenChange" | "tabStripVisible"> & {
   close: () => void;
+  /** The element holding every row, for a host that hides its frame when
+   *  none render. */
+  contentRef?: React.Ref<HTMLDivElement>;
   /**
    * Pins the PR band to the top of the surrounding scroller, so the merge
    * action stays in reach while the content below it scrolls. The host owns
@@ -1272,6 +1284,7 @@ export function WorkspaceSummaryBody({
 
   return (
     <div
+      ref={contentRef}
       className={
         embedded
           ? "flex flex-col gap-2.5 [&_button]:min-h-11 [&_a]:min-h-11"
