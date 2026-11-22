@@ -22,6 +22,7 @@ import {
   replaceVisibleRepoOrder,
   setRepoOrder,
 } from "../lib/repo-order";
+import { createPinnedDragStore } from "../lib/pinned-drag-store";
 
 type PinDragMeta = {
   repo: string | null;
@@ -224,12 +225,11 @@ export function useSidebarDnd({ onSetStatus }: UseSidebarDndOptions) {
   };
 
   // Drag-to-reorder in the Pinned band. onReorder fires continuously during a
-  // drag, so the in-flight order lives in local state and only commits to the
-  // pins store on drop. pinDragKey marks the floating row; pinJustDragged
+  // drag, so the in-flight order lives in the drag store and only commits to
+  // the pins store on drop. Its dragKey marks the floating row; pinJustDragged
   // swallows the click that lands on the row right after a drop.
-  const [pinOrderDraft, setPinOrderDraft] = useState<string[] | null>(null);
+  const [pinDragStore] = useState(createPinnedDragStore);
   const pinOrderPending = useRef<string[] | null>(null);
-  const [pinDragKey, setPinDragKey] = useState<string | null>(null);
   const pinJustDragged = useRef(false);
   // While a Pinned row is mid-drag, the status lanes below double as drop
   // targets. The ref twins keep drag-end from reading a stale closure
@@ -331,7 +331,7 @@ export function useSidebarDnd({ onSetStatus }: UseSidebarDndOptions) {
       entries.map((entry) => [entry.key, entry] as const),
     );
     const commitPinReorder = () => {
-      setPinDragKey(null);
+      pinDragStore.set({ dragKey: null });
       pinJustDragged.current = true;
       // The drop's click fires synchronously after pointerup. Clear the flag
       // right after so it swallows only that click, not the next real one.
@@ -349,14 +349,14 @@ export function useSidebarDnd({ onSetStatus }: UseSidebarDndOptions) {
       // is deliberately a move, unlike Set status, which keeps the pin.
       if (laneDrop && dragMeta && dragMeta.sessions.length > 0) {
         pinOrderPending.current = null;
-        setPinOrderDraft(null);
+        pinDragStore.set({ draft: null });
         setPins(unpin(dragMeta.pinKeys));
         onSetStatus(dragMeta.sessions, laneDrop.lane);
         return;
       }
       const orderKeys = pinOrderPending.current;
       pinOrderPending.current = null;
-      setPinOrderDraft(null);
+      pinDragStore.set({ draft: null });
       if (!orderKeys) return;
       // Rewrite only slots occupied by visible entries. Pins filtered from
       // the band by archive, repo, or review state keep their exact positions
@@ -375,13 +375,13 @@ export function useSidebarDnd({ onSetStatus }: UseSidebarDndOptions) {
       // Whole-row y-drag fights touch scrolling and swipe gestures, so reorder
       // is desktop-only. Keep one row draggable because it can move to a lane.
       canDrag: !isPhone && entries.length > 0,
-      dragKey: pinDragKey,
+      dragStore: pinDragStore,
       onReorder: (keys: string[]) => {
         pinOrderPending.current = keys;
-        setPinOrderDraft(keys);
+        pinDragStore.set({ draft: keys });
       },
       onEntryDragStart: (entry: PersonalBandPinnedEntry) => {
-        setPinDragKey(entry.key);
+        pinDragStore.set({ dragKey: entry.key });
         const meta = {
           repo: entry.repo,
           sessions: entry.sessions,
@@ -418,7 +418,6 @@ export function useSidebarDnd({ onSetStatus }: UseSidebarDndOptions) {
     stopRepoAutoScroll,
     pins,
     replacePins: setPins,
-    pinOrderDraft,
     pinDragMeta,
     laneDropHover,
     sessionPinState,

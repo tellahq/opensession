@@ -17,7 +17,9 @@ test("personal and project bands own their render wrappers", () => {
   expect(sidebarSource).not.toContain("data-repo-id={project.repo}");
   expect(sidebarSource).not.toContain("repoLabel(project.repo)");
 
-  expect(personalBandSource).toContain("pinned.open && (");
+  expect(personalBandSource).toContain(
+    "pinned.open && <PinnedReorderList pinned={pinned} />",
+  );
   expect(personalBandSource).toContain("<Reorder.Group");
   expect(personalBandSource).toContain("dragListener={pinned.canDrag}");
 

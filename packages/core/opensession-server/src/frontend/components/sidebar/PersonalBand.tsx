@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useSyncExternalStore } from "react";
 import { Reorder } from "motion/react";
 import {
   SIDEBAR_GROUP,
@@ -17,6 +17,7 @@ import {
   SIDEBAR_STICKY_LANE,
   SIDEBAR_STUCK_BACKING,
 } from "../../lib/sidebar-classes";
+import type { PinnedDragStore } from "../../lib/pinned-drag-store";
 import type { PersonalBandPinnedEntry } from "../../lib/sidebar-types";
 import { cn } from "../../ui/cn";
 import { IconChevronDown, IconRobot } from "../icons";
@@ -25,7 +26,7 @@ interface PersonalBandPinned {
   entries: PersonalBandPinnedEntry[];
   open: boolean;
   canDrag: boolean;
-  dragKey: string | null;
+  dragStore: PinnedDragStore;
   onToggle: () => void;
   onReorder: (keys: string[]) => void;
   onEntryDragStart: (entry: PersonalBandPinnedEntry) => void;
@@ -104,38 +105,7 @@ export function PersonalBand({
               }}
             />
           </button>
-          {pinned.open && (
-            <Reorder.Group
-              as="div"
-              axis="y"
-              values={pinned.entries.map((entry) => entry.key)}
-              onReorder={pinned.onReorder}
-            >
-              {pinned.entries.map((entry) => (
-                <Reorder.Item
-                  as="div"
-                  key={entry.key}
-                  value={entry.key}
-                  dragListener={pinned.canDrag}
-                  transition={{ duration: 0 }}
-                  onDragStart={() => pinned.onEntryDragStart(entry)}
-                  onDrag={(event: MouseEvent | TouchEvent | PointerEvent) =>
-                    pinned.onEntryDrag(event)
-                  }
-                  onDragEnd={pinned.onEntryDragEnd}
-                  whileDrag={{ scale: 1.01 }}
-                  className={cn(
-                    SIDEBAR_PIN_ENTRY,
-                    pinned.dragKey && SIDEBAR_PIN_DRAG_ACTIVE,
-                    pinned.dragKey === entry.key && SIDEBAR_PIN_ENTRY_DRAGGING,
-                  )}
-                  onClickCapture={pinned.onEntryClickCapture}
-                >
-                  {entry.node}
-                </Reorder.Item>
-              ))}
-            </Reorder.Group>
-          )}
+          {pinned.open && <PinnedReorderList pinned={pinned} />}
         </div>
       )}
 
@@ -178,5 +148,57 @@ export function PersonalBand({
         </button>
       )}
     </>
+  );
+}
+
+/** The Pinned rows. It reads the in-flight drag from the store itself, so each
+ *  swap re-renders only this list. The rows arrive already rendered, and the
+ *  same elements are reused while the drag runs. */
+function PinnedReorderList({ pinned }: { pinned: PersonalBandPinned }) {
+  const { dragStore } = pinned;
+  const { draft, dragKey } = useSyncExternalStore(
+    dragStore.subscribe,
+    dragStore.get,
+    dragStore.get,
+  );
+  let entries = pinned.entries;
+  // Mid-drag, Motion's in-flight order wins until the drop commits it.
+  if (draft) {
+    const index = new Map(draft.map((key, i) => [key, i] as const));
+    entries = [...entries].sort(
+      (a, b) => (index.get(a.key) ?? Infinity) - (index.get(b.key) ?? Infinity),
+    );
+  }
+  return (
+    <Reorder.Group
+      as="div"
+      axis="y"
+      values={entries.map((entry) => entry.key)}
+      onReorder={pinned.onReorder}
+    >
+      {entries.map((entry) => (
+        <Reorder.Item
+          as="div"
+          key={entry.key}
+          value={entry.key}
+          dragListener={pinned.canDrag}
+          transition={{ duration: 0 }}
+          onDragStart={() => pinned.onEntryDragStart(entry)}
+          onDrag={(event: MouseEvent | TouchEvent | PointerEvent) =>
+            pinned.onEntryDrag(event)
+          }
+          onDragEnd={pinned.onEntryDragEnd}
+          whileDrag={{ scale: 1.01 }}
+          className={cn(
+            SIDEBAR_PIN_ENTRY,
+            dragKey && SIDEBAR_PIN_DRAG_ACTIVE,
+            dragKey === entry.key && SIDEBAR_PIN_ENTRY_DRAGGING,
+          )}
+          onClickCapture={pinned.onEntryClickCapture}
+        >
+          {entry.node}
+        </Reorder.Item>
+      ))}
+    </Reorder.Group>
   );
 }
