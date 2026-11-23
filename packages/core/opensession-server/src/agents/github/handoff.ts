@@ -56,6 +56,7 @@ import {
   pickHandoffOwner,
   reviewSatisfied,
 } from "./handoff-gates";
+import { prKey } from "./constants";
 import { canFixOwnPr } from "./pr-conflict";
 import {
   buildHandoffMessage,
@@ -96,13 +97,16 @@ export async function isHandoffActive(
 
 /**
  * Drop round tracking (PR closed, or a review came back satisfied). With
- * `expected`, only while the state is still that round: checked inside the
- * locked update, so a newer round recorded meanwhile survives.
+ * `expected`, only while the state is still that round and `reviewedSha` is
+ * still the newest finished review: both checked inside the locked update, so
+ * a newer round, or a newer review whose handoff is still queued, survives.
+ * PR-close cleanup passes neither and clears unconditionally.
  */
 export async function clearHandoff(
   prNumber: number,
   ghRepo?: string,
   expected?: Pick<HandoffState, "rounds" | "lastSha">,
+  reviewedSha?: string,
 ): Promise<void> {
   const s = await readPrState(prNumber, ghRepo);
   if (!s?.handoff) return;
@@ -111,6 +115,7 @@ export async function clearHandoff(
     s.headRef,
     (st) => {
       if (expected && !sameHandoffRound(st.handoff, expected)) return;
+      if (staleReview(reviewedSha, st.lastReviewedSha)) return;
       st.handoff = undefined;
     },
     ghRepo,
@@ -203,7 +208,9 @@ export async function maybeHandoffFindings(
 ): Promise<void> {
   // null = the review was skipped (dedup/lock) or died before producing a result.
   if (!handoffEnabled() || !review || review.error) return;
-  await serializeByKey(handoffQueues, `${pr.ghRepo || ""}#${pr.number}`, () =>
+  // Same key as the PR state file, so Slack- and webhook-triggered reviews of
+  // the default repo share one queue.
+  await serializeByKey(handoffQueues, prKey(pr.number, pr.ghRepo), () =>
     handoffReview(pr, review),
   );
 }
@@ -228,7 +235,8 @@ async function handoffReview(pr: PrRef, review: ReviewResult): Promise<void> {
           openFindingsNoticeNeeded(review, prior, settled),
         notify: () => notifyOpenFindings(pr, review),
         clear: async () => {
-          if (prior) await clearHandoff(pr.number, pr.ghRepo, prior);
+          if (prior)
+            await clearHandoff(pr.number, pr.ghRepo, prior, pr.headSha);
         },
       });
       return;
