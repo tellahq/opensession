@@ -5,7 +5,7 @@ import type { WSClientMessage, WSServerMessage } from "./types";
 
 /**
  * A PR action the session has been asked to carry out ("Fix checks" becomes
- * "Fixing…"). Kept outside the strip so the header strip and the workspace
+ * "Fixing"). Kept outside the strip so the header strip and the workspace
  * summary card, which swap in for each other as the card opens and closes,
  * show the same pending state instead of each forgetting the press.
  *
@@ -100,7 +100,7 @@ function update(key: string, next: PendingPrompt | null) {
  * Ask the session to carry out a PR action and show it as pending under
  * `key` until that prompt's turn is over.
  *
- * The button turns to "Fixing…" first and the prompt follows once that has
+ * The button turns to "Fixing" first and the prompt follows once that has
  * settled: the transcript's response to a sent prompt is a long task that
  * would otherwise freeze the morph in its first frames.
  */

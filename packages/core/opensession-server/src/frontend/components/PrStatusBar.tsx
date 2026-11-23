@@ -67,7 +67,6 @@ import { ContextMenu, Menu, MENU_ICON } from "../ui/menu";
 import { TextShimmer } from "../ui/text-shimmer";
 import { duration, ease } from "../ui/motion";
 import { sendPrPrompt, usePromptPending } from "../lib/pr-prompt-pending";
-import { PixelSpinner } from "./PixelSpinner";
 import { Skeleton, SkeletonBar } from "../ui/state";
 import { cn } from "../ui/cn";
 import { useSessionPendingCreation } from "../hooks/useSessionPendingCreation";
@@ -216,14 +215,15 @@ interface PrBarButtonProps extends Omit<
     | "purple-dashed"
     | "solid";
   icon?: React.ReactNode;
-  /** The session is carrying this action out: the glyph becomes the
-   *  generating wave and the label shimmers until the work is done. */
+  /** The session is carrying this action out: the glyph drops away and the
+   *  label shimmers until the work is done. The shimmer alone says it is
+   *  under way, so there is no spinner and no trailing ellipsis. */
   working?: boolean;
 }
 
 /** The label and glyph crossfade with a short rise, while the button's width
  *  glides to the new label's (a Motion layout animation on the button), so
- *  "Fix checks" turning into "Fixing…" reads as one control changing its mind
+ *  "Fix checks" turning into "Fixing" reads as one control changing its mind
  *  rather than a second button replacing it. */
 const SWAP_MOTION = {
   initial: { opacity: 0, y: 5, filter: "blur(2px)" },
@@ -250,7 +250,7 @@ function PrBarButton({
   children,
   ...props
 }: PrBarButtonProps) {
-  const glyph = working ? <PixelSpinner className="scale-[1.15]" /> : icon;
+  const glyph = working ? null : icon;
   // The label crossfades and the width glides when the work starts or ends.
   // Any other change of label (Merge to Merging…) is the same control, and
   // the strip moving around it is not this button's to animate, so the layout
@@ -304,8 +304,8 @@ function PrBarButton({
         // two things. Icon-only callers override px themselves, so this
         // never lands on a lone glyph.
         glyph && "gap-1 pl-[6.5px]",
-        // Pressed is still the state, not "unavailable": the wave and the
-        // shimmer say it is in hand, so it keeps its full colour.
+        // Pressed is still the state, not "unavailable": the shimmer says it
+        // is in hand, so it keeps its full colour.
         working && "disabled:opacity-100",
         className,
       )}
@@ -679,7 +679,7 @@ export function PrStatusBar({
 
   const headline = deriveHeadline(pr, git, prUnavailable);
 
-  // "Fixing…" lasts as long as the prompt the press sent: through the queue
+  // "Fixing" lasts as long as the prompt the press sent: through the queue
   // and its own turn (lib/pr-prompt-pending). Once the PR leaves the state the
   // action was for, the strip has moved on whatever the session is doing.
   const promptKey = `${sessionId}\u0000${pr?.url ?? targetRepo ?? ""}`;
@@ -996,11 +996,10 @@ export function PrStatusBar({
       </>
     );
   }
-  // Fix checks leads with the sparkle, and "Fixing…" with the wave. Both
-  // reach nearer their box's edge than the glyph padding allows for, so on
-  // the card the label sat 1.6px left of centre, and on the header's even
-  // padding as far right. These pads leave equal room either side of the ink
-  // and keep the button's width.
+  // Fix checks leads with the sparkle, which reaches nearer its box's edge
+  // than the glyph padding allows for, so on the card the label sat 1.6px
+  // left of centre, and on the header's even padding as far right. These
+  // pads leave equal room either side of the ink.
   const fixPad =
     variant === "header" ? "pl-[13px] pr-[15px]" : "pl-[8px] pr-[10.5px]";
   function renderActionButton(): React.ReactNode {
@@ -1012,12 +1011,7 @@ export function PrStatusBar({
             ? "secondary"
             : "status-red";
       return (
-        <PrBarButton
-          className={cn(actionBtn, headline.key === "failing" && fixPad)}
-          tone={tone}
-          working
-          disabled
-        >
+        <PrBarButton className={actionBtn} tone={tone} working disabled>
           <TextShimmer
             className={
               tone === "red"
@@ -1142,7 +1136,7 @@ export function PrStatusBar({
             tone="red"
             onClick={() =>
               promptSession(
-                "Resolving…",
+                "Resolving",
                 `The PR has merge conflicts with ${pr?.baseRefName || git?.baseBranch || "main"}. Rebase this branch on the latest origin/${pr?.baseRefName || git?.baseBranch || "main"}, resolve the conflicts, and push.`,
               )
             }
@@ -1163,7 +1157,7 @@ export function PrStatusBar({
             icon={<IconSparkle size={18} />}
             onClick={() =>
               promptSession(
-                "Fixing…",
+                "Fixing",
                 `Investigate the failing checks on PR #${pr?.number}, fix the failures, run the relevant tests, commit the changes, and push them.`,
               )
             }
@@ -1178,7 +1172,7 @@ export function PrStatusBar({
             tone="status-red"
             onClick={() =>
               promptSession(
-                "Addressing feedback…",
+                "Addressing feedback",
                 `Address the requested changes on PR #${pr?.number}, run the relevant tests, commit the changes, and push them.`,
               )
             }
@@ -1207,7 +1201,7 @@ export function PrStatusBar({
               tone="secondary"
               icon={<IconRocket size={18} />}
               title={`Push to ${ship?.target ?? "the default branch"} after the checks pass`}
-              onClick={() => promptSession("Shipping…", directShip.prompt)}
+              onClick={() => promptSession("Shipping", directShip.prompt)}
             >
               Ship
             </PrBarButton>
@@ -1219,7 +1213,7 @@ export function PrStatusBar({
             icon={<IconPullRequest size={18} />}
             onClick={() =>
               promptSession(
-                "Creating PR…",
+                "Creating PR",
                 "Commit any remaining work, push the branch, and open a PR for it.",
               )
             }
