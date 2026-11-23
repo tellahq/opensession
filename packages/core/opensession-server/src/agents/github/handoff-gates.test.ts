@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   handoffActive,
   handoffDecision,
+  openFindingsCount,
   openFindingsNoticeNeeded,
   pickHandoffOwner,
   reviewSatisfied,
@@ -35,6 +36,7 @@ describe("open findings notice gate", () => {
       openFindingsNoticeNeeded(
         { findings: 1, blocking: 0, confidence: 5 },
         undefined,
+        false,
       ),
     ).toBe(true);
   });
@@ -44,12 +46,14 @@ describe("open findings notice gate", () => {
       openFindingsNoticeNeeded(
         { findings: 0, blocking: 0, confidence: 5 },
         undefined,
+        false,
       ),
     ).toBe(false);
     expect(
       openFindingsNoticeNeeded(
         { findings: 1, blocking: 1, confidence: 5 },
         undefined,
+        false,
       ),
     ).toBe(false);
   });
@@ -59,8 +63,25 @@ describe("open findings notice gate", () => {
       openFindingsNoticeNeeded(
         { findings: 1, blocking: 0, confidence: 5 },
         { rounds: 2 },
+        true,
       ),
     ).toBe(false);
+  });
+
+  test("an undelivered wrap-up falls back to the notice, even with nothing new", () => {
+    expect(
+      openFindingsNoticeNeeded(
+        { findings: 0, blocking: 0, confidence: 5 },
+        { rounds: 2 },
+        false,
+      ),
+    ).toBe(true);
+    // The notice then counts the open threads; none means nothing is sent.
+    expect(
+      openFindingsCount(0, "- [@a · comment 1] a.ts:1 — x\n- [@b review] y"),
+    ).toBe(2);
+    expect(openFindingsCount(0, "")).toBe(0);
+    expect(openFindingsCount(3, "")).toBe(3);
   });
 });
 

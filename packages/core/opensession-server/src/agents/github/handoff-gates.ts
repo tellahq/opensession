@@ -27,14 +27,28 @@ export function reviewSatisfied(r: ReviewGateInput): boolean {
 /**
  * A review can pass with findings still open: no blocking ones, high enough
  * confidence. That starts no fix round, but the session that wrote the code
- * should still hear about them once. After fix rounds, the settled message
- * closes the loop instead.
+ * should still hear about them once. After fix rounds, a delivered settled
+ * message closes the loop instead. When that wrap-up could not go out (its
+ * round session is gone), the owner gets the notice even if this review filed
+ * nothing new, since earlier threads can still be open; notifyOpenFindings
+ * then sends it only if the unresolved-thread read is nonempty.
  */
 export function openFindingsNoticeNeeded(
   r: ReviewGateInput,
   prior: Pick<HandoffState, "rounds"> | undefined,
+  wrapUpSent: boolean,
 ): boolean {
-  return reviewSatisfied(r) && r.findings > 0 && !prior?.rounds;
+  if (!reviewSatisfied(r) || wrapUpSent) return false;
+  return r.findings > 0 || !!prior?.rounds;
+}
+
+/** Findings to report: the review's own count, else the open threads listed. */
+export function openFindingsCount(
+  reported: number,
+  findingsBlock: string,
+): number {
+  if (reported > 0) return reported;
+  return findingsBlock.split("\n").filter((l) => l.startsWith("- ")).length;
 }
 
 /** Per-PR handoff round tracking, persisted on GithubPrState. */

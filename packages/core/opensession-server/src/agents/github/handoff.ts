@@ -46,6 +46,7 @@ import { matchSessions, workspaceIdForRepo } from "./session-notify";
 import {
   handoffActive,
   handoffDecision,
+  openFindingsCount,
   openFindingsNoticeNeeded,
   type HandoffState,
   pickHandoffOwner,
@@ -191,10 +192,8 @@ export async function maybeHandoffFindings(
       const settled = await settleHandoff(pr, review, "passed");
       // A delivered wrap-up carries the open findings. When none went out
       // (no rounds, or the round session is gone), the owner gets the notice.
-      // Only a PR that never had rounds links the session on the PR, as
-      // before; the fallback owner may be a branch match the PR never named.
-      if (openFindingsNoticeNeeded(review, settled ? prior : undefined))
-        await notifyOpenFindings(pr, review, !prior?.rounds);
+      if (openFindingsNoticeNeeded(review, prior, settled))
+        await notifyOpenFindings(pr, review);
       return;
     }
     // A fixer (label auto-fix / simplify / mention reply) already owns the
@@ -317,7 +316,6 @@ export async function maybeHandoffFindings(
 async function notifyOpenFindings(
   pr: PrRef,
   review: ReviewResult,
-  linkSession: boolean,
 ): Promise<void> {
   // A fixer already owns the branch worktree and will see the same comments.
   if (isLockHeld("code", pr.number, pr.ghRepo)) return;
@@ -335,13 +333,16 @@ async function notifyOpenFindings(
   const findingsBlock = await fetchReviewFindings(pr.number, pr.ghRepo).catch(
     () => "",
   );
+  // A pass that filed nothing new is reported only for threads still open.
+  const findings = openFindingsCount(review.findings, findingsBlock);
+  if (!findings) return;
   const message = buildOpenFindingsMessage({
     prNumber: pr.number,
     title: pr.title,
     headRef: pr.headRef,
     reviewedSha: sha,
     repoFull,
-    findings: review.findings,
+    findings,
     confidence: review.confidence,
     findingsBlock,
   });
@@ -361,13 +362,15 @@ async function notifyOpenFindings(
     pr_number: pr.number,
     repo: repoFull,
     session_id: target.id,
-    findings: review.findings,
+    findings,
     deliver_status: res.status,
   });
+  // No session link: the owner may be a branch match the PR never named, and
+  // the summary comment can be public.
   await appendToSummary(
     pr,
     state.summaryCommentId,
-    `💬 ${review.findings} non-blocking finding${review.findings === 1 ? "" : "s"} → ${linkSession ? `[owning session](${uiSessionUrl(target.id)})` : "owning session"}`,
+    `💬 ${findings} non-blocking finding${findings === 1 ? "" : "s"} → owning session`,
   );
 }
 
