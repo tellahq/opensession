@@ -86,6 +86,20 @@ describe("handoff round decision", () => {
       "duplicate",
     );
   });
+
+  test("after the cap, each new reviewed commit is reported once", () => {
+    const capped = {
+      rounds: 3,
+      lastSha: "abc",
+      cappedAnnounced: true,
+      cappedSha: "def",
+    };
+    expect(handoffDecision(capped, "def", 3)).toBe("duplicate");
+    expect(handoffDecision(capped, "ghi", 3)).toBe("post-cap");
+    expect(handoffDecision({ ...capped, cappedSha: "ghi" }, "ghi", 3)).toBe(
+      "duplicate",
+    );
+  });
 });
 
 describe("handoff active window", () => {

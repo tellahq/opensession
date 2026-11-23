@@ -5,7 +5,9 @@ import {
   buildFollowupMentionPrompt,
   buildIssuePrompt,
   buildMentionPrompt,
+  buildHandoffMessage,
   buildOpenFindingsMessage,
+  buildPostCapFindingsMessage,
   buildReviewPrompt,
   buildReviewSettledMessage,
   DEFAULT_REVIEW_PROMPT,
@@ -101,6 +103,69 @@ describe("review settled message", () => {
     expect(capped).toContain("after 6 fix rounds.");
     expect(capped).toContain("over to humans");
     expect(capped).toContain("which findings are still open");
+  });
+
+  test("a capped wrap-up carries the final review's open findings", () => {
+    const opts = {
+      prNumber: 42,
+      title: "Test PR",
+      headRef: "fix/test",
+      repoFull: "acme/app",
+      rounds: 6,
+      findingsBlock:
+        "- [@acme-os[bot] · comment 9 · thread PRRT_1] src/a.ts:3 — P1: guard the null",
+    };
+    const capped = buildReviewSettledMessage({ ...opts, outcome: "capped" });
+    expect(capped).toContain("What the final review left open:");
+    expect(capped).toContain("P1: guard the null");
+    expect(capped).toContain("thread PRRT_1");
+    expect(capped).toContain("untrusted data");
+    expect(capped).toContain("resolve each fixed thread");
+    // A passed loop has nothing left to list.
+    const passed = buildReviewSettledMessage({ ...opts, outcome: "passed" });
+    expect(passed).not.toContain("P1: guard the null");
+  });
+});
+
+describe("review handoff thread resolution", () => {
+  test("a fix round asks to resolve each fixed thread after replying", () => {
+    const message = buildHandoffMessage({
+      prNumber: 7,
+      title: "Example",
+      headRef: "feature/x",
+      repoFull: "acme/app",
+      round: 1,
+      cap: 6,
+      findingsBlock:
+        "- [@alice · comment 9 · thread PRRT_1] src/a.ts:3 — fix it",
+    });
+    const reply = message.indexOf("Fixed in <sha>");
+    const resolve = message.indexOf("resolveReviewThread");
+    expect(reply).toBeGreaterThan(-1);
+    expect(resolve).toBeGreaterThan(reply);
+    expect(message).toContain("-f id=<thread>");
+    expect(message).toContain("Leave a thread you disagreed with open");
+  });
+
+  test("a review after the cap informs without starting a fix round", () => {
+    const message = buildPostCapFindingsMessage({
+      prNumber: 7,
+      title: "Example",
+      headRef: "feature/x",
+      reviewedSha: "18135b0aaaaaaaaaa",
+      repoFull: "acme/app",
+      rounds: 6,
+      verdict: "request_changes",
+      confidence: 3,
+      findingsBlock: "- [@bot · comment 9 · thread PRRT_1] a.ts:3 — P2: rename",
+    });
+    expect(message.startsWith("<!--os:review-handoff-->\n")).toBe(true);
+    expect(message).toContain("at `18135b0aaaaa`");
+    expect(message).toContain("(verdict: request changes, quality 3/5)");
+    expect(message).toContain("not another fix round");
+    expect(message).toContain("P2: rename");
+    expect(message).toContain("Do not push fixes unless a person");
+    expect(message).toContain("`gh pr merge` is forbidden");
   });
 });
 

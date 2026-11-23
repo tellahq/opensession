@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { PrInfo } from "../../server/pr-cache";
 import type { UnifiedSession } from "../../server/types";
-import { resolveHandoffOwner } from "./handoff";
+import { deliverCapFollowUp, resolveHandoffOwner } from "./handoff";
+import { handoffDecision, type HandoffState } from "./handoff-gates";
 
 const WORKSPACE = "acme-app";
 const OPENER = "os-opener";
@@ -148,5 +149,80 @@ describe("review handoff owner", () => {
       d,
     );
     expect(owner?.id).toBe("os-branch");
+  });
+});
+
+describe("review findings after the round cap", () => {
+  const FINDINGS =
+    "- [@acme-os[bot] · comment 9 · thread PRRT_1] src/a.ts:3 — P1: guard the null";
+
+  /** Runs reviews of `shas` through the gate and follow-up, keeping state. */
+  async function reviewAfterCap(shas: string[], failFirst = false) {
+    let handoff: HandoffState = {
+      rounds: 6,
+      lastSha: "r6",
+      sessionId: "os-rounds",
+    };
+    const sent: { to: string; message: string; deliveryId: string }[] = [];
+    let failures = failFirst ? 1 : 0;
+    for (const sha of shas) {
+      const decision = handoffDecision(handoff, sha, 6);
+      if (decision !== "capped" && decision !== "post-cap") continue;
+      await deliverCapFollowUp(
+        {
+          pr: { number: 9, title: "Example", headRef: "feature/x" },
+          review: { verdict: "request_changes", confidence: 3 },
+          decision,
+          sha,
+          repoFull: "acme/app",
+          handoff,
+          ownerId: OPENER,
+        },
+        {
+          fetchFindings: async () => FINDINGS,
+          deliver: async (to, message, deliveryId) => {
+            if (failures-- > 0) return { status: "error", message: "down" };
+            sent.push({ to, message, deliveryId });
+            return { status: "delivered" };
+          },
+          recordCapped: async (reviewed) => {
+            handoff = {
+              ...handoff,
+              cappedAnnounced: true,
+              cappedSha: reviewed,
+            };
+          },
+        },
+      );
+    }
+    return sent;
+  }
+
+  test("the capped wrap-up carries the final review's findings", async () => {
+    const [wrapUp] = await reviewAfterCap(["s1"]);
+    expect(wrapUp?.to).toBe("os-rounds");
+    expect(wrapUp?.message).toStartWith("<!--os:review-settled:capped-->");
+    expect(wrapUp?.message).toContain("P1: guard the null");
+  });
+
+  test("a later push's review delivers its findings once per commit", async () => {
+    const sent = await reviewAfterCap(["s1", "s1", "s2", "s2", "s3"]);
+    expect(sent.map((d) => d.deliveryId)).toEqual([
+      "github-review-settled:acme/app:9:capped:s1",
+      "github-review-post-cap:acme/app:9:s2",
+      "github-review-post-cap:acme/app:9:s3",
+    ]);
+    const notice = sent[1]!;
+    expect(notice.to).toBe(OPENER);
+    expect(notice.message).toStartWith("<!--os:review-handoff-->");
+    expect(notice.message).toContain("not another fix round");
+    expect(notice.message).toContain("P1: guard the null");
+  });
+
+  test("a failed delivery is retried by the next review of that commit", async () => {
+    const sent = await reviewAfterCap(["s1", "s1"], true);
+    expect(sent.map((d) => d.deliveryId)).toEqual([
+      "github-review-settled:acme/app:9:capped:s1",
+    ]);
   });
 });

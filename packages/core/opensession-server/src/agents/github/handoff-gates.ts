@@ -48,19 +48,30 @@ export interface HandoffState {
   deliveredAt?: string;
   /** The round-cap notice was posted on the PR (post it once). */
   cappedAnnounced?: boolean;
+  /** Head SHA of the last review whose findings reached the session after the
+   * cap (the capped wrap-up or a post-cap notice). One delivery per commit. */
+  cappedSha?: string;
 }
 
-export type HandoffDecision = "deliver" | "duplicate" | "capped";
+/**
+ * - deliver: start the next fix round.
+ * - duplicate: this commit's findings already reached the session.
+ * - capped: the cap was just reached; send the wrap-up with the findings.
+ * - post-cap: a later push was reviewed; tell the session, start no round.
+ */
+export type HandoffDecision = "deliver" | "duplicate" | "capped" | "post-cap";
 
-/** Should an unsatisfied review of `sha` start another fix round? */
+/** What should an unsatisfied review of `sha` do in the owning session? */
 export function handoffDecision(
   prior: HandoffState | undefined,
   sha: string,
   cap: number,
 ): HandoffDecision {
   if (prior && sha && prior.lastSha === sha) return "duplicate";
-  if ((prior?.rounds || 0) >= cap) return "capped";
-  return "deliver";
+  if ((prior?.rounds || 0) < cap) return "deliver";
+  if (!prior?.cappedAnnounced) return "capped";
+  if (sha && prior.cappedSha === sha) return "duplicate";
+  return "post-cap";
 }
 
 /**

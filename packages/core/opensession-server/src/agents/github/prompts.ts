@@ -285,6 +285,24 @@ function prCheckoutStep(repoFull: string, headRef: string): string {
 
 export const REVIEW_HANDOFF_SENTINEL = "<!--os:review-handoff-->";
 
+/**
+ * The findings section shared by every review message to the owning session:
+ * the unresolved threads (fetchReviewFindings), or where to read them when
+ * that fetch came back empty.
+ */
+function findingsSection(opts: {
+  prNumber: number;
+  repoFull: string;
+  findingsBlock: string;
+}): string {
+  return opts.findingsBlock.trim()
+    ? `Open review feedback (trusted reviewers only, unresolved threads only; inline items carry a \`comment <id>\` for thread replies and a \`thread <id>\` to resolve it):\n${opts.findingsBlock.trim()}\n\n${UNTRUSTED_FEEDBACK_RULE}`
+    : `The findings are on the PR. Read them with \`gh pr view ${opts.prNumber} --repo ${opts.repoFull} --comments\` and \`gh api repos/${opts.repoFull}/pulls/${opts.prNumber}/comments\`. ${UNTRUSTED_FEEDBACK_RULE}`;
+}
+
+/** The command that resolves one review thread by its node id. */
+const RESOLVE_THREAD_COMMAND = `gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' -f id=<thread>`;
+
 export function buildHandoffMessage(opts: {
   prNumber: number;
   title: string;
@@ -306,9 +324,7 @@ export function buildHandoffMessage(opts: {
   ]
     .filter(Boolean)
     .join(", ");
-  const findings = opts.findingsBlock.trim()
-    ? `Open review feedback (trusted reviewers only; inline items carry a \`comment <id>\` for thread replies):\n${opts.findingsBlock.trim()}\n\n${UNTRUSTED_FEEDBACK_RULE}`
-    : `The findings are on the PR — read them with \`gh pr view ${opts.prNumber} --repo ${opts.repoFull} --comments\` and \`gh api repos/${opts.repoFull}/pulls/${opts.prNumber}/comments\`. ${UNTRUSTED_FEEDBACK_RULE}`;
+  const findings = findingsSection(opts);
   const remaining = opts.cap - opts.round;
 
   const reviewedSha = opts.reviewedSha ? opts.reviewedSha.slice(0, 12) : "";
@@ -323,7 +339,8 @@ Do this now:
 2. Address every actionable finding from a trusted author. If you disagree with one, leave the code unchanged and reply in that thread explaining why — never silently skip.
 3. Commit (stage specific files) and push: \`git push origin HEAD:${opts.headRef}\`.
 4. Reply in each addressed inline thread with what you did, e.g. \`gh api repos/${opts.repoFull}/pulls/${opts.prNumber}/comments/<id>/replies -f body='Fixed in <sha>'\`.
-5. NEVER merge the PR (\`gh pr merge\` is forbidden) and never force-push.
+5. Then resolve each thread you fixed: \`${RESOLVE_THREAD_COMMAND}\`. Leave a thread you disagreed with open, so its reviewer sees your reply. Resolved threads drop out of the next round's list.
+6. NEVER merge the PR (\`gh pr merge\` is forbidden) and never force-push.
 
 The review re-runs automatically after your push. ${
     remaining > 0
@@ -351,9 +368,7 @@ export function buildOpenFindingsMessage(opts: {
   const count = `${opts.findings} non-blocking finding${opts.findings === 1 ? "" : "s"}`;
   const quality =
     typeof opts.confidence === "number" ? `, quality ${opts.confidence}/5` : "";
-  const findings = opts.findingsBlock.trim()
-    ? `Open review feedback (trusted reviewers only; inline items carry a \`comment <id>\` for thread replies):\n${opts.findingsBlock.trim()}\n\n${UNTRUSTED_FEEDBACK_RULE}`
-    : `The findings are on the PR. Read them with \`gh pr view ${opts.prNumber} --repo ${opts.repoFull} --comments\` and \`gh api repos/${opts.repoFull}/pulls/${opts.prNumber}/comments\`. ${UNTRUSTED_FEEDBACK_RULE}`;
+  const findings = findingsSection(opts);
   const reviewedSha = opts.reviewedSha ? opts.reviewedSha.slice(0, 12) : "";
   return `${REVIEW_HANDOFF_SENTINEL}
 💬 This session's PR #${opts.prNumber} “${opts.title}” (branch \`${opts.headRef}\`) passed review${quality}, with ${count} left open. Nothing blocks a merge, but you wrote this code, so decide on each one.
@@ -363,8 +378,8 @@ ${findings}
 Then:
 0. ${prCheckoutStep(opts.repoFull, opts.headRef)}
 1. Sync the branch: \`git pull origin ${opts.headRef}\`.${reviewedSha ? ` These findings describe \`${reviewedSha}\`; if the branch has moved on, check they still apply.` : ""}
-2. Fix each finding that is right and cheap to fix within this PR's scope. Commit (stage specific files) and push: \`git push origin HEAD:${opts.headRef}\`.
-3. For each one you leave, reply in its thread saying why, e.g. \`gh api repos/${opts.repoFull}/pulls/${opts.prNumber}/comments/<id>/replies -f body='...'\`.
+2. Fix each finding that is right and cheap to fix within this PR's scope. Commit (stage specific files) and push: \`git push origin HEAD:${opts.headRef}\`. Reply \`Fixed in <sha>\` in each fixed thread, then resolve it: \`${RESOLVE_THREAD_COMMAND}\`.
+3. For each one you leave, reply in its thread saying why, e.g. \`gh api repos/${opts.repoFull}/pulls/${opts.prNumber}/comments/<id>/replies -f body='...'\`, and leave it open.
 4. NEVER merge the PR (\`gh pr merge\` is forbidden) and never force-push.`;
 }
 
@@ -395,6 +410,9 @@ export function buildReviewSettledMessage(opts: {
   rounds: number;
   outcome: ReviewSettledOutcome;
   confidence?: number;
+  /** The final review's open findings. Only a capped loop has any to show:
+   * without them the session cannot tell what is left. */
+  findingsBlock?: string;
 }): string {
   const rounds = `${opts.rounds} fix round${opts.rounds === 1 ? "" : "s"}`;
   const quality =
@@ -408,8 +426,12 @@ export function buildReviewSettledMessage(opts: {
     ? `review passed, CI (\`gh pr checks ${opts.prNumber} --repo ${opts.repoFull}\`), and whether anything still blocks a merge`
     : `which findings are still open, why you left them, and what CI says (\`gh pr checks ${opts.prNumber} --repo ${opts.repoFull}\`)`;
 
+  const open =
+    !passed && opts.findingsBlock?.trim()
+      ? `\n\nWhat the final review left open:\n${findingsSection({ ...opts, findingsBlock: opts.findingsBlock })}`
+      : "";
   return `${reviewSettledSentinel(opts.outcome)}
-${lead}
+${lead}${open}
 
 Write a short wrap-up for whoever comes back to this thread cold. Your earlier messages report each round; this one is the current state:
 1. Where things stand: ${standing}.
@@ -417,7 +439,38 @@ Write a short wrap-up for whoever comes back to this thread cold. Your earlier m
 3. Where to look: ${prUrl}, plus the preview URL if this branch has one.
 4. Anything a person still has to decide or do.
 
-Keep it short. Do not push new commits, re-run the review, or merge (\`gh pr merge\` is forbidden).`;
+Keep it short. Do not push new commits, re-run the review, or merge (\`gh pr merge\` is forbidden)${passed ? "" : ". If a person asks you to fix what is left, reply and resolve each fixed thread as in the fix rounds"}.`;
+}
+
+/**
+ * A review of a new push after the round cap (handoff.ts). The loop is over,
+ * so this starts no fix round, but the session still hears what the latest
+ * review left open instead of nothing. One per reviewed commit.
+ */
+export function buildPostCapFindingsMessage(opts: {
+  prNumber: number;
+  title: string;
+  headRef: string;
+  reviewedSha?: string;
+  repoFull: string;
+  rounds: number;
+  verdict?: string;
+  confidence?: number;
+  findingsBlock: string;
+}): string {
+  const verdict = [
+    opts.verdict ? `verdict: ${opts.verdict.replace(/_/g, " ")}` : "",
+    typeof opts.confidence === "number" ? `quality ${opts.confidence}/5` : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
+  const reviewedSha = opts.reviewedSha ? opts.reviewedSha.slice(0, 12) : "";
+  return `${REVIEW_HANDOFF_SENTINEL}
+📋 This session's PR #${opts.prNumber} “${opts.title}” (branch \`${opts.headRef}\`) was reviewed again${reviewedSha ? ` at \`${reviewedSha}\`` : ""} and is still not merge-ready${verdict ? ` (${verdict})` : ""}. The automatic loop stopped after ${opts.rounds} fix round${opts.rounds === 1 ? "" : "s"}, so this is for your information, not another fix round.
+
+${findingsSection(opts)}
+
+Say in one or two lines which of these are new since your last report. Do not push fixes unless a person in this thread asks for them; if one does, reply \`Fixed in <sha>\` in each fixed thread and resolve it: \`${RESOLVE_THREAD_COMMAND}\`. Never merge the PR (\`gh pr merge\` is forbidden).`;
 }
 
 export type MergeabilityState = "conflicting" | "clear" | "pending";
