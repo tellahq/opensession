@@ -20,7 +20,7 @@ import { useWorkspaceRecord } from "../../lib/workspace-records";
 import type { CommentThread, UnifiedSession, Workspace } from "../../lib/types";
 import { cn } from "../../ui/cn";
 import { ListRow, listRowClass } from "../../ui/list-row";
-import { Segmented, SegmentedOption } from "../../ui/segmented";
+import { UnderlineTabs } from "../../ui/tabs";
 import { EmptyState } from "../../ui/state";
 import {
   IconArrowUpRight,
@@ -37,9 +37,6 @@ import { ThreadRow } from "./ThreadRow";
 import { WorkspaceCard } from "./WorkspaceCard";
 
 type PanelTab = "threads" | "prs" | "comments" | "artifacts";
-
-/** Four tabs share a phone's width: each its own size plus a share of the rest. */
-const TAB = "flex-auto phone:px-1.5";
 
 /** The file a coordinator is told to keep current (server/coordinator.ts),
  *  and its name from before coordinator mode was a session setting. */
@@ -113,34 +110,44 @@ function ThreadsOverview({
         />
       )}
 
-      <Segmented
-        label="Threads panel"
-        value={tab}
-        onValueChange={(value) => {
-          if (
-            value === "threads" ||
-            value === "prs" ||
-            value === "comments" ||
-            value === "artifacts"
-          )
-            setTab(value);
-        }}
-        size="sm"
-        className="mx-2 flex"
-      >
-        <SegmentedOption value="threads" className={TAB}>
-          Threads {threads.length > 0 && <Count n={threads.length} />}
-        </SegmentedOption>
-        <SegmentedOption value="prs" className={TAB}>
-          PRs {prs.length > 0 && <Count n={prs.length} />}
-        </SegmentedOption>
-        <SegmentedOption value="comments" className={TAB}>
-          Comments {comments.open > 0 && <Count n={comments.open} />}
-        </SegmentedOption>
-        <SegmentedOption value="artifacts" className={TAB}>
-          Artifacts {artifacts.length > 0 && <Count n={artifacts.length} />}
-        </SegmentedOption>
-      </Segmented>
+      <div className="-mx-3 border-b border-divider px-3">
+        <UnderlineTabs.Root
+          label="Threads panel"
+          value={tab}
+          onValueChange={(value) => {
+            if (
+              value === "threads" ||
+              value === "prs" ||
+              value === "comments" ||
+              value === "artifacts"
+            )
+              setTab(value);
+          }}
+          className="h-9"
+        >
+          <UnderlineTabs.Tab
+            value="threads"
+            count={threads.length || undefined}
+          >
+            Threads
+          </UnderlineTabs.Tab>
+          <UnderlineTabs.Tab value="prs" count={prs.length || undefined}>
+            PRs
+          </UnderlineTabs.Tab>
+          <UnderlineTabs.Tab
+            value="comments"
+            count={comments.open || undefined}
+          >
+            Comments
+          </UnderlineTabs.Tab>
+          <UnderlineTabs.Tab
+            value="artifacts"
+            count={artifacts.length || undefined}
+          >
+            Artifacts
+          </UnderlineTabs.Tab>
+        </UnderlineTabs.Root>
+      </div>
 
       {tab === "threads" && (
         <ThreadGroups
