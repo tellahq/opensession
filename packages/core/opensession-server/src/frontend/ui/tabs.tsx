@@ -79,3 +79,74 @@ function Tab({
 }
 
 export const UnderlineTabs = { Root, Tab };
+
+/**
+ * Plate tabs: the pages of a panel, drawn like the side panel's own tab
+ * strip. An icon and a word on a soft plate; the page you are on keeps the
+ * wash. A blue dot on the icon says that page has something waiting on
+ * someone. Underline tabs sit on a divider; these stand on their own.
+ */
+function PlateRoot<T extends string>({
+  value,
+  onValueChange,
+  label,
+  className,
+  children,
+}: {
+  value: T;
+  onValueChange: (value: T) => void;
+  label: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <BaseTabs.Root
+      value={value}
+      onValueChange={(next: T) => onValueChange(next)}
+      className={className}
+    >
+      <BaseTabs.List
+        aria-label={label}
+        className="flex min-w-0 items-center gap-1"
+      >
+        {children}
+      </BaseTabs.List>
+    </BaseTabs.Root>
+  );
+}
+
+function PlateTab({
+  value,
+  icon,
+  attention,
+  children,
+}: {
+  value: string;
+  icon: React.ReactNode;
+  attention?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <BaseTabs.Tab
+      value={value}
+      className={cn(
+        "focus-ring flex min-w-0 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border-none bg-transparent px-2 py-1",
+        "text-label text-dim transition-colors hover:bg-hover hover:text-fg phone:min-h-11",
+        "data-[active]:bg-hover data-[active]:text-fg",
+      )}
+    >
+      <span className="relative inline-flex shrink-0 text-dim">
+        {icon}
+        {attention && (
+          <span
+            aria-hidden="true"
+            className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-blue ring-2 ring-[var(--panel-surface)]"
+          />
+        )}
+      </span>
+      <span className="truncate">{children}</span>
+    </BaseTabs.Tab>
+  );
+}
+
+export const PlateTabs = { Root: PlateRoot, Tab: PlateTab };

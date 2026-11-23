@@ -25,13 +25,16 @@ import type {
 } from "../../lib/types";
 import { cn } from "../../ui/cn";
 import { ListRow, listRowClass } from "../../ui/list-row";
-import { UnderlineTabs } from "../../ui/tabs";
+import { PlateTabs } from "../../ui/tabs";
 import { EmptyState } from "../../ui/state";
 import {
   IconArrowUpRight,
   IconChevronRight,
   IconFile,
+  IconFileText2,
+  IconListCircles,
   IconMessage,
+  IconMessages,
 } from "../icons";
 import { UserAvatar } from "../UserAvatar";
 import { THREAD_CAPTION } from "./thread-classes";
@@ -141,40 +144,31 @@ function ThreadsOverview({
         />
       )}
 
-      <div className="-mx-3 border-b border-divider px-3">
-        <UnderlineTabs.Root
-          label="Threads panel"
-          value={tab}
-          onValueChange={(value) => {
-            if (
-              value === "threads" ||
-              value === "comments" ||
-              value === "artifacts"
-            )
-              setTab(value);
-          }}
-          className="h-9"
+      <PlateTabs.Root
+        label="Threads panel"
+        value={tab}
+        onValueChange={setTab}
+        className="-mx-1"
+      >
+        <PlateTabs.Tab
+          value="threads"
+          icon={<IconListCircles size={20} />}
+          // Blue, like a blocked thread's dot: one is waiting on someone.
+          attention={threads.some((t) => threadState(t) === "blocked")}
         >
-          <UnderlineTabs.Tab
-            value="threads"
-            count={threads.length || undefined}
-          >
-            Threads
-          </UnderlineTabs.Tab>
-          <UnderlineTabs.Tab
-            value="comments"
-            count={comments.open || undefined}
-          >
-            Comments
-          </UnderlineTabs.Tab>
-          <UnderlineTabs.Tab
-            value="artifacts"
-            count={artifacts.length || undefined}
-          >
-            Artifacts
-          </UnderlineTabs.Tab>
-        </UnderlineTabs.Root>
-      </div>
+          Threads
+        </PlateTabs.Tab>
+        <PlateTabs.Tab
+          value="comments"
+          icon={<IconMessages size={20} />}
+          attention={comments.open > 0}
+        >
+          Comments
+        </PlateTabs.Tab>
+        <PlateTabs.Tab value="artifacts" icon={<IconFileText2 size={20} />}>
+          Artifacts
+        </PlateTabs.Tab>
+      </PlateTabs.Root>
 
       {tab === "threads" && (
         <>
