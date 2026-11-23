@@ -4,9 +4,13 @@ import { fetchThreadsApi } from "../../lib/api/threads";
 import { threadPreview } from "../../lib/comment-threads";
 import { repoLabel } from "../../lib/repo-label";
 import { useSessionRecords } from "../../lib/session-records";
+import { refState, refTone } from "../../lib/pr-refs";
+import { PR_SIB_DOT_BG, PR_STATE_TEXT } from "../../lib/pr-tone-classes";
 import {
+  coordinatedPrs,
   groupThreads,
   sessionThreads,
+  type CoordinatedPr,
   THREAD_STATE_LABEL,
   threadState,
 } from "../../lib/session-threads";
@@ -15,10 +19,10 @@ import { useWorkspaceRecord } from "../../lib/workspace-records";
 import type { CommentThread, UnifiedSession, Workspace } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
-import { ListRow } from "../../ui/list-row";
+import { ListRow, listRowClass } from "../../ui/list-row";
 import { Segmented, SegmentedOption } from "../../ui/segmented";
 import { EmptyState } from "../../ui/state";
-import { IconFile, IconMessage, IconGear } from "../icons";
+import { IconArrowUpRight, IconFile, IconGear, IconMessage } from "../icons";
 import { RepoTile } from "../RepoTile";
 import { UserAvatar } from "../UserAvatar";
 import { THREAD_CAPTION } from "./thread-classes";
@@ -29,7 +33,10 @@ import { useIsPhone } from "../../hooks/useIsPhone";
 import { useIsCoordinating } from "../../lib/coordinator-mode";
 import { ThreadRow } from "./ThreadRow";
 
-type PanelTab = "threads" | "comments" | "artifacts";
+type PanelTab = "threads" | "prs" | "comments" | "artifacts";
+
+/** Four tabs share a phone's width: each its own size plus a share of the rest. */
+const TAB = "flex-auto phone:px-1.5";
 
 /** The file a coordinator is told to keep current (server/coordinator.ts),
  *  and its name from before coordinator mode was a session setting. */
@@ -83,6 +90,7 @@ function ThreadsOverview({
 }) {
   const sessions = useSessionRecords();
   const threads = sessionThreads(sessions, rootId);
+  const prs = coordinatedPrs(sessions, rootId);
   const phone = useIsPhone();
   const [tab, setTab] = useState<PanelTab>("threads");
   const comments = usePanelComments(rootId);
@@ -118,21 +126,25 @@ function ThreadsOverview({
         onValueChange={(value) => {
           if (
             value === "threads" ||
+            value === "prs" ||
             value === "comments" ||
             value === "artifacts"
           )
             setTab(value);
         }}
         size="sm"
-        className="mx-2"
+        className="mx-2 flex"
       >
-        <SegmentedOption value="threads">
+        <SegmentedOption value="threads" className={TAB}>
           Threads {threads.length > 0 && <Count n={threads.length} />}
         </SegmentedOption>
-        <SegmentedOption value="comments">
+        <SegmentedOption value="prs" className={TAB}>
+          PRs {prs.length > 0 && <Count n={prs.length} />}
+        </SegmentedOption>
+        <SegmentedOption value="comments" className={TAB}>
           Comments {comments.open > 0 && <Count n={comments.open} />}
         </SegmentedOption>
-        <SegmentedOption value="artifacts">
+        <SegmentedOption value="artifacts" className={TAB}>
           Artifacts {artifacts.length > 0 && <Count n={artifacts.length} />}
         </SegmentedOption>
       </Segmented>
@@ -146,6 +158,9 @@ function ThreadsOverview({
             onOpenSession?.(id);
           }}
         />
+      )}
+      {tab === "prs" && (
+        <PrList prs={prs} rootId={rootId} primaryRepo={workspace?.repo} />
       )}
       {tab === "comments" && <CommentList threads={comments.threads} />}
       {tab === "artifacts" && (
@@ -282,6 +297,70 @@ function ThreadGroups({
           ))}
         </section>
       ))}
+    </div>
+  );
+}
+
+/** The coordinator's and its threads' PRs, each a link to the PR. */
+function PrList({
+  prs,
+  rootId,
+  primaryRepo,
+}: {
+  prs: CoordinatedPr[];
+  rootId: string;
+  primaryRepo?: string;
+}) {
+  if (prs.length === 0)
+    return (
+      <EmptyState className="py-8">
+        No PRs yet. Every PR this conversation or its threads open shows up
+        here.
+      </EmptyState>
+    );
+  return (
+    <div className="flex flex-col">
+      {prs.map(({ pr, session }) => {
+        const tone = refTone(pr);
+        const otherRepo = pr.repo !== primaryRepo;
+        return (
+          <a
+            key={`${pr.repo}#${pr.number}`}
+            href={pr.url}
+            target="_blank"
+            rel="noreferrer"
+            className={cn(listRowClass(), "group no-underline")}
+            title={pr.title}
+          >
+            <span
+              aria-hidden="true"
+              className={cn(
+                "mt-[7px] size-2 shrink-0 rounded-full",
+                PR_SIB_DOT_BG[tone],
+              )}
+            />
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="truncate text-label font-medium text-fg">
+                <span className="tabular-nums text-dim">#{pr.number}</span>{" "}
+                {pr.title || pr.branch}
+              </span>
+              <span className="truncate text-meta text-dim">
+                <span className={PR_STATE_TEXT[tone]}>{refState(pr)}</span>
+                {otherRepo && ` · ${repoLabel(pr.repo)}`}
+                {session.id !== rootId && session.title !== pr.title && (
+                  <span className="text-faint"> · {session.title}</span>
+                )}
+              </span>
+            </span>
+            {pr.url && (
+              <IconArrowUpRight
+                size={16}
+                className="mt-0.5 shrink-0 text-faint opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+              />
+            )}
+          </a>
+        );
+      })}
     </div>
   );
 }

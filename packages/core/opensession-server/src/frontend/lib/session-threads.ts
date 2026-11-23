@@ -9,7 +9,14 @@ import {
   unwrapMcpDispatcher,
 } from "@tellahq/opensession-protocol/tool-presentation";
 import { z } from "zod";
-import type { TranscriptEntry, UnifiedSession, Workspace } from "./types";
+import { refTone, type PrTone } from "./pr-refs";
+import { canonicalPrUrl, sessionPrRefs } from "./session-prs";
+import type {
+  SessionPrRef,
+  TranscriptEntry,
+  UnifiedSession,
+  Workspace,
+} from "./types";
 
 /** Where a thread stands, in the order the panel lists them. */
 export type ThreadState = "blocked" | "ready" | "working" | "idle" | "shipped";
@@ -71,6 +78,52 @@ export function sessionThreads(
       }
   }
   return out.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}
+
+/** A PR one of the coordinated sessions carries, and the session it is on. */
+export interface CoordinatedPr {
+  pr: SessionPrRef & { number: number };
+  session: UnifiedSession;
+}
+
+/** Open PRs that need someone first, then the ones waiting, then landed. */
+const PR_PANEL_RANK: Record<PrTone, number> = {
+  red: 0,
+  yellow: 1,
+  green: 2,
+  muted: 3,
+  purple: 4,
+};
+
+/**
+ * Every PR the coordinator and its threads carry, once each. A PR several
+ * sessions share (siblings inherit each other's as "discovered" refs) is
+ * listed under the session that opened it. Closed PRs go last.
+ */
+export function coordinatedPrs(
+  sessions: readonly UnifiedSession[],
+  rootId: string,
+): CoordinatedPr[] {
+  const root = sessions.find((s) => s.id === rootId);
+  const owners = [...(root ? [root] : []), ...sessionThreads(sessions, rootId)];
+  const byKey = new Map<string, CoordinatedPr>();
+  for (const session of owners)
+    for (const ref of sessionPrRefs(session)) {
+      if (ref.number == null) continue;
+      const pr = { ...ref, number: ref.number };
+      const key = canonicalPrUrl(ref.url) ?? `${ref.repo}#${ref.number}`;
+      const seen = byKey.get(key);
+      if (
+        !seen ||
+        (seen.pr.source === "discovered" && ref.source !== "discovered")
+      )
+        byKey.set(key, { pr, session });
+    }
+  const rank = ({ pr }: CoordinatedPr) =>
+    pr.state === "CLOSED" ? 5 : PR_PANEL_RANK[refTone(pr)];
+  return [...byKey.values()].sort(
+    (a, b) => rank(a) - rank(b) || b.pr.number - a.pr.number,
+  );
 }
 
 export function threadState(session: UnifiedSession): ThreadState {

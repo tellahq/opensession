@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  coordinatedPrs,
   groupThreads,
   isCoordinating,
   sessionThreads,
@@ -150,5 +151,56 @@ describe("spawnedThreadId", () => {
         "Depth limit reached",
       ),
     ).toBeNull();
+  });
+});
+
+describe("coordinated PRs", () => {
+  test("lists the root's and its threads' PRs once, needing attention first", () => {
+    const shared = {
+      repo: "acme",
+      branch: "feature",
+      number: 7,
+      url: "https://github.com/org/acme/pull/7",
+      state: "OPEN" as const,
+    };
+    const prs = coordinatedPrs(
+      [
+        session("bks-root", {
+          parentSessionId: undefined,
+          prs: [{ ...shared, source: "discovered" }],
+        }),
+        session("thread-a", { prs: [{ ...shared, source: "primary" }] }),
+        session("thread-b", {
+          prs: [
+            {
+              repo: "acme",
+              branch: "fix",
+              number: 9,
+              state: "OPEN",
+              source: "primary",
+              checks: { total: 2, passed: 1, failed: 1, pending: 0 },
+            },
+            {
+              repo: "acme",
+              branch: "old",
+              number: 3,
+              state: "MERGED",
+              source: "linked",
+            },
+            { repo: "acme", branch: "bare", source: "attached" },
+          ],
+        }),
+        session("elsewhere", {
+          parentSessionId: "bks-other",
+          prs: [{ repo: "acme", branch: "x", number: 1, source: "primary" }],
+        }),
+      ],
+      "bks-root",
+    );
+    expect(prs.map(({ pr, session }) => [pr.number, session.id])).toEqual([
+      [9, "thread-b"],
+      [7, "thread-a"],
+      [3, "thread-b"],
+    ]);
   });
 });
