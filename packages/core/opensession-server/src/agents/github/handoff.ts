@@ -181,16 +181,20 @@ export async function maybeHandoffFindings(
       const prior = (await readPrState(pr.number, pr.ghRepo))?.handoff;
       // The cap stands until the PR closes: a pass after it neither clears
       // the rounds nor goes only to the round session. The current owner
-      // hears it once per commit, with any findings it left open.
-      if (prior?.cappedAnnounced) {
+      // hears it once per commit, with any findings it left open. Judged by
+      // the round count, not cappedAnnounced: that is set only once a capped
+      // wrap-up is delivered, and a failed delivery must not reopen the cap.
+      if ((prior?.rounds || 0) >= MAX_ROUNDS) {
         await passedAfterCap(pr, review);
         return;
       }
       const settled = await settleHandoff(pr, review, "passed");
       // A delivered wrap-up carries the open findings. When none went out
       // (no rounds, or the round session is gone), the owner gets the notice.
+      // Only a PR that never had rounds links the session on the PR, as
+      // before; the fallback owner may be a branch match the PR never named.
       if (openFindingsNoticeNeeded(review, settled ? prior : undefined))
-        await notifyOpenFindings(pr, review);
+        await notifyOpenFindings(pr, review, !prior?.rounds);
       return;
     }
     // A fixer (label auto-fix / simplify / mention reply) already owns the
@@ -313,6 +317,7 @@ export async function maybeHandoffFindings(
 async function notifyOpenFindings(
   pr: PrRef,
   review: ReviewResult,
+  linkSession: boolean,
 ): Promise<void> {
   // A fixer already owns the branch worktree and will see the same comments.
   if (isLockHeld("code", pr.number, pr.ghRepo)) return;
@@ -362,7 +367,7 @@ async function notifyOpenFindings(
   await appendToSummary(
     pr,
     state.summaryCommentId,
-    `💬 ${review.findings} non-blocking finding${review.findings === 1 ? "" : "s"} → [owning session](${uiSessionUrl(target.id)})`,
+    `💬 ${review.findings} non-blocking finding${review.findings === 1 ? "" : "s"} → ${linkSession ? `[owning session](${uiSessionUrl(target.id)})` : "owning session"}`,
   );
 }
 
@@ -389,13 +394,13 @@ async function settleHandoff(
   const repoFull =
     pr.ghRepo || defaultRepo(configuredRepos(await getConfigAsync())).ghRepo;
   const sha = state?.lastReviewedSha || pr.headSha;
-  // A review can pass with non-blocking findings open. The fix-round session
-  // gets no separate notice for them (openFindingsNoticeNeeded), so the
-  // wrap-up carries them.
-  const findingsBlock =
-    review.findings > 0
-      ? await fetchReviewFindings(pr.number, pr.ghRepo).catch(() => "")
-      : "";
+  // A review can pass with findings open: its own non-blocking ones, or an
+  // earlier trusted thread it did not repeat (review.findings counts only its
+  // own output). The fix-round session gets no separate notice for them
+  // (openFindingsNoticeNeeded), so the wrap-up carries every unresolved thread.
+  const findingsBlock = await fetchReviewFindings(pr.number, pr.ghRepo).catch(
+    () => "",
+  );
   const message = buildReviewSettledMessage({
     prNumber: pr.number,
     title: pr.title,
@@ -477,10 +482,9 @@ export async function deliverCapFollowUp(
 ): Promise<string | undefined> {
   const { pr, review, decision, sha, repoFull, handoff } = input;
   const passed = decision === "post-cap" && !!input.passed;
-  const findingsBlock =
-    passed && review.findings === 0
-      ? ""
-      : await deps.fetchFindings().catch(() => "");
+  // Always read the threads: a pass with no findings of its own can still
+  // leave an earlier trusted thread unresolved.
+  const findingsBlock = await deps.fetchFindings().catch(() => "");
   const common = {
     prNumber: pr.number,
     title: pr.title,
@@ -542,7 +546,9 @@ async function passedAfterCap(pr: PrRef, review: ReviewResult): Promise<void> {
   if (!target) return;
   const state = await getOrInitPrState(pr.number, pr.headRef, pr.ghRepo);
   const sha = state.lastReviewedSha || pr.headSha;
-  if (handoffDecision(state.handoff, sha, MAX_ROUNDS) !== "post-cap") return;
+  // "capped" here means the capped wrap-up never got through; this pass
+  // stands in for it and records the cap.
+  if (handoffDecision(state.handoff, sha, MAX_ROUNDS) === "duplicate") return;
   await afterCap(pr, review, "post-cap", sha, repoFull, target.id, true);
 }
 
