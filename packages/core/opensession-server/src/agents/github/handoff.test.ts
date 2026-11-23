@@ -156,7 +156,8 @@ describe("review findings after the round cap", () => {
   const FINDINGS =
     "- [@acme-os[bot] · comment 9 · thread PRRT_1] src/a.ts:3 — P1: guard the null";
 
-  /** Runs reviews of `shas` through the gate and follow-up, keeping state. */
+  /** Runs reviews of `shas` through the gate and follow-up, keeping state.
+   * A sha ending in "+pass" is a passing review with one open finding. */
   async function reviewAfterCap(
     shas: string[],
     failFirst = false,
@@ -169,14 +170,21 @@ describe("review findings after the round cap", () => {
     };
     const sent: { to: string; message: string; deliveryId: string }[] = [];
     let failures = failFirst ? 1 : 0;
-    for (const sha of shas) {
+    for (const reviewed of shas) {
+      const passed = reviewed.endsWith("+pass");
+      const sha = reviewed.replace("+pass", "");
       const decision = handoffDecision(handoff, sha, 6);
+      // maybeHandoffFindings routes a pass here only once the cap is recorded.
+      if (passed && !handoff.cappedAnnounced) continue;
       if (decision !== "capped" && decision !== "post-cap") continue;
       await deliverCapFollowUp(
         {
           pr: { number: 9, title: "Example", headRef: "feature/x" },
-          review: { verdict: "request_changes", confidence: 3 },
+          review: passed
+            ? { verdict: "approve", confidence: 4, findings: 1 }
+            : { verdict: "request_changes", confidence: 3, findings: 1 },
           decision,
+          passed,
           sha,
           repoFull: "acme/app",
           handoff,
@@ -234,6 +242,22 @@ describe("review findings after the round cap", () => {
       [OPENER, "github-review-settled:acme/app:9:capped:s1"],
       [OPENER, "github-review-post-cap:acme/app:9:s2"],
     ]);
+  });
+
+  test("a pass after the cap reaches the current owner and keeps the cap", async () => {
+    const sent = await reviewAfterCap(
+      ["s1", "s2+pass", "s2+pass", "s3"],
+      false,
+      (id) => id !== "os-rounds",
+    );
+    expect(sent.map((d) => [d.to, d.deliveryId])).toEqual([
+      [OPENER, "github-review-settled:acme/app:9:capped:s1"],
+      [OPENER, "github-review-settled:acme/app:9:passed:s2"],
+      // The cap still stands: a later failing review is a notice, not round 1.
+      [OPENER, "github-review-post-cap:acme/app:9:s3"],
+    ]);
+    expect(sent[1]?.message).toStartWith("<!--os:review-settled:passed-->");
+    expect(sent[1]?.message).toContain("P1: guard the null");
   });
 
   test("a failed delivery is retried by the next review of that commit", async () => {

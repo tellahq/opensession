@@ -179,8 +179,17 @@ export async function maybeHandoffFindings(
     if (!handoffEnabled() || !review || review.error) return;
     if (reviewSatisfied(review)) {
       const prior = (await readPrState(pr.number, pr.ghRepo))?.handoff;
-      await settleHandoff(pr, review, "passed");
-      if (openFindingsNoticeNeeded(review, prior))
+      // The cap stands until the PR closes: a pass after it neither clears
+      // the rounds nor goes only to the round session. The current owner
+      // hears it once per commit, with any findings it left open.
+      if (prior?.cappedAnnounced) {
+        await passedAfterCap(pr, review);
+        return;
+      }
+      const settled = await settleHandoff(pr, review, "passed");
+      // A delivered wrap-up carries the open findings. When none went out
+      // (no rounds, or the round session is gone), the owner gets the notice.
+      if (openFindingsNoticeNeeded(review, settled ? prior : undefined))
         await notifyOpenFindings(pr, review);
       return;
     }
@@ -221,7 +230,7 @@ export async function maybeHandoffFindings(
     const decision = handoffDecision(state.handoff, sha, MAX_ROUNDS);
     if (decision === "duplicate") return;
     if (decision === "capped" || decision === "post-cap") {
-      await afterCap(pr, review, decision, sha, repoFull, target.id);
+      await afterCap(pr, review, decision, sha, repoFull, target.id, false);
       return;
     }
 
@@ -362,19 +371,21 @@ async function notifyOpenFindings(
  * the PR, so without this the session's last word is its report on the final
  * round and a person returning to the thread has to work out whether the PR
  * is done. Asks that session for one wrap-up; a PR that never had a round
- * handed off has no loop to close. Never throws past the caller's guard.
+ * handed off has no loop to close. Returns whether the wrap-up went out.
+ * Never throws past the caller's guard.
  */
 async function settleHandoff(
   pr: PrRef,
   review: ReviewResult,
   outcome: ReviewSettledOutcome,
-): Promise<void> {
+): Promise<boolean> {
   const state = await readPrState(pr.number, pr.ghRepo);
   const handoff = state?.handoff;
   if (outcome === "passed") await clearHandoff(pr.number, pr.ghRepo);
-  if (!handoff?.rounds || !handoff.sessionId) return;
+  if (!handoff?.rounds || !handoff.sessionId) return false;
   const control = tryGetSessionControl();
-  if (!control) return;
+  // A deleted round session cannot take the wrap-up.
+  if (!control?.getSession(handoff.sessionId)) return false;
   const repoFull =
     pr.ghRepo || defaultRepo(configuredRepos(await getConfigAsync())).ghRepo;
   const sha = state?.lastReviewedSha || pr.headSha;
@@ -410,7 +421,7 @@ async function settleHandoff(
     console.error(
       `[github] review settle → ${handoff.sessionId} failed for PR #${pr.number}: ${res.message}`,
     );
-    return;
+    return false;
   }
   audit({
     msg: "review_settled",
@@ -424,6 +435,7 @@ async function settleHandoff(
   console.log(
     `[github] review settled (${outcome}) → session ${handoff.sessionId} for PR #${pr.number} after ${handoff.rounds} round(s), ${res.status}`,
   );
+  return true;
 }
 
 export interface CapFollowUpDeps {
@@ -440,10 +452,11 @@ export interface CapFollowUpDeps {
 }
 
 /**
- * Tell the session about an unsatisfied review once the round cap is reached.
- * `capped` is the wrap-up for the round that hit the cap; `post-cap` is a
- * later push's review, which starts no fix round. Both carry the review's open
- * findings, so the session can say what is left or fix it when a person asks.
+ * Tell the session about a review once the round cap is reached. `capped` is
+ * the wrap-up for the round that hit the cap; `post-cap` is a later push's
+ * review, which starts no fix round: a findings notice, or a passed wrap-up
+ * when that review passed. Each carries the review's open findings, so the
+ * session can say what is left or fix it when a person asks.
  * Records the commit only after a successful delivery, so a failed one is
  * retried by the next review of the same commit. Returns the recipient, or
  * undefined when nothing was delivered.
@@ -451,8 +464,10 @@ export interface CapFollowUpDeps {
 export async function deliverCapFollowUp(
   input: {
     pr: Pick<PrRef, "number" | "title" | "headRef">;
-    review: Pick<ReviewResult, "verdict" | "confidence">;
+    review: Pick<ReviewResult, "verdict" | "confidence" | "findings">;
     decision: "capped" | "post-cap";
+    /** The review passed (only after the cap, when the rounds stay). */
+    passed?: boolean;
     sha: string;
     repoFull: string;
     handoff: HandoffState;
@@ -461,7 +476,11 @@ export async function deliverCapFollowUp(
   deps: CapFollowUpDeps,
 ): Promise<string | undefined> {
   const { pr, review, decision, sha, repoFull, handoff } = input;
-  const findingsBlock = await deps.fetchFindings().catch(() => "");
+  const passed = decision === "post-cap" && !!input.passed;
+  const findingsBlock =
+    passed && review.findings === 0
+      ? ""
+      : await deps.fetchFindings().catch(() => "");
   const common = {
     prNumber: pr.number,
     title: pr.title,
@@ -483,15 +502,19 @@ export async function deliverCapFollowUp(
   const message =
     decision === "capped"
       ? buildReviewSettledMessage({ ...common, outcome: "capped" })
-      : buildPostCapFindingsMessage({
-          ...common,
-          reviewedSha: sha,
-          verdict: review.verdict,
-        });
+      : passed
+        ? buildReviewSettledMessage({ ...common, outcome: "passed" })
+        : buildPostCapFindingsMessage({
+            ...common,
+            reviewedSha: sha,
+            verdict: review.verdict,
+          });
   const deliveryId =
     decision === "capped"
       ? `github-review-settled:${repoFull}:${pr.number}:capped:${sha}`
-      : `github-review-post-cap:${repoFull}:${pr.number}:${sha}`;
+      : passed
+        ? `github-review-settled:${repoFull}:${pr.number}:passed:${sha}`
+        : `github-review-post-cap:${repoFull}:${pr.number}:${sha}`;
   const res = await deps.deliver(recipient, message, deliveryId);
   if (res.status === "error") {
     console.error(
@@ -503,6 +526,26 @@ export async function deliverCapFollowUp(
   return recipient;
 }
 
+/**
+ * A passing review of a PR whose fix rounds hit the cap: the same per-commit
+ * follow-up as a failing one, to the current owner, leaving the cap in place.
+ */
+async function passedAfterCap(pr: PrRef, review: ReviewResult): Promise<void> {
+  // A fixer already owns the branch worktree and will see the same comments.
+  if (isLockHeld("code", pr.number, pr.ghRepo)) return;
+  if (!tryGetSessionControl()) return;
+  const repoFull =
+    pr.ghRepo || defaultRepo(configuredRepos(await getConfigAsync())).ghRepo;
+  const workspaceId = await workspaceIdForRepo(repoFull);
+  if (!workspaceId) return;
+  const target = await resolveHandoffOwner(pr, workspaceId);
+  if (!target) return;
+  const state = await getOrInitPrState(pr.number, pr.headRef, pr.ghRepo);
+  const sha = state.lastReviewedSha || pr.headSha;
+  if (handoffDecision(state.handoff, sha, MAX_ROUNDS) !== "post-cap") return;
+  await afterCap(pr, review, "post-cap", sha, repoFull, target.id, true);
+}
+
 async function afterCap(
   pr: PrRef,
   review: ReviewResult,
@@ -510,6 +553,7 @@ async function afterCap(
   sha: string,
   repoFull: string,
   ownerId: string,
+  passed: boolean,
 ): Promise<void> {
   const state = await readPrState(pr.number, pr.ghRepo);
   if (!state?.handoff) return;
@@ -520,6 +564,7 @@ async function afterCap(
       pr,
       review,
       decision,
+      passed,
       sha,
       repoFull,
       handoff: state.handoff,
@@ -551,23 +596,29 @@ async function afterCap(
   );
   if (!recipient) return;
   audit({
-    msg: decision === "capped" ? "review_settled" : "review_post_cap_findings",
+    msg:
+      decision === "capped" || passed
+        ? "review_settled"
+        : "review_post_cap_findings",
     pr_number: pr.number,
     repo: repoFull,
     session_id: recipient,
-    outcome: decision,
+    outcome: passed ? "passed-after-cap" : decision,
     rounds: state.handoff.rounds,
     findings: review.findings,
     blocking: review.blocking,
   });
+  if (passed && review.findings === 0) return;
+  // No session link after the cap: the recipient may be a branch match the PR
+  // never named, so its URL is not for a possibly public PR.
   await appendToSummary(
     pr,
     state.summaryCommentId,
     decision === "capped"
       ? `🔁 Still not merge-ready after ${state.handoff.rounds} handed-off fix round(s) — over to humans. (The \`os-auto-fix\` label still works for another automated pass.)`
-      : // No session link: the recipient may be a branch match the PR never
-        // named, so its URL is not for a possibly public PR.
-        `📋 ${review.findings} finding${review.findings === 1 ? "" : "s"} → owning session · no fix round after the cap`,
+      : passed
+        ? `💬 ${review.findings} non-blocking finding${review.findings === 1 ? "" : "s"} → owning session`
+        : `📋 ${review.findings} finding${review.findings === 1 ? "" : "s"} → owning session · no fix round after the cap`,
   );
 }
 
