@@ -137,6 +137,17 @@ describe("withProductionDeploy", () => {
     expect(calls).toEqual([]);
   });
 
+  test("keeps clients asking while the merge commit is not known yet", async () => {
+    const { read, calls } = github([{ sha: "merge", state: "success" }]);
+    const out = await withProductionDeploy(
+      details({ mergeCommitOid: undefined }),
+      "acme/app",
+      { read, config },
+    );
+    expect(out?.staging?.awaitingProduction).toBe(true);
+    expect(calls).toEqual([]);
+  });
+
   test("shares one recent answer across PRs of the same repo", async () => {
     const { read, calls } = github([{ sha: "merge", state: "success" }]);
     await withProductionDeploy(details(), "acme/app", { read, config });

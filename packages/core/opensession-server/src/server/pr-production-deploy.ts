@@ -159,18 +159,22 @@ export async function withProductionDeploy(
   if (!data || data.state !== "MERGED" || !data.staging) return data;
   if (data.staging.production) return data;
   const config = readConfig();
+  if (!config) return data;
+  const awaiting = {
+    ...data,
+    staging: { ...data.staging, awaitingProduction: true },
+  };
+  // Details cached before the merge commit was read have none yet: keep
+  // clients asking until the next details refresh fills it in.
   const merge = data.mergeCommitOid;
-  if (!config || !merge) return data;
+  if (!merge) return awaiting;
   try {
     const deployed = await latestDeployedSha(repo, config.environment, read);
     if (!deployed || !(await includedIn(repo, merge, deployed, read)))
-      return {
-        ...data,
-        staging: { ...data.staging, awaitingProduction: true },
-      };
+      return awaiting;
   } catch (e) {
     console.warn(`[pr-production-deploy] ${repo}: ${String(e)}`);
-    return { ...data, staging: { ...data.staging, awaitingProduction: true } };
+    return awaiting;
   }
   const production: PrStaging = {
     url: config.url,
