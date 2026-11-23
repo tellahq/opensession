@@ -110,7 +110,6 @@ function ThreadsOverview({
           showTitle={showTitle}
           shipped={shipped}
           total={threads.length}
-          phone={phone}
         />
       )}
 

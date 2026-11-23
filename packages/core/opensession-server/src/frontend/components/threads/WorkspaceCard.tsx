@@ -7,7 +7,6 @@ import {
   WS_SUMMARY_LABEL,
   WS_SUMMARY_RAIL,
   WS_SUMMARY_ROW,
-  WS_SUMMARY_SURFACE,
 } from "../../lib/workspace-summary-classes";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
@@ -26,13 +25,11 @@ import { WorkspaceSettingsDialog } from "../WorkspaceSettingsDialog";
 const STILL_ROW = cn(WS_SUMMARY_ROW, "cursor-default hover:bg-transparent");
 
 /**
- * The top of the threads panel, in the workspace summary card's grammar: the
- * card steps down while the side panel is open, so the panel carries what a
- * coordinator needs from it. Name, goal, then quiet rows for the project,
- * progress and the people in it, where teammates are added.
- *
- * On a phone it sits on the details page as plain rows, without the card's
- * glass.
+ * The top of the threads panel, in the workspace summary card's row grammar:
+ * the card steps down while the side panel is open, so the panel carries what
+ * a coordinator needs from it. Name, goal, then quiet rows for the project,
+ * progress and the people in it, where teammates are added. Plain rows on the
+ * panel itself, no surface of its own.
  */
 export function WorkspaceCard({
   workspace,
@@ -40,20 +37,18 @@ export function WorkspaceCard({
   showTitle,
   shipped,
   total,
-  phone,
 }: {
   workspace: Workspace;
   rootId: string;
   showTitle: boolean;
   shipped: number;
   total: number;
-  phone: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   return (
     <section
       aria-label="Workspace summary"
-      className={cn("flex min-w-0 flex-col py-2", !phone && WS_SUMMARY_SURFACE)}
+      className="-mx-2 flex min-w-0 flex-col"
     >
       {/* Where the page already names the workspace, the goal takes the
           title's place beside the controls. */}
