@@ -64,7 +64,6 @@ import {
 import type { useAppRoute } from "./useAppRoute";
 import type { useAppViewState } from "./useAppViewState";
 import { useArchiveUndo } from "./useArchiveUndo";
-import { useDeskFabPosition } from "./useDeskFabPosition";
 import { useRunningCloseConfirmation } from "./useRunningCloseConfirmation";
 import { useSessionLifecycle } from "./useSessionLifecycle";
 import type { useSessions } from "./useSessions";
@@ -520,10 +519,9 @@ export function useSessionTabs({
     !!activeTabSplit,
     !!viewingWorker,
   );
-  const deskFabPosition = useDeskFabPosition(
-    !isPhone && !activeViewTabShown,
-    `${focusedTopTabId ?? ""}:${activeTabSplit?.rightActive ?? ""}:${activeTabSplit?.ratio ?? ""}`,
-  );
+  // The Desk trigger measures its own place beside the composer (DeskFab).
+  const deskFabPlaced = !isPhone && !activeViewTabShown;
+  const deskFabLayoutKey = `${focusedTopTabId ?? ""}:${activeTabSplit?.rightActive ?? ""}:${activeTabSplit?.ratio ?? ""}`;
   const toStoredSplit = (split: ResolvedSplit): TabSplit => ({
     right: split.right,
     leftActive: split.leftActive,
@@ -1482,7 +1480,8 @@ export function useSessionTabs({
     strip: {
       activeTabSplit,
       tabStripVisible,
-      deskFabPosition,
+      deskFabPlaced,
+      deskFabLayoutKey,
       toStoredSplit,
       focusedSide,
       activeIdFor,
