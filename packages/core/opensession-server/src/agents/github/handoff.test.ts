@@ -157,7 +157,11 @@ describe("review findings after the round cap", () => {
     "- [@acme-os[bot] · comment 9 · thread PRRT_1] src/a.ts:3 — P1: guard the null";
 
   /** Runs reviews of `shas` through the gate and follow-up, keeping state. */
-  async function reviewAfterCap(shas: string[], failFirst = false) {
+  async function reviewAfterCap(
+    shas: string[],
+    failFirst = false,
+    live = (_id: string) => true,
+  ) {
     let handoff: HandoffState = {
       rounds: 6,
       lastSha: "r6",
@@ -180,6 +184,7 @@ describe("review findings after the round cap", () => {
         },
         {
           fetchFindings: async () => FINDINGS,
+          sessionExists: live,
           deliver: async (to, message, deliveryId) => {
             if (failures-- > 0) return { status: "error", message: "down" };
             sent.push({ to, message, deliveryId });
@@ -217,6 +222,18 @@ describe("review findings after the round cap", () => {
     expect(notice.message).toStartWith("<!--os:review-handoff-->");
     expect(notice.message).toContain("not another fix round");
     expect(notice.message).toContain("P1: guard the null");
+  });
+
+  test("the wrap-up goes to the current owner once the round session is gone", async () => {
+    const sent = await reviewAfterCap(
+      ["s1", "s2"],
+      false,
+      (id) => id !== "os-rounds",
+    );
+    expect(sent.map((d) => [d.to, d.deliveryId])).toEqual([
+      [OPENER, "github-review-settled:acme/app:9:capped:s1"],
+      [OPENER, "github-review-post-cap:acme/app:9:s2"],
+    ]);
   });
 
   test("a failed delivery is retried by the next review of that commit", async () => {

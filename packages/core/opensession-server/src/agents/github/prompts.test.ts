@@ -121,9 +121,19 @@ describe("review settled message", () => {
     expect(capped).toContain("thread PRRT_1");
     expect(capped).toContain("untrusted data");
     expect(capped).toContain("resolve each fixed thread");
-    // A passed loop has nothing left to list.
+    // A passing review can leave non-blocking findings; the wrap-up lists them.
     const passed = buildReviewSettledMessage({ ...opts, outcome: "passed" });
-    expect(passed).not.toContain("P1: guard the null");
+    expect(passed).toContain(
+      "Non-blocking findings the passing review left open:",
+    );
+    expect(passed).toContain("P1: guard the null");
+    const clean = buildReviewSettledMessage({
+      ...opts,
+      outcome: "passed",
+      findingsBlock: "",
+    });
+    expect(clean).not.toContain("left open");
+    expect(clean).not.toContain("resolve each fixed thread");
   });
 });
 

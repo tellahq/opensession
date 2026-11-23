@@ -378,6 +378,13 @@ async function settleHandoff(
   const repoFull =
     pr.ghRepo || defaultRepo(configuredRepos(await getConfigAsync())).ghRepo;
   const sha = state?.lastReviewedSha || pr.headSha;
+  // A review can pass with non-blocking findings open. The fix-round session
+  // gets no separate notice for them (openFindingsNoticeNeeded), so the
+  // wrap-up carries them.
+  const findingsBlock =
+    review.findings > 0
+      ? await fetchReviewFindings(pr.number, pr.ghRepo).catch(() => "")
+      : "";
   const message = buildReviewSettledMessage({
     prNumber: pr.number,
     title: pr.title,
@@ -386,6 +393,7 @@ async function settleHandoff(
     rounds: handoff.rounds,
     outcome,
     confidence: review.confidence,
+    findingsBlock,
   });
   // Same lane as the rounds themselves: behind any active human turn, alone.
   const res = await control.deliverToSession(
@@ -420,6 +428,8 @@ async function settleHandoff(
 
 export interface CapFollowUpDeps {
   fetchFindings(): Promise<string>;
+  /** Does this session still exist to receive a message? */
+  sessionExists(sessionId: string): boolean;
   deliver(
     sessionId: string,
     message: string,
@@ -461,10 +471,15 @@ export async function deliverCapFollowUp(
     confidence: review.confidence,
     findingsBlock,
   };
-  // The wrap-up closes the loop in the session that did the rounds; a later
-  // notice goes to whoever owns the PR now.
+  // The wrap-up closes the loop in the session that did the rounds, while it
+  // still exists; a later notice goes to whoever owns the PR now. A deleted
+  // round session would fail every delivery and so never record the cap.
   const recipient =
-    decision === "capped" ? handoff.sessionId || input.ownerId : input.ownerId;
+    decision === "capped" &&
+    handoff.sessionId &&
+    deps.sessionExists(handoff.sessionId)
+      ? handoff.sessionId
+      : input.ownerId;
   const message =
     decision === "capped"
       ? buildReviewSettledMessage({ ...common, outcome: "capped" })
@@ -512,6 +527,7 @@ async function afterCap(
     },
     {
       fetchFindings: () => fetchReviewFindings(pr.number, pr.ghRepo),
+      sessionExists: (id) => !!control.getSession(id),
       // Same lane as the rounds themselves: behind any active human turn, alone.
       deliver: (sessionId, message, deliveryId) =>
         control.deliverToSession(sessionId, message, "GitHub", {
@@ -549,7 +565,9 @@ async function afterCap(
     state.summaryCommentId,
     decision === "capped"
       ? `🔁 Still not merge-ready after ${state.handoff.rounds} handed-off fix round(s) — over to humans. (The \`os-auto-fix\` label still works for another automated pass.)`
-      : `📋 ${review.findings} finding${review.findings === 1 ? "" : "s"} → [owning session](${uiSessionUrl(recipient)}) · no fix round after the cap`,
+      : // No session link: the recipient may be a branch match the PR never
+        // named, so its URL is not for a possibly public PR.
+        `📋 ${review.findings} finding${review.findings === 1 ? "" : "s"} → owning session · no fix round after the cap`,
   );
 }
 

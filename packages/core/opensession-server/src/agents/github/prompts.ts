@@ -410,8 +410,9 @@ export function buildReviewSettledMessage(opts: {
   rounds: number;
   outcome: ReviewSettledOutcome;
   confidence?: number;
-  /** The final review's open findings. Only a capped loop has any to show:
-   * without them the session cannot tell what is left. */
+  /** The final review's open findings: what a capped loop left, or the
+   * non-blocking ones a passing review left. Without them the session cannot
+   * tell what is left. */
   findingsBlock?: string;
 }): string {
   const rounds = `${opts.rounds} fix round${opts.rounds === 1 ? "" : "s"}`;
@@ -426,10 +427,10 @@ export function buildReviewSettledMessage(opts: {
     ? `review passed, CI (\`gh pr checks ${opts.prNumber} --repo ${opts.repoFull}\`), and whether anything still blocks a merge`
     : `which findings are still open, why you left them, and what CI says (\`gh pr checks ${opts.prNumber} --repo ${opts.repoFull}\`)`;
 
-  const open =
-    !passed && opts.findingsBlock?.trim()
-      ? `\n\nWhat the final review left open:\n${findingsSection({ ...opts, findingsBlock: opts.findingsBlock })}`
-      : "";
+  const hasOpen = !!opts.findingsBlock?.trim();
+  const open = hasOpen
+    ? `\n\n${passed ? "Non-blocking findings the passing review left open" : "What the final review left open"}:\n${findingsSection({ ...opts, findingsBlock: opts.findingsBlock || "" })}`
+    : "";
   return `${reviewSettledSentinel(opts.outcome)}
 ${lead}${open}
 
@@ -439,7 +440,7 @@ Write a short wrap-up for whoever comes back to this thread cold. Your earlier m
 3. Where to look: ${prUrl}, plus the preview URL if this branch has one.
 4. Anything a person still has to decide or do.
 
-Keep it short. Do not push new commits, re-run the review, or merge (\`gh pr merge\` is forbidden)${passed ? "" : ". If a person asks you to fix what is left, reply and resolve each fixed thread as in the fix rounds"}.`;
+Keep it short. Do not push new commits, re-run the review, or merge (\`gh pr merge\` is forbidden)${passed && !hasOpen ? "" : ". If a person asks you to fix what is left, reply and resolve each fixed thread as in the fix rounds"}.`;
 }
 
 /**
