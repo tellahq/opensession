@@ -166,6 +166,7 @@ describe("review findings after the round cap", () => {
     shas: string[],
     failFirst = false,
     live = (_id: string) => true,
+    unreadable = 0,
   ) {
     let handoff: HandoffState = {
       rounds: 6,
@@ -195,7 +196,7 @@ describe("review findings after the round cap", () => {
           ownerId: OPENER,
         },
         {
-          fetchFindings: async () => FINDINGS,
+          fetchFindings: async () => (unreadable-- > 0 ? null : FINDINGS),
           sessionExists: live,
           deliver: async (to, message, deliveryId) => {
             if (failures-- > 0) return { status: "error", message: "down" };
@@ -276,6 +277,14 @@ describe("review findings after the round cap", () => {
     const [, passed] = await reviewAfterCap(["s1", "s2+pass"]);
     expect(passed?.message).toStartWith("<!--os:review-settled:passed-->");
     expect(passed?.message).toContain("P1: guard the null");
+  });
+
+  test("an unreadable findings list is neither delivered nor recorded", async () => {
+    const sent = await reviewAfterCap(["s1", "s1"], false, () => true, 1);
+    expect(sent.map((d) => d.deliveryId)).toEqual([
+      "github-review-settled:acme/app:9:capped:s1",
+    ]);
+    expect(sent[0]?.message).toContain("P1: guard the null");
   });
 
   test("a failed delivery is retried by the next review of that commit", async () => {

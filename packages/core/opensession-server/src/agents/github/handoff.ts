@@ -35,6 +35,7 @@ import {
   editIssueComment,
   fetchReviewFindings,
   getComment,
+  readReviewFindings,
 } from "./github-rest";
 import {
   getOrInitPrState,
@@ -48,6 +49,7 @@ import {
   handoffDecision,
   openFindingsCount,
   openFindingsNoticeNeeded,
+  sameHandoffRound,
   type HandoffState,
   pickHandoffOwner,
   reviewSatisfied,
@@ -90,10 +92,15 @@ export async function isHandoffActive(
   );
 }
 
-/** Drop round tracking (PR closed, or a review came back satisfied). */
+/**
+ * Drop round tracking (PR closed, or a review came back satisfied). With
+ * `expected`, only while the state is still that round: checked inside the
+ * locked update, so a newer round recorded meanwhile survives.
+ */
 export async function clearHandoff(
   prNumber: number,
   ghRepo?: string,
+  expected?: Pick<HandoffState, "rounds" | "lastSha">,
 ): Promise<void> {
   const s = await readPrState(prNumber, ghRepo);
   if (!s?.handoff) return;
@@ -101,6 +108,7 @@ export async function clearHandoff(
     prNumber,
     s.headRef,
     (st) => {
+      if (expected && !sameHandoffRound(st.handoff, expected)) return;
       st.handoff = undefined;
     },
     ghRepo,
@@ -194,7 +202,9 @@ export async function maybeHandoffFindings(
         noticeNeeded: (settled) =>
           openFindingsNoticeNeeded(review, prior, settled),
         notify: () => notifyOpenFindings(pr, review),
-        clear: () => clearHandoff(pr.number, pr.ghRepo),
+        clear: async () => {
+          if (prior) await clearHandoff(pr.number, pr.ghRepo, prior);
+        },
       });
       return;
     }
@@ -359,10 +369,11 @@ async function notifyOpenFindings(
 
   const state = await getOrInitPrState(pr.number, pr.headRef, pr.ghRepo);
   const sha = state.lastReviewedSha || pr.headSha;
-  const findingsBlock = await fetchReviewFindings(pr.number, pr.ghRepo).catch(
-    () => "",
-  );
-  // A pass that filed nothing new is reported only for threads still open.
+  const read = await readReviewFindings(pr.number, pr.ghRepo).catch(() => null);
+  // A pass that filed nothing new is reported only for threads still open;
+  // when GitHub could not say which those are, keep the notice owed.
+  if (read === null && review.findings === 0) return false;
+  const findingsBlock = read ?? "";
   const findings = openFindingsCount(review.findings, findingsBlock);
   if (!findings) return true;
   const message = buildOpenFindingsMessage({
@@ -430,9 +441,12 @@ async function settleHandoff(
   // earlier trusted thread it did not repeat (review.findings counts only its
   // own output). The fix-round session gets no separate notice for them
   // (openFindingsNoticeNeeded), so the wrap-up carries every unresolved thread.
-  const findingsBlock = await fetchReviewFindings(pr.number, pr.ghRepo).catch(
-    () => "",
+  // If GitHub could not be read, send nothing yet: the round state stays for
+  // the fallback notice or the next review.
+  const findingsBlock = await readReviewFindings(pr.number, pr.ghRepo).catch(
+    () => null,
   );
+  if (findingsBlock === null) return false;
   const message = buildReviewSettledMessage({
     prNumber: pr.number,
     title: pr.title,
@@ -476,7 +490,8 @@ async function settleHandoff(
 }
 
 export interface CapFollowUpDeps {
-  fetchFindings(): Promise<string>;
+  /** The open findings block, or null when GitHub could not be read. */
+  fetchFindings(): Promise<string | null>;
   /** Does this session still exist to receive a message? */
   sessionExists(sessionId: string): boolean;
   deliver(
@@ -516,7 +531,15 @@ export async function deliverCapFollowUp(
   const passed = decision === "post-cap" && !!input.passed;
   // Always read the threads: a pass with no findings of its own can still
   // leave an earlier trusted thread unresolved.
-  const findingsBlock = await deps.fetchFindings().catch(() => "");
+  const findingsBlock = await deps.fetchFindings().catch(() => null);
+  // Without the threads the message cannot say what is left. Deliver and
+  // record nothing, so the next review of this commit tries again.
+  if (findingsBlock === null) {
+    console.warn(
+      `[github] review ${decision} for PR #${pr.number}: findings unreadable, not delivered`,
+    );
+    return undefined;
+  }
   const common = {
     prNumber: pr.number,
     title: pr.title,
@@ -609,7 +632,7 @@ async function afterCap(
       ownerId,
     },
     {
-      fetchFindings: () => fetchReviewFindings(pr.number, pr.ghRepo),
+      fetchFindings: () => readReviewFindings(pr.number, pr.ghRepo),
       sessionExists: (id) => !!control.getSession(id),
       // Same lane as the rounds themselves: behind any active human turn, alone.
       deliver: (sessionId, message, deliveryId) =>

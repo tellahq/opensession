@@ -4,6 +4,8 @@ import {
   handoffDecision,
   openFindingsCount,
   openFindingsNoticeNeeded,
+  sameHandoffRound,
+  type HandoffState,
   pickHandoffOwner,
   reviewSatisfied,
 } from "./handoff-gates";
@@ -179,5 +181,16 @@ describe("handoff owner", () => {
 
   test("no footer and no branch owner means no owner", () => {
     expect(pickHandoffOwner(undefined, live, [])).toBeUndefined();
+  });
+});
+
+describe("clearing round state after a pass", () => {
+  test("only the round the pass settled is cleared", () => {
+    const settled = { rounds: 5, lastSha: "a" };
+    const current: HandoffState = { ...settled, sessionId: "s" };
+    expect(sameHandoffRound(current, settled)).toBe(true);
+    // A newer failing review recorded round 6 meanwhile: keep it.
+    expect(sameHandoffRound({ rounds: 6, lastSha: "b" }, settled)).toBe(false);
+    expect(sameHandoffRound(undefined, settled)).toBe(false);
   });
 });

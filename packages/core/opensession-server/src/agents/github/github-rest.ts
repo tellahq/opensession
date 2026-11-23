@@ -335,11 +335,19 @@ async function listReviewComments(
   prNumber: number,
   ghRepo: string = GITHUB_REPO,
 ): Promise<ReviewCommentInfo[]> {
+  return (await readReviewComments(prNumber, ghRepo)) ?? [];
+}
+
+/** listReviewComments, with null when GitHub could not be read. */
+async function readReviewComments(
+  prNumber: number,
+  ghRepo: string = GITHUB_REPO,
+): Promise<ReviewCommentInfo[] | null> {
   const r = await githubRequest<any[]>(
     "GET",
     `/repos/${ghRepo}/pulls/${prNumber}/comments?per_page=100`,
   );
-  if (!r.ok || !Array.isArray(r.data)) return [];
+  if (!r.ok || !Array.isArray(r.data)) return null;
   return r.data
     .map((c) => ({
       id: c.id,
@@ -540,6 +548,14 @@ export async function listReviewThreads(
   prNumber: number,
   ghRepo: string = GITHUB_REPO,
 ): Promise<ReviewThread[]> {
+  return (await readReviewThreads(prNumber, ghRepo)) ?? [];
+}
+
+/** listReviewThreads, with null when GitHub could not be read. */
+async function readReviewThreads(
+  prNumber: number,
+  ghRepo: string = GITHUB_REPO,
+): Promise<ReviewThread[] | null> {
   const data = await githubGraphQL<any>(
     `query($owner:String!,$name:String!,$number:Int!){
       repository(owner:$owner,name:$name){
@@ -561,7 +577,7 @@ export async function listReviewThreads(
     ghRepo,
   );
   const nodes = data?.repository?.pullRequest?.reviewThreads?.nodes;
-  if (!Array.isArray(nodes)) return [];
+  if (!Array.isArray(nodes)) return null;
   return nodes.map((t: any) => {
     const comments = (t.comments?.nodes || []).map((c: any) => {
       const groups: any[] = Array.isArray(c.reactionGroups)
@@ -857,14 +873,27 @@ export async function fetchReviewFindings(
   prNumber: number,
   ghRepo?: string,
 ): Promise<string> {
+  return (await readReviewFindings(prNumber, ghRepo)) ?? "";
+}
+
+/**
+ * fetchReviewFindings, with null when neither GraphQL nor REST could read the
+ * PR's review comments. "" then means GitHub answered and nothing is open, so
+ * a caller can tell "nothing owed" from "couldn't tell" and retry the latter.
+ */
+export async function readReviewFindings(
+  prNumber: number,
+  ghRepo?: string,
+): Promise<string | null> {
   const [threads, reviews] = await Promise.all([
-    listReviewThreads(prNumber, ghRepo).catch(() => []),
+    readReviewThreads(prNumber, ghRepo).catch(() => null),
     listReviews(prNumber, ghRepo),
   ]);
-  // An empty list is also what a failed GraphQL read returns. The REST read
-  // then tells "no threads" from "couldn't tell".
-  const source = threads.length
-    ? threads
-    : threadsFromComments(await listReviewComments(prNumber, ghRepo));
+  const source =
+    threads ??
+    (await readReviewComments(prNumber, ghRepo)
+      .catch(() => null)
+      .then((comments) => comments && threadsFromComments(comments)));
+  if (!source) return null;
   return formatReviewFindings(source, reviews);
 }

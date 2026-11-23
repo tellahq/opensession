@@ -80,6 +80,22 @@ export interface HandoffState {
  * - capped: the cap was just reached; send the wrap-up with the findings.
  * - post-cap: a later push was reviewed; tell the session, start no round.
  */
+/**
+ * Is the round state still the one a passing review settled? Reviews of
+ * different commits finish concurrently, so an older pass must not clear a
+ * round a newer failing review recorded meanwhile.
+ */
+export function sameHandoffRound(
+  current: Pick<HandoffState, "rounds" | "lastSha"> | undefined,
+  expected: Pick<HandoffState, "rounds" | "lastSha">,
+): boolean {
+  return (
+    !!current &&
+    current.rounds === expected.rounds &&
+    current.lastSha === expected.lastSha
+  );
+}
+
 export type HandoffDecision = "deliver" | "duplicate" | "capped" | "post-cap";
 
 /** What should an unsatisfied review of `sha` do in the owning session? */
