@@ -109,6 +109,26 @@ export function staleReview(
   return !!reviewedSha && !!lastReviewedSha && reviewedSha !== lastReviewedSha;
 }
 
+/**
+ * Run `fn` after every earlier call with the same key has settled, so handoffs
+ * for one PR never interleave. `queues` holds each key's tail; it is dropped
+ * once the queue drains.
+ */
+export function serializeByKey<T>(
+  queues: Map<string, Promise<unknown>>,
+  key: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const prev = queues.get(key) ?? Promise.resolve();
+  const run = prev.then(fn, fn);
+  const tail = run.catch(() => {});
+  queues.set(key, tail);
+  void tail.then(() => {
+    if (queues.get(key) === tail) queues.delete(key);
+  });
+  return run;
+}
+
 export type HandoffDecision = "deliver" | "duplicate" | "capped" | "post-cap";
 
 /** What should an unsatisfied review of `sha` do in the owning session? */

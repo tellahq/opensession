@@ -50,6 +50,7 @@ import {
   openFindingsCount,
   openFindingsNoticeNeeded,
   sameHandoffRound,
+  serializeByKey,
   staleReview,
   type HandoffState,
   pickHandoffOwner,
@@ -176,24 +177,40 @@ export async function resolveHandoffOwner(
   );
 }
 
+/** Per-PR handoff queues (see maybeHandoffFindings). */
+const handoffQueues = new Map<string, Promise<unknown>>();
+
+/**
+ * Is this review still the newest finished one for its PR? Checked when the
+ * handoff starts and again right before each delivery: the review lock is
+ * released before the handoff runs, so a newer review can finish during any
+ * await in between, and a superseded result must not deliver.
+ */
+async function reviewStillCurrent(pr: PrRef): Promise<boolean> {
+  const state = await readPrState(pr.number, pr.ghRepo);
+  return !staleReview(pr.headSha, state?.lastReviewedSha);
+}
+
 /**
  * Called after every webhook-triggered review with its result. Decides whether
- * to start (or stop) a fix round in the PR's owning session. Never throws.
+ * to start (or stop) a fix round in the PR's owning session. Handoffs for one
+ * PR run one at a time, so round state read here is not changed underneath by
+ * another review's handoff. Never throws.
  */
 export async function maybeHandoffFindings(
   pr: PrRef,
   review: ReviewResult | null,
 ): Promise<void> {
+  // null = the review was skipped (dedup/lock) or died before producing a result.
+  if (!handoffEnabled() || !review || review.error) return;
+  await serializeByKey(handoffQueues, `${pr.ghRepo || ""}#${pr.number}`, () =>
+    handoffReview(pr, review),
+  );
+}
+
+async function handoffReview(pr: PrRef, review: ReviewResult): Promise<void> {
   try {
-    // null = the review was skipped (dedup/lock) or died before producing a result.
-    if (!handoffEnabled() || !review || review.error) return;
-    if (
-      staleReview(
-        pr.headSha,
-        (await readPrState(pr.number, pr.ghRepo))?.lastReviewedSha,
-      )
-    )
-      return;
+    if (!(await reviewStillCurrent(pr))) return;
     if (reviewSatisfied(review)) {
       const prior = (await readPrState(pr.number, pr.ghRepo))?.handoff;
       // The cap stands until the PR closes: a pass after it neither clears
@@ -277,6 +294,7 @@ export async function maybeHandoffFindings(
     // Review findings must not steer into a person's active request. Queue the
     // handoff behind it and mark it as a phase boundary so the queue drains it
     // alone, after the user's turn has settled.
+    if (!(await reviewStillCurrent(pr))) return;
     const res = await control.deliverToSession(target.id, message, "GitHub", {
       busy: "queue",
       reviewHandoff: true,
@@ -394,6 +412,8 @@ async function notifyOpenFindings(
     confidence: review.confidence,
     findingsBlock,
   });
+  // Superseded: the newer review's handoff decides. Keep the round state.
+  if (!(await reviewStillCurrent(pr))) return false;
   const res = await control.deliverToSession(target.id, message, "GitHub", {
     busy: "queue",
     reviewHandoff: true,
@@ -465,6 +485,8 @@ async function settleHandoff(
     confidence: review.confidence,
     findingsBlock,
   });
+  // Superseded: the newer review's handoff decides. Keep the round state.
+  if (!(await reviewStillCurrent(pr))) return false;
   // Same lane as the rounds themselves: behind any active human turn, alone.
   const res = await control.deliverToSession(
     handoff.sessionId,
@@ -643,12 +665,14 @@ async function afterCap(
       fetchFindings: () => readReviewFindings(pr.number, pr.ghRepo),
       sessionExists: (id) => !!control.getSession(id),
       // Same lane as the rounds themselves: behind any active human turn, alone.
-      deliver: (sessionId, message, deliveryId) =>
-        control.deliverToSession(sessionId, message, "GitHub", {
-          busy: "queue",
-          reviewHandoff: true,
-          deliveryId,
-        }),
+      deliver: async (sessionId, message, deliveryId) =>
+        (await reviewStillCurrent(pr))
+          ? control.deliverToSession(sessionId, message, "GitHub", {
+              busy: "queue",
+              reviewHandoff: true,
+              deliveryId,
+            })
+          : { status: "error", message: "superseded by a newer review" },
       recordCapped: async (reviewed) => {
         await updatePrState(
           pr.number,

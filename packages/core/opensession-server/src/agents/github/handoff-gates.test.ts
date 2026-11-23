@@ -5,6 +5,7 @@ import {
   openFindingsCount,
   openFindingsNoticeNeeded,
   sameHandoffRound,
+  serializeByKey,
   staleReview,
   type HandoffState,
   pickHandoffOwner,
@@ -202,5 +203,43 @@ describe("out-of-order review results", () => {
     expect(staleReview("b", "b")).toBe(false);
     expect(staleReview("a", undefined)).toBe(false);
     expect(staleReview("", "b")).toBe(false);
+  });
+});
+
+describe("per-PR handoff serialization", () => {
+  test("handoffs for one PR run one at a time; other PRs don't wait", async () => {
+    const queues = new Map<string, Promise<unknown>>();
+    const log: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const a = serializeByKey(queues, "pr1", async () => {
+      log.push("a start");
+      await gate;
+      log.push("a end");
+    });
+    const b = serializeByKey(queues, "pr1", async () => {
+      log.push("b");
+    });
+    const other = serializeByKey(queues, "pr2", async () => {
+      log.push("other");
+    });
+    await other;
+    expect(log).toEqual(["a start", "other"]);
+    release();
+    await Promise.all([a, b]);
+    expect(log).toEqual(["a start", "other", "a end", "b"]);
+    await Promise.resolve();
+    expect(queues.size).toBe(0);
+  });
+
+  test("a failed handoff does not block the next one", async () => {
+    const queues = new Map<string, Promise<unknown>>();
+    const failed = serializeByKey(queues, "pr1", async () => {
+      throw new Error("boom");
+    });
+    await expect(failed).rejects.toThrow("boom");
+    expect(await serializeByKey(queues, "pr1", async () => "next")).toBe(
+      "next",
+    );
   });
 });
