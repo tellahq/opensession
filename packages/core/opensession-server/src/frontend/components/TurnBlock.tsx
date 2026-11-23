@@ -849,7 +849,8 @@ function StepNotice({ entry }: { entry: TranscriptEntry }) {
 /**
  * The media a turn's steps explicitly SURFACED, deduped and in call order.
  *
- * An OPENSESSION_IMAGE/_VIDEO marker is the agent saying "look at this", which
+ * An OPENSESSION_IMAGE/_VIDEO/_COMPARE marker, in a step's output or in the
+ * narration between steps, is the agent saying "look at this", which
  * makes the picture an artifact addressed to the reader rather than part of
  * the work — so the fold hides the steps and keeps it (see the strip under the
  * fold header). Media a step merely touched, a Read of a PNG or a path that
@@ -873,21 +874,27 @@ function featuredTurnMedia(
   const videos: string[] = [];
   const seen = new Set<string>();
   for (const entry of items) {
-    const result = entry.toolUseId
-      ? toolResults.get(entry.toolUseId)
-      : undefined;
-    if (!result?.featuredMedia?.length) continue;
+    // A tool's markers live on its result. Narration's live on the message
+    // itself: an agent answering "show me the screenshots" mid-turn writes
+    // the markers in prose, and the fold used to take them away with it.
+    const source =
+      entry.type === "tool_use"
+        ? entry.toolUseId
+          ? toolResults.get(entry.toolUseId)
+          : undefined
+        : entry;
+    if (!source?.featuredMedia?.length) continue;
     // Take the srcs off images[]/videos[] rather than off featuredMedia, so
     // what renders is always something the entry can resolve — bounded entries
     // rewrite images[] to os-blob: markers and leave featuredMedia at the
     // original path.
-    const featured = new Set(result.featuredMedia);
-    for (const src of result.images || []) {
+    const featured = new Set(source.featuredMedia);
+    for (const src of source.images || []) {
       if (!featured.has(src) || seen.has(src)) continue;
       seen.add(src);
       images.push(src);
     }
-    for (const src of result.videos || []) {
+    for (const src of source.videos || []) {
       if (!featured.has(src) || seen.has(src)) continue;
       seen.add(src);
       videos.push(src);

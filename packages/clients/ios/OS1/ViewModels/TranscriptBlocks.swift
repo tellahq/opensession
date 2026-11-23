@@ -1425,7 +1425,7 @@ enum TranscriptGrouping {
             touchedFiles: files,
             lineStats: stats,
             hasMedia: tools.contains(where: \.hasMedia),
-            featuredMedia: featuredMedia(from: tools),
+            featuredMedia: featuredMedia(from: items),
             suggestedTasks: SuggestedTaskProposal.proposals(in: tools),
             htmlRenders: HtmlRenderItem.renders(in: tools),
             livePreview: preview,
@@ -1436,16 +1436,22 @@ enum TranscriptGrouping {
         )
     }
 
-    /// Explicitly surfaced media in tool order, with repeated captures to the
-    /// same source shown once.
-    private static func featuredMedia(from tools: [ToolCallItem]) -> TranscriptMedia {
+    /// Explicitly surfaced media in turn order, with repeated captures to the
+    /// same source shown once. Narration counts too: an agent answering "show
+    /// me the screenshots" mid-turn writes the markers in its prose, and the
+    /// closed fold used to take them away with the steps.
+    private static func featuredMedia(from items: [TurnItem]) -> TranscriptMedia {
         var media = TranscriptMedia()
         var seen: Set<String> = []
-        for tool in tools {
-            for source in tool.featuredMedia.images where seen.insert(source).inserted {
+        for item in items {
+            let featured = switch item {
+            case .message(let entry): entry.explicitlyFeaturedMedia
+            case .tool(let tool): tool.featuredMedia
+            }
+            for source in featured.images where seen.insert(source).inserted {
                 media.images.append(source)
             }
-            for source in tool.featuredMedia.videos where seen.insert(source).inserted {
+            for source in featured.videos where seen.insert(source).inserted {
                 media.videos.append(source)
             }
         }

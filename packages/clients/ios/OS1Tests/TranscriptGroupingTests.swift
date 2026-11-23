@@ -460,6 +460,30 @@ final class TranscriptGroupingTests: XCTestCase {
         }.allSatisfy(\.hasFeaturedMedia))
     }
 
+    func testFoldKeepsMediaFeaturedInNarration() {
+        var narration = TranscriptEntry(
+            id: "a1", type: "assistant", content: "Here are the screenshots."
+        )
+        narration.images = ["/media?path=mentioned.png", "/media?path=after.png"]
+        narration.featuredMedia = ["/media?path=after.png"]
+
+        append([
+            TranscriptEntry(id: "u1", type: "user", content: "show me the screenshots"),
+            toolUse("t1", name: "Bash"),
+            toolResult("t1", text: "ok"),
+            narration,
+            toolUse("t2", name: "Bash"),
+            toolResult("t2", text: "ok"),
+            TranscriptEntry(id: "a2", type: "assistant", content: "Done."),
+        ])
+
+        guard case .work(let turn) = viewModel.displayBlocks[1] else {
+            return XCTFail("the work should fold")
+        }
+        XCTAssertEqual(turn.featuredMedia.images, ["/media?path=after.png"])
+        XCTAssertTrue(turn.featuredMedia.videos.isEmpty)
+    }
+
     func testOnlyFinalErrorNoticeOffersFailureContinuation() {
         let errorNotice = EntryNotice(
             kind: "system", title: "Run failed", tone: "error",
