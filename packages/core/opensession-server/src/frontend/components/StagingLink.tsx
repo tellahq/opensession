@@ -132,8 +132,9 @@ export function StagingLink({
   const shell = use(NavigationContext);
   const navigation = useLinksInBrowserTab() ? shell : null;
 
-  // The link is a pre-merge testing affordance. Repos without deployment
-  // metadata simply return no staging URL.
+  // The link is the place to try the change: the PR's preview while it is
+  // open, and after the merge until production carries it, then the
+  // production site. Repos without deployment metadata return no staging URL.
   const { relevant, staging, deployPending, building, rebuilding } =
     useStagingDeploy(session, refreshTick);
 
@@ -273,6 +274,8 @@ export function StagingLink({
   // behind a transient keypress — and a macOS screenshot chord holds ⌘, so no
   // capture ever showed the real state.
   const spinning = building || rebuilding;
+  const production = !!staging.production;
+  const label = production ? "Production" : "Preview environment";
   const restingIcon = (size: number) => <IconGlobe size={size} />;
   const globe = (size: number, ring: string) =>
     copied ? (
@@ -305,6 +308,9 @@ export function StagingLink({
       return `Preview environment ${staging.status.toLowerCase()}…${copyHint ? ` ${copyHint}` : ""}`;
     if (rebuilding)
       return `Redeploying for the latest push. Opens the previous deploy until it lands${aside}`;
+    if (production) return `Deployed. Open it in production${aside}`;
+    if (staging.awaitingProduction)
+      return `Merged, not in production yet. Opens the preview environment until it is${aside}`;
     return `Open the preview environment to test this PR${aside}`;
   };
 
@@ -390,7 +396,7 @@ export function StagingLink({
         <span className="inline-flex size-5 shrink-0 items-center justify-center text-faint">
           {globe(17, RING_LG)}
         </span>
-        <span className="min-w-0 flex-1 truncate">Preview environment</span>
+        <span className="min-w-0 flex-1 truncate">{label}</span>
       </a>
     );
   }
@@ -414,7 +420,7 @@ export function StagingLink({
           // and the deploy's own state rides in there with it: an icon cannot
           // say "Redeploying" and the band has no room for a word that is only
           // true for a minute at a time.
-          aria-label="Preview environment"
+          aria-label={label}
           className={cn(
             SUMMARY_MARK,
             SUMMARY_MARK_PAIR,
@@ -443,7 +449,7 @@ export function StagingLink({
       title={`${tooltip("right-click to copy the link")} · ${href}`}
     >
       {globe(15, RING_SM)}
-      Preview environment
+      {label}
       <IconArrowUpRight size={15} className="-ml-px opacity-80" />
     </a>,
   );

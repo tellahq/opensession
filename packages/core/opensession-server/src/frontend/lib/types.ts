@@ -986,6 +986,8 @@ export interface PrDetails {
   headRefName: string;
   /** Current head commit, used to keep independently loaded metadata and diffs aligned. */
   headRefOid?: string;
+  /** The commit the merge landed as on the base branch. */
+  mergeCommitOid?: string;
   additions: number;
   deletions: number;
   changedFiles: number;
@@ -1019,6 +1021,11 @@ export interface PrDetails {
     live?: boolean;
     /** Route to open when the session has no recorded preview path. */
     defaultPath?: string;
+    /** The PR is merged and deployed: this is the production site, which
+     *  replaces the preview once production carries the merge. */
+    production?: boolean;
+    /** Merged, and production has not deployed it yet: still the preview. */
+    awaitingProduction?: boolean;
   } | null;
   /** The GitHub stack this PR is a layer of. Null/absent covers both "not
    *  stacked" and "the stack read failed" — the UI treats them the same. */

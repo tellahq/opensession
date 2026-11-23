@@ -27,7 +27,11 @@ import {
 import { getLane, onLanesChanged } from "../lib/lanes";
 import type { LiveTurnStore } from "../lib/live-turn-store";
 import { isPinned, onPinsChanged, togglePin } from "../lib/pins";
-import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
+import {
+  MERGED_DEPLOY_POLL_MS,
+  pollWhileVisible,
+  PR_WEBHOOK_FALLBACK_POLL_MS,
+} from "../lib/poll";
 import { portalTargetFor } from "../lib/portals";
 import { NO_TYPING, type TypingPresence } from "../lib/typing";
 import {
@@ -106,13 +110,13 @@ type PreviewStatusEffectOptions = {
 function stagingPr(
   session: UnifiedSession,
   phonePr: SessionPrRef | undefined,
-): "none" | "open" | "done" {
+): "none" | "open" | "merged" | "done" {
   if (!phonePr && !session.prUrl) return "none";
   const state = phonePr
     ? (phonePr.state ??
       (phonePr.source === "primary" ? session.prState : undefined))
     : session.prState;
-  return state === "OPEN" ? "open" : "done";
+  return state === "OPEN" ? "open" : state === "MERGED" ? "merged" : "done";
 }
 
 export function useSessionRuntimeController({
@@ -413,6 +417,8 @@ export function useSessionRuntimeController({
     status: string;
     embeddable?: boolean;
     live?: boolean;
+    production?: boolean;
+    awaitingProduction?: boolean;
   } | null>(null);
   // True once the PR fetch has resolved at least once for this session — lets us
   // tell "staging genuinely absent" from "not loaded yet" (the fetch starts null
@@ -431,25 +437,35 @@ export function useSessionRuntimeController({
       return;
     }
     let alive = true;
+    const merged = stagingPrState === "merged";
+    let stop = () => {};
     const load = (signal?: AbortSignal) =>
       fetchPr(session.id, phonePr?.repo, phonePr?.branch, { signal })
         .then((pullRequest) => {
-          if (alive) {
-            setStaging(pullRequest?.staging ?? null);
-            setStagingLoadedFor(stagingPrUrl);
-            setStagingSettled(true);
-          }
+          if (!alive) return;
+          const next = pullRequest?.staging ?? null;
+          setStaging(next);
+          setStagingLoadedFor(stagingPrUrl);
+          setStagingSettled(true);
+          // A merged PR's link changes once more, when production carries
+          // the merge and the server swaps the preview for the production
+          // site. Unless the server says it is waiting on that, it is final.
+          if (merged && !next?.awaitingProduction) queueMicrotask(stop);
         })
         .catch(() => {});
-    // A merged or closed PR's preview no longer changes: load it once.
-    const stop =
-      stagingPrState === "open"
-        ? pollWhileVisible(load, PR_WEBHOOK_FALLBACK_POLL_MS)
-        : (() => {
-            const ctrl = new AbortController();
-            void load(ctrl.signal);
-            return () => ctrl.abort();
-          })();
+    // A closed PR's preview no longer changes: load it once. A merged one
+    // polls a little faster, so the handover to production shows soon after
+    // the deploy (no PR webhook announces it).
+    if (stagingPrState === "done") {
+      const ctrl = new AbortController();
+      void load(ctrl.signal);
+      stop = () => ctrl.abort();
+    } else {
+      stop = pollWhileVisible(
+        load,
+        merged ? MERGED_DEPLOY_POLL_MS : PR_WEBHOOK_FALLBACK_POLL_MS,
+      );
+    }
     return () => {
       alive = false;
       stop();

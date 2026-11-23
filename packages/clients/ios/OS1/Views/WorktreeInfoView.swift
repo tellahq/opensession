@@ -887,7 +887,7 @@ struct WorktreeInfoView: View {
         if let href = pr.staging?.href(previewPath: currentSession.previewPath) {
             rows.append(DeploymentRow(
                 id: "staging",
-                name: "Preview environment",
+                name: pr.staging?.production == true ? "Production" : "Preview environment",
                 detail: href.host() ?? href.absoluteString,
                 rank: .success,
                 url: href

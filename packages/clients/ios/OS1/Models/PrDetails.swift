@@ -94,6 +94,9 @@ struct PrStaging: Decodable, Equatable {
     /// The deployment's configured landing route, used when the session has
     /// not recorded one. Absent on servers that predate it.
     var defaultPath: String?
+    /// The PR is merged and deployed, so the link is the production site
+    /// rather than the PR's preview. Absent on servers that predate it.
+    var production: Bool?
 
     /// The preview link: the session's recorded route when it has one, else
     /// the configured landing route, else the root. Mirrors the web's

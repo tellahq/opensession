@@ -70,6 +70,12 @@ export interface PrStaging {
   live?: boolean;
   /** Route the link opens when the session has no recorded preview path. */
   defaultPath?: string;
+  /** The PR is merged and in production: the link is the production site,
+   *  not the PR's preview. See pr-production-deploy.ts. */
+  production?: boolean;
+  /** The PR is merged and production has not deployed it yet: the link is
+   *  still the preview, and turns into the production site once it has. */
+  awaitingProduction?: boolean;
 }
 
 export interface PrFile {
@@ -113,6 +119,8 @@ export interface PrDetails {
   baseRefName: string;
   headRefName: string;
   headRefOid?: string;
+  /** The commit the merge landed as on the base branch. */
+  mergeCommitOid?: string;
   /** Full owner/name of the head repository. Different from the base repository for fork PRs. */
   headRepo?: string;
   additions: number;

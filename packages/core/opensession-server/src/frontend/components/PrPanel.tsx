@@ -242,6 +242,13 @@ export interface LinkedPrEntry {
 
 const NO_LINKED_PRS: LinkedPrEntry[] = [];
 
+/** A merged PR's link hands over to production once the merge is deployed. */
+function stagingLabel(staging: { production?: boolean }): string {
+  return staging.production
+    ? "Open in production"
+    : "Open the preview environment";
+}
+
 export function PrPanel({
   sessionId,
   phoneNavigation,
@@ -1887,7 +1894,9 @@ export function PrPanel({
             render={<a href={pr.staging.url} target="_blank" rel="noopener" />}
           >
             <IconGlobe size={18} className={MENU_ICON} />
-            <span className="min-w-0 flex-1 truncate">Open preview</span>
+            <span className="min-w-0 flex-1 truncate">
+              {pr.staging.production ? "Open in production" : "Open preview"}
+            </span>
           </Menu.Item>
         )}
         <Menu.Item
@@ -2060,13 +2069,13 @@ export function PrPanel({
                 />
               )}
               {pr.staging?.url && !headerCompact && (
-                <Tooltip label="Open the preview environment">
+                <Tooltip label={stagingLabel(pr.staging)}>
                   <a
                     className="inline-flex size-8 shrink-0 items-center justify-center rounded-control text-dim no-underline hover:bg-hover hover:text-fg"
                     href={pr.staging.url}
                     target="_blank"
                     rel="noopener"
-                    aria-label="Open the preview environment"
+                    aria-label={stagingLabel(pr.staging)}
                   >
                     <IconGlobe size={19} />
                   </a>

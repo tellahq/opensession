@@ -17,7 +17,7 @@ export const API_SWR_OPTIONS = {
  * it during the external-store snapshot check.
  */
 export function apiResourceSWRConfig<Data>(
-  refreshInterval: number,
+  refreshInterval: number | ((latest?: Data) => number),
   compare?: SWRConfiguration<Data>["compare"],
 ): SWRConfiguration<Data> {
   const config: SWRConfiguration<Data> = {
