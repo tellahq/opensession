@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { PrInfo } from "../../server/pr-cache";
 import type { UnifiedSession } from "../../server/types";
-import { deliverCapFollowUp, resolveHandoffOwner } from "./handoff";
+import {
+  deliverCapFollowUp,
+  resolveHandoffOwner,
+  settlePassedReview,
+} from "./handoff";
 import { handoffDecision, type HandoffState } from "./handoff-gates";
 
 const WORKSPACE = "acme-app";
@@ -278,6 +282,38 @@ describe("review findings after the round cap", () => {
     const sent = await reviewAfterCap(["s1", "s1"], true);
     expect(sent.map((d) => d.deliveryId)).toEqual([
       "github-review-settled:acme/app:9:capped:s1",
+    ]);
+  });
+});
+
+describe("a pass below the round cap", () => {
+  async function pass(opts: { settled: boolean; notified: boolean }) {
+    const steps: string[] = [];
+    await settlePassedReview({
+      settle: async () => (steps.push("settle"), opts.settled),
+      noticeNeeded: (settled) => !settled,
+      notify: async () => (steps.push("notify"), opts.notified),
+      clear: async () => void steps.push("clear"),
+    });
+    return steps;
+  }
+
+  test("a delivered wrap-up clears the rounds without a notice", async () => {
+    expect(await pass({ settled: true, notified: true })).toEqual([
+      "settle",
+      "clear",
+    ]);
+  });
+
+  test("a failed fallback notice keeps the rounds for the next review", async () => {
+    expect(await pass({ settled: false, notified: false })).toEqual([
+      "settle",
+      "notify",
+    ]);
+    expect(await pass({ settled: false, notified: true })).toEqual([
+      "settle",
+      "notify",
+      "clear",
     ]);
   });
 });

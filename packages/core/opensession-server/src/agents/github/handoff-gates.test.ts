@@ -78,8 +78,13 @@ describe("open findings notice gate", () => {
     ).toBe(true);
     // The notice then counts the open threads; none means nothing is sent.
     expect(
-      openFindingsCount(0, "- [@a · comment 1] a.ts:1 — x\n- [@b review] y"),
+      openFindingsCount(
+        0,
+        "- [@a · comment 1] a.ts:1 — x\n- [@app[bot] · comment 2 · thread T] b.ts:2 — y\n- [@b review] y",
+      ),
     ).toBe(2);
+    // An approval body is listed but is not a finding.
+    expect(openFindingsCount(0, "- [@alice review approved] LGTM")).toBe(0);
     expect(openFindingsCount(0, "")).toBe(0);
     expect(openFindingsCount(3, "")).toBe(3);
   });

@@ -189,11 +189,13 @@ export async function maybeHandoffFindings(
         await passedAfterCap(pr, review);
         return;
       }
-      const settled = await settleHandoff(pr, review, "passed");
-      // A delivered wrap-up carries the open findings. When none went out
-      // (no rounds, or the round session is gone), the owner gets the notice.
-      if (openFindingsNoticeNeeded(review, prior, settled))
-        await notifyOpenFindings(pr, review);
+      await settlePassedReview({
+        settle: () => settleHandoff(pr, review, "passed"),
+        noticeNeeded: (settled) =>
+          openFindingsNoticeNeeded(review, prior, settled),
+        notify: () => notifyOpenFindings(pr, review),
+        clear: () => clearHandoff(pr.number, pr.ghRepo),
+      });
       return;
     }
     // A fixer (label auto-fix / simplify / mention reply) already owns the
@@ -307,26 +309,53 @@ export async function maybeHandoffFindings(
   }
 }
 
+export interface PassedReviewDeps {
+  /** Send the passed wrap-up to the round session; whether it went out. */
+  settle(): Promise<boolean>;
+  noticeNeeded(settled: boolean): boolean;
+  /** Send the open-findings notice; false only when a delivery failed. */
+  notify(): Promise<boolean>;
+  /** Drop the round state. */
+  clear(): Promise<void>;
+}
+
+/**
+ * A review passed below the cap. A delivered wrap-up carries the open
+ * findings; when none went out (no rounds, or the round session is gone), the
+ * owner gets the notice. The round state is dropped only once one of them got
+ * through or nothing was owed, so a failed fallback stays eligible on the next
+ * review of the same commit instead of losing the earlier rounds' threads.
+ */
+export async function settlePassedReview(
+  deps: PassedReviewDeps,
+): Promise<void> {
+  const settled = await deps.settle();
+  if (deps.noticeNeeded(settled) && !(await deps.notify())) return;
+  await deps.clear();
+}
+
 /**
  * Tell the owning session about findings a passing review left open. Not a fix
  * round: no round state, no bot-push re-review carve-out, no round cap. One
  * delivery per reviewed commit. PRs with no live owner get nothing extra, since
- * nothing blocks them. Never throws past the caller's guard.
+ * nothing blocks them. Returns false only when a delivery was attempted and
+ * failed (or session control is down), so the caller can retry later. Never
+ * throws past the caller's guard.
  */
 async function notifyOpenFindings(
   pr: PrRef,
   review: ReviewResult,
-): Promise<void> {
+): Promise<boolean> {
   // A fixer already owns the branch worktree and will see the same comments.
-  if (isLockHeld("code", pr.number, pr.ghRepo)) return;
+  if (isLockHeld("code", pr.number, pr.ghRepo)) return true;
   const control = tryGetSessionControl();
-  if (!control) return;
+  if (!control) return false;
   const repoFull =
     pr.ghRepo || defaultRepo(configuredRepos(await getConfigAsync())).ghRepo;
   const workspaceId = await workspaceIdForRepo(repoFull);
-  if (!workspaceId) return;
+  if (!workspaceId) return true;
   const target = await resolveHandoffOwner(pr, workspaceId);
-  if (!target) return;
+  if (!target) return true;
 
   const state = await getOrInitPrState(pr.number, pr.headRef, pr.ghRepo);
   const sha = state.lastReviewedSha || pr.headSha;
@@ -335,7 +364,7 @@ async function notifyOpenFindings(
   );
   // A pass that filed nothing new is reported only for threads still open.
   const findings = openFindingsCount(review.findings, findingsBlock);
-  if (!findings) return;
+  if (!findings) return true;
   const message = buildOpenFindingsMessage({
     prNumber: pr.number,
     title: pr.title,
@@ -355,7 +384,7 @@ async function notifyOpenFindings(
     console.error(
       `[github] open findings → ${target.id} failed for PR #${pr.number}: ${res.message}`,
     );
-    return;
+    return false;
   }
   audit({
     msg: "review_open_findings_handoff",
@@ -372,6 +401,7 @@ async function notifyOpenFindings(
     state.summaryCommentId,
     `💬 ${findings} non-blocking finding${findings === 1 ? "" : "s"} → owning session`,
   );
+  return true;
 }
 
 /**
@@ -389,7 +419,6 @@ async function settleHandoff(
 ): Promise<boolean> {
   const state = await readPrState(pr.number, pr.ghRepo);
   const handoff = state?.handoff;
-  if (outcome === "passed") await clearHandoff(pr.number, pr.ghRepo);
   if (!handoff?.rounds || !handoff.sessionId) return false;
   const control = tryGetSessionControl();
   // A deleted round session cannot take the wrap-up.

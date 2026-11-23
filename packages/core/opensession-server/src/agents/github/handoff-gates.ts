@@ -42,13 +42,20 @@ export function openFindingsNoticeNeeded(
   return r.findings > 0 || !!prior?.rounds;
 }
 
-/** Findings to report: the review's own count, else the open threads listed. */
+/**
+ * Findings to report: the review's own count, else the open inline threads in
+ * the findings block. Review summary bodies (an approval's "LGTM") are listed
+ * there too but are not findings, so only thread entries count: they carry a
+ * `comment <id>` or `thread <id>` handle after the author.
+ */
 export function openFindingsCount(
   reported: number,
   findingsBlock: string,
 ): number {
   if (reported > 0) return reported;
-  return findingsBlock.split("\n").filter((l) => l.startsWith("- ")).length;
+  return findingsBlock
+    .split("\n")
+    .filter((l) => /^- \[@\S+ · (comment|thread) /.test(l)).length;
 }
 
 /** Per-PR handoff round tracking, persisted on GithubPrState. */
