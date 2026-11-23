@@ -5,6 +5,7 @@ import {
   openFindingsCount,
   openFindingsNoticeNeeded,
   sameHandoffRound,
+  staleReview,
   type HandoffState,
   pickHandoffOwner,
   reviewSatisfied,
@@ -192,5 +193,14 @@ describe("clearing round state after a pass", () => {
     // A newer failing review recorded round 6 meanwhile: keep it.
     expect(sameHandoffRound({ rounds: 6, lastSha: "b" }, settled)).toBe(false);
     expect(sameHandoffRound(undefined, settled)).toBe(false);
+  });
+});
+
+describe("out-of-order review results", () => {
+  test("a review older than the last finished one is stale", () => {
+    expect(staleReview("a", "b")).toBe(true);
+    expect(staleReview("b", "b")).toBe(false);
+    expect(staleReview("a", undefined)).toBe(false);
+    expect(staleReview("", "b")).toBe(false);
   });
 });

@@ -50,6 +50,7 @@ import {
   openFindingsCount,
   openFindingsNoticeNeeded,
   sameHandoffRound,
+  staleReview,
   type HandoffState,
   pickHandoffOwner,
   reviewSatisfied,
@@ -186,6 +187,13 @@ export async function maybeHandoffFindings(
   try {
     // null = the review was skipped (dedup/lock) or died before producing a result.
     if (!handoffEnabled() || !review || review.error) return;
+    if (
+      staleReview(
+        pr.headSha,
+        (await readPrState(pr.number, pr.ghRepo))?.lastReviewedSha,
+      )
+    )
+      return;
     if (reviewSatisfied(review)) {
       const prior = (await readPrState(pr.number, pr.ghRepo))?.handoff;
       // The cap stands until the PR closes: a pass after it neither clears
@@ -241,7 +249,7 @@ export async function maybeHandoffFindings(
     }
 
     const state = await getOrInitPrState(pr.number, pr.headRef, pr.ghRepo);
-    const sha = state.lastReviewedSha || pr.headSha;
+    const sha = pr.headSha || state.lastReviewedSha || "";
     const decision = handoffDecision(state.handoff, sha, MAX_ROUNDS);
     if (decision === "duplicate") return;
     if (decision === "capped" || decision === "post-cap") {
@@ -368,7 +376,7 @@ async function notifyOpenFindings(
   if (!target) return true;
 
   const state = await getOrInitPrState(pr.number, pr.headRef, pr.ghRepo);
-  const sha = state.lastReviewedSha || pr.headSha;
+  const sha = pr.headSha || state.lastReviewedSha || "";
   const read = await readReviewFindings(pr.number, pr.ghRepo).catch(() => null);
   // A pass that filed nothing new is reported only for threads still open;
   // when GitHub could not say which those are, keep the notice owed.
@@ -436,7 +444,7 @@ async function settleHandoff(
   if (!control?.getSession(handoff.sessionId)) return false;
   const repoFull =
     pr.ghRepo || defaultRepo(configuredRepos(await getConfigAsync())).ghRepo;
-  const sha = state?.lastReviewedSha || pr.headSha;
+  const sha = pr.headSha || state?.lastReviewedSha || "";
   // A review can pass with findings open: its own non-blocking ones, or an
   // earlier trusted thread it did not repeat (review.findings counts only its
   // own output). The fix-round session gets no separate notice for them
@@ -600,7 +608,7 @@ async function passedAfterCap(pr: PrRef, review: ReviewResult): Promise<void> {
   const target = await resolveHandoffOwner(pr, workspaceId);
   if (!target) return;
   const state = await getOrInitPrState(pr.number, pr.headRef, pr.ghRepo);
-  const sha = state.lastReviewedSha || pr.headSha;
+  const sha = pr.headSha || state.lastReviewedSha || "";
   // "capped" here means the capped wrap-up never got through; this pass
   // stands in for it and records the cap.
   if (handoffDecision(state.handoff, sha, MAX_ROUNDS) === "duplicate") return;
@@ -646,7 +654,8 @@ async function afterCap(
           pr.number,
           pr.headRef,
           (s) => {
-            if (!s.handoff) return;
+            // A newer review finished meanwhile: its own handoff records.
+            if (!s.handoff || staleReview(reviewed, s.lastReviewedSha)) return;
             s.handoff.cappedAnnounced = true;
             s.handoff.cappedSha = reviewed;
           },

@@ -96,6 +96,19 @@ export function sameHandoffRound(
   );
 }
 
+/**
+ * Has a newer review of this PR finished since this one? The review lock is
+ * released before the handoff runs, so reviews of two commits can reach it
+ * out of order. A stale result must not deliver or touch round state: its
+ * findings describe a commit the newer review already replaced.
+ */
+export function staleReview(
+  reviewedSha: string | undefined,
+  lastReviewedSha: string | undefined,
+): boolean {
+  return !!reviewedSha && !!lastReviewedSha && reviewedSha !== lastReviewedSha;
+}
+
 export type HandoffDecision = "deliver" | "duplicate" | "capped" | "post-cap";
 
 /** What should an unsatisfied review of `sha` do in the owning session? */
