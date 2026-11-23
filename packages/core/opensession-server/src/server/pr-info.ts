@@ -34,6 +34,7 @@ import { githubToken, githubInstallationCredential } from "./github-app";
 import { reviewRequestRemovalSpecs } from "./github-review-requests";
 import { noteGithubGraphqlCall } from "./github-budget";
 import { getPrStack, unmergedLayersBelow } from "./pr-stack";
+import { withProductionDeploy } from "./pr-production-deploy";
 import {
   blockedOnlyForBot,
   fetchBranchRules,
@@ -1647,7 +1648,9 @@ export async function getPrDetails(
   branch: string,
   repo: string = DEFAULT_REPO(),
 ): Promise<PrDetails | null> {
-  return withEmbeddable(await getCachedPrDetails(branch, repo));
+  return withEmbeddable(
+    await withProductionDeploy(await getCachedPrDetails(branch, repo), repo),
+  );
 }
 
 async function getCachedPrDetails(
@@ -1697,7 +1700,7 @@ export async function getPrDetailsFresh(
   const data = await fetchPrDetails(branch, repo);
   cache.set(cacheKey(repo, branch), { data, ts: Date.now() });
   schedulePersist();
-  return withEmbeddable(data);
+  return withEmbeddable(await withProductionDeploy(data, repo));
 }
 
 /** True for "this branch/number has no PR" — a real answer, not a failure. */
@@ -1858,7 +1861,7 @@ async function fetchPrDetails(
     let trustCached = true;
     for (let attempt = 1; ; attempt++) {
       const baseFields =
-        "number,title,url,state,isDraft,baseRefName,headRefName,headRefOid,additions,deletions,changedFiles,reviewDecision,author,body,mergeable,mergeStateStatus,autoMergeRequest,comments,commits,files,latestReviews,reviewRequests";
+        "number,title,url,state,isDraft,baseRefName,headRefName,headRefOid,mergeCommit,additions,deletions,changedFiles,reviewDecision,author,body,mergeable,mergeStateStatus,autoMergeRequest,comments,commits,files,latestReviews,reviewRequests";
       const fields = `${baseFields},statusCheckRollup`;
       const queryStarted = Date.now();
       try {
@@ -1908,6 +1911,7 @@ async function fetchPrDetails(
       baseRefName: pr.baseRefName,
       headRefName: pr.headRefName,
       headRefOid: pr.headRefOid,
+      ...(pr.mergeCommit?.oid ? { mergeCommitOid: pr.mergeCommit.oid } : {}),
       additions: pr.additions,
       deletions: pr.deletions,
       changedFiles: pr.changedFiles,

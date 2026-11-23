@@ -1,5 +1,8 @@
 import { useEffect, useRef } from "react";
-import { PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
+import {
+  MERGED_DEPLOY_POLL_MS,
+  PR_WEBHOOK_FALLBACK_POLL_MS,
+} from "../lib/poll";
 import { useSessionPrResource } from "./useApiResources";
 import { useSessionPendingCreation } from "./useSessionPendingCreation";
 import type { PrCheck, UnifiedSession } from "../lib/types";
@@ -19,7 +22,11 @@ import { checkClass, isDeployment } from "../lib/pr-status-derive";
  * kept preview pages (through useReloadOnFreshDeploy) both read it, so they
  * agree on when the preview is up to date.
  *
- * - `relevant`: the PR is open, so its preview is worth showing at all.
+ * - `relevant`: the PR is open, or merged and the link still has somewhere
+ *   to go, so the globe is worth showing at all.
+ * - `merged`: the PR is merged. Its preview keeps serving the merged change
+ *   until production does, then the server hands `staging` over to the
+ *   production site (`staging.production`).
  * - `deployPending`: a deploy check is still queued or running.
  * - `building`: a first deploy with nothing behind the alias yet (it 404s).
  * - `rebuilding`: a newer deploy is on its way while the alias keeps serving
@@ -29,15 +36,19 @@ export function useStagingDeploy(
   session: UnifiedSession,
   refreshTick?: number,
 ) {
-  // A merged/closed PR's alias no longer points at this change. PR refs are
-  // shared across a workspace, so a tab without a PR of its own deliberately
-  // targets one of the workspace's refs.
+  // A closed PR's alias serves work that never landed. PR refs are shared
+  // across a workspace, so a tab without a PR of its own deliberately targets
+  // one of the workspace's refs.
   const presentation = sessionPrPresentation(session.prs);
   const target = presentation.primary ?? worstPrRef(presentation.additional);
-  const relevant = target
+  const state = target
     ? (target.state ??
-        (target.source === "primary" ? session.prState : undefined)) === "OPEN"
-    : !!session.prUrl && session.prState === "OPEN";
+      (target.source === "primary" ? session.prState : undefined))
+    : session.prUrl
+      ? session.prState
+      : undefined;
+  const merged = state === "MERGED";
+  const relevant = state === "OPEN" || merged;
   const pendingCreation = useSessionPendingCreation();
   const prResource = useSessionPrResource(
     session.id,
@@ -45,24 +56,36 @@ export function useStagingDeploy(
     target?.branch,
     {
       enabled: relevant && !pendingCreation,
-      refreshInterval: PR_WEBHOOK_FALLBACK_POLL_MS,
+      // A merged PR polls only while its link waits on production: nothing
+      // about it changes after that.
+      refreshInterval: (latest) =>
+        !merged
+          ? PR_WEBHOOK_FALLBACK_POLL_MS
+          : latest?.staging?.awaitingProduction
+            ? MERGED_DEPLOY_POLL_MS
+            : 0,
       revision: refreshTick,
     },
   );
   const staging = prResource.data?.staging ?? null;
   // A Vercel preview deploy is queued/running but butler hasn't posted the URL
-  // comment yet, or a push started a new one behind a Ready row.
-  const deployPending = !!prResource.data?.checks?.some(
-    (c: PrCheck) =>
-      isDeployment(c) && checkClass(c.status, c.conclusion) === "check-pending",
-  );
+  // comment yet, or a push started a new one behind a Ready row. A merged PR's
+  // checks belong to its last push, long settled into the preview it keeps.
+  const deployPending =
+    !merged &&
+    !!prResource.data?.checks?.some(
+      (c: PrCheck) =>
+        isDeployment(c) &&
+        checkClass(c.status, c.conclusion) === "check-pending",
+    );
   // The deploy bot can also flip its own row back to Building on a push; the
   // server's probe still sees the previous deploy serving (`live`), so that is
   // a rebuild too.
   const openable = staging ? previewOpenable(staging) : false;
   const building = !!staging && !openable;
-  const rebuilding = openable && (deployPending || staging?.status !== "Ready");
-  return { relevant, staging, deployPending, building, rebuilding };
+  const rebuilding =
+    !merged && openable && (deployPending || staging?.status !== "Ready");
+  return { relevant, merged, staging, deployPending, building, rebuilding };
 }
 
 /**

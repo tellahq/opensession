@@ -27,7 +27,9 @@ import {
 
 export type ApiResourceOptions<Data> = {
   enabled?: boolean;
-  refreshInterval?: number;
+  /** A function decides from the latest value, e.g. to stop polling once a
+   *  state is final. */
+  refreshInterval?: number | ((latest?: Data) => number);
   /** Revalidate when a webhook, socket event, or parent resource says this
    * read may have changed. The first value is covered by SWR's mount fetch. */
   revision?: string | number | null;
