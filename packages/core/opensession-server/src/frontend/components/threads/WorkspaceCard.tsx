@@ -9,9 +9,10 @@ import {
 } from "../../lib/workspace-summary-classes";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
+import { Menu } from "../../ui/menu";
 import { Tooltip } from "../../ui/tooltip";
 import { HuddleButton } from "../huddle/HuddleButton";
-import { IconCheckCircle, IconGear } from "../icons";
+import { IconCheckCircle, IconGear, IconPlus } from "../icons";
 import { RepoTile } from "../RepoTile";
 import {
   CollaboratorMenuItems,
@@ -19,7 +20,6 @@ import {
 } from "../WorkspaceCollaborators";
 import { UserAvatar } from "../UserAvatar";
 import { WorkspaceSettingsDialog } from "../WorkspaceSettingsDialog";
-import { WorkspaceSummaryAdd } from "../WorkspaceSummaryAdd";
 
 /** A row that only reports: no pointer, no hover pill. */
 const STILL_ROW = cn(WS_SUMMARY_ROW, "cursor-default hover:bg-transparent");
@@ -126,7 +126,7 @@ function Goal({ goal, className }: { goal?: string; className: string }) {
 /**
  * One row for where the work stands and who is in on it: threads shipped
  * with a thin bar on the left, the people's faces on the right and a "+"
- * after them that adds a teammate. Each collaborator gets the workspace in
+ * tile at the end of them that adds a teammate. Each collaborator gets the workspace in
  * their own sidebar.
  */
 function ProgressRow({
@@ -189,14 +189,28 @@ function ProgressRow({
               />
             </Tooltip>
           ))}
+          {/* The add is one more tile at the end of the faces, so it reads
+              as part of the group rather than a control beside it. */}
+          {state && (
+            <Menu.Root>
+              <Tooltip label="Add collaborator">
+                <Menu.Trigger
+                  aria-label="Add collaborator"
+                  className={cn(
+                    "grid size-[22px] shrink-0 cursor-pointer place-items-center rounded-avatar border-none bg-active p-0 text-dim shadow-[var(--avatar-edge)] focus-ring",
+                    "transition-colors hover:bg-pressed hover:text-fg data-[popup-open]:bg-pressed data-[popup-open]:text-fg",
+                    people.length > 0 && "-ml-1",
+                  )}
+                >
+                  <IconPlus size={20} className="size-3.5" />
+                </Menu.Trigger>
+              </Tooltip>
+              <Menu.Popup align="end" sideOffset={6} className="min-w-[200px]">
+                <CollaboratorMenuItems {...state} />
+              </Menu.Popup>
+            </Menu.Root>
+          )}
         </span>
-        {state && (
-          <span className="ml-1 flex shrink-0">
-            <WorkspaceSummaryAdd label="Add collaborator">
-              <CollaboratorMenuItems {...state} />
-            </WorkspaceSummaryAdd>
-          </span>
-        )}
       </div>
       {state?.error && (
         <div className="px-4 py-1 text-meta font-medium text-red">

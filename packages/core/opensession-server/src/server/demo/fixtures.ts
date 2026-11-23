@@ -2303,7 +2303,12 @@ export function demoPrDetails(now: number, ghRepo: string) {
     reviewers: [{ login: "sam-reviews", state: "APPROVED" as const }],
     mergeable: "MERGEABLE",
     mergeStateStatus: "CLEAN",
-    staging: null,
+    // A ready preview deploy, so the preview links have one to open.
+    staging: {
+      url: `https://pr-${DEMO_PR_NUMBER}.preview.example.test`,
+      status: "Ready",
+      live: true,
+    },
   };
 }
 

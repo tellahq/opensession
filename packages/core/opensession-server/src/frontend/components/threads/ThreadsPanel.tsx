@@ -17,7 +17,12 @@ import {
 } from "../../lib/session-threads";
 import { shortTime } from "../../lib/time";
 import { useWorkspaceRecord } from "../../lib/workspace-records";
-import type { CommentThread, UnifiedSession, Workspace } from "../../lib/types";
+import type {
+  CommentThread,
+  UnifiedSession,
+  Workspace,
+  WSClientMessage,
+} from "../../lib/types";
 import { cn } from "../../ui/cn";
 import { ListRow, listRowClass } from "../../ui/list-row";
 import { UnderlineTabs } from "../../ui/tabs";
@@ -33,10 +38,12 @@ import { THREAD_CAPTION } from "./thread-classes";
 import { openThreadTab } from "../../lib/thread-tabs";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { useIsCoordinating } from "../../lib/coordinator-mode";
+import { ThreadPanelView } from "./ThreadPanelView";
 import { ThreadRow } from "./ThreadRow";
+
 import { WorkspaceCard } from "./WorkspaceCard";
 
-type PanelTab = "threads" | "prs" | "comments" | "artifacts";
+type PanelTab = "threads" | "comments" | "artifacts";
 
 /** The file a coordinator is told to keep current (server/coordinator.ts),
  *  and its name from before coordinator mode was a session setting. */
@@ -45,8 +52,9 @@ const isSummary = (path: string) => SUMMARY_ASSETS.has(path);
 
 /**
  * The threads a conversation handed work to, at a glance: its workspace's
- * goal and people, the threads by where they stand, the conversation's
- * comment threads, and the documents it keeps. The desktop side panel's
+ * goal and people, the threads by where they stand (each with its PR and
+ * preview link, opening in the panel), the conversation's comment threads,
+ * and the documents it keeps. The desktop side panel's
  * Threads tab and the top of the phone's details page.
  */
 export function ThreadsPanel({
@@ -55,6 +63,7 @@ export function ThreadsPanel({
   onOpenSession,
   onOpenAsset,
   showTitle = true,
+  send,
 }: {
   workspace: Workspace | null;
   /** The conversation that started the threads. */
@@ -63,12 +72,32 @@ export function ThreadsPanel({
   onOpenAsset?: (path: string) => void;
   /** Off where the page around it already names the workspace. */
   showTitle?: boolean;
+  /** The conversation's socket, which a thread opened in the panel sends its
+   *  replies and actions through. Absent while disconnected. */
+  send?: (msg: WSClientMessage) => void;
 }) {
+  const phone = useIsPhone();
+  const [openThread, setOpenThread] = useState<string | null>(null);
+  // A thread opens in the panel on desktop, with a way out to a tab of its
+  // own; a phone opens it as its own page.
+  if (openThread && !phone)
+    return (
+      <ThreadPanelView
+        threadId={openThread}
+        send={send}
+        onBack={() => setOpenThread(null)}
+        onOpenTab={() => {
+          openThreadTab(openThread);
+          onOpenSession?.(openThread);
+        }}
+        onOpenThread={setOpenThread}
+      />
+    );
   return (
     <ThreadsOverview
       workspace={workspace}
       rootId={rootId}
-      onOpenSession={onOpenSession}
+      onOpenThread={(id) => (phone ? onOpenSession?.(id) : setOpenThread(id))}
       onOpenAsset={onOpenAsset}
       showTitle={showTitle}
     />
@@ -78,21 +107,23 @@ export function ThreadsPanel({
 function ThreadsOverview({
   workspace,
   rootId,
-  onOpenSession,
+  onOpenThread,
   onOpenAsset,
   showTitle,
 }: {
   workspace: Workspace | null;
   rootId: string;
-  onOpenSession?: (id: string) => void;
+  onOpenThread: (id: string) => void;
   onOpenAsset?: (path: string) => void;
   showTitle: boolean;
 }) {
   const sessions = useSessionRecords();
   const threads = sessionThreads(sessions, rootId);
   const root = sessions.find((s) => s.id === rootId);
-  const prs = coordinatedPrs(sessions, rootId);
-  const phone = useIsPhone();
+  // The conversation's own PRs; each thread's PR shows on its row.
+  const ownPrs = coordinatedPrs(sessions, rootId).filter(
+    ({ session }) => session.id === rootId,
+  );
   const [tab, setTab] = useState<PanelTab>("threads");
   const comments = usePanelComments(rootId);
   const artifacts = usePanelArtifacts(rootId, sessions);
@@ -117,7 +148,6 @@ function ThreadsOverview({
           onValueChange={(value) => {
             if (
               value === "threads" ||
-              value === "prs" ||
               value === "comments" ||
               value === "artifacts"
             )
@@ -130,9 +160,6 @@ function ThreadsOverview({
             count={threads.length || undefined}
           >
             Threads
-          </UnderlineTabs.Tab>
-          <UnderlineTabs.Tab value="prs" count={prs.length || undefined}>
-            PRs
           </UnderlineTabs.Tab>
           <UnderlineTabs.Tab
             value="comments"
@@ -150,18 +177,16 @@ function ThreadsOverview({
       </div>
 
       {tab === "threads" && (
-        <ThreadGroups
-          threads={threads}
-          starter={root?.startedBy || root?.createdBy || undefined}
-          onOpen={(id) => {
-            // In a tab of its own on desktop.
-            if (!phone) openThreadTab(id);
-            onOpenSession?.(id);
-          }}
-        />
-      )}
-      {tab === "prs" && (
-        <PrList prs={prs} rootId={rootId} primaryRepo={workspace?.repo} />
+        <>
+          {ownPrs.length > 0 && (
+            <PrList prs={ownPrs} primaryRepo={workspace?.repo} />
+          )}
+          <ThreadGroups
+            threads={threads}
+            starter={root?.startedBy || root?.createdBy || undefined}
+            onOpen={onOpenThread}
+          />
+        </>
       )}
       {tab === "comments" && <CommentList threads={comments.threads} />}
       {tab === "artifacts" && (
@@ -241,23 +266,18 @@ function ThreadGroups({
 /** The coordinator's and its threads' PRs, each a link to the PR. */
 function PrList({
   prs,
-  rootId,
   primaryRepo,
 }: {
   prs: CoordinatedPr[];
-  rootId: string;
   primaryRepo?: string;
 }) {
-  if (prs.length === 0)
-    return (
-      <EmptyState className="py-8">
-        No PRs yet. Every PR this conversation or its threads open shows up
-        here.
-      </EmptyState>
-    );
   return (
-    <div className="flex flex-col">
-      {prs.map(({ pr, session }) => {
+    <section className="flex flex-col" aria-label="This conversation's PRs">
+      <div className={cn(THREAD_CAPTION, "cursor-default hover:text-faint")}>
+        This conversation
+        <Count n={prs.length} />
+      </div>
+      {prs.map(({ pr }) => {
         const tone = refTone(pr);
         const otherRepo = pr.repo !== primaryRepo;
         return (
@@ -284,9 +304,6 @@ function PrList({
               <span className="truncate text-meta text-dim">
                 <span className={PR_STATE_TEXT[tone]}>{refState(pr)}</span>
                 {otherRepo && ` · ${repoLabel(pr.repo)}`}
-                {session.id !== rootId && session.title !== pr.title && (
-                  <span className="text-faint"> · {session.title}</span>
-                )}
               </span>
             </span>
             {pr.url && (
@@ -298,7 +315,7 @@ function PrList({
           </a>
         );
       })}
-    </div>
+    </section>
   );
 }
 

@@ -222,6 +222,7 @@ export function SessionViewerSidePanel({
               rootId={threads.rootId}
               onOpenSession={summary.onOpenSession}
               onOpenAsset={summary.onOpenAsset}
+              send={summaryRuntime.send}
             />
           )
         }

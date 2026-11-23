@@ -214,6 +214,9 @@ interface Props {
   forcePopover?: boolean;
   /** Render the same quiet rows inside the phone Workspace page. */
   embedded?: boolean;
+  /** Leave out Collaborators, where the page around it already shows the
+   *  workspace's people (a thread opened in the coordinator's panel). */
+  hideCollaborators?: boolean;
   /** Media already visible in the live transcript, before the overview catches up. */
   liveMedia?: WorkspaceMediaItem[];
   /**
@@ -500,6 +503,7 @@ export function WorkspaceSummaryBody({
   refreshTick,
   close,
   embedded = false,
+  hideCollaborators = false,
   reviewMode = false,
   liveMedia = NO_LIVE_MEDIA,
   prGroupRef,
@@ -1597,7 +1601,7 @@ export function WorkspaceSummaryBody({
           )}
         </div>
 
-        {collaboratorState && (
+        {collaboratorState && !hideCollaborators && (
           <WorkspaceSummaryCollaborators
             state={collaboratorState}
             groupClass={groupClass}
