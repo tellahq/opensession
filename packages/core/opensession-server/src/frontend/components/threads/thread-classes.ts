@@ -9,6 +9,7 @@ export const THREAD_DOT: Record<ThreadState, string> = {
   shipped: "bg-purple",
 };
 
-/** The panel's group captions: a size down from the rows, like sidebar lanes. */
+/** The panel's group captions: a size down from the rows, like sidebar lanes.
+ *  Each one folds its group. */
 export const THREAD_CAPTION =
-  "flex items-baseline gap-1.5 px-2 pt-3 pb-1 text-label font-semibold text-faint";
+  "focus-ring flex w-full cursor-pointer items-center gap-1.5 rounded-md border-none bg-transparent px-2 pt-3 pb-1 text-left text-label font-medium text-faint hover:text-dim phone:min-h-11";

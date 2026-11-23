@@ -67,15 +67,20 @@ export function useThreadGist(
 /** One thread: state dot, title, where it stands, who started it, when. */
 export function ThreadRow({
   thread,
+  starter: conversationStarter,
   onOpen,
 }: {
   thread: UnifiedSession;
+  /** Who started the conversation the thread belongs to. Their face is left
+   *  off, so a face on a row means someone else started that thread. */
+  starter?: string;
   onOpen?: (id: string) => void;
 }) {
   const state = threadState(thread);
   const gist = useThreadGist(thread, state);
   const status = threadStatusLine(thread);
   const starter = thread.startedBy || thread.createdBy || "";
+  const showStarter = !!starter && starter !== conversationStarter;
   return (
     <ListRow onClick={() => onOpen?.(thread.id)} title={thread.title}>
       <span
@@ -90,13 +95,13 @@ export function ThreadRow({
         <span className="truncate text-label font-medium text-fg">
           {thread.title}
         </span>
-        <span className="line-clamp-2 text-meta text-dim">
+        <span className="truncate text-meta text-dim">
           {status}
           {gist && <span className="text-faint"> · {gist}</span>}
         </span>
       </span>
       <span className="flex shrink-0 items-center gap-1.5 pt-0.5">
-        {starter && <UserAvatar name={starter} size={16} edge={false} />}
+        {showStarter && <UserAvatar name={starter} size={16} edge={false} />}
         <span className="text-meta tabular-nums text-faint">
           {shortTime(thread.lastActivity)}
         </span>

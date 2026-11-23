@@ -13,25 +13,28 @@ import {
   type CoordinatedPr,
   THREAD_STATE_LABEL,
   threadState,
+  type ThreadState,
 } from "../../lib/session-threads";
 import { shortTime } from "../../lib/time";
 import { useWorkspaceRecord } from "../../lib/workspace-records";
 import type { CommentThread, UnifiedSession, Workspace } from "../../lib/types";
-import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
 import { ListRow, listRowClass } from "../../ui/list-row";
 import { Segmented, SegmentedOption } from "../../ui/segmented";
 import { EmptyState } from "../../ui/state";
-import { IconArrowUpRight, IconFile, IconGear, IconMessage } from "../icons";
-import { RepoTile } from "../RepoTile";
+import {
+  IconArrowUpRight,
+  IconChevronRight,
+  IconFile,
+  IconMessage,
+} from "../icons";
 import { UserAvatar } from "../UserAvatar";
 import { THREAD_CAPTION } from "./thread-classes";
-import { WorkspaceSettingsDialog } from "../WorkspaceSettingsDialog";
-import { HuddleButton } from "../huddle/HuddleButton";
 import { openThreadTab } from "../../lib/thread-tabs";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { useIsCoordinating } from "../../lib/coordinator-mode";
 import { ThreadRow } from "./ThreadRow";
+import { WorkspaceCard } from "./WorkspaceCard";
 
 type PanelTab = "threads" | "prs" | "comments" | "artifacts";
 
@@ -90,6 +93,7 @@ function ThreadsOverview({
 }) {
   const sessions = useSessionRecords();
   const threads = sessionThreads(sessions, rootId);
+  const root = sessions.find((s) => s.id === rootId);
   const prs = coordinatedPrs(sessions, rootId);
   const phone = useIsPhone();
   const [tab, setTab] = useState<PanelTab>("threads");
@@ -99,26 +103,16 @@ function ThreadsOverview({
 
   return (
     <div className="flex flex-col gap-3 px-3 pt-3 pb-6">
-      <header className="flex flex-col gap-1.5 px-2">
-        {workspace && (
-          <WorkspaceHeading
-            workspace={workspace}
-            rootId={rootId}
-            showTitle={showTitle}
-          />
-        )}
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-meta text-dim">
-          {workspace && <WorkspaceFacts workspace={workspace} />}
-          {threads.length > 0 && (
-            <span className="tabular-nums">
-              {shipped} shipped · {threads.length - shipped} open
-            </span>
-          )}
-        </div>
-        {threads.length > 0 && (
-          <ShippedBar shipped={shipped} total={threads.length} />
-        )}
-      </header>
+      {workspace && (
+        <WorkspaceCard
+          workspace={workspace}
+          rootId={rootId}
+          showTitle={showTitle}
+          shipped={shipped}
+          total={threads.length}
+          phone={phone}
+        />
+      )}
 
       <Segmented
         label="Threads panel"
@@ -152,6 +146,7 @@ function ThreadsOverview({
       {tab === "threads" && (
         <ThreadGroups
           threads={threads}
+          starter={root?.startedBy || root?.createdBy || undefined}
           onOpen={(id) => {
             // In a tab of its own on desktop.
             if (!phone) openThreadTab(id);
@@ -170,113 +165,25 @@ function ThreadsOverview({
   );
 }
 
-/** The workspace's name, huddle and settings, then its goal. */
-function WorkspaceHeading({
-  workspace,
-  rootId,
-  showTitle,
-}: {
-  workspace: Workspace;
-  rootId: string;
-  showTitle: boolean;
-}) {
-  const [editing, setEditing] = useState(false);
-  return (
-    <>
-      <div className="flex min-w-0 items-center gap-2">
-        {showTitle && (
-          <h2 className="m-0 min-w-0 flex-1 truncate text-section-title font-semibold leading-tight text-fg">
-            {workspace.name}
-          </h2>
-        )}
-        <HuddleButton
-          target={{
-            roomId: `workspace:${workspace.id}`,
-            label: workspace.name,
-            sessionId: rootId,
-          }}
-        />
-        <Button
-          size="sm"
-          variant="ghost"
-          icon={<IconGear size={20} />}
-          aria-label="Workspace settings"
-          className={cn("phone:min-h-11", !showTitle && "ml-auto")}
-          onClick={() => setEditing(true)}
-        >
-          Settings
-        </Button>
-      </div>
-      {workspace.goal && (
-        <p className="m-0 whitespace-pre-line text-supporting text-fg">
-          {workspace.goal}
-        </p>
-      )}
-      <WorkspaceSettingsDialog
-        workspace={workspace}
-        open={editing}
-        onOpenChange={setEditing}
-      />
-    </>
-  );
-}
-
-/** Project and people, on the panel's meta line. */
-function WorkspaceFacts({ workspace }: { workspace: Workspace }) {
-  const members = [
-    workspace.createdBy,
-    ...(workspace.collaborators ?? []).map((c) => c.name),
-  ].filter((name, i, all) => name && all.indexOf(name) === i);
-  return (
-    <>
-      <span className="flex min-w-0 items-center gap-1.5">
-        {workspace.repo && <RepoTile name={workspace.repo} size={14} />}
-        <span className="truncate">
-          {workspace.repo ? repoLabel(workspace.repo) : "No project"}
-        </span>
-      </span>
-      <span className="flex items-center" aria-label="Members">
-        {members.map((name, i) => (
-          <UserAvatar
-            key={name}
-            name={name}
-            size={18}
-            title={name}
-            className={cn(i > 0 && "-ml-1")}
-          />
-        ))}
-      </span>
-    </>
-  );
-}
-
 function Count({ n }: { n: number }) {
   return <span className="tabular-nums text-faint">{n}</span>;
 }
 
-/** Shipped against everything started, as one thin bar. */
-function ShippedBar({ shipped, total }: { shipped: number; total: number }) {
-  return (
-    <div
-      className="mt-0.5 h-1 overflow-hidden rounded-[999px] bg-hover"
-      role="img"
-      aria-label={`${shipped} of ${total} threads shipped`}
-    >
-      <div
-        className="h-full rounded-[999px] bg-purple transition-[width] duration-300"
-        style={{ width: `${(shipped / total) * 100}%` }}
-      />
-    </div>
-  );
-}
+/** Groups that start folded: work that needs nothing more from anyone. */
+const FOLDED_AT_FIRST = new Set<ThreadState>(["shipped"]);
 
 function ThreadGroups({
   threads,
+  starter,
   onOpen,
 }: {
   threads: UnifiedSession[];
+  /** Who started the conversation. Rows name a thread's starter only when
+   *  it is someone else. */
+  starter?: string;
   onOpen?: (id: string) => void;
 }) {
+  const [folded, setFolded] = useState(FOLDED_AT_FIRST);
   if (threads.length === 0)
     return (
       <EmptyState className="py-8">
@@ -288,13 +195,37 @@ function ThreadGroups({
     <div className="flex flex-col">
       {groupThreads(threads).map((group) => (
         <section key={group.state} aria-label={THREAD_STATE_LABEL[group.state]}>
-          <div className={THREAD_CAPTION}>
+          <button
+            type="button"
+            className={THREAD_CAPTION}
+            aria-expanded={!folded.has(group.state)}
+            onClick={() =>
+              setFolded((prev) => {
+                const next = new Set(prev);
+                if (!next.delete(group.state)) next.add(group.state);
+                return next;
+              })
+            }
+          >
             {THREAD_STATE_LABEL[group.state]}
             <Count n={group.threads.length} />
-          </div>
-          {group.threads.map((thread) => (
-            <ThreadRow key={thread.id} thread={thread} onOpen={onOpen} />
-          ))}
+            <IconChevronRight
+              size={16}
+              className={cn(
+                "text-faint transition-transform duration-150",
+                !folded.has(group.state) && "rotate-90",
+              )}
+            />
+          </button>
+          {!folded.has(group.state) &&
+            group.threads.map((thread) => (
+              <ThreadRow
+                key={thread.id}
+                thread={thread}
+                starter={starter}
+                onOpen={onOpen}
+              />
+            ))}
         </section>
       ))}
     </div>
