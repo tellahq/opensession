@@ -57,7 +57,7 @@ touches an in-process tool:
 | [`opensession-walkthrough`](#opensession-walkthrough) | 2 | interactive | Needs a session id. |
 | [`opensession-slack`](#opensession-slack) | 1 | interactive | Needs a session id. |
 | [`opensession-scripts`](#opensession-scripts) | 3 | interactive | Needs a session id. |
-| [`opensession-gpu`](#opensession-gpu) | 3 | interactive | Needs a session id. |
+| [`opensession-gpu`](#opensession-gpu) | 4 | interactive | Needs a session id. |
 | [`opensession-local-files`](#opensession-local-files) | 1 | interactive | Needs a session id. |
 | [`opensession-local-folders`](#opensession-local-folders) | 10 | interactive | Needs a session id. |
 | [`opensession-plain-discussion`](#opensession-plain-discussion) | 3 | interactive | Only a session that answers a Plain discussion (plainDiscussionId): an Ask Sidekick session carries this server alone instead of the interactive set; an auto-triage session that reports into a discussion carries it beside the automation-bar set on its later turns. |
@@ -80,7 +80,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-39 servers, 189 tools.
+39 servers, 190 tools.
 
 ## opensession-sessions
 
@@ -963,15 +963,21 @@ Jobs on an NVIDIA T4 or L4 machine.
 
 ### `run_gpu_job`
 
-`mcp__opensession-gpu__run_gpu_job` · input: `job` (string), `command` (string), `gpu` ("T4" | "L4"), `timeoutMinutes` (number)
+`mcp__opensession-gpu__run_gpu_job` · input: `job` (string), `command` (string), `gpu` ("T4" | "L4"), `timeoutMinutes` (number), `files` (object[]), `identity` ("portal")
 
-Run work that needs an NVIDIA GPU (CUDA, Vulkan) on a GPU machine, from a session without one. Pass `job` to run one the repository declares in .agents/gpu-jobs.json (call with no arguments to list them), or `command` for any bash command, e.g. a single test. The session's work is checkpointed, uncommitted changes included, and landed on one of the session's own GPU machines (Modal, T4 or L4), which keep their build cache between jobs and sleep when idle. The command runs from the repository root with a read-only GitHub credential for the repository and its private build dependencies. It keeps running through Open Session restarts, and this session is woken with the exit code and the end of the output when it ends: start it, tell the person, and end your turn instead of polling. Start as many jobs as you need at once: each runs on its own machine. A job reuses a free machine that ran the same GPU; only a new machine starts without a build cache.
+Run work that needs an NVIDIA GPU (CUDA, Vulkan) on a GPU machine, from a session without one. Pass `job` to run one the repository declares in .agents/gpu-jobs.json (call with no arguments to list them), or `command` for any bash command, e.g. a single test. The session's work is checkpointed, uncommitted changes included, and landed on one of the session's own GPU machines (Modal, T4 or L4), which keep their build cache between jobs and sleep when idle. The command runs from the repository root with a read-only GitHub credential for the repository and its private build dependencies. It keeps running through Open Session restarts, and this session is woken with the exit code and the end of the output when it ends: start it, tell the person, and end your turn instead of polling. Start as many jobs as you need at once: each runs on its own machine. A job reuses a free machine that ran the same GPU; only a new machine starts without a build cache. Files the job writes to $OPENSESSION_JOB_OUTPUT (screenshots, reports; up to 64 MB) are copied to <session scratch>/gpu-jobs/<id>/ when it ends. Gitignored or private files the job needs (an env file, a key) go in `files`, never in a commit. While it runs, gpu_exec runs more commands on its machine.
 
 ### `gpu_job_status`
 
 `mcp__opensession-gpu__gpu_job_status` · input: `id` (string)
 
 Check a GPU job started with run_gpu_job: preparing/running/exited/failed/timed_out/stopped/lost, exit code, the commit it ran on, and the end of its output. Without an id, lists this session's jobs.
+
+### `gpu_exec`
+
+`mcp__opensession-gpu__gpu_exec` · input: `id` (string, required), `command` (string, required), `timeoutSeconds` (number), `fetch` (string[])
+
+Run a bash command on the machine of a running GPU job, beside the job: same processes, files and environment ($OPENSESSION_JOB_OUTPUT, credentials, identity), from the repository root. Returns the exit code and output. Use it to drive what the job started (a server, a browser) in a loop. Start long-lived processes detached (`setsid nohup … > log 2>&1 &`) so the call returns. `fetch` copies machine files (a screenshot) to <session scratch>/gpu-jobs/<id>/fetched/ and returns their host paths. Only while the job runs: keep its command alive (e.g. end it with `sleep infinity`) and stop_gpu_job when done.
 
 ### `stop_gpu_job`
 

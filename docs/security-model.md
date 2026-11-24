@@ -408,8 +408,19 @@ outlives the call and bills compute, so automation runs and workflow scripts
 cannot start one. The machine receives the session's checkpoint and a
 read-only GitHub App token for the repository and its configured
 `readRepos`, answered by an in-shell credential helper and never written to
-disk: a job can fetch but not push. Nothing else from this host enters it.
-The log copied back into the session's scratch folder is untrusted output.
+disk: a job can fetch but not push. Host files enter it only when the
+agent names them in `files`, and only from the session's worktree
+(gitignored files), its scratch folder or the repository's main checkout,
+with symlinks resolved before that check; they travel over the provider's
+file API, never through the checkpoint, a command line or the job record,
+and are removed when the job ends. Workload identity is the ordinary `run`
+lease unless the job asks for `identity: "portal"`, which grants the
+audiences configured for the repository's `setup`, `preview` and `run`
+lifecycles (interactive trust profile only) until the job ends. Nothing else
+from this host enters it. The log, the `$OPENSESSION_JOB_OUTPUT` files and
+`gpu_exec` fetches copied back into the session's scratch folder are
+untrusted output: only regular files are written there, under paths checked
+to stay inside the job's folder.
 
 ## Script runs
 

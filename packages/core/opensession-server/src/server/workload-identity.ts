@@ -421,8 +421,22 @@ async function signClaims(
  */
 export function createWorkloadIdentityEnv(
   context: WorkloadIdentityContext,
+  options: {
+    /** Grant the audiences configured for each of these lifecycles (same
+     *  repository and trust profile) instead of only `context.lifecycle`'s.
+     *  The token still names `context.lifecycle`. A GPU job that runs a
+     *  repository's setup and Portal start uses this to get what a Portal
+     *  Sandbox gets across its setup and preview hooks. */
+    grantLifecycles?: WorkloadLifecycle[];
+  } = {},
 ): Record<string, string> {
-  const audiences = configuredAudiences(context);
+  const audiences = [
+    ...new Set(
+      (options.grantLifecycles ?? [context.lifecycle]).flatMap((lifecycle) =>
+        configuredAudiences({ ...context, lifecycle }),
+      ),
+    ),
+  ];
   // Identity is opt-in per workload grant. A sandbox cannot choose an
   // arbitrary external audience merely because it is running OpenSession.
   if (audiences.length === 0) return {};

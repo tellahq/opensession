@@ -27,11 +27,33 @@
  *       "description": "…", "command": "scripts/…sh", "gpu": "T4",
  *       "timeoutMinutes": 60 } } }
  *
+ * A job may also carry (all opt-in, per call):
+ *
+ *  - `files`: host files written straight to the machine over the provider's
+ *    API after the checkpoint lands, for what must never reach GitHub (an
+ *    env file, a key). They are read from the session's worktree (gitignored
+ *    files only, as anything else ships in the checkpoint anyway), its
+ *    scratch directory or the repository's main checkout, and removed from
+ *    the machine when the job ends. Only their machine paths are recorded.
+ *  - `identity: "portal"`: the cloud identity a Portal Sandbox gets across
+ *    its setup and Portal hooks, instead of an ordinary command's.
+ *
+ * Every job gets `$OPENSESSION_JOB_OUTPUT`, a directory copied to
+ * `<session scratch>/gpu-jobs/<id>/` when it ends (capped), and
+ * `execOnGpuJob` runs further commands on the machine while it runs.
+ *
  * Cross-session state is this module's own registry file, loaded once; no
  * session files are scanned. All I/O is asynchronous.
  */
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import {
+  mkdir,
+  open,
+  readFile,
+  realpath,
+  stat,
+  writeFile,
+} from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, posix, sep } from "node:path";
 import { stateDir } from "./paths";
 import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import { hostSessionScratchDir } from "./session-scratch";
@@ -53,6 +75,20 @@ const WAKE_TAIL_BYTES = 3000;
 const SAVED_LOG_BYTES = 512 * 1024;
 const KEEP_ENDED_MS = 7 * 24 * 60 * 60_000;
 const REMOTE_ROOT = "/tmp/opensession-gpu-jobs";
+/** Host files one job may send, and their total size. */
+export const MAX_GPU_JOB_FILES = 20;
+export const MAX_GPU_JOB_FILE_BYTES = 16 * 1024 * 1024;
+/** What comes back from `$OPENSESSION_JOB_OUTPUT` when a job ends. */
+export const MAX_GPU_JOB_OUTPUT_BYTES = 64 * 1024 * 1024;
+const MAX_GPU_JOB_OUTPUT_FILES = 500;
+/** What one gpu_exec call may fetch. */
+const MAX_GPU_EXEC_FETCH_BYTES = 32 * 1024 * 1024;
+const MAX_GPU_EXEC_FETCH_FILES = 20;
+const COPY_CHUNK_MIB = 4;
+export const DEFAULT_GPU_EXEC_SECONDS = 120;
+export const MAX_GPU_EXEC_SECONDS = 600;
+const EXEC_STDOUT_BYTES = 64 * 1024;
+const EXEC_STDERR_BYTES = 16 * 1024;
 
 const GPU_MACHINE_PATTERN = /--gpu(?:-\d+)?$/;
 
@@ -79,11 +115,16 @@ export function gpuMachineOwner(sandboxId: string): string | null {
 
 // ── Repository declarations ──────────────────────────────────────────────
 
+/** `portal`: the job's commands get the cloud identity a Portal Sandbox
+ *  gets (the audiences granted to its setup and Portal hooks). */
+export type GpuJobIdentity = "portal";
+
 export interface RepoGpuJob {
   description?: string;
   command: string;
   gpu: SandboxGpu;
   timeoutMinutes: number;
+  identity?: GpuJobIdentity;
 }
 
 /** Parse `.agents/gpu-jobs.json`; malformed entries are dropped. */
@@ -114,6 +155,7 @@ export function parseRepoGpuJobs(text: string): Record<string, RepoGpuJob> {
       ...(typeof entry?.description === "string"
         ? { description: entry.description.slice(0, 400) }
         : {}),
+      ...(entry?.identity === "portal" ? { identity: "portal" as const } : {}),
     };
   }
   return out;
@@ -211,6 +253,15 @@ export interface GpuJobRecord {
   stopping?: boolean;
   /** Full log copied to this server when the job ended. */
   logPath?: string;
+  identity?: GpuJobIdentity;
+  /** Machine paths of the host files sent with the job (never their
+   *  contents or where they came from), removed when it ends. */
+  stagedFiles?: string[];
+  /** Where `$OPENSESSION_JOB_OUTPUT` was copied when the job ended, and
+   *  what did not fit. */
+  outputDir?: string;
+  outputFiles?: number;
+  outputNote?: string;
 }
 
 /** `machines`: every GPU machine (provider session key) each session ever
@@ -354,6 +405,23 @@ export function sessionHasGpuMachine(sessionId: string): boolean {
 
 // ── Starting ─────────────────────────────────────────────────────────────
 
+export interface GpuJobFile {
+  /** Host path: absolute, or relative to the session's worktree. */
+  from: string;
+  /** Machine path: absolute, or relative to the repository root there. */
+  to: string;
+  /** Octal file mode, default 600. */
+  mode?: string;
+}
+
+/** A host file read for a job: held in memory until it is on the machine,
+ *  never persisted. */
+interface LoadedGpuJobFile {
+  to: string;
+  mode: string;
+  content: Buffer;
+}
+
 export interface StartGpuJobInput {
   sessionId: string;
   title: string;
@@ -361,6 +429,99 @@ export interface StartGpuJobInput {
   gpu: SandboxGpu;
   timeoutMinutes: number;
   startedBy?: string;
+  files?: GpuJobFile[];
+  identity?: GpuJobIdentity;
+}
+
+function within(path: string, root: string): boolean {
+  return (
+    path === root || path.startsWith(root.endsWith(sep) ? root : root + sep)
+  );
+}
+
+async function gitIgnored(worktree: string, path: string): Promise<boolean> {
+  const proc = Bun.spawn(
+    ["git", "-C", worktree, "check-ignore", "-q", "--", path],
+    { stdout: "ignore", stderr: "ignore" },
+  );
+  return (await proc.exited) === 0;
+}
+
+/** Validate a target path on the machine; the repository root resolves
+ *  relative ones at launch. */
+export function gpuJobFileTarget(to: string, cwd: string): string | null {
+  if (!to || to.length > 1024 || /[\0\n\r]/.test(to)) return null;
+  const path = posix.isAbsolute(to)
+    ? posix.normalize(to)
+    : posix.join(cwd, posix.normalize(to));
+  if (path === "/" || path.endsWith("/")) return null;
+  if (within(path, posix.join(cwd, ".git")) || within(path, REMOTE_ROOT))
+    return null;
+  return path;
+}
+
+/**
+ * Read the files a job sends. Each `from` must resolve (symlinks followed)
+ * inside the session's worktree, its scratch directory or the repository's
+ * main checkout. One in the worktree must be gitignored: anything else is
+ * pushed with the checkpoint, which is what sending it this way avoids.
+ */
+export async function loadGpuJobFiles(
+  files: GpuJobFile[],
+  roots: { worktree?: string; scratch: string; mainCheckout?: string },
+): Promise<{ files: LoadedGpuJobFile[] } | { error: string }> {
+  if (files.length > MAX_GPU_JOB_FILES)
+    return { error: `at most ${MAX_GPU_JOB_FILES} files per job` };
+  const real = async (dir?: string) =>
+    dir ? await realpath(dir).catch(() => null) : null;
+  const [worktree, scratch, main] = await Promise.all([
+    real(roots.worktree),
+    real(roots.scratch),
+    real(roots.mainCheckout),
+  ]);
+  const loaded: LoadedGpuJobFile[] = [];
+  const targets = new Set<string>();
+  let total = 0;
+  for (const file of files) {
+    const mode = file.mode ?? "600";
+    if (!/^0?[0-7]{3}$/.test(mode))
+      return { error: `${file.to}: mode must be octal, like 600` };
+    if (!gpuJobFileTarget(file.to, "/repo"))
+      return { error: `${file.to}: not a file path the machine can take` };
+    if (targets.has(file.to)) return { error: `${file.to} is sent twice` };
+    targets.add(file.to);
+    const from =
+      isAbsolute(file.from) || !roots.worktree
+        ? file.from
+        : join(roots.worktree, file.from);
+    const path = await realpath(from).catch(() => null);
+    if (!path) return { error: `${file.from} does not exist` };
+    if (worktree && within(path, worktree)) {
+      if (!(await gitIgnored(worktree, path)))
+        return {
+          error: `${file.from} is not gitignored, so it is already in the checkpoint pushed to GitHub; send only gitignored files, or ones in the session's scratch directory`,
+        };
+    } else if (
+      !(scratch && within(path, scratch)) &&
+      !(main && within(path, main))
+    )
+      return {
+        error: `${file.from} is outside the session's worktree, its scratch directory and the repository's main checkout`,
+      };
+    const info = await stat(path);
+    if (!info.isFile()) return { error: `${file.from} is not a file` };
+    total += info.size;
+    if (total > MAX_GPU_JOB_FILE_BYTES)
+      return {
+        error: `the files add up to more than ${MAX_GPU_JOB_FILE_BYTES / 1024 / 1024} MB`,
+      };
+    loaded.push({
+      to: file.to,
+      mode: mode.replace(/^0/, ""),
+      content: await readFile(path),
+    });
+  }
+  return { files: loaded };
 }
 
 /** Validate and record the job, then prepare it in the background. */
@@ -384,6 +545,17 @@ export async function startGpuJob(
     return { error: "a Runner session's workspace cannot be checkpointed" };
   if (!session.repo || !session.worktreeDir)
     return { error: "this session has no repository workspace" };
+  let files: LoadedGpuJobFile[] = [];
+  if (input.files?.length) {
+    const { getRepo } = await import("./worktree");
+    const loaded = await loadGpuJobFiles(input.files, {
+      ...(session.sandbox?.provider ? {} : { worktree: session.worktreeDir }),
+      scratch: hostSessionScratchDir(session.id),
+      mainCheckout: getRepo(session.repo).repo,
+    });
+    if ("error" in loaded) return { error: loaded.error };
+    files = loaded.files;
+  }
   const machine = pickGpuMachine(
     state.jobs.values(),
     session.id,
@@ -407,11 +579,12 @@ export async function startGpuJob(
     startedAt: new Date(now).toISOString(),
     deadlineAt: new Date(now + minutes * 60_000).toISOString(),
     ...(input.startedBy ? { startedBy: input.startedBy } : {}),
+    ...(input.identity ? { identity: input.identity } : {}),
   };
   state.jobs.set(job.id, job);
   await persist();
   state.preparing.add(job.id);
-  void prepareAndLaunch(job, session)
+  void prepareAndLaunch(job, session, files)
     .catch(async (error) => {
       await settle(job, {
         state: "failed",
@@ -428,6 +601,7 @@ export async function startGpuJob(
 async function prepareAndLaunch(
   job: GpuJobRecord,
   session: UnifiedSession,
+  files: LoadedGpuJobFile[] = [],
 ): Promise<void> {
   const [
     { getSandboxProvider },
@@ -526,37 +700,148 @@ async function prepareAndLaunch(
   const script = Buffer.from(job.command).toString("base64");
   const launch = [
     `set -e`,
-    `mkdir -p ${dir}`,
+    `mkdir -p ${dir}/output`,
     `printf %s ${script} | base64 -d > ${dir}/command.sh`,
     `cat > ${dir}/wrap.sh <<'WRAP'`,
     `cd "$OPENSESSION_GPU_JOB_CWD"`,
     `timeout --signal=TERM --kill-after=30 ${deadlineSeconds} bash ${dir}/command.sh > ${dir}/log 2>&1`,
-    `echo $? > ${dir}/exit.tmp && mv ${dir}/exit.tmp ${dir}/exit`,
+    `code=$?`,
+    REMOVE_STAGED(dir),
+    `echo $code > ${dir}/exit.tmp && mv ${dir}/exit.tmp ${dir}/exit`,
     `WRAP`,
     `cd ${shellWord(sandbox.cwd)}`,
     `OPENSESSION_GPU_JOB_CWD="$PWD" nohup setsid bash ${dir}/wrap.sh >/dev/null 2>&1 < /dev/null &`,
     `echo $! > ${dir}/pid`,
   ].join("\n");
-  const started = await sandbox.exec(["bash", "-c", launch], {
-    env: {
-      ...env,
-      OPENSESSION_GPU: job.gpu,
-      OPENSESSION_GPU_JOB_ID: job.id,
-      RUNNER_TEMP: "/tmp",
-      CI: "1",
-    },
-    timeoutMs: 60_000,
-  });
-  if (started.exitCode !== 0)
-    throw new Error(
-      `could not start the job: ${(started.stderr || started.stdout).trim().slice(0, 300)}`,
-    );
+  try {
+    await stageFiles(sandbox, job, files);
+    const started = await sandbox.exec(["bash", "-c", launch], {
+      env: {
+        ...env,
+        ...jobVariables(job),
+        ...(await jobIdentityEnv(job, sandbox.id, repo.id)),
+      },
+      timeoutMs: 60_000,
+    });
+    if (started.exitCode !== 0)
+      throw new Error(
+        `could not start the job: ${(started.stderr || started.stdout).trim().slice(0, 300)}`,
+      );
+  } catch (error) {
+    await removeStaged(sandbox, job);
+    throw error;
+  }
   job.state = "running";
   await persist();
   console.log(
     `[gpu-jobs] ${job.sessionId}: ${job.id} running on ${job.gpu} in ${sandbox.id}`,
   );
   ensurePolling();
+}
+
+/** The variables every command of a job sees, the job's own and
+ *  gpu_exec's. */
+function jobVariables(job: GpuJobRecord): Record<string, string> {
+  return {
+    OPENSESSION_GPU: job.gpu,
+    OPENSESSION_GPU_JOB_ID: job.id,
+    OPENSESSION_JOB_OUTPUT: `${REMOTE_ROOT}/${job.id}/output`,
+    RUNNER_TEMP: "/tmp",
+    CI: "1",
+  };
+}
+
+/** A job with `identity: "portal"` gets a lease for the audiences granted
+ *  to a Portal Sandbox's setup, Portal and ordinary commands (the token
+ *  says lifecycle "preview"). Others keep the ordinary command's lease the
+ *  Sandbox handle adds. Revoked when the job ends. */
+async function jobIdentityEnv(
+  job: GpuJobRecord,
+  sandboxId: string,
+  repoId: string,
+): Promise<Record<string, string>> {
+  if (job.identity !== "portal") return {};
+  const { createWorkloadIdentityEnv } = await import("./workload-identity");
+  return createWorkloadIdentityEnv(
+    {
+      sandboxId,
+      provider: GPU_JOB_PROVIDER,
+      lifecycle: "preview",
+      sessionId: gpuJobMachine(job),
+      repoId,
+      trustProfile: "interactive",
+    },
+    { grantLifecycles: ["setup", "preview", "run"] },
+  );
+}
+
+/** Shell lines that delete the job's staged host files. */
+function REMOVE_STAGED(dir: string): string {
+  return `test -f ${dir}/staged && while IFS= read -r f; do rm -f -- "$f"; done < ${dir}/staged; rm -rf ${dir}/in`;
+}
+
+/** Write the job's host files to the machine: each travels base64 over the
+ *  provider's file API into a private inbox, then lands at its target with
+ *  its mode. The targets are recorded (and listed on the machine) first, so
+ *  whatever ends the job removes them. */
+async function stageFiles(
+  sandbox: Sandbox,
+  job: GpuJobRecord,
+  files: LoadedGpuJobFile[],
+): Promise<void> {
+  if (!files.length) return;
+  if (!sandbox.writeFile) throw new Error("this GPU machine cannot take files");
+  const dir = `${REMOTE_ROOT}/${job.id}`;
+  const targets = files.map((file) => {
+    const target = gpuJobFileTarget(file.to, sandbox.cwd);
+    if (!target) throw new Error(`${file.to}: not a file path`);
+    return target;
+  });
+  job.stagedFiles = targets;
+  await persist();
+  const list = Buffer.from(targets.join("\n") + "\n").toString("base64");
+  const prepared = await sandbox.exec(
+    [
+      "bash",
+      "-c",
+      `umask 077 && mkdir -p ${dir}/in && printf %s ${list} | base64 -d > ${dir}/staged`,
+    ],
+    { timeoutMs: 60_000 },
+  );
+  if (prepared.exitCode !== 0)
+    throw new Error(
+      `could not prepare the job's files: ${(prepared.stderr || prepared.stdout).trim().slice(0, 300)}`,
+    );
+  for (const [index, file] of files.entries())
+    await sandbox.writeFile(
+      `${dir}/in/${index}`,
+      file.content.toString("base64"),
+    );
+  const place = files
+    .map((file, index) => {
+      const target = shellWord(targets[index]!);
+      return `mkdir -p "$(dirname ${target})" && rm -f ${target} && (umask 077 && base64 -d < ${dir}/in/${index} > ${target}) && chmod ${file.mode} ${target} && rm -f ${dir}/in/${index}`;
+    })
+    .join(" && \n");
+  const placed = await sandbox.exec(["bash", "-c", place], {
+    timeoutMs: 120_000,
+  });
+  if (placed.exitCode !== 0)
+    throw new Error(
+      `could not place the job's files: ${(placed.stderr || placed.stdout).trim().slice(0, 300)}`,
+    );
+}
+
+async function removeStaged(
+  sandbox: Sandbox,
+  job: GpuJobRecord,
+): Promise<void> {
+  if (!job.stagedFiles?.length) return;
+  await sandbox
+    .exec(["bash", "-c", REMOVE_STAGED(`${REMOTE_ROOT}/${job.id}`)], {
+      timeoutMs: 60_000,
+    })
+    .catch(() => {});
 }
 
 /** Read access for the job: the repository and the repositories its build
@@ -707,6 +992,7 @@ async function killRemote(sandbox: Sandbox, job: GpuJobRecord): Promise<void> {
     `p=$(cat ${dir}/pid 2>/dev/null)`,
     `signal() { local f s; for f in /proc/[0-9]*/stat; do s=$(cat "$f" 2>/dev/null) || continue; set -- \${s##*")"}; [ "$4" = "$p" ] && kill -"$SIG" "\${f//[^0-9]/}" 2>/dev/null; done; kill -"$SIG" -- -"$p" 2>/dev/null; true; }`,
     `if test -n "$p"; then SIG=TERM signal; sleep 5; SIG=KILL signal; fi`,
+    REMOVE_STAGED(dir),
     `test -e ${dir}/exit || { echo 143 > ${dir}/exit.stop && mv -n ${dir}/exit.stop ${dir}/exit; }`,
   ].join("\n");
   await sandbox
@@ -721,6 +1007,13 @@ async function settle(
 ): Promise<void> {
   if (job.endedAt) return;
   Object.assign(job, patch, { endedAt: new Date().toISOString() });
+  if (job.identity === "portal" && job.sandboxId) {
+    // The job's lease (and gpu_exec's) end with it; the next job on this
+    // machine gets its own.
+    const { revokeWorkloadIdentityForSandbox } =
+      await import("./workload-identity");
+    revokeWorkloadIdentityForSandbox(job.sandboxId);
+  }
   if (sandbox) {
     const dir = `${REMOTE_ROOT}/${job.id}`;
     const log = await sandbox
@@ -739,6 +1032,14 @@ async function settle(
         job.logPath = undefined;
       });
     }
+    await removeStaged(sandbox, job);
+    await collectOutputs(sandbox, job).catch((error) => {
+      job.outputNote =
+        `Its outputs could not be copied: ${error instanceof Error ? error.message : String(error)}`.slice(
+          0,
+          300,
+        );
+    });
     // The idle timers start from the job's end.
     const { noteSandboxActivity } = await import("./sandbox/idle");
     noteSandboxActivity(
@@ -782,6 +1083,10 @@ export function gpuJobEndedMessage(job: GpuJobRecord, tail: string): string {
     (job.note ? `\n${job.note}` : "") +
     (job.error ? `\nError: ${job.error}` : "") +
     (job.logPath ? `\nFull log: ${job.logPath}` : "") +
+    (job.outputDir
+      ? `\nOutputs ($OPENSESSION_JOB_OUTPUT, ${job.outputFiles} file${job.outputFiles === 1 ? "" : "s"}): ${job.outputDir}`
+      : "") +
+    (job.outputNote ? `\n${job.outputNote}` : "") +
     (tail.trim() ? `\nLast output:\n${tail.trimEnd()}` : "")
   );
 }
@@ -858,6 +1163,280 @@ export async function stopGpuJob(
     ensurePolling();
   }
   return { job };
+}
+
+// ── Files back from the machine ─────────────────────────────────────────
+
+interface MachineFile {
+  /** Absolute path on the machine. */
+  remote: string;
+  /** Where it goes under the host directory. */
+  rel: string;
+  size: number;
+}
+
+/** A relative path that stays inside the directory it is joined to. */
+export function safeRelativePath(rel: string): string | null {
+  if (!rel || rel.startsWith("/") || /[\0\\]/.test(rel)) return null;
+  const parts = rel.split("/");
+  if (parts.some((part) => !part || part === "." || part === "..")) return null;
+  return parts.join(sep);
+}
+
+/** Regular files under `root` on the machine, with sizes. */
+async function listMachineFiles(
+  sandbox: Sandbox,
+  root: string,
+): Promise<MachineFile[]> {
+  const listed = await sandbox.exec(
+    [
+      "bash",
+      "-c",
+      `cd ${shellWord(root)} 2>/dev/null || exit 0; find . -type f -printf '%s\\t%P\\0' | base64 -w0`,
+    ],
+    { timeoutMs: 60_000 },
+  );
+  if (listed.exitCode !== 0)
+    throw new Error((listed.stderr || listed.stdout).trim().slice(0, 200));
+  return parseMachineFileList(
+    Buffer.from(listed.stdout.trim(), "base64").toString("utf8"),
+    root,
+  );
+}
+
+/** `find -printf '%s\t%P\0'` output as files, sorted by path. */
+export function parseMachineFileList(
+  text: string,
+  root: string,
+): MachineFile[] {
+  const files: MachineFile[] = [];
+  for (const entry of text.split("\0")) {
+    const tab = entry.indexOf("\t");
+    if (tab < 0) continue;
+    const size = Number(entry.slice(0, tab));
+    const rel = entry.slice(tab + 1);
+    if (!Number.isFinite(size) || !rel) continue;
+    files.push({ remote: posix.join(root, rel), rel, size });
+  }
+  return files.sort((a, b) => a.rel.localeCompare(b.rel));
+}
+
+/**
+ * Copy files from the machine to `hostDir`, in order, until `maxBytes` or
+ * `maxFiles`: base64 over exec in 4 MiB chunks, so binary files (a PNG)
+ * arrive intact. Only directories and regular files are created here, and
+ * every path is checked to stay inside `hostDir`.
+ */
+async function copyMachineFiles(
+  sandbox: Sandbox,
+  files: MachineFile[],
+  hostDir: string,
+  limits: { maxBytes: number; maxFiles: number },
+): Promise<{ copied: string[]; skipped: number; skippedBytes: number }> {
+  const copied: string[] = [];
+  let skipped = 0;
+  let skippedBytes = 0;
+  let total = 0;
+  for (const file of files) {
+    const rel = safeRelativePath(file.rel);
+    if (
+      !rel ||
+      copied.length >= limits.maxFiles ||
+      total + file.size > limits.maxBytes
+    ) {
+      skipped++;
+      skippedBytes += file.size;
+      continue;
+    }
+    const dest = join(hostDir, rel);
+    await mkdir(dirname(dest), { recursive: true });
+    const handle = await open(dest, "w", 0o600);
+    try {
+      for (let mib = 0; mib * 1024 * 1024 < file.size; mib += COPY_CHUNK_MIB) {
+        const chunk = await sandbox.exec(
+          [
+            "bash",
+            "-c",
+            `dd if=${shellWord(file.remote)} bs=1M skip=${mib} count=${COPY_CHUNK_MIB} status=none | base64 -w0`,
+          ],
+          { timeoutMs: 120_000 },
+        );
+        if (chunk.exitCode !== 0)
+          throw new Error(
+            `could not read ${file.remote}: ${(chunk.stderr || chunk.stdout).trim().slice(0, 200)}`,
+          );
+        await handle.write(Buffer.from(chunk.stdout.trim(), "base64"));
+      }
+    } finally {
+      await handle.close();
+    }
+    total += file.size;
+    copied.push(dest);
+  }
+  return { copied, skipped, skippedBytes };
+}
+
+function megabytes(bytes: number): string {
+  return `${Math.max(0.1, Math.round(bytes / 1024 / 102.4) / 10)} MB`;
+}
+
+/** The job's host directory: `<session scratch>/gpu-jobs/<id>/`. */
+export function gpuJobHostDir(
+  job: Pick<GpuJobRecord, "id" | "sessionId">,
+): string {
+  return join(hostSessionScratchDir(job.sessionId), "gpu-jobs", job.id);
+}
+
+/** Copy `$OPENSESSION_JOB_OUTPUT` to the job's host directory. */
+async function collectOutputs(
+  sandbox: Sandbox,
+  job: GpuJobRecord,
+): Promise<void> {
+  const files = await listMachineFiles(
+    sandbox,
+    `${REMOTE_ROOT}/${job.id}/output`,
+  );
+  if (!files.length) return;
+  const dir = gpuJobHostDir(job);
+  const { copied, skipped, skippedBytes } = await copyMachineFiles(
+    sandbox,
+    files,
+    dir,
+    { maxBytes: MAX_GPU_JOB_OUTPUT_BYTES, maxFiles: MAX_GPU_JOB_OUTPUT_FILES },
+  );
+  job.outputDir = dir;
+  job.outputFiles = copied.length;
+  if (skipped)
+    job.outputNote = `${skipped} output file${skipped === 1 ? "" : "s"} (${megabytes(skippedBytes)}) did not fit the ${MAX_GPU_JOB_OUTPUT_BYTES / 1024 / 1024} MB / ${MAX_GPU_JOB_OUTPUT_FILES} file cap and stayed on the machine in ${REMOTE_ROOT}/${job.id}/output until its next job.`;
+}
+
+// ── Commands on a running job's machine ─────────────────────────────────
+
+export interface GpuExecResult {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  /** Host paths of the fetched files. */
+  files?: string[];
+  note?: string;
+}
+
+function keepEnd(text: string, bytes: number): string {
+  return text.length > bytes
+    ? `[first ${text.length - bytes} characters dropped]\n${text.slice(-bytes)}`
+    : text;
+}
+
+/**
+ * Run a command on the machine of a running job, beside it: same machine,
+ * same processes and files, same environment as the job's own command
+ * (credentials, identity, `$OPENSESSION_JOB_OUTPUT`), from the repository
+ * root. `fetch` copies machine files (a screenshot) to
+ * `<session scratch>/gpu-jobs/<id>/fetched/` afterwards.
+ */
+export async function execOnGpuJob(
+  id: string,
+  sessionId: string,
+  input: { command: string; timeoutSeconds?: number; fetch?: string[] },
+): Promise<GpuExecResult | { error: string }> {
+  await ensureLoaded();
+  const job = state.jobs.get(id);
+  if (!job || job.sessionId !== sessionId)
+    return { error: "no GPU job with that id in this session" };
+  if (job.state === "preparing")
+    return {
+      error:
+        "the job's machine is still being prepared; try again when gpu_job_status says running",
+    };
+  if (job.state !== "running")
+    return {
+      error: `the job already ${ENDED_WORDS[job.state]}; gpu_exec runs only beside a running job`,
+    };
+  const sandbox = await machineFor(job);
+  if (!sandbox) return { error: "the job's GPU machine is not running" };
+  if ((input.fetch?.length ?? 0) > MAX_GPU_EXEC_FETCH_FILES)
+    return { error: `fetch at most ${MAX_GPU_EXEC_FETCH_FILES} files` };
+  const [{ findSessionAsync }, { getRepo }, { noteSandboxActivity }] =
+    await Promise.all([
+      import("./session-cache"),
+      import("./worktree"),
+      import("./sandbox/idle"),
+    ]);
+  const session = await findSessionAsync(sessionId);
+  if (!session?.repo) return { error: "no such session" };
+  const repo = getRepo(session.repo);
+  noteSandboxActivity({ sandboxId: sandbox.id, sessionId }, "agent");
+  const seconds = Math.min(
+    Math.max(1, input.timeoutSeconds ?? DEFAULT_GPU_EXEC_SECONDS),
+    MAX_GPU_EXEC_SECONDS,
+  );
+  const result = await sandbox.exec(["bash", "-c", input.command], {
+    env: {
+      ...(await gpuJobEnv(repo)),
+      ...jobVariables(job),
+      ...(await jobIdentityEnv(job, sandbox.id, repo.id)),
+    },
+    timeoutMs: seconds * 1000,
+  });
+  const out: GpuExecResult = {
+    exitCode: result.exitCode,
+    stdout: keepEnd(result.stdout, EXEC_STDOUT_BYTES),
+    stderr: keepEnd(result.stderr, EXEC_STDERR_BYTES),
+  };
+  if (result.exitCode === 124)
+    out.note = `The command did not finish within ${seconds}s. Start long-lived processes detached (setsid nohup … > file 2>&1 &) so the call returns.`;
+  if (input.fetch?.length) {
+    const targets = input.fetch.map((path) =>
+      posix.isAbsolute(path)
+        ? posix.normalize(path)
+        : posix.join(sandbox.cwd, path),
+    );
+    const sized = await sandbox.exec(
+      [
+        "bash",
+        "-c",
+        `for p in "$@"; do if test -f "$p"; then printf '%s\\t%s\\0' "$(stat -Lc %s -- "$p")" "$p"; fi; done | base64 -w0`,
+        "fetch",
+        ...targets,
+      ],
+      { timeoutMs: 60_000 },
+    );
+    const found = parseMachineFileList(
+      Buffer.from(sized.stdout.trim(), "base64").toString("utf8"),
+      "/",
+    );
+    const used = new Set<string>();
+    const files = found.map((file) => {
+      let name = basename(file.rel);
+      for (let n = 2; used.has(name); n++) name = `${n}-${basename(file.rel)}`;
+      used.add(name);
+      return { ...file, remote: file.rel, rel: name };
+    });
+    const { copied, skipped } = await copyMachineFiles(
+      sandbox,
+      files,
+      join(gpuJobHostDir(job), "fetched"),
+      {
+        maxBytes: MAX_GPU_EXEC_FETCH_BYTES,
+        maxFiles: MAX_GPU_EXEC_FETCH_FILES,
+      },
+    );
+    out.files = copied;
+    const missing = targets.length - found.length;
+    if (missing || skipped)
+      out.note = [
+        out.note,
+        missing
+          ? `${missing} fetch path${missing === 1 ? " is" : "s are"} not a file on the machine.`
+          : "",
+        skipped
+          ? `${skipped} file${skipped === 1 ? "" : "s"} did not fit the ${MAX_GPU_EXEC_FETCH_BYTES / 1024 / 1024} MB cap.`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+  }
+  return out;
 }
 
 // ── Machine lifecycle ────────────────────────────────────────────────────
@@ -981,3 +1560,11 @@ export function __resetGpuJobsForTest(): void {
   state.polling = undefined;
   state.loaded = Promise.resolve();
 }
+
+/** Test seam: the machine-side file handling, against any Sandbox. */
+export const __gpuJobsMachineFilesForTest = {
+  stageFiles,
+  removeStaged,
+  collectOutputs,
+  remoteDir: (id: string) => `${REMOTE_ROOT}/${id}`,
+};

@@ -768,8 +768,35 @@ needs no setup:
 
 `gpu` is `T4` (default) or `L4`; `timeoutMinutes` defaults to 60 and is
 capped at 360. The agent may pass its own `command` (one test) instead. The
-command sees `OPENSESSION_GPU`, `OPENSESSION_GPU_JOB_ID`, `CI=1` and
-`RUNNER_TEMP=/tmp`.
+command sees `OPENSESSION_GPU`, `OPENSESSION_GPU_JOB_ID`, `CI=1`,
+`RUNNER_TEMP=/tmp` and `OPENSESSION_JOB_OUTPUT`.
+
+A job can also:
+
+- **Carry files that must not reach GitHub.** `files: [{from, to, mode}]` on
+  `run_gpu_job` sends host files straight to the machine over the provider's
+  file API after the checkpoint lands (an env file, a key). `from` must be in
+  the session's worktree (gitignored files only, since anything else ships in
+  the checkpoint), its scratch folder, or the repository's main checkout; `to`
+  is relative to the repository root on the machine or absolute; `mode`
+  defaults to `600`. At most 20 files and 16 MB. They are removed from the
+  machine when the job ends, and the job record keeps only their machine
+  paths.
+- **Run with a Portal's identity.** `"identity": "portal"` (in
+  `.agents/gpu-jobs.json` or as a `run_gpu_job` argument) gives the job's
+  commands a workload identity lease for every audience granted to the
+  repository's `setup`, `preview` and `run` lifecycles, so it can run
+  `.agents/setup` and a Portal's start script as a Portal Sandbox does.
+  Tokens name lifecycle `preview`. The lease is revoked when the job ends.
+  Without it, a job gets an ordinary command's `run` lease.
+- **Return files.** Whatever the command writes to `$OPENSESSION_JOB_OUTPUT`
+  is copied to `<session scratch>/gpu-jobs/<id>/` when the job ends (64 MB
+  and 500 files at most; the rest stays on the machine until its next job).
+- **Be driven while it runs.** `gpu_exec {id, command, fetch}` runs a command
+  on the running job's machine with the job's environment and returns its
+  output; `fetch` copies machine files (a screenshot) to
+  `<session scratch>/gpu-jobs/<id>/fetched/`. A job meant for this keeps its
+  command alive (`… && sleep infinity`) and is stopped with `stop_gpu_job`.
 
 ## Security posture
 

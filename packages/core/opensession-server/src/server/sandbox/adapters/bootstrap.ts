@@ -2152,6 +2152,13 @@ export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
       return result;
     },
 
+    async writeFile(path: string, content: string): Promise<void> {
+      await parts.driver.ensureStarted();
+      startedAt = Date.now();
+      touch();
+      await parts.driver.writeFile(path, content);
+    },
+
     ports: (requestedPorts) => parts.ports(requestedPorts),
     status: () => parts.status(),
   };
