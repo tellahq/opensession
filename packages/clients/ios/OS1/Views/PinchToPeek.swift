@@ -162,13 +162,30 @@ private struct PinchPeek: UIViewRepresentable {
         /// view, and cancelling the view's touches leaves that recognizer
         /// tracking happily. Making it wait for this pinch to fail does.
         ///
-        /// The scroll view's own recognizers are exempt — a pan that had to
+        /// The scroll view's own recognizers are exempt: a pan that had to
         /// wait for a pinch to fail would make every scroll start late.
+        ///
+        /// So is the navigation stack's swipe back. A one-finger touch never
+        /// fails a pinch until it lifts, so a back swipe made to wait for this
+        /// one could not begin at all, and every session with a picture or
+        /// diagram on screen lost its way back to the list.
         func gestureRecognizer(
             _ gesture: UIGestureRecognizer,
             shouldBeRequiredToFailBy other: UIGestureRecognizer
         ) -> Bool {
-            other.view !== attachedTo
+            other.view !== attachedTo && !isBackSwipe(other)
+        }
+
+        private func isBackSwipe(_ other: UIGestureRecognizer) -> Bool {
+            var responder: UIResponder? = host
+            while let current = responder {
+                if let navigation = current as? UINavigationController {
+                    return other === navigation.interactivePopGestureRecognizer
+                        || other === navigation.interactiveContentPopGestureRecognizer
+                }
+                responder = current.next
+            }
+            return false
         }
 
         // MARK: The peek
