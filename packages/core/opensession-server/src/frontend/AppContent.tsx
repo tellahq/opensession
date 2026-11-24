@@ -96,6 +96,7 @@ import { appTopbarTitle } from "./lib/app-topbar-title";
 import type { AppProps, PendingCreateDraft } from "./lib/app-types";
 import { dropStagingAttachments } from "./lib/attachments";
 import { NEW_SESSION_DRAFT_KEY, clearDraft, saveDraft } from "./lib/drafts";
+import { useDeskShown } from "./lib/desk-pref";
 import { DESK_FAB, MOBILE_FAB } from "./lib/fab-classes";
 import { pickLandingSession } from "./lib/landing-session";
 import { receiveMention, receiveMentionsCleared } from "./lib/mentions";
@@ -473,6 +474,14 @@ export function AppContent({
   // A Desk voice call outlives a minimised Desk; the trigger shows it is live.
   const [deskCallActive, setDeskCallActive] = useState(false);
   const deskCallShown = deskCallActive && !deskOverlay.open;
+  // Settings → Preferences → Desk, off by default: no trigger, no overlay.
+  // Hiding it closes an open Desk so turning it back on does not reopen it.
+  const deskShown = useDeskShown();
+  useEffect(() => {
+    if (deskShown) return;
+    setDeskOverlay((desk) => (desk.open ? { ...desk, open: false } : desk));
+    setDeskCallActive(false);
+  }, [deskShown, setDeskOverlay]);
   const { closePalette, startNewSessionCreate } = useNewSessionCreateStart({
     getCurrentRoute,
     navigate,
@@ -978,6 +987,7 @@ export function AppContent({
     currentTheme,
     copyLinkPath,
     isPhone,
+    deskShown,
     nextChatAvailable,
     openNextChat,
     restorableArchived,
@@ -1875,7 +1885,7 @@ export function AppContent({
 				    bottom-right corner; phones: a second FAB beside the new-session +
 				    on the root page (see .desk-fab). ⌘J and the command palette still
 				    summon it too. */}
-            {(!isPhone || !mobileDetail) && (
+            {deskShown && (!isPhone || !mobileDetail) && (
               <Tooltip
                 label={deskCallShown ? "Desk call in progress" : "Desk"}
                 side="left"
@@ -1915,17 +1925,20 @@ export function AppContent({
               onOpenSession={(id) => navigate({ view: "session", id })}
             />
 
-            {/* ⌘J Desk overlay — standing concierge session. */}
-            <DeskOverlay
-              open={deskOverlay.open}
-              openOrigin={deskOverlay.origin}
-              onClose={() =>
-                setDeskOverlay((desk) => ({ ...desk, open: false }))
-              }
-              phone={isPhone}
-              onOpenSession={(id) => navigate({ view: "session", id })}
-              onCallActiveChange={setDeskCallActive}
-            />
+            {/* ⌘J Desk overlay — standing concierge session. Hiding the
+                Desk unmounts it, which also ends a call in progress. */}
+            {deskShown && (
+              <DeskOverlay
+                open={deskOverlay.open}
+                openOrigin={deskOverlay.origin}
+                onClose={() =>
+                  setDeskOverlay((desk) => ({ ...desk, open: false }))
+                }
+                phone={isPhone}
+                onOpenSession={(id) => navigate({ view: "session", id })}
+                onCallActiveChange={setDeskCallActive}
+              />
+            )}
 
             {/* ⌘K command palette — actions, PRs, and sessions across every view. */}
             <CommandMenuHost

@@ -1,5 +1,8 @@
 # Desk navigation
 
+The Desk is hidden by default. Settings → Preferences → Show Desk turns on its
+button, ⌘J and the command menu entry for that person (the `desk` ui-pref).
+
 The Desk overlay supports `show_in_app` in both text-only chat and web voice
 calls, including messages typed during a call. The action accepts exactly one
 `session` or `workspace`, as an ID or title/name, plus an optional `tab`

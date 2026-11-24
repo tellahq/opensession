@@ -77,7 +77,7 @@ function DeskBody({
     {},
   );
 
-  // Voice mode (Settings → Desk voice): a GPT-Live call layered on this same
+  // Voice mode (Settings → Desk): a GPT-Live call layered on this same
   // Desk session. The server mirrors the call's transcript into the session
   // one settled utterance at a time; the call's own transcript deltas fill
   // the wait as live captions (one store for the body's lifetime, cleared as

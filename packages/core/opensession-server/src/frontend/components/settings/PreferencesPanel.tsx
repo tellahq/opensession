@@ -43,6 +43,7 @@ import {
   onDefaultRepoPrefChanged,
   setDefaultRepoPref,
 } from "../../lib/default-repo-pref";
+import { setDeskShownPref, useDeskShown } from "../../lib/desk-pref";
 import {
   getDeskVoicePref,
   onDeskVoiceChanged,
@@ -180,7 +181,7 @@ import { RepoTile } from "../RepoTile";
 import { ModelEffortSelect } from "../ModelEffortSelect";
 import { IconPlus, IconRepo } from "../icons";
 
-// ── Desk voice ─────────────────────────────────────────────────────────────
+// ── Desk ───────────────────────────────────────────────────────────────────
 
 interface DeskVoiceStatus {
   configured: boolean;
@@ -254,7 +255,7 @@ function DeskVoiceBackendRow() {
   );
 }
 
-function DeskVoiceApiKeyRow() {
+function DeskVoiceApiKeyRow({ deskShown }: { deskShown: boolean }) {
   const [status, setStatus] = useState<DeskVoiceStatus | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [busy, setBusy] = useState(false);
@@ -302,7 +303,12 @@ function DeskVoiceApiKeyRow() {
       )}
       <SettingRow
         title={status?.configured ? "Replace key" : "OpenAI API key"}
-        desc={error || "Anyone signed in can start calls."}
+        desc={
+          error ||
+          (deskShown
+            ? "Anyone signed in can start calls."
+            : "Shared across this instance. Also powers Autocomplete.")
+        }
         control={
           <div className="flex items-center gap-2">
             <Input
@@ -327,34 +333,52 @@ function DeskVoiceApiKeyRow() {
   );
 }
 
-function DeskVoicePanel() {
-  const [on, setOn] = useState(getDeskVoicePref);
-  useEffect(() => onDeskVoiceChanged(() => setOn(getDeskVoicePref())), []);
+function DeskPanel() {
+  const shown = useDeskShown();
+  const [voice, setVoice] = useState(getDeskVoicePref);
+  useEffect(() => onDeskVoiceChanged(() => setVoice(getDeskVoicePref())), []);
 
   return (
     <>
-      <SettingsGroupLabel>Desk voice</SettingsGroupLabel>
+      <SettingsGroupLabel>Desk</SettingsGroupLabel>
       <SettingCard>
         <SettingGroup>
           <SettingRow
-            title="Voice mode"
+            title="Show Desk"
+            desc="Adds the Desk button, ⌘J and Open Desk in the command menu."
             control={
               <Switch
-                aria-label="Voice mode"
-                checked={on}
-                onCheckedChange={setDeskVoicePref}
+                aria-label="Show Desk"
+                checked={shown}
+                onCheckedChange={setDeskShownPref}
               />
             }
           />
-          <DeskVoiceApiKeyRow />
-          <DeskVoiceBackendRow />
+          {shown && (
+            <SettingRow
+              title="Voice mode"
+              control={
+                <Switch
+                  aria-label="Voice mode"
+                  checked={voice}
+                  onCheckedChange={setDeskVoicePref}
+                />
+              }
+            />
+          )}
+          {/* The key also powers composer Autocomplete, so it stays
+              reachable with the Desk hidden. */}
+          <DeskVoiceApiKeyRow deskShown={shown} />
+          {shown && <DeskVoiceBackendRow />}
         </SettingGroup>
       </SettingCard>
-      <SettingsHint>
-        Adds a microphone to Desk, opened with ⌘J. The API key and the backend
-        are shared across this instance. The composer's model pill sets the
-        typed Desk only; it does not change a call.
-      </SettingsHint>
+      {shown && (
+        <SettingsHint>
+          Voice mode adds a microphone to Desk. The API key and the backend are
+          shared across this instance. The composer's model pill sets the typed
+          Desk only; it does not change a call.
+        </SettingsHint>
+      )}
     </>
   );
 }
@@ -1073,7 +1097,7 @@ export function PreferencesPanel() {
             desc={
               autocompleteAvailable
                 ? "Suggest the rest of your message as you type. Tab or double tap to accept."
-                : "Needs an OpenAI key in Settings, Desk voice."
+                : "Needs an OpenAI key in Settings, Desk."
             }
             control={
               <Switch
@@ -1367,7 +1391,7 @@ export function PreferencesPanel() {
       </SettingCard>
 
       <VoiceAudioSection />
-      <DeskVoicePanel />
+      <DeskPanel />
       <PersonalPromptPanel />
       <PendingSendsSection />
       <DebugSection />
