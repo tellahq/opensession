@@ -183,6 +183,11 @@ passed`, the whole message and nothing else) draws as one compact row per
   both opening to the individual calls. The shared Thinking messages preference
   shows none, all, or only the newest provider reasoning row, with Latest as the
   default.
+  A thinking step reads like a tool call: a lightbulb, `Thinking` and one line
+  of what it was about, opening to the full trace (open from the start when
+  tool calls are set to open). A context compaction between two steps of one
+  run stays in that run's fold as a quiet step; after the answer it is still
+  its own line.
   Transcript videos stream inline on both platforms. Tool-result screenshots
   and recordings marked as featured stay visible when their work fold closes,
   while incidental media remains inside the producing tool row.
@@ -858,6 +863,11 @@ OS1/
 - When Settings → Personal → Preferences → Live typing is on, `stream_text`
   deltas render immediately. It defaults off; otherwise each durable part
   appears through `transcript_append`.
+- `stream_activity` carries the running turn's phase (`RunActivity`; an
+  unknown kind reads as none), as does `feed_snapshot.active.activity`. The
+  busy row under the transcript is the pulsing dot and the run's elapsed time
+  from 0s; it adds words only for stopping, compacting and a retry countdown,
+  and names every other phase to VoiceOver alone.
 - `credential_registration_request`, `keychain_asks_changed` and
   `force_merge_request` carry no viewer identity, so they only trigger a
   re-read of `/api/keychain/registrations`, `/api/keychain/asks` and

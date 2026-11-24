@@ -1098,6 +1098,9 @@ struct SessionView: View {
                 if ProcessInfo.processInfo.environment["OS1_SHOW_NOTE_RECEIPT"] == "1" {
                     Task { await viewModel.showNoteReceiptForScreenshot() }
                 }
+                if let steps = ProcessInfo.processInfo.environment["OS1_SHOW_WORK_STEPS"] {
+                    Task { await viewModel.showWorkStepsForScreenshot(steps) }
+                }
                 #endif
                 #if DEBUG && os(iOS)
                 // Install screenshot fixtures before network requests so a
@@ -1918,7 +1921,7 @@ struct SessionView: View {
         // The run clock closes the transcript while work is in flight, under
         // the durable answer, live stream, or working fold.
         if viewModel.isRunning {
-            RunStatusFooter(since: viewModel.runStartedAt)
+            RunStatusFooter(viewModel: viewModel)
                 .id("run-status")
                 .transcriptTail(tailId == "run-status")
         }

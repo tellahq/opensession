@@ -2055,3 +2055,251 @@ final class ToolPresentationTests: XCTestCase {
         XCTAssertEqual(TranscriptFormat.editedFiles(files), "a.ts, b.ts +2")
     }
 }
+
+/// A compaction between steps, thinking as one step, and the live run's
+/// phase: the work fold and busy row parity with the web transcript.
+@MainActor
+extension TranscriptGroupingTests {
+    // MARK: - Mid-turn compaction
+
+    private func compaction(_ id: String, at timestamp: String? = nil) -> TranscriptEntry {
+        TranscriptEntry(
+            id: id,
+            type: "system",
+            content: "Handoff summary",
+            timestamp: timestamp,
+            notice: EntryNotice(
+                kind: "compaction",
+                title: "Context compacted",
+                tone: "info",
+                body: nil,
+                link: nil,
+                ask: nil,
+                icon: nil
+            )
+        )
+    }
+
+    private var blockIds: [String] {
+        viewModel.displayBlocks.compactMap { block in
+            switch block {
+            case .message(let entry): entry.id
+            case .work: "work"
+            default: nil
+            }
+        }
+    }
+
+    func testAMidTurnCompactionStaysInsideOneWorkFold() {
+        append([
+            TranscriptEntry(id: "u1", type: "user", content: "check the repo",
+                            timestamp: "2026-08-13T06:00:00Z"),
+            TranscriptEntry(id: "t1", type: "tool_use", content: "Using Bash",
+                            timestamp: "2026-08-13T06:00:01Z", toolName: "Bash",
+                            toolInput: .object(["command": .string("git status")]), toolUseId: "t1"),
+            toolResult("t1", text: "ok"),
+            compaction("c1", at: "2026-08-13T06:00:02Z"),
+            TranscriptEntry(id: "t2", type: "tool_use", content: "Using Bash",
+                            timestamp: "2026-08-13T06:00:03Z", toolName: "Bash",
+                            toolInput: .object(["command": .string("git log")]), toolUseId: "t2"),
+            TranscriptEntry(id: "tr-t2", type: "tool_result", content: "ok",
+                            timestamp: "2026-08-13T06:00:04Z", toolUseId: "t2"),
+            TranscriptEntry(id: "a1", type: "assistant", content: "The repository is clean.",
+                            timestamp: "2026-08-13T06:00:05Z"),
+        ])
+
+        XCTAssertEqual(blockIds, ["u1", "work", "a1"], "one run reads as one fold")
+        guard let turn = workTurns().first else { return XCTFail("expected a fold") }
+        XCTAssertEqual(turn.items.map(\.id), ["tool-t1", "c1", "tool-t2"])
+        guard case .notice(let notice) = turn.items[1] else {
+            return XCTFail("the compaction is a step inside the fold")
+        }
+        XCTAssertEqual(notice.notice?.title, "Context compacted")
+        XCTAssertEqual(turn.toolCount, 2)
+        XCTAssertFalse(turn.hasNarration, "a notice is not narration")
+        XCTAssertEqual(turn.duration, 3, "timed across the compaction, first step to last")
+    }
+
+    func testACompactionAfterTheAnswerStaysItsOwnLine() {
+        append([
+            TranscriptEntry(id: "u1", type: "user", content: "check the repo"),
+            toolUse("t1", name: "Bash", input: ["command": .string("git status")]),
+            toolResult("t1", text: "ok"),
+            TranscriptEntry(id: "a1", type: "assistant", content: "The repository is clean."),
+            compaction("c1"),
+            TranscriptEntry(id: "u2", type: "user", content: "Now check the manifest"),
+        ])
+
+        XCTAssertEqual(blockIds, ["u1", "work", "a1", "c1", "u2"])
+    }
+
+    func testACompactionFollowedByAMessageEndsTheTurn() {
+        append([
+            TranscriptEntry(id: "u1", type: "user", content: "check the repo"),
+            toolUse("t1", name: "Bash", input: ["command": .string("git status")]),
+            toolResult("t1", text: "ok"),
+            compaction("c1"),
+            TranscriptEntry(id: "u2", type: "user", content: "Stop there"),
+        ])
+
+        XCTAssertEqual(blockIds, ["u1", "work", "c1", "u2"])
+    }
+
+    func testARunningTurnKeepsATrailingCompactionInItsFold() {
+        viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
+        append([
+            TranscriptEntry(id: "u1", type: "user", content: "check the repo"),
+            toolUse("t1", name: "Bash", input: ["command": .string("git status")]),
+            toolResult("t1", text: "ok"),
+            compaction("c1"),
+        ])
+
+        XCTAssertEqual(blockIds, ["u1", "work"], "the run is still working through it")
+        guard let turn = workTurns().first else { return XCTFail("expected a fold") }
+        XCTAssertTrue(turn.isLive)
+        XCTAssertEqual(turn.items.last?.id, "c1")
+
+        // Settled with nothing after it, it stands between turns again.
+        viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: false))
+        XCTAssertEqual(blockIds, ["u1", "work", "c1"])
+    }
+
+    func testARunningTurnThatEndedOnItsAnswerLeavesACompactionOutside() {
+        viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
+        append([
+            TranscriptEntry(id: "u1", type: "user", content: "check the repo"),
+            toolUse("t1", name: "Bash", input: ["command": .string("git status")]),
+            toolResult("t1", text: "ok"),
+            TranscriptEntry(id: "a1", type: "assistant", content: "The repository is clean."),
+            compaction("c1"),
+        ])
+
+        XCTAssertEqual(blockIds, ["u1", "work", "a1", "c1"])
+    }
+
+    // MARK: - Thinking as one step
+
+    func testAThinkingStepShowsItsLatestHeadingAsOneLine() {
+        XCTAssertEqual(
+            ReasoningSummaryDisplay.excerpt([
+                "**Reading logs**",
+                "**Comparing `bun test` runs**\n\nThe second run is slower.",
+            ]),
+            "Comparing bun test runs"
+        )
+    }
+
+    func testAThinkingStepWithoutAHeadingShowsItsFirstLineOfProse() {
+        XCTAssertEqual(
+            ReasoningSummaryDisplay.excerpt([
+                "\n\n- I should read [the config](src/config.ts) first.\nThen the tests.",
+            ]),
+            "I should read the config first."
+        )
+        XCTAssertEqual(ReasoningSummaryDisplay.excerpt(["## **Plan**"]), "Plan")
+        XCTAssertEqual(ReasoningSummaryDisplay.excerpt([]), "")
+    }
+
+    // MARK: - Live run phase
+
+    func testTheRunsPhaseFollowsItsFramesAndClearsWhenItEnds() {
+        viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
+        viewModel.handle(.streamActivity(sessionId: "bks-1", activity: .compacting))
+        XCTAssertEqual(viewModel.runActivity, .compacting)
+
+        viewModel.handle(.streamActivity(sessionId: "other", activity: .writing))
+        XCTAssertEqual(viewModel.runActivity, .compacting, "another session's phase is not ours")
+
+        viewModel.handle(.streamActivity(sessionId: "bks-1", activity: nil))
+        XCTAssertNil(viewModel.runActivity)
+
+        viewModel.handle(.feedSnapshot(sessionId: "bks-1", activity: .thinking))
+        XCTAssertEqual(viewModel.runActivity, .thinking)
+
+        viewModel.handle(.streamDone(sessionId: "bks-1"))
+        XCTAssertNil(viewModel.runActivity)
+
+        viewModel.handle(.streamActivity(sessionId: "bks-1", activity: .tool(toolName: "Bash", count: 1)))
+        viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: false))
+        XCTAssertNil(viewModel.runActivity, "a settled run has no phase")
+    }
+
+    func testStoppingLastsUntilTheRunSettles() {
+        viewModel.cancelRun()
+        XCTAssertNil(viewModel.stoppingSince, "nothing to stop")
+
+        viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
+        viewModel.handle(.streamStart(sessionId: "bks-1"))
+        viewModel.cancelRun()
+        let since = viewModel.stoppingSince
+        XCTAssertNotNil(since)
+        viewModel.cancelRun()
+        XCTAssertEqual(viewModel.stoppingSince, since, "a second tap keeps the first stop's time")
+
+        viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: false))
+        XCTAssertNil(viewModel.stoppingSince)
+    }
+
+    func testAStopLandsWhenTheModelTurnEndsEvenIfTheSessionStaysBusy() {
+        viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
+        viewModel.handle(.streamStart(sessionId: "bks-1"))
+        viewModel.cancelRun()
+        XCTAssertNotNil(viewModel.stoppingSince)
+
+        // A workflow the turn launched keeps the session running.
+        viewModel.handle(.streamDone(sessionId: "bks-1"))
+        XCTAssertTrue(viewModel.isRunning)
+        XCTAssertNil(viewModel.stoppingSince)
+    }
+
+    func testAReconnectForgetsAPhaseItMayHaveMissed() {
+        viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
+        viewModel.handle(.streamActivity(
+            sessionId: "bks-1",
+            activity: .retrying(attempt: 2, maxAttempts: 3, retryAt: .now.addingTimeInterval(30))
+        ))
+        viewModel.handle(.hello(bootId: "boot-2"))
+        XCTAssertNil(viewModel.runActivity)
+        XCTAssertTrue(viewModel.isRunning)
+    }
+
+    func testAStopAfterTheModelTurnEndedShowsNoStopping() {
+        viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
+        viewModel.handle(.streamStart(sessionId: "bks-1"))
+        // The turn ends; a workflow it launched keeps the session busy.
+        viewModel.handle(.streamDone(sessionId: "bks-1"))
+        viewModel.cancelRun()
+        XCTAssertNil(viewModel.stoppingSince, "no model turn left to unwind")
+
+        // The next model turn can be stopped again.
+        viewModel.handle(.streamStart(sessionId: "bks-1"))
+        viewModel.cancelRun()
+        XCTAssertNotNil(viewModel.stoppingSince)
+    }
+
+    func testAStopWithTheModelTurnUnknownShowsNoStopping() {
+        // Opened (or reconnected) while busy: no frame yet says a model
+        // turn is running, and a workflow may be all that holds the session.
+        viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
+        viewModel.cancelRun()
+        XCTAssertNil(viewModel.stoppingSince)
+
+        viewModel.handle(.streamStart(sessionId: "bks-1"))
+        viewModel.handle(.hello(bootId: "boot-2"))
+        viewModel.cancelRun()
+        XCTAssertNil(viewModel.stoppingSince, "a reconnect forgets the turn it saw")
+
+        viewModel.handle(.streamActivity(sessionId: "bks-1", activity: .writing))
+        viewModel.cancelRun()
+        XCTAssertNotNil(viewModel.stoppingSince, "a phase proves a turn in flight")
+    }
+
+    func testAReconnectForgetsAnUnconfirmedStop() {
+        viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
+        viewModel.handle(.streamStart(sessionId: "bks-1"))
+        viewModel.cancelRun()
+        XCTAssertNotNil(viewModel.stoppingSince)
+        viewModel.handle(.hello(bootId: "boot-2"))
+        XCTAssertNil(viewModel.stoppingSince)
+    }
+}
