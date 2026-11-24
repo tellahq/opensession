@@ -681,8 +681,12 @@ export function useSessionPreviewStatusEffect(
     worktreeDir,
   }: PreviewStatusEffectOptions,
 ) {
+  // The poll below mostly reads back the same status. Keeping the previous
+  // object then lets React skip re-rendering the whole session view.
   const setPreviewStatus = useEffectEvent((status: PreviewStatus) => {
-    preview.setStatus(status);
+    preview.setStatus((prev) =>
+      prev && JSON.stringify(prev) === JSON.stringify(status) ? prev : status,
+    );
   });
   const launching = preview.launchingPortal != null;
   // One read when the session opens, so the header knows which Portals the
