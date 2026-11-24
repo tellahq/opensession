@@ -8,6 +8,7 @@ import {
   serializeByKey,
   staleReview,
   type HandoffState,
+  descendsFrom,
   pickHandoffOwner,
   reviewSatisfied,
 } from "./handoff-gates";
@@ -179,6 +180,14 @@ describe("handoff owner", () => {
         { id: "branch" },
       ])?.id,
     ).toBe("branch");
+  });
+
+  test("descendsFrom follows parent links and stops on a cycle", () => {
+    const parents: Record<string, string> = { c: "b", b: "a", x: "y", y: "x" };
+    const parentOf = (id: string) => parents[id];
+    expect(descendsFrom("c", "a", parentOf)).toBe(true);
+    expect(descendsFrom("c", "z", parentOf)).toBe(false);
+    expect(descendsFrom("x", "z", parentOf)).toBe(false);
   });
 
   test("no footer and no branch owner means no owner", () => {

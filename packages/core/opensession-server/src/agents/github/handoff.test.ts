@@ -129,6 +129,78 @@ describe("review handoff owner", () => {
     }
   });
 
+  test("a worker the opener started on the branch gets the findings, not the opener", async () => {
+    const worker = session({ id: "os-worker", parentSessionId: OPENER });
+    const { deps: d } = deps({
+      cache: { "feature-a": cachedPr(11, OPENER) },
+      sessions: [session(), worker],
+      branchOwners: {
+        "feature-a": [session({ id: "os-unrelated" }), worker],
+      },
+    });
+    const owner = await resolveHandoffOwner(
+      { number: 11, headRef: "feature-a" },
+      WORKSPACE,
+      d,
+    );
+    expect(owner?.id).toBe("os-worker");
+  });
+
+  test("a worker's own worker on the branch counts too; an unrelated branch session does not", async () => {
+    const child = session({ id: "os-child", parentSessionId: OPENER });
+    const grandchild = session({
+      id: "os-grandchild",
+      parentSessionId: "os-child",
+    });
+    const { deps: d } = deps({
+      cache: { "feature-a": cachedPr(11, OPENER) },
+      sessions: [session(), child, grandchild],
+      branchOwners: { "feature-a": [grandchild] },
+    });
+    expect(
+      (
+        await resolveHandoffOwner(
+          { number: 11, headRef: "feature-a" },
+          WORKSPACE,
+          d,
+        )
+      )?.id,
+    ).toBe("os-grandchild");
+    const { deps: d2 } = deps({
+      cache: { "feature-a": cachedPr(11, OPENER) },
+      sessions: [session()],
+      branchOwners: { "feature-a": [session({ id: "os-unrelated" })] },
+    });
+    expect(
+      (
+        await resolveHandoffOwner(
+          { number: 11, headRef: "feature-a" },
+          WORKSPACE,
+          d2,
+        )
+      )?.id,
+    ).toBe(OPENER);
+  });
+
+  test("an archived worker leaves the findings with the opener", async () => {
+    const worker = session({
+      id: "os-worker",
+      parentSessionId: OPENER,
+      archived: true,
+    });
+    const { deps: d } = deps({
+      cache: { "feature-a": cachedPr(11, OPENER) },
+      sessions: [session(), worker],
+      branchOwners: { "feature-a": [worker] },
+    });
+    const owner = await resolveHandoffOwner(
+      { number: 11, headRef: "feature-a" },
+      WORKSPACE,
+      d,
+    );
+    expect(owner?.id).toBe(OPENER);
+  });
+
   test("no footer session and nobody on the branch keeps the label path", async () => {
     const { deps: d } = deps({ cache: { "feature-a": cachedPr(11) } });
     expect(

@@ -81,6 +81,7 @@ function harness(overrides: Partial<ReposToolContext> = {}) {
           changesRequestedBy: [],
           awaiting: [],
           requiredApprovals: 0,
+          openThreads: null,
         },
         rules: {
           readable: true,

@@ -814,6 +814,28 @@ function trustedThreadAuthor(c: ReviewThreadComment): boolean {
   );
 }
 
+/** Unresolved, current threads a trusted reviewer opened: the findings
+ * still owed an answer before the PR is ready. */
+function openTrustedThreads(threads: ReviewThread[]): ReviewThread[] {
+  return threads.filter((t) => {
+    if (t.isResolved || t.isOutdated || t.line == null) return false;
+    const root = t.comments[0];
+    return !!root && trustedThreadAuthor(root);
+  });
+}
+
+/**
+ * How many review threads from trusted reviewers are still unresolved on
+ * the PR (outdated ones excluded). Null when GitHub could not be read.
+ */
+export async function countOpenReviewThreads(
+  prNumber: number,
+  ghRepo?: string,
+): Promise<number | null> {
+  const threads = await readReviewThreads(prNumber, ghRepo).catch(() => null);
+  return threads && openTrustedThreads(threads).length;
+}
+
 /**
  * Pure formatter behind fetchReviewFindings, exported for tests. One entry per
  * unresolved, current thread, written from its root comment: replies (the
@@ -824,10 +846,8 @@ export function formatReviewFindings(
   reviews: ReviewInfo[],
 ): string {
   const lines: string[] = [];
-  for (const t of threads) {
-    if (t.isResolved || t.isOutdated || t.line == null) continue;
+  for (const t of openTrustedThreads(threads)) {
     const root = t.comments[0];
-    if (!root || !trustedThreadAuthor(root)) continue;
     // `comment <id>` lets the agent reply in that thread after fixing, and
     // `thread <id>` resolve it.
     const handles = [

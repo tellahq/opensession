@@ -53,6 +53,7 @@ import {
   serializeByKey,
   staleReview,
   type HandoffState,
+  descendsFrom,
   pickHandoffOwner,
   reviewSatisfied,
 } from "./handoff-gates";
@@ -155,8 +156,10 @@ const defaultOwnerDeps: HandoffOwnerDeps = {
  * even when an automation started it. A session can open several PRs from one
  * worktree, so its current branch alone misses most of them. A PR opened
  * moments ago may not be in the bulk cache yet, so the footer is read from
- * GitHub then. Otherwise the session working on the branch: one with the
- * branch checked out wins over one that only linked the PR.
+ * GitHub then. A worker that session started and that is on the branch
+ * takes precedence over it: the worker writes the code, and its reports keep
+ * the footer session informed. Otherwise the session working on the branch:
+ * one with the branch checked out wins over one that only linked the PR.
  */
 export async function resolveHandoffOwner(
   pr: Pick<PrRef, "number" | "headRef" | "ghRepo">,
@@ -179,6 +182,13 @@ export async function resolveHandoffOwner(
     sessionRef ? deps.getSession(sessionRef) : undefined,
     canFixOwnPr,
     owners,
+    (owner, referenced) =>
+      descendsFrom(
+        owner.id,
+        referenced.id,
+        (id) =>
+          (id === owner.id ? owner : deps.getSession(id))?.parentSessionId,
+      ),
   );
 }
 

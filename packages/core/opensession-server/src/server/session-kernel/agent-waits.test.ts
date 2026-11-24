@@ -359,6 +359,53 @@ describe("PR check settlement", () => {
     ]);
   });
 
+  test("a settled wake names unresolved review threads", async () => {
+    let now = 0;
+    const scheduled: PrChecksAgentWait[] = [];
+    const delivered: string[] = [];
+    let open: number | null = 3;
+    const deps = handlerDeps({
+      now: () => now,
+      getPrDetails: async () => details([passing]),
+      schedule: (wait) => scheduled.push(wait as PrChecksAgentWait),
+      deliver: async (_wait, message) => {
+        delivered.push(message);
+      },
+      openReviewThreads: async () => open,
+    });
+    const wait = (id: string, sessionId: string): PrChecksAgentWait => ({
+      version: 1,
+      id,
+      sessionId,
+      kind: "pr_checks",
+      user: "Jaap",
+      prompt: "Continue.",
+      repo: "example",
+      branch: "feature",
+      createdAt: 0,
+      deadlineAt: 600_000,
+      pollSeconds: 30,
+      settleSeconds: 45,
+    });
+    const settle = async (w: PrChecksAgentWait) => {
+      expect(await handleAgentWait(w, deps)).toBe("rescheduled");
+      now += 60_000;
+      expect(await handleAgentWait(scheduled.at(-1)!, deps)).toBe("delivered");
+    };
+
+    await settle(wait("w1", "threads-open"));
+    expect(delivered.at(-1)).toBe(
+      "PR example#42 checks settled. 1 checks settled: 1 passed, 0 failed. 3 unresolved review threads: not ready to merge until each is fixed or answered and resolved.",
+    );
+    open = 0;
+    await settle(wait("w2", "threads-clear"));
+    expect(delivered.at(-1)).toEndWith(" No unresolved review threads.");
+    // An unreadable count says nothing rather than guessing.
+    open = null;
+    await settle(wait("w3", "threads-unknown"));
+    expect(delivered.at(-1)).toEndWith("1 passed, 0 failed.");
+  });
+
   test("wakes on a failed check without waiting for the rest", async () => {
     let now = 10_000;
     let current = details([failing, running]);

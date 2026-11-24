@@ -164,13 +164,41 @@ export function handoffActive(
  * Which session a review handoff goes to. The session named in the PR body's
  * attribution footer wins while it can take the work, matching the CI-failure
  * and conflict notices: a session can open a PR in a repo it never attached,
- * so the branch lookup alone misses it. Otherwise the best branch owner.
+ * so the branch lookup alone misses it. When the footer session handed the
+ * branch to a worker it started (a coordinator and its thread), that worker
+ * writes and pushes the code, so it gets the findings directly instead of
+ * through the coordinator. Otherwise the best branch owner.
  */
 export function pickHandoffOwner<S>(
   referenced: S | undefined,
   canOwn: (session: S) => boolean,
   branchOwners: readonly S[],
+  startedBy: (owner: S, referenced: S) => boolean = () => false,
 ): S | undefined {
-  if (referenced && canOwn(referenced)) return referenced;
+  if (referenced && canOwn(referenced)) {
+    const worker = branchOwners.find(
+      (s) => s !== referenced && canOwn(s) && startedBy(s, referenced),
+    );
+    return worker ?? referenced;
+  }
   return branchOwners[0];
+}
+
+/**
+ * Did `ancestorId` start `id`, directly or through its own workers? Follows
+ * parent links a few hops up; a missing session or a cycle ends the walk.
+ */
+export function descendsFrom(
+  id: string,
+  ancestorId: string,
+  parentOf: (id: string) => string | undefined,
+  maxHops = 4,
+): boolean {
+  let current = parentOf(id);
+  for (let hop = 0; current && hop < maxHops; hop++) {
+    if (current === ancestorId) return true;
+    if (current === id) return false;
+    current = parentOf(current);
+  }
+  return false;
 }
