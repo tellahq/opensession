@@ -180,7 +180,7 @@ export function createGpuMcpServer(ctx: { sessionId: string; user?: string }) {
             .max(20)
             .optional()
             .describe(
-              "Machine paths (relative to the repository root, or absolute) to copy back after the command.",
+              "Machine paths (relative to the repository root, or absolute; a leading $OPENSESSION_JOB_OUTPUT is expanded, nothing else) to copy back after the command.",
             ),
         },
         async (args: {

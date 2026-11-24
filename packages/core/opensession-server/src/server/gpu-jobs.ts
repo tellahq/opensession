@@ -247,6 +247,9 @@ export interface GpuJobRecord {
   sandboxId?: string;
   /** Commit the job ran on, and whether it included uncommitted work. */
   commit?: string;
+  /** The checkpoint commit landed on the machine (the head above plus the
+   *  session's uncommitted changes), when there was one. */
+  checkpoint?: string;
   note?: string;
   startedBy?: string;
   notified?: boolean;
@@ -686,6 +689,7 @@ async function prepareAndLaunch(
   }
   const head = await sandbox.exec(["git", "rev-parse", "HEAD"]);
   if (head.exitCode === 0) job.commit = head.stdout.trim();
+  if (landed && landed.commit !== job.commit) job.checkpoint = landed.commit;
   if (job.stopping) {
     await settle(job, { state: "stopped" });
     return;
@@ -1079,7 +1083,9 @@ export function gpuJobEndedMessage(job: GpuJobRecord, tail: string): string {
   return (
     `A GPU job this session started ended. This is system context, not a new user message.\n\n` +
     `GPU job "${job.title}" (${job.id}, ${job.gpu}) ${ENDED_WORDS[job.state]}${code} after ${duration}.` +
-    (job.commit ? ` It ran on ${job.commit.slice(0, 12)}.` : "") +
+    (job.commit
+      ? ` It ran on ${job.commit.slice(0, 12)}${job.checkpoint ? ` with the uncommitted changes of checkpoint ${job.checkpoint.slice(0, 12)}` : ""}.`
+      : "") +
     (job.note ? `\n${job.note}` : "") +
     (job.error ? `\nError: ${job.error}` : "") +
     (job.logPath ? `\nFull log: ${job.logPath}` : "") +
@@ -1386,11 +1392,17 @@ export async function execOnGpuJob(
   if (result.exitCode === 124)
     out.note = `The command did not finish within ${seconds}s. Start long-lived processes detached (setsid nohup … > file 2>&1 &) so the call returns.`;
   if (input.fetch?.length) {
-    const targets = input.fetch.map((path) =>
-      posix.isAbsolute(path)
+    const output = jobVariables(job).OPENSESSION_JOB_OUTPUT!;
+    const targets = input.fetch.map((raw) => {
+      // The one variable a fetch path may name; nothing else is expanded.
+      const path = raw.replace(
+        /^\$(?:\{OPENSESSION_JOB_OUTPUT\}|OPENSESSION_JOB_OUTPUT\b)/,
+        output,
+      );
+      return posix.isAbsolute(path)
         ? posix.normalize(path)
-        : posix.join(sandbox.cwd, path),
-    );
+        : posix.join(sandbox.cwd, path);
+    });
     const sized = await sandbox.exec(
       [
         "bash",
