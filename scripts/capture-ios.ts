@@ -249,11 +249,13 @@ if (facts.xcodegen !== "yes")
   throw new Error(
     `${NODE} has no xcodegen on PATH — the Xcode project is generated`,
   );
-const freeGB = Math.min(Number(facts.freeGB), Number(facts.treeFreeGB));
+const systemFreeGB = Number(facts.freeGB);
+const treeFreeGB = Number(facts.treeFreeGB);
+const freeGB = Math.min(systemFreeGB, treeFreeGB);
 
-// Build trees live under ~/os-work, not /tmp: on Tella's node that is a symlink
-// to a 2 TB external SSD, while /tmp is on the 228 GB internal disk, which
-// filled up with 3 GB trees from parallel sessions.
+// Build trees live under ~/os-work, not /tmp: /tmp is on the system disk, which
+// 3 GB trees from parallel sessions fill, and ~/os-work can point at a larger
+// volume.
 const TREE = `${facts.home}/os-work/os1-capture-${TAG}`;
 const REMOTE_SHOT = `${TREE}/shot.png`;
 step(
@@ -265,11 +267,17 @@ step(
 // on device" errors, and CoreSimulator wedges machine-wide: every simctl verb
 // hangs for ever with no output while `simctl io screenshot` keeps working, so
 // it looks like the app rather than the box.
-if (Number.isFinite(freeGB) && freeGB < 8)
+const lowSpace = [
+  systemFreeGB < 8 &&
+    `the system disk has ${systemFreeGB}GB free (delete your own leftover ` +
+      `/private/tmp/os1-* trees and \`xcrun simctl delete\` your own simulators)`,
+  treeFreeGB < 8 &&
+    `~/os-work has ${treeFreeGB}GB free (delete your own ~/os-work/os1-* trees)`,
+].filter(Boolean);
+if (lowSpace.length > 0)
   throw new Error(
-    `${NODE} has only ${freeGB}GB free. Below ~8GB builds fail mid-compile and ` +
-      `CoreSimulator wedges machine-wide. Free space first: delete your own ` +
-      `~/os-work/os1-* trees and \`xcrun simctl delete\` your own simulators.`,
+    `${NODE} is low on space: ${lowSpace.join("; ")}. Below ~8GB builds fail ` +
+      `mid-compile and CoreSimulator wedges machine-wide.`,
   );
 
 // A booted simulator runs a full iOS userspace, so a shared box is BUSY by

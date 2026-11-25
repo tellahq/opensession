@@ -53,7 +53,8 @@ substitute your own Mac's hostname:
 
 ```sh
 T=os-work/os1-check-<session id>   # under the node's home; one tree per session
-rsync -a --delete --exclude=OS1.xcodeproj packages/clients/ios/ tella-mac-node:$T/os1-ios/
+ssh tella-mac-node "mkdir -p ~/$T/os1-ios" &&
+rsync -a --delete --exclude=OS1.xcodeproj packages/clients/ios/ tella-mac-node:$T/os1-ios/ &&
 ssh tella-mac-node "
   cd ~/$T/os1-ios && xcodegen generate --quiet
   xcodebuild -quiet build -skipMacroValidation -project OS1.xcodeproj -scheme OS1 \
@@ -65,10 +66,11 @@ ssh tella-mac-node "
     CODE_SIGNING_ALLOWED=NO"
 ```
 
-- Build under `~/os-work/`, never `/tmp`: a tree with derived data is about
-  3 GB. On `tella-mac-node`, `~/os-work` is on a 2 TB external SSD while `/tmp`
-  is on the small internal disk, which parallel sessions' trees have filled.
-  Delete your tree (`rm -rf ~/$T`) when the session's work is done.
+- Build under `~/os-work/`, not `/tmp`: a tree with derived data is about
+  3 GB, and `/tmp` sits on the system disk, which parallel sessions' trees
+  fill. Point `~/os-work` at a larger volume if the node has one. When the
+  session's work is done, delete the tree on the node:
+  `ssh tella-mac-node 'rm -rf ~/os-work/os1-check-<session id>'`.
 - Always build BOTH schemes: `#if os(macOS)` blocks only compile in `OS1Mac`.
 - Keep `-skipMacroValidation` on noninteractive builds. SwiftStreamingMarkdown's
   exact pinned dependency graph includes the Equatable compiler macro.
