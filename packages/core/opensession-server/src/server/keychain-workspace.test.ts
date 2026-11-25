@@ -4,7 +4,8 @@
  * method and path ceiling, with the secret still injected server-side and
  * every call audited with its session, caller and purpose. Only the owner
  * can share it or make it personal again, which ends the access sessions
- * got without asking. A login is never shareable.
+ * got without asking. A shared login has its password released to any
+ * interactive session without an ask, each release audited with its purpose.
  */
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
@@ -65,6 +66,21 @@ function shared(over: Partial<Parameters<typeof kc.addCredential>[0]> = {}) {
   });
 }
 
+function sharedLogin(
+  over: Partial<Parameters<typeof kc.addCredential>[0]> = {},
+) {
+  return kc.addCredential({
+    owner: "Alex",
+    service: "mac-mini",
+    kind: "login",
+    loginUrl: "vnc://192.0.2.10:5900",
+    username: "admin",
+    secret: "hunter2",
+    scope: "workspace",
+    ...over,
+  });
+}
+
 const call = (over: Partial<Parameters<typeof brokerCall>[0]> = {}) =>
   brokerCall({
     sessionId: "s-1",
@@ -94,18 +110,31 @@ describe("registering a workspace credential", () => {
     ]);
   });
 
-  test("a login can never be workspace-scoped", () => {
-    expect(() =>
-      kc.addCredential({
-        owner: "Alex",
-        service: "staging-login",
-        kind: "login",
-        loginUrl: "https://app.example.test/login",
-        username: "qa@example.test",
-        secret: "hunter2",
-        scope: "workspace",
-      }),
-    ).toThrow(/login can't be a workspace credential/);
+  test("a login can be workspace-scoped; personal is the default", () => {
+    expect(sharedLogin().scope).toBe("workspace");
+    expect(sharedLogin({ service: "mine", scope: undefined }).scope).toBe(
+      undefined,
+    );
+  });
+
+  test("a login may name a machine over VNC or SSH, never plain http", () => {
+    expect(sharedLogin({ loginUrl: "vnc://192.0.2.10:5900" })).toMatchObject({
+      host: "192.0.2.10",
+      loginUrl: "vnc://192.0.2.10:5900",
+    });
+    expect(
+      sharedLogin({ service: "box-ssh", loginUrl: "ssh://box.example.test" })
+        .host,
+    ).toBe("box.example.test");
+    for (const loginUrl of [
+      "http://app.example.test/login",
+      "ftp://box.example.test",
+      "vnc://admin:pw@192.0.2.10",
+      "vnc://",
+    ])
+      expect(() => sharedLogin({ service: "bad", loginUrl })).toThrow(
+        /loginUrl must be/,
+      );
   });
 
   test("an unknown scope is refused", () => {
@@ -241,18 +270,152 @@ describe("sharing and unsharing", () => {
     expect("status" in (await call({ sessionId: "s-2" }))).toBe(true);
   });
 
-  test("a login can't be shared", async () => {
-    const login = kc.addCredential({
-      owner: "Alex",
-      service: "staging-login",
-      kind: "login",
-      loginUrl: "https://app.example.test/login",
-      username: "qa@example.test",
-      secret: "hunter2",
-    });
+  test("an owner can share a personal login, and only the owner", async () => {
+    const login = sharedLogin({ scope: undefined });
     await expect(
-      kc.setCredentialScopeAsync(login.id, "Alex", "workspace"),
-    ).rejects.toThrow(/login can't be a workspace credential/);
+      kc.setCredentialScopeAsync(login.id, "Sam", "workspace"),
+    ).rejects.toThrow(/only the credential's owner/);
+    const done = await kc.setCredentialScopeAsync(
+      login.id,
+      "Alex",
+      "workspace",
+    );
+    expect(done.changed).toEqual(["scope"]);
+    expect(kc.findCredential("mac-mini")).toMatchObject({
+      kind: "login",
+      scope: "workspace",
+    });
+  });
+});
+
+describe("workspace logins", () => {
+  const PASSWORD = "machine-password-987";
+  const release = (
+    over: Partial<Parameters<typeof kc.claimLoginRelease>[0]> = {},
+  ) =>
+    kc.claimLoginRelease({
+      sessionId: "s-1",
+      credential: "mac-mini",
+      requestedBy: "Sam",
+      purpose: "grant Screen Recording over VNC",
+      ...over,
+    });
+
+  test("any session gets the password without an ask, audited with who and why", async () => {
+    sharedLogin({ secret: PASSWORD });
+    const first = await release();
+    if ("error" in first) throw new Error(first.error);
+    expect(first.credential.secret).toBe(PASSWORD);
+    expect(first.grant).toMatchObject({
+      mode: "release",
+      implicit: true,
+      status: "used",
+      sessionId: "s-1",
+    });
+    expect(kc.listKeychainAsks()).toHaveLength(0);
+    expect(
+      events.find((e) => e.kind === "keychain_login_released"),
+    ).toMatchObject({
+      session_id: "s-1",
+      requested_by: "Sam",
+      purpose: "grant Screen Recording over VNC",
+      scope: "workspace",
+    });
+    expect(JSON.stringify(events)).not.toContain(PASSWORD);
+    // Each release is its own, from any session.
+    const other = await release({ sessionId: "s-2", requestedBy: "Bea" });
+    expect("credential" in other).toBe(true);
+  });
+
+  test("a purpose is required", async () => {
+    sharedLogin();
+    expect(await release({ purpose: "  " })).toEqual({
+      error: expect.stringMatching(/workspace login: pass a purpose/),
+    });
+    expect(kc.listGrants()).toHaveLength(0);
+  });
+
+  test("a personal login still needs its owner's release", async () => {
+    sharedLogin({ scope: undefined });
+    expect(await release()).toEqual({
+      error: expect.stringMatching(/no approved release/),
+    });
+  });
+
+  test("request_credential mints a release without asking, and use spends it", async () => {
+    sharedLogin();
+    const asked = kc.requestCredential({
+      credential: "mac-mini",
+      sessionId: "s-1",
+      requestedBy: "Sam",
+      purpose: "sign in over VNC",
+    });
+    if (!("grant" in asked)) throw new Error("expected a grant");
+    expect(asked.grant).toMatchObject({ mode: "release", implicit: true });
+    expect(asked.instructions).toContain("workspace login");
+    expect(asked.instructions).toContain("use_login");
+    expect(kc.listKeychainAsks()).toHaveLength(0);
+    const used = await release({ purpose: undefined });
+    expect("grant" in used && used.grant.id).toBe(asked.grant.id);
+  });
+
+  test("a failed write drops a release minted for it", async () => {
+    sharedLogin();
+    const first = await release();
+    if ("error" in first) throw new Error(first.error);
+    await first.undo();
+    expect(kc.listGrants()).toHaveLength(0);
+  });
+
+  test("making it personal again revokes releases nobody approved", async () => {
+    const login = sharedLogin();
+    kc.requestCredential({
+      credential: "mac-mini",
+      sessionId: "s-1",
+      requestedBy: "Sam",
+      purpose: "sign in over VNC",
+    });
+    const done = await kc.setCredentialScopeAsync(login.id, "Alex", "personal");
+    expect(done.grantsRevoked).toBe(1);
+    expect(await release()).toEqual({
+      error: expect.stringMatching(/no approved release/),
+    });
+  });
+
+  test("use_login takes a purpose and writes the password to a file, not the result", async () => {
+    sharedLogin({ secret: PASSWORD });
+    const written: string[] = [];
+    const { createKeychainMcpServer } =
+      await import("../agents/slack/keychain-tools");
+    const server = createKeychainMcpServer({
+      sessionId: "s-1",
+      user: "Sam",
+      loginTarget: async () => ({
+        kind: "sandbox",
+        exec: Object.assign(
+          async (cmd: string[], opts?: { env?: Record<string, string> }) => {
+            if (cmd[0] !== "rm")
+              written.push(opts!.env!.KEYCHAIN_LOGIN_PASSWORD!);
+            return { exitCode: 0, stdout: "", stderr: "" };
+          },
+          { sandboxed: true, remote: true } as const,
+        ),
+      }),
+    }) as any;
+    const tool = server.instance._registeredTools.use_login;
+    const refused = await tool.handler({ credential: "mac-mini" }, {});
+    expect(refused.content[0].text).toMatch(/pass a purpose/);
+    const result = await tool.handler(
+      { credential: "mac-mini", purpose: "approve an admin prompt" },
+      {},
+    );
+    const text = result.content[0].text;
+    expect(text).not.toContain(PASSWORD);
+    expect(JSON.parse(text)).toMatchObject({
+      loginUrl: "vnc://192.0.2.10:5900",
+      username: "admin",
+    });
+    expect(written).toEqual([PASSWORD]);
   });
 });
 
@@ -414,5 +577,16 @@ describe("a person's turn in an automation session", () => {
     );
     expect(result.content[0].text).toContain("workspace credential");
     expect(kc.listKeychainAsks()).toHaveLength(0);
+  });
+
+  test("a workspace login still can't be asked for", async () => {
+    sharedLogin();
+    const tool = (await server()).instance._registeredTools.request_credential;
+    const result = await tool.handler(
+      { credential: "mac-mini", purpose: "sign in" },
+      {},
+    );
+    expect(result.content[0].text).toMatch(/is a login/);
+    expect(kc.listGrants()).toHaveLength(0);
   });
 });

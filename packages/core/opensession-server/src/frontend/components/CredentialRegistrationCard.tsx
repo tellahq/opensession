@@ -236,14 +236,18 @@ function RequestCard({
                   ? `Its active grants are revoked: they were approved for the old ${login ? "sign-in page" : "host"}.`
                   : request.changed?.includes("scope")
                     ? request.scope === "workspace"
-                      ? `Every session in the workspace can use it without asking you. Calls are audited, and ${AGENT_NAME} never sees the ${word}.`
+                      ? login
+                        ? `Every session in the workspace can have the password released without asking you, and ${AGENT_NAME} can read it then. Each release is audited.`
+                        : `Every session in the workspace can use it without asking you. Calls are audited, and ${AGENT_NAME} never sees the ${word}.`
                       : "Sessions must ask you again. Access they got without asking ends now."
                     : `Its active grants keep working. ${AGENT_NAME} never sees the ${word}.`
-                : login
-                  ? `Owned by you. Each time a session asks, you decide whether to release the password to it, and ${AGENT_NAME} can read it then. Use a test account.`
-                  : request.scope === "workspace"
-                    ? `Owned by you and shared with the workspace: every session can use it without asking. Calls are audited, and ${AGENT_NAME} never sees the secret.`
-                    : `Owned by you. Teammates' sessions must ask you before using it. ${AGENT_NAME} never sees the secret.`}
+                : login && request.scope === "workspace"
+                  ? `Owned by you and shared with the workspace: every session can have the password released without asking, and ${AGENT_NAME} can read it then. Each release is audited.`
+                  : login
+                    ? `Owned by you. Each time a session asks, you decide whether to release the password to it, and ${AGENT_NAME} can read it then. Use a test account.`
+                    : request.scope === "workspace"
+                      ? `Owned by you and shared with the workspace: every session can use it without asking. Calls are audited, and ${AGENT_NAME} never sees the secret.`
+                      : `Owned by you. Teammates' sessions must ask you before using it. ${AGENT_NAME} never sees the secret.`}
         </p>
       </div>
 
