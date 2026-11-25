@@ -52,6 +52,9 @@ struct SessionsListView: View {
     @State private var showSettings = false
     @State private var settingsAutomationId: String?
     @State private var showDesk = false
+    /// The synced `desk` pref: off hides the Desk's toolbar buttons and its
+    /// palette command. Explicit requests still open it; see `DeskPref`.
+    @AppStorage(DeskPref.storageKey) private var deskShown = DeskPref.standard
     /// The Plain support queue. iOS reaches it from the Support card at the
     /// bottom of the sessions sidebar; Mac keeps it in the sidebar header.
     @State private var showSupport = false
@@ -1049,18 +1052,20 @@ struct SessionsListView: View {
             )
         }
 
-        items.append(
-            CommandPaletteItem(
-                entry: CommandPaletteEntry(
-                    id: "command:desk",
-                    title: "Open the Desk",
-                    subtitle: "The standing concierge session",
-                    keywords: ["concierge", "assistant", "voice"],
-                    symbol: "lamp.desk"
-                ),
-                run: { showDesk = true }
+        if deskShown {
+            items.append(
+                CommandPaletteItem(
+                    entry: CommandPaletteEntry(
+                        id: "command:desk",
+                        title: "Open the Desk",
+                        subtitle: "The standing concierge session",
+                        keywords: ["concierge", "assistant", "voice"],
+                        symbol: "lamp.desk"
+                    ),
+                    run: { showDesk = true }
+                )
             )
-        )
+        }
 
         if supportLocation.showsPage {
             items.append(
@@ -1244,13 +1249,15 @@ struct SessionsListView: View {
                     .controlSize(.small)
                     .help("Open the support queue")
                 }
-                Button {
-                    showDesk = true
-                } label: {
-                    Image(systemName: "lamp.desk")
+                if deskShown {
+                    Button {
+                        showDesk = true
+                    } label: {
+                        Image(systemName: "lamp.desk")
+                    }
+                    .controlSize(.small)
+                    .help("Open the Desk")
                 }
-                .controlSize(.small)
-                .help("Open the Desk")
                 Button {
                     newSessionRequest = NewSessionRequest()
                 } label: {
@@ -1355,14 +1362,16 @@ struct SessionsListView: View {
                             )
                         }
                     }
-                    ToolbarItem(placement: .bottomBar) {
-                        Button {
-                            showDesk = true
-                        } label: {
-                            Image(systemName: "lamp.desk")
-                                .foregroundStyle(OS1VisualStyle.text)
+                    if deskShown {
+                        ToolbarItem(placement: .bottomBar) {
+                            Button {
+                                showDesk = true
+                            } label: {
+                                Image(systemName: "lamp.desk")
+                                    .foregroundStyle(OS1VisualStyle.text)
+                            }
+                            .accessibilityLabel("Open the Desk")
                         }
-                        .accessibilityLabel("Open the Desk")
                     }
                 }
                 .sheet(isPresented: $showSettings) {

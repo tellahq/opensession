@@ -16,6 +16,19 @@ final class PreferenceHydrationTests: XCTestCase {
         XCTAssertFalse(UsageBarPref.standard)
     }
 
+    /// The web's `desk` pref: "on"/"off" under the same key, hidden by
+    /// default, and any other value is no answer rather than a switch.
+    func testDeskPrefMatchesTheWebShape() {
+        XCTAssertEqual(DeskPref.prefKey, "desk")
+        XCTAssertEqual(DeskPref.decode("on"), true)
+        XCTAssertEqual(DeskPref.decode("off"), false)
+        XCTAssertNil(DeskPref.decode(nil))
+        XCTAssertNil(DeskPref.decode("true"))
+        XCTAssertEqual(DeskPref.encode(true), "on")
+        XCTAssertEqual(DeskPref.encode(false), "off")
+        XCTAssertFalse(DeskPref.standard)
+    }
+
     func testDefaultRepositoryPreferenceNormalizesRetiredAuto() {
         XCTAssertNil(NativePreferences.normalizedDefaultRepository(nil))
         XCTAssertEqual(NativePreferences.normalizedDefaultRepository(""), "")

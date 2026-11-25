@@ -90,7 +90,15 @@ enum NativePreferences {
             prefs[ActiveOrder.prefKey] = defaults.string(forKey: ActiveOrder.storageKey)
                 ?? "[]"
             prefs[UsageBarPref.prefKey] = UsageBarPref.encode(UsageBarPref.isOn)
+            prefs[DeskPref.prefKey] = DeskPref.encode(DeskPref.isOn)
         }
+        #if DEBUG
+        // Screenshot runs sign in as a shared identity; `OS1_DESK=on|off`
+        // pins the Desk's visibility without writing that account's pref.
+        if let forced = ProcessInfo.processInfo.environment["OS1_DESK"] {
+            prefs[DeskPref.prefKey] = forced
+        }
+        #endif
         let previousIdentity = defaults.string(forKey: identityKey)
         let previousBucket = defaults.string(forKey: bucketKey)
         let changedIdentity = previousIdentity != identity || previousBucket != bucket
@@ -255,6 +263,15 @@ enum NativePreferences {
             validatedIdList(prefs[SidebarTools.prefKey]),
             default: SidebarTools.defaultHiddenJSON,
             key: SidebarTools.storageKey,
+            resetMissing: true,
+            in: defaults
+        )
+        // Whether the Desk shows at all. The account's, like the web's own
+        // `desk` pref, so a missing value means hidden.
+        setBool(
+            DeskPref.decode(prefs[DeskPref.prefKey]),
+            default: DeskPref.standard,
+            key: DeskPref.storageKey,
             resetMissing: true,
             in: defaults
         )
