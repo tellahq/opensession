@@ -524,7 +524,7 @@ passed`, the whole message and nothing else) draws as one compact row per
   on `DeskCallRequest`, the sessions list opens the Desk, and the Desk sheet
   shows the call screen (`DeskVoiceEngine.open()`). A second press from
   outside the app hangs up. Running the intent is the opt-in, so it works with
-  the Desk voice preference off, and the Desk header keeps its mic button while
+  the Show Desk and Desk voice preferences off, and the Desk header keeps its mic button while
   that call runs. `AgentShortcuts` registers it beside "Start an Agent".
 - **Desk call Live Activity** (`OS1Widgets/DeskCallLiveActivity.swift`, driven
   by `DeskCallActivityController`) — every Desk call, however it started, shows
@@ -610,7 +610,10 @@ passed`, the whole message and nothing else) draws as one compact row per
 - **Desk** — a standing per-user concierge session (`POST /api/desk/ensure`
   get-or-creates it), summoned as a sheet from a toolbar button next to the
   sessions list (iOS: `lamp.desk` toolbar item; macOS: the same button in the
-  sidebar header). It's an ordinary `SessionView` under a compact header, so
+  sidebar header). Those buttons and the palette's "Open the Desk" show only
+  with Show Desk on (Settings → Personal → Preferences, off by default), the
+  account's `desk` ui-pref shared with the web (`Models/DeskPref.swift`).
+  It's an ordinary `SessionView` under a compact header, so
   everything the session view already does — streaming, tool folds, questions
   — works there too. Voice mode is opt-in under Settings → Personal →
   Preferences and syncs through the account's `desk-voice` ui-pref.
