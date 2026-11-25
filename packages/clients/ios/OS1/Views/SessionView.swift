@@ -5163,6 +5163,9 @@ private struct SessionInputBar: View {
             .frame(minHeight: 44)
             .contentShape(Rectangle())
         }
+        // Top-down like the web menu, not flipped toward the pill: the five
+        // read in the order the person dragged them into there.
+        .menuOrder(.fixed)
         .buttonStyle(.plain)
         .disabled(noteMode || viewModel.safety != nil)
         .opacity(noteMode ? 0.4 : 1)

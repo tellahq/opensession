@@ -127,6 +127,15 @@ enum NativePreferences {
             resetMissing: changedIdentity,
             in: defaults
         )
+        // The order of the model menus' top five, dragged on the web. The
+        // account's, so a missing value means the curated order.
+        set(
+            TopModels.normalized(prefs[TopModels.prefKey]),
+            default: "",
+            key: TopModels.storageKey,
+            resetMissing: true,
+            in: defaults
+        )
         set(
             validated(prefs["send-key"], allowed: ["enter", "mod-enter"]),
             default: "enter",
