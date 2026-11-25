@@ -47,16 +47,17 @@ WS protocol notes) — keep it updated alongside changes.
 
 ## Building and testing (from a non-Mac host)
 
-A Linux host has no Xcode. Verify every change on a Mac build node over SSH —
-the commands below show how Tella does it (`ssh tella-mac-node`, Xcode 26.6);
-substitute your own Mac's hostname:
+A Linux host has no Xcode. Verify every change on a Mac build node over SSH
+(Xcode 26.6). Set `MAC` to that node's SSH host:
 
 ```sh
-T=os-work/os1-check-<session id>   # under the node's home; one tree per session
-ssh tella-mac-node "mkdir -p ~/$T/os1-ios" &&
-rsync -a --delete --exclude=OS1.xcodeproj packages/clients/ios/ tella-mac-node:$T/os1-ios/ &&
-ssh tella-mac-node "
-  cd ~/$T/os1-ios && xcodegen generate --quiet
+MAC=<mac-build-host>                # e.g. mac.example.test
+T=os-work/os1-check-<session id>    # under the node's home; one tree per session
+ssh "$MAC" "mkdir -p ~/$T/os1-ios" &&
+rsync -a --delete --exclude=OS1.xcodeproj packages/clients/ios/ "$MAC:$T/os1-ios/" &&
+ssh "$MAC" "set -e
+  cd ~/$T/os1-ios
+  xcodegen generate --quiet
   xcodebuild -quiet build -skipMacroValidation -project OS1.xcodeproj -scheme OS1 \
     -destination 'generic/platform=iOS Simulator' -derivedDataPath ~/$T/dd
   xcodebuild -quiet build -skipMacroValidation -project OS1.xcodeproj -scheme OS1Mac \
@@ -70,7 +71,7 @@ ssh tella-mac-node "
   3 GB, and `/tmp` sits on the system disk, which parallel sessions' trees
   fill. Point `~/os-work` at a larger volume if the node has one. When the
   session's work is done, delete the tree on the node:
-  `ssh tella-mac-node 'rm -rf ~/os-work/os1-check-<session id>'`.
+  `ssh <mac-build-host> 'rm -rf ~/os-work/os1-check-<session id>'`.
 - Always build BOTH schemes: `#if os(macOS)` blocks only compile in `OS1Mac`.
 - Keep `-skipMacroValidation` on noninteractive builds. SwiftStreamingMarkdown's
   exact pinned dependency graph includes the Equatable compiler macro.
