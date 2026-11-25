@@ -401,6 +401,11 @@ final class SessionViewModel {
     private(set) var prLoadFailed = false
     private var prTask: Task<Void, Never>?
     private var prLoadGeneration = 0
+    /// Re-fetches a merged PR while its link waits on production. No event
+    /// fires when production deploys, so this is the only way the row flips.
+    private var productionPollTask: Task<Void, Never>?
+    /// The web's `MERGED_DEPLOY_POLL_MS` (src/frontend/lib/poll.ts).
+    static let productionPollInterval: Duration = .seconds(60)
     private let prLoader: @MainActor (String) async throws -> PrDetails?
     private let prReadyMarker: @MainActor (PrReadyTarget) async throws -> Void
     /// PRs with a Ready for review request on the wire. Keyed by target so a
@@ -904,6 +909,7 @@ final class SessionViewModel {
         deliveringPruneTask?.cancel()
         prLoadGeneration += 1
         prTask?.cancel()
+        cancelProductionPoll()
         notesTask?.cancel()
         socket?.disconnect()
         socket = nil
@@ -942,6 +948,30 @@ final class SessionViewModel {
             guard !Task.isCancelled, generation == prLoadGeneration else { return }
             prLoadFailed = prDetails == nil
         }
+        scheduleProductionPoll()
+    }
+
+    /// Arm the next production check while the loaded PR awaits production
+    /// and the session is on screen. Every refresh re-arms it from scratch,
+    /// so a webhook or foreground refresh in between resets the interval, and
+    /// a failed fetch keeps polling off the details it already has.
+    private func scheduleProductionPoll() {
+        cancelProductionPoll()
+        guard !stopped, !isAway, prDetails?.staging?.awaitingProduction == true else { return }
+        let clock = clock
+        productionPollTask = Task { [weak self] in
+            do {
+                try await clock.sleep(for: Self.productionPollInterval)
+            } catch { return }
+            guard let self, !Task.isCancelled else { return }
+            self.productionPollTask = nil
+            self.loadPr()
+        }
+    }
+
+    private func cancelProductionPoll() {
+        productionPollTask?.cancel()
+        productionPollTask = nil
     }
 
     /// A global PR event belongs to this session when it names any branch the
@@ -1352,6 +1382,8 @@ final class SessionViewModel {
         guard !stopped else { return }
         stopTyping()
         isAway = true
+        // `appDidBecomeActive` refetches, which re-arms the poll.
+        cancelProductionPoll()
         // Time away from the foreground never counts toward the reconnect
         // grace; `appDidBecomeActive` restarts it if the drop outlives the
         // background. An outage already on screen is folded back too, as the
