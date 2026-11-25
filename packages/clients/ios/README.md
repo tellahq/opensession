@@ -280,7 +280,9 @@ passed`, the whole message and nothing else) draws as one compact row per
   when ready" and has no slide. A refused merge shows the server's sentence
   on the card. Then a
   Deployments list (the PR's preview environment plus deploy checks such as
-  Vercel), and a Demos carousel of the conversation's and assets' pictures and
+  Vercel; a merged PR keeps its preview until production has the merge,
+  re-fetching every minute while the session is on screen, then links
+  production), and a Demos carousel of the conversation's and assets' pictures and
   recordings, videos first. Below that: repository and branch metadata, local
   git status, changed files, workspace context, document and data assets as
   Files rows, model/reasoning controls, and live remote
