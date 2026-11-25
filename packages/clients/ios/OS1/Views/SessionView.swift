@@ -905,8 +905,8 @@ struct SessionView: View {
                 }
             }
             #if os(iOS)
-            // The session's ⋯ sits beside the title, in the bar's own glass.
-            // Archive and Next stay on the pill above the composer
+            // The session's ⋯ sits beside the title, in the bar's own glass,
+            // and carries Archive. Next stays on the pill above the composer
             // (`SessionActionBar`), under the thumb.
             if let actionsMenu {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -1232,7 +1232,6 @@ struct SessionView: View {
                 horizontalInset: contentInset,
                 autoFocusWhenNeverRan: emptyContent == nil,
                 onNextChat: onNextChat,
-                onArchive: onArchiveWorkspace,
                 catalog: catalog,
                 accounts: accounts,
                 forkState: $forkState,
@@ -1276,6 +1275,7 @@ struct SessionView: View {
                 onNewSession: onNewSession,
                 onFork: canForkSession ? { forkState.enter() } : nil,
                 onRenameWorkspace: onRenameWorkspace,
+                onArchiveWorkspace: onArchiveWorkspace,
                 onDeleteWorkspace: onDeleteWorkspace,
                 showWorktreeInfo: $showWorktreeInfo,
                 showPrPanel: $showPrPanel,
@@ -2400,6 +2400,9 @@ private struct SessionActionsMenu: View {
     let onNewSession: (() -> Void)?
     let onFork: (() -> Void)?
     let onRenameWorkspace: ((String) -> Void)?
+    /// Archive without opening anything next (a session not pushed from the
+    /// sidebar). The sidebar's own archive-and-next wins.
+    let onArchiveWorkspace: (() -> Void)?
     let onDeleteWorkspace: (() -> Void)?
     @Binding var showWorktreeInfo: Bool
     @Binding var showPrPanel: Bool
@@ -2419,13 +2422,20 @@ private struct SessionActionsMenu: View {
     @State private var mergeError: String?
     @State private var sandboxMove = SandboxMoveViewModel()
     @Environment(\.openURL) private var openURL
+    /// The sidebar's archive-and-open-next, when this session was pushed from it.
+    @Environment(\.phoneSessionNavigation) private var navigation
+
+    /// Archive, preferring the sidebar's archive-and-next. nil leaves it out.
+    private var archiveAction: (() -> Void)? {
+        if navigation.canArchive { return { navigation.archive() } }
+        return onArchiveWorkspace
+    }
 
     var body: some View {
         // Read top down from the bar: what you look at in this session, its
         // pull request, starting something, then the workspace itself.
-        // Archive is the pill's job above the composer, model settings ride
-        // the composer's pill and the worktree sheet opens from the title, so
-        // none of them repeat here.
+        // Model settings ride the composer's pill and the worktree sheet
+        // opens from the title, so neither repeats here.
         Menu {
             // The three views reached for most, as one row of icons.
             ControlGroup {
@@ -2599,6 +2609,11 @@ private struct SessionActionsMenu: View {
                         HideStore.shared.unhide(for: viewModel.session)
                     } label: {
                         Label("Restore to sidebar", systemImage: "eye")
+                    }
+                }
+                if let archiveAction {
+                    Button(action: archiveAction) {
+                        Label("Archive workspace", systemImage: "archivebox")
                     }
                 }
                 if let workspace, !workspace.isOptimistic,
@@ -3610,9 +3625,6 @@ private struct SessionInputBar: View {
     var autoFocusWhenNeverRan = true
     /// Kept optional so non-sidebar conversations, such as the Desk, draw no row.
     var onNextChat: (() -> Void)?
-    /// Archive without opening anything next (a session not pushed from the
-    /// sidebar, such as the Desk). The sidebar's own archive-and-next wins.
-    var onArchive: (() -> Void)? = nil
     #if os(iOS)
     @Environment(\.phoneSessionNavigation) private var navigation
     /// The transcript's way back down, carried by the action pill.
@@ -3770,8 +3782,7 @@ private struct SessionInputBar: View {
             // The web phone's action pill. It steps aside while typing.
             if hasActionBar {
                 SessionActionBar(
-                    onArchive: navigation.canArchive ? { navigation.archive() } : onArchive,
-                    next: showNextChatButton ? navigation : nil,
+                    next: navigation,
                     scrollToLatest: scrollToLatest
                 )
                 .transition(.opacity)
@@ -4043,11 +4054,11 @@ private struct SessionInputBar: View {
 
     #if os(iOS)
     /// Whether the action bar has anything to hold, so there is no empty
-    /// capsule.
+    /// capsule. Next is all it carries; Archive lives in the ⋯ menu.
     private var hasActionBar: Bool {
         !inputFocused
-            && (onArchive != nil || navigation.canArchive
-                || (showNextChatButton && (!navigation.chats.isEmpty || navigation.allRead)))
+            && showNextChatButton
+            && (!navigation.chats.isEmpty || navigation.allRead)
     }
     #endif
 

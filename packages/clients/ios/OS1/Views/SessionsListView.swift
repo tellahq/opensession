@@ -2596,7 +2596,7 @@ struct SessionsListView: View {
         }
     }
 
-    /// What the pushed session's action pill acts on.
+    /// What the pushed session's action pill and ⋯ menu act on.
     private func phoneNavigation(for session: Session) -> PhoneSessionNavigation {
         var chats = unreadChats(after: session)
         #if DEBUG
@@ -2625,7 +2625,7 @@ struct SessionsListView: View {
         )
     }
 
-    /// The pill's Archive: archive the open workspace and go to the next
+    /// The ⋯ menu's Archive: archive the open workspace and go to the next
     /// unread session, or back to the list when there is none.
     private func archiveAndOpenNext(_ workspace: SidebarWorkspace, from session: Session) {
         let archivedIds = Set(workspace.sessions.map(\.id))

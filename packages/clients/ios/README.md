@@ -231,10 +231,10 @@ passed`, the whole message and nothing else) draws as one compact row per
   moves to the Closed sessions submenu of the session's overflow menu, which
   reopens a row the same way. On macOS, where the sidebar is the live-session
   switcher, the same scoped history lives in the selected session's toolbar
-  instead. On iOS, Archive and the session actions menu sit in the navigation
-  bar beside the title as one two-button group. With the Next chat preference
-  on, a Liquid Glass action bar floats above the composer holding that button;
-  it stays directly above the composer when the keyboard opens. The actions
+  instead. On iOS, the session actions menu sits in the navigation bar beside
+  the title, and its Archive workspace item archives the workspace and opens
+  the next unread session. With the Next chat preference on, a Liquid Glass
+  action bar floats above the composer holding the Next button. The actions
   menu carries New session in workspace, worktree details, the pull request
   panel, Add to sidebar when needed, rename,
   share, hide or restore, and archive, matching the sidebar row's long-press

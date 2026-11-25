@@ -88,20 +88,18 @@ extension EnvironmentValues {
 }
 
 /// What the session offers under the thumb, as one floating glass capsule
-/// above the composer: Archive (and open the next unread chat), and Next,
-/// which names the unread session it opens, with the transcript's
-/// scroll-to-latest arrow beside it. The ⋯ menu sits in the navigation bar
-/// beside the title, and a new workspace starts from the list, not from inside
-/// a chat. It steps aside while the keyboard is up.
+/// above the composer: Next, which names the unread session it opens, with the
+/// transcript's scroll-to-latest arrow beside it. Archive lives in the ⋯ menu
+/// in the navigation bar beside the title, and a new workspace starts from the
+/// list, not from inside a chat. It steps aside while the keyboard is up.
 ///
 /// The glass is a background SIBLING of the row, not an ancestor of it. A
 /// `Menu` whose label sits INSIDE a glass subtree makes the system treat that
 /// glass as the menu's morph source, which takes the whole bar off screen for
 /// as long as the menu is open. See `SessionInputBar.composer`.
 struct SessionActionBar: View {
-    var onArchive: (() -> Void)?
-    /// Where Next goes. nil hides it (the Next chat preference is off).
-    var next: PhoneSessionNavigation?
+    /// Where Next goes.
+    var next: PhoneSessionNavigation
     /// The transcript's arrow back to the latest, shown left of the capsule
     /// while the reader is scrolled up. nil hides it.
     var scrollToLatest: ScrollToLatest?
@@ -109,24 +107,8 @@ struct SessionActionBar: View {
     /// Matches the composer's round controls, so the two read as one system.
     static let control: CGFloat = 44
 
-    private var showsNext: Bool {
-        guard let next else { return false }
-        return !next.chats.isEmpty || next.allRead
-    }
-
     var body: some View {
-        HStack(spacing: 0) {
-            if let onArchive {
-                iconButton("archivebox", label: "Archive and open next chat", action: onArchive)
-            }
-            if let next, showsNext {
-                if onArchive != nil {
-                    divider
-                }
-                NextUnreadSegment(navigation: next)
-                    .transition(.opacity)
-            }
-        }
+        NextUnreadSegment(navigation: next)
         .padding(.horizontal, 2)
         .padding(.vertical, 2)
         .fixedSize(horizontal: false, vertical: true)
@@ -134,7 +116,7 @@ struct SessionActionBar: View {
         .background { Color.clear.glassSurface(in: Capsule()) }
         // The arrow's lane is kept on both sides, always, so the capsule sits
         // centred over the composer and does not move when the arrow comes
-        // and goes. Archive and Next leave the label room for that.
+        // and goes. Next leaves the label room for that.
         .padding(.horizontal, Self.arrowLane)
         .frame(maxWidth: .infinity)
         .overlay(alignment: .leading) {
@@ -153,36 +135,10 @@ struct SessionActionBar: View {
 
     /// The 12pt margin, the arrow's 44pt target, and 8pt before the capsule.
     private static let arrowLane: CGFloat = 12 + 44 + 8
-
-    private var divider: some View {
-        Rectangle()
-            .fill(OS1VisualStyle.border)
-            .frame(width: 1, height: 20)
-            .padding(.horizontal, 2)
-            .accessibilityHidden(true)
-    }
-
-    private func iconButton(
-        _ symbol: String,
-        label: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                // Weight from the font, never `.resizable()`, so this sits at
-                // the same stroke as the composer's controls.
-                .font(.system(size: 19))
-                .foregroundStyle(OS1VisualStyle.textDim)
-                .frame(width: Self.control, height: Self.control)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
-    }
 }
 
 /// The web phone's Next button (`NextUnreadButton`) as the action capsule's
-/// last segment, naming where it goes. Tap opens your next unread session; a
+/// content, naming where it goes. Tap opens your next unread session; a
 /// long press lists every unread one. When the last one has just been opened
 /// it reads "All read" for a moment, then goes. The label truncates before
 /// the capsule outgrows the screen.
