@@ -451,6 +451,14 @@ enum SettingsAPI {
         try await request("/api/claude-accounts", method: "POST", body: body)
     }
 
+    /// Adds a Claude API account from an API key. Federation enrolment is the
+    /// host operator's job on the web.
+    static func createClaudeApiAccount(name: String, apiKey: String, owner: String?) async throws -> ClaudeApiAccountAdded {
+        var body: [String: Any] = ["name": name, "apiKey": apiKey]
+        if let owner { body["owner"] = owner }
+        return try await request("/api/claude-accounts/api", method: "POST", body: body)
+    }
+
     static func refreshClaudeAccounts() async throws -> [ProviderAccount] {
         let response: ProviderAccountsResponse = try await request("/api/claude-accounts/refresh", method: "POST")
         return response.accounts ?? []
