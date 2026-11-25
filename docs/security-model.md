@@ -240,9 +240,9 @@ state one; the audit line (`keychain_broker_call`) records it with the
 session and the person driving it, and the implicit grant's
 `keychain_grant_minted` line is marked `scope: workspace`. Making the
 credential personal again revokes every implicit grant, which also ends a run
-using one, while grants its owner approved keep working. A login can never be
-a workspace credential: its password reaches the agent, so each release stays
-the owner's decision.
+using one, while grants its owner approved keep working. A login can be a
+workspace credential too (see Logins below), with the difference that its
+password does reach every session that uses it.
 
 Automation-owned sessions never get the full keychain server. A turn a person
 sends into one (resolved by `interactivePrompter`, never the automation's own
@@ -312,7 +312,9 @@ The old broker URL (`/api/keychain/broker/...`) answers every caller with
 
 A login is the one keychain secret an agent is given. It holds a sign-in
 page (`https://` only), a username and a password, for a test account a
-session signs in with in its own browser. A password has to be typed into a
+session signs in with in its own browser. A login for a machine itself (its
+Screen Sharing or SSH password) names `vnc://host[:port]` or
+`ssh://host[:port]` instead of a sign-in page. A password has to be typed into a
 page the agent drives, and the agent can read back any field it typed into,
 so no relay could keep it hidden. The design makes that disclosure explicit
 and bounded instead.
@@ -341,7 +343,19 @@ audited (`keychain_login_released`).
 Nothing stops the agent from reading the file, copying the password, or
 putting it in a transcript, commit or log despite its instructions. Treat
 every release as disclosing the password to that session, and register only
-dedicated test accounts as logins, never a person's own sign-in.
+dedicated test accounts or shared machine logins as logins, never a person's
+own sign-in.
+
+An owner may make a login a workspace credential, when registering it (the
+card says so) or later with Share in Settings → Account or
+`update_credential` with `scope: "workspace"`. Then any interactive session
+gets the password through `use_login` without an ask: the call must state a
+purpose, mints a single-use implicit `release` grant (`keychain_grant_minted`
+marked `scope: workspace`), and the `keychain_login_released` line records
+the session, the person driving it and the purpose. Sharing a login means
+every session in the workspace may read its password, so do it only for a
+credential the whole team is meant to hold. Making it personal again revokes
+unspent implicit releases. Automation turns still get no logins.
 
 **Limit: the keychain does not protect secrets from a local agent that goes
 looking for them.** The store is a 0600 file owned by the service user, and

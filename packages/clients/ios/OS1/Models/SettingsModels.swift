@@ -201,6 +201,49 @@ struct ProviderAccount: Codable, Sendable, Identifiable, Equatable {
     /// sign-in brings it back.
     var reloginRequired: Bool?
     var refreshError: String?
+    /// Claude only: "setup-token" or "oauth" for a subscription, "api-key" or
+    /// "federation" for an account billed to an Anthropic API organization.
+    /// Older servers leave it out, which reads as a subscription.
+    var authKind: String?
+    /// Claude API accounts: the Mythos models the organization can run.
+    var mythosModels: [String]?
+    /// Set on a workload identity (federation) Claude API account.
+    var federation: ClaudeFederation?
+
+    /// A Claude API account serves Mythos runs and bills the API organization,
+    /// so it has no subscription windows to meter.
+    var isClaudeApiAccount: Bool { authKind == "api-key" || authKind == "federation" }
+
+    /// What kind of Claude credential this is, as the web words it after
+    /// "Anthropic": nil for a subscription.
+    var claudeAuthLabel: String? {
+        switch authKind {
+        case "api-key": "API key"
+        case "federation": "API · workload identity"
+        default: nil
+        }
+    }
+}
+
+struct ClaudeFederation: Codable, Sendable, Equatable {
+    var organizationId: String?
+    var federationRuleId: String?
+    var serviceAccountId: String?
+    var workspaceId: String?
+}
+
+/// `POST /api/claude-accounts/api`: the new account, plus a `warning` when the
+/// server's bridge.accounts list leaves it out of Mythos runs.
+struct ClaudeApiAccountAdded: Decodable, Sendable {
+    var account: ProviderAccount
+    var warning: String?
+
+    private enum CodingKeys: String, CodingKey { case warning }
+
+    init(from decoder: Decoder) throws {
+        account = try ProviderAccount(from: decoder)
+        warning = try decoder.container(keyedBy: CodingKeys.self).decodeIfPresent(String.self, forKey: .warning)
+    }
 }
 
 struct ProviderAccountsResponse: Codable, Sendable {

@@ -23,7 +23,9 @@
  * the workspace: call_credential and run_with_credential use it without an
  * ask, each call stating its purpose for the audit log. Only its owner can
  * make it workspace-wide or personal again, on the same card as any other
- * change; a login never can be.
+ * change. A workspace login (a shared machine's password, say) is released
+ * by use_login to any interactive session without an ask, each release
+ * stating its purpose for the audit log.
  *
  * A secret pasted into a session prompt is a secret in the transcript, so
  * register_credential never takes one: the agent names the service and host,
@@ -34,7 +36,8 @@
  *
  * A login (a test account's username and password for a sign-in page) is the
  * one secret an agent does get, because it must type it into the page. Its
- * owner approves each release, and use_login writes the password to a
+ * owner approves each release (unless they made it a workspace login), and
+ * use_login writes the password to a
  * short-lived file in the session's workspace (keychain-logins.ts) rather
  * than returning it, so it stays out of the transcript.
  */
@@ -191,7 +194,7 @@ const credentialFields = {
     .max(2000)
     .optional()
     .describe(
-      "For a login: the full https:// URL of the sign-in page, e.g. 'https://app.example.test/login'.",
+      "For a login: where it is typed. The full https:// URL of a sign-in page, e.g. 'https://app.example.test/login', or for a machine's own login vnc://host[:port] (Screen Sharing) or ssh://host[:port], e.g. 'vnc://192.0.2.10:5900'.",
     ),
   username: z
     .string()
@@ -240,7 +243,7 @@ const credentialFields = {
     .enum(["personal", "workspace"])
     .optional()
     .describe(
-      "'personal' (default): every session must ask the owner with request_credential. 'workspace': every session in the workspace may call it without asking (still within its host, methods and paths, never seeing the secret, and audited). Only for API credentials, and only when the owner wants the whole team's sessions to use it.",
+      "'personal' (default): every session must ask the owner with request_credential. 'workspace': every session in the workspace may use it without asking. An API credential is still held to its host, methods and paths and its secret is never seen; a login's password is released by use_login to any interactive session that states a purpose, and the agent reads it then. Every use is audited. Only when the owner says the whole team's sessions should use it.",
     ),
 };
 
@@ -432,7 +435,10 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
             .join("; ");
           if (c.kind === "login")
             return (
-              `- **${c.service}** (login: ${c.username} on ${c.loginUrl}) — owner ${c.owner}` +
+              `- **${c.service}** (login: ${c.username} on ${c.loginUrl}) — ` +
+              (c.scope === "workspace"
+                ? `workspace login, use_login with a purpose without asking; owner ${c.owner}`
+                : `personal, owner ${c.owner}`) +
               (c.description ? `: ${c.description}` : "")
             );
           return (
@@ -446,13 +452,13 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
         });
         return text(
           `Credentials in the keychain:\n${lines.join("\n")}\n\n` +
-            "Workspace credentials need no request_credential: call them with call_credential (with a purpose). Personal ones need their owner's approval first.",
+            "Workspace credentials need no request_credential: call them with call_credential (with a purpose), or for a workspace login, use_login (with a purpose). Personal ones need their owner's approval first.",
         );
       },
     ),
     tool(
       "request_credential",
-      "Ask a credential's owner to lend it to THIS session for a stated purpose. Not needed for a workspace credential (list_credentials marks them): call_credential and run_with_credential use those directly, and asking for one just returns this session's grant at once without asking anybody. For a personal credential, the owner gets a DM with Approve once / Approve standing / Decline, and this call blocks until they answer. On approval you receive instructions for call_credential, which injects the credential server-side; you never see the secret itself. For a login (a username and password for a sign-in page), the owner instead chooses Release password or Decline, and on approval you use use_login to get the password into this session's workspace." +
+      "Ask a credential's owner to lend it to THIS session for a stated purpose. Not needed for a workspace credential (list_credentials marks them): call_credential and run_with_credential use those directly, and asking for one just returns this session's grant at once without asking anybody. For a personal credential, the owner gets a DM with Approve once / Approve standing / Decline, and this call blocks until they answer. On approval you receive instructions for call_credential, which injects the credential server-side; you never see the secret itself. For a login (a username and password for a sign-in page), the owner instead chooses Release password or Decline, and on approval you use use_login to get the password into this session's workspace. A workspace login needs no ask: call use_login with a purpose." +
         " Ask only when you actually need the access now, state the real purpose (the owner is approving that sentence, and every call is audited against it), and prefer 'once' unless the task genuinely needs repeated calls. For bulk work by a script (hundreds or more calls), pass `run` instead: the owner approves that exact command and call cap, and you start it with run_with_credential. A script that needs several APIs in one process names them all in `credentials` with `run`: each credential's owner approves, and the run starts only once all of them did. If they decline, don't re-ask. Calling again with the same purpose while your ask is pending reminds the owner and waits on that same ask; if they already approved it, you get the live grant back. If this session already holds a standing grant for the credential, any new ask returns that grant without asking the owner again.",
       {
         credential: z
@@ -644,19 +650,34 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
     ),
     tool(
       "use_login",
-      "Get the password of a login credential (a test account for a sign-in page) that its owner approved releasing to THIS session (request_credential, Release password). Writes the password to a 0600 file in this session's workspace and returns the sign-in page URL, the username and the file's path, never the password itself. Read it from the file in a script that types it into the page (for example Playwright's fill or CDP Input.insertText). Never print, echo or cat it, and never put it in a message, commit, screenshot, log or any other file. Each approval releases the password once, and the file is deleted after 30 minutes. Not available on a Runner.",
+      "Get the password of a login credential (a test account for a sign-in page, or a machine's login) that its owner approved releasing to THIS session (request_credential, Release password), or of a workspace login, which needs no approval: pass `purpose` and the release is audited with it. Writes the password to a 0600 file in this session's workspace and returns the sign-in page URL, the username and the file's path, never the password itself. Read it from the file in a script that types it into the page (for example Playwright's fill or CDP Input.insertText). Never print, echo or cat it, and never put it in a message, commit, screenshot, log or any other file. Each approval (or each workspace release) releases the password once, and the file is deleted after 30 minutes. Not available on a Runner.",
       {
         credential: z
           .string()
           .describe("The login's service slug (from list_credentials) or id."),
+        purpose: z
+          .string()
+          .max(500)
+          .optional()
+          .describe(
+            "Required for a workspace login: one sentence saying why this session signs in, recorded in the audit log. Ignored for a release its owner approved.",
+          ),
       },
-      async ({ credential }: { credential: string }) => {
+      async ({
+        credential,
+        purpose,
+      }: {
+        credential: string;
+        purpose?: string;
+      }) => {
         const target = await loginTarget(ctx);
         if ("error" in target)
           return text(`Couldn't release: ${target.error}.`);
         const release = await claimLoginRelease({
           sessionId: ctx.sessionId,
           credential,
+          requestedBy: ctx.user,
+          ...(purpose ? { purpose } : {}),
         });
         if ("error" in release)
           return text(`Couldn't release: ${release.error}.`);
@@ -680,7 +701,7 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
             username: release.credential.username,
             passwordFile: file.path,
             deletedAt: file.expiresAt,
-            next: "Open loginUrl in your browser, fill in the username, and type the password from passwordFile with a script that never prints it. Don't copy the password anywhere else. If you need to sign in again after the file is gone, ask with request_credential again.",
+            next: "Open loginUrl in your browser, fill in the username, and type the password from passwordFile with a script that never prints it. Don't copy the password anywhere else. If you need to sign in again after the file is gone, ask with request_credential again (for a workspace login, call use_login again with a purpose).",
           }),
         );
       },
@@ -829,7 +850,7 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
     ),
     tool(
       "register_credential",
-      "Add a credential to the keychain, owned by the person driving this session, so this and later sessions can borrow it through request_credential. With scope 'workspace', every session in the workspace may use it without asking (only for an API credential, and only when the owner says so; the card shows it). You supply only metadata. A card appears in the session where THEY paste the secret; it goes straight to the keychain and you never see it. For a username and password that must be typed into a sign-in page, pass kind 'login' with loginUrl and username (no host or limits): its owner later approves each release of the password with use_login, and the agent does see it then, so only register test accounts this way." +
+      "Add a credential to the keychain, owned by the person driving this session, so this and later sessions can borrow it through request_credential. With scope 'workspace', every session in the workspace may use it without asking (only when the owner says so; the card shows it). You supply only metadata. A card appears in the session where THEY paste the secret; it goes straight to the keychain and you never see it. For a username and password that must be typed into a sign-in page, pass kind 'login' with loginUrl and username (no host or limits): its owner later approves each release of the password with use_login, and the agent does see it then, so only register test accounts or shared machine logins this way. A login with scope 'workspace' is released to any interactive session without asking: only when the owner wants every session to have that password." +
         " This call waits until they save or decline (15 minutes at most) and returns the credential's id, service, host and owner. If the call is cut short, the card stays open: call again with the same service and host to keep waiting on it, or check list_credentials. Never ask anyone to paste a secret in chat; if they already did, tell them to rotate it. Check list_credentials first: service slugs are unique. Set allowedMethods / allowedPathPrefixes when the task needs less than full access. Sessions a signed-in teammate drives, including their own turns in an automation session.",
       {
         service: z
@@ -915,18 +936,20 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
               scope: c.scope ?? "personal",
             },
             next:
-              c.kind === "login"
-                ? `Ask for it with request_credential({ credential: "${c.service}", purpose }); once its owner releases the password, use_login puts it in a file in this session's workspace.`
-                : c.scope === "workspace"
-                  ? `Any session can call it now with call_credential({ credential: "${c.service}", method, path, purpose }); no request needed. The secret is never available to you directly.`
-                  : `Borrow it with request_credential({ credential: "${c.service}", purpose }). The secret is never available to you directly.`,
+              c.kind === "login" && c.scope === "workspace"
+                ? `Any interactive session can sign in with it now: use_login({ credential: "${c.service}", purpose }) writes the password to a file in that session's workspace; no request needed.`
+                : c.kind === "login"
+                  ? `Ask for it with request_credential({ credential: "${c.service}", purpose }); once its owner releases the password, use_login puts it in a file in this session's workspace.`
+                  : c.scope === "workspace"
+                    ? `Any session can call it now with call_credential({ credential: "${c.service}", method, path, purpose }); no request needed. The secret is never available to you directly.`
+                    : `Borrow it with request_credential({ credential: "${c.service}", purpose }). The secret is never available to you directly.`,
           }),
         );
       },
     ),
     tool(
       "update_credential",
-      "Replace a keychain credential's secret, or change its metadata, when the person driving this session owns it: e.g. they pasted the wrong key and the API answers 401. A card appears where THEY paste the new secret (and see any metadata change); you never see it. With only `credential`, the card asks for a new secret. With metadata fields, only those change (omitted ones keep their value; an empty description or list clears it), and a new secret is optional unless rotateSecret is true. The service slug and kind can't change. To share an API credential with every session in the workspace, pass only scope 'workspace'; scope 'personal' makes it ask-first again and revokes the grants sessions got without asking. Only the owner can do either." +
+      "Replace a keychain credential's secret, or change its metadata, when the person driving this session owns it: e.g. they pasted the wrong key and the API answers 401. A card appears where THEY paste the new secret (and see any metadata change); you never see it. With only `credential`, the card asks for a new secret. With metadata fields, only those change (omitted ones keep their value; an empty description or list clears it), and a new secret is optional unless rotateSecret is true. The service slug and kind can't change. To share a credential (an API credential or a login) with every session in the workspace, pass only scope 'workspace'; scope 'personal' makes it ask-first again and revokes the grants sessions got without asking. Only the owner can do either." +
         " Active grants keep working with the new secret and limits; a new host or sign-in page revokes them, since they were approved for the old one. This call waits until they save or decline (15 minutes at most). Sessions a signed-in teammate drives, including their own turns in an automation session.",
       {
         credential: z

@@ -736,6 +736,86 @@ final class SessionViewModelTests: XCTestCase {
         XCTAssertEqual(requested, ["bks-1", "bks-1", "bks-1", "bks-1"])
     }
 
+    /// A merged PR whose link waits on production is re-fetched on the web's
+    /// cadence while the session is on screen; production arriving, the app
+    /// leaving the foreground, or the view closing ends the poll.
+    func testMergedPrPollsUntilProductionArrives() async {
+        func merged(_ staging: String) -> PrDetails {
+            try! JSONDecoder().decode(
+                PrDetails.self,
+                from: Data(#"{"number":7,"state":"MERGED","staging":\#(staging)}"#.utf8)
+            )
+        }
+        let awaiting = merged(#"{"url":"https://preview.example.test","awaitingProduction":true}"#)
+        let deployed = merged(#"{"url":"https://example.test","production":true}"#)
+        let clock = ManualClock()
+        var answers = [awaiting, awaiting, deployed]
+        var loads = 0
+        let viewModel = SessionViewModel(
+            session: Session(id: "bks-1"),
+            socketFactory: { MockSocket() },
+            clock: clock,
+            prLoader: { _ in
+                loads += 1
+                return answers.isEmpty ? deployed : answers.removeFirst()
+            }
+        )
+        func settle() async { for _ in 0..<8 { await Task.yield() } }
+        func tick() async {
+            await settle()
+            clock.advance(by: SessionViewModel.productionPollInterval)
+            await settle()
+        }
+        XCTAssertEqual(SessionViewModel.productionPollInterval, .seconds(60))
+
+        // Land the handshake so the connection grace holds no sleeper: the
+        // clock's only sleeper is then the poll.
+        viewModel.start()
+        viewModel.handle(.hello(bootId: "boot-1"))
+        viewModel.handle(.transcriptInit(
+            sessionId: "bks-1",
+            entries: [TranscriptEntry(id: "e1", type: "assistant", content: "hi")],
+            cursor: .empty
+        ))
+        await settle()
+        XCTAssertEqual(viewModel.connectionState, .connected)
+        XCTAssertEqual(loads, 1)
+        XCTAssertEqual(viewModel.prDetails?.staging?.awaitingProduction, true)
+        XCTAssertEqual(clock.pendingSleepers, 1, "awaiting production arms the poll")
+
+        // Backgrounded: no polling; coming back refetches and re-arms.
+        viewModel.appDidEnterBackground()
+        await settle()
+        XCTAssertEqual(clock.pendingSleepers, 0)
+        clock.advance(by: SessionViewModel.productionPollInterval)
+        await settle()
+        XCTAssertEqual(loads, 1)
+        viewModel.appDidBecomeActive()
+        await settle()
+        XCTAssertEqual(loads, 2)
+        XCTAssertEqual(clock.pendingSleepers, 1)
+
+        await tick()
+        XCTAssertEqual(loads, 3)
+        XCTAssertEqual(viewModel.prDetails?.staging?.production, true)
+        XCTAssertNil(viewModel.prDetails?.staging?.awaitingProduction)
+        XCTAssertEqual(clock.pendingSleepers, 0, "production ends the poll")
+        await tick()
+        XCTAssertEqual(loads, 3)
+
+        // Closing the view stops a poll that is still armed.
+        answers = [awaiting]
+        viewModel.loadPr()
+        await settle()
+        XCTAssertEqual(loads, 4)
+        XCTAssertEqual(clock.pendingSleepers, 1)
+        viewModel.stop()
+        await settle()
+        XCTAssertEqual(clock.pendingSleepers, 0)
+        await tick()
+        XCTAssertEqual(loads, 4)
+    }
+
     /// Presence for another session must not repaint this one's pile.
     func testPresenceForAnotherSessionIsIgnored() {
         let viewModel = makeViewModel()
