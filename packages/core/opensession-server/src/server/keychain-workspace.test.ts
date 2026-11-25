@@ -126,6 +126,17 @@ describe("registering a workspace credential", () => {
       sharedLogin({ service: "box-ssh", loginUrl: "ssh://box.example.test" })
         .host,
     ).toBe("box.example.test");
+    // A machine's host is stored lower-case, like a web page's, so the
+    // card's re-check at submit matches it.
+    const mixed = sharedLogin({
+      service: "lab-mac",
+      loginUrl: "vnc://Lab-Mac.Example.test:5900",
+      host: "lab-mac.example.test",
+    });
+    expect(mixed).toMatchObject({
+      host: "lab-mac.example.test",
+      loginUrl: "vnc://lab-mac.example.test:5900",
+    });
     for (const loginUrl of [
       "http://app.example.test/login",
       "ftp://box.example.test",
@@ -357,6 +368,47 @@ describe("workspace logins", () => {
     expect(kc.listKeychainAsks()).toHaveLength(0);
     const used = await release({ purpose: undefined });
     expect("grant" in used && used.grant.id).toBe(asked.grant.id);
+  });
+
+  test("a release asked for one purpose is not spent for another", async () => {
+    sharedLogin();
+    const asked = kc.requestCredential({
+      credential: "mac-mini",
+      sessionId: "s-1",
+      requestedBy: "Sam",
+      purpose: "check the VNC connection",
+    });
+    if (!("grant" in asked)) throw new Error("expected a grant");
+    const used = await release({ purpose: "approve an admin prompt" });
+    if ("error" in used) throw new Error(used.error);
+    expect(used.grant.id).not.toBe(asked.grant.id);
+    expect(used.grant.purpose).toBe("approve an admin prompt");
+    expect(kc.listGrants().find((g) => g.id === asked.grant.id)?.status).toBe(
+      "active",
+    );
+    const same = await release({ purpose: "Check the VNC connection" });
+    expect("grant" in same && same.grant.id).toBe(asked.grant.id);
+  });
+
+  test("a failed write after unsharing doesn't bring the release back", async () => {
+    const login = sharedLogin();
+    const asked = kc.requestCredential({
+      credential: "mac-mini",
+      sessionId: "s-1",
+      requestedBy: "Sam",
+      purpose: "sign in over VNC",
+    });
+    if (!("grant" in asked)) throw new Error("expected a grant");
+    const claimed = await release({ purpose: "sign in over VNC" });
+    if ("error" in claimed) throw new Error(claimed.error);
+    await kc.setCredentialScopeAsync(login.id, "Alex", "personal");
+    await claimed.undo();
+    expect(kc.listGrants().find((g) => g.id === asked.grant.id)?.status).toBe(
+      "revoked",
+    );
+    expect(await release()).toEqual({
+      error: expect.stringMatching(/no approved release/),
+    });
   });
 
   test("a failed write drops a release minted for it", async () => {

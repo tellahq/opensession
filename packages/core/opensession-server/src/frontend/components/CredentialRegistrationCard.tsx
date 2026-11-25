@@ -44,6 +44,38 @@ const FIELD_LABELS: Record<Changeable, string> = {
 
 type FieldValues = NonNullable<CredentialRequest["previous"]>;
 
+/** What confirming an update does. A move to a new host or sign-in page
+ *  and a change of scope can come together, and each gets its sentence: a
+ *  login shared with the workspace must always say its password is read. */
+function updateNote(
+  request: CredentialRequest,
+  login: boolean,
+  word: string,
+): string {
+  const moved =
+    request.changed?.includes("host") || request.changed?.includes("loginUrl");
+  const notes: string[] = [];
+  if (moved)
+    notes.push(
+      `Its active grants are revoked: they were approved for the old ${login ? "sign-in page" : "host"}.`,
+    );
+  if (request.changed?.includes("scope"))
+    notes.push(
+      request.scope !== "workspace"
+        ? "Sessions must ask you again. Access they got without asking ends now."
+        : login
+          ? `Every session in the workspace can have the password released without asking you, and ${AGENT_NAME} can read it then. Each release is audited.`
+          : `Every session in the workspace can use it without asking you. Calls are audited, and ${AGENT_NAME} never sees the ${word}.`,
+    );
+  else if (!moved)
+    notes.push(
+      login
+        ? `Its active grants keep working. ${AGENT_NAME} can read the ${word} when it is released.`
+        : `Its active grants keep working. ${AGENT_NAME} never sees the ${word}.`,
+    );
+  return notes.join(" ");
+}
+
 /** One field's value in `values` as the card shows it. */
 function fieldValue(
   field: Changeable,
@@ -231,16 +263,7 @@ function RequestCard({
             : deleting
               ? "Its active grants are revoked, and any run using it stops."
               : updating
-                ? request.changed?.includes("host") ||
-                  request.changed?.includes("loginUrl")
-                  ? `Its active grants are revoked: they were approved for the old ${login ? "sign-in page" : "host"}.`
-                  : request.changed?.includes("scope")
-                    ? request.scope === "workspace"
-                      ? login
-                        ? `Every session in the workspace can have the password released without asking you, and ${AGENT_NAME} can read it then. Each release is audited.`
-                        : `Every session in the workspace can use it without asking you. Calls are audited, and ${AGENT_NAME} never sees the ${word}.`
-                      : "Sessions must ask you again. Access they got without asking ends now."
-                    : `Its active grants keep working. ${AGENT_NAME} never sees the ${word}.`
+                ? updateNote(request, login, word)
                 : login && request.scope === "workspace"
                   ? `Owned by you and shared with the workspace: every session can have the password released without asking, and ${AGENT_NAME} can read it then. Each release is audited.`
                   : login

@@ -470,6 +470,8 @@ export function normalizeLoginUrl(raw: string | undefined): URL {
     UNSAFE_DISPLAY_CHARS.test(url.toString())
   )
     throw new Error(LOGIN_URL_ERROR);
+  // https: lower-cases its host already; vnc: and ssh: keep the case given.
+  url.hostname = url.hostname.toLowerCase();
   url.hash = "";
   return url;
 }
@@ -1611,6 +1613,7 @@ export async function claimLoginRelease(input: {
       error: `${credMeta.service} is an API credential, so its secret is never released. Use call_credential`,
     };
   const workspace = isWorkspaceLogin(credMeta);
+  const purpose = input.purpose?.trim();
   let gr = [...grants.values()]
     .filter(
       (g) =>
@@ -1620,12 +1623,14 @@ export async function claimLoginRelease(input: {
         // Nobody approved an implicit release: it holds only while the
         // login stays workspace-wide.
         (!g.implicit || workspace) &&
+        // An implicit release was minted for one purpose: spend it only for
+        // that one, so the audit log says why the password was read.
+        (!g.implicit || !purpose || norm(g.purpose) === norm(purpose)) &&
         liveNow(g),
     )
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
   let minted = false;
   if (!gr && workspace) {
-    const purpose = input.purpose?.trim();
     if (!purpose || !input.requestedBy)
       return {
         error: `${credMeta.service} is a workspace login: pass a purpose, one sentence saying why this session signs in, recorded in the audit log`,
@@ -1653,7 +1658,17 @@ export async function claimLoginRelease(input: {
     // A release minted for this call is dropped rather than kept for later:
     // its purpose was this call's.
     if (minted) grants.delete(claimed.id);
-    else {
+    else if (
+      claimed.implicit &&
+      !isWorkspaceLogin(credentials.get(claimed.credentialId))
+    ) {
+      // Unshared during the write: nobody approved it, so it must not come
+      // back as a release the personal path would hand out.
+      claimed.status = "revoked";
+      claimed.revokedAt = new Date().toISOString();
+      delete claimed.usedAt;
+      grants.set(claimed.id, claimed);
+    } else {
       claimed.status = "active";
       delete claimed.usedAt;
       grants.set(claimed.id, claimed);
