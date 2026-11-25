@@ -58,8 +58,6 @@ import {
 } from "../lib/next-chat-pref";
 import { SubagentPane } from "./SubagentPane";
 import { ShellPanel } from "./TerminalPanel";
-import { getCurrentUser } from "./UserPicker";
-import { SessionBanners } from "./SessionBanners";
 import { UserAvatar } from "./UserAvatar";
 import {
   fetchFileMentions,
@@ -1658,21 +1656,6 @@ export function SessionViewer({
           openSlackComposer: handleOpenSlackComposer,
         }}
         conversation={{ others, entries }}
-      />
-
-      <SessionBanners
-        session={session}
-        onStopLoop={
-          connected
-            ? () =>
-                send({
-                  type: "prompt",
-                  sessionId: session.id,
-                  user: getCurrentUser(),
-                  content: "/loop stop",
-                })
-            : undefined
-        }
       />
 
       <div className="flex min-h-0 flex-1">

@@ -206,6 +206,8 @@ interface Props {
   onOpenChange?: (open: boolean) => void;
   /** The desktop tab strip sits between the header anchor and the transcript. */
   tabStripVisible?: boolean;
+  /** Height of the goal/loop banner strip under the header, 0 when absent. */
+  bannerHeight?: number;
   /** Review starts with the card shut and opens it below its own toolbar. */
   reviewMode?: boolean;
   /** Keep a pinned card visible while its Changes side panel is open. */
@@ -296,6 +298,7 @@ export function WorkspaceSummary({
   anchor,
   onOpenChange,
   tabStripVisible,
+  bannerHeight = 0,
   reviewMode = false,
   forceOpen = false,
   forcePopover = false,
@@ -452,7 +455,10 @@ export function WorkspaceSummary({
         // actions row the card anchors to, whose box ends 8px above the
         // header's own bottom edge and 37px above the tab strip's: 8 + 12
         // with no strip, 37 + 12 with one.
-        sideOffset={workspaceSummarySideOffset(Boolean(tabStripVisible))}
+        sideOffset={workspaceSummarySideOffset(
+          Boolean(tabStripVisible),
+          bannerHeight,
+        )}
         elevation="sm"
         // A menu's hairline is right for a strip of rows; on 300px of quiet
         // text it reads as a box drawn around them rather than the card's own

@@ -118,4 +118,9 @@ describe("workspace summary in Review", () => {
     expect(workspaceSummarySideOffset(true)).toBe(49);
     expect(workspaceSummarySideOffset(false)).toBe(20);
   });
+
+  test("places the summary below a goal or loop banner", () => {
+    expect(workspaceSummarySideOffset(false, 37)).toBe(57);
+    expect(workspaceSummarySideOffset(true, 37)).toBe(86);
+  });
 });

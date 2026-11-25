@@ -1,6 +1,7 @@
 import type { useSessionModelWorkflowController } from "../../hooks/useSessionModelWorkflowController";
 import { HuddleButton, huddleTarget } from "../huddle/HuddleButton";
 import type React from "react";
+import { useState } from "react";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { createPortal } from "react-dom";
 import { BASE_PATH } from "../../lib/base";
@@ -91,6 +92,8 @@ import { copySessionTranscript } from "../../lib/transcript-copy";
 import { dedupeViewers, facepileAvatarStyle } from "../../lib/presence";
 import { personKey } from "../../lib/review-queue";
 import { metadataModelLabel } from "./model-labels";
+import { SessionBanners } from "../SessionBanners";
+import { getCurrentUser } from "../UserPicker";
 import {
   HEADER_SESSIONBAR,
   HEADER_SESSIONBAR_MODEL,
@@ -469,6 +472,9 @@ export function SessionViewerChrome({
     openSlackComposer,
   } = infoActions;
   const { others, entries } = conversation;
+  /** The goal/loop strip under the header; the Workspace summary card hangs
+   *  below it instead of over it. */
+  const [bannerHeight, setBannerHeight] = useState(0);
   return (
     <>
       {!hideHeader &&
@@ -1211,6 +1217,7 @@ export function SessionViewerChrome({
                       refreshTick={gitRefreshTick}
                       onOpenChange={setSummaryOpen}
                       tabStripVisible={tabStripVisible}
+                      bannerHeight={bannerHeight}
                       reviewMode={showReview}
                       forcePopover={showReview}
                       // Too narrow for both, and the card gets out of the way
@@ -1598,6 +1605,21 @@ export function SessionViewerChrome({
           </span>,
           headerModelEl,
         )}{" "}
+      <SessionBanners
+        session={session}
+        onHeightChange={setBannerHeight}
+        onStopLoop={
+          connected
+            ? () =>
+                send({
+                  type: "prompt",
+                  sessionId: session.id,
+                  user: getCurrentUser(),
+                  content: "/loop stop",
+                })
+            : undefined
+        }
+      />
     </>
   );
 }
