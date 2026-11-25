@@ -192,28 +192,93 @@ final class PrLinksTests: XCTestCase {
 
     // MARK: - The conversation's own PR
 
-    /// In the session that IS a PR's conversation, a chip for that PR would
-    /// open the page already on screen, so every form of it stays text.
+    /// In the session that IS a PR's conversation, that PR's status pill
+    /// would only repeat the toolbar, so every form of it is a plain link on
+    /// the private scheme: still tappable, opening the review in place.
     /// Any other PR keeps its chip.
-    func testOwnPrStaysPlainText() {
+    func testOwnPrIsAPlainLink() {
         let own: Set<String> = [PrLinks.Index.key("opensession", 5528)]
-        func linkifyOwn(_ text: String) -> String {
-            chipsAsLinks(PrLinks.linkify(text, sessionId: session, ownPrs: own))
+        func raw(_ text: String) -> String {
+            PrLinks.linkify(text, sessionId: session, ownPrs: own)
         }
-        XCTAssertEqual(linkifyOwn("rebased #5528 on main"), "rebased #5528 on main")
-        XCTAssertEqual(linkifyOwn("see opensession#5528"), "see opensession#5528")
         XCTAssertEqual(
-            linkifyOwn("opened https://github.com/tellahq/opensession/pull/5528 for review"),
-            "opened PR #5528 for review"
+            raw("rebased #5528 on main"),
+            "rebased [#5528](os1pr:opensession/5528) on main"
         )
         XCTAssertEqual(
-            linkifyOwn("see [the PR](https://github.com/tellahq/opensession/pull/5528)"),
-            "see the PR"
+            raw("see opensession#5528"),
+            "see [opensession#5528](os1pr:opensession/5528)"
         )
         XCTAssertEqual(
-            linkifyOwn("#5528 replaces tella-fusion#5528"),
-            "#5528 replaces [tella-fusion#5528](os1pr:tella-fusion/5528)"
+            raw("opened https://github.com/tellahq/opensession/pull/5528 for review"),
+            "opened [PR #5528](os1pr:opensession/5528) for review"
         )
+        XCTAssertEqual(
+            raw("see [the PR](https://github.com/tellahq/opensession/pull/5528)"),
+            "see [the PR](os1pr:opensession/5528)"
+        )
+        // The other PR is a real chip, even after the own PR was named.
+        let mixed = raw("#5528 replaces tella-fusion#5528")
+        XCTAssertTrue(mixed.hasPrefix("[#5528](os1pr:opensession/5528) replaces "), mixed)
+        XCTAssertNotEqual(chipsAsLinks(mixed), mixed, mixed)
+        XCTAssertEqual(
+            chipsAsLinks(mixed),
+            "[#5528](os1pr:opensession/5528) replaces [tella-fusion#5528](os1pr:tella-fusion/5528)"
+        )
+    }
+
+    /// The own link points where the chip would: the same reference, so the
+    /// transcript's tap handler opens the session's review for it.
+    func testOwnPrLinkOpensTheSameReferenceAsAChip() throws {
+        let own: Set<String> = [PrLinks.Index.key("opensession", 5528)]
+        let out = PrLinks.linkify("see opensession#5528", sessionId: session, ownPrs: own)
+        let start = try XCTUnwrap(out.range(of: "(os1pr:"))
+        let destination = out[out.index(after: start.lowerBound)...].dropLast()
+        XCTAssertEqual(
+            PrLinks.reference(from: try XCTUnwrap(URL(string: String(destination)))),
+            PrLinks.Reference(repo: "opensession", number: 5528)
+        )
+    }
+
+    /// Without an own PR (a session with several, where `ownPrKeys` is
+    /// empty) every PR mention is a chip.
+    func testNoOwnPrKeepsEveryChip() {
+        let out = PrLinks.linkify(
+            "#5528 and opensession#92",
+            sessionId: session,
+            ownPrs: []
+        )
+        XCTAssertEqual(out.components(separatedBy: "[os1chip](").count - 1, 2, out)
+        XCTAssertEqual(
+            chipsAsLinks(out),
+            "[#5528](os1pr:opensession/5528) and [opensession#92](os1pr:opensession/92)"
+        )
+    }
+
+    func testOwnPrKeysNameTheOnePrASessionIsAbout() throws {
+        let one = try sessions(
+            """
+            [{"id":"os-1","repo":"opensession","branch":"fix","prNumber":5528,
+              "prs":[{"repo":"opensession","branch":"fix","source":"primary","number":5528}]}]
+            """
+        )[0]
+        XCTAssertEqual(PrLinks.ownPrKeys(of: one), [PrLinks.Index.key("opensession", 5528)])
+
+        let none = try sessions(#"[{"id":"os-2","repo":"opensession","branch":"fix"}]"#)[0]
+        XCTAssertEqual(PrLinks.ownPrKeys(of: none), [])
+    }
+
+    /// A session that opened several PRs has no single PR it is about, so
+    /// none of them loses its chip.
+    func testSessionWithSeveralPrsHasNoOwnPr() throws {
+        let several = try sessions(
+            """
+            [{"id":"os-3","repo":"opensession","branch":"fix","prNumber":5528,
+              "prs":[{"repo":"opensession","branch":"fix","source":"primary","number":5528},
+                     {"repo":"tella-fusion","branch":"fix","source":"attached","number":77}]}]
+            """
+        )[0]
+        XCTAssertEqual(PrLinks.ownPrKeys(of: several), [])
     }
 
     // MARK: - Where a chip points
