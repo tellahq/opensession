@@ -971,13 +971,13 @@ Run work that needs an NVIDIA GPU (CUDA, Vulkan) on a GPU machine, from a sessio
 
 `mcp__opensession-gpu__gpu_job_status` · input: `id` (string)
 
-Check a GPU job started with run_gpu_job: preparing/running/exited/failed/timed_out/stopped/lost, exit code, the commit it ran on, and the end of its output. Without an id, lists this session's jobs.
+Check a GPU job started with run_gpu_job: preparing/running/exited/failed/timed_out/stopped/lost, exit code, the commit it ran on, how long each preparation step took (timings), the last gpu_exec sync, and the end of its output. Without an id, lists this session's jobs.
 
 ### `gpu_exec`
 
-`mcp__opensession-gpu__gpu_exec` · input: `id` (string, required), `command` (string, required), `timeoutSeconds` (number), `fetch` (string[])
+`mcp__opensession-gpu__gpu_exec` · input: `id` (string, required), `command` (string, required), `timeoutSeconds` (number), `fetch` (string[]), `sync` (boolean)
 
-Run a bash command on the machine of a running GPU job, beside the job: same processes, files and environment ($OPENSESSION_JOB_OUTPUT, credentials, identity), from the repository root. Returns the exit code and output. Use it to drive what the job started (a server, a browser) in a loop. Start long-lived processes detached (`setsid nohup … > log 2>&1 &`) so the call returns. `fetch` copies machine files (a screenshot) to <session scratch>/gpu-jobs/<id>/fetched/ and returns their host paths. Only while the job runs: keep its command alive (e.g. end it with `sleep infinity`) and stop_gpu_job when done.
+Run a bash command on the machine of a running GPU job, beside the job: same processes, files and environment ($OPENSESSION_JOB_OUTPUT, credentials, identity), from the repository root. Returns the exit code and output. Use it to drive what the job started (a server, a browser) in a loop. Start long-lived processes detached (`setsid nohup … > log 2>&1 &`) so the call returns. `fetch` copies machine files (a screenshot) to <session scratch>/gpu-jobs/<id>/fetched/ and returns their host paths. Only while the job runs: keep its command alive (e.g. end it with `sleep infinity`) and stop_gpu_job when done. After editing code, pass `sync: true` instead of restarting a job that runs a dev server: your workspace is checkpointed (uncommitted changes included) and landed on the machine first, rewriting only files whose content changed, so the dev server hot-reloads just those; then the command runs (e.g. wait a few seconds and take a screenshot). The sync removes files you deleted, including ones an earlier sync added, but keeps untracked files the job created itself; ignored files are never touched. When nothing changed since the last landing it lands nothing and says so. The result's `sync` names the commit and checkpoint now on the machine, whether it changed, and the changed paths.
 
 ### `stop_gpu_job`
 

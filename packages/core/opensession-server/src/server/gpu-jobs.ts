@@ -57,7 +57,7 @@ import { basename, dirname, isAbsolute, join, posix, sep } from "node:path";
 import { stateDir } from "./paths";
 import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import { hostSessionScratchDir } from "./session-scratch";
-import type { UnifiedSession } from "./types";
+import type { SandboxCheckpointRecord, UnifiedSession } from "./types";
 import type { Sandbox } from "./sandbox/provider";
 import {
   sandboxGpu,
@@ -265,6 +265,46 @@ export interface GpuJobRecord {
   outputDir?: string;
   outputFiles?: number;
   outputNote?: string;
+  /** How long each preparation step took (milliseconds). */
+  timings?: GpuJobTimings;
+  /** Whether the job start's landing found the machine already on the
+   *  checkpoint (`unchanged`) or moved it (`landed`). */
+  landing?: "landed" | "unchanged";
+  /** The latest `gpu_exec` sync. */
+  lastSync?: GpuJobSync;
+}
+
+/** Preparation of a job, step by step, in milliseconds. `checkpointMs`
+ *  (capture and push) runs while an existing machine wakes (`machineMs`);
+ *  a new machine is created after it, with the checkpoint. `landMs`: the
+ *  checkpoint onto an existing machine. `prepareMs`: everything before the
+ *  launch; `launchMs`: files and the detached start; `totalMs`: both. */
+export interface GpuJobTimings {
+  checkpointMs?: number;
+  machineMs?: number;
+  landMs?: number;
+  prepareMs?: number;
+  launchMs?: number;
+  totalMs?: number;
+}
+
+/** What one sync put on a running job's machine. `changed`: the paths whose
+ *  content changed (absent when the machine had no landing to compare
+ *  with). */
+export interface GpuJobSync {
+  state: "landed" | "unchanged";
+  at: string;
+  commit?: string;
+  checkpoint?: string;
+  changed?: string[];
+  checkpointMs: number;
+  landMs: number;
+}
+
+export function formatTimings(timings: GpuJobTimings): string {
+  return Object.entries(timings)
+    .map(([step, ms]) => `${step.replace(/Ms$/, "")} ${ms}ms`)
+    .join(", ");
 }
 
 /** `machines`: every GPU machine (provider session key) each session ever
@@ -612,84 +652,140 @@ async function prepareAndLaunch(
     checkpoint,
     { getRepo },
     { noteSandboxActivity },
+    { withSessionLifecycleLane },
   ] = await Promise.all([
     import("./sandbox"),
     import("./sandbox/reliability"),
     import("./sandbox/checkpoint"),
     import("./worktree"),
     import("./sandbox/idle"),
+    import("./sandbox/lifecycle-lane"),
   ]);
   const repo = getRepo(session.repo);
+  const timings: GpuJobTimings = {};
+  const begun = Date.now();
+  const timed = async <T>(
+    step: keyof GpuJobTimings,
+    run: () => Promise<T>,
+  ): Promise<T> => {
+    const at = Date.now();
+    try {
+      return await run();
+    } finally {
+      timings[step] = Date.now() - at;
+    }
+  };
+  job.timings = timings;
 
-  // 1. The session's work, uncommitted changes included.
-  let outcome: Awaited<ReturnType<typeof checkpoint.checkpointHostWorkspace>>;
-  if (session.sandbox?.provider) {
-    const { activeSandboxFor } = await import("./session-sandbox");
-    outcome = await checkpoint.checkpointSessionWorkspace(session, (current) =>
-      activeSandboxFor(current as UnifiedSession, { wake: true }),
-    );
-  } else {
-    outcome = await checkpoint.checkpointHostWorkspace(
-      session,
-      session.worktreeDir!,
-    );
-  }
-  const landed = outcome.state === "skipped" ? null : outcome.checkpoint;
-  const branch = landed?.branch || session.branch || repo.defaultBranch;
-  if (outcome.state === "skipped")
-    job.note = `Ran on origin/${branch}: the workspace could not be checkpointed (${outcome.reason}), so uncommitted changes are not included.`;
-
-  // 2. The job's GPU machine: woken, created, or switched to this GPU.
+  // The job's GPU machine: woken, created, or switched to this GPU.
   const provider = getSandboxProvider(GPU_JOB_PROVIDER);
   const machineSession = gpuJobMachine(job);
   const existing = await provider.machineFor?.(machineSession);
-  const sandbox = await ensureSandboxWaitingForCapacity(provider, {
-    sessionId: machineSession,
-    // The machine works for the owning session: its repository and its
-    // trust profile (run_gpu_job is interactive-only) scope the workload
-    // identity every command on it gets.
-    repo: repo.id,
-    trustProfile: "interactive",
-    branch,
-    mode: "code",
-    gpu: job.gpu,
-    ...(!existing && landed
-      ? {
-          restoreCheckpoint: {
-            ref: landed.ref,
-            commit: landed.commit,
-            branch: landed.branch,
-          },
+  const ensure = (
+    branch: string,
+    landed?: SandboxCheckpointRecord | null,
+  ): Promise<Sandbox> =>
+    timed("machineMs", () =>
+      ensureSandboxWaitingForCapacity(provider, {
+        sessionId: machineSession,
+        // The machine works for the owning session: its repository and its
+        // trust profile (run_gpu_job is interactive-only) scope the workload
+        // identity every command on it gets.
+        repo: repo.id,
+        trustProfile: "interactive",
+        branch,
+        mode: "code",
+        gpu: job.gpu,
+        ...(landed
+          ? {
+              restoreCheckpoint: {
+                ref: landed.ref,
+                commit: landed.commit,
+                branch: landed.branch,
+              },
+            }
+          : {}),
+      }),
+    );
+  // An existing machine needs no checkpoint to wake: wake it while the
+  // checkpoint is taken. Its branch is fixed by the landing anyway.
+  const waking = existing
+    ? ensure(
+        session.sandboxCheckpoint?.branch ||
+          session.branch ||
+          repo.defaultBranch,
+      )
+    : null;
+  waking?.catch(() => {});
+
+  // The session's work, uncommitted changes included, then onto the
+  // machine. On the session's lifecycle lane with the landing: another
+  // checkpoint (a sync, a turn's) force-pushing the hidden ref between
+  // this capture and the machine's fetch would fail the landing.
+  // A new machine is created outside the lane (it can take minutes, and a
+  // turn waits for the lane); it restores the checkpoint as it is created.
+  const prepared = await withSessionLifecycleLane(
+    session.id,
+    async (): Promise<{
+      sandbox?: Sandbox;
+      landed: SandboxCheckpointRecord | null;
+      branch: string;
+    }> => {
+      const outcome = await timed("checkpointMs", () =>
+        captureCheckpoint(session),
+      );
+      const landed = outcome.state === "skipped" ? null : outcome.checkpoint;
+      const branch = landed?.branch || session.branch || repo.defaultBranch;
+      if (outcome.state === "skipped")
+        job.note = `Ran on origin/${branch}: the workspace could not be checkpointed (${outcome.reason}), so uncommitted changes are not included.`;
+      if (!waking) return { landed, branch };
+      const sandbox = await waking;
+      const env = await gpuJobEnv(repo);
+      await timed("landMs", async () => {
+        if (landed) {
+          const land = await checkpoint.landCheckpointInSandbox(
+            repo.id,
+            sandbox,
+            landed,
+          );
+          job.landing = land.state;
+          return;
         }
-      : {}),
-  });
+        const sync = await sandbox.exec(
+          [
+            "bash",
+            "-c",
+            `git fetch -q origin ${shellWord(branch)} && git reset -q --hard FETCH_HEAD && git clean -fdq && git update-ref -d ${checkpoint.LANDED_REF}`,
+          ],
+          { env, timeoutMs: 5 * 60_000 },
+        );
+        if (sync.exitCode !== 0)
+          throw new Error(
+            `could not update the GPU machine to origin/${branch}: ${(sync.stderr || sync.stdout).trim().slice(0, 300)}`,
+          );
+      });
+      return { sandbox, landed, branch };
+    },
+  );
+  const { landed } = prepared;
+  const sandbox =
+    prepared.sandbox ?? (await ensure(prepared.branch, prepared.landed));
   job.sandboxId = sandbox.id;
   noteSandboxActivity(
     { sandboxId: sandbox.id, sessionId: session.id },
     "agent",
   );
   const env = await gpuJobEnv(repo);
-  if (existing) {
-    if (landed)
-      await checkpoint.landCheckpointInSandbox(repo.id, sandbox, landed);
-    else {
-      const sync = await sandbox.exec(
-        [
-          "bash",
-          "-c",
-          `git fetch -q origin ${shellWord(branch)} && git reset -q --hard FETCH_HEAD && git clean -fdq`,
-        ],
-        { env, timeoutMs: 5 * 60_000 },
-      );
-      if (sync.exitCode !== 0)
-        throw new Error(
-          `could not update the GPU machine to origin/${branch}: ${(sync.stderr || sync.stdout).trim().slice(0, 300)}`,
-        );
-    }
-  }
-  const head = await sandbox.exec(["git", "rev-parse", "HEAD"]);
+  // A new machine restored the checkpoint while it was created: mark it
+  // landed so a sync starts from it.
+  const head = await sandbox.exec([
+    "bash",
+    "-c",
+    `${!existing && landed ? `git update-ref ${checkpoint.LANDED_REF} ${shellWord(landed.commit)} 2>/dev/null; ` : ""}git rev-parse HEAD`,
+  ]);
   if (head.exitCode === 0) job.commit = head.stdout.trim();
   if (landed && landed.commit !== job.commit) job.checkpoint = landed.commit;
+  timings.prepareMs = Date.now() - begun;
   if (job.stopping) {
     await settle(job, { state: "stopped" });
     return;
@@ -736,11 +832,101 @@ async function prepareAndLaunch(
     throw error;
   }
   job.state = "running";
+  timings.launchMs = Date.now() - begun - timings.prepareMs;
+  timings.totalMs = Date.now() - begun;
   await persist();
   console.log(
-    `[gpu-jobs] ${job.sessionId}: ${job.id} running on ${job.gpu} in ${sandbox.id}`,
+    `[gpu-jobs] ${job.sessionId}: ${job.id} running on ${job.gpu} in ${sandbox.id} after ${formatTimings(timings)}`,
   );
   ensurePolling();
+}
+
+/** Checkpoint the session's workspace wherever it is: a host worktree or
+ *  its Sandbox. Claims the session's lifecycle lane (reentrant). */
+async function captureCheckpoint(session: UnifiedSession) {
+  const checkpoint = await import("./sandbox/checkpoint");
+  if (session.sandbox?.provider) {
+    const { activeSandboxFor } = await import("./session-sandbox");
+    return checkpoint.checkpointSessionWorkspace(session, (current) =>
+      activeSandboxFor(current as UnifiedSession, { wake: true }),
+    );
+  }
+  return checkpoint.checkpointHostWorkspace(session, session.worktreeDir!);
+}
+
+/** Paths a sync result lists by name; the rest are counted. */
+const MAX_SYNC_PATHS = 50;
+
+/**
+ * Land the session's current work (uncommitted changes included) on the
+ * machine of one of its running jobs, without stopping the job. Only files
+ * whose content changed are rewritten, so a dev server's watcher there
+ * rebuilds just those. Untracked files the job made are left alone; files
+ * an earlier landing put there that the session has since deleted are
+ * removed. Nothing is fetched or reset when the machine already has this
+ * checkpoint. Runs on the session's lifecycle lane, so syncs, job starts
+ * and other checkpoints of the session never interleave.
+ */
+export async function syncGpuJob(
+  job: GpuJobRecord,
+  session: UnifiedSession,
+  sandbox: Sandbox,
+): Promise<GpuJobSync | { error: string }> {
+  const [checkpoint, { withSessionLifecycleLane }] = await Promise.all([
+    import("./sandbox/checkpoint"),
+    import("./sandbox/lifecycle-lane"),
+  ]);
+  return withSessionLifecycleLane(session.id, async () => {
+    const started = Date.now();
+    const outcome = await captureCheckpoint(session);
+    const checkpointMs = Date.now() - started;
+    if (outcome.state === "skipped")
+      return {
+        error: `the workspace could not be checkpointed (${outcome.reason}), so nothing was landed and the command did not run`,
+      };
+    const landed = outcome.checkpoint;
+    let state: GpuJobSync["state"] = "unchanged";
+    let changed: string[] | null = null;
+    if (landed.commit !== job.checkpoint) {
+      const land = await checkpoint.landCheckpointInSandbox(
+        session.repo,
+        sandbox,
+        landed,
+        { clean: false },
+      );
+      state = land.state;
+      if (land.state === "landed") changed = land.changed;
+      const head = await sandbox.exec(["git", "rev-parse", "HEAD"]);
+      if (head.exitCode === 0) job.commit = head.stdout.trim();
+      job.checkpoint = landed.commit;
+    }
+    const sync: GpuJobSync = {
+      state,
+      at: new Date().toISOString(),
+      ...(job.commit ? { commit: job.commit } : {}),
+      checkpoint: landed.commit,
+      ...(changed
+        ? {
+            changed:
+              changed.length > MAX_SYNC_PATHS
+                ? [
+                    ...changed.slice(0, MAX_SYNC_PATHS),
+                    `… and ${changed.length - MAX_SYNC_PATHS} more`,
+                  ]
+                : changed,
+          }
+        : {}),
+      checkpointMs,
+      landMs: Date.now() - started - checkpointMs,
+    };
+    job.lastSync = sync;
+    await persist().catch(() => {});
+    console.log(
+      `[gpu-jobs] ${job.sessionId}: ${job.id} sync ${state} ${landed.commit.slice(0, 12)}` +
+        `${changed ? ` (${changed.length} changed)` : ""} after checkpoint ${checkpointMs}ms, land ${sync.landMs}ms`,
+    );
+    return sync;
+  });
 }
 
 /** The variables every command of a job sees, the job's own and
@@ -1325,6 +1511,8 @@ export interface GpuExecResult {
   /** Host paths of the fetched files. */
   files?: string[];
   note?: string;
+  /** With `sync`: what was landed before the command ran. */
+  sync?: GpuJobSync;
 }
 
 function keepEnd(text: string, bytes: number): string {
@@ -1343,7 +1531,12 @@ function keepEnd(text: string, bytes: number): string {
 export async function execOnGpuJob(
   id: string,
   sessionId: string,
-  input: { command: string; timeoutSeconds?: number; fetch?: string[] },
+  input: {
+    command: string;
+    timeoutSeconds?: number;
+    fetch?: string[];
+    sync?: boolean;
+  },
 ): Promise<GpuExecResult | { error: string }> {
   await ensureLoaded();
   const job = state.jobs.get(id);
@@ -1372,6 +1565,18 @@ export async function execOnGpuJob(
   if (!session?.repo) return { error: "no such session" };
   const repo = getRepo(session.repo);
   noteSandboxActivity({ sandboxId: sandbox.id, sessionId }, "agent");
+  let sync: GpuJobSync | undefined;
+  if (input.sync) {
+    try {
+      const synced = await syncGpuJob(job, session, sandbox);
+      if ("error" in synced) return synced;
+      sync = synced;
+    } catch (error) {
+      return {
+        error: `could not land the workspace, so the command did not run: ${(error instanceof Error ? error.message : String(error)).slice(0, 400)}`,
+      };
+    }
+  }
   const seconds = Math.min(
     Math.max(1, input.timeoutSeconds ?? DEFAULT_GPU_EXEC_SECONDS),
     MAX_GPU_EXEC_SECONDS,
@@ -1388,6 +1593,7 @@ export async function execOnGpuJob(
     exitCode: result.exitCode,
     stdout: keepEnd(result.stdout, EXEC_STDOUT_BYTES),
     stderr: keepEnd(result.stderr, EXEC_STDERR_BYTES),
+    ...(sync ? { sync } : {}),
   };
   if (result.exitCode === 124)
     out.note = `The command did not finish within ${seconds}s. Start long-lived processes detached (setsid nohup … > file 2>&1 &) so the call returns.`;

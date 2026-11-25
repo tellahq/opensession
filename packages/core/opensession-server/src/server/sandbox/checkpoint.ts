@@ -169,36 +169,107 @@ export function checkpointScript(excluded: string[]): string {
     .join("\n");
 }
 
+/** The ref a landing leaves on the commit it landed: the next landing
+ *  starts from that tree instead of from the branch tip, and a landing of
+ *  the commit already there does nothing. */
+export const LANDED_REF = "refs/opensession/landed";
+
 /**
  * Shell that lands a checkout on a checkpoint whatever branch it is on: for
- * a Portal Sandbox (portal-sandbox.ts), whose checkout is nobody's work and
- * only ever mirrors the session's checkpoints. Fetch the hidden ref, verify
- * it is the recorded commit, reset the tree to the checkpoint outright,
- * drop untracked files the previous checkpoint left behind (`keep` names the
- * paths a checkpoint leaves out and the checkout must keep, such as the
- * Portal registry), put `branch` on it, and leave the checkpointed tree as
- * uncommitted changes on the checkpoint's parent, exactly as the restore
- * script does. Unlike the restore script it refuses nothing: a renamed or
- * switched branch simply lands here too.
+ * a Portal Sandbox (portal-sandbox.ts) or a GPU job machine (gpu-jobs.ts),
+ * whose checkout is nobody's work and only ever mirrors the session's
+ * checkpoints. Fetch the hidden ref, verify it is the recorded commit, make
+ * the tracked files the checkpoint's tree, put `branch` on the checkpoint's
+ * parent, and leave the checkpointed tree as uncommitted changes there,
+ * exactly as the restore script does. Unlike the restore script it refuses
+ * nothing: a renamed or switched branch simply lands here too.
+ *
+ * Built for checkouts that run a file watcher (a dev server) and for the
+ * machines' partial clones (`--filter=blob:none`):
+ *
+ *  - Only files whose content changes are rewritten. The index is first set
+ *    to the tree the previous landing left (`LANDED_REF`, stat data kept),
+ *    so a file the session changed before and has not touched since is
+ *    recognised as unchanged, and a file the previous checkpoint added and
+ *    this one lacks is removed even though the branch never tracked it.
+ *  - No blob of the checkpoint's parent is read. `reset --mixed <parent>`
+ *    did (a lazy fetch per landing, and a fatal error once the remote no
+ *    longer had it); the branch is moved with update-ref and the index
+ *    rebuilt with a one-tree `read-tree -m`, which compares object ids only
+ *    and keeps the stat data of every path the two trees share. Should that
+ *    step fail anyway (a crash was seen in `reset --mixed` that could not be
+ *    explained or reproduced), a plain `read-tree` gives the same end state
+ *    and git rehashes the files lazily later.
+ *  - The landing does nothing (no fetch, no reset) when the checkout is
+ *    already on that checkpoint, and prints `unchanged`.
+ *  - `clean` (default) deletes untracked files that are not ignored, except
+ *    `keep`, so a new job starts on exactly the checkpoint. Without it,
+ *    untracked files the checkpoint never had (a running job's scratch
+ *    files) stay; files an earlier checkpoint put there and this one does
+ *    not have are still removed.
+ *
+ * Prints `unchanged`, or `landed` followed by one line per path whose
+ * content differs from the previous landing (`landed ?` when there was no
+ * previous landing to compare with).
  */
 export function checkpointLandScript(
   ref: string,
   commit: string,
   branch: string,
   keep: string[] = [],
+  options: { clean?: boolean } = {},
 ): string {
   const exclude = keep.map((path) => `-e ${shellQuoteWord(path)}`).join(" ");
+  const c = shellQuoteWord(commit);
+  const b = shellQuoteWord(branch);
   return [
+    "set -e",
     STALE_INDEX_LOCK_CLEANUP,
+    STALE_TMP_PACK_CLEANUP,
+    // No automatic gc or maintenance in the middle of a landing.
+    'git() { command git -c gc.auto=0 -c maintenance.auto=false "$@"; }',
+    `prev=$(git rev-parse -q --verify '${LANDED_REF}^{commit}' 2>/dev/null || true)`,
+    `if [ "$prev" = ${c} ] && [ "$(git branch --show-current)" = ${b} ] && [ "$(git rev-parse -q --verify HEAD)" = "$(git rev-parse -q --verify "$prev^")" ]; then echo unchanged; exit 0; fi`,
     `git fetch --no-tags --quiet origin ${shellQuoteWord(`+${ref}:refs/opensession/checkpoint`)}`,
-    `test "$(git rev-parse --verify 'refs/opensession/checkpoint^{commit}')" = ${shellQuoteWord(commit)}`,
+    `test "$(git rev-parse --verify 'refs/opensession/checkpoint^{commit}')" = ${c}`,
+    'if [ -n "$prev" ]; then git read-tree --reset "$prev" || prev=; fi',
     GIT_REFRESH_INDEX,
-    "git -c advice.detachedHead=false reset --hard --quiet refs/opensession/checkpoint",
-    `git clean -fdq ${exclude}`.trimEnd(),
-    `git checkout --quiet -B ${shellQuoteWord(branch)}`,
-    "git reset --mixed --quiet 'refs/opensession/checkpoint^'",
+    "git read-tree --reset -u refs/opensession/checkpoint",
+    ...(options.clean === false ? [] : [`git clean -fdq ${exclude}`.trimEnd()]),
+    `git update-ref ${shellQuoteWord(`refs/heads/${branch}`)} 'refs/opensession/checkpoint^'`,
+    `git symbolic-ref HEAD ${shellQuoteWord(`refs/heads/${branch}`)}`,
+    "git read-tree --reset 'refs/opensession/checkpoint^' || { echo 'read-tree --reset failed; rebuilding the index without stat data' >&2; git read-tree 'refs/opensession/checkpoint^'; }",
+    `if [ -n "$prev" ]; then changed=$(git diff-tree -r --name-only "$prev" refs/opensession/checkpoint); else changed='?'; fi`,
+    `git update-ref ${LANDED_REF} refs/opensession/checkpoint`,
     "git update-ref -d refs/opensession/checkpoint",
-  ].join(" && ");
+    'printf "landed\\n%s\\n" "$changed"',
+  ].join("\n");
+}
+
+/** Interrupted fetches leave `tmp_pack_*` files (hundreds of MB on a large
+ *  repository) that git never removes. One untouched for an hour belongs to
+ *  no running fetch. */
+export const STALE_TMP_PACK_CLEANUP =
+  'find "$(git rev-parse --git-path objects/pack)" -maxdepth 1 -name "tmp_*" -mmin +60 -delete 2>/dev/null || true';
+
+/** What a landing did: nothing (the checkout was already there), or landed
+ *  with the paths whose content changed (`null` when unknown). */
+export type LandOutcome =
+  | { state: "unchanged" }
+  | { state: "landed"; changed: string[] | null };
+
+export function parseLandOutput(stdout: string): LandOutcome {
+  const lines = stdout.split("\n");
+  const at = lines.findLastIndex(
+    (line) => line === "landed" || line === "unchanged",
+  );
+  if (at < 0) return { state: "landed", changed: null };
+  if (lines[at] === "unchanged") return { state: "unchanged" };
+  const rest = lines.slice(at + 1).filter(Boolean);
+  return {
+    state: "landed",
+    changed: rest.length === 1 && rest[0] === "?" ? null : rest,
+  };
 }
 
 const LAND_RETRY_DELAY_MS = 2_000;
@@ -216,35 +287,34 @@ export const STALE_INDEX_LOCK_CLEANUP =
 
 /**
  * Land a checkpoint in a Sandbox whose checkout mirrors the session (a
- * Portal Sandbox). The token rides in the command's environment as for a
- * push; the Sandbox's origin stays credential-free. Throws when the
- * workspace has no credential or git refuses.
+ * Portal Sandbox, a GPU job machine). The token rides in the command's
+ * environment as for a push; the Sandbox's origin stays credential-free.
+ * Throws when the workspace has no credential or git refuses.
  */
 export async function landCheckpointInSandbox(
   repoId: string | undefined,
   sandbox: Sandbox,
   checkpoint: Pick<SandboxCheckpointRecord, "ref" | "commit" | "branch">,
-): Promise<void> {
+  options: { clean?: boolean } = {},
+): Promise<LandOutcome> {
   const repo = getRepo(repoId);
   const env = await checkpointGitEnv(repo);
   if (!env) throw new Error("the workspace has no GitHub credential");
-  const land = async () =>
-    sandbox.exec(
-      [
-        "bash",
-        "-c",
-        checkpointLandScript(
-          checkpoint.ref,
-          checkpoint.commit,
-          checkpoint.branch,
-          await excludedPaths(repo),
-        ),
-      ],
-      { env, timeoutMs: CHECKPOINT_TIMEOUT_MS },
-    );
-  // The landing is idempotent (fetch, hard reset, clean, branch, mixed
-  // reset), so one retry absorbs a transient failure: a provider command
-  // plane that hiccuped, or a git that crashed and left its lock behind.
+  const script = checkpointLandScript(
+    checkpoint.ref,
+    checkpoint.commit,
+    checkpoint.branch,
+    await excludedPaths(repo),
+    options,
+  );
+  const land = () =>
+    sandbox.exec(["bash", "-c", script], {
+      env,
+      timeoutMs: CHECKPOINT_TIMEOUT_MS,
+    });
+  // The landing is idempotent, so one retry absorbs a transient failure: a
+  // provider command plane that hiccuped, or a git that crashed and left
+  // its lock behind.
   let result = await land();
   if (result.exitCode !== 0) {
     await Bun.sleep(LAND_RETRY_DELAY_MS);
@@ -255,6 +325,7 @@ export async function landCheckpointInSandbox(
       `could not land checkpoint ${checkpoint.commit.slice(0, 12)} in ${sandbox.id}: ` +
         `${(result.stderr || result.stdout).trim().slice(0, 300)}`,
     );
+  return parseLandOutput(result.stdout);
 }
 
 export type CheckpointOutcome =
