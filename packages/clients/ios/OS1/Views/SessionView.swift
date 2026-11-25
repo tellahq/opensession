@@ -1614,16 +1614,8 @@ struct SessionView: View {
     }
     #endif
 
-    /// `PrLinks.Index` keys for every PR this session carries.
     private var ownPrKeys: Set<String> {
-        let session = viewModel.session
-        var keys = Set(SessionPrSeries.rows(for: session).compactMap { row in
-            row.number.map { PrLinks.Index.key(row.target.repo, $0) }
-        })
-        if let repo = session.repo, let number = session.prNumber {
-            keys.insert(PrLinks.Index.key(repo, number))
-        }
-        return keys
+        PrLinks.ownPrKeys(of: viewModel.session)
     }
 
     private func pullRequestButton(number: Int) -> some View {
@@ -5172,6 +5164,9 @@ private struct SessionInputBar: View {
             .frame(minHeight: 44)
             .contentShape(Rectangle())
         }
+        // Top-down like the web menu, not flipped toward the pill: the five
+        // read in the order the person dragged them into there.
+        .menuOrder(.fixed)
         .buttonStyle(.plain)
         .disabled(noteMode || viewModel.safety != nil)
         .opacity(noteMode ? 0.4 : 1)

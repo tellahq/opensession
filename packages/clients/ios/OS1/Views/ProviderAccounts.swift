@@ -20,6 +20,10 @@ struct ProviderAccountSections: View {
     @State private var removal: AccountRemoval?
     @State private var codexLoginSheet = false
     @State private var xaiLoginSheet = false
+    @State private var claudeApiKeySheet = false
+    /// A refusal or warning from the server, shown where it cannot be missed:
+    /// a 403 on a Claude API account, or a new one bridge.accounts leaves out.
+    @State private var notice: AccountNotice?
 
     /// Seeded from the last answer this device saw, so re-entering Providers
     /// shows the pools straight away and the fetch behind it only corrects them.
@@ -68,6 +72,7 @@ struct ProviderAccountSections: View {
                 }
                 Menu {
                     Button("Claude account") { showingAdd = .claude }
+                    Button("Claude API key") { claudeApiKeySheet = true }
                     Button("OpenAI API key") { showingAdd = .codex }
                 } label: {
                     Label("Add account", systemImage: "plus")
@@ -86,6 +91,20 @@ struct ProviderAccountSections: View {
             AccountEditor(kind: kind) { name, value, owner in
                 await addAccount(kind: kind, name: name, value: value, owner: owner)
             }
+        }
+        .sheet(isPresented: $claudeApiKeySheet) {
+            ClaudeApiKeyEditor { name, apiKey, owner in
+                await addClaudeApiKey(name: name, apiKey: apiKey, owner: owner)
+            }
+        }
+        .alert(
+            notice?.title ?? "",
+            isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } }),
+            presenting: notice
+        ) { _ in
+            Button("OK", role: .cancel) {}
+        } message: { notice in
+            Text(notice.message)
         }
         .sheet(isPresented: $codexLoginSheet) {
             CodexDeviceLoginView {
@@ -197,6 +216,23 @@ struct ProviderAccountSections: View {
         } catch { self.error = error.localizedDescription }
     }
 
+    /// Nil on success; otherwise the server's reason, shown in the sheet so
+    /// the key is still there to fix.
+    private func addClaudeApiKey(name: String, apiKey: String, owner: String?) async -> String? {
+        do {
+            let added = try await SettingsAPI.createClaudeApiAccount(name: name, apiKey: apiKey, owner: owner)
+            claude.append(added.account)
+            SettingsCache.save(Self.cacheKey(.claude), claude)
+            claudeApiKeySheet = false
+            if let warning = added.warning, warning.isEmpty == false {
+                notice = AccountNotice(title: "Account added", message: warning)
+            }
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
     private func toggleOwnership(_ account: ProviderAccount, kind: AccountKind) async {
         guard let id = account.id else { return }
         do {
@@ -213,7 +249,9 @@ struct ProviderAccountSections: View {
                 pool[index] = result
                 setAccounts(pool, for: kind)
             }
-        } catch { self.error = error.localizedDescription }
+        } catch {
+            notice = AccountNotice(title: "Could not change the owner", message: error.localizedDescription)
+        }
     }
 
     private func remove(_ target: AccountRemoval) async {
@@ -224,8 +262,75 @@ struct ProviderAccountSections: View {
             case .xai: _ = try await SettingsAPI.deleteXaiAccount(id: target.id)
             }
             setAccounts(accounts(of: target.kind).filter { $0.id != target.id }, for: target.kind)
-        } catch { self.error = error.localizedDescription }
+        } catch {
+            notice = AccountNotice(title: "Could not remove \(target.name)", message: error.localizedDescription)
+        }
         removal = nil
+    }
+}
+
+private struct AccountNotice: Identifiable {
+    let title: String
+    let message: String
+    var id: String { title + message }
+}
+
+/// Adds a Claude API account from an API key: it serves Mythos runs, billed
+/// to the key's API organization. Workload identity stays on the web, where
+/// only the host operator can enrol it.
+private struct ClaudeApiKeyEditor: View {
+    /// Returns the server's reason when the key was refused.
+    let onSave: (String, String, String?) async -> String?
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var apiKey = ""
+    @State private var shared = true
+    @State private var saving = false
+    @State private var error: String?
+
+    private var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
+    /// Pasted keys often carry line-wrap newlines; the server strips them too.
+    private var cleanKey: String { apiKey.filter { !$0.isWhitespace } }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Account name", text: $name)
+                        .autocorrectionDisabled()
+                        .noAutocapitalizationCompat()
+                    SecureField("API key", text: $apiKey)
+                        .autocorrectionDisabled()
+                        .noAutocapitalizationCompat()
+                    Toggle("Shared pool account", isOn: $shared)
+                } footer: {
+                    Text("A Claude API account serves Mythos, which Anthropic offers to verified API organizations. Its runs are billed to that organization.")
+                }
+                if let error {
+                    Text(error).foregroundStyle(.red)
+                }
+            }
+            .navigationTitle("Add Claude API key")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(saving ? "Adding…" : "Add") {
+                        saving = true
+                        error = nil
+                        Task {
+                            error = await onSave(trimmedName, cleanKey, shared ? nil : ServerConfig.shared.userName)
+                            saving = false
+                        }
+                    }
+                    .disabled(trimmedName.isEmpty || cleanKey.isEmpty || saving)
+                }
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 440, minHeight: 300)
+        #endif
     }
 }
 
@@ -250,7 +355,7 @@ private struct AccountUsageRow: View {
                 BrandTile(name: kind.brand, size: 28)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(account.label ?? account.name ?? account.email ?? "Account")
-                    Text("\(kind.providerName) · \(ownership)")
+                    Text(subtitle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -282,6 +387,13 @@ private struct AccountUsageRow: View {
         .padding(.vertical, 2)
     }
 
+    /// The provider, the kind of credential when it is not a subscription
+    /// ("API key"), and whose it is.
+    private var subtitle: String {
+        let authLabel = kind == .claude ? account.claudeAuthLabel : nil
+        return [kind.providerName, authLabel, ownership].compactMap(\.self).joined(separator: " · ")
+    }
+
     /// Whose subscription this is. A shared pool account is the default, so it
     /// is the phrase that needs no name beside it.
     private var ownership: String {
@@ -306,7 +418,13 @@ private struct AccountUsageRow: View {
 
     @ViewBuilder
     private var meter: some View {
-        if let message = usageProblem {
+        if kind == .claude, account.isClaudeApiAccount {
+            // API usage is billed to the organization; there is no window
+            // to fill, so no meter rather than an empty one.
+            Text("Serves Mythos runs, billed to the API organization.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } else if let message = usageProblem {
             Text(message)
                 .font(.caption)
                 .foregroundStyle(.secondary)

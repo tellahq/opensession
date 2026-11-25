@@ -163,6 +163,8 @@ struct PreferencesSettingsView: View {
     @AppStorage("os1.composer.autocomplete") private var nativeAutocomplete = false
     @AppStorage("os1.transcript.liveTyping") private var nativeLiveTyping = false
     @AppStorage("os1.desk.voice") private var deskVoice = "off"
+    /// Written through `DeskPref.set`, which syncs it on its own.
+    @AppStorage(DeskPref.storageKey) private var deskShown = DeskPref.standard
     /// Written through `UsageBarPref.set`, which syncs it on its own: the
     /// model menu flips the same pref, so it stays out of `commit()`.
     @AppStorage(UsageBarPref.storageKey) private var usageBar = UsageBarPref.standard
@@ -459,15 +461,25 @@ struct PreferencesSettingsView: View {
             }
 
             Section {
-                Toggle("Desk voice", isOn: Binding(
-                    get: { deskVoice == "on" },
-                    set: { enabled in
-                        deskVoice = enabled ? "on" : "off"
-                        pushDeskVoice(enabled)
-                    }
+                Toggle("Show Desk", isOn: Binding(
+                    get: { deskShown },
+                    set: { DeskPref.set($0) }
                 ))
+                if deskShown {
+                    Toggle("Desk voice", isOn: Binding(
+                        get: { deskVoice == "on" },
+                        set: { enabled in
+                            deskVoice = enabled ? "on" : "off"
+                            pushDeskVoice(enabled)
+                        }
+                    ))
+                }
+            } header: {
+                Text("Desk")
             } footer: {
-                Text("Talk to your Desk with a live voice call. Uses the server's OpenAI key.")
+                Text(deskShown
+                    ? "Adds the Desk button and Open the Desk in the command palette. Desk voice talks to your Desk with a live voice call, using the server's OpenAI key."
+                    : "Adds the Desk button and Open the Desk in the command palette.")
             }
             PersonalOutputStyleSection()
             YouShouldKnowSection()

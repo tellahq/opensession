@@ -967,6 +967,17 @@ struct NewSessionView: View {
 
     private var modelChip: some View {
         Menu {
+            if let catalog {
+                // The same five and More models as the session's menu.
+                Section("Model") {
+                    ModelMenuRows(
+                        catalog: catalog,
+                        isSelected: { $0.id == ModelCatalog.baseID(model) }
+                    ) { option in
+                        modelButton(option)
+                    }
+                }
+            }
             #if os(iOS)
             if !availableEfforts.isEmpty {
                 Section("Reasoning") {
@@ -994,26 +1005,15 @@ struct NewSessionView: View {
                     }
                 }
             }
-            if let catalog {
-                if !catalog.presets.isEmpty {
-                    Section("Presets") {
-                        ForEach(catalog.presets) { option in
-                            modelButton(option)
-                        }
-                    }
-                }
-                Section(catalog.presets.isEmpty ? "Model" : "Models") {
-                    ForEach(catalog.regular) { option in
-                        modelButton(option)
-                    }
-                }
-            }
         } label: {
             chipLabel(
                 icon: "cpu",
                 text: modelChipText
             )
         }
+        // Top-down like the web menu, models first, rather than flipped
+        // toward the chip: the five keep the person's synced order.
+        .menuOrder(.fixed)
         .menuStyle(.button)
         #if os(macOS)
         .buttonStyle(.plain)

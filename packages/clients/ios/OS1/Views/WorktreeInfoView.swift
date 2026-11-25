@@ -1498,7 +1498,10 @@ struct WorktreeInfoView: View {
                 // sits with the choice that drives it.
                 UsageMenuSection(usage: viewModel.usage)
                 if let catalog {
-                    ForEach(catalog.presets + catalog.regular) { option in
+                    ModelMenuRows(
+                        catalog: catalog,
+                        isSelected: { $0.id == ModelCatalog.baseID(currentModel) }
+                    ) { option in
                         let routed = ModelCatalog.routedID(option.id, engine: currentEngine)
                         Button {
                             if let routed { viewModel.changeModel(to: routed, option: option) }
