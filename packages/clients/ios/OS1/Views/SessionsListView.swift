@@ -5376,14 +5376,6 @@ struct SessionRow: View {
             if let repo {
                 RepoTile(name: repo, size: tileSize)
             }
-            // Origin reads on the left, beside the status mark and the repo
-            // tile: this row is a machine's run, not yours. Faint and a step
-            // under the tile so a band of automation rows stays a list rather
-            // than a wall of glyphs.
-            if session.wasAgentStarted || autoCreated {
-                WebIcon(kind: .robot, size: tileSize, color: OS1VisualStyle.textFaint)
-                    .accessibilityHidden(true)
-            }
             VStack(alignment: .leading, spacing: 2) {
                 Text(rowTitle)
                     #if os(iOS)
@@ -5409,6 +5401,14 @@ struct SessionRow: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            // Origin rides after the title, like the web sidebar's
+            // AutoCreatedMark, so the status marks and repo tiles stay on one
+            // column with every ordinary row. Faint so a band of automation
+            // rows stays a list rather than a wall of glyphs.
+            if session.wasAgentStarted || autoCreated {
+                WebIcon(kind: .robot, size: tileSize, color: OS1VisualStyle.textFaint)
+                    .accessibilityHidden(true)
+            }
             if hasDraft && !isWorkspaceDraft {
                 Image(systemName: "pencil")
                     .font(.system(size: 15, weight: .semibold))
