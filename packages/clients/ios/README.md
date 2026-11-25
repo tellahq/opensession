@@ -411,10 +411,11 @@ passed`, the whole message and nothing else) draws as one compact row per
   GitHub app through its universal link, instead of the Review panel or the
   in-app browser. Without the app installed they fall back to the in-app
   browser (`GitHubAppLinks`).
-- **A session's own PR in its chat** reads as plain text, not a chip (the
-  `transcriptOwnPrs` environment, as the web's `ownPrs`): the chip would only
-  open the conversation already on screen. Mentions of any other PR keep
-  their chip.
+- **A session's own PR in its chat** is a plain link, not a chip (the
+  `transcriptOwnPrs` environment, as the web's `ownPrs`): the status pill would
+  only repeat the toolbar, but a tap still opens the Review panel. A session
+  with several PRs has no single own PR, so all of its mentions keep their
+  chips, as do mentions of any other PR.
 - **PR panel** — sessions with a pull request expose a row in the title-opened
   overview page and the overflow menu; it opens a panel with state, review
   decision, conflicts, every check with its status, and reviewers, via

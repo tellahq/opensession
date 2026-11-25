@@ -170,6 +170,21 @@ enum PrLinks {
         session.repo == reference.repo && session.prNumber == reference.number
     }
 
+    /// The `Index` key of the one PR `session` is about, whose mentions
+    /// draw as plain links (`linkify`'s `ownPrs`). A session with several PRs
+    /// has no single PR it is about, so it gets none and every mention keeps
+    /// its chip: the chips are how a reader picks which one to open (web:
+    /// `MarkdownOwnPrsProvider`).
+    static func ownPrKeys(of session: Session) -> Set<String> {
+        var keys = Set(SessionPrSeries.rows(for: session).compactMap { row in
+            row.number.map { Index.key(row.target.repo, $0) }
+        })
+        if let repo = session.repo, let number = session.prNumber {
+            keys.insert(Index.key(repo, number))
+        }
+        return keys.count == 1 ? keys : []
+    }
+
     // MARK: - Rewriting
 
     /// A bare mention has nothing but its digits to argue it is a PR at all.
@@ -229,11 +244,11 @@ enum PrLinks {
     /// it is rendered in (prose, table cells, a callout). Without one, the
     /// text is a whole message of its own.
     ///
-    /// `ownPrs` are the PRs the conversation is about (`Index.key`). A
-    /// mention of one stays the text it was written as, and a link to one
-    /// keeps only its label: a chip there would open what the reader is
-    /// already looking at. The web does the same (`renderMarkdown`'s
-    /// `ownPrs`).
+    /// `ownPrs` is the PR the conversation is about (`Index.key`), empty
+    /// when the session has none or several. A mention of it is an ordinary
+    /// link on the private scheme rather than a chip: the status pill would
+    /// only repeat the toolbar, but a tap still opens the review. The web
+    /// does the same (`renderMarkdown`'s `ownPrs`).
     static func linkify(
         _ markdown: String,
         sessionId: String?,
@@ -245,7 +260,7 @@ enum PrLinks {
         return MarkdownProse.rewrite(markdown) { line in
             guard line.contains("#") || line.contains("/pull/") else { return line }
             return rewriteMentions(
-                in: retargetLinks(in: line, ownPrs: ownPrs),
+                in: retargetLinks(in: line),
                 repo: contextRepo,
                 ledger: ledger,
                 ownPrs: ownPrs
@@ -253,7 +268,7 @@ enum PrLinks {
         }
     }
 
-    private static func retargetLinks(in line: String, ownPrs: Set<String>) -> String {
+    private static func retargetLinks(in line: String) -> String {
         guard line.contains("/pull/") else { return line }
         let ns = line as NSString
         var result = ""
@@ -271,15 +286,9 @@ enum PrLinks {
                 location: cursor,
                 length: match.range.location - cursor
             ))
-            if ownPrs.contains(Index.key(reference.repo, reference.number)) {
-                // `[label](` minus its brackets: the label alone, as prose.
-                let opener = ns.substring(with: match.range(at: 1))
-                result += String(opener.dropFirst().dropLast(2))
-            } else {
-                result += ns.substring(with: match.range(at: 1))
-                result += destination(for: reference)
-                result += ns.substring(with: match.range(at: 6))
-            }
+            result += ns.substring(with: match.range(at: 1))
+            result += destination(for: reference)
+            result += ns.substring(with: match.range(at: 6))
             cursor = match.range.location + match.range.length
         }
         guard cursor > 0 else { return line }
@@ -336,12 +345,14 @@ enum PrLinks {
                 name: ns.substring(with: match.range(at: 4)),
                 number: ns.substring(with: match.range(at: 5))
             ) else { return nil }
-            if ownPrs.contains(Index.key(reference.repo, reference.number)) {
-                return "PR #\(reference.number)"
-            }
             // A pasted URL is labelled like a mention: the address is 50
             // characters of noise, and the chip already says it is a PR.
-            return link(label: "PR #\(reference.number)", to: reference, ledger: ledger)
+            return link(
+                label: "PR #\(reference.number)",
+                to: reference,
+                ledger: ledger,
+                ownPrs: ownPrs
+            )
         }
         let cue = match.range(at: 6).location == NSNotFound
             ? ""
@@ -353,7 +364,6 @@ enum PrLinks {
         guard let number = Int(digits), let repo = repoId(for: qualifier, context: contextRepo)
         else { return nil }
         let reference = Reference(repo: repo, number: number)
-        if ownPrs.contains(Index.key(reference.repo, reference.number)) { return nil }
         // A short number with nothing but its digits to go on is prose.
         if cue.isEmpty, qualifier == nil, !bareMentionLinks(reference, digits: digits) {
             return nil
@@ -361,7 +371,12 @@ enum PrLinks {
         // The cue stays prose: it reads as `PR` + a chip labelled `#92`, so a
         // chip that already says PR doesn't also spell the word out.
         let written = ns.substring(with: match.range).dropFirst(cue.count)
-        return cue + link(label: String(written), to: reference, ledger: ledger)
+        return cue + link(
+            label: String(written),
+            to: reference,
+            ledger: ledger,
+            ownPrs: ownPrs
+        )
     }
 
     /// The repo a mention points at, or nil when it can't be placed.
@@ -392,8 +407,16 @@ enum PrLinks {
     /// A chip the first time a message names `reference`, a plain link on the
     /// same private scheme after that: still tappable, still kept in the app,
     /// just not another filled pill. The tone belongs to the chip alone.
-    private static func link(label: String, to reference: Reference, ledger: Ledger) -> String {
-        guard ledger.claim(reference) else {
+    /// The conversation's own PR is always the plain link: it never claims
+    /// a chip, so it also never uses up another mention's.
+    private static func link(
+        label: String,
+        to reference: Reference,
+        ledger: Ledger,
+        ownPrs: Set<String>
+    ) -> String {
+        guard !ownPrs.contains(Index.key(reference.repo, reference.number)),
+              ledger.claim(reference) else {
             return "[\(escaped(label))](\(destination(for: reference)))"
         }
         let summary = index.states[Index.key(reference.repo, reference.number)]

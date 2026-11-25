@@ -17,9 +17,10 @@ private struct TranscriptPrChipsDrawnKey: EnvironmentKey {
     static let defaultValue: Set<String> = []
 }
 
-/// The PRs the conversation being read is about, keyed by
-/// `PrLinks.Index.key`. A mention of one stays plain text: its chip would
-/// only lead back to the conversation the reader is already in.
+/// The PR the conversation being read is about, keyed by
+/// `PrLinks.Index.key`; empty when the session has none or several. A
+/// mention of it draws as a plain link instead of a chip: the status pill
+/// would only repeat the toolbar, but a tap still opens the review.
 private struct TranscriptOwnPrsKey: EnvironmentKey {
     static let defaultValue: Set<String> = []
 }
