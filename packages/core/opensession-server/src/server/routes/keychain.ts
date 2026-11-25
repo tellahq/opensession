@@ -190,7 +190,7 @@ export async function handleKeychainRoutes(
             : undefined,
           statusOnly: body.statusOnly === true,
           // Anything but "personal" or "workspace" is refused by the spec
-          // check, and so is a workspace login.
+          // check.
           ...(typeof body.scope === "string" ? { scope: body.scope } : {}),
         }),
       });
