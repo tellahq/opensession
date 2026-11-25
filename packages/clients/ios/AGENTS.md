@@ -52,18 +52,23 @@ the commands below show how Tella does it (`ssh tella-mac-node`, Xcode 26.6);
 substitute your own Mac's hostname:
 
 ```sh
-rsync -a --delete packages/clients/ios/ tella-mac-node:/tmp/os1-check/packages/clients/ios/
-ssh tella-mac-node '
-  cd /tmp/os1-check/os1-ios && xcodegen generate --quiet
+T=os-work/os1-check-<session id>   # under the node's home; one tree per session
+rsync -a --delete --exclude=OS1.xcodeproj packages/clients/ios/ tella-mac-node:$T/os1-ios/
+ssh tella-mac-node "
+  cd ~/$T/os1-ios && xcodegen generate --quiet
   xcodebuild -quiet build -skipMacroValidation -project OS1.xcodeproj -scheme OS1 \
-    -destination "generic/platform=iOS Simulator" -derivedDataPath /tmp/os1-check/dd
+    -destination 'generic/platform=iOS Simulator' -derivedDataPath ~/$T/dd
   xcodebuild -quiet build -skipMacroValidation -project OS1.xcodeproj -scheme OS1Mac \
-    -destination "platform=macOS" -derivedDataPath /tmp/os1-check/dd CODE_SIGNING_ALLOWED=NO
+    -destination 'platform=macOS' -derivedDataPath ~/$T/dd CODE_SIGNING_ALLOWED=NO
   xcodebuild -quiet test -skipMacroValidation -project OS1.xcodeproj -scheme OS1Mac \
-    -destination "platform=macOS" -derivedDataPath /tmp/os1-check/dd \
-    CODE_SIGNING_ALLOWED=NO'
+    -destination 'platform=macOS' -derivedDataPath ~/$T/dd \
+    CODE_SIGNING_ALLOWED=NO"
 ```
 
+- Build under `~/os-work/`, never `/tmp`: a tree with derived data is about
+  3 GB. On `tella-mac-node`, `~/os-work` is on a 2 TB external SSD while `/tmp`
+  is on the small internal disk, which parallel sessions' trees have filled.
+  Delete your tree (`rm -rf ~/$T`) when the session's work is done.
 - Always build BOTH schemes: `#if os(macOS)` blocks only compile in `OS1Mac`.
 - Keep `-skipMacroValidation` on noninteractive builds. SwiftStreamingMarkdown's
   exact pinned dependency graph includes the Equatable compiler macro.
