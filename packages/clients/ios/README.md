@@ -182,7 +182,12 @@ passed`, the whole message and nothing else) draws as one compact row per
   file into one row — the path once, the summed ±lines, and a `×3` count —
   both opening to the individual calls. The shared Thinking messages preference
   shows none, all, or only the newest provider reasoning row, with Latest as the
-  default.
+  default. A reasoning row is one step like a tool row: a lightbulb,
+  `Thinking` and one line of what it was about, opening to the full trace
+  (open by default under Tool calls · Open). The row at the end of a running
+  turn is the pulsing dot and the run's elapsed time from `0s`; the phase
+  (`Working`, or `Thinking` while the turn ends on an open thought) is read
+  to VoiceOver only.
   Transcript videos stream inline on both platforms. Tool-result screenshots
   and recordings marked as featured stay visible when their work fold closes,
   while incidental media remains inside the producing tool row.

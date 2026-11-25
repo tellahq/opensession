@@ -106,7 +106,11 @@ struct TranscriptRow: View {
                     onFork: onForkMessage
                 )
             } else if entry.isAssistant, entry.isReasoning == true {
-                ReasoningSummaryRow(entry: entry, isActive: isActiveReasoning)
+                ReasoningStepRow(
+                    entry: entry,
+                    isActive: isActiveReasoning,
+                    state: expansionState("reasoning-\(entry.id)", false)
+                )
             } else if entry.isAssistant {
                 AssistantMessage(
                     entry: entry,
@@ -462,48 +466,110 @@ private struct OutboxMessageStatus: View {
     }
 }
 
-/// Provider reasoning is visible activity, not an answer. A generated bold
-/// heading is normalized to regular-weight quiet text; any body keeps markdown
-/// structure at the same dimmed hierarchy.
-struct ReasoningSummaryRow: View {
-    let entry: TranscriptEntry
+/// One thinking step, drawn like a tool row: a lightbulb, "Thinking" and one
+/// line of what it was about. Opening it shows the full trace, and the one
+/// line goes, since the trace right below starts with it. Adjacent reasoning
+/// entries join one step instead of a ladder of near-identical traces.
+/// Mirrors the web's `ReasoningStep`.
+struct ReasoningStepRow: View {
+    let entries: [TranscriptEntry]
+    /// The thought the live turn is still on: its label shimmers.
     var isActive = false
+    let state: TurnFoldState
 
-    private var display: ReasoningSummaryDisplay {
-        ReasoningSummaryDisplay(entry.text)
+    init(entries: [TranscriptEntry], isActive: Bool = false, state: TurnFoldState) {
+        self.entries = entries
+        self.isActive = isActive
+        self.state = state
+    }
+
+    init(entry: TranscriptEntry, isActive: Bool = false, state: TurnFoldState) {
+        self.init(entries: [entry], isActive: isActive, state: state)
+    }
+
+    private var displays: [ReasoningSummaryDisplay] {
+        entries.map { ReasoningSummaryDisplay($0.text) }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if let title = display.activityTitle(isActive: isActive) {
+        let displays = displays
+        let excerpt = ThinkingStep.excerpt(displays)
+        let hasBody = displays.contains { !$0.body.isEmpty }
+        let open = hasBody && state.expanded
+        VStack(alignment: .leading, spacing: 4) {
+            if hasBody {
+                Button {
+                    withAnimation(.snappy(duration: 0.2, extraBounce: 0)) {
+                        state.toggle()
+                    }
+                } label: {
+                    row(excerpt: open ? "" : excerpt, open: open)
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint(open ? "Hide the reasoning" : "Show the reasoning")
+            } else {
+                row(excerpt: excerpt, open: false)
+            }
+
+            if open {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(displays.enumerated()), id: \.offset) { _, display in
+                        if !display.body.isEmpty {
+                            MarkdownBody(display.body, dimmed: true)
+                        }
+                    }
+                }
+                .textSelection(.enabled)
+                // Under the label, not the glyph, as a tool call's body sits.
+                .padding(.leading, ToolRowMetrics.textInset)
+                .padding(.trailing, 16)
+                .padding(.bottom, 6)
+                .transition(.opacity)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        #if os(macOS)
+        .contextMenu {
+            Button {
+                copyToPasteboard(entries.map(\.text).joined(separator: "\n\n"))
+            } label: {
+                Label("Copy reasoning", systemImage: "document.on.document")
+            }
+            if let last = entries.last {
+                TimestampLabel(date: last.timestampDate)
+            }
+        }
+        #endif
+    }
+
+    private func row(excerpt: String, open: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: ToolRowMetrics.iconSpacing) {
+            // The glyph turns into the disclosure chevron when open, as a
+            // tool row's does.
+            ToolRowIcon(symbol: open ? "chevron.down" : "lightbulb")
+            Group {
                 if isActive {
-                    ActiveReasoningTitle(title: title)
+                    ShimmerText("Thinking")
                 } else {
-                    Text(title)
-                        .font(.body)
+                    Text("Thinking")
                         .foregroundStyle(OS1VisualStyle.textDim)
                 }
             }
-            if !display.body.isEmpty {
-                MarkdownBody(display.body, dimmed: true)
+            .font(.subheadline)
+            .lineLimit(1)
+            .fixedSize()
+            if !excerpt.isEmpty {
+                Text(excerpt)
+                    .font(.footnote)
+                    .foregroundStyle(OS1VisualStyle.textFaint)
+                    .lineLimit(1)
             }
+            Spacer(minLength: 0)
         }
-        .padding(.vertical, 2)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .textSelection(.enabled)
-        #if os(macOS)
-        // On iOS the long press selects text instead (see AssistantMessage).
-        .contextMenu {
-            Button {
-                copyToPasteboard(entry.text)
-            } label: {
-                Label("Copy reasoning summary", systemImage: "doc.on.doc")
-            }
-            TimestampLabel(date: entry.timestampDate)
-        }
-        #endif
-        .accessibilityLabel(isActive ? "Active reasoning" : "Reasoning summary")
-        .accessibilityValue(entry.text)
+        .toolRowFrame()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(isActive ? "Thinking, in progress" : "Thinking")
+        .accessibilityValue(excerpt)
     }
 }
 
@@ -928,12 +994,16 @@ struct StreamingBubble: View {
     }
 }
 
-/// The live run, at the end of the transcript: an amber pulse and the
-/// ticking clock, sitting directly under the last message so it reads as
-/// something that message is still doing. It used to ride the composer, which
-/// put the state on the field you type in rather than on the work.
+/// The live run, at the end of the transcript: an amber pulse and the run's
+/// elapsed time, counted from its first second, sitting directly under the
+/// last message so it reads as something that message is still doing. A
+/// tool, a thought or a reply already shows itself above, so the row adds no
+/// words; the phase is still announced to VoiceOver, which cannot see the
+/// dot. Mirrors the web's `BusyWorking`.
 struct RunStatusFooter: View {
     let since: Date?
+    /// The transcript ends on an open thought (`ThinkingStep`).
+    var isThinking = false
 
     var body: some View {
         HStack(spacing: 6) {
@@ -941,27 +1011,22 @@ struct RunStatusFooter: View {
             // the sessions list's in-progress lane, the tab strip's running
             // pill — so the transcript says "running" in the same voice.
             PulsingDot(color: OS1VisualStyle.yellowInk, size: 6)
-            // The web's BusyWorking copy: "Working", then after ten seconds
-            // "Still working · 24s". It only claims what is known, that the
-            // run is active. Ticks once a second, inside this node only.
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                let elapsed = since.map { context.date.timeIntervalSince($0) } ?? 0
-                HStack(spacing: 4) {
-                    Text(elapsed < 10 ? "Working" : "Still working")
-                        .foregroundStyle(OS1VisualStyle.textDim)
-                    if elapsed >= 10, let label = TranscriptFormat.duration(elapsed) {
-                        Text(verbatim: "· \(label)")
-                            .monospacedDigit()
-                            .foregroundStyle(OS1VisualStyle.textFaint)
-                            .accessibilityHidden(true)
-                    }
+            // Ticks on the run's own second boundaries, inside this node
+            // only, so the count never skips.
+            if let since {
+                TimelineView(.periodic(from: since, by: 1)) { context in
+                    Text(verbatim: LiveElapsed.label(context.date.timeIntervalSince(since)))
+                        .monospacedDigit()
+                        .foregroundStyle(OS1VisualStyle.textFaint)
                 }
+                .font(.footnote)
+                // The elapsed value is not read out every second.
+                .accessibilityHidden(true)
             }
-            .font(.footnote.weight(.medium))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Working")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(isThinking ? "Thinking" : "Working")
     }
 }
 

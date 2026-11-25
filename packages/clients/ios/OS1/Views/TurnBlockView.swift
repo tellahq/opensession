@@ -243,12 +243,15 @@ struct TurnStepsView: View {
 
     private enum TurnSection: Identifiable {
         case message(TranscriptEntry)
+        /// Adjacent reasoning entries, one thinking step.
+        case reasoning([TranscriptEntry])
         case status(id: String, FoldStatus)
         case tools([ToolCallItem], kind: ToolRunKind)
 
         var id: String {
             switch self {
             case .message(let entry): entry.id
+            case .reasoning(let entries): "reasoning-\(entries.first?.id ?? "empty")"
             case .status(let id, _): id
             case .tools(let items, _): "tools-\(items.first?.id ?? "empty")"
             }
@@ -261,21 +264,25 @@ struct TurnStepsView: View {
                 switch section {
                 case .status(_, let status):
                     ProgressStatusLine(status: status)
-                case .message(let entry):
-                    if entry.isReasoning == true {
-                        ReasoningSummaryRow(
-                            entry: entry,
-                            isActive: entry.id == activeReasoningId
+                case .reasoning(let entries):
+                    // "Tool calls · Open" opens thinking too, as on the web.
+                    ReasoningStepRow(
+                        entries: entries,
+                        isActive: activeReasoningId.map { id in
+                            entries.contains { $0.id == id }
+                        } ?? false,
+                        state: expansionState(
+                            "reasoning-\(entries[0].id)",
+                            rendersToolCallsInPlace
                         )
+                    )
+                case .message(let entry):
+                    // Narration is prose to read, just like the final answer.
+                    // The fold and its indent distinguish it; only tool rows
+                    // keep the dimmed treatment.
+                    MarkdownBody(entry.text)
+                        .environment(\.transcriptAnchorEntryId, entry.id)
                         .padding(.trailing, 16)
-                    } else {
-                        // Narration is prose to read, just like the final answer.
-                        // The fold and its indent distinguish it; only tool rows
-                        // keep the dimmed treatment.
-                        MarkdownBody(entry.text)
-                            .environment(\.transcriptAnchorEntryId, entry.id)
-                            .padding(.trailing, 16)
-                    }
                 case .tools(let calls, let kind):
                     if showsTools {
                         if rendersToolCallsInPlace {
@@ -315,15 +322,9 @@ struct TurnStepsView: View {
 
     /// The thinking still under way: the turn's newest message, while it is
     /// thinking (web: `activeReasoning`). Once narration follows it, that
-    /// thought is over and keeps no live label above the prose after it.
+    /// thought is over and its label stops shimmering.
     private var activeReasoningId: String? {
-        guard isLive else { return nil }
-        let lastMessage = items.reversed().lazy.compactMap { item -> TranscriptEntry? in
-            guard case .message(let entry) = item else { return nil }
-            return entry
-        }.first
-        guard let lastMessage, lastMessage.isReasoning == true else { return nil }
-        return lastMessage.id
+        ThinkingStep.activeReasoningId(in: items, isLive: isLive)
     }
 
     private var sections: [TurnSection] {
@@ -335,6 +336,13 @@ struct TurnStepsView: View {
                 case .shown(let status): sections.append(.status(id: entry.id, status))
                 // Folded into an earlier step: the calls either side join one run.
                 case .folded: break
+                case nil where entry.isReasoning == true:
+                    if case .reasoning(var entries) = sections.last {
+                        entries.append(entry)
+                        sections[sections.count - 1] = .reasoning(entries)
+                    } else {
+                        sections.append(.reasoning([entry]))
+                    }
                 case nil: sections.append(.message(entry))
                 }
             case .tool(let call):

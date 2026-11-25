@@ -493,6 +493,80 @@ struct ReasoningSummaryDisplay: Equatable {
     }
 }
 
+/// A thinking step's one line and the live state of the thought a turn ends
+/// on. Mirrors the web's `ReasoningStep` (`reasoningExcerpt`) and
+/// `TurnBlock`'s `activeReasoning`.
+enum ThinkingStep {
+    /// The one line a folded thinking step shows: the latest heading, else
+    /// the first line of its prose, without Markdown syntax.
+    static func excerpt(_ displays: [ReasoningSummaryDisplay]) -> String {
+        if let title = displays.last(where: { !$0.title.isEmpty })?.title {
+            let line = title.split(separator: "\n", omittingEmptySubsequences: false).last ?? ""
+            return ProgressUpdate.plainText(String(line))
+        }
+        let body = displays.first(where: { !$0.body.isEmpty })?.body ?? ""
+        for row in body.split(separator: "\n") {
+            let line = String(row)
+                .replacing(#/^\s*(?:[#>*-]+|\d+\.)\s+/#, with: "")
+                .trimmingCharacters(in: .whitespaces)
+            if !line.isEmpty { return ProgressUpdate.plainText(line) }
+        }
+        return ""
+    }
+
+    /// The thinking still under way in a live turn: its newest message, while
+    /// that message is reasoning. Once narration follows it, the thought is
+    /// over. Tool calls after it do not end it, as on the web.
+    static func activeReasoningId(in items: [TurnItem], isLive: Bool) -> String? {
+        guard isLive else { return nil }
+        for item in items.reversed() {
+            guard case .message(let entry) = item else { continue }
+            return entry.isReasoning == true ? entry.id : nil
+        }
+        return nil
+    }
+
+    /// Whether a running transcript ends on an open thought: a trailing
+    /// reasoning row, a live turn whose newest message is reasoning, or a
+    /// streamed heading not yet persisted. Streamed prose means the model has
+    /// moved on to writing.
+    static func endsOnActiveThought(
+        _ blocks: [TranscriptBlock],
+        liveText: String = ""
+    ) -> Bool {
+        if !liveText.isEmpty {
+            return ReasoningSummaryDisplay.liveHeading(liveText) != nil
+        }
+        switch blocks.last {
+        case .message(let entry):
+            return entry.isReasoning == true
+        case .work(let turn):
+            return activeReasoningId(in: turn.items, isLive: turn.isLive) != nil
+        default:
+            return false
+        }
+    }
+}
+
+/// The live run's age, counted up from its first second: "0s", "59s",
+/// "1m 05s", "1h 02m". Floored, so the count never runs ahead of the clock,
+/// and padded past a minute so the seconds hold their width. Mirrors the
+/// web's `liveElapsed`.
+enum LiveElapsed {
+    static func label(_ seconds: TimeInterval) -> String {
+        guard seconds.isFinite else { return "0s" }
+        let secs = Int(max(0, seconds).rounded(.down))
+        if secs < 60 { return "\(secs)s" }
+        let mins = secs / 60
+        if mins < 60 { return "\(mins)m \(pad(secs % 60))s" }
+        return "\(mins / 60)h \(pad(mins % 60))m"
+    }
+
+    private static func pad(_ value: Int) -> String {
+        value < 10 ? "0\(value)" : "\(value)"
+    }
+}
+
 // MARK: - Grouping
 
 @MainActor

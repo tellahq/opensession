@@ -310,6 +310,72 @@ final class SessionViewModel {
         rebuildDisplayItems()
     }
 
+    /// `OS1_SHOW_THINKING_FIXTURE`: a turn with a thinking step, added once
+    /// the transcript snapshot has landed. `finished` settles it with an
+    /// answer, `open` also opens the step, `live` keeps the run going with
+    /// the turn ending on the thought.
+    func showThinkingForScreenshot(_ variant: String) async {
+        holdsScreenshotFixture = true
+        for _ in 0..<100 where isLoadingConversation {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        try? await Task.sleep(for: .seconds(2))
+        let now = Date.now
+        let iso = ISO8601DateFormatter()
+        func at(_ offset: TimeInterval) -> String { iso.string(from: now.addingTimeInterval(offset)) }
+        func call(_ id: String, _ tool: String, _ input: [String: JSONValue], _ output: String, _ t: TimeInterval) -> [TranscriptEntry] {
+            [
+                TranscriptEntry(
+                    id: id, type: "tool_use", content: "Using \(tool)", timestamp: at(t),
+                    toolName: tool, toolInput: .object(input), toolUseId: id
+                ),
+                TranscriptEntry(
+                    id: "tr-\(id)", type: "tool_result", content: output, timestamp: at(t + 4),
+                    toolUseId: id
+                ),
+            ]
+        }
+        var entries = [TranscriptEntry(
+            id: "fixture-thinking-user", type: "user",
+            content: "Why does the upload retry test flake on CI?", timestamp: at(-96)
+        )]
+        entries += call(
+            "fixture-thinking-t1", "Bash", ["command": .string("bun test upload-retry")],
+            "1 fail: retry fires after 30s (timed out)", -90
+        )
+        entries.append(TranscriptEntry(
+            id: "fixture-thinking-r1", type: "assistant",
+            content: "**Tracing the retry timer**\n\nThe test advances the fake clock by 30 seconds, but the retry is scheduled behind the upload queue drain. On a slow runner the drain has not finished yet, so the timer is registered after the clock moved and never fires.",
+            timestamp: at(-80), isReasoning: true
+        ))
+        if variant != "live" {
+            entries += call(
+                "fixture-thinking-t2", "Read", ["file_path": .string("src/upload/retry.ts")],
+                "export function scheduleRetry() {}", -60
+            )
+            entries.append(TranscriptEntry(
+                id: "fixture-thinking-a1", type: "assistant",
+                content: "The retry timer is registered after the queue drains, so the test's clock jump can land first. Advancing the clock after `drain()` resolves fixes the flake.",
+                timestamp: at(-50)
+            ))
+        }
+        upsert(entries)
+        isLoadingConversation = false
+        rebuildDisplayItems()
+        if variant == "open" {
+            expansionState(id: "reasoning-fixture-thinking-r1").toggle()
+        }
+        guard variant == "live" else { return }
+        // Hold the run against the session's own status snapshots.
+        for _ in 0..<1200 {
+            if !isRunning || runStartedAt == nil {
+                runStartedAt = now.addingTimeInterval(-96)
+                isRunning = true
+            }
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+    }
+
     func showSteeredMessageForScreenshot() {
         holdsScreenshotFixture = true
         let id = "screenshot-steered-message"

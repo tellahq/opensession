@@ -1092,6 +1092,9 @@ struct SessionView: View {
                 if let cards = ProcessInfo.processInfo.environment["OS1_SHOW_ACTION_CARDS"] {
                     viewModel.showActionCardsForScreenshot(cards)
                 }
+                if let thinking = ProcessInfo.processInfo.environment["OS1_SHOW_THINKING_FIXTURE"] {
+                    Task { await viewModel.showThinkingForScreenshot(thinking) }
+                }
                 if ProcessInfo.processInfo.environment["OS1_SHOW_MERMAID_FIXTURE"] == "1" {
                     Task { await viewModel.showMermaidFixturesForScreenshot() }
                 }
@@ -1918,7 +1921,13 @@ struct SessionView: View {
         // The run clock closes the transcript while work is in flight, under
         // the durable answer, live stream, or working fold.
         if viewModel.isRunning {
-            RunStatusFooter(since: viewModel.runStartedAt)
+            RunStatusFooter(
+                since: viewModel.runStartedAt,
+                isThinking: ThinkingStep.endsOnActiveThought(
+                    viewModel.displayBlocks,
+                    liveText: viewModel.liveText
+                )
+            )
                 .id("run-status")
                 .transcriptTail(tailId == "run-status")
         }

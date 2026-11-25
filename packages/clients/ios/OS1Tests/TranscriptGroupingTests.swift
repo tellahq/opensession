@@ -314,6 +314,84 @@ final class TranscriptGroupingTests: XCTestCase {
         XCTAssertEqual(durableTurn.items.map(\.id), liveTurn.items.map(\.id))
     }
 
+    // MARK: - Thinking step and live status
+
+    func testThinkingStepExcerptIsTheLatestHeadingElseTheFirstPlainLine() {
+        XCTAssertEqual(
+            ThinkingStep.excerpt([
+                ReasoningSummaryDisplay("**Reading logs**\n\nThe tail is quiet."),
+                ReasoningSummaryDisplay("**Comparing `main` runs**"),
+            ]),
+            "Comparing main runs"
+        )
+        XCTAssertEqual(
+            ThinkingStep.excerpt([
+                ReasoningSummaryDisplay("\n- I should read **the config** first.\nThen run it."),
+            ]),
+            "I should read the config first."
+        )
+        XCTAssertEqual(ThinkingStep.excerpt([ReasoningSummaryDisplay("")]), "")
+    }
+
+    func testLiveTurnEndingOnReasoningIsAnOpenThoughtUntilNarrationFollows() {
+        let thinking = TranscriptEntry(
+            id: "r1", type: "assistant", content: "Weighing options.", isReasoning: true
+        )
+        let entries = [
+            TranscriptEntry(id: "u1", type: "user", content: "check it"),
+            toolUse("t0", name: "Bash"),
+            thinking,
+        ]
+        let items = TranscriptGrouping.displayItems(from: entries)
+        let live = TranscriptGrouping.blocks(
+            from: items, live: true, worktreeDir: nil, thinkingMessages: .all
+        )
+        guard case .work(let turn) = live.last else {
+            return XCTFail("expected the live work turn last")
+        }
+        XCTAssertEqual(ThinkingStep.activeReasoningId(in: turn.items, isLive: true), "r1")
+        XCTAssertNil(ThinkingStep.activeReasoningId(in: turn.items, isLive: false))
+        XCTAssertTrue(ThinkingStep.endsOnActiveThought(live))
+        // A tool call after the thought does not end it.
+        guard let call = turn.items.first(where: {
+            if case .tool = $0 { return true }
+            return false
+        }) else {
+            return XCTFail("expected the turn's tool call")
+        }
+        XCTAssertEqual(
+            ThinkingStep.activeReasoningId(in: turn.items + [call], isLive: true),
+            "r1"
+        )
+        // Streamed prose means the model moved on to writing; a streamed
+        // heading is still thinking.
+        XCTAssertFalse(ThinkingStep.endsOnActiveThought(live, liveText: "Here is"))
+        XCTAssertTrue(ThinkingStep.endsOnActiveThought(live, liveText: "**Checking"))
+
+        let narrated = TranscriptGrouping.blocks(
+            from: TranscriptGrouping.displayItems(
+                from: entries + [
+                    toolUse("t2", name: "Bash"),
+                    TranscriptEntry(id: "a1", type: "assistant", content: "Running tests."),
+                    toolUse("t3", name: "Bash"),
+                ]
+            ),
+            live: true, worktreeDir: nil, thinkingMessages: .all
+        )
+        XCTAssertFalse(ThinkingStep.endsOnActiveThought(narrated))
+    }
+
+    func testLiveElapsedCountsFromZeroAndPadsPastAMinute() {
+        XCTAssertEqual(LiveElapsed.label(0), "0s")
+        XCTAssertEqual(LiveElapsed.label(-3), "0s")
+        XCTAssertEqual(LiveElapsed.label(9.9), "9s")
+        XCTAssertEqual(LiveElapsed.label(59.99), "59s")
+        XCTAssertEqual(LiveElapsed.label(65), "1m 05s")
+        XCTAssertEqual(LiveElapsed.label(15 * 60), "15m 00s")
+        XCTAssertEqual(LiveElapsed.label(3600 + 2 * 60 + 7), "1h 02m")
+        XCTAssertEqual(LiveElapsed.label(.infinity), "0s")
+    }
+
     func testThinkingMessagePreferenceKeepsOnlyTheLatestByDefault() {
         let entries = [
             TranscriptEntry(id: "u1", type: "user", content: "check it"),
