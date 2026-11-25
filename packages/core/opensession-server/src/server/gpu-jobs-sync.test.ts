@@ -16,29 +16,49 @@ process.env.OPENSESSION_STATE_DIR = join(root, "state");
 
 const events: string[] = [];
 let nextCommit = "c1";
+let unchanged = false;
 const realCheckpoint = await import("./sandbox/checkpoint");
 mock.module("./sandbox/checkpoint", () => ({
   ...realCheckpoint,
   // The real one claims the session's lifecycle lane; so does this.
-  checkpointHostWorkspace: (session: { id: string }) =>
+  // Like the real one, it hands the captured checkpoint to
+  // `alongsidePush` and settles once both the push and that have.
+  checkpointHostWorkspace: (
+    session: { id: string },
+    _dir: string,
+    options: {
+      alongsidePush?: (checkpoint: unknown) => Promise<void>;
+      onPushed?: (ms: number) => void;
+    } = {},
+  ) =>
     import("./sandbox/lifecycle-lane").then(({ withSessionLifecycleLane }) =>
       withSessionLifecycleLane(session.id, async () => {
         const commit = nextCommit;
         events.push(`checkpoint ${commit}`);
         await Bun.sleep(5);
-        return {
-          state: "pushed" as const,
-          checkpoint: {
-            ref: "refs/opensession/checkpoints/s",
-            commit,
-            head: "p1",
-            tree: "t",
-            branch: "feature",
-            at: "",
-          },
+        const checkpoint = {
+          ref: "refs/opensession/checkpoints/s",
+          commit,
+          head: "p1",
+          tree: "t",
+          branch: "feature",
+          at: "",
         };
+        if (unchanged) return { state: "unchanged" as const, checkpoint };
+        const push = (async () => {
+          events.push(`push start ${commit}`);
+          await Bun.sleep(10);
+          events.push(`push end ${commit}`);
+        })();
+        await Promise.all([push, options.alongsidePush?.(checkpoint)]);
+        options.onPushed?.(10);
+        return { state: "pushed" as const, checkpoint };
       }),
     ),
+  checkpointBundle: async (_dir: string, commit: string, haves: string[]) => {
+    events.push(`bundle ${commit} on ${haves.join(",")}`);
+    return Buffer.from("bundle");
+  },
   landCheckpointInSandbox: async (
     _repo: string,
     _sandbox: Sandbox,
@@ -47,7 +67,12 @@ mock.module("./sandbox/checkpoint", () => ({
     events.push(`land start ${checkpoint.commit}`);
     await Bun.sleep(20);
     events.push(`land end ${checkpoint.commit}`);
-    return { state: "landed" as const, changed: ["src/a.ts"] };
+    return {
+      state: "landed" as const,
+      changed: ["src/a.ts"],
+      head: "p1",
+      bundled: true,
+    };
   },
 }));
 
@@ -102,7 +127,17 @@ describe("syncing a running job", () => {
     expect(record.commit).toBe("p1");
     expect(record.checkpoint).toBe("c1");
     expect(record.lastSync).toEqual(sync as never);
-    expect(events).toEqual(["checkpoint c1", "land start c1", "land end c1"]);
+    expect(sync).toMatchObject({ bundled: true, pushMs: 10 });
+    // The bundle builds on the checkpoint the machine has, and the landing
+    // runs while the checkpoint is pushed.
+    expect(events).toEqual([
+      "checkpoint c1",
+      "push start c1",
+      "bundle c1 on c0",
+      "land start c1",
+      "push end c1",
+      "land end c1",
+    ]);
   });
 
   test("the checkpoint the machine already has: nothing is landed", async () => {
@@ -111,6 +146,20 @@ describe("syncing a running job", () => {
     const record = { ...job(), commit: "p1", checkpoint: "c1" };
     const sync = await syncGpuJob(record, session, sandbox);
     expect(sync).toMatchObject({ state: "unchanged", checkpoint: "c1" });
+    expect(events).toEqual(["checkpoint c1", "push start c1", "push end c1"]);
+
+    // The workspace has not changed since the session's last checkpoint,
+    // which the machine has: nothing is pushed or landed.
+    events.length = 0;
+    unchanged = true;
+    try {
+      expect(await syncGpuJob(record, session, sandbox)).toMatchObject({
+        state: "unchanged",
+        checkpoint: "c1",
+      });
+    } finally {
+      unchanged = false;
+    }
     expect(events).toEqual(["checkpoint c1"]);
   });
 
@@ -127,10 +176,16 @@ describe("syncing a running job", () => {
     await Promise.all([first, second]);
     expect(events).toEqual([
       "checkpoint c2",
+      "push start c2",
+      "bundle c2 on c0",
       "land start c2",
+      "push end c2",
       "land end c2",
       "checkpoint c3",
+      "push start c3",
+      "bundle c3 on c2",
       "land start c3",
+      "push end c3",
       "land end c3",
     ]);
     expect(record.checkpoint).toBe("c3");

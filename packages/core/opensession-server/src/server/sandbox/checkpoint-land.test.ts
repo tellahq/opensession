@@ -22,7 +22,10 @@ import {
   checkpointLandScript,
   checkpointRef,
   checkpointScript,
+  checkpointBundle,
   parseLandOutput,
+  stepTimings,
+  withoutSteps,
 } from "./checkpoint";
 
 let scratch: string;
@@ -78,14 +81,18 @@ async function checkpoint(): Promise<string> {
     })
     .quiet()
     .nothrow();
-  expect(result.stderr.toString()).toBe("");
+  expect(withoutSteps(result.stderr.toString())).toBe("");
   const [state, commit] = result.stdout.toString().trim().split(/\s+/);
   expect(state).toBe("pushed");
   return commit!;
 }
 
 /** Land on the machine, tracing which git commands ran. */
-async function land(commit: string, options: { clean?: boolean } = {}) {
+async function land(
+  commit: string,
+  options: { clean?: boolean; bundle?: string } = {},
+  { quiet = true } = {},
+) {
   const result = await git(
     machine,
   )`bash -c ${checkpointLandScript(ref, commit, "feature", [".ports.conf"], options)}`
@@ -95,8 +102,10 @@ async function land(commit: string, options: { clean?: boolean } = {}) {
   const trace = result.stderr.toString();
   const errors = trace
     .split("\n")
-    .filter((line) => line && !/^\d\d:\d\d:\d\d\.\d+ |^remote: /.test(line));
-  expect(errors).toEqual([]);
+    .filter(
+      (line) => line && !/^\d\d:\d\d:\d\d\.\d+ |^remote: |^step /.test(line),
+    );
+  if (quiet) expect(errors).toEqual([]);
   expect(result.exitCode).toBe(0);
   return {
     outcome: parseLandOutput(result.stdout.toString()),
@@ -109,6 +118,7 @@ async function land(commit: string, options: { clean?: boolean } = {}) {
           line.includes("--no-write-fetch-head"),
       ).length,
     fetched: trace.includes("built-in: git fetch --no-tags"),
+    steps: stepTimings(trace),
   };
 }
 
@@ -128,7 +138,7 @@ describe("landing a checkpoint in a partial clone", () => {
     writeFileSync(join(work, "new.txt"), "new\n");
     const commit = await checkpoint();
     const { outcome } = await land(commit);
-    expect(outcome).toEqual({ state: "landed", changed: null });
+    expect(outcome).toMatchObject({ state: "landed", changed: null });
     expect((await git(machine)`git branch --show-current`.text()).trim()).toBe(
       "feature",
     );
@@ -155,7 +165,10 @@ describe("landing a checkpoint in a partial clone", () => {
     ageAll(["a.txt", "b.txt", "c.txt", "README.md", "new.txt"]);
 
     const { outcome, lazyFetches } = await land(commit, { clean: false });
-    expect(outcome).toEqual({ state: "landed", changed: ["a.txt", "b.txt"] });
+    expect(outcome).toMatchObject({
+      state: "landed",
+      changed: ["a.txt", "b.txt"],
+    });
     // One batch for the checkpoint's own new blobs at most; the parent's
     // version of a.txt (committed, never checked out here) stays unfetched.
     expect(lazyFetches).toBeLessThanOrEqual(1);
@@ -189,7 +202,7 @@ describe("landing a checkpoint in a partial clone", () => {
     const commit = await checkpoint();
     ageAll(["a.txt", "b.txt", "README.md"]);
     const { outcome } = await land(commit, { clean: false });
-    expect(outcome).toEqual({
+    expect(outcome).toMatchObject({
       state: "landed",
       changed: ["c.txt", "only-checkpoint.txt"],
     });
@@ -201,8 +214,48 @@ describe("landing a checkpoint in a partial clone", () => {
 
     // The same checkpoint again: nothing fetched, nothing touched.
     const again = await land(commit, { clean: false });
-    expect(again.outcome).toEqual({ state: "unchanged" });
+    expect(again.outcome).toMatchObject({ state: "unchanged" });
     expect(again.fetched).toBe(false);
+  });
+
+  test("a bundle from the host lands without any fetch from origin", async () => {
+    const previous = (
+      await git(machine)`git rev-parse refs/opensession/landed`.text()
+    ).trim();
+    writeFileSync(join(work, "a.txt"), "a.txt from a bundle\n");
+    const commit = await checkpoint();
+    const bundle = await checkpointBundle(work, commit, [previous]);
+    expect(bundle).not.toBeNull();
+    expect(bundle!.length).toBeLessThan(4096);
+    const path = join(scratch, "checkpoint.bundle");
+    writeFileSync(path, bundle!);
+    ageAll(["b.txt", "README.md"]);
+    const { outcome, fetched, lazyFetches, steps } = await land(commit, {
+      clean: false,
+      bundle: path,
+    });
+    expect(outcome).toMatchObject({ state: "landed", changed: ["a.txt"] });
+    expect(fetched).toBe(false);
+    expect(lazyFetches).toBe(0);
+    expect(steps).toStartWith("bundle ");
+    expect(outcome.head).toBe(await head());
+    expect(read("a.txt")).toBe("a.txt from a bundle\n");
+    for (const name of ["b.txt", "README.md"])
+      expect(mtime(name)).toBe(OLD.getTime());
+
+    // A commit the host does not know: no bundle.
+    expect(await checkpointBundle(work, commit, ["0".repeat(40)])).toBeNull();
+    // A bundle that does not apply falls back to origin.
+    writeFileSync(join(work, "a.txt"), "a.txt from origin\n");
+    const next = await checkpoint();
+    writeFileSync(path, "not a bundle");
+    const fallback = await land(
+      next,
+      { clean: false, bundle: path },
+      { quiet: false },
+    );
+    expect(fallback.fetched).toBe(true);
+    expect(read("a.txt")).toBe("a.txt from origin\n");
   });
 
   test("a landing with clean (a new job) also removes the previous job's files", async () => {
@@ -219,6 +272,15 @@ describe("landing a checkpoint in a partial clone", () => {
 describe("parseLandOutput", () => {
   test("reads the outcome and the changed paths", () => {
     expect(parseLandOutput("unchanged\n")).toEqual({ state: "unchanged" });
+    expect(parseLandOutput("head abc\nunchanged\n")).toEqual({
+      state: "unchanged",
+      head: "abc",
+    });
+    expect(parseLandOutput("head abc\nlanded\nx\n")).toEqual({
+      state: "landed",
+      changed: ["x"],
+      head: "abc",
+    });
     expect(parseLandOutput("landed\n?\n")).toEqual({
       state: "landed",
       changed: null,

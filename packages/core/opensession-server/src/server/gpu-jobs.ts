@@ -58,6 +58,7 @@ import { stateDir } from "./paths";
 import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import { hostSessionScratchDir } from "./session-scratch";
 import type { SandboxCheckpointRecord, UnifiedSession } from "./types";
+import type { CheckpointOutcome, LandOutcome } from "./sandbox/checkpoint";
 import type { Sandbox } from "./sandbox/provider";
 import {
   sandboxGpu,
@@ -270,6 +271,8 @@ export interface GpuJobRecord {
   /** Whether the job start's landing found the machine already on the
    *  checkpoint (`unchanged`) or moved it (`landed`). */
   landing?: "landed" | "unchanged";
+  /** That landing's steps on the machine (`fetch 210ms, …`). */
+  landingSteps?: string;
   /** The latest `gpu_exec` sync. */
   lastSync?: GpuJobSync;
 }
@@ -281,6 +284,8 @@ export interface GpuJobRecord {
  *  launch; `launchMs`: files and the detached start; `totalMs`: both. */
 export interface GpuJobTimings {
   checkpointMs?: number;
+  /** The push from a host worktree, beside the landing. */
+  pushMs?: number;
   machineMs?: number;
   landMs?: number;
   prepareMs?: number;
@@ -297,8 +302,17 @@ export interface GpuJobSync {
   commit?: string;
   checkpoint?: string;
   changed?: string[];
+  /** Capturing the checkpoint (from a Sandbox workspace, and pushing). */
   checkpointMs: number;
+  /** Pushing it to GitHub from a host worktree, beside the landing. */
+  pushMs?: number;
   landMs: number;
+  totalMs?: number;
+  /** The landing's steps on the machine (`fetch 210ms, …`). */
+  machineSteps?: string;
+  /** Whether the checkpoint went to the machine in a bundle from this
+   *  host instead of through GitHub. */
+  bundled?: boolean;
 }
 
 export function formatTimings(timings: GpuJobTimings): string {
@@ -731,39 +745,59 @@ async function prepareAndLaunch(
       landed: SandboxCheckpointRecord | null;
       branch: string;
     }> => {
-      const outcome = await timed("checkpointMs", () =>
-        captureCheckpoint(session),
-      );
+      if (!waking) {
+        const outcome = await timed("checkpointMs", () =>
+          captureCheckpoint(session),
+        );
+        const landed = outcome.state === "skipped" ? null : outcome.checkpoint;
+        const branch = landed?.branch || session.branch || repo.defaultBranch;
+        if (outcome.state === "skipped")
+          job.note = `Ran on origin/${branch}: the workspace could not be checkpointed (${outcome.reason}), so uncommitted changes are not included.`;
+        return { landed, branch };
+      }
+      // The checkpoint the machine was last put on: everything in it is on
+      // the machine, so a bundle on top of it is all the landing needs.
+      const previous = [...state.jobs.values()]
+        .filter(
+          (other) =>
+            other.id !== job.id &&
+            gpuJobMachine(other) === machineSession &&
+            other.checkpoint,
+        )
+        .sort((x, y) => y.startedAt.localeCompare(x.startedAt))[0];
+      const done = await checkpointOnto(session, () => waking, {
+        clean: true,
+        haves: previous?.checkpoint ? [previous.checkpoint] : [],
+      });
+      timings.checkpointMs = done.checkpointMs;
+      if (done.pushMs !== undefined) timings.pushMs = done.pushMs;
+      if (done.landMs !== undefined) timings.landMs = done.landMs;
+      const { outcome } = done;
       const landed = outcome.state === "skipped" ? null : outcome.checkpoint;
       const branch = landed?.branch || session.branch || repo.defaultBranch;
       if (outcome.state === "skipped")
         job.note = `Ran on origin/${branch}: the workspace could not be checkpointed (${outcome.reason}), so uncommitted changes are not included.`;
-      if (!waking) return { landed, branch };
+      if (done.land) {
+        job.landing = done.land.state;
+        if (done.land.head) job.commit = done.land.head;
+        if (done.land.steps) job.landingSteps = done.land.steps;
+      }
       const sandbox = await waking;
-      const env = await gpuJobEnv(repo);
-      await timed("landMs", async () => {
-        if (landed) {
-          const land = await checkpoint.landCheckpointInSandbox(
-            repo.id,
-            sandbox,
-            landed,
+      if (!landed)
+        await timed("landMs", async () => {
+          const sync = await sandbox.exec(
+            [
+              "bash",
+              "-c",
+              `git fetch -q origin ${shellWord(branch)} && git reset -q --hard FETCH_HEAD && git clean -fdq && git update-ref -d ${checkpoint.LANDED_REF}`,
+            ],
+            { env: await gpuJobEnv(repo), timeoutMs: 5 * 60_000 },
           );
-          job.landing = land.state;
-          return;
-        }
-        const sync = await sandbox.exec(
-          [
-            "bash",
-            "-c",
-            `git fetch -q origin ${shellWord(branch)} && git reset -q --hard FETCH_HEAD && git clean -fdq && git update-ref -d ${checkpoint.LANDED_REF}`,
-          ],
-          { env, timeoutMs: 5 * 60_000 },
-        );
-        if (sync.exitCode !== 0)
-          throw new Error(
-            `could not update the GPU machine to origin/${branch}: ${(sync.stderr || sync.stdout).trim().slice(0, 300)}`,
-          );
-      });
+          if (sync.exitCode !== 0)
+            throw new Error(
+              `could not update the GPU machine to origin/${branch}: ${(sync.stderr || sync.stdout).trim().slice(0, 300)}`,
+            );
+        });
       return { sandbox, landed, branch };
     },
   );
@@ -777,13 +811,15 @@ async function prepareAndLaunch(
   );
   const env = await gpuJobEnv(repo);
   // A new machine restored the checkpoint while it was created: mark it
-  // landed so a sync starts from it.
-  const head = await sandbox.exec([
-    "bash",
-    "-c",
-    `${!existing && landed ? `git update-ref ${checkpoint.LANDED_REF} ${shellWord(landed.commit)} 2>/dev/null; ` : ""}git rev-parse HEAD`,
-  ]);
-  if (head.exitCode === 0) job.commit = head.stdout.trim();
+  // landed so a sync starts from it. A landing said where it left HEAD.
+  if (!job.commit || !existing) {
+    const head = await sandbox.exec([
+      "bash",
+      "-c",
+      `${!existing && landed ? `git update-ref ${checkpoint.LANDED_REF} ${shellWord(landed.commit)} 2>/dev/null; ` : ""}git rev-parse HEAD`,
+    ]);
+    if (head.exitCode === 0) job.commit = head.stdout.trim();
+  }
   if (landed && landed.commit !== job.commit) job.checkpoint = landed.commit;
   timings.prepareMs = Date.now() - begun;
   if (job.stopping) {
@@ -841,9 +877,11 @@ async function prepareAndLaunch(
   ensurePolling();
 }
 
-/** Checkpoint the session's workspace wherever it is: a host worktree or
- *  its Sandbox. Claims the session's lifecycle lane (reentrant). */
-async function captureCheckpoint(session: UnifiedSession) {
+/** Checkpoint the session's workspace wherever it is, without landing it
+ *  (a new machine restores it as it is created). */
+async function captureCheckpoint(
+  session: UnifiedSession,
+): Promise<CheckpointOutcome> {
   const checkpoint = await import("./sandbox/checkpoint");
   if (session.sandbox?.provider) {
     const { activeSandboxFor } = await import("./session-sandbox");
@@ -852,6 +890,113 @@ async function captureCheckpoint(session: UnifiedSession) {
     );
   }
   return checkpoint.checkpointHostWorkspace(session, session.worktreeDir!);
+}
+
+/** What `checkpointOnto` did, with how long each part took. */
+interface CheckpointOntoResult {
+  outcome: CheckpointOutcome;
+  /** Absent when nothing was landed (skipped, or the machine already had
+   *  that checkpoint). */
+  land?: LandOutcome;
+  sandbox?: Sandbox;
+  /** Capture (and, from a Sandbox workspace, the push). */
+  checkpointMs: number;
+  /** The push from a host worktree, which runs beside the landing. */
+  pushMs?: number;
+  landMs?: number;
+}
+
+/**
+ * Checkpoint the session's workspace wherever it is (a host worktree or its
+ * Sandbox) and land it on a GPU machine. Claims the session's lifecycle
+ * lane (reentrant): another checkpoint force-pushing the hidden ref
+ * mid-landing would fail its check.
+ *
+ * From a host worktree the checkpoint is not fetched from GitHub: once it
+ * is captured, a bundle of it on top of `haves` (the checkpoint the machine
+ * was last put on, whose files it all has) goes straight to the machine
+ * while the checkpoint is pushed, and the landing falls back to origin if
+ * the bundle does not fit. A Sandbox workspace's checkpoint is pushed, then
+ * fetched.
+ *
+ * `machine` is awaited only once there is something to land; `onMachine`
+ * (the commit the machine has) skips the landing when it is this one.
+ */
+async function checkpointOnto(
+  session: UnifiedSession,
+  machine: () => Promise<Sandbox>,
+  options: { clean: boolean; haves: string[]; onMachine?: string },
+): Promise<CheckpointOntoResult> {
+  const checkpoint = await import("./sandbox/checkpoint");
+  const started = Date.now();
+  const result: Partial<CheckpointOntoResult> = {};
+  const land = async (
+    landed: SandboxCheckpointRecord,
+    bundle?: Buffer | null,
+  ) => {
+    result.sandbox = await machine();
+    const at = Date.now();
+    try {
+      result.land = await checkpoint.landCheckpointInSandbox(
+        session.repo,
+        result.sandbox,
+        landed,
+        { clean: options.clean, bundle },
+      );
+    } finally {
+      result.landMs = Date.now() - at;
+    }
+  };
+  const bundleFor = (commit: string) =>
+    options.haves.length
+      ? checkpoint
+          .checkpointBundle(session.worktreeDir!, commit, options.haves)
+          .catch(() => null)
+      : Promise.resolve(null);
+  let outcome: CheckpointOutcome;
+  let afterPush: SandboxCheckpointRecord | undefined;
+  if (session.sandbox?.provider) {
+    const { activeSandboxFor } = await import("./session-sandbox");
+    outcome = await checkpoint.checkpointSessionWorkspace(session, (current) =>
+      activeSandboxFor(current as UnifiedSession, { wake: true }),
+    );
+    result.checkpointMs = Date.now() - started;
+    if (
+      outcome.state !== "skipped" &&
+      outcome.checkpoint.commit !== options.onMachine
+    )
+      await land(outcome.checkpoint);
+  } else {
+    outcome = await checkpoint.checkpointHostWorkspace(
+      session,
+      session.worktreeDir!,
+      {
+        alongsidePush: async (captured) => {
+          result.checkpointMs = Date.now() - started;
+          if (captured.commit === options.onMachine) return;
+          // Without a bundle the machine fetches from origin, which has the
+          // checkpoint only once the push is done.
+          const bundle = await bundleFor(captured.commit);
+          if (bundle) await land(captured, bundle);
+          else afterPush = captured;
+        },
+        onPushed: (ms) => {
+          result.pushMs = ms;
+        },
+      },
+    );
+    result.checkpointMs ??= Date.now() - started;
+    if (afterPush) await land(afterPush);
+    if (
+      outcome.state === "unchanged" &&
+      outcome.checkpoint.commit !== options.onMachine
+    )
+      await land(
+        outcome.checkpoint,
+        await bundleFor(outcome.checkpoint.commit),
+      );
+  }
+  return { ...result, outcome, checkpointMs: result.checkpointMs! };
 }
 
 /** Paths a sync result lists by name; the rest are counted. */
@@ -872,36 +1017,27 @@ export async function syncGpuJob(
   session: UnifiedSession,
   sandbox: Sandbox,
 ): Promise<GpuJobSync | { error: string }> {
-  const [checkpoint, { withSessionLifecycleLane }] = await Promise.all([
-    import("./sandbox/checkpoint"),
-    import("./sandbox/lifecycle-lane"),
-  ]);
+  const { withSessionLifecycleLane } = await import("./sandbox/lifecycle-lane");
   return withSessionLifecycleLane(session.id, async () => {
     const started = Date.now();
-    const outcome = await captureCheckpoint(session);
-    const checkpointMs = Date.now() - started;
+    const done = await checkpointOnto(session, async () => sandbox, {
+      clean: false,
+      haves: job.checkpoint ? [job.checkpoint] : [],
+      ...(job.checkpoint ? { onMachine: job.checkpoint } : {}),
+    });
+    const { outcome, land } = done;
     if (outcome.state === "skipped")
       return {
         error: `the workspace could not be checkpointed (${outcome.reason}), so nothing was landed and the command did not run`,
       };
     const landed = outcome.checkpoint;
-    let state: GpuJobSync["state"] = "unchanged";
-    let changed: string[] | null = null;
-    if (landed.commit !== job.checkpoint) {
-      const land = await checkpoint.landCheckpointInSandbox(
-        session.repo,
-        sandbox,
-        landed,
-        { clean: false },
-      );
-      state = land.state;
-      if (land.state === "landed") changed = land.changed;
-      const head = await sandbox.exec(["git", "rev-parse", "HEAD"]);
-      if (head.exitCode === 0) job.commit = head.stdout.trim();
+    const changed = land?.state === "landed" ? land.changed : null;
+    if (land) {
+      if (land.head) job.commit = land.head;
       job.checkpoint = landed.commit;
     }
     const sync: GpuJobSync = {
-      state,
+      state: land?.state ?? "unchanged",
       at: new Date().toISOString(),
       ...(job.commit ? { commit: job.commit } : {}),
       checkpoint: landed.commit,
@@ -916,14 +1052,20 @@ export async function syncGpuJob(
                 : changed,
           }
         : {}),
-      checkpointMs,
-      landMs: Date.now() - started - checkpointMs,
+      checkpointMs: done.checkpointMs,
+      ...(done.pushMs !== undefined ? { pushMs: done.pushMs } : {}),
+      landMs: done.landMs ?? 0,
+      totalMs: Date.now() - started,
+      ...(land?.steps ? { machineSteps: land.steps } : {}),
+      ...(land?.bundled !== undefined ? { bundled: land.bundled } : {}),
     };
     job.lastSync = sync;
     await persist().catch(() => {});
     console.log(
-      `[gpu-jobs] ${job.sessionId}: ${job.id} sync ${state} ${landed.commit.slice(0, 12)}` +
-        `${changed ? ` (${changed.length} changed)` : ""} after checkpoint ${checkpointMs}ms, land ${sync.landMs}ms`,
+      `[gpu-jobs] ${job.sessionId}: ${job.id} sync ${sync.state} ${landed.commit.slice(0, 12)}` +
+        `${changed ? ` (${changed.length} changed)` : ""} in ${sync.totalMs}ms: checkpoint ${sync.checkpointMs}ms` +
+        `${sync.pushMs !== undefined ? `, push ${sync.pushMs}ms` : ""}, land ${sync.landMs}ms` +
+        `${sync.bundled ? " (bundle)" : ""}${sync.machineSteps ? ` [${sync.machineSteps}]` : ""}`,
     );
     return sync;
   });
