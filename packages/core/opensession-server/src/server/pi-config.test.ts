@@ -7,7 +7,9 @@ import {
   isPiModelId,
   loadPiConfig,
   normalizePiConfig,
+  DEFAULT_CLAUDE_HOST_URL,
   piAnthropicTransport,
+  piClaudeHostUrl,
   piConfigPath,
   piEngineEnabled,
   piPickerModels,
@@ -81,9 +83,13 @@ describe("normalizePiConfig", () => {
     expect(cfg).toEqual({ enabled: true, pickerModels: [] });
   });
 
-  it('keeps anthropicTransport only as the literal non-default "bridge"', async () => {
-    // Absent = the "inprocess" default; only the exact rollback value
-    // survives normalization (present-implies-non-default).
+  it("keeps anthropicTransport only as a literal non-default value", async () => {
+    // Absent = the "inprocess" default; only the exact non-default values
+    // survive normalization (present-implies-non-default).
+    expect(
+      normalizePiConfig({ enabled: true, anthropicTransport: "remote" })
+        .anthropicTransport,
+    ).toBe("remote");
     expect(
       normalizePiConfig({ enabled: true }).anthropicTransport,
     ).toBeUndefined();
@@ -104,6 +110,27 @@ describe("normalizePiConfig", () => {
         normalizePiConfig({ enabled: true, anthropicTransport: junk })
           .anthropicTransport,
       ).toBeUndefined();
+    }
+  });
+
+  it("keeps claudeHostUrl only as a WebSocket URL", async () => {
+    expect(
+      normalizePiConfig({
+        enabled: true,
+        claudeHostUrl: "wss://host.example.test",
+      }).claudeHostUrl,
+    ).toBe("wss://host.example.test");
+    for (const junk of [
+      "http://127.0.0.1:3847",
+      "127.0.0.1:3847",
+      "",
+      3847,
+      null,
+    ]) {
+      expect(
+        "claudeHostUrl" in
+          normalizePiConfig({ enabled: true, claudeHostUrl: junk }),
+      ).toBe(false);
     }
   });
 });
@@ -179,7 +206,7 @@ describe("readPiEngineConfig", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it('resolves piAnthropicTransport to "inprocess" unless the file says "bridge"', async () => {
+  it('resolves piAnthropicTransport to "inprocess" unless the file names another', async () => {
     // Missing file → default.
     const dir = await withConfigFile();
     expect(piAnthropicTransport()).toBe("inprocess");
@@ -190,6 +217,24 @@ describe("readPiEngineConfig", () => {
     );
     await loadPiConfig();
     expect(piAnthropicTransport()).toBe("bridge");
+    // The Claude host transport, at its default address unless one is set.
+    writeFileSync(
+      join(dir, "pi.json"),
+      JSON.stringify({ enabled: true, anthropicTransport: "remote" }),
+    );
+    await loadPiConfig();
+    expect(piAnthropicTransport()).toBe("remote");
+    expect(piClaudeHostUrl()).toBe(DEFAULT_CLAUDE_HOST_URL);
+    writeFileSync(
+      join(dir, "pi.json"),
+      JSON.stringify({
+        enabled: true,
+        anthropicTransport: "remote",
+        claudeHostUrl: "ws://127.0.0.1:4000",
+      }),
+    );
+    await loadPiConfig();
+    expect(piClaudeHostUrl()).toBe("ws://127.0.0.1:4000");
     // Junk values fall back to the default.
     writeFileSync(
       join(dir, "pi.json"),

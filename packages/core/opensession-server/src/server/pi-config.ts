@@ -22,7 +22,12 @@
  *         // token-level streaming, no loopback HTTP hop. "bridge" keeps the
  *         // pre-2026-08 loopback Anthropic bridge path as rollback. Only
  *         // the literal "bridge" survives normalization; anything else is
- *         // the default.
+ *         // the default. "remote" runs the same provider, but its Claude
+ *         // Code processes live in a separate Claude host service
+ *         // (src/claude-host) and get a placeholder instead of the
+ *         // account's token (claude-token-proxy.ts).
+ *     "claudeHostUrl": "ws://127.0.0.1:3847"
+ *         // Optional: where the "remote" transport finds the Claude host.
  *   }
  *
  * Read fresh per call (tiny file) so edits apply without a restart. The write
@@ -47,16 +52,31 @@ export function piConfigPath(): string {
 }
 
 /** Transport for pi/anthropic/* turns: the in-process native provider
- *  (default) or the loopback HTTP bridge (rollback). */
-export type PiAnthropicTransport = "inprocess" | "bridge";
+ *  (default), the same provider with its Claude Code processes in a separate
+ *  Claude host service ("remote"), or the loopback HTTP bridge (rollback). */
+export type PiAnthropicTransport = "inprocess" | "bridge" | "remote";
+
+export const DEFAULT_CLAUDE_HOST_URL = "ws://127.0.0.1:3847";
 
 export interface PiEngineConfig {
   enabled: boolean;
   /** Retired compatibility field. Model selection is engine-neutral. */
   pickerModels: string[];
-  /** Present only as the non-default "bridge" (absent = "inprocess"). Read it
+  /** Present only as a non-default value (absent = "inprocess"). Read it
    *  through piAnthropicTransport(), which resolves the default. */
   anthropicTransport?: PiAnthropicTransport;
+  /** Claude host address for the "remote" transport, when not the default. */
+  claudeHostUrl?: string;
+}
+
+function isClaudeHostUrl(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "ws:" || url.protocol === "wss:";
+  } catch {
+    return false;
+  }
 }
 
 /** Pure normalization (exported for tests): raw JSON → typed config. Tolerant
@@ -88,9 +108,12 @@ export function normalizePiConfig(raw: unknown): PiEngineConfig {
   return {
     enabled: r.enabled === true,
     pickerModels,
-    // Only the literal non-default survives; junk/absent = "inprocess".
-    ...(r.anthropicTransport === "bridge"
-      ? { anthropicTransport: "bridge" as const }
+    // Only a literal non-default survives; junk/absent = "inprocess".
+    ...(r.anthropicTransport === "bridge" || r.anthropicTransport === "remote"
+      ? { anthropicTransport: r.anthropicTransport }
+      : {}),
+    ...(isClaudeHostUrl(r.claudeHostUrl)
+      ? { claudeHostUrl: r.claudeHostUrl }
       : {}),
   };
 }
@@ -127,12 +150,15 @@ export function piPickerModels(): string[] {
 }
 
 /** Resolved transport for pi/anthropic/* turns — "inprocess" unless the
- *  config explicitly says "bridge" (missing/disabled/malformed config all
+ *  config explicitly names another (missing/disabled/malformed config all
  *  default; the engine-enabled gate is separate and comes first). */
 export function piAnthropicTransport(): PiAnthropicTransport {
-  return readPiEngineConfig()?.anthropicTransport === "bridge"
-    ? "bridge"
-    : "inprocess";
+  return readPiEngineConfig()?.anthropicTransport ?? "inprocess";
+}
+
+/** Where the "remote" transport reaches the Claude host. */
+export function piClaudeHostUrl(): string {
+  return readPiEngineConfig()?.claudeHostUrl ?? DEFAULT_CLAUDE_HOST_URL;
 }
 
 // ── Write path (Settings → Accounts "Pi engine" card) ───────────────────────

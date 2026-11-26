@@ -113,7 +113,7 @@ export interface PiRuntimeBindingDependencies {
   buildSeededOpenaiAuth: (
     account: CodexAccount,
   ) => SeededAuthResult | Promise<SeededAuthResult>;
-  anthropicTransport: () => "inprocess" | "bridge";
+  anthropicTransport: () => "inprocess" | "bridge" | "remote";
   buildAnthropicProvider: (input: {
     unifiedSessionId: string;
     user?: string;
@@ -454,7 +454,9 @@ export async function createPiRuntimeBinding(
     }
   } else if (
     input.providerID === "anthropic" &&
-    deps.anthropicTransport() === "inprocess"
+    // "remote" is the same native provider; only where its Claude Code
+    // processes run differs (pi-model-runtime's createLiveSdkConversation).
+    deps.anthropicTransport() !== "bridge"
   ) {
     const provider = deps.buildAnthropicProvider({
       unifiedSessionId: input.unifiedSessionId,

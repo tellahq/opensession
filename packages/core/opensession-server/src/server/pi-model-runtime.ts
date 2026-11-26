@@ -27,40 +27,34 @@
  *
  * The bridge transport remains the rollback path. This module has no import-
  * time sockets, timers, or subprocesses; queries start only from stream().
+ *
+ * Where the Claude Code process runs is the one thing a transport changes:
+ * in this process by default (claude-sdk-query.ts), or with "remote" in a
+ * Claude host service that gets a placeholder instead of the account's
+ * credential (claude-host-client.ts, claude-token-proxy.ts). Everything else
+ * here is the same for both.
  */
 
-import { mkdir } from "node:fs/promises";
-import {
-  query,
-  createSdkMcpServer,
-  tool,
-  type EffortLevel,
-  type Query,
-  type SDKUserMessage,
-  type ThinkingConfig,
+import type {
+  EffortLevel,
+  SDKUserMessage,
+  ThinkingConfig,
 } from "@anthropic-ai/claude-agent-sdk";
 import { getCurrentSystemPrompt, getCurrentTools } from "@earendil-works/pi-ai";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { stateDir } from "./paths";
 import { buildPiAnthropicModels } from "./pi-anthropic-models";
 export { buildPiAnthropicModels } from "./pi-anthropic-models";
 import { audit, summarizeText } from "./audit";
 import {
-  DISALLOWED_BUILTINS,
-  SDK_BUILTIN_TOOLS,
-  PASSTHROUGH_MCP,
   PASSTHROUGH_PREFIX,
-  BRIDGE_CWD,
   bridgeDesignationError,
   cliPassthroughEnv,
-  ensureAnthropicBridgeCwd,
   IMAGE_ONLY_PROMPT,
   currentTurnStart,
   flatSdkTurn,
   flatSdkTurnContent,
   flatSdkTurnText,
   flattenMessageText,
-  jsonSchemaToZodShape,
   pickBridgeAccount,
   replayConversation,
   turnImages,
@@ -90,7 +84,6 @@ import {
   shouldEarlyStop,
 } from "./meridian-passthrough";
 import {
-  CLAUDE_CODE_BIN,
   describeUsageLimitReset,
   claudeLimitErrorMessage,
   isClaudeAccountNotice,
@@ -100,7 +93,22 @@ import {
   mayBecomeClaudeAccountNotice,
   usageLimitResetAt,
 } from "./runner-shared";
-import { spawnClaudeCodeInWorkload } from "./workload-scope";
+import { startRemoteClaudeQuery } from "./claude-host-client";
+import { readClaudeHostToken } from "./claude-host-endpoint";
+import {
+  ensureClaudeQueryDirs,
+  localClaudeQueryRuntime,
+} from "./claude-query-runtime";
+import {
+  ClaudeInputQueue,
+  startLocalClaudeQuery,
+  type ClaudeQueryHandle,
+  type ClaudeQueryIo,
+  type ClaudeQuerySpec,
+  type ClaudeToolReply,
+} from "./claude-sdk-query";
+import { leaseClaudeToken } from "./claude-token-proxy";
+import { piAnthropicTransport, piClaudeHostUrl } from "./pi-config";
 
 type ClaudeCodeAuth = Awaited<ReturnType<typeof claudeCodeAuth>>;
 
@@ -798,20 +806,6 @@ export interface PiAnthropicProviderOpts {
   ephemeral?: boolean;
 }
 
-/** Per-account isolated SDK config dir — never host ~/.claude. Created by
- *  ensureSdkDirs before a conversation starts. */
-function claudeConfigDirFor(accountId: string): string {
-  return `${stateDir("pi")}/claude-cfg/${accountId.replace(/[^A-Za-z0-9._-]/g, "_")}`;
-}
-
-/** Create the SDK cwd and the account's config dir off the event loop. */
-async function ensureSdkDirs(accountId: string): Promise<void> {
-  await Promise.all([
-    ensureAnthropicBridgeCwd(),
-    mkdir(claudeConfigDirFor(accountId), { recursive: true }),
-  ]);
-}
-
 /**
  * Build the native provider for one run. Throws bridgeDesignationError()'s
  * message when no config designates serving accounts (the same early, clear
@@ -914,56 +908,14 @@ function sdkThinkingKey(options: SdkThinkingOptions): string {
 const MAX_LIVE_SDK_CONVERSATIONS = 24;
 const LIVE_SDK_IDLE_MS = 15 * 60_000;
 const LIVE_SDK_PENDING_MAX_MS = 2 * 60 * 60_000;
-const LIVE_MCP_TOOL_TIMEOUT_MS = 24 * 60 * 60_000;
 
-type SdkToolReply = {
-  content: Array<
-    | { type: "text"; text: string }
-    | { type: "image"; data: string; mimeType: string }
-  >;
-  isError?: boolean;
-};
-
-class SdkInputQueue implements AsyncIterable<SDKUserMessage> {
-  readonly #items: SDKUserMessage[] = [];
-  readonly #waiters: Array<(result: IteratorResult<SDKUserMessage>) => void> =
-    [];
-  #closed = false;
-
-  push(message: SDKUserMessage): void {
-    if (this.#closed) throw new Error("Claude SDK input is closed");
-    const waiter = this.#waiters.shift();
-    if (waiter) waiter({ value: message, done: false });
-    else this.#items.push(message);
-  }
-
-  close(): void {
-    if (this.#closed) return;
-    this.#closed = true;
-    for (const waiter of this.#waiters.splice(0)) {
-      waiter({ value: undefined, done: true });
-    }
-  }
-
-  [Symbol.asyncIterator](): AsyncIterator<SDKUserMessage> {
-    return {
-      next: () => {
-        const message = this.#items.shift();
-        if (message) return Promise.resolve({ value: message, done: false });
-        if (this.#closed) {
-          return Promise.resolve({ value: undefined, done: true });
-        }
-        return new Promise((resolve) => this.#waiters.push(resolve));
-      },
-    };
-  }
-}
+type SdkToolReply = ClaudeToolReply;
 
 export interface LiveSdkConversation {
   key: string;
   accountId: string;
-  query: Query;
-  input: SdkInputQueue;
+  query: ClaudeQueryHandle;
+  input: ClaudeInputQueue;
   controller: AbortController;
   pendingToolIds: string[];
   suppliedToolResults: Map<string, SdkToolReply>;
@@ -977,6 +929,8 @@ export interface LiveSdkConversation {
   credentialKey: string;
   /** The API request whose usage the last finished step reported. */
   reportedRequest?: SdkReportedRequest;
+  /** Ends the token placeholder a remote Claude host was given. */
+  releaseCredential?: () => void;
 }
 
 /** Live SDK conversations keyed by store key. Exported for tests. */
@@ -1008,6 +962,7 @@ function disposeLiveSdkConversation(
   live.input.close();
   live.controller.abort();
   live.query.close();
+  live.releaseCredential?.();
 }
 
 function pruneLiveSdkConversations(now = Date.now()): void {
@@ -1213,14 +1168,6 @@ function awaitLiveToolResult(
   return new Promise((resolve) => live.toolWaiters.set(toolUseId, resolve));
 }
 
-function sdkToolUseId(extra: unknown): string | undefined {
-  if (!extra || typeof extra !== "object") return undefined;
-  const metadata = (extra as { _meta?: unknown })._meta;
-  if (!metadata || typeof metadata !== "object") return undefined;
-  const value = (metadata as Record<string, unknown>)["claudecode/toolUseId"];
-  return typeof value === "string" && value ? value : undefined;
-}
-
 function inputForPlan(plan: PiSdkTurnPlan): SDKUserMessage {
   return sdkUserMessage(sdkPromptContent(plan) ?? plan.prompt);
 }
@@ -1307,71 +1254,42 @@ function createLiveSdkConversation(input: {
   plan: PiSdkTurnPlan;
   thinking: SdkThinkingOptions;
 }): LiveSdkConversation {
-  const prompt = new SdkInputQueue();
+  const prompt = new ClaudeInputQueue();
   const controller = new AbortController();
   let live: LiveSdkConversation;
-  const passthroughTools = input.tools.map((definition) =>
-    tool(
-      definition.name,
-      definition.description || definition.name,
-      jsonSchemaToZodShape(definition.parameters),
-      async (_arguments, extra) => {
-        const toolUseId = sdkToolUseId(extra);
-        if (!toolUseId) {
-          return {
-            content: [
-              { type: "text" as const, text: "Missing Claude tool call id" },
-            ],
-            isError: true,
-          };
-        }
-        return awaitLiveToolResult(live, toolUseId);
-      },
-    ),
-  );
-  const mcpServers = passthroughTools.length
-    ? {
-        [PASSTHROUGH_MCP]: createSdkMcpServer({
-          name: PASSTHROUGH_MCP,
-          tools: passthroughTools,
-        }),
-      }
-    : {};
-  const sdkQuery = query({
+  const spec: ClaudeQuerySpec = {
+    accountId: input.account.id,
+    model: input.model.id,
+    system: input.system,
+    tools: [...input.tools],
+    ...(input.plan.resume ? { resume: input.plan.resume } : {}),
+    ...(input.plan.resumeSessionAt
+      ? { resumeSessionAt: input.plan.resumeSessionAt }
+      : {}),
+    ...input.thinking,
+    env: { ...input.auth.env, ...cliPassthroughEnv(input.model) },
+  };
+  const io: ClaudeQueryIo = {
     prompt,
-    options: {
-      cwd: BRIDGE_CWD,
-      model: input.model.id,
-      resume: input.plan.resume,
-      ...(input.plan.resumeSessionAt
-        ? { resumeSessionAt: input.plan.resumeSessionAt }
-        : {}),
-      abortController: controller,
-      includePartialMessages: true,
-      ...input.thinking,
-      systemPrompt: input.system || " ",
-      settingSources: [],
-      mcpServers: mcpServers as any,
-      strictMcpConfig: true,
-      tools: SDK_BUILTIN_TOOLS,
-      disallowedTools: DISALLOWED_BUILTINS,
-      allowedTools: input.tools.map(
-        (definition) => `${PASSTHROUGH_PREFIX}${definition.name}`,
-      ),
-      pathToClaudeCodeExecutable: CLAUDE_CODE_BIN,
-      executable: "bun" as const,
-      spawnClaudeCodeProcess: spawnClaudeCodeInWorkload("model"),
-      env: {
-        PATH: process.env.PATH,
-        HOME: process.env.HOME,
-        LANG: process.env.LANG,
-        ...input.auth.env,
-        CLAUDE_CONFIG_DIR: claudeConfigDirFor(input.account.id),
-        MCP_TOOL_TIMEOUT: String(LIVE_MCP_TOOL_TIMEOUT_MS),
-        ...cliPassthroughEnv(input.model),
-      },
-    },
-  });
+    abortController: controller,
+    onToolCall: (toolUseId) => awaitLiveToolResult(live, toolUseId),
+  };
+  let releaseCredential: (() => void) | undefined;
+  let sdkQuery: ClaudeQueryHandle;
+  if (piAnthropicTransport() === "remote") {
+    // The Claude host runs the process; it gets a placeholder and this
+    // process's proxy address instead of the account's credential.
+    const lease = leaseClaudeToken(input.auth.env);
+    releaseCredential = lease.release;
+    const url = piClaudeHostUrl();
+    sdkQuery = startRemoteClaudeQuery(
+      { ...spec, env: { ...lease.env, ...cliPassthroughEnv(input.model) } },
+      io,
+      readClaudeHostToken().then((token) => ({ url, token })),
+    );
+  } else {
+    sdkQuery = startLocalClaudeQuery(spec, io, localClaudeQueryRuntime());
+  }
   live = {
     key: input.key,
     accountId: input.account.id,
@@ -1386,6 +1304,7 @@ function createLiveSdkConversation(input: {
     disposed: false,
     thinkingKey: sdkThinkingKey(input.thinking),
     credentialKey: input.auth.key,
+    ...(releaseCredential ? { releaseCredential } : {}),
   };
   liveSdkConversations().set(input.key, live);
   prompt.push(inputForPlan(input.plan));
@@ -1638,7 +1557,9 @@ async function* runSdkAttempt(
     }
     account = acquired.account;
     const auth = acquired.auth;
-    await ensureSdkDirs(account.id);
+    // A remote Claude host creates its own directories.
+    if (piAnthropicTransport() !== "remote")
+      await ensureClaudeQueryDirs(account.id);
     // Last await before Claude Code starts: an abort that landed during the
     // exchange or the directory setup never fires the listener registered
     // below, so check here or the canceled turn would still start a request.

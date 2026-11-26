@@ -39,6 +39,9 @@ matching provider credentials exist. New provider model lists are stored in
 Anthropic turns use the native in-process provider by default. Setting
 `"anthropicTransport": "bridge"` selects the loopback bridge as a rollback;
 absent and unrecognized values use the in-process provider.
+`"anthropicTransport": "remote"` keeps the same provider but runs its Claude
+Code processes in a separate Claude host service that never receives an
+account's token; see [claude-host.md](../claude-host.md).
 
 ## Configure model access
 
