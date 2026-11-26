@@ -184,10 +184,11 @@ electron-builder signs its executables with the app. It is not an
 `extraResources` entry because electron-builder leaves `node_modules` folders
 out of those, and the release keeps its image library in one. Without that
 variable nothing is packed and **Use this Mac** is never offered. The release
-workflow builds and packs the server when run manually with **Pack the server
-into the app**, or for every release once the `OS1_BUNDLE_LOCAL_SERVER`
-repository variable is `1`; it then starts the signed server from inside the
-packaged app before notarizing.
+workflow builds and packs the server for every release, and for a manual run
+with **Pack the server into the app** ticked; it then starts the signed server
+from inside the packaged app before notarizing. Set the
+`OS1_BUNDLE_LOCAL_SERVER` repository variable to `0` to release the app
+without a server.
 
 To try it from source, point the app at any unpacked release:
 
@@ -199,9 +200,17 @@ node scripts/smoke-local-server.js /path/to/opensession-<version>-darwin-arm64
 
 The smoke script downloads both tools for real into a temporary home.
 
-The app updates through the server it is pointed at (see Auto-update), and the
-server on this Mac has no release feed configured. An install that only uses
-"This Mac" therefore does not update itself yet.
+Updates: while "This Mac" is the organization in use, the app reads the update
+feed its releases publish instead of asking a server (see Auto-update), so an
+install that only uses "This Mac" keeps itself current, server and all.
+
+### Signing in to Claude
+
+**Add account** under Models offers **Sign in with Claude**. The server runs
+Claude Code's own `claude setup-token` (the copy above, so nothing has to be on
+`PATH`), which opens Anthropic's sign-in in the browser. Once it is approved the
+account is added; there is no token to copy. The paste-a-token and API key
+kinds are still there.
 
 ## Single-item macOS Keychain access
 
@@ -553,9 +562,24 @@ package opensession". The empty list stops the search at this directory.
 ## Auto-update
 
 The packaged app keeps itself current via Electron's built-in Squirrel.Mac
-updater. It points to
-`/api/packages/clients/mac/update?version=<installed>` on the server selected
-when the updater initializes, then checks after 15 seconds and every 4 hours.
+updater. It follows the organization in use when the updater initializes
+(`src/update-feed.js`), then checks after 15 seconds and every 4 hours.
+
+- **A server**: `/api/packages/clients/mac/update?version=<installed>` on that
+  server, described below.
+- **"This Mac"**: `OpenSession-arm64-update.json` from the latest release of the
+  repository the build came from (`opensession.releaseRepo` in `package.json`,
+  stamped by the release workflow). The release workflow publishes that file
+  beside the zip, and only for a release that carries the server, so such an
+  install is never offered a build that could not run its one organization. It
+  is read straight from GitHub, so the app can update even when its own server
+  will not start. A build made from source has no `releaseRepo` and does not
+  update itself.
+
+Set `OS1_UPDATE_FEED` to a feed URL to try an update against a feed served by
+hand. Squirrel only installs a build signed by the identity the running app
+carries, whichever feed named it.
+
 The route lives in
 `packages/core/opensession-server/src/server/routes/os1-update.ts` and returns a
 Squirrel static JSON feed, proxying its signed arm64 ZIP because Squirrel cannot

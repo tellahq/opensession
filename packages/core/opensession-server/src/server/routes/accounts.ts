@@ -53,6 +53,12 @@ import {
   startClaudeLogin,
 } from "../claude-oauth-login";
 import {
+  cancelClaudeTokenLogin,
+  getClaudeTokenLogin,
+  startClaudeTokenLogin,
+  submitClaudeTokenLoginCode,
+} from "../claude-token-login";
+import {
   listXaiAccountsPublic,
   refreshXaiUsage,
   removeXaiAccount,
@@ -204,6 +210,49 @@ export async function handleAccountsRoutes(
   if (path === "/api/claude-accounts/refresh" && req.method === "POST") {
     await refreshAllUsage({ recheckMythos: true });
     return Response.json({ accounts: listAccountsPublic() });
+  }
+
+  // "Sign in with Claude" for a new subscription account: the server runs
+  // `claude setup-token` and adds the account when it prints the token. Keep
+  // these ahead of the generic /claude-accounts/:id matchers.
+  if (path === "/api/claude-accounts/token-login" && req.method === "POST") {
+    const body = await req.json().catch(() => null);
+    let result = await startClaudeTokenLogin(
+      typeof body?.name === "string" ? body.name : "",
+      typeof body?.owner === "string" ? body.owner : undefined,
+    );
+    if (!("id" in result)) return Response.json(result, { status: 400 });
+    // Give the command a moment to print the link so the UI can show it from
+    // this response; the client keeps polling either way.
+    for (let i = 0; i < 25 && result.state === "starting"; i++) {
+      await new Promise((r) => setTimeout(r, 160));
+      result = getClaudeTokenLogin(result.id) ?? result;
+    }
+    return Response.json(result);
+  }
+  const tokenLoginMatch = path.match(
+    /^\/api\/claude-accounts\/token-login\/([^/]+)$/,
+  );
+  if (tokenLoginMatch && req.method === "GET") {
+    const login = getClaudeTokenLogin(decodeURIComponent(tokenLoginMatch[1]));
+    return login
+      ? Response.json(login)
+      : Response.json({ error: "Not found" }, { status: 404 });
+  }
+  if (tokenLoginMatch && req.method === "POST") {
+    const body = await req.json().catch(() => null);
+    const result = submitClaudeTokenLoginCode(
+      decodeURIComponent(tokenLoginMatch[1]),
+      typeof body?.code === "string" ? body.code : "",
+    );
+    if (!result) return Response.json({ error: "Not found" }, { status: 404 });
+    if (!("id" in result)) return Response.json(result, { status: 400 });
+    return Response.json(result);
+  }
+  if (tokenLoginMatch && req.method === "DELETE") {
+    return cancelClaudeTokenLogin(decodeURIComponent(tokenLoginMatch[1]))
+      ? Response.json({ ok: true })
+      : Response.json({ error: "Not found" }, { status: 404 });
   }
 
   // "Sign in with Claude" attaches usage OAuth to an existing setup-token

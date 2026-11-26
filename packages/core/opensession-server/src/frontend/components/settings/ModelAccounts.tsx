@@ -1861,11 +1861,13 @@ export function ProviderAccountsSection({
 
 // ── Add forms ──────────────────────────────────────────────────────────────
 
-type ClaudeAccountKind = "setup-token" | "federation" | "api-key";
+type ClaudeAccountKind = "sign-in" | "setup-token" | "federation" | "api-key";
 
-/** How a Claude account is added: a subscription setup token, or an Anthropic
- *  API organization through workload identity or a static API key. */
+/** How a Claude account is added: a subscription, by signing in or by pasting
+ *  a setup token made elsewhere, or an Anthropic API organization through
+ *  workload identity or a static API key. */
 const CLAUDE_KIND_ITEMS: { value: ClaudeAccountKind; label: string }[] = [
+  { value: "sign-in", label: "Claude subscription · sign in" },
   { value: "setup-token", label: "Claude subscription · setup token" },
   { value: "federation", label: "Claude API · workload identity" },
   { value: "api-key", label: "Claude API · API key" },
@@ -1874,15 +1876,18 @@ const CLAUDE_KIND_ITEMS: { value: ClaudeAccountKind; label: string }[] = [
 function ClaudeKindField({
   value,
   onChange,
+  disabled,
 }: {
   value: ClaudeAccountKind;
   onChange: (kind: ClaudeAccountKind) => void;
+  disabled?: boolean;
 }) {
   return (
     <Field label="Kind">
       <Select.Root
         items={CLAUDE_KIND_ITEMS}
         value={value}
+        disabled={disabled}
         onValueChange={(next) => {
           const kind = CLAUDE_KIND_ITEMS.find((k) => k.value === next);
           if (kind) onChange(kind.value);
@@ -1905,8 +1910,10 @@ function AddClaudeAccountForm(props: {
   onAccountAdded: () => void;
   onDone: () => void;
 }) {
-  const [kind, setKind] = useState<ClaudeAccountKind>("setup-token");
-  return kind === "setup-token" ? (
+  const [kind, setKind] = useState<ClaudeAccountKind>("sign-in");
+  return kind === "sign-in" ? (
+    <AddClaudeSignInForm {...props} onKindChange={setKind} />
+  ) : kind === "setup-token" ? (
     <AddClaudeSubscriptionForm {...props} onKindChange={setKind} />
   ) : (
     <AddClaudeApiAccountForm {...props} kind={kind} onKindChange={setKind} />
@@ -2152,6 +2159,242 @@ function AddClaudeApiAccountForm({
   );
 }
 
+/** GET/POST /claude-accounts/token-login: the server running
+ *  `claude setup-token` for a new subscription account. */
+interface ClaudeTokenLogin {
+  id: string;
+  name: string;
+  state: "starting" | "awaiting_sign_in" | "done" | "error" | "cancelled";
+  url?: string;
+  error?: string;
+  account?: ClaudeAccountInfo;
+}
+
+function AddClaudeSignInForm({
+  onAccountAdded,
+  onDone,
+  onKindChange,
+}: {
+  onAccountAdded: () => void;
+  onDone: () => void;
+  onKindChange: (kind: ClaudeAccountKind) => void;
+}) {
+  const [name, setName] = useState("");
+  const [owner, setOwner] = useState("");
+  const [login, setLogin] = useState<ClaudeTokenLogin | null>(null);
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const pending =
+    !!login &&
+    (login.state === "starting" || login.state === "awaiting_sign_in");
+  const loginPath = login
+    ? `/claude-accounts/token-login/${encodeURIComponent(login.id)}`
+    : null;
+
+  const cancelPending = useEffectEvent(() => {
+    if (!pending || !loginPath) return;
+    void request(loginPath, {
+      method: "DELETE",
+      label: "Could not cancel Claude sign-in",
+    }).catch(() => undefined);
+  });
+  useEffect(() => () => cancelPending(), []);
+
+  function settle(next: ClaudeTokenLogin) {
+    setLogin(next);
+    if (next.state !== "done") return;
+    toast(
+      `Claude account ${next.account ? providerAccountLabel(next.account) : next.name} connected`,
+    );
+    onAccountAdded();
+    onDone();
+  }
+  const poll = useEffectEvent(async () => {
+    if (!loginPath) return;
+    try {
+      settle(
+        await request<ClaudeTokenLogin>(loginPath, {
+          label: "Could not refresh Claude sign-in",
+        }),
+      );
+    } catch {
+      // Keep polling. One failed refresh does not end the sign-in.
+    }
+  });
+  useEffect(() => {
+    if (!pending) return;
+    const timer = setInterval(() => void poll(), 2000);
+    return () => clearInterval(timer);
+  }, [pending]);
+
+  async function handleStart() {
+    setBusy(true);
+    setError(null);
+    setCode("");
+    try {
+      const trimmedOwner = owner.trim();
+      const account = { name: name.trim() };
+      settle(
+        await request<ClaudeTokenLogin>("/claude-accounts/token-login", {
+          method: "POST",
+          body: trimmedOwner ? { ...account, owner: trimmedOwner } : account,
+          label: "Could not start Claude sign-in",
+        }),
+      );
+    } catch (cause) {
+      setError(errorMessage(cause, "Could not start Claude sign-in"));
+    }
+    setBusy(false);
+  }
+
+  async function handleSubmitCode() {
+    if (!loginPath) return;
+    setBusy(true);
+    setError(null);
+    try {
+      settle(
+        await request<ClaudeTokenLogin>(loginPath, {
+          method: "POST",
+          body: { code },
+          label: "Could not send the code",
+        }),
+      );
+    } catch (cause) {
+      setError(errorMessage(cause, "Could not send the code"));
+    }
+    setBusy(false);
+  }
+
+  return (
+    <>
+      <Modal.Header
+        title="Add Claude account"
+        description="Sign in with a Claude subscription. The sign-in lasts about one year."
+      />
+      <form
+        className="flex flex-col gap-5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (busy) return;
+          if (pending) {
+            if (code.trim()) void handleSubmitCode();
+          } else if (name.trim()) void handleStart();
+        }}
+      >
+        <div className="flex flex-col gap-3">
+          <ClaudeKindField
+            value="sign-in"
+            onChange={onKindChange}
+            disabled={pending}
+          />
+          <Field label="Email">
+            <Input
+              required
+              type="email"
+              autoComplete="email"
+              value={name}
+              disabled={pending}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="person@example.com"
+              autoCapitalize="none"
+              spellCheck={false}
+            />
+          </Field>
+          <Field
+            label="Owner"
+            title="Personal sub: this person's runs use the account first, with the shared pool as backup. Automations: only automation runs use it, before the shared pool. Shared pool: used by everyone and by automations."
+          >
+            <OwnerSelect
+              value={owner}
+              onChange={setOwner}
+              label="Owner"
+              disabled={pending}
+            />
+          </Field>
+        </div>
+
+        {pending && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex flex-col gap-3 rounded-md bg-surface px-4 py-3"
+          >
+            {login?.url ? (
+              <>
+                <SettingRowDescription>
+                  Approve the sign-in in your browser. If no browser opened, or
+                  it is on another device, open the link and paste the code
+                  Claude shows.
+                </SettingRowDescription>
+                <Button
+                  render={
+                    <a
+                      className="self-start"
+                      href={login.url}
+                      target="_blank"
+                      rel="noreferrer"
+                    />
+                  }
+                  icon={<IconPlug size={16} />}
+                >
+                  Open Claude sign-in
+                </Button>
+                <Field label="Code">
+                  <Input
+                    value={code}
+                    onChange={(event) => setCode(event.target.value)}
+                    placeholder="Paste the code from Claude (…#…)"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                  />
+                </Field>
+              </>
+            ) : (
+              <LoadingState placement="row">Starting sign-in…</LoadingState>
+            )}
+          </div>
+        )}
+
+        {(error || login?.state === "error") && (
+          <InlineAlert>{error || login?.error || "Sign-in failed"}</InlineAlert>
+        )}
+
+        <Modal.Footer>
+          <Modal.Close
+            render={
+              <Button variant="ghost" disabled={busy}>
+                Cancel
+              </Button>
+            }
+          />
+          {pending ? (
+            <Button
+              variant="primary"
+              type="submit"
+              disabled={busy || !code.trim()}
+            >
+              {busy ? "Sending…" : "Use code"}
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              type="submit"
+              disabled={busy || !name.trim()}
+            >
+              {busy
+                ? "Starting…"
+                : login?.state === "error"
+                  ? "Try again"
+                  : "Sign in with Claude"}
+            </Button>
+          )}
+        </Modal.Footer>
+      </form>
+    </>
+  );
+}
+
 function AddClaudeSubscriptionForm({
   onAccountAdded,
   onDone,
@@ -2365,8 +2608,8 @@ function AddClaudeSubscriptionForm({
             />
           </Field>
           <p className="m-0 text-meta leading-relaxed text-faint">
-            Run <code>claude setup-token</code> while signed into this Claude
-            account. The token powers model runs for about one year.
+            Run <code>claude setup-token</code> on any computer signed into this
+            Claude account. The token powers model runs for about one year.
           </p>
           <Field
             label="Owner"

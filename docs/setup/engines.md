@@ -48,8 +48,13 @@ account's token; see [claude-host.md](../claude-host.md).
 Enabling Pi only opens the engine gate. Add at least one usable account or API
 key under **Settings → Providers**:
 
-- `pi/anthropic/*` uses the Claude account pool. Add a setup token created with
-  `claude setup-token`; a separate Claude sign-in can provide usage and reset
+- `pi/anthropic/*` uses the Claude account pool. **Add account** under
+  Settings → Providers offers **Sign in with Claude**: the server runs
+  `claude setup-token` itself, Claude Code opens the sign-in in a browser on
+  that machine (or you open the link it prints and paste back the code), and
+  the account is added when the token is created. You can also paste a token
+  from `claude setup-token` run elsewhere. A separate Claude sign-in can
+  provide usage and reset
   data.
 - `pi/anthropic/claude-mythos-*` needs a Claude API account: Anthropic offers
   Mythos to verified API organizations, not to Claude subscriptions. See

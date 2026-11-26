@@ -53,6 +53,7 @@ const {
   resumableAccountUrl,
 } = require("./account-navigation");
 const packageConfig = require("../package.json").opensession || {};
+const { updateFeedUrl } = require("./update-feed");
 // "This Mac": the server release packed into the app's resources, run by the
 // app itself (local-server.js). A build without it simply never offers it.
 const localServer = new LocalServer({
@@ -701,16 +702,22 @@ function initAutoUpdate() {
   // Called again once the first run has chosen a server, so the feed is only
   // ever armed against the instance actually in use.
   if (updaterReady || !APP_ORIGIN) return;
+  // Updates come from the instance this shell is pointed at: every Open
+  // Session server serves the release proxy, and a self-hosted one is where
+  // its own build came from. "This Mac" has no such server, so it reads the
+  // feed its releases publish (update-feed.js). Squirrel installs only a
+  // build signed by the identity the running app carries, so following the
+  // address does not widen who can hand this app a binary.
+  const url = updateFeedUrl({
+    origin: APP_ORIGIN,
+    local: isLocalAccountUrl(APP_URL),
+    version: app.getVersion(),
+    releaseRepo: packageConfig.releaseRepo,
+    override: process.env.OS1_UPDATE_FEED,
+  });
+  if (!url) return;
   try {
-    autoUpdater.setFeedURL({
-      // Updates come from the instance this shell is pointed at: every Open
-      // Session server serves the release proxy, and a self-hosted one is
-      // where its own build came from. Squirrel installs only a build signed
-      // by the identity the running app carries, so following the address
-      // does not widen who can hand this app a binary.
-      url: `${APP_ORIGIN}/api/packages/clients/mac/update?version=${encodeURIComponent(app.getVersion())}`,
-      serverType: "json",
-    });
+    autoUpdater.setFeedURL({ url, serverType: "json" });
   } catch (err) {
     console.error("[update] setFeedURL failed", err);
     return;

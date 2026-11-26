@@ -80,9 +80,15 @@ jobs:
             require_one "^OpenSession-$version-arm64\\.$ext$"
             require_one "^OpenSession-$version-arm64\\.$ext\\.sha256$"
           done
+          # The Mac app's update feed is published only when the app carries
+          # its own server (os1-mac-release.yml).
+          expected=24
+          if grep -Fqx "OpenSession-arm64-update.json" "$RUNNER_TEMP/assets"; then
+            expected=25
+          fi
           count="$(wc -l < "$RUNNER_TEMP/assets" | tr -d ' ')"
-          if [ "$count" != "24" ]; then
-            echo "::error title=Release asset set is invalid::Expected 24 uploaded assets on $TAG, found $count."
+          if [ "$count" != "$expected" ]; then
+            echo "::error title=Release asset set is invalid::Expected $expected uploaded assets on $TAG, found $count."
             exit 1
           fi
 

@@ -11,7 +11,7 @@ on:
       local_server:
         description: "Pack the server into the app (This Mac)"
         type: boolean
-        default: false
+        default: true
 
 permissions:
   contents: write
@@ -28,15 +28,16 @@ defaults:
 
 jobs:
   # "This Mac": the app can carry the compiled server and run it itself
-  # (packages/clients/mac/src/local-server.js). Off unless a manual run asks
-  # for it or the OS1_BUNDLE_LOCAL_SERVER repository variable is 1; without it
-  # this job is skipped and the app is built exactly as before.
+  # (packages/clients/mac/src/local-server.js). Releases carry it unless the
+  # OS1_BUNDLE_LOCAL_SERVER repository variable is 0, and a manual run unless
+  # its box is unticked; then this job is skipped and the app is built without
+  # a server, as it was before.
   #
   # Built here rather than in the signing job on purpose: this installs the
   # whole server dependency tree, and none of that should execute next to the
   # Developer ID certificate.
   local-server:
-    if: github.repository_owner == 'tellahq' && (inputs.local_server == true || vars.OS1_BUNDLE_LOCAL_SERVER == '1')
+    if: github.repository_owner == 'tellahq' && (inputs.local_server == true || (github.event_name == 'push' && vars.OS1_BUNDLE_LOCAL_SERVER != '0'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -73,7 +74,7 @@ jobs:
 
   release:
     needs: [local-server]
-    # A skipped local-server job is the ordinary case, and a skipped
+    # A skipped local-server job is a build without the server, and a skipped
     # dependency would otherwise skip this job too.
     if: ${{ !cancelled() && github.repository_owner == 'tellahq' && (needs.local-server.result == 'success' || needs.local-server.result == 'skipped') }}
     runs-on: macos-26
@@ -154,13 +155,15 @@ jobs:
         env:
           SERVER: ${{ vars.OS1_SERVER_URL || 'https://os.tella.dev/' }}
           TAG: ${{ github.ref_name }}
+        # releaseRepo is where an install that only uses "This Mac" looks for
+        # its updates (src/update-feed.js).
         run: |
           version="$(jq -r .version package.json)"
           if [[ "$TAG" == v[0-9]* ]]; then version="${TAG#v}"; fi
-          jq --arg s "$SERVER" --arg v "$version" \
-            '.opensession.defaultServer = $s | .version = $v' package.json > /tmp/pkg.json
+          jq --arg s "$SERVER" --arg v "$version" --arg r "$GITHUB_REPOSITORY" \
+            '.opensession.defaultServer = $s | .opensession.releaseRepo = $r | .version = $v' package.json > /tmp/pkg.json
           mv /tmp/pkg.json package.json
-          jq -r '"version: " + .version + ", default server: " + .opensession.defaultServer' package.json
+          jq -r '"version: " + .version + ", default server: " + .opensession.defaultServer + ", releases: " + .opensession.releaseRepo' package.json
 
       - name: Generate license inventory and SBOM
         run: |
@@ -312,6 +315,13 @@ jobs:
             fi
             cp "${versioned[0]}" "dist/OpenSession-arm64.$ext"
           done
+          # The update feed for installs that only use "This Mac". Published
+          # only with a release that carries the server, so such an install is
+          # never offered a build that could not run its one organization.
+          if [ -n "${OS1_LOCAL_SERVER_RELEASE:-}" ]; then
+            node scripts/write-update-feed.js "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" \
+              dist/OpenSession-arm64-update.json
+          fi
           cd dist
           for asset in *.dmg *.zip; do
             hash="$(shasum -a 256 "$asset" | awk '{ print $1 }')"
@@ -332,8 +342,12 @@ jobs:
         # Retry transient API failures, but keep the release mutable until every
         # producer succeeds.
         run: |
+          assets=(dist/*.dmg dist/*.zip dist/*.sha256)
+          if [ -f dist/OpenSession-arm64-update.json ]; then
+            assets+=(dist/OpenSession-arm64-update.json)
+          fi
           for attempt in 1 2 3 4 5; do
-            if gh release upload "$GITHUB_REF_NAME" dist/*.dmg dist/*.zip dist/*.sha256 --clobber; then
+            if gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber; then
               echo "uploaded assets to the $GITHUB_REF_NAME draft"
               exit 0
             fi
