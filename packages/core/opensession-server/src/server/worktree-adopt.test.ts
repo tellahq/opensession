@@ -124,6 +124,19 @@ describe("createWorktree branch-collision adoption", () => {
     expect(head).toBe("orphan-branch");
   });
 
+  test("starts a new session from the last fetched default branch when the remote is unreachable", async () => {
+    const { createWorktree } = await import("./worktree");
+    await git(repoDir, "remote", "set-url", "origin", join(root, "gone.git"));
+    try {
+      const wtPath = await createWorktree("offline-create", "scratch");
+      expect((await $`git -C ${wtPath} rev-parse HEAD`.text()).trim()).toBe(
+        (await $`git -C ${repoDir} rev-parse origin/main`.text()).trim(),
+      );
+    } finally {
+      await git(repoDir, "remote", "set-url", "origin", originDir);
+    }
+  });
+
   test("still fails loudly when the branch has unique commits", async () => {
     const { createWorktree } = await import("./worktree");
     // A branch with real work on it (one commit past origin/main), no worktree.
@@ -204,6 +217,19 @@ describe("worktree revival", () => {
     expect((await $`git -C ${wtPath} rev-parse HEAD`.text()).trim()).toBe(
       (await $`git -C ${repoDir} rev-parse origin/main`.text()).trim(),
     );
+  });
+
+  test("starts from the last fetched default branch when the remote is unreachable", async () => {
+    const { reviveWorktree } = await import("./worktree");
+    await git(repoDir, "remote", "set-url", "origin", join(root, "gone.git"));
+    try {
+      const wtPath = await reviveWorktree("offline-revival", "scratch");
+      expect((await $`git -C ${wtPath} rev-parse HEAD`.text()).trim()).toBe(
+        (await $`git -C ${repoDir} rev-parse origin/main`.text()).trim(),
+      );
+    } finally {
+      await git(repoDir, "remote", "set-url", "origin", originDir);
+    }
   });
 
   test("reports the checkout that already owns the branch", async () => {

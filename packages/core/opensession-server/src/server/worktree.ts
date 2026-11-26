@@ -20,7 +20,11 @@ import {
 } from "./config";
 import { stateDir } from "./paths";
 import { pathExists } from "./run-fs";
-import { gitFetchArgv } from "./git-fetch";
+import {
+  GIT_FETCH_TIMED_OUT_EXIT_CODE,
+  GIT_FETCH_TIMEOUT_SECONDS,
+  gitFetchArgv,
+} from "./git-fetch";
 import { workloadArgv } from "./workload-scope";
 import {
   assertSetupPipelineLive,
@@ -822,7 +826,32 @@ export async function reviveWorktree(
           await $`git -C ${repo.repo} show-ref --verify --quiet refs/remotes/origin/${branch}`.nothrow()
         ).exitCode === 0;
       if (!hasRemote) {
-        await $`${workloadArgv(gitFetchArgv(repo.repo, ["origin", repo.defaultBranch, "--quiet"]), "git")}`;
+        const fetchBase =
+          await $`${workloadArgv(gitFetchArgv(repo.repo, ["origin", repo.defaultBranch, "--quiet"]), "git")}`
+            .quiet()
+            .nothrow();
+        if (fetchBase.exitCode !== 0) {
+          // A slow or unreachable remote must not keep a new session from
+          // starting: branch from the last fetched default branch instead.
+          const reason =
+            fetchBase.exitCode === GIT_FETCH_TIMED_OUT_EXIT_CODE
+              ? `timed out after ${GIT_FETCH_TIMEOUT_SECONDS}s`
+              : fetchBase.stderr.toString().trim();
+          const hasBase =
+            (
+              await $`git -C ${repo.repo} rev-parse --verify --quiet refs/remotes/origin/${repo.defaultBranch}`
+                .quiet()
+                .nothrow()
+            ).exitCode === 0;
+          if (!hasBase) {
+            throw new Error(
+              `Could not fetch ${repo.id}'s ${repo.defaultBranch}: ${reason}`,
+            );
+          }
+          console.warn(
+            `[worktree] ${repo.id}: fetch of ${repo.defaultBranch} failed (${reason}); branching ${branch} from the last fetched origin/${repo.defaultBranch}`,
+          );
+        }
       }
       const startPoint = hasRemote
         ? `origin/${branch}`
@@ -1030,7 +1059,7 @@ export async function createWorktreeForExistingBranch(
   await withGitLock(repo.repo, async () => {
     await $`git -C ${repo.repo} worktree prune`.quiet();
     if (await pathExists(wtPath)) return; // pruned stale registration; dir already usable
-    await shell`git -C ${repo.repo} fetch origin ${branch} --quiet`.nothrow();
+    await shell`${gitFetchArgv(repo.repo, ["origin", branch, "--quiet"])}`.nothrow();
     const hasLocal =
       (
         await $`git -C ${repo.repo} show-ref --verify --quiet refs/heads/${branch}`.nothrow()
@@ -1100,7 +1129,7 @@ export async function withClaimedBranchWorktree<T>(
     const wtPath = `${worktreesDir()}/${repo.wtPrefix}-${branch}`;
     if (await pathExists(wtPath))
       return fn({ path: wtPath, created: false, createdBranch: false });
-    await shell`git -C ${repo.repo} fetch origin ${branch} --quiet`
+    await shell`${gitFetchArgv(repo.repo, ["origin", branch, "--quiet"])}`
       .quiet()
       .nothrow();
     const hasRef = async (ref: string) =>
@@ -1306,7 +1335,7 @@ export async function createWorktree(
   const base = opts?.base;
 
   await withGitLock(repo.repo, async () => {
-    await shell`git -C ${repo.repo} fetch origin ${repo.defaultBranch} --quiet`
+    await shell`${gitFetchArgv(repo.repo, ["origin", repo.defaultBranch, "--quiet"])}`
       .quiet()
       .nothrow();
     let startPoint = await defaultStartPoint(repo);
@@ -1314,7 +1343,7 @@ export async function createWorktree(
       // Stacked feature base: retain local work. An explicit default branch
       // uses the same remote-first start point as an omitted base.
       // Fetch the base as it may be remote-only.
-      await shell`git -C ${repo.repo} fetch origin ${base} --quiet`.nothrow();
+      await shell`${gitFetchArgv(repo.repo, ["origin", base, "--quiet"])}`.nothrow();
       startPoint = await resolveStartPoint(repo.repo, base, repo.defaultBranch);
     }
     const add =
