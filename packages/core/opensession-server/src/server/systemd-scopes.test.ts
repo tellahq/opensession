@@ -9,6 +9,7 @@ import {
   previewScopeCommand,
   previewScopeSystemdArgs,
   previewScopeUnit,
+  scriptScopeSystemdArgs,
 } from "./systemd-scopes";
 
 describe("systemd scope resource controls", () => {
@@ -21,6 +22,20 @@ describe("systemd scope resource controls", () => {
       "--property=TasksMax=1024",
       "--property=OOMPolicy=stop",
     ]);
+  });
+
+  test("script runs get a build-sized budget in the agents slice", () => {
+    expect(scriptScopeSystemdArgs({})).toEqual([
+      `--slice=${ENGINE_SLICE}`,
+      "--property=MemoryHigh=24G",
+      "--property=MemoryMax=32G",
+      "--property=MemorySwapMax=2G",
+      "--property=TasksMax=4096",
+      "--property=OOMPolicy=stop",
+    ]);
+    expect(
+      scriptScopeSystemdArgs({ OPENSESSION_SCRIPT_MEMORY_HIGH: "16G" }),
+    ).toContain("--property=MemoryHigh=16G");
   });
 
   test("previews get a separate budget and leave CPU headroom", () => {

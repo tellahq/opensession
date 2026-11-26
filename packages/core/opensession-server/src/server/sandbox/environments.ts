@@ -28,6 +28,9 @@ const invalidationTimers: Map<string, ReturnType<typeof setTimeout>> = ((
   globalThis as any
 ).__sandboxEnvironmentInvalidationTimers ??= new Map());
 const PROVIDER_QUOTA_RETRY_MS = 60 * 60_000;
+/** A setup that failed for a non-transient reason is retried once the
+ *  default branch has moved, at most this often. */
+const SETUP_FAILURE_RETRY_MS = 60 * 60_000;
 
 export interface SandboxEnvironment {
   repo: string;
@@ -40,6 +43,9 @@ export interface SandboxEnvironment {
   failureSummary?: string;
   /** Persisted backoff for recoverable provider/setup failures. */
   retryAt?: string;
+  /** Default-branch commit a non-transient setup failure happened on. A fix
+   *  lands there, so maintenance retries once the branch moves. */
+  failedAtCommit?: string;
   mode?: "template";
   settings?: SandboxMachineSettings;
   /** One prepared Sandbox is kept waiting for this project between
@@ -52,6 +58,47 @@ export interface SandboxEnvironment {
 interface StoredEnvironments {
   version: 1;
   environments: SandboxEnvironment[];
+}
+
+/** The registered checkout's last-fetched default-branch tip. */
+async function defaultBranchTip(repo: string): Promise<string | undefined> {
+  const config = REPOS[repo];
+  if (!config?.repo || !config.defaultBranch) return undefined;
+  const proc = Bun.spawn(
+    [
+      "git",
+      "-C",
+      config.repo,
+      "rev-parse",
+      "--verify",
+      "--quiet",
+      `refs/remotes/origin/${config.defaultBranch}`,
+    ],
+    { stdout: "pipe", stderr: "ignore" },
+  );
+  const [stdout, status] = await Promise.all([
+    new Response(proc.stdout).text(),
+    proc.exited,
+  ]);
+  return status === 0 ? stdout.trim() || undefined : undefined;
+}
+
+/** When maintenance may retry a failed preparation, or NaN for never. */
+export async function failedEnvironmentRetryAt(
+  environment: SandboxEnvironment,
+): Promise<number> {
+  if (environment.retryAt) return Date.parse(environment.retryAt);
+  if (
+    /(?:rate.?limit|quota|plan allows|per day)/i.test(
+      environment.failureSummary || "",
+    )
+  )
+    return Date.parse(environment.updatedAt) + PROVIDER_QUOTA_RETRY_MS;
+  // A failure the setup itself caused repeats until the project changes.
+  // Without this a fixed setup stayed failed until someone pressed Rebuild.
+  const tip = await defaultBranchTip(environment.repo);
+  if (!tip || tip === environment.failedAtCommit) return Number.NaN;
+  return Date.parse(environment.updatedAt) + SETUP_FAILURE_RETRY_MS;
 }
 
 function storePath(): string {
@@ -495,6 +542,9 @@ export async function prepareSandboxEnvironment(
       : isTransientSandboxStartError(error)
         ? 15 * 60_000
         : 0;
+    const failedAtCommit = retryDelayMs
+      ? undefined
+      : await defaultBranchTip(repo);
     const failure: SandboxEnvironment = {
       repo,
       provider,
@@ -506,6 +556,7 @@ export async function prepareSandboxEnvironment(
       ...(retryDelayMs
         ? { retryAt: new Date(Date.now() + retryDelayMs).toISOString() }
         : {}),
+      ...(failedAtCommit ? { failedAtCommit } : {}),
       ...(settings ? { settings } : {}),
     };
     await writeEnvironment(failure);
@@ -535,13 +586,7 @@ async function maintainSandboxEnvironments(): Promise<void> {
     )
       continue;
     if (environment.state === "failed") {
-      const retryAt = environment.retryAt
-        ? Date.parse(environment.retryAt)
-        : /(?:rate.?limit|quota|plan allows|per day)/i.test(
-              environment.failureSummary || "",
-            )
-          ? Date.parse(environment.updatedAt) + PROVIDER_QUOTA_RETRY_MS
-          : Number.NaN;
+      const retryAt = await failedEnvironmentRetryAt(environment);
       if (!Number.isFinite(retryAt) || retryAt > Date.now()) continue;
     }
     const template = await readRemoteRepoTemplate(

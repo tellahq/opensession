@@ -49,6 +49,7 @@ import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { pathExists, readTextOrNull } from "./sandbox/async-fs";
 import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import { removeTree } from "./workload-scope";
+import { gitFetchArgv } from "./git-fetch";
 import { workloadArgv } from "./workload-scope";
 
 // ── Config ───────────────────────────────────────────────────────────────────
@@ -412,14 +413,14 @@ async function doRefresh(repoId: string, force: boolean): Promise<void> {
       await withGitLock(repo.repo, async () => {
         await $`git -C ${repo.repo} worktree prune`.quiet().nothrow();
         if (await pathExists(dir)) return;
-        await $`${workloadArgv(["git", "-C", repo.repo, "fetch", "origin", repo.defaultBranch, "--quiet"], "git")}`.nothrow();
+        await $`${workloadArgv(gitFetchArgv(repo.repo, ["origin", repo.defaultBranch, "--quiet"]), "git")}`.nothrow();
         await $`${workloadArgv(["git", "-C", repo.repo, "worktree", "add", "--detach", dir, `origin/${repo.defaultBranch}`], "git")}`;
       });
     }
 
     // 2. Fetch; skip the expensive rebuild when nothing moved and the last
     //    refresh was good.
-    await $`${workloadArgv(["git", "-C", dir, "fetch", "origin", repo.defaultBranch, "--quiet"], "git")}`.nothrow();
+    await $`${workloadArgv(gitFetchArgv(dir, ["origin", repo.defaultBranch, "--quiet"]), "git")}`.nothrow();
     const sha = (
       await $`git -C ${dir} rev-parse --short origin/${repo.defaultBranch}`
         .nothrow()

@@ -28,7 +28,6 @@ import {
 } from "./workspaces";
 import { sessionPrBranch } from "./session-pr-target";
 import {
-  invalidateMemorySnapshot,
   renderSessionMemoryNote,
   snapshotMemoryNote,
   sessionMemoryScopes,
@@ -40,7 +39,9 @@ import {
   v2IsRecord,
 } from "./memory-v2";
 import {
+  memoryCheckoutRoot,
   prepareSessionMemory,
+  renderMemoryEntryPoints,
   renderRepoMemoryNote,
   retrievalScopeKeys,
   retrieveRepoMemoryForPrompt,
@@ -482,20 +483,37 @@ export async function retrievedMemoryNoteFor(
   user: string | undefined,
   repos: string[],
   sessionId?: string,
+  /** The agent's shell runs in a Sandbox or on a Runner, not on this host. */
+  remote = false,
 ): Promise<string> {
   const mode = memoryRolloutMode();
   if (mode === "legacy") return "";
   try {
     const scopes = sessionMemoryScopes({ user, repos });
     if (mode === "repo") {
+      const present = sessionId ? (presentRepos.get(sessionId) ?? []) : [];
+      const scopeKeys = retrievalScopeKeys(
+        scopes.map((scope) => scope.key),
+        present,
+      );
+      // Which entry points apply, and whose memory is whose, changes with the
+      // prompter and with who has joined, so it is turn context and never
+      // system prompt (renderRepoMemoryNote).
+      const entryPoints = await renderMemoryEntryPoints({
+        scopeKeys,
+        root: sessionId && !remote ? memoryCheckoutRoot(sessionId) : undefined,
+        present,
+        user,
+      }).catch((e) => {
+        console.warn("[memory] failed to list memory entry points:", e);
+        return "";
+      });
       return (
         await retrieveRepoMemoryForPrompt(
           query,
-          retrievalScopeKeys(
-            scopes.map((scope) => scope.key),
-            sessionId ? (presentRepos.get(sessionId) ?? []) : [],
-          ),
+          scopeKeys,
           scopes.find((scope) => scope.kind === "repo")?.key,
+          entryPoints,
         )
       ).text;
     }
@@ -526,10 +544,9 @@ export function sessionWorkspaceIsRemote(session: {
 }
 
 /**
- * Repo-mode memory section: checkouts are refreshed every turn (clone or
- * pull), while the rendered text is snapshotted per session so other
- * sessions' pushes do not change this session's cached prompt prefix. A new
- * checkout (another person joined) refreshes it.
+ * Repo-mode memory section. The checkouts are refreshed every turn (clone or
+ * pull); the text is the same on every turn of a session, because it names
+ * no memory content and no person (renderRepoMemoryNote).
  */
 async function repoMemoryNoteFor(
   scopeKeys: string[],
@@ -537,37 +554,23 @@ async function repoMemoryNoteFor(
   sessionId: string | undefined,
   remote: boolean,
 ): Promise<string> {
-  if (!sessionId) {
-    return renderRepoMemoryNote({
-      scopeKeys,
-      prepared: { repos: [], present: [], added: false },
-      user,
-      tools: true,
-    });
-  }
+  if (!sessionId) return renderRepoMemoryNote({ tools: true });
   const prepared = await prepareSessionMemory({
     sessionId,
     scopeKeys,
     user,
     remote,
   });
-  const previous = presentRepos.get(sessionId);
   presentRepos.set(sessionId, prepared.present);
-  if (previous && prepared.present.some((name) => !previous.includes(name)))
-    invalidateMemorySnapshot(sessionId);
   if (presentRepos.size > 2000) {
     const oldest = presentRepos.keys().next().value;
     if (oldest) presentRepos.delete(oldest);
   }
-  return snapshotMemoryNote(sessionId, () =>
-    renderRepoMemoryNote({
-      scopeKeys: retrievalScopeKeys(scopeKeys, prepared.present),
-      prepared,
-      user,
-      sessionLink: sessionLink(sessionId),
-      tools: remote,
-    }),
-  );
+  return renderRepoMemoryNote({
+    root: prepared.root,
+    sessionLink: sessionLink(sessionId),
+    tools: remote,
+  });
 }
 
 export interface WorktreeTarget {

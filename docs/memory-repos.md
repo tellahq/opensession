@@ -54,10 +54,15 @@ saved SQL, scripts) are indexed as whole files.
 Before each turn the gateway gives the session a checkout of every repository
 it can see under `<session scratch>/memory/`: the team repository, the
 prompting person's repository, and any other participant's personal repository
-already cloned there. New checkouts are cloned; clean ones pull. The prompt
-carries the relevant `MEMORY.md` files (6 KB budget), the checkout paths and the
-memory loop. The text is snapshotted per session so other sessions' pushes do
-not change a cached prompt prefix.
+already cloned there. New checkouts are cloned; clean ones pull.
+
+The system prompt carries only where memory is and the memory loop. It holds no
+memory content, no list of checkouts and no word about who is prompting, so it
+is the same on every turn of a session and a teammate's push, a second person
+joining or someone else prompting cannot cost the session its cached prompt.
+Each turn's memory context lists the `MEMORY.md` entry points that apply, most
+specific first, with whose personal memory is whose, and the agent reads them
+with a tool call.
 
 Runs that cannot write a local checkout (Sandbox and Runner sessions, and every
 automation, whose unattended shell may not push) get file tools on

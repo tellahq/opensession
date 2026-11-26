@@ -44,6 +44,23 @@ export function engineScopeSystemdArgs(env: LimitEnv = process.env): string[] {
   ];
 }
 
+/**
+ * Script runs (start_script) are the sanctioned home for long builds and full
+ * test suites. At the 6G engine budget a parallel `bun run check` or a cargo
+ * test run spent most of its time in memory.high reclaim, so scripts get a
+ * build-sized budget of their own.
+ */
+export function scriptScopeSystemdArgs(env: LimitEnv = process.env): string[] {
+  return [
+    `--slice=${ENGINE_SLICE}`,
+    property("MemoryHigh", value(env, "OPENSESSION_SCRIPT_MEMORY_HIGH", "24G")),
+    property("MemoryMax", value(env, "OPENSESSION_SCRIPT_MEMORY_MAX", "32G")),
+    property("MemorySwapMax", value(env, "OPENSESSION_SCRIPT_SWAP_MAX", "2G")),
+    property("TasksMax", value(env, "OPENSESSION_SCRIPT_TASKS_MAX", "4096")),
+    property("OOMPolicy", "stop"),
+  ];
+}
+
 export function previewScopeSystemdArgs(env: LimitEnv = process.env): string[] {
   return [
     `--slice=${PREVIEW_SLICE}`,

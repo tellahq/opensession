@@ -147,8 +147,16 @@ case "$action" in
       -p "Environment=OPENSESSION_RUN_JOURNAL=$dir/journal.json" \
       -p "Environment=OPENSESSION_RUN_SPEC_HASH=$spec_hash" \
       -p "IPAddressDeny=169.254.169.254/32" \
+      -p "MemoryHigh=32G" \
+      -p "MemoryMax=40G" \
+      -p "MemorySwapMax=4G" \
+      -p "OOMPolicy=continue" \
       -p "StandardOutput=journal" \
       -p "StandardError=journal"
+    # One run host holds an engine and every command it starts. The cap keeps
+    # a runaway test (100+ GB on this host) inside its own run. With
+    # OOMPolicy=continue the kernel kills only the largest process, so the
+    # engine survives and sees the command fail instead of the run dying.
     if [ "$runner_mode" = "compiled" ]; then
       exec "$@" "$runner_bin" runner-host "$dir/spec.json"
     fi

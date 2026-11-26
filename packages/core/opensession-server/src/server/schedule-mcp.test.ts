@@ -13,6 +13,7 @@ import {
   listScheduledPrompts,
 } from "./scheduled-prompts";
 import { createScheduleMcpServer, resolveDeliveryTime } from "./schedule-mcp";
+import { __setIdentitiesForTest } from "./shared/user-mappings";
 
 let dir: string;
 let previousPath: string;
@@ -33,8 +34,8 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-async function connect(sessionId: string) {
-  const server = createScheduleMcpServer({ sessionId, user: "Jaap" });
+async function connect(sessionId: string, user = "Jaap") {
+  const server = createScheduleMcpServer({ sessionId, user });
   const client = new Client({ name: "test", version: "1.0.0" });
   const [clientTransport, serverTransport] =
     InMemoryTransport.createLinkedPair();
@@ -49,6 +50,39 @@ function textOf(result: unknown): string {
 }
 
 describe("opensession-schedule", () => {
+  // schedule_prompt is handed to the model by name, so its declaration is in
+  // every request's cached prefix. It must not depend on who started the
+  // turn: a time zone in it rewrote the prompt cache whenever a teammate or
+  // a GitHub event followed the session's owner.
+  test("the tools are declared the same for every prompter", async () => {
+    const restore = __setIdentitiesForTest([
+      {
+        name: "Ada",
+        email: "ada@example.test",
+        aliases: ["ada"],
+        timezone: "Europe/Amsterdam",
+      },
+      {
+        name: "Bo",
+        email: "bo@example.test",
+        aliases: ["bo"],
+        timezone: "America/New_York",
+      },
+    ]);
+    try {
+      const declared = async (sessionId: string, user: string) =>
+        JSON.stringify(
+          (await (await connect(sessionId, user)).listTools()).tools,
+        );
+      const ada = await declared("s1", "Ada");
+      expect(await declared("s1", "Bo")).toBe(ada);
+      expect(await declared("s2", "GitHub")).toBe(ada);
+      expect(ada).not.toContain("Amsterdam");
+    } finally {
+      restore();
+    }
+  });
+
   test("schedules, lists and cancels a prompt for its own session", async () => {
     const client = await connect("s1");
     const at = new Date(Date.now() + 60_000).toISOString();

@@ -1831,6 +1831,7 @@ export async function openCreatedSession(
         spec.user,
         [...spec.memoryRepoIds, ...attachedRepoIds],
         bksId,
+        !!spec.sandboxProvider || !!spec.runnerTarget,
       );
       const openingPromptForRun = retrievedMemory
         ? `${retrievedMemory}\n\n${spec.openingPrompt}`

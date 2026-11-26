@@ -33,6 +33,7 @@ import {
 import { tmpdir } from "os";
 import { join } from "path";
 import { __setSessionsDirForTest } from "../paths";
+import { REPOS } from "../worktree";
 import { sandboxesEnabled } from "./config";
 import {
   connectSandboxProvider,
@@ -54,7 +55,10 @@ import {
   _stopPrewarmSweepForTest,
   type PrewarmAdapter,
 } from "./prewarm";
-import { prepareSandboxEnvironment } from "./environments";
+import {
+  failedEnvironmentRetryAt,
+  prepareSandboxEnvironment,
+} from "./environments";
 import { writeRemoteRepoTemplate } from "./remote-repo-template";
 
 let scratch: string;
@@ -472,6 +476,49 @@ describe("claimPrewarm (adoption)", () => {
     },
     15_000,
   );
+
+  test("a setup failure is retried once the default branch moves", async () => {
+    const dir = join(scratch, "infra");
+    mkdirSync(dir, { recursive: true });
+    const git = (...args: string[]) =>
+      Bun.spawnSync(["git", "-C", dir, ...args], {
+        env: {
+          ...process.env,
+          GIT_AUTHOR_NAME: "t",
+          GIT_AUTHOR_EMAIL: "t@example.test",
+          GIT_COMMITTER_NAME: "t",
+          GIT_COMMITTER_EMAIL: "t@example.test",
+        },
+      })
+        .stdout.toString()
+        .trim();
+    git("init", "-q");
+    git("commit", "-q", "--allow-empty", "-m", "one");
+    const branch = REPOS.infra!.defaultBranch;
+    git("update-ref", `refs/remotes/origin/${branch}`, "HEAD");
+    const first = git("rev-parse", "HEAD");
+    const failedAt = Date.now() - 2 * 60 * 60_000;
+    const failure = {
+      repo: "infra",
+      provider: "box" as const,
+      state: "failed" as const,
+      updatedAt: new Date(failedAt).toISOString(),
+      failureSummary: "refusing to snapshot infra: setup changed tracked files",
+    };
+    // Recorded before the commit was kept: retried, an hour after failing.
+    expect(await failedEnvironmentRetryAt(failure)).toBe(
+      failedAt + 60 * 60_000,
+    );
+    // Same commit: the setup would fail the same way.
+    expect(
+      await failedEnvironmentRetryAt({ ...failure, failedAtCommit: first }),
+    ).toBeNaN();
+    git("commit", "-q", "--allow-empty", "-m", "two");
+    git("update-ref", `refs/remotes/origin/${branch}`, "HEAD");
+    expect(
+      await failedEnvironmentRetryAt({ ...failure, failedAtCommit: first }),
+    ).toBe(failedAt + 60 * 60_000);
+  });
 
   test.skipIf(killSwitch)(
     "a deploy leaves a ready prewarm adoptable",

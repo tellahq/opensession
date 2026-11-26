@@ -91,6 +91,7 @@ import {
   repoForPathOrNull,
   repoFromGitPointer,
 } from "./worktree";
+import { gitFetchArgv } from "./git-fetch";
 import { workloadArgv } from "./workload-scope";
 import { pathExists } from "./run-fs";
 
@@ -805,7 +806,7 @@ export async function sweepWorktreeReaper(
     // Refresh the base ref once per repo so the ancestry test is accurate.
     if (!fetched.has(repo.id)) {
       fetched.add(repo.id);
-      await $`${workloadArgv(["git", "-C", repo.repo, "fetch", "origin", repo.defaultBranch, "-q"], "git")}`
+      await $`${workloadArgv(gitFetchArgv(repo.repo, ["origin", repo.defaultBranch, "-q"]), "git")}`
         .nothrow()
         .quiet();
     }
