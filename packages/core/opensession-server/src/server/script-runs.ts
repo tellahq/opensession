@@ -34,8 +34,8 @@ import type { ScriptRunWire } from "@tellahq/opensession-protocol/session";
 import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import { stateDir } from "./paths";
 import {
-  engineScopeSystemdArgs,
   literalScopeArgs,
+  scriptScopeSystemdArgs,
   stopUserScopeAndWait,
   systemdRunVersion,
   systemdUserEnv,
@@ -690,7 +690,7 @@ async function launchHost(input: {
         "--quiet",
         `--unit=${input.unit}`,
         ...literalScopeArgs(await systemdRunVersion()),
-        ...engineScopeSystemdArgs(),
+        ...scriptScopeSystemdArgs(),
         // The host forwards SIGTERM and waits for the command's own grace.
         "--property=TimeoutStopSec=20",
         "--",

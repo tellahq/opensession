@@ -2,7 +2,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { recoverableLocalHostSnapshotRecords } from "./run-session";
+import {
+  drainWatcherDelay,
+  recoverableLocalHostSnapshotRecords,
+} from "./run-session";
 import type { ActiveRunRecord } from "./run-journal";
 
 const roots: string[] = [];
@@ -11,6 +14,18 @@ afterEach(() => {
   for (const root of roots.splice(0)) {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+describe("drain watcher backoff", () => {
+  test("retries fast at first and settles at one try per 15 minutes", () => {
+    const nominal = (failures: number) => drainWatcherDelay(failures) / 1.2;
+    expect(drainWatcherDelay(0)).toBeLessThanOrEqual(3_600);
+    expect(nominal(5)).toBeLessThanOrEqual(96_000);
+    for (const failures of [9, 10, 50, 1_000]) {
+      expect(drainWatcherDelay(failures)).toBeGreaterThanOrEqual(12 * 60_000);
+      expect(drainWatcherDelay(failures)).toBeLessThanOrEqual(18 * 60_000);
+    }
+  });
 });
 
 describe("shutdown snapshot recovery", () => {

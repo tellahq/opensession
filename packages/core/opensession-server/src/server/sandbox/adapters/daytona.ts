@@ -306,6 +306,81 @@ async function getDaytonaSnapshot(
   }
 }
 
+/** Daytona deactivates a snapshot that no sandbox has used for two weeks.
+ * Every create from it then fails with "Snapshot <name> is inactive" until
+ * someone activates it again, so a quiet provider broke every launch. */
+export function daytonaSnapshotInactive(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /\bsnapshot\b.*\bis inactive\b/i.test(message);
+}
+
+type DaytonaSnapshotClient = Pick<Daytona, "snapshot">;
+
+const DAYTONA_SNAPSHOT_ACTIVATION_MS = 10 * 60_000;
+const daytonaSnapshotActivations = new Map<string, Promise<void>>();
+
+async function activateDaytonaSnapshot(
+  client: DaytonaSnapshotClient,
+  name: string,
+  pollMs: number,
+): Promise<void> {
+  const stateOfSnapshot = (snapshot: any) =>
+    String(snapshot?.state || "").toLowerCase();
+  let snapshot: any = await client.snapshot.get(name);
+  if (stateOfSnapshot(snapshot) === "inactive") {
+    try {
+      snapshot = await client.snapshot.activate(snapshot);
+    } catch (error) {
+      // Another coordinator may have started the activation first.
+      snapshot = await client.snapshot.get(name);
+      if (stateOfSnapshot(snapshot) === "inactive") throw error;
+    }
+  }
+  // Activation pulls the image back into the runners: ~5 min for a 21 GB
+  // repo template on 2026-11-26.
+  const deadline = Date.now() + DAYTONA_SNAPSHOT_ACTIVATION_MS;
+  while (stateOfSnapshot(snapshot) !== "active") {
+    const state = stateOfSnapshot(snapshot);
+    if (/fail|error/.test(state))
+      throw new Error(
+        `Daytona snapshot ${name} could not be activated: ${state}`,
+      );
+    if (Date.now() >= deadline)
+      throw new Error(
+        `Daytona snapshot ${name} is still ${state || "unknown"} after ${DAYTONA_SNAPSHOT_ACTIVATION_MS / 60_000} min`,
+      );
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+    snapshot = await client.snapshot.get(name);
+  }
+}
+
+/** Create from `snapshot`, reactivating it once if Daytona deactivated it.
+ * Concurrent launches share one activation per snapshot. */
+export async function createFromDaytonaSnapshot<T>(
+  client: DaytonaSnapshotClient,
+  snapshot: string | undefined,
+  create: (snapshot?: string) => Promise<T>,
+  pollMs = 5_000,
+): Promise<T> {
+  try {
+    return await create(snapshot);
+  } catch (error) {
+    if (!snapshot || !daytonaSnapshotInactive(error)) throw error;
+    let activation = daytonaSnapshotActivations.get(snapshot);
+    if (!activation) {
+      console.warn(
+        `[sandbox:daytona] snapshot ${snapshot} is inactive; reactivating`,
+      );
+      activation = activateDaytonaSnapshot(client, snapshot, pollMs).finally(
+        () => daytonaSnapshotActivations.delete(snapshot),
+      );
+      daytonaSnapshotActivations.set(snapshot, activation);
+    }
+    await activation;
+    return await create(snapshot);
+  }
+}
+
 async function recoverDaytonaRepoTemplate(client: Daytona, repoId: string) {
   const stored = await readRemoteRepoTemplate("daytona", repoId);
   if (stored) return stored;
@@ -758,10 +833,12 @@ export class DaytonaProvider implements SandboxProvider {
         );
       };
       try {
-        sbx = await create(
+        sbx = await createFromDaytonaSnapshot(
+          client,
           disposable
             ? undefined
             : template?.artifactId || cfg.daytona?.snapshot,
+          create,
         );
         preparedWorkspace = Boolean(template);
       } catch (error) {
@@ -773,7 +850,11 @@ export class DaytonaProvider implements SandboxProvider {
         console.warn(
           `[sandbox:daytona] repo template ${template.artifactId} is unavailable; retrying cold`,
         );
-        sbx = await create(cfg.daytona?.snapshot);
+        sbx = await createFromDaytonaSnapshot(
+          client,
+          cfg.daytona?.snapshot,
+          create,
+        );
         preparedWorkspace = false;
       }
       newlyCreated = true;
@@ -1109,12 +1190,20 @@ export const daytonaPrewarmAdapter: PrewarmAdapter = {
     let sbx: DaytonaSandbox;
     let restoredFromTemplate = Boolean(template);
     try {
-      sbx = await create(template?.artifactId || cfg.daytona?.snapshot);
+      sbx = await createFromDaytonaSnapshot(
+        client,
+        template?.artifactId || cfg.daytona?.snapshot,
+        create,
+      );
     } catch (error) {
       if (!template || !daytonaNotFound(error)) throw error;
       await invalidateRemoteRepoTemplate("daytona", repoId);
       restoredFromTemplate = false;
-      sbx = await create(cfg.daytona?.snapshot);
+      sbx = await createFromDaytonaSnapshot(
+        client,
+        cfg.daytona?.snapshot,
+        create,
+      );
     }
     return {
       sandboxId: sbx.id,

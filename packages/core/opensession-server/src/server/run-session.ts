@@ -1741,8 +1741,16 @@ export function sessionQueueOwnerActive(sessionId: string): boolean {
   return drainWatchers.has(sessionId) || queueDrains.has(sessionId);
 }
 
-function drainWatcherDelay(failures: number): number {
-  const base = Math.min(60_000, 3_000 * 2 ** Math.min(failures, 5));
+// A queue that cannot start (its repo is gone, a sandbox reservation lapsed)
+// keeps its messages and keeps retrying, but backs off to one try every 15
+// minutes instead of a full session setup and stack trace every minute.
+const DRAIN_WATCHER_MAX_DELAY_MS = 15 * 60_000;
+
+export function drainWatcherDelay(failures: number): number {
+  const base = Math.min(
+    DRAIN_WATCHER_MAX_DELAY_MS,
+    3_000 * 2 ** Math.min(failures, 9),
+  );
   return Math.round(base * (0.8 + Math.random() * 0.4));
 }
 

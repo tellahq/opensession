@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
   assertAutomationEgressRestricted,
+  createFromDaytonaSnapshot,
   daytonaDesktopUrl,
   daytonaCreateResources,
   daytonaCreateSource,
   daytonaDriver,
+  daytonaSnapshotInactive,
   daytonaSnapshotIsRecent,
   daytonaSnapshotIsRecoverable,
   parseDaytonaExecResult,
@@ -87,6 +89,90 @@ describe("Daytona create source", () => {
     expect(
       daytonaSnapshotIsRecent({ updatedAt: "2026-08-11T11:55:00.000Z" }, now),
     ).toBe(false);
+  });
+});
+
+describe("Daytona inactive snapshots", () => {
+  const inactive = () =>
+    new Error("Snapshot opensession-acme-0123456789abcdef is inactive");
+
+  test("recognises Daytona's inactive-snapshot refusal only", () => {
+    expect(daytonaSnapshotInactive(inactive())).toBe(true);
+    expect(daytonaSnapshotInactive(new Error("Sandbox is inactive"))).toBe(
+      false,
+    );
+    expect(daytonaSnapshotInactive(new Error("rate limited"))).toBe(false);
+  });
+
+  test("reactivates the snapshot once and retries the create", async () => {
+    const states = ["inactive", "pending", "pulling", "active"];
+    const calls: string[] = [];
+    const client = {
+      snapshot: {
+        get: async (name: string) => {
+          calls.push(`get:${name}`);
+          return { name, state: states.shift() };
+        },
+        activate: async (snapshot: { name: string }) => {
+          calls.push(`activate:${snapshot.name}`);
+          return { ...snapshot, state: states.shift() };
+        },
+      },
+    } as any;
+    let creates = 0;
+    const sandbox = await createFromDaytonaSnapshot(
+      client,
+      "opensession-acme-0123456789abcdef",
+      async (snapshot) => {
+        creates += 1;
+        if (creates === 1) throw inactive();
+        return { id: "sb-1", snapshot };
+      },
+      1,
+    );
+    expect(sandbox).toEqual({
+      id: "sb-1",
+      snapshot: "opensession-acme-0123456789abcdef",
+    });
+    expect(creates).toBe(2);
+    expect(calls.filter((c) => c.startsWith("activate"))).toHaveLength(1);
+  });
+
+  test("other create failures and snapshot-less creates are not retried", async () => {
+    const client = { snapshot: {} } as any;
+    let creates = 0;
+    await expect(
+      createFromDaytonaSnapshot(client, "acme", async () => {
+        creates += 1;
+        throw new Error("HTTP 429");
+      }),
+    ).rejects.toThrow("HTTP 429");
+    await expect(
+      createFromDaytonaSnapshot(client, undefined, async () => {
+        creates += 1;
+        throw inactive();
+      }),
+    ).rejects.toThrow("is inactive");
+    expect(creates).toBe(2);
+  });
+
+  test("a failed activation surfaces instead of looping", async () => {
+    const client = {
+      snapshot: {
+        get: async () => ({ state: "inactive" }),
+        activate: async () => ({ state: "error" }),
+      },
+    } as any;
+    await expect(
+      createFromDaytonaSnapshot(
+        client,
+        "acme",
+        async () => {
+          throw inactive();
+        },
+        1,
+      ),
+    ).rejects.toThrow("could not be activated: error");
   });
 });
 

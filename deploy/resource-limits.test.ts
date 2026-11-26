@@ -16,6 +16,19 @@ describe("host resource-limit deployment", () => {
     expect(control).toContain("IOWeight=1000");
     expect(workloads).toContain("CPUWeight=100");
     expect(workloads).toContain("IOWeight=100");
+    expect(workloads).toContain("MemoryHigh=88G");
+    expect(workloads).toContain("MemoryMax=100G");
+    expect(control).toContain("MemoryLow=12G");
+  });
+
+  test("each run host has its own memory budget", async () => {
+    const helper = await Bun.file(
+      resolve(import.meta.dir, "opensession-run-host"),
+    ).text();
+    expect(helper).toContain('-p "MemoryHigh=32G"');
+    expect(helper).toContain('-p "MemoryMax=40G"');
+    expect(helper).toContain('-p "MemorySwapMax=4G"');
+    expect(helper).toContain('-p "OOMPolicy=continue"');
   });
 
   test("system-scope Open Session outweighs the user manager's workloads", async () => {
@@ -60,8 +73,8 @@ describe("host resource-limit deployment", () => {
       ),
     ).text();
 
-    expect(dropIn).toContain("MemoryHigh=4G");
-    expect(dropIn).toContain("MemoryMax=6G");
+    expect(dropIn).toContain("MemoryHigh=12G");
+    expect(dropIn).toContain("MemoryMax=16G");
     expect(dropIn).toContain("MemorySwapMax=1G");
     expect(dropIn).toContain("OOMPolicy=stop");
     expect(dropIn).not.toContain("EnvironmentFile=");

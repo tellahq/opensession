@@ -7,3 +7,6 @@ Description=Open Session latency-sensitive control plane
 # builds saturate the host; unused capacity remains available to workloads.
 CPUWeight=1000
 IOWeight=1000
+# Keep the gateway and SessionKernel working sets (heap plus SQLite page
+# cache) resident when agent workloads put the host under memory pressure.
+MemoryLow=12G

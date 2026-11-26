@@ -187,7 +187,7 @@ describe("public PR review policy", () => {
     expect(daytona).toContain("if (!sbx && !disposable)");
     expect(daytona).toContain("const template = disposable");
     expect(daytona).toContain(
-      "sbx = await create(\n          disposable\n            ? undefined",
+      "sbx = await createFromDaytonaSnapshot(\n          client,\n          disposable\n            ? undefined",
     );
     expect(daytona).toContain("runLifecycleHooks: !sourceVerification");
     expect(daytona).toContain("await client.delete(sbx, 120)");

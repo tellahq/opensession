@@ -7,3 +7,8 @@ Description=Open Session agent workloads
 # the control plane when both groups are busy.
 CPUWeight=100
 IOWeight=100
+# Aggregate fuse below the 123 GB host so concurrent runs cannot push the
+# control plane into swap. Each run host also has its own 32G/40G budget.
+MemoryHigh=88G
+MemoryMax=100G
+MemorySwapMax=8G
