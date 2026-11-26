@@ -166,6 +166,16 @@ describe("LocalServer", () => {
     // Turns live inside the server, so they end with the app.
     expect(env.OPENSESSION_EXECUTOR).toBe("0");
     expect(env.OPENSESSION_PI_DETACH).toBe("0");
+    // And when the app dies without stopping it, the server ends itself: the
+    // session store last, so runs drain while it still answers.
+    expect(env.OPENSESSION_EXIT_WITH_PARENT).toBe(String(process.pid));
+    expect(env.OPENSESSION_EXIT_WITH_PARENT_DELAY_MS).toBeUndefined();
+    expect(started[0].env.OPENSESSION_EXIT_WITH_PARENT).toBe(
+      String(process.pid),
+    );
+    expect(
+      Number(started[0].env.OPENSESSION_EXIT_WITH_PARENT_DELAY_MS),
+    ).toBeGreaterThan(Number(env.SHUTDOWN_DRAIN_MS));
     expect(env.OPENSESSION_SESSION_KERNEL_TOKEN).toMatch(/^[0-9a-f]{64}$/);
     expect(env.OPENSESSION_SESSION_KERNEL_TOKEN).toBe(
       started[0].env.OPENSESSION_SESSION_KERNEL_TOKEN,

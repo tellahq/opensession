@@ -164,6 +164,8 @@ class LocalServer extends EventEmitter {
     tools = null,
     findTool = findOnPath,
     resolvePath = loginShellPath,
+    // The process the server ends with: this one.
+    pid = process.pid,
     preferredPorts = PREFERRED_PORTS,
     readyTimeouts = { kernel: KERNEL_READY_MS, server: SERVER_READY_MS },
   }) {
@@ -180,6 +182,7 @@ class LocalServer extends EventEmitter {
     this.fetch = fetch;
     this.resolvePath = resolvePath;
     this.findTool = findTool;
+    this.pid = pid;
     this.preferredPorts = preferredPorts;
     this.readyTimeouts = readyTimeouts;
     this.state = "stopped";
@@ -336,7 +339,11 @@ class LocalServer extends EventEmitter {
     await this.seedState(childEnv);
     fs.mkdirSync(this.logDir, { recursive: true, mode: 0o700 });
 
-    this.kernel = this.launch("kernel", ["session-kernel-service"], childEnv);
+    this.kernel = this.launch("kernel", ["session-kernel-service"], {
+      ...childEnv,
+      // After the server, whose runs drain while the store still answers.
+      OPENSESSION_EXIT_WITH_PARENT_DELAY_MS: String(KILL_AFTER_MS + 2_000),
+    });
     this.rememberPids();
     await this.waitFor(
       "The session store",
@@ -437,6 +444,9 @@ class LocalServer extends EventEmitter {
       OPENSESSION_EXECUTOR: "0",
       OPENSESSION_PI_DETACH: "0",
       SHUTDOWN_DRAIN_MS: String(DRAIN_MS),
+      // A crash, force quit or kill of the app never reaches stop(). The
+      // server watches for this process going away and shuts itself down.
+      OPENSESSION_EXIT_WITH_PARENT: String(this.pid),
     };
   }
 

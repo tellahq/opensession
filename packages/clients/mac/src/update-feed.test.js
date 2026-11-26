@@ -38,7 +38,13 @@ describe("where the app looks for updates", () => {
   });
 
   test("a build that does not know its repository has no feed for This Mac", () => {
-    for (const releaseRepo of [undefined, "", "acme", "acme/open session", "../x/y"])
+    for (const releaseRepo of [
+      undefined,
+      "",
+      "acme",
+      "acme/open session",
+      "../x/y",
+    ])
       expect(
         updateFeedUrl({
           origin: "http://127.0.0.1:47850",
@@ -48,9 +54,9 @@ describe("where the app looks for updates", () => {
         }),
       ).toBe(null);
     expect(publicFeedUrl("acme/opensession?x=1")).toBe(null);
-    expect(updateFeedUrl({ origin: null, local: false, version: "1.2.3" })).toBe(
-      null,
-    );
+    expect(
+      updateFeedUrl({ origin: null, local: false, version: "1.2.3" }),
+    ).toBe(null);
   });
 
   test("a feed served by hand wins", () => {
@@ -92,7 +98,9 @@ describe("the feed a release publishes", () => {
   });
 
   test("is refused for anything that is not a release tag", () => {
-    expect(() => releaseFeed({ repo: "acme/opensession", tag: "main" })).toThrow();
+    expect(() =>
+      releaseFeed({ repo: "acme/opensession", tag: "main" }),
+    ).toThrow();
     expect(() => releaseFeed({ repo: "acme", tag: "v1.2.3" })).toThrow();
   });
 

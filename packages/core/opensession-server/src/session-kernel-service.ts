@@ -1,4 +1,5 @@
 import { startSessionKernelService } from "./server/session-kernel/actor-service";
+import { startParentWatch } from "./server/parent-watch";
 
 export async function runSessionKernelService(): Promise<void> {
   const service = await startSessionKernelService({
@@ -28,6 +29,8 @@ export async function runSessionKernelService(): Promise<void> {
   }
   process.on("SIGTERM", stop);
   process.on("SIGINT", stop);
+  // Only when started by a program that asked for it (the Mac app).
+  startParentWatch();
 }
 
 if (import.meta.main) await runSessionKernelService();

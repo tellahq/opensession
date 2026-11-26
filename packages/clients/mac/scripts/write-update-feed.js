@@ -10,5 +10,8 @@ if (!repo || !tag || !out) {
   console.error("usage: write-update-feed.js <owner/repo> <tag> <out file>");
   process.exit(2);
 }
-fs.writeFileSync(out, JSON.stringify(releaseFeed({ repo, tag }), null, 2) + "\n");
+fs.writeFileSync(
+  out,
+  JSON.stringify(releaseFeed({ repo, tag }), null, 2) + "\n",
+);
 console.log(`wrote ${out}`);

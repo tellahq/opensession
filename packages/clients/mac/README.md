@@ -139,8 +139,11 @@ and `gh` are), `HOME`, and the SSH agent socket. Turns run inside the
 server process (`OPENSESSION_EXECUTOR=0`, `OPENSESSION_PI_DETACH=0`), so
 quitting the app ends them and nothing keeps running in the background. A turn
 that was in flight is recorded as interrupted and can be continued. Processes
-left by a crashed or force-quit app are ended at the next launch, matched by
-executable path and never by pid alone.
+that lose the app without being stopped (a crash, a force quit, a `kill`) end
+themselves within seconds: the app sets `OPENSESSION_EXIT_WITH_PARENT` to its
+own process id and the server watches for that parent going away. Anything
+still left is ended at the next launch, matched by executable path and never by
+pid alone.
 
 ### Claude Code and Codex
 

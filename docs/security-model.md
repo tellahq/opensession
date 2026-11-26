@@ -491,7 +491,8 @@ as that user in the folders they are given. What it adds:
 - **No remote control of it.** Starting, stopping and inspecting the server is
   IPC that the app accepts only from its own packaged pages.
 - **It ends with the app.** Turns run inside the server process and the app
-  stops the server on quit.
+  stops the server on quit. If the app dies without doing so, the server
+  notices its parent is gone and shuts down by itself.
 - **Downloaded tools are the publisher's.** When the Mac has no `claude` or
   `codex`, the app downloads them from their publishers over HTTPS into its
   state folder. A file is used only if it matches the checksum published

@@ -39,6 +39,7 @@ import {
 } from "./src/server/automations";
 import { startUsagePoller } from "./src/server/claude-accounts";
 import { startClaudeCodeUpgrade } from "./src/server/claude-code-version";
+import { startParentWatch } from "./src/server/parent-watch";
 import { startCodexUsagePoller } from "./src/server/codex-accounts";
 import { startXaiUsagePoller } from "./src/server/xai-accounts";
 import {
@@ -1525,6 +1526,9 @@ if (!g.__opensessionBooted) {
   };
   process.on("SIGTERM", () => void gracefulShutdown("SIGTERM"));
   process.on("SIGINT", () => void gracefulShutdown("SIGINT"));
+  // Only when started by a program that asked for it (the Mac app): its
+  // crash or force quit then ends this server the same way a stop does.
+  startParentWatch();
   process.on("SIGUSR2", () => void gracefulShutdown("SIGUSR2"));
   // The run-ws timer-poison tripwire calls this when timer death is confirmed:
   // same snapshot+exit path as a signal, and the
