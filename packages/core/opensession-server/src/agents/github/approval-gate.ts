@@ -311,6 +311,7 @@ async function refreshOnce(prNumber: number, ghRepo: string): Promise<void> {
     codeowners,
     ownerTokens,
     ...(config.maxRisk ? { maxRisk: config.maxRisk } : {}),
+    ...(config.minQuality ? { minQuality: config.minQuality } : {}),
     ...(config.requireApprovalOnHead ? { requireApprovalOnHead: true } : {}),
     matchGlob,
   });

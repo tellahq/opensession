@@ -14,7 +14,7 @@
  *     "monitoringPlan": { "instructions": "..." },      // "How we'll know" plan (true, or with repo guidance)
  *     "rules": [ { "name", "when", "then" } ],          // custom scoring rules (review-rules.ts)
  *     "groups": [ { "name", "rules": [ ... ] } ],        // rules reported together under one name
- *     "approvalGate": { "maxRisk": "low" }                 // CODEOWNERS-aware required check; maxRisk optional (approval-gate.ts; read from the default branch)
+ *     "approvalGate": { "maxRisk": "low", "minQuality": 4 } // CODEOWNERS-aware required check; maxRisk and minQuality optional (approval-gate.ts; read from the default branch)
  *   }
  *
  * Auto-review gating (skipKeywords) reads the repo's MAIN checkout copy (the

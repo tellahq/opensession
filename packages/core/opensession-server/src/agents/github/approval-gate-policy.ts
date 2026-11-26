@@ -24,8 +24,10 @@
  *
  * Enabled per repository from `.os-review.json` on the default branch, with
  * `"approvalGate": true` or `"approvalGate": { "checkName": "...",
- * "maxRisk": "low" }`. `maxRisk` additionally caps the review's merge risk
- * on the automatic path; without it, risk is shown but does not decide.
+ * "maxRisk": "low", "minQuality": 4 }`. `maxRisk` additionally caps the
+ * review's merge risk on the automatic path; without it, risk is shown but
+ * does not decide. `minQuality` (1-5, default 5) is the lowest review quality
+ * the automatic path accepts.
  *
  * Human approvals survive later pushes by default, like a ruleset without
  * "dismiss stale reviews on push": the reviewer approved the change, not
@@ -54,6 +56,8 @@ export interface ApprovalGateConfig {
   checkName: string;
   /** Highest merge risk the automatic path accepts. Absent = risk ignored. */
   maxRisk?: GateRisk;
+  /** Lowest review quality the automatic path accepts. Absent = 5. */
+  minQuality?: number;
   /** Count only human approvals of the current head. Default false. */
   requireApprovalOnHead?: boolean;
 }
@@ -71,9 +75,17 @@ export function normalizeApprovalGateConfig(
       ? o.checkName.trim().slice(0, 100)
       : DEFAULT_GATE_CHECK_NAME;
   const maxRisk = GATE_RISKS.find((r) => r === o.maxRisk);
+  const minQuality =
+    typeof o.minQuality === "number" &&
+    Number.isInteger(o.minQuality) &&
+    o.minQuality >= 1 &&
+    o.minQuality < 5
+      ? o.minQuality
+      : undefined;
   return {
     checkName: name,
     ...(maxRisk ? { maxRisk } : {}),
+    ...(minQuality ? { minQuality } : {}),
     ...(o.requireApprovalOnHead === true
       ? { requireApprovalOnHead: true }
       : {}),
@@ -192,6 +204,8 @@ export interface GateInput {
   /** Highest merge risk the automatic path accepts; absent = ignored. A
    *  review without a risk score never clears a cap. */
   maxRisk?: GateRisk;
+  /** Lowest review quality the automatic path accepts; absent = 5. */
+  minQuality?: number;
   /** Count only approvals of the current head (default: any commit). */
   requireApprovalOnHead?: boolean;
   /** Matches a path against one glob; injected so the policy stays pure. */
@@ -229,6 +243,10 @@ function list(items: string[], max = 5): string {
   return shown.join(", ") + more;
 }
 
+function quality(min: number): string {
+  return min === 5 ? "5/5" : `${min}/5 or higher`;
+}
+
 function reviewLabel(r: LastReviewState): string {
   const verdict = (r.verdict || "no verdict").replace(/_/g, " ");
   const quality =
@@ -237,15 +255,16 @@ function reviewLabel(r: LastReviewState): string {
   return `${verdict} · ${quality} · ${risk}`;
 }
 
-function how(onHead: boolean): string {
+function how(onHead: boolean, minQuality: number): string {
   const approval = onHead ? "an approval of the current head" : "an approval";
-  return `Passes when every changed file with a code owner has ${approval} from one of its owners and either the OS review of the current head clears the automatic path (approve and 5/5, plus the repository's risk cap if it sets one), or someone with write access gives ${approval}. Files with code owners, the review policy, and PRs from forks always need a human.`;
+  return `Passes when every changed file with a code owner has ${approval} from one of its owners and either the OS review of the current head clears the automatic path (approve and ${quality(minQuality)}, plus the repository's risk cap if it sets one), or someone with write access gives ${approval}. Files with code owners, the review policy, and PRs from forks always need a human.`;
 }
 
 export function evaluateApprovalGate(input: GateInput): GateResult {
   const head = input.headSha;
   const onHead = !!input.requireApprovalOnHead;
-  const HOW = how(onHead);
+  const minQuality = input.minQuality ?? 5;
+  const HOW = how(onHead, minQuality);
   const author = input.author.toLowerCase();
   const counted = [...latestDecisiveReviews(input.reviews).entries()].filter(
     ([login]) => login !== author && input.approvers.has(login),
@@ -354,10 +373,11 @@ export function evaluateApprovalGate(input: GateInput): GateResult {
     !input.maxRisk ||
     (!!review.risk &&
       GATE_RISKS.indexOf(review.risk) <= GATE_RISKS.indexOf(input.maxRisk));
-  const needs = `approve, 5/5${input.maxRisk ? `, risk ${input.maxRisk}${input.maxRisk === "high" ? "" : " or lower"}` : ""} and no blocking findings`;
+  const needs = `approve, ${quality(minQuality)}${input.maxRisk ? `, risk ${input.maxRisk}${input.maxRisk === "high" ? "" : " or lower"}` : ""} and no blocking findings`;
   const passes =
     review.verdict === "approve" &&
-    review.confidence === 5 &&
+    typeof review.confidence === "number" &&
+    review.confidence >= minQuality &&
     review.blocking === 0 &&
     riskOk;
   if (passes) {

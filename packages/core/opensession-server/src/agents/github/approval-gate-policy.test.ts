@@ -147,6 +147,31 @@ describe("approval gate policy", () => {
     ).toBe("success");
   });
 
+  test("a repository quality floor lets lower-scored approvals pass, and only them", () => {
+    const at = (confidence: number | undefined, minQuality?: number) =>
+      evaluateApprovalGate(
+        input({ minQuality, lastReview: review({ confidence }) }),
+      );
+    expect(at(4, 4)).toMatchObject({ conclusion: "success" });
+    expect(at(5, 4)).toMatchObject({ conclusion: "success" });
+    const under = at(3, 4);
+    expect(under).toMatchObject({ conclusion: "action_required" });
+    expect(under.summary).toContain("approve, 4/5 or higher");
+    expect(at(undefined, 4)).toMatchObject({ conclusion: "action_required" });
+    expect(at(4)).toMatchObject({ conclusion: "action_required" });
+    // The floor never waives the verdict or blocking findings.
+    for (const over of [{ verdict: "comment" }, { blocking: 1 }]) {
+      expect(
+        evaluateApprovalGate(
+          input({
+            minQuality: 4,
+            lastReview: review({ confidence: 4, ...over }),
+          }),
+        ),
+      ).toMatchObject({ conclusion: "action_required" });
+    }
+  });
+
   test("anything short of approve, 5/5 and no blockers needs a human", () => {
     for (const over of [
       { confidence: 4 },
@@ -364,6 +389,14 @@ describe("approval gate config", () => {
       checkName: "OS approval gate",
       requireApprovalOnHead: true,
     });
+    expect(normalizeApprovalGateConfig({ minQuality: 4 })).toEqual({
+      checkName: "OS approval gate",
+      minQuality: 4,
+    });
+    for (const minQuality of [0, 5, 3.5, "4"])
+      expect(normalizeApprovalGateConfig({ minQuality })).toEqual({
+        checkName: "OS approval gate",
+      });
     expect(normalizeApprovalGateConfig({ maxRisk: "extreme" })).toEqual({
       checkName: "OS approval gate",
     });
