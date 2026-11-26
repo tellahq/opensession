@@ -73,14 +73,12 @@
 
 import { registerMemoryProbe } from "./memory-probes";
 import { homeDir } from "./paths";
-import { stateDir } from "./paths";
 import {
   query,
   createSdkMcpServer,
   tool,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
-import { z } from "zod";
 import { audit, summarizeText } from "./audit";
 import {
   hasAccounts,
@@ -109,11 +107,26 @@ import {
 } from "./model-providers";
 import { readPiEngineConfig, piConfigPath } from "./pi-config";
 import { mkdir } from "node:fs/promises";
+import { CLAUDE_QUERY_CWD } from "./claude-query-runtime";
+import {
+  DISALLOWED_BUILTINS,
+  PASSTHROUGH_MCP,
+  PASSTHROUGH_PREFIX,
+  SDK_BUILTIN_TOOLS,
+  jsonSchemaToZodShape,
+} from "./claude-passthrough-tools";
+export {
+  DISALLOWED_BUILTINS,
+  PASSTHROUGH_MCP,
+  PASSTHROUGH_PREFIX,
+  SDK_BUILTIN_TOOLS,
+  jsonSchemaToZodShape,
+} from "./claude-passthrough-tools";
 
 const HOME = homeDir();
 // Empty, dedicated cwd for the SDK subprocess: the bridge never touches files
 // (every tool is a blocked passthrough), so no worktree must ever be visible.
-export const BRIDGE_CWD = `${stateDir("anthropic-bridge")}/bridge-cwd`;
+export const BRIDGE_CWD = CLAUDE_QUERY_CWD;
 
 /** Create the SDK cwd on the call path. The in-process provider uses the same
  * directory without starting the HTTP bridge, so bridge startup cannot own it. */
@@ -468,52 +481,6 @@ export function flatSdkTurnContent(turn: FlatSdkTurn): ContentBlock[] | null {
   ];
 }
 
-/** Minimal JSON Schema → zod conversion for client tool registration. The
- *  schema only shapes what the model emits — Pi revalidates on its side,
- *  so unknown constructs safely degrade to z.any(). */
-export function jsonSchemaToZodShape(
-  schema: any,
-): Record<string, z.ZodTypeAny> {
-  if (!schema || typeof schema !== "object" || !schema.properties) return {};
-  const required = new Set<string>(
-    Array.isArray(schema.required) ? schema.required : [],
-  );
-  const shape: Record<string, z.ZodTypeAny> = {};
-  for (const [key, prop] of Object.entries<any>(schema.properties)) {
-    let t = jsonSchemaToZod(prop);
-    if (prop?.description && typeof prop.description === "string")
-      t = t.describe(prop.description);
-    shape[key] = required.has(key) ? t : t.optional();
-  }
-  return shape;
-}
-
-function jsonSchemaToZod(schema: any): z.ZodTypeAny {
-  if (!schema || typeof schema !== "object") return z.any();
-  switch (schema.type) {
-    case "string":
-      return Array.isArray(schema.enum) && schema.enum.length
-        ? z.enum(schema.enum as [string, ...string[]])
-        : z.string();
-    case "number":
-    case "integer":
-      return z.number();
-    case "boolean":
-      return z.boolean();
-    case "array":
-      return z.array(jsonSchemaToZod(schema.items));
-    case "object":
-      return schema.properties
-        ? z.object(jsonSchemaToZodShape(schema))
-        : z.record(z.string(), z.any());
-    default:
-      return z.any();
-  }
-}
-
-export const PASSTHROUGH_MCP = "oc";
-export const PASSTHROUGH_PREFIX = `mcp__${PASSTHROUGH_MCP}__`;
-
 /** Far above any real window: the CLI never refuses a request on its own
  *  token estimate. */
 const CLI_BLOCKING_LIMIT_OFF = 1_000_000_000;
@@ -552,42 +519,6 @@ export function cliPassthroughEnv(limits: {
       : {}),
   };
 }
-
-/** Primary switch: an empty `tools` list removes every SDK built-in from the
- *  model's context, including ones added by SDK bumps after the denylist
- *  below was written (CronCreate, ScheduleWakeup, Monitor, ...). Without it a
- *  new built-in leaks into context, the model calls it, and the client
- *  answers "Tool X not found". */
-export const SDK_BUILTIN_TOOLS: string[] = [];
-
-/** Built-in SDK tools the bridge must never let run — the client owns all
- *  execution. Belt-and-braces under `SDK_BUILTIN_TOOLS`; the PreToolUse hook
- *  blocks everything as a final backstop. */
-export const DISALLOWED_BUILTINS = [
-  "Bash",
-  "Edit",
-  "Write",
-  "Read",
-  "Glob",
-  "Grep",
-  "WebFetch",
-  "WebSearch",
-  "NotebookEdit",
-  "Task",
-  "TaskOutput",
-  "TaskStop",
-  "Agent",
-  "Skill",
-  "TaskCreate",
-  "TaskUpdate",
-  "TaskList",
-  "TaskGet",
-  "AskUserQuestion",
-  "ListMcpResourcesTool",
-  "ReadMcpResourceTool",
-  "ToolSearch",
-  "Workflow",
-];
 
 interface CapturedToolUse {
   id: string;
