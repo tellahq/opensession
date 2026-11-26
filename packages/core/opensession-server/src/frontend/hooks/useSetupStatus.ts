@@ -12,6 +12,7 @@ import {
   type SetupRepo,
   type SetupStatus,
 } from "../components/setup-shared";
+import { getCurrentUser } from "../components/UserPicker";
 import { BASE_PATH } from "../lib/base";
 import { waitForSetupHealth } from "../lib/setup-restart";
 import { toast } from "../ui/toast";
@@ -64,7 +65,11 @@ export function useSetupStatus(): SetupController {
   // this hook can invoke the same fetch.
   const refetch = useCallback(async () => {
     await (async () => {
-      const body = await setupRequest<SetupStatus>("/api/setup/status");
+      // The engine readiness check is per user when Claude accounts are
+      // personal; with web sign-in on the server uses the verified identity.
+      const body = await setupRequest<SetupStatus>(
+        `/api/setup/status?user=${encodeURIComponent(getCurrentUser())}`,
+      );
       setStatus(body);
       setFailed(false);
     })().catch(async () => {

@@ -10,17 +10,23 @@
  */
 import { z } from "zod";
 import { createSdkMcpServer, tool } from "../../server/inprocess-mcp";
+import { productName } from "../../server/config";
 import { findSession } from "../../server/session-cache";
 import { stripeApprovalsEnforced } from "../../server/stripe-approvals";
 import {
+  QUESTION_LIMITS,
+  requestDiscussionQuestion,
   requestDiscussionToolCallApproval,
   upsertDiscussionToolCall,
   withDiscussionOrder,
 } from "./discussion-api";
 import {
   awaitApproval,
+  awaitQuestion,
   beginDiscussionAction,
+  hasPendingQuestion,
   resolveApproval,
+  resolveQuestion,
   type ApprovalOutcome,
 } from "./discussions";
 
@@ -128,8 +134,88 @@ export function createPlainDiscussionMcpServer(ctx: {
     version: "1.0.0",
     tools: [
       tool(
+        "ask_teammate",
+        "Ask the teammate in this Plain discussion to choose before you carry on: Plain shows a card with each question and its options, plus its own Other box and Skip. Waits for the answer and returns it. Use it when a real choice blocks you (which invoice, which account, which of two fixes), not for yes/no on an action: reply_to_customer and execute_stripe_action carry their own Approve/Deny card. Never call it in an unattended run nobody is watching.",
+        {
+          questions: z
+            .array(
+              z.object({
+                question: z.string().min(1).max(QUESTION_LIMITS.questionChars),
+                isMultiSelect: z
+                  .boolean()
+                  .optional()
+                  .describe("Let the teammate pick more than one option."),
+                options: z
+                  .array(
+                    z.object({
+                      label: z
+                        .string()
+                        .min(1)
+                        .max(QUESTION_LIMITS.labelChars)
+                        .describe("Unique within the question."),
+                      description: z
+                        .string()
+                        .min(1)
+                        .max(QUESTION_LIMITS.descriptionChars),
+                    }),
+                  )
+                  .min(QUESTION_LIMITS.optionsMin)
+                  .max(QUESTION_LIMITS.optionsMax)
+                  .describe(
+                    "Recommended option first. Do not add an Other option; Plain adds one.",
+                  ),
+              }),
+            )
+            .min(1)
+            .max(QUESTION_LIMITS.questionsPerAsk),
+        },
+        async (args: {
+          questions: Array<{
+            question: string;
+            isMultiSelect?: boolean;
+            options: Array<{ label: string; description: string }>;
+          }>;
+        }) => {
+          if (hasPendingQuestion(ctx.discussionId))
+            return text(
+              "A question card is already open in this discussion. Wait for its answer.",
+            );
+          // Wait before publishing, as with approvals: the answer webhook
+          // must find a waiter.
+          const answer = awaitQuestion(ctx.discussionId, APPROVAL_TIMEOUT_MS);
+          try {
+            await withDiscussionOrder(ctx.discussionId, () =>
+              requestDiscussionQuestion({
+                discussionId: ctx.discussionId,
+                questions: args.questions,
+              }),
+            );
+          } catch (e) {
+            resolveQuestion(ctx.discussionId, { status: "CANCELLED" });
+            return text(
+              `Could not show the question: ${e instanceof Error ? e.message : String(e)}. Ask in your reply instead.`,
+            );
+          }
+          const outcome = await answer;
+          switch (outcome.status) {
+            case "ANSWERED":
+              return text(`The teammate answered:\n\n${outcome.answer}`);
+            case "DISMISSED":
+              return text(
+                "The teammate skipped the question. Do not guess; end the turn and wait for their next message.",
+              );
+            case "CANCELLED":
+              return text("The teammate stopped the turn before answering.");
+            case "TIMEOUT":
+              return text(
+                "No answer within 30 minutes. End the turn; the teammate can answer in a new message.",
+              );
+          }
+        },
+      ),
+      tool(
         "reply_to_customer",
-        "Send a reply to the customer on the support thread, after the teammate approves it in Plain. Shows them the exact text on an Approve/Deny card and waits for the decision; on approval the reply is sent and the thread is snoozed as waiting for the customer. Nothing is sent on a denial. Use only when the teammate asked for a reply to go out.",
+        "Send a reply to the customer on the support thread, after the teammate approves it in Plain. Shows them the exact text on an Approve/Deny card and waits for the decision; on approval the reply is sent under the approving teammate's name when Plain allows it (otherwise as the support machine user) and the thread is snoozed as waiting for the customer. Nothing is sent on a denial. Use only when the teammate asked for a reply to go out.",
         {
           text: z
             .string()
@@ -171,17 +257,37 @@ export function createPlainDiscussionMcpServer(ctx: {
             // Last check before the write: a Stop during the thread lookup
             // must not send.
             throwIfStopped(action.signal);
+            // Sent as the teammate who approved it, when the agent key may
+            // impersonate them; otherwise as the machine user.
             const sent = await sendCustomerReply(
               threadId,
               customerId,
               args.text,
+              {
+                asUser: outcome.approvedByUserId
+                  ? [{ userId: outcome.approvedByUserId }]
+                  : [],
+              },
             );
-            if (!sent.ok) throw new Error("Plain rejected the reply");
-            await closeGate(gate, "SUCCESS", "sent");
+            if (!sent.ok)
+              throw new Error(
+                sent.sentAs === "user" && sent.impersonationError
+                  ? `Plain did not confirm the reply (${sent.impersonationError}); check the thread before sending again`
+                  : "Plain rejected the reply",
+              );
+            const author =
+              sent.sentAs === "user"
+                ? "as the teammate who approved it"
+                : `as the ${productName()} machine user${sent.impersonationError ? ` (sending as the approver failed: ${sent.impersonationError})` : ""}`;
+            await closeGate(
+              gate,
+              "SUCCESS",
+              sent.sentAs === "user" ? "sent as you" : "sent",
+            );
             return text(
               sent.waitingForCustomer
-                ? `Reply sent to the customer on ${threadId}; the thread is waiting for the customer.`
-                : `Reply sent to the customer on ${threadId}, but its status could not be set to Waiting for customer.`,
+                ? `Reply sent to the customer on ${threadId} ${author}; the thread is waiting for the customer.`
+                : `Reply sent to the customer on ${threadId} ${author}, but its status could not be set to Waiting for customer.`,
             );
           } catch (e) {
             const message = e instanceof Error ? e.message : String(e);

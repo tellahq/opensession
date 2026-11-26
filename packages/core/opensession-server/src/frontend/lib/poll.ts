@@ -42,3 +42,7 @@ export const pollWhileVisible = makePollWhileVisible();
 
 /** GitHub webhooks are the primary PR refresh path; this only recovers missed events. */
 export const PR_WEBHOOK_FALLBACK_POLL_MS = 5 * 60_000;
+
+/** A merged PR waiting on its production deploy: no webhook announces the
+ *  deploy, so its link checks a little more often until the handover. */
+export const MERGED_DEPLOY_POLL_MS = 60_000;

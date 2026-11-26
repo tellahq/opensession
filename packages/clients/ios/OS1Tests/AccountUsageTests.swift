@@ -338,4 +338,75 @@ final class AccountUsageTests: XCTestCase {
             "Main · Fable, yours, 8 percent left, not for this model"
         )
     }
+
+    // MARK: Session limits (the usage bar)
+
+    /// On auto the bar reads the account routing would pick (your own
+    /// before the pool), with its 5-hour window and the model's weekly cap.
+    func testSessionLimitsOnAutoReadYourAccount() {
+        let accounts = [
+            pooled("pool", "Pool", usage: claudeUsage(week: 10)),
+            pooled("mine", "Main", owner: "Kent", usage: claudeUsage(week: 30, fable: 45)),
+            pooled("other", "Theirs", owner: "Someone", usage: claudeUsage(week: 0)),
+        ]
+        let limits = SessionLimits.read(
+            accounts: accounts, viewer: "Kent", kind: .claude,
+            model: "claude-fable-5", accountId: nil, now: now
+        )
+        XCTAssertEqual(limits?.account.account.id, "mine")
+        XCTAssertEqual(limits?.accountName, "Main")
+        XCTAssertEqual(limits?.auto, true)
+        XCTAssertEqual(limits?.short?.used, 60)
+        XCTAssertEqual(limits?.week?.used, 45)
+        XCTAssertEqual(limits?.week?.scope, "Fable")
+    }
+
+    func testSessionLimitsFollowAPin() {
+        let accounts = [
+            pooled("pool", "Pool", usage: claudeUsage(week: 80)),
+            pooled("mine", "Main", owner: "Kent", usage: claudeUsage(week: 20)),
+        ]
+        let limits = SessionLimits.read(
+            accounts: accounts, viewer: "Kent", kind: .claude,
+            model: "claude-sonnet-5", accountId: "pool", now: now
+        )
+        XCTAssertEqual(limits?.account.account.id, "pool")
+        XCTAssertEqual(limits?.auto, false)
+        XCTAssertEqual(limits?.week?.used, 80)
+        XCTAssertNil(limits?.week?.scope)
+    }
+
+    /// Codex windows shorter than a week are the short limit; SuperGrok has
+    /// none. No provider, or no account to spend, reads as no limits.
+    func testSessionLimitsShortWindowsAndAbsentAccounts() {
+        var codex = AccountUsage()
+        codex.buckets = [CodexUsageBucket(
+            primary: UsageWindow(utilization: 25, resetsAt: iso(now.addingTimeInterval(3600)), windowDurationMins: 300),
+            secondary: UsageWindow(utilization: 70, resetsAt: iso(now.addingTimeInterval(86_400)), windowDurationMins: 10_080)
+        )]
+        let codexLimits = SessionLimits.read(
+            accounts: [pooled("c", "Codex", kind: .codex, usage: codex)],
+            viewer: "Kent", kind: .codex, model: "gpt-5", accountId: nil, now: now
+        )
+        XCTAssertEqual(codexLimits?.short?.used, 25)
+        XCTAssertEqual(codexLimits?.week?.used, 70)
+
+        var grok = AccountUsage()
+        grok.creditUsagePercent = 12
+        let grokLimits = SessionLimits.read(
+            accounts: [pooled("x", "Grok", kind: .xai, usage: grok)],
+            viewer: "Kent", kind: .xai, model: "grok-5", accountId: nil, now: now
+        )
+        XCTAssertNil(grokLimits?.short)
+        XCTAssertEqual(grokLimits?.week?.used, 12)
+
+        XCTAssertNil(SessionLimits.read(
+            accounts: [pooled("c", "Codex", kind: .codex, usage: codex)],
+            viewer: "Kent", kind: nil, model: "x", accountId: nil, now: now
+        ))
+        XCTAssertNil(SessionLimits.read(
+            accounts: [pooled("other", "Theirs", owner: "Someone", usage: claudeUsage(week: 1))],
+            viewer: "Kent", kind: .claude, model: "claude-opus-5", accountId: nil, now: now
+        ))
+    }
 }

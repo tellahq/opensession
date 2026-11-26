@@ -51,7 +51,10 @@
  * use_login tool writes the password to a short-lived 0600 file in the
  * session's own workspace (keychain-logins.ts), never into a tool result or
  * the transcript. A login is never usable through call_credential or a
- * scripted run, and an API credential is never released.
+ * scripted run, and an API credential is never released. An owner may make
+ * a login workspace-wide (a shared machine's password, say): then any
+ * interactive session gets an implicit release grant per stated purpose,
+ * audited like any release, and nobody is asked.
  *
  * Stated limitation: the store is a 0600 file owned by the service user,
  * which agent shells also run as (and which may have root on the host), so
@@ -169,9 +172,9 @@ export interface KeychainCredential {
   allowedPathPrefixes?: string[];
   /** Calls return only the HTTP status, never headers or body. */
   statusOnly?: boolean;
-  /** "workspace": any session in the workspace may call it without an
-   *  ask; absent: personal, every use needs the owner's approval. Never
-   *  set on a login. */
+  /** "workspace": any session in the workspace may call it (or, for a
+   *  login, have its password released) without an ask; absent: personal,
+   *  every use needs the owner's approval. */
   scope?: "workspace";
   secret: string;
   createdAt: string;
@@ -444,16 +447,31 @@ export function normalizeCredentialHost(host: string): string {
     .replace(/[/?#].*$/, "");
 }
 
+/** Where a login is typed: a web sign-in page, or a machine reached over
+ *  VNC (Screen Sharing) or SSH. */
+const LOGIN_URL_PROTOCOLS = new Set(["https:", "vnc:", "ssh:"]);
+
+const LOGIN_URL_ERROR =
+  "loginUrl must be the full https:// URL of the sign-in page, or vnc://host[:port] or ssh://host[:port] for a machine's login";
+
 /** A login's sign-in page as stored, or an error safe to show the caller. */
 export function normalizeLoginUrl(raw: string | undefined): URL {
   let url: URL;
   try {
     url = new URL((raw || "").trim());
   } catch {
-    throw new Error("loginUrl must be a full https:// URL of the sign-in page");
+    throw new Error(LOGIN_URL_ERROR);
   }
-  if (url.protocol !== "https:" || url.username || url.password)
-    throw new Error("loginUrl must be a full https:// URL of the sign-in page");
+  if (
+    !LOGIN_URL_PROTOCOLS.has(url.protocol) ||
+    !url.hostname ||
+    url.username ||
+    url.password ||
+    UNSAFE_DISPLAY_CHARS.test(url.toString())
+  )
+    throw new Error(LOGIN_URL_ERROR);
+  // https: lower-cases its host already; vnc: and ssh: keep the case given.
+  url.hostname = url.hostname.toLowerCase();
   url.hash = "";
   return url;
 }
@@ -564,11 +582,6 @@ function normalizeLoginSpec(
     throw new Error(
       "a login has no header, method, path or status-only settings: it is typed into its sign-in page",
     );
-  // Its password reaches the agent, so every release stays the owner's call.
-  if (input.scope === "workspace")
-    throw new Error(
-      "a login can't be a workspace credential: its password reaches the agent, so its owner approves each release",
-    );
   const url = normalizeLoginUrl(input.loginUrl);
   if (
     input.host !== undefined &&
@@ -589,6 +602,9 @@ function normalizeLoginSpec(
     loginUrl: url.toString(),
     username,
     ...(description ? { description } : {}),
+    // Its password reaches the agent, so sharing it means every session in
+    // the workspace may read it. Only the owner can say so.
+    ...(input.scope === "workspace" ? { scope: "workspace" as const } : {}),
   };
 }
 
@@ -1105,6 +1121,14 @@ export function isWorkspaceCredential(
   return cred?.scope === "workspace" && cred.kind !== "login";
 }
 
+/** A workspace login: any interactive session may have its password
+ *  released without an ask, each release stating its purpose. */
+export function isWorkspaceLogin(
+  cred: Pick<KeychainCredentialMeta, "scope" | "kind"> | undefined,
+): boolean {
+  return cred?.scope === "workspace" && cred.kind === "login";
+}
+
 /** Insert (without persisting) a grant nobody approved, because the
  *  credential is workspace-scoped. The caller has checked that it is. */
 function insertImplicitGrant(input: {
@@ -1112,7 +1136,7 @@ function insertImplicitGrant(input: {
   sessionId: string;
   requestedBy: string;
   purpose: string;
-  mode: "workspace" | "run";
+  mode: "workspace" | "run" | "release";
   run?: KeychainScriptedRun;
 }): KeychainGrant {
   return insertGrant(
@@ -1575,6 +1599,10 @@ export interface LoginRelease {
 export async function claimLoginRelease(input: {
   sessionId: string;
   credential: string;
+  /** For a workspace login without a release grant: who asks, and why.
+   *  The release is minted on the spot and audited with both. */
+  requestedBy?: string;
+  purpose?: string;
 }): Promise<LoginRelease | { error: string }> {
   await ensureKeychainLoaded();
   const credMeta = findCredential(input.credential);
@@ -1584,28 +1612,67 @@ export async function claimLoginRelease(input: {
     return {
       error: `${credMeta.service} is an API credential, so its secret is never released. Use call_credential`,
     };
-  const gr = [...grants.values()]
+  const workspace = isWorkspaceLogin(credMeta);
+  const purpose = input.purpose?.trim();
+  let gr = [...grants.values()]
     .filter(
       (g) =>
         g.sessionId === input.sessionId &&
         g.credentialId === credMeta.id &&
         g.mode === "release" &&
+        // Nobody approved an implicit release: it holds only while the
+        // login stays workspace-wide.
+        (!g.implicit || workspace) &&
+        // An implicit release was minted for one purpose: spend it only for
+        // that one, so the audit log says why the password was read.
+        (!g.implicit || !purpose || norm(g.purpose) === norm(purpose)) &&
         liveNow(g),
     )
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  let minted = false;
+  if (!gr && workspace) {
+    if (!purpose || !input.requestedBy)
+      return {
+        error: `${credMeta.service} is a workspace login: pass a purpose, one sentence saying why this session signs in, recorded in the audit log`,
+      };
+    gr = insertImplicitGrant({
+      cred: credMeta,
+      sessionId: input.sessionId,
+      requestedBy: input.requestedBy,
+      purpose,
+      mode: "release",
+    });
+    minted = true;
+  }
   if (!gr)
     return {
       error: `this session holds no approved release for ${credMeta.service}. Ask its owner with request_credential({ credential: "${credMeta.service}", purpose }) first`,
     };
-  const cred = credentials.get(gr.credentialId)!;
-  gr.status = "used";
-  gr.usedAt = new Date().toISOString();
-  grants.set(gr.id, gr);
+  const claimed = gr;
+  const cred = credentials.get(claimed.credentialId)!;
+  claimed.status = "used";
+  claimed.usedAt = new Date().toISOString();
+  grants.set(claimed.id, claimed);
   const undo = async () => {
-    if (gr.status !== "used") return;
-    gr.status = "active";
-    delete gr.usedAt;
-    grants.set(gr.id, gr);
+    if (claimed.status !== "used") return;
+    // A release minted for this call is dropped rather than kept for later:
+    // its purpose was this call's.
+    if (minted) grants.delete(claimed.id);
+    else if (
+      claimed.implicit &&
+      !isWorkspaceLogin(credentials.get(claimed.credentialId))
+    ) {
+      // Unshared during the write: nobody approved it, so it must not come
+      // back as a release the personal path would hand out.
+      claimed.status = "revoked";
+      claimed.revokedAt = new Date().toISOString();
+      delete claimed.usedAt;
+      grants.set(claimed.id, claimed);
+    } else {
+      claimed.status = "active";
+      delete claimed.usedAt;
+      grants.set(claimed.id, claimed);
+    }
     await persistAsync().catch(() => {});
   };
   try {
@@ -1617,13 +1684,15 @@ export async function claimLoginRelease(input: {
   }
   auditAsync({
     kind: "keychain_login_released",
-    grant_id: gr.id,
-    credential_id: gr.credentialId,
-    session_id: gr.sessionId,
-    owner: gr.owner,
-    requested_by: gr.requestedBy,
+    grant_id: claimed.id,
+    credential_id: claimed.credentialId,
+    session_id: claimed.sessionId,
+    owner: claimed.owner,
+    requested_by: claimed.requestedBy,
+    purpose: claimed.purpose,
+    ...(claimed.implicit ? { scope: "workspace" } : {}),
   });
-  return { credential: cred, grant: gr, undo };
+  return { credential: cred, grant: claimed, undo };
 }
 
 /** Close a run's grants when the run ends, without blocking on the store.
@@ -1767,8 +1836,11 @@ export function grantInstructions(
     .join("; ");
   if (gr.mode === "release")
     return (
-      `${gr.owner} approved releasing the **${credMeta.service}** login to this session ` +
-      `(once, grant ${gr.id}; use it before ${gr.expiresAt}).\n` +
+      (gr.implicit
+        ? `**${credMeta.service}** is a workspace login (owner ${gr.owner}): every session may have its password released without asking ` +
+          `(once, grant ${gr.id}; use it before ${gr.expiresAt}).\n`
+        : `${gr.owner} approved releasing the **${credMeta.service}** login to this session ` +
+          `(once, grant ${gr.id}; use it before ${gr.expiresAt}).\n`) +
       `Call use_login({ credential: "${credMeta.service}" }). It writes the password to a file in this ` +
       `session's workspace and returns the sign-in page, the username and the file's path. ` +
       `Type the password into the page from that file in a script (for example with Playwright's fill or ` +
@@ -1858,6 +1930,13 @@ export function requestCredential(
   const isLogin = credMeta.kind === "login";
   if (isWorkspaceCredential(credMeta))
     return workspaceAnswer(credMeta, { ...input, purpose });
+  if (isWorkspaceLogin(credMeta)) {
+    if (input.run)
+      return {
+        error: `${credMeta.service} is a login: it can't be used by a scripted run. Ask without \`run\` to have the password released to this session`,
+      };
+    return workspaceLoginAnswer(credMeta, { ...input, purpose });
+  }
   const owner = resolveTeammate(credMeta.owner);
   if (!owner)
     return {
@@ -2077,6 +2156,37 @@ function workspaceAnswer(
       mode: "workspace",
     });
   }
+  persist();
+  return { grant: gr, instructions: grantInstructions(gr, credMeta) };
+}
+
+/**
+ * request_credential for a workspace login: nobody is asked. The session
+ * gets a release grant for this purpose (its live one if it already holds
+ * one for the same purpose), which use_login then spends. Audited with who
+ * asked and why.
+ */
+function workspaceLoginAnswer(
+  credMeta: KeychainCredentialMeta,
+  input: RequestCredentialInput,
+): RequestCredentialResult {
+  const live = [...grants.values()].find(
+    (g) =>
+      g.sessionId === input.sessionId &&
+      g.credentialId === credMeta.id &&
+      g.mode === "release" &&
+      norm(g.purpose) === norm(input.purpose) &&
+      liveNow(g),
+  );
+  if (live)
+    return { grant: live, instructions: grantInstructions(live, credMeta) };
+  const gr = insertImplicitGrant({
+    cred: credMeta,
+    sessionId: input.sessionId,
+    requestedBy: input.requestedBy,
+    purpose: input.purpose,
+    mode: "release",
+  });
   persist();
   return { grant: gr, instructions: grantInstructions(gr, credMeta) };
 }

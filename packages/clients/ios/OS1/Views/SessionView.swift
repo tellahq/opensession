@@ -905,8 +905,8 @@ struct SessionView: View {
                 }
             }
             #if os(iOS)
-            // The session's ⋯ sits beside the title, in the bar's own glass.
-            // Archive and Next stay on the pill above the composer
+            // The session's ⋯ sits beside the title, in the bar's own glass,
+            // and carries Archive. Next stays on the pill above the composer
             // (`SessionActionBar`), under the thumb.
             if let actionsMenu {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -1092,6 +1092,9 @@ struct SessionView: View {
                 if let cards = ProcessInfo.processInfo.environment["OS1_SHOW_ACTION_CARDS"] {
                     viewModel.showActionCardsForScreenshot(cards)
                 }
+                if let thinking = ProcessInfo.processInfo.environment["OS1_SHOW_THINKING_FIXTURE"] {
+                    Task { await viewModel.showThinkingForScreenshot(thinking) }
+                }
                 if ProcessInfo.processInfo.environment["OS1_SHOW_MERMAID_FIXTURE"] == "1" {
                     Task { await viewModel.showMermaidFixturesForScreenshot() }
                 }
@@ -1229,7 +1232,6 @@ struct SessionView: View {
                 horizontalInset: contentInset,
                 autoFocusWhenNeverRan: emptyContent == nil,
                 onNextChat: onNextChat,
-                onArchive: onArchiveWorkspace,
                 catalog: catalog,
                 accounts: accounts,
                 forkState: $forkState,
@@ -1273,6 +1275,7 @@ struct SessionView: View {
                 onNewSession: onNewSession,
                 onFork: canForkSession ? { forkState.enter() } : nil,
                 onRenameWorkspace: onRenameWorkspace,
+                onArchiveWorkspace: onArchiveWorkspace,
                 onDeleteWorkspace: onDeleteWorkspace,
                 showWorktreeInfo: $showWorktreeInfo,
                 showPrPanel: $showPrPanel,
@@ -1611,16 +1614,8 @@ struct SessionView: View {
     }
     #endif
 
-    /// `PrLinks.Index` keys for every PR this session carries.
     private var ownPrKeys: Set<String> {
-        let session = viewModel.session
-        var keys = Set(SessionPrSeries.rows(for: session).compactMap { row in
-            row.number.map { PrLinks.Index.key(row.target.repo, $0) }
-        })
-        if let repo = session.repo, let number = session.prNumber {
-            keys.insert(PrLinks.Index.key(repo, number))
-        }
-        return keys
+        PrLinks.ownPrKeys(of: viewModel.session)
     }
 
     private func pullRequestButton(number: Int) -> some View {
@@ -1918,7 +1913,13 @@ struct SessionView: View {
         // The run clock closes the transcript while work is in flight, under
         // the durable answer, live stream, or working fold.
         if viewModel.isRunning {
-            RunStatusFooter(since: viewModel.runStartedAt)
+            RunStatusFooter(
+                since: viewModel.runStartedAt,
+                isThinking: ThinkingStep.endsOnActiveThought(
+                    viewModel.displayBlocks,
+                    liveText: viewModel.liveText
+                )
+            )
                 .id("run-status")
                 .transcriptTail(tailId == "run-status")
         }
@@ -2399,6 +2400,9 @@ private struct SessionActionsMenu: View {
     let onNewSession: (() -> Void)?
     let onFork: (() -> Void)?
     let onRenameWorkspace: ((String) -> Void)?
+    /// Archive without opening anything next (a session not pushed from the
+    /// sidebar). The sidebar's own archive-and-next wins.
+    let onArchiveWorkspace: (() -> Void)?
     let onDeleteWorkspace: (() -> Void)?
     @Binding var showWorktreeInfo: Bool
     @Binding var showPrPanel: Bool
@@ -2418,13 +2422,20 @@ private struct SessionActionsMenu: View {
     @State private var mergeError: String?
     @State private var sandboxMove = SandboxMoveViewModel()
     @Environment(\.openURL) private var openURL
+    /// The sidebar's archive-and-open-next, when this session was pushed from it.
+    @Environment(\.phoneSessionNavigation) private var navigation
+
+    /// Archive, preferring the sidebar's archive-and-next. nil leaves it out.
+    private var archiveAction: (() -> Void)? {
+        if navigation.canArchive { return { navigation.archive() } }
+        return onArchiveWorkspace
+    }
 
     var body: some View {
         // Read top down from the bar: what you look at in this session, its
         // pull request, starting something, then the workspace itself.
-        // Archive is the pill's job above the composer, model settings ride
-        // the composer's pill and the worktree sheet opens from the title, so
-        // none of them repeat here.
+        // Model settings ride the composer's pill and the worktree sheet
+        // opens from the title, so neither repeats here.
         Menu {
             // The three views reached for most, as one row of icons.
             ControlGroup {
@@ -2598,6 +2609,11 @@ private struct SessionActionsMenu: View {
                         HideStore.shared.unhide(for: viewModel.session)
                     } label: {
                         Label("Restore to sidebar", systemImage: "eye")
+                    }
+                }
+                if let archiveAction {
+                    Button(action: archiveAction) {
+                        Label("Archive workspace", systemImage: "archivebox")
                     }
                 }
                 if let workspace, !workspace.isOptimistic,
@@ -3609,9 +3625,6 @@ private struct SessionInputBar: View {
     var autoFocusWhenNeverRan = true
     /// Kept optional so non-sidebar conversations, such as the Desk, draw no row.
     var onNextChat: (() -> Void)?
-    /// Archive without opening anything next (a session not pushed from the
-    /// sidebar, such as the Desk). The sidebar's own archive-and-next wins.
-    var onArchive: (() -> Void)? = nil
     #if os(iOS)
     @Environment(\.phoneSessionNavigation) private var navigation
     /// The transcript's way back down, carried by the action pill.
@@ -3769,13 +3782,17 @@ private struct SessionInputBar: View {
             // The web phone's action pill. It steps aside while typing.
             if hasActionBar {
                 SessionActionBar(
-                    onArchive: navigation.canArchive ? { navigation.archive() } : onArchive,
-                    next: showNextChatButton ? navigation : nil,
+                    next: navigation,
                     scrollToLatest: scrollToLatest
                 )
                 .transition(.opacity)
             }
             #endif
+
+            // Directly on the composer, under the action bar, as the web
+            // folds it out from behind the field. Its own view struct, so the
+            // usage it reads re-renders the strip alone.
+            ComposerUsageBar(viewModel: viewModel, catalog: catalog, accounts: accounts)
 
             ComposerMentionPalette(
                 text: projectedDraft.wrappedValue,
@@ -4037,11 +4054,11 @@ private struct SessionInputBar: View {
 
     #if os(iOS)
     /// Whether the action bar has anything to hold, so there is no empty
-    /// capsule.
+    /// capsule. Next is all it carries; Archive lives in the ⋯ menu.
     private var hasActionBar: Bool {
         !inputFocused
-            && (onArchive != nil || navigation.canArchive
-                || (showNextChatButton && (!navigation.chats.isEmpty || navigation.allRead)))
+            && showNextChatButton
+            && (!navigation.chats.isEmpty || navigation.allRead)
     }
     #endif
 
@@ -5158,6 +5175,9 @@ private struct SessionInputBar: View {
             .frame(minHeight: 44)
             .contentShape(Rectangle())
         }
+        // Top-down like the web menu, not flipped toward the pill: the five
+        // read in the order the person dragged them into there.
+        .menuOrder(.fixed)
         .buttonStyle(.plain)
         .disabled(noteMode || viewModel.safety != nil)
         .opacity(noteMode ? 0.4 : 1)
@@ -5817,27 +5837,34 @@ private struct SessionInputBar: View {
     }
 }
 
-/// How full the model's context window is, as the web's `ContextRing`
-/// (UsageMeter.tsx): accent until 85%, red past it. Nothing without a window.
+/// How full the model's context is, as the web's `ContextRing`
+/// (UsageMeter.tsx): it fills toward the point the engine compacts, when
+/// that sits under the window, and turns red once the window itself is 85%
+/// full. Nothing without a window.
 struct ContextFillRing: View {
     let usage: SessionUsage
     var size: CGFloat = 12
 
     var body: some View {
-        if usage.contextWindow > 0 {
-            let fraction = min(max(Double(usage.contextTokens) / Double(usage.contextWindow), 0), 1)
+        let fill = usage.contextFill
+        if fill.limit > 0 {
+            let fraction = fill.fraction
             ZStack {
                 Circle().stroke(OS1VisualStyle.border, lineWidth: 2)
                 Circle()
                     .trim(from: 0, to: fraction)
                     .stroke(
-                        fraction >= 0.85 ? OS1VisualStyle.red : OS1VisualStyle.accent,
+                        fill.isTight ? OS1VisualStyle.red : OS1VisualStyle.accent,
                         style: StrokeStyle(lineWidth: 2, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
             }
             .frame(width: size, height: size)
-            .accessibilityLabel("Context \(Int((fraction * 100).rounded())) percent full")
+            .accessibilityLabel(
+                fill.compacts
+                    ? "Context \(fill.percent) percent of the way to compaction"
+                    : "Context \(fill.percent) percent full"
+            )
         }
     }
 }

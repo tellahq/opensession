@@ -453,3 +453,39 @@ describe("open work fold hairline", () => {
     expect(html).not.toContain("border-b border-line");
   });
 });
+
+describe("TurnBlock featured media", () => {
+  test("keeps screenshots marked in narration visible when the turn folds", async () => {
+    const { TurnBlock } = await import("./TurnBlock");
+    const shot = "/media?path=%2Ftmp%2Fafter.png";
+    const incidental = "/media?path=%2Ftmp%2Fmentioned.png";
+    const items: TranscriptEntry[] = [
+      toolUse("narr-a", "Bash", { command: "ls" }),
+      {
+        id: "narr-msg",
+        type: "assistant",
+        content: `Here are the screenshots.\n\n![](${shot})`,
+        timestamp: "2026-08-17T09:00:02.000Z",
+        images: [shot, incidental],
+        featuredMedia: [shot],
+      },
+      toolUse("narr-b", "Bash", { command: "ls" }),
+    ];
+    const html = renderToStaticMarkup(
+      React.createElement(TurnBlock, {
+        items,
+        toolResults: new Map([
+          ["use-narr-a", result("narr-a")],
+          ["use-narr-b", result("narr-b")],
+        ]),
+        live: false,
+      }),
+    );
+    const strip = html.slice(html.lastIndexOf('class="pl-[7px] pr-1"'));
+
+    expect(html).toContain('aria-expanded="false"');
+    expect(strip).toContain(shot);
+    // Only what the marker named: a path that merely turned up stays folded.
+    expect(strip).not.toContain(incidental);
+  });
+});

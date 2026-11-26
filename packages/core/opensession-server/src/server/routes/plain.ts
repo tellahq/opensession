@@ -414,11 +414,11 @@ export async function handlePlainRoutes(
     }
     if (!text && attachmentIds.length === 0)
       return Response.json({ error: "Empty message" }, { status: 400 });
-    // Plain's API can only impersonate customers, not workspace users, so
-    // everything lands as the bot machine user — carry the human's
-    // name in the message instead: replies get their first name as an
-    // email-style sign-off (unless they already signed), notes get an
-    // author prefix.
+    // Notes always land as the machine user (createNote cannot impersonate),
+    // so they carry an author prefix. Replies go out as the signed-in
+    // teammate through Plain's user impersonation; when that is not possible
+    // the machine user sends them with the teammate's first name as an
+    // email-style sign-off (unless they already signed).
     const senderName = requestUser(ctx, body?.user);
     const firstName = senderName.split(/\s+/)[0] || "";
     try {
@@ -447,27 +447,38 @@ export async function handlePlainRoutes(
             `${firstName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`,
             "i",
           ).test(text.trimEnd());
-        const replyText =
+        const signedText =
           firstName && text && !alreadySigned
             ? `${text.trimEnd()}\n\n${firstName}`
             : text;
-        // Their own Plain grant (Account → Connect) sends the reply
-        // AS THEM; without one (or if Plain rejects the token) the
-        // workspace machine user sends it, name carried in the sign-off.
+        // Only a verified sign-in picks whose name the customer sees: a
+        // client-claimed user never sends as a teammate.
+        const verifiedLogin =
+          ctx.authUser && !ctx.authUser.automation ? ctx.authUser.login : "";
+        const { rosterEmailsForLogin } =
+          await import("../shared/user-mappings");
+        const asUser = rosterEmailsForLogin(verifiedLogin).map(
+          (emailAddress) => ({ emailAddress }),
+        );
+        // Their own Plain grant (Account → Connect) is the next option.
         const { mcpUserGrantToken } = await import("../mcp-oauth");
         const grantToken = senderName
           ? mcpUserGrantToken("plain", senderName)
           : undefined;
-        const res = await sendCustomerReply(
-          threadId,
-          "",
-          replyText,
-          grantToken,
+        const res = await sendCustomerReply(threadId, "", text, {
+          asUser,
+          userToken: grantToken,
+          machineUserText: signedText,
           attachmentIds,
-        );
-        if (!res.ok) throw new Error("Plain rejected the reply");
+        });
+        if (!res.ok)
+          throw new Error(
+            res.sentAs === "user" && res.impersonationError
+              ? `Plain did not confirm the reply (${res.impersonationError}). Check the thread before sending again.`
+              : "Plain rejected the reply",
+          );
         console.log(
-          `[plain-reply] ${senderName || "someone"} sent a reply to ${threadId} (as ${res.sentAs})`,
+          `[plain-reply] ${senderName || "someone"} sent a reply to ${threadId} (as ${res.sentAs}${res.impersonationError ? `; impersonation: ${res.impersonationError}` : ""})`,
         );
         for (const id of attachmentIds) plainAttachmentUploads.delete(id);
         if (res.waitingForCustomer) {

@@ -21,8 +21,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   flat single-line workspace rows with live/PR status marks and a running-time
   ticker, larger mobile type, and the web client's warm dark palette. Inbox
   keeps Active work in stable creation order with a nearby Snoozed shelf,
-  sharing `/api/snoozes` with the web sidebar. Activity restores Needs action,
-  Recent, Yesterday, and Earlier; Status remains the dynamic lane view. Group
+  sharing `/api/snoozes` with the web sidebar. Activity restores Merged, Needs
+  action, Recent, Yesterday, and Earlier (idle rows whose PR merged collect in
+  Merged at the top, as on the web); Status remains the dynamic lane view. Group
   by project is an independent switch for all three modes. The
   compact toolbar search/filter finds session metadata (title, repository,
   branch, workspace name) with the web's typo-tolerant matcher
@@ -181,7 +182,12 @@ passed`, the whole message and nothing else) draws as one compact row per
   file into one row — the path once, the summed ±lines, and a `×3` count —
   both opening to the individual calls. The shared Thinking messages preference
   shows none, all, or only the newest provider reasoning row, with Latest as the
-  default.
+  default. A reasoning row is one step like a tool row: a lightbulb,
+  `Thinking` and one line of what it was about, opening to the full trace
+  (open by default under Tool calls · Open). The row at the end of a running
+  turn is the pulsing dot and the run's elapsed time from `0s`; the phase
+  (`Working`, or `Thinking` while the turn ends on an open thought) is read
+  to VoiceOver only.
   Transcript videos stream inline on both platforms. Tool-result screenshots
   and recordings marked as featured stay visible when their work fold closes,
   while incidental media remains inside the producing tool row.
@@ -225,19 +231,32 @@ passed`, the whole message and nothing else) draws as one compact row per
   moves to the Closed sessions submenu of the session's overflow menu, which
   reopens a row the same way. On macOS, where the sidebar is the live-session
   switcher, the same scoped history lives in the selected session's toolbar
-  instead. On iOS, Archive and the session actions menu sit in the navigation
-  bar beside the title as one two-button group. With the Next chat preference
-  on, a Liquid Glass action bar floats above the composer holding that button;
-  it stays directly above the composer when the keyboard opens. The actions
+  instead. On iOS, the session actions menu sits in the navigation bar beside
+  the title, and its Archive workspace item archives the workspace and opens
+  the next unread session. With the Next chat preference on, a Liquid Glass
+  action bar floats above the composer holding the Next button. The actions
   menu carries New session in workspace, worktree details, the pull request
   panel, Add to sidebar when needed, rename,
   share, hide or restore, and archive, matching the sidebar row's long-press
   menu. The model settings menu (the toolbar's slider control on macOS, nested
-  in the actions menu on iOS) opens with a Weekly remaining row: what is left
-  on the account the current model will run on, over a breakdown of every
+  in the actions menu on iOS, and the composer's model name) has the web
+  menu's shape: five curated models (`Models/TopModels.swift`, mirroring the
+  web's list) in the order the account dragged them into on the web (the
+  synced `top-model-order` pref, read-only here), More models with the rest
+  grouped by provider, Effort, Speed, and an Options submenu. The new-session
+  model chip and worktree details list models the same way
+  (`Views/ModelMenuRows.swift`). Options holds a Weekly remaining row: what is
+  left on the account the current model will run on, over a breakdown of every
   subscription account you can spend, yours first and then the shared pool,
   each with its refill day. Choosing one for the current model's pool pins it
-  for the session through `/account`. Completed native sessions can also fork from the current transcript tip
+  for the session through `/account`. Its Show usage bar switch (also in
+  Settings → Preferences) is the account's synced `usage-bar` pref: when on,
+  a strip above the composer shows context, spend, the account's 5-hour and
+  weekly limits and which account the session runs on. Context readouts (the
+  header ring, Conversation usage, the strip's detail) fill toward the
+  engine's compaction point and break the prompt down by part (messages,
+  summary, system prompt, instructions, tools, MCP tools, skills, Other).
+  Completed native sessions can also fork from the current transcript tip
   or a message menu; the composer names the source and opens the new session
   after creation. A bounded cache keeps
   recently visited conversations loaded while their
@@ -266,9 +285,15 @@ passed`, the whole message and nothing else) draws as one compact row per
   merge", reviewers and the checks rollup, base ← head with a merge-method
   menu, and a `SlideToMerge` track: the slide is the confirmation, and a PR
   with conflicts, failing or running checks, a draft or requested changes
-  still asks first; VoiceOver activates it as a button), a
+  still asks first; VoiceOver activates it as a button). A PR GitHub reports
+  as BLOCKED reads "Blocked" or "Review required", slides to auto-merge, and
+  keeps Force merge in the method menu; with auto-merge on it reads "Merges
+  when ready" and has no slide. A refused merge shows the server's sentence
+  on the card. Then a
   Deployments list (the PR's preview environment plus deploy checks such as
-  Vercel), and a Demos carousel of the conversation's and assets' pictures and
+  Vercel; a merged PR keeps its preview until production has the merge,
+  re-fetching every minute while the session is on screen, then links
+  production), and a Demos carousel of the conversation's and assets' pictures and
   recordings, videos first. Below that: repository and branch metadata, local
   git status, changed files, workspace context, document and data assets as
   Files rows, model/reasoning controls, and live remote
@@ -399,10 +424,11 @@ passed`, the whole message and nothing else) draws as one compact row per
   GitHub app through its universal link, instead of the Review panel or the
   in-app browser. Without the app installed they fall back to the in-app
   browser (`GitHubAppLinks`).
-- **A session's own PR in its chat** reads as plain text, not a chip (the
-  `transcriptOwnPrs` environment, as the web's `ownPrs`): the chip would only
-  open the conversation already on screen. Mentions of any other PR keep
-  their chip.
+- **A session's own PR in its chat** is a plain link, not a chip (the
+  `transcriptOwnPrs` environment, as the web's `ownPrs`): the status pill would
+  only repeat the toolbar, but a tap still opens the Review panel. A session
+  with several PRs has no single own PR, so all of its mentions keep their
+  chips, as do mentions of any other PR.
 - **PR panel** — sessions with a pull request expose a row in the title-opened
   overview page and the overflow menu; it opens a panel with state, review
   decision, conflicts, every check with its status, and reviewers, via
@@ -503,7 +529,7 @@ passed`, the whole message and nothing else) draws as one compact row per
   on `DeskCallRequest`, the sessions list opens the Desk, and the Desk sheet
   shows the call screen (`DeskVoiceEngine.open()`). A second press from
   outside the app hangs up. Running the intent is the opt-in, so it works with
-  the Desk voice preference off, and the Desk header keeps its mic button while
+  the Show Desk and Desk voice preferences off, and the Desk header keeps its mic button while
   that call runs. `AgentShortcuts` registers it beside "Start an Agent".
 - **Desk call Live Activity** (`OS1Widgets/DeskCallLiveActivity.swift`, driven
   by `DeskCallActivityController`) — every Desk call, however it started, shows
@@ -589,7 +615,10 @@ passed`, the whole message and nothing else) draws as one compact row per
 - **Desk** — a standing per-user concierge session (`POST /api/desk/ensure`
   get-or-creates it), summoned as a sheet from a toolbar button next to the
   sessions list (iOS: `lamp.desk` toolbar item; macOS: the same button in the
-  sidebar header). It's an ordinary `SessionView` under a compact header, so
+  sidebar header). Those buttons and the palette's "Open the Desk" show only
+  with Show Desk on (Settings → Personal → Preferences, off by default), the
+  account's `desk` ui-pref shared with the web (`Models/DeskPref.swift`).
+  It's an ordinary `SessionView` under a compact header, so
   everything the session view already does — streaming, tool folds, questions
   — works there too. Voice mode is opt-in under Settings → Personal →
   Preferences and syncs through the account's `desk-voice` ui-pref.

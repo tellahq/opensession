@@ -52,6 +52,9 @@ struct SessionsListView: View {
     @State private var showSettings = false
     @State private var settingsAutomationId: String?
     @State private var showDesk = false
+    /// The synced `desk` pref: off hides the Desk's toolbar buttons and its
+    /// palette command. Explicit requests still open it; see `DeskPref`.
+    @AppStorage(DeskPref.storageKey) private var deskShown = DeskPref.standard
     /// The Plain support queue. iOS reaches it from the Support card at the
     /// bottom of the sessions sidebar; Mac keeps it in the sidebar header.
     @State private var showSupport = false
@@ -1049,18 +1052,20 @@ struct SessionsListView: View {
             )
         }
 
-        items.append(
-            CommandPaletteItem(
-                entry: CommandPaletteEntry(
-                    id: "command:desk",
-                    title: "Open the Desk",
-                    subtitle: "The standing concierge session",
-                    keywords: ["concierge", "assistant", "voice"],
-                    symbol: "lamp.desk"
-                ),
-                run: { showDesk = true }
+        if deskShown {
+            items.append(
+                CommandPaletteItem(
+                    entry: CommandPaletteEntry(
+                        id: "command:desk",
+                        title: "Open the Desk",
+                        subtitle: "The standing concierge session",
+                        keywords: ["concierge", "assistant", "voice"],
+                        symbol: "lamp.desk"
+                    ),
+                    run: { showDesk = true }
+                )
             )
-        )
+        }
 
         if supportLocation.showsPage {
             items.append(
@@ -1244,13 +1249,15 @@ struct SessionsListView: View {
                     .controlSize(.small)
                     .help("Open the support queue")
                 }
-                Button {
-                    showDesk = true
-                } label: {
-                    Image(systemName: "lamp.desk")
+                if deskShown {
+                    Button {
+                        showDesk = true
+                    } label: {
+                        Image(systemName: "lamp.desk")
+                    }
+                    .controlSize(.small)
+                    .help("Open the Desk")
                 }
-                .controlSize(.small)
-                .help("Open the Desk")
                 Button {
                     newSessionRequest = NewSessionRequest()
                 } label: {
@@ -1355,14 +1362,16 @@ struct SessionsListView: View {
                             )
                         }
                     }
-                    ToolbarItem(placement: .bottomBar) {
-                        Button {
-                            showDesk = true
-                        } label: {
-                            Image(systemName: "lamp.desk")
-                                .foregroundStyle(OS1VisualStyle.text)
+                    if deskShown {
+                        ToolbarItem(placement: .bottomBar) {
+                            Button {
+                                showDesk = true
+                            } label: {
+                                Image(systemName: "lamp.desk")
+                                    .foregroundStyle(OS1VisualStyle.text)
+                            }
+                            .accessibilityLabel("Open the Desk")
                         }
-                        .accessibilityLabel("Open the Desk")
                     }
                 }
                 .sheet(isPresented: $showSettings) {
@@ -2587,7 +2596,7 @@ struct SessionsListView: View {
         }
     }
 
-    /// What the pushed session's action pill acts on.
+    /// What the pushed session's action pill and ⋯ menu act on.
     private func phoneNavigation(for session: Session) -> PhoneSessionNavigation {
         var chats = unreadChats(after: session)
         #if DEBUG
@@ -2616,7 +2625,7 @@ struct SessionsListView: View {
         )
     }
 
-    /// The pill's Archive: archive the open workspace and go to the next
+    /// The ⋯ menu's Archive: archive the open workspace and go to the next
     /// unread session, or back to the list when there is none.
     private func archiveAndOpenNext(_ workspace: SidebarWorkspace, from session: Session) {
         let archivedIds = Set(workspace.sessions.map(\.id))
@@ -5367,14 +5376,6 @@ struct SessionRow: View {
             if let repo {
                 RepoTile(name: repo, size: tileSize)
             }
-            // Origin reads on the left, beside the status mark and the repo
-            // tile: this row is a machine's run, not yours. Faint and a step
-            // under the tile so a band of automation rows stays a list rather
-            // than a wall of glyphs.
-            if session.wasAgentStarted || autoCreated {
-                WebIcon(kind: .robot, size: tileSize, color: OS1VisualStyle.textFaint)
-                    .accessibilityHidden(true)
-            }
             VStack(alignment: .leading, spacing: 2) {
                 Text(rowTitle)
                     #if os(iOS)
@@ -5400,6 +5401,14 @@ struct SessionRow: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            // Origin rides after the title, like the web sidebar's
+            // AutoCreatedMark, so the status marks and repo tiles stay on one
+            // column with every ordinary row. Faint so a band of automation
+            // rows stays a list rather than a wall of glyphs.
+            if session.wasAgentStarted || autoCreated {
+                WebIcon(kind: .robot, size: tileSize, color: OS1VisualStyle.textFaint)
+                    .accessibilityHidden(true)
+            }
             if hasDraft && !isWorkspaceDraft {
                 Image(systemName: "pencil")
                     .font(.system(size: 15, weight: .semibold))

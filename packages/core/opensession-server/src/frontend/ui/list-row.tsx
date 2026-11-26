@@ -10,6 +10,16 @@ import { cn } from "./cn";
  * `variant="card"` is the same row standing on its own fill, for a row that
  * sits in running text rather than in a list (a thread card in a transcript).
  */
+/** The row's look, for a row that has to be a link rather than a button. */
+export function listRowClass(variant: "plain" | "card" = "plain") {
+  return cn(
+    "focus-ring flex w-full min-w-0 items-start gap-2.5 text-left transition-colors hover:bg-hover phone:min-h-11",
+    variant === "card"
+      ? "rounded-xl bg-panel px-3 py-2"
+      : "rounded-md px-2 py-1.5",
+  );
+}
+
 export function ListRow({
   className,
   variant = "plain",
@@ -19,13 +29,7 @@ export function ListRow({
   return (
     <button
       type={type}
-      className={cn(
-        "focus-ring flex w-full min-w-0 items-start gap-2.5 text-left transition-colors hover:bg-hover phone:min-h-11",
-        variant === "card"
-          ? "rounded-xl bg-panel px-3 py-2"
-          : "rounded-md px-2 py-1.5",
-        className,
-      )}
+      className={cn(listRowClass(variant), className)}
       {...props}
     />
   );

@@ -23,6 +23,7 @@ import {
   checkpointRef,
   checkpointScript,
   restorableCheckpoint,
+  withoutSteps,
 } from "./checkpoint";
 import {
   sessionLifecycleInFlight,
@@ -113,7 +114,7 @@ describe("checkpointLandScript", () => {
     )`bash -c ${checkpointLandScript(ref, commit!, "feature", [".ports.conf"])}`
       .quiet()
       .nothrow();
-    expect(land.stderr.toString()).toBe("");
+    expect(withoutSteps(land.stderr.toString())).toBe("");
     expect(land.exitCode).toBe(0);
     expect((await git(mirror)`git branch --show-current`.text()).trim()).toBe(
       "feature",
@@ -147,7 +148,7 @@ describe("checkpointLandScript", () => {
     )`bash -c ${checkpointLandScript(ref, commit!, "feature", [".ports.conf"])}`
       .quiet()
       .nothrow();
-    expect(relanded.stderr.toString()).toBe("");
+    expect(withoutSteps(relanded.stderr.toString())).toBe("");
     expect(relanded.exitCode).toBe(0);
     expect(existsSync(lock)).toBe(false);
   });

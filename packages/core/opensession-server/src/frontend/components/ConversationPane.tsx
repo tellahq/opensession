@@ -47,26 +47,34 @@ interface Props {
    *  the pane's own instead of at the top of the thread. For the Support
    *  inbox, where the pane has that bar to itself. */
   headerInBar?: boolean;
+  /** Changes when something outside the pane edited this ticket (the Support
+   *  queue's right-click menu), to load it again now rather than at the next
+   *  poll. */
+  refreshKey?: number;
+  /** Called after the pane's own controls change the ticket, so a list
+   *  beside it can catch up. */
+  onTicketChanged?: () => void;
 }
 
 /**
  * The pane width at which the ticket's actions fit in the bar beside the
  * subject. Measured on a ticket carrying the widest of them (an assignee, a
- * named priority, two labels): the action row 536px, the status badge 26, the
- * bar's own padding and gaps 48. At this threshold that leaves the subject and
- * the customer under it about 140px, which is short but still reads as a title
+ * named priority, two labels): the action row about 610px, the bar's own
+ * padding and gaps 48. At this threshold that leaves the subject and the
+ * customer under it about 140px, which is short but still reads as a title
  * rather than as an ellipsis; wider panes give it everything they gain. A
  * 1440pt window clears it, the app sidebar and the queue column taking about
  * 600 of whatever is left.
  *
- * It came down 40px when "Open in Plain" stopped being a link floating at the
- * end of the bar and became a button in the action row, which is a smaller
- * control saying the same thing.
+ * It went up 50px when the status became a labelled picker and Mark done got
+ * its word back (they were a bare badge, a check and a clock, which read as
+ * three icons nobody could name). "Open in Plain" moved into the overflow
+ * menu to pay for most of that.
  *
  * Narrower than this the actions stay at the top of the thread, where they have
  * a whole row to wrap into.
  */
-const ACTIONS_IN_BAR_MIN = 750;
+const ACTIONS_IN_BAR_MIN = 800;
 
 /**
  * The support-ticket Conversation surface: the full thread straight from Plain
@@ -83,6 +91,8 @@ export function ConversationPane({
   session,
   className,
   headerInBar,
+  refreshKey,
+  onTicketChanged,
 }: Props) {
   const [thread, setThread] = useState<PlainThread | null>(null);
   const isPhone = useIsPhone();
@@ -143,6 +153,13 @@ export function ConversationPane({
     }, 20000);
     return () => clearInterval(poll);
   }, [load]);
+  useEffect(() => {
+    if (refreshKey) void load();
+  }, [refreshKey, load]);
+  const handleChanged = () => {
+    void load();
+    onTicketChanged?.();
+  };
   // The triage automation reuses a live session for this thread when one
   // exists, else boots a fresh run — that takes tens of seconds, so keep the
   // button in a visible in-progress state the whole way.
@@ -213,8 +230,10 @@ export function ConversationPane({
 							    Trailing, it landed at a different x on every ticket and
 							    read as part of the name; leading, it reads as the
 							    ticket's state and the subject gets a fixed left edge to
-							    truncate against. */}
-              {status && <PlainStatusBadge status={status} />}
+							    truncate against. When the actions share the bar, their
+							    status picker already names the state, so the badge
+							    would say it twice. */}
+              {status && !actionsInBar && <PlainStatusBadge status={status} />}
               <div className="flex min-w-0 flex-1 flex-col justify-center">
                 {/* The actions beside it can leave this 200px on a
 								    laptop, so the full subject stays on hover. */}
@@ -244,7 +263,7 @@ export function ConversationPane({
                 <PlainThreadActions
                   threadId={threadId}
                   thread={thread}
-                  onChanged={load}
+                  onChanged={handleChanged}
                   layout="bar"
                   className="shrink-0"
                 />
@@ -291,7 +310,8 @@ export function ConversationPane({
                           {customerEmail}
                         </span>
                       )}
-                      {status && <PlainStatusBadge status={status} />}
+                      {/* No status badge here: the actions row below this
+                          header always leads with the status picker. */}
                     </div>
                     {thread?.title && (
                       <div className="mt-2 text-section-title font-semibold text-fg">
@@ -314,7 +334,7 @@ export function ConversationPane({
                   <PlainThreadActions
                     threadId={threadId}
                     thread={thread}
-                    onChanged={load}
+                    onChanged={handleChanged}
                     className="mt-3"
                   />
                 )}

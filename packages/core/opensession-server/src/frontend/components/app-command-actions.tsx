@@ -40,6 +40,8 @@ interface BuildAppCommandActionsOptions {
   currentTheme: EffectiveTheme;
   copyLinkPath: string | null;
   isPhone: boolean;
+  /** Settings → Preferences → Desk. Off drops "Open Desk". */
+  deskShown: boolean;
   nextChatAvailable: boolean;
   openNextChat: () => void;
   restorableArchived: UnifiedSession[];
@@ -71,6 +73,7 @@ export function buildAppCommandActions({
   currentTheme,
   copyLinkPath,
   isPhone,
+  deskShown,
   nextChatAvailable,
   openNextChat,
   restorableArchived,
@@ -240,16 +243,20 @@ export function buildAppCommandActions({
       icon: <IconListCircles size={18} />,
       run: () => navigate({ view: "tasks" }),
     },
-    {
-      id: "desk",
-      label: "Open Desk",
-      description: "Open the standing concierge session",
-      category: "Actions",
-      keywords: ["concierge", "assistant"],
-      shortcut: shortcutPrimaryKeys("desk") ?? undefined,
-      icon: <IconDesk size={18} />,
-      run: () => setDeskOverlay({ open: true, origin: "center" }),
-    },
+    ...(deskShown
+      ? [
+          {
+            id: "desk",
+            label: "Open Desk",
+            description: "Open the standing concierge session",
+            category: "Actions",
+            keywords: ["concierge", "assistant"],
+            shortcut: shortcutPrimaryKeys("desk") ?? undefined,
+            icon: <IconDesk size={18} />,
+            run: () => setDeskOverlay({ open: true, origin: "center" }),
+          } satisfies CommandPaletteAction,
+        ]
+      : []),
     {
       id: "toggle-sidebar",
       label: sidebarCollapsed ? "Show sidebar" : "Hide sidebar",

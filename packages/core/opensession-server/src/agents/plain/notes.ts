@@ -70,3 +70,18 @@ export function splitNoteText(
 
   return parts.map((part, i) => `${part}\n\n(${i + 1}/${parts.length})`);
 }
+
+/** A note's Markdown for the model: mentions of this agent removed, other
+ *  mention tokens (`<@u_…>`, `<@mu_…>`) shown as plain `@id`. */
+export function noteTextWithoutMentions(
+  markdown: string,
+  ownIds: ReadonlySet<string>,
+): string {
+  return markdown
+    .replace(
+      /<@((?:mu|u)_[A-Za-z0-9]+)>( ?)/g,
+      (_token, id: string, space: string) =>
+        ownIds.has(id) ? "" : `@${id}${space}`,
+    )
+    .trim();
+}

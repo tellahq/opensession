@@ -147,6 +147,82 @@ export function isClaudeUsageLimitError(
   );
 }
 
+// Claude Code account notices, each matched against a whole successful
+// result. A model answer that merely starts with or mentions this wording
+// ("You're out of usage credits on the old plan, but …") never matches.
+const SEPARATOR = "[·∙•|-]";
+// The reset stamp Claude Code prints, and nothing after it: "3am",
+// "12:50pm (UTC)", "Aug 20, 9am (UTC)". Prose that follows a stamp ("…
+// resets 3am, then retry.") makes the text an answer, not a notice.
+const RESET_STAMP =
+  "(?:[a-z]{3,9}\\.? \\d{1,2},? )?\\d{1,2}(?::\\d{2})? ?(?:am|pm)(?: \\([\\w/+:-]{1,40}\\))?";
+const CLAUDE_ACCOUNT_NOTICES = [
+  // "You've hit your session limit · resets 12:50pm (UTC)"
+  new RegExp(
+    `^you['’]ve (?:hit|reached) your [\\w -]{0,30}limit(?: ${SEPARATOR} resets ${RESET_STAMP})?\\.?$`,
+  ),
+  // "5-hour limit reached ∙ resets 3am"
+  new RegExp(
+    `^[\\w -]{0,30}limit (?:reached|hit) ${SEPARATOR} resets ${RESET_STAMP}\\.?$`,
+  ),
+  // "Claude AI usage limit reached|1767225600"
+  /^claude (?:ai )?usage limit reached(?:\|\d+)?\.?$/,
+  // "You're out of usage credits. Run /usage-credits to keep using Fable 5.1
+  // or /model to switch models."
+  /^you(?:['’]re| are) out of (?:usage )?credits\.(?: run \/usage-credits to keep using [\w .-]{1,30} or \/model to switch models\.)?$/,
+  // "Claude Max subscription issue. Check your subscription status."
+  /^claude (?:max|pro) subscription issue\.(?: check your subscription status\.)?$/,
+  // "Your organization has disabled Claude subscription access for Claude
+  // Code · Use an Anthropic API key instead, or ask your admin to enable access"
+  new RegExp(
+    `^your organization has disabled claude subscription access for claude code(?: ${SEPARATOR} use an anthropic api key instead, or ask your admin to enable access)?\\.?$`,
+  ),
+];
+
+/** The opening words of those notices, for holding back streamed text that
+ *  may still turn out to be one. */
+const CLAUDE_ACCOUNT_NOTICE_OPENERS =
+  /^(?:you['’]ve (?:hit|reached) your|[\w -]{0,30}limit (?:reached|hit)|claude (?:ai )?usage limit|you(?:['’]re| are) out of|claude (?:max|pro) subscription|your organization has disabled)/;
+
+/**
+ * Whether a successful result's whole text is a Claude Code account notice
+ * (a usage limit or a subscription refusal) rather than a model answer. Only
+ * for results reported as success; errors keep the broader
+ * `isClaudeUsageLimitError` / `isClaudeSubscriptionError` heuristics.
+ */
+export function isClaudeAccountNotice(text: string): boolean {
+  const s = text.trim().toLowerCase();
+  return s.length <= 300 && CLAUDE_ACCOUNT_NOTICES.some((re) => re.test(s));
+}
+
+/** Whether streamed text could still grow into an account notice. */
+export function mayBecomeClaudeAccountNotice(text: string): boolean {
+  const s = text.trimStart().toLowerCase();
+  return s.length <= 300 && CLAUDE_ACCOUNT_NOTICE_OPENERS.test(s);
+}
+
+/** SDK assistant-message error kinds that mean the account is out of
+ *  capacity, whatever the message text says. */
+export function isClaudeLimitErrorKind(kind: unknown): boolean {
+  return kind === "rate_limit" || kind === "billing_error";
+}
+
+/** The failure to report for a message tagged with such a kind, worded so
+ *  the error-path classifiers bench the account. */
+export function claudeLimitErrorMessage(
+  kind: string,
+  content: unknown,
+): string {
+  const text = Array.isArray(content)
+    ? content
+        .filter((b) => b?.type === "text" && typeof b.text === "string")
+        .map((b) => b.text)
+        .join("\n")
+        .trim()
+    : "";
+  return `Usage limit reached (${kind})${text ? `: ${text}` : ""}`;
+}
+
 const RESET_MONTHS: Record<string, number> = {
   jan: 0,
   feb: 1,

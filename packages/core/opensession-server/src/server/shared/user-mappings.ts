@@ -165,6 +165,132 @@ export function isTrustedGithubLogin(login?: string | null): boolean {
 }
 
 /**
+ * The name a verified signed-in person acts under: their first name, as the
+ * picker shows it, unless another roster member answers to that first name.
+ * Then it is their full name, or their GitHub login when even that is shared,
+ * so every gate that resolves the name (personal Claude API accounts need an
+ * unambiguous one) still finds exactly this person.
+ */
+export function signedInUserName(signedIn: {
+  login: string;
+  name: string;
+}): string {
+  const full = signedIn.name.trim();
+  const first = full.split(" ")[0] || full;
+  const login = signedIn.login.trim();
+  const lower = login.toLowerCase();
+  // A sign-in the roster does not list (the automation principal) keeps the
+  // historical first name; no personal account can resolve to it anyway.
+  if (
+    !lower ||
+    !liveTeam().some((m) => m.github?.trim().toLowerCase() === lower)
+  )
+    return first;
+  // The chosen name must resolve to this verified login and nobody else.
+  const namesOnlyThem = (ref: string) => {
+    const members = rosterMembersNamed(normRef(ref));
+    return (
+      members.length === 1 && members[0].github?.trim().toLowerCase() === lower
+    );
+  };
+  if (namesOnlyThem(first)) return first;
+  if (full && namesOnlyThem(full)) return full;
+  return login;
+}
+
+/**
+ * The GitHub login of the one roster member an owner reference (a picker
+ * first name, alias, full name, or login) names, or undefined when nobody,
+ * several people, or someone without a login answers to it. Personal Claude
+ * API accounts store this login, not the reference: a name can pass to a
+ * later namesake, a login cannot.
+ */
+export function rosterLoginNamed(
+  ref: string | null | undefined,
+): string | undefined {
+  const members = rosterMembersNamed(normRef(ref));
+  if (members.length !== 1) return undefined;
+  return members[0].github?.trim().replace(/^@/, "") || undefined;
+}
+
+/**
+ * Whether a run's user reference names exactly the roster member with this
+ * GitHub login. For spending gates (personal Claude API accounts), unlike
+ * `userMatchesAny`: a first name two roster members share names neither of
+ * them, and a login nobody on the roster holds any more names nobody, so a
+ * departed owner's account serves no one until it is reassigned.
+ */
+export function userIsRosterLogin(
+  login: string | null | undefined,
+  user: string | null | undefined,
+): boolean {
+  const owner = normRef(login);
+  const userRef = normRef(user);
+  if (!owner || !userRef) return false;
+  const users = rosterMembersNamed(userRef);
+  return users.length === 1 && normRef(users[0].github) === owner;
+}
+
+/**
+ * The work emails of the roster member with this verified GitHub login: the
+ * configured `email`, then `linearEmails`, deduplicated, without GitHub
+ * noreply addresses (those name no account in another tool). Empty for a
+ * login the roster does not list. Callers look the person up in another
+ * tool by these, so pass only a login web sign-in verified.
+ */
+export function rosterEmailsForLogin(
+  login: string | null | undefined,
+): string[] {
+  const lower = normRef(login);
+  if (!lower) return [];
+  const member = liveTeam().find((m) => normRef(m.github) === lower);
+  if (!member) return [];
+  const seen = new Set<string>();
+  const emails: string[] = [];
+  for (const raw of [member.email, ...(member.linearEmails ?? [])]) {
+    const email = raw?.trim();
+    const key = email?.toLowerCase();
+    if (!email || !key || seen.has(key) || key.endsWith("noreply.github.com"))
+      continue;
+    seen.add(key);
+    emails.push(email);
+  }
+  return emails;
+}
+
+function normRef(ref: string | null | undefined): string {
+  return ref?.trim().replace(/^@/, "").toLowerCase() ?? "";
+}
+
+/** The roster as configured now. Authorization reads it live, as web
+ *  sign-in does: `/api/setup/team` edits it without a restart, and the
+ *  module-load `identity` snapshot would then miss a newly added namesake. */
+function liveTeam(): TeamMember[] {
+  if (teamOverrideForTest) return teamOverrideForTest;
+  try {
+    return configuredIdentity().team;
+  } catch {
+    // Config not loaded (some unit tests): the load-time snapshot.
+    return identity.team;
+  }
+}
+let teamOverrideForTest: TeamMember[] | null = null;
+
+/** Roster members a normalized reference (GitHub login, full name, first
+ *  name, or alias) can mean. More than one means the reference is ambiguous. */
+function rosterMembersNamed(ref: string): TeamMember[] {
+  return liveTeam().filter((m) => {
+    const name = m.name.trim().toLowerCase();
+    return (
+      m.github?.trim().toLowerCase() === ref ||
+      name === ref ||
+      name.split(" ")[0] === ref ||
+      !!m.aliases?.some((a) => a.trim().toLowerCase() === ref)
+    );
+  });
+}
+
+/**
  * The configured teammate a session's driver names, with the roster GitHub
  * login that identifies them, or null. This is the "a known teammate is
  * driving" gate for card-confirmed actions (keychain registration, force
@@ -470,10 +596,13 @@ export function __setIdentitiesForTest(
   slackNames: Record<string, string> = {},
 ): () => void {
   const prev = identity;
+  const prevOverride = teamOverrideForTest;
   identity = { ...prev, team, slackNames };
+  teamOverrideForTest = team;
   applyDerivedTables(deriveIdentityTables(team, slackNames));
   return () => {
     identity = prev;
+    teamOverrideForTest = prevOverride;
     applyDerivedTables(deriveIdentityTables(prev.team, prev.slackNames));
   };
 }

@@ -19,10 +19,12 @@
  * lose the PKCE verifier between "open this URL" and the code paste.
  */
 
-import { chmod, mkdir } from "fs/promises";
+import { chmod, mkdir, rm } from "fs/promises";
 import { writeFileAtomicAsync } from "./shared/atomic-write";
 import { stateDir } from "./paths";
+import { isClaudeApiAccount } from "./claude-api-credentials";
 import {
+  CLAUDE_API_ACCOUNT_NO_SIGN_IN,
   getAccountById,
   setAccountUsageCredentials,
   type ClaudeAccountPublic,
@@ -79,6 +81,8 @@ export async function startClaudeLogin(
   prune();
   const account = getAccountById(accountId);
   if (!account) return { error: "Unknown account" };
+  if (isClaudeApiAccount(account))
+    return { error: CLAUDE_API_ACCOUNT_NO_SIGN_IN };
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
   const challenge = b64url(
     new Uint8Array(
@@ -117,6 +121,13 @@ export async function completeClaudeLogin(
   prune();
   const login = pending.get(id);
   if (!login) return { error: "Sign-in attempt expired — start again." };
+  // Checked again before the token exchange and in the store write: the
+  // account could have been replaced since the sign-in started.
+  const target = getAccountById(login.accountId);
+  if (target && isClaudeApiAccount(target)) {
+    pending.delete(id);
+    return { error: CLAUDE_API_ACCOUNT_NO_SIGN_IN };
+  }
   const cleaned = pastedCode.replace(/\s+/g, "");
   const [code, state] = cleaned.split("#");
   if (!code)
@@ -155,6 +166,10 @@ export async function completeClaudeLogin(
   if (!account) {
     pending.delete(id);
     return { error: "The account this sign-in was for no longer exists." };
+  }
+  if (isClaudeApiAccount(account)) {
+    pending.delete(id);
+    return { error: CLAUDE_API_ACCOUNT_NO_SIGN_IN };
   }
   const email: string | undefined = body.account?.email_address || undefined;
   // Usage data from the wrong subscription is actively misleading. Refuse a
@@ -200,8 +215,12 @@ export async function completeClaudeLogin(
     path,
     email,
   );
-  if (!updated)
-    return { error: "The account this sign-in was for no longer exists." };
+  if (!updated || "forbidden" in updated) {
+    await rm(path, { force: true });
+    return updated
+      ? { error: updated.forbidden }
+      : { error: "The account this sign-in was for no longer exists." };
+  }
   console.log(
     `[claude-oauth-login] ${updated.name} reconnected${email ? ` (${email})` : ""}`,
   );

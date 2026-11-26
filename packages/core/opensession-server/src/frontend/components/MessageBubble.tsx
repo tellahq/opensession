@@ -1291,7 +1291,7 @@ export function ReasoningStep({
         )}
       </span>
       {label}
-      {excerpt && (
+      {excerpt && !(open && hasBody) && (
         <span className="min-w-0 truncate text-label leading-4 text-dim">
           {excerpt}
         </span>

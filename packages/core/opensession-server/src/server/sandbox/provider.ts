@@ -155,6 +155,11 @@ export interface Sandbox {
   /** One-shot commands in the workspace (git status, ls-files, …). Never throws
    *  on non-zero exit — inspect `exitCode`. */
   exec(cmd: string[], opts?: ExecOpts): Promise<ExecResult>;
+  /** Create or replace a text file at an absolute path in the machine,
+   *  creating its directory. The content travels over the provider's API
+   *  (stdin), never in a command line or environment. Remote providers
+   *  only. */
+  writeFile?(path: string, content: string): Promise<void>;
   /** Preview ports (sandbox port → host port). `requestedPorts` lets providers
    *  with dynamic tunnels publish services a session added to .ports.conf. */
   ports(requestedPorts?: number[]): Promise<PortMap>;

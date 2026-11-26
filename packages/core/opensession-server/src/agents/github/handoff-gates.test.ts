@@ -2,7 +2,13 @@ import { describe, expect, test } from "bun:test";
 import {
   handoffActive,
   handoffDecision,
+  openFindingsCount,
   openFindingsNoticeNeeded,
+  sameHandoffRound,
+  serializeByKey,
+  staleReview,
+  type HandoffState,
+  descendsFrom,
   pickHandoffOwner,
   reviewSatisfied,
 } from "./handoff-gates";
@@ -35,6 +41,7 @@ describe("open findings notice gate", () => {
       openFindingsNoticeNeeded(
         { findings: 1, blocking: 0, confidence: 5 },
         undefined,
+        false,
       ),
     ).toBe(true);
   });
@@ -44,12 +51,14 @@ describe("open findings notice gate", () => {
       openFindingsNoticeNeeded(
         { findings: 0, blocking: 0, confidence: 5 },
         undefined,
+        false,
       ),
     ).toBe(false);
     expect(
       openFindingsNoticeNeeded(
         { findings: 1, blocking: 1, confidence: 5 },
         undefined,
+        false,
       ),
     ).toBe(false);
   });
@@ -59,8 +68,30 @@ describe("open findings notice gate", () => {
       openFindingsNoticeNeeded(
         { findings: 1, blocking: 0, confidence: 5 },
         { rounds: 2 },
+        true,
       ),
     ).toBe(false);
+  });
+
+  test("an undelivered wrap-up falls back to the notice, even with nothing new", () => {
+    expect(
+      openFindingsNoticeNeeded(
+        { findings: 0, blocking: 0, confidence: 5 },
+        { rounds: 2 },
+        false,
+      ),
+    ).toBe(true);
+    // The notice then counts the open threads; none means nothing is sent.
+    expect(
+      openFindingsCount(
+        0,
+        "- [@a · comment 1] a.ts:1 — x\n- [@app[bot] · comment 2 · thread T] b.ts:2 — y\n- [@b review] y",
+      ),
+    ).toBe(2);
+    // An approval body is listed but is not a finding.
+    expect(openFindingsCount(0, "- [@alice review approved] LGTM")).toBe(0);
+    expect(openFindingsCount(0, "")).toBe(0);
+    expect(openFindingsCount(3, "")).toBe(3);
   });
 });
 
@@ -83,6 +114,20 @@ describe("handoff round decision", () => {
       "capped",
     );
     expect(handoffDecision({ rounds: 3, lastSha: "abc" }, "abc", 3)).toBe(
+      "duplicate",
+    );
+  });
+
+  test("after the cap, each new reviewed commit is reported once", () => {
+    const capped = {
+      rounds: 3,
+      lastSha: "abc",
+      cappedAnnounced: true,
+      cappedSha: "def",
+    };
+    expect(handoffDecision(capped, "def", 3)).toBe("duplicate");
+    expect(handoffDecision(capped, "ghi", 3)).toBe("post-cap");
+    expect(handoffDecision({ ...capped, cappedSha: "ghi" }, "ghi", 3)).toBe(
       "duplicate",
     );
   });
@@ -137,7 +182,73 @@ describe("handoff owner", () => {
     ).toBe("branch");
   });
 
+  test("descendsFrom follows parent links and stops on a cycle", () => {
+    const parents: Record<string, string> = { c: "b", b: "a", x: "y", y: "x" };
+    const parentOf = (id: string) => parents[id];
+    expect(descendsFrom("c", "a", parentOf)).toBe(true);
+    expect(descendsFrom("c", "z", parentOf)).toBe(false);
+    expect(descendsFrom("x", "z", parentOf)).toBe(false);
+  });
+
   test("no footer and no branch owner means no owner", () => {
     expect(pickHandoffOwner(undefined, live, [])).toBeUndefined();
+  });
+});
+
+describe("clearing round state after a pass", () => {
+  test("only the round the pass settled is cleared", () => {
+    const settled = { rounds: 5, lastSha: "a" };
+    const current: HandoffState = { ...settled, sessionId: "s" };
+    expect(sameHandoffRound(current, settled)).toBe(true);
+    // A newer failing review recorded round 6 meanwhile: keep it.
+    expect(sameHandoffRound({ rounds: 6, lastSha: "b" }, settled)).toBe(false);
+    expect(sameHandoffRound(undefined, settled)).toBe(false);
+  });
+});
+
+describe("out-of-order review results", () => {
+  test("a review older than the last finished one is stale", () => {
+    expect(staleReview("a", "b")).toBe(true);
+    expect(staleReview("b", "b")).toBe(false);
+    expect(staleReview("a", undefined)).toBe(false);
+    expect(staleReview("", "b")).toBe(false);
+  });
+});
+
+describe("per-PR handoff serialization", () => {
+  test("handoffs for one PR run one at a time; other PRs don't wait", async () => {
+    const queues = new Map<string, Promise<unknown>>();
+    const log: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const a = serializeByKey(queues, "pr1", async () => {
+      log.push("a start");
+      await gate;
+      log.push("a end");
+    });
+    const b = serializeByKey(queues, "pr1", async () => {
+      log.push("b");
+    });
+    const other = serializeByKey(queues, "pr2", async () => {
+      log.push("other");
+    });
+    await other;
+    expect(log).toEqual(["a start", "other"]);
+    release();
+    await Promise.all([a, b]);
+    expect(log).toEqual(["a start", "other", "a end", "b"]);
+    await Promise.resolve();
+    expect(queues.size).toBe(0);
+  });
+
+  test("a failed handoff does not block the next one", async () => {
+    const queues = new Map<string, Promise<unknown>>();
+    const failed = serializeByKey(queues, "pr1", async () => {
+      throw new Error("boom");
+    });
+    await expect(failed).rejects.toThrow("boom");
+    expect(await serializeByKey(queues, "pr1", async () => "next")).toBe(
+      "next",
+    );
   });
 });

@@ -11,7 +11,7 @@ test("the conversation model menu can make its current model the personal defaul
     '<span className="min-w-0 truncate">Set as default</span>',
   );
   expect(picker).toContain(
-    "onClick={() => onSetAsDefault(effectiveModel, defaultEffortToSave)}",
+    "onSetAsDefault(effectiveModel, defaultEffortToSave)",
   );
   expect(picker).toContain("disabled={isPreferredDefault}");
 });

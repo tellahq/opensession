@@ -1,11 +1,18 @@
 /** Shared readiness check for Setup and `opensession doctor`. */
-import { listAccountsPublic } from "./claude-accounts";
+import { listAccountsPublic, resolveAccount } from "./claude-accounts";
 import { listCodexAccountsPublic } from "./codex-accounts";
 import { listXaiAccountsPublic } from "./xai-accounts";
 import { accountProviderForModel } from "./models";
-import { configuredInteractiveDefaultModel } from "./model-catalog";
-import { modelProviders } from "./model-providers";
-import { piConfigPath, piEngineEnabled } from "./pi-config";
+import {
+  configuredInteractiveDefaultModel,
+  configuredModelProviders,
+} from "./model-catalog";
+import { designatedBridgeAccountIds, modelProviders } from "./model-providers";
+import {
+  piAnthropicTransport,
+  piConfigPath,
+  piEngineEnabled,
+} from "./pi-config";
 import { homeDir } from "./paths";
 
 function engineConfigLabel(): string {
@@ -27,7 +34,13 @@ export interface EngineStatus {
   fixableInApp: boolean;
 }
 
-export function engineStatus(): EngineStatus {
+/** `user` is the person viewing, `billingLogin` their verified GitHub login:
+ *  Claude capacity, and so the default model, counts only accounts that
+ *  serve them. */
+export function engineStatus(
+  user?: string,
+  billingLogin?: string,
+): EngineStatus {
   const enabled = piEngineEnabled();
   const claudePool = listAccountsPublic();
   const codexPool = listCodexAccountsPublic();
@@ -38,14 +51,26 @@ export function engineStatus(): EngineStatus {
   const xaiAvailable = xaiPool.filter(
     (account) => account.usable && !account.exhaustedUntil,
   ).length;
-  const claudeAvailable = claudePool.filter(
-    (account) => account.usable && !account.exhaustedUntil,
-  ).length;
   const codexAvailable = codexPool.filter(
     (account) => account.usable && !account.exhaustedUntil,
   ).length;
-  const defaultModel = configuredInteractiveDefaultModel();
+  const defaultModel = configuredInteractiveDefaultModel(
+    configuredModelProviders(user, billingLogin),
+  );
   const provider = accountProviderForModel(defaultModel);
+  // Claude readiness asks the runner's own selector, as a peek that does not
+  // consume a round-robin turn: the designation, the owner gate for this user
+  // (the HTTP bridge carries no run identity), the account kind, and both
+  // account-wide and per-model sidelines for the default model.
+  const claudeAvailable =
+    "account" in
+    resolveAccount({
+      user: piAnthropicTransport() === "bridge" ? undefined : user,
+      billingLogin,
+      model: defaultModel,
+      designatedIds: designatedBridgeAccountIds(),
+      recordPick: false,
+    });
   const base = {
     piEnabled: enabled,
     claudeAccounts,

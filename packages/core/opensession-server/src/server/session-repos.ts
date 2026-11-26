@@ -1220,7 +1220,13 @@ export async function checkPrMergeReadiness(
   input: { url?: string; repo?: string; number?: number; session?: string },
 ): Promise<PrMergeVerdict> {
   const target = await resolvePrReadinessTarget(sessionId, input);
-  return assessPrMergeReadiness(await fetchPrReadinessSource(target));
+  const { countOpenReviewThreads } =
+    await import("../agents/github/github-rest");
+  const [source, openReviewThreads] = await Promise.all([
+    fetchPrReadinessSource(target),
+    countOpenReviewThreads(target.number, target.ghRepo).catch(() => null),
+  ]);
+  return assessPrMergeReadiness({ ...source, openReviewThreads });
 }
 
 /** Remove a linked PR from a session (the link only — the PR is untouched). */

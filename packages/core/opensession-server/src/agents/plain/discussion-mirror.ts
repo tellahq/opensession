@@ -11,6 +11,7 @@ import type { StreamEvent } from "../../server/run-events";
 import type { TranscriptEntry } from "../../server/types";
 import { splitNoteText } from "./notes";
 import {
+  DISCUSSION_MESSAGE_MAX_CHARS,
   sendDiscussionMessage,
   updateDiscussionAgentStatus,
   upsertDiscussionToolCall,
@@ -146,7 +147,10 @@ export function mirrorTurnToPlainDiscussion(
   report(discussionId, "turn mirror", async () => {
     try {
       if (markdown) {
-        for (const part of splitNoteText(markdown))
+        for (const part of splitNoteText(
+          markdown,
+          DISCUSSION_MESSAGE_MAX_CHARS,
+        ))
           await sendDiscussionMessage(discussionId, part);
       }
     } finally {

@@ -12,8 +12,10 @@ import {
  *
  * It is a picture with a name, not a control. The word it replaced is the
  * tooltip and the accessible name, so the state can still be read out and
- * hovered for; changing it is the job of the Done / Snooze controls next to
- * it (`PlainThreadActions`), which is why this is a `span` with no tab stop.
+ * hovered for; changing it is the job of the status picker that leads the
+ * ticket's actions (`PlainThreadActions`), which is why this is a `span` with
+ * no tab stop. Where that picker shares a row with the badge, the badge steps
+ * aside rather than name the state twice.
  */
 export function PlainStatusBadge({
   status,

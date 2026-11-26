@@ -80,6 +80,8 @@ export const SETTINGS_KEYWORDS = {
     "pin new sessions",
     "tool calls",
     "transcript",
+    "desk",
+    "show desk",
     "desk voice",
     "audio",
     "microphone",

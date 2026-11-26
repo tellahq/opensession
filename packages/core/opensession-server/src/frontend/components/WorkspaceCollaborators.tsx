@@ -52,7 +52,15 @@ export function useWorkspaceCollaborators(
   const collaborators = workspace.collaborators || [];
   const names = new Set(collaborators.map((c) => c.name.toLowerCase()));
   const creator = workspace.createdBy.toLowerCase();
-  const candidates = TEAM.filter((name) => name.toLowerCase() !== creator);
+  // Everyone already added stays in the picker, roster or not, so they can
+  // always be taken off again.
+  const candidates = [
+    ...collaborators.map((c) => c.name),
+    ...TEAM.filter(
+      (name) =>
+        name.toLowerCase() !== creator && !names.has(name.toLowerCase()),
+    ),
+  ];
   if (!candidates.length && !collaborators.length) return null;
 
   function toggle(name: string) {

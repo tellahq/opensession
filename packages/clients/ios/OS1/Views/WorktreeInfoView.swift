@@ -63,7 +63,10 @@ struct WorktreeInfoView: View {
     /// How the slide merges; picked from the menu beside the branches.
     @State private var mergeMethod = "squash"
     @State private var merging = false
+    /// The server's refusal, already one short sentence; shown on the card.
     @State private var mergeError: String?
+    /// The force merge waiting on its confirmation, from the method menu.
+    @State private var confirmingForceMerge = false
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -149,16 +152,15 @@ struct WorktreeInfoView: View {
         } message: {
             Text(mergeConfirmationMessage)
         }
-        .alert(
-            "Couldn’t merge pull request",
-            isPresented: Binding(
-                get: { mergeError != nil },
-                set: { if !$0 { mergeError = nil } }
-            )
+        .confirmationDialog(
+            forceMergeConfirmationTitle,
+            isPresented: $confirmingForceMerge,
+            titleVisibility: .visible
         ) {
-            Button("OK", role: .cancel) {}
+            Button("Force merge", role: .destructive) { forceMerge() }
+            Button("Cancel", role: .cancel) {}
         } message: {
-            Text(mergeError ?? "Please try again.")
+            Text(forceMergeConfirmationMessage)
         }
         .task(id: loadIdentity) { await load() }
         .refreshable { await refresh() }
@@ -604,6 +606,7 @@ struct WorktreeInfoView: View {
                 .buttonStyle(.plain)
 
                 if pr.isOpen {
+                    let block = pr.mergeBlock
                     // Where it lands and how, then the slide that does it.
                     HStack(spacing: 10) {
                         if let head = pr.headRefName, let base = pr.baseRefName {
@@ -622,40 +625,81 @@ struct WorktreeInfoView: View {
                             .accessibilityLabel("\(head) into \(base)")
                         }
                         Spacer(minLength: 8)
-                        Menu {
-                            Picker("Merge method", selection: $mergeMethod) {
-                                Text("Squash and merge").tag("squash")
-                                Text("Create a merge commit").tag("merge")
-                                Text("Rebase and merge").tag("rebase")
+                        // With auto-merge on there is nothing to pick: the
+                        // host lands it the way it was queued.
+                        if block != .mergesWhenReady {
+                            Menu {
+                                Picker("Merge method", selection: $mergeMethod) {
+                                    Text("Squash and merge").tag("squash")
+                                    Text("Create a merge commit").tag("merge")
+                                    Text("Rebase and merge").tag("rebase")
+                                }
+                                // A blocked PR's plain merge would only be
+                                // refused; going around the rules is offered
+                                // here, a step away from the slide.
+                                if block != nil, pr.canForceMerge {
+                                    Divider()
+                                    Button(role: .destructive) {
+                                        confirmingForceMerge = true
+                                    } label: {
+                                        Label("Force merge", systemImage: "exclamationmark.triangle")
+                                    }
+                                }
+                            } label: {
+                                HStack(spacing: 3) {
+                                    Text(Self.mergeMethodShortLabel(mergeMethod))
+                                    Image(systemName: "chevron.up.chevron.down")
+                                        .font(.caption2.weight(.semibold))
+                                }
+                                .font(.footnote.weight(.medium))
+                                .foregroundStyle(OS1VisualStyle.textDim)
+                                .frame(minHeight: 32)
+                                .contentShape(Rectangle())
                             }
-                        } label: {
-                            HStack(spacing: 3) {
-                                Text(Self.mergeMethodShortLabel(mergeMethod))
-                                Image(systemName: "chevron.up.chevron.down")
-                                    .font(.caption2.weight(.semibold))
-                            }
-                            .font(.footnote.weight(.medium))
-                            .foregroundStyle(OS1VisualStyle.textDim)
-                            .frame(minHeight: 32)
-                            .contentShape(Rectangle())
+                            .accessibilityLabel("Merge method, \(Self.mergeButtonLabel(mergeMethod))")
+                            .disabled(merging)
                         }
-                        .accessibilityLabel("Merge method, \(Self.mergeButtonLabel(mergeMethod))")
-                        .disabled(merging)
                     }
 
-                    // The slide is the confirmation. A PR with something
-                    // wrong (conflicts, failing checks, a draft) still asks
-                    // first, and says what.
-                    SlideToMerge(
-                        label: "Slide to merge",
-                        tint: OS1VisualStyle.green,
-                        busy: merging || pendingMerge != nil
-                    ) {
-                        if mergeWarnings(pr).isEmpty {
-                            merge(method: mergeMethod)
-                        } else {
-                            pendingMerge = mergeMethod
+                    switch block {
+                    case .mergesWhenReady:
+                        // The headline says it will land; nothing to slide.
+                        EmptyView()
+                    case .blocked, .reviewRequired:
+                        // The host refuses a plain merge, so the slide
+                        // queues one that lands once the rules pass.
+                        if pr.canAutoMerge {
+                            SlideToMerge(
+                                label: "Slide to auto-merge",
+                                tint: OS1VisualStyle.green,
+                                busy: merging || confirmingForceMerge
+                            ) {
+                                autoMerge(method: mergeMethod)
+                            }
                         }
+                    case nil:
+                        // The slide is the confirmation. A PR with something
+                        // wrong (conflicts, failing checks, a draft) still
+                        // asks first, and says what.
+                        SlideToMerge(
+                            label: "Slide to merge",
+                            tint: OS1VisualStyle.green,
+                            busy: merging || pendingMerge != nil
+                        ) {
+                            if mergeWarnings(pr).isEmpty {
+                                merge(method: mergeMethod)
+                            } else {
+                                pendingMerge = mergeMethod
+                            }
+                        }
+                    }
+
+                    if let mergeError {
+                        Text(mergeError)
+                            .font(.footnote)
+                            .foregroundStyle(OS1VisualStyle.redInk)
+                            .lineLimit(2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }
@@ -673,6 +717,9 @@ struct WorktreeInfoView: View {
         if pr.isOpen, pr.mergeable == "CONFLICTING" || pr.reviewDecision == "CHANGES_REQUESTED" {
             return OS1VisualStyle.red
         }
+        if let block = pr.mergeBlock {
+            return block.isGreen ? OS1VisualStyle.green : OS1VisualStyle.yellow
+        }
         return pr.summary.color
     }
 
@@ -686,6 +733,8 @@ struct WorktreeInfoView: View {
         case .passing:
             if pr.mergeable == "CONFLICTING" { return "Merge conflicts" }
             if pr.reviewDecision == "CHANGES_REQUESTED" { return "Changes requested" }
+            // Nothing above holds it, yet the host refuses the merge.
+            if let block = pr.mergeBlock { return block.headline }
             if pr.reviewDecision == "REVIEW_REQUIRED" { return "Waiting for review" }
             return "Ready to merge"
         }
@@ -697,7 +746,9 @@ struct WorktreeInfoView: View {
         case .closed, .failing: "xmark"
         case .draft: "pencil"
         case .pending: "clock"
-        case .passing: pr.mergeable == "CONFLICTING" ? "exclamationmark" : "checkmark"
+        case .passing:
+            pr.mergeable == "CONFLICTING" ? "exclamationmark"
+                : pr.mergeBlock.map { $0.isGreen ? "clock" : "lock" } ?? "checkmark"
         }
     }
 
@@ -761,12 +812,27 @@ struct WorktreeInfoView: View {
 
     private func merge(method: String) {
         pendingMerge = nil
+        runMerge { try await viewModel.mergePr(method: method) }
+    }
+
+    private func autoMerge(method: String) {
+        runMerge { try await viewModel.autoMergePr(method: method) }
+    }
+
+    private func forceMerge() {
+        let headSha = viewModel.prDetails?.headRefOid
+        let method = mergeMethod
+        runMerge { try await viewModel.forceMergePr(method: method, headSha: headSha) }
+    }
+
+    /// One merge request at a time; the server's refusal stays on the card.
+    private func runMerge(_ work: @escaping () async throws -> Void) {
         guard !merging else { return }
         merging = true
         mergeError = nil
         Task {
             do {
-                try await viewModel.mergePr(method: method)
+                try await work()
                 Haptics.play(.commit)
             } catch {
                 mergeError = (error as? LocalizedError)?.errorDescription
@@ -774,6 +840,25 @@ struct WorktreeInfoView: View {
             }
             merging = false
         }
+    }
+
+    private var forceMergeConfirmationTitle: String {
+        guard let number = viewModel.prDetails?.number else { return "Force merge?" }
+        return "Force merge #\(number)?"
+    }
+
+    /// The web's wording: what lands where, what it skips, whose rights.
+    private var forceMergeConfirmationMessage: String {
+        guard let pr = viewModel.prDetails else { return "This cannot be undone." }
+        let base = pr.baseRefName ?? "the base branch"
+        let verb = switch mergeMethod {
+        case "merge": "Merge"
+        case "rebase": "Rebase"
+        default: "Squash"
+        }
+        let bypasses = pr.forceMergeBypasses
+        let skipping = bypasses.isEmpty ? "" : ", skipping \(bypasses.joined(separator: ", "))"
+        return "\(verb) into \(base) now\(skipping), using your GitHub permissions."
     }
 
     /// A check that is a deploy rather than a test, as the web's
@@ -802,7 +887,7 @@ struct WorktreeInfoView: View {
         if let href = pr.staging?.href(previewPath: currentSession.previewPath) {
             rows.append(DeploymentRow(
                 id: "staging",
-                name: "Preview environment",
+                name: pr.staging?.production == true ? "Production" : "Preview environment",
                 detail: href.host() ?? href.absoluteString,
                 rank: .success,
                 url: href
@@ -1413,7 +1498,10 @@ struct WorktreeInfoView: View {
                 // sits with the choice that drives it.
                 UsageMenuSection(usage: viewModel.usage)
                 if let catalog {
-                    ForEach(catalog.presets + catalog.regular) { option in
+                    ModelMenuRows(
+                        catalog: catalog,
+                        isSelected: { $0.id == ModelCatalog.baseID(currentModel) }
+                    ) { option in
                         let routed = ModelCatalog.routedID(option.id, engine: currentEngine)
                         Button {
                             if let routed { viewModel.changeModel(to: routed, option: option) }

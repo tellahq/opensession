@@ -368,6 +368,63 @@ describe("sandbox workload identity", () => {
     expect(seen).toEqual({});
   });
 
+  test("a lease may carry the grants of several lifecycles, and names its own", async () => {
+    process.env.OPENSESSION_WORKLOAD_IDENTITY_GRANTS = JSON.stringify([
+      {
+        repoId: "fusion",
+        lifecycle: "setup",
+        audiences: ["urn:test:artifacts"],
+      },
+      {
+        repoId: "fusion",
+        lifecycle: "preview",
+        trustProfile: "interactive",
+        audiences: ["urn:test:stage-read-write"],
+      },
+      { repoId: "fusion", lifecycle: "run", audiences: ["urn:test:run"] },
+      { repoId: "other", lifecycle: "preview", audiences: ["urn:test:other"] },
+    ]);
+    const context = {
+      sandboxId: "sbx-gpu",
+      provider: "modal",
+      lifecycle: "preview" as const,
+      sessionId: "os-1--gpu",
+      repoId: "fusion",
+      trustProfile: "interactive" as const,
+    };
+    const mint = (env: Record<string, string>, audience: string) =>
+      identity.handleWorkloadIdentityRequest(
+        new Request(env.OPENSESSION_WORKLOAD_IDENTITY_URL!, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${env.OPENSESSION_WORKLOAD_IDENTITY_TOKEN}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ audience }),
+        }),
+      );
+    const env = identity.createWorkloadIdentityEnv(context, {
+      grantLifecycles: ["setup", "preview", "run"],
+    });
+    for (const audience of [
+      "urn:test:artifacts",
+      "urn:test:stage-read-write",
+      "urn:test:run",
+    ]) {
+      const response = await mint(env, audience);
+      expect(response?.status).toBe(200);
+      expect(claims(await response!.text())).toMatchObject({
+        aud: audience,
+        lifecycle: "preview",
+      });
+    }
+    expect((await mint(env, "urn:test:other"))?.status).toBe(403);
+    // Without the option, only its own lifecycle's grants.
+    const plain = identity.createWorkloadIdentityEnv(context);
+    expect((await mint(plain, "urn:test:stage-read-write"))?.status).toBe(200);
+    expect((await mint(plain, "urn:test:artifacts"))?.status).toBe(403);
+  });
+
   test("does not create a lease without a matching central audience grant", () => {
     const env = identity.createWorkloadIdentityEnv({
       sandboxId: "sbx-no-grant",

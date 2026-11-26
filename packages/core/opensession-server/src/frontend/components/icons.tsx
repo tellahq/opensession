@@ -1301,6 +1301,28 @@ export function IconClock(p: IconProps) {
   );
 }
 
+export function IconDollarCircle(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <circle {...stroke} cx="12" cy="12" r="7.25" />
+      <path
+        {...stroke}
+        d="M14.25 9.75C14.25 9.75 13.5 8.75 12 8.75C10.75 8.75 9.75 9.4 9.75 10.375C9.75 12.5 14.25 11.5 14.25 13.625C14.25 14.6 13.25 15.25 12 15.25C10.5 15.25 9.75 14.25 9.75 14.25M12 7.75V8.75M12 15.25V16.25"
+      />
+    </Svg>
+  );
+}
+
+/** Two overlapping coins: a token count, as opposed to money. */
+export function IconTokens(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <circle {...stroke} cx="9.5" cy="9.5" r="4.75" />
+      <path {...stroke} d="M14.24 9.76A4.75 4.75 0 1 1 9.76 14.24" />
+    </Svg>
+  );
+}
+
 export function IconTarget(p: IconProps) {
   return (
     <Svg {...p}>

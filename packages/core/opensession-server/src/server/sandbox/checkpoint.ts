@@ -121,6 +121,24 @@ async function excludedPaths(repo: Repo): Promise<string[]> {
   return [".ports.conf", ...seeded];
 }
 
+/** Shell for scripts that report their steps: `step <name>` prints
+ *  `step <name> <ms>` (time since the previous step) on stderr, which the
+ *  caller logs; stdout stays the script's result. */
+export const STEP_TIMER =
+  '__t=$(date +%s%3N); step() { local n; n=$(date +%s%3N); echo "step $1 $((n - __t))" >&2; __t=$n; }';
+
+/** A script's stderr without its `step` lines. */
+export function withoutSteps(stderr: string): string {
+  return stderr.replace(/^step \S+ \d+\n?/gm, "");
+}
+
+/** `step <name> <ms>` lines from a script's stderr, as `name 12ms, …`. */
+export function stepTimings(stderr: string): string {
+  return [...stderr.matchAll(/^step (\S+) (\d+)$/gm)]
+    .map(([, name, ms]) => `${name} ${ms}ms`)
+    .join(", ");
+}
+
 /**
  * The script that builds and pushes the checkpoint. Reads its inputs from the
  * environment so nothing session-specific is interpolated into shell text
@@ -130,7 +148,9 @@ async function excludedPaths(repo: Repo): Promise<string[]> {
  * is on the repository's default branch (`OS_DEFAULT_BRANCH`), both without
  * pushing; `unchanged <head> <tree> <branch>` when the last checkpoint
  * already holds this exact state on this branch; else
- * `pushed <commit> <head> <tree> <branch>`.
+ * `pushed <commit> <head> <tree> <branch>`. With `OS_DEFER_PUSH` set it
+ * pushes nothing and prints `captured <commit> <head> <tree> <branch>
+ * <verify>` instead, for `CHECKPOINT_PUSH_SCRIPT` to push.
  */
 export function checkpointScript(excluded: string[]): string {
   const rm = excluded.length
@@ -138,6 +158,7 @@ export function checkpointScript(excluded: string[]): string {
     : "";
   return [
     "set -eu",
+    STEP_TIMER,
     'cd "$OS_CWD"',
     "branch=$(git branch --show-current)",
     'if [ -z "$branch" ]; then echo detached; exit 0; fi',
@@ -148,57 +169,227 @@ export function checkpointScript(excluded: string[]): string {
     // `git add -A` rehash only what changed (seconds to milliseconds on a
     // large checkout; a fresh index hashes every file). Entries marked
     // assume-unchanged or skip-worktree would hide changes, so a checkout
-    // with any falls back to building the index from HEAD.
+    // with any falls back to building the index from HEAD. `-p` keeps the
+    // index's mtime, which git's racy-file check compares file mtimes
+    // with: a fresh one would trust a file edited in the same clock tick
+    // as the last index write.
     "real_idx=$(git rev-parse --git-path index)",
-    'if [ -s "$real_idx" ] && ! git ls-files -v | grep -q "^[a-zS]"; then cp "$real_idx" "$idx"; else rm -f "$idx"; fi',
+    'if [ -s "$real_idx" ] && ! git ls-files -v | grep -q "^[a-zS]"; then cp -p "$real_idx" "$idx"; else rm -f "$idx"; fi',
     'export GIT_INDEX_FILE="$idx"',
     'if [ ! -s "$idx" ]; then git read-tree "$head"; fi',
     "git add -A -- .",
     rm.trimEnd(),
     "tree=$(git write-tree)",
+    // A pre-push hook has no business with a hidden checkpoint ref, and Git
+    // LFS's costs seconds on a large repository (its own ls-remote and
+    // rev-list). Its one job matters only when the checkpoint holds LFS
+    // files: then the objects must reach the remote too, so the hooks run.
+    "verify=--no-verify; if [ -n \"$(git ls-files -- ':(attr:filter=lfs)' 2>/dev/null | head -n 1)\" ]; then verify=--verify; fi",
     "unset GIT_INDEX_FILE",
     'rm -f "$idx"',
+    'step "capture"',
     'if [ "$head" = "${OS_LAST_HEAD:-}" ] && [ "$tree" = "${OS_LAST_TREE:-}" ] && [ "$branch" = "${OS_LAST_BRANCH:-}" ]; then',
     '  echo "unchanged $head $tree $branch"; exit 0',
     "fi",
     'commit=$(printf \'Open Session checkpoint\\n\\nSession: %s\\nBranch: %s\\nHead: %s\\n\' "$OS_SESSION" "$branch" "$head" | git commit-tree "$tree" -p "$head")',
-    'git push --force --quiet origin "$commit:$OS_REF"',
+    'if [ -n "${OS_DEFER_PUSH:-}" ]; then echo "captured $commit $head $tree $branch $verify"; exit 0; fi',
+    'git push "$verify" --force --quiet origin "$commit:$OS_REF"',
+    'step "push"',
     'echo "pushed $commit $head $tree $branch"',
   ]
     .filter(Boolean)
     .join("\n");
 }
 
+/** Pushes a captured checkpoint (`OS_COMMIT`, with `OS_VERIFY` from the
+ *  capture) to `OS_REF`. */
+export const CHECKPOINT_PUSH_SCRIPT = [
+  "set -eu",
+  'cd "$OS_CWD"',
+  'git push "$OS_VERIFY" --force --quiet origin "$OS_COMMIT:$OS_REF"',
+].join("\n");
+
+/** The ref a landing leaves on the commit it landed: the next landing
+ *  starts from that tree instead of from the branch tip, and a landing of
+ *  the commit already there does nothing. */
+export const LANDED_REF = "refs/opensession/landed";
+
 /**
  * Shell that lands a checkout on a checkpoint whatever branch it is on: for
- * a Portal Sandbox (portal-sandbox.ts), whose checkout is nobody's work and
- * only ever mirrors the session's checkpoints. Fetch the hidden ref, verify
- * it is the recorded commit, reset the tree to the checkpoint outright,
- * drop untracked files the previous checkpoint left behind (`keep` names the
- * paths a checkpoint leaves out and the checkout must keep, such as the
- * Portal registry), put `branch` on it, and leave the checkpointed tree as
- * uncommitted changes on the checkpoint's parent, exactly as the restore
- * script does. Unlike the restore script it refuses nothing: a renamed or
- * switched branch simply lands here too.
+ * a Portal Sandbox (portal-sandbox.ts) or a GPU job machine (gpu-jobs.ts),
+ * whose checkout is nobody's work and only ever mirrors the session's
+ * checkpoints. Fetch the hidden ref, verify it is the recorded commit, make
+ * the tracked files the checkpoint's tree, put `branch` on the checkpoint's
+ * parent, and leave the checkpointed tree as uncommitted changes there,
+ * exactly as the restore script does. Unlike the restore script it refuses
+ * nothing: a renamed or switched branch simply lands here too.
+ *
+ * Built for checkouts that run a file watcher (a dev server) and for the
+ * machines' partial clones (`--filter=blob:none`):
+ *
+ *  - Only files whose content changes are rewritten. The index is first set
+ *    to the tree the previous landing left (`LANDED_REF`, stat data kept),
+ *    so a file the session changed before and has not touched since is
+ *    recognised as unchanged, and a file the previous checkpoint added and
+ *    this one lacks is removed even though the branch never tracked it.
+ *  - No blob of the checkpoint's parent is read. `reset --mixed <parent>`
+ *    did (a lazy fetch per landing, and a fatal error once the remote no
+ *    longer had it); the branch is moved with update-ref and the index
+ *    rebuilt with `read-tree --reset`, which compares object ids only and
+ *    keeps the stat data of every path the two trees share. Should that
+ *    step fail anyway (a crash was seen in `reset --mixed` that could not be
+ *    explained or reproduced), a plain `read-tree` gives the same end state
+ *    and git rehashes the files lazily later.
+ *  - The landing does nothing (no fetch, no reset) when the checkout is
+ *    already on that checkpoint, and prints `unchanged`.
+ *  - `bundle` names a git bundle on the machine holding the checkpoint on
+ *    top of commits the machine has (checkpointBundle): fetched from there
+ *    with the blobs of the changed files in it, instead of from origin and
+ *    then the blobs one more round trip later. Any failure of it falls back
+ *    to origin.
+ *  - `clean` (default) deletes untracked files that are not ignored, except
+ *    `keep`, so a new job starts on exactly the checkpoint. Without it,
+ *    untracked files the checkpoint never had (a running job's scratch
+ *    files) stay; files an earlier checkpoint put there and this one does
+ *    not have are still removed.
+ *
+ * Prints `head <commit>` (the branch tip it leaves), then `unchanged`, or
+ * `landed` followed by one line per path whose content differs from the
+ * previous landing (`?` when there was no previous landing to compare
+ * with). `step` lines on stderr time it.
  */
 export function checkpointLandScript(
   ref: string,
   commit: string,
   branch: string,
   keep: string[] = [],
+  options: { clean?: boolean; bundle?: string } = {},
 ): string {
   const exclude = keep.map((path) => `-e ${shellQuoteWord(path)}`).join(" ");
+  const c = shellQuoteWord(commit);
+  const b = shellQuoteWord(branch);
+  const fetch = `git fetch --no-tags --quiet origin ${shellQuoteWord(`+${ref}:refs/opensession/checkpoint`)}`;
   return [
+    "set -e",
+    STEP_TIMER,
     STALE_INDEX_LOCK_CLEANUP,
-    `git fetch --no-tags --quiet origin ${shellQuoteWord(`+${ref}:refs/opensession/checkpoint`)}`,
-    `test "$(git rev-parse --verify 'refs/opensession/checkpoint^{commit}')" = ${shellQuoteWord(commit)}`,
+    STALE_TMP_PACK_CLEANUP,
+    // No automatic gc or maintenance in the middle of a landing.
+    'git() { command git -c gc.auto=0 -c maintenance.auto=false "$@"; }',
+    `prev=$(git rev-parse -q --verify '${LANDED_REF}^{commit}' 2>/dev/null || true)`,
+    `if [ "$prev" = ${c} ] && [ "$(git branch --show-current)" = ${b} ] && [ "$(git rev-parse -q --verify HEAD)" = "$(git rev-parse -q --verify "$prev^")" ]; then echo "head $(git rev-parse HEAD)"; echo unchanged; exit 0; fi`,
+    options.bundle
+      ? `{ git bundle unbundle ${shellQuoteWord(options.bundle)} >/dev/null && git update-ref refs/opensession/checkpoint ${c} && step bundle; } || { echo 'the bundle did not land; fetching from origin' >&2; ${fetch}; }`
+      : fetch,
+    `test "$(git rev-parse --verify 'refs/opensession/checkpoint^{commit}')" = ${c}`,
+    "step fetch",
+    'if [ -n "$prev" ]; then git read-tree --reset "$prev" || prev=; fi',
     GIT_REFRESH_INDEX,
-    "git -c advice.detachedHead=false reset --hard --quiet refs/opensession/checkpoint",
-    `git clean -fdq ${exclude}`.trimEnd(),
-    `git checkout --quiet -B ${shellQuoteWord(branch)}`,
-    "git reset --mixed --quiet 'refs/opensession/checkpoint^'",
+    "step index",
+    "git read-tree --reset -u refs/opensession/checkpoint",
+    "step checkout",
+    ...(options.clean === false ? [] : [`git clean -fdq ${exclude}`.trimEnd()]),
+    `git update-ref ${shellQuoteWord(`refs/heads/${branch}`)} 'refs/opensession/checkpoint^'`,
+    `git symbolic-ref HEAD ${shellQuoteWord(`refs/heads/${branch}`)}`,
+    "git read-tree --reset 'refs/opensession/checkpoint^' || { echo 'read-tree --reset failed; rebuilding the index without stat data' >&2; git read-tree 'refs/opensession/checkpoint^'; }",
+    `if [ -n "$prev" ]; then changed=$(git diff-tree -r --name-only "$prev" refs/opensession/checkpoint); else changed='?'; fi`,
+    `git update-ref ${LANDED_REF} refs/opensession/checkpoint`,
     "git update-ref -d refs/opensession/checkpoint",
-  ].join(" && ");
+    "step finish",
+    'printf "head %s\\nlanded\\n%s\\n" "$(git rev-parse HEAD)" "$changed"',
+  ].join("\n");
+}
+
+/**
+ * A git bundle of checkpoint `commit` for a machine that has `haves` (the
+ * commit and checkpoint it was last put on), built in the host checkout
+ * `dir`: the commits, trees and blobs between them, usually a few KB. Null
+ * when no `have` is known here or the bundle would exceed `maxBytes` (a
+ * merge of a busy default branch), so the caller fetches from origin.
+ */
+export async function checkpointBundle(
+  dir: string,
+  commit: string,
+  haves: string[],
+  maxBytes = 32 * 1024 * 1024,
+): Promise<Buffer | null> {
+  const git = (args: string[], stdout: "pipe" | "ignore" = "ignore") =>
+    Bun.spawn(["git", "-C", dir, ...args], { stdout, stderr: "ignore" });
+  const known: string[] = [];
+  for (const have of new Set(
+    haves.filter((have) => /^[0-9a-f]{40,64}$/.test(have)),
+  ))
+    if ((await git(["cat-file", "-e", `${have}^{commit}`]).exited) === 0)
+      known.push(have);
+  if (!known.length) return null;
+  // A bundle records refs, not bare commits: a private ref, only for the
+  // length of the call.
+  const ref = `refs/opensession/bundles/${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  if ((await git(["update-ref", ref, commit]).exited) !== 0) return null;
+  try {
+    const proc = Bun.spawn(
+      [
+        "git",
+        "-C",
+        dir,
+        "bundle",
+        "create",
+        "-q",
+        "-",
+        ref,
+        ...known.map((have) => `^${have}`),
+      ],
+      { stdout: "pipe", stderr: "ignore" },
+    );
+    const [bytes, code] = await Promise.all([
+      new Response(proc.stdout).arrayBuffer(),
+      proc.exited,
+    ]);
+    if (code !== 0 || bytes.byteLength > maxBytes) return null;
+    return Buffer.from(bytes);
+  } finally {
+    await git(["update-ref", "-d", ref]).exited;
+  }
+}
+
+/** Interrupted fetches leave `tmp_pack_*` files (hundreds of MB on a large
+ *  repository) that git never removes. One untouched for an hour belongs to
+ *  no running fetch. */
+export const STALE_TMP_PACK_CLEANUP =
+  'find "$(git rev-parse --git-path objects/pack)" -maxdepth 1 -name "tmp_*" -mmin +60 -delete 2>/dev/null || true';
+
+/** What a landing did: nothing (the checkout was already there), or landed
+ *  with the paths whose content changed (`null` when unknown). */
+export type LandOutcome = (
+  | { state: "unchanged" }
+  | { state: "landed"; changed: string[] | null }
+) & {
+  /** The branch tip the checkout is on afterwards. */
+  head?: string;
+  /** How long each step took on the machine (`fetch 812ms, …`). */
+  steps?: string;
+  /** Whether the checkpoint came in a bundle from this host. */
+  bundled?: boolean;
+};
+
+export function parseLandOutput(stdout: string): LandOutcome {
+  const lines = stdout.split("\n");
+  const head = lines.find((line) => line.startsWith("head "))?.slice(5);
+  const outcome = parseLandState(lines);
+  return head ? { ...outcome, head } : outcome;
+}
+
+function parseLandState(lines: string[]): LandOutcome {
+  const at = lines.findLastIndex(
+    (line) => line === "landed" || line === "unchanged",
+  );
+  if (at < 0) return { state: "landed", changed: null };
+  if (lines[at] === "unchanged") return { state: "unchanged" };
+  const rest = lines.slice(at + 1).filter(Boolean);
+  return {
+    state: "landed",
+    changed: rest.length === 1 && rest[0] === "?" ? null : rest,
+  };
 }
 
 const LAND_RETRY_DELAY_MS = 2_000;
@@ -216,45 +407,76 @@ export const STALE_INDEX_LOCK_CLEANUP =
 
 /**
  * Land a checkpoint in a Sandbox whose checkout mirrors the session (a
- * Portal Sandbox). The token rides in the command's environment as for a
- * push; the Sandbox's origin stays credential-free. Throws when the
- * workspace has no credential or git refuses.
+ * Portal Sandbox, a GPU job machine). The token rides in the command's
+ * environment as for a push; the Sandbox's origin stays credential-free.
+ * Throws when the workspace has no credential or git refuses.
  */
 export async function landCheckpointInSandbox(
   repoId: string | undefined,
   sandbox: Sandbox,
   checkpoint: Pick<SandboxCheckpointRecord, "ref" | "commit" | "branch">,
-): Promise<void> {
+  options: { clean?: boolean; bundle?: Buffer | null } = {},
+): Promise<LandOutcome> {
   const repo = getRepo(repoId);
-  const env = await checkpointGitEnv(repo);
+  const [env, keep] = await Promise.all([
+    checkpointGitEnv(repo),
+    excludedPaths(repo),
+  ]);
   if (!env) throw new Error("the workspace has no GitHub credential");
-  const land = async () =>
-    sandbox.exec(
-      [
-        "bash",
-        "-c",
-        checkpointLandScript(
-          checkpoint.ref,
-          checkpoint.commit,
-          checkpoint.branch,
-          await excludedPaths(repo),
-        ),
-      ],
-      { env, timeoutMs: CHECKPOINT_TIMEOUT_MS },
+  // The bundle travels over the provider's file API as base64; the script
+  // decodes it and removes both files whatever happens.
+  let bundle: string | undefined;
+  if (options.bundle && sandbox.writeFile) {
+    const path = `/tmp/opensession-checkpoint-${checkpoint.commit.slice(0, 12)}-${Math.random().toString(36).slice(2, 8)}`;
+    try {
+      await sandbox.writeFile(`${path}.b64`, options.bundle.toString("base64"));
+      bundle = path;
+    } catch (error) {
+      console.warn(
+        `[sandbox] ${sandbox.id}: checkpoint bundle not sent, fetching from origin: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+  const landScript = (bundlePath?: string) =>
+    checkpointLandScript(
+      checkpoint.ref,
+      checkpoint.commit,
+      checkpoint.branch,
+      keep,
+      { clean: options.clean, ...(bundlePath ? { bundle: bundlePath } : {}) },
     );
-  // The landing is idempotent (fetch, hard reset, clean, branch, mixed
-  // reset), so one retry absorbs a transient failure: a provider command
-  // plane that hiccuped, or a git that crashed and left its lock behind.
-  let result = await land();
+  const run = (script: string) =>
+    sandbox.exec(["bash", "-c", script], {
+      env,
+      timeoutMs: CHECKPOINT_TIMEOUT_MS,
+    });
+  // The landing is idempotent, so one retry absorbs a transient failure: a
+  // provider command plane that hiccuped, or a git that crashed and left
+  // its lock behind.
+  let result = await run(
+    bundle
+      ? `trap ${shellQuoteWord(`rm -f ${bundle}.b64 ${bundle}.bundle`)} EXIT\n` +
+          `base64 -d < ${shellQuoteWord(`${bundle}.b64`)} > ${shellQuoteWord(`${bundle}.bundle`)} || true\n` +
+          landScript(`${bundle}.bundle`)
+      : landScript(),
+  );
   if (result.exitCode !== 0) {
     await Bun.sleep(LAND_RETRY_DELAY_MS);
-    result = await land();
+    // The first attempt removed the bundle: this one fetches from origin.
+    result = await run(landScript());
   }
+  const stderr = withoutSteps(result.stderr);
   if (result.exitCode !== 0)
     throw new Error(
       `could not land checkpoint ${checkpoint.commit.slice(0, 12)} in ${sandbox.id}: ` +
-        `${(result.stderr || result.stdout).trim().slice(0, 300)}`,
+        `${(stderr || result.stdout).trim().slice(0, 300)}`,
     );
+  const steps = stepTimings(result.stderr);
+  return {
+    ...parseLandOutput(result.stdout),
+    ...(steps ? { steps } : {}),
+    ...(bundle ? { bundled: /^step bundle /m.test(result.stderr) } : {}),
+  };
 }
 
 export type CheckpointOutcome =
@@ -292,6 +514,7 @@ async function runCheckpoint(
   session: CheckpointSession,
   cwd: string,
   run: ScriptRunner,
+  options: CheckpointOptions = {},
 ): Promise<CheckpointOutcome> {
   if (!session.branch) return { state: "skipped", reason: "no branch" };
   const repo = getRepo(session.repo);
@@ -310,10 +533,11 @@ async function runCheckpoint(
     OS_LAST_HEAD: last?.ref === ref ? last.head : "",
     OS_LAST_TREE: last?.ref === ref ? last.tree : "",
     OS_LAST_BRANCH: last?.ref === ref ? last.branch : "",
+    ...(options.alongsidePush ? { OS_DEFER_PUSH: "1" } : {}),
   });
   if (result.exitCode !== 0) {
     throw new Error(
-      `checkpoint push failed: ${(result.stderr || result.stdout).trim().slice(0, 400)}`,
+      `checkpoint push failed: ${(withoutSteps(result.stderr) || result.stdout).trim().slice(0, 400)}`,
     );
   }
   const line = result.stdout.trim().split("\n").at(-1) || "";
@@ -324,7 +548,7 @@ async function runCheckpoint(
     return { state: "skipped", reason: "session is on the default branch" };
   if (state === "unchanged" && last?.ref === ref && parts[2] === last.branch)
     return { state: "unchanged", checkpoint: last };
-  if (state !== "pushed" || parts.length < 4)
+  if ((state !== "pushed" && state !== "captured") || parts.length < 4)
     throw new Error(`checkpoint produced no result: ${line.slice(0, 200)}`);
   const branch = parts[3]!;
   const checkpoint: SandboxCheckpointRecord = {
@@ -335,6 +559,41 @@ async function runCheckpoint(
     branch,
     at: new Date().toISOString(),
   };
+  if (state === "captured") {
+    // Push while the caller uses the commit; the record (and the caller's
+    // result) waits for both, so it only ever names a pushed checkpoint.
+    const pushStarted = Date.now();
+    const [pushed, alongside] = await Promise.allSettled([
+      run(CHECKPOINT_PUSH_SCRIPT, {
+        ...env,
+        OS_CWD: cwd,
+        OS_REF: ref,
+        OS_COMMIT: checkpoint.commit,
+        OS_VERIFY: parts[4] === "--verify" ? "--verify" : "--no-verify",
+      }),
+      options.alongsidePush!(checkpoint),
+    ]);
+    if (pushed.status === "rejected") throw pushed.reason;
+    if (pushed.value.exitCode !== 0)
+      throw new Error(
+        `checkpoint push failed: ${(pushed.value.stderr || pushed.value.stdout).trim().slice(0, 400)}`,
+      );
+    options.onPushed?.(Date.now() - pushStarted);
+    if (alongside.status === "rejected") {
+      await recordCheckpoint(session, checkpoint);
+      throw alongside.reason;
+    }
+  }
+  if (options.onCaptured) options.onCaptured(stepTimings(result.stderr));
+  await recordCheckpoint(session, checkpoint);
+  return { state: "pushed", checkpoint };
+}
+
+async function recordCheckpoint(
+  session: CheckpointSession,
+  checkpoint: SandboxCheckpointRecord,
+): Promise<void> {
+  const { ref, branch } = checkpoint;
   const patch =
     branch === session.branch
       ? { sandboxCheckpoint: checkpoint }
@@ -346,7 +605,17 @@ async function runCheckpoint(
         ? ""
         : ` (checkout is on ${branch}, record said ${session.branch}; record updated)`),
   );
-  return { state: "pushed", checkpoint };
+}
+
+export interface CheckpointOptions {
+  /** Called with the new checkpoint once it is captured, while it is
+   *  pushed (a landing that does not need origin). The checkpoint call
+   *  settles when both have; its error, after the push, is the call's. */
+  alongsidePush?: (checkpoint: SandboxCheckpointRecord) => Promise<void>;
+  /** The capture's step timings (`capture 412ms, …`). */
+  onCaptured?: (steps: string) => void;
+  /** How long the push took, when it ran beside `alongsidePush`. */
+  onPushed?: (ms: number) => void;
 }
 
 /**
@@ -391,6 +660,7 @@ export function checkpointSessionWorkspace(
 export function checkpointHostWorkspace(
   session: Omit<CheckpointSession, "sandbox">,
   dir: string,
+  options: CheckpointOptions = {},
 ): Promise<CheckpointOutcome> {
   return withSessionLifecycleLane(session.id, async () => {
     if (!(await pathExists(dir)))
@@ -413,6 +683,7 @@ export function checkpointHostWorkspace(
           stderr: result.stderr.toString(),
         };
       },
+      options,
     );
   });
 }

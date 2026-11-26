@@ -1048,6 +1048,9 @@ export interface AgentWaitHandlerDeps {
   ) => Promise<WorkflowRunJob[]>;
   /** Re-arm the webhook index for a wait that keeps polling. */
   watchWorkflowRun: (wait: WorkflowRunAgentWait) => void;
+  /** Unresolved review threads from trusted reviewers; null when unknown
+   * (not a GitHub repo, or GitHub could not be read). */
+  openReviewThreads?: (repo: string, number: number) => Promise<number | null>;
 }
 
 /** Who a wake is sent as: `waitActor(person)` for a wait a person's own
@@ -1070,6 +1073,13 @@ export function agentWaitWakePrompt(wait: AgentWait, message: string): string {
 
 const defaultHandlerDeps: AgentWaitHandlerDeps = {
   now: () => Date.now(),
+  openReviewThreads: async (repo, number) => {
+    const target = resolvePrWaitRepo(repo);
+    if (!target?.github) return null;
+    const { countOpenReviewThreads } =
+      await import("../agents/github/github-rest");
+    return countOpenReviewThreads(number, target.hostRepo);
+  },
   getPrDetails: async (branch, repo) => {
     const target = resolvePrWaitRepo(repo);
     if (!target) throw new Error(`Unknown repository "${repo}".`);
@@ -1290,6 +1300,28 @@ function needsPersonSuffix(state: PrCheckSettlement): string {
     : "";
 }
 
+/**
+ * Settled checks are not the whole merge story: a PR whose checks all pass
+ * can still have review threads open, and a wake that only counts checks
+ * reads as "ready". Name them so the agent does not report it as such.
+ */
+async function openReviewThreadsSuffix(
+  wait: PrChecksAgentWait,
+  number: number,
+  deps: AgentWaitHandlerDeps,
+): Promise<string> {
+  if (!deps.openReviewThreads) return "";
+  const open = await deps
+    .openReviewThreads(wait.repo, number)
+    .catch(() => null);
+  if (open === null) return "";
+  if (!open) return " No unresolved review threads.";
+  return (
+    ` ${open} unresolved review thread${open === 1 ? "" : "s"}: ` +
+    `not ready to merge until each is fixed or answered and resolved.`
+  );
+}
+
 async function checksStillRunning(
   wait: PrChecksAgentWait,
   deps: AgentWaitHandlerDeps,
@@ -1459,9 +1491,10 @@ export async function handleAgentWait(
       : `${state.total} checks settled: ${state.passed} passed, ${state.failed} failed` +
         (state.other ? `, ${state.other} skipped or neutral.` : ".") +
         needsPersonSuffix(state);
+  const threads = await openReviewThreadsSuffix(wait, details.number, deps);
   await deps.deliver(
     wait,
-    `PR ${wait.repo}#${details.number} checks settled. ${result}`,
+    `PR ${wait.repo}#${details.number} checks settled. ${result}${threads}`,
   );
   notePrChecksReport(wait, signature, now);
   return "delivered";

@@ -1,6 +1,12 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { fetchSupportThreads } from "../lib/api";
+import { errorMessage } from "../lib/error-message";
+import type { TicketChange } from "../lib/plain-ticket";
+import {
+  applyTicketChange,
+  sendTicketChange,
+} from "../lib/support-ticket-changes";
 import {
   SIDEBAR_GROUP_HEADER,
   SIDEBAR_GROUP_HEADER_INSET,
@@ -17,14 +23,25 @@ import {
   SUPPORT_PRIORITY_GROUPS,
 } from "../lib/sidebar-filter";
 import { SUPPORT_COLUMN_BAR } from "../lib/support-classes";
+import {
+  filterSupportThreadsByLabel,
+  readSupportLabel,
+  supportLabelOptions,
+  writeSupportLabel,
+} from "../lib/support-labels";
 import { mineStatus } from "../lib/sidebar-lanes";
 import { MINE_STATUS_META } from "../lib/sidebar-types";
 import { shortTime } from "../lib/time";
 import type { SupportThread, UnifiedSession } from "../lib/types";
+import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
+import { Menu, MENU_ICON } from "../ui/menu";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
+import { toast } from "../ui/toast";
 import { ConversationPane } from "./ConversationPane";
-import { IconMail } from "./icons";
+import { IconMail, IconTag } from "./icons";
+import { SupportTicketContextMenu } from "./SupportTicketContextMenu";
+import { useCurrentUser } from "./UserPicker";
 
 /**
  * The Plain queue as a place of its own: the tickets in a column beside the
@@ -54,8 +71,7 @@ const COLUMN =
 const COLUMN_TITLE =
   "m-0 text-item-title font-semibold text-fg phone:text-section-title";
 
-const COLUMN_COUNT =
-  "ml-auto shrink-0 text-meta font-medium tabular-nums text-faint";
+const COLUMN_COUNT = "shrink-0 text-meta font-medium tabular-nums text-faint";
 
 const LIST =
   "min-h-0 flex-1 overflow-y-auto px-1.5 pt-2 pb-3 " +
@@ -102,32 +118,64 @@ export function SupportInbox({
   const isPhone = useIsPhone();
   const [threads, setThreads] = useState<SupportThread[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // One Plain label narrowing the queue, like Plain's own Labels list.
+  const [label, setLabelState] = useState(readSupportLabel);
+  const setLabel = (next: string) => {
+    setLabelState(next);
+    writeSupportLabel(next);
+  };
+
+  const currentUser = useCurrentUser();
+  // Bumped when the queue changes the open ticket, so the pane beside it
+  // shows the new state now rather than at its next poll.
+  const [paneVersion, setPaneVersion] = useState(0);
+  const aliveRef = useRef(true);
+
+  // A poll that fails while tickets are already on screen keeps them: the
+  // list is the queue as of the last good answer, not an error page.
+  const load = () =>
+    fetchSupportThreads()
+      .then((t) => {
+        if (!aliveRef.current) return;
+        setThreads(t);
+        setError(null);
+      })
+      .catch((e) => {
+        if (aliveRef.current)
+          setError(e?.message || "Failed to load the queue");
+      });
+  const poll = useEffectEvent(() => void load());
 
   // The same gentle cadence the sidebar polls Plain on (the server caches
-  // ~60s). A poll that fails while tickets are already on screen keeps them:
-  // the list is the queue as of the last good answer, not an error page.
+  // ~60s, and drops that cache on every edit made from here).
   useEffect(() => {
-    let alive = true;
-    const load = () =>
-      fetchSupportThreads()
-        .then((t) => {
-          if (!alive) return;
-          setThreads(t);
-          setError(null);
-        })
-        .catch((e) => {
-          if (alive) setError(e?.message || "Failed to load the queue");
-        });
-    void load();
+    aliveRef.current = true;
+    poll();
     const timer = setInterval(() => {
       if (document.visibilityState === "hidden") return;
-      void load();
+      poll();
     }, 60_000);
     return () => {
-      alive = false;
+      aliveRef.current = false;
       clearInterval(timer);
     };
   }, []);
+
+  // An edit from a row's right-click menu. The row changes first, so the
+  // queue answers the click rather than Plain's round trip: a closed,
+  // snoozed or spam ticket leaves the Todo queue, a new priority moves it to
+  // that lane. Then the queue is fetched again either way, which keeps the
+  // edit when Plain took it and puts the row back when it did not.
+  async function changeTicket(t: SupportThread, change: TicketChange) {
+    setThreads((prev) => prev && applyTicketChange(prev, t.id, change));
+    try {
+      await sendTicketChange(t.id, change, currentUser);
+    } catch (e) {
+      toast(errorMessage(e, "Plain update failed"), { variant: "error" });
+    }
+    void load();
+    if (t.id === threadId) setPaneVersion((v) => v + 1);
+  }
 
   // Newest live session per thread — the same rule the sidebar's Support rows
   // use to decide what their dot says.
@@ -142,6 +190,13 @@ export function SupportInbox({
     return m;
   })();
 
+  const labelOptions = threads ? supportLabelOptions(threads) : [];
+  // A picked label nobody carries right now stays listed, so it can be
+  // seen and cleared rather than silently emptying the queue.
+  if (label && !labelOptions.some((o) => o.name === label))
+    labelOptions.push({ name: label, count: 0 });
+  const shown = threads ? filterSupportThreadsByLabel(threads, label) : null;
+
   // Phone: list and ticket are separate pages, with a back button between.
   const showList = !isPhone || !threadId;
   const showTicket = !isPhone || !!threadId;
@@ -155,36 +210,41 @@ export function SupportInbox({
         : SUPPORT_PRIORITY_DOT[t.priority ?? 2]) || "var(--text-faint)";
     const stamp = t.statusChangedAt || t.createdAt;
     return (
-      <button
+      <SupportTicketContextMenu
         key={t.id}
-        type="button"
-        className={ROW}
-        data-active={(threadId === t.id && !isPhone) || undefined}
-        onClick={() => onSelectThread(t.id)}
+        thread={t}
+        onChange={(change) => void changeTicket(t, change)}
       >
-        <span className={SIDEBAR_RAIL}>
-          <span
-            className="size-[7px] rounded-full"
-            style={{ backgroundColor: dot }}
-          />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className={ROW_HEAD}>
-            <span className={ROW_NAME}>{customer}</span>
-            {stamp && (
-              <span
-                className={ROW_TIME}
-                title={new Date(stamp).toLocaleString()}
-              >
-                {shortTime(stamp)}
-              </span>
-            )}
+        <button
+          type="button"
+          className={ROW}
+          data-active={(threadId === t.id && !isPhone) || undefined}
+          onClick={() => onSelectThread(t.id)}
+        >
+          <span className={SIDEBAR_RAIL}>
+            <span
+              className="size-[7px] rounded-full"
+              style={{ backgroundColor: dot }}
+            />
           </span>
-          <span className={ROW_SUBJECT}>
-            {t.title || t.previewText || "No subject"}
+          <span className="min-w-0 flex-1">
+            <span className={ROW_HEAD}>
+              <span className={ROW_NAME}>{customer}</span>
+              {stamp && (
+                <span
+                  className={ROW_TIME}
+                  title={new Date(stamp).toLocaleString()}
+                >
+                  {shortTime(stamp)}
+                </span>
+              )}
+            </span>
+            <span className={ROW_SUBJECT}>
+              {t.title || t.previewText || "No subject"}
+            </span>
           </span>
-        </span>
-      </button>
+        </button>
+      </SupportTicketContextMenu>
     );
   }
 
@@ -194,10 +254,58 @@ export function SupportInbox({
         <aside className={COLUMN}>
           <div className={SUPPORT_COLUMN_BAR}>
             <h1 className={COLUMN_TITLE}>Support</h1>
-            {threads && <span className={COLUMN_COUNT}>{threads.length}</span>}
+            {shown && <span className={COLUMN_COUNT}>{shown.length}</span>}
+            {labelOptions.length > 0 && (
+              <Menu.Root>
+                <Menu.Trigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={cn("ml-auto min-w-0", label && "text-accent")}
+                      icon={<IconTag size={16} />}
+                      iconTone={label ? "full" : "muted"}
+                      caret
+                    >
+                      <span className="max-w-[140px] truncate">
+                        {label || "All labels"}
+                      </span>
+                    </Button>
+                  }
+                />
+                <Menu.Popup
+                  align="end"
+                  className="max-h-[min(480px,70vh)] min-w-[220px] max-w-[300px]"
+                >
+                  <Menu.RadioGroup
+                    value={label}
+                    onValueChange={(value) => setLabel(String(value))}
+                  >
+                    <Menu.RadioItem value="" closeOnClick>
+                      <span className="size-[18px] shrink-0" />
+                      <span className="min-w-0 flex-1 truncate">
+                        All labels
+                      </span>
+                      <Menu.Shortcut>{threads?.length}</Menu.Shortcut>
+                      <Menu.Check on={!label} />
+                    </Menu.RadioItem>
+                    {labelOptions.map((o) => (
+                      <Menu.RadioItem key={o.name} value={o.name} closeOnClick>
+                        <IconTag size={18} className={MENU_ICON} />
+                        <span className="min-w-0 flex-1 truncate">
+                          {o.name}
+                        </span>
+                        <Menu.Shortcut>{o.count}</Menu.Shortcut>
+                        <Menu.Check on={label === o.name} />
+                      </Menu.RadioItem>
+                    ))}
+                  </Menu.RadioGroup>
+                </Menu.Popup>
+              </Menu.Root>
+            )}
           </div>
           <div className={LIST}>
-            {threads === null ? (
+            {threads === null || shown === null ? (
               <LoadingState>Loading tickets…</LoadingState>
             ) : error && threads.length === 0 ? (
               <InlineAlert className="mt-2">{error}</InlineAlert>
@@ -205,9 +313,16 @@ export function SupportInbox({
               <div className="px-3 py-6 text-center text-label text-faint">
                 Nothing waiting in Plain.
               </div>
+            ) : shown.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 px-3 py-6 text-center text-label text-faint">
+                No tickets labelled {label}.
+                <Button variant="ghost" size="sm" onClick={() => setLabel("")}>
+                  Show all labels
+                </Button>
+              </div>
             ) : (
               SUPPORT_PRIORITY_GROUPS.map((group) => {
-                const items = threads.filter(
+                const items = shown.filter(
                   (t) => (t.priority ?? 2) === group.p,
                 );
                 if (items.length === 0) return null;
@@ -261,6 +376,8 @@ export function SupportInbox({
               onOpenSession={onOpenSession}
               session={sessionByThread.get(threadId) || null}
               headerInBar
+              refreshKey={paneVersion}
+              onTicketChanged={() => void load()}
             />
           ) : (
             <div className="flex min-h-0 flex-1 items-center justify-center p-8">

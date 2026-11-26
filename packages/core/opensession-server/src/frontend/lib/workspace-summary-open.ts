@@ -87,8 +87,12 @@ export function workspaceSummaryShouldDismissAfterRouting(
   return !canStand;
 }
 
-/** Place the card directly below the workspace tab strip. Review gives the
- *  card its own column, so its inner PR bars need no extra clearance. */
-export function workspaceSummarySideOffset(tabStripVisible: boolean): number {
-  return tabStripVisible ? 49 : 20;
+/** Place the card directly below the workspace tab strip and the goal/loop
+ *  banner strip under it. Review gives the card its own column, so its inner
+ *  PR bars need no extra clearance. */
+export function workspaceSummarySideOffset(
+  tabStripVisible: boolean,
+  bannerHeight = 0,
+): number {
+  return (tabStripVisible ? 49 : 20) + bannerHeight;
 }

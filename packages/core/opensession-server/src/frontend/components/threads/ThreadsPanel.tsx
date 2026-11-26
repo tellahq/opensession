@@ -4,30 +4,47 @@ import { fetchThreadsApi } from "../../lib/api/threads";
 import { threadPreview } from "../../lib/comment-threads";
 import { repoLabel } from "../../lib/repo-label";
 import { useSessionRecords } from "../../lib/session-records";
+import { refState, refTone } from "../../lib/pr-refs";
+import { PR_SIB_DOT_BG, PR_STATE_TEXT } from "../../lib/pr-tone-classes";
 import {
+  coordinatedPrs,
   groupThreads,
   sessionThreads,
+  type CoordinatedPr,
   THREAD_STATE_LABEL,
   threadState,
+  type ThreadState,
 } from "../../lib/session-threads";
 import { shortTime } from "../../lib/time";
 import { useWorkspaceRecord } from "../../lib/workspace-records";
-import type { CommentThread, UnifiedSession, Workspace } from "../../lib/types";
-import { Button } from "../../ui/button";
+import type {
+  CommentThread,
+  UnifiedSession,
+  Workspace,
+  WSClientMessage,
+} from "../../lib/types";
 import { cn } from "../../ui/cn";
-import { ListRow } from "../../ui/list-row";
-import { Segmented, SegmentedOption } from "../../ui/segmented";
+import { ListRow, listRowClass } from "../../ui/list-row";
+import { PlateTabs } from "../../ui/tabs";
 import { EmptyState } from "../../ui/state";
-import { IconFile, IconMessage, IconGear } from "../icons";
-import { RepoTile } from "../RepoTile";
+import {
+  IconArrowUpRight,
+  IconChevronRight,
+  IconFile,
+  IconFileText2,
+  IconListCircles,
+  IconMessage,
+  IconMessages,
+} from "../icons";
 import { UserAvatar } from "../UserAvatar";
 import { THREAD_CAPTION } from "./thread-classes";
-import { WorkspaceSettingsDialog } from "../WorkspaceSettingsDialog";
-import { HuddleButton } from "../huddle/HuddleButton";
 import { openThreadTab } from "../../lib/thread-tabs";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { useIsCoordinating } from "../../lib/coordinator-mode";
+import { ThreadPanelView } from "./ThreadPanelView";
 import { ThreadRow } from "./ThreadRow";
+
+import { WorkspaceCard } from "./WorkspaceCard";
 
 type PanelTab = "threads" | "comments" | "artifacts";
 
@@ -38,8 +55,9 @@ const isSummary = (path: string) => SUMMARY_ASSETS.has(path);
 
 /**
  * The threads a conversation handed work to, at a glance: its workspace's
- * goal and people, the threads by where they stand, the conversation's
- * comment threads, and the documents it keeps. The desktop side panel's
+ * goal and people, the threads by where they stand (each with its PR and
+ * preview link, opening in the panel), the conversation's comment threads,
+ * and the documents it keeps. The desktop side panel's
  * Threads tab and the top of the phone's details page.
  */
 export function ThreadsPanel({
@@ -48,6 +66,7 @@ export function ThreadsPanel({
   onOpenSession,
   onOpenAsset,
   showTitle = true,
+  send,
 }: {
   workspace: Workspace | null;
   /** The conversation that started the threads. */
@@ -56,12 +75,32 @@ export function ThreadsPanel({
   onOpenAsset?: (path: string) => void;
   /** Off where the page around it already names the workspace. */
   showTitle?: boolean;
+  /** The conversation's socket, which a thread opened in the panel sends its
+   *  replies and actions through. Absent while disconnected. */
+  send?: (msg: WSClientMessage) => void;
 }) {
+  const phone = useIsPhone();
+  const [openThread, setOpenThread] = useState<string | null>(null);
+  // A thread opens in the panel on desktop, with a way out to a tab of its
+  // own; a phone opens it as its own page.
+  if (openThread && !phone)
+    return (
+      <ThreadPanelView
+        threadId={openThread}
+        send={send}
+        onBack={() => setOpenThread(null)}
+        onOpenTab={() => {
+          openThreadTab(openThread);
+          onOpenSession?.(openThread);
+        }}
+        onOpenThread={setOpenThread}
+      />
+    );
   return (
     <ThreadsOverview
       workspace={workspace}
       rootId={rootId}
-      onOpenSession={onOpenSession}
+      onOpenThread={(id) => (phone ? onOpenSession?.(id) : setOpenThread(id))}
       onOpenAsset={onOpenAsset}
       showTitle={showTitle}
     />
@@ -71,19 +110,23 @@ export function ThreadsPanel({
 function ThreadsOverview({
   workspace,
   rootId,
-  onOpenSession,
+  onOpenThread,
   onOpenAsset,
   showTitle,
 }: {
   workspace: Workspace | null;
   rootId: string;
-  onOpenSession?: (id: string) => void;
+  onOpenThread: (id: string) => void;
   onOpenAsset?: (path: string) => void;
   showTitle: boolean;
 }) {
   const sessions = useSessionRecords();
   const threads = sessionThreads(sessions, rootId);
-  const phone = useIsPhone();
+  const root = sessions.find((s) => s.id === rootId);
+  // The conversation's own PRs; each thread's PR shows on its row.
+  const ownPrs = coordinatedPrs(sessions, rootId).filter(
+    ({ session }) => session.id === rootId,
+  );
   const [tab, setTab] = useState<PanelTab>("threads");
   const comments = usePanelComments(rootId);
   const artifacts = usePanelArtifacts(rootId, sessions);
@@ -91,61 +134,53 @@ function ThreadsOverview({
 
   return (
     <div className="flex flex-col gap-3 px-3 pt-3 pb-6">
-      <header className="flex flex-col gap-1.5 px-2">
-        {workspace && (
-          <WorkspaceHeading
-            workspace={workspace}
-            rootId={rootId}
-            showTitle={showTitle}
-          />
-        )}
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-meta text-dim">
-          {workspace && <WorkspaceFacts workspace={workspace} />}
-          {threads.length > 0 && (
-            <span className="tabular-nums">
-              {shipped} shipped · {threads.length - shipped} open
-            </span>
-          )}
-        </div>
-        {threads.length > 0 && (
-          <ShippedBar shipped={shipped} total={threads.length} />
-        )}
-      </header>
+      {workspace && (
+        <WorkspaceCard
+          workspace={workspace}
+          rootId={rootId}
+          showTitle={showTitle}
+          shipped={shipped}
+          total={threads.length}
+        />
+      )}
 
-      <Segmented
+      <PlateTabs.Root
         label="Threads panel"
         value={tab}
-        onValueChange={(value) => {
-          if (
-            value === "threads" ||
-            value === "comments" ||
-            value === "artifacts"
-          )
-            setTab(value);
-        }}
-        size="sm"
-        className="mx-2"
+        onValueChange={setTab}
+        className="-mx-1"
       >
-        <SegmentedOption value="threads">
-          Threads {threads.length > 0 && <Count n={threads.length} />}
-        </SegmentedOption>
-        <SegmentedOption value="comments">
-          Comments {comments.open > 0 && <Count n={comments.open} />}
-        </SegmentedOption>
-        <SegmentedOption value="artifacts">
-          Artifacts {artifacts.length > 0 && <Count n={artifacts.length} />}
-        </SegmentedOption>
-      </Segmented>
+        <PlateTabs.Tab
+          value="threads"
+          icon={<IconListCircles size={20} />}
+          // Blue, like a blocked thread's dot: one is waiting on someone.
+          attention={threads.some((t) => threadState(t) === "blocked")}
+        >
+          Threads
+        </PlateTabs.Tab>
+        <PlateTabs.Tab
+          value="comments"
+          icon={<IconMessages size={20} />}
+          attention={comments.open > 0}
+        >
+          Comments
+        </PlateTabs.Tab>
+        <PlateTabs.Tab value="artifacts" icon={<IconFileText2 size={20} />}>
+          Artifacts
+        </PlateTabs.Tab>
+      </PlateTabs.Root>
 
       {tab === "threads" && (
-        <ThreadGroups
-          threads={threads}
-          onOpen={(id) => {
-            // In a tab of its own on desktop.
-            if (!phone) openThreadTab(id);
-            onOpenSession?.(id);
-          }}
-        />
+        <>
+          {ownPrs.length > 0 && (
+            <PrList prs={ownPrs} primaryRepo={workspace?.repo} />
+          )}
+          <ThreadGroups
+            threads={threads}
+            starter={root?.startedBy || root?.createdBy || undefined}
+            onOpen={onOpenThread}
+          />
+        </>
       )}
       {tab === "comments" && <CommentList threads={comments.threads} />}
       {tab === "artifacts" && (
@@ -155,113 +190,25 @@ function ThreadsOverview({
   );
 }
 
-/** The workspace's name, huddle and settings, then its goal. */
-function WorkspaceHeading({
-  workspace,
-  rootId,
-  showTitle,
-}: {
-  workspace: Workspace;
-  rootId: string;
-  showTitle: boolean;
-}) {
-  const [editing, setEditing] = useState(false);
-  return (
-    <>
-      <div className="flex min-w-0 items-center gap-2">
-        {showTitle && (
-          <h2 className="m-0 min-w-0 flex-1 truncate text-section-title font-semibold leading-tight text-fg">
-            {workspace.name}
-          </h2>
-        )}
-        <HuddleButton
-          target={{
-            roomId: `workspace:${workspace.id}`,
-            label: workspace.name,
-            sessionId: rootId,
-          }}
-        />
-        <Button
-          size="sm"
-          variant="ghost"
-          icon={<IconGear size={20} />}
-          aria-label="Workspace settings"
-          className={cn("phone:min-h-11", !showTitle && "ml-auto")}
-          onClick={() => setEditing(true)}
-        >
-          Settings
-        </Button>
-      </div>
-      {workspace.goal && (
-        <p className="m-0 whitespace-pre-line text-supporting text-fg">
-          {workspace.goal}
-        </p>
-      )}
-      <WorkspaceSettingsDialog
-        workspace={workspace}
-        open={editing}
-        onOpenChange={setEditing}
-      />
-    </>
-  );
-}
-
-/** Project and people, on the panel's meta line. */
-function WorkspaceFacts({ workspace }: { workspace: Workspace }) {
-  const members = [
-    workspace.createdBy,
-    ...(workspace.collaborators ?? []).map((c) => c.name),
-  ].filter((name, i, all) => name && all.indexOf(name) === i);
-  return (
-    <>
-      <span className="flex min-w-0 items-center gap-1.5">
-        {workspace.repo && <RepoTile name={workspace.repo} size={14} />}
-        <span className="truncate">
-          {workspace.repo ? repoLabel(workspace.repo) : "No project"}
-        </span>
-      </span>
-      <span className="flex items-center" aria-label="Members">
-        {members.map((name, i) => (
-          <UserAvatar
-            key={name}
-            name={name}
-            size={18}
-            title={name}
-            className={cn(i > 0 && "-ml-1")}
-          />
-        ))}
-      </span>
-    </>
-  );
-}
-
 function Count({ n }: { n: number }) {
   return <span className="tabular-nums text-faint">{n}</span>;
 }
 
-/** Shipped against everything started, as one thin bar. */
-function ShippedBar({ shipped, total }: { shipped: number; total: number }) {
-  return (
-    <div
-      className="mt-0.5 h-1 overflow-hidden rounded-[999px] bg-hover"
-      role="img"
-      aria-label={`${shipped} of ${total} threads shipped`}
-    >
-      <div
-        className="h-full rounded-[999px] bg-purple transition-[width] duration-300"
-        style={{ width: `${(shipped / total) * 100}%` }}
-      />
-    </div>
-  );
-}
+/** Groups that start folded: work that needs nothing more from anyone. */
+const FOLDED_AT_FIRST = new Set<ThreadState>(["shipped"]);
 
 function ThreadGroups({
   threads,
+  starter,
   onOpen,
 }: {
   threads: UnifiedSession[];
+  /** Who started the conversation. Rows name a thread's starter only when
+   *  it is someone else. */
+  starter?: string;
   onOpen?: (id: string) => void;
 }) {
+  const [folded, setFolded] = useState(FOLDED_AT_FIRST);
   if (threads.length === 0)
     return (
       <EmptyState className="py-8">
@@ -273,16 +220,96 @@ function ThreadGroups({
     <div className="flex flex-col">
       {groupThreads(threads).map((group) => (
         <section key={group.state} aria-label={THREAD_STATE_LABEL[group.state]}>
-          <div className={THREAD_CAPTION}>
+          <button
+            type="button"
+            className={THREAD_CAPTION}
+            aria-expanded={!folded.has(group.state)}
+            onClick={() =>
+              setFolded((prev) => {
+                const next = new Set(prev);
+                if (!next.delete(group.state)) next.add(group.state);
+                return next;
+              })
+            }
+          >
             {THREAD_STATE_LABEL[group.state]}
             <Count n={group.threads.length} />
-          </div>
-          {group.threads.map((thread) => (
-            <ThreadRow key={thread.id} thread={thread} onOpen={onOpen} />
-          ))}
+            <IconChevronRight
+              size={16}
+              className={cn(
+                "text-faint transition-transform duration-150",
+                !folded.has(group.state) && "rotate-90",
+              )}
+            />
+          </button>
+          {!folded.has(group.state) &&
+            group.threads.map((thread) => (
+              <ThreadRow
+                key={thread.id}
+                thread={thread}
+                starter={starter}
+                onOpen={onOpen}
+              />
+            ))}
         </section>
       ))}
     </div>
+  );
+}
+
+/** The coordinator's and its threads' PRs, each a link to the PR. */
+function PrList({
+  prs,
+  primaryRepo,
+}: {
+  prs: CoordinatedPr[];
+  primaryRepo?: string;
+}) {
+  return (
+    <section className="flex flex-col" aria-label="This conversation's PRs">
+      <div className={cn(THREAD_CAPTION, "cursor-default hover:text-faint")}>
+        This conversation
+        <Count n={prs.length} />
+      </div>
+      {prs.map(({ pr }) => {
+        const tone = refTone(pr);
+        const otherRepo = pr.repo !== primaryRepo;
+        return (
+          <a
+            key={`${pr.repo}#${pr.number}`}
+            href={pr.url}
+            target="_blank"
+            rel="noreferrer"
+            className={cn(listRowClass(), "group no-underline")}
+            title={pr.title}
+          >
+            <span
+              aria-hidden="true"
+              className={cn(
+                "mt-[7px] size-2 shrink-0 rounded-full",
+                PR_SIB_DOT_BG[tone],
+              )}
+            />
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="truncate text-label font-medium text-fg">
+                <span className="tabular-nums text-dim">#{pr.number}</span>{" "}
+                {pr.title || pr.branch}
+              </span>
+              <span className="truncate text-meta text-dim">
+                <span className={PR_STATE_TEXT[tone]}>{refState(pr)}</span>
+                {otherRepo && ` · ${repoLabel(pr.repo)}`}
+              </span>
+            </span>
+            {pr.url && (
+              <IconArrowUpRight
+                size={16}
+                className="mt-0.5 shrink-0 text-faint opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+              />
+            )}
+          </a>
+        );
+      })}
+    </section>
   );
 }
 

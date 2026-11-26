@@ -21,7 +21,7 @@ import {
   toolsCacheKey,
   writeCachedTools,
 } from "./mcp-tools-cache";
-import { mcpSharedGrantHeader, mcpUserGrantHeader } from "./mcp-oauth";
+import { MCP_RELAY_GRANT_HEADER, mcpGrantExists } from "./mcp-oauth";
 import { mcpRelayUrl, mintMcpRelayToken } from "./mcp-relay";
 import type { InProcessMcpServer } from "./inprocess-mcp";
 import { RPC_TOOL_CALL_TIMEOUT_MS } from "./run-rpc-protocol";
@@ -334,6 +334,25 @@ export function mcpGrantCandidates(
   ].filter((user): user is string => !!user);
 }
 
+/** Tool call ids of the tools/call messages in one JSON-RPC POST body. */
+export function toolCallIdsIn(body: string): string[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return [];
+  }
+  return (Array.isArray(parsed) ? parsed : [parsed]).flatMap((m) => {
+    const id =
+      (m as { method?: unknown; params?: { _meta?: Record<string, unknown> } })
+        ?.method === "tools/call"
+        ? (m as { params?: { _meta?: Record<string, unknown> } }).params?._meta
+            ?.opensessionToolCallId
+        : undefined;
+    return typeof id === "string" ? [id] : [];
+  });
+}
+
 export async function createMcpRuntime(opts: {
   mcpServers: McpScope;
   user?: string;
@@ -373,8 +392,24 @@ export async function createMcpRuntime(opts: {
   const ownTimeoutMs =
     opts.ownServerCallTimeoutMs ?? OWN_SERVER_CALL_TIMEOUT_MS;
   const grantUsers = [opts.mcpGrantUser, opts.user];
-  // Which personal grant each connected server used, for the audit trail.
-  const grantedBy = new Map<string, string>();
+  // The personal grant the relay forwarded each tool call with, by tool
+  // call id, read from the relay's response header. The relay decides per
+  // request, and a personal grant can stop refreshing mid-run, so only its
+  // own answer is a faithful audit.
+  const relayGrantUsers = new Map<string, string | undefined>();
+  const relayFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const response = await fetch(input, init);
+    const used = response.headers.get(MCP_RELAY_GRANT_HEADER);
+    if (used !== null && typeof init?.body === "string")
+      for (const id of toolCallIdsIn(init.body))
+        relayGrantUsers.set(id, used ? decodeURIComponent(used) : undefined);
+    return response;
+  }) as typeof fetch;
+  const takeGrantUser = (toolCallId: string) => {
+    const user = relayGrantUsers.get(toolCallId);
+    relayGrantUsers.delete(toolCallId);
+    return user;
+  };
   let closed = false;
   const live = new Set<ServerConn>();
   const conns = new Map<string, Promise<ServerConn>>();
@@ -392,11 +427,12 @@ export async function createMcpRuntime(opts: {
     let transport: Transport;
     if (cfg.type === "http" || cfg.type === "sse" || cfg.url) {
       const candidates = mcpGrantCandidates(name, opts);
-      const personal = candidates.find((user) =>
-        mcpUserGrantHeader(name, user),
-      );
-      if (personal) grantedBy.set(name, personal);
-      const hasGrant = !!personal || !!mcpSharedGrantHeader(name);
+      // Routing only needs a stored grant: even one whose token is expired
+      // goes through the relay, which refreshes per request, never out
+      // directly with no Authorization at all.
+      const hasGrant =
+        mcpGrantExists(name) ||
+        candidates.some((user) => mcpGrantExists(name, user));
       let url = String(cfg.url);
       let headers = { ...((cfg.headers as Record<string, string>) || {}) };
       if (hasGrant) {
@@ -405,10 +441,14 @@ export async function createMcpRuntime(opts: {
         headers = rest;
       }
       const requestInit = Object.keys(headers).length ? { headers } : undefined;
+      const fetchOpt = hasGrant ? { fetch: relayFetch } : {};
       transport =
         cfg.type === "sse"
-          ? new SSEClientTransport(new URL(url), { requestInit })
-          : new StreamableHTTPClientTransport(new URL(url), { requestInit });
+          ? new SSEClientTransport(new URL(url), { requestInit, ...fetchOpt })
+          : new StreamableHTTPClientTransport(new URL(url), {
+              requestInit,
+              ...fetchOpt,
+            });
     } else if (cfg.command) {
       transport = new StdioClientTransport({
         ...workloadCommand(
@@ -687,7 +727,7 @@ export async function createMcpRuntime(opts: {
           server: tool.server,
           tool: tool.name,
           ok: true,
-          grantUser: grantedBy.get(tool.server),
+          grantUser: takeGrantUser(options.toolCallId),
           ms: Date.now() - started,
         });
         return { content };
@@ -696,7 +736,7 @@ export async function createMcpRuntime(opts: {
           server: tool.server,
           tool: tool.name,
           ok: false,
-          grantUser: grantedBy.get(tool.server),
+          grantUser: takeGrantUser(options.toolCallId),
           ms: Date.now() - started,
         });
         throw error instanceof Error ? error : new Error(String(error));

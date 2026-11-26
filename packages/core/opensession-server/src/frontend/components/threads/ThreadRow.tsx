@@ -6,7 +6,9 @@ import {
   threadStatusLine,
   type ThreadState,
 } from "../../lib/session-threads";
-import type { UnifiedSession } from "../../lib/types";
+import { sessionPrRefs } from "../../lib/session-prs";
+import type { SessionPrRef, UnifiedSession } from "../../lib/types";
+import { PrRefStagingMark, usePrRefStaging } from "../PrRefStagingMark";
 import { cn } from "../../ui/cn";
 import { UserAvatar } from "../UserAvatar";
 import { ListRow } from "../../ui/list-row";
@@ -67,40 +69,84 @@ export function useThreadGist(
 /** One thread: state dot, title, where it stands, who started it, when. */
 export function ThreadRow({
   thread,
+  starter: conversationStarter,
   onOpen,
 }: {
   thread: UnifiedSession;
+  /** Who started the conversation the thread belongs to. Their face is left
+   *  off, so a face on a row means someone else started that thread. */
+  starter?: string;
   onOpen?: (id: string) => void;
 }) {
   const state = threadState(thread);
   const gist = useThreadGist(thread, state);
   const status = threadStatusLine(thread);
   const starter = thread.startedBy || thread.createdBy || "";
+  const showStarter = !!starter && starter !== conversationStarter;
+  const pr = threadPr(thread);
+  const staging = usePrRefStaging(pr ? thread.id : undefined, pr ?? NO_PR);
+  const diff =
+    pr && (pr.additions || pr.deletions) && pr.state !== "MERGED"
+      ? { additions: pr.additions ?? 0, deletions: pr.deletions ?? 0 }
+      : null;
   return (
-    <ListRow onClick={() => onOpen?.(thread.id)} title={thread.title}>
-      <span
-        aria-hidden="true"
-        className={cn(
-          "mt-[7px] size-2 shrink-0 rounded-full",
-          THREAD_DOT[state],
-          state === "working" && "motion-safe:animate-pulse",
-        )}
-      />
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-label font-medium text-fg">
-          {thread.title}
+    // The preview link sits beside the row rather than inside it: the row is
+    // a button, and links and buttons do not nest.
+    <div className="flex min-w-0 items-start rounded-md transition-colors hover:bg-hover">
+      <ListRow
+        onClick={() => onOpen?.(thread.id)}
+        title={thread.title}
+        className="flex-1 hover:bg-transparent"
+      >
+        <span
+          aria-hidden="true"
+          className={cn(
+            "mt-[7px] size-2 shrink-0 rounded-full",
+            THREAD_DOT[state],
+            state === "working" && "motion-safe:animate-pulse",
+          )}
+        />
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="truncate text-label font-medium text-fg">
+            {thread.title}
+          </span>
+          <span className="truncate text-meta text-dim">
+            {status}
+            {diff && (
+              <span className="tabular-nums">
+                {" · "}
+                <span className="text-green">+{diff.additions}</span>{" "}
+                <span className="text-red">−{diff.deletions}</span>
+              </span>
+            )}
+            {gist && <span className="text-faint"> · {gist}</span>}
+          </span>
         </span>
-        <span className="line-clamp-2 text-meta text-dim">
-          {status}
-          {gist && <span className="text-faint"> · {gist}</span>}
+        <span className="flex shrink-0 items-center gap-1.5 pt-0.5">
+          {showStarter && <UserAvatar name={starter} size={16} edge={false} />}
+          <span className="text-meta tabular-nums text-faint">
+            {shortTime(thread.lastActivity)}
+          </span>
         </span>
-      </span>
-      <span className="flex shrink-0 items-center gap-1.5 pt-0.5">
-        {starter && <UserAvatar name={starter} size={16} edge={false} />}
-        <span className="text-meta tabular-nums text-faint">
-          {shortTime(thread.lastActivity)}
-        </span>
-      </span>
-    </ListRow>
+      </ListRow>
+      {staging && (
+        <PrRefStagingMark
+          staging={staging}
+          number={pr?.number}
+          className="mt-1 mr-1 shrink-0"
+        />
+      )}
+    </div>
   );
+}
+
+const NO_PR: SessionPrRef = { repo: "", branch: "", source: "primary" };
+
+/** The PR a thread opened itself: its own branch's first, else any it owns
+ *  outright. Not one it merely shares with a sibling. */
+function threadPr(thread: UnifiedSession): SessionPrRef | null {
+  const own = sessionPrRefs(thread).filter(
+    (ref) => ref.number != null && ref.source !== "discovered",
+  );
+  return own.find((ref) => ref.source === "primary") ?? own[0] ?? null;
 }

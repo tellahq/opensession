@@ -6,6 +6,7 @@ import {
   focusDeskPanel,
   openDeskPanel,
 } from "../lib/desk-panel";
+import { getDeskShownPref } from "../lib/desk-pref";
 import { absoluteLink, copyToClipboard } from "../lib/share-link";
 import { matchesShortcut } from "../lib/shortcuts";
 
@@ -55,7 +56,8 @@ export function useAppGlobalHotkeys({
         commandMenuRef.current?.toggle();
         return;
       }
-      if (matchesShortcut(e, "desk")) {
+      // A hidden Desk (Settings → Preferences) leaves ⌘J to the browser.
+      if (getDeskShownPref() && matchesShortcut(e, "desk")) {
         // Summon the Desk, jump back into it, or dismiss it. On desktop the
         // Desk is a floating panel that stays open while you work elsewhere,
         // so an open Desk you are not in gets the caret rather than closing

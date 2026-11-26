@@ -185,6 +185,25 @@ describe("Pi-only model routing", () => {
     expect(modelLabel("claude-fable-5-1")).toBe("Claude Fable 5.1");
   });
 
+  test("keeps Mythos 5.1 and 5.2 as distinct Fable-tier models", async () => {
+    expect(resolveModel("mythos")?.id).toBe("claude-mythos-5-2");
+    expect(resolveModel("mythos5.1")?.id).toBe("claude-mythos-5-1");
+    for (const [id, label] of [
+      ["claude-mythos-5-2", "Claude Mythos 5.2"],
+      ["claude-mythos-5-1", "Claude Mythos 5.1"],
+    ] as const) {
+      expect(toPiModel(id)).toBe(`pi/anthropic/${id}`);
+      expect(toPiModel(`pi/anthropic/${id}`)).toBe(`pi/anthropic/${id}`);
+      expect(modelLabel(id)).toBe(label);
+      expect(accountProviderForModel(`pi/anthropic/${id}`)).toBe("claude");
+      expect(modelEfforts(`pi/anthropic/${id}`)).toEqual(
+        modelEfforts("pi/anthropic/claude-fable-5-2"),
+      );
+      expect(fallbackTier(id)).toBe(fallbackTier("claude-fable-5-2"));
+      expect(contextWindowFor(`pi/anthropic/${id}`)).toBe(1_000_000);
+    }
+  });
+
   test("routes every accepted id to Pi", async () => {
     expect(routeModel("claude-fable-5-2")).toEqual({
       engine: "pi",
@@ -267,17 +286,18 @@ describe("Pi-only model routing", () => {
     ).toSatisfy((hops) => hops.every((hop) => hop.id.startsWith("pi/")));
   });
 
-  test("falls back from Fable to Astra before configured Sol or Opus", async () => {
+  test("falls back from Fable to Opus, then Astra and Sol", async () => {
     for (const primary of [
       "claude-fable-5-2",
       "pi/anthropic/claude-fable-5-2",
     ]) {
       for (const preferred of ["pi/openai/gpt-6.2-sol", "claude-opus-5-5"]) {
         expect(nextFallbackModel(primary, new Set(), preferred)).toEqual({
-          id: "pi/openai/gpt-6.2-astra",
+          id: "pi/anthropic/claude-opus-5-5",
           mode: "auto",
         });
-        expect(fallbackPlan(primary, preferred).slice(0, 2)).toEqual([
+        expect(fallbackPlan(primary, preferred).slice(0, 3)).toEqual([
+          { id: "pi/anthropic/claude-opus-5-5", mode: "auto" },
           { id: "pi/openai/gpt-6.2-astra", mode: "auto" },
           { id: "pi/openai/gpt-6.2-sol", mode: "auto" },
         ]);
@@ -285,14 +305,20 @@ describe("Pi-only model routing", () => {
     }
   });
 
-  test("keeps Sol available when Astra is exhausted", async () => {
+  test("keeps Astra first off other top-tier models", async () => {
+    expect(
+      nextFallbackModel("pi/openai/gpt-6.2-sol", new Set(), "claude-opus-5-5"),
+    ).toEqual({ id: "pi/openai/gpt-6.2-astra", mode: "auto" });
+  });
+
+  test("keeps Astra available when Opus is exhausted", async () => {
     expect(
       nextFallbackModel(
         "pi/anthropic/claude-fable-5-2",
-        new Set(["pi/openai/gpt-6.2-astra"]),
+        new Set(["pi/anthropic/claude-opus-5-5"]),
         "claude-opus-5-5",
       ),
-    ).toEqual({ id: "pi/openai/gpt-6.2-sol", mode: "auto" });
+    ).toEqual({ id: "pi/openai/gpt-6.2-astra", mode: "auto" });
   });
 
   test("keeps automatic fallback disabled when requested", async () => {

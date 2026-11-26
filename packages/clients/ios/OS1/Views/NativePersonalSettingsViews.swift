@@ -163,6 +163,11 @@ struct PreferencesSettingsView: View {
     @AppStorage("os1.composer.autocomplete") private var nativeAutocomplete = false
     @AppStorage("os1.transcript.liveTyping") private var nativeLiveTyping = false
     @AppStorage("os1.desk.voice") private var deskVoice = "off"
+    /// Written through `DeskPref.set`, which syncs it on its own.
+    @AppStorage(DeskPref.storageKey) private var deskShown = DeskPref.standard
+    /// Written through `UsageBarPref.set`, which syncs it on its own: the
+    /// model menu flips the same pref, so it stays out of `commit()`.
+    @AppStorage(UsageBarPref.storageKey) private var usageBar = UsageBarPref.standard
     /// The one control on this screen that stays on the device — see the type
     /// note above. It is deliberately not in `seededPrefs`/`commit()`: those
     /// are the server round-trip, and this value never makes that trip.
@@ -402,6 +407,15 @@ struct PreferencesSettingsView: View {
 
             suggestionsSection
 
+            Section {
+                Toggle("Usage bar", isOn: Binding(
+                    get: { usageBar },
+                    set: { UsageBarPref.set($0) }
+                ))
+            } footer: {
+                Text("Show context, spend, limits and the account above the composer.")
+            }
+
             #if os(iOS)
             // Directly under Sending, because sending is what it mostly
             // answers — and its own section rather than a row in there,
@@ -447,15 +461,25 @@ struct PreferencesSettingsView: View {
             }
 
             Section {
-                Toggle("Desk voice", isOn: Binding(
-                    get: { deskVoice == "on" },
-                    set: { enabled in
-                        deskVoice = enabled ? "on" : "off"
-                        pushDeskVoice(enabled)
-                    }
+                Toggle("Show Desk", isOn: Binding(
+                    get: { deskShown },
+                    set: { DeskPref.set($0) }
                 ))
+                if deskShown {
+                    Toggle("Desk voice", isOn: Binding(
+                        get: { deskVoice == "on" },
+                        set: { enabled in
+                            deskVoice = enabled ? "on" : "off"
+                            pushDeskVoice(enabled)
+                        }
+                    ))
+                }
+            } header: {
+                Text("Desk")
             } footer: {
-                Text("Talk to your Desk with a live voice call. Uses the server's OpenAI key.")
+                Text(deskShown
+                    ? "Adds the Desk button and Open the Desk in the command palette. Desk voice talks to your Desk with a live voice call, using the server's OpenAI key."
+                    : "Adds the Desk button and Open the Desk in the command palette.")
             }
             PersonalOutputStyleSection()
             YouShouldKnowSection()

@@ -388,7 +388,9 @@ enum SettingsAPI {
 
     // MARK: - Models and accounts
 
-    static func modelCatalog() async throws -> ModelCatalogSettings { try await request("/api/models") }
+    static func modelCatalog() async throws -> ModelCatalogSettings {
+        try await request(OS1API.modelsPath(workspaceId: nil))
+    }
 
     static func setDefaultModel(_ model: String?) async throws -> ModelDefaults {
         try await request("/api/models/default", method: "PUT", body: ["model": model ?? NSNull()])
@@ -447,6 +449,14 @@ enum SettingsAPI {
 
     static func createClaudeAccount(_ body: [String: Any]) async throws -> ProviderAccount {
         try await request("/api/claude-accounts", method: "POST", body: body)
+    }
+
+    /// Adds a Claude API account from an API key. Federation enrolment is the
+    /// host operator's job on the web.
+    static func createClaudeApiAccount(name: String, apiKey: String, owner: String?) async throws -> ClaudeApiAccountAdded {
+        var body: [String: Any] = ["name": name, "apiKey": apiKey]
+        if let owner { body["owner"] = owner }
+        return try await request("/api/claude-accounts/api", method: "POST", body: body)
     }
 
     static func refreshClaudeAccounts() async throws -> [ProviderAccount] {
@@ -535,14 +545,29 @@ enum SettingsAPI {
         try await request("/api/settings/model-providers")
     }
 
-    static func upsertModelProvider(id: String, apiKey: String? = nil, baseURL: String? = nil, models: [String]? = nil) async throws -> ModelProvider {
-        struct Response: Decodable, Sendable { var provider: ModelProvider? }
+    /// `discoverModels: true` also lists the provider's models into the
+    /// picker when the server can (a base URL, or the Gemini API); the result
+    /// carries the count or the error, and the key is saved either way.
+    @discardableResult
+    static func upsertModelProvider(
+        id: String,
+        apiKey: String? = nil,
+        baseURL: String? = nil,
+        models: [String]? = nil,
+        discoverModels: Bool? = nil,
+        connection: Connection? = nil,
+        session: URLSession = .shared
+    ) async throws -> ModelProviderSaveResult {
         var body: [String: Any] = [:]
         if let apiKey { body["apiKey"] = apiKey }
         if let baseURL { body["baseURL"] = baseURL }
         if let models { body["models"] = models }
-        let response: Response = try await request("/api/settings/model-providers/\(segment(id))", method: "PUT", body: body)
-        return response.provider ?? ModelProvider(id: id, apiKeyMasked: nil, baseURL: nil, models: nil)
+        if let discoverModels { body["discoverModels"] = discoverModels }
+        return try await request("/api/settings/model-providers/\(segment(id))", method: "PUT", body: body, connection: connection, session: session)
+    }
+
+    static func discoverModelProviderModels(id: String, connection: Connection? = nil, session: URLSession = .shared) async throws -> ModelDiscoveryResult {
+        try await request("/api/settings/model-providers/\(segment(id))/discover", method: "POST", connection: connection, session: session)
     }
 
     static func deleteModelProvider(id: String) async throws -> SettingsOK {

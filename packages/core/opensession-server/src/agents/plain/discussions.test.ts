@@ -2,9 +2,14 @@ import { describe, expect, it } from "bun:test";
 import {
   abortDiscussionActions,
   awaitApproval,
+  awaitQuestion,
   beginDiscussionAction,
   cancelApprovalsFor,
   discussionOpeningPrompt,
+  formatQuestionAnswer,
+  handleDiscussionEvent,
+  hasPendingQuestion,
+  resolveQuestion,
   openTriageDiscussion,
   resolveApproval,
   shouldAnswer,
@@ -132,6 +137,144 @@ describe("approval registry", () => {
     // A finished action is out of reach; a Stop then has nothing to abort.
     expect(abortDiscussionActions("disc_other")).toBe(0);
     expect(other.signal.aborted).toBe(false);
+  });
+});
+
+async function withAgentKey<T>(fn: () => Promise<T>): Promise<T> {
+  const original = process.env.PLAIN_AGENT_API_KEY;
+  process.env.PLAIN_AGENT_API_KEY = "test-agent-key";
+  try {
+    return await fn();
+  } finally {
+    if (original === undefined) delete process.env.PLAIN_AGENT_API_KEY;
+    else process.env.PLAIN_AGENT_API_KEY = original;
+  }
+}
+
+describe("approval webhook", () => {
+  const discussion = {
+    id: "disc_1",
+    type: "AGENT_SESSION",
+    agent: { id: ME },
+    status: "OPEN",
+    threadId: "th_1",
+  };
+
+  it("carries the approving teammate's Plain user id to the waiting tool", async () => {
+    await withAgentKey(async () => {
+      const waiting = awaitApproval("disc_1", "reply-approver", 10_000);
+      handleDiscussionEvent({
+        type: "discussion.tool_call_approval_resolved",
+        payload: {
+          discussion,
+          approvalId: "appr_1",
+          toolCallId: "reply-approver",
+          status: "APPROVED",
+          reviewerNote: null,
+          resolvedBy: { actorType: "user", userId: "u_sam" },
+        },
+      });
+      expect(await waiting).toEqual({
+        status: "APPROVED",
+        reviewerNote: null,
+        approvedByUserId: "u_sam",
+      });
+    });
+  });
+
+  it("names no one when a machine user resolved the approval", async () => {
+    await withAgentKey(async () => {
+      const waiting = awaitApproval("disc_1", "reply-machine", 10_000);
+      handleDiscussionEvent({
+        type: "discussion.tool_call_approval_resolved",
+        payload: {
+          discussion,
+          approvalId: "appr_2",
+          toolCallId: "reply-machine",
+          status: "APPROVED",
+          reviewerNote: null,
+          resolvedBy: { actorType: "machineUser" },
+        },
+      });
+      expect(await waiting).toEqual({ status: "APPROVED", reviewerNote: null });
+    });
+  });
+});
+
+describe("question cards", () => {
+  const card = {
+    questions: [
+      {
+        id: "q1",
+        question: "Which invoice should I refund?",
+        options: [
+          { id: "o1", label: "INV-1042" },
+          { id: "o2", label: "INV-1043" },
+        ],
+      },
+      {
+        id: "q2",
+        question: "Notify the customer?",
+        options: [
+          { id: "o3", label: "Yes" },
+          { id: "o4", label: "No" },
+        ],
+      },
+    ],
+  };
+
+  it("formats picked labels and typed Other text per question", () => {
+    expect(
+      formatQuestionAnswer({
+        ...card,
+        selections: [
+          { questionId: "q1", optionIds: ["o2"], otherText: null },
+          { questionId: "q2", optionIds: [], otherText: "Only by email" },
+        ],
+      }),
+    ).toBe(
+      "Q: Which invoice should I refund?\nA: INV-1043\n\nQ: Notify the customer?\nA: Other: Only by email",
+    );
+  });
+
+  it("resumes the waiting tool with the answer from the webhook", async () => {
+    await withAgentKey(async () => {
+      const waiting = awaitQuestion("disc_q", 10_000);
+      expect(hasPendingQuestion("disc_q")).toBe(true);
+      handleDiscussionEvent({
+        type: "discussion.question_resolved",
+        payload: {
+          discussion: {
+            id: "disc_q",
+            type: "AGENT_SESSION",
+            agent: { id: ME },
+            status: "OPEN",
+            threadId: null,
+          },
+          questionRequestId: "qr_1",
+          status: "ANSWERED",
+          ...card,
+          selections: [
+            { questionId: "q1", optionIds: ["o1"], otherText: null },
+            { questionId: "q2", optionIds: ["o3"], otherText: null },
+          ],
+        },
+      });
+      expect(await waiting).toEqual({
+        status: "ANSWERED",
+        answer:
+          "Q: Which invoice should I refund?\nA: INV-1042\n\nQ: Notify the customer?\nA: Yes",
+      });
+      expect(hasPendingQuestion("disc_q")).toBe(false);
+    });
+  });
+
+  it("reports a skipped card as dismissed, and a timeout when nobody answers", async () => {
+    const waiting = awaitQuestion("disc_skip", 10_000);
+    expect(resolveQuestion("disc_skip", { status: "DISMISSED" })).toBe(true);
+    expect(await waiting).toEqual({ status: "DISMISSED" });
+    expect(await awaitQuestion("disc_slow", 1)).toEqual({ status: "TIMEOUT" });
+    expect(resolveQuestion("disc_slow", { status: "DISMISSED" })).toBe(false);
   });
 });
 

@@ -157,6 +157,7 @@ describe("assessPrMergeReadiness", () => {
       changesRequestedBy: [],
       awaiting: [],
       requiredApprovals: 0,
+      openThreads: null,
     });
     expect(v.summary).toContain("approved by michiel");
     expect(v.warnings).toEqual([]);
@@ -187,6 +188,20 @@ describe("assessPrMergeReadiness", () => {
     );
     expect(v.checks.failing[0].name).toBe("Native client CI / build-and-test");
     expect(v.checks.pending[0].name).toBe("Vercel / Deploy preview");
+  });
+
+  test("unresolved review threads block an otherwise green PR", () => {
+    const v = assessPrMergeReadiness(source({ openReviewThreads: 2 }));
+    expect(v.ready).toBe(false);
+    expect(v.blockers).toEqual(["2 review threads are still unresolved"]);
+    expect(v.review.openThreads).toBe(2);
+    expect(formatPrMergeVerdict(v)).toContain("2 unresolved threads");
+    expect(assessPrMergeReadiness(source({ openReviewThreads: 0 })).ready).toBe(
+      true,
+    );
+    const unread = assessPrMergeReadiness(source({ openReviewThreads: null }));
+    expect(unread.ready).toBe(true);
+    expect(unread.warnings).toContain("review threads could not be read");
   });
 
   test("a draft is not ready even when everything else is green", () => {

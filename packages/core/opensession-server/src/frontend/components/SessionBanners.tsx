@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { UnifiedSession } from "../lib/types";
 import { SESSION_BANNER, SESSION_BANNERS } from "../lib/session-viewer-classes";
 import { Button } from "../ui/button";
@@ -61,13 +61,30 @@ export function SessionLoopBanner({
 export function SessionBanners({
   session,
   onStopLoop,
+  onHeightChange,
 }: {
   session: Pick<UnifiedSession, "goal" | "loop">;
   onStopLoop?: () => void;
+  /** The strip's height, 0 while it is gone, so chrome that hangs below the
+   *  header (the Workspace summary card) can clear it. */
+  onHeightChange?: (height: number) => void;
 }) {
-  if (!session.goal && !session.loop) return null;
+  const stripRef = useRef<HTMLDivElement>(null);
+  const shown = Boolean(session.goal || session.loop);
+  useLayoutEffect(() => {
+    const el = stripRef.current;
+    if (!shown || !el || !onHeightChange) return;
+    onHeightChange(el.offsetHeight);
+    const observer = new ResizeObserver(() => onHeightChange(el.offsetHeight));
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      onHeightChange(0);
+    };
+  }, [shown, onHeightChange]);
+  if (!shown) return null;
   return (
-    <div className={SESSION_BANNERS}>
+    <div ref={stripRef} className={SESSION_BANNERS}>
       {session.goal && (
         <span
           className={`${SESSION_BANNER} text-dim`}

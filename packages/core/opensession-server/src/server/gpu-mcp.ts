@@ -8,14 +8,20 @@
 import { z } from "zod";
 import { createSdkMcpServer, tool } from "./inprocess-mcp";
 import {
+  DEFAULT_GPU_EXEC_SECONDS,
   DEFAULT_GPU_JOB_MINUTES,
+  execOnGpuJob,
   GPU_JOBS_FILE,
   gpuJobStatus,
   listGpuJobs,
+  MAX_GPU_EXEC_SECONDS,
+  MAX_GPU_JOB_FILES,
   MAX_GPU_JOB_MINUTES,
+  MAX_GPU_JOB_OUTPUT_BYTES,
   sessionRepoGpuJobs,
   startGpuJob,
   stopGpuJob,
+  type GpuJobFile,
 } from "./gpu-jobs";
 
 function text(value: string) {
@@ -29,7 +35,7 @@ export function createGpuMcpServer(ctx: { sessionId: string; user?: string }) {
     tools: [
       tool(
         "run_gpu_job",
-        `Run work that needs an NVIDIA GPU (CUDA, Vulkan) on a GPU machine, from a session without one. Pass \`job\` to run one the repository declares in ${GPU_JOBS_FILE} (call with no arguments to list them), or \`command\` for any bash command, e.g. a single test. The session's work is checkpointed, uncommitted changes included, and landed on one of the session's own GPU machines (Modal, T4 or L4), which keep their build cache between jobs and sleep when idle. The command runs from the repository root with a read-only GitHub credential for the repository and its private build dependencies. It keeps running through Open Session restarts, and this session is woken with the exit code and the end of the output when it ends: start it, tell the person, and end your turn instead of polling. Start as many jobs as you need at once: each runs on its own machine. A job reuses a free machine that ran the same GPU; only a new machine starts without a build cache.`,
+        `Run work that needs an NVIDIA GPU (CUDA, Vulkan) on a GPU machine, from a session without one. Pass \`job\` to run one the repository declares in ${GPU_JOBS_FILE} (call with no arguments to list them), or \`command\` for any bash command, e.g. a single test. The session's work is checkpointed, uncommitted changes included, and landed on one of the session's own GPU machines (Modal, T4 or L4), which keep their build cache between jobs and sleep when idle. The command runs from the repository root with a read-only GitHub credential for the repository and its private build dependencies. It keeps running through Open Session restarts, and this session is woken with the exit code and the end of the output when it ends: start it, tell the person, and end your turn instead of polling. Start as many jobs as you need at once: each runs on its own machine. A job reuses a free machine that ran the same GPU; only a new machine starts without a build cache. Files the job writes to $OPENSESSION_JOB_OUTPUT (screenshots, reports; up to ${MAX_GPU_JOB_OUTPUT_BYTES / 1024 / 1024} MB) are copied to <session scratch>/gpu-jobs/<id>/ when it ends. Gitignored or private files the job needs (an env file, a key) go in \`files\`, never in a commit. While it runs, gpu_exec runs more commands on its machine.`,
         {
           job: z
             .string()
@@ -57,12 +63,47 @@ export function createGpuMcpServer(ctx: { sessionId: string; user?: string }) {
             .describe(
               `Stop the job after this long. Default: the job's, else ${DEFAULT_GPU_JOB_MINUTES}.`,
             ),
+          files: z
+            .array(
+              z.object({
+                from: z
+                  .string()
+                  .max(4096)
+                  .describe(
+                    "Host path: in your worktree (gitignored files only), your scratch directory, or the repository's main checkout. Relative paths start at your worktree.",
+                  ),
+                to: z
+                  .string()
+                  .max(1024)
+                  .describe(
+                    "Path on the GPU machine, relative to the repository root there or absolute.",
+                  ),
+                mode: z
+                  .string()
+                  .regex(/^0?[0-7]{3}$/)
+                  .optional()
+                  .describe("Octal file mode. Default 600."),
+              }),
+            )
+            .max(MAX_GPU_JOB_FILES)
+            .optional()
+            .describe(
+              "Host files to put on the machine before the command starts, sent straight over the provider's API instead of the git checkpoint, so they never reach GitHub. Removed from the machine when the job ends; their contents are not recorded.",
+            ),
+          identity: z
+            .enum(["portal"])
+            .optional()
+            .describe(
+              "`portal`: the job's commands (and gpu_exec's) get the cloud identity a Portal Sandbox gets for its setup and Portal start, e.g. to run `.agents/setup` and `.agents/start.sh`. Default: the job's, else an ordinary command's.",
+            ),
         },
         async (args: {
           job?: string;
           command?: string;
           gpu?: "T4" | "L4";
           timeoutMinutes?: number;
+          files?: GpuJobFile[];
+          identity?: "portal";
         }) => {
           const { findSessionAsync } = await import("./session-cache");
           const session = await findSessionAsync(ctx.sessionId);
@@ -92,20 +133,24 @@ export function createGpuMcpServer(ctx: { sessionId: string; user?: string }) {
               spec?.timeoutMinutes ??
               DEFAULT_GPU_JOB_MINUTES,
             ...(ctx.user ? { startedBy: ctx.user } : {}),
+            ...(args.files?.length ? { files: args.files } : {}),
+            ...(args.identity || spec?.identity
+              ? { identity: args.identity || spec?.identity }
+              : {}),
           });
           if ("error" in result)
             return text(`Couldn't start: ${result.error}.`);
           return text(
             JSON.stringify({
               job: result.job,
-              next: "The GPU machine is being prepared (about a minute when it exists, a few minutes the first time), then the job runs. Tell the person it started, then end your turn: this session is woken when it ends. gpu_job_status shows progress meanwhile.",
+              next: "The GPU machine is being prepared (about a minute when it exists, a few minutes the first time), then the job runs. Tell the person it started, then end your turn: this session is woken when it ends. gpu_job_status shows progress meanwhile. If the job keeps a dev server running, land later edits with gpu_exec's \`sync: true\` instead of restarting it.",
             }),
           );
         },
       ),
       tool(
         "gpu_job_status",
-        "Check a GPU job started with run_gpu_job: preparing/running/exited/failed/timed_out/stopped/lost, exit code, the commit it ran on, and the end of its output. Without an id, lists this session's jobs.",
+        "Check a GPU job started with run_gpu_job: preparing/running/exited/failed/timed_out/stopped/lost, exit code, the commit it ran on, how long each preparation step took (timings), the last gpu_exec sync, and the end of its output. Without an id, lists this session's jobs.",
         { id: z.string().optional().describe("The job's id, 'gj-…'.") },
         async ({ id }: { id?: string }) => {
           if (!id)
@@ -116,6 +161,44 @@ export function createGpuMcpServer(ctx: { sessionId: string; user?: string }) {
               ? JSON.stringify(status)
               : "No GPU job with that id in this session.",
           );
+        },
+      ),
+      tool(
+        "gpu_exec",
+        `Run a bash command on the machine of a running GPU job, beside the job: same processes, files and environment ($OPENSESSION_JOB_OUTPUT, credentials, identity), from the repository root. Returns the exit code and output. Use it to drive what the job started (a server, a browser) in a loop. Start long-lived processes detached (\`setsid nohup … > log 2>&1 &\`) so the call returns. \`fetch\` copies machine files (a screenshot) to <session scratch>/gpu-jobs/<id>/fetched/ and returns their host paths. Only while the job runs: keep its command alive (e.g. end it with \`sleep infinity\`) and stop_gpu_job when done. After editing code, pass \`sync: true\` instead of restarting a job that runs a dev server: your workspace is checkpointed (uncommitted changes included) and landed on the machine first, rewriting only files whose content changed, so the dev server hot-reloads just those; then the command runs (e.g. wait a few seconds and take a screenshot). The sync removes files you deleted, including ones an earlier sync added, but keeps untracked files the job created itself; ignored files are never touched. When nothing changed since the last landing it lands nothing and says so. The result's \`sync\` names the commit and checkpoint now on the machine, whether it changed, and the changed paths.`,
+        {
+          id: z.string().describe("The running job's id, 'gj-…'."),
+          command: z.string().max(8000).describe("A bash command."),
+          timeoutSeconds: z
+            .number()
+            .positive()
+            .max(MAX_GPU_EXEC_SECONDS)
+            .optional()
+            .describe(`Default ${DEFAULT_GPU_EXEC_SECONDS}.`),
+          fetch: z
+            .array(z.string().max(1024))
+            .max(20)
+            .optional()
+            .describe(
+              "Machine paths (relative to the repository root, or absolute; a leading $OPENSESSION_JOB_OUTPUT is expanded, nothing else) to copy back after the command.",
+            ),
+          sync: z
+            .boolean()
+            .optional()
+            .describe(
+              "Land your current workspace (uncommitted changes included) on the machine before the command runs, without stopping the job. If the landing fails, the command does not run.",
+            ),
+        },
+        async (args: {
+          id: string;
+          command: string;
+          timeoutSeconds?: number;
+          fetch?: string[];
+          sync?: boolean;
+        }) => {
+          const result = await execOnGpuJob(args.id, ctx.sessionId, args);
+          if ("error" in result) return text(`Couldn't run: ${result.error}.`);
+          return text(JSON.stringify(result));
         },
       ),
       tool(

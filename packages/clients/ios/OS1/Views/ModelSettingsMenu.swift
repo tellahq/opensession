@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// Model, reasoning effort and speed for the next turn, as one row per
-/// setting: each row names its current value and opens a submenu, mirroring
-/// the web composer's pill menu.
+/// Model, reasoning effort and speed for the next turn, mirroring the web
+/// composer's pill menu: the five best models as rows, More models for the
+/// rest, Effort and Speed rows that name their value and open a submenu, and
+/// an Options submenu for the rarer settings.
 ///
 /// Mounted twice so the two surfaces can't drift: the macOS toolbar's own
 /// control, and the iOS session overflow menu, where these settings used to be
@@ -14,27 +15,27 @@ import SwiftUI
 /// time one of them moves.
 struct ModelSettingsMenu: View {
     @AppStorage("os1.composer.defaultModel") private var preferredModel = ""
+    @AppStorage(UsageBarPref.storageKey) private var usageBarOn = UsageBarPref.standard
 
     let viewModel: SessionViewModel
     let catalog: ModelCatalog?
     /// Every subscription account the server lists, for the weekly overview.
     /// Empty until the pools load, which only costs the Weekly remaining row.
     var accounts: [PooledAccount] = []
-    /// Conversation cost, above the choices that drive it. Carried where this
-    /// is the whole menu; suppressed where it is nested inside one, since
+    /// Conversation cost, in Options. Carried where this is the session's
+    /// own settings menu; suppressed on the composer's model pill, where
     /// spend is not a model setting and the row would read as one.
     var showsUsage = true
 
     var body: some View {
-        if showsUsage {
-            UsageMenuSection(usage: viewModel.usage)
-        }
-        if !weeklyRows.isEmpty {
-            weeklyRemainingMenu
-        }
+        // The web menu's shape: the five best models, More models, Effort,
+        // Speed, then one Options submenu for what is set once and left.
         if let catalog {
-            Menu {
-                ForEach(catalog.presets + catalog.regular) { option in
+            Section {
+                ModelMenuRows(
+                    catalog: catalog,
+                    isSelected: { $0.id == ModelCatalog.baseID(currentModel) }
+                ) { option in
                     let routed = ModelCatalog.routedID(option.id, engine: currentEngine)
                     Button {
                         if let routed { viewModel.changeModel(to: routed, option: option) }
@@ -47,71 +48,101 @@ struct ModelSettingsMenu: View {
                     }
                     .disabled(routed == nil)
                 }
-            } label: {
-                Label("Model · \(catalog.label(for: currentModel))", systemImage: "cpu")
             }
-            if engineChoices.count > 1 {
+        }
+        Section {
+            if !supportedEfforts.isEmpty {
                 Menu {
-                    ForEach(engineChoices) { engine in
-                        let routed = ModelCatalog.routedID(currentModel, engine: engine.id)
+                    ForEach(supportedEfforts, id: \.self) { level in
                         Button {
-                            if let routed {
-                                viewModel.changeModel(
-                                    to: routed, option: catalog.option(for: currentModel)
-                                )
-                            }
+                            viewModel.effort = level
                         } label: {
-                            if engine.id == currentEngine {
-                                Label(engine.label, systemImage: "checkmark")
+                            // Checked against the RESOLVED effort, not the
+                            // stored one: "" means the server's default rather
+                            // than no choice, so comparing the raw value leaves
+                            // an untouched session with nothing checked at all.
+                            if effectiveEffort == level {
+                                Label(EffortLevel.label(level), systemImage: "checkmark")
                             } else {
-                                Text(engine.label)
+                                Text(EffortLevel.label(level))
                             }
                         }
-                        .disabled(routed == nil)
                     }
                 } label: {
-                    Label("Engine · \(currentEngineLabel)", systemImage: "gearshape.2")
+                    Label("Effort · \(EffortLevel.label(effectiveEffort))", systemImage: "brain")
+                }
+            }
+            if !speedChoices.isEmpty {
+                let effective = speedChoices.effective(viewModel.speed)
+                Menu {
+                    ForEach(speedChoices.options) { option in
+                        Button {
+                            viewModel.selectSpeed(option, choices: speedChoices)
+                        } label: {
+                            if effective == option {
+                                Label(option.label, systemImage: "checkmark")
+                            } else {
+                                Text(option.label)
+                            }
+                        }
+                    }
+                } label: {
+                    Label("Speed · \(effective.label)", systemImage: effective.symbol)
                 }
             }
         }
-        if !supportedEfforts.isEmpty {
+        Menu {
+            optionsRows
+        } label: {
+            Label("Options", systemImage: "gearshape")
+        }
+    }
+
+    /// Everything set once and left alone: engine, account, usage and the
+    /// defaults. Kept off the top level so the menu stays short.
+    @ViewBuilder
+    private var optionsRows: some View {
+        if let catalog, engineChoices.count > 1 {
             Menu {
-                ForEach(supportedEfforts, id: \.self) { level in
+                ForEach(engineChoices) { engine in
+                    let routed = ModelCatalog.routedID(currentModel, engine: engine.id)
                     Button {
-                        viewModel.effort = level
+                        if let routed {
+                            viewModel.changeModel(
+                                to: routed, option: catalog.option(for: currentModel)
+                            )
+                        }
                     } label: {
-                        // Checked against the RESOLVED effort, not the stored
-                        // one: "" means the server's default rather than no
-                        // choice, so comparing the raw value leaves an
-                        // untouched session with nothing checked at all.
-                        if effectiveEffort == level {
-                            Label(EffortLevel.label(level), systemImage: "checkmark")
+                        if engine.id == currentEngine {
+                            Label(engine.label, systemImage: "checkmark")
                         } else {
-                            Text(EffortLevel.label(level))
+                            Text(engine.label)
                         }
                     }
+                    .disabled(routed == nil)
                 }
             } label: {
-                Label("Effort · \(EffortLevel.label(effectiveEffort))", systemImage: "brain")
+                Label("Engine · \(currentEngineLabel)", systemImage: "gearshape.2")
             }
         }
-        if !speedChoices.isEmpty {
-            let effective = speedChoices.effective(viewModel.speed)
-            Menu {
-                ForEach(speedChoices.options) { option in
-                    Button {
-                        viewModel.selectSpeed(option, choices: speedChoices)
-                    } label: {
-                        if effective == option {
-                            Label(option.label, systemImage: "checkmark")
-                        } else {
-                            Text(option.label)
-                        }
-                    }
-                }
-            } label: {
-                Label("Speed · \(effective.label)", systemImage: effective.symbol)
+        if !weeklyRows.isEmpty {
+            weeklyRemainingMenu
+        }
+        Section {
+            if showsUsage {
+                UsageMenuSection(usage: viewModel.usage)
             }
+            // The same readout, kept in view above the composer. Here even
+            // where the usage row is not: this menu is where the web keeps
+            // the switch, and the composer's own menu is the one to hand.
+            // A button, not a Toggle: iOS 26 draws a Toggle inside a nested
+            // menu as a dimmed row with an empty one under it.
+            Button {
+                UsageBarPref.set(!usageBarOn)
+            } label: {
+                Label("Show usage bar", systemImage: usageBarOn ? "checkmark" : "chart.bar.xaxis")
+            }
+            .accessibilityAddTraits(usageBarOn ? .isSelected : [])
         }
         Section {
             Button(action: setAsDefault) {

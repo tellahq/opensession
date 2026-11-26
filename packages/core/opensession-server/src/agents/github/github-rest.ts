@@ -326,6 +326,8 @@ export interface ReviewCommentInfo {
   /** GitHub account type ("User", "Bot", "Organization"). */
   userType: string;
   outdated: boolean;
+  /** Set on replies: the comment this one answers (REST `in_reply_to_id`). */
+  inReplyTo?: number;
 }
 
 /** List the inline review comments on a PR (for auto-fix to address + reply to). Newest first. */
@@ -333,11 +335,19 @@ async function listReviewComments(
   prNumber: number,
   ghRepo: string = GITHUB_REPO,
 ): Promise<ReviewCommentInfo[]> {
+  return (await readReviewComments(prNumber, ghRepo)) ?? [];
+}
+
+/** listReviewComments, with null when GitHub could not be read. */
+async function readReviewComments(
+  prNumber: number,
+  ghRepo: string = GITHUB_REPO,
+): Promise<ReviewCommentInfo[] | null> {
   const r = await githubRequest<any[]>(
     "GET",
     `/repos/${ghRepo}/pulls/${prNumber}/comments?per_page=100`,
   );
-  if (!r.ok || !Array.isArray(r.data)) return [];
+  if (!r.ok || !Array.isArray(r.data)) return null;
   return r.data
     .map((c) => ({
       id: c.id,
@@ -348,6 +358,8 @@ async function listReviewComments(
       login: c.user?.login || "",
       userType: c.user?.type || "",
       outdated: c.line == null && c.original_line != null,
+      inReplyTo:
+        typeof c.in_reply_to_id === "number" ? c.in_reply_to_id : undefined,
     }))
     .reverse();
 }
@@ -501,7 +513,11 @@ export async function submitReview(
 export const FIXED_REPLY_MARKER = "<!-- os-fixed -->";
 
 export interface ReviewThreadComment {
+  /** REST id (GraphQL databaseId), for `pulls/comments/<id>/replies`. */
+  id?: number;
   login: string;
+  /** GitHub account type ("User", "Bot", ...), as REST reports it. */
+  userType?: string;
   body: string;
   /** 👍 / 👎 reaction counts (feedback signal for the review filter). */
   plus?: number;
@@ -532,6 +548,14 @@ export async function listReviewThreads(
   prNumber: number,
   ghRepo: string = GITHUB_REPO,
 ): Promise<ReviewThread[]> {
+  return (await readReviewThreads(prNumber, ghRepo)) ?? [];
+}
+
+/** listReviewThreads, with null when GitHub could not be read. */
+async function readReviewThreads(
+  prNumber: number,
+  ghRepo: string = GITHUB_REPO,
+): Promise<ReviewThread[] | null> {
   const data = await githubGraphQL<any>(
     `query($owner:String!,$name:String!,$number:Int!){
       repository(owner:$owner,name:$name){
@@ -539,7 +563,7 @@ export async function listReviewThreads(
           reviewThreads(first:100){
             nodes{
               id isResolved isOutdated path line
-              comments(first:100){ nodes{ author{login} body reactionGroups{ content reactors{ totalCount } } } }
+              comments(first:100){ nodes{ databaseId author{login __typename} body reactionGroups{ content reactors{ totalCount } } } }
             }
           }
         }
@@ -553,7 +577,7 @@ export async function listReviewThreads(
     ghRepo,
   );
   const nodes = data?.repository?.pullRequest?.reviewThreads?.nodes;
-  if (!Array.isArray(nodes)) return [];
+  if (!Array.isArray(nodes)) return null;
   return nodes.map((t: any) => {
     const comments = (t.comments?.nodes || []).map((c: any) => {
       const groups: any[] = Array.isArray(c.reactionGroups)
@@ -562,7 +586,10 @@ export async function listReviewThreads(
       const count = (content: string) =>
         groups.find((g) => g?.content === content)?.reactors?.totalCount || 0;
       return {
+        id: typeof c.databaseId === "number" ? c.databaseId : undefined,
         login: c.author?.login || "",
+        userType:
+          typeof c.author?.__typename === "string" ? c.author.__typename : "",
         body: typeof c.body === "string" ? c.body : "",
         plus: count("THUMBS_UP"),
         minus: count("THUMBS_DOWN"),
@@ -750,18 +777,88 @@ export function isTrustedFeedbackAuthor(
   );
 }
 
-/** Pure formatter behind fetchReviewFindings, exported for tests. */
-export function formatReviewFindings(
+/**
+ * REST fallback for when the GraphQL thread read fails: one open pseudo-thread
+ * per root comment. REST carries no resolution state, so this can still list a
+ * resolved thread, but it never lists a reply as a finding of its own.
+ */
+export function threadsFromComments(
   comments: ReviewCommentInfo[],
+): ReviewThread[] {
+  return comments
+    .filter((c) => c.inReplyTo == null)
+    .map((c) => ({
+      id: "",
+      isResolved: false,
+      isOutdated: c.outdated,
+      path: c.path || null,
+      line: c.line,
+      rootAuthor: c.login,
+      comments: [
+        { id: c.id, login: c.login, userType: c.userType, body: c.body },
+      ],
+    }));
+}
+
+/**
+ * GraphQL names an App account "<slug>" where REST says "<slug>[bot]", so a
+ * Bot root is also checked in the REST form.
+ */
+function trustedThreadAuthor(c: ReviewThreadComment): boolean {
+  if (isTrustedFeedbackAuthor(c.login, c.userType)) return true;
+  return (
+    c.userType === "Bot" &&
+    !!c.login &&
+    !c.login.endsWith("[bot]") &&
+    isTrustedFeedbackAuthor(`${c.login}[bot]`, c.userType)
+  );
+}
+
+/** Unresolved, current threads a trusted reviewer opened: the findings
+ * still owed an answer before the PR is ready. */
+function openTrustedThreads(threads: ReviewThread[]): ReviewThread[] {
+  return threads.filter((t) => {
+    if (t.isResolved || t.isOutdated || t.line == null) return false;
+    const root = t.comments[0];
+    return !!root && trustedThreadAuthor(root);
+  });
+}
+
+/**
+ * How many review threads from trusted reviewers are still unresolved on
+ * the PR (outdated ones excluded). Null when GitHub could not be read.
+ */
+export async function countOpenReviewThreads(
+  prNumber: number,
+  ghRepo?: string,
+): Promise<number | null> {
+  const threads = await readReviewThreads(prNumber, ghRepo).catch(() => null);
+  return threads && openTrustedThreads(threads).length;
+}
+
+/**
+ * Pure formatter behind fetchReviewFindings, exported for tests. One entry per
+ * unresolved, current thread, written from its root comment: replies (the
+ * fixer's own "Fixed in <sha>" among them) are conversation, not findings.
+ */
+export function formatReviewFindings(
+  threads: ReviewThread[],
   reviews: ReviewInfo[],
 ): string {
   const lines: string[] = [];
-  for (const c of comments) {
-    if (c.outdated || c.line == null) continue;
-    if (!isTrustedFeedbackAuthor(c.login, c.userType)) continue;
-    // `comment <id>` lets the agent reply in that thread after fixing.
+  for (const t of openTrustedThreads(threads)) {
+    const root = t.comments[0];
+    // `comment <id>` lets the agent reply in that thread after fixing, and
+    // `thread <id>` resolve it.
+    const handles = [
+      root.id != null ? `comment ${root.id}` : "",
+      t.id ? `thread ${t.id}` : "",
+    ]
+      .filter(Boolean)
+      .map((h) => ` · ${h}`)
+      .join("");
     lines.push(
-      `- [@${c.login} · comment ${c.id}] ${c.path}:${c.line} — ${c.body.replace(/\s+/g, " ").trim().slice(0, 400)}`,
+      `- [@${root.login}${handles}] ${t.path}:${t.line} — ${root.body.replace(/\s+/g, " ").trim().slice(0, 400)}`,
     );
   }
   for (const rv of reviews) {
@@ -784,19 +881,39 @@ export function formatReviewFindings(
 }
 
 /**
- * Open review feedback on the PR, formatted for a fix prompt: inline comments
- * AND review summaries from trusted authors only (our bot, the team roster,
- * installed GitHub Apps), each tagged with its author. Skips outdated inline
- * comments and the agent's own boilerplate review body. Returns "" when there's
- * nothing. Shared by auto-fix and the review handoff.
+ * Open review feedback on the PR, formatted for a fix prompt: unresolved inline
+ * threads AND review summaries from trusted authors only (our bot, the team
+ * roster, installed GitHub Apps), each tagged with its author. Threads come
+ * from GraphQL, the only API that says whether a thread is resolved; REST
+ * comments are the fallback when that read fails. Skips resolved and outdated
+ * threads, replies, and the agent's own boilerplate review body. Returns ""
+ * when there's nothing. Shared by auto-fix and the review handoff.
  */
 export async function fetchReviewFindings(
   prNumber: number,
   ghRepo?: string,
 ): Promise<string> {
-  const [comments, reviews] = await Promise.all([
-    listReviewComments(prNumber, ghRepo),
+  return (await readReviewFindings(prNumber, ghRepo)) ?? "";
+}
+
+/**
+ * fetchReviewFindings, with null when neither GraphQL nor REST could read the
+ * PR's review comments. "" then means GitHub answered and nothing is open, so
+ * a caller can tell "nothing owed" from "couldn't tell" and retry the latter.
+ */
+export async function readReviewFindings(
+  prNumber: number,
+  ghRepo?: string,
+): Promise<string | null> {
+  const [threads, reviews] = await Promise.all([
+    readReviewThreads(prNumber, ghRepo).catch(() => null),
     listReviews(prNumber, ghRepo),
   ]);
-  return formatReviewFindings(comments, reviews);
+  const source =
+    threads ??
+    (await readReviewComments(prNumber, ghRepo)
+      .catch(() => null)
+      .then((comments) => comments && threadsFromComments(comments)));
+  if (!source) return null;
+  return formatReviewFindings(source, reviews);
 }

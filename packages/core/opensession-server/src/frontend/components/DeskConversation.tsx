@@ -727,7 +727,7 @@ export function DeskConversation({
               // setting, so the pill has nothing to apply to until it ends.
               modelPillDisabled: voiceCall?.active,
               modelTitle: voiceCall?.active
-                ? "Applies to typed turns. The voice call uses its own backend (Settings → Desk voice)."
+                ? "Applies to typed turns. The voice call uses its own backend (Settings → Desk)."
                 : "Model and reasoning effort for your Desk",
               effort,
               autoFocus,

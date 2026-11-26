@@ -12,6 +12,7 @@ import {
 import type { ModelProviderConfig } from "./model-providers";
 import type { XaiAccount, bindXaiAccount } from "./xai-accounts";
 import { XAI_OAUTH_PROVIDER } from "./xai-provider-id";
+import { bridgePinHeaders } from "./anthropic-bridge-pin";
 import { isCompiledBinary } from "../runner-host/exe";
 import { checkPhotonWasm } from "./photon-wasm";
 import {
@@ -112,10 +113,11 @@ export interface PiRuntimeBindingDependencies {
   buildSeededOpenaiAuth: (
     account: CodexAccount,
   ) => SeededAuthResult | Promise<SeededAuthResult>;
-  anthropicTransport: () => "inprocess" | "bridge";
+  anthropicTransport: () => "inprocess" | "bridge" | "remote";
   buildAnthropicProvider: (input: {
     unifiedSessionId: string;
     user?: string;
+    billingLogin?: string;
     accountId?: string;
     accountStrict?: boolean;
     usageCredits?: boolean;
@@ -143,6 +145,9 @@ export interface CreatePiRuntimeBindingInput {
   affinityKey: string;
   unifiedSessionId: string;
   accountUser?: string;
+  /** Verified login a personal Claude API account may bill: the session
+   *  creator's, never a display name resolved at dispatch. */
+  billingLogin?: string;
   accountId?: string;
   accountStrict?: boolean;
   usageCredits?: boolean;
@@ -449,11 +454,14 @@ export async function createPiRuntimeBinding(
     }
   } else if (
     input.providerID === "anthropic" &&
-    deps.anthropicTransport() === "inprocess"
+    // "remote" is the same native provider; only where its Claude Code
+    // processes run differs (pi-model-runtime's createLiveSdkConversation).
+    deps.anthropicTransport() !== "bridge"
   ) {
     const provider = deps.buildAnthropicProvider({
       unifiedSessionId: input.unifiedSessionId,
       user: input.accountUser,
+      billingLogin: input.billingLogin,
       accountId: input.accountId,
       accountStrict: input.accountStrict,
       usageCredits: input.usageCredits,
@@ -470,7 +478,13 @@ export async function createPiRuntimeBinding(
     }
   } else if (input.providerID === "anthropic") {
     const bridge = deps.ensureAnthropicBridge();
-    const headers = { "x-opensession-session": input.unifiedSessionId };
+    // The session's account pin travels with each request so the bridge
+    // honors it; a strict pin (fixed subscription) never falls back to
+    // another account, so it can never bill a different organization.
+    const headers: Record<string, string> = {
+      "x-opensession-session": input.unifiedSessionId,
+      ...bridgePinHeaders(input.accountId, input.accountStrict),
+    };
     runtime.registerProvider("anthropic", { baseUrl: bridge.url, headers });
     await runtime.setRuntimeApiKey("anthropic", bridge.key);
     model = runtime.getModel("anthropic", input.modelID);

@@ -24,6 +24,8 @@ struct SettingsView: View {
         ProcessInfo.processInfo.environment["OS1_OPEN_SETTINGS"] == "memory"
     @State private var opensPreferencesFixture =
         ProcessInfo.processInfo.environment["OS1_OPEN_SETTINGS"] == "preferences"
+    @State private var opensProvidersFixture =
+        ProcessInfo.processInfo.environment["OS1_OPEN_SETTINGS"] == "providers"
     #endif
 
     private var signIn: GitHubSignIn { .shared }
@@ -68,6 +70,10 @@ struct SettingsView: View {
             // And `OS1_OPEN_SETTINGS=preferences`.
             .navigationDestination(isPresented: $opensPreferencesFixture) {
                 PreferencesSettingsView()
+            }
+            // And `OS1_OPEN_SETTINGS=providers`.
+            .navigationDestination(isPresented: $opensProvidersFixture) {
+                ProvidersSettingsView()
             }
             #endif
             #if os(macOS)

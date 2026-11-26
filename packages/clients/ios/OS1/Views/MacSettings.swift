@@ -81,6 +81,7 @@ struct MacSettingsView: View {
         case "notifications": return .notifications
         case "keychain": return .keychain
         case "memory": return .memory
+        case "providers": return .providers
         default: break
         }
         #endif

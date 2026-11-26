@@ -140,7 +140,9 @@ export function KeychainSection() {
         ? `Share ${c.service} with the workspace?`
         : `Make ${c.service} personal?`,
       description: sharing
-        ? "Every session in the workspace can call it without asking you, within its host, methods and paths. Calls are still audited."
+        ? c.kind === "login"
+          ? "Every session in the workspace can have its password released without asking you, and the agent can read it then. Each release is audited with its purpose."
+          : "Every session in the workspace can call it without asking you, within its host, methods and paths. Calls are still audited."
         : "Sessions will have to ask you again before using it. Access they got without asking ends now.",
       confirmLabel: sharing ? "Share" : "Make personal",
       onConfirm: () =>
@@ -233,15 +235,13 @@ export function KeychainSection() {
               control={
                 c.mine ? (
                   <div className="flex items-center gap-1">
-                    {c.kind !== "login" && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setScope(c)}
-                      >
-                        {c.scope === "workspace" ? "Make personal" : "Share"}
-                      </Button>
-                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setScope(c)}
+                    >
+                      {c.scope === "workspace" ? "Make personal" : "Share"}
+                    </Button>
                     <Button
                       size="sm"
                       variant="ghost"
@@ -654,7 +654,7 @@ function AddLoginForm({
             <Input
               value={loginUrl}
               onChange={(e) => setLoginUrl(e.target.value)}
-              placeholder="https://app.example.test/login"
+              placeholder="https://app.example.test/login or vnc://host"
               autoCapitalize="none"
               spellCheck={false}
             />

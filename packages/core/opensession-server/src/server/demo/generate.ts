@@ -28,6 +28,7 @@ import {
   DEMO_RENDER_ASSET,
   DEMO_RENDER_SESSION_ID,
   DEMO_SCRIPT_RENDER_SESSION_ID,
+  DEMO_SPACE_MERGED_BRANCH,
   DEMO_SPACE_SESSION_ID,
   DEMO_SPACE_STATUSES,
   DEMO_SPACE_WORKSPACE_ID,
@@ -41,6 +42,7 @@ import {
   demoGoal,
   demoPrDetails,
   demoPrInfo,
+  demoSpaceMergedPrInfo,
   demoSessions,
 } from "./fixtures";
 import { encodePng, type PngRect, type Rgb } from "./png";
@@ -357,6 +359,7 @@ export async function generateDemoData(
       repos: {
         [DEMO_REPO_ID]: {
           [DEMO_BRANCH]: demoPrInfo(now, DEMO_GH_REPO, "bks-demo-pr"),
+          [DEMO_SPACE_MERGED_BRANCH]: demoSpaceMergedPrInfo(now, DEMO_GH_REPO),
         },
       },
       recentLimits: { [DEMO_REPO_ID]: 500 },

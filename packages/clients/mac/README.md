@@ -120,6 +120,7 @@ from the command line on the same machine:
 | Session workspaces     | `~/OpenSession/workspaces/` (`paths.worktreesDir`)            |
 | Ports                  | 47850 (app), 47849 (session kernel), 47860 (webhook listener) |
 | Gateway ownership lock | `~/.opensession-app/deploy/`                                  |
+| Model tools it fetched | `~/.opensession-app/tools/` (see below)                       |
 
 The two folders are chosen at the first launch and written to the config. A
 Mac's file system ignores case, so `~/OpenSession` is also `~/opensession`; when
@@ -133,13 +134,37 @@ launch writes a config with the two folders, switches the engine on and creates
 a `scratch` repository; later launches leave the config alone, so settings
 changed in the app stay.
 
-The server gets a minimal environment: the login shell's `PATH` (where `git`,
-`gh` and `claude` are), `HOME`, and the SSH agent socket. Turns run inside the
+The server gets a minimal environment: the login shell's `PATH` (where `git`
+and `gh` are), `HOME`, and the SSH agent socket. Turns run inside the
 server process (`OPENSESSION_EXECUTOR=0`, `OPENSESSION_PI_DETACH=0`), so
 quitting the app ends them and nothing keeps running in the background. A turn
 that was in flight is recorded as interrupted and can be continued. Processes
 left by a crashed or force-quit app are ended at the next launch, matched by
 executable path and never by pid alone.
+
+### Claude Code and Codex
+
+The server runs every Claude turn through the `claude` command-line tool, and
+uses `codex` to sign in to ChatGPT and read usage. The app does not carry
+either one (`src/local-tools.js`):
+
+- **Claude Code.** A `claude` already on the Mac's `PATH` is used as it is.
+  Without one, the first start downloads Anthropic's build, with progress on
+  the waiting page, and points the server at it (`OPENSESSION_CLAUDE_BIN`). If
+  the download fails the server starts anyway and the app tries again every
+  five minutes. The app checks for a newer release at each start and once a
+  day, and keeps the one before it for turns still running.
+- **Codex.** A `codex` already on `PATH` wins. Otherwise `tools/bin/codex`,
+  last on the server's `PATH`, is a small stand-in: the first time something
+  runs it, it asks the app for the download, waits, then runs the real one
+  with the same arguments. A copy is replaced once it is a month old.
+
+Both are the files the publisher's own installer fetches (`downloads.claude.ai`
+and `releases.openai.com`). Each is checked against the checksum published
+beside it and, with `codesign`, against the publisher's Developer ID, then run
+as it arrived: the app never modifies or re-signs it. Each person signs in with
+their own account. Removing the "This Mac" organization leaves the downloads in
+place; delete `~/.opensession-app/tools/` to take them back out.
 
 Security: the server listens on loopback with no sign-in, like a default
 command-line install, so any process running as the same macOS user can reach
@@ -168,9 +193,11 @@ To try it from source, point the app at any unpacked release:
 
 ```sh
 OS1_LOCAL_SERVER_DIR=/path/to/opensession-<version>-darwin-arm64 bun run start
-bun test src/local-server.test.js
+bun test src/local-server.test.js src/local-tools.test.js
 node scripts/smoke-local-server.js /path/to/opensession-<version>-darwin-arm64
 ```
+
+The smoke script downloads both tools for real into a temporary home.
 
 The app updates through the server it is pointed at (see Auto-update), and the
 server on this Mac has no release feed configured. An install that only uses

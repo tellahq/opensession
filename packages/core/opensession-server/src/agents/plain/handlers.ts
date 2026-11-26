@@ -4,6 +4,7 @@
 import {
   getThreadWithMessages,
   postNote,
+  plainMachineUserId,
   sendCustomerReply,
   formatThreadContext,
   cleanDraftText,
@@ -19,6 +20,7 @@ import {
 import { getDefaultModel, toPiModel } from "../../server/models";
 import { cancelAgentRun, runAgent } from "../../server/agent-runner";
 import { STRIPE_CONFIRM_TOOLS } from "../../server/runner-shared";
+import { noteTextWithoutMentions } from "./notes";
 import { classifyRefundApproval } from "./refund-intent";
 import { handleDiscussionEvent, type DiscussionWebhook } from "./discussions";
 import { createWorktree as createRepoWorktree } from "../../server/worktree";
@@ -56,6 +58,36 @@ const PLAIN_MENTION_RE = new RegExp(
 // --- State ---
 
 const processedMessages = new Set<string>();
+
+/** Notes already taken by one of the two events that can carry the same
+ *  note (`thread.note_created` with the text handle, and
+ *  `thread.note_mention_created` for an @-mention of the machine user).
+ *  Claimed synchronously, before any await, so concurrent deliveries of both
+ *  events cannot both act on it. */
+const claimedNotes = new Set<string>();
+const CLAIMED_NOTES_LIMIT = 5000;
+
+export function claimNote(noteId: string): boolean {
+  if (claimedNotes.has(noteId)) return false;
+  if (claimedNotes.size >= CLAIMED_NOTES_LIMIT) claimedNotes.clear();
+  claimedNotes.add(noteId);
+  return true;
+}
+
+/** Machine users that are this agent: the `PLAIN_API_KEY` one and, when it
+ *  is a separate key, the Ask Sidekick agent's. */
+async function ownMachineUserIds(): Promise<Set<string>> {
+  const { agentMachineUserId, discussionAgentConfigured } =
+    await import("./discussion-api");
+  const lookups = [plainMachineUserId()];
+  if (discussionAgentConfigured()) lookups.push(agentMachineUserId());
+  const ids = new Set<string>();
+  for (const result of await Promise.allSettled(lookups)) {
+    if (result.status === "fulfilled") ids.add(result.value);
+    else console.warn("[plain] machine user lookup failed:", result.reason);
+  }
+  return ids;
+}
 
 interface ActiveSession {
   threadId: string;
@@ -112,11 +144,17 @@ export interface PlainWebhookPayload {
       text?: string;
       createdBy?: { actorType: "customer" | "user" | "machineUser" | "system" };
     };
+    /** `thread.note_mention_created`: the machine users the note mentions. */
+    mentions?: Array<{ id: string }>;
     note?: {
       id: string;
       text?: string;
       markdown?: string;
-      createdBy?: { actorType: "customer" | "user" | "machineUser" | "system" };
+      createdBy?: {
+        actorType: "customer" | "user" | "machineUser" | "system";
+        /** Plain user id (`u_…`) when `actorType` is "user". */
+        userId?: string;
+      };
     };
   };
 }
@@ -249,6 +287,8 @@ async function handleAgentMention(
   customerId: string,
   noteText: string,
   thread: any,
+  /** Plain user id of the teammate who wrote the note. */
+  authorUserId?: string,
 ): Promise<void> {
   console.log(
     `[plain] Processing ${PLAIN_MENTION} mention in thread ${threadId}`,
@@ -268,18 +308,22 @@ async function handleAgentMention(
     pendingConfirmations.delete(threadId);
 
     if (pending.type === "customer_reply") {
+      // Sent as the teammate who confirmed it, when the API key may
+      // impersonate them; otherwise as the machine user.
       const sent = await sendCustomerReply(
         threadId,
         customerId,
         pending.draftText,
+        { asUser: authorUserId ? [{ userId: authorUserId }] : [] },
       );
       if (sent.ok) {
+        const as = sent.sentAs === "user" ? " as you" : "";
         await postNote(
           threadId,
           customerId,
           sent.waitingForCustomer
-            ? "✓ Reply sent to customer. Thread set to Waiting for Customer."
-            : "✓ Reply sent to customer.",
+            ? `✓ Reply sent to customer${as}. Thread set to Waiting for Customer.`
+            : `✓ Reply sent to customer${as}.`,
         );
       } else {
         await postNote(
@@ -545,6 +589,7 @@ export async function processAgentMention(
   threadId: string,
   noteId: string,
   noteText: string,
+  authorUserId?: string,
 ): Promise<void> {
   const triggerId = `note-${noteId}`;
   if (processedMessages.has(triggerId)) {
@@ -565,7 +610,13 @@ export async function processAgentMention(
       return;
     }
 
-    await handleAgentMention(threadId, customerId, noteText, thread);
+    await handleAgentMention(
+      threadId,
+      customerId,
+      noteText,
+      thread,
+      authorUserId,
+    );
   } catch (e) {
     console.error(`[plain] Error processing ${PLAIN_MENTION} mention:`, e);
   }
@@ -785,6 +836,42 @@ async function deliverNoteToLinkedSession(
   }
 }
 
+type MentionNote = NonNullable<PlainWebhookPayload["payload"]["note"]>;
+
+async function actOnMentionNote(
+  threadId: string,
+  note: MentionNote,
+  noteText: string,
+): Promise<Response> {
+  // SECURITY: Only act on notes from support agents (user) — never the
+  // machine user's own notes (feedback loops) or customer/system actors.
+  const actorType = note.createdBy?.actorType;
+  if (actorType !== "user") {
+    console.log(
+      `[plain] Ignoring ${PLAIN_MENTION} mention from non-user actor: ${actorType}`,
+    );
+    return Response.json({ ok: true });
+  }
+  if (!claimNote(note.id)) return Response.json({ ok: true });
+
+  const delivered = await deliverNoteToLinkedSession(
+    threadId,
+    note.id,
+    noteText,
+  );
+  if (!delivered) {
+    processAgentMention(
+      threadId,
+      note.id,
+      noteText,
+      note.createdBy?.userId,
+    ).catch((e) =>
+      console.error(`[plain] Error processing ${PLAIN_MENTION} mention:`, e),
+    );
+  }
+  return Response.json({ ok: true });
+}
+
 export async function handleWebhook(
   payload: PlainWebhookPayload,
 ): Promise<Response> {
@@ -827,41 +914,34 @@ export async function handleWebhook(
       );
   }
 
-  // Internal notes that explicitly mention the persona: a thread with a live
-  // linked session gets the note delivered INTO that session (steered into a
-  // busy run, queued behind it, or starting a fresh turn — persisted, so a
-  // restart can't drop it). The legacy one-shot @mention flow only handles
-  // threads with no session. Notes without the mention are teammate-to-
-  // teammate and are left alone.
-  if (eventType === "thread.note_created" && payload.payload.note) {
-    const note = payload.payload.note;
+  // Internal notes that mention the agent: a thread with a live linked
+  // session gets the note delivered INTO that session (steered into a busy
+  // run, queued behind it, or starting a fresh turn — persisted, so a restart
+  // can't drop it). The legacy one-shot mention flow only handles threads with
+  // no session. A note reaches the agent either as an @-mention of its
+  // machine user (`thread.note_mention_created`) or by naming the configured
+  // text handle (`thread.note_created`); the same note can arrive as both,
+  // and only the first one is acted on. Notes without a mention are
+  // teammate-to-teammate and are left alone.
+  const note = payload.payload.note;
+  if (eventType === "thread.note_mention_created" && note) {
+    const ownIds = await ownMachineUserIds();
+    if (!payload.payload.mentions?.some((m) => ownIds.has(m.id))) {
+      console.log(`[plain] Note mention for another machine user; ignoring`);
+      return Response.json({ ok: true });
+    }
+    const noteText = noteTextWithoutMentions(
+      note.markdown || note.text || "",
+      ownIds,
+    );
+    return actOnMentionNote(thread.id, note, noteText);
+  }
+  if (eventType === "thread.note_created" && note) {
     const noteText = note.text || note.markdown || "";
     const mentioned = PLAIN_MENTION_RE.test(noteText);
     PLAIN_MENTION_RE.lastIndex = 0;
     if (!mentioned) return Response.json({ ok: true });
-
-    // SECURITY: Only act on notes from support agents (user) — never the
-    // machine user's own notes (feedback loops) or customer/system actors.
-    const actorType = note.createdBy?.actorType;
-    if (actorType !== "user") {
-      console.log(
-        `[plain] Ignoring ${PLAIN_MENTION} mention from non-user actor: ${actorType}`,
-      );
-      return Response.json({ ok: true });
-    }
-
-    const delivered = await deliverNoteToLinkedSession(
-      thread.id,
-      note.id,
-      noteText,
-    );
-    if (!delivered) {
-      processAgentMention(thread.id, note.id, noteText).catch((e) =>
-        console.error(`[plain] Error processing ${PLAIN_MENTION} mention:`, e),
-      );
-    }
-
-    return Response.json({ ok: true });
+    return actOnMentionNote(thread.id, note, noteText);
   }
 
   console.log(`[plain] Ignoring event type: ${eventType}`);

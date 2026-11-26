@@ -10,11 +10,6 @@ import {
   accountOwnerLabel,
   providerAccountLabel,
 } from "../lib/provider-account";
-import {
-  getRecentModels,
-  onRecentModelsChanged,
-  pushRecentModel,
-} from "../lib/model-recents";
 import { Menu } from "../ui/menu";
 import { selectTriggerClasses } from "../ui/select-classes";
 import { Badge } from "../ui/badge";
@@ -52,6 +47,8 @@ import {
 } from "../lib/account-limits";
 import { UsageCost, UsageDetails } from "./UsageMeter";
 import { setUsageBarPref, useUsageBarPref } from "../lib/usage-bar-pref";
+import { setTopModelOrder, useTopModelOrder } from "../lib/top-model-order";
+import { Reorder } from "motion/react";
 
 export const EFFORTS = [
   { id: "none", label: "None" },
@@ -64,6 +61,8 @@ export const EFFORTS = [
 
 const PRIMARY_MODEL_IDS = [
   "claude-fable-5-2",
+  "claude-mythos-5-2",
+  "claude-mythos-5-1",
   "claude-opus-5-5",
   "claude-sonnet-5-5",
   "claude-haiku-5-5",
@@ -73,6 +72,54 @@ const PRIMARY_MODEL_IDS = [
   "gpt-6-luna",
 ] as const;
 const PRIMARY_MODEL_ID_SET = new Set<string>(PRIMARY_MODEL_IDS);
+
+/** How many models the picker lists at its top level. */
+export const TOP_MODEL_COUNT = 5;
+
+/** The best current models, by id tail, in the order the picker lists them.
+ * Update this when a model ships or retires so the top of the picker stays
+ * the five most people want; everything else sits under "More models". */
+const TOP_MODEL_TAILS = [
+  "claude-fable-5-2",
+  "claude-opus-5-5",
+  "claude-sonnet-5-5",
+  "gpt-6.2-astra",
+  "gpt-6.2-sol",
+];
+
+const idTail = (id: string) => id.split("/").pop() || "";
+
+/**
+ * Split the picker's first-class entries into the top-level five and the rest.
+ * The curated best come first; a catalog missing some of them fills the gap
+ * from its own order, so the top level is never short while models remain.
+ * `order` is the person's dragged order (id tails): it reorders the five but
+ * never changes which five they are. A model it does not name keeps its
+ * curated place after the ones it does.
+ */
+export function pickTopModels<T extends { id: string }>(
+  options: readonly T[],
+  order: readonly string[] = [],
+) {
+  const tail = (o: T) => idTail(o.id);
+  const curated = TOP_MODEL_TAILS.flatMap((t) => {
+    const option = options.find((o) => tail(o) === t);
+    return option ? [option] : [];
+  });
+  const top = [
+    ...curated,
+    ...options.filter((o) => !curated.includes(o)),
+  ].slice(0, TOP_MODEL_COUNT);
+  const rank = (o: T) => {
+    const i = order.indexOf(tail(o));
+    return i === -1 ? order.length : i;
+  };
+  const ordered = top
+    .map((o, i) => [o, i] as const)
+    .sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1])
+    .map(([o]) => o);
+  return { top: ordered, more: options.filter((o) => !top.includes(o)) };
+}
 
 /** Engine display names, keyed by ModelOption.provider — only used for the
  * legacy (no-engine-configured) grouping fallback below. */
@@ -215,6 +262,8 @@ const PROVIDER_ORDER = [
  * unlisted keeps its registry/config order after these. */
 const MODEL_TAIL_ORDER = [
   "claude-fable-5-2",
+  "claude-mythos-5-2",
+  "claude-mythos-5-1",
   "claude-opus-5-5",
   "claude-opus-4-8",
   "claude-sonnet-5-5",
@@ -280,10 +329,7 @@ function MenuHint({ children }: { children: React.ReactNode }) {
 
 type ModelMenuOption = {
   value: string;
-  /** Label used inside its provider section. */
   label: string;
-  /** Label used when the option stands alone in the recent list. */
-  standaloneLabel: string;
   id: string;
   /** Engine key (ModelOption.provider) for the legacy-fallback group headers. */
   engine: string;
@@ -306,14 +352,14 @@ const ACCOUNT_BRAND: Record<WeeklyRemainingRow["provider"], string> = {
 };
 
 /**
- * Combined model + reasoning-effort menu: one trigger opens a short list of
- * settings rows (Model, Effort, Speed, Account), each showing its current value
- * and opening a submenu, over a "Reset to default" row. The same menu powers
- * the composer pill and the full-width model row in session info, so those two
- * surfaces cannot drift apart. The model list used to sit at the top level,
- * which made the menu as tall as the registry and buried the settings under it;
- * a row per setting keeps the menu one screenful whatever the catalog does, at
- * the cost of one extra hop to change model.
+ * Combined model + reasoning-effort menu: one trigger opens the five best
+ * models as rows, a "More models" submenu for the rest of the catalog, Effort
+ * and Speed rows that show their current value and open a submenu, and one
+ * Options submenu for the rarer settings (account, auto-fallback, usage,
+ * defaults). The same menu powers the composer pill and the full-width model
+ * row in session info, so those two surfaces cannot drift apart. Capping the
+ * top level at five models and two settings keeps the menu short whatever the
+ * catalog does, while the usual picks take one click.
  *
  * Unlike PaletteSelect there is no native-select phone fallback: the nested
  * submenus don't map to a <select>, and Base UI menus handle touch fine.
@@ -358,16 +404,19 @@ export function ModelEffortSelect({
   } = actions;
   const effectiveModel = model || defaultModel;
   const usageBarOn = useUsageBarPref();
+  const savedTopOrder = useTopModelOrder();
+  // Mid-drag, Motion's in-flight order of the top five (option ids); saved as
+  // the person's order when the row is dropped.
+  const [draftTopIds, setDraftTopIds] = React.useState<string[] | null>(null);
+  const [draggingTopId, setDraggingTopId] = React.useState<string | null>(null);
+  const draftTopIdsRef = React.useRef<string[] | null>(null);
+  // A drop ends in a click on the row under the pointer; it must not pick it.
+  const justDragged = React.useRef(false);
   const [open, setOpen] = React.useState(false);
   const setMenuOpen = (nextOpen: boolean) => {
     setOpen(nextOpen);
     onOpenChange?.(nextOpen);
   };
-  const [recentModelIds, setRecentModelIds] = React.useState(getRecentModels);
-  React.useEffect(
-    () => onRecentModelsChanged(() => setRecentModelIds(getRecentModels())),
-    [],
-  );
   // Pi-routed ids resolve to their base list entry for label/effort/account
   // lookups — the engine prefix is routing, not a different model.
   const effectiveBase = baseModelId(effectiveModel);
@@ -444,6 +493,10 @@ export function ModelEffortSelect({
     ...(fastModeAvailable ? (["fast"] as const) : []),
     ...(ultrafastAvailable ? (["ultrafast"] as const) : []),
   ];
+  // A speed row with only Standard in it is not a choice; it appears once
+  // the model and account offer a faster tier.
+  const showSpeedRow =
+    hasSpeed && (speedOptions.length > 1 || effectiveSpeed !== "standard");
   const accountLabel = currentAccount
     ? providerAccountLabel(currentAccount)
     : "Auto";
@@ -520,11 +573,9 @@ export function ModelEffortSelect({
   const { primaryFirst, allPrimaryOptions, allOtherOptions } = (() => {
     const optionFor = (id: string): ModelMenuOption => {
       const info = modelById.get(id);
-      const shortLabel = shortModelLabel(id, models);
       return {
         value: id === defaultModel ? "" : id,
-        label: shortLabel,
-        standaloneLabel: shortLabel,
+        label: shortModelLabel(id, models),
         id,
         engine: info?.provider || (routedModelParts(id) ? "pi" : "claude"),
       };
@@ -535,7 +586,6 @@ export function ModelEffortSelect({
     const legacyOptionFor = (m: ModelOption): ModelMenuOption => ({
       value: m.id === defaultModel ? "" : m.id,
       label: m.label,
-      standaloneLabel: m.label,
       id: m.id,
       engine: m.provider,
     });
@@ -566,7 +616,8 @@ export function ModelEffortSelect({
   // Pi serves every configured model; it still meets
   // the odd unroutable legacy slug, which stays a disabled row below).
   const {
-    primaryOptions,
+    topOptions,
+    morePrimaryOptions,
     otherOptions,
     hiddenOnEngine,
     otherGroups,
@@ -599,8 +650,14 @@ export function ModelEffortSelect({
         options: otherOptions.filter((o) => o.engine === engine),
       }))
       .filter((g) => g.options.length > 0);
-    // Main-list sections by upstream provider (Anthropic / OpenAI / xAI / …) —
-    // a flat list stops scanning well once third-party providers join the
+    // The best five sit at the top level; the rest of the main list moves
+    // under "More models".
+    const { top: topOptions, more: morePrimaryOptions } = pickTopModels(
+      primaryOptions,
+      savedTopOrder,
+    );
+    // "More models" sections by upstream provider (Anthropic / OpenAI / xAI /
+    // …): a flat list stops scanning well once third-party providers join the
     // picker. Falls back to flat when everything is one provider.
     const providerOf = (id: string) =>
       routedModelParts(id)?.provider || "other";
@@ -609,7 +666,7 @@ export function ModelEffortSelect({
       label: string;
       options: ModelMenuOption[];
     }> = [];
-    for (const option of primaryOptions) {
+    for (const option of morePrimaryOptions) {
       const provider = providerOf(option.id);
       let group = providerGroups.find((g) => g.provider === provider);
       if (!group) {
@@ -634,7 +691,8 @@ export function ModelEffortSelect({
     });
     const groupedPrimary = primaryFirst && providerGroups.length > 1;
     return {
-      primaryOptions,
+      topOptions,
+      morePrimaryOptions,
       otherOptions,
       hiddenOnEngine,
       otherGroups,
@@ -647,25 +705,38 @@ export function ModelEffortSelect({
     option.value === model ||
     option.id === effectiveBase ||
     (option.value === "" && (model === "" || model === defaultModel));
-  // Dim hint on the legacy submenu trigger when the CURRENT model lives in
-  // there — otherwise the open menu would show no checked row at all.
+  // Name the current model on the "More models" trigger when it lives in
+  // there; otherwise the open menu would show no checked row at all.
+  const selectedMoreOption = topOptions.some(isSelected)
+    ? undefined
+    : morePrimaryOptions.find(isSelected) || otherOptions.find(isSelected);
   const selectedLegacyLabel =
-    primaryFirst && !primaryOptions.some(isSelected)
+    primaryFirst && !morePrimaryOptions.some(isSelected)
       ? otherOptions.find(isSelected)?.label
       : undefined;
-  const recentOptions = (() => {
-    const available = new Map(
-      [...primaryOptions, ...otherOptions].map((option) => [option.id, option]),
-    );
-    return recentModelIds
-      .map((id) => available.get(id))
-      .filter((option): option is ModelMenuOption => !!option)
-      .slice(0, 3);
-  })();
+  const hasMoreModels =
+    morePrimaryOptions.length > 0 || otherOptions.length > 0;
+  const topById = new Map(topOptions.map((option) => [option.id, option]));
+  const shownTopOptions = draftTopIds
+    ? draftTopIds.flatMap((id) => {
+        const option = topById.get(id);
+        return option ? [option] : [];
+      })
+    : topOptions;
+  const updateTopDraft = (ids: string[]) => {
+    draftTopIdsRef.current = ids;
+    setDraftTopIds(ids);
+  };
+  const dropTopModel = () => {
+    const ids = draftTopIdsRef.current;
+    draftTopIdsRef.current = null;
+    setDraftTopIds(null);
+    setDraggingTopId(null);
+    if (ids) setTopModelOrder(ids.map(idTail));
+  };
 
-  const renderModelOption = (option: ModelMenuOption, standalone = false) => {
+  const renderModelOption = (option: ModelMenuOption) => {
     const selected = isSelected(option);
-    const optionLabel = standalone ? option.standaloneLabel : option.label;
     const nextModelInfo = modelById.get(option.id);
     const nextEfforts = nextModelInfo?.efforts ?? [];
     const nextEffort = nextEfforts.includes(effort ?? "")
@@ -673,23 +744,6 @@ export function ModelEffortSelect({
       : nextEfforts.includes("high")
         ? "high"
         : nextEfforts[0];
-    const recentSettings = standalone
-      ? [
-          onSpeedChange &&
-          effectiveSpeed !== "standard" &&
-          nextModelInfo?.fastModeSupported === true
-            ? SPEED_LABELS[
-                effectiveSpeed === "ultrafast" &&
-                nextModelInfo.ultrafastSupported === true
-                  ? "ultrafast"
-                  : "fast"
-              ]
-            : undefined,
-          onEffortChange
-            ? EFFORTS.find((e) => e.id === nextEffort)?.label
-            : undefined,
-        ].filter((label): label is string => !!label)
-      : [];
     // Engine stays sticky across model changes: the new id is recomposed onto
     // the engine the session is already on. An entry that can't route there
     // (wrong vendor for a direct-SDK engine, a legacy native id) is offered
@@ -701,7 +755,6 @@ export function ModelEffortSelect({
       <Menu.Item
         onClick={() => {
           onModelChange(routed ?? option.value);
-          pushRecentModel(option.id);
           if (
             onEffortChange &&
             !nextEfforts.includes(effort ?? "") &&
@@ -728,7 +781,7 @@ export function ModelEffortSelect({
             ? modelTitle
             : offEngine
               ? "Not available in this session"
-              : undefined
+              : (reuploadHint ?? undefined)
         }
         className={cn(
           PICKER_ROW_GAP,
@@ -742,13 +795,8 @@ export function ModelEffortSelect({
           <span className="flex size-4 shrink-0 items-center justify-center text-dim">
             <ModelMark id={option.id} provider={option.engine} />
           </span>
-          <span className="min-w-0 truncate">{optionLabel}</span>
+          <span className="min-w-0 truncate">{option.label}</span>
         </span>
-        {recentSettings.length > 0 && (
-          <span className="ml-auto shrink-0 text-supporting text-faint">
-            {recentSettings.join(" · ")}
-          </span>
-        )}
         <Menu.Check on={selected} className="text-dim" />
       </Menu.Item>
     );
@@ -864,210 +912,126 @@ export function ModelEffortSelect({
           menuRowTrigger && "min-w-[220px]",
         )}
       >
-        {showUsage && (
-          <>
-            <Menu.SubmenuRoot>
-              <Menu.SubmenuTrigger className="justify-between gap-3">
-                <span className="min-w-0 truncate">Conversation usage</span>
-                <span className="flex flex-none items-center gap-1 text-dim">
-                  <UsageCost usage={usage} />
-                  <IconChevronRight className="shrink-0" size={17} />
-                </span>
-              </Menu.SubmenuTrigger>
-              <Menu.Popup className="w-64 max-w-[min(360px,calc(100vw-1rem))]">
-                <UsageDetails usage={usage} className="p-1.5" />
-              </Menu.Popup>
-            </Menu.SubmenuRoot>
-            {/* The same readout, kept in view above the composer. */}
-            <Menu.CheckboxItem
-              checked={usageBarOn}
-              onCheckedChange={setUsageBarPref}
-              closeOnClick
-              className="justify-between gap-3 phone:min-h-11"
+        {/* The best five sit right here; the rest are one hop away. A row
+            drags straight away to put the five in the person's order. */}
+        <Reorder.Group
+          as="div"
+          axis="y"
+          values={shownTopOptions.map((option) => option.id)}
+          onReorder={updateTopDraft}
+        >
+          {shownTopOptions.map((option) => (
+            <Reorder.Item
+              as="div"
+              key={option.id}
+              value={option.id}
+              dragListener={shownTopOptions.length > 1}
+              onPointerDownCapture={() => {
+                justDragged.current = false;
+              }}
+              onDragStart={() => {
+                justDragged.current = true;
+                setDraggingTopId(option.id);
+                updateTopDraft(shownTopOptions.map((o) => o.id));
+              }}
+              onDragEnd={dropTopModel}
+              onClickCapture={(event: React.MouseEvent) => {
+                if (!justDragged.current) return;
+                justDragged.current = false;
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              whileDrag={{ scale: 1.02, zIndex: 1 }}
+              className={cn(
+                "relative rounded-md",
+                draggingTopId === option.id &&
+                  "bg-popup [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm",
+              )}
             >
-              <span className="min-w-0 truncate">Show usage bar</span>
-              <Menu.Check on={usageBarOn} className="text-dim" />
-            </Menu.CheckboxItem>
-            <Menu.Separator className="my-1" />
-          </>
-        )}
-        {weeklyRows.length > 0 && (
-          <>
-            <Menu.SubmenuRoot>
-              <Menu.SubmenuTrigger className="justify-between gap-3">
-                <span className="min-w-0 truncate">Weekly remaining</span>
-                <span className="flex flex-none items-center gap-1.5 text-dim">
-                  {/* A model with its own weekly bucket (Fable) is capped by
-                      that bucket, not the plan's 7-day window; name it so a
-                      full general week is not read as Fable headroom. */}
-                  {weeklyReadout?.scope && <Badge>{weeklyReadout.scope}</Badge>}
-                  {weeklyReadout && (
-                    <span
-                      className={cn(
-                        "tabular-nums",
-                        REMAINING_TONE[weeklyReadout.tone],
-                      )}
-                    >
-                      {weeklyReadout.remaining}%
-                    </span>
-                  )}
-                  <IconChevronRight className="shrink-0" size={17} />
-                </span>
-              </Menu.SubmenuTrigger>
-              <Menu.Popup className="w-80 max-w-[min(360px,calc(100vw-1rem))]">
-                {weeklyRows.map((row, i) => {
-                  const pinnable =
-                    hasAccount && row.provider === accountProvider;
-                  const selected = pinnable && row.accountId === accountId;
-                  return (
-                    <Menu.Item
-                      key={`${row.accountId}-${i}`}
-                      onClick={() => onAccountChange!(row.accountId)}
-                      disabled={!pinnable}
-                      title={
-                        pinnable
-                          ? `Use ${row.label} for this session`
-                          : hasAccount
-                            ? "Not for this model"
-                            : undefined
-                      }
-                      className={cn(
-                        PICKER_ROW_GAP,
-                        "justify-between gap-3",
-                        selected && "bg-hover",
-                        !pinnable && "opacity-70",
-                      )}
-                    >
-                      <span className="flex min-w-0 flex-1 items-center gap-2">
-                        <span className="flex size-4 shrink-0 items-center justify-center text-dim">
-                          <BrandMark
-                            name={ACCOUNT_BRAND[row.provider]}
-                            size={15}
-                          />
-                        </span>
-                        <span className="min-w-0 truncate">{row.name}</span>
-                        {row.scope && <Badge>{row.scope}</Badge>}
-                      </span>
-                      <span className="flex flex-none items-center gap-2 tabular-nums">
-                        {row.owner ? (
-                          <UserAvatar
-                            name={row.owner}
-                            size={14}
-                            edge={false}
-                            title="Yours"
-                          />
-                        ) : (
-                          <IconPeople
-                            size={14}
-                            className="text-faint"
-                            aria-label="Shared"
-                          />
-                        )}
-                        <span className="text-faint" title={row.resetTitle}>
-                          {row.day}
-                        </span>
-                        <span
-                          className={cn(
-                            "min-w-9 text-right",
-                            REMAINING_TONE[row.tone],
-                          )}
-                        >
-                          {row.remaining}%
-                        </span>
-                      </span>
-                      <Menu.Check on={selected} className="text-dim" />
-                    </Menu.Item>
-                  );
-                })}
-                {hasAccount && weeklyRowsForModel.length > 0 && (
-                  <MenuHint>Choose one to use it for this session</MenuHint>
+              {renderModelOption(option)}
+            </Reorder.Item>
+          ))}
+        </Reorder.Group>
+        {hasMoreModels && (
+          <Menu.SubmenuRoot>
+            <Menu.SubmenuTrigger className="justify-between gap-3">
+              <span className="flex min-w-0 flex-1 items-center gap-2">
+                <span className="size-4 shrink-0" />
+                <span className="min-w-0 truncate">More models</span>
+              </span>
+              <span className="flex min-w-0 flex-none items-center gap-1 text-dim">
+                {selectedMoreOption && (
+                  <span className="truncate">{selectedMoreOption.label}</span>
                 )}
-                <Menu.Separator className="my-1" />
-                <Menu.Item
-                  className="justify-between gap-3"
-                  onClick={() => navigation.openSettings("providers")}
-                >
-                  <span className="min-w-0 truncate">Manage accounts</span>
-                  <IconChevronRight className="shrink-0 text-dim" size={17} />
-                </Menu.Item>
-              </Menu.Popup>
-            </Menu.SubmenuRoot>
-            <Menu.Separator className="my-1" />
-          </>
-        )}
-        {recentOptions.length > 0 && (
-          <>
-            <Menu.Group>
-              <Menu.GroupLabel>Recent models</Menu.GroupLabel>
-              {recentOptions.map((option) => renderModelOption(option, true))}
-            </Menu.Group>
-            <Menu.Separator className="my-1" />
-          </>
-        )}
-        <Menu.SubmenuRoot>
-          <Menu.SubmenuTrigger className="justify-between gap-3">
-            <span className="min-w-0 truncate">Model</span>
-            <span className="flex min-w-0 flex-none items-center gap-1 text-dim">
-              <span className="truncate">{modelLabel}</span>
-              <IconChevronRight className="shrink-0" size={17} />
-            </span>
-          </Menu.SubmenuTrigger>
-          <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
-            {reuploadHint && <MenuHint>{reuploadHint}</MenuHint>}
-            {groupedPrimary
-              ? providerGroups.map((g, i) => (
-                  <React.Fragment key={g.provider}>
-                    {i > 0 && <Menu.Separator className="my-1" />}
+                <IconChevronRight className="shrink-0" size={17} />
+              </span>
+            </Menu.SubmenuTrigger>
+            <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
+              {reuploadHint && <MenuHint>{reuploadHint}</MenuHint>}
+              {groupedPrimary
+                ? providerGroups.map((g, i) => (
+                    <React.Fragment key={g.provider}>
+                      {i > 0 && <Menu.Separator className="my-1" />}
+                      <Menu.Group>
+                        <Menu.GroupLabel>{g.label}</Menu.GroupLabel>
+                        {g.options.map((option) => renderModelOption(option))}
+                      </Menu.Group>
+                    </React.Fragment>
+                  ))
+                : morePrimaryOptions.map((option) => renderModelOption(option))}
+              {primaryFirst && otherOptions.length > 0 && (
+                <>
+                  {morePrimaryOptions.length > 0 && (
+                    <Menu.Separator className="my-1" />
+                  )}
+                  <Menu.SubmenuRoot>
+                    <Menu.SubmenuTrigger className="justify-between gap-3 text-dim">
+                      <span className="min-w-0 truncate">
+                        {LEGACY_GROUP_LABEL}
+                      </span>
+                      <span className="flex flex-none items-center gap-1 text-dim">
+                        {selectedLegacyLabel && (
+                          <span className="text-faint">
+                            {selectedLegacyLabel}
+                          </span>
+                        )}
+                        <IconChevronRight className="shrink-0" size={17} />
+                      </span>
+                    </Menu.SubmenuTrigger>
+                    <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
+                      {otherOptions.map((option) => renderModelOption(option))}
+                    </Menu.Popup>
+                  </Menu.SubmenuRoot>
+                </>
+              )}
+              {/* Without engine models the registry's own entries are the
+                  rest of the list, grouped by engine. */}
+              {!primaryFirst &&
+                otherGroups.map((g, i) => (
+                  <React.Fragment key={g.engine}>
+                    {(i > 0 || morePrimaryOptions.length > 0) && (
+                      <Menu.Separator className="my-1" />
+                    )}
                     <Menu.Group>
-                      <Menu.GroupLabel>{g.label}</Menu.GroupLabel>
+                      {otherGroups.length > 1 && (
+                        <Menu.GroupLabel>{g.label}</Menu.GroupLabel>
+                      )}
                       {g.options.map((option) => renderModelOption(option))}
                     </Menu.Group>
                   </React.Fragment>
-                ))
-              : primaryOptions.map((option) => renderModelOption(option))}
-            {otherOptions.length > 0 && (
-              <Menu.SubmenuRoot>
-                <Menu.SubmenuTrigger
-                  className={cn(
-                    "justify-between gap-3",
-                    primaryFirst && "text-dim",
-                  )}
-                >
-                  <span className="min-w-0 truncate">
-                    {primaryFirst ? LEGACY_GROUP_LABEL : "Other models"}
-                  </span>
-                  <span className="flex flex-none items-center gap-1 text-dim">
-                    {selectedLegacyLabel && (
-                      <span className="text-faint">{selectedLegacyLabel}</span>
-                    )}
-                    <IconChevronRight className="shrink-0" size={17} />
-                  </span>
-                </Menu.SubmenuTrigger>
-                <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
-                  {!primaryFirst && otherGroups.length > 1
-                    ? otherGroups.map((g, i) => (
-                        <React.Fragment key={g.engine}>
-                          {i > 0 && <Menu.Separator className="my-1" />}
-                          <Menu.Group>
-                            <Menu.GroupLabel>{g.label}</Menu.GroupLabel>
-                            {g.options.map((option) =>
-                              renderModelOption(option),
-                            )}
-                          </Menu.Group>
-                        </React.Fragment>
-                      ))
-                    : otherOptions.map((option) => renderModelOption(option))}
-                </Menu.Popup>
-              </Menu.SubmenuRoot>
-            )}
-            {hiddenOnEngine > 0 && (
-              <MenuHint>
-                {hiddenOnEngine} {hiddenOnEngine === 1 ? "model" : "models"} not
-                available here
-              </MenuHint>
-            )}
-          </Menu.Popup>
-        </Menu.SubmenuRoot>
+                ))}
+              {hiddenOnEngine > 0 && (
+                <MenuHint>
+                  {hiddenOnEngine} {hiddenOnEngine === 1 ? "model" : "models"}{" "}
+                  not available here
+                </MenuHint>
+              )}
+            </Menu.Popup>
+          </Menu.SubmenuRoot>
+        )}
+        {(topOptions.length > 0 || hasMoreModels) && (
+          <Menu.Separator className="my-1" />
+        )}
         {hasEffort && (
           <Menu.SubmenuRoot>
             <Menu.SubmenuTrigger className="justify-between gap-3">
@@ -1099,7 +1063,7 @@ export function ModelEffortSelect({
             </Menu.Popup>
           </Menu.SubmenuRoot>
         )}
-        {hasSpeed && (
+        {showSpeedRow && (
           <Menu.SubmenuRoot>
             <Menu.SubmenuTrigger className="justify-between gap-3">
               <span className="min-w-0 truncate">Speed</span>
@@ -1140,90 +1104,239 @@ export function ModelEffortSelect({
             </Menu.Popup>
           </Menu.SubmenuRoot>
         )}
-        {onAutoFallbackChange && (
-          <Menu.CheckboxItem
-            checked={autoFallback}
-            onCheckedChange={onAutoFallbackChange}
-            closeOnClick={false}
-            className="justify-between gap-3 phone:min-h-11"
-          >
-            <span className="flex min-w-0 flex-col">
-              <span>Auto-fallback</span>
-              <span className="text-supporting text-faint">
-                Switch models when quota runs out
-              </span>
-            </span>
-            <Menu.Check on={autoFallback} className="text-dim" />
-          </Menu.CheckboxItem>
-        )}
-        {hasAccount && (
-          <Menu.SubmenuRoot>
-            <Menu.SubmenuTrigger className="justify-between gap-3">
-              <span className="min-w-0 truncate">Account</span>
-              <span className="flex flex-none items-center gap-1 text-dim">
-                {accountLabel}
-                <IconChevronRight className="shrink-0 text-dim" size={17} />
-              </span>
-            </Menu.SubmenuTrigger>
-            <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
-              <Menu.Item
-                onClick={() => onAccountChange!("")}
-                className={cn(
-                  PICKER_ROW_GAP,
-                  "justify-between gap-3",
-                  !accountId && "bg-hover",
-                )}
+        {(hasEffort || showSpeedRow) && <Menu.Separator className="my-1" />}
+        {/* Everything set once and left alone: account, fallback, usage and
+            the defaults. Kept off the top level so the menu stays short. */}
+        <Menu.SubmenuRoot>
+          <Menu.SubmenuTrigger className="justify-between gap-3">
+            <span className="min-w-0 truncate">Options</span>
+            <IconChevronRight className="shrink-0 text-dim" size={17} />
+          </Menu.SubmenuTrigger>
+          <Menu.Popup className="min-w-[220px] max-w-[min(360px,calc(100vw-1rem))]">
+            {onAutoFallbackChange && (
+              <Menu.CheckboxItem
+                checked={autoFallback}
+                onCheckedChange={onAutoFallbackChange}
+                closeOnClick={false}
+                className="justify-between gap-3 phone:min-h-11"
               >
-                <span className="min-w-0 truncate">Auto</span>
-                <Menu.Check on={!accountId} className="text-dim" />
-              </Menu.Item>
-              {providerAccounts.map((a) => {
-                const selected = a.id === accountId;
-                return (
+                <span className="flex min-w-0 flex-col">
+                  <span>Auto-fallback</span>
+                  <span className="text-supporting text-faint">
+                    Switch models when quota runs out
+                  </span>
+                </span>
+                <Menu.Check on={autoFallback} className="text-dim" />
+              </Menu.CheckboxItem>
+            )}
+            {hasAccount && (
+              <Menu.SubmenuRoot>
+                <Menu.SubmenuTrigger className="justify-between gap-3">
+                  <span className="min-w-0 truncate">Account</span>
+                  <span className="flex flex-none items-center gap-1 text-dim">
+                    {accountLabel}
+                    <IconChevronRight className="shrink-0 text-dim" size={17} />
+                  </span>
+                </Menu.SubmenuTrigger>
+                <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
                   <Menu.Item
-                    key={a.id}
-                    onClick={() => onAccountChange!(a.id)}
+                    onClick={() => onAccountChange!("")}
                     className={cn(
                       PICKER_ROW_GAP,
                       "justify-between gap-3",
-                      selected && "bg-hover",
+                      !accountId && "bg-hover",
                     )}
                   >
-                    <span className="min-w-0 truncate">
-                      {providerAccountLabel(a)}
-                      {a.owner ? ` · ${accountOwnerLabel(a.owner)}` : ""}
-                      {a.usable ? "" : " · exhausted"}
-                    </span>
-                    <Menu.Check on={selected} className="text-dim" />
+                    <span className="min-w-0 truncate">Auto</span>
+                    <Menu.Check on={!accountId} className="text-dim" />
                   </Menu.Item>
-                );
-              })}
-            </Menu.Popup>
-          </Menu.SubmenuRoot>
-        )}
-        <Menu.Separator className="my-1" />
-        {onSetAsDefault && (
-          <Menu.Item
-            onClick={() => onSetAsDefault(effectiveModel, defaultEffortToSave)}
-            disabled={isPreferredDefault}
-            title={`Use ${modelLabel}${defaultEffortToSave && effortLabel ? ` at ${effortLabel.toLowerCase()} effort` : ""} for new sessions`}
-            className={cn(
-              "justify-between gap-3",
-              isPreferredDefault && "opacity-55",
+                  {providerAccounts.map((a) => {
+                    const selected = a.id === accountId;
+                    return (
+                      <Menu.Item
+                        key={a.id}
+                        onClick={() => onAccountChange!(a.id)}
+                        className={cn(
+                          PICKER_ROW_GAP,
+                          "justify-between gap-3",
+                          selected && "bg-hover",
+                        )}
+                      >
+                        <span className="min-w-0 truncate">
+                          {providerAccountLabel(a)}
+                          {a.owner ? ` · ${accountOwnerLabel(a.owner)}` : ""}
+                          {a.usable ? "" : " · exhausted"}
+                        </span>
+                        <Menu.Check on={selected} className="text-dim" />
+                      </Menu.Item>
+                    );
+                  })}
+                </Menu.Popup>
+              </Menu.SubmenuRoot>
             )}
-          >
-            <span className="min-w-0 truncate">Set as default</span>
-            <Menu.Check on={isPreferredDefault} className="text-dim" />
-          </Menu.Item>
-        )}
-        <Menu.Item
-          onClick={resetToDefault}
-          disabled={atDefault}
-          className={cn("justify-between gap-3", atDefault && "opacity-55")}
-        >
-          <span className="min-w-0 truncate">Reset to default</span>
-          <IconUndo className="shrink-0 text-dim" size={17} />
-        </Menu.Item>
+            <Menu.Separator className="my-1" />
+            {showUsage && (
+              <>
+                <Menu.SubmenuRoot>
+                  <Menu.SubmenuTrigger className="justify-between gap-3">
+                    <span className="min-w-0 truncate">Conversation usage</span>
+                    <span className="flex flex-none items-center gap-1 text-dim">
+                      <UsageCost usage={usage} />
+                      <IconChevronRight className="shrink-0" size={17} />
+                    </span>
+                  </Menu.SubmenuTrigger>
+                  <Menu.Popup className="w-64 max-w-[min(360px,calc(100vw-1rem))]">
+                    <UsageDetails usage={usage} className="p-1.5" />
+                  </Menu.Popup>
+                </Menu.SubmenuRoot>
+                {/* The same readout, kept in view above the composer. */}
+                <Menu.CheckboxItem
+                  checked={usageBarOn}
+                  onCheckedChange={setUsageBarPref}
+                  closeOnClick
+                  className="justify-between gap-3 phone:min-h-11"
+                >
+                  <span className="min-w-0 truncate">Show usage bar</span>
+                  <Menu.Check on={usageBarOn} className="text-dim" />
+                </Menu.CheckboxItem>
+                <Menu.Separator className="my-1" />
+              </>
+            )}
+            {weeklyRows.length > 0 && (
+              <>
+                <Menu.SubmenuRoot>
+                  <Menu.SubmenuTrigger className="justify-between gap-3">
+                    <span className="min-w-0 truncate">Weekly remaining</span>
+                    <span className="flex flex-none items-center gap-1.5 text-dim">
+                      {/* A model with its own weekly bucket (Fable) is capped by
+                          that bucket, not the plan's 7-day window; name it so a
+                          full general week is not read as Fable headroom. */}
+                      {weeklyReadout?.scope && (
+                        <Badge>{weeklyReadout.scope}</Badge>
+                      )}
+                      {weeklyReadout && (
+                        <span
+                          className={cn(
+                            "tabular-nums",
+                            REMAINING_TONE[weeklyReadout.tone],
+                          )}
+                        >
+                          {weeklyReadout.remaining}%
+                        </span>
+                      )}
+                      <IconChevronRight className="shrink-0" size={17} />
+                    </span>
+                  </Menu.SubmenuTrigger>
+                  <Menu.Popup className="w-80 max-w-[min(360px,calc(100vw-1rem))]">
+                    {weeklyRows.map((row, i) => {
+                      const pinnable =
+                        hasAccount && row.provider === accountProvider;
+                      const selected = pinnable && row.accountId === accountId;
+                      return (
+                        <Menu.Item
+                          key={`${row.accountId}-${i}`}
+                          onClick={() => onAccountChange!(row.accountId)}
+                          disabled={!pinnable}
+                          title={
+                            pinnable
+                              ? `Use ${row.label} for this session`
+                              : hasAccount
+                                ? "Not for this model"
+                                : undefined
+                          }
+                          className={cn(
+                            PICKER_ROW_GAP,
+                            "justify-between gap-3",
+                            selected && "bg-hover",
+                            !pinnable && "opacity-70",
+                          )}
+                        >
+                          <span className="flex min-w-0 flex-1 items-center gap-2">
+                            <span className="flex size-4 shrink-0 items-center justify-center text-dim">
+                              <BrandMark
+                                name={ACCOUNT_BRAND[row.provider]}
+                                size={15}
+                              />
+                            </span>
+                            <span className="min-w-0 truncate">{row.name}</span>
+                            {row.scope && <Badge>{row.scope}</Badge>}
+                          </span>
+                          <span className="flex flex-none items-center gap-2 tabular-nums">
+                            {row.owner ? (
+                              <UserAvatar
+                                name={row.owner}
+                                size={14}
+                                edge={false}
+                                title="Yours"
+                              />
+                            ) : (
+                              <IconPeople
+                                size={14}
+                                className="text-faint"
+                                aria-label="Shared"
+                              />
+                            )}
+                            <span className="text-faint" title={row.resetTitle}>
+                              {row.day}
+                            </span>
+                            <span
+                              className={cn(
+                                "min-w-9 text-right",
+                                REMAINING_TONE[row.tone],
+                              )}
+                            >
+                              {row.remaining}%
+                            </span>
+                          </span>
+                          <Menu.Check on={selected} className="text-dim" />
+                        </Menu.Item>
+                      );
+                    })}
+                    {hasAccount && weeklyRowsForModel.length > 0 && (
+                      <MenuHint>Choose one to use it for this session</MenuHint>
+                    )}
+                    <Menu.Separator className="my-1" />
+                    <Menu.Item
+                      className="justify-between gap-3"
+                      onClick={() => navigation.openSettings("providers")}
+                    >
+                      <span className="min-w-0 truncate">Manage accounts</span>
+                      <IconChevronRight
+                        className="shrink-0 text-dim"
+                        size={17}
+                      />
+                    </Menu.Item>
+                  </Menu.Popup>
+                </Menu.SubmenuRoot>
+                <Menu.Separator className="my-1" />
+              </>
+            )}
+            {onSetAsDefault && (
+              <Menu.Item
+                onClick={() =>
+                  onSetAsDefault(effectiveModel, defaultEffortToSave)
+                }
+                disabled={isPreferredDefault}
+                title={`Use ${modelLabel}${defaultEffortToSave && effortLabel ? ` at ${effortLabel.toLowerCase()} effort` : ""} for new sessions`}
+                className={cn(
+                  "justify-between gap-3",
+                  isPreferredDefault && "opacity-55",
+                )}
+              >
+                <span className="min-w-0 truncate">Set as default</span>
+                <Menu.Check on={isPreferredDefault} className="text-dim" />
+              </Menu.Item>
+            )}
+            <Menu.Item
+              onClick={resetToDefault}
+              disabled={atDefault}
+              className={cn("justify-between gap-3", atDefault && "opacity-55")}
+            >
+              <span className="min-w-0 truncate">Reset to default</span>
+              <IconUndo className="shrink-0 text-dim" size={17} />
+            </Menu.Item>
+          </Menu.Popup>
+        </Menu.SubmenuRoot>
       </Menu.Popup>
     </Menu.Root>
   );

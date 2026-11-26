@@ -141,9 +141,7 @@ const TAG = createHash("sha256")
   )
   .digest("hex")
   .slice(0, 8);
-const TREE = `/tmp/os1-capture-${TAG}`;
 const DEVICE_NAME = `os1cap-${TAG}`;
-const REMOTE_SHOT = `${TREE}/shot.png`;
 
 const SERVER =
   flag("server") ||
@@ -229,7 +227,10 @@ step(`preflight on ${NODE} (${PLATFORM})`);
 const preflight = await node(
   `
   echo "xcode=$(xcodebuild -version 2>/dev/null | head -1 || echo none)"
+  echo "home=$HOME"
   echo "freeGB=$(df -g /System/Volumes/Data | tail -1 | awk '{print $4}')"
+  mkdir -p "$HOME/os-work"
+  echo "treeFreeGB=$(df -g "$HOME/os-work/" | tail -1 | awk '{print $4}')"
   echo "load1=$(sysctl -n vm.loadavg | awk '{print $2}')"
   echo "cpus=$(sysctl -n hw.ncpu)"
   echo "xcodegen=$(command -v xcodegen >/dev/null && echo yes || echo no)"
@@ -248,7 +249,15 @@ if (facts.xcodegen !== "yes")
   throw new Error(
     `${NODE} has no xcodegen on PATH — the Xcode project is generated`,
   );
-const freeGB = Number(facts.freeGB);
+const systemFreeGB = Number(facts.freeGB);
+const treeFreeGB = Number(facts.treeFreeGB);
+const freeGB = Math.min(systemFreeGB, treeFreeGB);
+
+// Build trees live under ~/os-work, not /tmp: /tmp is on the system disk, which
+// 3 GB trees from parallel sessions fill, and ~/os-work can point at a larger
+// volume.
+const TREE = `${facts.home}/os-work/os1-capture-${TAG}`;
+const REMOTE_SHOT = `${TREE}/shot.png`;
 step(
   `Xcode ${(facts.xcode || "").replace("Xcode ", "")} · ${freeGB}GB free · ` +
     `load ${facts.load1} on ${facts.cpus} cores`,
@@ -258,11 +267,17 @@ step(
 // on device" errors, and CoreSimulator wedges machine-wide: every simctl verb
 // hangs for ever with no output while `simctl io screenshot` keeps working, so
 // it looks like the app rather than the box.
-if (Number.isFinite(freeGB) && freeGB < 8)
+const lowSpace = [
+  systemFreeGB < 8 &&
+    `the system disk has ${systemFreeGB}GB free (delete your own leftover ` +
+      `/private/tmp/os1-* trees and \`xcrun simctl delete\` your own simulators)`,
+  treeFreeGB < 8 &&
+    `~/os-work has ${treeFreeGB}GB free (delete your own ~/os-work/os1-* trees)`,
+].filter(Boolean);
+if (lowSpace.length > 0)
   throw new Error(
-    `${NODE} has only ${freeGB}GB free. Below ~8GB builds fail mid-compile and ` +
-      `CoreSimulator wedges machine-wide. Free space first: delete your own ` +
-      `/tmp/os1-* trees and \`xcrun simctl delete\` your own simulators.`,
+    `${NODE} is low on space: ${lowSpace.join("; ")}. Below ~8GB builds fail ` +
+      `mid-compile and CoreSimulator wedges machine-wide.`,
   );
 
 // A booted simulator runs a full iOS userspace, so a shared box is BUSY by
@@ -517,7 +532,7 @@ SWIFT`,
       # like an iOS one.
       exe=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")
       pkill -f "$app/Contents/MacOS/" 2>/dev/null || true
-      ${launchEnv("")} nohup "$app/Contents/MacOS/$exe" >/tmp/os1-capture-${TAG}.log 2>&1 </dev/null &
+      ${launchEnv("")} nohup "$app/Contents/MacOS/$exe" >${TREE}/app.log 2>&1 </dev/null &
       sleep ${Math.ceil(WAIT_MS / 1000)}
       # Park the window at a fixed rect: sibling sessions' windows steal the
       # foreground, so raise ours in the SAME breath as the capture.

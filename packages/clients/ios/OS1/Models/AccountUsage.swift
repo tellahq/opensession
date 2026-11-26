@@ -204,7 +204,11 @@ enum AccountUsageReading {
     /// wall-clock time it happens at — an account reports three or four
     /// windows, and four absolute timestamps in a column is unreadable.
     static func formatReset(_ resetsAt: String?, now: Date = Date()) -> String? {
-        guard let resetsAt, let date = parse(resetsAt) else { return nil }
+        formatReset(date: resetsAt.flatMap(parse), now: now)
+    }
+
+    static func formatReset(date: Date?, now: Date = Date()) -> String? {
+        guard let date else { return nil }
         let minutes = Int((date.timeIntervalSince(now) / 60).rounded())
         if minutes <= 0 { return "resets now" }
         if minutes < 60 { return "resets in \(minutes)m" }
@@ -494,5 +498,102 @@ enum WeeklyRemaining {
             ?? best(personal(candidates))
             ?? best(pool(candidates))
             ?? lowest(providerRows)
+    }
+}
+
+// MARK: - Session limits
+
+/// One limit as the usage bar reads it: how much is used, and when it frees.
+struct SessionLimit: Equatable, Sendable {
+    /// Whole percent used, 0-100.
+    var used: Int
+    var resetsAt: Date?
+    /// Model the cap is scoped to ("Fable"), or nil for the whole account.
+    var scope: String?
+}
+
+/// The account a session's next turn will most likely run on, and the two
+/// limits that can stop it there. Mirrors `sessionLimits` in the web's
+/// `lib/account-limits.ts`, so the strip above the composer reads the same
+/// account and the same numbers on every client.
+struct SessionLimits: Equatable, Sendable {
+    var account: PooledAccount
+    /// True when routing picks the account; false for a pin.
+    var auto: Bool
+    /// The short rolling window (5 hours), when the account reports one.
+    var short: SessionLimit?
+    /// The weekly budget that applies to the session's model.
+    var week: SessionLimit?
+
+    var accountName: String {
+        account.account.label ?? account.account.name ?? account.account.email ?? "Account"
+    }
+
+    /// A usable pin wins; on auto it is the account the model menu's weekly
+    /// readout picks, or else the first usable account the viewer may spend.
+    /// The client's best guess, not the runner's record: auto routing decides
+    /// at the start of each turn.
+    static func read(
+        accounts: [PooledAccount],
+        viewer: String,
+        kind: AccountKind?,
+        model: String,
+        accountId: String?,
+        now: Date = Date()
+    ) -> SessionLimits? {
+        guard let kind else { return nil }
+        let mine = accounts.filter {
+            $0.kind == kind && WeeklyRemaining.isAvailable($0.account, to: viewer)
+        }
+        let pinned = accountId.flatMap { id in
+            id.isEmpty ? nil : accounts.first { $0.account.id == id }
+        }
+        let rows = WeeklyRemaining.rows(mine, viewer: viewer, now: now)
+        let readout = pinned == nil
+            ? WeeklyRemaining.readout(
+                rows: rows, accounts: mine, viewer: viewer, kind: kind, model: model, accountId: nil
+            )
+            : nil
+        guard let account = pinned
+            ?? mine.first(where: { readout != nil && $0.account.id == readout?.accountId })
+            ?? mine.first(where: { $0.account.usable != false && $0.account.owner?.isEmpty == false })
+            ?? mine.first(where: { $0.account.usable != false })
+        else { return nil }
+
+        var short: SessionLimit?
+        for window in shortWindows(account.account.usage, kind: account.kind) {
+            guard let used = AccountUsageReading.liveUtilization(window, now: now) else { continue }
+            let percent = max(0, min(100, Int(used.rounded())))
+            if let current = short, current.used >= percent { continue }
+            short = SessionLimit(
+                used: percent,
+                resetsAt: window.resetsAt.flatMap(AccountUsageReading.parse)
+            )
+        }
+
+        let own = rows.filter { $0.accountId == account.account.id }
+        let week = WeeklyRemaining.lowest(WeeklyRemaining.rows(for: model, in: own)).map {
+            SessionLimit(used: 100 - $0.remaining, resetsAt: $0.resetsAt, scope: $0.scope)
+        }
+        return SessionLimits(account: account, auto: pinned == nil, short: short, week: week)
+    }
+
+    /// The windows shorter than a week: Claude's 5-hour window, and any
+    /// Codex window under seven days. SuperGrok reports none.
+    private static func shortWindows(_ usage: AccountUsage?, kind: AccountKind) -> [LimitWindow] {
+        guard let usage else { return [] }
+        switch kind {
+        case .claude:
+            guard let window = usage.fiveHour else { return [] }
+            return [LimitWindow(label: "5h", utilization: window.utilization, resetsAt: window.resetsAt)]
+        case .codex:
+            return (usage.buckets ?? []).flatMap { bucket in
+                [bucket.primary, bucket.secondary].compactMap { $0 }
+                    .filter { ($0.windowDurationMins ?? 0) < 7 * 24 * 60 }
+                    .map { LimitWindow(label: "", utilization: $0.utilization, resetsAt: $0.resetsAt) }
+            }
+        case .xai:
+            return []
+        }
     }
 }

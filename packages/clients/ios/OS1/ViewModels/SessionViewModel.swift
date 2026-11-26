@@ -310,6 +310,72 @@ final class SessionViewModel {
         rebuildDisplayItems()
     }
 
+    /// `OS1_SHOW_THINKING_FIXTURE`: a turn with a thinking step, added once
+    /// the transcript snapshot has landed. `finished` settles it with an
+    /// answer, `open` also opens the step, `live` keeps the run going with
+    /// the turn ending on the thought.
+    func showThinkingForScreenshot(_ variant: String) async {
+        holdsScreenshotFixture = true
+        for _ in 0..<100 where isLoadingConversation {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        try? await Task.sleep(for: .seconds(2))
+        let now = Date.now
+        let iso = ISO8601DateFormatter()
+        func at(_ offset: TimeInterval) -> String { iso.string(from: now.addingTimeInterval(offset)) }
+        func call(_ id: String, _ tool: String, _ input: [String: JSONValue], _ output: String, _ t: TimeInterval) -> [TranscriptEntry] {
+            [
+                TranscriptEntry(
+                    id: id, type: "tool_use", content: "Using \(tool)", timestamp: at(t),
+                    toolName: tool, toolInput: .object(input), toolUseId: id
+                ),
+                TranscriptEntry(
+                    id: "tr-\(id)", type: "tool_result", content: output, timestamp: at(t + 4),
+                    toolUseId: id
+                ),
+            ]
+        }
+        var entries = [TranscriptEntry(
+            id: "fixture-thinking-user", type: "user",
+            content: "Why does the upload retry test flake on CI?", timestamp: at(-96)
+        )]
+        entries += call(
+            "fixture-thinking-t1", "Bash", ["command": .string("bun test upload-retry")],
+            "1 fail: retry fires after 30s (timed out)", -90
+        )
+        entries.append(TranscriptEntry(
+            id: "fixture-thinking-r1", type: "assistant",
+            content: "**Tracing the retry timer**\n\nThe test advances the fake clock by 30 seconds, but the retry is scheduled behind the upload queue drain. On a slow runner the drain has not finished yet, so the timer is registered after the clock moved and never fires.",
+            timestamp: at(-80), isReasoning: true
+        ))
+        if variant != "live" {
+            entries += call(
+                "fixture-thinking-t2", "Read", ["file_path": .string("src/upload/retry.ts")],
+                "export function scheduleRetry() {}", -60
+            )
+            entries.append(TranscriptEntry(
+                id: "fixture-thinking-a1", type: "assistant",
+                content: "The retry timer is registered after the queue drains, so the test's clock jump can land first. Advancing the clock after `drain()` resolves fixes the flake.",
+                timestamp: at(-50)
+            ))
+        }
+        upsert(entries)
+        isLoadingConversation = false
+        rebuildDisplayItems()
+        if variant == "open" {
+            expansionState(id: "reasoning-fixture-thinking-r1").toggle()
+        }
+        guard variant == "live" else { return }
+        // Hold the run against the session's own status snapshots.
+        for _ in 0..<1200 {
+            if !isRunning || runStartedAt == nil {
+                runStartedAt = now.addingTimeInterval(-96)
+                isRunning = true
+            }
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+    }
+
     func showSteeredMessageForScreenshot() {
         holdsScreenshotFixture = true
         let id = "screenshot-steered-message"
@@ -401,6 +467,11 @@ final class SessionViewModel {
     private(set) var prLoadFailed = false
     private var prTask: Task<Void, Never>?
     private var prLoadGeneration = 0
+    /// Re-fetches a merged PR while its link waits on production. No event
+    /// fires when production deploys, so this is the only way the row flips.
+    private var productionPollTask: Task<Void, Never>?
+    /// The web's `MERGED_DEPLOY_POLL_MS` (src/frontend/lib/poll.ts).
+    static let productionPollInterval: Duration = .seconds(60)
     private let prLoader: @MainActor (String) async throws -> PrDetails?
     private let prReadyMarker: @MainActor (PrReadyTarget) async throws -> Void
     /// PRs with a Ready for review request on the wire. Keyed by target so a
@@ -904,6 +975,7 @@ final class SessionViewModel {
         deliveringPruneTask?.cancel()
         prLoadGeneration += 1
         prTask?.cancel()
+        cancelProductionPoll()
         notesTask?.cancel()
         socket?.disconnect()
         socket = nil
@@ -942,6 +1014,30 @@ final class SessionViewModel {
             guard !Task.isCancelled, generation == prLoadGeneration else { return }
             prLoadFailed = prDetails == nil
         }
+        scheduleProductionPoll()
+    }
+
+    /// Arm the next production check while the loaded PR awaits production
+    /// and the session is on screen. Every refresh re-arms it from scratch,
+    /// so a webhook or foreground refresh in between resets the interval, and
+    /// a failed fetch keeps polling off the details it already has.
+    private func scheduleProductionPoll() {
+        cancelProductionPoll()
+        guard !stopped, !isAway, prDetails?.staging?.awaitingProduction == true else { return }
+        let clock = clock
+        productionPollTask = Task { [weak self] in
+            do {
+                try await clock.sleep(for: Self.productionPollInterval)
+            } catch { return }
+            guard let self, !Task.isCancelled else { return }
+            self.productionPollTask = nil
+            self.loadPr()
+        }
+    }
+
+    private func cancelProductionPoll() {
+        productionPollTask?.cancel()
+        productionPollTask = nil
     }
 
     /// A global PR event belongs to this session when it names any branch the
@@ -1214,6 +1310,21 @@ final class SessionViewModel {
         await refreshPr()
     }
 
+    /// Turn on auto-merge: the host lands the PR once its rules pass.
+    func autoMergePr(method: String = "squash") async throws {
+        try await OS1API.mergePr(sessionId: session.id, method: method, mode: "auto")
+        await refreshPr()
+    }
+
+    /// Merge past branch protection with the person's own rights, refused if
+    /// the head moved past the commit they saw.
+    func forceMergePr(method: String = "squash", headSha: String?) async throws {
+        try await OS1API.mergePr(
+            sessionId: session.id, method: method, mode: "admin", headSha: headSha
+        )
+        await refreshPr()
+    }
+
     /// Close this session's PR without merging it.
     func closePr() async throws {
         try await OS1API.closePr(sessionId: session.id)
@@ -1337,6 +1448,8 @@ final class SessionViewModel {
         guard !stopped else { return }
         stopTyping()
         isAway = true
+        // `appDidBecomeActive` refetches, which re-arms the poll.
+        cancelProductionPoll()
         // Time away from the foreground never counts toward the reconnect
         // grace; `appDidBecomeActive` restarts it if the drop outlives the
         // background. An outage already on screen is folded back too, as the

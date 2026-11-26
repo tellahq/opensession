@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { PLAIN_NOTE_MAX_CHARS, splitNoteText } from "./notes";
+import {
+  noteTextWithoutMentions,
+  PLAIN_NOTE_MAX_CHARS,
+  splitNoteText,
+} from "./notes";
 
 /** Body text with the "(1/3)" marker stripped back off. */
 function body(part: string): string {
@@ -57,5 +61,24 @@ describe("splitNoteText", () => {
     const parts = splitNoteText("z".repeat(25_000));
     expect(parts.length).toBe(3);
     expect(parts.map(body).join("")).toBe("z".repeat(25_000));
+  });
+});
+
+describe("noteTextWithoutMentions", () => {
+  const own = new Set(["mu_agent"]);
+
+  it("drops this agent's mention and keeps other mentions readable", () => {
+    expect(
+      noteTextWithoutMentions(
+        "<@mu_agent> can you check this with <@u_sam>?",
+        own,
+      ),
+    ).toBe("can you check this with @u_sam?");
+  });
+
+  it("leaves indentation inside the note alone", () => {
+    expect(noteTextWithoutMentions("<@mu_agent> run:\n    bun test", own)).toBe(
+      "run:\n    bun test",
+    );
   });
 });

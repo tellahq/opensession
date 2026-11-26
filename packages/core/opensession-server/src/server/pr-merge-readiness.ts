@@ -74,6 +74,9 @@ export interface PrReadinessSource {
   reviewRequests: string[];
   /** Null when the rules endpoint was not readable with this token. */
   rules: PrBranchRules | null;
+  /** Unresolved review threads from trusted reviewers; null or absent when
+   * they could not be read. */
+  openReviewThreads?: number | null;
 }
 
 export type PrCheckOutcome = "passing" | "failing" | "pending" | "skipped";
@@ -131,6 +134,8 @@ export interface PrMergeVerdict {
     changesRequestedBy: string[];
     awaiting: string[];
     requiredApprovals: number;
+    /** Unresolved review threads from trusted reviewers; null when unread. */
+    openThreads: number | null;
   };
   rules: {
     /** False when the rulesets endpoint was not readable; the verdict then leans on mergeStateStatus. */
@@ -260,6 +265,7 @@ export function assessPrMergeReadiness(src: PrReadinessSource): PrMergeVerdict {
     changesRequestedBy,
     awaiting: src.reviewRequests,
     requiredApprovals: rules.requiredApprovals,
+    openThreads: src.openReviewThreads ?? null,
   };
 
   const blockers: string[] = [];
@@ -300,6 +306,12 @@ export function assessPrMergeReadiness(src: PrReadinessSource): PrMergeVerdict {
       blockers.push(
         `it needs ${plural(rules.requiredApprovals, "approving review")} and has ${approvedBy.length}`,
       );
+    // GitHub does not block a merge on open threads unless a ruleset asks
+    // it to, but a reviewer's unanswered finding still means not ready.
+    if (review.openThreads)
+      blockers.push(
+        `${plural(review.openThreads, "review thread is", "review threads are")} still unresolved`,
+      );
     const mss = src.mergeStateStatus.toUpperCase();
     if (mss === "BEHIND")
       blockers.push(`the branch is behind ${base} and needs updating`);
@@ -319,6 +331,8 @@ export function assessPrMergeReadiness(src: PrReadinessSource): PrMergeVerdict {
         );
     }
 
+    if (src.openReviewThreads === null)
+      warnings.push("review threads could not be read");
     if (!src.rules)
       warnings.push(
         "branch rules could not be read, so the verdict leans on GitHub's merge state",
@@ -438,6 +452,9 @@ export function formatPrMergeVerdict(v: PrMergeVerdict): string {
         : "") +
       (v.review.awaiting.length
         ? ` · awaiting ${v.review.awaiting.join(", ")}`
+        : "") +
+      (v.review.openThreads
+        ? ` · ${plural(v.review.openThreads, "unresolved thread")}`
         : ""),
   );
   lines.push(

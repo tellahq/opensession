@@ -93,9 +93,11 @@ configuration for the run.
   user, gets no AWS credentials (unless the instance opts untrusted runs in
   with `integrations.aws.untrustedRuns`), and mounts only
   `opensession-plain-discussion`
-  (the Approve/Deny-gated customer reply and Stripe execution) in place of the
-  interactive set. The run-rpc fallback builder serves that same set, so a
-  hosted or sandboxed turn cannot ask for more.
+  (the Approve/Deny-gated customer reply and Stripe execution, and a question
+  card) in place of the interactive set. The run-rpc fallback builder serves
+  that same set, so a hosted or sandboxed turn cannot ask for more. An
+  approved reply is sent as the Plain user id in the approval webhook's
+  `resolvedBy`, which the signed webhook supplies and the model cannot choose.
 - `mode` is per automation. Ask has guarded read/find/grep/ls/bash tools but
   no Write/Edit. For an unsandboxed ordinary repository it uses a stable,
   shared detached worktree pinned to `origin/<defaultBranch>`; only a
@@ -238,9 +240,9 @@ state one; the audit line (`keychain_broker_call`) records it with the
 session and the person driving it, and the implicit grant's
 `keychain_grant_minted` line is marked `scope: workspace`. Making the
 credential personal again revokes every implicit grant, which also ends a run
-using one, while grants its owner approved keep working. A login can never be
-a workspace credential: its password reaches the agent, so each release stays
-the owner's decision.
+using one, while grants its owner approved keep working. A login can be a
+workspace credential too (see Logins below), with the difference that its
+password does reach every session that uses it.
 
 Automation-owned sessions never get the full keychain server. A turn a person
 sends into one (resolved by `interactivePrompter`, never the automation's own
@@ -310,7 +312,9 @@ The old broker URL (`/api/keychain/broker/...`) answers every caller with
 
 A login is the one keychain secret an agent is given. It holds a sign-in
 page (`https://` only), a username and a password, for a test account a
-session signs in with in its own browser. A password has to be typed into a
+session signs in with in its own browser. A login for a machine itself (its
+Screen Sharing or SSH password) names `vnc://host[:port]` or
+`ssh://host[:port]` instead of a sign-in page. A password has to be typed into a
 page the agent drives, and the agent can read back any field it typed into,
 so no relay could keep it hidden. The design makes that disclosure explicit
 and bounded instead.
@@ -339,7 +343,19 @@ audited (`keychain_login_released`).
 Nothing stops the agent from reading the file, copying the password, or
 putting it in a transcript, commit or log despite its instructions. Treat
 every release as disclosing the password to that session, and register only
-dedicated test accounts as logins, never a person's own sign-in.
+dedicated test accounts or shared machine logins as logins, never a person's
+own sign-in.
+
+An owner may make a login a workspace credential, when registering it (the
+card says so) or later with Share in Settings → Account or
+`update_credential` with `scope: "workspace"`. Then any interactive session
+gets the password through `use_login` without an ask: the call must state a
+purpose, mints a single-use implicit `release` grant (`keychain_grant_minted`
+marked `scope: workspace`), and the `keychain_login_released` line records
+the session, the person driving it and the purpose. Sharing a login means
+every session in the workspace may read its password, so do it only for a
+credential the whole team is meant to hold. Making it personal again revokes
+unspent implicit releases. Automation turns still get no logins.
 
 **Limit: the keychain does not protect secrets from a local agent that goes
 looking for them.** The store is a 0600 file owned by the service user, and
@@ -406,8 +422,19 @@ outlives the call and bills compute, so automation runs and workflow scripts
 cannot start one. The machine receives the session's checkpoint and a
 read-only GitHub App token for the repository and its configured
 `readRepos`, answered by an in-shell credential helper and never written to
-disk: a job can fetch but not push. Nothing else from this host enters it.
-The log copied back into the session's scratch folder is untrusted output.
+disk: a job can fetch but not push. Host files enter it only when the
+agent names them in `files`, and only from the session's worktree
+(gitignored files), its scratch folder or the repository's main checkout,
+with symlinks resolved before that check; they travel over the provider's
+file API, never through the checkpoint, a command line or the job record,
+and are removed when the job ends. Workload identity is the ordinary `run`
+lease unless the job asks for `identity: "portal"`, which grants the
+audiences configured for the repository's `setup`, `preview` and `run`
+lifecycles (interactive trust profile only) until the job ends. Nothing else
+from this host enters it. The log, the `$OPENSESSION_JOB_OUTPUT` files and
+`gpu_exec` fetches copied back into the session's scratch folder are
+untrusted output: only regular files are written there, under paths checked
+to stay inside the job's folder.
 
 ## Script runs
 
@@ -465,6 +492,13 @@ as that user in the folders they are given. What it adds:
   IPC that the app accepts only from its own packaged pages.
 - **It ends with the app.** Turns run inside the server process and the app
   stops the server on quit.
+- **Downloaded tools are the publisher's.** When the Mac has no `claude` or
+  `codex`, the app downloads them from their publishers over HTTPS into its
+  state folder. A file is used only if it matches the checksum published
+  beside it and `codesign` confirms the publisher's Developer ID team. The
+  address of a Codex file comes from the release channel and is followed only
+  on that channel's own origin. Nothing is fetched from anywhere else, and the
+  files are never modified.
 
 Other macOS users on a shared computer can still reach a loopback port. Do not
 use "This Mac" on a computer shared with people you do not trust.

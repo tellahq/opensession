@@ -14,7 +14,7 @@ async function press(key: string) {
     key,
     sessionId: SESSION,
     user: "acme",
-    label: "Fixing…",
+    label: "Fixing",
     headline: "failing",
     content: "Fix the checks",
   });

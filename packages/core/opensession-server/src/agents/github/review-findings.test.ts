@@ -3,8 +3,10 @@ import { __setIdentitiesForTest } from "../../server/shared/user-mappings";
 import {
   formatReviewFindings,
   isTrustedFeedbackAuthor,
+  threadsFromComments,
   type ReviewCommentInfo,
   type ReviewInfo,
+  type ReviewThread,
 } from "./github-rest";
 import { buildHandoffMessage } from "./prompts";
 
@@ -23,6 +25,14 @@ function comment(
     outdated: false,
     ...overrides,
   };
+}
+
+/** One review thread whose root is `comment(overrides)`. */
+function thread(
+  overrides: Partial<ReviewCommentInfo> = {},
+  extra: Partial<ReviewThread> = {},
+): ReviewThread {
+  return { ...threadsFromComments([comment(overrides)])[0]!, ...extra };
 }
 
 function review(overrides: Partial<ReviewInfo> = {}): ReviewInfo {
@@ -63,9 +73,9 @@ describe("review findings author trust", () => {
   test("drops inline comments and reviews from untrusted authors", () => {
     const block = formatReviewFindings(
       [
-        comment({ id: 1 }),
-        comment({ id: 2, login: "mallory", body: INJECTION }),
-        comment({ id: 3, login: "reviewer-app[bot]", userType: "Bot" }),
+        thread({ id: 1 }),
+        thread({ id: 2, login: "mallory", body: INJECTION }),
+        thread({ id: 3, login: "reviewer-app[bot]", userType: "Bot" }),
       ],
       [review(), review({ login: "mallory", body: INJECTION })],
     );
@@ -79,10 +89,60 @@ describe("review findings author trust", () => {
   test("returns nothing when only outsiders commented", () => {
     expect(
       formatReviewFindings(
-        [comment({ login: "mallory", body: INJECTION })],
+        [thread({ login: "mallory", body: INJECTION })],
         [review({ login: "mallory", body: INJECTION })],
       ),
     ).toBe("");
+  });
+
+  test("lists only unresolved, current threads, once each, from the root", () => {
+    const open = thread({ id: 10, body: "Root finding." }, { id: "PRRT_open" });
+    open.comments.push({
+      id: 11,
+      login: "acme-os[bot]",
+      userType: "Bot",
+      body: "<!-- os-fixed --> Fixed in abc123",
+    });
+    const block = formatReviewFindings(
+      [
+        open,
+        thread(
+          { id: 20, body: "Already resolved." },
+          { id: "PRRT_done", isResolved: true },
+        ),
+        thread(
+          { id: 30, body: "Code moved." },
+          { id: "PRRT_old", isOutdated: true },
+        ),
+      ],
+      [],
+    );
+    expect(block).toBe(
+      "- [@alice · comment 10 · thread PRRT_open] src/a.ts:10 — Root finding.",
+    );
+  });
+
+  test("trusts an App root as GraphQL names it, without the [bot] suffix", () => {
+    const block = formatReviewFindings(
+      [
+        thread({ id: 4, login: "reviewer-app", userType: "Bot" }),
+        thread({ id: 5, login: "mallory", userType: "User", body: INJECTION }),
+      ],
+      [],
+    );
+    expect(block).toContain("[@reviewer-app · comment 4]");
+    expect(block).not.toContain(INJECTION);
+  });
+
+  test("the REST fallback drops replies", () => {
+    const threads = threadsFromComments([
+      comment({ id: 1, body: "Root finding." }),
+      comment({ id: 2, body: "Fixed in abc123", inReplyTo: 1 }),
+    ]);
+    expect(threads).toHaveLength(1);
+    const block = formatReviewFindings(threads, []);
+    expect(block).toContain("comment 1]");
+    expect(block).not.toContain("Fixed in");
   });
 
   test("fix prompts mark other comments as untrusted data", () => {

@@ -87,7 +87,7 @@ export const INTEGRATIONS: IntegrationSpec[] = [
       {
         name: "PLAIN_AGENT_API_KEY",
         description:
-          "Custom-agent machine user key for Ask Sidekick discussions; falls back to PLAIN_API_KEY",
+          "Agent machine user key for Ask Sidekick discussions; falls back to PLAIN_API_KEY",
       },
     ],
     links: [

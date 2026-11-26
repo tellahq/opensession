@@ -16,6 +16,7 @@ const fs = require("node:fs");
 const net = require("node:net");
 const os = require("node:os");
 const path = require("node:path");
+const { LocalTools, findOnPath } = require("./local-tools");
 
 // Away from 3850/3849/3860, which a command-line install uses.
 const PREFERRED_PORTS = { port: 47850, kernelPort: 47849, ingressPort: 47860 };
@@ -42,6 +43,8 @@ const FALLBACK_PATH = [
   "/sbin",
 ];
 const PATH_MARK = "__OS1_PATH__";
+// How often a download's progress reaches the waiting page.
+const STEP_EVERY_MS = 200;
 
 function validPort(value) {
   return Number.isInteger(value) && value > 0 && value < 65536;
@@ -155,6 +158,11 @@ class LocalServer extends EventEmitter {
     spawn = childProcess.spawn,
     execFile = childProcess.execFile,
     fetch = globalThis.fetch,
+    // For downloads from the internet. The app passes Electron's, which
+    // follows the Mac's proxy settings.
+    download = fetch,
+    tools = null,
+    findTool = findOnPath,
     resolvePath = loginShellPath,
     preferredPorts = PREFERRED_PORTS,
     readyTimeouts = { kernel: KERNEL_READY_MS, server: SERVER_READY_MS },
@@ -171,6 +179,7 @@ class LocalServer extends EventEmitter {
     this.execFile = execFile;
     this.fetch = fetch;
     this.resolvePath = resolvePath;
+    this.findTool = findTool;
     this.preferredPorts = preferredPorts;
     this.readyTimeouts = readyTimeouts;
     this.state = "stopped";
@@ -182,6 +191,16 @@ class LocalServer extends EventEmitter {
     this.stopping = null;
     this.restarts = [];
     this.tail = [];
+    this.step = null;
+    this.stepAt = 0;
+    this.tools =
+      tools ||
+      new LocalTools({
+        dir: path.join(stateDir, "tools"),
+        fetch: download,
+        execFile,
+        log: (line) => this.note("tools", line),
+      });
   }
 
   /** Whether this build of the app carries a server at all. */
@@ -249,6 +268,17 @@ class LocalServer extends EventEmitter {
   setState(state, error = null) {
     this.state = state;
     this.error = error;
+    this.step = null;
+    this.emit("state", this.status());
+  }
+
+  /** What a long start is busy with, for the waiting page. */
+  setStep(step) {
+    this.step = step;
+    const now = Date.now();
+    if (step && step.done < step.total && now - this.stepAt < STEP_EVERY_MS)
+      return;
+    this.stepAt = now;
     this.emit("state", this.status());
   }
 
@@ -256,6 +286,7 @@ class LocalServer extends EventEmitter {
     return {
       state: this.state,
       error: this.error,
+      step: this.step,
       url: this.ports ? `http://127.0.0.1:${this.ports.port}/` : null,
       logDir: this.logDir,
     };
@@ -270,8 +301,9 @@ class LocalServer extends EventEmitter {
       if (this.stopping) await this.stopping;
       this.setState("starting");
       try {
-        await this.boot();
+        const manage = await this.boot();
         this.setState("ready");
+        this.tools.watch({ manage });
         return await this.url();
       } catch (error) {
         await this.teardown();
@@ -300,6 +332,7 @@ class LocalServer extends EventEmitter {
     this.ports = null;
     const ports = await this.resolvePorts();
     const childEnv = await this.childEnvironment(ports);
+    const manage = await this.prepareTools(childEnv);
     await this.seedState(childEnv);
     fs.mkdirSync(this.logDir, { recursive: true, mode: 0o700 });
 
@@ -328,6 +361,40 @@ class LocalServer extends EventEmitter {
       this.readyTimeouts.server,
       (response) => response.ok,
     );
+    return manage;
+  }
+
+  /** Point the server at the model tools. A `claude` already on the Mac is
+   * used as it is. Otherwise the app keeps its own copy, and the first start
+   * waits for that download. Codex is fetched the first time something runs
+   * it (local-tools.js). Resolves with the tools the app keeps current. */
+  async prepareTools(childEnv) {
+    this.tools.prepare();
+    const own = this.findTool("claude", childEnv.PATH);
+    // Last, so a Codex the person installed is the one that runs.
+    childEnv.PATH = `${childEnv.PATH}:${this.tools.binDir}`;
+    if (own) return [];
+    childEnv.OPENSESSION_CLAUDE_BIN = this.tools.path("claude");
+    // The app replaces its copy itself. `claude update` would install a
+    // second one into the person's home instead.
+    childEnv.OPENSESSION_CLAUDE_AUTO_UPDATE = "0";
+    if (this.tools.installed("claude")) return ["claude"];
+    const label = this.tools.label("claude");
+    try {
+      this.setStep({ label, done: 0, total: 0 });
+      await this.tools.ensure("claude", {
+        onProgress: (done, total) => this.setStep({ label, done, total }),
+      });
+    } catch (error) {
+      if (this.state !== "starting")
+        throw new LocalServerError("Starting was cancelled.");
+      // The server is still worth having without it. The download is tried
+      // again while the app runs, and the path above works once it lands.
+      this.note("tools", `${label} could not be downloaded: ${error.message}`);
+    } finally {
+      this.setStep(null);
+    }
+    return ["claude"];
   }
 
   async childEnvironment(ports) {
@@ -460,6 +527,19 @@ class LocalServer extends EventEmitter {
         fs.renameSync(file, `${file}.1`);
     } catch {}
     return fs.createWriteStream(file, { flags: "a", mode: 0o600 });
+  }
+
+  /** A line of the app's own, kept with the server's output. */
+  note(name, line) {
+    this.remember(name, line);
+    try {
+      fs.mkdirSync(this.logDir, { recursive: true, mode: 0o700 });
+      fs.appendFileSync(
+        path.join(this.logDir, `${name}.log`),
+        `${new Date().toISOString()} ${line}\n`,
+        { mode: 0o600 },
+      );
+    } catch {}
   }
 
   remember(name, chunk) {
@@ -644,6 +724,7 @@ class LocalServer extends EventEmitter {
 
   /** Gateway first, so its runs drain while the session store still answers. */
   async teardown() {
+    this.tools.stop();
     const { gateway, kernel } = this;
     this.gateway = null;
     this.kernel = null;
@@ -659,6 +740,7 @@ class LocalServer extends EventEmitter {
     this.stopping = (async () => {
       // Leaving "starting" makes a start in flight give up at its next check.
       this.setState("stopping");
+      this.tools.stop();
       if (this.starting) await this.starting.catch(() => {});
       await this.teardown();
       this.setState("stopped");

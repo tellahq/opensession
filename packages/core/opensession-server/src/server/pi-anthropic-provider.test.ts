@@ -38,6 +38,7 @@ import {
   buildPiAnthropicProvider,
   IMAGE_ONLY_PROMPT,
   MAX_TURN_IMAGES,
+  lastSdkStepRequest,
   recordSdkStepUsage,
   sumSdkStepUsage,
   piImageBlockToAnthropic,
@@ -75,13 +76,24 @@ import {
   flatSdkTurnContent,
   flatSdkTurnText,
   flattenMessageText,
+  bridgeKey,
+  handleBridgeRequest,
   pickBridgeAccount,
   replayConversation,
+  sidelineLimitedBridgeAccount,
   type AnthropicMessage,
 } from "./anthropic-bridge";
 import { isPiUsageLimitShape } from "./pi-runner";
 import * as accounts from "./claude-accounts";
+import * as workloadIdentity from "./workload-identity";
+import {
+  CLAUDE_API_CAPACITY,
+  configuredInteractiveDefaultModel,
+  configuredModelProviders,
+} from "./model-catalog";
+import { bridgePinHeaders } from "./anthropic-bridge-pin";
 import { loadPiConfig } from "./pi-config";
+import { engineStatus } from "./engine-status";
 import { loadModelProviders } from "./model-providers";
 import * as sdk from "@anthropic-ai/claude-agent-sdk";
 import type { EffortLevel } from "@anthropic-ai/claude-agent-sdk";
@@ -953,6 +965,29 @@ describe("buildPiAnthropicModels", () => {
     });
   });
 
+  test("registers Mythos 5.1 and 5.2 with their Fable twins' limits and pricing", async () => {
+    const [mythos52] = buildPiAnthropicModels([], "claude-mythos-5-2");
+    expect(mythos52).toMatchObject({
+      id: "claude-mythos-5-2",
+      name: "Claude Mythos 5.2",
+      contextWindow: 1_000_000,
+      maxTokens: 128_000,
+      cost: { input: 8, output: 40, cacheRead: 0.2, cacheWrite: 10 },
+      thinkingLevelMap: { off: null, xhigh: "xhigh", max: "max" },
+      compat: { forceAdaptiveThinking: true, supportsTemperature: false },
+    });
+    const [mythos51] = buildPiAnthropicModels([], "claude-mythos-5-1");
+    expect(mythos51).toMatchObject({
+      id: "claude-mythos-5-1",
+      name: "Claude Mythos 5.1",
+      contextWindow: 1_000_000,
+      maxTokens: 128_000,
+      cost: { input: 10, output: 50, cacheRead: 0.25, cacheWrite: 12.5 },
+      thinkingLevelMap: { off: null, xhigh: "xhigh", max: "max" },
+      compat: { forceAdaptiveThinking: true, supportsTemperature: false },
+    });
+  });
+
   test("registers Opus 5.5 with its published limits and pricing", async () => {
     const [opus] = buildPiAnthropicModels([], "claude-opus-5-5");
     expect(opus).toMatchObject({
@@ -1090,6 +1125,62 @@ describe("SdkStepUsage", () => {
       cache_read_input_tokens: 220_178,
       cache_creation_input_tokens: 51_121,
     });
+  });
+
+  test("a step after a tool boundary adds only the output the previous request had left", async () => {
+    // Step 1 ends at the tool call, before its request's message_delta.
+    const first = new Map();
+    const opening = {
+      input_tokens: 2,
+      output_tokens: 6,
+      cache_read_input_tokens: 0,
+      cache_creation_input_tokens: 168_162,
+    };
+    recordSdkStepUsage(first, "msg_1", opening);
+    recordSdkStepUsage(first, "msg_1", opening);
+    expect(sumSdkStepUsage(first)).toEqual(opening);
+    const reported = lastSdkStepRequest(first);
+    expect(reported).toEqual({ id: "msg_1", output: 6 });
+
+    // Step 2 reads that delta first, then its own request.
+    const second = new Map();
+    recordSdkStepUsage(
+      second,
+      "msg_1",
+      { ...opening, output_tokens: 305 },
+      reported,
+    );
+    recordSdkStepUsage(
+      second,
+      "msg_2",
+      {
+        input_tokens: 4,
+        output_tokens: 1,
+        cache_read_input_tokens: 168_162,
+        cache_creation_input_tokens: 526,
+      },
+      reported,
+    );
+    recordSdkStepUsage(second, "msg_2", { output_tokens: 40 }, reported);
+    expect(sumSdkStepUsage(second)).toEqual({
+      input_tokens: 4,
+      output_tokens: 299 + 40,
+      cache_read_input_tokens: 168_162,
+      cache_creation_input_tokens: 526,
+    });
+    expect(lastSdkStepRequest(second, reported)).toEqual({
+      id: "msg_2",
+      output: 40,
+    });
+
+    // A step that only sees the earlier delta keeps counting from it.
+    const third = new Map();
+    recordSdkStepUsage(third, "msg_1", { output_tokens: 305 }, reported);
+    expect(lastSdkStepRequest(third, reported)).toEqual({
+      id: "msg_1",
+      output: 305,
+    });
+    expect(lastSdkStepRequest(new Map(), reported)).toBe(reported);
   });
 
   test("ignores non-numeric fields and reports nothing for an empty step", async () => {
@@ -1372,6 +1463,157 @@ describe("buildPiAnthropicProvider", () => {
     }
   });
 
+  test("the step after a live tool boundary does not count the previous request again", async () => {
+    await designate(["boundary-account"]);
+    await seedAccounts(["boundary-account"]);
+    accounts.__setUsageCacheForTest("boundary-account", freshUsage);
+    const stream = (event: Record<string, unknown>) => ({
+      type: "stream_event",
+      event,
+      session_id: "sdk-boundary",
+    });
+    const first = {
+      input_tokens: 2,
+      output_tokens: 6,
+      cache_read_input_tokens: 0,
+      cache_creation_input_tokens: 168_162,
+    };
+    const second = {
+      input_tokens: 4,
+      output_tokens: 1,
+      cache_read_input_tokens: 168_162,
+      cache_creation_input_tokens: 526,
+    };
+    // Claude Code's order: the tool_use assistant message comes before its
+    // request's message_delta, so the facade ends step 1 first and step 2
+    // reads that delta.
+    const messages: Array<Record<string, any>> = [
+      { type: "system", subtype: "init", session_id: "sdk-boundary" },
+      stream({
+        type: "message_start",
+        message: { id: "msg_1", usage: first },
+      }),
+      {
+        type: "assistant",
+        uuid: "asst-1",
+        session_id: "sdk-boundary",
+        message: {
+          id: "msg_1",
+          usage: first,
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_1",
+              name: "mcp__oc__bash",
+              input: { command: "ls" },
+            },
+          ],
+        },
+      },
+      stream({
+        type: "message_delta",
+        usage: { ...first, output_tokens: 305 },
+      }),
+      stream({ type: "message_stop" }),
+      stream({
+        type: "message_start",
+        message: { id: "msg_2", usage: second },
+      }),
+      {
+        type: "assistant",
+        uuid: "asst-2",
+        session_id: "sdk-boundary",
+        message: {
+          id: "msg_2",
+          usage: second,
+          content: [{ type: "text", text: "done" }],
+        },
+      },
+      stream({
+        type: "message_delta",
+        usage: { ...second, output_tokens: 40 },
+      }),
+      stream({ type: "message_stop" }),
+      {
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        result: "done",
+        usage: { ...second, output_tokens: 346 },
+        session_id: "sdk-boundary",
+      },
+    ];
+    const query = spyOn(sdk, "query").mockImplementation(
+      () =>
+        ({
+          next: async () => {
+            const value = messages.shift();
+            return value
+              ? { value, done: false }
+              : { value: undefined, done: true };
+          },
+          close: () => {},
+          [Symbol.asyncIterator]() {
+            return this;
+          },
+        }) as any,
+    );
+    const sessionId = `boundary-${crypto.randomUUID()}`;
+    try {
+      const provider = buildPiAnthropicProvider({
+        unifiedSessionId: sessionId,
+        builtinModels: [model],
+      }) as any;
+      const run = async (context: Record<string, unknown>) => {
+        let done: any;
+        for await (const ev of provider.streamSimple(model, context, {
+          sessionId,
+        }))
+          if (ev.type === "done") done = ev.message;
+        return done;
+      };
+      const user = { role: "user", content: "list files" };
+      const step1 = await run({ messages: [user] });
+      expect(step1.stopReason).toBe("toolUse");
+      expect(step1.usage).toMatchObject({
+        input: 2,
+        output: 6,
+        cacheRead: 0,
+        cacheWrite: 168_162,
+      });
+      const step2 = await run({
+        messages: [
+          user,
+          step1,
+          {
+            role: "toolResult",
+            toolCallId: "toolu_1",
+            toolName: "bash",
+            content: [{ type: "text", text: "a.txt" }],
+            isError: false,
+            timestamp: Date.now(),
+          },
+        ],
+      });
+      expect(query).toHaveBeenCalledTimes(1);
+      expect(step2.stopReason).toBe("stop");
+      expect(step2.usage).toMatchObject({
+        input: 4,
+        output: 299 + 40,
+        cacheRead: 168_162,
+        cacheWrite: 526,
+      });
+    } finally {
+      for (const live of [...liveSdkConversations().values()]) {
+        if (live.key.startsWith(`pi:${sessionId}:`)) {
+          live.disposed = true;
+          liveSdkConversations().delete(live.key);
+        }
+      }
+      query.mockRestore();
+    }
+  });
+
   for (const ephemeral of [true, false]) {
     test(`a settled ${ephemeral ? "ephemeral" : "resumable"} run ${ephemeral ? "releases" : "keeps"} its live SDK conversation`, async () => {
       await designate(["settle-account"]);
@@ -1474,6 +1716,1102 @@ describe("buildPiAnthropicProvider", () => {
       expect((pickBridgeAccount(model.id) as any).id).toBe("busy-account");
     } finally {
       query.mockRestore();
+    }
+  });
+
+  test("a federated Claude API account spawns Claude Code with a fresh minted token", async () => {
+    const [mythos] = buildPiAnthropicModels([], "claude-mythos-5-2");
+    await designate(["wif-account"]);
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: [
+          {
+            id: "wif-account",
+            name: "wif-account",
+            token: "",
+            authKind: "federation",
+            mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
+            federation: {
+              organizationId: "00000000-0000-4000-8000-000000000000",
+              federationRuleId: "fdrl_rule",
+              serviceAccountId: "svac_account",
+            },
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    const sign = spyOn(
+      workloadIdentity,
+      "signServerIdentityToken",
+    ).mockResolvedValue("header.payload.signature");
+    let minted = 0;
+    // An already-expired token, so the next turn exchanges again.
+    const exchange = spyOn(globalThis, "fetch").mockImplementation((async () =>
+      Response.json({
+        access_token: `sk-ant-oat01-minted-${++minted}`,
+        expires_in: 0,
+      })) as unknown as typeof fetch);
+    const envs: Array<Record<string, string | undefined> | undefined> = [];
+    const query = spyOn(sdk, "query").mockImplementation((input) => {
+      envs.push(input.options?.env);
+      const messages: Array<Record<string, any>> = [
+        { type: "system", subtype: "init", session_id: "sdk-wif" },
+        {
+          type: "result",
+          subtype: "success",
+          is_error: false,
+          result: "ok",
+          usage: { input_tokens: 1, output_tokens: 1 },
+          session_id: "sdk-wif",
+        },
+      ];
+      return {
+        next: async () => {
+          const value = messages.shift();
+          return value
+            ? { value, done: false }
+            : { value: undefined, done: true };
+        },
+        close: () => {},
+        [Symbol.asyncIterator]() {
+          return this;
+        },
+      } as any;
+    });
+    const sessionId = `wif-${crypto.randomUUID()}`;
+    try {
+      const provider = buildPiAnthropicProvider({
+        unifiedSessionId: sessionId,
+        builtinModels: [],
+        ensureModelId: mythos.id,
+      }) as any;
+      for (const content of ["hi", "again"]) {
+        for await (const _ of provider.streamSimple(
+          mythos,
+          { messages: [{ role: "user", content }] },
+          { sessionId },
+        )) {
+        }
+      }
+      expect(envs.map((env) => env?.CLAUDE_CODE_OAUTH_TOKEN)).toEqual([
+        "sk-ant-oat01-minted-1",
+        "sk-ant-oat01-minted-2",
+      ]);
+      expect(envs[0]?.ANTHROPIC_API_KEY).toBeUndefined();
+      expect(String(exchange.mock.calls[0]?.[0])).toBe(
+        "https://api.anthropic.com/v1/oauth/token",
+      );
+    } finally {
+      for (const live of [...liveSdkConversations().values()]) {
+        if (live.key.startsWith(`pi:${sessionId}:`)) {
+          live.disposed = true;
+          liveSdkConversations().delete(live.key);
+        }
+      }
+      query.mockRestore();
+      exchange.mockRestore();
+      sign.mockRestore();
+    }
+  });
+
+  test("a Claude API account whose token exchange fails is skipped for the next one", async () => {
+    const [mythos] = buildPiAnthropicModels([], "claude-mythos-5-2");
+    await designate(["revoked-wif", "key-account"]);
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: [
+          {
+            id: "revoked-wif",
+            name: "revoked-wif",
+            token: "",
+            authKind: "federation",
+            mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
+            federation: {
+              organizationId: "00000000-0000-4000-8000-000000000000",
+              federationRuleId: "fdrl_revoked",
+              serviceAccountId: "svac_account",
+            },
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+          {
+            id: "key-account",
+            name: "key-account",
+            token: "sk-ant-api03-test-key",
+            authKind: "api-key",
+            mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    const sign = spyOn(
+      workloadIdentity,
+      "signServerIdentityToken",
+    ).mockResolvedValue("header.payload.signature");
+    const exchange = spyOn(globalThis, "fetch").mockImplementation((async () =>
+      Response.json(
+        { error: "invalid_grant", error_description: "rule revoked" },
+        { status: 403 },
+      )) as unknown as typeof fetch);
+    const envs: Array<Record<string, string | undefined> | undefined> = [];
+    const query = spyOn(sdk, "query").mockImplementation((input) => {
+      envs.push(input.options?.env);
+      throw new Error("test SDK reached");
+    });
+    try {
+      const provider = buildPiAnthropicProvider({
+        unifiedSessionId: "os-wif-failover",
+        builtinModels: [],
+        ensureModelId: mythos.id,
+      }) as any;
+      // Whichever account the pick tries first, the turn reaches the SDK on
+      // the API key.
+      for (let i = 0; i < 2; i++) {
+        for await (const _ of provider.streamSimple(mythos, {
+          messages: [{ role: "user", content: "hi" }],
+        })) {
+        }
+      }
+      expect(envs).toHaveLength(2);
+      for (const env of envs) {
+        expect(env?.ANTHROPIC_API_KEY).toBe("sk-ant-api03-test-key");
+        expect(env?.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
+      }
+
+      // A strict pin on the revoked account surfaces the exchange error.
+      const pinned = buildPiAnthropicProvider({
+        unifiedSessionId: "os-wif-pinned",
+        builtinModels: [],
+        ensureModelId: mythos.id,
+        accountId: "revoked-wif",
+        accountStrict: true,
+      }) as any;
+      const events: any[] = [];
+      for await (const ev of pinned.streamSimple(mythos, {
+        messages: [{ role: "user", content: "hi" }],
+      })) {
+        events.push(ev);
+      }
+      expect(events.at(-1)?.error?.errorMessage).toContain(
+        "Anthropic token exchange failed (403)",
+      );
+      expect(envs).toHaveLength(2);
+    } finally {
+      query.mockRestore();
+      exchange.mockRestore();
+      sign.mockRestore();
+    }
+  });
+
+  test("Claude API capacity follows the bridge designation", async () => {
+    await designate(["designated-sub"]);
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: [
+          {
+            id: "designated-sub",
+            name: "designated-sub",
+            token: "sk-ant-oat01-designated-sub",
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+          {
+            id: "outside-key",
+            name: "outside-key",
+            token: "sk-ant-api03-outside-key",
+            authKind: "api-key",
+            mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    // The API account is outside bridge.accounts, so it cannot serve Mythos
+    // and the catalog must not offer it.
+    const fenced = configuredModelProviders();
+    expect(fenced.has("anthropic")).toBe(true);
+    expect(fenced.has(CLAUDE_API_CAPACITY)).toBe(false);
+    await designate(["designated-sub", "outside-key"]);
+    expect(configuredModelProviders().has(CLAUDE_API_CAPACITY)).toBe(true);
+  });
+
+  test("Mythos capacity counts only API accounts that serve the user", async () => {
+    await designate([]);
+    const { __setIdentitiesForTest } = await import("./shared/user-mappings");
+    const restore = __setIdentitiesForTest([
+      { name: "Alice Example", github: "alice" },
+      { name: "Bob Example", github: "bob" },
+    ]);
+    try {
+      writeFileSync(
+        accountsFile,
+        JSON.stringify({
+          accounts: [
+            {
+              id: "alice-key",
+              name: "alice-key",
+              owner: "alice",
+              token: "sk-ant-api03-alice-key",
+              authKind: "api-key",
+              mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
+              createdAt: "2026-01-01T00:00:00.000Z",
+            },
+          ],
+        }),
+      );
+      await accounts.loadClaudeAccounts();
+      const mythosFor = (user?: string, login?: string) =>
+        configuredModelProviders(user, login).has(CLAUDE_API_CAPACITY);
+      const claudeFor = (user?: string) =>
+        configuredModelProviders(user).has("anthropic");
+      expect(mythosFor("Alice", "alice")).toBe(true);
+      // A name with no verified login never spends a personal API account.
+      expect(mythosFor("Alice")).toBe(false);
+      expect(mythosFor("Bob", "bob")).toBe(false);
+      expect(mythosFor()).toBe(false);
+      // Alice's subscription is hers too: with only a shared API key left for
+      // Bob, his catalog offers Mythos and not the subscription models.
+      writeFileSync(
+        accountsFile,
+        JSON.stringify({
+          accounts: [
+            {
+              id: "alice-sub",
+              name: "alice-sub",
+              owner: "Alice",
+              token: "sk-ant-oat01-alice-sub",
+              createdAt: "2026-01-01T00:00:00.000Z",
+            },
+            {
+              id: "shared-key",
+              name: "shared-key",
+              token: "sk-ant-api03-shared-key",
+              authKind: "api-key",
+              mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
+              createdAt: "2026-01-01T00:00:00.000Z",
+            },
+          ],
+        }),
+      );
+      await accounts.loadClaudeAccounts();
+      expect(claudeFor("Bob")).toBe(false);
+      expect(mythosFor("Bob")).toBe(true);
+      expect(claudeFor("Alice")).toBe(true);
+      expect(
+        configuredInteractiveDefaultModel(configuredModelProviders("Bob")),
+      ).toContain("mythos");
+      // The HTTP bridge carries no run identity, so a personal account never
+      // serves there, not even its owner; the shared key still does.
+      writeFileSync(
+        piConfigFile,
+        JSON.stringify({ enabled: true, anthropicTransport: "bridge" }),
+      );
+      await loadPiConfig();
+      try {
+        expect(claudeFor("Alice")).toBe(false);
+        expect(mythosFor("Alice", "alice")).toBe(true);
+      } finally {
+        await designate([]);
+      }
+    } finally {
+      restore();
+    }
+  });
+
+  test("a personal API account never serves an ambiguous first name", async () => {
+    await designate([]);
+    const { __setIdentitiesForTest } = await import("./shared/user-mappings");
+    const restore = __setIdentitiesForTest([
+      { name: "Alex Rivera", github: "alex-rivera" },
+      { name: "Alex Chen", github: "alex-chen" },
+    ]);
+    const apiKey = (id: string, owner: string) => ({
+      id,
+      name: id,
+      owner,
+      token: `sk-ant-api03-${id}`,
+      authKind: "api-key",
+      mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    try {
+      writeFileSync(
+        accountsFile,
+        JSON.stringify({ accounts: [apiKey("alex-key", "Alex")] }),
+      );
+      await accounts.loadClaudeAccounts();
+      const mythosFor = (user?: string, login?: string) =>
+        configuredModelProviders(user, login).has(CLAUDE_API_CAPACITY);
+      const servedFor = (user: string, billingLogin?: string) => {
+        const r = accounts.resolveAccount({
+          user,
+          billingLogin,
+          model: "claude-mythos-5-2",
+        });
+        return "account" in r ? r.account.id : undefined;
+      };
+      // A stored name, not a login, never spends, even for an unambiguous
+      // full name.
+      expect(mythosFor("Alex Rivera", "alex-rivera")).toBe(false);
+      // "Alex" names both teammates, as owner and as run user: neither spends.
+      expect(mythosFor("Alex", "alex-rivera")).toBe(false);
+      expect(servedFor("Alex", "alex-rivera")).toBeUndefined();
+      // A login owner serves its own person, by full name or login, but
+      // still not the shared first name.
+      writeFileSync(
+        accountsFile,
+        JSON.stringify({ accounts: [apiKey("alex-key", "alex-rivera")] }),
+      );
+      await accounts.loadClaudeAccounts();
+      expect(mythosFor("Alex Rivera", "alex-rivera")).toBe(true);
+      expect(mythosFor("alex-rivera", "alex-rivera")).toBe(true);
+      expect(mythosFor("Alex Chen", "alex-chen")).toBe(false);
+      expect(mythosFor("Alex", "alex-rivera")).toBe(false);
+      expect(servedFor("Alex", "alex-rivera")).toBeUndefined();
+      expect(servedFor("Alex Rivera", "alex-rivera")).toBe("alex-key");
+      // A name alone, with no verified login, never spends it.
+      expect(mythosFor("Alex Rivera")).toBe(false);
+      expect(servedFor("Alex Rivera")).toBeUndefined();
+      // Another teammate prompting Rivera's session (creator login
+      // alex-rivera) is not Rivera, so Rivera's key does not serve them.
+      expect(servedFor("Alex Chen", "alex-rivera")).toBeUndefined();
+      // Production paths: a verified sign-in that shares a first name acts
+      // under a name only that person answers to, so Rivera's own key serves
+      // Rivera from the picker, Setup, and turns, and never Chen.
+      const { signedInUserName } = await import("./shared/user-mappings");
+      const { requestUser } = await import("./routes/context");
+      const rivera = { login: "alex-rivera", name: "Alex Rivera" };
+      const chen = { login: "alex-chen", name: "Alex Chen" };
+      expect(signedInUserName(rivera)).toBe("Alex Rivera");
+      const asRivera = requestUser({ authUser: rivera } as never);
+      expect(mythosFor(asRivera, rivera.login)).toBe(true);
+      expect(servedFor(asRivera, rivera.login)).toBe("alex-key");
+      expect(
+        mythosFor(requestUser({ authUser: chen } as never), chen.login),
+      ).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
+  test("a personal API account bills only the turn's verified login, not a name resolved at dispatch", async () => {
+    await designate([]);
+    const { __setIdentitiesForTest } = await import("./shared/user-mappings");
+    const apiKey = (id: string, owner: string) => ({
+      id,
+      name: id,
+      owner,
+      token: `sk-ant-api03-${id}`,
+      authKind: "api-key",
+      mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: [
+          apiKey("rivera-key", "alex-rivera"),
+          apiKey("chen-key", "alex-chen"),
+        ],
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    const servedFor = (user: string, billingLogin?: string) => {
+      const r = accounts.resolveAccount({
+        user,
+        billingLogin,
+        model: "claude-mythos-5-2",
+      });
+      return "account" in r ? r.account.id : undefined;
+    };
+    // Rivera queues a prompt as "Alex" while he is the only Alex.
+    let restore = __setIdentitiesForTest([
+      { name: "Alex Rivera", github: "alex-rivera" },
+    ]);
+    try {
+      expect(servedFor("Alex", "alex-rivera")).toBe("rivera-key");
+    } finally {
+      restore();
+    }
+    // He leaves and Alex Chen is now the only Alex when the queue drains, or
+    // the old session wakes after a restart. The turn still carries Rivera's
+    // session login, so neither key serves it: "Alex" now names Chen, who is
+    // not the login this turn may bill.
+    restore = __setIdentitiesForTest([
+      { name: "Alex Chen", github: "alex-chen" },
+    ]);
+    try {
+      expect(servedFor("Alex", "alex-rivera")).toBeUndefined();
+      // Chen's own turns still use his key.
+      expect(servedFor("Alex", "alex-chen")).toBe("chen-key");
+    } finally {
+      restore();
+    }
+  });
+
+  test("a run bills a personal API account only while GitHub sign-in is on", () => {
+    // With sign-in off the run user is a claimed name, so the creator's
+    // stored login must not vouch for it.
+    expect(accounts.runBillingLogin("alex-rivera", true)).toBe("alex-rivera");
+    expect(accounts.runBillingLogin("alex-rivera", false)).toBeUndefined();
+    expect(accounts.runBillingLogin(undefined, true)).toBeUndefined();
+    expect(accounts.runBillingLogin("  ", true)).toBeUndefined();
+  });
+
+  test("setup readiness counts only Claude accounts that can run the default", async () => {
+    const { __setIdentitiesForTest } = await import("./shared/user-mappings");
+    let restoreRoster = () => {};
+    const apiKey = (id: string, owner?: string) => ({
+      id,
+      name: id,
+      token: `sk-ant-api03-${id}`,
+      authKind: "api-key",
+      mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      ...(owner ? { owner } : {}),
+    });
+    try {
+      // bridge.accounts names a removed subscription; the one API account is
+      // outside it, so nothing can run any Claude model.
+      await designate(["removed-sub"]);
+      writeFileSync(
+        accountsFile,
+        JSON.stringify({ accounts: [apiKey("new-key")] }),
+      );
+      await accounts.loadClaudeAccounts();
+      let status = engineStatus("Bob");
+      expect(status.provider).toBe("claude");
+      expect(status.ready).toBe(false);
+      // Once designated, the default moves to Mythos and setup is ready.
+      await designate(["new-key"]);
+      status = engineStatus("Bob");
+      expect(status.defaultModel).toContain("mythos");
+      expect(status.ready).toBe(true);
+      // A rate limit on the default model alone benches the only key for it,
+      // so setup reports the same refusal the runner would.
+      accounts.markExhausted("new-key", status.defaultModel);
+      expect(engineStatus("Bob").ready).toBe(false);
+      accounts.returnAccountToPool("new-key");
+      expect(engineStatus("Bob").ready).toBe(true);
+      // Another user's personal account never makes this user ready.
+      await designate([]);
+      restoreRoster = __setIdentitiesForTest([
+        { name: "Alice Example", github: "alice" },
+      ]);
+      writeFileSync(
+        accountsFile,
+        JSON.stringify({ accounts: [apiKey("alice-key", "alice")] }),
+      );
+      await accounts.loadClaudeAccounts();
+      expect(engineStatus("Alice", "alice").ready).toBe(true);
+      expect(engineStatus("Alice").ready).toBe(false);
+      expect(engineStatus("Bob", "bob").ready).toBe(false);
+    } finally {
+      restoreRoster();
+      await designate([]);
+    }
+  });
+
+  test("the bridge benches an account whose result is a limit notice", async () => {
+    await designate(["key-a", "key-b"]);
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: ["key-a", "key-b"].map((id) => ({
+          id,
+          name: id,
+          token: `sk-ant-api03-${id}`,
+          authKind: "api-key",
+          mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
+          createdAt: "2026-01-01T00:00:00.000Z",
+        })),
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    const first = pickBridgeAccount("claude-mythos-5-2") as any;
+    // Claude Code reports this limit as a *successful* result.
+    const query = spyOn(sdk, "query").mockImplementation((() =>
+      (async function* () {
+        yield {
+          type: "result",
+          subtype: "success",
+          is_error: false,
+          result: "5-hour limit reached ∙ resets 3am",
+          session_id: "sdk-limit",
+        };
+      })()) as any);
+    try {
+      const res = await handleBridgeRequest(
+        new Request("http://127.0.0.1/v1/messages", {
+          method: "POST",
+          headers: { "x-api-key": bridgeKey() },
+          body: JSON.stringify({
+            model: "claude-mythos-5-2",
+            messages: [{ role: "user", content: "hi" }],
+          }),
+        }),
+      );
+      expect(query).toHaveBeenCalledTimes(1);
+      expect(res.status).toBe(400);
+      expect(JSON.stringify(await res.json())).toContain("limit reached");
+      const next = pickBridgeAccount("claude-mythos-5-2") as any;
+      expect(next.id).not.toBe(first.id);
+    } finally {
+      query.mockRestore();
+      accounts.returnAccountToPool(first.id);
+    }
+    expect(
+      sidelineLimitedBridgeAccount(first, "claude-mythos-5-2", "Invalid model"),
+    ).toBe(false);
+  });
+
+  test("a bridge answer that opens like a limit notice is returned, not benched", async () => {
+    await designate(["key-a", "key-b"]);
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: ["key-a", "key-b"].map((id) => ({
+          id,
+          name: id,
+          token: `sk-ant-api03-${id}`,
+          authKind: "api-key",
+          mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
+          createdAt: "2026-01-01T00:00:00.000Z",
+        })),
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    const answer =
+      "You're out of usage credits on the old plan, but the new plan has a separate balance. Use /usage-credits to check it.";
+    const query = spyOn(sdk, "query").mockImplementation((() =>
+      (async function* () {
+        yield {
+          type: "assistant",
+          message: { content: [{ type: "text", text: answer }] },
+        };
+        yield {
+          type: "result",
+          subtype: "success",
+          is_error: false,
+          result: answer,
+          session_id: "sdk-answer",
+        };
+      })()) as any);
+    try {
+      const res = await handleBridgeRequest(
+        new Request("http://127.0.0.1/v1/messages", {
+          method: "POST",
+          headers: { "x-api-key": bridgeKey() },
+          body: JSON.stringify({
+            model: "claude-mythos-5-2",
+            messages: [{ role: "user", content: "how do I check credits?" }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as any;
+      expect(body.content[0].text).toBe(answer);
+      // Still first in the designated walk: the account was not benched.
+      expect((pickBridgeAccount("claude-mythos-5-2") as any).id).toBe("key-a");
+    } finally {
+      query.mockRestore();
+    }
+  });
+
+  test("the bridge benches an account whose reply carries a rate-limit tag", async () => {
+    await designate(["key-a", "key-b"]);
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: ["key-a", "key-b"].map((id) => ({
+          id,
+          name: id,
+          token: `sk-ant-api03-${id}`,
+          authKind: "api-key",
+          mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
+          createdAt: "2026-01-01T00:00:00.000Z",
+        })),
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    // The tag wins over the result's own wording, success or error.
+    for (const result of [
+      { subtype: "success", is_error: false },
+      { subtype: "error_during_execution", is_error: true },
+    ]) {
+      accounts.returnAccountToPool("key-a");
+      const query = spyOn(sdk, "query").mockImplementation((() =>
+        (async function* () {
+          yield {
+            type: "assistant",
+            error: "rate_limit",
+            message: {
+              content: [{ type: "text", text: "Please slow down." }],
+            },
+          };
+          yield {
+            type: "result",
+            ...result,
+            result: "Please slow down.",
+            session_id: "sdk-tagged",
+          };
+        })()) as any);
+      try {
+        const res = await handleBridgeRequest(
+          new Request("http://127.0.0.1/v1/messages", {
+            method: "POST",
+            headers: { "x-api-key": bridgeKey() },
+            body: JSON.stringify({
+              model: "claude-mythos-5-2",
+              messages: [{ role: "user", content: "hi" }],
+            }),
+          }),
+        );
+        expect(res.status).toBe(400);
+        expect((pickBridgeAccount("claude-mythos-5-2") as any).id).toBe(
+          "key-b",
+        );
+      } finally {
+        query.mockRestore();
+        accounts.returnAccountToPool("key-a");
+      }
+    }
+  });
+
+  test("an in-process reply tagged rate_limit fails over to the next account", async () => {
+    const [mythos] = buildPiAnthropicModels([], "claude-mythos-5-2");
+    await designate(["key-a", "key-b"]);
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: ["key-a", "key-b"].map((id) => ({
+          id,
+          name: id,
+          token: `sk-ant-api03-${id}`,
+          authKind: "api-key",
+          mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
+          createdAt: "2026-01-01T00:00:00.000Z",
+        })),
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    accounts.returnAccountToPool("key-a");
+    const keys: unknown[] = [];
+    const query = spyOn(sdk, "query").mockImplementation((input) => {
+      const key = input.options?.env?.ANTHROPIC_API_KEY;
+      keys.push(key);
+      const text =
+        key === "sk-ant-api03-key-a" ? "Please slow down." : "Served.";
+      const messages: Array<Record<string, any>> = [
+        { type: "system", subtype: "init", session_id: "sdk-tag" },
+        {
+          type: "assistant",
+          ...(key === "sk-ant-api03-key-a" ? { error: "rate_limit" } : {}),
+          message: {
+            id: `m-${keys.length}`,
+            content: [{ type: "text", text }],
+          },
+        },
+        {
+          type: "result",
+          subtype: "success",
+          is_error: false,
+          result: text,
+          usage: { input_tokens: 1, output_tokens: 1 },
+          session_id: "sdk-tag",
+        },
+      ];
+      return {
+        next: async () => {
+          const value = messages.shift();
+          return value
+            ? { value, done: false }
+            : { value: undefined, done: true };
+        },
+        close: () => {},
+        [Symbol.asyncIterator]() {
+          return this;
+        },
+      } as any;
+    });
+    try {
+      const provider = buildPiAnthropicProvider({
+        unifiedSessionId: "os-tagged-limit",
+        builtinModels: [],
+        ensureModelId: mythos.id,
+        ephemeral: true,
+      }) as any;
+      const events: any[] = [];
+      for await (const ev of provider.streamSimple(mythos, {
+        messages: [{ role: "user", content: "hi" }],
+      }))
+        events.push(ev);
+      expect(keys).toEqual(["sk-ant-api03-key-a", "sk-ant-api03-key-b"]);
+      expect(events.at(-1)?.type).toBe("done");
+      expect(
+        events
+          .filter((ev) => ev.type === "text_delta")
+          .map((ev) => ev.delta)
+          .join(""),
+      ).toBe("Served.");
+    } finally {
+      query.mockRestore();
+      accounts.returnAccountToPool("key-a");
+    }
+  });
+
+  test("an in-process result-only limit notice fails over to the next account", async () => {
+    const [mythos] = buildPiAnthropicModels([], "claude-mythos-5-2");
+    await designate(["key-a", "key-b"]);
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: ["key-a", "key-b"].map((id) => ({
+          id,
+          name: id,
+          token: `sk-ant-api03-${id}`,
+          authKind: "api-key",
+          mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
+          createdAt: "2026-01-01T00:00:00.000Z",
+        })),
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    accounts.returnAccountToPool("key-a");
+    const keys: unknown[] = [];
+    const query = spyOn(sdk, "query").mockImplementation((input) => {
+      const key = input.options?.env?.ANTHROPIC_API_KEY;
+      keys.push(key);
+      const limited = key === "sk-ant-api03-key-a";
+      // The same sequence the bridge test uses: a successful result whose
+      // whole text is the notice, with no assistant message.
+      const messages: Array<Record<string, any>> = [
+        { type: "system", subtype: "init", session_id: "sdk-result-limit" },
+        ...(limited
+          ? []
+          : [
+              {
+                type: "assistant",
+                message: {
+                  id: `m-${keys.length}`,
+                  content: [{ type: "text", text: "Served." }],
+                },
+              },
+            ]),
+        {
+          type: "result",
+          subtype: "success",
+          is_error: false,
+          result: limited ? "5-hour limit reached ∙ resets 3am" : "Served.",
+          usage: { input_tokens: 1, output_tokens: 1 },
+          session_id: "sdk-result-limit",
+        },
+      ];
+      return {
+        next: async () => {
+          const value = messages.shift();
+          return value
+            ? { value, done: false }
+            : { value: undefined, done: true };
+        },
+        close: () => {},
+        [Symbol.asyncIterator]() {
+          return this;
+        },
+      } as any;
+    });
+    try {
+      const provider = buildPiAnthropicProvider({
+        unifiedSessionId: "os-result-limit",
+        builtinModels: [],
+        ensureModelId: mythos.id,
+        ephemeral: true,
+      }) as any;
+      const events: any[] = [];
+      for await (const ev of provider.streamSimple(mythos, {
+        messages: [{ role: "user", content: "hi" }],
+      }))
+        events.push(ev);
+      expect(keys).toEqual(["sk-ant-api03-key-a", "sk-ant-api03-key-b"]);
+      expect(events.at(-1)?.type).toBe("done");
+      expect(
+        events
+          .filter((ev) => ev.type === "text_delta")
+          .map((ev) => ev.delta)
+          .join(""),
+      ).toBe("Served.");
+    } finally {
+      query.mockRestore();
+      accounts.returnAccountToPool("key-a");
+    }
+  });
+
+  test("an in-process answer that opens like a limit notice reaches pi", async () => {
+    const [mythos] = buildPiAnthropicModels([], "claude-mythos-5-2");
+    await designate(["key-a", "key-b"]);
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: ["key-a", "key-b"].map((id) => ({
+          id,
+          name: id,
+          token: `sk-ant-api03-${id}`,
+          authKind: "api-key",
+          mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
+          createdAt: "2026-01-01T00:00:00.000Z",
+        })),
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    accounts.returnAccountToPool("key-a");
+    const answer =
+      "You're out of usage credits on the old plan, but the new plan has a separate balance.";
+    const query = spyOn(sdk, "query").mockImplementation(() => {
+      const messages: Array<Record<string, any>> = [
+        { type: "system", subtype: "init", session_id: "sdk-near-notice" },
+        {
+          type: "assistant",
+          message: { id: "m1", content: [{ type: "text", text: answer }] },
+        },
+        {
+          type: "result",
+          subtype: "success",
+          is_error: false,
+          result: answer,
+          usage: { input_tokens: 1, output_tokens: 1 },
+          session_id: "sdk-near-notice",
+        },
+      ];
+      return {
+        next: async () => {
+          const value = messages.shift();
+          return value
+            ? { value, done: false }
+            : { value: undefined, done: true };
+        },
+        close: () => {},
+        [Symbol.asyncIterator]() {
+          return this;
+        },
+      } as any;
+    });
+    try {
+      const provider = buildPiAnthropicProvider({
+        unifiedSessionId: "os-near-notice",
+        builtinModels: [],
+        ensureModelId: mythos.id,
+        ephemeral: true,
+      }) as any;
+      const events: any[] = [];
+      for await (const ev of provider.streamSimple(mythos, {
+        messages: [{ role: "user", content: "hi" }],
+      }))
+        events.push(ev);
+      expect(events.at(-1)?.type).toBe("done");
+      expect(
+        events
+          .filter((ev) => ev.type === "text_delta")
+          .map((ev) => ev.delta)
+          .join(""),
+      ).toBe(answer);
+      expect((pickBridgeAccount("claude-mythos-5-2") as any).id).toBe("key-a");
+    } finally {
+      query.mockRestore();
+    }
+  });
+
+  test("the bridge honors a fixed session's strict account pin", async () => {
+    await designate(["key-a", "key-b"]);
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: ["key-a", "key-b"].map((id) => ({
+          id,
+          name: id,
+          token: `sk-ant-api03-${id}`,
+          authKind: "api-key",
+          mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
+          createdAt: "2026-01-01T00:00:00.000Z",
+        })),
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    const keys: unknown[] = [];
+    const query = spyOn(sdk, "query").mockImplementation(((args: any) => {
+      keys.push(args.options.env.ANTHROPIC_API_KEY);
+      return (async function* () {
+        yield {
+          type: "result",
+          subtype: "success",
+          is_error: false,
+          result: "ok",
+          session_id: "sdk-pin",
+        };
+      })();
+    }) as any);
+    const send = (pinned = true) =>
+      handleBridgeRequest(
+        new Request("http://127.0.0.1/v1/messages", {
+          method: "POST",
+          headers: {
+            "x-api-key": bridgeKey(),
+            ...(pinned ? bridgePinHeaders("key-b", true) : {}),
+          },
+          body: JSON.stringify({
+            model: "claude-mythos-5-2",
+            messages: [{ role: "user", content: "hi" }],
+          }),
+        }),
+      );
+    accounts.returnAccountToPool("key-a");
+    accounts.returnAccountToPool("key-b");
+    try {
+      // Unpinned, the designated walk starts at key-a; the pin moves it.
+      expect((await send(false)).status).toBe(200);
+      expect((await send()).status).toBe(200);
+      expect(keys).toEqual(["sk-ant-api03-key-a", "sk-ant-api03-key-b"]);
+      // With the pinned account benched, the strict pin refuses instead of
+      // billing key-a.
+      accounts.markExhausted("key-b", "claude-mythos-5-2");
+      expect((await send()).status).toBe(529);
+      expect(keys).toHaveLength(2);
+    } finally {
+      query.mockRestore();
+      accounts.returnAccountToPool("key-b");
+    }
+  });
+
+  test("a bridge request canceled during the token exchange never starts Claude Code", async () => {
+    await designate(["bridge-cancel-wif"]);
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: [
+          {
+            id: "bridge-cancel-wif",
+            name: "bridge-cancel-wif",
+            token: "",
+            authKind: "federation",
+            mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
+            federation: {
+              organizationId: "00000000-0000-4000-8000-000000000000",
+              federationRuleId: "fdrl_bridge_cancel",
+              serviceAccountId: "svac_account",
+            },
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    const client = new AbortController();
+    const sign = spyOn(
+      workloadIdentity,
+      "signServerIdentityToken",
+    ).mockResolvedValue("header.payload.signature");
+    const exchange = spyOn(globalThis, "fetch").mockImplementation(
+      (async () => {
+        // The client disconnects while the exchange is in flight.
+        client.abort();
+        return Response.json({
+          access_token: "sk-ant-oat01-late",
+          expires_in: 3600,
+        });
+      }) as unknown as typeof fetch,
+    );
+    const query = spyOn(sdk, "query").mockImplementation(() => {
+      throw new Error("test SDK reached");
+    });
+    try {
+      const res = await handleBridgeRequest(
+        new Request("http://127.0.0.1/v1/messages", {
+          method: "POST",
+          headers: { "x-api-key": bridgeKey() },
+          body: JSON.stringify({
+            model: "claude-mythos-5-2",
+            messages: [{ role: "user", content: "hi" }],
+          }),
+          signal: client.signal,
+        }),
+      );
+      expect(exchange).toHaveBeenCalled();
+      expect(query).not.toHaveBeenCalled();
+      expect(JSON.stringify(await res.json())).toContain("canceled");
+    } finally {
+      query.mockRestore();
+      exchange.mockRestore();
+      sign.mockRestore();
+    }
+  });
+
+  test("a turn canceled during the token exchange never starts Claude Code", async () => {
+    const [mythos] = buildPiAnthropicModels([], "claude-mythos-5-2");
+    await designate(["cancel-wif"]);
+    writeFileSync(
+      accountsFile,
+      JSON.stringify({
+        accounts: [
+          {
+            id: "cancel-wif",
+            name: "cancel-wif",
+            token: "",
+            authKind: "federation",
+            mythosModels: ["claude-mythos-5-2", "claude-mythos-5-1"],
+            federation: {
+              organizationId: "00000000-0000-4000-8000-000000000000",
+              federationRuleId: "fdrl_cancel",
+              serviceAccountId: "svac_account",
+            },
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    await accounts.loadClaudeAccounts();
+    const controller = new AbortController();
+    const sign = spyOn(
+      workloadIdentity,
+      "signServerIdentityToken",
+    ).mockResolvedValue("header.payload.signature");
+    const exchange = spyOn(globalThis, "fetch").mockImplementation(
+      (async () => {
+        // The person stops the turn while the exchange is in flight.
+        controller.abort();
+        return Response.json({
+          access_token: "sk-ant-oat01-late",
+          expires_in: 3600,
+        });
+      }) as unknown as typeof fetch,
+    );
+    const query = spyOn(sdk, "query").mockImplementation(() => {
+      throw new Error("test SDK reached");
+    });
+    try {
+      const provider = buildPiAnthropicProvider({
+        unifiedSessionId: "os-wif-cancel",
+        builtinModels: [],
+        ensureModelId: mythos.id,
+      }) as any;
+      const events: any[] = [];
+      for await (const ev of provider.streamSimple(
+        mythos,
+        { messages: [{ role: "user", content: "hi" }] },
+        { signal: controller.signal },
+      )) {
+        events.push(ev);
+      }
+      expect(query).not.toHaveBeenCalled();
+      expect(events.at(-1)?.error?.errorMessage).toBe("Request aborted");
+    } finally {
+      query.mockRestore();
+      exchange.mockRestore();
+      sign.mockRestore();
     }
   });
 
@@ -1856,7 +3194,7 @@ describe("buildPiAnthropicProvider", () => {
   });
 });
 
-describe("pickBridgeAccount pins (in-process runs only; designation is the ceiling)", () => {
+describe("pickBridgeAccount pins (designation is the ceiling)", () => {
   test("a designated, usable pin is picked first", async () => {
     await designate(["des-a", "des-b"]);
     await seedAccounts(["des-a", "des-b"]);

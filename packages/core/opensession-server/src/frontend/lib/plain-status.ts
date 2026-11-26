@@ -71,6 +71,18 @@ export function plainStatusClass(status: string): string {
   return `${BASE} ${tone}`;
 }
 
+/** Just the state's ink, for a glyph that leads a label (the status picker,
+ *  its menu rows) rather than sitting on the badge's tint. */
+const INKS = Object.fromEntries([
+  ["todo", "text-blue"],
+  ["done", "text-green"],
+  ["snoozed", "text-yellow"],
+]);
+
+export function plainStatusInk(status: string): string {
+  return INKS[status.toLowerCase()] ?? "text-faint";
+}
+
 export function plainStatusIcon(status: string): typeof IconCheck {
   return ICONS[status.toLowerCase()] ?? IconStatusRing;
 }

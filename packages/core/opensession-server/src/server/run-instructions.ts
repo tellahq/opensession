@@ -110,6 +110,8 @@ export function buildRunInstructions(input: {
       "the problem they reported, describe the old behavior, or walk through cases the visual " +
       "proof already shows. No lead-ins like `Here's how it looks now`, no pointers to proof " +
       "that renders anyway. " +
+      "After a bug fix, add short `Cause:`, `Fix:` and `Checked:` paragraphs: why it broke, " +
+      "what changed, and where you confirmed it (a device or page, not commands). " +
       "Keep meaningful blockers, uncertainty, verification limits and required decisions explicit. " +
       "Give detail when requested or needed to act. " +
       "For a routine progress-only reply, use exactly one Markdown line: " +

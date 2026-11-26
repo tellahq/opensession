@@ -19,6 +19,23 @@ struct UsageMenuSection: View {
                     Text("Context \(context)")
                 }
             }
+            // What fills the context, the web's per-section breakdown. A menu
+            // draws text only, so each part is a row and its share the value.
+            if let rows = resolved.context?.rows, !rows.isEmpty {
+                Section("What fills the context") {
+                    ForEach(rows) { row in
+                        Text(
+                            "\(row.label) \(SessionUsage.tokenLabel(row.tokens))"
+                                + " · \(ContextBreakdown.share(row, of: rows))%"
+                        )
+                    }
+                    if let note = resolved.compactionNote() {
+                        Text(note)
+                    }
+                }
+            } else if let note = resolved.compactionNote() {
+                Section { Text(note) }
+            }
             Section {
                 Text("Input \(SessionUsage.tokenLabel(resolved.inputTokens))")
                 Text("Output \(SessionUsage.tokenLabel(resolved.outputTokens))")

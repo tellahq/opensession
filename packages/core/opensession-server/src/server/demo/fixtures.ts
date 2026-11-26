@@ -53,6 +53,9 @@ export const DEMO_LIVE_ENGINE_SESSION_ID = "ses_demolive";
 export const DEMO_ASK_SESSION_ID = "bks-demo-ask";
 export const DEMO_ASK_ENGINE_SESSION_ID = "ses_demoask";
 export const DEMO_PR_NUMBER = 128;
+/** The demo coordinator's shipped thread, and the PR it merged. */
+export const DEMO_SPACE_MERGED_BRANCH = "demo/todo-empty-state";
+export const DEMO_SPACE_MERGED_PR_NUMBER = 124;
 /** The demo coordinator (server/coordinator.ts): its workspace and session. */
 export const DEMO_SPACE_WORKSPACE_ID = "ws-demo-space";
 export const DEMO_SPACE_SESSION_ID = "bks-demo-space";
@@ -1440,7 +1443,7 @@ export function demoSessions(opts: {
         title: "Add empty-state copy to the todo list",
         prompt:
           "Add an empty state to the todo list with a short line and a New todo button.",
-        file: {},
+        file: { branch: DEMO_SPACE_MERGED_BRANCH },
         startedAgoMin: 80,
         lastAgoMin: 30,
         reply: "Merged. The empty list now says what to do next.",
@@ -2190,6 +2193,22 @@ export function demoPrInfo(now: number, ghRepo: string, sessionId: string) {
   };
 }
 
+/** The empty-state thread's PR, merged, for the coordinator's PRs tab. */
+export function demoSpaceMergedPrInfo(now: number, ghRepo: string) {
+  return {
+    ...demoPrInfo(now, ghRepo, "bks-demo-space-t2"),
+    url: `https://github.com/${ghRepo || "acme/acme-todo"}/pull/${DEMO_SPACE_MERGED_PR_NUMBER}`,
+    state: "MERGED" as const,
+    number: DEMO_SPACE_MERGED_PR_NUMBER,
+    title: "Add empty-state copy to the todo list",
+    additions: 24,
+    deletions: 2,
+    changedFiles: 3,
+    headRefOid: "demo0000000000000000000000000000000000e2",
+    updatedAt: iso(now - 30 * 60_000),
+  };
+}
+
 export function demoPrDetails(now: number, ghRepo: string) {
   const info = demoPrInfo(now, ghRepo, "bks-demo-pr");
   return {
@@ -2284,7 +2303,12 @@ export function demoPrDetails(now: number, ghRepo: string) {
     reviewers: [{ login: "sam-reviews", state: "APPROVED" as const }],
     mergeable: "MERGEABLE",
     mergeStateStatus: "CLEAN",
-    staging: null,
+    // A ready preview deploy, so the preview links have one to open.
+    staging: {
+      url: `https://pr-${DEMO_PR_NUMBER}.preview.example.test`,
+      status: "Ready",
+      live: true,
+    },
   };
 }
 

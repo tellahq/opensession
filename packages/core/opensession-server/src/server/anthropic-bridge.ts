@@ -73,36 +73,60 @@
 
 import { registerMemoryProbe } from "./memory-probes";
 import { homeDir } from "./paths";
-import { stateDir } from "./paths";
 import {
   query,
   createSdkMcpServer,
   tool,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
-import { z } from "zod";
 import { audit, summarizeText } from "./audit";
 import {
   hasAccounts,
+  markExhausted,
   resolveAccount,
   type ClaudeAccount,
 } from "./claude-accounts";
+import { claudeCodeAuth } from "./claude-api-credentials";
+import { bridgePinFromHeaders } from "./anthropic-bridge-pin";
 import { cacheCreationUsage } from "./claude-cache-writes";
 import { contextWindowFor } from "./models";
-import { CLAUDE_CODE_BIN } from "./runner-shared";
+import {
+  CLAUDE_CODE_BIN,
+  claudeLimitErrorMessage,
+  isClaudeAccountNotice,
+  isClaudeLimitErrorKind,
+  isClaudeUsageLimitError,
+  usageLimitResetAt,
+} from "./runner-shared";
 import { spawnClaudeCodeInWorkload } from "./workload-scope";
 import {
   bridgePort,
+  designatedBridgeAccountIds,
   readModelProviderConfig,
   configPath as modelProvidersConfigPath,
 } from "./model-providers";
 import { readPiEngineConfig, piConfigPath } from "./pi-config";
 import { mkdir } from "node:fs/promises";
+import { CLAUDE_QUERY_CWD } from "./claude-query-runtime";
+import {
+  DISALLOWED_BUILTINS,
+  PASSTHROUGH_MCP,
+  PASSTHROUGH_PREFIX,
+  SDK_BUILTIN_TOOLS,
+  jsonSchemaToZodShape,
+} from "./claude-passthrough-tools";
+export {
+  DISALLOWED_BUILTINS,
+  PASSTHROUGH_MCP,
+  PASSTHROUGH_PREFIX,
+  SDK_BUILTIN_TOOLS,
+  jsonSchemaToZodShape,
+} from "./claude-passthrough-tools";
 
 const HOME = homeDir();
 // Empty, dedicated cwd for the SDK subprocess: the bridge never touches files
 // (every tool is a blocked passthrough), so no worktree must ever be visible.
-export const BRIDGE_CWD = `${stateDir("anthropic-bridge")}/bridge-cwd`;
+export const BRIDGE_CWD = CLAUDE_QUERY_CWD;
 
 /** Create the SDK cwd on the call path. The in-process provider uses the same
  * directory without starting the HTTP bridge, so bridge startup cannot own it. */
@@ -193,16 +217,19 @@ export function ensureAnthropicBridge(): BridgeInfo {
   return { url: `http://127.0.0.1:${port}`, key: bridgeKey() };
 }
 
-/** Optional account pin for pickBridgeAccount — only the in-process pi
- *  provider passes it (the HTTP bridge has no channel for a pin); a pin never
- *  widens serving beyond what the pick mode allows. */
+/** Optional account pin for pickBridgeAccount: the in-process pi provider
+ *  passes it directly, the HTTP bridge reads it from request headers
+ *  (anthropic-bridge-pin.ts, account and strictness only, never the user); a
+ *  pin never widens serving beyond what the pick mode allows. */
 export interface BridgeAccountPin {
   accountId?: string;
   /** Strict pin: never fall back to the other eligible accounts. */
   accountStrict?: boolean;
   /** Run user, for the pool pick's personal-account preference (same identity
-   *  matching as pickAccount everywhere else). */
+   *  matching as pickAccount everywhere else). Never set on the HTTP bridge. */
   user?: string;
+  /** Verified login a personal API account may bill (accountServesUser). */
+  billingLogin?: string;
   /** Allow extra-usage credits when judging the pin/walk usability. */
   usageCredits?: boolean;
   /** Accounts this turn already burned, skipped on every path. Drives the pi
@@ -228,7 +255,7 @@ export interface BridgeAccountPin {
  *    live on a credits-off account, 2026-08-06), so there is no billing
  *    reason to fence it off from the pool.
  *
- *  A `pin` (in-process pi runs only) is tried first; with accountStrict the
+ *  A `pin` (from either transport) is tried first; with accountStrict the
  *  walk never widens past it. Another user's personal subscription never
  *  serves, on any path — the ordered policy and that owner gate both live in
  *  resolveAccount; this only renders its refusals. The "no designated bridge
@@ -238,10 +265,10 @@ export function pickBridgeAccount(
   model: string | undefined,
   pin?: BridgeAccountPin,
 ): ClaudeAccount | { error: string } {
-  const cfg = readModelProviderConfig();
-  const ids = cfg?.enabled ? cfg.bridgeAccountIds || [] : [];
+  const ids = designatedBridgeAccountIds();
   const resolved = resolveAccount({
     user: pin?.user,
+    billingLogin: pin?.billingLogin,
     model,
     pinnedId: pin?.accountId,
     strictPin: pin?.accountStrict,
@@ -290,6 +317,19 @@ export function pickBridgeAccount(
   return {
     error: "no usable Claude account in the pool (all exhausted or sidelined)",
   };
+}
+
+/** Bench a bridge account whose request failed on a limit it reported (a
+ *  429, a usage limit), until the reset it named when it named one, so the
+ *  next pick moves on. Returns whether the failure was a limit. */
+export function sidelineLimitedBridgeAccount(
+  account: Pick<ClaudeAccount, "id">,
+  model: string,
+  message: string,
+): boolean {
+  if (!isClaudeUsageLimitError(message, true)) return false;
+  markExhausted(account.id, model || undefined, usageLimitResetAt(message));
+  return true;
 }
 
 // ── Anthropic request → SDK prompt mapping ───────────────────────────────────
@@ -441,52 +481,6 @@ export function flatSdkTurnContent(turn: FlatSdkTurn): ContentBlock[] | null {
   ];
 }
 
-/** Minimal JSON Schema → zod conversion for client tool registration. The
- *  schema only shapes what the model emits — Pi revalidates on its side,
- *  so unknown constructs safely degrade to z.any(). */
-export function jsonSchemaToZodShape(
-  schema: any,
-): Record<string, z.ZodTypeAny> {
-  if (!schema || typeof schema !== "object" || !schema.properties) return {};
-  const required = new Set<string>(
-    Array.isArray(schema.required) ? schema.required : [],
-  );
-  const shape: Record<string, z.ZodTypeAny> = {};
-  for (const [key, prop] of Object.entries<any>(schema.properties)) {
-    let t = jsonSchemaToZod(prop);
-    if (prop?.description && typeof prop.description === "string")
-      t = t.describe(prop.description);
-    shape[key] = required.has(key) ? t : t.optional();
-  }
-  return shape;
-}
-
-function jsonSchemaToZod(schema: any): z.ZodTypeAny {
-  if (!schema || typeof schema !== "object") return z.any();
-  switch (schema.type) {
-    case "string":
-      return Array.isArray(schema.enum) && schema.enum.length
-        ? z.enum(schema.enum as [string, ...string[]])
-        : z.string();
-    case "number":
-    case "integer":
-      return z.number();
-    case "boolean":
-      return z.boolean();
-    case "array":
-      return z.array(jsonSchemaToZod(schema.items));
-    case "object":
-      return schema.properties
-        ? z.object(jsonSchemaToZodShape(schema))
-        : z.record(z.string(), z.any());
-    default:
-      return z.any();
-  }
-}
-
-export const PASSTHROUGH_MCP = "oc";
-export const PASSTHROUGH_PREFIX = `mcp__${PASSTHROUGH_MCP}__`;
-
 /** Far above any real window: the CLI never refuses a request on its own
  *  token estimate. */
 const CLI_BLOCKING_LIMIT_OFF = 1_000_000_000;
@@ -525,42 +519,6 @@ export function cliPassthroughEnv(limits: {
       : {}),
   };
 }
-
-/** Primary switch: an empty `tools` list removes every SDK built-in from the
- *  model's context, including ones added by SDK bumps after the denylist
- *  below was written (CronCreate, ScheduleWakeup, Monitor, ...). Without it a
- *  new built-in leaks into context, the model calls it, and the client
- *  answers "Tool X not found". */
-export const SDK_BUILTIN_TOOLS: string[] = [];
-
-/** Built-in SDK tools the bridge must never let run — the client owns all
- *  execution. Belt-and-braces under `SDK_BUILTIN_TOOLS`; the PreToolUse hook
- *  blocks everything as a final backstop. */
-export const DISALLOWED_BUILTINS = [
-  "Bash",
-  "Edit",
-  "Write",
-  "Read",
-  "Glob",
-  "Grep",
-  "WebFetch",
-  "WebSearch",
-  "NotebookEdit",
-  "Task",
-  "TaskOutput",
-  "TaskStop",
-  "Agent",
-  "Skill",
-  "TaskCreate",
-  "TaskUpdate",
-  "TaskList",
-  "TaskGet",
-  "AskUserQuestion",
-  "ListMcpResourcesTool",
-  "ReadMcpResourceTool",
-  "ToolSearch",
-  "Workflow",
-];
 
 interface CapturedToolUse {
   id: string;
@@ -632,7 +590,7 @@ async function* singleUserMessage(
   };
 }
 
-async function handleBridgeRequest(req: Request): Promise<Response> {
+export async function handleBridgeRequest(req: Request): Promise<Response> {
   const url = new URL(req.url);
   if (url.pathname === "/health") return Response.json({ ok: true });
   const requestId = crypto.randomUUID();
@@ -725,14 +683,61 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
             .join("\n\n")
         : "";
 
-  const account = pickBridgeAccount(model);
-  if ("error" in account) {
-    auditReject(requestId, 529, "no_usable_account", {
+  // A client that disconnects (a stopped turn) or cancels the stream ends
+  // the request: no further account is tried, Claude Code is not started,
+  // and a running query is stopped, so a canceled turn bills nothing more.
+  const cancel = new AbortController();
+  if (req.signal.aborted) cancel.abort();
+  else
+    req.signal.addEventListener("abort", () => cancel.abort(), { once: true });
+  const canceled = () => {
+    auditReject(requestId, 400, "request_canceled", {
       engine_session: engineSessionHeader,
       model,
-      detail: account.error,
     });
-    return anthropicError(529, "overloaded_error", `bridge: ${account.error}`);
+    return anthropicError(400, "invalid_request_error", "bridge: canceled");
+  };
+
+  // An account whose credential cannot be obtained (a revoked federation
+  // rule) is skipped for this request; the next eligible account serves it.
+  const skippedIds: string[] = [];
+  const credentialErrors: string[] = [];
+  const pin = bridgePinFromHeaders(req.headers);
+  let account: ClaudeAccount;
+  let auth: Awaited<ReturnType<typeof claudeCodeAuth>>;
+  for (;;) {
+    if (cancel.signal.aborted) return canceled();
+    const picked = pickBridgeAccount(model, { ...pin, excludeIds: skippedIds });
+    if ("error" in picked) {
+      if (credentialErrors.length) {
+        const detail = credentialErrors.join("; ");
+        auditReject(requestId, 401, "credential_unavailable", {
+          engine_session: engineSessionHeader,
+          model,
+          detail,
+        });
+        return anthropicError(401, "authentication_error", `bridge: ${detail}`);
+      }
+      auditReject(requestId, 529, "no_usable_account", {
+        engine_session: engineSessionHeader,
+        model,
+        detail: picked.error,
+      });
+      return anthropicError(529, "overloaded_error", `bridge: ${picked.error}`);
+    }
+    try {
+      auth = await claudeCodeAuth(picked);
+      account = picked;
+      if (cancel.signal.aborted) return canceled();
+      break;
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[bridge] ${picked.name}: credential unavailable, trying another account: ${detail}`,
+      );
+      skippedIds.push(picked.id);
+      credentialErrors.push(detail);
+    }
   }
 
   const key = sessionKeyFor(req, messages);
@@ -788,7 +793,7 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
     ...summarizeText(prompt),
   });
 
-  const run = async () => {
+  const runOnce = async () => {
     const contentOut: ContentBlock[] = [];
     let usage = {
       input_tokens: 0,
@@ -802,10 +807,14 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
     };
     let sdkSessionId = isContinuation ? stored!.sdkSessionId : undefined;
 
+    const cwd = await ensureAnthropicBridgeCwd();
+    // Last await before Claude Code starts.
+    if (cancel.signal.aborted) throw new Error("Request canceled");
     const q = query({
       prompt: promptContent ? singleUserMessage(promptContent) : prompt,
       options: {
-        cwd: await ensureAnthropicBridgeCwd(),
+        cwd,
+        abortController: cancel,
         model: model || undefined,
         resume: sdkSessionId,
         // Turn 1 is the real answer; turn 2 exists because blocked tool calls
@@ -830,7 +839,7 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
           PATH: process.env.PATH,
           HOME: process.env.HOME,
           LANG: process.env.LANG,
-          CLAUDE_CODE_OAUTH_TOKEN: account.token,
+          ...auth.env,
           ...cliPassthroughEnv({
             contextWindow: contextWindowFor(model),
             maxTokens:
@@ -867,11 +876,17 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
       },
     });
 
+    let limitError: string | undefined;
     for await (const msg of q) {
       if (msg.type === "system" && (msg as any).subtype === "init") {
         sdkSessionId = (msg as any).session_id;
       }
       if (msg.type === "assistant") {
+        if (isClaudeLimitErrorKind((msg as any).error) && !limitError)
+          limitError = claudeLimitErrorMessage(
+            (msg as any).error,
+            (msg as any).message?.content,
+          );
         const blocks = (msg as any).message?.content;
         if (Array.isArray(blocks)) {
           for (const b of blocks) {
@@ -886,6 +901,9 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
       if (msg.type === "result") {
         const rm = msg as any;
         sdkSessionId = rm.session_id || sdkSessionId;
+        // A limit tag on a message outranks the result's own wording, even
+        // on an error result, so the account is benched either way.
+        if (limitError) throw new Error(limitError);
         // error_max_turns WITH captured calls is a SUCCESS for this bridge:
         // sequential-tool models (sonnet especially) often answer a blocked
         // call by trying the next tool — a fresh turn each time — and blow
@@ -912,6 +930,20 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
             "SDK run failed";
           throw new Error(detail);
         }
+        // Claude Code reports some usage limits as a successful result: the
+        // message carries a limit error kind, or the whole text is a notice
+        // ("5-hour limit reached ∙ resets 3am"). An answer that only mentions
+        // limits is returned as usual.
+        // Treat that as the failure it is, so the account is benched and the
+        // notice never reaches the client as the model's answer.
+        const notice =
+          (typeof rm.result === "string" && rm.result) ||
+          contentOut
+            .filter((b) => b.type === "text")
+            .map((b) => b.text)
+            .join("\n");
+        if (!captured.length && isClaudeAccountNotice(notice))
+          throw new Error(notice);
         usage = {
           input_tokens: rm.usage?.input_tokens || 0,
           output_tokens: rm.usage?.output_tokens || 0,
@@ -978,6 +1010,19 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
     return response;
   };
 
+  // A limit the account itself reported benches it (until the reset it
+  // named, when it named one) before the error goes back, so the next
+  // request's pick moves to another account. Without this an API account,
+  // which has no usage poll to notice the limit, kept being picked first.
+  const run = async () => {
+    try {
+      return await runOnce();
+    } catch (e: any) {
+      sidelineLimitedBridgeAccount(account, model, e?.message || String(e));
+      throw e;
+    }
+  };
+
   if (!wantsStream) {
     try {
       return Response.json(await run());
@@ -1004,6 +1049,9 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
   const sse = (event: string, data: unknown) =>
     enc.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   const stream = new ReadableStream<Uint8Array>({
+    cancel() {
+      cancel.abort();
+    },
     start(controller) {
       const heartbeat = setInterval(() => {
         try {
