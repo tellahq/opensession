@@ -58,6 +58,11 @@ async function make(overrides = {}) {
     home,
     env: { PATH: process.env.PATH, USER: "ada", SECRET_OF_THE_APP: "no" },
     resolvePath: async () => process.env.PATH,
+    // A Mac with Claude Code installed, and no internet to fetch one from.
+    findTool: () => "/usr/local/bin/claude",
+    download: async () => {
+      throw new Error("no network in tests");
+    },
     preferredPorts: {
       port: await freePort(),
       kernelPort: await freePort(),
@@ -166,6 +171,13 @@ describe("LocalServer", () => {
       started[0].env.OPENSESSION_SESSION_KERNEL_TOKEN,
     );
     expect(env.HOME).toBe(home);
+    // The Mac's own Claude Code is used as it is, found on PATH. Codex's
+    // stand-in comes last, so one the person installed wins.
+    expect(env.OPENSESSION_CLAUDE_BIN).toBeUndefined();
+    expect(env.OPENSESSION_CLAUDE_AUTO_UPDATE).toBeUndefined();
+    const toolsBin = path.join(home, ".opensession-app", "tools", "bin");
+    expect(env.PATH.split(":").at(-1)).toBe(toolsBin);
+    expect(fs.statSync(path.join(toolsBin, "codex")).mode & 0o111).toBe(0o111);
     expect(env.USER).toBe("ada");
     expect(env.SECRET_OF_THE_APP).toBeUndefined();
 
@@ -306,6 +318,102 @@ describe("LocalServer", () => {
       .filter((call) => call.pid && call.role !== "seed-session-catalogs")
       .map((call) => call.pid);
     expect(await until(() => !pids.some(alive))).toBe(true);
+  });
+});
+
+describe("a Mac without Claude Code", () => {
+  const managed = () =>
+    path.join(home, ".opensession-app", "tools", "claude", "current", "claude");
+  // Stands in for local-tools.js: fetches when told to, and says what it did.
+  function fakeTools({ fail = false } = {}) {
+    const dir = path.join(home, ".opensession-app", "tools");
+    const tools = {
+      binDir: path.join(dir, "bin"),
+      has: false,
+      watched: null,
+      stops: 0,
+      release: null,
+      label: () => "Claude Code",
+      path: () => managed(),
+      installed: () => (tools.has ? "9.9.1" : null),
+      prepare: () => {},
+      watch: (options) => (tools.watched = options),
+      stop: () => {
+        tools.stops++;
+        tools.release?.(new Error("cancelled"));
+      },
+      ensure: async (_name, { onProgress }) => {
+        onProgress(40, 100);
+        await new Promise((resolve, reject) => {
+          tools.release = (error) => (error ? reject(error) : resolve());
+          if (tools.hold) return;
+          if (fail) reject(new Error("offline"));
+          else resolve();
+        });
+        onProgress(100, 100);
+        tools.has = true;
+      },
+    };
+    return tools;
+  }
+
+  test("downloads it before the first start and points the server at it", async () => {
+    const tools = fakeTools();
+    const server = await make({ findTool: () => null, tools });
+    const steps = [];
+    server.on("state", (status) => steps.push([status.state, status.step]));
+    await server.start();
+
+    expect(steps).toContainEqual([
+      "starting",
+      { label: "Claude Code", done: 100, total: 100 },
+    ]);
+    expect(steps.at(-1)).toEqual(["ready", null]);
+    const env = calls().find((call) => call.role === "server").env;
+    expect(env.OPENSESSION_CLAUDE_BIN).toBe(managed());
+    // The app replaces its copy itself.
+    expect(env.OPENSESSION_CLAUDE_AUTO_UPDATE).toBe("0");
+    expect(tools.watched).toEqual({ manage: ["claude"] });
+  });
+
+  test("starts without it when the download fails, and keeps trying", async () => {
+    const tools = fakeTools({ fail: true });
+    const server = await make({ findTool: () => null, tools });
+    await server.start();
+    expect(server.status().state).toBe("ready");
+    const env = calls().find((call) => call.role === "server").env;
+    // Still where the server looks, so a later download is picked up.
+    expect(env.OPENSESSION_CLAUDE_BIN).toBe(managed());
+    expect(tools.watched).toEqual({ manage: ["claude"] });
+    expect(server.recentOutput()).toContain(
+      "Claude Code could not be downloaded: offline",
+    );
+  });
+
+  test("does not download again once it has a copy", async () => {
+    const tools = fakeTools();
+    tools.has = true;
+    tools.ensure = async () => {
+      throw new Error("should not be asked");
+    };
+    const server = await make({ findTool: () => null, tools });
+    await server.start();
+    expect(server.recentOutput()).toBe("");
+    expect(
+      calls().find((call) => call.role === "server").env.OPENSESSION_CLAUDE_BIN,
+    ).toBe(managed());
+  });
+
+  test("a stop during the download starts nothing", async () => {
+    const tools = fakeTools();
+    tools.hold = true;
+    const server = await make({ findTool: () => null, tools });
+    const starting = server.start();
+    expect(await until(() => !!tools.release)).toBe(true);
+    await server.stop();
+    await expect(starting).rejects.toThrow(/cancelled/);
+    expect(server.status().state).toBe("stopped");
+    expect(calls()).toEqual([]);
   });
 });
 

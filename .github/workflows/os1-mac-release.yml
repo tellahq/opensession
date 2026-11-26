@@ -271,7 +271,7 @@ jobs:
             <(cd "$APP/Contents/Resources/server" && find . -type f | sort) ||
             { echo '::error::The packed local server is missing files'; exit 1; }
           du -sh "$APP/Contents/Resources/server"
-          bun test src/local-server.test.js
+          bun test src/local-server.test.js src/local-tools.test.js
           node scripts/smoke-local-server.js "$APP/Contents/Resources/server"
 
       - name: Verify packaged locales and report size

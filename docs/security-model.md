@@ -492,6 +492,13 @@ as that user in the folders they are given. What it adds:
   IPC that the app accepts only from its own packaged pages.
 - **It ends with the app.** Turns run inside the server process and the app
   stops the server on quit.
+- **Downloaded tools are the publisher's.** When the Mac has no `claude` or
+  `codex`, the app downloads them from their publishers over HTTPS into its
+  state folder. A file is used only if it matches the checksum published
+  beside it and `codesign` confirms the publisher's Developer ID team. The
+  address of a Codex file comes from the release channel and is followed only
+  on that channel's own origin. Nothing is fetched from anywhere else, and the
+  files are never modified.
 
 Other macOS users on a shared computer can still reach a loopback port. Do not
 use "This Mac" on a computer shared with people you do not trust.

@@ -61,6 +61,8 @@ const localServer = new LocalServer({
     (app.isPackaged
       ? path.join(process.resourcesPath, "server")
       : path.join(__dirname, "../build/vendor/server")),
+  // Electron's fetch follows the Mac's proxy settings; Node's does not.
+  download: (url, options) => net.fetch(url, options),
 });
 const LOCAL_ACCOUNT_LABEL = "This Mac";
 const nativeDictation = new NativeDictation();

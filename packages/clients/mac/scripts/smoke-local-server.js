@@ -6,6 +6,7 @@
 //   node scripts/smoke-local-server.js "dist/mac-arm64/OS.app/Contents/Resources/server"
 //
 // Everything it writes goes to a temporary home that is removed afterwards.
+const childProcess = require("node:child_process");
 const fs = require("node:fs");
 const http = require("node:http");
 const os = require("node:os");
@@ -23,6 +24,18 @@ function status(port, host, urlPath) {
     );
     req.on("error", () => resolve(0));
     req.end();
+  });
+}
+
+function output(file, args, env) {
+  return new Promise((resolve) => {
+    childProcess.execFile(
+      file,
+      args,
+      { env, encoding: "utf8", timeout: 600_000 },
+      (error, stdout, stderr) =>
+        resolve(error ? `${error.message} ${stderr}` : stdout.trim()),
+    );
   });
 }
 
@@ -68,6 +81,32 @@ async function main() {
         path.join(home, "OpenSession", "repos", "scratch"),
     );
     expect("the engine is on", setup.engine?.piEnabled === true);
+
+    // The model tools, fetched from their publishers for real: on a Mac this
+    // is also the check that each is still signed by its publisher.
+    const toolEnv = { HOME: home, PATH: process.env.PATH };
+    if (server.tools.managed.has("claude")) {
+      const version = await output(
+        server.tools.path("claude"),
+        ["--version"],
+        toolEnv,
+      );
+      console.log(`     Claude Code says ${version}`);
+      expect(
+        "Claude Code was downloaded and runs",
+        /^\d+\.\d+\.\d+/.test(version),
+      );
+    } else {
+      console.log("     this machine has its own Claude Code; not downloaded");
+    }
+    const codex = path.join(server.tools.binDir, "codex");
+    expect(
+      "Codex is not downloaded before it is used",
+      !server.tools.installed("codex"),
+    );
+    const version = await output(codex, ["--version"], toolEnv);
+    console.log(`     Codex says ${version}`);
+    expect("Codex is downloaded when first run", /^codex-cli \d/.test(version));
     const pids = server.readPlan().pids || [];
     await server.stop();
     expect(

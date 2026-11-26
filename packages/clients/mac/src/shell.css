@@ -155,6 +155,26 @@ h1 {
   outline: none;
   border-color: var(--text-faint);
 }
+progress {
+  appearance: none;
+  display: block;
+  width: 220px;
+  height: 4px;
+  margin: 22px auto 0;
+  border: 0;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--border);
+}
+progress[hidden] {
+  display: none;
+}
+progress::-webkit-progress-bar {
+  background: var(--border);
+}
+progress::-webkit-progress-value {
+  background: var(--text);
+}
 .actions {
   display: flex;
   align-items: center;
