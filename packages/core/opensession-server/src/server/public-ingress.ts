@@ -63,6 +63,10 @@ import {
 import { configuredIngress } from "./config";
 import { publicIngressConfig } from "./sandbox/config";
 import { handleWorkloadIdentityRequest } from "./workload-identity";
+import {
+  GITHUB_CREDENTIAL_PATH,
+  handleGithubCredentialRequest,
+} from "./sandbox/github-credential-broker";
 import { handleWebhookRequest } from "./webhook-server";
 
 const g = globalThis as any;
@@ -165,6 +169,17 @@ async function ingressFetch(
       status: 429,
       headers: { "retry-after": String(Math.ceil(WINDOW_MS / 1000)) },
     });
+  }
+  if (path === GITHUB_CREDENTIAL_PATH) {
+    // git and gh in a Sandbox call this on every GitHub operation, so only
+    // refused leases spend the per-IP budget.
+    const response = await handleGithubCredentialRequest(req);
+    if (response?.status === 401 && rateLimited(clientIp(req, server)))
+      return new Response(null, {
+        status: 429,
+        headers: { "retry-after": String(Math.ceil(WINDOW_MS / 1000)) },
+      });
+    return response;
   }
   const workloadIdentity = await handleWorkloadIdentityRequest(req);
   if (workloadIdentity) return workloadIdentity;

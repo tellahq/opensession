@@ -128,10 +128,32 @@ survive, and the next turn continues on a rebuilt machine.
 Shell commands run in their own process group with output going to a file,
 so a Stop or a timeout reaches everything a command started, and a server it
 left in the background does not hold the call open. The command receives the
-run's GitHub and git identity; this server's paths and file-based
-credentials (AWS, Claude or Codex CLI pools) are never passed. The skills
+run's git identity; this server's paths and file-based credentials (AWS,
+Claude or Codex CLI pools) are never passed. The skills
 this server ships are read from here; the checkout's own AGENTS.md and
 skills are read from the Sandbox at the start of each turn.
+
+### GitHub credentials in a Sandbox
+
+A Sandbox command never holds a GitHub token. The run's tokens (`GH_TOKEN`,
+`GITHUB_TOKEN`, `GH_READ_TOKEN` and per-owner tokens) stop at this server,
+which keeps them in memory for the run
+(`src/server/sandbox/github-credential-broker.ts`). The command gets an
+opaque lease in `OPENSESSION_GITHUB_CREDENTIAL_TOKEN`, valid only at
+`/workload-identity/github-token` on the callback URL and only while the run
+lasts:
+
+- git's credential helper (inline shell and curl) exchanges the lease each
+  time git talks to github.com;
+- `gh` is a small shim first on the command's PATH that fetches `GH_TOKEN`
+  for that one process, unless the caller set one, and runs the real gh.
+  `gh auth token` prints it for anything else that needs a token.
+
+The run re-resolves its tokens every few minutes, so a turn longer than an
+installation token's hour keeps working. A lease stops working when its run
+ends or its Sandbox is retired, and leases do not survive a server restart
+(the next command gets a new one). Lifecycle hooks and checkpoint pushes are
+server-owned and keep their own bounded credential.
 
 A tool call costs one provider round trip: about 25 to 110 ms on Boat over
 its SSH lane and 120 to 300 ms on Daytona. `deploy/sandbox/verify-remote-workspace.ts`

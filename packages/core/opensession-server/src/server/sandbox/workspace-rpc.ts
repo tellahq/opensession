@@ -23,6 +23,12 @@ import {
 import type { RemoteWorkspaceSpec } from "../../runner-host/protocol";
 import { sandboxSessionScratchDir } from "../session-scratch";
 import { noteSandboxActivity } from "./idle";
+import {
+  brokerGithubCredentials,
+  ghShimEnsureScript,
+  revokeGithubCredentialsForSandbox,
+} from "./github-credential-broker";
+import { workloadIdentityIssuer } from "../workload-identity";
 
 /**
  * The remote workspace a run acting on this session's checkout must use, or
@@ -155,6 +161,7 @@ async function sandboxForRun(
  *  teardownSandbox): a run that still holds a token gets an error, not the
  *  machine. */
 export function forgetWorkspaceSandbox(sandboxId: string): void {
+  revokeGithubCredentialsForSandbox(sandboxId);
   for (const [sessionId, sandbox] of primed())
     if (sandbox.id === sandboxId) primed().delete(sessionId);
   for (const [token, entry] of handles())
@@ -195,23 +202,33 @@ export async function dispatchWorkspaceExec(
     { sandboxId: sandbox.id, sessionId: ctx.sessionId },
     "agent",
   );
+  // The run's GitHub tokens stay on this server; the command gets a lease
+  // that git and gh exchange per call (github-credential-broker.ts).
+  const github = brokerGithubCredentials({
+    runToken: token,
+    sessionId: ctx.sessionId,
+    sandboxId: sandbox.id,
+    env: {
+      // The guest's own PATH and HOME (bun, the identity command, the
+      // pinned tools), which a command from this server cannot know.
+      PATH: layout.path,
+      HOME: layout.home,
+      ...stringRecord(body.env),
+    },
+    endpoint: `${workloadIdentityIssuer()}/github-token`,
+    home: layout.home,
+  });
   try {
     const result = await sandbox.exec(
       [
         "bash",
         "-c",
-        'cd -- "$OS_CWD" 2>/dev/null || { echo "No such directory in the Sandbox: $OS_CWD" >&2; exit 125; }\n' +
+        (github.brokered ? `${ghShimEnsureScript(layout.home)}\n` : "") +
+          'cd -- "$OS_CWD" 2>/dev/null || { echo "No such directory in the Sandbox: $OS_CWD" >&2; exit 125; }\n' +
           script,
       ],
       {
-        // The guest's own PATH and HOME (bun, the identity command, the
-        // pinned tools), which a command from this server cannot know.
-        env: {
-          PATH: layout.path,
-          HOME: layout.home,
-          ...stringRecord(body.env),
-          OS_CWD: cwd,
-        },
+        env: { ...github.env, OS_CWD: cwd },
         timeoutMs,
         assumeStarted: true,
         // One lease per shell command, none per file operation: leases are

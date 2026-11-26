@@ -226,6 +226,7 @@ import {
   runRemoteCommand,
   type RemoteWorkspace,
 } from "./remote-workspace";
+import { isBrokeredGithubVariable } from "./sandbox/github-credential-broker";
 import type { TranscriptEntry } from "./types";
 import type { RunAgentOpts } from "./agent-runner";
 import {
@@ -242,6 +243,10 @@ import type {
 const g = globalThis as any;
 
 const PROVIDER = "pi" as const;
+/** How often a Sandbox run re-resolves its GitHub credentials. Installation
+ *  tokens are re-minted once under five minutes remain, so this keeps the
+ *  token the server hands out at least a minute from expiry. */
+const SANDBOX_GITHUB_REFRESH_MS = 4 * 60_000;
 export const PI_MODEL_PREFIX = "pi/";
 
 /** Fresh authority for an unattended GitHub code run. Host recovery resolves
@@ -2580,6 +2585,7 @@ async function* runPiAttempt(
   let reachedTerminal = false;
   let session: AgentSession | undefined;
   let backgroundShells: BackgroundShells | undefined;
+  let githubRefreshTimer: ReturnType<typeof setInterval> | undefined;
   let mcpRuntime: McpRuntime | undefined;
   let mcpBridge: PiMcpBridge | undefined;
   let checkpointWriter: PiTurnCheckpointWriter | undefined;
@@ -2800,7 +2806,7 @@ async function* runPiAttempt(
       unattended: Boolean(policy.unattended),
       isolatedHome: Boolean(opts.publicationPolicy),
     });
-    const githubEnv = await runGithubEnv({
+    const githubEnvInput = {
       isCode: mode === "code",
       ownerTurn,
       user: githubUser,
@@ -2812,7 +2818,8 @@ async function* runPiAttempt(
       readRepos: opts.readRepos,
       attachedRepos: opts.attachedRepos,
       hostLogin: hostGithubLogin,
-    });
+    };
+    const githubEnv = await runGithubEnv(githubEnvInput);
     const agentGitEnv = await agentGitIdentityEnv(author);
     const mergeGuard = runGithubMergeGuard({
       isCode: mode === "code",
@@ -3077,6 +3084,27 @@ async function* runPiAttempt(
           Boolean(opts.publicationPolicy),
         )
       : bashEnv;
+    // A Sandbox command's GitHub tokens are handed to git and gh per call
+    // by the server (sandbox/github-credential-broker.ts), from what the
+    // latest command carried. Re-resolve them while the turn runs, so a turn
+    // longer than an installation token's hour keeps a live one.
+    if (remote) {
+      githubRefreshTimer = setInterval(() => {
+        void runGithubEnv(githubEnvInput)
+          .then((fresh) => {
+            for (const [key, value] of Object.entries(fresh))
+              if (value && key in commandEnv && isBrokeredGithubVariable(key))
+                commandEnv[key] = value;
+          })
+          .catch((error) =>
+            console.warn(
+              "[pi-runner] could not refresh the Sandbox run's GitHub credentials:",
+              error instanceof Error ? error.message : String(error),
+            ),
+          );
+      }, SANDBOX_GITHUB_REFRESH_MS);
+      githubRefreshTimer.unref?.();
+    }
     let steeringBoundaryPending = false;
     const baseCustomTools: ToolDefinition<any, any, any>[] = [
       ...mcpBridge.discoveryTools,
@@ -4444,6 +4472,7 @@ async function* runPiAttempt(
         ? checkpointWriter.discard()
         : checkpointWriter.flush());
     }
+    if (githubRefreshTimer) clearInterval(githubRefreshTimer);
     // Background commands belong to this run: stop what it left running.
     if (backgroundShells) {
       try {

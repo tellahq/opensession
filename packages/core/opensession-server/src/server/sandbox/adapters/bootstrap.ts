@@ -20,9 +20,10 @@
  *    (remote-workspace.ts via sandbox/workspace-rpc.ts) all use.
  *
  * Nothing here uploads a model credential: the agent loop never runs in a
- * Sandbox. What enters one is the clone credential during the clone, a run's
- * GitHub token inside each of its shell commands' environment, and
- * short-lived workload identity leases.
+ * Sandbox. What enters one is the clone credential during the clone, and
+ * short-lived leases: workload identity, and the GitHub credential lease a
+ * run's shell commands exchange per git or gh call
+ * (sandbox/github-credential-broker.ts).
  */
 
 import { randomUUID } from "crypto";

@@ -30,6 +30,7 @@ import { lazyJsonSchemaValidator } from "./inprocess-mcp";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { pathExists } from "./run-fs";
 import { audit } from "./audit";
+import { revokeGithubCredentialsForRun } from "./sandbox/github-credential-broker";
 import { devInstanceBootError, isDevInstance } from "./dev-mode";
 import {
   MCP_HTTP_PORT,
@@ -78,10 +79,12 @@ export function unregisterRunToken(token: string | undefined): void {
   const existing = tokens.get(token);
   if (!existing || existing.refs <= 1) {
     tokens.delete(token);
-    // The run's cached Sandbox handle (sandbox/workspace-rpc.ts) goes too.
+    // The run's cached Sandbox handle (sandbox/workspace-rpc.ts) goes too,
+    // and so do the GitHub credentials its Sandbox commands exchange.
     (
       g.__opensessionWorkspaceRpcHandles as Map<string, unknown> | undefined
     )?.delete(token);
+    revokeGithubCredentialsForRun(token);
   } else existing.refs -= 1;
 }
 

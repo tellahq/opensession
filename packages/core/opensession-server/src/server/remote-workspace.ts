@@ -1095,7 +1095,10 @@ export function forgetRemoteBackgroundCommand(
  * minus everything that names this machine (its PATH, HOME, temp and
  * credential-file paths), with Sandbox scratch in their place. GitHub
  * transport goes through an inline credential helper reading $GH_TOKEN,
- * since this server's helper binary does not exist in the Sandbox.
+ * since this server's helper binary does not exist in the Sandbox. The
+ * server takes the tokens out before the command enters the Sandbox and
+ * points that helper at its per-call endpoint instead
+ * (sandbox/github-credential-broker.ts).
  */
 export function remoteCommandEnv(
   local: Record<string, string>,
