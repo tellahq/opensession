@@ -28,6 +28,14 @@
  * The bridge transport remains the rollback path. This module has no import-
  * time sockets, timers, or subprocesses; queries start only from stream().
  *
+ * The mapping from a pi conversation to its SDK session is also written to a
+ * small file beside pi's own session file (claude-sdk-session-file.ts). Every
+ * turn runs in a new process, and without the file each one replayed the whole
+ * conversation into a new SDK session, a prompt-cache write where a resume is
+ * a read. A process that finds an entry resumes that session from Claude
+ * Code's own files, after checking that pi's history still starts with the
+ * messages the session has seen.
+ *
  * Where the Claude Code process runs is the one thing a transport changes:
  * in this process by default (claude-sdk-query.ts), or with "remote" in a
  * Claude host service that gets a placeholder instead of the account's
@@ -35,6 +43,7 @@
  * here is the same for both.
  */
 
+import { createHash } from "node:crypto";
 import type {
   EffortLevel,
   SDKUserMessage,
@@ -107,6 +116,10 @@ import {
   type ClaudeQuerySpec,
   type ClaudeToolReply,
 } from "./claude-sdk-query";
+import {
+  readSdkSessionEntries,
+  writeSdkSessionEntry,
+} from "./claude-sdk-session-file";
 import { leaseClaudeToken } from "./claude-token-proxy";
 import { piAnthropicTransport, piClaudeHostUrl } from "./pi-config";
 
@@ -515,13 +528,142 @@ export interface PiSdkSessionState {
    * fallback resumes here with exact tool results when no live query remains. */
   passthroughToolCallAssistantUuid?: string;
   passthroughToolCallIds?: string[];
+  /** historyDigest() of the pi-side messages that went into the last step
+   *  (the first `messageCount - 1`). Lets another process check that pi's
+   *  history still starts with what the SDK session has seen. */
+  historyDigest?: string;
   lastUsedAt: number;
 }
 
-// unified session id → SDK session mapping; globalThis-parked for hot reloads
-// (a real restart replays — correct, only slower). Exported for tests.
+// unified session id → SDK session mapping; globalThis-parked for hot reloads.
+// A new process starts empty and fills an entry from the session's file when
+// the provider was given one (hydrateSdkSession). Exported for tests.
 export function piSdkSessionStore(): Map<string, PiSdkSessionState> {
   return (g.__piAnthropicSdkSessions ??= new Map<string, PiSdkSessionState>());
+}
+
+/** Store keys read from a session file that this process has not yet
+ *  completed a step on. A resume that fails while its key is here is retried
+ *  as a fresh replay instead of failing the turn. */
+function coldSdkSessionKeys(): Set<string> {
+  return (g.__piAnthropicColdSdkSessions ??= new Set<string>());
+}
+
+/**
+ * Chained digest of `messages[from, to)`, continuing from `seed` (the digest
+ * of the messages before `from`). Chained so each step only hashes the
+ * messages added since the last one, however long the history is.
+ */
+export function historyDigest(
+  messages: readonly AnthropicMessage[],
+  to: number,
+  from = 0,
+  seed = "",
+): string {
+  let digest = seed;
+  for (let index = from; index < to; index++) {
+    digest = createHash("sha256")
+      .update(digest)
+      .update("\n")
+      .update(JSON.stringify(messages[index]))
+      .digest("hex");
+  }
+  return digest;
+}
+
+function parseStoredSdkSession(raw: unknown): PiSdkSessionState | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  if (
+    typeof r.sdkSessionId !== "string" ||
+    !r.sdkSessionId ||
+    typeof r.accountId !== "string" ||
+    !r.accountId ||
+    typeof r.historyDigest !== "string" ||
+    !Number.isInteger(r.messageCount) ||
+    (r.messageCount as number) < 1
+  )
+    return null;
+  const checkpointIds = r.passthroughToolCallIds;
+  if (
+    r.passthroughToolCallAssistantUuid !== undefined &&
+    (typeof r.passthroughToolCallAssistantUuid !== "string" ||
+      !Array.isArray(checkpointIds) ||
+      !checkpointIds.every((id) => typeof id === "string"))
+  )
+    return null;
+  return {
+    sdkSessionId: r.sdkSessionId,
+    messageCount: r.messageCount as number,
+    accountId: r.accountId,
+    historyDigest: r.historyDigest,
+    ...(typeof r.passthroughToolCallAssistantUuid === "string"
+      ? {
+          passthroughToolCallAssistantUuid: r.passthroughToolCallAssistantUuid,
+          passthroughToolCallIds: [...(checkpointIds as string[])],
+        }
+      : {}),
+    lastUsedAt: typeof r.lastUsedAt === "number" ? r.lastUsedAt : 0,
+  };
+}
+
+/** Why a stored SDK session was not resumed. */
+export type SdkResumeMiss =
+  | "invalid_entry"
+  | "history_changed"
+  | "config_changed"
+  | "account_changed"
+  | "tail_not_resumable";
+
+/** `pi:<session key>:` of a store key: the part that names the conversation,
+ *  without the hash of its model, prompt and tools. */
+function storeKeyConversation(key: string): string {
+  const cut = key.lastIndexOf(":");
+  return cut < 0 ? key : key.slice(0, cut + 1);
+}
+
+/**
+ * Fill the in-memory mapping for `key` from the session's file, when the
+ * entry there still describes this conversation: pi's history must be longer
+ * than what the SDK session has seen, hold an assistant message where that
+ * session's last reply belongs, and start with exactly the messages it was
+ * given. Anything else (an edit, a compaction, a repaired interrupted turn)
+ * leaves the mapping empty and the turn replays, as it did before the file
+ * existed. `config_changed` reports that the file knows this conversation
+ * only under another model, prompt or tool set. Exported for tests.
+ */
+export async function hydrateSdkSession(
+  file: string,
+  key: string,
+  messages: readonly AnthropicMessage[],
+): Promise<"resumable" | SdkResumeMiss | undefined> {
+  const entries = await readSdkSessionEntries(file);
+  const raw = entries[key];
+  if (raw === undefined) {
+    const conversation = storeKeyConversation(key);
+    return Object.keys(entries).some((k) => k.startsWith(conversation))
+      ? "config_changed"
+      : undefined;
+  }
+  const stored = parseStoredSdkSession(raw);
+  if (!stored) return "invalid_entry";
+  const seen = stored.messageCount - 1;
+  if (
+    messages.length <= stored.messageCount ||
+    messages[seen]?.role !== "assistant" ||
+    historyDigest(messages, seen) !== stored.historyDigest
+  )
+    return "history_changed";
+  piSdkSessionStore().set(key, stored);
+  coldSdkSessionKeys().add(key);
+  return "resumable";
+}
+
+/** Drop the mapping for `key`, in memory and in the session's file. */
+async function forgetSdkSession(key: string, file?: string): Promise<void> {
+  piSdkSessionStore().delete(key);
+  coldSdkSessionKeys().delete(key);
+  if (file) await writeSdkSessionEntry(file, key, null);
 }
 
 export interface PiSdkTurnPlan {
@@ -690,16 +832,23 @@ export function sdkPromptContent(plan: PiSdkTurnPlan): ContentBlock[] | null {
 export const MAX_PI_SDK_SESSIONS = 500;
 
 /** Record the post-turn mapping (+1: the assistant message this turn returns
- *  will be in pi's history on the next call) and prune oldest past the cap. */
+ *  will be in pi's history on the next call) and prune oldest past the cap.
+ *  With `history` (the step's `wireMessageCount` input messages) the mapping
+ *  also carries their digest, which a mapping written to a file needs. */
 export function rememberSdkTurn(
   key: string,
   sdkSessionId: string,
   wireMessageCount: number,
   accountId: string,
   checkpoint?: { assistantUuid: string; toolCallIds: string[] },
-): void {
+  history?: readonly AnthropicMessage[],
+): PiSdkSessionState {
   const store = piSdkSessionStore();
-  store.set(key, {
+  const previous = store.get(key);
+  // A step's history extends the previous step's, so continue its digest.
+  const covered =
+    previous?.historyDigest === undefined ? -1 : previous.messageCount - 1;
+  const state: PiSdkSessionState = {
     sdkSessionId,
     messageCount: wireMessageCount + 1,
     accountId,
@@ -709,14 +858,31 @@ export function rememberSdkTurn(
           passthroughToolCallIds: [...checkpoint.toolCallIds],
         }
       : {}),
+    ...(history
+      ? {
+          historyDigest:
+            covered >= 0 && covered <= wireMessageCount
+              ? historyDigest(
+                  history,
+                  wireMessageCount,
+                  covered,
+                  previous!.historyDigest,
+                )
+              : historyDigest(history, wireMessageCount),
+        }
+      : {}),
     lastUsedAt: Date.now(),
-  });
-  if (store.size <= MAX_PI_SDK_SESSIONS) return;
-  const byAge = [...store.entries()].sort(
-    (a, b) => a[1].lastUsedAt - b[1].lastUsedAt,
-  );
-  for (const [k] of byAge.slice(0, store.size - MAX_PI_SDK_SESSIONS))
-    store.delete(k);
+  };
+  store.set(key, state);
+  coldSdkSessionKeys().delete(key);
+  if (store.size > MAX_PI_SDK_SESSIONS) {
+    const byAge = [...store.entries()].sort(
+      (a, b) => a[1].lastUsedAt - b[1].lastUsedAt,
+    );
+    for (const [k] of byAge.slice(0, store.size - MAX_PI_SDK_SESSIONS))
+      store.delete(k);
+  }
+  return state;
 }
 
 // ── Usage / cost ─────────────────────────────────────────────────────────────
@@ -804,6 +970,10 @@ export interface PiAnthropicProviderOpts {
    *  live SDK conversation, and its claude process, as soon as each request
    *  settles instead of keeping it warm for a resume that never comes. */
   ephemeral?: boolean;
+  /** File that keeps this session's SDK-session mapping for the next turn's
+   *  process (claude-sdk-session-file.ts). Absent: the mapping lives and dies
+   *  with this process. */
+  sdkSessionFile?: string;
 }
 
 /**
@@ -931,6 +1101,8 @@ export interface LiveSdkConversation {
   reportedRequest?: SdkReportedRequest;
   /** Ends the token placeholder a remote Claude host was given. */
   releaseCredential?: () => void;
+  /** The session file holding this conversation's mapping, if any. */
+  sessionFile?: string;
 }
 
 /** Live SDK conversations keyed by store key. Exported for tests. */
@@ -1187,7 +1359,7 @@ function queryFacade(live: LiveSdkConversation): LiveQueryFacade {
           if (queued) {
             if (queued.__disposeLive === true) {
               disposeLiveSdkConversation(live, "unsupported SDK tool call");
-              piSdkSessionStore().delete(live.key);
+              await forgetSdkSession(live.key, live.sessionFile);
               delete queued.__disposeLive;
             }
             return { value: queued, done: false };
@@ -1253,6 +1425,7 @@ function createLiveSdkConversation(input: {
   tools: readonly PiToolShape[];
   plan: PiSdkTurnPlan;
   thinking: SdkThinkingOptions;
+  sessionFile?: string;
 }): LiveSdkConversation {
   const prompt = new ClaudeInputQueue();
   const controller = new AbortController();
@@ -1305,6 +1478,7 @@ function createLiveSdkConversation(input: {
     thinkingKey: sdkThinkingKey(input.thinking),
     credentialKey: input.auth.key,
     ...(releaseCredential ? { releaseCredential } : {}),
+    ...(input.sessionFile ? { sessionFile: input.sessionFile } : {}),
   };
   liveSdkConversations().set(input.key, live);
   prompt.push(inputForPlan(input.plan));
@@ -1320,6 +1494,7 @@ function acquireLiveSdkQuery(input: {
   tools: readonly PiToolShape[];
   plan: PiSdkTurnPlan;
   thinking: SdkThinkingOptions;
+  sessionFile?: string;
 }): LiveQueryFacade {
   pruneLiveSdkConversations();
   let live = liveSdkConversations().get(input.key);
@@ -1384,6 +1559,9 @@ function isCloudflareBlock(message: string): boolean {
 interface SdkAttemptRetry {
   retry: boolean;
   cloudflareReplayed: boolean;
+  /** A resume of a session read from the session file failed and was
+   *  replayed fresh once. */
+  storedSessionReplayed: boolean;
   replayAccount?: ClaudeAccount;
 }
 
@@ -1424,7 +1602,11 @@ async function* runSdkStream(
 
   // Never retry the same account twice during this turn's fallback walk.
   const excluded = new Set<string>();
-  const rotate: SdkAttemptRetry = { retry: false, cloudflareReplayed: false };
+  const rotate: SdkAttemptRetry = {
+    retry: false,
+    cloudflareReplayed: false,
+    storedSessionReplayed: false,
+  };
   for (;;) {
     rotate.retry = false;
     yield* runSdkAttempt(
@@ -1443,8 +1625,9 @@ async function* runSdkStream(
 
 /** One attempt on one account. Sets `rotate.retry` instead of yielding a
  *  terminal error when the failure is a usage limit, nothing has streamed
- *  yet, and another account can serve. An edge-blocked continuation gets one
- *  fresh replay on the same account before surfacing the failure. */
+ *  yet, and another account can serve. An edge-blocked continuation, and a
+ *  resume of a session another process left in the session file, each get
+ *  one fresh replay on the same account before surfacing the failure. */
 async function* runSdkAttempt(
   opts: PiAnthropicProviderOpts,
   model: PiCatalogModel,
@@ -1482,6 +1665,9 @@ async function* runSdkAttempt(
   // dead SDK session forever (count-based divergence never triggers while
   // history keeps growing — meridian evicts on resume failure the same way).
   let plannedContinuation = false;
+  // The planned continuation resumes a session this process only knows from
+  // the session file. If that resume fails, the turn replays fresh once.
+  let resumesStoredSession = false;
 
   const auditBase = {
     msg: "pi_anthropic_request",
@@ -1499,6 +1685,23 @@ async function* runSdkAttempt(
     if (signal?.aborted) {
       yield fail("aborted", "Request aborted");
       return;
+    }
+
+    // A new process knows nothing of the SDK session the previous turn left:
+    // read it from the session's file, before the account pick, which
+    // prefers the account that holds it.
+    let resumeMiss: SdkResumeMiss | undefined;
+    if (
+      opts.sdkSessionFile &&
+      !piSdkSessionStore().has(storeKey) &&
+      !liveSdkConversations().has(storeKey)
+    ) {
+      const hydrated = await hydrateSdkSession(
+        opts.sdkSessionFile,
+        storeKey,
+        wireMessages,
+      );
+      if (hydrated !== "resumable") resumeMiss = hydrated;
     }
 
     // Stay on the account that already holds this session's SDK conversation
@@ -1592,12 +1795,25 @@ async function* runSdkAttempt(
         ? planLiveSdkTurn(usableStored, wireMessages)
         : null) ?? planSdkTurn(usableStored, wireMessages);
     plannedContinuation = plan.continuation;
+    if (stored && coldSdkSessionKeys().has(storeKey)) {
+      if (plan.continuation) resumesStoredSession = true;
+      else resumeMiss = usableStored ? "tail_not_resumable" : "account_changed";
+    }
+
+    // The file only ever names a session no step is running on: this step
+    // is about to add to it (or leave it behind), and if the process is
+    // killed before the step's own mapping is written, the next one must
+    // replay rather than resume a session holding a half-delivered step.
+    if (opts.sdkSessionFile && stored)
+      await writeSdkSessionEntry(opts.sdkSessionFile, storeKey, null);
 
     audit({
       ...auditBase,
       direction: "in",
       account: account.name,
       continuation: plan.continuation,
+      ...(resumesStoredSession ? { sdk_resume: "stored" } : {}),
+      ...(resumeMiss ? { sdk_resume_miss: resumeMiss } : {}),
       ...summarizeText(plan.prompt),
     });
 
@@ -1610,6 +1826,7 @@ async function* runSdkAttempt(
       tools: requestTools,
       plan,
       thinking: sdkThinkingOptions(model, options),
+      sessionFile: opts.sdkSessionFile,
     });
     const controller = q.live.controller;
     q.live.inUse = true;
@@ -2022,7 +2239,7 @@ async function* runSdkAttempt(
     }
 
     if (signal?.aborted) {
-      piSdkSessionStore().delete(storeKey);
+      await forgetSdkSession(storeKey, opts.sdkSessionFile);
       audit({
         ...auditBase,
         direction: "out",
@@ -2041,13 +2258,18 @@ async function* runSdkAttempt(
     }
 
     if (sdkSessionId && !q.live.disposed) {
-      rememberSdkTurn(
+      const state = rememberSdkTurn(
         storeKey,
         sdkSessionId,
         wireMessages.length,
         account.id,
         checkpoint,
+        opts.sdkSessionFile ? wireMessages : undefined,
       );
+      // Awaited: the process may exit as soon as the turn's last step ends,
+      // and that step's mapping is the one the next turn resumes.
+      if (opts.sdkSessionFile)
+        await writeSdkSessionEntry(opts.sdkSessionFile, storeKey, state);
     }
 
     const usage = clientDone
@@ -2088,7 +2310,7 @@ async function* runSdkAttempt(
     const failedLive = liveSdkConversations().get(storeKey);
     if (failedLive) disposeLiveSdkConversation(failedLive, "SDK turn failed");
     if (signal?.aborted) {
-      piSdkSessionStore().delete(storeKey);
+      await forgetSdkSession(storeKey, opts.sdkSessionFile);
       audit({
         ...auditBase,
         direction: "out",
@@ -2104,7 +2326,7 @@ async function* runSdkAttempt(
     // A facade failure after pi received the tool turn must not emit a second
     // terminal event. Evict the live query and let the next step replay.
     if (clientDone) {
-      piSdkSessionStore().delete(storeKey);
+      await forgetSdkSession(storeKey, opts.sdkSessionFile);
       audit({
         ...auditBase,
         direction: "out",
@@ -2117,7 +2339,8 @@ async function* runSdkAttempt(
     }
     // A failed continuation may mean the resumed SDK session is dead (config
     // dir swept/wiped): evict the mapping so the next turn replays fresh.
-    if (plannedContinuation) piSdkSessionStore().delete(storeKey);
+    if (plannedContinuation)
+      await forgetSdkSession(storeKey, opts.sdkSessionFile);
     // Rebuild only the failed model step, not the agent turn: context already
     // contains the results of executed tools. One fresh query can recover a
     // blocked live continuation without replaying tools or benching good auth.
@@ -2143,6 +2366,31 @@ async function* runSdkAttempt(
       return;
     }
     const accountUnavailable = isClaudeAccountUnavailable(message, true);
+    // The session file named an SDK session this process could not resume
+    // (its Claude Code files are gone or cut short). The mapping is already
+    // dropped above: run the step again as the fresh replay it would have
+    // been without the file, instead of failing the person's turn.
+    if (
+      account &&
+      resumesStoredSession &&
+      !accountUnavailable &&
+      partial.content.length === 0 &&
+      !rotate.storedSessionReplayed
+    ) {
+      rotate.storedSessionReplayed = true;
+      rotate.replayAccount = account;
+      rotate.retry = true;
+      audit({
+        ...auditBase,
+        direction: "out",
+        ok: false,
+        account: account.name,
+        duration_ms: Date.now() - started,
+        error: message,
+        recovery: "stored_session_fresh_replay",
+      });
+      return;
+    }
     // Account-level death: sideline the picked designated account before
     // surfacing (claude-direct's markExhausted discipline); the preserved
     // message is what isPiUsageLimitShape classifies upstream.

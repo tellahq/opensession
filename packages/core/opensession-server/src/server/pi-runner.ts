@@ -52,6 +52,7 @@ import {
   isCodexUsageLimitError,
 } from "./runner-shared";
 import { ensureAnthropicBridge } from "./anthropic-bridge";
+import { CLAUDE_SDK_SESSION_FILE } from "./claude-sdk-session-file";
 import {
   FALLBACK_CONTEXT_WINDOW,
   FALLBACK_MAX_TOKENS,
@@ -2831,6 +2832,15 @@ async function* runPiAttempt(
       accountStrict: opts.accountStrict,
       usageCredits: opts.usageCredits,
       ephemeral: opts.ephemeral,
+      // Beside pi's own session file, so the next turn's process finds it.
+      claudeSdkSessionFile: unifiedSessionId
+        ? join(
+            PI_STATE_DIR,
+            "sessions",
+            sanitizeId(unifiedSessionId),
+            CLAUDE_SDK_SESSION_FILE,
+          )
+        : undefined,
       speed,
       excludedOpenaiAccountIds: walk.excluded,
       onAccountEvidence: (evidence) => {

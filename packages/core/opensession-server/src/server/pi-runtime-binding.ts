@@ -124,6 +124,7 @@ export interface PiRuntimeBindingDependencies {
     builtinModels: ReturnType<ModelRuntime["getModels"]>;
     ensureModelId: string;
     ephemeral?: boolean;
+    sdkSessionFile?: string;
   }) => Parameters<ModelRuntime["registerNativeProvider"]>[0];
   ensureAnthropicBridge: () => { url: string; key: string };
   buildThirdPartyProviderPlan: (input: {
@@ -153,6 +154,9 @@ export interface CreatePiRuntimeBindingInput {
   usageCredits?: boolean;
   /** Throwaway run: release the live provider conversation once it settles. */
   ephemeral?: boolean;
+  /** Where a Claude conversation's SDK-session mapping is kept between turns
+   *  (claude-sdk-session-file.ts). Absent for runs with no later turn. */
+  claudeSdkSessionFile?: string;
   /** Ultrafast turns prefer accounts on the plan that serves it. */
   speed?: SessionSpeed;
   /** Accounts already burned by this turn's walk (Codex and SuperGrok pools). */
@@ -468,6 +472,9 @@ export async function createPiRuntimeBinding(
       builtinModels: runtime.getModels("anthropic"),
       ensureModelId: input.modelID,
       ...(input.ephemeral ? { ephemeral: true } : {}),
+      ...(input.claudeSdkSessionFile && !input.ephemeral
+        ? { sdkSessionFile: input.claudeSdkSessionFile }
+        : {}),
     });
     runtime.registerNativeProvider(provider);
     model = runtime.getModel("anthropic", input.modelID);

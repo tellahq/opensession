@@ -43,6 +43,16 @@ absent and unrecognized values use the in-process provider.
 Code processes in a separate Claude host service that never receives an
 account's token; see [claude-host.md](../claude-host.md).
 
+Each turn of a session runs in its own process, and the Claude Agent SDK keeps
+a conversation in its own session files. So that a later turn continues the
+same SDK session, and reads the provider's prompt cache instead of writing the
+whole conversation again, the provider records which SDK session holds the
+conversation in `claude-sdk-sessions.json` beside Pi's session file. The next
+turn resumes it when Pi's history still starts with the messages that session
+has seen and the same account can serve; otherwise, or when the resume fails,
+it replays the conversation into a new SDK session. The file can be deleted at
+any time.
+
 ## Configure model access
 
 Enabling Pi only opens the engine gate. Add at least one usable account or API
