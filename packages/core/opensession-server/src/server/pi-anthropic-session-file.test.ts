@@ -17,6 +17,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import * as sdk from "@anthropic-ai/claude-agent-sdk";
+import { getCurrentSystemPrompt } from "@earendil-works/pi-ai";
 import type { AnthropicMessage } from "./anthropic-bridge";
 import * as accounts from "./claude-accounts";
 import {
@@ -32,7 +33,9 @@ import {
   liveSdkConversations,
   piSdkSessionStore,
   rememberSdkTurn,
+  splitSystemPrompt,
   type PiCatalogModel,
+  type PiWireMessage,
 } from "./pi-model-runtime";
 import { loadPiConfig } from "./pi-config";
 
@@ -111,6 +114,7 @@ function newProcess(): void {
 interface FakeCall {
   resume?: string;
   token?: string;
+  system?: string;
   prompts: unknown[];
 }
 
@@ -124,6 +128,7 @@ function fakeClaude(
     const call: FakeCall = {
       resume: input.options.resume,
       token: input.options.env.CLAUDE_CODE_OAUTH_TOKEN,
+      system: input.options.systemPrompt,
       prompts: [],
     };
     calls.push(call);
@@ -201,7 +206,9 @@ afterEach(() => {
   newProcess();
 });
 
-function session() {
+function session(
+  head: Record<string, unknown> = { role: "system", content: "Base prompt" },
+) {
   const sessionId = `sess-${crypto.randomUUID()}`;
   const file = join(dir, `${sessionId}.json`);
   const run = async (messages: unknown[], signal?: AbortSignal) => {
@@ -214,7 +221,7 @@ function session() {
     const events: any[] = [];
     for await (const event of provider.streamSimple(
       model,
-      { messages: [{ role: "system", content: "Base prompt" }, ...messages] },
+      { messages: [head, ...messages] },
       { sessionId, signal },
     ))
       events.push(event);
@@ -448,6 +455,266 @@ describe("SDK session mapping across processes", () => {
     newProcess();
     await run([first, reply1, { role: "user", content: "what next?" }]);
     expect(fake.calls[1].resume).toBeUndefined();
+  });
+});
+
+// Pi's prompt as it records it: the instructions bare, every other section
+// wrapped in a tag of its name.
+const promptSections = (parts: {
+  instructions: string[];
+  skills: string[];
+  cwd?: string;
+}) => ({
+  preamble: parts.instructions.join("\n\n"),
+  skills: `<skills>\n${parts.skills
+    .map((path) => `  <location>${path}</location>`)
+    .join("\n")}\n</skills>`,
+  cwd: `<cwd>\n${parts.cwd ?? "/work/checkout"}\n</cwd>`,
+});
+
+const INSTRUCTIONS = [
+  "## Finish your turns\nLead with the outcome.",
+  "## Memory\n- `/scratch/memory/user-a`: A's personal memory (the person prompting)\n- `/scratch/memory/user-b`: B's personal memory",
+  "## Tools\n- `sessions`: start sessions.\n- `portals`: start services.",
+];
+
+describe("the system prompt across a conversation's turns", () => {
+  // The guard against a whole class of regressions: whatever makes pi's
+  // prompt differ from one turn to the next (who prompts, a memory edit, a
+  // deploy that moves the shipped skills, a tool added to the guidance), the
+  // SDK must get the same system prompt and keep its session. A new source
+  // of change costs a note in the conversation, never the prompt cache.
+  test("a prompt that changed between turns is the same system prompt and the same SDK session", async () => {
+    const fake = fakeClaude((call) => ({
+      text: `answer ${call.prompts.length}`,
+    }));
+    restoreFake = fake.restore;
+    accounts.__setUsageCacheForTest("acct-a", usage(10));
+    accounts.__setUsageCacheForTest("acct-b", usage(50));
+    const started = promptSections({
+      instructions: INSTRUCTIONS,
+      skills: ["/releases/aaa/skills/simplify/SKILL.md"],
+    });
+    const s = session({ role: "system", content: "", sections: started });
+
+    const first = { role: "user", content: "first question" };
+    const reply1 = done(await s.run([first]));
+    const system = fake.calls[0].system;
+    expect(system).toContain("## Finish your turns");
+    expect(system).toContain("/releases/aaa/skills/simplify/SKILL.md");
+
+    // Next turn, from a new process: another person prompts, the memory
+    // folders are listed in another order, a tool joined the guidance, a
+    // deploy moved the shipped skills, and the checkout moved.
+    newProcess();
+    const later = promptSections({
+      instructions: [
+        INSTRUCTIONS[0],
+        "## Memory\n- `/scratch/memory/user-b`: B's personal memory (the person prompting)\n- `/scratch/memory/user-a`: A's personal memory",
+        `${INSTRUCTIONS[2]}\n- \`keychain\`: borrow a credential.`,
+      ],
+      skills: ["/releases/bbb/skills/simplify/SKILL.md"],
+      cwd: "/work/elsewhere",
+    });
+    const change1 = { role: "system", content: "", sections: later };
+    const second = { role: "user", content: "what next?" };
+    const reply2 = done(await s.run([first, reply1, change1, second]));
+    expect(fake.calls).toHaveLength(2);
+    expect(fake.calls[1].resume).toBe("sdk-1");
+    expect(fake.calls[1].system).toBe(system);
+    const sent = String(fake.calls[1].prompts[0]);
+    expect(sent).toContain("what next?");
+    expect(sent).toContain("- `keychain`: borrow a credential.");
+    expect(sent).toContain("/releases/bbb/skills/simplify/SKILL.md");
+    expect(sent).toContain("/work/elsewhere");
+    // Only what changed is sent, not the prompt again.
+    expect(sent).not.toContain("Lead with the outcome.");
+    expect(sent).not.toContain("- `sessions`: start sessions.");
+
+    // And a third turn, with the earlier change now behind it and one more
+    // section dropped.
+    newProcess();
+    const change2 = { role: "system", content: "", sections: { skills: null } };
+    const third = { role: "user", content: "and then?" };
+    await s.run([first, reply1, change1, second, reply2, change2, third]);
+    expect(fake.calls[2].resume).toBe("sdk-1");
+    expect(fake.calls[2].system).toBe(system);
+    const sentThird = String(fake.calls[2].prompts[0]);
+    expect(sentThird).toContain(
+      "<skills> part of your system prompt was removed",
+    );
+    expect(sentThird).not.toContain("keychain");
+  });
+
+  test("a change mid-turn keeps the system prompt too", async () => {
+    const fake = fakeClaude(() => ({ text: "ok" }));
+    restoreFake = fake.restore;
+    accounts.__setUsageCacheForTest("acct-a", usage(10));
+    accounts.__setUsageCacheForTest("acct-b", usage(50));
+    const s = session();
+    const first = { role: "user", content: "first question" };
+    const reply1 = done(await s.run([first]));
+    // Same process: the conversation is still live.
+    await s.run([
+      first,
+      reply1,
+      { role: "system", content: "Answer in French." },
+      { role: "user", content: "what next?" },
+    ]);
+    expect(fake.calls).toHaveLength(1);
+    expect(fake.calls[0].system).toBe("Base prompt");
+    expect(String(fake.calls[0].prompts[1])).toContain("Answer in French.");
+  });
+});
+
+describe("splitSystemPrompt", () => {
+  const user = (content: string): PiWireMessage => ({ role: "user", content });
+  const system = (
+    sections: Record<string, string | null>,
+    content = "",
+  ): PiWireMessage => ({ role: "system", content, sections });
+  const notes = (messages: PiWireMessage[]) =>
+    splitSystemPrompt(messages)
+      .messages.filter(
+        (m) =>
+          typeof m.content === "string" &&
+          m.content.startsWith("<system-reminder>"),
+      )
+      .map((m) => String(m.content));
+
+  test("the system prompt is the leading message, whatever follows", () => {
+    const head = system({ preamble: "Be brief.", cwd: "<cwd>\n/a\n</cwd>" });
+    const alone = splitSystemPrompt([head, user("hi")]);
+    expect(alone).toEqual({
+      system: "Be brief.\n\n<cwd>\n/a\n</cwd>",
+      messages: [user("hi")],
+      updates: 0,
+    });
+    const changed = splitSystemPrompt([
+      head,
+      user("hi"),
+      system({ preamble: "Be thorough.", cwd: null }, "And kind."),
+      user("again"),
+    ]);
+    expect(changed.system).toBe(alone.system);
+    expect(changed.updates).toBe(1);
+    expect(changed.messages.map((m) => m.role)).toEqual([
+      "user",
+      "user",
+      "user",
+    ]);
+  });
+
+  test("the leading prompt is rendered the way pi renders it", () => {
+    const transcript = [
+      { ...system({ preamble: "Be brief." }, "First."), timestamp: 1 },
+      {
+        ...system({ cwd: "<cwd>\n/a\n</cwd>", preamble: "Be kind." }, "More."),
+        timestamp: 2,
+      },
+      user("hi"),
+    ];
+    expect(splitSystemPrompt(transcript).system).toBe(
+      getCurrentSystemPrompt(transcript as never),
+    );
+  });
+
+  test("a changed section is sent as its changed lines", () => {
+    const before = ["## Tools", "- a: one", "- b: two", "- c: three"];
+    const [note] = notes([
+      system({ preamble: before.join("\n") }),
+      user("hi"),
+      system({
+        preamble: ["## Tools", "- a: one", "- c: three", "- d: four"].join(
+          "\n",
+        ),
+      }),
+    ]);
+    expect(note).toContain(
+      "In the opening part of your system prompt, these lines were removed:\n- b: two",
+    );
+    expect(note).toContain("these lines were added:\n- d: four");
+    expect(note).not.toContain("- a: one");
+  });
+
+  test("each change is described against the one before it", () => {
+    const all = notes([
+      system({ preamble: "## Tools\n- a\n- b\n- c\n- d" }),
+      user("hi"),
+      system({ preamble: "## Tools\n- a\n- b\n- c\n- d\n- e" }),
+      user("again"),
+      system({ preamble: "## Tools\n- a\n- b\n- c\n- d" }),
+    ]);
+    expect(all).toHaveLength(2);
+    expect(all[0]).toContain("these lines were added:\n- e");
+    expect(all[1]).toContain("these lines were removed:\n- e");
+  });
+
+  test("lines in another order say nothing", () => {
+    const split = splitSystemPrompt([
+      system({ preamble: "- a\n- b\n\n- c" }),
+      user("hi"),
+      system({ preamble: "- c\n- a\n- b" }),
+      user("again"),
+    ]);
+    expect(split.updates).toBe(0);
+    expect(split.messages).toEqual([user("hi"), user("again")]);
+  });
+
+  test("a section that is mostly new is sent whole, and a long dropped line is cut", () => {
+    const long = `- ${"x".repeat(400)}`;
+    const [rewritten, trimmed] = notes([
+      system({
+        preamble: `intro\n${long}`,
+        skills: "<skills>\nold\n</skills>",
+      }),
+      user("hi"),
+      system({
+        skills: "<skills>\nnew one, at length\nnew two, at length\n</skills>",
+      }),
+      user("again"),
+      system({ preamble: "intro\n- short" }),
+    ]);
+    expect(rewritten).toContain(
+      "The <skills> part of your system prompt now reads:\n\n<skills>\nnew one, at length\nnew two, at length\n</skills>",
+    );
+    expect(trimmed).toContain(`- ${"x".repeat(198)}…`);
+    expect(trimmed).not.toContain("x".repeat(250));
+  });
+
+  test("new and dropped sections, and plain added text", () => {
+    const [note] = notes([
+      system({ preamble: "Be brief.", cwd: "<cwd>\n/a\n</cwd>" }),
+      user("hi"),
+      system(
+        { cwd: null, skills: "<skills>\none\n</skills>" },
+        "Answer in French.",
+      ),
+    ]);
+    expect(note).toContain("Added to your system prompt:\n\nAnswer in French.");
+    expect(note).toContain("The <cwd> part of your system prompt was removed.");
+    expect(note).toContain(
+      "New <skills> part of your system prompt:\n\n<skills>\none\n</skills>",
+    );
+  });
+
+  test("a transcript older than its first system message starts the prompt there", () => {
+    const split = splitSystemPrompt([
+      user("old"),
+      system({ preamble: "Be brief." }),
+      user("new"),
+      { role: "system", content: "", toolsAdded: [{ name: "read" }] },
+    ]);
+    expect(split).toEqual({
+      system: "Be brief.",
+      messages: [user("old"), user("new")],
+      updates: 0,
+    });
+    expect(splitSystemPrompt([user("only")])).toEqual({
+      system: "",
+      messages: [user("only")],
+      updates: 0,
+    });
   });
 });
 

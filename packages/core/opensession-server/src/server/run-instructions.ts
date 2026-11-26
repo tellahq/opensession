@@ -377,6 +377,10 @@ export function buildSessionContext(input: {
   githubAccessNote?: string | null;
   /** `Name <email>` for the Co-authored-by trailer (pi-runner GIT_COAUTHOR_ENV). */
   coAuthor?: string;
+  /** IANA time zone of the person behind this turn, for a run that can
+   *  schedule by wall-clock time. Here and not in the scheduling tool's
+   *  schema, which must not change with the prompter. */
+  timezone?: string;
 }): string {
   const lines: string[] = [];
   const link = input.osSessionId
@@ -384,6 +388,8 @@ export function buildSessionContext(input: {
     : null;
   if (link) lines.push(`${personaName()} session: ${link}`);
   if (input.cwd) lines.push(`Working directory: ${input.cwd}`);
+  if (input.timezone)
+    lines.push(`Time zone of the person prompting: ${input.timezone}`);
   if (
     link &&
     !input.isAsk &&

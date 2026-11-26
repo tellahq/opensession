@@ -430,6 +430,14 @@ describe("buildSessionContext", () => {
     );
   });
 
+  test("names the prompter's time zone only when the run was given one", () => {
+    const base = { osSessionId: "os-test", cwd: "/w", isAsk: false };
+    expect(
+      buildSessionContext({ ...base, timezone: "Europe/Amsterdam" }),
+    ).toContain("Time zone of the person prompting: Europe/Amsterdam");
+    expect(buildSessionContext(base)).not.toContain("Time zone");
+  });
+
   test("links commits to the session even without a co-author", () => {
     const ctx = buildSessionContext({
       osSessionId: "os-test",

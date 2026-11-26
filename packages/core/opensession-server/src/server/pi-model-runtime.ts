@@ -36,6 +36,13 @@
  * Code's own files, after checking that pi's history still starts with the
  * messages the session has seen.
  *
+ * The SDK session's system prompt is the one the conversation started with,
+ * for as long as that conversation lasts. Pi records a later change to its
+ * prompt (instructions, AGENTS.md, skills) as a new system message in the
+ * transcript; sending the changed prompt would make the provider write the
+ * whole conversation to its cache again, so each change goes to the model as
+ * a short note at its place in the conversation instead (splitSystemPrompt).
+ *
  * Where the Claude Code process runs is the one thing a transport changes:
  * in this process by default (claude-sdk-query.ts), or with "remote" in a
  * Claude host service that gets a placeholder instead of the account's
@@ -49,7 +56,7 @@ import type {
   SDKUserMessage,
   ThinkingConfig,
 } from "@anthropic-ai/claude-agent-sdk";
-import { getCurrentSystemPrompt, getCurrentTools } from "@earendil-works/pi-ai";
+import { getCurrentTools } from "@earendil-works/pi-ai";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { buildPiAnthropicModels } from "./pi-anthropic-models";
 export { buildPiAnthropicModels } from "./pi-anthropic-models";
@@ -413,6 +420,161 @@ export function piImageBlockToAnthropic(
     type: "image",
     source: { type: "base64", media_type: mediaType, data: block.data },
   };
+}
+
+/** Past this share of new text a changed prompt section is sent whole
+ *  instead of as its changed lines. */
+const SYSTEM_UPDATE_REWRITE_SHARE = 0.6;
+/** A removed line only has to be recognizable. */
+const SYSTEM_UPDATE_REMOVED_LINE_CHARS = 200;
+
+function systemMessageText(content: PiWireMessage["content"]): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .filter((b) => b?.type === "text" && typeof b.text === "string")
+    .map((b) => b.text as string)
+    .join("\n");
+}
+
+function systemMessageSections(
+  message: PiWireMessage,
+): Array<[string, string | null]> {
+  const sections = message.sections;
+  if (!sections || typeof sections !== "object") return [];
+  return Object.entries(sections as Record<string, unknown>).filter(
+    (entry): entry is [string, string | null] =>
+      entry[1] === null || typeof entry[1] === "string",
+  );
+}
+
+/** How a note names a prompt section. Pi sends the first one bare and wraps
+ *  every other in a tag of its name. */
+function promptPart(section: string): string {
+  return section === "preamble"
+    ? "opening part of your system prompt"
+    : `<${section}> part of your system prompt`;
+}
+
+/** What a changed section says differently, or "" when it only moved lines
+ *  around. */
+function sectionChangeNote(
+  section: string,
+  previous: string,
+  current: string,
+): string {
+  const before = new Set(previous.split("\n"));
+  const after = new Set(current.split("\n"));
+  const added = [...after].filter((line) => line.trim() && !before.has(line));
+  const removed = [...before].filter((line) => line.trim() && !after.has(line));
+  if (!added.length && !removed.length) return "";
+  const addedChars = added.reduce((sum, line) => sum + line.length, 0);
+  if (addedChars > current.length * SYSTEM_UPDATE_REWRITE_SHARE)
+    return `The ${promptPart(section)} now reads:\n\n${current}`;
+  const parts: string[] = [];
+  if (removed.length)
+    parts.push(
+      `In the ${promptPart(section)}, these lines were removed:\n${removed
+        .map((line) =>
+          line.length > SYSTEM_UPDATE_REMOVED_LINE_CHARS
+            ? `${line.slice(0, SYSTEM_UPDATE_REMOVED_LINE_CHARS)}…`
+            : line,
+        )
+        .join("\n")}`,
+    );
+  if (added.length)
+    parts.push(
+      `In the ${promptPart(section)}, these lines were added:\n${added.join("\n")}`,
+    );
+  return parts.join("\n\n");
+}
+
+/**
+ * The system prompt a conversation started with, and every later change to
+ * it as a message in the conversation.
+ *
+ * Pi keeps its prompt in the transcript: one leading system message, then a
+ * system message for each later change (new text, or named sections replaced
+ * or removed). Replaying them all into one current prompt, as pi does for
+ * providers without mid-conversation system messages, gives the SDK a
+ * different system prompt whenever anything in it moved between two turns: a
+ * teammate's memory edit, another person prompting, a deploy that moved the
+ * shipped skills. A changed system prompt is a new SDK session and a full
+ * prompt-cache write of the conversation behind it.
+ *
+ * So the leading message alone is the system prompt, byte for byte the same
+ * on every request of the conversation, and each later system message becomes
+ * a user-role note where it happened, saying what changed: for a replaced
+ * section its added and dropped lines, or the whole section when most of it is
+ * new. A change that only reorders lines says nothing. Tool changes are not
+ * text and stay with getCurrentTools. A compaction starts the transcript over
+ * with the then-current prompt as its leading message.
+ *
+ * Exported for tests.
+ */
+export function splitSystemPrompt(messages: readonly PiWireMessage[]): {
+  system: string;
+  messages: PiWireMessage[];
+  /** Later prompt changes that became notes. */
+  updates: number;
+} {
+  const first = messages.findIndex((m) => m?.role === "system");
+  if (first < 0) return { system: "", messages: [...messages], updates: 0 };
+  let end = first;
+  while (messages[end]?.role === "system") end++;
+  // The leading prompt, rendered as pi renders a system message: its text,
+  // then its sections in the order they were first given.
+  const texts: string[] = [];
+  const sections = new Map<string, string>();
+  for (const message of messages.slice(first, end)) {
+    const text = systemMessageText(message.content);
+    if (text) texts.push(text);
+    for (const [name, value] of systemMessageSections(message)) {
+      if (value === null) sections.delete(name);
+      else sections.set(name, value);
+    }
+  }
+  const system = [texts.join("\n\n"), ...sections.values()]
+    .filter(Boolean)
+    .join("\n\n");
+  const out: PiWireMessage[] = [];
+  let updates = 0;
+  messages.forEach((message, index) => {
+    if (message?.role !== "system") {
+      out.push(message);
+      return;
+    }
+    if (index < end) return;
+    const parts: string[] = [];
+    const text = systemMessageText(message.content).trim();
+    if (text) parts.push(`Added to your system prompt:\n\n${text}`);
+    for (const [name, value] of systemMessageSections(message)) {
+      const previous = sections.get(name);
+      if (value === null) {
+        sections.delete(name);
+        if (previous !== undefined)
+          parts.push(`The ${promptPart(name)} was removed.`);
+        continue;
+      }
+      sections.set(name, value);
+      if (previous === undefined)
+        parts.push(`New ${promptPart(name)}:\n\n${value}`);
+      else if (previous !== value) {
+        const note = sectionChangeNote(name, previous, value);
+        if (note) parts.push(note);
+      }
+    }
+    if (!parts.length) return;
+    updates++;
+    out.push({
+      role: "user",
+      content:
+        "<system-reminder>\nYour system prompt changed. Read the prompt you were given at the " +
+        "start of this conversation with these changes applied.\n\n" +
+        `${parts.join("\n\n")}\n</system-reminder>`,
+    });
+  });
+  return { system, messages: out, updates };
 }
 
 function assistantHasReplayable(content: PiWireMessage["content"]): boolean {
@@ -1654,11 +1816,13 @@ async function* runSdkAttempt(
   // Include the exact model/system/tool configuration so compaction and other
   // one-shot requests never evict an interactive conversation that happens to
   // carry the same routing session id.
-  const wireMessages = piMessagesToAnthropic(context.messages || []);
-  // Replays every system message, so a mid-conversation prompt or tool change
-  // reaches the SDK as the current state.
+  // The prompt the conversation started with stays the SDK's system prompt;
+  // later changes to it ride the conversation as notes (splitSystemPrompt).
+  // Tools are the current set: the SDK can only offer what pi will run.
+  const prompt = splitSystemPrompt(context.messages || []);
+  const wireMessages = piMessagesToAnthropic(prompt.messages);
   const requestTools: PiToolShape[] = getCurrentTools(context.messages || []);
-  const system = getCurrentSystemPrompt(context.messages || []);
+  const system = prompt.system;
   const storeKey = `pi:${sessionKey}:${liveConfigHash(model.id, system, requestTools)}`;
   // Set once the turn plan exists; the catch evicts the stored mapping on a
   // failed continuation so the NEXT turn replays fresh instead of resuming a
@@ -1812,6 +1976,7 @@ async function* runSdkAttempt(
       direction: "in",
       account: account.name,
       continuation: plan.continuation,
+      ...(prompt.updates ? { system_updates: prompt.updates } : {}),
       ...(resumesStoredSession ? { sdk_resume: "stored" } : {}),
       ...(resumeMiss ? { sdk_resume_miss: resumeMiss } : {}),
       ...summarizeText(plan.prompt),

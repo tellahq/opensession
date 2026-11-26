@@ -53,6 +53,17 @@ has seen and the same account can serve; otherwise, or when the resume fails,
 it replays the conversation into a new SDK session. The file can be deleted at
 any time.
 
+A conversation keeps the system prompt it started with. Pi records a later
+change to its prompt (the run instructions, `AGENTS.md`, the skills list) as a
+new system message in the transcript, and sending the changed prompt would
+make the provider write the whole conversation to its cache again. The
+provider sends the original prompt on every request and delivers each change
+as a short note at its place in the conversation: the lines added to and
+dropped from a section, or the whole section when most of it is new. A
+compaction starts over with the then-current prompt. Tool declarations are
+always the current set, so text that differs between turns or between people
+does not belong in a tool's description or schema.
+
 ## Configure model access
 
 Enabling Pi only opens the engine gate. Add at least one usable account or API

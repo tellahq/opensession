@@ -271,6 +271,7 @@ import {
   buildSessionNote,
   retrievedMemoryNoteFor,
   sessionRepoIds,
+  sessionWorkspaceIsRemote,
 } from "./session-repos";
 import {
   automationSessionMcp,
@@ -3321,6 +3322,7 @@ async function runSessionPromptInner(
       user,
       await sessionRepoIds(session),
       session.id,
+      sessionWorkspaceIsRemote(session),
     );
     if (memoryContext) prompt = `${memoryContext}\n\n${prompt}`;
   }

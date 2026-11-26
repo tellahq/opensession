@@ -2152,6 +2152,7 @@ async function automationRepoMemory(
 ): Promise<string> {
   const {
     prepareSessionMemory,
+    renderMemoryEntryPoints,
     renderRepoMemoryNote,
     retrieveRepoMemoryForPrompt,
   } = await import("./memory-repo/session");
@@ -2174,22 +2175,28 @@ async function automationRepoMemory(
     remote: !!automation.sandbox,
   });
   const parts = [
-    await renderRepoMemoryNote({
-      scopeKeys,
-      prepared,
-      user: owner,
+    renderRepoMemoryNote({
+      root: prepared.root,
       sessionLink: sessionLink(sessionId),
       tools: true,
     }),
   ];
+  const entryPoints = await renderMemoryEntryPoints({
+    scopeKeys,
+    root: prepared.root,
+    present: prepared.present,
+    user: owner,
+  });
   if (dreaming) {
     const { dreamingContext } = await import("./memory-repo/dreaming");
+    if (entryPoints) parts.push(entryPoints);
     parts.push(await dreamingContext(dreaming, automation, prepared));
   } else {
     const retrieved = await retrieveRepoMemoryForPrompt(
       opts.query,
       scopeKeys,
       opts.primaryRepoKey,
+      entryPoints,
     );
     if (retrieved.text) parts.push(retrieved.text);
   }

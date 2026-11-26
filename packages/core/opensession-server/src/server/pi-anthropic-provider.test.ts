@@ -1453,7 +1453,9 @@ describe("buildPiAnthropicProvider", () => {
       }
       expect(query).toHaveBeenCalledTimes(1);
       const options = (query.mock.calls[0] as any)[0].options;
-      expect(options.systemPrompt).toBe("Base prompt\n\nLater instruction");
+      // The prompt the conversation started with; the later instruction is
+      // a note in the conversation (splitSystemPrompt). Tools are current.
+      expect(options.systemPrompt).toBe("Base prompt");
       expect(options.allowedTools).toEqual([
         expect.stringMatching(/read$/),
         expect.stringMatching(/codemode$/),

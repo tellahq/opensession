@@ -15,7 +15,6 @@
 
 import { createSdkMcpServer, tool } from "./inprocess-mcp";
 import { z } from "zod";
-import { timezoneForUser } from "./shared/user-mappings";
 import {
   createScheduledPrompt,
   deleteScheduledPrompt,
@@ -128,7 +127,6 @@ async function startLoop(
 }
 
 export function createScheduleMcpServer(ctx: ScheduleToolContext) {
-  const tz = timezoneForUser(ctx.user);
   const tools = [
     tool(
       "schedule_prompt",
@@ -142,12 +140,12 @@ export function createScheduleMcpServer(ctx: ScheduleToolContext) {
           .describe(
             "Deliver this many minutes from now (e.g. 20). Use this or `at`.",
           ),
-        at: z
-          .string()
-          .optional()
-          .describe(
-            `Deliver at this ISO 8601 UTC datetime (e.g. 2026-09-01T19:49:00Z), for a wall-clock time. The user's timezone is ${tz}. Use this or \`in_minutes\`.`,
-          ),
+        at: z.string().optional().describe(
+          // No per-person text here: a tool's schema is in every request's
+          // cached prefix, and naming the prompter's time zone changed it
+          // whenever someone else (or a GitHub event) started the turn.
+          "Deliver at this ISO 8601 UTC datetime (e.g. 2026-09-01T19:49:00Z), for a wall-clock time. The session context names the time zone of the person prompting. Use this or `in_minutes`.",
+        ),
         every_minutes: z
           .number()
           .int()

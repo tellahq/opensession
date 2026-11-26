@@ -154,7 +154,11 @@ import {
 } from "./transcript-persistence";
 import { transcript } from "./actor-transcript";
 import { transcriptForwarder } from "./transcript-forward";
-import { gitIdentityEnv, type GitIdentity } from "./shared/user-mappings";
+import {
+  gitIdentityEnv,
+  timezoneForUser,
+  type GitIdentity,
+} from "./shared/user-mappings";
 import {
   humanPrompter,
   interactivePrompter,
@@ -3357,6 +3361,9 @@ async function* runPiAttempt(
         hostLogin: hostGithubLogin,
       }),
       coAuthor: agentGitEnv[GIT_COAUTHOR_ENV],
+      timezone: opts.inProcessMcp?.["opensession-schedule"]
+        ? timezoneForUser(user)
+        : undefined,
     });
     await loader.reload();
 
