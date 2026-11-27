@@ -173,7 +173,8 @@ export async function handleModelsRoutes(
         return Response.json({ error: "audio too large" }, { status: 413 });
       }
       const mime = req.headers.get("content-type") || "audio/webm";
-      const result = await transcribeAudio(audio, mime);
+      const prompt = url.searchParams.get("prompt") || undefined;
+      const result = await transcribeAudio(audio, mime, { prompt });
       return Response.json(result);
     } catch (e: any) {
       console.error("[transcribe]", e);

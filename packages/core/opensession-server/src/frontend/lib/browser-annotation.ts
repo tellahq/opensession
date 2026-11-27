@@ -135,13 +135,38 @@ function oneLine(text: string, max = 120): string {
     : compact;
 }
 
+function scaleMark(mark: BrowserMark, ratio: number): BrowserMark {
+  return mark.kind === "point"
+    ? { kind: "point", x: mark.x * ratio, y: mark.y * ratio }
+    : {
+        kind: "area",
+        rect: {
+          x: mark.rect.x * ratio,
+          y: mark.rect.y * ratio,
+          width: mark.rect.width * ratio,
+          height: mark.rect.height * ratio,
+        },
+      };
+}
+
 /**
  * The chat message for a comment: where it was made as a quoted header, then
  * what the person wrote. The header is plain enough for the agent to open the
  * same page at the same size and find the spot again.
  */
 export function browserCommentMessage(comment: BrowserComment): string {
-  const { mark, view, inspected } = comment;
+  const { inspected } = comment;
+  // Marks are made in the layer's pixels. A page drawn scaled (an inline
+  // asset shown at desktop width) has its own, and those are what the agent
+  // can find the spot again in.
+  const viewport = inspected?.viewport;
+  const ratio =
+    viewport && comment.view.width > 0
+      ? viewport.width / comment.view.width
+      : 1;
+  const scaled = Math.abs(ratio - 1) > 0.02;
+  const mark = scaled ? scaleMark(comment.mark, ratio) : comment.mark;
+  const view = scaled && viewport ? viewport : comment.view;
   const where =
     mark.kind === "point"
       ? `Point at (${px(mark.x)}, ${px(mark.y)})`

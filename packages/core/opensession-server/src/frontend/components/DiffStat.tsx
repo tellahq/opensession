@@ -48,10 +48,10 @@ export function DiffStat({
       : "";
     return (
       <>
-        <span className={cn("text-green", countClassName, dots)}>
+        <span className={cn("text-diff-add", countClassName, dots)}>
           +{totalAdditions}
         </span>
-        <span className={cn("text-red", countClassName, dots)}>
+        <span className={cn("text-diff-del", countClassName, dots)}>
           −{totalDeletions}
         </span>
       </>
@@ -97,7 +97,7 @@ export function DiffStat({
                 <td
                   className={cn(
                     "py-1 pl-3 text-right",
-                    row.additions ? "text-green" : "text-faint",
+                    row.additions ? "text-diff-add" : "text-faint",
                   )}
                 >
                   +{row.additions}
@@ -105,7 +105,7 @@ export function DiffStat({
                 <td
                   className={cn(
                     "py-1 pl-3 text-right",
-                    row.deletions ? "text-red" : "text-faint",
+                    row.deletions ? "text-diff-del" : "text-faint",
                   )}
                 >
                   −{row.deletions}
@@ -119,10 +119,10 @@ export function DiffStat({
               >
                 Total
               </th>
-              <td className="pt-2 pb-0.5 pl-3 text-right font-semibold text-green">
+              <td className="pt-2 pb-0.5 pl-3 text-right font-semibold text-diff-add">
                 +{totalAdditions}
               </td>
-              <td className="pt-2 pb-0.5 pl-3 text-right font-semibold text-red">
+              <td className="pt-2 pb-0.5 pl-3 text-right font-semibold text-diff-del">
                 −{totalDeletions}
               </td>
             </tr>

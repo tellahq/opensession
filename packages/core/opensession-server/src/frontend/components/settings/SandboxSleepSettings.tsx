@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import {
   fetchSandboxLifecycle,
+  saveSandboxIdlePolicy,
   saveWorkspaceResumeScript,
   type SandboxLifecycleSettings,
 } from "../../lib/api/sandboxes";
+import { errorMessage } from "../../lib/error-message";
 import { sandboxProviderLabel } from "../../lib/ready-sandbox-providers";
 import { Button } from "../../ui/button";
 import {
@@ -11,8 +13,22 @@ import {
   SettingsGroupLabel,
   SettingsHint,
 } from "../../ui/settings";
+import { toast } from "../../ui/toast";
 import { SandboxScriptDialog } from "./SandboxScriptDialog";
-import { SettingRow } from "./shared";
+import { Select, SettingRow } from "./shared";
+
+const AGENT_IDLE_PRESETS = [2, 5, 10, 15, 30, 60];
+const HUMAN_IDLE_PRESETS = [5, 10, 20, 30, 60, 120];
+
+function idleMinuteOptions(presets: readonly number[], current: number) {
+  const values = presets.includes(current)
+    ? [...presets]
+    : [...presets, current].sort((a, b) => a - b);
+  return values.map((minutes) => ({
+    value: String(minutes),
+    label: `${minutes} min`,
+  }));
+}
 
 /** Workspace → Sandboxes: when Sandboxes sleep, the workspace resume
  *  script, and which providers run the Sandbox agent. */
@@ -21,6 +37,7 @@ export function SandboxSleepSettings() {
     null,
   );
   const [editing, setEditing] = useState(false);
+  const [savingIdle, setSavingIdle] = useState(false);
   useEffect(() => {
     fetchSandboxLifecycle()
       .then(setSettings)
@@ -30,17 +47,69 @@ export function SandboxSleepSettings() {
   const { agentMinutes, humanMinutes } = settings.idle;
   const agentProviders = settings.agentProviders.map(sandboxProviderLabel);
 
+  function saveIdle(next: { agentMinutes: number; humanMinutes: number }) {
+    setSavingIdle(true);
+    void saveSandboxIdlePolicy(next)
+      .then(setSettings)
+      .catch((error) => {
+        toast(
+          errorMessage(error, "Failed to save Sandbox idle sleep settings"),
+          { variant: "error" },
+        );
+      })
+      .finally(() => {
+        setSavingIdle(false);
+      });
+  }
+
   return (
     <>
       <SettingsGroupLabel>Sleep and wake</SettingsGroupLabel>
       <SettingCard>
         <SettingRow
-          title="Idle sleep"
-          desc={`A Sandbox sleeps once the agent has done nothing in it for ${agentMinutes} min and nobody has used it for ${humanMinutes} min. Prompts, Portal visits, Terminal and Desktop count as use.`}
+          title="Agent idle sleep"
+          desc="Wait this long after the agent finishes work before a Sandbox can sleep."
           control={
-            <span className="text-supporting text-faint">
-              {agentMinutes} / {humanMinutes} min
-            </span>
+            <div
+              className={
+                savingIdle ? "pointer-events-none opacity-60" : undefined
+              }
+            >
+              <Select
+                label="Agent idle timeout"
+                value={String(agentMinutes)}
+                options={idleMinuteOptions(AGENT_IDLE_PRESETS, agentMinutes)}
+                onChange={(value) => {
+                  const parsed = Number(value);
+                  if (Number.isFinite(parsed)) {
+                    saveIdle({ agentMinutes: parsed, humanMinutes });
+                  }
+                }}
+              />
+            </div>
+          }
+        />
+        <SettingRow
+          title="Human idle sleep"
+          desc="Keep a Sandbox awake this long after a prompt, Portal visit, Terminal, or Desktop session."
+          control={
+            <div
+              className={
+                savingIdle ? "pointer-events-none opacity-60" : undefined
+              }
+            >
+              <Select
+                label="Human idle timeout"
+                value={String(humanMinutes)}
+                options={idleMinuteOptions(HUMAN_IDLE_PRESETS, humanMinutes)}
+                onChange={(value) => {
+                  const parsed = Number(value);
+                  if (Number.isFinite(parsed)) {
+                    saveIdle({ agentMinutes, humanMinutes: parsed });
+                  }
+                }}
+              />
+            </div>
           }
         />
         <SettingRow

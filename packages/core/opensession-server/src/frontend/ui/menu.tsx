@@ -99,6 +99,7 @@ function Popup({
   alignOffset = 0,
   anchor,
   finalFocus,
+  footer,
   children,
 }: {
   className?: string;
@@ -118,6 +119,8 @@ function Popup({
   /** Where focus goes on close. Defaults to the trigger, which a menu opened
    * from an anchor rather than a trigger does not have. */
   finalFocus?: React.ComponentProps<typeof BaseMenu.Popup>["finalFocus"];
+  /** Non-scrolling footer docked flush to the bottom edge of the popup. */
+  footer?: React.ReactNode;
   children: React.ReactNode;
 }) {
   if (useDeferredPopupRoot()) return null;
@@ -143,10 +146,24 @@ function Popup({
         )}
       >
         <BaseMenu.Popup
-          className={cn(POPUP_HOOK, popupSurfaceClasses, className)}
+          className={cn(
+            POPUP_HOOK,
+            popupSurfaceClasses,
+            footer &&
+              "flex max-h-[min(80dvh,560px,var(--available-height))] flex-col",
+            className,
+          )}
           finalFocus={finalFocus}
         >
-          <div className={popupScrollClasses}>{children}</div>
+          <div
+            className={cn(
+              popupScrollClasses,
+              footer && "min-h-0 max-h-none flex-1",
+            )}
+          >
+            {children}
+          </div>
+          {footer}
         </BaseMenu.Popup>
       </BaseMenu.Positioner>
     </BaseMenu.Portal>

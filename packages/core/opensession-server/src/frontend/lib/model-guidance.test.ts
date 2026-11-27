@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { formatModelGuidanceTitle, modelGuidanceFor } from "./model-guidance";
+import {
+  formatModelGuidanceTitle,
+  modelGuidanceFor,
+  uniqueModelGuidances,
+} from "./model-guidance";
 
 describe("modelGuidanceFor", () => {
   test("resolves candid strongAt and watchFor guidance for routed and bare model ids", () => {
@@ -25,5 +29,18 @@ describe("modelGuidanceFor", () => {
     const text = formatModelGuidanceTitle(opus);
     expect(text).toContain("Strong at:");
     expect(text).toContain("Watch for:");
+  });
+
+  test("deduplicates guidance entries across model ids and skips unknown models", () => {
+    const unique = uniqueModelGuidances([
+      "pi/anthropic/claude-opus-5-5",
+      "claude-opus-4-8",
+      "pi/custom/unknown-model-x",
+      "pi/openai/gpt-6.2-astra",
+      "gpt-6-astra",
+    ]);
+    expect(unique).toHaveLength(2);
+    expect(unique[0]?.summary).toContain("Feature");
+    expect(unique[1]?.summary).toContain("Deep debugging");
   });
 });

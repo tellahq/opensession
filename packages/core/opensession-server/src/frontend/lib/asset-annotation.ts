@@ -88,10 +88,20 @@ function describe(element: Element, rect: FrameRect, root?: Element | null) {
 }
 
 /**
+ * How much smaller than its own CSS pixels a frame is drawn: an inline HTML
+ * asset renders at desktop width and is scaled down to fit the chat.
+ */
+function frameScale(frame: HTMLIFrameElement): number {
+  const drawn = frame.getBoundingClientRect().width;
+  return frame.offsetWidth > 0 && drawn > 0 ? drawn / frame.offsetWidth : 1;
+}
+
+/**
  * What is at `point` (layer pixels) in the preview under the layer.
  *
- * `host` is the preview's root. An HTML asset's frame fills it, so layer
- * pixels are the page's own; anything else renders in this document, where
+ * `host` is the preview's root. An HTML asset's frame is read in its own
+ * pixels, which may be scaled against the layer's, and the element's box is
+ * handed back in layer pixels. Anything else renders in this document, where
  * the layer itself is the top element and is skipped.
  */
 export function inspectAssetPreview(
@@ -110,7 +120,15 @@ export function inspectAssetPreview(
     }
     const view = frame.contentWindow;
     if (!document || !view) return null;
-    const element = document.elementFromPoint(point.x, point.y);
+    const origin = layer.getBoundingClientRect();
+    const drawn = frame.getBoundingClientRect();
+    const scale = frameScale(frame);
+    const dx = drawn.left - origin.left;
+    const dy = drawn.top - origin.top;
+    const element = document.elementFromPoint(
+      (point.x - dx) / scale,
+      (point.y - dy) / scale,
+    );
     const box = element?.getBoundingClientRect();
     return {
       type: "opensession:inspected",
@@ -118,10 +136,10 @@ export function inspectAssetPreview(
       element:
         element && box
           ? describe(element, {
-              x: box.left,
-              y: box.top,
-              width: box.width,
-              height: box.height,
+              x: dx + box.left * scale,
+              y: dy + box.top * scale,
+              width: box.width * scale,
+              height: box.height * scale,
             })
           : null,
       scroll: { x: view.scrollX, y: view.scrollY },
@@ -177,7 +195,10 @@ export function scrollAssetPreview(
       const view = frame.contentWindow;
       if (!view) return false;
       const before = [view.scrollX, view.scrollY];
-      view.scrollBy(dx, dy);
+      // The wheel moves what is drawn: a scaled page scrolls further in its
+      // own pixels for the same distance on screen.
+      const scale = frameScale(frame);
+      view.scrollBy(dx / scale, dy / scale);
       return view.scrollX !== before[0] || view.scrollY !== before[1];
     } catch {
       return false;

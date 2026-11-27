@@ -104,4 +104,25 @@ describe("browser annotation", () => {
       ].join("\n"),
     );
   });
+
+  test("a scaled asset reports the page's own pixels", () => {
+    expect(
+      browserCommentMessage({
+        url: "/api/sessions/s/assets/raw/shell.html",
+        asset: "shell.html",
+        mark: { kind: "area", rect: { x: 100, y: 50, width: 64, height: 32 } },
+        view: { width: 640, height: 400 },
+        inspected: { ...reply, scroll: { x: 0, y: 0 } },
+        text: "Bigger",
+      }),
+    ).toBe(
+      [
+        "> Comment on asset `shell.html`",
+        "> Area 128×64 at (200, 100) in a 1280×800 view",
+        '> Element `main > button.plan\'cta`: "Select plan"',
+        "",
+        "Bigger",
+      ].join("\n"),
+    );
+  });
 });

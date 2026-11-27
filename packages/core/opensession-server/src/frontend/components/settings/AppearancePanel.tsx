@@ -26,6 +26,12 @@ import {
 } from "../../lib/sidebar-tools";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import {
+  getDiffPalette,
+  onDiffPaletteChanged,
+  setDiffPalette,
+  type DiffPalette,
+} from "../../lib/diff-palette";
+import {
   getThemePref,
   effectiveTheme,
   onThemeChanged,
@@ -251,6 +257,12 @@ export function AppearanceSection() {
   );
   const [accent, setAccent] = useState<AccentTheme>(getAccentTheme);
   useEffect(() => onAccentThemeChanged(() => setAccent(getAccentTheme())), []);
+  const [diffPalette, setDiffPaletteState] =
+    useState<DiffPalette>(getDiffPalette);
+  useEffect(
+    () => onDiffPaletteChanged(() => setDiffPaletteState(getDiffPalette())),
+    [],
+  );
 
   return (
     <>
@@ -300,6 +312,25 @@ export function AppearanceSection() {
           </div>
         </div>
       </SettingsSection>
+      <div className="mt-3">
+        <SettingCard>
+          <SettingRow
+            title="Color-blind diff palette"
+            desc="Use blue and orange instead of green and red in code diffs."
+            control={
+              <Switch
+                aria-label="Color-blind diff palette"
+                checked={diffPalette === "colorblind"}
+                onCheckedChange={(checked) => {
+                  const next: DiffPalette = checked ? "colorblind" : "default";
+                  setDiffPalette(next);
+                  setDiffPaletteState(next);
+                }}
+              />
+            }
+          />
+        </SettingCard>
+      </div>
     </>
   );
 }

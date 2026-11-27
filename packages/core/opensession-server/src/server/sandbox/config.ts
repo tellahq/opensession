@@ -91,6 +91,8 @@ export interface SandboxIdleConfig {
 
 export const DEFAULT_IDLE_AGENT_MINUTES = 5;
 export const DEFAULT_IDLE_HUMAN_MINUTES = 20;
+export const MIN_IDLE_MINUTES = 1;
+export const MAX_IDLE_MINUTES = 240;
 
 /** How remote providers authenticate `git clone` inside the sandbox (they
  *  can't mount host creds). "none" = public clone; "https-token" injects the
@@ -488,6 +490,36 @@ export async function setRepoPreSetupScript(
 }
 
 /** Store (or clear) the workspace-wide resume script. */
+export async function setSandboxIdlePolicy(input: {
+  agentMinutes: number;
+  humanMinutes: number;
+}): Promise<{ agentMinutes: number; humanMinutes: number }> {
+  const agentMinutes = Math.round(input.agentMinutes);
+  const humanMinutes = Math.round(input.humanMinutes);
+  if (
+    !Number.isFinite(agentMinutes) ||
+    agentMinutes < MIN_IDLE_MINUTES ||
+    agentMinutes > MAX_IDLE_MINUTES
+  ) {
+    throw new Error(
+      `agentMinutes must be between ${MIN_IDLE_MINUTES} and ${MAX_IDLE_MINUTES}`,
+    );
+  }
+  if (
+    !Number.isFinite(humanMinutes) ||
+    humanMinutes < MIN_IDLE_MINUTES ||
+    humanMinutes > MAX_IDLE_MINUTES
+  ) {
+    throw new Error(
+      `humanMinutes must be between ${MIN_IDLE_MINUTES} and ${MAX_IDLE_MINUTES}`,
+    );
+  }
+  await updateSandboxConfigFile((raw) => {
+    raw.idle = { agentMinutes, humanMinutes };
+  });
+  return { agentMinutes, humanMinutes };
+}
+
 export async function setWorkspaceResumeScript(
   value: string | null,
 ): Promise<string | null> {

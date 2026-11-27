@@ -74,6 +74,19 @@ describe("github app permission sets", () => {
     expect(GITHUB_APP_READ_PERMISSIONS.actions).toBe("read");
   });
 
+  test("the App is granted workflows:write but no installation mint requests it", () => {
+    expect(GITHUB_APP_GRANT_PERMISSIONS.workflows).toBe("write");
+    for (const set of [
+      GITHUB_APP_READ_PERMISSIONS,
+      GITHUB_APP_WRITE_PERMISSIONS,
+      GITHUB_APP_CODE_PERMISSIONS,
+      GITHUB_APP_CHECKS_PERMISSIONS,
+      GITHUB_APP_DEPLOYMENTS_PERMISSIONS,
+    ]) {
+      expect(set.workflows).toBeUndefined();
+    }
+  });
+
   test("the App is granted actions:write but no mint requests it", () => {
     // Connected-user tokens inherit the grant and need write to re-run
     // failed jobs; installation mints stay at read so Apps created before

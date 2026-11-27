@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { inLocalLane, LOCAL_LANES, LOCAL_QUEUE } from "./transcribe";
+import {
+  inLocalLane,
+  LOCAL_LANES,
+  LOCAL_QUEUE,
+  MAX_TRANSCRIBE_PROMPT_CHARS,
+  sanitizeTranscribePrompt,
+} from "./transcribe";
 
 describe("local transcription lanes", () => {
   test("runs a bounded number at once, queues a few, and refuses the rest", async () => {
@@ -33,5 +39,17 @@ describe("local transcription lanes", () => {
     await Bun.sleep(0);
     releases.shift()?.();
     expect(await after).toBe("ok");
+  });
+});
+
+describe("sanitizeTranscribePrompt", () => {
+  test("collapses newlines and trims to the prompt budget", () => {
+    expect(
+      sanitizeTranscribePrompt("  Open Session\nDaytona\r\nPi SDK  "),
+    ).toBe("Open Session, Daytona, Pi SDK");
+    expect(sanitizeTranscribePrompt("x".repeat(800)).length).toBe(
+      MAX_TRANSCRIBE_PROMPT_CHARS,
+    );
+    expect(sanitizeTranscribePrompt(undefined)).toBe("");
   });
 });

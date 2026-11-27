@@ -178,6 +178,12 @@ import {
 import { PersonalSandboxDefaultRow } from "./SandboxDefaults";
 import { PendingSendsSection } from "./PendingSendsSection";
 import { VoiceAudioSection } from "./VoiceAudioSection";
+import {
+  getDictationVocabulary,
+  MAX_DICTATION_VOCABULARY_CHARS,
+  onDictationVocabularyChanged,
+  setDictationVocabulary,
+} from "../../lib/dictation-vocabulary";
 import { RepoTile } from "../RepoTile";
 import { ModelEffortSelect } from "../ModelEffortSelect";
 import { IconPlus, IconRepo } from "../icons";
@@ -1416,11 +1422,81 @@ export function PreferencesPanel() {
       </SettingCard>
 
       <VoiceAudioSection />
+      <DictationVocabularySection />
       <DeskPanel />
       <LayoutPanel />
       <PersonalPromptPanel />
       <PendingSendsSection />
       <DebugSection />
     </SettingsPanel>
+  );
+}
+
+function DictationVocabularySection() {
+  const [saved, setSaved] = useState(getDictationVocabulary);
+  const [draft, setDraft] = useState(saved);
+  useEffect(
+    () =>
+      onDictationVocabularyChanged(() => {
+        const next = getDictationVocabulary();
+        setSaved(next);
+        setDraft(next);
+      }),
+    [],
+  );
+  const dirty = draft.trim() !== saved;
+
+  function save() {
+    const next = setDictationVocabulary(draft);
+    setSaved(next);
+    setDraft(next);
+  }
+
+  return (
+    <>
+      <SettingsGroupLabel>Dictation vocabulary</SettingsGroupLabel>
+      <SettingCard>
+        <div className="flex flex-col gap-2.5 px-3.5 py-3">
+          <div className="text-supporting text-dim">
+            Comma- or line-separated product names, code identifiers, or
+            teammate names to bias speech transcription.
+          </div>
+          <Textarea
+            aria-label="Dictation custom vocabulary"
+            rows={2}
+            maxLength={MAX_DICTATION_VOCABULARY_CHARS}
+            value={draft}
+            placeholder="Open Session, Daytona, TypeScript, oxlint"
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={() => {
+              if (dirty) save();
+            }}
+          />
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-meta text-faint">
+              {draft.length}/{MAX_DICTATION_VOCABULARY_CHARS}
+            </span>
+            <div className="flex items-center gap-2">
+              {saved && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setDictationVocabulary("");
+                    setSaved("");
+                    setDraft("");
+                  }}
+                >
+                  Clear
+                </Button>
+              )}
+              <Button size="sm" disabled={!dirty} onClick={save}>
+                Save
+              </Button>
+            </div>
+          </div>
+        </div>
+      </SettingCard>
+    </>
   );
 }

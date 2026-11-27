@@ -15,7 +15,10 @@ import { __setGithubAppKeyPathForTest } from "../github-app";
 import { __setAdditionalGithubAppKeyDirForTest } from "../github-app-registry";
 import { loadGithubAuthStore } from "../github-auth";
 import type { RouteContext } from "./context";
-import { handleGithubAppsRoutes } from "./github-apps";
+import {
+  __resetGithubOAuthStatesForTest,
+  handleGithubAppsRoutes,
+} from "./github-apps";
 
 const saved = {
   config: process.env.OPENSESSION_CONFIG,
@@ -35,7 +38,7 @@ function context(
   return {
     req: new Request(url, { method }),
     url,
-    path,
+    path: url.pathname,
     publicPrefix: "",
     authUser,
   };
@@ -65,6 +68,7 @@ beforeEach(async () => {
               ownerType: "User",
               appSlug: "open-session-octocat",
               oauthClientId: "Iv-personal",
+              oauthClientSecret: "secret-personal",
               webhookSecret: "whsec-value",
             },
           ],
@@ -165,5 +169,68 @@ describe("GitHub account Apps settings API", () => {
     expect(existsSync(join(dir, "github-apps", "personal1.pem"))).toBe(false);
     expect(existsSync(join(dir, "github-auth.app-personal1.json"))).toBe(false);
     expect(existsSync(join(dir, "github-app.pem"))).toBe(true);
+  });
+
+  test("web OAuth start and callback exchanges code, stores token, and rejects state replay", async () => {
+    __resetGithubOAuthStatesForTest();
+    const startRes = await handleGithubAppsRoutes(
+      context(
+        "/api/connections/github/oauth/start?appId=personal1&returnTo=welcome",
+        "GET",
+      ),
+    );
+    expect(startRes?.status).toBe(302);
+    const location = startRes?.headers.get("location") || "";
+    const parsed = new URL(location);
+    expect(parsed.origin + parsed.pathname).toBe(
+      "https://github.com/login/oauth/authorize",
+    );
+    expect(parsed.searchParams.get("client_id")).toBe("Iv-personal");
+    const state = parsed.searchParams.get("state") || "";
+    expect(state.length).toBeGreaterThan(20);
+
+    const prevFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+      if (url.includes("/login/oauth/access_token")) {
+        return Response.json({
+          access_token: "ghu_web_oauth_token",
+          expires_in: 28800,
+          refresh_token: "ghr_web_refresh",
+          refresh_token_expires_in: 15897600,
+        });
+      }
+      if (url.includes("api.github.com/user")) {
+        return Response.json({ login: "octocat", name: "Octo Cat" });
+      }
+      return new Response("not found", { status: 404 });
+    }) as typeof fetch;
+
+    try {
+      const cbRes = await handleGithubAppsRoutes(
+        context(
+          `/api/connections/github/oauth/callback?code=abc123&state=${encodeURIComponent(state)}`,
+          "GET",
+        ),
+      );
+      expect(cbRes?.status).toBe(303);
+      expect(cbRes?.headers.get("location")).toContain("github_oauth=ok");
+
+      // Replaying the same state must fail closed.
+      const replay = await handleGithubAppsRoutes(
+        context(
+          `/api/connections/github/oauth/callback?code=abc123&state=${encodeURIComponent(state)}`,
+          "GET",
+        ),
+      );
+      expect(replay?.status).toBe(400);
+    } finally {
+      globalThis.fetch = prevFetch;
+    }
   });
 });

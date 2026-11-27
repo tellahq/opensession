@@ -179,6 +179,23 @@ export function modelGuidanceFor(modelId: string): ModelGuidance | null {
   return null;
 }
 
+/** Deduplicated guidance entries across a set of model ids, used to reserve a
+ * stable footer height so hovering between models never shifts the dropdown. */
+export function uniqueModelGuidances(
+  modelIds: readonly string[],
+): ModelGuidance[] {
+  const seen = new Set<ModelGuidance>();
+  const result: ModelGuidance[] = [];
+  for (const id of modelIds) {
+    const guidance = modelGuidanceFor(id);
+    if (guidance && !seen.has(guidance)) {
+      seen.add(guidance);
+      result.push(guidance);
+    }
+  }
+  return result;
+}
+
 export function formatModelGuidanceTitle(guidance: ModelGuidance): string {
   const lines = [guidance.summary];
   if (guidance.strongAt.length > 0) {

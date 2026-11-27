@@ -355,4 +355,25 @@ describe("GitHub App manifest", () => {
     expect(replay?.status).toBe(400);
     expect(existsSync(keyPath)).toBe(true);
   });
+
+  test("includes web OAuth callback_url and supports opt-in multi-account public App", () => {
+    const privateManifest = buildGithubAppManifest({
+      origin: "https://os.example.test",
+      publicPrefix: "/backstage",
+    });
+    expect(privateManifest.callback_url).toBe(
+      "https://os.example.test/backstage/api/connections/github/oauth/callback",
+    );
+    expect(privateManifest.public).toBe(false);
+
+    const publicManifest = buildGithubAppManifest({
+      origin: "https://os.example.test",
+      publicPrefix: "",
+      public: true,
+    });
+    expect(publicManifest.public).toBe(true);
+    expect(publicManifest.callback_url).toBe(
+      "https://os.example.test/api/connections/github/oauth/callback",
+    );
+  });
 });

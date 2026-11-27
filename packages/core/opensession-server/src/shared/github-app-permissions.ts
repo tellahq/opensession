@@ -32,6 +32,10 @@ export const GITHUB_APP_GRANT_PERMISSIONS: Record<string, string> = {
   // App created before this change keeps minting until its owner accepts
   // the upgrade.
   actions: "write",
+  // Pushing changes to .github/workflows/* requires workflows:write on
+  // connected-user tokens; installation mints never request it so older Apps
+  // keep working without 422s.
+  workflows: "write",
   // Read CI check runs; write only the approval gate's own check
   // (agents/github/approval-gate.ts), minted on its own token below.
   checks: "write",
