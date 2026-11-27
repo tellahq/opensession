@@ -29,6 +29,7 @@ import { UserAvatar } from "./UserAvatar";
 import {
   PANEL_TAB_DOT,
   TAB_ACTIONS,
+  TAB_CONTROL_ATTACHED,
   TAB_DROP_SLOT,
   TAB_FACE,
   TAB_FACES,
@@ -400,7 +401,11 @@ export function SessionTabs({
         render={
           <button
             type="button"
-            className={cn(TAB_NEW, "relative z-[1]")}
+            className={cn(
+              TAB_NEW,
+              "relative z-[1]",
+              attached && TAB_CONTROL_ATTACHED,
+            )}
             aria-label="New session in this workspace"
             title="New session. Shares this workspace's worktree (right-click for options)"
             onClick={(event) => {
@@ -887,7 +892,14 @@ export function SessionTabs({
       {!isPhone && (
         // Attached, history follows the + instead of sitting at the far end
         // of a row it now shares with the header's own controls.
-        <div className={cn(TAB_ACTIONS, attached && "ml-0")}>{historyMenu}</div>
+        <div
+          className={cn(
+            TAB_ACTIONS,
+            attached && cn("ml-0", TAB_CONTROL_ATTACHED),
+          )}
+        >
+          {historyMenu}
+        </div>
       )}
       {deleteTarget && (
         <DeleteSessionDialog
