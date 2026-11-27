@@ -23,6 +23,10 @@ import {
   IconSparkle,
   IconUndo,
 } from "./icons";
+import {
+  formatModelGuidanceTitle,
+  modelGuidanceFor,
+} from "../lib/model-guidance";
 import { ModelMark } from "./ModelMark";
 import { BrandMark } from "./BrandTile";
 import { UserAvatar } from "./UserAvatar";
@@ -418,6 +422,9 @@ export function ModelEffortSelect({
   // the person's order when the row is dropped.
   const [draftTopIds, setDraftTopIds] = React.useState<string[] | null>(null);
   const [draggingTopId, setDraggingTopId] = React.useState<string | null>(null);
+  const [hoveredModelId, setHoveredModelId] = React.useState<string | null>(
+    null,
+  );
   const draftTopIdsRef = React.useRef<string[] | null>(null);
   // A drop ends in a click on the row under the pointer; it must not pick it.
   const justDragged = React.useRef(false);
@@ -761,8 +768,11 @@ export function ModelEffortSelect({
     const routed = engineModelId(activeEngine, option.id);
     const offEngine = routed === null;
     const disabled = modelDisabled || offEngine;
+    const guidance = modelGuidanceFor(option.id);
     const item = (
       <Menu.Item
+        onPointerEnter={() => setHoveredModelId(option.id)}
+        onFocus={() => setHoveredModelId(option.id)}
         onClick={() => {
           onModelChange(routed ?? option.value);
           pushRecentModel(option.id);
@@ -792,7 +802,8 @@ export function ModelEffortSelect({
             ? modelTitle
             : offEngine
               ? "Not available in this session"
-              : (reuploadHint ?? undefined)
+              : (reuploadHint ??
+                (guidance ? formatModelGuidanceTitle(guidance) : undefined))
         }
         className={cn(
           PICKER_ROW_GAP,
@@ -806,7 +817,14 @@ export function ModelEffortSelect({
           <span className="flex size-4 shrink-0 items-center justify-center text-dim">
             <ModelMark id={option.id} provider={option.engine} />
           </span>
-          <span className="min-w-0 truncate">{option.label}</span>
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="min-w-0 truncate">{option.label}</span>
+            {guidance && (
+              <span className="min-w-0 truncate text-[11px] leading-tight text-faint">
+                {guidance.summary}
+              </span>
+            )}
+          </span>
         </span>
         <Menu.Check on={selected} className="text-dim" />
       </Menu.Item>
@@ -814,12 +832,20 @@ export function ModelEffortSelect({
     return React.cloneElement(item, { key: option.value || option.id });
   };
 
+  const previewGuidance = modelGuidanceFor(hoveredModelId ?? effectiveBase);
+
   const menuRowTrigger = triggerVariant === "menu-row";
   const heroTrigger = triggerVariant === "hero";
   const fieldTrigger = triggerVariant === "field";
 
   return (
-    <Menu.Root open={open} onOpenChange={setMenuOpen}>
+    <Menu.Root
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) setHoveredModelId(null);
+        setMenuOpen(next);
+      }}
+    >
       <Menu.Trigger
         type="button"
         onTouchEnd={(event) => {
@@ -963,6 +989,20 @@ export function ModelEffortSelect({
             </Reorder.Item>
           ))}
         </Reorder.Group>
+        {previewGuidance && (
+          <div className="mx-1.5 my-1 rounded-md border border-border-subtle bg-panel px-2.5 py-1.5 text-[11px] leading-snug text-dim">
+            <div className="line-clamp-2">
+              <span className="font-medium text-fg">Strong at:</span>{" "}
+              {previewGuidance.strongAt.join(" · ")}
+            </div>
+            {previewGuidance.watchFor.length > 0 && (
+              <div className="mt-0.5 line-clamp-2 text-faint">
+                <span className="font-medium text-dim">Watch for:</span>{" "}
+                {previewGuidance.watchFor.join(" · ")}
+              </div>
+            )}
+          </div>
+        )}
         {hasMoreModels && (
           <Menu.SubmenuRoot>
             <Menu.SubmenuTrigger className="justify-between gap-3">
