@@ -87,6 +87,27 @@ export function timeAgo(ts: string, now = Date.now()): string {
   return tsDate(ts).toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
+/** A list row's time: the clock today, "Yesterday", then the date. */
+export function shortWhen(date: Date, now = new Date()): string {
+  const day = (d: Date) =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diff = Math.round((day(now) - day(date)) / 86_400_000);
+  if (diff === 0)
+    return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (diff === 1) return "Yesterday";
+  const format: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
+  if (date.getFullYear() !== now.getFullYear()) format.year = "numeric";
+  return date.toLocaleDateString([], format);
+}
+
+/** "Louise, Michiel and 2 others": who is in a thread. */
+export function peopleLine(names: readonly string[]): string {
+  const unique = [...new Set(names.filter(Boolean))];
+  if (unique.length <= 2) return unique.join(" and ");
+  if (unique.length === 3) return `${unique[0]}, ${unique[1]} and ${unique[2]}`;
+  return `${unique[0]}, ${unique[1]} and ${unique.length - 2} others`;
+}
+
 /** Reactions after the person toggled `name`. */
 export function toggledReactions(
   message: ChannelMessage,

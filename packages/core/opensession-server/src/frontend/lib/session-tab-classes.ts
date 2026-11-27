@@ -280,7 +280,9 @@ export type TabState = {
  */
 const TAB_ATTACHED_BASE =
   "relative inline-flex max-w-[180px] shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
-  "[corner-shape:round] border px-2.5 text-label shadow-none transition-[background-color,color]";
+  "[corner-shape:round] border px-2.5 text-label shadow-none transition-[background-color,color] " +
+  // Close sits as far in from the right edge as the label from the left.
+  "[--tab-close-inset:6px]";
 const TAB_ATTACHED_OUTLINE = {
   // The label centred between the tab's top and the row's line below it.
   active:
@@ -333,12 +335,19 @@ export function tabClass(state: TabState): string {
 
 /** The label uses the close control's space while the tab is idle. Hovering
  *  reveals close over the title, with a wider fade keeping both legible. */
-export const TAB_TITLE =
+const TAB_TITLE_BASE =
   "session-tab-title block min-w-0 max-w-[150px] overflow-hidden " +
   "data-[overflow]:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_10px),transparent_100%)] " +
-  "desktop:max-w-[166px] " +
+  "desktop:max-w-[166px]";
+
+export const TAB_TITLE =
+  `${TAB_TITLE_BASE} ` +
   "desktop:group-hover/tab:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_36px),transparent_100%)] " +
   "desktop:group-focus-within/tab:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_36px),transparent_100%)]";
+
+/** The title of a tab whose ⋯ and close sit beside it rather than over it,
+ *  so hovering has nothing to fade the label for. */
+export const TAB_TITLE_INLINE_CONTROLS = TAB_TITLE_BASE;
 
 /** An icon-only view tab (Staging → a globe): drop the label's text metrics so
  *  the tab sizes to the glyph. */
@@ -440,7 +449,7 @@ const CLOSE_BASE =
  * changes its width and never asks Motion to shuffle every sibling. */
 const CLOSE_OVERLAY_POSITION =
   "[@media_(hover:hover)_and_(pointer:fine)]:absolute " +
-  "[@media_(hover:hover)_and_(pointer:fine)]:right-1 [@media_(hover:hover)_and_(pointer:fine)]:top-1/2 " +
+  "[@media_(hover:hover)_and_(pointer:fine)]:right-[var(--tab-close-inset,4px)] [@media_(hover:hover)_and_(pointer:fine)]:top-1/2 " +
   "[@media_(hover:hover)_and_(pointer:fine)]:z-[1] [@media_(hover:hover)_and_(pointer:fine)]:m-0 " +
   "[@media_(hover:hover)_and_(pointer:fine)]:-translate-y-1/2 " +
   "[@media_(hover:hover)_and_(pointer:fine)]:transition-opacity";
@@ -458,6 +467,24 @@ const CLOSE_TOUCH = "size-[26px] -mr-1";
 
 export const tabCloseClass = (phone: boolean) =>
   `${CLOSE_BASE} ${phone ? CLOSE_TOUCH : `${CLOSE_OVERLAY_POSITION} ${CLOSE_OVERLAY_HIDDEN}`}`;
+
+/**
+ * The new layout's active session tab carries the session's ⋯ menu, then
+ * close, both always shown and in flow after the title. The ⋯ is a real
+ * button with a 28px squircle plate, nearly the tab's own height; close is
+ * just its glyph, inking up on hover with no plate of its own.
+ */
+/** The open tab grows by its ⋯, so the title keeps the room it had. */
+export const TAB_WITH_MENU = "max-w-[230px]";
+export const TAB_INLINE_CONTROLS = "-mr-1 flex flex-none items-center gap-0.5";
+export const TAB_MENU_CONTROL =
+  "inline-flex size-7 shrink-0 cursor-pointer items-center justify-center " +
+  "rounded-md border-0 bg-transparent p-0 text-dim " +
+  "transition-[background-color,color] hover:bg-hover hover:text-fg " +
+  "data-[popup-open]:bg-pressed data-[popup-open]:text-fg";
+export const TAB_CLOSE_INLINE =
+  "inline-flex size-5 shrink-0 cursor-pointer items-center justify-center " +
+  "border-0 bg-transparent p-0 text-dim transition-colors hover:text-fg";
 
 /**
  * The trailing controls use quiet chrome with no pill fill or shadow. History

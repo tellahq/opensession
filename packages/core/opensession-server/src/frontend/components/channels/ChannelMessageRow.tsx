@@ -146,6 +146,7 @@ export function ChannelMessageRow({
   onReact,
   onOpenThread,
   threadOpen = false,
+  className,
 }: {
   message: ChannelMessage;
   channelId: string;
@@ -155,6 +156,8 @@ export function ChannelMessageRow({
   /** Absent inside a thread. */
   onOpenThread?: () => void;
   threadOpen?: boolean;
+  /** Placement, and a corner for a row inside a rounded card. */
+  className?: string;
 }) {
   const replies = message.replyCount ?? 0;
   const copyLink = () =>
@@ -170,6 +173,7 @@ export function ChannelMessageRow({
         "group relative flex gap-2 px-5 outline-none transition-colors hover:bg-hover focus-within:bg-hover",
         head ? "mt-1 pt-2 pb-1" : "py-0.5",
         threadOpen && "bg-yellow-soft hover:bg-yellow-soft",
+        className,
       )}
     >
       <div className="w-9 shrink-0">
@@ -249,7 +253,7 @@ export function ChannelMessageRow({
       </div>
       <div
         className={cn(
-          "absolute -top-4 right-5 z-10 flex items-center gap-0.5 rounded-lg border border-line bg-panel p-0.5 shadow-ring-sm",
+          "absolute -top-5 right-5 z-10 flex items-center gap-0.5 rounded-lg border border-line bg-panel p-1 shadow-ring-sm",
           // Hidden bars take no taps, or they would cover the text above.
           "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 has-[[data-popup-open]]:pointer-events-auto has-[[data-popup-open]]:opacity-100",
         )}
@@ -262,8 +266,8 @@ export function ChannelMessageRow({
             trigger={
               <Button
                 variant="ghost"
-                size="sm"
-                icon={<IconReactionAdd size={20} />}
+                size="md"
+                icon={<IconReactionAdd size={22} />}
                 aria-label="Add reaction"
               />
             }
@@ -273,8 +277,8 @@ export function ChannelMessageRow({
           <Tooltip label="Reply in thread">
             <Button
               variant="ghost"
-              size="sm"
-              icon={<IconMessage size={20} />}
+              size="md"
+              icon={<IconMessage size={22} />}
               aria-label="Reply in thread"
               onClick={onOpenThread}
             />
@@ -283,8 +287,8 @@ export function ChannelMessageRow({
         <Tooltip label="Copy link">
           <Button
             variant="ghost"
-            size="sm"
-            icon={<IconLink size={20} />}
+            size="md"
+            icon={<IconLink size={22} />}
             aria-label="Copy link"
             onClick={copyLink}
           />
@@ -295,8 +299,8 @@ export function ChannelMessageRow({
               render={
                 <Button
                   variant="ghost"
-                  size="sm"
-                  icon={<IconDotsVertical size={20} />}
+                  size="md"
+                  icon={<IconDotsVertical size={22} />}
                   aria-label="More actions"
                 />
               }

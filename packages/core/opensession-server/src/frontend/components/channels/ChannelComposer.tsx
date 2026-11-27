@@ -10,6 +10,7 @@ import {
   type FormatKind,
 } from "../../lib/channel-format";
 import { noAutofill } from "../../lib/composer-autofill";
+import { readDraft, saveDraft } from "../../lib/channel-drafts";
 import { emojiContextAt, emojiMatches, type EmojiEntry } from "../../lib/emoji";
 import { isApple } from "../../lib/platform";
 import { effectiveSendKey, isSendCombo } from "../../lib/send-key";
@@ -44,38 +45,38 @@ const FORMATS: (
   {
     kind: "bold",
     label: "Bold",
-    icon: <IconBold size={18} />,
+    icon: <IconBold size={20} />,
     keys: [MOD, "B"],
   },
   {
     kind: "italic",
     label: "Italic",
-    icon: <IconItalic size={18} />,
+    icon: <IconItalic size={20} />,
     keys: [MOD, "I"],
   },
   {
     kind: "strike",
     label: "Strikethrough",
-    icon: <IconStrikethrough size={18} />,
+    icon: <IconStrikethrough size={20} />,
     keys: [MOD, "⇧", "X"],
   },
   "|",
-  { kind: "link", label: "Link", icon: <IconLink size={18} /> },
+  { kind: "link", label: "Link", icon: <IconLink size={20} /> },
   "|",
   {
     kind: "ordered",
     label: "Ordered list",
-    icon: <IconListOrdered size={18} />,
+    icon: <IconListOrdered size={20} />,
   },
   {
     kind: "bullet",
     label: "Bulleted list",
-    icon: <IconListBullet size={18} />,
+    icon: <IconListBullet size={20} />,
   },
   "|",
-  { kind: "quote", label: "Quote", icon: <IconQuote size={18} /> },
-  { kind: "code", label: "Code", icon: <IconCode size={18} /> },
-  { kind: "codeblock", label: "Code block", icon: <IconCodeBlock size={18} /> },
+  { kind: "quote", label: "Quote", icon: <IconQuote size={20} /> },
+  { kind: "code", label: "Code", icon: <IconCode size={20} /> },
+  { kind: "codeblock", label: "Code block", icon: <IconCodeBlock size={20} /> },
 ];
 
 type Suggestion =
@@ -105,6 +106,8 @@ export function ChannelComposer({
   broadcastLabel,
   onSend,
   autoFocus,
+  draftOf,
+  compact = false,
 }: {
   placeholder: string;
   disabled: boolean;
@@ -114,14 +117,23 @@ export function ChannelComposer({
   broadcastLabel?: string;
   onSend: (text: string, broadcast: boolean) => Promise<boolean>;
   autoFocus?: boolean;
+  /** Keep what is typed as this conversation's (or thread's) draft. */
+  draftOf?: { channelId: string; thread?: string };
+  /** Start with the formatting row hidden, for a box among other content. */
+  compact?: boolean;
 }) {
-  const [draft, setDraft] = useState("");
+  const [stored] = useState(() =>
+    draftOf ? readDraft(draftOf.channelId, draftOf.thread) : undefined,
+  );
+  const [draft, setDraftText] = useState(stored?.text ?? "");
   const [sending, setSending] = useState(false);
   const [broadcast, setBroadcast] = useState(false);
-  const [formatting, setFormatting] = useState(true);
+  const [formatting, setFormatting] = useState(!compact);
   const [users, setUsers] = useState<SlackMentionUser[]>([]);
   // The people picked from the "@" list, by the name the text shows.
-  const [mentions, setMentions] = useState<Map<string, string>>(new Map());
+  const [mentions, setMentions] = useState<Map<string, string>>(
+    () => new Map(stored?.mentions),
+  );
   const [caret, setCaret] = useState(0);
   const [highlight, setHighlight] = useState(0);
   const [dismissedAt, setDismissedAt] = useState(-1);
@@ -151,13 +163,23 @@ export function ChannelComposer({
       : [];
   const active = suggestions[Math.min(highlight, suggestions.length - 1)];
 
+  function setDraft(value: string, picked: Map<string, string> = mentions) {
+    setDraftText(value);
+    if (draftOf) saveDraft(draftOf.channelId, draftOf.thread, value, picked);
+  }
+
   function loadPeople() {
     if (users.length) return;
     void fetchSlackUsers().then(setUsers);
   }
 
-  function setText(value: string, start: number, end = start) {
-    setDraft(value);
+  function setText(
+    value: string,
+    start: number,
+    end = start,
+    picked: Map<string, string> = mentions,
+  ) {
+    setDraft(value, picked);
     setCaret(end);
     requestAnimationFrame(() => {
       const el = textRef.current;
@@ -194,14 +216,15 @@ export function ChannelComposer({
       suggestion.kind === "person"
         ? `@${suggestion.user.name} `
         : suggestion.entry.char;
-    if (suggestion.kind === "person")
-      setMentions(
-        new Map(mentions).set(suggestion.user.name, suggestion.user.id),
-      );
+    const picked =
+      suggestion.kind === "person"
+        ? new Map(mentions).set(suggestion.user.name, suggestion.user.id)
+        : mentions;
+    if (picked !== mentions) setMentions(picked);
     const value =
       draft.slice(0, context.start) + replacement + draft.slice(caret);
     setHighlight(0);
-    setText(value, context.start + replacement.length);
+    setText(value, context.start + replacement.length, undefined, picked);
   }
 
   async function send() {
@@ -211,7 +234,7 @@ export function ChannelComposer({
     const sent = await onSend(encodeSlackMentions(text, mentions), broadcast);
     setSending(false);
     if (sent) {
-      setDraft("");
+      setDraft("", new Map());
       setCaret(0);
       setBroadcast(false);
       setMentions(new Map());
@@ -297,7 +320,7 @@ export function ChannelComposer({
                 >
                   <Button
                     variant="ghost"
-                    size="sm"
+                    size="md"
                     icon={item.icon}
                     aria-label={item.label}
                     disabled={disabled}
@@ -376,7 +399,7 @@ export function ChannelComposer({
           <Tooltip label={formatting ? "Hide formatting" : "Show formatting"}>
             <Button
               variant="ghost"
-              size="sm"
+              size="md"
               aria-label={formatting ? "Hide formatting" : "Show formatting"}
               aria-pressed={formatting}
               icon={FORMATTING_GLYPH}
@@ -390,8 +413,8 @@ export function ChannelComposer({
             trigger={
               <Button
                 variant="ghost"
-                size="sm"
-                icon={<IconSmile size={20} />}
+                size="md"
+                icon={<IconSmile size={22} />}
                 aria-label="Emoji"
                 disabled={disabled}
               />
@@ -400,8 +423,8 @@ export function ChannelComposer({
           <Tooltip label="Mention someone">
             <Button
               variant="ghost"
-              size="sm"
-              icon={<IconAtSign size={20} />}
+              size="md"
+              icon={<IconAtSign size={22} />}
               aria-label="Mention someone"
               disabled={disabled}
               onClick={() => {
@@ -416,8 +439,8 @@ export function ChannelComposer({
           <Tooltip label="Send now" shortcut={["↵"]}>
             <Button
               variant={canSend ? "success-strong" : "ghost"}
-              size="sm"
-              icon={<IconSend size={20} />}
+              size="md"
+              icon={<IconSend size={22} />}
               aria-label="Send message"
               disabled={!canSend}
               onClick={() => void send()}

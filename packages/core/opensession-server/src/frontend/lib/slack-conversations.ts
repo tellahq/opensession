@@ -3,7 +3,7 @@
 // reads it, faster while the Channels place is on screen.
 
 import { useEffect, useSyncExternalStore } from "react";
-import type { Route } from "./app-route";
+import { isChannelsPage, type Route } from "./app-route";
 import {
   fetchConversations,
   type Conversation,
@@ -127,8 +127,37 @@ export function lastChannel(): string | undefined {
   }
 }
 
-/** The Channels route for `id`, or for the conversation last open there. */
-export function channelsRoute(id?: string): Route {
-  const target = id ?? lastChannel();
-  return target ? { view: "channels", id: target } : { view: "channels" };
+/** The Channels route for `target` (a conversation id, or Threads or
+ *  Drafts & sent), or for whichever of those was last open there. */
+export function channelsRoute(target?: string): Route {
+  const shown = target ?? lastChannel();
+  if (!shown) return { view: "channels" };
+  return isChannelsPage(shown)
+    ? { view: "channels", page: shown }
+    : { view: "channels", id: shown };
+}
+
+export interface ConversationLabel {
+  label: string;
+  conversation: Pick<Conversation, "kind" | "name" | "avatarUrl">;
+}
+
+/** How a conversation is named in a list: `#name` for a channel, the
+ *  person's (or people's) name for a direct message. Falls back to what the
+ *  caller knows when the conversation is not in the person's list. */
+export function conversationLabel(
+  conversations: readonly Conversation[] | undefined,
+  id: string,
+  fallback?: { name: string; isDirect: boolean },
+): ConversationLabel {
+  const listed = conversations?.find((c) => c.id === id);
+  const conversation = listed ?? {
+    kind: fallback?.isDirect ? ("dm" as const) : ("channel" as const),
+    name: fallback?.name ?? id,
+  };
+  const direct = conversation.kind === "dm" || conversation.kind === "group";
+  return {
+    label: direct ? conversation.name : `#${conversation.name}`,
+    conversation,
+  };
 }

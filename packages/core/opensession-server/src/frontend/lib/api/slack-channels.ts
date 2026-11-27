@@ -161,6 +161,42 @@ export function fetchPermalink(
   });
 }
 
+/** A thread you are in, as the Threads page shows it. */
+export interface ThreadSummary {
+  channelId: string;
+  /** The conversation's name, or the person's for a direct message. */
+  channelName: string;
+  isDirect: boolean;
+  parent: ChannelMessage;
+  /** The latest replies, oldest first. */
+  latest: ChannelMessage[];
+  replyCount: number;
+  latestReply: string;
+}
+
+/** A message you sent, as Drafts & sent lists it. */
+export interface SentMessage {
+  channelId: string;
+  channelName: string;
+  isDirect: boolean;
+  ts: string;
+  /** The thread it replied in. */
+  threadTs?: string;
+  text: string;
+}
+
+export function fetchThreads(fresh = false): Promise<{
+  threads: ThreadSummary[];
+}> {
+  return request(`/slack/threads${fresh ? "?fresh=1" : ""}`, {
+    label: "Couldn't load your threads",
+  });
+}
+
+export function fetchSent(): Promise<{ messages: SentMessage[] }> {
+  return request("/slack/sent", { label: "Couldn't load sent messages" });
+}
+
 /** A message file's preview as an <img> source. */
 export function fileSrc(thumb: string): string {
   return `${BASE_PATH}${thumb}`;

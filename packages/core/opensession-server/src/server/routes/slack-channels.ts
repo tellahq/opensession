@@ -114,51 +114,10 @@ function demoConversations() {
   };
 }
 
-/** Message subtypes a channel shows besides plain messages. Joins, topic
- *  changes and the like stay out, as before. */
-const SHOWN_SUBTYPES = new Set([
-  "bot_message",
-  "thread_broadcast",
-  "file_share",
-  "me_message",
-]);
-
-export interface SlackMessageFile {
-  name: string;
-  /** Proxied through /api/slack/file, for an image. */
-  thumb?: string;
-  width?: number;
-  height?: number;
-  /** Opens the file in Slack. */
-  permalink?: string;
-}
-
-/** What a channel shows of a message's files: images inline, the rest as a
- *  named link to Slack. */
-export function messageFiles(files: unknown): SlackMessageFile[] {
-  if (!Array.isArray(files)) return [];
-  return files
-    .filter((f: any) => f && typeof f === "object" && f.mode !== "tombstone")
-    .map((f: any) => {
-      const thumb = f.thumb_720 || f.thumb_480 || f.thumb_360;
-      const isImage = String(f.mimetype || "").startsWith("image/");
-      return {
-        name: String(f.title || f.name || "file"),
-        ...(isImage && typeof thumb === "string"
-          ? {
-              thumb: `/api/slack/file?url=${encodeURIComponent(thumb)}`,
-              ...(f.thumb_720_w || f.original_w
-                ? { width: Number(f.thumb_720_w || f.original_w) }
-                : {}),
-              ...(f.thumb_720_h || f.original_h
-                ? { height: Number(f.thumb_720_h || f.original_h) }
-                : {}),
-            }
-          : {}),
-        ...(typeof f.permalink === "string" ? { permalink: f.permalink } : {}),
-      };
-    });
-}
+export {
+  messageFiles,
+  type SlackMessageFile,
+} from "../../agents/slack/message-view";
 
 export async function slackChannelsPayload(
   ctx: Pick<RouteContext, "authUser">,
@@ -339,6 +298,93 @@ export async function handleSlackChannelRoutes(
     );
   }
 
+  // Threads and Sent: the person's own recent messages and the threads
+  // they are in (agents/slack/my-threads.ts). `fresh=1` skips the cache.
+  if (
+    (path === "/api/slack/threads" || path === "/api/slack/sent") &&
+    req.method === "GET"
+  ) {
+    const which = path.endsWith("threads") ? "threads" : "sent";
+    if (process.env.OPENSESSION_DEMO === "1")
+      return Response.json(
+        which === "threads" ? { threads: demoThreads() } : demoSent(),
+      );
+    const caller = callerOf(ctx);
+    if (!caller)
+      return Response.json({ error: "Sign in first" }, { status: 401 });
+    const { mcpUserGrantToken } = await import("../mcp-oauth");
+    const grantToken = mcpUserGrantToken("slack", caller);
+    if (!grantToken)
+      return Response.json(
+        { error: "Connect your Slack account in Settings, Account" },
+        { status: 403 },
+      );
+    try {
+      const { myThreadsAndSent } =
+        await import("../../agents/slack/my-threads");
+      const { messageConverter, renderSlackText } =
+        await import("../../agents/slack/message-view");
+      const { resolveSlackUser } = await import("../../agents/slack/slack-api");
+      const { customEmojiMap, emojifySlackText } =
+        await import("../../agents/slack/emoji");
+      const { sent, threads } = await myThreadsAndSent(caller, grantToken, {
+        fresh: url.searchParams.get("fresh") === "1",
+      });
+      // A direct message's channel name is the other person's user id.
+      const nameOf = async (name: string, isDirect: boolean) =>
+        isDirect && /^U[A-Z0-9]+$/.test(name)
+          ? (await resolveSlackUser(name).catch(() => ({ name }))).name
+          : name;
+      if (which === "threads") {
+        const convert = await messageConverter(caller, grantToken);
+        const out = [];
+        for (const thread of threads) {
+          const parent = await convert(thread.parent);
+          if (!parent) continue;
+          const latest = [];
+          for (const reply of thread.latest) {
+            const view = await convert(reply, { inThread: true });
+            if (view) latest.push(view);
+          }
+          out.push({
+            channelId: thread.channelId,
+            channelName: await nameOf(thread.channelName, thread.isDirect),
+            isDirect: thread.isDirect,
+            parent,
+            latest,
+            replyCount: thread.replyCount,
+            latestReply: thread.latestReply,
+          });
+        }
+        return Response.json({ threads: out });
+      }
+      const custom = await customEmojiMap(grantToken);
+      const emojify = (t: string) => emojifySlackText(t, custom);
+      const out = [];
+      for (const message of sent) {
+        out.push({
+          channelId: message.channelId,
+          channelName: await nameOf(message.channelName, message.isDirect),
+          isDirect: message.isDirect,
+          ts: message.ts,
+          ...(message.threadTs ? { threadTs: message.threadTs } : {}),
+          text: await renderSlackText(message.text, emojify),
+        });
+      }
+      return Response.json({ messages: out });
+    } catch (e: any) {
+      return Response.json(
+        {
+          error:
+            e?.message === "missing_scope"
+              ? "Reconnect Slack in Settings, Account to see your threads"
+              : e?.message || "Slack did not answer",
+        },
+        { status: 502 },
+      );
+    }
+  }
+
   // A message's link in Slack, for Copy link and Open in Slack.
   const linkMatch = path.match(/^\/api\/slack\/channels\/([^/]+)\/permalink$/);
   if (linkMatch && req.method === "GET") {
@@ -460,32 +506,6 @@ export async function handleSlackChannelRoutes(
   const msgsMatch = path.match(/^\/api\/slack\/channels\/([^/]+)\/messages$/);
   if (!msgsMatch) return undefined;
 
-  // Slack markup → markdown-ish the pane renders: <url|label> →
-  // [label](url), bare <url> → url, mentions/broadcasts/channel refs →
-  // [[@Name]]/[[@here]]/[[#name]] tag tokens (chips in the pane), custom
-  // emoji → ![:name:](url) image tokens, standard emoji → unicode.
-  // Entities decode only after the <...> markup is consumed so an escaped
-  // "&lt;" can't become fake markup; emoji run last so a decoded ":" can
-  // join a shortcode.
-  const renderSlackText = async (
-    raw: string,
-    resolveSlackUser: (id: string) => Promise<{ name: string }>,
-    emojify: (t: string) => string,
-  ) => {
-    let text = raw
-      .replace(/<(https?:[^|>]+)\|([^>]+)>/g, "[$2]($1)")
-      .replace(/<(https?:[^>]+)>/g, "$1")
-      .replace(/<!(here|channel|everyone)(\|[^>]*)?>/g, "[[@$1]]")
-      .replace(/<#[A-Z0-9]+\|([^>]*)>/g, "[[#$1]]");
-    const mentionIds = [...text.matchAll(/<@(U[A-Z0-9]+)>/g)].map((m) => m[1]);
-    for (const id of [...new Set(mentionIds)]) {
-      const u = await resolveSlackUser(id).catch(() => ({ name: "someone" }));
-      text = text.replaceAll(`<@${id}>`, `[[@${u.name.split(" ")[0]}]]`);
-    }
-    return emojify(
-      text.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&"),
-    );
-  };
   const channelId = decodeURIComponent(msgsMatch[1]);
   if (process.env.OPENSESSION_DEMO === "1")
     return demoChannelMessages(req, url, channelId);
@@ -504,32 +524,10 @@ export async function handleSlackChannelRoutes(
       100,
     );
     try {
-      const { slackApiGet, resolveSlackUser } =
-        await import("../../agents/slack/slack-api");
-      const { customEmojiMap, emojifySlackText, reactionDisplay } =
-        await import("../../agents/slack/emoji");
-      const { personaName } = await import("../config");
-      const custom = await customEmojiMap(grantToken);
-      const emojify = (t: string) => emojifySlackText(t, custom);
-      const selfId =
-        caller && grantToken
-          ? await (
-              await import("../../agents/slack/conversations")
-            )
-              .slackSelfId(caller, grantToken)
-              .catch(() => undefined)
-          : undefined;
-      const reactionsOf = (m: any) =>
-        (m.reactions || [])
-          .filter((r: any) => r?.name && r?.count)
-          .map((r: any) => ({
-            name: r.name,
-            count: r.count,
-            ...(selfId && Array.isArray(r.users) && r.users.includes(selfId)
-              ? { mine: true }
-              : {}),
-            ...reactionDisplay(r.name, custom),
-          }));
+      const { slackApiGet } = await import("../../agents/slack/slack-api");
+      const { messageConverter } =
+        await import("../../agents/slack/message-view");
+      const convert = await messageConverter(caller, grantToken);
       const data = await slackApiGet(
         threadTs ? "conversations.replies" : "conversations.history",
         {
@@ -554,61 +552,8 @@ export async function handleSlackChannelRoutes(
         : [...(data.messages || [])].reverse();
       const out: unknown[] = [];
       for (const m of chronological) {
-        if (m.type !== "message") continue;
-        if (m.subtype && !SHOWN_SUBTYPES.has(m.subtype)) continue;
-        const files = messageFiles(m.files);
-        if (!m.text && !files.length) continue;
-        // User-first: app-relayed posts carry BOTH user and bot_id (a
-        // person's own message via an app) — the person wins, otherwise
-        // their posts render as the bot.
-        const text = m.text
-          ? await renderSlackText(m.text, resolveSlackUser, emojify)
-          : "";
-        const thread =
-          !threadTs && (m.reply_count || 0) > 0
-            ? {
-                replyCount: m.reply_count || 0,
-                ...(m.latest_reply ? { latestReply: m.latest_reply } : {}),
-                replyUsers: await Promise.all(
-                  (m.reply_users || []).slice(0, 4).map(async (id: string) => {
-                    const u = await resolveSlackUser(id).catch(() => ({
-                      name: id,
-                      avatarUrl: undefined,
-                    }));
-                    return { name: u.name, avatarUrl: u.avatarUrl };
-                  }),
-                ),
-              }
-            : { replyCount: 0 };
-        const shared = {
-          ts: m.ts,
-          text,
-          ...thread,
-          reactions: reactionsOf(m),
-          ...(files.length ? { files } : {}),
-          ...(m.edited ? { edited: true } : {}),
-          ...(m.subtype === "thread_broadcast" ? { broadcast: true } : {}),
-        };
-        if (m.user) {
-          const u = await resolveSlackUser(m.user);
-          out.push({
-            ...shared,
-            userId: m.user,
-            userName: u.name,
-            avatarUrl: u.avatarUrl,
-            isBot: false,
-          });
-        } else {
-          out.push({
-            ...shared,
-            userName: m.username || m.bot_profile?.name || personaName(),
-            avatarUrl:
-              m.icons?.image_72 ||
-              m.icons?.image_48 ||
-              m.bot_profile?.icons?.image_72,
-            isBot: true,
-          });
-        }
+        const view = await convert(m, { inThread: !!threadTs });
+        if (view) out.push(view);
       }
       return Response.json({
         messages: out,
@@ -812,4 +757,97 @@ async function demoReaction(
   }
   message.reactions = reactions.filter((r) => r.count > 0);
   return Response.json({ ok: true });
+}
+
+function demoThreads() {
+  const parent = demoHistory("CDEMO0001")[2];
+  const key = `CDEMO0001:${parent.ts}`;
+  const replies = demoHistories.get(key) ?? [
+    {
+      ts: `${Math.floor(Number(parent.ts)) + 60}.000200`,
+      text: "Same here on Safari 18.",
+      userName: "Grace Hopper",
+      isBot: false,
+      replyCount: 0,
+      reactions: [],
+    },
+    {
+      ts: `${Math.floor(Number(parent.ts)) + 120}.000300`,
+      text: "It's the file input's *accept* attribute, fix incoming.",
+      userName: "Alan Turing",
+      isBot: false,
+      replyCount: 0,
+      reactions: [{ name: "+1", count: 2, emoji: "👍" }],
+    },
+  ];
+  demoHistories.set(key, replies);
+  const release = demoHistory("CDEMO0002").at(-1);
+  const now = Math.floor(Date.now() / 1000);
+  return [
+    {
+      channelId: "CDEMO0001",
+      channelName: "design",
+      isDirect: false,
+      parent,
+      latest: replies.slice(-2),
+      replyCount: replies.length,
+      latestReply: replies.at(-1).ts,
+    },
+    {
+      channelId: "CDEMO0002",
+      channelName: "engineering",
+      isDirect: false,
+      parent: { ...release, replyCount: 4 },
+      latest: [
+        {
+          ts: `${now - 400}.000100`,
+          text: "Added the billing changes under *Fixes*.",
+          userName: "Grace Hopper",
+          isBot: false,
+          replyCount: 0,
+          reactions: [],
+        },
+        {
+          ts: `${now - 200}.000100`,
+          text: "Thanks, shipping it at 4.",
+          userName: "Ada Lovelace",
+          isBot: false,
+          replyCount: 0,
+          reactions: [],
+        },
+      ],
+      replyCount: 4,
+      latestReply: `${now - 200}.000100`,
+    },
+  ];
+}
+
+function demoSent() {
+  const now = Math.floor(Date.now() / 1000);
+  return {
+    messages: [
+      {
+        channelId: "CDEMO0002",
+        channelName: "engineering",
+        isDirect: false,
+        ts: `${now - 300}.000100`,
+        threadTs: `${now - 600}.000100`,
+        text: "Can we hold the release until the billing fix lands?",
+      },
+      {
+        channelId: "DDEMO0001",
+        channelName: "Ada Lovelace",
+        isDirect: true,
+        ts: `${now - 3600}.000100`,
+        text: "Sure, I'll look at it after lunch.",
+      },
+      {
+        channelId: "CDEMO0001",
+        channelName: "design",
+        isDirect: false,
+        ts: `${now - 86400 * 2}.000100`,
+        text: "New onboarding mocks are in the *Figma* file.",
+      },
+    ],
+  };
 }

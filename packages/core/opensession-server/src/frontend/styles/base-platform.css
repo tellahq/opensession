@@ -139,12 +139,15 @@ body:is(.resizing-sidebar, .resizing-panel, .resizing-tab-split) {
   }
 }
 
-/* Pinned headings need an opaque backing so rows cannot show through them.
-   Keep this material opaque rather than animating row opacity: `view()`
-   timelines can resolve against nested overflow containers and hide rows. */
+/* The chrome is the sidebar colour at 88%, so the window material shows a
+   little of what is behind the window through it. Only a little: pinned
+   headings keep an opaque backing so rows cannot show through them (no
+   row-opacity animation: `view()` timelines can resolve against nested
+   overflow containers and hide rows), and at 12% the gap between that
+   backing and the chrome around it is too small to read as a slab. */
 @media (min-width: 721px) {
   html.material-backdrop {
-    --sidebar-material: var(--sidebar-bg);
+    --sidebar-material: color-mix(in srgb, var(--sidebar-bg) 88%, transparent);
     --sidebar-material-sheen: transparent;
   }
 }

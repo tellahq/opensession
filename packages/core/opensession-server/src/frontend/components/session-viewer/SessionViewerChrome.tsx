@@ -88,6 +88,8 @@ import {
   TopBarTitle,
 } from "../../ui/top-bar";
 import { cn } from "../../ui/cn";
+import { TAB_MENU_CONTROL } from "../../lib/session-tab-classes";
+import { useTabMenuSlot } from "../../lib/tab-menu-slot";
 import { toast } from "../../ui/toast";
 import { copySessionTranscript } from "../../lib/transcript-copy";
 import { dedupeViewers, facepileAvatarStyle } from "../../lib/presence";
@@ -455,6 +457,10 @@ export function SessionViewerChrome({
     changeWorktreeDiffSource,
     previewStatus,
   } = infoState;
+  // The new layout's open tab has a slot for this session's ⋯ menu; while
+  // it does, the menu lives there instead of in the header.
+  const tabMenuSlot = useTabMenuSlot(session.id);
+  const menuInTab = !isPhone && !infoPageOpen && !!tabMenuSlot;
   const {
     setPreviewStatus,
     portalTarget,
@@ -959,7 +965,11 @@ export function SessionViewerChrome({
                   // and press scale are identical to the share and side-panel
                   // buttons by construction instead of by hand-matching.
                   render={
-                    infoPageOpen ? (
+                    menuInTab ? (
+                      <button type="button" className={TAB_MENU_CONTROL}>
+                        <IconDotsHorizontal size={16} aria-hidden="true" />
+                      </button>
+                    ) : infoPageOpen ? (
                       <TopBarAction
                         floating
                         icon={<IconDotsHorizontal size={22} />}
@@ -973,11 +983,11 @@ export function SessionViewerChrome({
                     )
                   }
                   className={cn(
-                    !infoPageOpen && "rounded-control",
+                    !menuInTab && !infoPageOpen && "rounded-control",
                     !infoPageOpen &&
                       isPhone &&
                       "size-11 min-h-11 rounded-control border-transparent text-dim shadow-none [corner-shape:squircle]",
-                    overflowOpen && "bg-hover text-fg",
+                    !menuInTab && overflowOpen && "bg-hover text-fg",
                   )}
                   title="More actions"
                   aria-label="More actions"
@@ -986,7 +996,9 @@ export function SessionViewerChrome({
                   // Desktop: opens rightward from a trigger that now sits at the
                   // left of the bar. Phones keep it flush with the right edge.
                   align={isPhone ? "end" : "start"}
-                  sideOffset={6}
+                  // From the tab, the menu hangs below the tab's foot on
+                  // the sheet rather than just under its ⋯.
+                  sideOffset={menuInTab ? 8 : 6}
                   className="min-w-[240px] max-w-[min(300px,calc(100vw-24px))]"
                 >
                   {/* Quick session actions use the same focus, spacing, collision,
@@ -1059,7 +1071,11 @@ export function SessionViewerChrome({
               onCommitRename={commitRename}
               onCancelRename={() => setRenameDraft(null)}
               canRename={Boolean(onRename)}
-              menu={overflowMenu}
+              menu={
+                menuInTab && tabMenuSlot
+                  ? createPortal(overflowMenu, tabMenuSlot)
+                  : overflowMenu
+              }
               menuTrailing={
                 !isPhone && showReview ? (
                   <div

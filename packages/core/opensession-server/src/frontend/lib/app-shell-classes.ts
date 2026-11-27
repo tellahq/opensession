@@ -104,10 +104,12 @@ const NEW_LAYOUT_PANE_ROW =
  * it starts at this row's bottom edge. That edge is the top of the panel's
  * outline (WORKSPACE_SHELL), which the active tab covers.
  * `components/shell/PaneTopRow.tsx` renders it. Hidden while it holds nothing,
- * on a page that brings a bar of its own.
+ * on a page that brings a bar of its own. Over the desktop shell's translucent
+ * material it paints nothing, so the window shows through it as it does
+ * through the minibar and the sidebar beside it.
  */
 export const PANE_TOP_ROW =
-  "relative flex min-w-0 shrink-0 items-stretch bg-sidebar " +
+  "relative flex min-w-0 shrink-0 items-stretch bg-sidebar [html.material-backdrop_&]:bg-transparent " +
   "[&:not(:has(>:not(:empty)))]:hidden " +
   // The header's controls keep to the lights' line (NEW_LAYOUT_PANE_ROW).
   "[&_.wco-chrome]:pt-[var(--row-drop,0px)]";
@@ -167,6 +169,13 @@ export const WORKSPACE_SHELL =
   "new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:pointer-events-none new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:absolute new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:inset-x-0 new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:top-[calc(var(--desktop-header-h)-1px)] " +
   "new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:z-30 new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:h-2.5 new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:content-[''] " +
   "new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:[background:radial-gradient(circle_at_100%_100%,transparent_9.75px,var(--sidebar-bg)_10.25px)_left_top/var(--panel-tl)_var(--panel-tl)_no-repeat,radial-gradient(circle_at_0_100%,transparent_9.75px,var(--sidebar-bg)_10.25px)_right_top/10px_10px_no-repeat] " +
+  // Over the desktop shell's translucent material, opaque grey under the
+  // row or at those corners would not match the chrome around it. There the
+  // panel's fill starts at the row's bottom edge, and the corners are cut
+  // out of the box instead of painted over.
+  "[html.material-backdrop_&]:new-layout:[&:has([data-pane-top-row]>:not(:empty))]:[background:linear-gradient(transparent_calc(var(--desktop-header-h)-1px),var(--bg)_0)] " +
+  "[html.material-backdrop_&]:new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:hidden " +
+  "[html.material-backdrop_&]:new-layout:[&:has([data-pane-top-row]>:not(:empty))]:[clip-path:shape(from_0_0,hline_to_100%,vline_to_calc(var(--desktop-header-h)-1px),hline_to_calc(100%-10px),arc_to_100%_calc(var(--desktop-header-h)+9px)_of_10px_cw,vline_to_100%,hline_to_0,vline_to_calc(var(--desktop-header-h)-1px+var(--panel-tl)),arc_to_var(--panel-tl)_calc(var(--desktop-header-h)-1px)_of_var(--panel-tl)_cw,hline_to_0,close)] " +
   // The first tab stands on the panel's left edge. While it is the open
   // one its side is that edge carried straight up, so the panel has no corner
   // of its own there. Not with the sidebar collapsed, where the strip starts

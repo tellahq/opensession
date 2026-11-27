@@ -50,7 +50,11 @@ import {
   TAB_SWATCH,
   TAB_SWATCH_NONE,
   TAB_SWATCH_ON,
+  TAB_CLOSE_INLINE,
+  TAB_INLINE_CONTROLS,
   TAB_TITLE,
+  TAB_TITLE_INLINE_CONTROLS,
+  TAB_WITH_MENU,
   TAB_VICON,
   tabClass,
   tabCloseClass,
@@ -67,6 +71,7 @@ import { shouldShowTabStrip } from "../lib/split-tabs";
 import { movesToPanel } from "../lib/workspace-pane-tabs";
 import { sessionNeverRan } from "../lib/landing-session";
 import type { SessionTabsProps, ViewTab } from "../lib/session-tabs-types";
+import { registerTabMenuSlot } from "../lib/tab-menu-slot";
 
 interface SessionTabStyle extends React.CSSProperties {
   "--tab-color"?: string;
@@ -157,9 +162,11 @@ function flareStyle(tabColor: string): SessionTabStyle {
  * as a DOM attribute avoids rerendering the full tab strip for presentation. */
 function TabTitle({
   children,
+  inlineControls,
   onDoubleClick,
 }: {
   children: React.ReactNode;
+  inlineControls?: boolean;
   onDoubleClick?: React.MouseEventHandler<HTMLSpanElement>;
 }) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -178,10 +185,24 @@ function TabTitle({
   }, [children]);
 
   return (
-    <span ref={ref} className={TAB_TITLE} onDoubleClick={onDoubleClick}>
+    <span
+      ref={ref}
+      className={inlineControls ? TAB_TITLE_INLINE_CONTROLS : TAB_TITLE}
+      onDoubleClick={onDoubleClick}
+    >
       {children}
     </span>
   );
+}
+
+/** Where the session viewer portals its ⋯ menu (lib/tab-menu-slot). */
+function TabMenuSlot({ sessionId }: { sessionId: string }) {
+  const [el, setEl] = useState<HTMLSpanElement | null>(null);
+  useEffect(() => {
+    if (!el) return;
+    return registerTabMenuSlot(sessionId, el);
+  }, [sessionId, el]);
+  return <span ref={setEl} className="contents" />;
 }
 
 export function SessionTabs({
@@ -601,6 +622,9 @@ export function SessionTabs({
               session.source === "opensession" && sessionNeverRan(session);
             const openingEmpty = key === morphingSessionId && !!morphOrigin;
             const emptyVisual = empty || openingEmpty;
+            // The new layout's open tab carries the session's ⋯ menu before
+            // its close, both in flow and always shown.
+            const menuInTab = !!attached && !isPhone && key === activeId;
 
             const titleContent =
               editKey === key ? (
@@ -620,6 +644,7 @@ export function SessionTabs({
                 />
               ) : (
                 <TabTitle
+                  inlineControls={menuInTab}
                   onDoubleClick={(e) => {
                     e.stopPropagation();
                     setDraft(session.title);
@@ -629,6 +654,34 @@ export function SessionTabs({
                   {session.title}
                 </TabTitle>
               );
+            const closeButton = (
+              <button
+                type="button"
+                className={
+                  menuInTab ? TAB_CLOSE_INLINE : tabCloseClass(isPhone)
+                }
+                style={
+                  emptyVisual && !isPhone && !menuInTab
+                    ? { opacity: 1, pointerEvents: "auto" }
+                    : undefined
+                }
+                aria-label="Close session"
+                title="Close session"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (empty) closeEmptySession(e.currentTarget, session);
+                  else onClose(session);
+                }}
+              >
+                {emptyVisual ? (
+                  <span className="inline-flex" data-empty-tab-glyph="">
+                    <IconX size={16} dense aria-hidden="true" />
+                  </span>
+                ) : (
+                  <IconX size={16} dense aria-hidden="true" />
+                )}
+              </button>
+            );
             const style: SessionTabStyle = {};
             if (hex) style["--tab-color"] = hex;
             if (emptyVisual) {
@@ -667,7 +720,8 @@ export function SessionTabs({
                             colored: !!hex,
                             attached,
                           }),
-                          emptyVisual && "desktop:pr-7",
+                          emptyVisual && !menuInTab && "desktop:pr-7",
+                          menuInTab && TAB_WITH_MENU,
                         )}
                         style={style}
                         onClick={() => onSelect(session)}
@@ -730,30 +784,21 @@ export function SessionTabs({
                     {key !== activeId && (
                       <SessionDraftIndicator sessionId={key} />
                     )}
-                    <button
-                      type="button"
-                      className={tabCloseClass(isPhone)}
-                      style={
-                        emptyVisual && !isPhone
-                          ? { opacity: 1, pointerEvents: "auto" }
-                          : undefined
-                      }
-                      aria-label="Close session"
-                      title="Close session"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (empty) closeEmptySession(e.currentTarget, session);
-                        else onClose(session);
-                      }}
-                    >
-                      {emptyVisual ? (
-                        <span className="inline-flex" data-empty-tab-glyph="">
-                          <IconX size={16} dense aria-hidden="true" />
+                    {menuInTab ? (
+                      <span className={TAB_INLINE_CONTROLS}>
+                        {/* An empty tab's ⋯ fades in with its title while the
+                            + opens into the tab; close is that + turned. */}
+                        <span
+                          className="flex"
+                          data-empty-tab-title={emptyVisual ? "" : undefined}
+                        >
+                          <TabMenuSlot sessionId={key} />
                         </span>
-                      ) : (
-                        <IconX size={16} dense aria-hidden="true" />
-                      )}
-                    </button>
+                        {closeButton}
+                      </span>
+                    ) : (
+                      closeButton
+                    )}
                   </ContextMenu.Trigger>
                   {/* finalFocus=false: "Rename session" mounts the inline rename
 							    input (autoFocus) — the closing menu must not steal focus

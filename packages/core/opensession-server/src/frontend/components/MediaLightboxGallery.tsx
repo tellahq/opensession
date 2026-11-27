@@ -930,15 +930,7 @@ export function MediaLightboxGallery({
           if (e.target === e.currentTarget) requestClose();
         }}
       >
-        {many && !isPhone && (
-          <Button
-            variant="default"
-            icon={<IconChevronLeft size={22} />}
-            className={LIGHTBOX_ROUND_BUTTON_CLASS}
-            onClick={prev}
-            aria-label="Previous"
-          />
-        )}
+        {many && !isPhone && <div className="size-10 shrink-0" aria-hidden />}
         <motion.div
           className="flex min-h-0 min-w-0 flex-1 self-stretch"
           initial={
@@ -1029,16 +1021,34 @@ export function MediaLightboxGallery({
             </div>
           )}
         </motion.div>
-        {many && !isPhone && (
-          <Button
-            variant="default"
-            icon={<IconChevronRight size={22} />}
-            className={LIGHTBOX_ROUND_BUTTON_CLASS}
-            onClick={next}
-            aria-label="Next"
-          />
-        )}
+        {many && !isPhone && <div className="size-10 shrink-0" aria-hidden />}
       </div>
+      {/* The page arrows sit on the window's middle, not the picture's: the
+          input and caption under the picture lift it above the middle, and
+          arrows riding with it read as off centre. The stage keeps their
+          room with the spacers either side of the picture. */}
+      {many && !isPhone && (
+        <>
+          <div className="absolute left-[calc(16px+env(safe-area-inset-left))] top-1/2 z-10 -translate-y-1/2">
+            <Button
+              variant="default"
+              icon={<IconChevronLeft size={22} />}
+              className={LIGHTBOX_ROUND_BUTTON_CLASS}
+              onClick={prev}
+              aria-label="Previous"
+            />
+          </div>
+          <div className="absolute right-[calc(16px+env(safe-area-inset-right))] top-1/2 z-10 -translate-y-1/2">
+            <Button
+              variant="default"
+              icon={<IconChevronRight size={22} />}
+              className={LIGHTBOX_ROUND_BUTTON_CLASS}
+              onClick={next}
+              aria-label="Next"
+            />
+          </div>
+        </>
+      )}
 
       {isPhone && (
         <div
