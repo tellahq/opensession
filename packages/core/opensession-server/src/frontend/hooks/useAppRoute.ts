@@ -130,8 +130,9 @@ export class AppRouteController {
   private currentPlace: Place = "sessions";
   /** The conversation last shown in Sessions, which its button returns to. */
   private sessionsReturn: Route | null = null;
-  /** The return target the server is being asked about, if any. */
-  private returnLookup: Route | null = null;
+  /** The return target the server is being asked about, if any, and the
+   *  page the Sessions button was last clicked on while it was. */
+  private returnLookup: { target: Route; from: Route } | null = null;
   private firstMile: boolean;
   private readonly listeners = new Set<(snapshot: RouteSnapshot) => void>();
 
@@ -196,7 +197,10 @@ export class AppRouteController {
   ): void {
     const shown = this.currentPlace === "sessions";
     const target = isConversationRoute(this.route) ? null : this.sessionsReturn;
-    if (target && target !== this.returnLookup) {
+    if (target && target === this.returnLookup?.target) {
+      // Already asking. The answer returns you from here instead.
+      this.returnLookup.from = this.route;
+    } else if (target) {
       const verdict = stillThere(target);
       if (verdict === true) {
         // Set first, so the conversation lands in Sessions even when the
@@ -227,9 +231,10 @@ export class AppRouteController {
   }
 
   private returnOnceConfirmed(target: Route, verdict: Promise<boolean>): void {
-    this.returnLookup = target;
+    const lookup = { target, from: this.route };
+    this.returnLookup = lookup;
     const settle = () => {
-      if (this.returnLookup === target) this.returnLookup = null;
+      if (this.returnLookup === lookup) this.returnLookup = null;
     };
     verdict.then(
       (there) => {
@@ -237,12 +242,10 @@ export class AppRouteController {
         // Forgotten or replaced meanwhile.
         if (this.sessionsReturn !== target) return;
         if (!there) this.sessionsReturn = null;
-        // Still waiting on it: your list beside a page. Opening a
-        // conversation or leaving for another place is moving on.
-        else if (
-          this.currentPlace === "sessions" &&
-          !isConversationRoute(this.route)
-        )
+        // Only from the page the button was clicked on, with your list
+        // still beside it. Anything opened since (a session, Archived,
+        // another place) is where you chose to be.
+        else if (this.route === lookup.from && this.currentPlace === "sessions")
           this.navigate(target);
       },
       // Unknown, not gone: it stays remembered, and the next click asks again.

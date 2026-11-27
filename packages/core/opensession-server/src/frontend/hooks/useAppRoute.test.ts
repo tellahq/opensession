@@ -1045,6 +1045,48 @@ describe("places", () => {
     });
   });
 
+  test("a page opened from the list while a lookup is pending stays open", async () => {
+    const fake = fakeBrowser({ path: "/session/mine", state: { d: 0 } });
+    const controller = new AppRouteController(fake.browser);
+    controller.navigate({ view: "issues" });
+
+    let answer!: (there: boolean) => void;
+    controller.openSessions(
+      () => new Promise<boolean>((resolve) => (answer = resolve)),
+    );
+    // Archived is in the Sessions list, so the place does not change.
+    controller.navigate({ view: "archived" });
+    expect(controller.place).toBe("sessions");
+
+    answer(true);
+    await Promise.resolve();
+    expect(controller.getCurrentRoute()).toEqual({ view: "archived" });
+  });
+
+  test("clicking Sessions there while the lookup is pending returns from it", async () => {
+    const fake = fakeBrowser({ path: "/session/mine", state: { d: 0 } });
+    const controller = new AppRouteController(fake.browser);
+    controller.navigate({ view: "issues" });
+
+    let asked = 0;
+    let answer!: (there: boolean) => void;
+    const lookUp = () => {
+      asked += 1;
+      return new Promise<boolean>((resolve) => (answer = resolve));
+    };
+    controller.openSessions(lookUp);
+    controller.navigate({ view: "archived" });
+    controller.openSessions(lookUp);
+    expect(asked).toBe(1);
+
+    answer(true);
+    await Promise.resolve();
+    expect(controller.getCurrentRoute()).toEqual({
+      view: "session",
+      id: "mine",
+    });
+  });
+
   test("Sessions already selected with nothing to return to does nothing", () => {
     const fake = fakeBrowser({ path: "/issues", state: { d: 0 } });
     const controller = new AppRouteController(fake.browser);
