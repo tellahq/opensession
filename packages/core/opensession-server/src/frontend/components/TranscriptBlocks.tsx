@@ -133,6 +133,8 @@ interface Props {
   onFork?: (entryId: string) => void;
   /** Your own sent messages can be reopened in the composer when provided. */
   onEditMessage?: (entry: TranscriptEntry) => void;
+  /** Deletes one of your messages that no run has picked up yet. */
+  onDeletePendingMessage?: (entryId: string) => void;
   /** Starts a turn that picks the work back up after a run failed. Offered on
    *  the last block only: an older failure has already been moved past, and a
    *  Continue button on it would restart work the session went on to do. */
@@ -831,6 +833,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
   live,
   onFork,
   onEditMessage,
+  onDeletePendingMessage,
   onContinue,
   onOpenSubagent,
   owner,
@@ -1138,6 +1141,11 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
                   : onEditMessage
               }
               optimistic={optimisticEntryIds.has(inner.entry.id)}
+              onDeletePending={
+                optimisticEntryIds.has(inner.entry.id)
+                  ? undefined
+                  : onDeletePendingMessage
+              }
               // Between the fold's flush tool rows an answer spaces like
               // narration. One with its footer under it keeps the turn's
               // margin, which the lifted footer sits in.
@@ -1310,6 +1318,11 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
             optimisticEntryIds.has(block.entry.id) ? undefined : onEditMessage
           }
           optimistic={optimisticEntryIds.has(block.entry.id)}
+          onDeletePending={
+            optimisticEntryIds.has(block.entry.id)
+              ? undefined
+              : onDeletePendingMessage
+          }
           onContinue={i === groupedBlocks.length - 1 ? onContinue : undefined}
         />
       );

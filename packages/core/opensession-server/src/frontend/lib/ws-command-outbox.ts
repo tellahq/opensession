@@ -71,6 +71,7 @@ const mutationMessageSchema = z.discriminatedUnion("type", [
       ...sessionMutationFields,
       queueId: z.string().optional(),
       queueIndex: z.number().optional(),
+      entryId: z.string().optional(),
     })
     .catchall(jsonValueSchema),
   z

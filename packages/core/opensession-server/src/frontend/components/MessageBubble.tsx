@@ -37,6 +37,7 @@ import {
   IconLightbulb,
   IconLink,
   IconPencil,
+  IconTrash,
 } from "./icons";
 import { TextShimmer } from "../ui/text-shimmer";
 import { plainStatusText } from "../lib/progress-updates";
@@ -535,7 +536,10 @@ function TeammateAvatar({ name }: { name: string }) {
 const bubbleReveal =
   "[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-hover/bubble:opacity-100 [@media(hover:hover)]:group-focus-within/bubble:opacity-100";
 
-const bubbleActionClass = `flex size-7 flex-none cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-faint select-none hover:bg-hover hover:text-dim ${bubbleReveal}`;
+const bubbleActionBase =
+  "flex size-7 flex-none cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-faint select-none hover:bg-hover hover:text-dim";
+
+const bubbleActionClass = `${bubbleActionBase} ${bubbleReveal}`;
 
 /** Put a message you already sent back into the composer, so a typo is a fix
  * and a re-send rather than a re-type.
@@ -557,6 +561,24 @@ function EditAgainButton({ onClick }: { onClick: () => void }) {
         className={bubbleActionClass}
       >
         <IconPencil size={16} />
+      </button>
+    </Tooltip>
+  );
+}
+
+/** Take back a message the conversation accepted but no run has read yet.
+ * Unlike the hover actions it stays on the page: a message stuck in this
+ * state is the thing the person is looking at. */
+function DeletePendingButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Tooltip label="Delete unsent message">
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label="Delete unsent message"
+        className={bubbleActionBase}
+      >
+        <IconTrash size={16} />
       </button>
     </Tooltip>
   );
@@ -645,12 +667,15 @@ function CopyMessageLinkButton({ entryId }: { entryId: string }) {
 function BubbleMeta({
   ts,
   onEdit,
+  onDelete,
   copy,
   linkEntryId,
   message,
 }: {
   ts?: string;
   onEdit?: () => void;
+  /** Offered while the message waits for a run to pick it up. */
+  onDelete?: () => void;
   copy?: { entry: TranscriptEntry; sessionId?: string };
   /** The entry a "Copy link" points at; omitted while it is not stored. */
   linkEntryId?: string;
@@ -658,7 +683,8 @@ function BubbleMeta({
   message?: MessageRef;
 }) {
   const label = ts ? fullTime(ts) : "";
-  if (!onEdit && !copy && !linkEntryId && !label && !message) return null;
+  if (!onEdit && !onDelete && !copy && !linkEntryId && !label && !message)
+    return null;
   return (
     <div className="absolute top-[calc(100%+2px)] right-0 flex items-center gap-1">
       {message && (
@@ -672,6 +698,8 @@ function BubbleMeta({
           {label}
         </span>
       )}
+      {/* Last, so it holds the bubble's edge while the hover actions are hidden. */}
+      {onDelete && <DeletePendingButton onClick={onDelete} />}
     </div>
   );
 }
@@ -702,6 +730,9 @@ interface Props {
   /** A just-sent turn the server has not stored yet: its id is the client's
    *  own, so there is nothing a link to it could open. */
   optimistic?: boolean;
+  /** Offered with `pendingDelivery` on your own turns: deletes the message
+   *  before a run picks it up. */
+  onDeletePending?: (entryId: string) => void;
   /** Offered on a failed run's notice: starts a turn that picks the work back
    *  up. Passed only for the notice a person can still act on — the last one,
    *  on an idle session (see TranscriptBlocks). */
@@ -991,6 +1022,7 @@ export const MessageBubble = function MessageBubble({
   sessionId,
   onEdit,
   optimistic,
+  onDeletePending,
   onContinue,
   step = false,
 }: Props) {
@@ -1192,6 +1224,11 @@ export const MessageBubble = function MessageBubble({
           <BubbleMeta
             ts={fromOther ? undefined : e.timestamp}
             onEdit={!fromOther && onEdit ? () => onEdit(e) : undefined}
+            onDelete={
+              !fromOther && pendingDelivery && onDeletePending
+                ? () => onDeletePending(e.id)
+                : undefined
+            }
             copy={
               !fromOther && displayContent ? { entry: e, sessionId } : undefined
             }

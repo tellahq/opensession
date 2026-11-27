@@ -135,6 +135,7 @@ import { subscribeTranscript } from "./transcript-bus";
 import { resumeSessionFeed } from "./session-feed";
 import type { SeqEntry } from "./transcript-store";
 import { importLegacyTranscript, transcript } from "./actor-transcript";
+import { withdrawPendingPrompt } from "./withdraw-pending-prompt";
 import { startTranscriptWatch } from "./transcript-watch";
 import { type CompressibleSocket, sendCompressedFrame } from "./ws-compression";
 import { clampV2InitEntries } from "./transcript-wire";
@@ -1731,7 +1732,12 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
         }
 
         case "delete_queued_prompt": {
-          const { sessionId, queueId, queueIndex } = msg;
+          const { sessionId, queueId, queueIndex, entryId } = msg;
+          if (entryId) {
+            const session = await findSessionAsync(sessionId);
+            if (session) await withdrawPendingPrompt(session, entryId);
+            break;
+          }
           await deleteQueuedPrompt(sessionId, queueId, queueIndex);
           break;
         }
