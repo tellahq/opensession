@@ -20,6 +20,7 @@ import {
   readdir as fsReaddir,
   realpath as fsRealpath,
   stat as fsStat,
+  unlink as fsUnlink,
   writeFile as fsWriteFile,
 } from "fs/promises";
 import { createHash } from "node:crypto";
@@ -114,6 +115,11 @@ import {
   PiResourceLockManager,
   piResourceLockTools,
 } from "./pi-resource-locks";
+import {
+  makePiApplyPatchTool,
+  modelPromptAdaptation,
+  usesApplyPatchTool,
+} from "./pi-apply-patch";
 import { piSecretRedactionTools } from "./pi-secret-redaction";
 import {
   guardStripeApprovalCall,
@@ -1526,6 +1532,10 @@ export function makeGuardedToolOps(cwd: string, scratchDir?: string) {
         await guard(dir);
         await fsMkdir(dir, { recursive: true });
       },
+    },
+    deleteFile: async (p: string) => {
+      await guard(p);
+      await fsUnlink(p);
     },
   };
 }
@@ -3080,11 +3090,14 @@ async function* runPiAttempt(
     // Code/scratch get the read set + edit/write + the ungated custom bash.
     // disableLocalWorkspaceTools (engine-outside-sandbox) strips all local
     // tools — pi has no sandbox mode, but fail closed if a caller passes it.
+    const patchNative = usesApplyPatchTool(parsed.providerID, parsed.modelID);
     const localTools = opts.disableLocalWorkspaceTools
       ? []
       : isAsk
         ? ["read", "grep", "find", "ls", "bash"]
-        : ["read", "grep", "find", "ls", "edit", "write", "bash"];
+        : patchNative
+          ? ["read", "grep", "find", "ls", "apply_patch", "bash"]
+          : ["read", "grep", "find", "ls", "edit", "write", "bash"];
     // Every enabled name is derived from a custom definition below. Pi falls
     // back to its in-process built-ins for a name without an override, so a
     // separately maintained enabled-name list would be a containment escape.
@@ -3182,6 +3195,19 @@ async function* runPiAttempt(
             }) as ToolDefinition<any, any, any>,
           );
           break;
+        case "apply_patch":
+          baseCustomTools.push(
+            makePiApplyPatchTool({
+              cwd,
+              operations: {
+                readFile: guardedOps.edit.readFile,
+                writeFile: guardedOps.write.writeFile,
+                mkdir: guardedOps.write.mkdir,
+                deleteFile: guardedOps.deleteFile,
+              },
+            }),
+          );
+          break;
         case "bash":
           baseCustomTools.push(
             makePiBashTool({
@@ -3263,6 +3289,9 @@ async function* runPiAttempt(
       repoHost: isScratch ? undefined : cwdRepo?.host,
       publicRepo,
       localInstructions: await readLocalInstructions(context.dir),
+      modelAdaptation: isAsk
+        ? undefined
+        : modelPromptAdaptation(parsed.providerID, parsed.modelID),
       stripeApprovalsNote: stripeApprovals
         ? stripeApprovalsNote(policy.unattended)
         : undefined,
