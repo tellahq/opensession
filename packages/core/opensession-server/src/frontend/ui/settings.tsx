@@ -663,3 +663,10 @@ const styles = stylex.create({
  *  status text beside it. */
 export const rowMenuTriggerClasses =
   stylex.props(styles.rowMenuTrigger).className ?? "";
+
+/**
+ * The plate as a class string, for a list that draws its own rows on it (the
+ * phone settings sheet's section list and account card).
+ */
+export const SETTINGS_PLATE =
+  stylex.props(styles.surface, styles.clip).className ?? "";

@@ -67,6 +67,92 @@
  * without anyone re-deriving them.
  */
 
+import * as stylex from "@stylexjs/stylex";
+import { classString as sx } from "../ui/sx";
+import { color, media, sidebarScale as scale } from "../ui/tokens.stylex";
+
+/**
+ * The pieces of the rail that are StyleX. The constants below that read
+ * `stylex.props(...)` are these styles as class strings, for call sites that
+ * still compose strings; the rest are Tailwind until their families move.
+ */
+export const sidebarStyles = stylex.create({
+  // See SIDEBAR_DENSITY_VARS. Compact is desktop-only and keyed on the same
+  // element's `data-density`.
+  density: {
+    "--sidebar-row-pad": {
+      default: scale.rowPad,
+      [media.desktop]: {
+        default: null,
+        ":is([data-density=compact])": scale.rowPadCompact,
+      },
+    },
+    "--sidebar-tool-pad": {
+      default: scale.toolPad,
+      [media.desktop]: {
+        default: null,
+        ":is([data-density=compact])": scale.toolPadCompact,
+      },
+    },
+    "--sidebar-line-h": {
+      default: scale.lineHeight,
+      [media.desktop]: {
+        default: null,
+        ":is([data-density=compact])": scale.lineHeightCompact,
+      },
+    },
+    "--sidebar-cap-h": {
+      default: scale.caption,
+      [media.desktop]: {
+        default: null,
+        ":is([data-density=compact])": scale.captionCompact,
+      },
+    },
+    "--sidebar-band-slot": {
+      default: scale.bandSlot,
+      [media.desktop]: {
+        default: null,
+        ":is([data-density=compact])": scale.bandSlotCompact,
+      },
+    },
+    "--sidebar-group-gap": {
+      default: scale.groupGap,
+      [media.desktop]: {
+        default: null,
+        ":is([data-density=compact])": scale.groupGapCompact,
+      },
+    },
+    "--sidebar-row-action": {
+      default: scale.rowAction,
+      [media.desktop]: {
+        default: null,
+        ":is([data-density=compact])": scale.rowActionCompact,
+      },
+    },
+  },
+  rail: {
+    position: "relative",
+    display: "flex",
+    width: scale.rail,
+    height: scale.rail,
+    flex: `0 0 ${scale.rail}`,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  railGap: { gap: scale.railGap },
+  // A layer, not a colour: see SIDEBAR_HOVER_LAYER.
+  hoverLayer: {
+    backgroundImage: {
+      default: null,
+      ":hover": {
+        default: null,
+        [media.hover]: `linear-gradient(${color.hover}, ${color.hover})`,
+      },
+    },
+  },
+  group: { marginBottom: scale.groupGapVar },
+});
+
 /**
  * The rail's vertical scale, as one set of custom properties on the sidebar's
  * scroll root. The default column is the scale described above; the compact
@@ -96,13 +182,9 @@
  * Two rules ride on this. Compact is gated on `desktop:`, because a phone row
  * is a tap target and its `phone:` padding is deliberately off this scale.
  * And the compact values sit on the SAME element as `data-density`, so they
- * out-rank the defaults on specificity (0,2,0 against 0,1,0) rather than on
- * Tailwind's output order, which two utilities setting one property would
- * otherwise be settled by.
+ * out-rank the defaults on specificity rather than on stylesheet order.
  */
-export const SIDEBAR_DENSITY_VARS =
-  "[--sidebar-row-pad:7px] [--sidebar-tool-pad:5px] [--sidebar-line-h:36px] [--sidebar-cap-h:28px] [--sidebar-band-slot:32px] [--sidebar-group-gap:14px] [--sidebar-row-action:26px] " +
-  "desktop:data-[density=compact]:[--sidebar-row-pad:4px] desktop:data-[density=compact]:[--sidebar-tool-pad:4px] desktop:data-[density=compact]:[--sidebar-line-h:30px] desktop:data-[density=compact]:[--sidebar-cap-h:24px] desktop:data-[density=compact]:[--sidebar-band-slot:28px] desktop:data-[density=compact]:[--sidebar-group-gap:8px] desktop:data-[density=compact]:[--sidebar-row-action:24px]";
+export const SIDEBAR_DENSITY_VARS = sx(sidebarStyles.density);
 
 /**
  * The rail's HORIZONTAL scale, the counterpart to the vertical one above, on
@@ -155,8 +237,7 @@ export const SIDEBAR_RAIL_PAD_DESKTOP =
  * resizing them: the group dot and RepoTile are also dropdown option icons,
  * where a 22px box would be wrong.
  */
-export const SIDEBAR_RAIL =
-  "relative flex size-[22px] flex-[0_0_22px] items-center justify-center";
+export const SIDEBAR_RAIL = sx(sidebarStyles.rail);
 
 /**
  * The air between that rail and the title after it — one value, shared by
@@ -171,7 +252,7 @@ export const SIDEBAR_RAIL =
  * closed up. Tightening the shared gap keeps that difference where it belongs
  * (inside the rail, centred) instead of adding to it.
  */
-export const SIDEBAR_RAIL_GAP = "gap-[7px]";
+export const SIDEBAR_RAIL_GAP = sx(sidebarStyles.railGap);
 
 /**
  * ── Containers ──────────────────────────────────────────────────────────────
@@ -231,8 +312,7 @@ export const SIDEBAR_INDEPENDENT_SCROLL = "min-w-0 overflow-y-visible pb-1.5";
  * The one thing this is NOT for is an action chip floating over a row — see
  * {@link SIDEBAR_ROW_CHIP}.
  */
-export const SIDEBAR_HOVER_LAYER =
-  "hover:bg-[image:linear-gradient(var(--hover),var(--hover))]";
+export const SIDEBAR_HOVER_LAYER = sx(sidebarStyles.hoverLayer);
 
 /**
  * The pin/archive chip's hover — the deliberate exception to the wash.
@@ -248,7 +328,7 @@ export const SIDEBAR_HOVER_LAYER =
 export const SIDEBAR_ROW_CHIP = "hover:bg-[var(--row-chip)]";
 
 /** A top-level group in the workspace list, and the gap after it. */
-export const SIDEBAR_GROUP = "mb-[var(--sidebar-group-gap)]";
+export const SIDEBAR_GROUP = sx(sidebarStyles.group);
 
 /**
  * A status lane. Consecutive lanes open with 8px of their own, which was an

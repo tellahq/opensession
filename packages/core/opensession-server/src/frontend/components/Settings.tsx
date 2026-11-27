@@ -4,16 +4,8 @@ import { useScrollEdge } from "../hooks/useScrollEdge";
 import { cn } from "../ui/cn";
 import {
   SETTINGS_BACK,
-  SETTINGS_CONTENT,
   SETTINGS_CONTENT_SHEET,
-  SETTINGS_CONTENT_TOOL,
   SETTINGS_DRAG_HANDLE,
-  SETTINGS_PAGE,
-  SETTINGS_PANEL_FRAME,
-  SETTINGS_PANEL_FRAME_GALLERY,
-  SETTINGS_PANEL_FRAME_SHEET,
-  SETTINGS_SHEET_LIST,
-  SETTINGS_SHEET_SEARCH_BAR,
   SETTINGS_NAV,
   SETTINGS_NAV_CAPTION,
   SETTINGS_NAV_GROUP,
@@ -21,6 +13,19 @@ import {
   SETTINGS_NAV_LIST,
   SETTINGS_NAV_ROW,
   SETTINGS_NAV_SEARCH,
+  SETTINGS_PAGE,
+  SETTINGS_PANEL_FRAME,
+  SETTINGS_PANEL_FRAME_GALLERY,
+  SETTINGS_PANEL_FRAME_SHEET,
+  SETTINGS_SHEET_CAPTION,
+  SETTINGS_SHEET_EMPTY,
+  SETTINGS_SHEET_GLYPH,
+  SETTINGS_SHEET_HINT,
+  SETTINGS_SHEET_LABEL,
+  SETTINGS_SHEET_LIST,
+  SETTINGS_SHEET_ROW,
+  SETTINGS_SHEET_SEARCH_BAR,
+  settingsContent,
 } from "../lib/settings-classes";
 import { matchSections, type SectionHit } from "../lib/settings-search";
 import {
@@ -30,7 +35,7 @@ import {
   type ToolSectionKey,
 } from "../lib/settings-sections";
 import { Input } from "../ui/input";
-import { SettingsInSheet } from "../ui/settings";
+import { SETTINGS_PLATE, SettingsInSheet } from "../ui/settings";
 import { PhonePage, SheetIconButton } from "../ui/sheet";
 import { PhoneTopBar, PhoneTopBarTitle } from "../ui/top-bar";
 import { Connections } from "./Connections";
@@ -93,6 +98,7 @@ const GALLERY_SECTIONS = new Set<SettingsSectionKey>(["library", "setup"]);
 const SETTINGS_LEADING =
   "leading-normal [&_*]:!leading-normal " +
   "[&_[data-setting-title]]:!leading-[1.1] [&_[data-top-bar-title]]:!leading-[1.1] " +
+  "[&_.settings-title]:!leading-[1.1] " +
   "[&_h1]:!leading-[1.1] [&_h2]:!leading-[1.1] [&_h3]:!leading-[1.1] " +
   "[&_h4]:!leading-[1.1] [&_h5]:!leading-[1.1] [&_h6]:!leading-[1.1] " +
   "[&_.font-title]:!leading-[1.1] [&_.text-item-title]:!leading-[1.1] " +
@@ -380,10 +386,7 @@ export function Settings({
 			    padded reading column. */}
       <div
         data-settings-scroll
-        className={cn(
-          SETTINGS_CONTENT,
-          TOOL_SECTIONS.has(active) && SETTINGS_CONTENT_TOOL,
-        )}
+        className={settingsContent(TOOL_SECTIONS.has(active))}
       >
         {TOOL_SECTIONS.has(active) ? (
           <SectionPanel section={active} onOpenOnboarding={onOpenOnboarding}>
@@ -496,23 +499,19 @@ function MobileSettings({
               <div className={SETTINGS_SHEET_LIST}>
                 {shown.map((g) => (
                   <div key={g.group}>
-                    <div className="mb-2 mt-5 px-1 text-control-label font-semibold text-faint">
-                      {g.group}
-                    </div>
-                    <div className="overflow-hidden rounded-2xl border border-divider-soft bg-settings-plate">
+                    <div className={SETTINGS_SHEET_CAPTION}>{g.group}</div>
+                    <div className={SETTINGS_PLATE}>
                       {g.hits.map(({ item: s, hint }) => (
                         <button
                           key={s.key}
-                          className="relative flex w-full items-center gap-3 border-0 bg-transparent px-3.5 py-3 text-left after:absolute after:bottom-0 after:left-[54px] after:right-0 after:h-px after:bg-divider-soft last:after:hidden active:bg-hover"
+                          className={SETTINGS_SHEET_ROW}
                           onClick={() => onSelect(s.key)}
                         >
-                          <span className="flex h-7 w-7 shrink-0 items-center justify-center text-dim">
-                            {s.icon}
-                          </span>
-                          <span className="min-w-0 flex-1 text-item-title font-medium text-fg">
+                          <span className={SETTINGS_SHEET_GLYPH}>{s.icon}</span>
+                          <span className={SETTINGS_SHEET_LABEL}>
                             {s.label}
                             {hint && (
-                              <span className="block truncate text-meta font-normal text-faint">
+                              <span className={SETTINGS_SHEET_HINT}>
                                 {hint}
                               </span>
                             )}
@@ -527,7 +526,7 @@ function MobileSettings({
                   </div>
                 ))}
                 {shown.length === 0 && (
-                  <div className="mt-6 px-1 text-supporting text-faint">
+                  <div className={SETTINGS_SHEET_EMPTY}>
                     Nothing matches “{query}”.
                   </div>
                 )}

@@ -135,6 +135,18 @@ past the element: the floating bar's `::before` fade and its `.app:has(...)`
 offsets, the archived search collapse under `body.kb-open`, and the
 `[&_svg]` glyph sizes.
 
+Feature areas follow the same pattern, one area at a time. The settings page
+and the phone settings sheet live in `lib/settings-classes.ts`; the sidebar
+pieces settings borrows (the density scale, the 22px rail and the gap after
+it, the hover layer, the group gap) are `sidebarStyles` in
+`lib/sidebar-classes.ts`, with their numbers in `sidebarScale`. Each class
+string constant is `classString(...)` from `ui/sx.ts`: pass every style one
+element wears in one call, so two styles that set the same property are
+settled by argument order, not stylesheet order. Hooks that CSS or tests read
+(`settings-nav`, `settings-content`, `settings-content-tool`,
+`settings-drag-handle`, `wco-chrome`, `settings-title`) stay plain class
+names beside the StyleX ones.
+
 Other shared pieces: `ui/sx.ts` (merges a primitive's StyleX props with a
 caller's legacy `className`, and defines the `LayoutStyles` type every
 `xstyle` uses), `ui/choice-styles.ts` (the box a Checkbox and a Radio share),

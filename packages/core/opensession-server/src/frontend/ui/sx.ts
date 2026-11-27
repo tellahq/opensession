@@ -36,6 +36,16 @@ export function sx(
   };
 }
 
+/**
+ * StyleX styles as one class string, for the `lib/*-classes.ts` constants that
+ * call sites still compose as strings. Pass every style one element wears in
+ * ONE call: two strings that set the same property differently are settled by
+ * stylesheet order, which is not a decision anyone made.
+ */
+export function classString(...styles: Styles[]): string {
+  return stylex.props(styles).className ?? "";
+}
+
 /** Placement-only overrides every ported primitive accepts as `xstyle`. */
 export type LayoutStyles = StyleXStyles<{
   margin?: string | number | null;

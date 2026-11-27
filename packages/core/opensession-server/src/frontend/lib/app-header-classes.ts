@@ -1,13 +1,8 @@
 import * as stylex from "@stylexjs/stylex";
-import type { CompiledStyles, StyleXArray } from "@stylexjs/stylex";
+import { classString as sx } from "../ui/sx";
 import { appHeaderStyles as h } from "../ui/app-header-styles";
 import { titlePillMarker } from "../ui/markers.stylex";
 import { cn } from "../ui/cn";
-
-/** A StyleX style set as the class string these constants have always been. */
-const sx = (
-  ...styles: StyleXArray<CompiledStyles | boolean | null | undefined>[]
-): string => stylex.props(styles).className ?? "";
 
 /**
  * The phone top bar — one iOS-style nav bar, and everything that rides in it.
