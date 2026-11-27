@@ -132,20 +132,3 @@ export function channelsRoute(id?: string): Route {
   const target = id ?? lastChannel();
   return target ? { view: "channels", id: target } : { view: "channels" };
 }
-
-/** Channels first, then direct and group messages, as Slack's sidebar has
- *  them. */
-export interface ConversationSections {
-  channels: Conversation[];
-  direct: Conversation[];
-}
-
-export function conversationSections(
-  conversations: readonly Conversation[],
-): ConversationSections {
-  const channels: Conversation[] = [];
-  const direct: Conversation[] = [];
-  for (const c of conversations)
-    (c.kind === "dm" || c.kind === "group" ? direct : channels).push(c);
-  return { channels, direct };
-}

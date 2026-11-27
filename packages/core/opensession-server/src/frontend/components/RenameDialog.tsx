@@ -14,6 +14,7 @@ export function RenameDialog({
   draft,
   placeholder,
   allowEmpty = false,
+  submitLabel = "Rename",
   onDraftChange,
   onCommit,
   onCancel,
@@ -24,6 +25,8 @@ export function RenameDialog({
   placeholder?: string;
   /** Allow saving a blank name, for names that fall back to a default. */
   allowEmpty?: boolean;
+  /** The confirm button, when the dialog names something new. */
+  submitLabel?: string;
   onDraftChange: (value: string) => void;
   onCommit: () => void;
   onCancel: () => void;
@@ -75,7 +78,7 @@ export function RenameDialog({
               className="phone:flex-1"
               disabled={!allowEmpty && !shown.trim()}
             >
-              Rename
+              {submitLabel}
             </Button>
           </Modal.Footer>
         </form>
