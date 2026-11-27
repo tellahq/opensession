@@ -3,11 +3,9 @@ import { useShortcutKeys } from "../../hooks/useShortcutBindings";
 import { hasDraft } from "../../lib/drafts";
 import { markRead, markUnread } from "../../lib/reads";
 import {
-  SIDEBAR_HOVER_LAYER,
   SIDEBAR_RAIL,
   SIDEBAR_RAIL_GAP,
-  SIDEBAR_RAIL_PAD,
-  SIDEBAR_ROW_CHIP,
+  SIDEBAR_ROW_TITLE,
   SIDEBAR_STATUS_DOT,
   SIDEBAR_SWIPE_ACTION,
   SIDEBAR_SWIPE_ACTION_ARCHIVE,
@@ -17,6 +15,9 @@ import {
   SIDEBAR_SWIPE_ACTION_TRANSITION,
   SIDEBAR_SWIPE_ROW,
   SIDEBAR_WS_DRAFT,
+  sidebarRow,
+  sidebarRowChip,
+  sidebarRowChipStyles,
 } from "../../lib/sidebar-classes";
 import {
   isClaimed,
@@ -76,55 +77,17 @@ import React, { useEffect, useRef, useState } from "react";
 
 type SwipeRowStyle = React.CSSProperties & { "--swipe-action-w": string };
 
-/** The sidebar's selectable row — the shape every list family wears: session,
- *  workspace, PR, support, feed and archived rows. Migrated off the
- *  legacy row family, so the state that used to live in `-selected` /
- *  `-waiting` / `-unread` modifier classes now rides `data-*` attributes on
- *  the row itself and descendants read it through `group-data-[…]` variants.
- *  `data-sidebar-row` is the hook the ⌘↑/⌘↓ row walker queries by.
- *
- *  Rows wrapped in a swipe shell add `mt-0` — the wrapper carries the 2px gap
- *  for them — plus the swipe transform; bare rows keep the margin. On phones,
- *  row marks sit on the same 16px rail as tool and repo marks. The inset is
- *  written against `--sidebar-icon-left` (12px at its default 16) rather than
- *  as a flat 4, so a family that nests by overriding that variable, today the
- *  runs under an automation, indents at phone width too and not only on
- *  desktop, where the rail pad already reads it.
- *
- *  `--sidebar-row-pad` around the 22px rail is the sidebar's ITEM height (see
- *  the height scale in lib/sidebar-classes.ts): 7px for a 36px box, and 4px
- *  for the 30px one the compact density asks for. It is the same box the tool
- *  rows and the item headings take at either setting, so a repo band and its
- *  sessions run as one regular column. It was a flat 9px, which made a session
- *  row the tallest thing in the rail and 12px taller than a tool row saying the
- *  same kind of thing.
- *  Phones keep `py-[13px]` at both densities: 36px is a reading height, not a
- *  tap target, so the compact values are gated to desktop where they are set. */
-export const SIDEBAR_ROW = `group relative mt-0.5 w-full rounded-control border-0 bg-transparent py-[var(--sidebar-row-pad)] pr-2 ${SIDEBAR_RAIL_PAD} text-left text-fg phone:pr-2 phone:pl-[calc(var(--sidebar-icon-left,16px)-12px)] phone:py-[13px]`;
+/* The row, its title and its chips are sidebarRow, SIDEBAR_ROW_TITLE and
+   sidebarRowChip in lib/sidebar-classes.ts.
 
-/** A row's title: one line that fades smoothly at the available edge instead
- *  of ending in an ellipsis. Read conversations stay quiet; unread ones
- *  brighten immediately, then bold once the agent finishes. A blocked one
- *  also bolds because it needs a person. */
-/* Pin + one trailing action, hover-revealed on desktop: Archive for your own
+   Pin + one trailing action, hover-revealed on desktop: Archive for your own
    sessions, Keep for somebody else's. They take the metadata's place at the
-   far right so they don't crowd the title. Long titles run under
-   that spot, and what used to cover them was an opaque plate per button — which
-   only ever worked because the row it sat on was opaque too. Now that a row's
-   states are translucent ink, a solid chip cuts a hole in the material behind
-   it, so the row reserves the space instead (`hover:pr-[68px]` below) and the
-   buttons carry nothing but their own hover wash.
-   The reveal is `group-hover`, which Tailwind gates to real hover devices for
-   us. Team's add action is the exception: it stays visible with a 44px touch
-   target because every row there is waiting to be added. */
-const ROW_ACTION = cn(
-  "absolute top-1/2 hidden size-[var(--sidebar-row-action,26px)] -translate-y-1/2 items-center justify-center rounded-md text-[15px] leading-none text-faint group-hover:flex hover:text-fg",
-  // Not a wash — a lid. See SIDEBAR_ROW_CHIP.
-  SIDEBAR_ROW_CHIP,
-);
-
-export const SIDEBAR_ROW_TITLE =
-  "min-w-0 flex-1 overflow-hidden whitespace-nowrap [-webkit-mask-image:linear-gradient(to_right,#000_calc(100%_-_24px),transparent)] [mask-image:linear-gradient(to_right,#000_calc(100%_-_24px),transparent)] text-body font-medium leading-[1.35] text-dim desktop:text-item-title group-data-[selected]:text-fg group-data-[waiting]:font-semibold group-data-[finished-unread]:font-semibold group-data-[unread]:text-fg";
+   far right so they don't crowd the title. Long titles run under that spot,
+   and a solid chip would cut a hole in the translucent row behind it, so the
+   row reserves the space instead (`chips` below) and the buttons carry nothing
+   but their own hover lid. Team's add action is the exception: it stays
+   visible with a 44px touch target because every row there is waiting to be
+   added. */
 
 export function SidebarItem({
   session,
@@ -441,34 +404,26 @@ export function SidebarItem({
             <button
               ref={btnRef}
               className={cn(
-                SIDEBAR_ROW,
                 // Inside a swipe row: the wrapper owns the gap, the row owns the
                 // slide. Hover paints over selected/waiting here, as it always
-                // has — as a layer now, so it lifts those states rather than
+                // has, as a layer, so it lifts those states rather than
                 // replacing them (see SIDEBAR_HOVER_LAYER).
-                "z-1 mt-0 block touch-pan-y",
-                SIDEBAR_HOVER_LAYER,
+                //
                 // The row gives up its right end to the pin plus one trailing
-                // action, the same reserve workspace rows make (SIDEBAR_WS_ROW).
-                // Team's add action is standing, so its first chip is reserved
-                // even at rest. Other actions remain hover-only. `hover:`, not
-                // `group-hover:` — this element is the group itself.
-                alwaysShowAddToSidebar
-                  ? pinned
-                    ? "pr-[38px] hover:pr-[68px] phone:pr-[52px]"
-                    : "pr-[38px] phone:pr-[52px]"
-                  : pinned
-                    ? "hover:pr-[68px]"
-                    : "hover:pr-[38px]",
-                // No trim here for other people's sessions, which stack a meta
-                // line under the title. That used to re-state `py-[7px]` against
-                // a 9px base; the base is now the shared `--sidebar-row-pad`, and
-                // a hard second `py-*` would out-rank it on Tailwind's output
-                // order alone and pin those rows at one density.
-                // No fill for "needs you" — the blue mark in the rail and the
+                // action, the same reserve workspace rows make. Team's add
+                // action is standing, so its first chip is reserved even at
+                // rest. Other actions remain hover-only.
+                //
+                // "Needs you" paints no fill: the blue mark in the rail and the
                 // bold title carry it, and the row's one background slot stays
                 // with selection (see the workspace row, which matches).
-                selected && "bg-selected",
+                sidebarRow({
+                  layout: "block",
+                  swipe: true,
+                  selected,
+                  chips: pinned ? 2 : 1,
+                  standing: alwaysShowAddToSidebar,
+                }),
                 dragging
                   ? "transition-none"
                   : swipeOpen
@@ -667,14 +622,10 @@ export function SidebarItem({
               shortcut={selected ? (pinKeys ?? undefined) : undefined}
             >
               <span
-                className={cn(
-                  ROW_ACTION,
-                  // One chip's width plus the archive's 7px edge and the 4px
-                  // between them — the ws rows' `gap-1` cluster, spelled as an
-                  // offset because these two are positioned rather than laid out.
-                  // It has to be a calc: the chip narrows with the density.
-                  "right-[calc(var(--sidebar-row-action,26px)_+_11px)] data-[on]:bg-pressed data-[on]:text-fg",
-                )}
+                // One chip in from the archive: its width plus the 7px edge and
+                // the 4px between them, the ws rows' cluster spelled as an
+                // offset because these two are positioned rather than laid out.
+                className={sidebarRowChip({ slot: "second", on: true })}
                 data-on=""
                 role="button"
                 aria-label="Unpin session"
@@ -694,7 +645,7 @@ export function SidebarItem({
               shortcut={selected ? (archiveKeys ?? undefined) : undefined}
             >
               <span
-                className={cn(ROW_ACTION, "right-[7px]")}
+                className={sidebarRowChip({ slot: "edge" })}
                 role="button"
                 aria-label="Archive session"
                 onMouseEnter={closeHover}
@@ -721,11 +672,10 @@ export function SidebarItem({
           {(!isPhone || alwaysShowAddToSidebar) && canKeepInSidebar && (
             <KeepInSidebarMark
               label="Add to your sidebar"
-              className={cn(
-                ROW_ACTION,
-                "right-[7px]",
-                alwaysShowAddToSidebar && "flex phone:right-0 phone:size-11",
-              )}
+              xstyle={sidebarRowChipStyles({
+                slot: "edge",
+                standing: alwaysShowAddToSidebar,
+              })}
               onMouseEnter={closeHover}
               onKeep={() => onSetStatus?.("mine")}
             />

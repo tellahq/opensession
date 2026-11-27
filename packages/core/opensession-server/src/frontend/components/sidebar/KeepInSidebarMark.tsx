@@ -1,4 +1,8 @@
+import * as stylex from "@stylexjs/stylex";
 import { cn } from "../../ui/cn";
+import { focusStyles } from "../../ui/focus-styles";
+import type { Styles } from "../../ui/sx";
+import { color, corner, media, motion, radius } from "../../ui/tokens.stylex";
 import { Tooltip } from "../../ui/tooltip";
 import { IconInbox, IconPlus } from "../icons";
 
@@ -17,16 +21,43 @@ export function KeepInSidebarIcon({ className }: { className?: string }) {
   );
 }
 
-/** The inline claim affordance for a row that is visible but not yet kept. */
+const styles = stylex.create({
+  mark: {
+    position: "relative",
+    flexShrink: 0,
+    cursor: "pointer",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.md,
+    ["cornerShape"]: corner.squircle,
+    color: {
+      default: color.faint,
+      ":hover": { default: null, [media.hover]: color.fg },
+    },
+    scale: {
+      default: null,
+      ":active": { default: motion.pressScale, [media.reducedMotion]: null },
+    },
+    transitionProperty: "color, scale",
+    transitionDuration: motion.micro,
+    transitionTimingFunction: motion.ease,
+  },
+});
+
+/**
+ * The inline claim affordance for a row that is visible but not yet kept.
+ * `xstyle` is the row's chip (its box, slot and reveal), merged in the same
+ * StyleX call so it out-ranks the mark's own position by argument order.
+ */
 export function KeepInSidebarMark({
   onKeep,
   label = "Keep in sidebar",
-  className,
+  xstyle,
   onMouseEnter,
 }: {
   onKeep: () => void;
   label?: string;
-  className?: string;
+  xstyle: Styles;
   onMouseEnter?: () => void;
 }) {
   const keep = (event: { preventDefault(): void; stopPropagation(): void }) => {
@@ -41,11 +72,7 @@ export function KeepInSidebarMark({
         tabIndex={0}
         aria-label={label}
         data-sidebar-keep=""
-        className={cn(
-          "focus-ring relative shrink-0 cursor-pointer items-center justify-center rounded-md text-faint transition-[color,scale] hover:text-fg active:scale-[0.96] motion-reduce:transform-none",
-          className ??
-            "ml-1 flex size-5 before:absolute before:-inset-3 before:content-[''] desktop:before:-inset-2.5",
-        )}
+        {...stylex.props(styles.mark, focusStyles.ring, xstyle)}
         onClick={keep}
         onMouseEnter={onMouseEnter}
         onMouseDown={(event) => event.stopPropagation()}

@@ -13,18 +13,16 @@ import React from "react";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import type { AutomationOverview } from "../../lib/api/automations";
 import {
-  SIDEBAR_HOVER_LAYER,
   SIDEBAR_RAIL,
-  SIDEBAR_WS_ROW,
-  SIDEBAR_WS_TIME,
-  SIDEBAR_WS_TIME_HOVER,
+  SIDEBAR_ROW_TITLE,
+  sidebarRow,
+  sidebarRowTime,
 } from "../../lib/sidebar-classes";
 import { reportUrgencyDot } from "../../lib/report-urgency";
 import { shortTime } from "../../lib/time";
 import { cn } from "../../ui/cn";
 import { Popover } from "../../ui/popover";
 import { CardFooter, RowCardPopup, useRowHoverCard } from "../SidebarRowCards";
-import { SIDEBAR_ROW, SIDEBAR_ROW_TITLE } from "./SidebarItem";
 
 type Report = NonNullable<AutomationOverview["latestReport"]>;
 
@@ -44,7 +42,7 @@ export function AutomationReportRow({
         render={
           <button
             type="button"
-            className={cn(SIDEBAR_ROW, SIDEBAR_WS_ROW, SIDEBAR_HOVER_LAYER)}
+            className={sidebarRow({ layout: "rail", chips: 3 })}
             data-sidebar-row=""
             onClick={onOpen}
             aria-label={`Report: ${report.title}`}
@@ -60,7 +58,7 @@ export function AutomationReportRow({
         <span className={SIDEBAR_ROW_TITLE}>{report.title}</span>
         {!isPhone && (
           <span
-            className={cn(SIDEBAR_WS_TIME, SIDEBAR_WS_TIME_HOVER)}
+            className={sidebarRowTime({ reveal: true })}
             aria-label={new Date(report.createdAt).toLocaleString()}
           >
             {shortTime(report.createdAt)}

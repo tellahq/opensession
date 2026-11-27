@@ -3,15 +3,13 @@ import type { ReviewQueueItem } from "../lib/review-queue";
 import { isBotAuthor } from "../lib/pr-comments";
 import { prStatusMark } from "../lib/pr-status";
 import {
-  SIDEBAR_HOVER_LAYER,
   SIDEBAR_RAIL,
+  SIDEBAR_ROW_TITLE,
   SIDEBAR_STATUS_DOT,
   SIDEBAR_WS_ACTION,
-  SIDEBAR_WS_ACTIONS,
-  SIDEBAR_WS_ACTIONS_HOVER,
-  SIDEBAR_WS_ROW,
-  SIDEBAR_WS_TIME,
-  SIDEBAR_WS_TIME_HOVER,
+  sidebarRow,
+  sidebarRowActions,
+  sidebarRowTime,
 } from "../lib/sidebar-classes";
 import { providerFromUrl } from "../lib/provider";
 import { shortTime } from "../lib/time";
@@ -20,7 +18,6 @@ import { cn } from "../ui/cn";
 import { ContextMenu } from "../ui/menu";
 import { Popover } from "../ui/popover";
 import { Tooltip } from "../ui/tooltip";
-import { SIDEBAR_ROW, SIDEBAR_ROW_TITLE } from "./sidebar/SidebarItem";
 import { ReviewAskerFace } from "./ReviewAskerFace";
 import { PrRowCard, RowCardPopup, useRowHoverCard } from "./SidebarRowCards";
 import { useIsPhone } from "../hooks/useIsPhone";
@@ -89,16 +86,14 @@ export function PrRow({
               render={
                 <button
                   type="button"
-                  className={cn(
-                    SIDEBAR_ROW,
-                    SIDEBAR_WS_ROW,
+                  className={sidebarRow({
+                    layout: "rail",
+                    selected,
                     // An unpinned row reveals one chip fewer (the pin only
                     // appears once there is something to unpin), so it gives
                     // that much of its right end back to the title.
-                    !pinned && "hover:pr-[68px]",
-                    SIDEBAR_HOVER_LAYER,
-                    selected && "bg-selected",
-                  )}
+                    chips: pinned ? 3 : 2,
+                  })}
                   data-sidebar-row=""
                   data-ws-row=""
                   data-selected={selected || undefined}
@@ -141,7 +136,7 @@ export function PrRow({
           )}
           {!isPhone && (
             <span
-              className={cn(SIDEBAR_WS_TIME, SIDEBAR_WS_TIME_HOVER)}
+              className={sidebarRowTime({ reveal: true })}
               aria-label={new Date(item.pr.updatedAt).toLocaleString()}
             >
               {shortTime(item.pr.updatedAt)}
@@ -152,7 +147,7 @@ export function PrRow({
 			    (confirmed). It deliberately does NOT wear the archive icon —
 			    this row sits beside workspace rows whose trailing icon archives
 			    locally, and a mis-click here closes someone's PR on GitHub. */}
-          <span className={cn(SIDEBAR_WS_ACTIONS, SIDEBAR_WS_ACTIONS_HOVER)}>
+          <span className={sidebarRowActions()}>
             {/* Pin only shows on a row that IS pinned, where it is the way
 				    back out. Pinning itself lives in the context menu. */}
             {pinned && (

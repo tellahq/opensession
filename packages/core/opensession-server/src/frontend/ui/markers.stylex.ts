@@ -16,3 +16,6 @@ export const titlePillMarker = stylex.defineMarker();
 export const settingsNavRowMarker = stylex.defineMarker();
 /** A sidebar group heading: its chevron shows with the heading's hover. */
 export const sidebarHeaderMarker = stylex.defineMarker();
+/** A sidebar row: its title, chips, time and facepile read its hover and its
+ *  `data-selected` / `data-waiting` / `data-unread` state through this. */
+export const sidebarRowMarker = stylex.defineMarker();

@@ -3,14 +3,12 @@ import { fetchFeedFilterOptions, relativeTime } from "../../lib/api";
 import {
   SIDEBAR_BAND_ACTION,
   SIDEBAR_FILTER_DOT,
-  SIDEBAR_HOVER_LAYER,
   SIDEBAR_RAIL,
+  SIDEBAR_ROW_TITLE,
   SIDEBAR_WS_ACTION,
-  SIDEBAR_WS_ACTIONS,
-  SIDEBAR_WS_ACTIONS_HOVER,
-  SIDEBAR_WS_ROW,
-  SIDEBAR_WS_TIME,
-  SIDEBAR_WS_TIME_HOVER,
+  sidebarRow,
+  sidebarRowActions,
+  sidebarRowTime,
 } from "../../lib/sidebar-classes";
 import { laneCtxEntries, useRowCtxMenu } from "../../lib/sidebar-ctx";
 import {
@@ -44,7 +42,6 @@ import {
 } from "../SidebarRowCards";
 import { IconCheck, IconFilter, IconPin } from "../icons";
 import { SidebarCtxMenu } from "../sidebar/SidebarCtxMenu";
-import { SIDEBAR_ROW, SIDEBAR_ROW_TITLE } from "../sidebar/SidebarItem";
 import React, { useEffect, useEffectEvent, useState } from "react";
 
 // A Support row: one TODO Plain ticket, single-line in the workspace rows'
@@ -91,12 +88,11 @@ export function SupportRow({
         render={
           <button
             type="button"
-            className={cn(
-              SIDEBAR_ROW,
-              SIDEBAR_WS_ROW,
-              SIDEBAR_HOVER_LAYER,
-              active && "bg-selected",
-            )}
+            className={sidebarRow({
+              layout: "rail",
+              selected: active,
+              chips: 3,
+            })}
             data-sidebar-row=""
             data-ws-row=""
             data-selected={active || undefined}
@@ -115,7 +111,7 @@ export function SupportRow({
         <span className={SIDEBAR_ROW_TITLE}>{label}</span>
         {!isPhone && t.statusChangedAt && (
           <span
-            className={cn(SIDEBAR_WS_TIME, SIDEBAR_WS_TIME_HOVER)}
+            className={sidebarRowTime({ reveal: true })}
             aria-label={new Date(t.statusChangedAt).toLocaleString()}
           >
             {shortTime(t.statusChangedAt)}
@@ -124,7 +120,7 @@ export function SupportRow({
         {/* Hover actions: the same pin + finish pair the workspace rows
 				    wear — pin keeps the ticket in the Pinned band, the check
 				    marks it done in Plain. */}
-        <span className={cn(SIDEBAR_WS_ACTIONS, SIDEBAR_WS_ACTIONS_HOVER)}>
+        <span className={sidebarRowActions()}>
           <span
             role="button"
             tabIndex={0}
@@ -248,12 +244,11 @@ export function FeedRow({
         render={
           <button
             type="button"
-            className={cn(
-              SIDEBAR_ROW,
-              SIDEBAR_WS_ROW,
-              SIDEBAR_HOVER_LAYER,
-              active && "bg-selected",
-            )}
+            className={sidebarRow({
+              layout: "rail",
+              selected: active,
+              chips: 3,
+            })}
             data-sidebar-row=""
             data-ws-row=""
             data-selected={active || undefined}
@@ -276,13 +271,13 @@ export function FeedRow({
         </span>
         {!isPhone && ts && (
           <span
-            className={cn(SIDEBAR_WS_TIME, SIDEBAR_WS_TIME_HOVER)}
+            className={sidebarRowTime({ reveal: true })}
             aria-label={new Date(ts).toLocaleString()}
           >
             {shortTime(ts)}
           </span>
         )}
-        <span className={cn(SIDEBAR_WS_ACTIONS, SIDEBAR_WS_ACTIONS_HOVER)}>
+        <span className={sidebarRowActions()}>
           <span
             role="button"
             tabIndex={0}

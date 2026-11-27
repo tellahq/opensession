@@ -13,14 +13,14 @@ import {
   SIDEBAR_SWIPE_ACTION_TRANSITION,
   SIDEBAR_SWIPE_ACTION_UNSNOOZE,
   SIDEBAR_SWIPE_ROW,
+  SIDEBAR_ROW_TITLE,
   SIDEBAR_WS_ACTION,
-  SIDEBAR_WS_ACTIONS,
-  SIDEBAR_WS_ACTIONS_HOVER,
+  SIDEBAR_WS_ACTION_STYLES,
   SIDEBAR_WS_FACE,
   SIDEBAR_WS_FACES,
-  SIDEBAR_WS_ROW,
-  SIDEBAR_WS_TIME,
-  SIDEBAR_WS_TIME_HOVER,
+  sidebarRow,
+  sidebarRowActions,
+  sidebarRowTime,
 } from "../../lib/sidebar-classes";
 import {
   isClaimed,
@@ -55,7 +55,6 @@ import {
 import { KeepInSidebarMark } from "./KeepInSidebarMark";
 import { mentionLabel } from "../../lib/mentions";
 import { OriginMark } from "./OriginMark";
-import { SIDEBAR_ROW, SIDEBAR_ROW_TITLE } from "./SidebarItem";
 import { SoundMark } from "./SoundMark";
 import { WorkspaceDraftIndicator } from "./WorkspaceDraftIndicator";
 
@@ -345,26 +344,29 @@ export function WorkspaceRow({
       )}
       <button
         className={cn(
-          SIDEBAR_ROW,
           // Inside a swipe row: the wrapper carries the 2px gap and the
-          // row carries the slide. The drag writes --swipe-x straight onto
-          // the node, so the transform reads it rather than a React style.
-          SIDEBAR_WS_ROW,
-          // The reserve follows the chips that actually appear. Keep sits
-          // rightmost after Archive, adding one chip; an unpinned row without
-          // it still reveals only Snooze + Archive.
-          pinned && canKeepInSidebar
-            ? "hover:pr-[128px]"
-            : !pinned && !canKeepInSidebar
-              ? "hover:pr-[68px]"
-              : null,
-          "z-1 mt-0 touch-pan-y transform-[translateX(var(--swipe-x,0))]",
-          SIDEBAR_HOVER_LAYER,
+          // row carries the slide. The reserve follows the chips that
+          // actually appear: Keep sits rightmost after Archive, adding one
+          // chip; an unpinned row without it reveals only Snooze + Archive.
+          //
           // "Needs you" paints no fill of its own: it is a question
           // waiting, not a failure, and the row's one background slot
           // belongs to selection. The blue mark in the rail and the bold
-          // title carry it — same as the native app.
-          active && "bg-selected",
+          // title carry it, same as the native app.
+          sidebarRow({
+            layout: "rail",
+            swipe: true,
+            selected: active,
+            chips:
+              pinned && canKeepInSidebar
+                ? 4
+                : !pinned && !canKeepInSidebar
+                  ? 2
+                  : 3,
+          }),
+          // The drag writes --swipe-x straight onto the node, so the
+          // transform reads it rather than a React style.
+          "transform-[translateX(var(--swipe-x,0))]",
           tint && ROW_TINT_CLASS,
           draggingRow
             ? "transition-none"
@@ -573,17 +575,14 @@ export function WorkspaceRow({
           timePreference !== "off" &&
           row.lastActivity && (
             <span
-              className={cn(
-                SIDEBAR_WS_TIME,
-                timePreference === "hover" && SIDEBAR_WS_TIME_HOVER,
-                // The "hover" mode (the default) shows the badge only under
-                // the pointer. On touch there is no hover, so it shows inline
-                // like "always". A running row keeps its duration instead.
-                showRunDuration && "hidden",
-                timePreference === "hover" &&
-                  !showRunDuration &&
-                  "[@media(hover:none)]:inline-flex",
-              )}
+              // The "hover" mode (the default) shows the badge only under
+              // the pointer. On touch there is no hover, so it shows inline
+              // like "always". A running row keeps its duration instead.
+              className={sidebarRowTime({
+                reveal: timePreference === "hover",
+                touch: !showRunDuration,
+                hidden: showRunDuration,
+              })}
               data-ws-time=""
               aria-label={new Date(row.lastActivity).toLocaleString()}
             >
@@ -598,13 +597,9 @@ export function WorkspaceRow({
         />
         {/* Hover actions stay in one predictable order: Pin, Snooze, Archive, Keep. */}
         <span
-          className={cn(
-            SIDEBAR_WS_ACTIONS,
-            // A revealed swipe action owns the row's right edge, so the
-            // hover cluster stays out of it entirely rather than being
-            // hidden again by a more specific rule further down the sheet.
-            swipeSide ? "hidden" : SIDEBAR_WS_ACTIONS_HOVER,
-          )}
+          // A revealed swipe action owns the row's right edge, so the
+          // hover cluster stays out of it entirely.
+          className={sidebarRowActions(!!swipeSide)}
           data-ws-actions=""
         >
           {/* Pin is not one of the row's standing actions: an unpinned row
@@ -731,7 +726,7 @@ export function WorkspaceRow({
           ) : null}
           {canKeepInSidebar && (
             <KeepInSidebarMark
-              className={SIDEBAR_WS_ACTION}
+              xstyle={SIDEBAR_WS_ACTION_STYLES}
               onKeep={() => onKeepInSidebar()}
             />
           )}

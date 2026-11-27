@@ -8,7 +8,8 @@ import type {
 import type { CSSProperties } from "react";
 import { cn } from "./cn";
 
-type Styles = StyleXArray<
+/** Any StyleX styles one element wears, as `stylex.props` takes them. */
+export type Styles = StyleXArray<
   | (null | undefined | CompiledStyles)
   | boolean
   | Readonly<[CompiledStyles, InlineStyles]>
