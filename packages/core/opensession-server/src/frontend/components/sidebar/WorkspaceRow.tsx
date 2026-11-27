@@ -336,7 +336,7 @@ export function WorkspaceRow({
           // Inside a swipe row: the wrapper carries the 2px gap and the
           // row carries the slide. The reserve follows the chips that
           // actually appear: Keep sits rightmost after Archive, adding one
-          // chip; an unpinned row without it reveals only Snooze + Archive.
+          // chip; a row without it reveals Pin + Archive.
           //
           // "Needs you" paints no fill of its own: it is a question
           // waiting, not a failure, and the row's one background slot
@@ -346,12 +346,7 @@ export function WorkspaceRow({
             layout: "rail",
             swipe: true,
             selected: active,
-            chips:
-              pinned && canKeepInSidebar
-                ? 4
-                : !pinned && !canKeepInSidebar
-                  ? 2
-                  : 3,
+            chips: canKeepInSidebar ? 3 : 2,
           }),
           // The drag writes --swipe-x straight onto the node, so the
           // transform reads it rather than a React style.
@@ -576,21 +571,42 @@ export function WorkspaceRow({
           sessionIdsKey={row.sessions.map((session) => session.id).join("\0")}
           pushed={showRunDuration || Boolean(snoozeIso)}
         />
-        {/* Hover actions stay in one predictable order: Pin, Snooze, Archive, Keep. */}
+        {/* Hover actions stay in one predictable order: Pin, Archive, Keep. */}
         <span
           // A revealed swipe action owns the row's right edge, so the
           // hover cluster stays out of it entirely.
           className={sidebarRowActions(!!swipeSide)}
           data-ws-actions=""
         >
-          {/* Pin is not one of the row's standing actions: an unpinned row
-              offers snooze and archive, the two moves you make constantly,
-              and pinning stays in the context menu, the ⌘P chord and the
-              swipe. Once a row IS pinned the chip comes back, because
-              unpinning has to be reachable from the thing it marks. */}
-          {pinned && (
+          {/* The first chip pins, except on a snoozed row, where it wakes the
+              row instead, as the phone's leading swipe does: Pinned leaves
+              snoozed rows out, so a pin there would do nothing visible.
+              Snoozing itself stays in the context menu. A pinned row keeps
+              its accent so the chip reads as the row's state. */}
+          {snoozed && row.sessions.length > 0 ? (
+            <Tooltip label="Unsnooze workspace">
+              <span
+                role="button"
+                tabIndex={0}
+                className={cn(SIDEBAR_WS_ACTION, "text-faint hover:text-fg")}
+                aria-label="Unsnooze workspace"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleSnooze();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.stopPropagation();
+                    onToggleSnooze();
+                  }
+                }}
+              >
+                <IconMoon size={19} />
+              </span>
+            </Tooltip>
+          ) : pinned || row.sessions.length > 0 ? (
             <Tooltip
-              label="Unpin workspace"
+              label={pinned ? "Unpin workspace" : "Pin workspace"}
               // Only on the row the chord would actually hit: ⌘P pins the
               // workspace holding the OPEN session, so advertising it on
               // every row would promise a key that lands elsewhere.
@@ -602,8 +618,11 @@ export function WorkspaceRow({
                 // One colour, picked here rather than stacking two `text-*`
                 // utilities, whose winner would be Tailwind's ordering: a
                 // pinned action keeps its accent under the pointer.
-                className={cn(SIDEBAR_WS_ACTION, "text-accent")}
-                aria-label="Unpin workspace"
+                className={cn(
+                  SIDEBAR_WS_ACTION,
+                  pinned ? "text-accent" : "text-faint hover:text-fg",
+                )}
+                aria-label={pinned ? "Unpin workspace" : "Pin workspace"}
                 onClick={(e) => {
                   e.stopPropagation();
                   onTogglePin();
@@ -615,40 +634,12 @@ export function WorkspaceRow({
                   }
                 }}
               >
-                <IconPin size={19} fill="currentColor" />
+                <IconPin size={19} fill={pinned ? "currentColor" : "none"} />
               </span>
             </Tooltip>
-          )}
+          ) : null}
           {row.sessions.length > 0 ? (
             <>
-              <Tooltip
-                label={
-                  snoozed
-                    ? "Unsnooze workspace"
-                    : "Snooze workspace until Someday"
-                }
-              >
-                <span
-                  role="button"
-                  tabIndex={0}
-                  className={cn(SIDEBAR_WS_ACTION, "text-faint hover:text-fg")}
-                  aria-label={
-                    snoozed ? "Unsnooze workspace" : "Snooze workspace"
-                  }
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onToggleSnooze();
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.stopPropagation();
-                      onToggleSnooze();
-                    }
-                  }}
-                >
-                  <IconMoon size={19} />
-                </span>
-              </Tooltip>
               <Tooltip
                 label="Archive workspace"
                 shortcut={

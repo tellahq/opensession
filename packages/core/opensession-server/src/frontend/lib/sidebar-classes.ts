@@ -523,15 +523,6 @@ export const sidebarStyles = stylex.create({
   face: {
     marginLeft: { default: null, ":not(:first-child)": scale.faceOverlap },
   },
-  draftAtRest: {
-    display: {
-      default: "inline-flex",
-      [stylex.when.ancestor(":hover", sidebarRowMarker)]: {
-        default: null,
-        [media.hover]: "none",
-      },
-    },
-  },
 
   // ── Swipe rows: the phone swipe shell and the actions behind it ──
   // The shell carries the 2px gap between rows, so the row inside it adds
@@ -1728,16 +1719,10 @@ export const SIDEBAR_WS_FACE = sx(sidebarStyles.face);
 /**
  * Slack-style unsent-draft pencil. Its left margin is the call site's: on a
  * workspace row it pins itself to the right edge, unless a ticker or a snooze
- * countdown already did that pushing.
+ * countdown already did that pushing. It stays beside the hover actions, so
+ * pointing at it reads the draft back.
  */
 export const SIDEBAR_WS_DRAFT = sx(sidebarStyles.draft);
-
-/** The same pencil on a workspace row, where it yields its spot to the hover
- *  actions. */
-export const SIDEBAR_WS_DRAFT_YIELDS = sx(
-  sidebarStyles.draft,
-  sidebarStyles.draftAtRest,
-);
 
 /**
  * Wake countdown on a snoozed workspace row (moon + "1h"). It stands in for

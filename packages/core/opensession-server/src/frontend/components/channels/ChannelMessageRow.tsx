@@ -1,7 +1,10 @@
+import { useEffect, useRef, useState } from "react";
+import { decodeSlackMentions } from "../../../shared/slack-mentions";
 import type {
   ChannelMessage,
   MessageReaction,
 } from "../../lib/api/slack-channels";
+import { fetchSlackUsers } from "../../lib/api/shipped-changes";
 import { fetchPermalink, fileSrc } from "../../lib/api/slack-channels";
 import { messageTime, replySummary, timeAgo } from "../../lib/channel-messages";
 import { errorMessage } from "../../lib/error-message";
@@ -18,10 +21,13 @@ import {
   IconFile,
   IconLink,
   IconMessage,
+  IconPencil,
   IconReactionAdd,
   IconShare,
+  IconTrash,
 } from "../icons";
 import { UserAvatar } from "../UserAvatar";
+import { ChannelComposer } from "./ChannelComposer";
 import { EmojiPicker } from "./EmojiPicker";
 import { SlackText } from "./SlackText";
 
@@ -118,6 +124,50 @@ function Files({ files }: { files: NonNullable<ChannelMessage["files"]> }) {
   );
 }
 
+/**
+ * Slack's in-place edit: the composer over the message's own text, with
+ * Cancel and Save. Picked people read as "@name" again, so the roster loads
+ * first (it is cached after the first composer focus).
+ */
+function MessageEditor({
+  source,
+  onSave,
+  onCancel,
+}: {
+  source: string;
+  onSave: (text: string) => Promise<boolean>;
+  onCancel: () => void;
+}) {
+  const [initial, setInitial] = useState<ReturnType<
+    typeof decodeSlackMentions
+  > | null>(null);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (initial) box.current?.scrollIntoView({ block: "nearest" });
+  }, [initial]);
+  useEffect(() => {
+    let alive = true;
+    void fetchSlackUsers().then(
+      (users) => alive && setInitial(decodeSlackMentions(source, users)),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [source]);
+  if (!initial) return null;
+  return (
+    <div ref={box} className="mt-1 mb-1">
+      <ChannelComposer
+        placeholder="Edit message"
+        disabled={false}
+        initial={initial}
+        onSend={(text) => onSave(text)}
+        onCancel={onCancel}
+      />
+    </div>
+  );
+}
+
 async function withPermalink(
   channelId: string,
   ts: string,
@@ -146,6 +196,11 @@ export function ChannelMessageRow({
   onReact,
   onOpenThread,
   threadOpen = false,
+  editing = false,
+  onEdit,
+  onSaveEdit,
+  onCancelEdit,
+  onDelete,
   className,
 }: {
   message: ChannelMessage;
@@ -156,6 +211,14 @@ export function ChannelMessageRow({
   /** Absent inside a thread. */
   onOpenThread?: () => void;
   threadOpen?: boolean;
+  /** The person's own message is open in the editor. */
+  editing?: boolean;
+  /** Present for the person's own message: open it in the editor. */
+  onEdit?: () => void;
+  onSaveEdit?: (text: string) => Promise<boolean>;
+  onCancelEdit?: () => void;
+  /** Present for the person's own message: delete it, after a confirm. */
+  onDelete?: () => void;
   /** Placement, and a corner for a row inside a rounded card. */
   className?: string;
 }) {
@@ -172,7 +235,7 @@ export function ChannelMessageRow({
       className={cn(
         "group relative flex gap-2 px-5 outline-none transition-colors hover:bg-hover focus-within:bg-hover",
         head ? "mt-1 pt-2 pb-1" : "py-0.5",
-        threadOpen && "bg-yellow-soft hover:bg-yellow-soft",
+        (threadOpen || editing) && "bg-yellow-soft hover:bg-yellow-soft",
         className,
       )}
     >
@@ -209,9 +272,19 @@ export function ChannelMessageRow({
         {message.broadcast && (
           <div className="text-meta text-faint">Replied to a thread</div>
         )}
-        {message.text && <SlackText text={message.text} />}
-        {message.edited && (
-          <span className="text-meta text-faint">(edited)</span>
+        {editing && onSaveEdit && onCancelEdit ? (
+          <MessageEditor
+            source={message.source ?? ""}
+            onSave={onSaveEdit}
+            onCancel={onCancelEdit}
+          />
+        ) : (
+          <>
+            {message.text && <SlackText text={message.text} />}
+            {message.edited && (
+              <span className="text-meta text-faint">(edited)</span>
+            )}
+          </>
         )}
         {!!message.files?.length && <Files files={message.files} />}
         {!!message.reactions?.length && (
@@ -251,87 +324,105 @@ export function ChannelMessageRow({
           </ListRow>
         )}
       </div>
-      <div
-        className={cn(
-          "absolute -top-5 right-5 z-10 flex items-center gap-0.5 rounded-lg border border-line bg-panel p-1 shadow-ring-sm",
-          // Hidden bars take no taps, or they would cover the text above.
-          "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 has-[[data-popup-open]]:pointer-events-auto has-[[data-popup-open]]:opacity-100",
-        )}
-      >
-        {onReact && (
-          <EmojiPicker
-            side="bottom"
-            tooltip="Add reaction…"
-            onPick={(entry) => onReact(entry.name, entry.char)}
-            trigger={
-              <Button
-                variant="ghost"
-                size="md"
-                icon={<IconReactionAdd size={22} />}
-                aria-label="Add reaction"
-              />
-            }
-          />
-        )}
-        {onOpenThread && (
-          <Tooltip label="Reply in thread">
-            <Button
-              variant="ghost"
-              size="md"
-              icon={<IconMessage size={22} />}
-              aria-label="Reply in thread"
-              onClick={onOpenThread}
-            />
-          </Tooltip>
-        )}
-        <Tooltip label="Copy link">
-          <Button
-            variant="ghost"
-            size="md"
-            icon={<IconLink size={22} />}
-            aria-label="Copy link"
-            onClick={copyLink}
-          />
-        </Tooltip>
-        <Menu.Root>
-          <Tooltip label="More actions">
-            <Menu.Trigger
-              render={
+      {!editing && (
+        <div
+          className={cn(
+            "absolute -top-5 right-5 z-10 flex items-center gap-0.5 rounded-lg border border-line bg-panel p-1 shadow-ring-sm",
+            // Hidden bars take no taps, or they would cover the text above.
+            "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 has-[[data-popup-open]]:pointer-events-auto has-[[data-popup-open]]:opacity-100",
+          )}
+        >
+          {onReact && (
+            <EmojiPicker
+              side="bottom"
+              tooltip="Add reaction…"
+              onPick={(entry) => onReact(entry.name, entry.char)}
+              trigger={
                 <Button
                   variant="ghost"
                   size="md"
-                  icon={<IconDotsVertical size={22} />}
-                  aria-label="More actions"
+                  icon={<IconReactionAdd size={22} />}
+                  aria-label="Add reaction"
                 />
               }
             />
+          )}
+          {onOpenThread && (
+            <Tooltip label="Reply in thread">
+              <Button
+                variant="ghost"
+                size="md"
+                icon={<IconMessage size={22} />}
+                aria-label="Reply in thread"
+                onClick={onOpenThread}
+              />
+            </Tooltip>
+          )}
+          <Tooltip label="Copy link">
+            <Button
+              variant="ghost"
+              size="md"
+              icon={<IconLink size={22} />}
+              aria-label="Copy link"
+              onClick={copyLink}
+            />
           </Tooltip>
-          <Menu.Popup align="end">
-            <Menu.Item
-              onClick={() =>
-                copyToClipboard(message.text, () => toast("Text copied"))
-              }
-            >
-              <IconCopy size={20} className={MENU_ICON} />
-              <span className="grow">Copy text</span>
-            </Menu.Item>
-            <Menu.Item onClick={copyLink}>
-              <IconLink size={20} className={MENU_ICON} />
-              <span className="grow">Copy link</span>
-            </Menu.Item>
-            <Menu.Item
-              onClick={() =>
-                void withPermalink(channelId, message.ts, (url) =>
-                  window.open(url, "_blank", "noopener"),
-                )
-              }
-            >
-              <IconShare size={20} className={MENU_ICON} />
-              <span className="grow">Open in Slack</span>
-            </Menu.Item>
-          </Menu.Popup>
-        </Menu.Root>
-      </div>
+          <Menu.Root>
+            <Tooltip label="More actions">
+              <Menu.Trigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="md"
+                    icon={<IconDotsVertical size={22} />}
+                    aria-label="More actions"
+                  />
+                }
+              />
+            </Tooltip>
+            <Menu.Popup align="end">
+              <Menu.Item
+                onClick={() =>
+                  copyToClipboard(message.text, () => toast("Text copied"))
+                }
+              >
+                <IconCopy size={20} className={MENU_ICON} />
+                <span className="grow">Copy text</span>
+              </Menu.Item>
+              <Menu.Item onClick={copyLink}>
+                <IconLink size={20} className={MENU_ICON} />
+                <span className="grow">Copy link</span>
+              </Menu.Item>
+              <Menu.Item
+                onClick={() =>
+                  void withPermalink(channelId, message.ts, (url) =>
+                    window.open(url, "_blank", "noopener"),
+                  )
+                }
+              >
+                <IconShare size={20} className={MENU_ICON} />
+                <span className="grow">Open in Slack</span>
+              </Menu.Item>
+              {(onEdit || onDelete) && <Menu.Separator />}
+              {onEdit && (
+                <Menu.Item onClick={onEdit}>
+                  <IconPencil size={20} className={MENU_ICON} />
+                  <span className="grow">Edit message</span>
+                </Menu.Item>
+              )}
+              {onDelete && (
+                <Menu.Item
+                  onClick={onDelete}
+                  className="text-red data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
+                >
+                  <IconTrash size={20} />
+                  <span className="grow">Delete message</span>
+                </Menu.Item>
+              )}
+            </Menu.Popup>
+          </Menu.Root>
+        </div>
+      )}
     </div>
   );
 }

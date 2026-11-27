@@ -1720,7 +1720,7 @@ app.whenReady().then(async () => {
   });
 
   // The web app's first row is the titlebar, and its height depends on the
-  // layout the person picked (48px, or 36px in the new layout). It reports the
+  // layout the person picked (48px, or 44px in the new layout). It reports the
   // height so the traffic lights stay centred on that row.
   ipcMain.on("os1:titlebar-height", (e, height) => {
     if (!inWindow(e.senderFrame?.url ?? "")) return;

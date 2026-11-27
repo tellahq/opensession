@@ -4,6 +4,7 @@
 
 import { useEffect, useSyncExternalStore } from "react";
 import { isChannelsPage, type Route } from "./app-route";
+import { staysHidden } from "./channel-section-model";
 import {
   fetchConversations,
   type Conversation,
@@ -106,11 +107,12 @@ export function markConversationSeen(id: string): void {
   });
 }
 
-/** Anything unread: the minibar's dot. */
+/** Anything unread you have not hidden: the minibar's dot. */
 export function hasUnreadConversation(
   conversations: readonly Conversation[] | undefined,
+  hidden: ReadonlySet<string>,
 ): boolean {
-  return !!conversations?.some((c) => c.unread);
+  return !!conversations?.some((c) => c.unread && !staysHidden(c, hidden));
 }
 
 export function rememberChannel(id: string): void {

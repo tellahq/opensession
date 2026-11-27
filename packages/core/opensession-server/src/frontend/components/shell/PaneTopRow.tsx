@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import {
-  NEW_LAYOUT_ROW_PX,
+  NEW_LAYOUT_LIGHTS_ROW_PX,
   PANE_TOP_ROW,
   PANE_TOP_ROW_TABS,
 } from "../../lib/app-shell-classes";
@@ -34,7 +34,7 @@ export function PaneTopRow({
   // shorter in the new layout (NEW_LAYOUT_ROW_HEIGHT); the old layout's
   // lights stay where a 48px row puts them.
   useEffect(() => {
-    os1Shell()?.setTitlebarHeight?.(newLayout ? NEW_LAYOUT_ROW_PX : 48);
+    os1Shell()?.setTitlebarHeight?.(newLayout ? NEW_LAYOUT_LIGHTS_ROW_PX : 48);
   }, [newLayout]);
   if (!newLayout) {
     return (

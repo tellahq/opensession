@@ -80,6 +80,13 @@ export async function renderSlackText(
   );
 }
 
+/** A message's own text as its author edits it: Slack's markup kept (links,
+ *  mention tokens), only the HTML entities Slack escapes decoded, so saving
+ *  it unchanged sends back what was there. */
+export function editableSource(raw: string): string {
+  return raw.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+}
+
 /**
  * A converter for one reader: Slack message objects in, the web's message
  * shape out (null for a message the channel does not show). `inThread` drops
@@ -150,8 +157,14 @@ export async function messageConverter(
     // the bot.
     if (m.user) {
       const u = await resolveSlackUser(m.user);
+      // The reader's own message: they may edit or delete it.
+      const own =
+        selfId && m.user === selfId
+          ? { mine: true, source: editableSource(String(m.text || "")) }
+          : {};
       return {
         ...shared,
+        ...own,
         userId: m.user,
         userName: u.name,
         avatarUrl: u.avatarUrl,

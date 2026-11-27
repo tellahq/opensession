@@ -25,6 +25,7 @@ import {
   IconSliders,
 } from "../icons";
 import { MINIBAR_ITEMS, type MinibarItem } from "./minibar-model";
+import { useHiddenChannels } from "../../lib/channel-sections";
 import {
   hasUnreadConversation,
   useSlackConversations,
@@ -196,6 +197,7 @@ export function Minibar({
   const pinnedHere = inBar.find((item) => item.onPage?.(route));
   const channelsUnread = hasUnreadConversation(
     useSlackConversations().payload?.conversations,
+    useHiddenChannels(),
   );
   const unread = (item: MinibarItem) =>
     (item.id === "activity" && unreadNotifications > 0) ||

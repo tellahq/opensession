@@ -72,3 +72,41 @@ describe("Slack files in the Channels place", () => {
     ]);
   });
 });
+
+describe("editing and deleting in the Channels place", () => {
+  test("an edit needs a Slack ts and some text", async () => {
+    const { EditMessageBody } = await import("./slack-channels");
+    expect(EditMessageBody.safeParse({ ts: "1.2", text: " hi " }).data).toEqual(
+      { ts: "1.2", text: "hi" },
+    );
+    expect(EditMessageBody.safeParse({ ts: "1.2", text: "  " }).success).toBe(
+      false,
+    );
+    expect(EditMessageBody.safeParse({ ts: "x", text: "hi" }).success).toBe(
+      false,
+    );
+  });
+
+  test("Slack's refusals read as one short sentence", async () => {
+    const { messageChangeError } = await import("./slack-channels");
+    expect(messageChangeError("cant_update_message", "edit")).toBe(
+      "Slack doesn't let you edit this message",
+    );
+    expect(messageChangeError("edit_window_closed", "edit")).toBe(
+      "The time to edit this message has passed",
+    );
+    expect(messageChangeError("missing_scope", "delete")).toBe(
+      "Reconnect Slack in Settings, Account to delete from here",
+    );
+    expect(messageChangeError(undefined, "delete")).toBe(
+      "Couldn't delete the message",
+    );
+  });
+
+  test("an own message edits from its markup, entities decoded", async () => {
+    const { editableSource } = await import("../../agents/slack/message-view");
+    expect(editableSource("a &lt;b&gt; &amp; <@U1> <https://x.test|x>")).toBe(
+      "a <b> & <@U1> <https://x.test|x>",
+    );
+  });
+});
