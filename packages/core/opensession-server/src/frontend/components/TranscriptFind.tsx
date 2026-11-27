@@ -364,7 +364,7 @@ export function TranscriptFind({
           )}
         >
           <div className="flex items-center gap-1 rounded-popup bg-popup py-1 pl-2.5 pr-1 [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-md">
-            <IconSearch size={18} className="shrink-0 text-faint" aria-hidden />
+            <IconSearch size={20} className="shrink-0 text-faint" aria-hidden />
             <input
               ref={inputRef}
               value={query}
@@ -392,7 +392,7 @@ export function TranscriptFind({
               <Button
                 variant="ghost"
                 size="sm"
-                icon={<IconArrowUp size={18} />}
+                icon={<IconArrowUp size={20} />}
                 aria-label="Older match"
                 disabled={count === 0}
                 onClick={() => step(-1)}
@@ -402,7 +402,7 @@ export function TranscriptFind({
               <Button
                 variant="ghost"
                 size="sm"
-                icon={<IconArrowDown size={18} />}
+                icon={<IconArrowDown size={20} />}
                 aria-label="Newer match"
                 disabled={count === 0}
                 onClick={() => step(1)}
@@ -412,7 +412,7 @@ export function TranscriptFind({
               <Button
                 variant="ghost"
                 size="sm"
-                icon={<IconX size={18} />}
+                icon={<IconX size={20} />}
                 aria-label="Close find"
                 onClick={close}
               />

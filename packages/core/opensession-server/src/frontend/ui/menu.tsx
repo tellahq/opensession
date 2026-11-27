@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Menu as BaseMenu } from "@base-ui/react/menu";
 import { ContextMenu as BaseContextMenu } from "@base-ui/react/context-menu";
-import { IconCheck } from "../components/icons";
+import { IconCheck, type IconSize } from "../components/icons";
 import * as stylex from "@stylexjs/stylex";
 import { cn } from "./cn";
 import { POPUP_HOOK } from "./popup-classes";
@@ -274,12 +274,12 @@ export function MenuShortcut({
  */
 export function MenuCheck({
   on,
-  size = 17,
+  size = 20,
   className,
 }: {
   /** Whether this row is the picked one. */
   on: boolean;
-  size?: number;
+  size?: IconSize;
   className?: string;
 }) {
   return (

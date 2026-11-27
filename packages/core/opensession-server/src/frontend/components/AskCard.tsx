@@ -328,7 +328,7 @@ export function AskCard({
               type="button"
               variant="ghost"
               size="sm"
-              icon={<IconX size={18} />}
+              icon={<IconX size={20} />}
               aria-label="Dismiss question"
               disabled={submitted}
               onClick={() => {

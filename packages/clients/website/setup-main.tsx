@@ -151,7 +151,7 @@ function ProviderLogo({ provider }: { provider: Provider }) {
           <path d={logo.path} />
         </svg>
       ) : (
-        <IconTerminal size={23} />
+        <IconTerminal size={24} />
       )}
     </span>
   );
@@ -186,9 +186,9 @@ function CopyCommand({ command, label }: { command: string; label: string }) {
         }
       >
         {copyState === "copied" ? (
-          <IconCheck size={17} />
+          <IconCheck size={20} />
         ) : (
-          <IconCopy size={17} />
+          <IconCopy size={20} />
         )}
         <span>
           {copyState === "copied"
@@ -527,7 +527,7 @@ function SetupPage() {
               </div>
             ) : (
               <p className="setup-note">
-                <IconTerminal size={17} /> Keep the SSH session open for the
+                <IconTerminal size={20} /> Keep the SSH session open for the
                 next step.
               </p>
             )}
@@ -540,13 +540,13 @@ function SetupPage() {
           >
             <div className="setup-connection-visual" aria-hidden="true">
               <span className="setup-connection-node">
-                <IconTerminal size={23} />
+                <IconTerminal size={24} />
               </span>
               <span className="setup-connection-track">
                 <span />
               </span>
               <span className="setup-connection-node">
-                <IconServer size={23} />
+                <IconServer size={24} />
               </span>
             </div>
             <div className="setup-server-status-copy">
@@ -572,10 +572,10 @@ function SetupPage() {
               onClick={() => setServerConnected(true)}
             >
               <span className="setup-confirm-icon" aria-hidden="true">
-                <IconServer className="setup-confirm-icon-pending" size={18} />
+                <IconServer className="setup-confirm-icon-pending" size={20} />
                 <IconCheckCircle
                   className="setup-confirm-icon-connected"
-                  size={18}
+                  size={20}
                 />
               </span>
               {serverConnected ? "Connected" : "I've connected over SSH"}
@@ -623,7 +623,7 @@ function SetupPage() {
             target="_blank"
             rel="noreferrer"
           >
-            <IconGlobe size={17} />
+            <IconGlobe size={20} />
             Download Tailscale <span aria-hidden="true">↗</span>
           </a>
         </div>
@@ -649,7 +649,7 @@ function SetupPage() {
             onClick={() => setStep(4)}
           >
             <span className="setup-download-mark" aria-hidden="true">
-              <IconGlobe size={26} />
+              <IconGlobe size={28} />
             </span>
             <span className="setup-download-card-copy">
               <strong>Web</strong>
@@ -663,13 +663,13 @@ function SetupPage() {
                 className="setup-download-mark setup-download-mark-dark"
                 aria-hidden="true"
               >
-                <IconPhone size={26} />
+                <IconPhone size={28} />
               </span>
               <span className="setup-download-card-copy">
                 <strong>iPhone and iPad PWA</strong>
                 <small>Add the web app to your home screen</small>
               </span>
-              <IconChevronLeft className="setup-terminal-chevron" size={17} />
+              <IconChevronLeft className="setup-terminal-chevron" size={20} />
             </summary>
             <div className="setup-terminal-content">
               <ol className="setup-mini-steps">
@@ -770,7 +770,7 @@ function SetupPage() {
           disabled={step === 0}
           aria-label="Back"
         >
-          <IconChevronLeft size={18} />
+          <IconChevronLeft size={20} />
         </button>
         <StepNav
           step={step}
@@ -795,7 +795,7 @@ function SetupPage() {
           onClick={() => setStep((current) => Math.max(0, current - 1))}
           disabled={step === 0}
         >
-          <IconChevronLeft size={17} />
+          <IconChevronLeft size={20} />
           Back
         </button>
         {step < 4 ? (

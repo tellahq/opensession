@@ -162,7 +162,7 @@ export function CommentComposer({
               size="sm"
               variant="primary"
               aria-label={submitLabel}
-              icon={<IconArrowUp size={18} />}
+              icon={<IconArrowUp size={20} />}
               // Keep focus in the box: a press that blurs it would collapse a
               // compact reply box before the click lands.
               onMouseDown={(e) => e.preventDefault()}

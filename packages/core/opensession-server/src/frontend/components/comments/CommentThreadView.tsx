@@ -164,18 +164,18 @@ function CommentItem({
                 "ml-auto opacity-0 focus-visible:opacity-100 group-hover/comment:opacity-100 data-[popup-open]:opacity-100 pointer-coarse:opacity-100",
               )}
             >
-              <IconDotsHorizontal size={16} />
+              <IconDotsHorizontal size={20} />
             </Menu.Trigger>
             <Menu.Popup align="end">
               {mine && (
                 <Menu.Item onClick={() => setEditing(true)}>
-                  <IconPencil size={18} className="text-faint" />
+                  <IconPencil size={20} className="text-faint" />
                   Edit
                 </Menu.Item>
               )}
               {mine && <Menu.Separator />}
               <Menu.Item onClick={() => void remove()} className="text-red">
-                <IconTrash size={18} />
+                <IconTrash size={20} />
                 Delete
               </Menu.Item>
             </Menu.Popup>
@@ -375,7 +375,7 @@ export function CommentThreadView({
       <Button
         size="sm"
         variant="ghost"
-        icon={resolved ? <IconUndo size={16} /> : <IconCheck size={16} />}
+        icon={resolved ? <IconUndo size={20} /> : <IconCheck size={20} />}
         onClick={() => void setStatus(resolved ? "open" : "resolved")}
         aria-label={resolved ? "Reopen" : "Resolve"}
       >
@@ -383,21 +383,21 @@ export function CommentThreadView({
       </Button>
       <Menu.Root>
         <Menu.Trigger aria-label="Thread actions" className={QUIET_TRIGGER}>
-          <IconDotsHorizontal size={16} />
+          <IconDotsHorizontal size={20} />
         </Menu.Trigger>
         <Menu.Popup align="end" className="min-w-[220px]">
           {onSendToSession && (
             <Menu.Item onClick={() => onSendToSession(thread)}>
-              <IconArrowUpRight size={18} className="text-faint" />
+              <IconArrowUpRight size={20} className="text-faint" />
               Send to session
             </Menu.Item>
           )}
           <Menu.Item onClick={() => void askAgent()} disabled={answering}>
-            <IconSparkle size={18} className="text-faint" />
+            <IconSparkle size={20} className="text-faint" />
             Ask {AGENT_NAME}
           </Menu.Item>
           <Menu.Item onClick={copyLink}>
-            <IconLink size={18} className="text-faint" />
+            <IconLink size={20} className="text-faint" />
             Copy link
           </Menu.Item>
           {(people.length > 0 || thread.assignee) && (
@@ -408,7 +408,7 @@ export function CommentThreadView({
                 <Menu.GroupLabel>Assign to</Menu.GroupLabel>
                 {thread.assignee && (
                   <Menu.Item onClick={() => void assign(null)}>
-                    <IconPerson size={18} className="text-faint" />
+                    <IconPerson size={20} className="text-faint" />
                     Nobody
                   </Menu.Item>
                 )}
@@ -432,14 +432,14 @@ export function CommentThreadView({
             <>
               <Menu.Separator />
               <Menu.Item onClick={() => setEditingId(root.id)}>
-                <IconPencil size={18} className="text-faint" />
+                <IconPencil size={20} className="text-faint" />
                 Edit
               </Menu.Item>
               <Menu.Item
                 onClick={() => void deleteThread()}
                 className="text-red"
               >
-                <IconTrash size={18} />
+                <IconTrash size={20} />
                 Delete thread
               </Menu.Item>
             </>
@@ -465,7 +465,7 @@ export function CommentThreadView({
           )}
           {resolved && (
             <span className="inline-flex items-center gap-1 text-meta text-faint">
-              <IconCheck size={14} />
+              <IconCheck size={20} />
               Resolved{thread.resolvedBy ? ` by ${thread.resolvedBy}` : ""}
             </span>
           )}
@@ -497,7 +497,7 @@ export function CommentThreadView({
           <Button
             size="sm"
             variant="soft"
-            icon={<IconArrowUpRight size={16} />}
+            icon={<IconArrowUpRight size={20} />}
             onClick={() => onSendToSession(thread)}
           >
             Send to session

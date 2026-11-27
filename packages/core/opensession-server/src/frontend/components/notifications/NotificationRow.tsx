@@ -247,7 +247,7 @@ export function NotificationRow({
                 aria-label={readLabel}
                 onClick={toggleRead}
               >
-                <IconMail size={18} />
+                <IconMail size={20} />
               </Button>
             </Tooltip>
             <Tooltip label={thread.done ? "Move to inbox" : "Done"} side="top">
@@ -257,7 +257,7 @@ export function NotificationRow({
                 aria-label={thread.done ? "Move to inbox" : "Done"}
                 onClick={toggleDone}
               >
-                {thread.done ? <IconUndo size={18} /> : <IconCheck size={18} />}
+                {thread.done ? <IconUndo size={20} /> : <IconCheck size={20} />}
               </Button>
             </Tooltip>
           </div>

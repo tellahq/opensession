@@ -113,7 +113,7 @@ function Trigger({
       <span {...stylex.props(field.triggerLabel)}>
         {children ?? <BaseCombobox.Value placeholder={placeholder} />}
       </span>
-      <IconChevronDown size={16} {...stylex.props(field.triggerChevron)} />
+      <IconChevronDown size={20} {...stylex.props(field.triggerChevron)} />
     </BaseCombobox.Trigger>
   );
 }
@@ -164,7 +164,7 @@ function Popup({
           {/* A row, not a field: the popup surface is the well here, so the
 					    search sits on it with a divider rather than in a second box. */}
           <div {...stylex.props(popup.searchRow)}>
-            <IconSearch size={16} {...stylex.props(popup.searchIcon)} />
+            <IconSearch size={20} {...stylex.props(popup.searchIcon)} />
             <BaseCombobox.Input
               aria-label={searchLabel}
               placeholder={searchPlaceholder}
@@ -201,7 +201,7 @@ function Item({ className, children, ...props }: ItemProps) {
 			    the picked row is not wider than the rest. */}
       <span {...stylex.props(popup.tickSlot)}>
         <BaseCombobox.ItemIndicator>
-          <IconCheck size={17} />
+          <IconCheck size={20} />
         </BaseCombobox.ItemIndicator>
       </span>
     </BaseCombobox.Item>

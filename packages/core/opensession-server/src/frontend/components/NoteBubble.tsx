@@ -54,7 +54,7 @@ export function NoteBubble({
     >
       {folded ? (
         <div className="flex min-w-0 items-center gap-2 text-supporting text-dim">
-          <IconCheck size={16} className="shrink-0 text-faint" />
+          <IconCheck size={20} className="shrink-0 text-faint" />
           <UserAvatar name={root.user} size={18} />
           <span className="min-w-0 truncate">
             <span className="font-semibold text-fg">{root.user}</span>

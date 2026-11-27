@@ -395,7 +395,7 @@ export function ConversationPane({
                   className={cn(FLOATING_PILL_BUTTON, "pointer-events-auto")}
                   onClick={handleTriage}
                 >
-                  <IconSparkle size={14} className="text-dim" aria-hidden />
+                  <IconSparkle size={20} className="text-dim" aria-hidden />
                   Triage this ticket
                 </button>
               </Tooltip>

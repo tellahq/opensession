@@ -176,7 +176,7 @@ export function ProjectBands({
                     the band reads as Ask sessions rather than a project named Ask. */}
                 <span className={SIDEBAR_RAIL}>
                   {project.repo === askBand ? (
-                    <IconEye size={16} className="text-faint" />
+                    <IconEye size={20} className="text-faint" />
                   ) : (
                     <RepoTile
                       name={project.repo}

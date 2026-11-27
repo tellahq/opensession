@@ -1025,7 +1025,7 @@ export function SessionViewerMainRegion({
                                 variant="ghost"
                                 icon={
                                   <ChipIcon
-                                    size={16}
+                                    size={20}
                                     className={
                                       selected ? "text-green" : undefined
                                     }
@@ -1324,7 +1324,7 @@ export function SessionViewerMainRegion({
                       )}
                     >
                       <IconArrowUp
-                        size={13}
+                        size={20}
                         className="text-dim transition-transform group-hover:-translate-y-px"
                         aria-hidden
                       />
@@ -1359,7 +1359,7 @@ export function SessionViewerMainRegion({
                     }}
                   >
                     <IconArrowDown
-                      size={13}
+                      size={20}
                       className="text-dim transition-transform group-hover:translate-y-px"
                       aria-hidden
                     />
@@ -1443,7 +1443,7 @@ export function SessionViewerMainRegion({
                                 }}
                               >
                                 <IconArrowDown
-                                  size={13}
+                                  size={20}
                                   className="text-dim transition-transform group-hover:translate-y-px"
                                   aria-hidden
                                 />
@@ -1730,7 +1730,7 @@ export function SessionViewerMainRegion({
                                   }}
                                 >
                                   <IconArrowDown
-                                    size={13}
+                                    size={20}
                                     className="text-dim transition-transform group-hover:translate-y-px"
                                     aria-hidden
                                   />

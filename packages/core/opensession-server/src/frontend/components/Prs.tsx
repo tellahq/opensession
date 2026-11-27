@@ -505,7 +505,7 @@ export function Prs({
         <Tooltip label="Search" side="bottom">
           <Button
             variant="ghost"
-            icon={<IconSearch size={18} />}
+            icon={<IconSearch size={20} />}
             className={cn(
               "absolute inset-y-0 left-0 z-10",
               searchExpanded && "pointer-events-none text-faint",
@@ -530,7 +530,7 @@ export function Prs({
                 <Button
                   variant="ghost"
                   className="min-w-0"
-                  icon={<IconPeople size={18} />}
+                  icon={<IconPeople size={20} />}
                   caret
                 >
                   <span className="max-w-[150px] truncate">
@@ -576,7 +576,7 @@ export function Prs({
                 <Button
                   variant="ghost"
                   className="min-w-0"
-                  icon={<IconRepo size={18} />}
+                  icon={<IconRepo size={20} />}
                   caret
                 >
                   <span className="max-w-[150px] truncate">
@@ -621,7 +621,7 @@ export function Prs({
                   variant="ghost"
                   className={showArchived ? "shrink-0 text-fg" : "shrink-0"}
                   aria-label="More filters"
-                  icon={<IconDotsHorizontal size={18} />}
+                  icon={<IconDotsHorizontal size={20} />}
                 />
               }
             />
@@ -635,7 +635,7 @@ export function Prs({
               }}
               closeOnClick
             >
-              <IconArchive size={18} />
+              <IconArchive size={20} />
               <span className="min-w-0 flex-1 truncate">Show archived</span>
               <Menu.Check on={showArchived} />
             </Menu.CheckboxItem>
@@ -648,7 +648,7 @@ export function Prs({
         <Button
           variant="primary"
           className="shrink-0"
-          icon={<IconPlus size={18} />}
+          icon={<IconPlus size={20} />}
           onClick={onNewSession}
         >
           New session
@@ -813,7 +813,7 @@ export function Prs({
           <>
             <div className="flex min-h-13 shrink-0 items-center gap-2 border-b border-line bg-panel px-3 phone:min-h-14">
               <div className="flex min-w-0 flex-1 items-center gap-2 px-1 text-item-title font-medium text-fg">
-                <IconPullRequest size={19} className="shrink-0 text-dim" />
+                <IconPullRequest size={20} className="shrink-0 text-dim" />
                 <span className="truncate">{repoLabel(preview.repo)}</span>
                 {preview.number && (
                   <span className="shrink-0 font-normal tabular-nums text-faint">
@@ -826,7 +826,7 @@ export function Prs({
                   size="lg"
                   variant="default"
                   className="shrink-0"
-                  icon={<IconSidebarLeft size={18} />}
+                  icon={<IconSidebarLeft size={20} />}
                   onClick={() => {
                     onOpenWorkspace(preview.workspaceId!, preview);
                     setPreview(null);
@@ -839,7 +839,7 @@ export function Prs({
                   size="lg"
                   variant="default"
                   className="shrink-0"
-                  icon={<IconSidebarLeft size={18} />}
+                  icon={<IconSidebarLeft size={20} />}
                   disabled={addingToSidebar}
                   onClick={() => void addPreviewToSidebar()}
                 >

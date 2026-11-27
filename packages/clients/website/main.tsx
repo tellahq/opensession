@@ -376,9 +376,9 @@ function InstallCommand() {
         }}
       >
         {copyState === "copied" ? (
-          <IconCheck size={16} />
+          <IconCheck size={20} />
         ) : (
-          <IconCopy size={16} />
+          <IconCopy size={20} />
         )}
         <span aria-live="polite">{copyLabel}</span>
       </button>

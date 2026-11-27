@@ -47,7 +47,7 @@ export function DesktopLinkToast() {
             <Button
               variant="primary"
               size="sm"
-              icon={<IconShare size={18} />}
+              icon={<IconShare size={20} />}
               onClick={() => {
                 // A user-initiated hidden navigation can open a custom protocol while
                 // keeping this web page available when no desktop app handles it.
@@ -66,7 +66,7 @@ export function DesktopLinkToast() {
               <Button
                 variant="ghost"
                 size="sm"
-                icon={<IconX size={16} />}
+                icon={<IconX size={20} />}
                 aria-label="Dismiss"
                 onClick={() => setDismissed(true)}
               />

@@ -10,7 +10,13 @@ import { Tooltip } from "../ui/tooltip";
 import { toast } from "../ui/toast";
 import { CopyCheck, useCopy } from "../ui/copy";
 import { ContextMenu, MENU_ICON } from "../ui/menu";
-import { IconArrowUpRight, IconCheck, IconCopy, IconGlobe } from "./icons";
+import {
+  IconArrowUpRight,
+  IconCheck,
+  IconCopy,
+  IconGlobe,
+  type IconSize,
+} from "./icons";
 import { useShortcutLabel } from "../hooks/useShortcutBindings";
 import { SUMMARY_MARK_HOVER } from "./PrRefStagingMark";
 import { useLinksInBrowserTab } from "../lib/links-in-browser-tab";
@@ -145,7 +151,7 @@ export function StagingLink({
   // (backend-only PR, no deploy) render nothing.
   if (!staging) {
     if (!deployPending) return null;
-    const shimmerGlobe = (size: number) => (
+    const shimmerGlobe = (size: IconSize) => (
       <span
         className="relative inline-flex items-center justify-center animate-[staging-shimmer_1.4s_ease-in-out_infinite]"
         aria-hidden="true"
@@ -166,7 +172,7 @@ export function StagingLink({
             className={`staging-icon ${ICON_BASE} ${ICON_PENDING}`}
             aria-disabled="true"
           >
-            {shimmerGlobe(25)}
+            {shimmerGlobe(24)}
           </span>
         </Tooltip>
       );
@@ -178,7 +184,7 @@ export function StagingLink({
           title="Preview environment starting… the link appears once it's up"
         >
           <span className="inline-flex size-5 shrink-0 items-center justify-center">
-            {shimmerGlobe(17)}
+            {shimmerGlobe(20)}
           </span>
           <span className="min-w-0 flex-1 truncate">Preview environment</span>
         </span>
@@ -215,7 +221,7 @@ export function StagingLink({
         className={`${LINK_BASE} ${LINK_PENDING}`}
         title="Preview environment starting… the link appears once it's up"
       >
-        {shimmerGlobe(15)}
+        {shimmerGlobe(20)}
         Preview environment
       </span>
     );
@@ -276,8 +282,8 @@ export function StagingLink({
   const spinning = building || rebuilding;
   const production = !!staging.production;
   const label = production ? "Production" : "Preview environment";
-  const restingIcon = (size: number) => <IconGlobe size={size} />;
-  const globe = (size: number, ring: string) =>
+  const restingIcon = (size: IconSize) => <IconGlobe size={size} />;
+  const globe = (size: IconSize, ring: string) =>
     copied ? (
       <CopyCheck copied size={size} idle={restingIcon(size)} />
     ) : (
@@ -376,7 +382,7 @@ export function StagingLink({
           {/* The globe glyph only fills ~60% of its box (thin circle in a 24
 					    viewBox), so it still needs a hair more than the play/sidebar
 					    icons to read at the same weight in the top bar. */}
-          {globe(25, RING_LG)}
+          {globe(24, RING_LG)}
         </a>
       </Tooltip>,
     );
@@ -394,7 +400,7 @@ export function StagingLink({
         title={`${tooltip("")} · ${href}`}
       >
         <span className="inline-flex size-5 shrink-0 items-center justify-center text-faint">
-          {globe(17, RING_LG)}
+          {globe(20, RING_LG)}
         </span>
         <span className="min-w-0 flex-1 truncate">{label}</span>
       </a>
@@ -448,9 +454,9 @@ export function StagingLink({
       className={`${LINK_BASE} ${building ? LINK_BUILDING : rebuilding ? LINK_DEPLOYING : LINK_READY}`}
       title={`${tooltip("right-click to copy the link")} · ${href}`}
     >
-      {globe(15, RING_SM)}
+      {globe(20, RING_SM)}
       {label}
-      <IconArrowUpRight size={15} className="-ml-px opacity-80" />
+      <IconArrowUpRight size={20} className="-ml-px opacity-80" />
     </a>,
   );
 }

@@ -264,7 +264,7 @@ export function PortalsPage({
                         {target && onPinPortal ? (
                           <Button
                             variant="ghost"
-                            icon={<IconPin size={14} />}
+                            icon={<IconPin size={20} />}
                             onClick={() => onPinPortal(target)}
                             className="size-11 shrink-0 text-faint hover:text-fg"
                             aria-label={`Pin ${service.name} beside the conversation`}
@@ -280,7 +280,7 @@ export function PortalsPage({
                             aria-label={`Open ${service.name} in a separate browser window`}
                             title="Open in browser"
                           >
-                            <IconArrowUpRight size={14} />
+                            <IconArrowUpRight size={20} />
                           </a>
                         ) : null}
                         {service.managed && onPortalAction ? (

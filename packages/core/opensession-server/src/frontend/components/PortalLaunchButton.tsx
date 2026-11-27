@@ -93,7 +93,7 @@ export function PortalLaunchButton({
   }
 
   const busy = launching != null;
-  const icon = busy ? <Spinner size="md" /> : <IconPlayOutline size={18} />;
+  const icon = busy ? <Spinner size="md" /> : <IconPlayOutline size={20} />;
   const className = cn(
     "rounded-control text-dim hover:bg-hover hover:text-fg",
     portals.some((portal) => portal.target) && "text-green",

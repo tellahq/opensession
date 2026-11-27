@@ -746,7 +746,7 @@ export function WorkspacePane({
               <Menu.SubmenuTrigger title="Closed sessions in this workspace">
                 <IconHistory size={20} className={MENU_ICON} />
                 <span className="grow">Archived sessions</span>
-                <IconChevronRight size={16} className="text-faint" />
+                <IconChevronRight size={20} className="text-faint" />
               </Menu.SubmenuTrigger>
               <Menu.Popup className="min-w-[240px] max-w-[320px]">
                 <ArchivedSessionItems
@@ -806,7 +806,7 @@ export function WorkspacePane({
         )}
         {workspace.repo && (
           <IconChevronRight
-            size={18}
+            size={20}
             className={cn("-mx-1 shrink-0 text-faint", HIDDEN_BESIDE_TABS)}
             aria-hidden="true"
           />

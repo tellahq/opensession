@@ -107,9 +107,9 @@ export function CodeOrganizationSettings({
         }}
         trailing={
           sortDirection === "asc" ? (
-            <IconArrowUp size={15} className="shrink-0 text-dim" />
+            <IconArrowUp size={20} className="shrink-0 text-dim" />
           ) : (
-            <IconArrowDown size={15} className="shrink-0 text-dim" />
+            <IconArrowDown size={20} className="shrink-0 text-dim" />
           )
         }
         footer={

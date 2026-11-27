@@ -139,7 +139,7 @@ export function HtmlRenderFrame({ render }: { render: HtmlRenderReference }) {
           <Button
             variant="ghost"
             size="sm"
-            icon={<IconExpand size={16} />}
+            icon={<IconExpand size={20} />}
             aria-label={`Expand ${render.title}`}
             onClick={expand}
           />

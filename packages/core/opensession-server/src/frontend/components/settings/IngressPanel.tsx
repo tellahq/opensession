@@ -72,7 +72,7 @@ function CodeBlock({ children }: { children: string }) {
         size="sm"
         aria-label={copied ? "Copied" : "Copy command"}
         icon={
-          <CopyCheck copied={copied} size={15} idle={<IconCopy size={15} />} />
+          <CopyCheck copied={copied} size={15} idle={<IconCopy size={20} />} />
         }
         className="shrink-0 phone:size-10 phone:justify-center phone:p-0"
         onClick={() => copy(children, { toast: "Copied" })}
@@ -92,7 +92,7 @@ function ConfigCodeBlock({ code }: { code: string }) {
         size="sm"
         aria-label={copied ? "Copied" : "Copy configuration"}
         icon={
-          <CopyCheck copied={copied} size={15} idle={<IconCopy size={15} />} />
+          <CopyCheck copied={copied} size={15} idle={<IconCopy size={20} />} />
         }
         className="absolute top-1 right-1 shrink-0 phone:size-10 phone:justify-center phone:p-0"
         onClick={() => copy(code, { toast: "Copied" })}
@@ -996,14 +996,14 @@ export function IngressPanel({
                               disabled={!!busy}
                               className="flex flex-1 justify-center"
                             >
-                              <IconServer size={14} /> Caddy
+                              <IconServer size={20} /> Caddy
                             </SegmentedOption>
                             <SegmentedOption
                               value="cloudflare"
                               disabled={!!busy}
                               className="flex flex-1 justify-center"
                             >
-                              <IconGlobe size={14} /> Cloudflare
+                              <IconGlobe size={20} /> Cloudflare
                             </SegmentedOption>
                           </Segmented>
                         </SettingsForm>

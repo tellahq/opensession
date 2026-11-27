@@ -72,7 +72,7 @@ export function SupportTicketContextMenu({
   );
 }
 
-const SUB_ARROW = <IconChevronRight size={16} className="text-faint" />;
+const SUB_ARROW = <IconChevronRight size={20} className="text-faint" />;
 
 /** Mounted only while the menu is open, so a queue of a hundred rows asks
  *  Plain for its teammates and labels once someone right-clicks, not before. */

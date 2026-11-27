@@ -57,7 +57,7 @@ function ChoiceRow({
           selected ? "bg-green-soft text-green" : "text-transparent",
         )}
       >
-        <IconCheck size={16} />
+        <IconCheck size={20} />
       </span>
     </div>
   );
@@ -86,7 +86,7 @@ export function AnsweredAskCard({
             aria-hidden="true"
             className="flex h-4 w-4 items-center justify-center rounded-full bg-green-soft text-green"
           >
-            <IconCheck size={14} />
+            <IconCheck size={20} />
           </span>
           <span className="text-dim">
             {count === 1 ? "Answer sent" : `${count} answers sent`}

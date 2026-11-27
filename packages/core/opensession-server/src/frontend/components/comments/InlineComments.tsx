@@ -562,7 +562,7 @@ export function InlineComments({
         <Button
           variant="soft"
           size="sm"
-          icon={<IconMessages size={16} />}
+          icon={<IconMessages size={20} />}
           onClick={() => setListOpen(true)}
           aria-label={`Comments, ${openCount} open`}
           className="absolute top-2 z-[6] phone:top-[calc(var(--header-h)+4px)]"
@@ -595,7 +595,7 @@ export function InlineComments({
             <Button
               variant="ghost"
               size="sm"
-              icon={<IconX size={18} />}
+              icon={<IconX size={20} />}
               aria-label="Close"
               onClick={() => {
                 setActiveId(null);
@@ -747,7 +747,7 @@ function CommentsList({
           <Button
             variant="ghost"
             size="sm"
-            icon={<IconX size={18} />}
+            icon={<IconX size={20} />}
             aria-label="Close"
             onClick={onClose}
             className="ml-auto phone:min-w-11"

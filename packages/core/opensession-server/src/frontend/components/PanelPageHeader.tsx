@@ -22,7 +22,7 @@ export function PanelPageHeader({
       <TopBarBack
         onClick={onBack}
         aria-label="Back to workspace"
-        iconSize={18}
+        iconSize={20}
         className="shrink-0 rounded-control text-dim hover:bg-hover hover:text-fg"
       />
       <TopBarTitle className="flex-1 truncate text-supporting font-semibold text-fg">

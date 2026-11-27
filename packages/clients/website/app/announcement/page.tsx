@@ -41,7 +41,7 @@ export default function AnnouncementPage() {
           <img src="/icon.png" alt="" />
         </a>
         <a className="announcement-home" href="/">
-          <IconChevronLeft size={17} aria-hidden="true" />
+          <IconChevronLeft size={20} aria-hidden="true" />
           Back to home
         </a>
       </nav>

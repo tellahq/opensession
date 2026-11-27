@@ -172,7 +172,7 @@ export function Security({ onOpenSession }: Props) {
             tab === "profiles" ? (
               <Button
                 variant="primary"
-                icon={<IconPlus size={16} />}
+                icon={<IconPlus size={20} />}
                 onClick={() => setEditProfile("new")}
               >
                 New profile
@@ -180,7 +180,7 @@ export function Security({ onOpenSession }: Props) {
             ) : (
               <Button
                 variant="primary"
-                icon={<IconPlus size={16} />}
+                icon={<IconPlus size={20} />}
                 onClick={() => setShowNewScan(true)}
               >
                 New scan
@@ -242,18 +242,18 @@ export function Security({ onOpenSession }: Props) {
                         className={rowMenuTriggerClasses}
                         aria-label={`Manage ${p.name}`}
                       >
-                        <IconDotsHorizontal size={18} />
+                        <IconDotsHorizontal size={20} />
                       </Menu.Trigger>
                       <Menu.Popup align="end" sideOffset={4}>
                         <Menu.Item onClick={() => setEditProfile(p)}>
-                          <IconPencil size={16} />
+                          <IconPencil size={20} />
                           Edit profile
                         </Menu.Item>
                         <Menu.Item
                           onClick={() => handleDeleteProfile(p)}
                           className="text-red data-[highlighted]:bg-red-soft"
                         >
-                          <IconTrash size={16} />
+                          <IconTrash size={20} />
                           Delete profile
                         </Menu.Item>
                       </Menu.Popup>
@@ -395,14 +395,14 @@ export function Security({ onOpenSession }: Props) {
                           className={rowMenuTriggerClasses}
                           aria-label="Manage scan"
                         >
-                          <IconDotsHorizontal size={18} />
+                          <IconDotsHorizontal size={20} />
                         </Menu.Trigger>
                         <Menu.Popup align="end" sideOffset={4}>
                           <Menu.Item
                             onClick={() => handleDeleteScan(s)}
                             className="text-red data-[highlighted]:bg-red-soft"
                           >
-                            <IconTrash size={16} />
+                            <IconTrash size={20} />
                             Remove scan
                           </Menu.Item>
                         </Menu.Popup>

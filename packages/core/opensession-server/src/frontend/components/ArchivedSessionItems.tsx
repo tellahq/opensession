@@ -30,7 +30,7 @@ export function ArchivedSessionItems({ sessions, onSelect, onRestore }: Props) {
         <Menu.Item key={s.id} onClick={() => onSelect(s)}>
           {(isAutomationSession(s) || !!s.parentSessionId) && (
             <IconRobot
-              size={14}
+              size={20}
               className="shrink-0 text-faint"
               aria-label="Agent run"
             />

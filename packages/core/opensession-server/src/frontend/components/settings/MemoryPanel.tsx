@@ -495,7 +495,7 @@ function MemoryRow({
                       size="lg"
                       variant="ghost"
                       aria-label="Confirm memory"
-                      icon={<IconCheck size={16} />}
+                      icon={<IconCheck size={20} />}
                       disabled={busy}
                       onClick={() => void act("confirm")}
                     />
@@ -509,7 +509,7 @@ function MemoryRow({
                           ? "Unpin memory"
                           : "Pin memory"
                       }
-                      icon={<IconPin size={16} />}
+                      icon={<IconPin size={20} />}
                       disabled={busy}
                       onClick={() =>
                         void act(row.entry.tier === "pinned" ? "unpin" : "pin")
@@ -520,7 +520,7 @@ function MemoryRow({
                     size="lg"
                     variant="ghost"
                     aria-label="Edit memory"
-                    icon={<IconPencil size={16} />}
+                    icon={<IconPencil size={20} />}
                     disabled={busy}
                     onClick={() => {
                       setDraft(summary);
@@ -535,9 +535,9 @@ function MemoryRow({
                     }
                     icon={
                       state === "archived" ? (
-                        <IconRestore size={16} />
+                        <IconRestore size={20} />
                       ) : (
-                        <IconArchive size={16} />
+                        <IconArchive size={20} />
                       )
                     }
                     disabled={busy}
@@ -551,7 +551,7 @@ function MemoryRow({
                       variant="ghost"
                       aria-label="Delete memory permanently"
                       className="hover:text-red"
-                      icon={<IconTrash size={16} />}
+                      icon={<IconTrash size={20} />}
                       disabled={busy}
                       onClick={() =>
                         confirm({
@@ -1016,7 +1016,7 @@ function CategoryPage({
         <Button
           size="sm"
           variant="ghost"
-          icon={<IconChevronLeft size={18} />}
+          icon={<IconChevronLeft size={20} />}
           onClick={onBack}
         >
           Back
@@ -1037,13 +1037,13 @@ function CategoryPage({
                     {selectedIds.size} selected
                   </span>
                   <IconX
-                    size={16}
+                    size={20}
                     className="col-start-1 row-start-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                   />
                 </span>
                 <span className="hidden items-center gap-1.5 phone:flex">
                   {selectedIds.size} selected
-                  <IconX size={16} />
+                  <IconX size={20} />
                 </span>
               </Button>
               <Button size="sm" variant="soft" onClick={() => setMerging(true)}>
@@ -1054,7 +1054,7 @@ function CategoryPage({
           <Button
             size="sm"
             className={selectedIds.size >= 2 ? "phone:hidden" : ""}
-            icon={<IconPlus size={16} />}
+            icon={<IconPlus size={20} />}
             disabled={!canAdd}
             onClick={() => setAdding(true)}
           >
@@ -1064,7 +1064,7 @@ function CategoryPage({
             <Button
               size="sm"
               className="hidden phone:inline-flex"
-              icon={<IconPlus size={18} />}
+              icon={<IconPlus size={20} />}
               aria-label="Add memory"
               title="Add memory"
               disabled={!canAdd}
@@ -1080,7 +1080,7 @@ function CategoryPage({
               <label className="relative col-span-2 block min-w-0 phone:col-span-1">
                 <span className="sr-only">Search memories</span>
                 <IconSearch
-                  size={16}
+                  size={20}
                   className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-faint"
                 />
                 <Input

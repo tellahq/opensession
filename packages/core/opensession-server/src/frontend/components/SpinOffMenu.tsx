@@ -190,7 +190,7 @@ export function SpinOffMenu({
               a fresh agent run rather than branching this one. */}
           <IconSparkle size={20} className={MENU_ICON} />
           <span className="grow">Spin off</span>
-          <IconChevronRight size={16} className="text-faint" />
+          <IconChevronRight size={20} className="text-faint" />
         </Menu.SubmenuTrigger>
         <Menu.Popup className="w-80 overflow-hidden p-0">
           {isAsk && (

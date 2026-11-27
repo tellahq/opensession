@@ -108,7 +108,7 @@ function SetupSummary({
               )}
               aria-hidden="true"
             >
-              <IconCheck size={14} />
+              <IconCheck size={20} />
             </span>
             <span
               className={cn(

@@ -142,7 +142,7 @@ function Trigger(triggerProps: TriggerProps) {
         </span>
       ))}
       <IconChevronDown
-        size={16}
+        size={20}
         {...stylex.props(
           field.triggerChevron,
           iconSlot ? field.triggerChevronAfterIcon : null,
@@ -224,7 +224,7 @@ function Item(itemProps: ItemProps) {
 			    is a different width depending on what is selected. */}
       <span {...stylex.props(popup.tickSlot)}>
         <BaseSelect.ItemIndicator>
-          <IconCheck size={17} />
+          <IconCheck size={20} />
         </BaseSelect.ItemIndicator>
       </span>
     </BaseSelect.Item>

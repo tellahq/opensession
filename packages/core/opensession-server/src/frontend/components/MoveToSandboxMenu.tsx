@@ -190,7 +190,7 @@ export function MoveToSandboxMenu({
         <span className="grow">
           {current ? "Move session" : "Move to Sandbox"}
         </span>
-        <IconChevronRight size={16} className="text-faint" />
+        <IconChevronRight size={20} className="text-faint" />
       </Menu.SubmenuTrigger>
       <Menu.Popup className="min-w-[220px] max-w-[300px]">
         {current && (

@@ -116,7 +116,7 @@ function OrderSection<T extends string>({
                 }}
               >
                 <span className="flex size-5 shrink-0 items-center justify-center text-faint group-hover:text-dim">
-                  <IconGripVertical size={18} />
+                  <IconGripVertical size={20} />
                 </span>
                 {/* Shared geometry keeps every tool and repository label
 								    on the same vertical line. */}

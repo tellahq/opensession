@@ -54,13 +54,13 @@ export function ReviewerRow({
 export function reviewerStateMeta(state: PrReviewer["state"]) {
   switch (state) {
     case "APPROVED":
-      return { ...reviewerVerdict(state), icon: <IconCheck size={16} /> };
+      return { ...reviewerVerdict(state), icon: <IconCheck size={20} /> };
     case "CHANGES_REQUESTED":
-      return { ...reviewerVerdict(state), icon: <IconX size={16} /> };
+      return { ...reviewerVerdict(state), icon: <IconX size={20} /> };
     case "COMMENTED":
-      return { ...reviewerVerdict(state), icon: <IconMessage size={16} /> };
+      return { ...reviewerVerdict(state), icon: <IconMessage size={20} /> };
     default:
-      return { ...reviewerVerdict(state), icon: <IconClock size={16} /> };
+      return { ...reviewerVerdict(state), icon: <IconClock size={20} /> };
   }
 }
 
@@ -90,7 +90,7 @@ export function FileRow({
       disabled={!onClick}
       title={file.path}
     >
-      <IconFile size={14} className="shrink-0 text-faint" />
+      <IconFile size={20} className="shrink-0 text-faint" />
       <span className="min-w-0 flex-1 truncate text-label text-fg">{base}</span>
       <span className="inline-flex shrink-0 items-center gap-1.5 text-meta">
         {file.additions > 0 && (

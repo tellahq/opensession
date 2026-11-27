@@ -1,6 +1,6 @@
 import * as React from "react";
 import { MOBILE_BACK, MOBILE_TOP_BAR_CONTROL } from "../lib/app-header-classes";
-import { IconChevronLeft } from "../components/icons";
+import { IconChevronLeft, type IconSize } from "../components/icons";
 import * as stylex from "@stylexjs/stylex";
 import { Button, type ButtonProps } from "./button";
 import { cn } from "./cn";
@@ -192,7 +192,7 @@ export const TopBarAction = React.forwardRef<
 type TopBarBackProps = Omit<ButtonProps, "children" | "icon"> & {
   "aria-label": string;
   floating?: boolean;
-  iconSize?: number;
+  iconSize?: IconSize;
 };
 
 export const TopBarBack = React.forwardRef<HTMLButtonElement, TopBarBackProps>(

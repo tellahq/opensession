@@ -1104,7 +1104,7 @@ export function PrPanel({
       <Button
         variant="default"
         size="sm"
-        icon={<IconPlus size={18} />}
+        icon={<IconPlus size={20} />}
         onClick={onStartSession}
       >
         {sessionActionLabel}
@@ -1303,7 +1303,7 @@ export function PrPanel({
                   setActiveKey(target.key);
                 }}
               >
-                <IconBranches size={17} className="shrink-0 text-dim" />
+                <IconBranches size={20} className="shrink-0 text-dim" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-label font-medium text-fg">
                     {target.label}
@@ -1313,7 +1313,7 @@ export function PrPanel({
                   </span>
                 </span>
                 {selected && (
-                  <IconCheck size={16} className="shrink-0 text-fg" />
+                  <IconCheck size={20} className="shrink-0 text-fg" />
                 )}
               </button>
             );
@@ -1689,7 +1689,7 @@ export function PrPanel({
               size="sm"
               className="desktop:-mr-1.5 phone:rounded-full"
               aria-label="Code view settings"
-              icon={<IconSliders size={18} />}
+              icon={<IconSliders size={20} />}
             />
           }
         />
@@ -1780,13 +1780,13 @@ export function PrPanel({
       "overview",
       "Overview",
       comments.length || undefined,
-      <IconChecklist key="overview" size={16} />,
+      <IconChecklist key="overview" size={20} />,
     ],
     [
       "files",
       "Files changed",
       files.length || undefined,
-      <IconFile key="files" size={16} />,
+      <IconFile key="files" size={20} />,
     ],
   ] as const;
 
@@ -1854,7 +1854,7 @@ export function PrPanel({
               size="sm"
               className="desktop:-mr-1.5 phone:rounded-full"
               aria-label="Pull request actions"
-              icon={<IconDotsHorizontal size={18} />}
+              icon={<IconDotsHorizontal size={20} />}
             />
           }
         />
@@ -1869,7 +1869,7 @@ export function PrPanel({
 
         {onOpenSession && (
           <Menu.Item onClick={onOpenSession}>
-            <IconBranches size={18} className={MENU_ICON} />
+            <IconBranches size={20} className={MENU_ICON} />
             {openSessionLabel}
           </Menu.Item>
         )}
@@ -1877,7 +1877,7 @@ export function PrPanel({
           sessionActionTarget === undefined &&
           headerCompact && (
             <Menu.Item onClick={onStartSession}>
-              <IconPlus size={18} className={MENU_ICON} />
+              <IconPlus size={20} className={MENU_ICON} />
               <span className="min-w-0 flex-1 truncate">
                 {sessionActionLabel}
               </span>
@@ -1893,7 +1893,7 @@ export function PrPanel({
           <Menu.Item
             render={<a href={pr.staging.url} target="_blank" rel="noopener" />}
           >
-            <IconGlobe size={18} className={MENU_ICON} />
+            <IconGlobe size={20} className={MENU_ICON} />
             <span className="min-w-0 flex-1 truncate">
               {pr.staging.production ? "Open in production" : "Open preview"}
             </span>
@@ -1904,7 +1904,7 @@ export function PrPanel({
             copyPrLink(pr.url, { toast: "Pull request link copied" })
           }
         >
-          <IconCopy size={18} className={MENU_ICON} />
+          <IconCopy size={20} className={MENU_ICON} />
           <span className="min-w-0 flex-1 truncate">Copy PR link</span>
         </Menu.Item>
         {pr.state === "OPEN" && (
@@ -1912,16 +1912,16 @@ export function PrPanel({
             <Menu.Separator />
             {pr.isDraft && (
               <Menu.Item onClick={handleMarkReady} disabled={markingReady}>
-                <IconCheck size={18} className={MENU_ICON} />
+                <IconCheck size={20} className={MENU_ICON} />
                 {markingReady ? "Marking ready…" : "Ready for review"}
               </Menu.Item>
             )}
             {(choices.all.includes("merge") || mergeScheduled) && (
               <Menu.Item onClick={handleMerge} disabled={merging}>
                 {mergeScheduled ? (
-                  <IconUndo size={18} className={MENU_ICON} />
+                  <IconUndo size={20} className={MENU_ICON} />
                 ) : (
-                  <IconGitMerge size={18} className={MENU_ICON} />
+                  <IconGitMerge size={20} className={MENU_ICON} />
                 )}
                 {merging
                   ? "Merging…"
@@ -1935,7 +1935,7 @@ export function PrPanel({
                 onClick={() => chooseMerge("auto")}
                 disabled={autoMergeBusy || merging}
               >
-                <IconClock size={18} className={MENU_ICON} />
+                <IconClock size={20} className={MENU_ICON} />
                 {MERGE_CHOICE_LABEL.auto}
               </Menu.Item>
             )}
@@ -1944,7 +1944,7 @@ export function PrPanel({
                 onClick={() => chooseMerge("cancel-auto")}
                 disabled={autoMergeBusy}
               >
-                <IconX size={18} className={MENU_ICON} />
+                <IconX size={20} className={MENU_ICON} />
                 {MERGE_CHOICE_LABEL["cancel-auto"]}
               </Menu.Item>
             )}
@@ -1954,7 +1954,7 @@ export function PrPanel({
                 onClick={() => chooseMerge("force")}
                 disabled={merging}
               >
-                <IconWarningTriangle size={18} className="text-red" />
+                <IconWarningTriangle size={20} className="text-red" />
                 {MERGE_CHOICE_LABEL.force}
               </Menu.Item>
             )}
@@ -1964,7 +1964,7 @@ export function PrPanel({
               closeOnClick={confirmClose}
               disabled={closing}
             >
-              <IconX size={18} className={MENU_ICON} />
+              <IconX size={20} className={MENU_ICON} />
               {closing
                 ? "Closing…"
                 : confirmClose
@@ -2077,7 +2077,7 @@ export function PrPanel({
                     rel="noopener"
                     aria-label={stagingLabel(pr.staging)}
                   >
-                    <IconGlobe size={19} />
+                    <IconGlobe size={20} />
                   </a>
                 </Tooltip>
               )}

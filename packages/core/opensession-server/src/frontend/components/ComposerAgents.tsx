@@ -187,7 +187,7 @@ export function ComposerAgents({ runs, subagents, plan, onOpenPanel }: Props) {
       {/* Points the way the card moves, not at the content: closed it opens
 			    upward, open it folds back down into this row. */}
       <IconChevronDown
-        size={16}
+        size={20}
         className={cn(
           "flex-none text-faint transition-transform duration-[var(--dur)]",
           !open && "rotate-180",
@@ -334,7 +334,7 @@ export function ComposerAgents({ runs, subagents, plan, onOpenPanel }: Props) {
                 onClick={onOpenPanel}
               >
                 Open full panel
-                <IconChevronRight size={15} />
+                <IconChevronRight size={20} />
               </button>
             </div>
           )}

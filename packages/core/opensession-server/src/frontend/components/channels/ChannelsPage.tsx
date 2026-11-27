@@ -233,7 +233,7 @@ function ThreadPanel({
             <Button
               variant="ghost"
               size="sm"
-              icon={<IconX size={18} />}
+              icon={<IconX size={20} />}
               aria-label="Close thread"
               onClick={onClose}
             />

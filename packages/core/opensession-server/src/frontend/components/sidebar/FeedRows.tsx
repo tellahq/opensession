@@ -142,7 +142,7 @@ export function SupportRow({
               }
             }}
           >
-            <IconPin size={19} fill={pinned ? "currentColor" : "none"} />
+            <IconPin size={20} fill={pinned ? "currentColor" : "none"} />
           </span>
           <Tooltip label="Mark done in Plain">
             <span
@@ -161,7 +161,7 @@ export function SupportRow({
                 }
               }}
             >
-              <IconCheck size={19} />
+              <IconCheck size={20} />
             </span>
           </Tooltip>
         </span>
@@ -299,7 +299,7 @@ export function FeedRow({
               }
             }}
           >
-            <IconPin size={19} fill={pinned ? "currentColor" : "none"} />
+            <IconPin size={20} fill={pinned ? "currentColor" : "none"} />
           </span>
         </span>
       </Popover.Trigger>
@@ -393,7 +393,7 @@ export function FeedFilterMenu({
       onClick={() => onSet(key, selected ? "" : value)}
     >
       <span className="flex size-4 shrink-0 items-center justify-center">
-        {selected && <IconCheck size={13} />}
+        {selected && <IconCheck size={20} />}
       </span>
       <span className="truncate">{label}</span>
     </Menu.Item>
@@ -429,7 +429,7 @@ export function FeedFilterMenu({
           />
         }
       >
-        <IconFilter size={19} />
+        <IconFilter size={20} />
       </Menu.Trigger>
       <Menu.Popup align="end" sideOffset={5} className="min-w-[230px]">
         {metaSpecs.map((spec) => {

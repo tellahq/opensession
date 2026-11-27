@@ -233,7 +233,7 @@ export function RepoBar({
             )}
           </span>
         </span>
-        <IconChevronRight size={16} className="shrink-0 text-faint" />
+        <IconChevronRight size={20} className="shrink-0 text-faint" />
       </Menu.Trigger>
     ) : variant === "card" ? (
       // The title card's Repository row: the value itself opens the menu, so
@@ -356,7 +356,7 @@ export function RepoBar({
                           title="Detach (leaves the worktree on disk)"
                           aria-label={`Detach ${repoLabel(r.repo)}`}
                         >
-                          <IconX size={16} />
+                          <IconX size={20} />
                         </button>
                       </div>
                     ))}
@@ -377,7 +377,7 @@ export function RepoBar({
                       <span className="min-w-0 flex-1 truncate">
                         {repoLabel(p.id)}
                       </span>
-                      <IconPlus size={18} className="text-faint" />
+                      <IconPlus size={20} className="text-faint" />
                     </Menu.Item>
                   ))
                 ) : (

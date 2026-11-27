@@ -160,7 +160,7 @@ function VoiceAudioMenuContent({
                       ).label
                     }
                   </span>
-                  <IconChevronRight className="shrink-0 text-faint" size={17} />
+                  <IconChevronRight className="shrink-0 text-faint" size={20} />
                 </span>
               </Menu.SubmenuTrigger>
               <Menu.Popup className="max-w-[min(300px,calc(100vw-1rem))]">

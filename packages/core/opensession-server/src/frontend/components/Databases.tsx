@@ -469,7 +469,7 @@ export function Databases({
               <span className={DATABASES_COLUMN_COUNT}>{databases.length}</span>
               <Button
                 size="sm"
-                icon={<IconPlus size={16} />}
+                icon={<IconPlus size={20} />}
                 aria-label="New database"
                 title="New database"
                 onClick={openNewForm}
@@ -507,7 +507,7 @@ export function Databases({
                 </span>
                 {isPhone && (
                   <IconChevronRight
-                    size={16}
+                    size={20}
                     className="mt-0.5 shrink-0 text-faint"
                   />
                 )}
@@ -527,7 +527,7 @@ export function Databases({
                 className="-ml-1 flex items-center gap-0.5 rounded-control border-0 bg-transparent py-1.5 pl-1 pr-2.5 text-sm font-medium text-accent cursor-pointer"
                 onClick={onBack}
               >
-                <IconChevronLeft size={18} />
+                <IconChevronLeft size={20} />
                 Databases
               </button>
               {database && (

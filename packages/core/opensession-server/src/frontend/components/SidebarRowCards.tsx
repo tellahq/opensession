@@ -147,7 +147,7 @@ export function CardLink({
       className="inline-flex shrink-0 items-center gap-0.5 text-xs text-dim no-underline hover:text-fg"
     >
       {children}
-      <IconArrowUpRight size={15} className="opacity-70" />
+      <IconArrowUpRight size={20} className="opacity-70" />
     </a>
   );
 }
@@ -183,7 +183,7 @@ export function CardPrChip({
       {/* Cap band, so the number centres on the chip the way the action
 			    button beside it centres its word. */}
       <span className={CAP_LABEL}>{number != null ? `#${number}` : "PR"}</span>
-      <IconArrowUpRight size={15} className="opacity-70" />
+      <IconArrowUpRight size={20} className="opacity-70" />
     </a>
   );
 }

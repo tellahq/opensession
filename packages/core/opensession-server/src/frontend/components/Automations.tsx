@@ -38,6 +38,7 @@ import {
   IconBolt,
   IconChevronLeft,
   IconClock,
+  type IconComponent,
   IconHash,
   IconPlayOutline,
   IconPlug,
@@ -1180,7 +1181,7 @@ function ChooserRow({
   meta,
   onClick,
 }: {
-  icon: (props: { size?: number; className?: string }) => React.ReactElement;
+  icon: IconComponent;
   title: string;
   description: string;
   meta?: string;

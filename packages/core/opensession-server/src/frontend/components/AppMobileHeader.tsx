@@ -202,7 +202,7 @@ export function AppMobileHeader({
                   </OverflowFadeText>
                   {currentSession && sessionWasAgentStarted(currentSession) && (
                     <IconRobot
-                      size={16}
+                      size={20}
                       className="shrink-0 text-faint"
                       aria-label="Started by an agent"
                     />

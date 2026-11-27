@@ -116,7 +116,7 @@ function CopyQuickActionPill({
           <CopyCheck
             copied={copied}
             size={14}
-            idle={<IconCopy size={14} className="text-dim" />}
+            idle={<IconCopy size={20} className="text-dim" />}
           />
           <span>{copied ? "Copied" : action.label}</span>
         </button>
@@ -204,7 +204,7 @@ export function ReplySuggestions({
                 aria-label={action.label}
               >
                 <span>{action.label}</span>
-                <IconArrowUpRight size={14} className="text-faint" />
+                <IconArrowUpRight size={20} className="text-faint" />
               </a>
             </Tooltip>
           </motion.div>

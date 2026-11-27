@@ -105,7 +105,7 @@ export function ClaudeSignInForm({
             target="_blank"
             rel="noreferrer"
           >
-            <Button icon={<IconPlug size={16} />}>Open Claude sign-in</Button>
+            <Button icon={<IconPlug size={20} />}>Open Claude sign-in</Button>
           </a>
           <Field className="flex-1" label="Code">
             <Input

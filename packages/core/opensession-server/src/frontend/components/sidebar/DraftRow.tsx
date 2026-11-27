@@ -48,7 +48,7 @@ export function DraftRow({
       aria-label="New session, not started yet"
     >
       <span className={SIDEBAR_RAIL}>
-        <IconPlus className="shrink-0 text-faint" size={16} />
+        <IconPlus className="shrink-0 text-faint" size={20} />
       </span>
       <span className={SIDEBAR_ROW_TITLE}>New session</span>
       {draft && (

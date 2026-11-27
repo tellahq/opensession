@@ -82,7 +82,7 @@ export function SessionVoiceHost({
                 onClick={() => call.sessionId && onOpenSession(call.sessionId)}
               >
                 <span className="min-w-0 truncate">{call.title}</span>
-                <IconChevronRight size={16} className="shrink-0 text-faint" />
+                <IconChevronRight size={20} className="shrink-0 text-faint" />
               </Button>
             </div>
             {call.active && (

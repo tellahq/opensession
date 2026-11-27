@@ -89,7 +89,7 @@ function SetupStep({
           className="mr-1 flex size-5 shrink-0 items-center justify-center rounded-full border border-line text-transparent"
           aria-hidden="true"
         >
-          <IconCheck size={16} />
+          <IconCheck size={20} />
         </span>
       )}
     </button>
@@ -149,7 +149,7 @@ export function SetupWidget({
             <Button
               variant="ghost"
               size="sm"
-              icon={<IconX size={16} />}
+              icon={<IconX size={20} />}
               aria-label="Dismiss setup checklist"
               onClick={() => {
                 dismissSetupWidget();

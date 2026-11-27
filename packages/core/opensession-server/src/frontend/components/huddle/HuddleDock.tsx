@@ -153,7 +153,7 @@ function Dock() {
     >
       <div className="flex items-center gap-2">
         <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-green-soft text-green">
-          <IconHeadphones size={16} />
+          <IconHeadphones size={20} />
         </span>
         <Button
           size="sm"
@@ -172,7 +172,7 @@ function Dock() {
           aria-label={collapsed ? "Expand huddle" : "Collapse huddle"}
           icon={
             <IconChevronDown
-              size={18}
+              size={20}
               className={cn(collapsed && "rotate-180")}
             />
           }
@@ -201,10 +201,10 @@ function Dock() {
                   <UserAvatar name={m.user} size={24} />
                 </span>
                 <span className="max-w-[90px] truncate">{m.user}</span>
-                {m.muted && <IconMicOff size={14} className="text-faint" />}
+                {m.muted && <IconMicOff size={20} className="text-faint" />}
                 {m.sharing && (
                   <IconScreenShare
-                    size={14}
+                    size={20}
                     className="text-accent"
                     aria-label="Sharing their screen"
                   />

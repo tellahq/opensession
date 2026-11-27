@@ -38,7 +38,7 @@ export function SlackManifestGuide() {
           size="sm"
           onClick={() => copy(json, { toast: "Manifest copied" })}
         >
-          <CopyCheck copied={copied} size={14} idle={<IconCopy size={14} />} />
+          <CopyCheck copied={copied} size={14} idle={<IconCopy size={20} />} />
           {copied ? "Copied" : "Copy manifest"}
         </Button>
       </div>

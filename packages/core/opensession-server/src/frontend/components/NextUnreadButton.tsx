@@ -194,7 +194,7 @@ export function NextUnreadButton({ phone = false }: { phone?: boolean }) {
           <RepoTile name={next.repo} size={18} />
         </span>
         <span className="min-w-0 flex-1 truncate">{nextLabel}</span>
-        <IconArrowRight size={18} className="shrink-0" aria-hidden />
+        <IconArrowRight size={20} className="shrink-0" aria-hidden />
       </Popover.Trigger>
       <Popover.Popup
         side="top"
@@ -214,7 +214,7 @@ export function NextUnreadButton({ phone = false }: { phone?: boolean }) {
               variant="ghost"
               className="size-11 min-h-11"
               aria-label="Close unread sessions"
-              icon={<IconX size={18} />}
+              icon={<IconX size={20} />}
               onClick={close}
             />
           ) : (

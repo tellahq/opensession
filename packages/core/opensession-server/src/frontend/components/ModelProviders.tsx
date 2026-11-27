@@ -184,7 +184,7 @@ export function ModelProvidersPanel() {
         actions={
           <Button
             size="sm"
-            icon={<IconPlus size={16} />}
+            icon={<IconPlus size={20} />}
             onClick={() => setShowAdd(true)}
           >
             Add provider
@@ -282,7 +282,7 @@ function GeminiKeySection({
             onRemove={onRemove}
             menuItems={
               <Menu.Item onClick={() => setEditing(true)}>
-                <IconRefresh size={16} />
+                <IconRefresh size={20} />
                 Replace key
               </Menu.Item>
             }
@@ -454,7 +454,7 @@ function VertexSection({
             onRemove={onRemove}
             menuItems={
               <Menu.Item onClick={() => setEditing(true)}>
-                <IconRefresh size={16} />
+                <IconRefresh size={20} />
                 Edit
               </Menu.Item>
             }
@@ -689,13 +689,13 @@ function ProviderRow({
             className={rowMenuTriggerClasses}
             aria-label={`Manage ${p.id}`}
           >
-            <IconDotsHorizontal size={18} />
+            <IconDotsHorizontal size={20} />
           </Menu.Trigger>
           <Menu.Popup align="end" sideOffset={4}>
             {menuItems}
             {p.canDiscover && onDiscover && (
               <Menu.Item onClick={() => onDiscover(p)}>
-                <IconSearch size={16} />
+                <IconSearch size={20} />
                 Discover models
               </Menu.Item>
             )}
@@ -703,7 +703,7 @@ function ProviderRow({
               onClick={() => onRemove(p)}
               className="text-red data-[highlighted]:bg-red-soft"
             >
-              <IconTrash size={16} />
+              <IconTrash size={20} />
               Remove provider
             </Menu.Item>
           </Menu.Popup>

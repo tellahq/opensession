@@ -301,7 +301,7 @@ export function GithubAccountApps({
                       <Button
                         size="sm"
                         variant="primary"
-                        icon={<IconArrowUpRight size={16} />}
+                        icon={<IconArrowUpRight size={20} />}
                         render={
                           <a
                             href={signIn.flow.verificationUri}
@@ -326,7 +326,7 @@ export function GithubAccountApps({
                   {app.installed !== true && (
                     <Button
                       size="sm"
-                      icon={<IconArrowUpRight size={16} />}
+                      icon={<IconArrowUpRight size={20} />}
                       render={
                         <a
                           href={app.settingsUrl}
@@ -341,7 +341,7 @@ export function GithubAccountApps({
                   <Button
                     size="sm"
                     variant={app.installed === true ? "ghost" : "default"}
-                    icon={<IconArrowUpRight size={16} />}
+                    icon={<IconArrowUpRight size={20} />}
                     render={
                       <a
                         href={app.installUrl}

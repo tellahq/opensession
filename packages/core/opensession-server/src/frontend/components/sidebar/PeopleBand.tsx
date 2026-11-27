@@ -58,7 +58,7 @@ export function PeopleBand({
           </span>
           <IconChevronDown
             className={sidebarBandChevron({ collapsed: !open, brighten: true })}
-            size={18}
+            size={20}
             style={{ transform: open ? "none" : "rotate(-90deg)" }}
           />
         </button>

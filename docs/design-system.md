@@ -29,6 +29,9 @@ its odd values. A rule in a document does not stop that. A type does.
 
 1. **Tokens** (`ui/tokens.stylex.ts`). The only place a length, a colour, a
    radius, a type size or a duration is written. Every scale is closed.
+   Icon sizes are the same idea as a type: `IconSize` and `DenseIconSize` in
+   `components/icons.tsx`, so `size={17}` is a compile error rather than a
+   number the icon silently clamps.
 2. **Primitives** (`ui/*.tsx`). Authored in StyleX against the tokens. Each
    one owns its look completely and exposes `variant` / `size` for the
    choices the system has made, plus an `xstyle` prop whose type only accepts

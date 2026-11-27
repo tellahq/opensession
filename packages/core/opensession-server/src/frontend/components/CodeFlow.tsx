@@ -157,7 +157,7 @@ export function CodeFlow({
       aria-labelledby={titleId}
     >
       <header className="mb-3 flex items-center gap-2 px-1">
-        <IconBranches size={17} className="text-dim" />
+        <IconBranches size={20} className="text-dim" />
         <h2 id={titleId} className="m-0 text-sm font-semibold text-fg">
           Code flow
         </h2>

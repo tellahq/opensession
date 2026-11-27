@@ -113,7 +113,7 @@ export function SessionHeader({
       {session.mode === "scratch" ? (
         <RepoTile name={session.externalRefs?.[0]?.kind || "scratch"} />
       ) : (
-        <IconEye size={16} className="shrink-0 text-faint" />
+        <IconEye size={20} className="shrink-0 text-faint" />
       )}
     </span>
   ) : null;
@@ -173,7 +173,7 @@ export function SessionHeader({
               {workspaceName || parentSession.title}
             </button>
             <IconChevronDown
-              size={18}
+              size={20}
               className="-mx-1 shrink-0 -rotate-90 text-faint"
               aria-hidden="true"
             />
@@ -261,7 +261,7 @@ export function SessionHeader({
               className="-ml-1 inline-flex size-6 shrink-0 items-center justify-center rounded-control text-faint transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-hover hover:text-fg"
               aria-label={`Open ${session.automation} automation settings`}
             >
-              <IconRobot size={18} />
+              <IconRobot size={20} />
             </a>
           </Tooltip>
         ) : sessionWasAgentStarted(session) ? (
@@ -271,7 +271,7 @@ export function SessionHeader({
             aria-label="Started by an agent"
             title="Started by an agent"
           >
-            <IconRobot size={18} />
+            <IconRobot size={20} />
           </span>
         ) : null}
         {/* Where this session's runs execute when it is not this machine: a

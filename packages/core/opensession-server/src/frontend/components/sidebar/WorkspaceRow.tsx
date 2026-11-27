@@ -601,7 +601,7 @@ export function WorkspaceRow({
                   }
                 }}
               >
-                <IconMoon size={19} />
+                <IconMoon size={20} />
               </span>
             </Tooltip>
           ) : pinned || row.sessions.length > 0 ? (
@@ -634,7 +634,7 @@ export function WorkspaceRow({
                   }
                 }}
               >
-                <IconPin size={19} fill={pinned ? "currentColor" : "none"} />
+                <IconPin size={20} fill={pinned ? "currentColor" : "none"} />
               </span>
             </Tooltip>
           ) : null}
@@ -670,7 +670,7 @@ export function WorkspaceRow({
                     }
                   }}
                 >
-                  <IconArchive size={19} />
+                  <IconArchive size={20} />
                 </span>
               </Tooltip>
             </>
@@ -692,7 +692,7 @@ export function WorkspaceRow({
                   }
                 }}
               >
-                <IconTrash size={19} />
+                <IconTrash size={20} />
               </span>
             </Tooltip>
           ) : null}

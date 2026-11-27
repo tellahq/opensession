@@ -41,7 +41,7 @@ export function PortalPane({
               variant="ghost"
               size="md"
               className="rounded-control"
-              icon={<IconExpand size={16} />}
+              icon={<IconExpand size={20} />}
               onClick={onExpand}
               aria-label={`Expand ${target.name} to full width`}
               title="Expand to full width"
@@ -52,7 +52,7 @@ export function PortalPane({
               variant="ghost"
               size="md"
               className="rounded-control"
-              icon={<IconX size={16} />}
+              icon={<IconX size={20} />}
               onClick={onClose}
               aria-label={`Close ${target.name} side panel`}
               title="Close side panel"

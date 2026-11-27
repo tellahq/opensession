@@ -44,7 +44,7 @@ export function GithubRepoAccess({
         {installUrl && (
           <Button
             size="sm"
-            icon={<IconArrowUpRight size={16} />}
+            icon={<IconArrowUpRight size={20} />}
             render={<a href={installUrl} target="_blank" rel="noreferrer" />}
           >
             Choose repositories

@@ -60,20 +60,21 @@ import { z } from "zod";
 // open-an-asset behaviour, which the turn footer shares.
 export { OpenAssetProvider } from "../lib/open-asset";
 import {
-  IconTerminal,
-  IconFile,
-  IconPencil,
-  IconSearch,
-  IconGlobe,
-  IconSparkle,
-  IconConnections,
+  IconArrowUpRight,
   IconBook,
   IconBranches,
-  IconListCircles,
-  IconWrench,
   IconChevronDown,
+  IconConnections,
   IconExpand,
-  IconArrowUpRight,
+  IconFile,
+  IconGlobe,
+  IconListCircles,
+  IconPencil,
+  IconSearch,
+  type IconSize,
+  IconSparkle,
+  IconTerminal,
+  IconWrench,
 } from "./icons";
 
 interface Props {
@@ -256,7 +257,7 @@ export function ToolGlyph({
   size = 20,
 }: {
   toolName: string;
-  size?: number;
+  size?: IconSize;
 }) {
   switch (toolFamily(toolName)) {
     case "run":

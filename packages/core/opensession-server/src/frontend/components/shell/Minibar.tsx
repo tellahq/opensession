@@ -303,7 +303,7 @@ export function Minibar({
                 <Menu.SubmenuTrigger>
                   <IconSliders size={20} className={MENU_ICON} />
                   <span className="grow">Show in minibar</span>
-                  <IconChevronRight size={16} className="text-faint" />
+                  <IconChevronRight size={20} className="text-faint" />
                 </Menu.SubmenuTrigger>
                 <Menu.Popup className="min-w-[220px]">
                   <MinibarItemToggles items={items} shown={shown} />

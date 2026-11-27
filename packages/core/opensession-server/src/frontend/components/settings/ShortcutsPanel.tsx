@@ -285,12 +285,12 @@ export function ShortcutsPanel() {
               <span className="text-supporting text-faint">Unassigned</span>
               <RowMenu label={`Manage the shortcut for ${command.title}`}>
                 <Menu.Item onClick={() => beginRecording(id, 0)}>
-                  <IconPencil size={16} className={MENU_ICON} />
+                  <IconPencil size={20} className={MENU_ICON} />
                   Set a shortcut…
                 </Menu.Item>
                 {customized && (
                   <Menu.Item onClick={() => resetShortcutBindings(id)}>
-                    <IconRestore size={16} className={MENU_ICON} />
+                    <IconRestore size={20} className={MENU_ICON} />
                     Reset to default
                   </Menu.Item>
                 )}
@@ -322,21 +322,21 @@ export function ShortcutsPanel() {
                   label={`Manage the ${chordKeys.join(" ")} shortcut for ${command.title}`}
                 >
                   <Menu.Item onClick={() => beginRecording(id, i)}>
-                    <IconPencil size={16} className={MENU_ICON} />
+                    <IconPencil size={20} className={MENU_ICON} />
                     Change shortcut…
                   </Menu.Item>
                   {last && keys.length < MAX_BINDINGS && (
                     <Menu.Item
                       onClick={() => beginRecording(id, bindings.length)}
                     >
-                      <IconPlus size={16} className={MENU_ICON} />
+                      <IconPlus size={20} className={MENU_ICON} />
                       Add another shortcut…
                     </Menu.Item>
                   )}
                   <Menu.Separator />
                   {last && customized && (
                     <Menu.Item onClick={() => resetShortcutBindings(id)}>
-                      <IconRestore size={16} className={MENU_ICON} />
+                      <IconRestore size={20} className={MENU_ICON} />
                       Reset to default
                     </Menu.Item>
                   )}
@@ -349,7 +349,7 @@ export function ShortcutsPanel() {
                       )
                     }
                   >
-                    <IconTrash size={16} />
+                    <IconTrash size={20} />
                     Remove shortcut
                   </Menu.Item>
                 </RowMenu>
@@ -456,7 +456,7 @@ function RowMenu({
   return (
     <Menu.Root>
       <Menu.Trigger className={rowMenuTriggerClasses} aria-label={label}>
-        <IconDotsHorizontal size={18} />
+        <IconDotsHorizontal size={20} />
       </Menu.Trigger>
       <Menu.Popup align="end" sideOffset={4}>
         {children}

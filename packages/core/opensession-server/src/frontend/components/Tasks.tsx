@@ -79,7 +79,7 @@ function TaskRow({
         onClick={() => onToggle(task)}
         aria-label={done ? `Reopen ${task.text}` : `Mark ${task.text} done`}
       >
-        <IconCheck size={14} />
+        <IconCheck size={20} />
       </button>
       <div className="min-w-0 flex-1">
         <div
@@ -122,7 +122,7 @@ function TaskRow({
           onClick={() => onDrop(task)}
           aria-label={`Drop ${task.text}`}
           title="Drop task"
-          icon={<IconX size={16} />}
+          icon={<IconX size={20} />}
         />
       )}
     </li>

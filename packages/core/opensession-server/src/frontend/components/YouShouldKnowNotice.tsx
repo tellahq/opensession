@@ -130,7 +130,7 @@ export function YouShouldKnowNotice({
         aria-label={tag}
       >
         <div className="flex items-center gap-1.5 text-meta font-medium text-faint">
-          <IconLightbulb size={16} className="shrink-0" />
+          <IconLightbulb size={20} className="shrink-0" />
           <span className="min-w-0 flex-1 truncate">{tag}</span>
           {!off && (
             <Menu.Root>
@@ -139,7 +139,7 @@ export function YouShouldKnowNotice({
                   <Button
                     size="sm"
                     variant="ghost"
-                    icon={<IconDotsHorizontal size={16} />}
+                    icon={<IconDotsHorizontal size={20} />}
                     aria-label={`${tag} options`}
                     className="-my-1 -me-2 rounded-full text-faint"
                   />
@@ -181,7 +181,7 @@ export function YouShouldKnowNotice({
               aria-expanded={open}
               trailing={
                 <IconChevronDown
-                  size={14}
+                  size={20}
                   className={cn(
                     "opacity-60 transition-transform motion-reduce:transition-none",
                     open && "rotate-180",

@@ -187,7 +187,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
             actions={
               <Button
                 variant="primary"
-                icon={<IconPlus size={16} />}
+                icon={<IconPlus size={20} />}
                 onClick={() => setShowForm(true)}
               >
                 New goal

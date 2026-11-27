@@ -283,10 +283,10 @@ export function GitStatusRows(props: GitStatusRowsProps) {
 }
 
 const MERGE_CHOICE_ICON: Record<MergeChoice, React.ReactNode> = {
-  merge: <IconGitMerge size={18} className={MENU_ICON} />,
-  auto: <IconClock size={18} className={MENU_ICON} />,
-  "cancel-auto": <IconX size={18} className={MENU_ICON} />,
-  force: <IconWarningTriangle size={18} className="text-red" />,
+  merge: <IconGitMerge size={20} className={MENU_ICON} />,
+  auto: <IconClock size={20} className={MENU_ICON} />,
+  "cancel-auto": <IconX size={20} className={MENU_ICON} />,
+  force: <IconWarningTriangle size={20} className="text-red" />,
 };
 
 /**
@@ -343,12 +343,12 @@ function MergeControl({
             disabled={busy}
           >
             {primary ? (
-              <IconChevronDown size={14} />
+              <IconChevronDown size={20} />
             ) : (
               <>
                 Merge
                 <IconChevronDown
-                  size={14}
+                  size={20}
                   className="ml-1 shrink-0 opacity-55"
                 />
               </>

@@ -95,7 +95,7 @@ function AssetPager({
           <Button
             variant="ghost"
             size="sm"
-            icon={<IconChevronLeft size={16} />}
+            icon={<IconChevronLeft size={20} />}
             aria-label="Previous asset"
             className={cn(
               "size-9",
@@ -151,7 +151,7 @@ function AssetPager({
           <Button
             variant="ghost"
             size="sm"
-            icon={<IconChevronRight size={16} />}
+            icon={<IconChevronRight size={20} />}
             aria-label="Next asset"
             className={cn(
               "size-9",
@@ -271,7 +271,7 @@ function AssetMenu({
                 "size-6.5 rounded-full bg-transparent text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg phone:size-11",
         )}
       >
-        <IconDotsHorizontal size={phone ? 24 : 16} />
+        <IconDotsHorizontal size={phone ? 24 : 20} />
       </Menu.Trigger>
       <Menu.Popup align="end">
         {!deleteOnly && (
@@ -285,7 +285,7 @@ function AssetMenu({
                     ),
                   })}
             >
-              <IconArrowDown size={18} className="text-faint" />
+              <IconArrowDown size={20} className="text-faint" />
               Download
             </Menu.Item>
             <Menu.Item
@@ -297,7 +297,7 @@ function AssetMenu({
                     ),
                   })}
             >
-              <IconArrowUpRight size={18} className="text-faint" />
+              <IconArrowUpRight size={20} className="text-faint" />
               {nativeShare ? "Open or share" : "Open in a browser tab"}
             </Menu.Item>
             <Menu.Item
@@ -307,14 +307,14 @@ function AssetMenu({
                 )
               }
             >
-              <IconCopy size={18} className="text-faint" />
+              <IconCopy size={20} className="text-faint" />
               Copy link
             </Menu.Item>
             {/* The folder follows writes live (assets_changed); this is for
                 files an agent wrote straight to disk, which send no event. */}
             {refresh && (
               <Menu.Item onClick={refresh}>
-                <IconRefresh size={18} className="text-faint" />
+                <IconRefresh size={20} className="text-faint" />
                 Refresh files
               </Menu.Item>
             )}
@@ -322,7 +322,7 @@ function AssetMenu({
           </>
         )}
         <Menu.Item onClick={onDelete} className="text-red">
-          <IconTrash size={18} />
+          <IconTrash size={20} />
           Delete
         </Menu.Item>
       </Menu.Popup>
@@ -604,7 +604,7 @@ export function AssetActions({
               className="focus-ring flex h-6.5 shrink-0 cursor-pointer items-center gap-1 rounded-full border-0 bg-transparent px-2.5 text-label text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg phone:h-11"
             >
               {files.indexOf(file) + 1} of {files.length}
-              <IconChevronDown size={12} className="shrink-0 text-faint" />
+              <IconChevronDown size={20} className="shrink-0 text-faint" />
             </Menu.Trigger>
             <Menu.Popup
               align="start"
@@ -641,7 +641,7 @@ export function AssetActions({
           <Button
             variant="ghost"
             size="sm"
-            icon={<IconMessage size={16} />}
+            icon={<IconMessage size={20} />}
             className={cn(
               "shrink-0",
               annotating && "bg-hover text-fg hover:bg-pressed",
@@ -656,7 +656,7 @@ export function AssetActions({
         <Button
           variant="ghost"
           size="sm"
-          icon={<IconArrowUpRight size={16} />}
+          icon={<IconArrowUpRight size={20} />}
           className="shrink-0"
           aria-label={nativeShare ? "Open or share" : "Open in browser"}
           {...(nativeShare

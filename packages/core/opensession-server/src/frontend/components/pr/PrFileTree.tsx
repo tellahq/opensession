@@ -371,9 +371,9 @@ export function PrFileTree({
                 aria-label="Hide changed files"
                 icon={
                   side === "right" ? (
-                    <IconSidebarRight size={18} />
+                    <IconSidebarRight size={20} />
                   ) : (
-                    <IconSidebarLeft size={18} />
+                    <IconSidebarLeft size={20} />
                   )
                 }
                 className="-mr-1.5"
@@ -412,7 +412,7 @@ export function PrFileTree({
                       size="sm"
                       className="ml-auto"
                       aria-label="Review progress"
-                      icon={<IconDotsHorizontal size={18} />}
+                      icon={<IconDotsHorizontal size={20} />}
                     />
                   }
                 />
@@ -475,7 +475,7 @@ export function PrFileTree({
                       }
                     >
                       <IconChevronRight
-                        size={14}
+                        size={20}
                         className={cn(
                           "shrink-0 text-faint transition-transform",
                           !collapsed && "rotate-90",
@@ -514,7 +514,7 @@ export function PrFileTree({
                               ? `Mark ${group.title} as not reviewed`
                               : `Mark ${group.title} as reviewed`
                           }
-                          icon={<IconCheck size={16} />}
+                          icon={<IconCheck size={20} />}
                           onClick={() => onSetReviewed!(group.files, !done)}
                         />
                       </Tooltip>

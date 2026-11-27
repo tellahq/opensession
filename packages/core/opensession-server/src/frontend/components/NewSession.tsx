@@ -1485,7 +1485,7 @@ export function NewSession({
             isPhone={isPhone}
           >
             {repo === NO_REPO ? (
-              <IconMessage className="shrink-0" size={18} />
+              <IconMessage className="shrink-0" size={20} />
             ) : (
               <RepoTile name={repo} />
             )}
@@ -1547,7 +1547,7 @@ export function NewSession({
               {selectedPullRequest && (
                 <ComposerContextChip
                   key="pull-request"
-                  icon={<IconPullRequest size={15} />}
+                  icon={<IconPullRequest size={20} />}
                   label={`${repoOptionLabel(selectedPullRequest.repo) || selectedPullRequest.repo} #${selectedPullRequest.number}`}
                   title={`Starts from PR #${selectedPullRequest.number}: ${selectedPullRequest.title}`}
                   onRemove={() => setStartPoint(defaultStartPoint())}
@@ -1675,7 +1675,7 @@ export function NewSession({
                     aria-pressed
                     aria-label="Ask mode"
                   >
-                    <IconEye size={14} />
+                    <IconEye size={20} />
                     Ask
                   </button>
                 </Tooltip>
@@ -1765,7 +1765,7 @@ export function NewSession({
                           <span className="truncate">{createFromLabel}</span>
                           <IconChevronRight
                             className="shrink-0 text-faint"
-                            size={17}
+                            size={20}
                           />
                         </span>
                       </Menu.SubmenuTrigger>
@@ -1810,7 +1810,7 @@ export function NewSession({
                           </span>
                           <IconChevronRight
                             className="shrink-0 text-faint"
-                            size={17}
+                            size={20}
                           />
                         </span>
                       </Menu.SubmenuTrigger>
@@ -1871,7 +1871,7 @@ export function NewSession({
                           )}
                           <IconChevronRight
                             className="shrink-0 text-faint"
-                            size={17}
+                            size={20}
                           />
                         </span>
                       </Menu.SubmenuTrigger>
@@ -2004,7 +2004,7 @@ export function NewSession({
                           : "All"}
                         <IconChevronRight
                           className="shrink-0 text-faint"
-                          size={17}
+                          size={20}
                         />
                       </span>
                     </Menu.SubmenuTrigger>

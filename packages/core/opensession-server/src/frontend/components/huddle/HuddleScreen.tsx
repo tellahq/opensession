@@ -84,7 +84,7 @@ export function HuddleScreen({
         />
         <OverlayAction
           aria-label={`Open ${title} large`}
-          icon={<IconExpand size={18} />}
+          icon={<IconExpand size={20} />}
           className="top-1.5 right-1.5 phone:size-11"
           onClick={() => setExpanded(true)}
         />

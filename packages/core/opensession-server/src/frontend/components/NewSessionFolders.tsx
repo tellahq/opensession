@@ -90,7 +90,7 @@ export function NewSessionFolderChips({
       {folders.folders.map((folder) => (
         <ComposerContextChip
           key={folder.id}
-          icon={<IconFolder size={15} />}
+          icon={<IconFolder size={20} />}
           label={folder.name}
           meta={folder.readOnly ? "Read only" : undefined}
           title={`${folder.displayPath || folder.name} will be connected to this session. It can read and edit it while this app is open.`}

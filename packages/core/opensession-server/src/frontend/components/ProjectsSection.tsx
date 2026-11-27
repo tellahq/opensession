@@ -235,7 +235,7 @@ export function ProjectsSection() {
                 onClick={() => remove(f.id)}
                 aria-label={`Remove ${f.title}`}
               >
-                <IconTrash size={16} />
+                <IconTrash size={20} />
               </button>
             )}
           </div>
@@ -244,7 +244,7 @@ export function ProjectsSection() {
           className="flex w-full items-center gap-2 px-5 py-3 text-control-label font-medium text-dim transition-colors hover:bg-hover hover:text-fg"
           onClick={() => setOpen(true)}
         >
-          <IconPlus size={16} /> New project
+          <IconPlus size={20} /> New project
         </button>
       </SettingCard>
       <NewProjectModal

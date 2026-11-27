@@ -1038,7 +1038,7 @@ export function PreferencesPanel() {
                   {
                     value: "",
                     label: "Use the workspace default",
-                    icon: <IconRepo size={16} />,
+                    icon: <IconRepo size={20} />,
                   },
                   ...repoOptions.map((r) => ({
                     value: r.id,
@@ -1179,7 +1179,7 @@ export function PreferencesPanel() {
             <Button
               size="sm"
               variant="ghost"
-              icon={<IconPlus size={16} />}
+              icon={<IconPlus size={20} />}
               onClick={() =>
                 setCheckoutOverrideDraft({
                   repo: "",
@@ -1269,7 +1269,7 @@ export function PreferencesPanel() {
                     {
                       value: "",
                       label: "Choose repository",
-                      icon: <IconRepo size={16} />,
+                      icon: <IconRepo size={20} />,
                     },
                     ...availableCheckoutRepos.map((repo) => ({
                       value: repo.id,

@@ -85,7 +85,7 @@ export function SessionDatabasesPanel({
               {databaseDetail(meta)} · updated {shortTime(meta.updatedAt)}
             </span>
           </span>
-          <IconChevronRight size={16} className="shrink-0 text-faint" />
+          <IconChevronRight size={20} className="shrink-0 text-faint" />
         </button>
       ))}
     </Card>

@@ -82,7 +82,7 @@ export function InlineAssetCard({
             <Button
               variant="ghost"
               size="sm"
-              icon={<IconMessage size={16} />}
+              icon={<IconMessage size={20} />}
               className={cn(
                 "phone:size-11",
                 annotating && "bg-hover text-fg hover:bg-pressed",
@@ -99,7 +99,7 @@ export function InlineAssetCard({
           <Button
             variant="ghost"
             size="sm"
-            icon={<IconExpand size={16} />}
+            icon={<IconExpand size={20} />}
             className="phone:size-11"
             aria-label={`Open ${name} full size`}
             onClick={() => asset.open(path)}

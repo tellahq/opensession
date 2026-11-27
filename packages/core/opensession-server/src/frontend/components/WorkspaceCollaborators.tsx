@@ -158,7 +158,7 @@ export function WorkspaceCollaborators({
             </span>
           ) : (
             <span className="inline-flex size-5 shrink-0 items-center justify-center text-dim">
-              <IconPeople size={18} />
+              <IconPeople size={20} />
             </span>
           )}
           <span
@@ -175,7 +175,7 @@ export function WorkspaceCollaborators({
               aria-label="Collaborators"
             >
               {collaborators.length ? "Change" : "Add"}
-              <IconChevronDown size={14} className={GIT_ACTION_CARET} />
+              <IconChevronDown size={20} className={GIT_ACTION_CARET} />
             </Menu.Trigger>
             <Menu.Popup align="start" sideOffset={6} className="min-w-[200px]">
               <CollaboratorMenuItems {...state} />
@@ -208,7 +208,7 @@ export function CollaboratorsSubmenu({
       <Menu.SubmenuTrigger title="Teammates who get this workspace in their sidebar">
         <IconPeople size={20} className={MENU_ICON} />
         <span className="grow">Collaborators</span>
-        <IconChevronRight size={16} className="text-faint" />
+        <IconChevronRight size={20} className="text-faint" />
       </Menu.SubmenuTrigger>
       <Menu.Popup className="min-w-[200px]">
         <CollaboratorMenuItems {...state} />

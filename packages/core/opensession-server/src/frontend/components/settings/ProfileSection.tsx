@@ -352,7 +352,7 @@ function ProfileCard({
                   onClick={() => void removePicture()}
                   aria-label="Remove picture"
                   title="Remove picture"
-                  icon={<IconTrash className="text-red" size={16} />}
+                  icon={<IconTrash className="text-red" size={20} />}
                 />
               )}
             </div>

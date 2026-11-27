@@ -82,7 +82,7 @@ export function PersonalBand({
             <span className={SIDEBAR_LANE_COUNT}>{pinned.entries.length}</span>
             <IconChevronDown
               className={sidebarChevron(!pinned.open)}
-              size={12}
+              size={20}
               style={{
                 transform: pinned.open ? "none" : "rotate(-90deg)",
               }}

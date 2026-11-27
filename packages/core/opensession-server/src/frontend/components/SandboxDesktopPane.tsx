@@ -92,7 +92,7 @@ export function SandboxDesktopPane({ sessionId }: { sessionId: string }) {
           aria-hidden="true"
         />
         <div className="flex min-w-0 flex-1 items-center gap-2 text-supporting text-dim">
-          <IconBox size={16} className="shrink-0 opacity-60" />
+          <IconBox size={20} className="shrink-0 opacity-60" />
           <span className="truncate">
             Sandbox desktop
             {state.phase === "asleep" ? " · asleep" : ""}
@@ -101,7 +101,7 @@ export function SandboxDesktopPane({ sessionId }: { sessionId: string }) {
         <Button
           variant="ghost"
           size="md"
-          icon={<IconRestore size={16} />}
+          icon={<IconRestore size={20} />}
           onClick={reload}
           disabled={state.phase === "loading"}
           aria-label="Reload the desktop"
@@ -111,7 +111,7 @@ export function SandboxDesktopPane({ sessionId }: { sessionId: string }) {
           <Button
             variant="ghost"
             size="md"
-            icon={<IconArrowUpRight size={16} />}
+            icon={<IconArrowUpRight size={20} />}
             disabled={!url}
             onClick={() => {
               if (url) window.open(url, `desktop-${sessionId}`, "noopener");

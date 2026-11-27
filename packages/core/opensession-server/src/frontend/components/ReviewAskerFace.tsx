@@ -42,7 +42,7 @@ export function ReviewAskerFace({ asker }: { asker: ReviewAsker }) {
         aria-hidden="true"
         className="absolute -bottom-1 -right-1 flex size-3 items-center justify-center rounded-full bg-blue text-white ring-2 ring-panel"
       >
-        <IconEye size={8} />
+        <IconEye size={20} />
       </span>
     </span>
   );

@@ -376,29 +376,29 @@ function ToastStatusIcon({
 
   switch (name) {
     case "archive":
-      return <IconArchive size={14} className={className} aria-hidden />;
+      return <IconArchive size={20} className={className} aria-hidden />;
     case "branches":
-      return <IconBranches size={14} className={className} aria-hidden />;
+      return <IconBranches size={20} className={className} aria-hidden />;
     case "check":
       return <AnimatedCheck size={14} className={className} />;
     case "copy":
-      return <IconCopy size={14} className={className} aria-hidden />;
+      return <IconCopy size={20} className={className} aria-hidden />;
     case "link":
-      return <IconLink size={14} className={className} aria-hidden />;
+      return <IconLink size={20} className={className} aria-hidden />;
     case "play":
-      return <IconPlay size={14} className={className} aria-hidden />;
+      return <IconPlay size={20} className={className} aria-hidden />;
     case "plug":
-      return <IconPlug size={14} className={className} aria-hidden />;
+      return <IconPlug size={20} className={className} aria-hidden />;
     case "plus":
-      return <IconPlus size={14} className={className} aria-hidden />;
+      return <IconPlus size={20} className={className} aria-hidden />;
     case "restore":
-      return <IconRestore size={14} className={className} aria-hidden />;
+      return <IconRestore size={20} className={className} aria-hidden />;
     case "send":
-      return <IconArrowUp size={14} className={className} aria-hidden />;
+      return <IconArrowUp size={20} className={className} aria-hidden />;
     case "server":
-      return <IconServer size={14} className={className} aria-hidden />;
+      return <IconServer size={20} className={className} aria-hidden />;
     case "trash":
-      return <IconTrash size={14} className={className} aria-hidden />;
+      return <IconTrash size={20} className={className} aria-hidden />;
     case "error":
       return (
         <span aria-hidden {...stylex.props(styles.errorGlyph)}>

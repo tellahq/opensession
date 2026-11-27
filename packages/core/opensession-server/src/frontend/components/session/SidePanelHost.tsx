@@ -84,7 +84,7 @@ interface SidePanelHostProps {
   pinnedThreads?: boolean;
 }
 
-const ICON = 15;
+const ICON = 20;
 
 /** The new-tab page is a short list of names, so the panel stays at its
  *  narrowest there whatever width the tabs were dragged to. */
@@ -235,7 +235,7 @@ export function SidePanelHost({
                     aria-label={`Close ${name}`}
                     onClick={() => onCloseTab(tab)}
                   >
-                    <IconX size={13} dense aria-hidden="true" />
+                    <IconX size={14} dense aria-hidden="true" />
                   </button>
                 )}
               </ContextMenu.Trigger>
