@@ -84,6 +84,9 @@ export function buildRunInstructions(input: {
   /** Stripe approvals guidance (stripeApprovalsNote), set only when the
    *  run can reach the Stripe server while approvals are enforced. */
   stripeApprovalsNote?: string;
+  /** Per-model-family editing/behavioral adaptation (static per family so
+   *  prompt-prefix caching stays shared across sessions on that model). */
+  modelAdaptation?: string;
 }): string {
   const parts: string[] = [];
   parts.push(
@@ -334,11 +337,12 @@ export function buildRunInstructions(input: {
       ' Live fences: mermaid (quote labels with punctuation: `A["v1 (beta)"]`, ' +
       '`-->|"@x"|`), math, csv, json, ansi, palette, metrics (`Label: value ' +
       "(delta)`), choices (a reply per line, click sends), tree, artifact (static " +
-      "HTML), svg, slides (`---`); `> [!NOTE]` is a callout. Three or more items " +
+      "HTML), svg, slides (`---`), copy; `> [!NOTE]` is a callout. Three or more items " +
       "compared on the same fields (PRs, options, results) read best as a Markdown " +
       "table, one row each with short cells; keep prose for fewer, and a chart or " +
       "mermaid when the point is a trend or a flow.",
   );
+  if (input.modelAdaptation?.trim()) parts.push(input.modelAdaptation.trim());
   if (input.stripeApprovalsNote) parts.push(input.stripeApprovalsNote);
   // Instance-local operator instructions last: they're the deployment's own
   // additions and may refine anything above.

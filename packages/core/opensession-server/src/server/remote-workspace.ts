@@ -631,6 +631,17 @@ export function makeRemoteToolOps(
       // writeFile creates the directory in the same command.
       mkdir: async (_dir: string) => {},
     },
+    deleteFile: async (path: string) => {
+      await readOnlyHere(path);
+      const resolved = workspace.resolve(path);
+      const result = await workspace.exec({
+        script:
+          'if [ ! -e "$OS_PATH" ]; then echo ENOENT >&2; exit 2; fi; rm -- "$OS_PATH"',
+        env: { OS_PATH: resolved },
+        cwd: "/",
+      });
+      if (result.exitCode !== 0) throw fsError(result, resolved, "unlink");
+    },
   };
 }
 

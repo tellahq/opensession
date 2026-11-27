@@ -1,9 +1,12 @@
 import React from "react";
 import { motion } from "motion/react";
+import type { QuickAction } from "../lib/quick-actions";
 import type { ReplySuggestion } from "../lib/reply-suggestions";
+import { CopyCheck, useCopy } from "../ui/copy";
 import { duration, ease } from "../ui/motion";
 import { Tooltip } from "../ui/tooltip";
 import { cn } from "../ui/cn";
+import { IconArrowUpRight, IconCopy } from "./icons";
 
 /**
  * Quick-reply chips above the session composer: the two or three replies the
@@ -77,12 +80,57 @@ const chip =
 
 interface Props {
   suggestions: ReplySuggestion[];
+  /** Deterministic zero-latency actions (copy fences, human-action URLs). */
+  quickActions?: QuickAction[];
   /** Hands back the chip's full text for the composer to receive as a draft. */
   onPick: (text: string) => void;
   className?: string;
 }
 
-export function ReplySuggestions({ suggestions, onPick, className }: Props) {
+function CopyQuickActionPill({
+  action,
+  delay,
+}: {
+  action: Extract<QuickAction, { kind: "copy" }>;
+  delay: number;
+}) {
+  const { copied, copy } = useCopy();
+  const preview =
+    action.value.length > 140 ? action.value.slice(0, 140) + "…" : action.value;
+  return (
+    <motion.div
+      className="pointer-events-auto shrink-0"
+      initial={{ opacity: 0, y: 3 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: duration.base, ease, delay }}
+    >
+      <Tooltip label={preview} side="top" multiline>
+        <button
+          type="button"
+          className={cn(chip, "gap-1.5")}
+          onClick={() =>
+            copy(action.value, { toast: action.label + " copied" })
+          }
+          aria-label={copied ? "Copied" : action.label}
+        >
+          <CopyCheck
+            copied={copied}
+            size={14}
+            idle={<IconCopy size={14} className="text-dim" />}
+          />
+          <span>{copied ? "Copied" : action.label}</span>
+        </button>
+      </Tooltip>
+    </motion.div>
+  );
+}
+
+export function ReplySuggestions({
+  suggestions,
+  quickActions = [],
+  onPick,
+  className,
+}: Props) {
   const rowRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -108,9 +156,9 @@ export function ReplySuggestions({ suggestions, onPick, className }: Props) {
       observer.disconnect();
       row.removeEventListener("scroll", syncEdges);
     };
-  }, [suggestions]);
+  }, [suggestions, quickActions]);
 
-  if (!suggestions.length) return null;
+  if (!suggestions.length && !quickActions.length) return null;
   return (
     <div
       ref={rowRef}
@@ -132,6 +180,36 @@ export function ReplySuggestions({ suggestions, onPick, className }: Props) {
         className,
       )}
     >
+      {quickActions.map((action, i) =>
+        action.kind === "copy" ? (
+          <CopyQuickActionPill
+            key={action.id}
+            action={action}
+            delay={i * 0.04}
+          />
+        ) : (
+          <motion.div
+            key={action.id}
+            className="pointer-events-auto shrink-0"
+            initial={{ opacity: 0, y: 3 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: duration.base, ease, delay: i * 0.04 }}
+          >
+            <Tooltip label={action.url} side="top" multiline>
+              <a
+                href={action.url}
+                target="_blank"
+                rel="noreferrer"
+                className={cn(chip, "gap-1.5 no-underline")}
+                aria-label={action.label}
+              >
+                <span>{action.label}</span>
+                <IconArrowUpRight size={14} className="text-faint" />
+              </a>
+            </Tooltip>
+          </motion.div>
+        ),
+      )}
       {suggestions.map((s, i) => (
         // The animation rides a wrapper rather than the button itself: the
         // button is Base UI's tooltip trigger, which renders INTO the element
@@ -146,7 +224,11 @@ export function ReplySuggestions({ suggestions, onPick, className }: Props) {
           // stagger reads as one row settling rather than four arrivals.
           initial={{ opacity: 0, y: 3 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: duration.base, ease, delay: i * 0.04 }}
+          transition={{
+            duration: duration.base,
+            ease,
+            delay: (quickActions.length + i) * 0.04,
+          }}
         >
           <Tooltip label={s.text} side="top" multiline>
             <button

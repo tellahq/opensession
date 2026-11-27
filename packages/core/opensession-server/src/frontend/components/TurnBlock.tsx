@@ -833,15 +833,36 @@ function NarrationMessage({
  * drawn as one more step: the tool row's glyph slot and type, at rest. Outside
  * a fold the same notice is a centered line between turns. */
 function StepNotice({ entry }: { entry: TranscriptEntry }) {
+  const [open, setOpen] = useState(false);
+  const hasRecap =
+    entry.notice?.kind === "compaction" && entry.content.trim().length > 0;
   return (
-    <div
-      className="-ml-1 flex min-w-0 items-center gap-2 py-[3px] text-item-title leading-5 text-faint"
-      data-eid={entry.id}
-    >
-      <span className="flex size-[22px] flex-shrink-0 items-center justify-center">
-        <IconHistory size={20} />
-      </span>
-      <span className="min-w-0 truncate">{entry.notice?.title}</span>
+    <div className="-ml-1 min-w-0 py-[3px]" data-eid={entry.id}>
+      <div className="flex min-w-0 items-center gap-2 text-item-title leading-5 text-faint">
+        <span className="flex size-[22px] flex-shrink-0 items-center justify-center">
+          <IconHistory size={20} />
+        </span>
+        <span className="min-w-0 truncate">{entry.notice?.title}</span>
+        {hasRecap && (
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => setOpen((v) => !v)}
+            className="shrink-0 cursor-pointer text-meta font-medium text-dim transition-colors hover:text-fg"
+          >
+            {open ? "Hide recap" : "Recap"}
+          </button>
+        )}
+      </div>
+      {hasRecap && open && (
+        <div className="ml-7 mt-1.5 rounded-lg border border-border-subtle border-l-2 border-l-accent bg-panel px-3.5 py-2.5 text-supporting text-fg">
+          <ClampedBody
+            className="markdown"
+            content={entry.content}
+            entry={entry}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -48,6 +48,10 @@ import {
 import { ReplySuggestions } from "./ReplySuggestions";
 import { SessionSafetyNotice } from "./SessionSafetyNotice";
 import {
+  extractQuickActions,
+  latestAssistantReplyText,
+} from "../lib/quick-actions";
+import {
   getReplySuggestionsPref,
   onReplySuggestionsChanged,
   type ReplySuggestion,
@@ -1447,12 +1451,19 @@ export function SessionViewer({
 	   The row floats on the transcript rather than sitting between it and the
 	   composer, so it is also what the transcript pads for and what the
 	   scroll-to-bottom pill has to clear. One flag, read in three places. */
+  const quickActions = useMemo(
+    () =>
+      !isBusy && !ask && !forkFrom
+        ? extractQuickActions(latestAssistantReplyText(entries))
+        : [],
+    [isBusy, ask, forkFrom, entries],
+  );
   const quickReplies =
-    showReplySuggestions &&
     !isBusy &&
     !ask &&
     !forkFrom &&
-    replySuggestions.length > 0;
+    ((showReplySuggestions && replySuggestions.length > 0) ||
+      quickActions.length > 0);
   /* Unread navigation attaches to the composer (NEXT_RISE). On desktop the
      scroll arrow joins it there, so it needs no band of its own. */
   const nextAction =
@@ -1788,7 +1799,8 @@ export function SessionViewer({
             nextAction,
             scrollAction,
             isPhone,
-            replySuggestions,
+            replySuggestions: showReplySuggestions ? replySuggestions : [],
+            quickActions,
             pickReplySuggestion,
             prediction: viewState.preferences.composerPrediction,
             transcriptDownKeys,

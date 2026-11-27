@@ -363,6 +363,20 @@ function defaultExtractToolPaths(toolName: string, params: unknown): string[] {
     const path = (params as { path?: unknown }).path;
     return typeof path === "string" && path.trim() ? [path.trim()] : [];
   }
+  if (toolName === "apply_patch") {
+    const patchText =
+      (params as { patchText?: unknown; patch?: unknown }).patchText ??
+      (params as { patch?: unknown }).patch;
+    if (typeof patchText !== "string") return [];
+    const paths: string[] = [];
+    for (const line of patchText.split("\n")) {
+      const m =
+        /^\*\*\* (?:Add|Update|Delete) File: (.+)$/.exec(line) ??
+        /^\*\*\* Move to: (.+)$/.exec(line);
+      if (m?.[1]?.trim()) paths.push(m[1].trim());
+    }
+    return paths;
+  }
   return [];
 }
 

@@ -1,6 +1,7 @@
 /** Thin Pi adapter over the engine-neutral, turn-scoped MCP runtime. */
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { McpRuntime, McpRuntimeTool } from "./mcp-runtime";
+import { extractServersFromPatterns, matchToolPattern } from "./pi-skill-tools";
 
 export interface PiMcpBridge {
   /** Mutable post-policy view retained for diagnostics and existing callers. */
@@ -10,6 +11,11 @@ export interface PiMcpBridge {
   /** The few catalog tools also offered by name (DIRECT_MCP_TOOLS), only
    *  when this run's post-policy catalog carries them. */
   directTools: ToolDefinition<any, any, any>[];
+  /** Selectively hydrate and return policy-permitted tools requested by a skill. */
+  unlockTools: (filter: {
+    readonly servers?: readonly string[];
+    readonly toolPatterns?: readonly string[];
+  }) => Promise<ToolDefinition<any, any, any>[]>;
 }
 
 /**
@@ -191,9 +197,37 @@ export async function createPiMcpBridge(
     return name ? [{ ...definition, name }] : [];
   });
 
+  const unlockTools: PiMcpBridge["unlockTools"] = async (filter) => {
+    if (!hasCatalog) return [];
+    const serverSet = new Set(
+      (filter.servers ?? []).map((s) => s.trim().toLowerCase()).filter(Boolean),
+    );
+    const patterns = (filter.toolPatterns ?? [])
+      .map((p) => p.trim())
+      .filter(Boolean);
+    if (serverSet.size === 0 && patterns.length === 0) return [];
+
+    const patternServers = extractServersFromPatterns(patterns);
+    if (patternServers === null) {
+      await syncCatalog(true);
+    } else {
+      const toHydrate = [...new Set([...serverSet, ...patternServers])];
+      if (toHydrate.length > 0) await syncCatalog(toHydrate);
+    }
+
+    return tools.filter((def) => {
+      const underscore = def.name.indexOf("_");
+      const server =
+        underscore > 0 ? def.name.slice(0, underscore).toLowerCase() : "";
+      if (server && serverSet.has(server)) return true;
+      return patterns.some((pat) => matchToolPattern(pat, def.name));
+    });
+  };
+
   return {
     tools,
     discoveryTools: hasCatalog ? [searchCatalog, callCatalog] : [],
     directTools,
+    unlockTools,
   };
 }
