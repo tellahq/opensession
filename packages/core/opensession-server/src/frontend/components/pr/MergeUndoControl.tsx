@@ -64,7 +64,7 @@ export function MergeUndoControl({
           seconds == null ? "Undo merge" : `Undo merge, ${seconds}s left`
         }
         onClick={onUndo}
-        icon={<IconUndo size={compact ? 18 : 20} />}
+        icon={<IconUndo size={20} />}
         iconTone="full"
         className={cn(
           "shrink-0 text-dim",

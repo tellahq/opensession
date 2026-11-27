@@ -493,7 +493,7 @@ function PrNumberChip({
           rel="noopener"
           aria-label={`Open pull request #${pr.number} on ${provider.name}`}
         >
-          <IconArrowUpRight size={18} />
+          <IconArrowUpRight size={20} />
         </a>
       </Tooltip>
     </div>
@@ -1056,7 +1056,7 @@ export function PrStatusBar({
                 // The open outline: carrying the work on is the choice
                 // beside the filed-away one, not the same weight as it.
                 tone="purple-dashed"
-                icon={<IconPlus size={18} />}
+                icon={<IconPlus size={20} />}
                 onClick={onNewSession}
                 title="Start a new session in this workspace"
                 aria-label="Continue"
@@ -1071,7 +1071,7 @@ export function PrStatusBar({
                 <PrBarButton
                   className={actionBtn}
                   tone="secondary"
-                  icon={<IconArchive size={18} />}
+                  icon={<IconArchive size={20} />}
                   aria-label="Unarchive session"
                   disabled={!!busy}
                   onClick={() =>
@@ -1092,7 +1092,7 @@ export function PrStatusBar({
                 // a landed PR is for, and the band around it already says
                 // purple, so the button is that colour rather than a neutral.
                 tone="purple"
-                icon={<IconArchive size={18} />}
+                icon={<IconArchive size={20} />}
                 disabled={!!busy}
                 onClick={() =>
                   run("archive", async () => {
@@ -1113,7 +1113,7 @@ export function PrStatusBar({
           <PrBarButton
             className={actionBtn}
             tone="solid"
-            icon={<IconArrowUp size={18} />}
+            icon={<IconArrowUp size={20} />}
             disabled={!!busy}
             onClick={() => run("push", () => gitPushApi(sessionId, repo))}
           >
@@ -1126,7 +1126,7 @@ export function PrStatusBar({
           <PrBarButton
             className={actionBtn}
             tone="solid"
-            icon={<IconArrowDown size={18} />}
+            icon={<IconArrowDown size={20} />}
             disabled={!!busy}
             title={
               headline.key === "behind-base"
@@ -1167,7 +1167,7 @@ export function PrStatusBar({
           <PrBarButton
             className={cn(actionBtn, fixPad)}
             tone="red"
-            icon={<IconSparkle size={18} />}
+            icon={<IconSparkle size={20} />}
             onClick={() =>
               promptSession(
                 "Fixing",
@@ -1212,7 +1212,7 @@ export function PrStatusBar({
             <PrBarButton
               className={actionBtn}
               tone="secondary"
-              icon={<IconRocket size={18} />}
+              icon={<IconRocket size={20} />}
               title={`Push to ${ship?.target ?? "the default branch"} after the checks pass`}
               onClick={() => promptSession("Shipping", directShip.prompt)}
             >
@@ -1223,7 +1223,7 @@ export function PrStatusBar({
           <PrBarButton
             className={actionBtn}
             tone="secondary"
-            icon={<IconPullRequest size={18} />}
+            icon={<IconPullRequest size={20} />}
             onClick={() =>
               promptSession(
                 "Creating PR",
@@ -1245,7 +1245,7 @@ export function PrStatusBar({
           <PrBarButton
             className={actionBtn}
             tone="green"
-            icon={!merging ? <IconGitMerge size={18} /> : undefined}
+            icon={!merging ? <IconGitMerge size={20} /> : undefined}
             disabled={!!busy || merging}
             onClick={handleMerge}
             title={
@@ -1299,7 +1299,7 @@ export function PrStatusBar({
             onClick={() => handleForceMerge(choices.bypasses)}
             className="text-red data-[highlighted]:bg-red-soft"
           >
-            <IconWarningTriangle size={18} className="text-red" />
+            <IconWarningTriangle size={20} className="text-red" />
             <span className="min-w-0 flex-1 truncate">
               {MERGE_CHOICE_LABEL.force}
             </span>
@@ -1319,7 +1319,7 @@ export function PrStatusBar({
                 }
               >
                 Merge
-                <IconChevronDown size={14} className="-mr-0.5 opacity-60" />
+                <IconChevronDown size={20} className="-mr-0.5 opacity-60" />
               </Menu.Trigger>
               <Menu.Popup align="end" sideOffset={6} className="min-w-[200px]">
                 {forceItem}
@@ -1353,7 +1353,7 @@ export function PrStatusBar({
                       disabled={!!busy}
                       aria-label="Merge options"
                       title="Merge options"
-                      icon={<IconChevronDown size={14} />}
+                      icon={<IconChevronDown size={20} />}
                     />
                   }
                 />

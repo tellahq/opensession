@@ -128,7 +128,7 @@ export function ReposSection({
             size="sm"
             variant="primary"
             className="bg-fg text-bg hover:bg-fg/85"
-            icon={pendingRepo ? <Spinner /> : <IconPlus size={16} />}
+            icon={pendingRepo ? <Spinner /> : <IconPlus size={20} />}
             disabled={pendingRepo !== null}
             onClick={() => setPickerOpen(true)}
           >
@@ -420,11 +420,11 @@ function RepoActionsMenu({
           className={rowMenuTriggerClasses}
           aria-label={`Manage ${repo.label}`}
         >
-          <IconDotsHorizontal size={18} />
+          <IconDotsHorizontal size={20} />
         </Menu.Trigger>
         <Menu.Popup align="end" sideOffset={4}>
           <Menu.Item onClick={openBranchDialog}>
-            <IconBranches size={17} className="text-dim" />
+            <IconBranches size={20} className="text-dim" />
             <span className="min-w-0 flex-1 truncate">Default branch</span>
             <Menu.Shortcut className="max-w-28 truncate font-mono">
               {defaultBranch}
@@ -453,7 +453,7 @@ function RepoActionsMenu({
             disabled={!!saving || repo.isDefault}
             onClick={confirmRemove}
           >
-            <IconTrash size={17} />
+            <IconTrash size={20} />
             <span className="min-w-0 flex-1 truncate">
               {repo.isDefault
                 ? "Default repository can't be removed"
@@ -665,7 +665,7 @@ function RepoTileButton({
             onClick={() => fileInput.current?.click()}
           >
             <span className="flex h-full w-full items-center justify-center rounded-control border border-dashed border-line text-dim">
-              <IconArrowUpToLine size={14} />
+              <IconArrowUpToLine size={20} />
             </span>
           </TileChoice>
           <input

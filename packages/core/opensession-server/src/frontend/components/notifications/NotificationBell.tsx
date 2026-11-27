@@ -112,7 +112,7 @@ export function NotificationBell() {
                   openInAppUrl("/settings/notifications");
                 }}
               >
-                <IconGear size={18} />
+                <IconGear size={20} />
               </Button>
             </Tooltip>
             <Button

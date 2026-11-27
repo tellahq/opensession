@@ -91,7 +91,7 @@ function QueueContent({
   return (
     <div className={composerQueueContent}>
       {isReview && (
-        <IconPullRequest size={18} className="flex-none text-faint" />
+        <IconPullRequest size={20} className="flex-none text-faint" />
       )}
       {firstImage && (
         <div className={composerQueueImage}>

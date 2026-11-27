@@ -267,7 +267,7 @@ function BuildGroupFlap({
           <span className="truncate phone:hidden">{groupSummary(group)}</span>
           {hasDetail && (
             <IconChevronDown
-              size={16}
+              size={20}
               className={cn(
                 "flex-none text-faint transition-transform duration-[var(--dur)]",
                 !open && "rotate-180",
@@ -281,7 +281,7 @@ function BuildGroupFlap({
             size="sm"
             // Negative margins keep the touch target from growing the row.
             className="-my-1.5 -mr-1 shrink-0 phone:-my-3 phone:-mr-[13px] phone:min-w-11"
-            icon={<IconX size={16} />}
+            icon={<IconX size={20} />}
             aria-label="Close"
             onClick={onHide}
           />

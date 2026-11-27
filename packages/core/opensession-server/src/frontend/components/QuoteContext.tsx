@@ -14,7 +14,7 @@ interface Props {
 export function QuoteContext({ quote, onRemove, disabled }: Props) {
   return (
     <ComposerContextChip
-      icon={<IconCursor size={15} />}
+      icon={<IconCursor size={20} />}
       label="Selected text"
       title={quotePreview(quote.text)}
       onRemove={onRemove}

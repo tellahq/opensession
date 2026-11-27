@@ -96,7 +96,7 @@ function FeedOwnerMark({ owner }: { owner: FeedOwner }) {
       className="flex size-[24px] shrink-0 items-center justify-center rounded-avatar bg-active text-dim shadow-[var(--avatar-edge)]"
       title={owner.label}
     >
-      <IconRobot size={14} />
+      <IconRobot size={20} />
     </span>
   );
 }
@@ -334,7 +334,7 @@ export function Feed({
           <Button
             variant="ghost"
             size="sm"
-            icon={<IconRepo size={18} />}
+            icon={<IconRepo size={20} />}
             caret
             className="shrink-0"
           >

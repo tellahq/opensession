@@ -106,7 +106,7 @@ export function ThreadPanelView({
             size="sm"
             variant="ghost"
             aria-label="Open in a tab"
-            icon={<IconExpand size={18} />}
+            icon={<IconExpand size={20} />}
             className="shrink-0 text-dim"
             onClick={onOpenTab}
           />

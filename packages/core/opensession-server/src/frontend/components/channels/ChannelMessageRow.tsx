@@ -75,7 +75,7 @@ function Reactions({
               aria-label="Add reaction"
               className="inline-flex h-6 min-h-0 w-auto items-center rounded-full border border-transparent bg-hover px-2 py-0 text-dim opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:border-line-strong [@media(hover:none)]:opacity-100"
             >
-              <IconReactionAdd size={16} />
+              <IconReactionAdd size={20} />
             </ListRow>
           }
         />
@@ -115,7 +115,7 @@ function Files({ files }: { files: NonNullable<ChannelMessage["files"]> }) {
             rel="noreferrer"
             className="inline-flex w-fit max-w-full items-center gap-2 rounded-lg border border-line px-3 py-2 text-body text-fg hover:bg-hover"
           >
-            <IconFile size={18} className="shrink-0 text-dim" />
+            <IconFile size={20} className="shrink-0 text-dim" />
             <span className="truncate">{file.name}</span>
           </a>
         ),

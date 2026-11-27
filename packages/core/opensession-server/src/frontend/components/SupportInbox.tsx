@@ -261,7 +261,7 @@ export function SupportInbox({
                       variant="ghost"
                       size="sm"
                       className={cn("ml-auto min-w-0", label && "text-accent")}
-                      icon={<IconTag size={16} />}
+                      icon={<IconTag size={20} />}
                       iconTone={label ? "full" : "muted"}
                       caret
                     >
@@ -289,7 +289,7 @@ export function SupportInbox({
                     </Menu.RadioItem>
                     {labelOptions.map((o) => (
                       <Menu.RadioItem key={o.name} value={o.name} closeOnClick>
-                        <IconTag size={18} className={MENU_ICON} />
+                        <IconTag size={20} className={MENU_ICON} />
                         <span className="min-w-0 flex-1 truncate">
                           {o.name}
                         </span>

@@ -1644,7 +1644,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
                   !hasWorkspaceFilter &&
                   isPhone && (
                     <div className="flex min-h-[360px] flex-col items-center justify-center px-7 py-12 text-center">
-                      <IconMessages size={30} className="mb-3 text-dim" />
+                      <IconMessages size={28} className="mb-3 text-dim" />
                       <div className="text-section-title leading-[1.15] font-semibold tracking-[-0.02em] text-fg">
                         No sessions
                       </div>

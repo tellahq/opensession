@@ -214,7 +214,7 @@ function FirstMileSummary({
       preview: (
         <div className="flex max-w-full items-center gap-1.5 rounded-full bg-bg/65 py-1 pr-2 pl-1 text-meta font-medium text-fg">
           <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-bg/85 text-dim">
-            <IconGlobe size={15} />
+            <IconGlobe size={20} />
           </span>
           <span className="truncate">{serverHost}</span>
         </div>
@@ -335,7 +335,7 @@ function FirstMileSummary({
                 )}
               >
                 {tile.ready ? (
-                  <IconCheck size={18} />
+                  <IconCheck size={20} />
                 ) : (
                   <span className="size-2 rounded-full bg-current" />
                 )}
@@ -349,9 +349,9 @@ function FirstMileSummary({
                   onClick={onCopyInviteLink}
                   icon={
                     inviteCopied ? (
-                      <IconCheck size={15} />
+                      <IconCheck size={20} />
                     ) : (
-                      <IconLink size={15} />
+                      <IconLink size={20} />
                     )
                   }
                   className="mb-3 min-h-10 w-full px-2.5 phone:min-h-11"

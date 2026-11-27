@@ -358,7 +358,7 @@ export function BrowserAnnotationLayer({
               <Button
                 variant="ghost"
                 size="lg"
-                icon={<IconX size={16} />}
+                icon={<IconX size={20} />}
                 className="shrink-0 rounded-[999px]"
                 onClick={reset}
                 disabled={sending}
@@ -370,7 +370,7 @@ export function BrowserAnnotationLayer({
                 type="submit"
                 variant="primary"
                 size="lg"
-                icon={<IconArrowUp size={17} />}
+                icon={<IconArrowUp size={20} />}
                 className="shrink-0 rounded-[999px]"
                 disabled={!text.trim() || sending}
                 aria-label={sending ? "Sending comment" : "Send comment"}

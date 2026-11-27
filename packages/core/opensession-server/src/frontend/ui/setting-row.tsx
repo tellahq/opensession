@@ -184,7 +184,7 @@ export function ValueRow({
             {current?.label ?? value}
           </span>
           {trailing}
-          <IconChevronDown size={16} {...stylex.props(styles.chevron)} />
+          <IconChevronDown size={20} {...stylex.props(styles.chevron)} />
         </span>
       </Menu.Trigger>
       <Menu.Popup align="end" sideOffset={6}>

@@ -30,7 +30,7 @@ export function repoFilterOptions(
   repos: Array<{ id: string }>,
 ): SettingOption[] {
   return [
-    { value: "all", label: "All repos", icon: <IconRepo size={16} /> },
+    { value: "all", label: "All repos", icon: <IconRepo size={20} /> },
     ...repos.map(({ id }) => ({
       value: id,
       label: repoLabel(id),
@@ -51,7 +51,7 @@ export function personFilterOptions({
   const icon = (key: string, label: string) =>
     key === AGENT_PERSON_KEY ? (
       <span className="inline-flex size-4 shrink-0 items-center justify-center rounded-avatar bg-active text-dim">
-        <IconRobot size={13} />
+        <IconRobot size={20} />
       </span>
     ) : (
       avatar(label)

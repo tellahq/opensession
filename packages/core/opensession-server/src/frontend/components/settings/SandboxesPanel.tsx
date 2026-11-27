@@ -122,7 +122,7 @@ function MacHostsEditor({
         <Button
           size="sm"
           variant="ghost"
-          icon={<IconPlus size={15} />}
+          icon={<IconPlus size={20} />}
           onClick={() =>
             onChange([...hosts, { runner: unused[0]?.name || "", maxVms: "" }])
           }
@@ -176,7 +176,7 @@ function MacHostsEditor({
           <Button
             size="sm"
             variant="ghost"
-            icon={<IconX size={15} />}
+            icon={<IconX size={20} />}
             aria-label="Remove Mac"
             onClick={() => onChange(hosts.filter((_, i) => i !== index))}
             disabled={hosts.length === 1}
@@ -893,7 +893,7 @@ function ConnectionCard({
                   {connection.state === "ready" && !checking && (
                     <Button
                       size="sm"
-                      icon={<IconCheck size={17} />}
+                      icon={<IconCheck size={20} />}
                       onClick={() => void testAgain()}
                       disabled={busy}
                     >
@@ -1277,7 +1277,7 @@ export function SandboxesPanel() {
               availableEnvironments.length > 0 && (
                 <Button
                   size="sm"
-                  icon={<IconPlus size={16} />}
+                  icon={<IconPlus size={20} />}
                   onClick={() => {
                     setEnvironmentTarget(undefined);
                     setEnvironmentDialogOpen(true);

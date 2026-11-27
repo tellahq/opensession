@@ -191,7 +191,7 @@ export function Issues({ sessions, onOpenSession, topbarActionsEl }: Props) {
         <Tooltip label="Search" side="bottom">
           <Button
             variant="ghost"
-            icon={<IconSearch size={18} />}
+            icon={<IconSearch size={20} />}
             className={cn(
               "absolute inset-y-0 left-0 z-10",
               searchExpanded && "pointer-events-none text-faint",
@@ -213,7 +213,7 @@ export function Issues({ sessions, onOpenSession, topbarActionsEl }: Props) {
                 <Button
                   variant="ghost"
                   className="min-w-0"
-                  icon={<IconRepo size={18} />}
+                  icon={<IconRepo size={20} />}
                   caret
                 >
                   <span className="max-w-[150px] truncate">
@@ -324,7 +324,7 @@ export function Issues({ sessions, onOpenSession, topbarActionsEl }: Props) {
                           title={`${repoLabel(issue.repo)} · #${issue.number}`}
                         >
                           <span className="flex items-center text-green">
-                            <IconIssue size={18} />
+                            <IconIssue size={20} />
                           </span>
                           {issue.person ? (
                             <UserAvatar
@@ -382,7 +382,7 @@ export function Issues({ sessions, onOpenSession, topbarActionsEl }: Props) {
           <>
             <div className="flex min-h-13 shrink-0 items-center gap-2 border-b border-line bg-panel px-3 phone:min-h-14">
               <div className="flex min-w-0 flex-1 items-center gap-2 px-1 text-item-title font-medium text-fg">
-                <IconIssue size={19} className="shrink-0 text-dim" />
+                <IconIssue size={20} className="shrink-0 text-dim" />
                 <span className="truncate">{repoLabel(preview.repo)}</span>
                 <span className="shrink-0 font-normal tabular-nums text-faint">
                   #{preview.number}

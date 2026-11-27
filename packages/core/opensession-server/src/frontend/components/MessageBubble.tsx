@@ -210,7 +210,7 @@ export function ClampedBody({
             onClick={showAll ? () => setShowAll(false) : expand}
             icon={
               <IconChevronDown
-                size={16}
+                size={20}
                 className={showAll ? undefined : "-rotate-90"}
               />
             }
@@ -557,7 +557,7 @@ function EditAgainButton({ onClick }: { onClick: () => void }) {
         aria-label="Edit and send again"
         className={bubbleActionClass}
       >
-        <IconPencil size={16} />
+        <IconPencil size={20} />
       </button>
     </Tooltip>
   );
@@ -588,7 +588,7 @@ function PendingMessageActions({
             onClick={onEdit}
             aria-label="Edit unsent message"
             className={pendingActionClass}
-            icon={<IconPencil size={16} />}
+            icon={<IconPencil size={20} />}
           />
         </Tooltip>
       )}
@@ -599,7 +599,7 @@ function PendingMessageActions({
           onClick={onDelete}
           aria-label="Delete unsent message"
           className={pendingActionClass}
-          icon={<IconTrash size={16} />}
+          icon={<IconTrash size={20} />}
         />
       </Tooltip>
     </>
@@ -650,7 +650,7 @@ function CopyMessageButton({
         aria-label={copied ? "Copied" : "Copy message"}
         className={bubbleActionClass}
       >
-        <CopyCheck copied={copied} idle={<IconCopy size={16} />} />
+        <CopyCheck copied={copied} idle={<IconCopy size={20} />} />
       </button>
     </Tooltip>
   );
@@ -669,7 +669,7 @@ function CopyMessageLinkButton({ entryId }: { entryId: string }) {
         aria-label={copied ? "Copied" : "Copy link"}
         className={bubbleActionClass}
       >
-        <CopyCheck copied={copied} idle={<IconLink size={16} />} />
+        <CopyCheck copied={copied} idle={<IconLink size={20} />} />
       </button>
     </Tooltip>
   );
@@ -1010,7 +1010,7 @@ function PastedTextCard({
         )}
       >
         <span className={fileChipThumb}>
-          <IconFileText2 size={15} />
+          <IconFileText2 size={20} />
         </span>
         <span className={fileChipMeta}>
           <span className={fileChipName}>Pasted text</span>

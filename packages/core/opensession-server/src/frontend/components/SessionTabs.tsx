@@ -260,7 +260,7 @@ export function SessionTabs({
   // desktop they stay pinned after the last tab. Icons run a touch bigger on
   // touch for an easier hit.
   const isPhone = useIsPhone();
-  const ctrlIconSize = isPhone ? 23 : 20;
+  const ctrlIconSize = isPhone ? 24 : 20;
 
   // A lone unsplit tab has nowhere to move. Split bars remain draggable so their
   // final tab can cross into the other column.
@@ -836,7 +836,7 @@ export function SessionTabs({
                       <ContextMenu.SubmenuTrigger>
                         <IconCopy size={20} className={MENU_ICON} />
                         <span className="grow">Copy transcript</span>
-                        <IconChevronRight size={16} className="text-faint" />
+                        <IconChevronRight size={20} className="text-faint" />
                       </ContextMenu.SubmenuTrigger>
                       <Menu.Popup>
                         <Menu.Item

@@ -619,7 +619,7 @@ export function SidebarItem({
                   onTogglePin();
                 }}
               >
-                <IconPin size={19} fill="currentColor" />
+                <IconPin size={20} fill="currentColor" />
               </span>
             </Tooltip>
           )}

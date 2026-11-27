@@ -70,11 +70,12 @@ import {
   IconLink,
   IconMail,
   IconMoon,
-  IconPencil,
   IconPalette,
+  IconPencil,
   IconPeople,
   IconPin,
   IconPullRequest,
+  type IconSize,
 } from "../icons";
 import { useWorkspaceCollaborators } from "../WorkspaceCollaborators";
 import { UserAvatar } from "../UserAvatar";
@@ -269,6 +270,13 @@ export function SnoozeBadge({
   );
 }
 
+/** The glyph a status mark draws in its `size`-wide slot. The scale's
+ *  smallest icon is 20, so an 18px slot (the workspace row's) holds a glyph
+ *  that overhangs it by a pixel each side, as it always has. */
+function markGlyph(slot: number): IconSize {
+  return slot >= 22 ? 22 : 20;
+}
+
 export function WsPrStatusMark({
   sessions,
   size,
@@ -285,13 +293,14 @@ export function WsPrStatusMark({
   /** This work lands on the default branch, so an absent PR is not missing work. */
   shipsDirectlyToMain?: boolean;
 }) {
+  const glyph = markGlyph(size);
   // Read the authoritative multi-PR projection before the legacy flat fields.
   // A Slack session can own a discovered PR through `prs[]` while `prUrl` and
   // `prState` stay empty, and that landed work still needs the merged mark.
   if (sessions.some(sessionPrMerged)) {
     return (
       <span className="flex items-center" title="PR merged">
-        <IconPullRequest size={size} className="text-purple" />
+        <IconPullRequest size={glyph} className="text-purple" />
       </span>
     );
   }
@@ -312,7 +321,7 @@ export function WsPrStatusMark({
       if (workspace?.draft)
         return (
           <span className="flex items-center" title="Draft">
-            <IconPencil size={size} className="text-faint" />
+            <IconPencil size={glyph} className="text-faint" />
           </span>
         );
       return (
@@ -338,7 +347,7 @@ export function WsPrStatusMark({
     // a PR that exists or is missing; the PR glyph now always means a real PR.
     return (
       <span className="flex items-center" title="Branch, no pull request">
-        <IconBranches size={size} className="text-faint" />
+        <IconBranches size={glyph} className="text-faint" />
       </span>
     );
   }
@@ -369,7 +378,7 @@ export function WsPrStatusMark({
                 : "PR open";
   return (
     <span className="flex items-center" title={label}>
-      <IconPullRequest size={size} className={className} />
+      <IconPullRequest size={glyph} className={className} />
     </span>
   );
 }
@@ -386,6 +395,7 @@ export function WsStatusMark({
   };
   size?: number;
 }) {
+  const glyph = markGlyph(size);
   // Every mark rides in the same `size`-wide (20px) flex slot so #number/title
   // line up at one x whichever mark the row carries. It also gives the icons a
   // real CSS box: an SVG sized only by its width/height *attributes* collapses
@@ -410,7 +420,7 @@ export function WsStatusMark({
   if (row.workspace?.draft && row.sessions.length === 0)
     return (
       <span className="flex items-center" title="Draft">
-        <IconPencil size={size} className="text-faint" />
+        <IconPencil size={glyph} className="text-faint" />
       </span>
     );
   if (row.status === "review") {
@@ -418,13 +428,13 @@ export function WsStatusMark({
     const allDraft = open.length > 0 && open.every((c) => c.prIsDraft);
     return slot(
       <IconPullRequest
-        size={size}
+        size={glyph}
         className={allDraft ? "text-faint" : "text-green"}
       />,
     );
   }
   if (row.status === "merged")
-    return slot(<IconGitMerge size={size} className="text-purple" />);
+    return slot(<IconGitMerge size={glyph} className="text-purple" />);
   // A landed PR files its idle row under Done (prLaneForSessions), but a
   // human-pinned lane wins, so a row parked in Backlog stays there after its
   // PR merges. Its mark should carry the PR lifecycle anyway, like the
@@ -432,7 +442,7 @@ export function WsStatusMark({
   // reads as "no PR".
   const prSession = frontingPrSession(row.sessions);
   if (row.status === "pending" && prSession && sessionPrMerged(prSession))
-    return slot(<IconGitMerge size={size} className="text-purple" />);
+    return slot(<IconGitMerge size={glyph} className="text-purple" />);
   return dot("idle");
 }
 
@@ -647,7 +657,7 @@ export function WsCardBody({
           <Button
             size="sm"
             variant={prReady ? "success-strong" : "soft"}
-            trailing={<IconArrowUpRight size={15} className="opacity-80" />}
+            trailing={<IconArrowUpRight size={20} className="opacity-80" />}
             render={
               <a
                 href={prSession.prUrl}

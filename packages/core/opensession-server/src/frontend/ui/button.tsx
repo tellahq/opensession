@@ -398,8 +398,6 @@ const variantStyle = {
 
 // The caret keys off the label, not the 20px icon step: an iconic-pro glyph
 // at 14 draws an arrow about as tall as the cap height of a 12px label.
-const caretSize: Record<Size, number> = { sm: 14, md: 16, lg: 18, xl: 18 };
-
 // Leading-icon dimming: full-strength plates (primary, tones) take the
 // lighter dim, neutral weights the stronger one. Icon-only stays undimmed.
 const dimsOnTone = new Set<Variant>([
@@ -570,7 +568,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         {caret && (
           <IconChevronDown
             className={stylex.props(styles.caret).className}
-            size={caretSize[size]}
+            size={20}
           />
         )}
       </>

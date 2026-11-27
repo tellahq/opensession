@@ -111,7 +111,7 @@ export function Disclosure({
         <Collapsible.Trigger
           {...stylex.props(styles.trigger, focusStyles.ring, disclosureMarker)}
         >
-          <IconChevronRight size={14} {...stylex.props(styles.chevron)} />
+          <IconChevronRight size={20} {...stylex.props(styles.chevron)} />
           <span {...stylex.props(styles.title)}>{title}</span>
         </Collapsible.Trigger>
         {actions}

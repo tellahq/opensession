@@ -14,7 +14,7 @@ interface Props {
 export function PastedTextContext({ attachment, onRemove, disabled }: Props) {
   return (
     <ComposerContextChip
-      icon={<IconFileText2 size={15} />}
+      icon={<IconFileText2 size={20} />}
       label="Pasted text"
       meta={pastedTextLineLabel(attachment.text)}
       onRemove={onRemove}

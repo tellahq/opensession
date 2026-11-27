@@ -59,7 +59,7 @@ export function AssetViewToggle({
               active ? "bg-hover text-fg" : "text-faint hover:text-dim",
             )}
           >
-            <option.icon size={16} />
+            <option.icon size={20} />
           </button>
         );
       })}

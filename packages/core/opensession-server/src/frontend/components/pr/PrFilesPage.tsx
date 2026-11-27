@@ -276,7 +276,7 @@ export function PrFilesPage({
             <Button
               variant="soft"
               size="sm"
-              icon={<IconFile size={18} />}
+              icon={<IconFile size={20} />}
               onClick={() => setFilesOpen(true)}
             >
               Files
@@ -299,7 +299,7 @@ export function PrFilesPage({
                 variant="ghost"
                 size="sm"
                 aria-label="Show changed files"
-                icon={<IconSidebarRight size={18} />}
+                icon={<IconSidebarRight size={20} />}
                 className="order-last"
                 onClick={() => hideTree(false)}
               />
@@ -315,7 +315,7 @@ export function PrFilesPage({
                   aria-keyshortcuts="k"
                   disabled={!previous}
                   onClick={() => navigate(previous)}
-                  icon={<IconChevronLeft size={18} />}
+                  icon={<IconChevronLeft size={20} />}
                 />
               </Tooltip>
               <Tooltip label="Next file (J)">
@@ -326,7 +326,7 @@ export function PrFilesPage({
                   aria-keyshortcuts="j"
                   disabled={!next}
                   onClick={() => navigate(next)}
-                  icon={<IconChevronRight size={18} />}
+                  icon={<IconChevronRight size={20} />}
                 />
               </Tooltip>
               {reviewedFiles && (
@@ -398,7 +398,7 @@ export function PrFilesPage({
                     aria-label="Previous file"
                     disabled={!previous}
                     onClick={() => navigate(previous)}
-                    icon={<IconChevronLeft size={18} />}
+                    icon={<IconChevronLeft size={20} />}
                   />
                   <Button
                     variant="ghost"
@@ -406,7 +406,7 @@ export function PrFilesPage({
                     aria-label="Next file"
                     disabled={!next}
                     onClick={() => navigate(next)}
-                    icon={<IconChevronRight size={18} />}
+                    icon={<IconChevronRight size={20} />}
                   />
                 </>
               )}
@@ -626,7 +626,7 @@ export function PrFilesPage({
                       <div className="flex flex-wrap items-center gap-2">
                         <Button
                           variant="soft"
-                          icon={<IconChevronRight size={18} />}
+                          icon={<IconChevronRight size={20} />}
                           onClick={() => showStep(currentStep + 1)}
                         >
                           Next: {guideSections[currentStep + 1].title}

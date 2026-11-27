@@ -370,7 +370,7 @@ export function ScopeGroups({ groups }: { groups: SetupScopeGroup[] }) {
           copy(all.join(", "), { toast: `Copied ${all.length} scopes` })
         }
       >
-        <CopyCheck copied={copied} size={14} idle={<IconCopy size={14} />} />
+        <CopyCheck copied={copied} size={14} idle={<IconCopy size={20} />} />
         {copied ? "Copied" : `Copy all ${all.length}`}
       </Button>
     </div>
@@ -496,7 +496,7 @@ export function CopyableCode({ value }: { value: string }) {
         copied={copied}
         size={14}
         className="shrink-0 text-faint"
-        idle={<IconCopy size={14} />}
+        idle={<IconCopy size={20} />}
       />
     </button>
   );

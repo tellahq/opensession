@@ -46,7 +46,7 @@ export function DownloadAppsDialog({
                 <Button
                   variant="ghost"
                   size="sm"
-                  icon={<IconChevronLeft size={18} />}
+                  icon={<IconChevronLeft size={20} />}
                   className="-ml-1 size-7 shrink-0"
                   onClick={() => setShowInstallHelp(false)}
                   aria-label="Back to apps"

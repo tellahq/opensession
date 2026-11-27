@@ -335,7 +335,7 @@ function ManageOrganizationsBody({
               </span>
               {active ? (
                 <span className="flex items-center gap-1 text-label text-faint">
-                  <IconCheck size={14} aria-hidden="true" />
+                  <IconCheck size={20} aria-hidden="true" />
                   Current
                 </span>
               ) : (
@@ -343,7 +343,7 @@ function ManageOrganizationsBody({
                   <Button
                     variant="ghost"
                     size="sm"
-                    icon={<IconTrash size={18} />}
+                    icon={<IconTrash size={20} />}
                     aria-label={`Remove ${account.label}`}
                     disabled={busy}
                     onClick={() => void remove(account)}

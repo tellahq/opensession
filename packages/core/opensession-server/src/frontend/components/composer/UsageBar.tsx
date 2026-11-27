@@ -108,7 +108,7 @@ export function UsageBar(props: UsageSummaryInput) {
       </ContextMenu.Trigger>
       <ContextMenu.Popup>
         <ContextMenu.Item onClick={() => setUsageBarPref(false)}>
-          <IconEyeOff size={17} aria-hidden className={MENU_ICON} />
+          <IconEyeOff size={20} aria-hidden className={MENU_ICON} />
           Hide usage bar
         </ContextMenu.Item>
       </ContextMenu.Popup>

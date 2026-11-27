@@ -143,7 +143,7 @@ function LocalFoldersFlap({ sessionId, folders, grants, waiting }: FlapProps) {
             key={grant.id}
             variant="ghost"
             size="sm"
-            icon={<IconFolder size={18} aria-hidden />}
+            icon={<IconFolder size={20} aria-hidden />}
             onClick={() =>
               void reauthorizeLocalFolder(grant.id).then((ok) => {
                 if (!ok)
@@ -168,7 +168,7 @@ function LocalFoldersFlap({ sessionId, folders, grants, waiting }: FlapProps) {
                 aria-label={`${folder.name} on ${folder.deviceLabel}`}
               >
                 <IconFolder
-                  size={18}
+                  size={20}
                   className={cn(
                     "shrink-0",
                     folder.online ? "text-dim" : "text-faint",
@@ -215,7 +215,7 @@ function LocalFoldersFlap({ sessionId, folders, grants, waiting }: FlapProps) {
                       ).catch(report)
                     }
                   >
-                    <IconX size={18} className={MENU_ICON} aria-hidden />
+                    <IconX size={20} className={MENU_ICON} aria-hidden />
                     Disconnect
                   </Menu.Item>
                 </Menu.Group>

@@ -111,7 +111,7 @@ function GithubSetupStep({
             aria-label={`Show help for ${label.toLowerCase()}`}
             className="focus-ring pointer-events-auto ml-auto flex size-6 items-center justify-center rounded-control text-faint transition-colors duration-[var(--dur-micro)] hover:text-fg phone:size-8"
           >
-            <IconQuestionCircle size={18} />
+            <IconQuestionCircle size={20} />
           </button>
         </Tooltip>
       </div>

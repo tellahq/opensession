@@ -389,7 +389,7 @@ export function DiffPanel({
               variant="ghost"
               size="sm"
               aria-label="Code view settings"
-              icon={<IconSliders size={18} />}
+              icon={<IconSliders size={20} />}
             />
           }
         />
@@ -556,7 +556,7 @@ export function DiffPanel({
           <Button
             variant="ghost"
             size="sm"
-            icon={<IconRestore size={18} />}
+            icon={<IconRestore size={20} />}
             onClick={() => {
               if (view === "flow") {
                 void refreshFlow();

@@ -104,7 +104,7 @@ export function buildAppCommandActions({
       category: "Actions",
       keywords: ["create", "session", "workspace"],
       shortcut: shortcutPrimaryKeys("session-new") ?? undefined,
-      icon: <IconPlus size={18} />,
+      icon: <IconPlus size={20} />,
       run: () => openPalette(),
     },
     ...(currentSession
@@ -119,7 +119,7 @@ export function buildAppCommandActions({
                   keywords: ["tab", "conversation", "sibling"],
                   shortcut:
                     shortcutPrimaryKeys("session-new-sibling") ?? undefined,
-                  icon: <IconPlus size={18} />,
+                  icon: <IconPlus size={20} />,
                   run: () => void handleNewSession("share"),
                 },
               ]
@@ -134,7 +134,7 @@ export function buildAppCommandActions({
                   keywords: ["next", "unread", "ready", "attention"],
                   shortcut:
                     shortcutPrimaryKeys("workspace-next-unread") ?? undefined,
-                  icon: <IconChevronRight size={18} />,
+                  icon: <IconChevronRight size={20} />,
                   run: openNextChat,
                 },
               ]
@@ -146,7 +146,7 @@ export function buildAppCommandActions({
             category: "Actions" as const,
             keywords: ["search", "transcript", "messages"],
             shortcut: shortcutPrimaryKeys("transcript-find") ?? undefined,
-            icon: <IconSearch size={18} />,
+            icon: <IconSearch size={20} />,
             run: () => window.dispatchEvent(new Event(TRANSCRIPT_FIND_EVENT)),
           },
           {
@@ -157,7 +157,7 @@ export function buildAppCommandActions({
             keywords: ["transcript", "clipboard"],
             shortcut:
               shortcutPrimaryKeys("session-copy-transcript") ?? undefined,
-            icon: <IconCopy size={18} />,
+            icon: <IconCopy size={20} />,
             run: () =>
               void copySessionTranscript(currentSession, "concise", showToast),
           },
@@ -176,7 +176,7 @@ export function buildAppCommandActions({
               ? ["restore", "open"]
               : ["close", "remove"],
             shortcut: shortcutPrimaryKeys("session-archive") ?? undefined,
-            icon: <IconArchive size={18} />,
+            icon: <IconArchive size={20} />,
             run: () =>
               void (currentSession.archived
                 ? unarchiveSession(currentSession)
@@ -196,7 +196,7 @@ export function buildAppCommandActions({
             category: "Actions" as const,
             keywords: ["unarchive", "restore", "undo", "closed", "reopen"],
             shortcut: shortcutPrimaryKeys("session-reopen") ?? undefined,
-            icon: <IconUnarchive size={18} />,
+            icon: <IconUnarchive size={20} />,
             run: () => void reopenLastArchived(),
           },
         ]
@@ -211,7 +211,7 @@ export function buildAppCommandActions({
             category: "Actions" as const,
             keywords: ["url", "share", "clipboard"],
             shortcut: shortcutPrimaryKeys("session-copy-link") ?? undefined,
-            icon: <IconCopy size={18} />,
+            icon: <IconCopy size={20} />,
             run: () =>
               copyToClipboard(absoluteLink(copyLinkPath), () =>
                 showToast("Link copied"),
@@ -228,7 +228,7 @@ export function buildAppCommandActions({
             category: "Actions" as const,
             keywords: ["url", "share", "clipboard", "github", "pr"],
             shortcut: shortcutPrimaryKeys("pr-copy-link") ?? undefined,
-            icon: <IconPullRequest size={18} />,
+            icon: <IconPullRequest size={20} />,
             run: () =>
               copyToClipboard(prUrl, () =>
                 showToast("Pull request link copied"),
@@ -242,7 +242,7 @@ export function buildAppCommandActions({
       description: "Open your task list",
       category: "Actions",
       keywords: ["todos", "tasks"],
-      icon: <IconListCircles size={18} />,
+      icon: <IconListCircles size={20} />,
       run: () => navigate({ view: "tasks" }),
     },
     ...(deskShown
@@ -254,7 +254,7 @@ export function buildAppCommandActions({
             category: "Actions",
             keywords: ["concierge", "assistant"],
             shortcut: shortcutPrimaryKeys("desk") ?? undefined,
-            icon: <IconDesk size={18} />,
+            icon: <IconDesk size={20} />,
             run: () => setDeskOverlay({ open: true, origin: "center" }),
           } satisfies CommandPaletteAction,
         ]
@@ -266,7 +266,7 @@ export function buildAppCommandActions({
       category: "Actions",
       keywords: ["toggle", "panel", "navigation"],
       shortcut: shortcutPrimaryKeys("sidebar-toggle") ?? undefined,
-      icon: <IconSidebarLeft size={18} />,
+      icon: <IconSidebarLeft size={20} />,
       run: toggleSidebarCollapsed,
     },
     {
@@ -275,7 +275,7 @@ export function buildAppCommandActions({
       description: `Current appearance: ${currentTheme}`,
       category: "Actions",
       keywords: ["toggle", "theme", "appearance", "dark", "light"],
-      icon: <IconMoon size={18} />,
+      icon: <IconMoon size={20} />,
       run: () => setThemePref(currentTheme === "dark" ? "light" : "dark"),
     },
     {
@@ -284,7 +284,7 @@ export function buildAppCommandActions({
       description: "Match your device's light or dark mode",
       category: "Actions",
       keywords: ["system", "automatic", "theme", "appearance"],
-      icon: <IconMoon size={18} />,
+      icon: <IconMoon size={20} />,
       run: () => setThemePref("system"),
     },
     {
@@ -292,7 +292,7 @@ export function buildAppCommandActions({
       label: "Pull requests",
       description: "Open the pull request list",
       category: "Navigate",
-      icon: <IconPullRequest size={18} />,
+      icon: <IconPullRequest size={20} />,
       run: () => navigate({ view: "prs" }),
     },
     {
@@ -301,7 +301,7 @@ export function buildAppCommandActions({
       description: "Open the GitHub issue list",
       category: "Navigate",
       keywords: ["github", "issue"],
-      icon: <IconIssue size={18} />,
+      icon: <IconIssue size={20} />,
       run: () => navigate({ view: "issues" }),
     },
     {
@@ -310,7 +310,7 @@ export function buildAppCommandActions({
       description: "Open your Slack channels and direct messages",
       category: "Navigate",
       keywords: ["slack", "dm", "message", "thread"],
-      icon: <IconHash size={18} />,
+      icon: <IconHash size={20} />,
       run: () => navigate(channelsRoute()),
     },
     {
@@ -318,7 +318,7 @@ export function buildAppCommandActions({
       label: "Feed",
       description: "Open what the team has been shipping",
       category: "Navigate",
-      icon: <IconFeed size={18} />,
+      icon: <IconFeed size={20} />,
       run: () => navigate({ view: "feed" }),
     },
     // Catch up is offered at phone widths only (lib/sidebar-tools.ts), so
@@ -331,7 +331,7 @@ export function buildAppCommandActions({
             description: "Swipe through unread workspaces",
             category: "Navigate",
             keywords: ["unread", "inbox"],
-            icon: <IconStack size={18} />,
+            icon: <IconStack size={20} />,
             run: () => navigate({ view: "catchup" }),
           },
         ] satisfies CommandPaletteAction[])
@@ -344,7 +344,7 @@ export function buildAppCommandActions({
             description: "Triage the Plain todo queue",
             category: "Navigate",
             keywords: ["tickets", "plain", "support"],
-            icon: <IconInbox size={18} />,
+            icon: <IconInbox size={20} />,
             run: () => navigate({ view: "supporttinder" }),
           },
         ] satisfies CommandPaletteAction[])
@@ -355,7 +355,7 @@ export function buildAppCommandActions({
       description: "Read and answer Plain tickets",
       category: "Navigate",
       keywords: ["tickets", "plain", "inbox"],
-      icon: <IconMail size={18} />,
+      icon: <IconMail size={20} />,
       run: () => navigate({ view: "plain" }),
     },
     {
@@ -363,7 +363,7 @@ export function buildAppCommandActions({
       label: "Reports",
       description: "Open recurring automation reports",
       category: "Navigate",
-      icon: <IconFile size={18} />,
+      icon: <IconFile size={20} />,
       run: () => navigate({ view: "reports" }),
     },
     {
@@ -372,7 +372,7 @@ export function buildAppCommandActions({
       description: "Browse the databases sessions keep",
       category: "Navigate",
       keywords: ["sqlite", "tables", "sql"],
-      icon: <IconDatabase size={18} />,
+      icon: <IconDatabase size={20} />,
       run: () => navigate({ view: "databases" }),
     },
     {
@@ -380,7 +380,7 @@ export function buildAppCommandActions({
       label: "Analytics",
       description: "Sessions, tokens, models, and PRs over time",
       category: "Navigate",
-      icon: <IconChart size={18} />,
+      icon: <IconChart size={20} />,
       run: () => navigate({ view: "analytics" }),
     },
     {
@@ -389,7 +389,7 @@ export function buildAppCommandActions({
       description: "Open the pull request review queue",
       category: "Navigate",
       keywords: ["pull requests", "code review"],
-      icon: <IconListCircles size={18} />,
+      icon: <IconListCircles size={20} />,
       run: () => navigate({ view: "reviews" }),
     },
     {
@@ -398,7 +398,7 @@ export function buildAppCommandActions({
       description: "Manage scheduled and event-triggered routines",
       category: "Navigate",
       keywords: ["routines", "scheduled"],
-      icon: <IconWrench size={18} />,
+      icon: <IconWrench size={20} />,
       run: () => navigate({ view: "automations" }),
     },
     {
@@ -406,7 +406,7 @@ export function buildAppCommandActions({
       label: "Goals",
       description: "Manage long-running missions",
       category: "Navigate",
-      icon: <IconListCircles size={18} />,
+      icon: <IconListCircles size={20} />,
       run: () => navigate({ view: "goals" }),
     },
     {
@@ -414,7 +414,7 @@ export function buildAppCommandActions({
       label: "Security",
       description: "Open security scans and findings",
       category: "Navigate",
-      icon: <IconBook size={18} />,
+      icon: <IconBook size={20} />,
       run: () => navigate({ view: "security" }),
     },
     {
@@ -423,7 +423,7 @@ export function buildAppCommandActions({
       description: "Your inbox of questions, reviews and mentions",
       category: "Navigate",
       keywords: ["inbox", "notifications", "unread", "alerts"],
-      icon: <IconBell size={18} />,
+      icon: <IconBell size={20} />,
       run: () => navigate({ view: "inbox" }),
     },
     {
@@ -432,7 +432,7 @@ export function buildAppCommandActions({
       description: "Browse closed conversations",
       category: "Navigate",
       keywords: ["history", "closed"],
-      icon: <IconArchive size={18} />,
+      icon: <IconArchive size={20} />,
       run: () => navigate({ view: "archived" }),
     },
     {
@@ -441,7 +441,7 @@ export function buildAppCommandActions({
       description: `Configure ${PRODUCT_NAME}`,
       category: "Navigate",
       keywords: ["preferences", "appearance", "connections"],
-      icon: <IconGear size={18} />,
+      icon: <IconGear size={20} />,
       run: () => navigate({ view: "settings" }),
     },
     // Every Settings section, straight from the nav's own table — the palette

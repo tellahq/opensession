@@ -840,7 +840,7 @@ export function Composer({
               label: "Add files and folders",
               description: "Attach context to this message",
               keywords: ["upload", "attach"],
-              icon: <IconPaperclip size={16} />,
+              icon: <IconPaperclip size={20} />,
               run: () => fileInputRef.current?.click(),
             },
           ]
@@ -852,7 +852,7 @@ export function Composer({
               label: goal ? "Edit session goal" : "Set session goal",
               description: "Guide every prompt in this session",
               keywords: ["target", "objective"],
-              icon: <IconCrosshair size={16} />,
+              icon: <IconCrosshair size={20} />,
               run: () => setMenu("goal"),
             },
           ]
@@ -868,7 +868,7 @@ export function Composer({
                 ? "Stop loading the pstack playbooks and skills"
                 : "Load the pstack playbooks and skills for every turn",
               keywords: ["pstack", "poteto", "playbook", "rigorous"],
-              icon: <IconChecklist size={16} />,
+              icon: <IconChecklist size={20} />,
               run: () => onPstackModeChange(!pstackMode),
             },
           ]
@@ -882,7 +882,7 @@ export function Composer({
                 ? "Send the next message to the agent"
                 : "Only your team will see it",
               keywords: ["internal", "note"],
-              icon: <IconNote size={16} />,
+              icon: <IconNote size={20} />,
               run: () => onNoteModeChange(!noteMode),
             },
           ]
@@ -1608,7 +1608,7 @@ export function Composer({
             {!minimized && askMode && (
               <ComposerContextChip
                 key="ask-mode"
-                icon={<IconEye size={15} />}
+                icon={<IconEye size={20} />}
                 label="Ask"
                 title={
                   onAskModeExit
@@ -1632,7 +1632,7 @@ export function Composer({
             {noteMode && !minimized && (
               <ComposerContextChip
                 key="note-mode"
-                icon={<IconNote size={15} />}
+                icon={<IconNote size={20} />}
                 label="Team note"
                 title={
                   noteChord
@@ -1923,11 +1923,11 @@ export function Composer({
               className={composerMenuWidth}
             >
               <Menu.Item onClick={changePill}>
-                <IconPencil size={17} aria-hidden className={MENU_ICON} />
+                <IconPencil size={20} aria-hidden className={MENU_ICON} />
                 Change
               </Menu.Item>
               <Menu.Item onClick={removePill}>
-                <IconTrash size={17} aria-hidden className={MENU_ICON} />
+                <IconTrash size={20} aria-hidden className={MENU_ICON} />
                 Remove
               </Menu.Item>
             </Menu.Popup>
@@ -2095,7 +2095,7 @@ export function Composer({
                   onPress={() => onToggleCall?.()}
                   aria-label="End call"
                 >
-                  <IconCall size={minimized ? 18 : 20} />
+                  <IconCall size={20} />
                 </ComposerPressButton>
               </Tooltip>
             </motion.div>
@@ -2265,7 +2265,7 @@ export function Composer({
                     )}
                     <ContextMenu.Check
                       on={busySendPrefs.enter === "queue"}
-                      size={16}
+                      size={20}
                     />
                   </ContextMenu.Item>
                   <ContextMenu.Item onClick={() => pickBusySend("steer")}>
@@ -2278,7 +2278,7 @@ export function Composer({
                     )}
                     <ContextMenu.Check
                       on={busySendPrefs.enter === "steer"}
-                      size={16}
+                      size={20}
                     />
                   </ContextMenu.Item>
                 </ContextMenu.Popup>

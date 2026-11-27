@@ -678,7 +678,7 @@ export function SessionSearch({
   const roster = usePeople();
   const canonical = canonicalNames(roster);
   const personOptions = [
-    { value: "all", label: "Anyone", icon: <IconPeople size={18} /> },
+    { value: "all", label: "Anyone", icon: <IconPeople size={20} /> },
     ...sessionOwners(pool, canonical).map(({ key, label }) => ({
       value: key,
       label,
@@ -693,7 +693,7 @@ export function SessionSearch({
       counts.set(project, (counts.get(project) || 0) + 1);
     }
     return [
-      { value: "all", label: "Any repo", icon: <IconRepo size={18} /> },
+      { value: "all", label: "Any repo", icon: <IconRepo size={20} /> },
       ...Array.from(counts.entries())
         .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
         .map(([value]) => ({
@@ -705,7 +705,7 @@ export function SessionSearch({
   })();
 
   const statusOptions = [
-    { value: "all", label: "Any status", icon: <IconStatusRing size={18} /> },
+    { value: "all", label: "Any status", icon: <IconStatusRing size={20} /> },
     ...STATUS_ORDER.map((value) => ({
       value,
       label: STATUS_META[value].label,
@@ -1012,21 +1012,21 @@ export function SessionSearch({
             value={person}
             options={personOptions}
             onChange={setPerson}
-            icon={<IconPeople size={18} />}
+            icon={<IconPeople size={20} />}
           />
           <FilterMenu
             label="Repo"
             value={repo}
             options={repoOptions}
             onChange={setRepo}
-            icon={<IconRepo size={18} />}
+            icon={<IconRepo size={20} />}
           />
           <FilterMenu
             label="Status"
             value={status}
             options={statusOptions}
             onChange={setStatus}
-            icon={<IconStatusRing size={18} />}
+            icon={<IconStatusRing size={20} />}
           />
           {hasSessionFilter && (
             <Button
@@ -1178,7 +1178,7 @@ export function SessionSearch({
                     onClick={() => selectResult(result)}
                   >
                     <span className="inline-flex size-5 shrink-0 items-center justify-center text-dim group-aria-selected:text-fg">
-                      <IconPullRequest size={18} />
+                      <IconPullRequest size={20} />
                     </span>
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                       <span className="truncate text-label font-medium">

@@ -212,7 +212,7 @@ export function SidebarChrome({
                   onClick={() => setFilter({ person: "me" })}
                   aria-label="Back to your workspaces"
                 >
-                  <IconX size={18} aria-hidden="true" />
+                  <IconX size={20} aria-hidden="true" />
                 </button>
               </Tooltip>
             </>
@@ -259,7 +259,7 @@ export function SidebarChrome({
                   collapsed: !workspacesOpen,
                   brighten: false,
                 })}
-                size={18}
+                size={20}
                 style={{
                   transform: workspacesOpen ? "none" : "rotate(-90deg)",
                 }}

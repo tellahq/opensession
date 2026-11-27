@@ -299,7 +299,7 @@ export function Connections() {
               variant="soft"
               icon={
                 <IconHistory
-                  size={16}
+                  size={20}
                   className={refreshing ? "animate-spin" : ""}
                 />
               }
@@ -310,7 +310,7 @@ export function Connections() {
             </Button>
             <Button
               variant="primary"
-              icon={<IconPlus size={16} />}
+              icon={<IconPlus size={20} />}
               onClick={() => setShowAdd(true)}
             >
               Add MCP server
@@ -417,7 +417,7 @@ export function Connections() {
                       )}
                       aria-label={`Manage ${s.name}`}
                     >
-                      <IconDotsHorizontal size={18} />
+                      <IconDotsHorizontal size={20} />
                     </Menu.Trigger>
                     <Menu.Popup align="end" sideOffset={4}>
                       {(s.transport === "http" ||
@@ -426,7 +426,7 @@ export function Connections() {
                           <Menu.Item
                             onClick={() => handleOauthConnect(s, "shared")}
                           >
-                            <IconPlus size={16} className="text-faint" />
+                            <IconPlus size={20} className="text-faint" />
                             {oauthByName[s.name]?.shared
                               ? "Reconnect (workspace)"
                               : "Connect (workspace)"}
@@ -434,13 +434,13 @@ export function Connections() {
                           <Menu.Item
                             onClick={() => handleOauthConnect(s, "me")}
                           >
-                            <IconPlus size={16} className="text-faint" />
+                            <IconPlus size={20} className="text-faint" />
                             Connect my account
                           </Menu.Item>
                           {s.transport === "http" &&
                           oauthByName[s.name]?.manualToken ? (
                             <Menu.Item onClick={() => setTokenConnect(s)}>
-                              <IconPlus size={16} className="text-faint" />
+                              <IconPlus size={20} className="text-faint" />
                               Connect with API token
                             </Menu.Item>
                           ) : null}
@@ -454,7 +454,7 @@ export function Connections() {
                                 )
                               }
                             >
-                              <IconTrash size={16} className="text-faint" />
+                              <IconTrash size={20} className="text-faint" />
                               Disconnect OAuth
                             </Menu.Item>
                           ) : null}
@@ -462,14 +462,14 @@ export function Connections() {
                         </>
                       )}
                       <Menu.Item onClick={() => handleRestrict(s)}>
-                        <IconSliders size={16} className="text-faint" />
+                        <IconSliders size={20} className="text-faint" />
                         {restricted ? "Edit access" : "Restrict access"}
                       </Menu.Item>
                       <Menu.Item
                         onClick={() => handleRemove(s.name)}
                         className="text-red data-[highlighted]:bg-red-soft"
                       >
-                        <IconTrash size={16} />
+                        <IconTrash size={20} />
                         Remove server
                       </Menu.Item>
                     </Menu.Popup>
@@ -1451,7 +1451,7 @@ export function GithubAccounts({
                     className={rowMenuTriggerClasses}
                     aria-label={`Manage @${account.login}`}
                   >
-                    <IconDotsHorizontal size={18} />
+                    <IconDotsHorizontal size={20} />
                   </Menu.Trigger>
                   <Menu.Popup align="end" sideOffset={4}>
                     {/* Reconnect re-runs the device flow, which exists only with
@@ -1461,7 +1461,7 @@ export function GithubAccounts({
                         onClick={startConnect}
                         disabled={flowState !== "idle"}
                       >
-                        <IconPlug size={16} className="text-faint" />
+                        <IconPlug size={20} className="text-faint" />
                         Reconnect
                       </Menu.Item>
                     )}
@@ -1469,7 +1469,7 @@ export function GithubAccounts({
                       onClick={() => disconnect(account.login)}
                       className="text-red data-[highlighted]:bg-red-soft"
                     >
-                      <IconTrash size={16} />
+                      <IconTrash size={20} />
                       Disconnect
                     </Menu.Item>
                   </Menu.Popup>
@@ -1581,7 +1581,7 @@ export function GithubAccounts({
                 className="inline-flex items-center gap-1 text-meta text-dim underline hover:text-fg"
               >
                 Manage which repositories the app can access
-                <IconArrowUpRight size={14} />
+                <IconArrowUpRight size={20} />
               </a>
             </div>
           )}
@@ -1758,21 +1758,21 @@ export function GithubAccounts({
                   className={rowMenuTriggerClasses}
                   aria-label={`Manage @${own!.github}`}
                 >
-                  <IconDotsHorizontal size={18} />
+                  <IconDotsHorizontal size={20} />
                 </Menu.Trigger>
                 <Menu.Popup align="end" sideOffset={4}>
                   <Menu.Item
                     onClick={startConnect}
                     disabled={flowState !== "idle"}
                   >
-                    <IconPlug size={16} className="text-faint" />
+                    <IconPlug size={20} className="text-faint" />
                     Reconnect
                   </Menu.Item>
                   <Menu.Item
                     onClick={() => disconnect(own!.github)}
                     className="text-red data-[highlighted]:bg-red-soft"
                   >
-                    <IconTrash size={16} />
+                    <IconTrash size={20} />
                     Disconnect
                   </Menu.Item>
                 </Menu.Popup>
@@ -1840,14 +1840,14 @@ export function GithubAccounts({
                           className={rowMenuTriggerClasses}
                           aria-label={`Manage @${m.github}`}
                         >
-                          <IconDotsHorizontal size={18} />
+                          <IconDotsHorizontal size={20} />
                         </Menu.Trigger>
                         <Menu.Popup align="end" sideOffset={4}>
                           <Menu.Item
                             onClick={() => disconnect(m.github)}
                             className="text-red data-[highlighted]:bg-red-soft"
                           >
-                            <IconTrash size={16} />
+                            <IconTrash size={20} />
                             Disconnect
                           </Menu.Item>
                         </Menu.Popup>

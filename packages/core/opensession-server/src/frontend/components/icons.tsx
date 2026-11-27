@@ -6,54 +6,57 @@ import React from "react";
  * session UI uses the same quality stroke icons as the product instead of emoji.
  * All are 24×24, `currentColor`, stroke-width 1.5 — size via the `size` prop.
  *
- * Size scale — stick to these three steps so icons feel consistent (bumped
- * one step 2026-07: the old 18/20 read too small):
+ * Size scale: `IconSize`, a closed union, so an off-scale size does not
+ * compile.
  *   20 = inline/meta glyphs riding along with text (draft pencil, trailing
  *        chevrons, tool-status check/x, disclosure carets in rows)
- *   22 = standard standalone icons (the default — search, list rows, menus)
+ *   22 = standard standalone icons (the default: search, list rows, menus)
  *   24 = primary action buttons + overlay chrome (composer send/mic/plus,
  *        lightbox nav, mobile top-bar buttons, the footer settings gear)
+ *   28 = a feature glyph on the website
+ *   40 = the hero glyph of an empty state or a drop target
  * Note: the few hand-drawn 16-viewBox SVGs around the app render ~15% denser
  * than this 24-grid set, so their pixel sizes run smaller for the same visual
  * weight (a raw 17 ≈ iconic 20). Migrate them here when touched.
  */
-type IconProps = React.SVGProps<SVGSVGElement> & {
-  size?: number;
-  /**
-   * Opt out of MIN_ICON_SIZE. For a glyph riding INSIDE a small chip, the
-   * floor inverts its own reasoning: at 20 the icon, not the text, sets the
-   * chip's height, so the chip grows to fit the glyph instead of the glyph
-   * sitting with the word. Only for that case — a standalone icon that looks
-   * too big is a container to rework, not a size to shrink.
-   */
-  dense?: boolean;
-};
+export type IconSize = 20 | 22 | 24 | 28 | 40;
 
-// Hard floor at the scale's smallest step: these 24-grid glyphs only draw
-// ~60% of their box, so anything below 20px renders as a speck. Sub-20 sizes
-// kept sneaking in (11–17px) — clamp them here; if a spot can't fit a 20px
-// icon, rework the container, don't shrink the icon.
+/**
+ * The sizes a `dense` glyph may take: one riding INSIDE a small chip, where
+ * the scale's 20 floor inverts its own reasoning. At 20 the icon, not the
+ * text, sets the chip's height, so the chip grows to fit the glyph instead of
+ * the glyph sitting with the word. Only for that case: a standalone icon that
+ * looks too big is a container to rework, not a size to shrink.
+ */
+export type DenseIconSize = 12 | 14 | 16 | 18;
+
+export type IconProps = React.SVGProps<SVGSVGElement> &
+  ({ size?: IconSize; dense?: false } | { size: DenseIconSize; dense: true });
+
+/** An icon from this set, for a prop or a table that holds one. */
+export type IconComponent = (props: IconProps) => React.JSX.Element;
+
+// The scale's smallest step: these 24-grid glyphs only draw ~60% of their
+// box, so anything below 20px renders as a speck. Sub-20 sizes kept sneaking
+// in (11-17px) and used to be clamped here at runtime, silently, so the number
+// a call site wrote was not the size it got. The type now rules them out.
 //
-// Exported because the clamp is silent, and a container that sizes ITSELF from
-// the same number a caller passed the icon will be too small for what actually
-// renders. `ui/copy`'s CopyCheck is the one that bit: it drew a 15px box for a
-// glyph the clamp had already made 20, so the icon overflowed down and right
-// and read as badly centred. Anything sizing a box around one of these glyphs
-// takes this floor too.
+// Exported for anything that sizes a box around one of these glyphs from the
+// size it passes the icon: `ui/copy`'s CopyCheck once drew a 15px box for a
+// glyph the clamp had made 20, so the icon overflowed and read as badly
+// centred.
 export const MIN_ICON_SIZE = 20;
-const MIN_SIZE = MIN_ICON_SIZE;
 
 function Svg({
   size = 22,
-  dense,
+  dense: _dense,
   children,
   ...rest
 }: IconProps & { children: React.ReactNode }) {
-  const px = dense ? size : Math.max(size, MIN_SIZE);
   return (
     <svg
-      width={px}
-      height={px}
+      width={size}
+      height={size}
       viewBox="0 0 24 24"
       fill="none"
       aria-hidden="true"

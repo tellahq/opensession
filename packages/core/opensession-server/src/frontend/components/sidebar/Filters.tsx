@@ -90,7 +90,7 @@ function FilterSubmenu<Value extends string>({
             <span className={SETTING_GLYPH}>{current.icon}</span>
           )}
           <span className="truncate">{current?.label ?? value}</span>
-          <IconChevronRight className="shrink-0 text-faint" size={17} />
+          <IconChevronRight className="shrink-0 text-faint" size={20} />
         </span>
       </Menu.SubmenuTrigger>
       <Menu.Popup>
@@ -243,7 +243,7 @@ export function FilterPopover({
                 </span>
               )}
               <IconChevronRight
-                size={16}
+                size={20}
                 className="-mr-0.5 shrink-0 text-faint"
               />
             </span>
@@ -330,7 +330,7 @@ export function FilterPopover({
                 options={DENSITY_OPTIONS.map(({ value, label, Icon }) => ({
                   value,
                   label,
-                  icon: <Icon size={16} />,
+                  icon: <Icon size={20} />,
                 }))}
                 onSelect={setSidebarDensity}
               />
@@ -349,11 +349,11 @@ export function FilterPopover({
         <Menu.Root>
           <Menu.Trigger className={cn(SETTING_ROW, SETTING_ROW_PRESSABLE)}>
             <span className={SETTING_GLYPH}>
-              <IconFolderPlus size={16} />
+              <IconFolderPlus size={20} />
             </span>
             <span className="truncate">Add project</span>
             <IconChevronRight
-              size={16}
+              size={20}
               className="-mr-0.5 ml-auto shrink-0 text-faint"
             />
           </Menu.Trigger>
@@ -365,19 +365,19 @@ export function FilterPopover({
           >
             <Menu.Item onClick={() => onAddProject("remote")}>
               <span className={SETTING_GLYPH}>
-                <IconRepo size={16} />
+                <IconRepo size={20} />
               </span>
               Clone repository…
             </Menu.Item>
             <Menu.Item onClick={() => onAddProject("local")}>
               <span className={SETTING_GLYPH}>
-                <IconFolder size={16} />
+                <IconFolder size={20} />
               </span>
               Local folder…
             </Menu.Item>
             <Menu.Item onClick={() => onAddProject("new")}>
               <span className={SETTING_GLYPH}>
-                <IconPlus size={16} />
+                <IconPlus size={20} />
               </span>
               New repository…
             </Menu.Item>
@@ -451,7 +451,7 @@ export const RepoFilterChip = React.forwardRef<
               >
                 <span className="flex min-w-0 items-center gap-2">
                   <span className={SETTING_GLYPH}>
-                    <IconRepo size={16} />
+                    <IconRepo size={20} />
                   </span>
                   <span className="min-w-0 truncate">All repos</span>
                 </span>

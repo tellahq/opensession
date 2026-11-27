@@ -282,13 +282,13 @@ export function DesignSystemGallery() {
               >
                 <UnderlineTabs.Tab
                   value="overview"
-                  icon={<IconChecklist size={16} />}
+                  icon={<IconChecklist size={20} />}
                 >
                   Overview
                 </UnderlineTabs.Tab>
                 <UnderlineTabs.Tab
                   value="files"
-                  icon={<IconRepo size={16} />}
+                  icon={<IconRepo size={20} />}
                   count={8}
                 >
                   Files changed
@@ -304,12 +304,12 @@ export function DesignSystemGallery() {
               >
                 <PlateTabs.Tab
                   value="threads"
-                  icon={<IconBolt size={16} />}
+                  icon={<IconBolt size={20} />}
                   attention
                 >
                   Threads
                 </PlateTabs.Tab>
-                <PlateTabs.Tab value="filters" icon={<IconFilter size={16} />}>
+                <PlateTabs.Tab value="filters" icon={<IconFilter size={20} />}>
                   Filters
                 </PlateTabs.Tab>
               </PlateTabs.Root>
@@ -564,7 +564,7 @@ export function DesignSystemGallery() {
                     className={rowMenuTriggerClasses}
                     aria-label="Manage acme/web"
                   >
-                    <IconDotsHorizontal size={18} />
+                    <IconDotsHorizontal size={20} />
                   </Menu.Trigger>
                   <Menu.Popup align="end" sideOffset={4}>
                     <Menu.Item>Disconnect</Menu.Item>
@@ -605,7 +605,7 @@ export function DesignSystemGallery() {
             <div className="size-full rounded-md bg-accent-soft" />
             <OverlayAction
               aria-label="Remove preview"
-              icon={<IconPlus size={18} />}
+              icon={<IconPlus size={20} />}
             />
           </div>
         </section>

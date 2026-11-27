@@ -143,7 +143,7 @@ function ServerHealthPopover() {
               />
             }
           >
-            <IconX size={18} />
+            <IconX size={20} />
           </Popover.Close>
         </div>
         <div className="space-y-4">

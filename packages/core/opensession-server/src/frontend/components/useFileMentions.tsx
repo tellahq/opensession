@@ -612,15 +612,15 @@ export function useFileMentions({
                         <IconTile name={item.insert} size={20} />
                       ) : isWorkspace ? (
                         <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-active text-dim">
-                          <IconStack size={14} />
+                          <IconStack size={20} />
                         </span>
                       ) : isSession ? (
                         <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-active text-dim">
-                          <IconMessage size={14} />
+                          <IconMessage size={20} />
                         </span>
                       ) : isAction ? (
                         <span className="flex size-5 shrink-0 items-center justify-center text-dim">
-                          {item.icon || <IconPlug size={16} />}
+                          {item.icon || <IconPlug size={20} />}
                         </span>
                       ) : item.repo ? (
                         <span className="shrink-0 rounded-md bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-[5px] py-px text-meta font-semibold text-accent">
@@ -629,11 +629,11 @@ export function useFileMentions({
                       ) : (
                         <span className="flex size-5 shrink-0 items-center justify-center text-faint">
                           {isSkill ? (
-                            <IconBolt size={16} />
+                            <IconBolt size={20} />
                           ) : isDir ? (
-                            <IconFolder size={16} />
+                            <IconFolder size={20} />
                           ) : (
-                            <IconFile size={16} />
+                            <IconFile size={20} />
                           )}
                         </span>
                       )}

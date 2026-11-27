@@ -72,7 +72,7 @@ export function SlackSentNotice({
               variant="ghost"
               size="sm"
               className="phone:size-10"
-              icon={undoing ? <Spinner size="sm" /> : <IconUndo size={16} />}
+              icon={undoing ? <Spinner size="sm" /> : <IconUndo size={20} />}
               aria-label="Undo"
               disabled={undoing}
               onClick={async () => {
@@ -436,7 +436,7 @@ export function ShippedChangeComposer({
               variant="ghost"
               size="md"
               className="ml-auto phone:size-10"
-              icon={<IconX size={18} />}
+              icon={<IconX size={20} />}
               aria-label="Close"
               disabled={status !== "idle"}
               onClick={onCancel}
@@ -524,7 +524,7 @@ export function ShippedChangeComposer({
                 <OverlayAction
                   aria-label="Remove screenshot"
                   disabled={status !== "idle"}
-                  icon={<IconX className="text-red" size={16} />}
+                  icon={<IconX className="text-red" size={20} />}
                   onClick={() => {
                     draftDirtyRef.current = true;
                     setScreenshots((current) =>

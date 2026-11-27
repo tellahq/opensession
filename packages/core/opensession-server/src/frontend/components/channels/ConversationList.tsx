@@ -32,6 +32,7 @@ import {
   IconMessages,
   IconPencil,
   IconSend,
+  type IconSize,
   IconTrash,
   IconX,
 } from "../icons";
@@ -48,7 +49,7 @@ export function ConversationGlyph({
   size = 22,
 }: {
   conversation: Pick<Conversation, "kind" | "name" | "avatarUrl">;
-  size?: number;
+  size?: IconSize;
 }) {
   if (conversation.kind === "dm")
     return (
@@ -126,7 +127,7 @@ type Naming =
   | { mode: "new"; channelId?: string; draft: string }
   | { mode: "rename"; id: string; draft: string };
 
-const SUB_ARROW = <IconChevronRight size={16} className="text-faint" />;
+const SUB_ARROW = <IconChevronRight size={20} className="text-faint" />;
 
 function ConversationRow({
   conversation,
@@ -281,7 +282,7 @@ function Group({
             </span>
           )}
           <IconChevronDown
-            size={16}
+            size={20}
             className={cn(
               "shrink-0 text-faint transition-transform",
               !open && "-rotate-90",

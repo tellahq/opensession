@@ -158,7 +158,7 @@ export function OrganizationSwitcher({
             </span>
             <span className="min-w-0 truncate">{name}</span>
             <IconChevronsUpDown
-              size={14}
+              size={20}
               className="-ml-1 shrink-0 text-faint transition-colors group-hover:text-dim"
               aria-hidden="true"
             />
@@ -193,14 +193,14 @@ export function OrganizationSwitcher({
           </div>
           <Menu.Separator />
           <Menu.Item className={itemClass} onClick={() => onOpenSettings()}>
-            <IconGear size={19} className={MENU_ICON} />
+            <IconGear size={20} className={MENU_ICON} />
             <span className="min-w-0 flex-1 truncate">Settings</span>
           </Menu.Item>
           <Menu.Item
             className={itemClass}
             onClick={() => onOpenSettings("members")}
           >
-            <IconPeople size={19} className={MENU_ICON} />
+            <IconPeople size={20} className={MENU_ICON} />
             <span className="min-w-0 flex-1 truncate">Members</span>
             {memberCount !== null && (
               <span className="text-label tabular-nums text-faint">
@@ -212,14 +212,14 @@ export function OrganizationSwitcher({
             className={itemClass}
             onClick={() => setDownloadOpen(true)}
           >
-            <IconArrowDown size={19} className={MENU_ICON} />
+            <IconArrowDown size={20} className={MENU_ICON} />
             <span className="min-w-0 flex-1 truncate">Download apps</span>
           </Menu.Item>
           <Menu.Item
             className={`${itemClass} text-accent`}
             onClick={() => setInviteOpen(true)}
           >
-            <IconPlus size={19} className="text-accent" />
+            <IconPlus size={20} className="text-accent" />
             <span className="min-w-0 flex-1 truncate">Invite member</span>
           </Menu.Item>
           <Menu.Separator />
@@ -266,7 +266,7 @@ export function OrganizationSwitcher({
                 className={`${itemClass} text-accent`}
                 onClick={() => setAddOpen(true)}
               >
-                <IconPlus size={19} className="text-accent" />
+                <IconPlus size={20} className="text-accent" />
                 <span className="min-w-0 flex-1 truncate">
                   Add organization
                 </span>
@@ -274,7 +274,7 @@ export function OrganizationSwitcher({
             )}
             {canManage && (
               <Menu.Item className={itemClass} onClick={openManage}>
-                <IconServer size={19} className={MENU_ICON} />
+                <IconServer size={20} className={MENU_ICON} />
                 <span className="min-w-0 flex-1 truncate">
                   Manage organizations
                 </span>
@@ -329,7 +329,7 @@ export function OrganizationSwitcher({
             </Button>
             <Button
               variant="primary"
-              icon={<IconCopy size={18} />}
+              icon={<IconCopy size={20} />}
               onClick={() => void copyOrganizationLink()}
             >
               {copied ? "Copied" : "Copy invite link"}

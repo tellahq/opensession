@@ -245,9 +245,9 @@ function OwnerSelect({
   // Automations group the glyph Automations has everywhere else.
   const ownerIcon = (owner: string) =>
     !owner ? (
-      <IconPeople size={16} />
+      <IconPeople size={20} />
     ) : isAutomationsAccountOwner(owner) ? (
-      <IconClock size={16} />
+      <IconClock size={20} />
     ) : (
       <UserAvatar name={owner} size={16} />
     );
@@ -831,7 +831,7 @@ function ClaudeAccountRows({ state }: { state: ClaudeAccountsState }) {
                     className={rowMenuTriggerClasses}
                     aria-label={`Manage ${providerAccountLabel(account)}`}
                   >
-                    <IconDotsHorizontal size={18} />
+                    <IconDotsHorizontal size={20} />
                   </Menu.Trigger>
                   <Menu.Popup align="end" sideOffset={4}>
                     {(account.sidelined || account.exhaustedUntil) && (
@@ -839,13 +839,13 @@ function ClaudeAccountRows({ state }: { state: ClaudeAccountsState }) {
                         onClick={() => state.returnToPool(account)}
                         title="Use this after resetting its limit at Anthropic. A real limit benches it again on the next refused request."
                       >
-                        <IconHistory size={16} className="text-faint" />
+                        <IconHistory size={20} className="text-faint" />
                         Return to pool
                       </Menu.Item>
                     )}
                     {!isClaudeApiAccount(account) && (
                       <Menu.Item onClick={() => state.setSignIn(account)}>
-                        <IconPlug size={16} className="text-faint" />
+                        <IconPlug size={20} className="text-faint" />
                         Connect usage…
                       </Menu.Item>
                     )}
@@ -853,19 +853,19 @@ function ClaudeAccountRows({ state }: { state: ClaudeAccountsState }) {
                       <Menu.Item
                         onClick={() => state.setCredentialsPath(account)}
                       >
-                        <IconSliders size={16} className="text-faint" />
+                        <IconSliders size={20} className="text-faint" />
                         Usage credentials…
                       </Menu.Item>
                     )}
                     <Menu.Item onClick={() => state.rename.start(account)}>
-                      <IconPencil size={16} className="text-faint" />
+                      <IconPencil size={20} className="text-faint" />
                       Rename…
                     </Menu.Item>
                     <Menu.Item
                       onClick={() => state.remove(account)}
                       className="text-red data-[highlighted]:bg-red-soft"
                     >
-                      <IconTrash size={16} />
+                      <IconTrash size={20} />
                       Remove account
                     </Menu.Item>
                   </Menu.Popup>
@@ -908,7 +908,7 @@ export function ClaudeAccountsSection({
         actions={
           <Button
             size="sm"
-            icon={<IconPlus size={16} />}
+            icon={<IconPlus size={20} />}
             onClick={() => setShowAdd(true)}
           >
             Add account
@@ -1223,18 +1223,18 @@ function CodexAccountRows({ state }: { state: CodexAccountsState }) {
                   className={rowMenuTriggerClasses}
                   aria-label={`Manage ${providerAccountLabel(account)}`}
                 >
-                  <IconDotsHorizontal size={18} />
+                  <IconDotsHorizontal size={20} />
                 </Menu.Trigger>
                 <Menu.Popup align="end" sideOffset={4}>
                   <Menu.Item onClick={() => state.rename.start(account)}>
-                    <IconPencil size={16} className="text-faint" />
+                    <IconPencil size={20} className="text-faint" />
                     Rename…
                   </Menu.Item>
                   <Menu.Item
                     onClick={() => state.remove(account)}
                     className="text-red data-[highlighted]:bg-red-soft"
                   >
-                    <IconTrash size={16} />
+                    <IconTrash size={20} />
                     Remove account
                   </Menu.Item>
                 </Menu.Popup>
@@ -1265,7 +1265,7 @@ export function CodexAccountsSection({
         actions={
           <Button
             size="sm"
-            icon={<IconPlus size={16} />}
+            icon={<IconPlus size={20} />}
             onClick={() => setShowAdd(true)}
           >
             Add account
@@ -1529,18 +1529,18 @@ function XaiAccountRows({ state }: { state: XaiAccountsState }) {
                   className={rowMenuTriggerClasses}
                   aria-label={`Manage ${providerAccountLabel(account)}`}
                 >
-                  <IconDotsHorizontal size={18} />
+                  <IconDotsHorizontal size={20} />
                 </Menu.Trigger>
                 <Menu.Popup align="end" sideOffset={4}>
                   <Menu.Item onClick={() => state.rename.start(account)}>
-                    <IconPencil size={16} className="text-faint" />
+                    <IconPencil size={20} className="text-faint" />
                     Rename…
                   </Menu.Item>
                   <Menu.Item
                     onClick={() => state.remove(account)}
                     className="text-red data-[highlighted]:bg-red-soft"
                   >
-                    <IconTrash size={16} />
+                    <IconTrash size={20} />
                     Remove account
                   </Menu.Item>
                 </Menu.Popup>
@@ -1602,7 +1602,7 @@ function ProviderSummaryRow({
           <Button
             size="sm"
             variant="ghost"
-            icon={<IconPlus size={16} />}
+            icon={<IconPlus size={20} />}
             onClick={onAdd}
           >
             Add account
@@ -1671,7 +1671,7 @@ export function ProviderAccountsSection({
                 variant="ghost"
                 icon={
                   <IconHistory
-                    size={16}
+                    size={20}
                     className={refreshing ? "animate-spin" : ""}
                   />
                 }
@@ -1691,7 +1691,7 @@ export function ProviderAccountsSection({
                       "",
                       onboarding && "bg-fg text-bg hover:bg-fg/85",
                     )}
-                    icon={<IconPlus size={16} />}
+                    icon={<IconPlus size={20} />}
                     caret={!onboarding}
                   >
                     Add account
@@ -2333,7 +2333,7 @@ function AddClaudeSignInForm({
                       rel="noreferrer"
                     />
                   }
-                  icon={<IconPlug size={16} />}
+                  icon={<IconPlug size={20} />}
                 >
                   Open Claude sign-in
                 </Button>
@@ -2516,7 +2516,7 @@ function AddClaudeSubscriptionForm({
                     rel="noreferrer"
                   />
                 }
-                icon={<IconPlug size={16} />}
+                icon={<IconPlug size={20} />}
               >
                 Open Claude sign-in
               </Button>

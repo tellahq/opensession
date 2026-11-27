@@ -15,7 +15,7 @@ export function KeepInSidebarIcon({ className }: { className?: string }) {
         aria-hidden="true"
         className="absolute -right-1 -bottom-1 flex size-3 items-center justify-center rounded-full bg-accent text-on-accent ring-2 ring-panel"
       >
-        <IconPlus size={9} />
+        <IconPlus size={20} />
       </span>
     </span>
   );

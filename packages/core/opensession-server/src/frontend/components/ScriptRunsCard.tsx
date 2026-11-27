@@ -200,7 +200,7 @@ function ScriptRunRow({
             variant="ghost"
             size="sm"
             className="-my-1 -mr-1.5 shrink-0 phone:min-w-11"
-            icon={<IconX size={16} />}
+            icon={<IconX size={20} />}
             aria-label="Close"
             onClick={close}
           />

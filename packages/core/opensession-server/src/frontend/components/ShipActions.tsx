@@ -82,9 +82,9 @@ export function ShipActions({
         icon={
           button.primary ? (
             info.mode === "direct" ? (
-              <IconRocket size={18} />
+              <IconRocket size={20} />
             ) : (
-              <IconPullRequest size={18} />
+              <IconPullRequest size={20} />
             )
           ) : undefined
         }
@@ -142,7 +142,7 @@ export function DirectShipNotice({
       role="status"
     >
       <IconRocket
-        size={18}
+        size={20}
         className={shipped ? "shrink-0 text-green" : "shrink-0 text-dim"}
       />
       <span className="font-medium text-fg">

@@ -96,7 +96,7 @@ export function NewSessionPrPicker({
           <span className="truncate">
             {selected ? `#${selected.number}` : "None"}
           </span>
-          <IconChevronRight className="shrink-0 text-faint" size={17} />
+          <IconChevronRight className="shrink-0 text-faint" size={20} />
         </span>
       </Menu.SubmenuTrigger>
       <Menu.Popup className="w-[min(380px,calc(100vw-1rem))]">
@@ -114,7 +114,7 @@ export function NewSessionPrPicker({
             <div className="relative">
               <IconSearch
                 aria-hidden
-                size={16}
+                size={20}
                 className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-faint"
               />
               <Input

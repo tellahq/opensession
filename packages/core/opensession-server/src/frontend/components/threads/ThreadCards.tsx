@@ -106,7 +106,7 @@ function AgentMark({ state }: { state: ThreadState | null }) {
       aria-hidden="true"
       className="relative flex size-7 shrink-0 items-center justify-center rounded-full bg-bg text-dim"
     >
-      <IconRobot size={16} />
+      <IconRobot size={20} />
       <span
         className={cn(
           "absolute right-0 bottom-0 size-2.5 rounded-full ring-2 ring-panel",

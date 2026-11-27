@@ -588,7 +588,7 @@ export function PlainThreadActions({
           <Button
             size="sm"
             variant="default"
-            trailing={<IconArrowUpRight size={14} />}
+            trailing={<IconArrowUpRight size={20} />}
             render={<a href={plainUrl} target="_blank" rel="noreferrer" />}
             title="Open this thread in Plain"
           >
@@ -887,7 +887,7 @@ export function PlainReplyBox({
             }
             disabled={sending}
           >
-            <IconPencil size={14} />
+            <IconPencil size={20} />
             Internal note
           </button>
         </Tooltip>
@@ -950,7 +950,7 @@ export function PlainWaitingBanner({
         className,
       )}
     >
-      <IconClock size={16} className="shrink-0 text-yellow" />
+      <IconClock size={20} className="shrink-0 text-yellow" />
       <span className="min-w-0 truncate">
         {thread.awaitingFirstResponse ? (
           <>
@@ -1021,7 +1021,7 @@ function PlainAttachments({
               />
             ) : (
               <>
-                <IconPaperclip size={16} className="shrink-0 opacity-60" />
+                <IconPaperclip size={20} className="shrink-0 opacity-60" />
                 <span className="truncate">{a.fileName}</span>
                 {a.sizeBytes ? (
                   <span className="shrink-0 text-faint">
@@ -1148,7 +1148,7 @@ export function PlainEntryRow({
               title="Open the triage session for this ticket"
             >
               Session
-              <IconArrowUpRight size={13} />
+              <IconArrowUpRight size={20} />
             </a>
           )}
         </div>

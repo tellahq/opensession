@@ -331,7 +331,7 @@ function BrowserToolbar({
         variant="ghost"
         size="md"
         className="rounded-control"
-        icon={<IconChevronLeft size={16} />}
+        icon={<IconChevronLeft size={20} />}
         onClick={() => step(-1)}
         disabled={!canStep(-1)}
         aria-label={`Back in ${name}`}
@@ -341,7 +341,7 @@ function BrowserToolbar({
         variant="ghost"
         size="md"
         className="rounded-control"
-        icon={<IconChevronRight size={16} />}
+        icon={<IconChevronRight size={20} />}
         onClick={() => step(1)}
         disabled={!canStep(1)}
         aria-label={`Forward in ${name}`}
@@ -351,7 +351,7 @@ function BrowserToolbar({
         variant="ghost"
         size="md"
         className="rounded-control"
-        icon={<IconRestore size={16} />}
+        icon={<IconRestore size={20} />}
         onClick={() => onLoad(address)}
         aria-label={`Reload ${name}`}
         title="Reload"
@@ -392,7 +392,7 @@ function BrowserToolbar({
             "rounded-control",
             annotating && "bg-hover text-fg hover:bg-pressed",
           )}
-          icon={<IconMessage size={16} />}
+          icon={<IconMessage size={20} />}
           onClick={() => onAnnotate?.(!annotating)}
           aria-pressed={annotating}
           aria-label={
@@ -405,7 +405,7 @@ function BrowserToolbar({
         variant="ghost"
         size="md"
         className="rounded-control"
-        icon={<IconArrowUpRight size={16} />}
+        icon={<IconArrowUpRight size={20} />}
         onClick={() => window.open(address, openWindowName, "noopener")}
         aria-label={`Open ${name} in a new browser tab`}
         title="Open in browser"

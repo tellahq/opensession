@@ -584,7 +584,7 @@ export function SessionViewerChrome({
                 <Menu.SubmenuTrigger title="Closed sessions in this workspace">
                   <IconHistory size={20} className={MENU_ICON} />
                   <span className="grow">Archived sessions</span>
-                  <IconChevronRight size={16} className="text-faint" />
+                  <IconChevronRight size={20} className="text-faint" />
                 </Menu.SubmenuTrigger>
                 <Menu.Popup className="min-w-[240px] max-w-[320px]">
                   <ArchivedSessionItems
@@ -612,7 +612,7 @@ export function SessionViewerChrome({
               <Menu.SubmenuTrigger title="Copy this session's transcript">
                 <IconCopy size={20} className={MENU_ICON} />
                 <span className="grow">Copy transcript</span>
-                <IconChevronRight size={16} className="text-faint" />
+                <IconChevronRight size={20} className="text-faint" />
               </Menu.SubmenuTrigger>
               <Menu.Popup>
                 <Menu.Item
@@ -967,7 +967,7 @@ export function SessionViewerChrome({
                   render={
                     menuInTab ? (
                       <button type="button" className={TAB_MENU_CONTROL}>
-                        <IconDotsHorizontal size={16} aria-hidden="true" />
+                        <IconDotsHorizontal size={20} aria-hidden="true" />
                       </button>
                     ) : infoPageOpen ? (
                       <TopBarAction

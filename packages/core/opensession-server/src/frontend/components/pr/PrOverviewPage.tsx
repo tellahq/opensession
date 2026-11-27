@@ -168,7 +168,7 @@ function PhoneIdentity({
         <p className="m-0 break-all font-mono text-meta leading-relaxed text-dim">
           {pr.headRefName}
           <IconArrowRight
-            size={12}
+            size={20}
             className="mx-1 inline-block align-[-1px] text-faint"
           />
           <span className="sr-only"> into </span>

@@ -122,7 +122,7 @@ function CtxFlyoutRow({
         </span>
       )}
       <IconChevronRight
-        size={16}
+        size={20}
         style={{ color: "var(--text-faint)", flexShrink: 0 }}
       />
     </button>

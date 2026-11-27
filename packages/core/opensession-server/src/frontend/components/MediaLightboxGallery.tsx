@@ -717,11 +717,11 @@ export function MediaLightboxGallery({
           </Tooltip>
           <Menu.Popup side="bottom" align="end" sideOffset={6}>
             <Menu.Item onClick={copyImage}>
-              <IconCopy size={18} className={MENU_ICON} />
+              <IconCopy size={20} className={MENU_ICON} />
               Copy image
             </Menu.Item>
             <Menu.Item onClick={copyLink}>
-              <IconLink size={18} className={MENU_ICON} />
+              <IconLink size={20} className={MENU_ICON} />
               Copy link
             </Menu.Item>
           </Menu.Popup>
@@ -1099,7 +1099,7 @@ export function MediaLightboxGallery({
                   disabled={saving}
                   aria-label={saving ? "Preparing image" : "Share image"}
                 >
-                  <IconShare size={21} />
+                  <IconShare size={22} />
                 </button>
               ) : (
                 <a
@@ -1108,7 +1108,7 @@ export function MediaLightboxGallery({
                   className={phoneAction}
                   aria-label="Download"
                 >
-                  <IconDownload size={21} />
+                  <IconDownload size={22} />
                 </a>
               )}
             </div>
@@ -1128,7 +1128,7 @@ export function MediaLightboxGallery({
                   commenting ? "Cancel image comment" : "Comment on image"
                 }
               >
-                <IconMessage size={21} />
+                <IconMessage size={22} />
               </button>
             )}
 
@@ -1139,7 +1139,7 @@ export function MediaLightboxGallery({
               disabled={item.kind === "video"}
               aria-label={copiedImage ? "Image copied" : "Copy image"}
             >
-              {copiedImage ? <IconCheck size={21} /> : <IconCopy size={21} />}
+              {copiedImage ? <IconCheck size={22} /> : <IconCopy size={22} />}
             </button>
           </div>
         </div>
@@ -1231,7 +1231,7 @@ export function MediaLightboxGallery({
               disabled={sendingComment}
               aria-label="Cancel comment"
             >
-              <IconX size={16} />
+              <IconX size={20} />
             </button>
             <button
               type="submit"
@@ -1241,7 +1241,7 @@ export function MediaLightboxGallery({
               disabled={!commentText.trim() || sendingComment}
               aria-label={sendingComment ? "Sending comment" : "Send comment"}
             >
-              <IconArrowUp size={17} />
+              <IconArrowUp size={20} />
             </button>
           </div>
           {commentError && (

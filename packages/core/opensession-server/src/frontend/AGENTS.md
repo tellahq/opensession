@@ -34,6 +34,11 @@ session`, `Try again`); headings name the place or object (`Model providers`).
   it rather than writing a `strokeWidth`, so every glyph carries one weight. A
   new icon is a new export in that file, traced to the same grid; do not inline
   an SVG at a call site or pull one from another set.
+- Icon sizes are a closed type, `IconSize` (20 inline with text, 22
+  standalone, 24 primary actions and overlay chrome, 28 the website's feature
+  glyphs, 40 an empty-state hero). A glyph inside a small chip passes `dense`
+  and takes a `DenseIconSize` (12, 14, 16, 18). An off-scale size does not
+  compile; a component that forwards a size types it `IconSize`.
 - This is the web's convention, not the product's. The native app draws SF
   Symbols for the same reasons in reverse (see `packages/clients/ios/AGENTS.md`), so a glyph
   that exists in both clients is expected to look different in each. Do not

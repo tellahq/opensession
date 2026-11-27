@@ -196,7 +196,7 @@ export function MediaLightboxViewer({
                         onClick={() => onEditAnnotation(annotation)}
                         aria-label="Edit annotation"
                       >
-                        <IconPencil size={17} />
+                        <IconPencil size={20} />
                       </button>
                     )}
                     {onDeleteAnnotation && (
@@ -206,7 +206,7 @@ export function MediaLightboxViewer({
                         onClick={() => onDeleteAnnotation(annotation)}
                         aria-label="Delete annotation"
                       >
-                        <IconTrash size={17} />
+                        <IconTrash size={20} />
                       </button>
                     )}
                   </div>

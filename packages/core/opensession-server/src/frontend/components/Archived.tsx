@@ -471,7 +471,7 @@ export function Archived({
             size="sm"
             icon={
               owner === "everyone" ? (
-                <IconPeople size={18} />
+                <IconPeople size={20} />
               ) : (
                 <UserAvatar
                   name={owner === "mine" ? currentUser : ownerLabel}
@@ -505,7 +505,7 @@ export function Archived({
             </Menu.RadioItem>
           ))}
           <Menu.RadioItem value="everyone" closeOnClick>
-            <IconPeople size={18} className="shrink-0 text-dim" />
+            <IconPeople size={20} className="shrink-0 text-dim" />
             <span className="min-w-0 flex-1">Everyone</span>
             <Menu.Check on={owner === "everyone"} />
           </Menu.RadioItem>
@@ -523,7 +523,7 @@ export function Archived({
               size="sm"
               icon={
                 repo === "all" ? (
-                  <IconRepo size={18} />
+                  <IconRepo size={20} />
                 ) : (
                   <RepoTile name={repo} size={18} />
                 )
@@ -575,7 +575,7 @@ export function Archived({
             <Button
               variant="ghost"
               size="sm"
-              icon={<IconFilter size={18} />}
+              icon={<IconFilter size={20} />}
               aria-label={`Reason, ${REASON_LABEL[reason]}`}
               className={cn("shrink-0", reason !== "all" && "text-fg")}
             />
@@ -791,14 +791,14 @@ export function Archived({
                                 {relativeTime(s.lastActivity)}
                               </span>
                               <IconChevronRight
-                                size={16}
+                                size={20}
                                 className="shrink-0"
                               />
                             </span>
                             <Button
                               size="sm"
                               className={ARCHIVED_ROW_ACTION}
-                              icon={<IconUnarchive size={15} />}
+                              icon={<IconUnarchive size={20} />}
                               aria-label="Restore session"
                               disabled={busy === s.id}
                               onClick={(e) => void handleUnarchive(e, s.id)}
@@ -811,7 +811,7 @@ export function Archived({
                               disabled={busy === s.id}
                               onClick={(e) => void handleUnarchive(e, s.id)}
                             >
-                              <IconUnarchive size={18} className={MENU_ICON} />
+                              <IconUnarchive size={20} className={MENU_ICON} />
                               <span>Restore</span>
                             </ContextMenu.Item>
                           </ContextMenu.Popup>

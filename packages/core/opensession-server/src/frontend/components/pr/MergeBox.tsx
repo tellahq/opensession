@@ -148,9 +148,9 @@ export function MergeStatusIcon({
 }) {
   if (pr.state !== "OPEN" || pr.isDraft)
     return <PrStateIcon state={pr.state} isDraft={pr.isDraft} />;
-  if (tone === "green") return <IconCheck size={18} />;
-  if (tone === "red") return <IconX size={18} />;
-  if (tone === "yellow") return <IconClock size={18} />;
+  if (tone === "green") return <IconCheck size={20} />;
+  if (tone === "red") return <IconX size={20} />;
+  if (tone === "yellow") return <IconClock size={20} />;
   return <PrStateIcon state={pr.state} />;
 }
 

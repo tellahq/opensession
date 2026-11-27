@@ -133,7 +133,7 @@ function SessionStagingPane({
               variant="ghost"
               size="md"
               className="rounded-control"
-              icon={<IconCopy size={16} />}
+              icon={<IconCopy size={20} />}
               onClick={() => shareLink(url, { toast: "Link copied" })}
               aria-label="Copy preview link"
               title="Copy link"
@@ -167,16 +167,16 @@ function SessionStagingPane({
           rel="noopener"
           className="inline-flex items-center gap-2 rounded-md border border-line bg-surface px-4 py-2 text-sm font-medium text-fg transition-colors hover:bg-panel"
         >
-          <IconGlobe size={16} />
+          <IconGlobe size={20} />
           Open staging
-          <IconArrowUpRight size={16} />
+          <IconArrowUpRight size={20} />
         </a>
         <button
           type="button"
           onClick={() => shareLink(url, { toast: "Link copied" })}
           className="inline-flex items-center gap-1.5 text-xs text-dim transition-colors hover:text-fg"
         >
-          <IconCopy size={14} />
+          <IconCopy size={20} />
           Copy link
         </button>
         <div className="max-w-xs text-xs leading-relaxed text-dim">

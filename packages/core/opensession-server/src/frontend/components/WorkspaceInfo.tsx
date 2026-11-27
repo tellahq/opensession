@@ -776,7 +776,7 @@ function AgentReviewCard({
               disabled={busy !== null}
               aria-label={`${AGENT_NAME} actions`}
             >
-              <IconChevronDown size={14} />
+              <IconChevronDown size={20} />
             </Menu.Trigger>
             <Menu.Popup align="end" sideOffset={6} className="min-w-[280px]">
               <Menu.Group>
@@ -835,7 +835,7 @@ function AgentReviewCard({
                 )}
                 aria-hidden
               >
-                <IconRobot size={18} />
+                <IconRobot size={20} />
               </span>
               <span className={GIT_LABEL}>
                 {/* The row names its reviewer now that the section label is
@@ -1180,7 +1180,7 @@ function ReviewerChip({
           <UserAvatar name={faceName} size={20} edge={false} />
         ) : (
           <span className={cn(REVIEW_FACE, "text-dim")} aria-hidden>
-            {selectedTeam ? <IconStack size={18} /> : <IconPeople size={18} />}
+            {selectedTeam ? <IconStack size={20} /> : <IconPeople size={20} />}
           </span>
         )}
         <span className={GIT_LABEL} title={rowTitle}>
@@ -1213,11 +1213,11 @@ function ReviewerChip({
             title={rowTitle}
           >
             {reviewNow ? (
-              <IconChevronDown size={14} />
+              <IconChevronDown size={20} />
             ) : (
               <>
                 {req || githubTarget ? "Change" : "Request"}
-                <IconChevronDown size={14} className={GIT_ACTION_CARET} />
+                <IconChevronDown size={20} className={GIT_ACTION_CARET} />
               </>
             )}
           </Menu.Trigger>
@@ -1457,7 +1457,7 @@ function MediaStrip({ items }: { items: StripItem[] }) {
 								    (a bare white glyph vanishes on light footage). */}
                 <span className="pointer-events-none absolute inset-0 grid place-items-center">
                   <span className="grid size-8 place-items-center rounded-full bg-black/45 text-white backdrop-blur-sm">
-                    <IconPlay size={18} />
+                    <IconPlay size={20} />
                   </span>
                 </span>
               </>
@@ -1866,7 +1866,7 @@ export function WorkspaceInfo({
                         // A poster frame at 14px is a smudge, so a recording
                         // says what it is instead.
                         <IconPlayRectangle
-                          size={14}
+                          size={20}
                           className={cn(
                             "shrink-0 text-faint",
                             a.description && "mt-0.5",
@@ -1874,7 +1874,7 @@ export function WorkspaceInfo({
                         />
                       ) : (
                         <IconFile
-                          size={14}
+                          size={20}
                           className={cn(
                             "shrink-0 text-faint",
                             a.description && "mt-0.5",

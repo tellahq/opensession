@@ -235,7 +235,7 @@ function ThreadGroups({
             {THREAD_STATE_LABEL[group.state]}
             <Count n={group.threads.length} />
             <IconChevronRight
-              size={16}
+              size={20}
               className={cn(
                 "text-faint transition-transform duration-150",
                 !folded.has(group.state) && "rotate-90",
@@ -302,7 +302,7 @@ function PrList({
             </span>
             {pr.url && (
               <IconArrowUpRight
-                size={16}
+                size={20}
                 className="mt-0.5 shrink-0 text-faint opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
               />
             )}
@@ -386,9 +386,9 @@ function ArtifactList({
       {files.map((file) => (
         <ListRow key={file.path} onClick={() => onOpen?.(file.path)}>
           {isSummary(file.path) ? (
-            <IconMessage size={18} className="mt-px shrink-0 text-dim" />
+            <IconMessage size={20} className="mt-px shrink-0 text-dim" />
           ) : (
-            <IconFile size={18} className="mt-px shrink-0 text-dim" />
+            <IconFile size={20} className="mt-px shrink-0 text-dim" />
           )}
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="truncate text-label text-fg">

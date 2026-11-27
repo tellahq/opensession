@@ -75,7 +75,7 @@ export function createWorkspaceGroupingRenderers({
           <span className={SIDEBAR_LANE_COUNT}>{rows.length}</span>
           <IconChevronDown
             className={sidebarChevron(!open)}
-            size={12}
+            size={20}
             style={{ transform: open ? "none" : "rotate(-90deg)" }}
           />
         </button>
@@ -128,7 +128,7 @@ export function createWorkspaceGroupingRenderers({
           <span className={SIDEBAR_LANE_COUNT}>{rows.length + prs.length}</span>
           <IconChevronDown
             className={sidebarChevron(!open)}
-            size={12}
+            size={20}
             style={{ transform: open ? "none" : "rotate(-90deg)" }}
           />
         </button>
@@ -202,7 +202,7 @@ export function createWorkspaceGroupingRenderers({
             </span>
             <IconChevronDown
               className={sidebarChevron(!open)}
-              size={12}
+              size={20}
               style={{ transform: open ? "none" : "rotate(-90deg)" }}
             />
           </button>
@@ -299,7 +299,7 @@ export function createWorkspaceGroupingRenderers({
               </span>
               <IconChevronDown
                 className={sidebarChevron(!open)}
-                size={12}
+                size={20}
                 style={{ transform: open ? "none" : "rotate(-90deg)" }}
               />
             </button>
@@ -350,7 +350,7 @@ export function createWorkspaceGroupingRenderers({
           <span className={SIDEBAR_LANE_COUNT}>{rows.length}</span>
           <IconChevronDown
             className={sidebarChevron(!open)}
-            size={12}
+            size={20}
             style={{ transform: open ? "none" : "rotate(-90deg)" }}
           />
         </button>

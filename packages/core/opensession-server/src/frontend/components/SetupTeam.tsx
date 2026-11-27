@@ -143,7 +143,7 @@ export function TeamSection({
               size="sm"
               variant="default"
               className={onboarding || githubAuth ? "" : undefined}
-              icon={<IconPlus size={16} />}
+              icon={<IconPlus size={20} />}
               onClick={() => {
                 setEditing(null);
                 setDialogOpen(true);
@@ -157,9 +157,9 @@ export function TeamSection({
                 variant="default"
                 icon={
                   inviteCopied ? (
-                    <IconCheck size={16} />
+                    <IconCheck size={20} />
                   ) : (
-                    <IconLink size={16} />
+                    <IconLink size={20} />
                   )
                 }
                 onClick={copyInviteLink}
@@ -316,18 +316,18 @@ function MemberActions({
           className={rowMenuTriggerClasses}
           aria-label={`Manage ${member.name}`}
         >
-          <IconDotsHorizontal size={18} />
+          <IconDotsHorizontal size={20} />
         </Menu.Trigger>
         <Menu.Popup align="end" sideOffset={4}>
           <Menu.Item onClick={onEdit}>
-            <IconPencil size={16} className={MENU_ICON} />
+            <IconPencil size={20} className={MENU_ICON} />
             Edit member
           </Menu.Item>
           <Menu.Item
             className="text-red data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
             onClick={() => setConfirmOpen(true)}
           >
-            <IconTrash size={16} />
+            <IconTrash size={20} />
             Remove member
           </Menu.Item>
         </Menu.Popup>
@@ -462,7 +462,7 @@ export function GithubMemberDialog({
                 icon={
                   <CopyCheck
                     copied={inviteCopy.copied}
-                    idle={<IconLink size={16} />}
+                    idle={<IconLink size={20} />}
                     size={16}
                     checkClassName="text-on-accent"
                   />

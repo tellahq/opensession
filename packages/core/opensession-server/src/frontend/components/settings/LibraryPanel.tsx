@@ -11,6 +11,7 @@ import {
   IconBolt,
   IconChart,
   IconCheckCircle,
+  type IconComponent,
   IconInbox,
   IconListCircles,
   IconMail,
@@ -97,7 +98,7 @@ const FILTERS: { key: "all" | LibraryEntryType; label: string }[] = [
   { key: "package", label: "Packages" },
 ];
 
-type Glyph = { icon: ComponentType<{ size?: number }>; tone: MarkTone };
+type Glyph = { icon: IconComponent; tone: MarkTone };
 
 /** Per tool, because a tool is a place in the app and its glyph is how the
  *  sidebar already names it. */
@@ -209,7 +210,7 @@ function EntryIcon({
         boxShadow: markTileShadow(markTileInk(glyph.tone)),
       }}
     >
-      <Icon size={Math.round(size * 0.54)} />
+      <Icon size={20} />
     </span>
   );
 }

@@ -170,13 +170,13 @@ export function ReviewRail({
             icon={
               <span className={CHECK_TEXT[checksRank(checkSummary)]}>
                 {checkSummary.failed > 0 ? (
-                  <IconX size={15} />
+                  <IconX size={20} />
                 ) : checkSummary.pending > 0 ? (
                   <span className="pr-check-mark-pending animate-[pulse_1.4s_infinite]">
                     ●
                   </span>
                 ) : (
-                  <IconCheck size={15} />
+                  <IconCheck size={20} />
                 )}
               </span>
             }
@@ -272,7 +272,7 @@ export function ReviewRail({
           <RollupRow
             open={filesOpen}
             onToggle={() => setFilesOpen((o) => !o)}
-            icon={<IconFile size={15} className="text-faint" />}
+            icon={<IconFile size={20} className="text-faint" />}
             label={`${files.length} file${files.length === 1 ? "" : "s"}`}
             trailing={
               <DiffStat
@@ -321,12 +321,12 @@ export function ReviewRail({
             title="Open a new session tab on this pull request"
           >
             <span className="inline-flex w-4 shrink-0 items-center justify-center [&>svg]:block">
-              <IconPlus size={15} className="text-faint" />
+              <IconPlus size={20} className="text-faint" />
             </span>
             <span className="min-w-0 flex-1 truncate font-medium">
               New session
             </span>
-            <IconChevronRight size={14} className="shrink-0 text-faint" />
+            <IconChevronRight size={20} className="shrink-0 text-faint" />
           </button>
         </RailSection>
       )}
@@ -417,7 +417,7 @@ function RollupRow({
         </span>
       )}
       <IconChevronRight
-        size={14}
+        size={20}
         className={`shrink-0 text-faint ${open ? "rotate-90" : ""}`}
       />
     </div>

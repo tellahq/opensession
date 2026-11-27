@@ -948,7 +948,7 @@ export function ModelEffortSelect({
       >
         {menuRowTrigger ? (
           <>
-            <IconSparkle size={18} className="shrink-0 text-faint" />
+            <IconSparkle size={20} className="shrink-0 text-faint" />
             <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
               <span className="text-meta font-semibold leading-none text-faint">
                 Model
@@ -957,7 +957,7 @@ export function ModelEffortSelect({
                 {modelLabel}
               </span>
             </span>
-            <IconChevronRight size={16} className="shrink-0 text-faint" />
+            <IconChevronRight size={20} className="shrink-0 text-faint" />
           </>
         ) : fieldTrigger ? (
           <>
@@ -971,7 +971,7 @@ export function ModelEffortSelect({
               )}
             </span>
             <IconChevronDown
-              size={16}
+              size={20}
               className="col-start-3 row-start-1 shrink-0 text-faint"
             />
           </>
@@ -1075,7 +1075,7 @@ export function ModelEffortSelect({
                 {selectedMoreOption && (
                   <span className="truncate">{selectedMoreOption.label}</span>
                 )}
-                <IconChevronRight className="shrink-0" size={17} />
+                <IconChevronRight className="shrink-0" size={20} />
               </span>
             </Menu.SubmenuTrigger>
             <Menu.Popup
@@ -1118,7 +1118,7 @@ export function ModelEffortSelect({
                             {selectedLegacyLabel}
                           </span>
                         )}
-                        <IconChevronRight className="shrink-0" size={17} />
+                        <IconChevronRight className="shrink-0" size={20} />
                       </span>
                     </Menu.SubmenuTrigger>
                     <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
@@ -1163,7 +1163,7 @@ export function ModelEffortSelect({
               <span className="min-w-0 truncate">Effort</span>
               <span className="flex flex-none items-center gap-1 text-dim">
                 {effortLabel}
-                <IconChevronRight className="shrink-0 text-dim" size={17} />
+                <IconChevronRight className="shrink-0 text-dim" size={20} />
               </span>
             </Menu.SubmenuTrigger>
             <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
@@ -1194,7 +1194,7 @@ export function ModelEffortSelect({
               <span className="min-w-0 truncate">Speed</span>
               <span className="flex flex-none items-center gap-1 text-dim">
                 {SPEED_LABELS[effectiveSpeed]}
-                <IconChevronRight className="shrink-0 text-dim" size={17} />
+                <IconChevronRight className="shrink-0 text-dim" size={20} />
               </span>
             </Menu.SubmenuTrigger>
             <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
@@ -1235,7 +1235,7 @@ export function ModelEffortSelect({
         <Menu.SubmenuRoot>
           <Menu.SubmenuTrigger className="justify-between gap-3">
             <span className="min-w-0 truncate">Options</span>
-            <IconChevronRight className="shrink-0 text-dim" size={17} />
+            <IconChevronRight className="shrink-0 text-dim" size={20} />
           </Menu.SubmenuTrigger>
           <Menu.Popup className="min-w-[220px] max-w-[min(360px,calc(100vw-1rem))]">
             {onAutoFallbackChange && (
@@ -1260,7 +1260,7 @@ export function ModelEffortSelect({
                   <span className="min-w-0 truncate">Account</span>
                   <span className="flex flex-none items-center gap-1 text-dim">
                     {accountLabel}
-                    <IconChevronRight className="shrink-0 text-dim" size={17} />
+                    <IconChevronRight className="shrink-0 text-dim" size={20} />
                   </span>
                 </Menu.SubmenuTrigger>
                 <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
@@ -1307,7 +1307,7 @@ export function ModelEffortSelect({
                     <span className="min-w-0 truncate">Conversation usage</span>
                     <span className="flex flex-none items-center gap-1 text-dim">
                       <UsageCost usage={usage} />
-                      <IconChevronRight className="shrink-0" size={17} />
+                      <IconChevronRight className="shrink-0" size={20} />
                     </span>
                   </Menu.SubmenuTrigger>
                   <Menu.Popup className="w-64 max-w-[min(360px,calc(100vw-1rem))]">
@@ -1349,7 +1349,7 @@ export function ModelEffortSelect({
                           {weeklyReadout.remaining}%
                         </span>
                       )}
-                      <IconChevronRight className="shrink-0" size={17} />
+                      <IconChevronRight className="shrink-0" size={20} />
                     </span>
                   </Menu.SubmenuTrigger>
                   <Menu.Popup className="w-80 max-w-[min(360px,calc(100vw-1rem))]">
@@ -1396,7 +1396,7 @@ export function ModelEffortSelect({
                               />
                             ) : (
                               <IconPeople
-                                size={14}
+                                size={20}
                                 className="text-faint"
                                 aria-label="Shared"
                               />
@@ -1428,7 +1428,7 @@ export function ModelEffortSelect({
                       <span className="min-w-0 truncate">Manage accounts</span>
                       <IconChevronRight
                         className="shrink-0 text-dim"
-                        size={17}
+                        size={20}
                       />
                     </Menu.Item>
                   </Menu.Popup>
@@ -1458,7 +1458,7 @@ export function ModelEffortSelect({
               className={cn("justify-between gap-3", atDefault && "opacity-55")}
             >
               <span className="min-w-0 truncate">Reset to default</span>
-              <IconUndo className="shrink-0 text-dim" size={17} />
+              <IconUndo className="shrink-0 text-dim" size={20} />
             </Menu.Item>
           </Menu.Popup>
         </Menu.SubmenuRoot>

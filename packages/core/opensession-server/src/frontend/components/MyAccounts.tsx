@@ -176,18 +176,18 @@ export function MyAccountsPanel() {
                           className={rowMenuTriggerClasses}
                           aria-label={`Manage ${displayName(s.name)}`}
                         >
-                          <IconDotsHorizontal size={18} />
+                          <IconDotsHorizontal size={20} />
                         </Menu.Trigger>
                         <Menu.Popup align="end" sideOffset={4}>
                           <Menu.Item onClick={() => connect(s.name)}>
-                            <IconPlug size={16} className="text-faint" />
+                            <IconPlug size={20} className="text-faint" />
                             Reconnect
                           </Menu.Item>
                           <Menu.Item
                             onClick={() => disconnect(s.name)}
                             className="text-red data-[highlighted]:bg-red-soft"
                           >
-                            <IconTrash size={16} />
+                            <IconTrash size={20} />
                             Disconnect
                           </Menu.Item>
                         </Menu.Popup>

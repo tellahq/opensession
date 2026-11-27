@@ -758,7 +758,7 @@ export function CommentableDiff({ patch, options }: Props) {
               }}
             >
               <IconChevronRight
-                size={16}
+                size={20}
                 className={`shrink-0 text-faint transition-transform ${isOpen ? "rotate-90" : ""}`}
               />
               {isPhone ? (
@@ -778,7 +778,7 @@ export function CommentableDiff({ patch, options }: Props) {
                     {fileExt(base) ? (
                       <ExtBadge name={base} size={14} />
                     ) : (
-                      <IconFile size={17} />
+                      <IconFile size={20} />
                     )}
                   </span>
                   <span className="flex min-w-0 items-center gap-2 overflow-x-auto whitespace-nowrap text-label">
@@ -801,7 +801,7 @@ export function CommentableDiff({ patch, options }: Props) {
                     void startEdit(file);
                   }}
                 >
-                  <IconPencil size={16} />
+                  <IconPencil size={20} />
                 </button>
               </Tooltip>
             )}
@@ -813,9 +813,9 @@ export function CommentableDiff({ patch, options }: Props) {
                 aria-label={`Copy path ${file.name}`}
                 icon={
                   copied === file.name ? (
-                    <IconCheck size={18} />
+                    <IconCheck size={20} />
                   ) : (
-                    <IconCopy size={18} />
+                    <IconCopy size={20} />
                   )
                 }
                 onClick={() => copyPath(file.name)}
@@ -962,7 +962,7 @@ export function CommentableDiff({ patch, options }: Props) {
                         variant="ghost"
                         size="sm"
                         aria-label={`File actions for ${file.name}`}
-                        icon={<IconDotsHorizontal size={18} />}
+                        icon={<IconDotsHorizontal size={20} />}
                       />
                     }
                   />
@@ -979,7 +979,7 @@ export function CommentableDiff({ patch, options }: Props) {
                   )}
                   {isPhone && editable && !isEditing && (
                     <Menu.Item onClick={() => void startEdit(file)}>
-                      <IconPencil size={18} className={MENU_ICON} />
+                      <IconPencil size={20} className={MENU_ICON} />
                       Edit file in place
                     </Menu.Item>
                   )}
@@ -990,7 +990,7 @@ export function CommentableDiff({ patch, options }: Props) {
                           window.open(fileUrl, "_blank", "noopener,noreferrer")
                         }
                       >
-                        <IconArrowUpRight size={18} className={MENU_ICON} />
+                        <IconArrowUpRight size={20} className={MENU_ICON} />
                         <span className="min-w-0 flex-1 truncate">
                           Open file on {fileActions.providerName}
                         </span>
@@ -1000,7 +1000,7 @@ export function CommentableDiff({ patch, options }: Props) {
                           copyMenuValue(fileUrl, "File link copied")
                         }
                       >
-                        <IconLink size={18} className={MENU_ICON} />
+                        <IconLink size={20} className={MENU_ICON} />
                         <span className="min-w-0 flex-1 truncate">
                           Copy link to file
                         </span>
@@ -1011,7 +1011,7 @@ export function CommentableDiff({ patch, options }: Props) {
                   <Menu.Item
                     onClick={() => copyMenuValue(file.name, "File path copied")}
                   >
-                    <IconCopy size={18} className={MENU_ICON} />
+                    <IconCopy size={20} className={MENU_ICON} />
                     <span className="min-w-0 flex-1 truncate">
                       Copy full path
                     </span>
@@ -1019,7 +1019,7 @@ export function CommentableDiff({ patch, options }: Props) {
                   <Menu.Item
                     onClick={() => copyMenuValue(base, "Filename copied")}
                   >
-                    <IconCopy size={18} className={MENU_ICON} />
+                    <IconCopy size={20} className={MENU_ICON} />
                     <span className="min-w-0 flex-1 truncate">
                       Copy filename
                     </span>
@@ -1028,7 +1028,7 @@ export function CommentableDiff({ patch, options }: Props) {
                     file.type !== "deleted" &&
                     !IMAGE_EXT.test(file.name) && (
                       <Menu.Item onClick={() => void copyFileContents(file)}>
-                        <IconCopy size={18} className={MENU_ICON} />
+                        <IconCopy size={20} className={MENU_ICON} />
                         <span className="min-w-0 flex-1 truncate">
                           Copy file contents
                         </span>
@@ -1184,7 +1184,7 @@ export function CommentableDiff({ patch, options }: Props) {
                   onClick={() => toggleGroup(group.title)}
                 >
                   <IconChevronRight
-                    size={16}
+                    size={20}
                     className={`shrink-0 text-faint transition-transform ${collapsed ? "" : "rotate-90"}`}
                   />
                   <span className="text-label font-semibold">
@@ -1257,12 +1257,12 @@ function ResolvedReviewThread({
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        <IconCheckCircle size={17} className="shrink-0 text-dim" />
+        <IconCheckCircle size={20} className="shrink-0 text-dim" />
         <span className="min-w-0 flex-1 truncate">
           {count} resolved {count === 1 ? "comment" : "comments"} from {author}
         </span>
         <IconChevronRight
-          size={16}
+          size={20}
           className={`shrink-0 text-faint transition-transform ${open ? "rotate-90" : ""}`}
         />
       </button>

@@ -180,7 +180,7 @@ function CommitRow({
           onClick={toggle}
         >
           <IconChevronRight
-            size={14}
+            size={20}
             className={cn(
               "mt-1 shrink-0 text-faint transition-transform",
               open && "rotate-90",
@@ -402,7 +402,7 @@ export function MemoryRepoPage({
         <Button
           size="sm"
           variant="ghost"
-          icon={<IconChevronLeft size={18} />}
+          icon={<IconChevronLeft size={20} />}
           onClick={onBack}
         >
           Back

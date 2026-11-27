@@ -156,7 +156,7 @@ function NavSearch({
     <div className={className} ref={ref}>
       <div className="relative">
         <IconSearch
-          size={sheet ? 20 : 18}
+          size={20}
           className={cn(
             "pointer-events-none absolute top-1/2 -translate-y-1/2 text-faint",
             sheet ? "left-3.5" : "left-2",
@@ -213,7 +213,7 @@ function NavSearch({
             )}
             onClick={() => onChange("")}
           >
-            <IconX size={sheet ? 18 : 16} />
+            <IconX size={20} />
           </button>
         )}
       </div>

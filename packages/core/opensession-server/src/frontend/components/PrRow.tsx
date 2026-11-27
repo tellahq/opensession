@@ -13,7 +13,13 @@ import {
 } from "../lib/sidebar-classes";
 import { providerFromUrl } from "../lib/provider";
 import { shortTime } from "../lib/time";
-import { IconArrowUpRight, IconPin, IconPullRequest, IconX } from "./icons";
+import {
+  IconArrowUpRight,
+  IconPin,
+  IconPullRequest,
+  type IconSize,
+  IconX,
+} from "./icons";
 import { cn } from "../ui/cn";
 import { ContextMenu } from "../ui/menu";
 import { Popover } from "../ui/popover";
@@ -39,7 +45,13 @@ import { useIsPhone } from "../hooks/useIsPhone";
 // The ws rows' PR color language (prStatusMark), computed off the queue item's
 // OpenPr: red = blocked (conflict / failing checks / changes requested),
 // yellow = checks running, faint = draft, green = open and healthy.
-function PrStateMark({ item, size }: { item: ReviewQueueItem; size: number }) {
+function PrStateMark({
+  item,
+  size,
+}: {
+  item: ReviewQueueItem;
+  size: IconSize;
+}) {
   const status = prStatusMark(item.pr);
   return (
     <span title={item.status || status.label}>
@@ -116,7 +128,7 @@ export function PrRow({
             {needsMyReview ? (
               <StatusDot state="waiting" title="Needs your review" />
             ) : (
-              <PrStateMark item={item} size={18} />
+              <PrStateMark item={item} size={20} />
             )}
           </span>
           <span className={SIDEBAR_ROW_TITLE}>{item.pr.title}</span>
@@ -168,7 +180,7 @@ export function PrRow({
                     }
                   }}
                 >
-                  <IconPin size={19} fill="currentColor" />
+                  <IconPin size={20} fill="currentColor" />
                 </span>
               </Tooltip>
             )}
@@ -190,7 +202,7 @@ export function PrRow({
                   }
                 }}
               >
-                <IconX size={19} />
+                <IconX size={20} />
               </span>
             </Tooltip>
           </span>
@@ -202,7 +214,7 @@ export function PrRow({
           <ContextMenu.Item
             render={<a href={item.pr.url} target="_blank" rel="noopener" />}
           >
-            <IconArrowUpRight size={18} />
+            <IconArrowUpRight size={20} />
             <span className="grow">
               Open on {providerFromUrl(item.pr.url).name}
             </span>
@@ -213,7 +225,7 @@ export function PrRow({
             disabled={closing}
             onClick={onClose}
           >
-            <IconX size={18} />
+            <IconX size={20} />
             <span className="grow">
               {closing ? "Closing…" : "Close pull request…"}
             </span>

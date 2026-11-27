@@ -229,7 +229,7 @@ export function PrSeriesRow({
             rel="noopener"
             aria-label={`Open ${repoLabel(prRef.repo)} pull request #${prRef.number} on ${provider.name}`}
           >
-            <IconArrowUpRight size={16} />
+            <IconArrowUpRight size={20} />
           </a>
         </Tooltip>
       )}

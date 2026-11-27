@@ -273,7 +273,7 @@ type SummaryChangeFile = {
 
 function ReviewerAvatar({ reviewer }: { reviewer: ReviewLine }) {
   if (reviewer.team)
-    return <IconStack size={16} className="shrink-0 text-dim" />;
+    return <IconStack size={20} className="shrink-0 text-dim" />;
   return (
     <UserAvatar
       name={reviewer.name}
@@ -1225,7 +1225,7 @@ export function WorkspaceSummaryBody({
             </span>
           )}
           <IconChevronDown
-            size={14}
+            size={20}
             className={cn(
               "shrink-0 text-faint transition-transform motion-reduce:transition-none",
               workOpen && "rotate-180",
@@ -1403,7 +1403,7 @@ export function WorkspaceSummaryBody({
               >
                 <span>Review</span>
                 <IconChevronRight
-                  size={14}
+                  size={20}
                   className="text-faint opacity-50 transition-[color,opacity,transform] group-hover/review:translate-x-0.5 group-hover/review:text-fg group-hover/review:opacity-100 phone:opacity-100"
                 />
               </Button>
@@ -1572,7 +1572,7 @@ export function WorkspaceSummaryBody({
                 <span className={cn(WS_SUMMARY_STATE, pickerReviewer.tone)}>
                   {pickerReviewer.state}
                 </span>
-                <IconChevronDown size={14} className="shrink-0 text-faint" />
+                <IconChevronDown size={20} className="shrink-0 text-faint" />
               </Menu.Trigger>
               <Menu.Popup align="end" sideOffset={6} className="min-w-[200px]">
                 {reviewerMenuItems()}
@@ -1706,7 +1706,7 @@ export function WorkspaceSummaryBody({
                         />
                         <span className="pointer-events-none absolute inset-0 grid place-items-center">
                           <span className="grid size-7 place-items-center rounded-full bg-black/45 text-white backdrop-blur-sm">
-                            <IconPlay size={16} />
+                            <IconPlay size={20} />
                           </span>
                         </span>
                       </>
@@ -1773,7 +1773,7 @@ export function WorkspaceSummaryBody({
                           />
                           <span className="pointer-events-none absolute inset-0 grid place-items-center">
                             <span className="grid size-7 place-items-center rounded-full bg-black/45 text-white backdrop-blur-sm">
-                              <IconPlay size={16} />
+                              <IconPlay size={20} />
                             </span>
                           </span>
                         </>
