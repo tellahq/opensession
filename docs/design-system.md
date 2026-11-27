@@ -96,19 +96,35 @@ a primitive can be ported without touching its call sites, and why the port of
 routes, at both widths and in both themes, matched the Tailwind version.
 
 Ported so far: `Button`, `Badge`, `Card`, `Spinner`, `Switch`,
-`Checkbox`, `Radio`, `Segmented`, both `Tabs` styles, the field family
-(`Input`, `Textarea`, native `Select`, `Field`, and the select trigger in
-`ui/field-styles.ts`), and the popup family (`Menu`, `ContextMenu`, `Select`,
-`Combobox`, `Popover`, `Tooltip`, on `ui/popup-styles.ts`). The class-string
-helpers (`fieldClasses`, `selectTriggerClasses`, `popupSurfaceClasses` and
-friends) now return StyleX class names, so the raw controls that use them
-moved too. Shared pieces:
-`ui/sx.ts` (merges a primitive's StyleX props with a caller's legacy
-`className`, and defines the `LayoutStyles` type every `xstyle` uses),
-`ui/choice-styles.ts` (the box a Checkbox and a Radio share), and
-`ui/markers.stylex.ts` (named markers for `stylex.when.ancestor`, so a tab's
-inner plate reacts to its own tab's hover, not to any ancestor's). Three
-things to know when porting:
+`Checkbox`, `Radio`, `Segmented`, both `Tabs` styles; the field family
+(`Input`, `Textarea`, native `Select`, `Field`, and the select trigger, in
+`ui/field-styles.ts`); the popup family (`Menu`, `ContextMenu`, `Select`,
+`Combobox`, `Popover`, `Tooltip`, on `ui/popup-styles.ts`); the dialog
+family (`Modal` in all three variants, `ResponsiveDialog` and the sheet
+parts, `Confirm`, sharing `ui/dialog-styles.ts`); and the leaves
+(`PulseDot`, `WorkingPill`, `ListRow`, the page layout and header,
+`FloatingStatus`, `OverflowFadeText`, the collapsible panel, `Disclosure`,
+`Fold`, `CopyCheck`, `DeviceCode`, `TextShimmer`, the setting rows,
+`HoldToConfirmButton`'s fill, `DataGrid`). The class-string helpers
+(`fieldClasses`, `selectTriggerClasses`, `popupSurfaceClasses`,
+`collapsiblePanelClasses`, `listRowClass`, `SETTING_ROW` and friends) now
+return StyleX class names, so the raw controls that use them moved too.
+
+Still Tailwind inside `ui/`: `settings.tsx`, `state.tsx`, `toast.tsx`,
+`date-picker.tsx`, `swipe-deck.tsx`, `top-bar.tsx` and `overlay-action.tsx`.
+Each is tied to feature code through descendant selectors or shared
+`lib/*-classes.ts` strings (the settings plate's `bg-settings-plate` hook,
+`.settings-sheet` ancestors, the app header's control classes), so they move
+with their call-site areas rather than alone.
+
+Other shared pieces: `ui/sx.ts` (merges a primitive's StyleX props with a
+caller's legacy `className`, and defines the `LayoutStyles` type every
+`xstyle` uses), `ui/choice-styles.ts` (the box a Checkbox and a Radio share),
+`ui/focus-styles.ts` (the `focus-ring` utility as a style), and
+`ui/markers.stylex.ts` (named markers for `stylex.when.ancestor`, so a part
+reacts to its own control's hover or state, not to any ancestor's).
+
+Things to know when porting:
 
 - base.css squircles any element whose class contains `rounded-`. StyleX
   classes don't match, so a rounded StyleX element sets
@@ -124,6 +140,16 @@ things to know when porting:
   must exclude that state (`":enabled:hover"`,
   `":not([data-popup-open]):not(:focus):hover"`), or it wins under the
   pointer.
+- tailwind-merge only dropped a primitive's class when the caller's class had
+  the same variant. Now every caller utility lands after the StyleX sheet, so
+  a caller's unprefixed `gap-3.5` also beats the primitive's phone gap, and a
+  class tailwind-merge used to drop (a mistaken `text-input-phone` taken for
+  a colour, an `h-10` under a variant height) applies again. The parity
+  sweep finds these; decide each one, do not paper over it.
+- Some utility names are also hooks: base.css makes `.text-supporting` text
+  selectable, and Settings tightens the leading of `.text-item-title` and
+  friends from an ancestor. A port that drops the utility keeps the hook
+  (`SELECTABLE` in `ui/dialog-styles.ts`) or the value it was given.
 
 The order of work:
 

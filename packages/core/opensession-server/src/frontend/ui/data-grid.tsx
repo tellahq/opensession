@@ -12,7 +12,96 @@
  */
 
 import React from "react";
-import { cn } from "./cn";
+import * as stylex from "@stylexjs/stylex";
+import { sx } from "./sx";
+import {
+  color,
+  corner,
+  geometry,
+  layer,
+  media,
+  radius,
+  space,
+  text,
+  weight,
+} from "./tokens.stylex";
+
+const RULE = {
+  borderBottomStyle: "solid",
+  borderBottomWidth: geometry.hairline,
+  borderBottomColor: color.divider,
+} as const;
+
+const styles = stylex.create({
+  scroller: { minHeight: 0, minWidth: 0, flex: "1", overflow: "auto" },
+  table: {
+    width: "max-content",
+    minWidth: "100%",
+    borderCollapse: "collapse",
+    fontSize: text.label,
+  },
+  head: {
+    position: "sticky",
+    top: space.s0,
+    zIndex: layer.tableHead,
+    backgroundColor: color.page,
+  },
+  headLabel: {
+    display: "inline-flex",
+    maxWidth: geometry.gridHeaderMax,
+    alignItems: "center",
+    gap: space.s4,
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  arrow: { flexShrink: 0 },
+  th: {
+    ...RULE,
+    whiteSpace: "nowrap",
+    paddingInline: space.s12,
+    paddingBlock: space.s6,
+    fontWeight: weight.medium,
+    color: color.dim,
+  },
+  left: { textAlign: "left" },
+  right: { textAlign: "right" },
+  sort: {
+    marginInline: `calc(-1 * ${space.s4})`,
+    cursor: "pointer",
+    borderRadius: radius.sm,
+    ["cornerShape"]: corner.squircle,
+    borderWidth: 0,
+    backgroundColor: color.transparent,
+    paddingInline: space.s4,
+    paddingBlock: space.s2,
+    color: {
+      default: "inherit",
+      ":hover": { default: null, [media.hover]: color.fg },
+    },
+  },
+  row: {
+    backgroundColor: {
+      default: null,
+      ":hover": { default: null, [media.hover]: color.hover },
+    },
+  },
+  td: {
+    ...RULE,
+    maxWidth: geometry.gridCellMax,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    paddingInline: space.s12,
+    paddingBlock: space.s6,
+    verticalAlign: "top",
+    color: color.fg,
+  },
+  numeric: { textAlign: "right", fontVariantNumeric: "tabular-nums" },
+  null: { fontStyle: "italic", color: color.faint },
+});
 import { IconArrowDown, IconArrowUp } from "../components/icons";
 
 export type DataGridCell = string | number | null;
@@ -57,20 +146,28 @@ export function DataGrid({
     });
   };
   return (
-    <div className={cn("min-h-0 min-w-0 flex-1 overflow-auto", className)}>
-      <table className="w-max min-w-full border-collapse text-label">
-        <thead className="sticky top-0 z-[1] bg-surface">
+    <div {...sx(styles.scroller, className)}>
+      <table {...stylex.props(styles.table)}>
+        <thead {...stylex.props(styles.head)}>
           <tr>
             {columns.map((column, index) => {
               const active = sort?.column === column;
               const label = (
-                <span className="inline-flex max-w-[320px] items-center gap-1">
-                  <span className="truncate">{column}</span>
+                <span {...stylex.props(styles.headLabel)}>
+                  <span {...stylex.props(styles.truncate)}>{column}</span>
                   {active &&
                     (sort.dir === "asc" ? (
-                      <IconArrowUp size={14} dense className="shrink-0" />
+                      <IconArrowUp
+                        size={14}
+                        dense
+                        {...stylex.props(styles.arrow)}
+                      />
                     ) : (
-                      <IconArrowDown size={14} dense className="shrink-0" />
+                      <IconArrowDown
+                        size={14}
+                        dense
+                        {...stylex.props(styles.arrow)}
+                      />
                     ))}
                 </span>
               );
@@ -85,15 +182,15 @@ export function DataGrid({
                         : "descending"
                       : undefined
                   }
-                  className={cn(
-                    "whitespace-nowrap border-b border-divider px-3 py-1.5 font-medium text-dim",
-                    numeric[index] ? "text-right" : "text-left",
+                  {...stylex.props(
+                    styles.th,
+                    numeric[index] ? styles.right : styles.left,
                   )}
                 >
                   {onSort ? (
                     <button
                       type="button"
-                      className="-mx-1 cursor-pointer rounded-sm border-0 bg-transparent px-1 py-0.5 text-inherit hover:text-fg"
+                      {...stylex.props(styles.sort)}
                       onClick={() => toggle(column)}
                     >
                       {label}
@@ -108,18 +205,15 @@ export function DataGrid({
         </thead>
         <tbody>
           {rows.map((row, rowIndex) => (
-            <tr key={rowIndex} className="hover:bg-hover">
+            <tr key={rowIndex} {...stylex.props(styles.row)}>
               {row.map((cell, index) => (
                 <td
                   key={index}
-                  className={cn(
-                    "max-w-[420px] truncate whitespace-nowrap border-b border-divider px-3 py-1.5 align-top text-fg",
-                    numeric[index] && "text-right tabular-nums",
-                  )}
+                  {...stylex.props(styles.td, numeric[index] && styles.numeric)}
                   title={cell === null ? undefined : String(cell)}
                 >
                   {cell === null ? (
-                    <span className="italic text-faint">NULL</span>
+                    <span {...stylex.props(styles.null)}>NULL</span>
                   ) : (
                     String(cell)
                   )}

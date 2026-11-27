@@ -1,16 +1,51 @@
 import * as React from "react";
-import {
-  SETTING_GLYPH,
-  SETTING_ROW,
-  SETTING_ROW_PRESSABLE,
-} from "../lib/setting-row-classes";
+import * as stylex from "@stylexjs/stylex";
+import { settingRow } from "./setting-row-styles";
+import { sx } from "./sx";
+import { color, space } from "./tokens.stylex";
+
+const styles = stylex.create({
+  label: { flexShrink: 0, color: color.dim },
+  labelOff: { color: color.faint },
+  value: {
+    marginLeft: "auto",
+    display: "flex",
+    minWidth: 0,
+    alignItems: "center",
+    gap: space.s8,
+  },
+  valueInk: { color: color.fg },
+  // Pressing a row it can't apply yet does nothing, and the pointer says so.
+  inert: { cursor: "default" },
+  optionLead: {
+    display: "flex",
+    minWidth: 0,
+    alignItems: "center",
+    gap: space.s8,
+  },
+  truncate: {
+    minWidth: 0,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  ellipsis: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  chevron: {
+    marginRight: `calc(-1 * ${space.s2})`,
+    flexShrink: 0,
+    color: color.faint,
+  },
+});
 import { IconChevronDown } from "../components/icons";
-import { cn } from "./cn";
 import { Menu } from "./menu";
 import { Switch } from "./switch";
 
 /** The rows a settings popover is made of. The rule they follow, and why they
- *  wear a menu row rather than a field, is in `lib/setting-row-classes`. */
+ *  wear a menu row rather than a field, is in `ui/setting-row-styles`. */
 export interface SettingOption {
   value: string;
   label: string;
@@ -29,11 +64,9 @@ export function SettingRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className={cn(SETTING_ROW, className)}>
-      <span className="shrink-0 text-dim">{label}</span>
-      <span className="ml-auto flex min-w-0 items-center gap-2">
-        {children}
-      </span>
+    <div {...sx(settingRow.row, className)}>
+      <span {...stylex.props(styles.label)}>{label}</span>
+      <span {...stylex.props(styles.value)}>{children}</span>
     </div>
   );
 }
@@ -53,14 +86,14 @@ export function SwitchRow({
 }) {
   return (
     <label
-      className={cn(
-        SETTING_ROW,
-        disabled ? "cursor-default" : SETTING_ROW_PRESSABLE,
+      {...stylex.props(
+        settingRow.row,
+        disabled ? styles.inert : settingRow.pressable,
       )}
     >
       {/* A setting that cannot apply yet dims its name too: a live label
 			    over a faded switch reads as a switch that failed to draw. */}
-      <span className={cn("shrink-0", disabled ? "text-faint" : "text-dim")}>
+      <span {...stylex.props(styles.label, disabled && styles.labelOff)}>
         {label}
       </span>
       <Switch
@@ -102,9 +135,11 @@ export function ValueOptions({
           closeOnClick
           className="justify-between gap-3"
         >
-          <span className="flex min-w-0 items-center gap-2">
-            {glyphs && <span className={SETTING_GLYPH}>{option.icon}</span>}
-            <span className="min-w-0 truncate">{option.label}</span>
+          <span {...stylex.props(styles.optionLead)}>
+            {glyphs && (
+              <span {...stylex.props(settingRow.glyph)}>{option.icon}</span>
+            )}
+            <span {...stylex.props(styles.truncate)}>{option.label}</span>
           </span>
           <Menu.Check on={option.value === value} />
         </Menu.RadioItem>
@@ -139,17 +174,17 @@ export function ValueRow({
   const current = options.find((option) => option.value === value);
   return (
     <Menu.Root>
-      <Menu.Trigger
-        className={cn(SETTING_ROW, SETTING_ROW_PRESSABLE, className)}
-      >
-        <span className="shrink-0 text-dim">{label}</span>
-        <span className="ml-auto flex min-w-0 items-center gap-2 text-fg">
+      <Menu.Trigger {...sx([settingRow.row, settingRow.pressable], className)}>
+        <span {...stylex.props(styles.label)}>{label}</span>
+        <span {...stylex.props(styles.value, styles.valueInk)}>
           {current?.icon && (
-            <span className={SETTING_GLYPH}>{current.icon}</span>
+            <span {...stylex.props(settingRow.glyph)}>{current.icon}</span>
           )}
-          <span className="truncate">{current?.label ?? value}</span>
+          <span {...stylex.props(styles.ellipsis)}>
+            {current?.label ?? value}
+          </span>
           {trailing}
-          <IconChevronDown size={16} className="-mr-0.5 shrink-0 text-faint" />
+          <IconChevronDown size={16} {...stylex.props(styles.chevron)} />
         </span>
       </Menu.Trigger>
       <Menu.Popup align="end" sideOffset={6}>

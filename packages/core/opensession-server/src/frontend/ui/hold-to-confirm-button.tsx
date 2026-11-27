@@ -1,6 +1,24 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Button, type ButtonProps } from "./button";
+import * as stylex from "@stylexjs/stylex";
 import { cn } from "./cn";
+import { color, layer, space } from "./tokens.stylex";
+
+/** `color-mix` ink at a fixed strength over whatever surface is behind it. */
+const ink = (c: string, pct: number) =>
+  `color-mix(in oklab, ${c} ${pct}%, transparent)`;
+
+const styles = stylex.create({
+  // The fill that sweeps across the plate while it is held.
+  fill: {
+    pointerEvents: "none",
+    position: "absolute",
+    inset: space.s0,
+    transformOrigin: "left",
+    backgroundColor: ink(color.onScrim, 20),
+  },
+  label: { position: "relative", zIndex: layer.sticky },
+});
 
 export interface HoldToConfirmButtonProps extends Omit<
   ButtonProps,
@@ -111,7 +129,7 @@ export function HoldToConfirmButton({
     >
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 origin-left bg-white/20"
+        {...stylex.props(styles.fill)}
         style={{
           transform: holding ? "scaleX(1)" : "scaleX(0)",
           transition: holding
@@ -119,7 +137,7 @@ export function HoldToConfirmButton({
             : "transform 140ms ease-out",
         }}
       />
-      <span className="relative z-10">{displayLabel}</span>
+      <span {...stylex.props(styles.label)}>{displayLabel}</span>
     </Button>
   );
 }

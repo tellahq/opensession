@@ -398,6 +398,9 @@ export const geometry = stylex.defineConsts({
   codeTrackingBack: "-0.14em",
   /** Half a pixel down: a word reads a touch high at the geometric centre. */
   opticalNudge: "0 0.5px",
+  /** A data grid's widest header label and widest cell before truncating. */
+  gridHeaderMax: "320px",
+  gridCellMax: "420px",
   /** A divider rule. */
   hairline: "1px",
   /** A select's popup is never narrower than its trigger. */
@@ -429,6 +432,8 @@ export const layer = stylex.defineConsts({
   modal: "10001",
   /** A sticky bar inside a scrolling surface. */
   sticky: "10",
+  /** A sticky table head over its own rows. */
+  tableHead: "1",
 });
 
 /** Backdrop blurs: the faint one under a dialog's scrim, the heavier one
