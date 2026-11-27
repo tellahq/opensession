@@ -9,10 +9,7 @@ import {
   ARCHIVED_SEARCH_HEADER,
   HEADER_TITLE_COL,
   HEADER_TITLE_MODEL,
-  HEADER_TITLE_PILL,
-  HEADER_TITLE_PILL_CENTERED,
-  HEADER_TITLE_PILL_FADE,
-  HEADER_TITLE_PILL_TAPPABLE,
+  headerTitlePill,
   HEADER_TITLE_REPO,
   HEADER_TITLE_ROW,
   HEADER_TITLE_TEXT,
@@ -157,11 +154,15 @@ export function AppMobileHeader({
                 route.view === "session" || phoneTitleHandedOver || undefined
               }
               className={cn(
-                route.view === "session" && currentSession
-                  ? `${HEADER_TITLE_PILL_TAPPABLE} session-settings-trigger`
-                  : HEADER_TITLE_PILL,
-                route.view !== "session" && HEADER_TITLE_PILL_FADE,
-                route.view === "archived" && HEADER_TITLE_PILL_CENTERED,
+                headerTitlePill({
+                  tappable: route.view === "session" && !!currentSession,
+                  fade: route.view !== "session",
+                  centered: route.view === "archived",
+                }),
+                // The hook the session settings menu anchors to.
+                route.view === "session" &&
+                  currentSession &&
+                  "session-settings-trigger",
               )}
               {...(route.view === "session" && currentSession
                 ? {

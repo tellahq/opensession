@@ -46,9 +46,9 @@ test("phone pages and sheets share one bar and action rhythm", () => {
     </PhoneTopBar>,
   );
 
-  expect(html).toContain("phone:h-11");
-  expect(html).toContain("size-11");
-  expect(html).toContain("rounded-full");
+  // StyleX names classes `<file>__<styles>.<key>` under test.
+  expect(html).toContain("top-bar__styles.phoneBar");
+  expect(html).toContain("top-bar__styles.phoneAction");
   expect(html).toContain("Settings");
 });
 
@@ -61,7 +61,8 @@ test("floating controls reuse application mobile chrome", () => {
   );
 
   expect(html).toContain("pwa-header-back");
-  expect(html).toContain("mobile-header-control-surface");
+  expect(html).toContain("appHeaderStyles.glassFill");
+  expect(html).toContain("appHeaderStyles.glassEffects");
   expect(html).toContain('aria-label="Back"');
   expect(html).toContain('aria-label="More"');
 });

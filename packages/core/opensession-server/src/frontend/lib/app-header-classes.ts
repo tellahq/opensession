@@ -1,3 +1,14 @@
+import * as stylex from "@stylexjs/stylex";
+import type { CompiledStyles, StyleXArray } from "@stylexjs/stylex";
+import { appHeaderStyles as h } from "../ui/app-header-styles";
+import { titlePillMarker } from "../ui/markers.stylex";
+import { cn } from "../ui/cn";
+
+/** A StyleX style set as the class string these constants have always been. */
+const sx = (
+  ...styles: StyleXArray<CompiledStyles | boolean | null | undefined>[]
+): string => stylex.props(styles).className ?? "";
+
 /**
  * The phone top bar — one iOS-style nav bar, and everything that rides in it.
  *
@@ -45,10 +56,6 @@
  * keeps a small gap on a flat-top device while a notched one still gets its
  * full safe-area inset.
  */
-const APP_HEADER_BASE =
-  "hidden h-[var(--header-h)] shrink-0 items-center justify-between bg-sidebar " +
-  "px-4 pt-[env(safe-area-inset-top,0px)] pb-0 " +
-  "phone:flex phone:px-3 phone:pt-[max(env(safe-area-inset-top,0px),8px)]";
 
 /**
  * Pushed pages (a session, a PR…): the band itself goes invisible so its
@@ -59,7 +66,6 @@ const APP_HEADER_BASE =
  * draws a border on this element (no rule in base.css or here targets it), so
  * that declaration only ever moved a computed value; it is not carried over.
  */
-const APP_HEADER_DETAIL = "phone:bg-transparent";
 
 /**
  * Home, Feed, and a session: the bar floats over the content instead of
@@ -122,13 +128,13 @@ export function appHeader({
   detail: boolean;
   floating: boolean;
 }): string {
-  return [
-    APP_HEADER_BASE,
-    floating ? APP_HEADER_OVERLAY : "phone:relative",
-    detail ? APP_HEADER_DETAIL : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  // One `stylex.props` call, so the detail face's transparent fill beats the
+  // bar's own. The overlay stays utilities: it reaches `.app:has(...)`, its
+  // children and a pseudo-element, none of which a StyleX style can.
+  return cn(
+    sx(h.bar, !floating && h.inFlow, detail && h.detail),
+    floating && APP_HEADER_OVERLAY,
+  );
 }
 
 /** Leading slot: the brand on the root page, the Back bubble on a pushed one. */
@@ -148,41 +154,34 @@ export const APP_HEADER_LEFT = "flex shrink-0 items-center gap-2";
  * base.css collapses the fill back to an opaque `--bg` where the browser has no
  * backdrop-filter at all, and for reduced transparency.
  */
-export const MOBILE_CONTROL_GLASS_EFFECTS =
-  "phone:[backdrop-filter:var(--mobile-header-control-blur)] " +
-  "phone:[-webkit-backdrop-filter:var(--mobile-header-control-blur)]";
+export const MOBILE_CONTROL_GLASS_EFFECTS = sx(h.glassEffects);
 
-export const MOBILE_CONTROL_GLASS =
-  "phone:bg-[var(--mobile-header-control-surface)] " +
-  MOBILE_CONTROL_GLASS_EFFECTS;
+export const MOBILE_CONTROL_GLASS = sx(h.glassEffects, h.glassFill);
 
 /**
  * One circular mobile top-bar control: Back, More and future page actions all
  * share this material, size, neutral ink and press response. `rounded-full`,
  * not `rounded-[999px]`, keeps the platform's true-circle toolbar shape.
  */
-export const MOBILE_TOP_BAR_CONTROL =
-  "phone:m-0 phone:inline-flex phone:size-11 phone:min-h-11 phone:items-center phone:justify-center " +
-  `phone:rounded-full phone:border phone:border-[color:var(--mobile-header-control-border)] ${MOBILE_CONTROL_GLASS} phone:p-0 ` +
-  "phone:text-fg phone:shadow-[var(--mobile-header-control-shadow)] " +
-  "phone:cursor-pointer phone:touch-manipulation " +
-  "phone:[-webkit-tap-highlight-color:transparent] " +
-  "phone:[transition-property:opacity] phone:duration-[var(--dur)] " +
-  "phone:ease-[var(--ease)] phone:active:scale-100 phone:active:opacity-40 phone:active:duration-0 " +
-  "phone:[&_svg]:size-[26px] phone:[&_svg]:shrink-0";
+export const MOBILE_TOP_BAR_CONTROL = cn(
+  sx(h.control, h.capsule, h.glassEffects, h.glassFill),
+  // The glyph inside: a reach into the child, so it stays a utility.
+  "phone:[&_svg]:size-[26px] phone:[&_svg]:shrink-0",
+);
 
 /** Back adds only its PWA hook and the chevron's optical left nudge. */
-export const MOBILE_BACK =
-  `pwa-header-back ${MOBILE_TOP_BAR_CONTROL} ` +
-  "phone:[&_svg]:size-[34px] phone:[&_svg]:-ml-px";
+export const MOBILE_BACK = cn(
+  "pwa-header-back",
+  MOBILE_TOP_BAR_CONTROL,
+  "phone:[&_svg]:size-[34px] phone:[&_svg]:-ml-px",
+);
 
 /**
  * Live connection dot on the organization mark in the sidebar selector. It
  * rides a relative wrapper because the tile itself can clip its image. The
  * colour is set inline from the socket state.
  */
-export const APP_LOGO_STATUS =
-  "absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full border-2 border-raised";
+export const APP_LOGO_STATUS = sx(h.logoStatus);
 
 /**
  * The title pill on a pushed page: the repo tile leads, then the name over a
@@ -199,17 +198,12 @@ export const APP_LOGO_STATUS =
  * so this capsule is a round one. Both radii clamp to the same half-height
  * anyway; spelling it `999px` would hand it a squircle it never had.
  */
-export const HEADER_TITLE_PILL =
-  "phone:flex phone:min-h-11 phone:flex-[0_1_auto] phone:min-w-0 phone:items-center " +
-  "phone:justify-start phone:gap-[9px] phone:ml-2 phone:mr-auto " +
-  "phone:py-[5px] phone:pr-4 phone:pl-[11px] " +
-  `phone:rounded-full phone:border phone:border-[color:var(--mobile-header-control-border)] ${MOBILE_CONTROL_GLASS} ` +
-  "phone:shadow-[var(--mobile-header-control-shadow)] phone:text-fg " +
-  "phone:pointer-events-auto";
-
-/** Center a plain page title independently of the leading and trailing controls. */
-export const HEADER_TITLE_PILL_CENTERED =
-  "phone:absolute phone:left-1/2 phone:ml-0 phone:mr-0 phone:[transform:translateX(-50%)]";
+export const HEADER_TITLE_PILL = sx(
+  h.titlePill,
+  h.capsule,
+  h.glassEffects,
+  h.glassFill,
+);
 
 /**
  * Archived keeps Search at the phone's bottom edge. While that field is
@@ -230,43 +224,40 @@ export const ARCHIVED_SEARCH_HEADER =
   "phone:[body.kb-open_&]:[transform:translateY(-8px)] motion-reduce:transition-none";
 
 /**
- * The pill on a page that names itself, which is every page but a session: it
- * is not there until that name has scrolled up under the bar, and then it is.
- * The iOS large title, on the surface the pattern comes from. `data-shown` is
- * set by hooks/useLargeTitle.ts.
- *
- * The whole lozenge fades, not just the word inside it. This one is a floating
- * pill rather than a band across the top, so an empty one is a blank white
- * capsule sitting in the header with nothing in it, which is worse than the
- * duplicate title it was there to avoid.
+ * The title pill with its optional faces, merged in ONE StyleX call: the
+ * centred face's zero margin has to beat the pill's own, and two separate
+ * class strings for the same property would leave that to stylesheet order.
  */
-export const HEADER_TITLE_PILL_FADE =
-  "phone:translate-y-1 phone:opacity-0 phone:transition-[opacity,translate] " +
-  "phone:data-[shown]:translate-y-0 phone:data-[shown]:opacity-100";
-
-/**
- * On a session the pill is the tap target for the settings menu, and the name
- * dims on press to say so. The group name is what carries that press down to
- * the name; it is only on the markup when the pill is actually tappable, so
- * the plain title can't dim on a stray press.
- */
-export const HEADER_TITLE_PILL_TAPPABLE =
-  `${HEADER_TITLE_PILL} group/titlepill ` +
-  "phone:cursor-pointer phone:[-webkit-tap-highlight-color:transparent]";
+export function headerTitlePill({
+  tappable,
+  fade,
+  centered,
+}: {
+  tappable: boolean;
+  fade: boolean;
+  centered: boolean;
+}): string {
+  return sx(
+    h.titlePill,
+    h.capsule,
+    h.glassEffects,
+    h.glassFill,
+    tappable && h.titlePillTappable,
+    tappable && titlePillMarker,
+    fade && h.titlePillFade,
+    centered && h.titlePillCentered,
+  );
+}
 
 /**
  * Leading repo tile — a fixed square spanning both text rows. It is filled by
  * SessionViewer's portal, so it hides while empty rather than holding open the
  * pill's 9px gap in front of a name that has no tile yet.
  */
-export const HEADER_TITLE_REPO =
-  "phone:inline-flex phone:flex-none phone:items-center phone:justify-center " +
-  "phone:empty:hidden";
+export const HEADER_TITLE_REPO = sx(h.titleRepo);
 
 /** Name over metadata, stacked to the right of the repo tile. */
-export const HEADER_TITLE_COL =
-  "phone:flex phone:min-w-0 phone:flex-col phone:items-start phone:justify-center " +
-  "phone:gap-px";
+export const HEADER_TITLE_COL = sx(h.titleColumn);
 
 /**
  * The name's row. The leading is pinned rather than left at `normal` (~1.21):
@@ -274,22 +265,17 @@ export const HEADER_TITLE_COL =
  * between them should be the 1px column gap plus a known half-leading, not
  * whatever the font's default line box happens to be.
  */
-export const HEADER_TITLE_ROW =
-  "phone:flex phone:min-w-0 phone:max-w-full phone:items-center phone:gap-[7px] " +
-  "phone:text-base phone:leading-4 phone:font-semibold";
+export const HEADER_TITLE_ROW = sx(h.titleRow);
 
 /** The name itself, softly faded if clipped and dimming while pressed. */
-export const HEADER_TITLE_TEXT =
-  "phone:flex-1 phone:group-active/titlepill:opacity-60";
+export const HEADER_TITLE_TEXT = sx(h.titleText);
 
 /**
  * The metadata line's slot under the name — filled by SessionViewer's portal.
  * A touch lighter than the name so the subtitle recedes (Slack-header). Pointer
  * events are re-enabled here because the bar turns them off wholesale.
  */
-export const HEADER_TITLE_MODEL =
-  "phone:max-w-full phone:truncate phone:text-meta phone:font-medium " +
-  "phone:leading-[1.1] phone:text-faint phone:pointer-events-auto";
+export const HEADER_TITLE_MODEL = sx(h.titleModel);
 
 /**
  * The session bar: the line under the title that just *shows* repo · model ·
@@ -299,11 +285,7 @@ export const HEADER_TITLE_MODEL =
  *
  * `header-sessionbar` leads the string as a bare hook — see the module note.
  */
-export const HEADER_SESSIONBAR =
-  "header-sessionbar phone:inline-flex phone:min-h-4 phone:min-w-0 " +
-  "phone:max-w-full phone:items-center phone:justify-start phone:gap-1.5 " +
-  "phone:cursor-pointer phone:pointer-events-auto " +
-  "phone:[-webkit-tap-highlight-color:transparent] phone:active:opacity-60";
+export const HEADER_SESSIONBAR = cn("header-sessionbar", sx(h.sessionbar));
 
 /**
  * The middot between repo · model · cost. Bigger than the text around it, but
@@ -314,12 +296,9 @@ export const HEADER_SESSIONBAR =
 /* The 16px is glyph geometry, not a step of the scale: it sizes the middle dot
    between two runs of metadata so the dot lands optically centred against
    11px text. See the scale note in styles/tailwind.css. */
-export const HEADER_SESSIONBAR_SEP =
-  "phone:shrink-0 phone:text-[16px] phone:leading-4 phone:text-dim";
+export const HEADER_SESSIONBAR_SEP = sx(h.sessionbarSep);
 
-export const HEADER_SESSIONBAR_MODEL =
-  "truncate phone:min-w-0 phone:max-w-[45vw] phone:text-meta " +
-  "phone:font-medium phone:text-dim";
+export const HEADER_SESSIONBAR_MODEL = sx(h.sessionbarModel);
 
 /**
  * The cost meter, restyled for the subtitle line: the model's size and colour,
@@ -346,8 +325,7 @@ export const HEADER_SESSIONBAR_USAGE =
  * Tailwind's OUTPUT order rather than the order they are written, so a `gap-0`
  * appended after this string silently loses to a `gap-2.5` inside it.
  */
-const HEADER_ACTIONS_BASE =
-  "app-header-actions phone:flex phone:min-w-0 phone:items-center";
+const HEADER_ACTIONS_BASE = "app-header-actions";
 
 /**
  * On the root page the two glyphs in this slot — Filter and Search — are one
@@ -370,10 +348,10 @@ const HEADER_ACTIONS_BASE =
  * header into this slot, which is a row of unrelated controls and keeps the
  * loose spacing.
  */
-export const APP_HEADER_ACTIONS =
-  `${HEADER_ACTIONS_BASE} phone:ml-auto phone:gap-0 phone:overflow-hidden ` +
-  `phone:rounded-full phone:border phone:border-[color:var(--mobile-header-control-border)] ${MOBILE_CONTROL_GLASS} ` +
-  "phone:shadow-[var(--mobile-header-control-shadow)]";
+export const APP_HEADER_ACTIONS = cn(
+  HEADER_ACTIONS_BASE,
+  sx(h.actions, h.actionsGrouped, h.capsule, h.glassEffects, h.glassFill),
+);
 
 /**
  * On a pushed page the title pill already carries `mr-auto` to shove this
@@ -381,7 +359,10 @@ export const APP_HEADER_ACTIONS =
  * long title, so the pill butts straight against the actions — a fixed gap, and
  * no shrinking, keeps air between them.
  */
-export const APP_HEADER_ACTIONS_DETAIL = `${HEADER_ACTIONS_BASE} phone:ml-2.5 phone:flex-none phone:gap-2.5`;
+export const APP_HEADER_ACTIONS_DETAIL = cn(
+  HEADER_ACTIONS_BASE,
+  sx(h.actions, h.actionsLoose),
+);
 
 /**
  * A segment of the grouped bar control (see `APP_HEADER_ACTIONS`): 40pt tall
@@ -396,12 +377,7 @@ export const APP_HEADER_ACTIONS_DETAIL = `${HEADER_ACTIONS_BASE} phone:ml-2.5 ph
  * rather than as the tallest thing on the screen.
  */
 const MOBILE_BAR_SEGMENT =
-  "phone:relative phone:inline-flex phone:h-10 phone:w-13 phone:shrink-0 " +
-  "phone:items-center phone:justify-center phone:rounded-none " +
-  "phone:border-none phone:bg-transparent phone:p-0 phone:shadow-none " +
-  "phone:cursor-pointer phone:touch-manipulation " +
-  "phone:[-webkit-tap-highlight-color:transparent] " +
-  "phone:active:opacity-35 phone:active:duration-0 " +
+  // The glyph is thickened and sized from here: a reach into the child.
   "phone:[&_svg]:size-[23px] phone:[&_svg]:[stroke-width:2]";
 
 /**
@@ -409,10 +385,10 @@ const MOBILE_BAR_SEGMENT =
  * the two glyphs sit in one undivided capsule, as they do in the native app's
  * grouped toolbar item. The air between them is the separation.
  */
-export const MOBILE_SEARCH_BTN =
-  `${MOBILE_BAR_SEGMENT} phone:text-fg ` +
-  "phone:[transition-property:opacity] phone:duration-[var(--dur)] " +
-  "phone:ease-[var(--ease)]";
+export const MOBILE_SEARCH_BTN = cn(
+  sx(h.segment, h.searchSegment),
+  MOBILE_BAR_SEGMENT,
+);
 
 /**
  * Filter, portaled out of the sidebar header into the same capsule. `-order-1`
@@ -424,13 +400,14 @@ export const MOBILE_SEARCH_BTN =
  * order they were written in. Read them through `mobileFilterBtn()`, never
  * build the class name.
  */
-const MOBILE_FILTER_BTN_BASE =
-  `${MOBILE_BAR_SEGMENT} phone:-order-1 ` +
-  "phone:[transition:opacity_var(--dur)_var(--ease),color_var(--dur-micro)_var(--ease)] ";
+const MOBILE_FILTER_BTN_BASE = MOBILE_BAR_SEGMENT;
 
 const MOBILE_FILTER_BTN = {
-  muted: `${MOBILE_FILTER_BTN_BASE} phone:text-dim`,
-  active: `${MOBILE_FILTER_BTN_BASE} phone:text-fg`,
+  muted: cn(sx(h.segment, h.filterSegment), MOBILE_FILTER_BTN_BASE),
+  active: cn(
+    sx(h.segment, h.filterSegment, h.filterSegmentActive),
+    MOBILE_FILTER_BTN_BASE,
+  ),
 } as const;
 
 /** Raised to the neutral foreground while the popover is open or filtered. */

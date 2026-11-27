@@ -93,6 +93,11 @@ export const color = stylex.defineConsts({
   dividerSoft: "var(--divider-soft)",
   /** A control over an image: white in both themes. */
   overlaySurface: "#fff",
+  /** The app's chrome column (sidebar, and the phone top bar at rest). */
+  sidebar: "var(--sidebar-bg)",
+  /** The phone top bar's floating controls: a thinned fill, its edge. */
+  headerControl: "var(--mobile-header-control-surface)",
+  headerControlEdge: "var(--mobile-header-control-border)",
 });
 
 /**
@@ -199,6 +204,8 @@ export const leading = stylex.defineConsts({
   snug: "1.375",
   /** `text.glyphHero`'s own line. */
   hero: "calc(2.5 / 2.25)",
+  /** A compact title, or a line of metadata pinned under one. */
+  title: "1.1",
   /** A field's small step, which keeps Tailwind's `text-xs` leading. */
   small: "calc(1 / 0.75)",
 });
@@ -249,6 +256,12 @@ export const opacity = stylex.defineConsts({
   outOfRange: "0.45",
   /** The body under an alert's title, a step behind it. */
   secondary: "0.9",
+  /** A glass control in the phone top bar under the thumb, and a segment of
+   *  a grouped one (thinner, as the capsule around it stays put). */
+  pressedGlass: "0.4",
+  pressedSegment: "0.35",
+  /** Text that is itself the tap target (the session title) while pressed. */
+  pressedText: "0.6",
 });
 
 export const motion = stylex.defineConsts({
@@ -330,6 +343,8 @@ export const shadow = stylex.defineConsts({
   /** The forced-colors stand-in for a ring tier, which Windows High Contrast
    *  strips along with every box-shadow. */
   ringForced: "var(--smooth-ring-width, 1px) solid CanvasText",
+  /** A floating control in the phone top bar. */
+  headerControl: "var(--mobile-header-control-shadow)",
   /** A card lifted off the page while you handle it (the swipe decks). */
   lifted:
     "0 3px 10px -3px color-mix(in srgb, var(--tw-shadow-color, black) 4%, transparent), 0 20px 56px -16px color-mix(in srgb, var(--tw-shadow-color, black) 12%, transparent)",
@@ -470,6 +485,30 @@ export const geometry = stylex.defineConsts({
   stampBorder: "2px",
   /** A line of prose under a headline, centred. */
   measureNarrow: "20rem",
+  /** The phone top bar: its height (base.css owns it, with the 8px inset its
+   *  40px segments assume), and the safe area it clears. */
+  headerHeight: "var(--header-h)",
+  headerSafeTop: "env(safe-area-inset-top, 0px)",
+  headerSafeTopPhone: "max(env(safe-area-inset-top, 0px), 8px)",
+  /** The title pill's optical padding: the repo tile's side is tighter, and
+   *  the name sits 9px from the tile and 7px from its badges. */
+  headerPillPadBlock: "5px",
+  headerPillPadStart: "11px",
+  headerPillGap: "9px",
+  headerTitleGap: "7px",
+  /** A grouped bar control's segment: wider than tall, so the target the
+   *  thumb meets stays past 44px across. */
+  headerSegmentWidth: "52px",
+  headerSegmentHeight: "40px",
+  /** The middle dot between runs of metadata: glyph geometry, sized so it
+   *  lands centred against 11px text. */
+  metaDot: "16px",
+  /** The model name in the session subtitle gives way before the cost. */
+  headerModelMax: "45vw",
+  /** The connection dot on the organization mark, and its cut-out ring. */
+  logoStatusDot: "10px",
+  logoStatusRing: "2px",
+  logoStatusOffset: "-2px",
   /** A month grid: 36px day columns, 44px on a phone (still inside 390px). */
   monthWidth: "252px",
   monthWidthPhone: "308px",
@@ -505,6 +544,9 @@ export const layer = stylex.defineConsts({
 export const blur = stylex.defineConsts({
   scrim: "blur(1px)",
   paletteScrim: "blur(6px)",
+  /** The phone top bar's glass. base-theme.css swaps the fill when the
+   *  browser has no backdrop-filter or the person asks for less transparency. */
+  headerControl: "var(--mobile-header-control-blur)",
 });
 
 export const media = stylex.defineConsts({

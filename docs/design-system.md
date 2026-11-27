@@ -125,9 +125,15 @@ form titles' leading by `[data-setting-title]`. The inset rule between a
 card's rows and the control column's `[&>*]` cap stay utilities, because they
 style the caller's children.
 
-Still Tailwind inside `ui/`: `top-bar.tsx`, whose controls take the app
-header's glass classes from `lib/app-header-classes.ts`, so it moves with the
-header.
+Every primitive in `ui/` is now StyleX. The last one, `top-bar.tsx`, moved
+with the phone app header: its values live in `ui/app-header-styles.ts`, and
+`lib/app-header-classes.ts` reads them as the class strings feature code
+composes. The header's glass (`glassEffects`, `glassFill`, `capsule`) is
+defined once there, so Back, the title pill, the grouped actions and the
+session tab strip cannot drift apart. What stays utilities is what reaches
+past the element: the floating bar's `::before` fade and its `.app:has(...)`
+offsets, the archived search collapse under `body.kb-open`, and the
+`[&_svg]` glyph sizes.
 
 Other shared pieces: `ui/sx.ts` (merges a primitive's StyleX props with a
 caller's legacy `className`, and defines the `LayoutStyles` type every
@@ -161,6 +167,14 @@ Things to know when porting:
   class tailwind-merge used to drop (a mistaken `text-input-phone` taken for
   a colour, an `h-10` under a variant height) applies again. The parity
   sweep finds these; decide each one, do not paper over it.
+- A style merged after another replaces each property it names at every
+  width. A phone-only override written `{ default: null, [media.phone]: x }`
+  therefore wipes the desktop value it lands on: restate the default
+  (`{ default: color.sidebar, [media.phone]: color.transparent }`), or pass
+  the override as a separate class string when the two agree at phone
+  width. Two class strings that set one property differently at the same
+  width are the opposite mistake: which wins is stylesheet order, so merge
+  them in one `stylex.props` call (`headerTitlePill()`).
 - Some utility names are also hooks: base.css makes `.text-supporting` text
   selectable, and Settings tightens the leading of `.text-item-title` and
   friends from an ancestor. A port that drops the utility keeps the hook
