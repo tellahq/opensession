@@ -6,6 +6,7 @@ import { PRODUCT_NAME } from "../lib/brand";
 import { subscribeFrontendVersion } from "../lib/frontend-version";
 import { onShellUpdated } from "../lib/push";
 import { PERSISTENT_NOTICE_CARD } from "../lib/notification-classes";
+import { chordFromEvent, glyphsFor } from "../lib/shortcuts";
 import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
 import { IconArrowDown } from "./icons";
@@ -25,6 +26,11 @@ interface Props {
  *  immediately) — long enough to finish a thought, short enough that a
  *  protocol-break deploy converges in under a minute. */
 const FORCE_GRACE_MS = 20_000;
+
+/** The minibar button's shortcut: the reload chord, which already refreshes a
+ *  browser tab onto the new bundle. A staged shell update takes it over so it
+ *  relaunches and installs instead. */
+const UPDATE_CHORD = "mod+r";
 
 const shellUpdateStateSchema = z.object({
   state: z.enum(["idle", "available", "downloaded"]),
@@ -169,6 +175,23 @@ export function UpdatePill({ addHandler, variant = "card" }: Props) {
     };
   }, [forceAt]);
 
+  // ⌘R is what the minibar button advertises. For a new web bundle the
+  // browser's own reload already does the right thing; a staged shell update
+  // needs the relaunch, so take the chord over for it. Forced reloads keep the
+  // plain reload, as the button does.
+  const shellRelaunch = variant === "icon" && shellReady && forceAt == null;
+  useEffect(() => {
+    if (!shellRelaunch) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (chordFromEvent(e) !== UPDATE_CHORD) return;
+      e.preventDefault();
+      setRefreshing(true);
+      os1Updates()?.install();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [shellRelaunch]);
+
   if (!show && !shellReady) return null;
 
   const forced = secondsLeft != null;
@@ -188,17 +211,28 @@ export function UpdatePill({ addHandler, variant = "card" }: Props) {
   const detail = restart ? shellVersion : by;
 
   if (variant === "icon") {
-    const hint = refreshing
+    const label = refreshing
       ? restart
-        ? "Restarting…"
+        ? "Relaunching…"
         : "Refreshing…"
+      : forced
+        ? `Updating in ${secondsLeft}s`
+        : restart
+          ? "Relaunch to update"
+          : "Refresh to update";
+    const hint = refreshing
+      ? label
       : forced
         ? `Updating in ${secondsLeft}s. Click to refresh now.`
         : restart
-          ? `${PRODUCT_NAME} ${shellVersion ?? "update"} is ready. Restart to install it.`
+          ? `${PRODUCT_NAME} ${shellVersion ?? "update"} is ready. Relaunch to install it.`
           : `New update available${by ? ` (${by})` : ""}. Click to refresh.`;
     return (
-      <Tooltip label={hint} side="right" multiline>
+      <Tooltip
+        label={label}
+        side="right"
+        shortcut={refreshing ? undefined : glyphsFor(UPDATE_CHORD)}
+      >
         <Button
           variant="primary"
           size="md"
