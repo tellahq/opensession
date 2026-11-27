@@ -79,6 +79,7 @@ const mutationMessageSchema = z.discriminatedUnion("type", [
       type: z.literal("take_queued_prompt"),
       ...sessionMutationFields,
       queueId: z.string(),
+      entryId: z.string().optional(),
     })
     .catchall(jsonValueSchema),
   z

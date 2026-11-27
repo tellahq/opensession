@@ -1114,6 +1114,14 @@ export function SessionViewerMainRegion({
                             entryId,
                           })
                         }
+                        onEditPendingMessage={(entryId) =>
+                          send({
+                            type: "take_queued_prompt",
+                            sessionId: session.id,
+                            queueId: entryId,
+                            entryId,
+                          })
+                        }
                         // Same gate the composer sends under: a busy session
                         // is already continuing, and one you cannot type into
                         // must not offer a button that types for you.

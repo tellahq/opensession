@@ -563,21 +563,42 @@ function EditAgainButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-/** Take back a message the conversation accepted but no run has read yet.
- * Unlike the hover actions it stays on the page: a message stuck in this
+/** Change or delete a message the conversation accepted but no run has read
+ * yet. Edit takes it back into the composer, so it is never sent twice.
+ * Unlike the hover actions these stay on the page: a message stuck in this
  * state is the thing the person is looking at. */
-function DeletePendingButton({ onClick }: { onClick: () => void }) {
+function PendingMessageActions({
+  onEdit,
+  onDelete,
+}: {
+  onEdit?: () => void;
+  onDelete: () => void;
+}) {
   return (
-    <Tooltip label="Delete unsent message">
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={onClick}
-        aria-label="Delete unsent message"
-        className="size-7 min-h-7 text-faint"
-        icon={<IconTrash size={16} />}
-      />
-    </Tooltip>
+    <>
+      {onEdit && (
+        <Tooltip label="Edit unsent message">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onEdit}
+            aria-label="Edit unsent message"
+            className="size-7 min-h-7 text-faint"
+            icon={<IconPencil size={16} />}
+          />
+        </Tooltip>
+      )}
+      <Tooltip label="Delete unsent message">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onDelete}
+          aria-label="Delete unsent message"
+          className="size-7 min-h-7 text-faint"
+          icon={<IconTrash size={16} />}
+        />
+      </Tooltip>
+    </>
   );
 }
 
@@ -664,15 +685,16 @@ function CopyMessageLinkButton({ entryId }: { entryId: string }) {
 function BubbleMeta({
   ts,
   onEdit,
-  onDelete,
+  pending,
   copy,
   linkEntryId,
   message,
 }: {
   ts?: string;
   onEdit?: () => void;
-  /** Offered while the message waits for a run to pick it up. */
-  onDelete?: () => void;
+  /** Offered while the message waits for a run to pick it up. Its edit takes
+   *  the place of the re-send edit above. */
+  pending?: { onEdit?: () => void; onDelete: () => void };
   copy?: { entry: TranscriptEntry; sessionId?: string };
   /** The entry a "Copy link" points at; omitted while it is not stored. */
   linkEntryId?: string;
@@ -680,7 +702,7 @@ function BubbleMeta({
   message?: MessageRef;
 }) {
   const label = ts ? fullTime(ts) : "";
-  if (!onEdit && !onDelete && !copy && !linkEntryId && !label && !message)
+  if (!onEdit && !pending && !copy && !linkEntryId && !label && !message)
     return null;
   return (
     <div className="absolute top-[calc(100%+2px)] right-0 flex items-center gap-1">
@@ -689,14 +711,14 @@ function BubbleMeta({
       )}
       {copy && <CopyMessageButton {...copy} />}
       {linkEntryId && <CopyMessageLinkButton entryId={linkEntryId} />}
-      {onEdit && <EditAgainButton onClick={onEdit} />}
+      {onEdit && !pending && <EditAgainButton onClick={onEdit} />}
       {label && (
         <span className="hidden text-meta leading-none font-medium whitespace-nowrap text-faint select-none selection:bg-[rgba(0,0,0,0.01)] [@media(hover:hover)]:block [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-hover/bubble:opacity-100 [@media(hover:hover)]:group-focus-within/bubble:opacity-100">
           {label}
         </span>
       )}
-      {/* Last, so it holds the bubble's edge while the hover actions are hidden. */}
-      {onDelete && <DeletePendingButton onClick={onDelete} />}
+      {/* Last, so they hold the bubble's edge while the hover actions are hidden. */}
+      {pending && <PendingMessageActions {...pending} />}
     </div>
   );
 }
@@ -730,6 +752,8 @@ interface Props {
   /** Offered with `pendingDelivery` on your own turns: deletes the message
    *  before a run picks it up. */
   onDeletePending?: (entryId: string) => void;
+  /** With `onDeletePending`: takes the waiting message back into the composer. */
+  onEditPending?: (entryId: string) => void;
   /** Offered on a failed run's notice: starts a turn that picks the work back
    *  up. Passed only for the notice a person can still act on — the last one,
    *  on an idle session (see TranscriptBlocks). */
@@ -1020,6 +1044,7 @@ export const MessageBubble = function MessageBubble({
   onEdit,
   optimistic,
   onDeletePending,
+  onEditPending,
   onContinue,
   step = false,
 }: Props) {
@@ -1221,9 +1246,14 @@ export const MessageBubble = function MessageBubble({
           <BubbleMeta
             ts={fromOther ? undefined : e.timestamp}
             onEdit={!fromOther && onEdit ? () => onEdit(e) : undefined}
-            onDelete={
+            pending={
               !fromOther && pendingDelivery && onDeletePending
-                ? () => onDeletePending(e.id)
+                ? {
+                    onEdit: onEditPending
+                      ? () => onEditPending(e.id)
+                      : undefined,
+                    onDelete: () => onDeletePending(e.id),
+                  }
                 : undefined
             }
             copy={

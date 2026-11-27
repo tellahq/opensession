@@ -135,7 +135,10 @@ import { subscribeTranscript } from "./transcript-bus";
 import { resumeSessionFeed } from "./session-feed";
 import type { SeqEntry } from "./transcript-store";
 import { importLegacyTranscript, transcript } from "./actor-transcript";
-import { withdrawPendingPrompt } from "./withdraw-pending-prompt";
+import {
+  takePendingPromptForEdit,
+  withdrawPendingPrompt,
+} from "./withdraw-pending-prompt";
 import { startTranscriptWatch } from "./transcript-watch";
 import { type CompressibleSocket, sendCompressedFrame } from "./ws-compression";
 import { clampV2InitEntries } from "./transcript-wire";
@@ -1743,19 +1746,26 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
         }
 
         case "take_queued_prompt": {
-          const { sessionId, queueId } = msg;
-          const item = await takeQueuedPrompt(
-            sessionId,
-            queueId,
-            ws.data.authUser || ws.data.user || undefined,
-          );
+          const { sessionId, queueId, entryId } = msg;
+          const actor = ws.data.authUser || ws.data.user || undefined;
+          // An entry id names a waiting conversation message, not a queue row.
+          const session = entryId ? await findSessionAsync(sessionId) : null;
+          const item = !entryId
+            ? await takeQueuedPrompt(sessionId, queueId, actor)
+            : session
+              ? await takePendingPromptForEdit(session, entryId, actor)
+              : undefined;
           const response = {
             type: "queued_prompt_taken",
             sessionId,
             queueId,
             ...(item
               ? { item: queueItemForClient(item) }
-              : { message: "That queued message could not be edited." }),
+              : {
+                  message: entryId
+                    ? "That message was already picked up."
+                    : "That queued message could not be edited.",
+                }),
           };
           recordInternalKernelResult(
             kernelDispatchTokens,

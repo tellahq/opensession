@@ -2,7 +2,9 @@ import { appendTranscriptEvents, transcript } from "./actor-transcript";
 import { retractAgentSteer } from "./agent-runner";
 import {
   deleteQueuedPrompt,
+  isEditableQueueItem,
   promptQueues,
+  queueActorMatches,
   steeredReceipts,
   type QueueItem,
 } from "./queue-state";
@@ -40,8 +42,33 @@ export async function withdrawPendingPrompt(
   session: SessionEngineIds,
   entryId: string,
 ): Promise<boolean> {
+  return !!(await takePendingPrompt(session, entryId));
+}
+
+/**
+ * Withdraw a waiting message the way Delete does and hand back its full
+ * payload, so the person can put it in the composer and change it. Only their
+ * own ordinary composer messages qualify, like editing a queued one.
+ */
+export async function takePendingPromptForEdit(
+  session: SessionEngineIds,
+  entryId: string,
+  actor?: string,
+): Promise<QueueItem | undefined> {
+  return takePendingPrompt(
+    session,
+    entryId,
+    (item) => isEditableQueueItem(item) && queueActorMatches(item, actor),
+  );
+}
+
+async function takePendingPrompt(
+  session: SessionEngineIds,
+  entryId: string,
+  allowed: (item: QueueItem) => boolean = () => true,
+): Promise<QueueItem | undefined> {
   const pending = withdrawablePendingPrompt(session.id, entryId);
-  if (!pending) return false;
+  if (!pending || !allowed(pending.item)) return;
   if (
     pending.slot === "steered" &&
     !(await retractAgentSteer(
@@ -49,8 +76,8 @@ export async function withdrawPendingPrompt(
       pending.item.id,
     ))
   )
-    return false;
-  if (!(await deleteQueuedPrompt(session.id, pending.item.id))) return false;
+    return;
+  if (!(await deleteQueuedPrompt(session.id, pending.item.id))) return;
   const entry = await transcript
     .getFullEntry(session.id, entryId)
     .catch(() => null);
@@ -63,5 +90,5 @@ export async function withdrawPendingPrompt(
         timestamp: entry.timestamp,
       },
     ]);
-  return true;
+  return pending.item;
 }

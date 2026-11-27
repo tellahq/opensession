@@ -408,6 +408,9 @@ export type ProtocolClientMessage =
       sessionId: string;
       requestId?: string;
       queueId: string;
+      /** Takes back a conversation message no run has picked up yet, by its
+       * transcript entry id. Clients send the same id as `queueId`. */
+      entryId?: string;
     }
   | {
       type: "take_steered_prompt";
