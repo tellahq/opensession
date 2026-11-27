@@ -269,10 +269,11 @@ export type TabState = {
  */
 const TAB_ATTACHED_BASE =
   "relative inline-flex max-w-[200px] shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
-  "[corner-shape:round] border px-3 text-item-title shadow-none transition-[background-color,color]";
+  "[corner-shape:round] border px-3 text-label shadow-none transition-[background-color,color]";
 const TAB_ATTACHED_OUTLINE = {
   active: "rounded-t-[10px] border-b-0",
-  inactive: "mb-1 rounded-[10px]",
+  // 28px, centred on the active tab's label line.
+  inactive: "my-1 rounded-[10px]",
 };
 
 function attachedTabClass({ active, waiting, colored }: TabState): string {
