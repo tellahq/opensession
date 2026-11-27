@@ -263,5 +263,13 @@ export function createSidebarToolsModel({
       <span className={cn(SIDEBAR_GROUP_NAME, "font-semibold")}>Archived</span>
     </button>
   );
-  return { archivedLink, sidebarMenuSources, sidebarMenuTools, visibleTools };
+  return {
+    archivedLink,
+    sidebarMenuSources,
+    sidebarMenuTools,
+    visibleTools,
+    // Every tool whatever the strip shows: the new layout lists them by place
+    // (components/shell/place-nav-model.tsx) rather than by this choice.
+    allTools: tools,
+  };
 }

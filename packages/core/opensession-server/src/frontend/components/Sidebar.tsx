@@ -126,6 +126,8 @@ import { IconDotsHorizontal, IconMessages } from "./icons";
 import { AddProjectDialog, type AddRepoMode } from "./SetupRepos";
 import { PrRow } from "./PrRow";
 import { AutomationsBand } from "./sidebar/AutomationsBand";
+import { PlaceNav } from "./shell/PlaceNav";
+import { placeNavGroups } from "./shell/place-nav-model";
 import { useNewLayoutPref } from "../lib/new-layout-pref";
 import { DraftRow } from "./sidebar/DraftRow";
 import { FeedRow } from "./sidebar/FeedRows";
@@ -177,6 +179,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     onDeleteWorkspace,
     archivedActive,
     catchUpActive,
+    place,
     onUnreadChatsChange,
     onArchive,
     onArchiveWorkspace,
@@ -922,30 +925,35 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     });
   }
 
-  const { archivedLink, sidebarMenuSources, sidebarMenuTools, visibleTools } =
-    createSidebarToolsModel({
-      navigation,
-      feedActive,
-      prsActive,
-      issuesActive,
-      tasksActive,
-      taskCount,
-      plainActive,
-      catchUpActive,
-      catchUpCount,
-      supportTinderActive,
-      reportsActive,
-      databasesActive,
-      analyticsActive,
-      isPhone,
-      toolOrder,
-      hiddenTools,
-      hiddenFeeds,
-      borrowedLens,
-      productEmpty,
-      feeds,
-      archivedActive,
-    });
+  const {
+    allTools,
+    archivedLink,
+    sidebarMenuSources,
+    sidebarMenuTools,
+    visibleTools,
+  } = createSidebarToolsModel({
+    navigation,
+    feedActive,
+    prsActive,
+    issuesActive,
+    tasksActive,
+    taskCount,
+    plainActive,
+    catchUpActive,
+    catchUpCount,
+    supportTinderActive,
+    reportsActive,
+    databasesActive,
+    analyticsActive,
+    isPhone,
+    toolOrder,
+    hiddenTools,
+    hiddenFeeds,
+    borrowedLens,
+    productEmpty,
+    feeds,
+    archivedActive,
+  });
   const setToolVisible = setSidebarToolVisible;
 
   const {
@@ -1371,6 +1379,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     />
   );
 
+  // The new layout gives this column one place at a time. Sessions (and
+  // Support, which has no list of its own yet) lists your sessions and nothing
+  // else; a place with pages lists those, and Activity adds the teammates and
+  // automation runs that used to trail your sessions.
+  const placeGroups = place
+    ? placeNavGroups(place, allTools, navigation)
+    : null;
+  const listsSessions = !placeGroups;
+  const listsOthers = !place || place === "activity";
+
   const workspaceMenuWorkspace = workspaceMenu
     ? workspaces.find((workspace) => workspace.id === workspaceMenu.id)
     : undefined;
@@ -1388,7 +1406,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
 		    scroll rather than its first child, so the organization row, the tools
 		    and the Workspaces heading hold their place while the list runs under
 		    them. */}
-      {!isPhone && sidebarChrome}
+      {!isPhone &&
+        (placeGroups && place ? (
+          <PlaceNav place={place} density={density} groups={placeGroups} />
+        ) : (
+          sidebarChrome
+        ))}
       {/* The scrollport is the right-click target for the sidebar's own menu.
 		    Only the background reaches it, since every row stops the event on its
 		    way up to open its own menu. Phones are left alone because row sheets
@@ -1436,7 +1459,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
 
           <div className="block max-w-full min-w-0 flex-none">
             {/* Fallback row: only when the chip doesn't fit inline. */}
-            {filter.repo !== "all" && !repoInline && (
+            {listsSessions && filter.repo !== "all" && !repoInline && (
               <div className="mx-4 mt-[-2px] mb-2 flex min-w-0 md:mr-2 md:ml-4">
                 <RepoFilterChip
                   repo={filter.repo}
@@ -1526,7 +1549,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
                 onClose={() => setWorkspaceMenu(null)}
               />
             )}
-            {workspacesOpen && (
+            {workspacesOpen && listsSessions && (
               <div
                 className={cn(
                   SIDEBAR_LIST,
@@ -1722,46 +1745,55 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
           </div>
 
           {/* ── Automations (one collapsible band, one group per automation) ── */}
-          <AutomationsBand
-            groups={groups}
-            automationOverview={automationOverview}
-            open={automationsOpen}
-            hasPeople={activePersonGroups.length > 0}
-            isGroupOpen={isOpen}
-            onToggleBand={() => toggleBand("automations")}
-            onToggleGroup={toggleGroup}
-            onOpenAutomation={(name) => navigation.openAutomation(name)}
-            onOpenReport={(automationId, reportId) =>
-              navigation.openReports({ automationId, reportId })
-            }
-            renderSession={renderAutomationSession}
-          />
+          {listsOthers && (
+            <AutomationsBand
+              groups={groups}
+              automationOverview={automationOverview}
+              open={automationsOpen}
+              hasPeople={activePersonGroups.length > 0}
+              isGroupOpen={isOpen}
+              onToggleBand={() => toggleBand("automations")}
+              onToggleGroup={toggleGroup}
+              onOpenAutomation={(name) => navigation.openAutomation(name)}
+              onOpenReport={(automationId, reportId) =>
+                navigation.openReports({ automationId, reportId })
+              }
+              renderSession={renderAutomationSession}
+            />
+          )}
 
           {/* ── Team: independently collapsible active teammates ── */}
-          <PeopleBand
-            groups={activePersonGroups}
-            open={peopleOpen}
-            isGroupOpen={isOpen}
-            onToggleBand={() => toggleBand("people")}
-            onToggleGroup={toggleGroup}
-            renderSession={renderPersonSession}
-          />
+          {listsOthers && (
+            <PeopleBand
+              groups={activePersonGroups}
+              open={peopleOpen}
+              isGroupOpen={isOpen}
+              onToggleBand={() => toggleBand("people")}
+              onToggleGroup={toggleGroup}
+              renderSession={renderPersonSession}
+            />
+          )}
 
           {/* Archived closes the sidebar, below every section rather than inside
 			    the workspace list. It is the end of the list, so anything ordered
 			    after the workspaces (Automations and People) used to render past it,
 			    which read as "the sidebar ended, and then there was more". */}
-          {(!isPhone || !productEmpty || hasWorkspaceFilter) && (
-            <div
-              // It sits outside the workspace list, so it takes the same inset
-              // its other out-of-list siblings do. Without it the row is the one
-              // thing in the sidebar whose fill runs edge to edge.
-              className={cn(SIDEBAR_INDEPENDENT_SECTION, SIDEBAR_GROUP, "mt-1")}
-              style={{ order: 99 }}
-            >
-              {archivedLink}
-            </div>
-          )}
+          {listsSessions &&
+            (!isPhone || !productEmpty || hasWorkspaceFilter) && (
+              <div
+                // It sits outside the workspace list, so it takes the same inset
+                // its other out-of-list siblings do. Without it the row is the one
+                // thing in the sidebar whose fill runs edge to edge.
+                className={cn(
+                  SIDEBAR_INDEPENDENT_SECTION,
+                  SIDEBAR_GROUP,
+                  "mt-1",
+                )}
+                style={{ order: 99 }}
+              >
+                {archivedLink}
+              </div>
+            )}
 
           {/* Phones keep setup in the sidebar's normal scroll flow. The bottom
 			    margin clears the paired new-session and Desk controls. */}

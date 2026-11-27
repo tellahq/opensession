@@ -8,6 +8,7 @@ import type { useSessions } from "../hooks/useSessions";
 import type { RepoInfo } from "../lib/api";
 import { renameSessionApi } from "../lib/api";
 import type { Route } from "../lib/app-route";
+import { usePlace } from "../lib/new-layout-place";
 import { useNewLayoutPref } from "../lib/new-layout-pref";
 import { Minibar } from "./shell/Minibar";
 import { SIDEBAR_CHROME_BTN } from "../lib/sidebar-classes";
@@ -130,12 +131,15 @@ export function AppSidebar({
   // sidebar takes the page's fill, and every pinned heading inside it reads
   // its backing from the same two variables, so they are set once here.
   const newLayout = useNewLayoutPref() && !isPhone;
+  const place = usePlace(route);
   const sidebarStyle: CSSProperties & { "--sidebar-w": string } = {
     "--sidebar-w": `${sidebarWidth}px`,
   };
   return (
     <>
-      {newLayout && <Minibar route={route} connected={connected} />}
+      {newLayout && (
+        <Minibar route={route} place={place} connected={connected} />
+      )}
       {/* `sidebar-container` stays on the markup as a hook: base.css's
 					    platform chrome (html.material-backdrop, the reduced-transparency
 					    fallback) paints this surface by name. */}
@@ -277,6 +281,7 @@ export function AppSidebar({
           catchUpActive={route.view === "catchup"}
           onUnreadChatsChange={setUnreadChats}
           archivedActive={route.view === "archived"}
+          place={newLayout ? place : undefined}
           onArchive={archiveSessionFromSidebar}
           onArchiveWorkspace={archiveWorkspaceFromSidebar}
           onRename={async (s, title) => {
