@@ -208,7 +208,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     stopRepoAutoScroll,
     pins,
     replacePins,
-    pinOrderDraft,
     pinDragMeta,
     laneDropHover,
     sessionPinState,
@@ -1298,14 +1297,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
         ? Math.min(...e.pinKeys.map((k) => pinIdx.get(k)!))
         : Infinity;
     entries.sort((a, b) => firstIdx(a) - firstIdx(b));
-    // Mid-drag, Motion's in-flight order wins until the drop commits it.
-    if (pinOrderDraft) {
-      const draftIdx = new Map(pinOrderDraft.map((k, i) => [k, i] as const));
-      entries.sort(
-        (a, b) =>
-          (draftIdx.get(a.key) ?? Infinity) - (draftIdx.get(b.key) ?? Infinity),
-      );
-    }
     const drag = createPinnedDrag(entries, isPhone);
     return {
       entries,
