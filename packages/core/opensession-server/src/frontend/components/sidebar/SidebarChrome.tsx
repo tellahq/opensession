@@ -208,7 +208,7 @@ export function SidebarChrome({
               </div>
               <Tooltip label="Back to your workspaces">
                 <button
-                  className="relative flex size-10 shrink-0 items-center justify-center rounded-md border-0 bg-transparent text-dim transition-[color,scale] before:absolute before:inset-2 before:rounded-md before:transition-colors before:content-[''] hover:text-fg hover:before:bg-hover active:scale-[0.96] phone:size-11 motion-reduce:transform-none [&>*]:relative [&>*]:z-[1]"
+                  className="relative flex size-10 shrink-0 items-center justify-center rounded-md border-0 bg-transparent text-dim transition-[color,scale] before:absolute before:inset-2 before:rounded-md before:transition-colors before:content-[''] hover:text-fg hover:before:bg-hover active:scale-[0.96] phone:size-11 motion-reduce:transform-none [&>*]:relative [&>*]:z-1"
                   onClick={() => setFilter({ person: "me" })}
                   aria-label="Back to your workspaces"
                 >

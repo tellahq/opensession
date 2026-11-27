@@ -359,7 +359,7 @@ export function TranscriptFind({
           exit={{ opacity: 0, y: -4 }}
           transition={{ type: "tween", duration: duration.micro, ease }}
           className={cn(
-            "absolute right-3 top-3 z-[6] w-[min(380px,calc(100%-24px))]",
+            "absolute right-3 top-3 z-6 w-[min(380px,calc(100%-24px))]",
             "phone:top-[calc(var(--pane-header-h)+var(--strip-clearance,0px)+8px)]",
           )}
         >

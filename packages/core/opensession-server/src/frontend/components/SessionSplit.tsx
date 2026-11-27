@@ -26,7 +26,7 @@ const COLUMN =
  * own. It lights up while hovered and stays lit for the whole drag.
  */
 const DIVIDER =
-  "relative z-[5] cursor-col-resize touch-none bg-line transition-[background-color] " +
+  "relative z-5 cursor-col-resize touch-none bg-line transition-[background-color] " +
   "after:absolute after:inset-y-0 after:-left-1 after:-right-1 after:content-[''] " +
   "hover:bg-accent [body.resizing-tab-split_&]:bg-accent";
 

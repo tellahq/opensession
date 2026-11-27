@@ -652,7 +652,7 @@ export function DeskConversation({
         )}
       </div>
 
-      <div className="relative z-[1] mt-[calc(-1*var(--desk-under))] shrink-0 px-2 pb-2">
+      <div className="relative z-1 mt-[calc(-1*var(--desk-under))] shrink-0 px-2 pb-2">
         {/* Starter pills stay attached to the composer and disappear once the
 				    conversation starts. Picking one fills the draft rather than
 				    sending: some name actions with side effects, and all of them are

@@ -5,15 +5,22 @@ import {
   VIEWER_MESSAGES,
 } from "./session-viewer-classes";
 
+// The stacking layers, bottom to top (base-theme.css `--layer-*`).
+const baseTheme = await Bun.file(
+  new URL("../styles/base-theme.css", import.meta.url),
+).text();
+function layer(name: string): number {
+  return Number(new RegExp(`--layer-${name}: (\\d+);`).exec(baseTheme)?.[1]);
+}
+
 test("the desktop tab strip cannot cover the header actions", () => {
-  expect(VIEWER_HEADER_ACTIONS).toContain("relative z-[21]");
+  expect(VIEWER_HEADER_ACTIONS).toContain("relative z-header-actions");
 });
 
 test("the summary card in the header actions clears the chat's sticky prompt", () => {
   // The card is portaled into this row, so the row's step is the card's. The
-  // sticky prompt pill over the top of the chat is z-20.
-  const step = Number(/\bz-\[(\d+)\]/.exec(VIEWER_HEADER_ACTIONS)?.[1]);
-  expect(step).toBeGreaterThan(20);
+  // sticky prompt pill over the top of the chat is `z-float`.
+  expect(layer("header-actions")).toBeGreaterThan(layer("float"));
 });
 
 test("the focused phone composer is fixed close to the keyboard edge", () => {

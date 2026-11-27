@@ -7,11 +7,11 @@
  * covering controls.
  */
 export const TRANSIENT_NOTICE_LANE =
-  "pointer-events-none fixed right-4 top-[calc(var(--desktop-header-h)+8px)] z-[200] " +
+  "pointer-events-none fixed right-4 top-[calc(var(--desktop-header-h)+8px)] z-notice " +
   "phone:inset-x-0 phone:right-0 phone:px-3 phone:top-[calc(var(--header-h)+8px)]";
 
 export const TOAST_NOTICE_LANE =
-  "pointer-events-none inset-x-0 bottom-[124px] z-[200]";
+  "pointer-events-none inset-x-0 bottom-[124px] z-notice";
 
 /**
  * Live status is product-wide rather than composer-aligned. On phones it clears
@@ -21,7 +21,7 @@ export const ONGOING_TOAST_POSITION =
   "fixed bottom-10 phone:top-[calc(var(--pane-header-h)+var(--strip-clearance,0px)+8px)] phone:bottom-auto";
 
 export const PERSISTENT_NOTICE_SHELF =
-  "pointer-events-none fixed bottom-2 left-2 z-[9500] flex w-fit " +
+  "pointer-events-none fixed bottom-2 left-2 z-toast flex w-fit " +
   "max-w-[calc(100vw-16px)] flex-col gap-2";
 
 /** Card shared by durable update and desktop-link prompts. */

@@ -22,7 +22,7 @@ export function SetupRestart({ setup }: { setup: SetupController }) {
   return (
     <>
       {restartNeeded && restartState !== "working" && (
-        <div className="sticky bottom-3 z-20 mt-8 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-line bg-panel px-4 py-3 smooth-shadow-soft">
+        <div className="sticky bottom-3 z-float mt-8 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-line bg-panel px-4 py-3 smooth-shadow-soft">
           <div className="min-w-0 flex-1">
             <div className="text-control-label font-medium text-fg">
               Changes saved. Restart to apply.
@@ -47,7 +47,7 @@ export function SetupRestart({ setup }: { setup: SetupController }) {
         </div>
       )}
       {restartState === "working" && (
-        <div className="absolute inset-0 z-30 rounded-lg bg-bg/75 backdrop-blur-[2px]">
+        <div className="absolute inset-0 z-shell-overlay rounded-lg bg-bg/75 backdrop-blur-[2px]">
           <div className="sticky top-[30vh] pb-8">
             <LoadingState>Restarting…</LoadingState>
           </div>

@@ -156,7 +156,7 @@ export function MediaLightboxViewer({
               return (
                 <div
                   key={annotation.id}
-                  className="group/annotation absolute z-[3] flex items-center"
+                  className="group/annotation absolute z-3 flex items-center"
                   style={{
                     left: imageBox.left + centerX * imageBox.width,
                     top: imageBox.top + centerY * imageBox.height,

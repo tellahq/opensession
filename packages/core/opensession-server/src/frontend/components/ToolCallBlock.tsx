@@ -544,7 +544,7 @@ export const ToolCallBlock = function ToolCallBlock({
             "hover:bg-hover/40",
           )}
         >
-          <span className="relative z-[1] flex size-[22px] flex-shrink-0 self-center items-center justify-center text-faint">
+          <span className="relative z-1 flex size-[22px] flex-shrink-0 self-center items-center justify-center text-faint">
             <span className="transition-opacity duration-150 group-hover:opacity-0">
               <ToolGlyph toolName={toolName} size={20} />
             </span>
@@ -735,7 +735,7 @@ export const ToolCallBlock = function ToolCallBlock({
       </Tooltip>
 
       <Fold open={expanded}>
-        <div className="relative z-[1] mb-1.5 ml-[30px] mt-1 space-y-1.5">
+        <div className="relative z-1 mb-1.5 ml-[30px] mt-1 space-y-1.5">
           <ToolInputDetail toolName={canonical} input={callInput} />
           {shownResult &&
             (resultContent ||

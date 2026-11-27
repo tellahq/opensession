@@ -10,10 +10,10 @@ export const ARCHIVED_LIST = "-mx-3";
  * the floating field without drawing a hard toolbar divider.
  */
 export const ARCHIVED_PHONE_SEARCH_DOCK =
-  "pointer-events-none fixed inset-x-0 bottom-0 z-30 hidden px-3.5 pt-6 " +
+  "pointer-events-none fixed inset-x-0 bottom-0 z-shell-overlay hidden px-3.5 pt-6 " +
   "pb-[max(12px,env(safe-area-inset-bottom,0px))] phone:block " +
   "phone:[body.kb-open_&]:pb-3 " +
-  "before:pointer-events-none before:absolute before:inset-0 before:-z-[1] " +
+  "before:pointer-events-none before:absolute before:inset-0 before:-z-1 " +
   "before:bg-[linear-gradient(to_bottom,transparent_0%,var(--bg)_48%)] " +
   "[&>input]:pointer-events-auto";
 
@@ -59,7 +59,7 @@ export const ARCHIVED_ROW =
   "after:pointer-events-none after:absolute after:right-3 after:bottom-0 after:left-[42px] " +
   "after:h-px after:bg-line after:transition-opacity after:duration-[var(--dur-micro)] " +
   "hover:after:opacity-0 focus-within:after:opacity-0 " +
-  "phone:z-[1] phone:gap-2.5 phone:touch-pan-y phone:bg-surface phone:px-[18px] phone:py-4 " +
+  "phone:z-1 phone:gap-2.5 phone:touch-pan-y phone:bg-surface phone:px-[18px] phone:py-4 " +
   "phone:transform-[translateX(var(--swipe-x,0))] phone:after:left-[46px]";
 
 /**
@@ -100,7 +100,7 @@ export const ARCHIVED_ROW_TIME =
  * reveal the labelled swipe action instead, so every row stays visually quiet.
  */
 export const ARCHIVED_ROW_ACTION =
-  "absolute right-3 top-1.5 z-[1] opacity-0 transition-opacity " +
+  "absolute right-3 top-1.5 z-1 opacity-0 transition-opacity " +
   "duration-[var(--dur-micro)] ease-[var(--ease)] group-hover:opacity-100 " +
   "focus-visible:opacity-100 phone:hidden";
 

@@ -193,7 +193,7 @@ export function Issues({ sessions, onOpenSession, topbarActionsEl }: Props) {
             variant="ghost"
             icon={<IconSearch size={20} />}
             className={cn(
-              "absolute inset-y-0 left-0 z-10",
+              "absolute inset-y-0 left-0 z-sticky",
               searchExpanded && "pointer-events-none text-faint",
             )}
             aria-label="Search issues"

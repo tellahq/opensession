@@ -185,7 +185,7 @@ test("sidebar Changes shares Review's code display options", () => {
   expect(commentableDiffSource).toContain(
     "top-[calc(var(--review-file-header-top,0px)-1px)]",
   );
-  expect(commentableDiffSource).toContain("z-[6] bg-surface");
+  expect(commentableDiffSource).toContain("z-6 bg-surface");
   expect(commentableDiffSource).toContain("rounded-md bg-surface");
   expect(commentableDiffSource).toContain(
     ': "w-auto rounded-none bg-[var(--review-file-header-bg)] hover:bg-[var(--review-file-header-hover)]"',

@@ -37,6 +37,11 @@ its odd values. A rule in a document does not stop that. A type does.
    (`leading-title`, `leading-body`, `tracking-tight`, `tracking-title`). A
    line box that must equal its control's height takes a spacing step
    (`leading-6.5`); `ui-audit`'s `arbitrary-leading` counts the rest.
+   Stacking order is one list of named layers, bottom to top, in
+   base-theme.css (`--layer-*`): Tailwind reads them as `z-<name>`
+   (`z-sticky`, `z-chrome`, `z-modal`) and StyleX as `layer.<name>`. Inside a
+   component's own stacking context, siblings take small integers (`-z-1` to
+   `z-9`). `off-scale-z` counts any other z-index of 10 or more.
 2. **Primitives** (`ui/*.tsx`). Authored in StyleX against the tokens. Each
    one owns its look completely and exposes `variant` / `size` for the
    choices the system has made, plus an `xstyle` prop whose type only accepts

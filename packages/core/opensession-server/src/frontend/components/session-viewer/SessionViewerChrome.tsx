@@ -1306,7 +1306,7 @@ export function SessionViewerChrome({
                     >
                       <TopBarBack
                         floating
-                        className="relative z-[1]"
+                        className="relative z-1"
                         onClick={() =>
                           panelPage
                             ? setPanelPage(null)
@@ -1332,7 +1332,7 @@ export function SessionViewerChrome({
                       </TopBarTitle>
                       {/* The same session menu moves with the person into Workspace
 									    details instead of remaining behind the full-screen page. */}
-                      <TopBarActions className="relative z-[1]">
+                      <TopBarActions className="relative z-1">
                         {overflowMenu}
                       </TopBarActions>
                     </TopBar>

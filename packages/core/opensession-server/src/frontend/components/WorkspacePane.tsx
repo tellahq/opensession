@@ -1039,7 +1039,7 @@ export function WorkspacePane({
         createPortal(
           <>
             <motion.div
-              className="pointer-events-none fixed inset-0 z-[12000] flex flex-col items-center justify-center bg-[color-mix(in_srgb,var(--bg-panel)_68%,transparent)] px-6 text-center"
+              className="pointer-events-none fixed inset-0 z-drop-target flex flex-col items-center justify-center bg-[color-mix(in_srgb,var(--bg-panel)_68%,transparent)] px-6 text-center"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ type: "tween", duration: duration.base, ease }}

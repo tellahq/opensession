@@ -1243,7 +1243,7 @@ export const SIDEBAR_AUTO_COG = cn(
   // above the wash through a child reach: utilities.
   "before:absolute before:top-1/2 before:left-1/2 before:z-0 before:size-7 before:-translate-x-1/2 before:-translate-y-1/2 before:rounded-[calc(6px*var(--rf))] before:[corner-shape:var(--cs)] before:transition-[background] before:content-[''] hover:before:bg-pressed " +
     "after:absolute after:-inset-x-1 after:inset-y-0 after:content-[''] " +
-    "[&>svg]:relative [&>svg]:z-[1]",
+    "[&>svg]:relative [&>svg]:z-1",
   sx(sidebarStyles.autoCog),
 );
 

@@ -162,7 +162,7 @@ export const composerMenuIcon =
  *  that line is drawn for a control resting IN the page, and on a floating
  *  popup it read a step darker than every other menu on screen. */
 export const composerMenuPopup =
-  "absolute bottom-[calc(100%+6px)] z-40 rounded-lg bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] p-1 smooth-shadow-ring-md";
+  "absolute bottom-[calc(100%+6px)] z-chrome rounded-lg bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] p-1 smooth-shadow-ring-md";
 /** The menu's own floor width. Kept out of the surface above because a second
  *  `min-w-*` on the same element would not compose — the send-later menu is
  *  wider (it lists pending messages), and whichever Tailwind emitted last would
@@ -284,7 +284,7 @@ export const composerQueueItemDraggable =
  *  painted after it, hence `order-1`. The negative block margins keep the 36px
  *  cluster from setting the height of a one-line row. */
 export const composerQueueActions =
-  "order-1 z-[1] -mt-[11px] -mb-2.5 inline-flex shrink-0 items-center gap-0.5";
+  "order-1 z-1 -mt-[11px] -mb-2.5 inline-flex shrink-0 items-center gap-0.5";
 /** A compact 36px action with the same `rounded-control` corner and inset
  *  hover wash as the composer's toolbar buttons. It remains a separate
  *  constant because the wash sits 3px in rather than 4px, there is no
@@ -292,7 +292,7 @@ export const composerQueueActions =
 export const composerQueueAction =
   "relative inline-flex size-9 items-center justify-center rounded-control text-dim disabled:cursor-default disabled:opacity-35 enabled:hover:text-fg " +
   "before:absolute before:inset-[3px] before:z-0 before:rounded-[calc(9px*var(--rf))] before:[corner-shape:var(--cs)] before:transition-[background] before:content-[''] enabled:hover:before:bg-hover " +
-  "[&>*]:relative [&>*]:z-[1]";
+  "[&>*]:relative [&>*]:z-1";
 /** Destructive action: the wash goes red rather than neutral. */
 export const composerQueueActionDanger =
   "enabled:hover:text-red enabled:hover:before:bg-red-soft";

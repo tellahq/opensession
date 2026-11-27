@@ -270,7 +270,7 @@ export function BrowserLoading({ name }: { name: string }) {
     <div
       role="status"
       aria-label={`Loading ${name}`}
-      className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-panel"
+      className="pointer-events-none absolute inset-0 z-sticky flex items-center justify-center bg-panel"
     >
       <PageLoader className="text-dim" />
     </div>

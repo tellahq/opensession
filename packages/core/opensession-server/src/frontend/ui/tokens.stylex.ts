@@ -551,26 +551,78 @@ export const geometry = stylex.defineConsts({
 
 /** The one breakpoint (720px, inclusive on the phone side) and hover gating. */
 /**
- * Stacking layers. Only the ones the primitives own; a feature that needs a
- * new layer adds it here, named for what it sits above.
+ * Stacking layers, bottom to top: base-theme.css `--layer-*`, the same values
+ * Tailwind reads as `z-<name>`. A feature that needs a new layer adds it
+ * there, named for what it sits above. Inside a component's own stacking
+ * context, order siblings with small integers instead. The top two are
+ * numbers: through var(), Chrome rounds both to 2147480000, which ties them.
  */
 export const layer = stylex.defineConsts({
-  /** The app's top interaction layer: every menu, select, tooltip and hover
-   *  preview, above the pinned workspace summary wherever its trigger lives. */
-  floating: "2147483647",
+  /** A sticky bar or a veil over a surface's own content. */
+  sticky: "var(--layer-sticky)",
+  /** A surface's own floating controls and band headings, over its sticky bars. */
+  float: "var(--layer-float)",
+  /** The session header's actions, over its title's floats. */
+  headerActions: "var(--layer-header-actions)",
+  /** The content pane beside the sidebar, and a side panel floating over it. */
+  shellPane: "var(--layer-shell-pane)",
+  /** Over the shell panes: the sidebar's resize edge, the comments pane, a pane-wide confirm. */
+  shellOverlay: "var(--layer-shell-overlay)",
+  /** The session tab strip, over the shell overlays it docks beside. */
+  tabStrip: "var(--layer-tab-strip)",
+  /** App chrome over a pane: the phone header overlay and the composer's menus. */
+  chrome: "var(--layer-chrome)",
+  /** A phone side panel, a drawer over the chrome. */
+  drawer: "var(--layer-drawer)",
+  /** A docked call window. */
+  dock: "var(--layer-dock)",
+  /** A full-screen phone sheet inside the session viewer. */
+  sheet: "var(--layer-sheet)",
+  /** Development readouts. */
+  debug: "var(--layer-debug)",
+  /** The voice session controls. */
+  voice: "var(--layer-voice)",
+  /** A dragged element's ghost. */
+  dragGhost: "var(--layer-drag-ghost)",
+  /** Notification banners. */
+  notice: "var(--layer-notice)",
+  /** A small modal's scrim, and a phone filter sheet's. */
+  sheetScrim: "var(--layer-sheet-scrim)",
+  /** The small modal or phone sheet over that scrim. */
+  sheetPopup: "var(--layer-sheet-popup)",
+  /** The phone's floating action button. */
+  fab: "var(--layer-fab)",
+  /** A float anchored to content: a selection's toolbar, a chart's tooltip. */
+  inlineFloat: "var(--layer-inline-float)",
+  /** A hand-rolled right-click menu. */
+  contextMenu: "var(--layer-context-menu)",
   /** A panel you keep open (above the page and its floating triggers). */
-  panel: "5000",
-  /** A palette's scrim and the palette over it. */
-  paletteScrim: "6000",
-  palette: "6001",
-  /** The modal tier: a dialog's scrim and the dialog. */
-  modalScrim: "10000",
-  modal: "10001",
-  /** A sticky bar inside a scrolling surface. */
-  sticky: "10",
-  /** A sticky table head over its own rows. */
+  panel: "var(--layer-panel)",
+  /** A palette's scrim. */
+  paletteScrim: "var(--layer-palette-scrim)",
+  /** A palette over its scrim. */
+  palette: "var(--layer-palette)",
+  /** Toasts, under the modal tier. */
+  toast: "var(--layer-toast)",
+  /** The modal tier: a dialog's scrim, and full-screen blocking overlays. */
+  modalScrim: "var(--layer-modal-scrim)",
+  /** A dialog over its scrim. */
+  modal: "var(--layer-modal)",
+  /** What shows through the lightbox's composer hole. */
+  lightboxUnder: "var(--layer-lightbox-under)",
+  /** The media lightbox. */
+  lightbox: "var(--layer-lightbox)",
+  /** The composer riding over the lightbox. */
+  lightboxComposer: "var(--layer-lightbox-composer)",
+  /** The full-page file drop target. */
+  dropTarget: "var(--layer-drop-target)",
+  /** A live frame's hole, and the pinned workspace summary's popover, just under floating. */
+  frameHole: "2147483646",
+  /** The app's top interaction layer: every menu, select, tooltip and hover preview. */
+  floating: "2147483647",
+  /** A sticky table head over its own rows (local). */
   tableHead: "1",
-  /** An action pinned over a preview it belongs to. */
+  /** An action pinned over a preview it belongs to (local). */
   overPreview: "1",
 });
 
@@ -711,5 +763,5 @@ export const sidebarScale = stylex.defineConsts({
   cogWidth: "24px",
   cogBleed: "-4px",
   /** The sticky band slot rides above the pinned lanes. */
-  bandLayer: "20",
+  bandLayer: "var(--layer-float)",
 });

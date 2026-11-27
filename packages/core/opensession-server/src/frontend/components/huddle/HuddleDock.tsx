@@ -142,7 +142,7 @@ function Dock() {
       aria-label="Huddle"
       style={dockStyle}
       className={cn(
-        "fixed z-50 flex flex-col gap-2 rounded-xl border border-divider bg-raised p-2.5 smooth-shadow-md",
+        "fixed z-dock flex flex-col gap-2 rounded-xl border border-divider bg-raised p-2.5 smooth-shadow-md",
         phone
           ? "inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))]"
           : cn(

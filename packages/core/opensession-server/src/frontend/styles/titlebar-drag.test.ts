@@ -49,7 +49,7 @@ test("Electron titlebar drag regions do not depend on WCO visibility", async () 
     appShell.indexOf("<TitleBar pane />"),
   );
   expect(firstMile).toContain(
-    'className="wco-chrome relative z-20 flex h-11 shrink-0 items-start justify-center"',
+    'className="wco-chrome relative z-float flex h-11 shrink-0 items-start justify-center"',
   );
   expect(settings).toContain("!TOOL_SECTIONS.has(active) && (");
   expect(settings).toContain("className={SETTINGS_DRAG_HANDLE}");

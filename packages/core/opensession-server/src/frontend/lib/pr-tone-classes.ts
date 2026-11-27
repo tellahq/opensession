@@ -351,7 +351,7 @@ export function prStackChipClass(tone: PrTone, size: "bar" | "head"): string {
 /** The split button's two halves lift over each other on hover/focus so the
  *  shared seam doesn't clip the active one's edge. */
 export const PR_CHIP_SEAM =
-  "hover:relative hover:z-[1] focus-visible:relative focus-visible:z-[1]";
+  "hover:relative hover:z-1 focus-visible:relative focus-visible:z-1";
 
 /** Sibling PRs in the header's overflow menu: a dot in each PR's own tone. */
 export const PR_SIB_DOT = "size-[7px] shrink-0 rounded-full";

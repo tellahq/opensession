@@ -111,7 +111,7 @@ export function SelectionToSession({
       {sel && send && (
         <div
           ref={popRef}
-          className="fixed z-1000 max-w-[min(340px,90vw)] -translate-x-1/2 rounded-md border border-accent bg-popup-glass [backdrop-filter:var(--popup-blur)] font-sans smooth-shadow-md"
+          className="fixed z-inline-float max-w-[min(340px,90vw)] -translate-x-1/2 rounded-md border border-accent bg-popup-glass [backdrop-filter:var(--popup-blur)] font-sans smooth-shadow-md"
           style={{ left: sel.x, top: sel.y + 6 }}
           onMouseDown={(e) => e.stopPropagation()}
         >

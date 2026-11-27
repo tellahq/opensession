@@ -477,6 +477,16 @@ const SIGNALS: Signal[] = [
     count: (source) => occurrences(source, /\btext-\[[0-9.]+px\]/g),
   },
   {
+    id: "off-scale-z",
+    instead:
+      "a named stacking layer, z-<name> or layer.<name> (base-theme.css --layer-*), or a small integer (-z-1 to z-9) for order inside a component",
+    exempt: ["styles/", "ui/tokens.stylex.ts"],
+    count: (source) =>
+      occurrences(source, /(?<![\w-])-?z-\[[^\]]+\]/g) +
+      occurrences(source, /(?<![\w-])-?z-\d{2,}(?![\w.])/g) +
+      occurrences(source, /\bz-?index:\s*["']?-?\d{2,}/gi),
+  },
+  {
     id: "arbitrary-leading",
     instead:
       "the line-height and tracking scales: leading-none/title/tight/snug/body/relaxed, a spacing step for a line box that fills its control (leading-6.5), tracking-tight/title/wide",

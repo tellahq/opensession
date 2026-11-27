@@ -30,7 +30,7 @@ export const LIGHTBOX_TOOL_CLASS =
 /** Close and the page arrows: frosted glass discs, so the page shows
  *  through them the way it does through the scrim. */
 export const LIGHTBOX_ROUND_BUTTON_CLASS =
-  "z-10 size-10 shrink-0 rounded-full border-fg/10 bg-bg/60 text-fg backdrop-blur-xl backdrop-saturate-150 smooth-shadow-sm hover:bg-bg/85 phone:size-11";
+  "z-sticky size-10 shrink-0 rounded-full border-fg/10 bg-bg/60 text-fg backdrop-blur-xl backdrop-saturate-150 smooth-shadow-sm hover:bg-bg/85 phone:size-11";
 
 /** The session input a desktop viewer keeps above its scrim: the child of
  *  the marked host that holds Composer's box (`.composer`), lifted by

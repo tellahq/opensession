@@ -265,7 +265,7 @@ export function RestartOverlay({ connected, addHandler }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/82 p-6 backdrop-blur-[4px]"
+      className="fixed inset-0 z-modal-scrim flex items-center justify-center bg-black/82 p-6 backdrop-blur-[4px]"
       role="alertdialog"
       aria-live="assertive"
     >

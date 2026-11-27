@@ -241,7 +241,7 @@ export const WS_SUMMARY_FRAME_MEDIA =
  *  edge against the card. Same corner as the tile, so the box's clip and the
  *  line agree. */
 export const WS_SUMMARY_FRAME_EDGE =
-  "pointer-events-none absolute inset-0 z-[1] rounded-md border border-line";
+  "pointer-events-none absolute inset-0 z-1 rounded-md border border-line";
 
 /** The filename under a frame. The picture is the content, but the name is how
  *  you refer to it ("use the dark one"), so it stays. */
@@ -251,13 +251,13 @@ export const WS_SUMMARY_FRAME_CAPTION =
 /** The address of a live page, laid over its bottom-left corner like a
  *  video's title: dark glass, so it reads on any page. */
 export const WS_SUMMARY_FRAME_HOST =
-  "pointer-events-none absolute bottom-2 left-2 z-[1] max-w-[calc(100%_-_16px)] truncate " +
+  "pointer-events-none absolute bottom-2 left-2 z-1 max-w-[calc(100%_-_16px)] truncate " +
   "rounded-full bg-black/55 px-2.5 py-1 text-meta font-medium text-white backdrop-blur-xl";
 
 /** A newer preview deploy is on its way, laid over the live page's top-right
  *  corner in the host pill's dark glass. */
 export const WS_SUMMARY_FRAME_DEPLOYING =
-  "pointer-events-none absolute top-2 right-2 z-[1] inline-flex items-center gap-1.5 " +
+  "pointer-events-none absolute top-2 right-2 z-1 inline-flex items-center gap-1.5 " +
   "rounded-full bg-black/55 py-1 pr-2.5 pl-2 text-meta font-medium text-white backdrop-blur-xl";
 
 /** The badge's spinner, in the pill's white ink: the globe's amber is too

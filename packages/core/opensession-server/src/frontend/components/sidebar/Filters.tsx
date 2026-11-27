@@ -52,9 +52,9 @@ import { createPortal } from "react-dom";
 // Rendered in a portal so it can overflow the narrow sidebar.
 
 /** Full-screen transparent catcher that closes the popover on outside click.
- *  The row menus portal above it (Base UI positions them at z-10001), so a
+ *  The row menus portal above it (Base UI positions them at z-modal), so a
  *  press inside an open menu never reaches this. */
-const BACKDROP = "fixed inset-0 z-[300]";
+const BACKDROP = "fixed inset-0 z-sheet-scrim";
 
 /** The panel itself, portalled and fixed-positioned at the anchor: the app's
  *  popup surface, so it reads as the same object as every menu it opens.
@@ -63,7 +63,7 @@ const BACKDROP = "fixed inset-0 z-[300]";
  *  crowding its `rounded-popup` corners. `gap-0.5` keeps two adjacent hover
  *  washes from fusing into one block. */
 const FILTER_POPOVER =
-  "fixed z-[301] flex flex-col gap-0.5 rounded-popup bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] " +
+  "fixed z-sheet-popup flex flex-col gap-0.5 rounded-popup bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] " +
   "p-2 smooth-shadow-ring-md animate-[hovercard-in_var(--dur-micro)_var(--ease)]";
 
 /** The same control as a row inside the Advanced menu: label, current value,

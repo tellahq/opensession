@@ -145,7 +145,7 @@ export function animateEmptyTabClose(button: HTMLButtonElement): void {
     height: `${rect.height}px`,
     overflow: "hidden",
     pointerEvents: "none",
-    zIndex: "100",
+    zIndex: "var(--layer-drag-ghost)",
     transition: "none",
   });
   document.body.append(ghost);

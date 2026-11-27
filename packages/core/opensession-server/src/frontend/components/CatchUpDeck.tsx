@@ -266,7 +266,7 @@ export function CatchUpDeck({
 			    a desktop-width card), and the up-fling of Keep Unread crosses the
 			    whole row. Cards pass UNDER the bar instead of over it, so the
 			    counter stays readable through every swipe. */}
-      <PhoneTopBar className="relative z-10 w-full bg-surface px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))] phone:h-auto">
+      <PhoneTopBar className="relative z-sticky w-full bg-surface px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))] phone:h-auto">
         <PhoneTopBarAction
           className="hidden phone:inline-flex"
           onClick={onExit}
@@ -356,7 +356,7 @@ export function CatchUpDeck({
 			    the card stack for the same reason the header is: a tilted card
 			    reaches past its own box at both ends. */}
       {!done && (
-        <div className="relative z-10 flex w-full max-w-[860px] shrink-0 items-stretch gap-2.5 bg-surface px-4 pb-[max(16px,env(safe-area-inset-bottom))]">
+        <div className="relative z-sticky flex w-full max-w-[860px] shrink-0 items-stretch gap-2.5 bg-surface px-4 pb-[max(16px,env(safe-area-inset-bottom))]">
           <Button
             size="lg"
             className="flex-1 py-3 text-sm"

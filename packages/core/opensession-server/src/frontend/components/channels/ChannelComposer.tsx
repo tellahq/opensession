@@ -276,7 +276,7 @@ export function ChannelComposer({
         <div
           role="listbox"
           aria-label={mention ? "People" : "Emoji"}
-          className="absolute right-0 bottom-full left-0 z-20 mb-1 flex flex-col gap-0.5 rounded-popup bg-panel p-1 shadow-ring-md"
+          className="absolute right-0 bottom-full left-0 z-float mb-1 flex flex-col gap-0.5 rounded-popup bg-panel p-1 shadow-ring-md"
         >
           {suggestions.map((suggestion, index) => (
             <ListRow

@@ -55,7 +55,7 @@ export function SessionVoiceHost({
           <motion.aside
             {...composerChipMotion}
             exit={{ opacity: 0 }}
-            className="fixed z-[90] flex items-center gap-2 rounded-2xl bg-panel/95 p-3 backdrop-blur-xl smooth-shadow-lg desktop:right-6 desktop:bottom-24 desktop:w-96 phone:inset-x-3 phone:bottom-[calc(env(safe-area-inset-bottom)+96px)]"
+            className="fixed z-voice flex items-center gap-2 rounded-2xl bg-panel/95 p-3 backdrop-blur-xl smooth-shadow-lg desktop:right-6 desktop:bottom-24 desktop:w-96 phone:inset-x-3 phone:bottom-[calc(env(safe-area-inset-bottom)+96px)]"
             aria-label="Voice conversation"
           >
             <SessionVoiceOrb

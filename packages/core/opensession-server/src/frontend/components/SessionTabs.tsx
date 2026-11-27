@@ -424,7 +424,7 @@ export function SessionTabs({
             type="button"
             className={cn(
               TAB_NEW,
-              "relative z-[1]",
+              "relative z-1",
               attached && TAB_CONTROL_ATTACHED,
             )}
             aria-label="New session in this workspace"

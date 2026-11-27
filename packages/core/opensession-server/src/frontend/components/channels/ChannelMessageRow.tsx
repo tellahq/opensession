@@ -327,7 +327,7 @@ export function ChannelMessageRow({
       {!editing && (
         <div
           className={cn(
-            "absolute -top-5 right-5 z-10 flex items-center gap-0.5 rounded-lg border border-line bg-panel p-1 shadow-ring-sm",
+            "absolute -top-5 right-5 z-sticky flex items-center gap-0.5 rounded-lg border border-line bg-panel p-1 shadow-ring-sm",
             // Hidden bars take no taps, or they would cover the text above.
             "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 has-[[data-popup-open]]:pointer-events-auto has-[[data-popup-open]]:opacity-100",
           )}

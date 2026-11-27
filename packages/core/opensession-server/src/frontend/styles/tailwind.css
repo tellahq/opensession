@@ -368,6 +368,40 @@
   --tracking-tight: -0.01em;
   --tracking-title: -0.02em;
 
+  /* Stacking layers (base-theme.css `--layer-*`), as `z-<name>`. */
+  --z-index-sticky: var(--layer-sticky);
+  --z-index-float: var(--layer-float);
+  --z-index-header-actions: var(--layer-header-actions);
+  --z-index-shell-pane: var(--layer-shell-pane);
+  --z-index-shell-overlay: var(--layer-shell-overlay);
+  --z-index-tab-strip: var(--layer-tab-strip);
+  --z-index-chrome: var(--layer-chrome);
+  --z-index-drawer: var(--layer-drawer);
+  --z-index-dock: var(--layer-dock);
+  --z-index-sheet: var(--layer-sheet);
+  --z-index-debug: var(--layer-debug);
+  --z-index-voice: var(--layer-voice);
+  --z-index-drag-ghost: var(--layer-drag-ghost);
+  --z-index-notice: var(--layer-notice);
+  --z-index-sheet-scrim: var(--layer-sheet-scrim);
+  --z-index-sheet-popup: var(--layer-sheet-popup);
+  --z-index-fab: var(--layer-fab);
+  --z-index-inline-float: var(--layer-inline-float);
+  --z-index-context-menu: var(--layer-context-menu);
+  --z-index-panel: var(--layer-panel);
+  --z-index-palette-scrim: var(--layer-palette-scrim);
+  --z-index-palette: var(--layer-palette);
+  --z-index-toast: var(--layer-toast);
+  --z-index-modal-scrim: var(--layer-modal-scrim);
+  --z-index-modal: var(--layer-modal);
+  --z-index-lightbox-under: var(--layer-lightbox-under);
+  --z-index-lightbox: var(--layer-lightbox);
+  --z-index-lightbox-composer: var(--layer-lightbox-composer);
+  --z-index-drop-target: var(--layer-drop-target);
+  /* Literal: through var(), Chrome rounds these two to one value. */
+  --z-index-frame-hole: 2147483646;
+  --z-index-floating: 2147483647;
+
   /* Interaction geometry: `hit-target` uses 40px for pointer layouts and
 	   expands to the WCAG-friendly 44px touch convention on coarse pointers. */
   --spacing-hit-target: 40px;

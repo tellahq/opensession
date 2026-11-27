@@ -6,7 +6,7 @@
  * the new-session + sits 12px from the right edge at 58px across, and the Desk
  * trigger sits one 12px gutter further in — which is why its phone `right` is
  * still spelled `calc(12px + 58px + 12px)` rather than the 82px it resolves
- * to. Both ride z-500: above the content, below the action sheet (4000) and
+ * to. Both ride z-fab: above the content, below the action sheet (4000) and
  * the palettes (6000).
  *
  * Every phone value is a `phone:` variant rather than an unprefixed base with
@@ -35,7 +35,7 @@
  */
 export const MOBILE_FAB =
   "hidden phone:fixed phone:right-3 phone:bottom-[calc(18px+env(safe-area-inset-bottom,0px))] " +
-  "phone:z-500 phone:flex phone:size-[58px] phone:items-center phone:justify-center " +
+  "phone:z-fab phone:flex phone:size-[58px] phone:items-center phone:justify-center " +
   "phone:rounded-full phone:border-none phone:bg-accent phone:text-on-accent " +
   "phone:shadow-[0_4px_14px_rgba(0,0,0,0.16),0_1px_3px_rgba(0,0,0,0.10)] " +
   "phone:transition-transform phone:active:scale-[0.92]";
@@ -67,7 +67,7 @@ export const MOBILE_FAB =
  * layout from the right edge.
  */
 export const DESK_FAB =
-  "fixed right-[18px] bottom-[18px] z-500 flex size-11 items-center justify-center " +
+  "fixed right-[18px] bottom-[18px] z-fab flex size-11 items-center justify-center " +
   "rounded-full border border-divider bg-[var(--composer-surface)] text-dim " +
   "smooth-shadow-xs " +
   "transition-[color,border-color,translate,scale] hover:-translate-y-px hover:border-line hover:text-fg " +

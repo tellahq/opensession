@@ -34,5 +34,5 @@ export const SUPPORT_COLUMN_BAR =
  * its own top padding, so nothing sits under the pill at rest.
  */
 export const SUPPORT_TOP_RAIL =
-  "pointer-events-none absolute top-3 left-1/2 z-[5] flex max-w-[calc(100%-32px)] " +
+  "pointer-events-none absolute top-3 left-1/2 z-5 flex max-w-[calc(100%-32px)] " +
   "-translate-x-1/2 flex-col items-center gap-1.5";

@@ -845,7 +845,7 @@ export function MediaLightboxGallery({
     <motion.div
       ref={dialogRef}
       data-media-lightbox=""
-      className="fixed inset-0 z-[11000] flex flex-col phone:h-[100dvh]"
+      className="fixed inset-0 z-lightbox flex flex-col phone:h-[100dvh]"
       role="dialog"
       tabIndex={-1}
       // Not modal while the session input stays usable beside it.
@@ -868,13 +868,13 @@ export function MediaLightboxGallery({
           the top bar: the bar's sides differ in width (window controls on
           the left, the actions on the right). */}
       {many && !isPhone && (
-        <div className="pointer-events-none absolute left-1/2 top-[calc(12px+env(safe-area-inset-top))] z-10 flex h-10 -translate-x-1/2 items-center text-meta font-medium tabular-nums text-dim">
+        <div className="pointer-events-none absolute left-1/2 top-[calc(12px+env(safe-area-inset-top))] z-sticky flex h-10 -translate-x-1/2 items-center text-meta font-medium tabular-nums text-dim">
           {index + 1} of {items.length}
         </div>
       )}
       <div
         className={cn(
-          "pointer-events-none absolute left-[calc(16px+env(safe-area-inset-left))] [html.wco_&]:left-[max(16px,calc(env(titlebar-area-x,78px)+8px))] right-[calc(12px+env(safe-area-inset-right))] top-[calc(12px+env(safe-area-inset-top))] z-10 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3",
+          "pointer-events-none absolute left-[calc(16px+env(safe-area-inset-left))] [html.wco_&]:left-[max(16px,calc(env(titlebar-area-x,78px)+8px))] right-[calc(12px+env(safe-area-inset-right))] top-[calc(12px+env(safe-area-inset-top))] z-sticky grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3",
           isPhone &&
             "transition-[opacity,transform] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
           isPhone && !chromeVisible && "-translate-y-2 opacity-0",
@@ -1029,7 +1029,7 @@ export function MediaLightboxGallery({
           room with the spacers either side of the picture. */}
       {many && !isPhone && (
         <>
-          <div className="absolute left-[calc(16px+env(safe-area-inset-left))] top-1/2 z-10 -translate-y-1/2">
+          <div className="absolute left-[calc(16px+env(safe-area-inset-left))] top-1/2 z-sticky -translate-y-1/2">
             <Button
               variant="default"
               icon={<IconChevronLeft size={22} />}
@@ -1038,7 +1038,7 @@ export function MediaLightboxGallery({
               aria-label="Previous"
             />
           </div>
-          <div className="absolute right-[calc(16px+env(safe-area-inset-right))] top-1/2 z-10 -translate-y-1/2">
+          <div className="absolute right-[calc(16px+env(safe-area-inset-right))] top-1/2 z-sticky -translate-y-1/2">
             <Button
               variant="default"
               icon={<IconChevronRight size={22} />}
@@ -1054,7 +1054,7 @@ export function MediaLightboxGallery({
         <div
           ref={phoneBottomRef}
           className={cn(
-            "absolute inset-x-0 bottom-0 z-10 flex flex-col gap-3 bg-linear-to-b from-transparent via-bg/85 to-bg px-0 pb-[max(14px,env(safe-area-inset-bottom))] pt-8 transition-[opacity,transform] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
+            "absolute inset-x-0 bottom-0 z-sticky flex flex-col gap-3 bg-linear-to-b from-transparent via-bg/85 to-bg px-0 pb-[max(14px,env(safe-area-inset-bottom))] pt-8 transition-[opacity,transform] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
             !chromeVisible && "pointer-events-none translate-y-3 opacity-0",
           )}
           inert={!chromeVisible ? true : undefined}
@@ -1146,7 +1146,7 @@ export function MediaLightboxGallery({
       )}
 
       {isPhone && commentHint && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-[calc(16px+env(safe-area-inset-bottom))] z-20 flex justify-center px-4">
+        <div className="pointer-events-none absolute inset-x-0 bottom-[calc(16px+env(safe-area-inset-bottom))] z-float flex justify-center px-4">
           {commentHint}
         </div>
       )}
@@ -1157,7 +1157,7 @@ export function MediaLightboxGallery({
           /* Fixed and placed against the region: the remark and the pixels it
 					   is about read as one thing. Kept to a single row, because on a
 					   phone a taller card would cover the picture it is describing. */
-          className="fixed z-20 flex cursor-text flex-col gap-1 rounded-[22px] bg-black/55 p-1.5 shadow-[inset_0_1px_0_rgb(255_255_255/0.08),0_16px_50px_rgb(0_0_0/0.5)] backdrop-blur-2xl backdrop-saturate-150"
+          className="fixed z-float flex cursor-text flex-col gap-1 rounded-[22px] bg-black/55 p-1.5 shadow-[inset_0_1px_0_rgb(255_255_255/0.08),0_16px_50px_rgb(0_0_0/0.5)] backdrop-blur-2xl backdrop-saturate-150"
           // It grows out of the corner of the region it belongs to, rather
           // than fading in beside it.
           initial={reduceMotion ? false : { opacity: 0, scale: 0.94 }}
@@ -1254,7 +1254,7 @@ export function MediaLightboxGallery({
 
       {!isPhone && (
         <div
-          className="z-10 flex shrink-0 flex-col items-center gap-2"
+          className="z-sticky flex shrink-0 flex-col items-center gap-2"
           style={{
             ...sidePadding,
             // Rests just above the input, or on the window's edge without one.
