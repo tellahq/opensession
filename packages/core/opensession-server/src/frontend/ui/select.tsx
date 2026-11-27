@@ -1,15 +1,13 @@
 import * as React from "react";
 import { Select as BaseSelect } from "@base-ui/react/select";
 import { IconCheck, IconChevronDown } from "../components/icons";
+import * as stylex from "@stylexjs/stylex";
 import { cn } from "./cn";
+import { field } from "./field-styles";
 import { selectTriggerClasses } from "./select-classes";
-import {
-  FLOATING_OVERLAY_LAYER,
-  POPUP_HOOK,
-  popupItemClasses,
-  popupScrollClasses,
-  popupSurfaceClasses,
-} from "./popup-classes";
+import { POPUP_HOOK } from "./popup-classes";
+import { popup } from "./popup-styles";
+import { sx } from "./sx";
 import { restoreSelectFocusAfterClose } from "./select-focus";
 
 /**
@@ -121,34 +119,33 @@ function Trigger(triggerProps: TriggerProps) {
   // Presence, not truthiness: an icon-bearing list keeps the slot for the
   // values that have no glyph, so the labels stay on one x.
   const iconSlot = "icon" in triggerProps;
-  const label = iconSlot ? "col-start-2" : "col-start-1";
+  const label = [
+    field.triggerLabel,
+    iconSlot ? field.triggerLabelAfterIcon : null,
+  ];
   return (
     <BaseSelect.Trigger
       {...props}
       className={selectTriggerClasses(size, iconSlot, className)}
     >
-      {iconSlot && (
-        <span className="col-start-1 row-start-1 flex size-4 shrink-0 items-center justify-center text-dim">
-          {icon}
-        </span>
-      )}
-      <span className={cn("row-start-1 truncate", label)}>
+      {iconSlot && <span {...stylex.props(field.triggerIcon)}>{icon}</span>}
+      <span {...stylex.props(label)}>
         {children ?? <BaseSelect.Value placeholder={placeholder} />}
       </span>
       {sizeTo?.map((text, index) => (
         <span
           key={index}
           aria-hidden
-          className={cn("invisible row-start-1 truncate", label)}
+          {...stylex.props(label, field.triggerSizer)}
         >
           {text}
         </span>
       ))}
       <IconChevronDown
         size={16}
-        className={cn(
-          "row-start-1 shrink-0 text-faint",
-          iconSlot ? "col-start-3" : "col-start-2",
+        {...stylex.props(
+          field.triggerChevron,
+          iconSlot ? field.triggerChevronAfterIcon : null,
         )}
       />
     </BaseSelect.Trigger>
@@ -182,18 +179,13 @@ function Popup({
         // would give this one popup two open behaviours and no
         // animation. Anchor it below the trigger like every menu.
         alignItemWithTrigger={false}
-        className={cn(FLOATING_OVERLAY_LAYER, "outline-none")}
+        {...stylex.props(popup.positioner)}
       >
         <BaseSelect.Popup
           finalFocus={() => restoreFocusRef?.current ?? true}
-          className={cn(
-            POPUP_HOOK,
-            popupSurfaceClasses,
-            "min-w-[var(--anchor-width)]",
-            className,
-          )}
+          {...sx([popup.surface, popup.anchorWidth], cn(POPUP_HOOK, className))}
         >
-          <BaseSelect.List className={popupScrollClasses}>
+          <BaseSelect.List {...stylex.props(popup.scroll)}>
             {children}
           </BaseSelect.List>
         </BaseSelect.Popup>
@@ -218,19 +210,11 @@ function Item(itemProps: ItemProps) {
   return (
     <BaseSelect.Item
       {...props}
-      className={cn(
-        popupItemClasses,
-        "justify-between gap-3 data-[disabled]:cursor-default data-[disabled]:opacity-40",
-        className,
-      )}
+      {...sx([popup.item, popup.selectItem], className)}
     >
-      <span className="flex min-w-0 items-center gap-2">
-        {iconSlot && (
-          <span className="flex size-4 shrink-0 items-center justify-center text-dim">
-            {icon}
-          </span>
-        )}
-        <BaseSelect.ItemText className="min-w-0 truncate">
+      <span {...stylex.props(popup.itemLead)}>
+        {iconSlot && <span {...stylex.props(popup.itemIcon)}>{icon}</span>}
+        <BaseSelect.ItemText {...stylex.props(popup.truncate)}>
           {children}
         </BaseSelect.ItemText>
       </span>
@@ -238,7 +222,7 @@ function Item(itemProps: ItemProps) {
 			    `Check` reserves it: an indicator that only takes space while
 			    selected makes the picked row wider than the rest, so the popup
 			    is a different width depending on what is selected. */}
-      <span className="flex size-[17px] shrink-0 items-center justify-center text-accent">
+      <span {...stylex.props(popup.tickSlot)}>
         <BaseSelect.ItemIndicator>
           <IconCheck size={17} />
         </BaseSelect.ItemIndicator>
@@ -256,20 +240,13 @@ function GroupLabel({
   return (
     <BaseSelect.GroupLabel
       {...props}
-      className={cn(
-        "px-2 pb-1 pt-1.5 text-meta font-semibold tracking-[-0.01em] text-faint",
-        className,
-      )}
+      {...sx([popup.groupLabel, popup.groupLabelSpaced], className)}
     />
   );
 }
 
 function Separator({ className }: { className?: string }) {
-  return (
-    <BaseSelect.Separator
-      className={cn("-mx-1.5 my-1.5 h-px bg-line", className)}
-    />
-  );
+  return <BaseSelect.Separator {...sx(popup.separator, className)} />;
 }
 
 export const Select = {

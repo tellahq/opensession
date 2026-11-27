@@ -1,15 +1,38 @@
 import * as React from "react";
-import { cn } from "./cn";
+import * as stylex from "@stylexjs/stylex";
 import { PageDescription, PageHeader, PageTitle } from "./page-header";
+import { sx } from "./sx";
+import { geometry, media, space } from "./tokens.stylex";
 
 export type PageContentWidth = "narrow" | "default" | "wide" | "full";
 
-const contentWidths: Record<PageContentWidth, string> = {
-  narrow: "max-w-[760px]",
-  default: "max-w-[860px]",
-  wide: "max-w-[920px]",
-  full: "max-w-none",
-};
+const styles = stylex.create({
+  scroller: { minHeight: 0, width: "100%", flex: "1", overflowY: "auto" },
+  column: {
+    marginInline: "auto",
+    width: "100%",
+    paddingInline: { default: space.s24, [media.narrow]: space.s14 },
+    paddingBottom: { default: geometry.pageBottom, [media.narrow]: space.s48 },
+    paddingTop: {
+      default: geometry.pageTop,
+      [media.narrow]: geometry.pageTopNarrow,
+    },
+  },
+  section: { marginInline: "auto", width: "100%" },
+  narrow: { maxWidth: geometry.pageNarrow },
+  default: { maxWidth: geometry.pageDefault },
+  wide: { maxWidth: geometry.pageWide },
+  full: { maxWidth: "none" },
+  actions: { width: { default: null, [media.phone]: "100%" } },
+  filters: {
+    marginTop: `calc(-1 * ${space.s6})`,
+    marginBottom: geometry.pageFiltersGap,
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: space.s10,
+  },
+});
 
 interface PageLayoutProps extends Omit<
   React.ComponentPropsWithoutRef<"div">,
@@ -38,15 +61,10 @@ export function PageLayout({
       // title once this page has travelled under it. Read by App.tsx through
       // hooks/useScrollEdge.ts; it styles nothing.
       data-page-scroll
-      className={cn("min-h-0 w-full flex-1 overflow-y-auto", className)}
+      {...sx(styles.scroller, className)}
       {...props}
     >
-      <div
-        className={cn(
-          "mx-auto w-full px-6 pb-[60px] pt-7 max-[560px]:px-3.5 max-[560px]:pb-12 max-[560px]:pt-[18px]",
-          contentWidths[contentWidth],
-        )}
-      >
+      <div {...stylex.props(styles.column, styles[contentWidth])}>
         <PageHeader>
           <div>
             <PageTitle>{title}</PageTitle>
@@ -55,13 +73,11 @@ export function PageLayout({
             )}
           </div>
           {actions !== undefined && (
-            <div className="phone:w-full">{actions}</div>
+            <div {...stylex.props(styles.actions)}>{actions}</div>
           )}
         </PageHeader>
         {filters !== undefined && (
-          <div className="-mt-1.5 mb-[18px] flex flex-wrap items-center gap-2.5">
-            {filters}
-          </div>
+          <div {...stylex.props(styles.filters)}>{filters}</div>
         )}
         {children}
       </div>
@@ -80,7 +96,7 @@ export function PageSection({
 }: PageSectionProps) {
   return (
     <div
-      className={cn("mx-auto w-full", contentWidths[contentWidth], className)}
+      {...sx([styles.section, styles[contentWidth]], className)}
       {...props}
     />
   );

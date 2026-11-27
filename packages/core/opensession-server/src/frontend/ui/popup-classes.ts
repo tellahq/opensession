@@ -1,3 +1,6 @@
+import * as stylex from "@stylexjs/stylex";
+import { popup } from "./popup-styles";
+
 /**
  * The chrome every floating list in the app wears: the menu, the right-click
  * menu, and the select. One module so a select popup cannot drift from a menu
@@ -24,20 +27,11 @@ export const POPUP_HOOK = "app-menu-popup";
  * person opens paints above the card regardless of where its trigger lives.
  * Keep this on the portaled positioner rather than the popup surface: Base UI
  * owns positioning and creates the stacking box there. */
-export const FLOATING_OVERLAY_LAYER = "z-[2147483647]";
+export const FLOATING_OVERLAY_LAYER = stylex.props(popup.layer).className ?? "";
 
-/** The floating surface itself. `overflow-hidden` keeps the inner scrollbar's
- *  ends clipped to the rounded corner instead of poking past it; the
- *  transition rides Base UI's lifecycle attributes, so exit animates too. */
-export const popupSurfaceClasses =
-  "min-w-[180px] overflow-hidden rounded-popup [corner-shape:squircle] bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-md outline-none origin-[var(--transform-origin)] transition-[transform,opacity] duration-[120ms] ease-out data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0 data-[ending-style]:opacity-0";
-
-/** The scroller inside the surface: a long list scrolls, the padding stays.
- * `touch-pan-y` keeps nested menu rows from claiming an iOS swipe as a press. */
-export const popupScrollClasses =
-  "max-h-[min(60dvh,420px,var(--available-height))] touch-pan-y overflow-y-auto overflow-x-hidden overscroll-contain p-1.5";
-
-/** One row. Highlight via Base UI's `data-highlighted` so keyboard navigation
- *  lights rows up the same way the pointer does. */
-export const popupItemClasses =
-  "flex w-full cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-left text-control-label text-fg no-underline outline-none data-[highlighted]:bg-hover";
+/** The surface, scroller and row as class strings, for the popups that
+ *  assemble different Base UI parts around them. The look is `popup` in
+ *  `ui/popup-styles.ts`. */
+export const popupSurfaceClasses = stylex.props(popup.surface).className ?? "";
+export const popupScrollClasses = stylex.props(popup.scroll).className ?? "";
+export const popupItemClasses = stylex.props(popup.item).className ?? "";

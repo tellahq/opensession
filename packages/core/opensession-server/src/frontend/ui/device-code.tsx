@@ -1,6 +1,76 @@
 import { IconCopy } from "../components/icons";
-import { cn } from "./cn";
+import * as stylex from "@stylexjs/stylex";
 import { CopyCheck, useCopy } from "./copy";
+import { focusStyles } from "./focus-styles";
+import { deviceCodeMarker } from "./markers.stylex";
+import { sx } from "./sx";
+import {
+  color,
+  corner,
+  font,
+  geometry,
+  media,
+  motion,
+  opacity,
+  radius,
+  shadow,
+  space,
+  text,
+  weight,
+} from "./tokens.stylex";
+
+const styles = stylex.create({
+  button: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: space.s6,
+    borderRadius: radius.control,
+    ["cornerShape"]: corner.squircle,
+    borderStyle: "solid",
+    borderWidth: geometry.hairline,
+    borderColor: {
+      default: color.line,
+      ":hover": { default: null, [media.hover]: color.lineStrong },
+    },
+    backgroundColor: {
+      default: color.control,
+      ":hover": { default: null, [media.hover]: color.hover },
+    },
+    paddingInline: space.s10,
+    paddingBlock: space.s4,
+    fontFamily: font.mono,
+    fontSize: text.itemTitle,
+    fontWeight: weight.bold,
+    color: color.fg,
+    boxShadow: shadow.sm,
+    transitionProperty: "background-color, border-color, scale",
+    transitionDuration: motion.micro,
+    transitionTimingFunction: motion.ease,
+    scale: { default: null, ":active": motion.pressPlateScale },
+  },
+  // Cap-band centred against the copy glyph: `text-box` trims the line box
+  // to cap height and baseline, so the code's own ink sits on the button's
+  // middle whatever font the platform picks, plus the half pixel the PR
+  // strip's labels carry.
+  code: {
+    translate: geometry.opticalNudge,
+    letterSpacing: geometry.codeTracking,
+    marginRight: geometry.codeTrackingBack,
+    textBox: "trim-both cap alphabetic",
+  },
+  glyph: {
+    transitionProperty: "opacity",
+    transitionDuration: motion.micro,
+    transitionTimingFunction: motion.ease,
+    opacity: {
+      default: opacity.glyphResting,
+      [stylex.when.ancestor(":hover", deviceCodeMarker)]: {
+        default: null,
+        [media.hover]: opacity.glyphOnTone,
+      },
+    },
+  },
+});
 import { Tooltip } from "./tooltip";
 
 /**
@@ -32,31 +102,13 @@ export function DeviceCode({
         type="button"
         aria-label={`${label} ${code}`}
         onClick={() => copy(code, { toast: "Code copied" })}
-        className={cn(
-          "group inline-flex items-center gap-1.5 rounded-control border border-line bg-control px-2.5 py-1",
-          "font-mono text-item-title font-bold text-fg smooth-shadow-sm",
-          "transition-[background-color,border-color,scale] active:scale-[0.98]",
-          "hover:border-line-strong hover:bg-hover focus-ring",
-          className,
-        )}
+        {...sx([styles.button, focusStyles.ring, deviceCodeMarker], className)}
       >
-        {/* Cap-band centered against the copy glyph: `text-box` trims the
-				    line box to cap height and baseline, so the code's own ink sits
-				    on the button's middle whatever font the platform picks, plus
-				    the half pixel the PR strip's labels carry (a word reads a touch
-				    high at the geometric center). */}
-        <span className="translate-y-[0.5px] tracking-[0.14em] -mr-[0.14em] [text-box:trim-both_cap_alphabetic]">
-          {code}
-        </span>
+        <span {...stylex.props(styles.code)}>{code}</span>
         <CopyCheck
           copied={copied}
           size={20}
-          idle={
-            <IconCopy
-              size={20}
-              className="opacity-45 transition-opacity group-hover:opacity-80"
-            />
-          }
+          idle={<IconCopy size={20} {...stylex.props(styles.glyph)} />}
         />
       </button>
     </Tooltip>

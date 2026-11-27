@@ -25,6 +25,10 @@ export const color = stylex.defineConsts({
   control: "var(--control-surface)",
   button: "var(--button-surface)",
   popup: "var(--popup-surface)",
+  /** The popup surface held up to the light: translucent where the platform
+   *  can blur behind it, solid where it cannot. */
+  popupGlass: "var(--popup-glass)",
+  popupRing: "var(--popup-ring)",
   // Interaction washes: translucent ink, so one value reads on any surface.
   hover: "var(--hover)",
   pressed: "var(--hover-strong)",
@@ -66,6 +70,21 @@ export const color = stylex.defineConsts({
   accentControl: "var(--accent-control, var(--accent))",
   onAccentControl: "var(--on-accent-control, var(--on-accent))",
   panelSurface: "var(--panel-surface)",
+  /** A palette: denser glass than a menu, since it sits over a scrim. */
+  paletteGlass: "var(--palette-glass)",
+  /** The hairline a shell on a scrim needs: firmer than a menu's. */
+  dialogRing: "var(--dialog-ring)",
+  /** The dimming under a dialog, and the lighter one under a glass palette
+   *  (the palette composites the scrim through its own fill). */
+  scrim: "rgb(0 0 0 / 0.25)",
+  scrimLight: "rgb(0 0 0 / 0.22)",
+  /** The heavier dimming under a bottom sheet or sheet-style dialog. */
+  scrimSheet: "rgb(0 0 0 / 0.45)",
+  /** Opaque ink for a mask gradient: only its alpha matters. */
+  mask: "#000",
+  purple: "var(--purple)",
+  tooltip: "var(--tooltip-bg)",
+  tooltipFg: "var(--tooltip-fg)",
   segmentedKnob: "var(--segmented-knob-surface)",
   segmentedKnobEdge: "var(--segmented-knob-edge)",
 });
@@ -120,6 +139,9 @@ export const radius = stylex.defineConsts({
   xl: "calc(18px * var(--rf))",
   xxl: "calc(22px * var(--rf))",
   pill: "calc(infinity * 1px)",
+  /** A bottom sheet's top corners, which a surface can override through
+   *  `--sheet-radius`. */
+  sheet: "calc(var(--sheet-radius, 34px) * var(--rf))",
   /** A pill that keeps the squircle (Tailwind's `rounded-[999px]`). */
   capsule: "999px",
 });
@@ -151,11 +173,24 @@ export const text = stylex.defineConsts({
 });
 
 /**
- * Line height for single-line control labels (buttons, chips, tabs), as a
- * unitless ratio: 18.6px on a 13px label, 21.4px on a 15px one.
+ * Line heights, as unitless ratios. `label` is every single-line control
+ * label (buttons, chips, tabs): 18.6px on a 13px label, 21.4px on a 15px one.
  */
 export const leading = stylex.defineConsts({
   label: "calc(1.25 / 0.875)",
+  /** One line exactly the size of the type: a single-line input centred in
+   *  its box. */
+  none: "1",
+  /** Running text: a textarea, a description. */
+  body: "1.5",
+  /** Headings: a dialog title. */
+  tight: "1.25",
+  /** Supporting prose under a heading. */
+  relaxed: "1.625",
+  /** A tooltip's line, a little tighter than running text. */
+  snug: "1.375",
+  /** A field's small step, which keeps Tailwind's `text-xs` leading. */
+  small: "calc(1 / 0.75)",
 });
 
 /**
@@ -163,11 +198,26 @@ export const leading = stylex.defineConsts({
  * regular; headings take `title` (500 in dark, 600 in light). Semibold and
  * bold are for prose emphasis, not chrome.
  */
+/** Font families: the app's own stack is inherited, so only the exceptions
+ *  are named. */
+export const font = stylex.defineConsts({
+  mono: "var(--mono)",
+});
+
+/** Letter spacing. `tight` pulls small bold labels together a hair. */
+export const tracking = stylex.defineConsts({
+  tight: "-0.01em",
+});
+
 export const weight = stylex.defineConsts({
   regular: "400",
   medium: "500",
   /** The selected underline tab, and emphasis inside prose. */
   strong: "600",
+  /** A code to read out and type elsewhere. */
+  bold: "700",
+  /** Group labels and section kickers. */
+  heading: "600",
   title: "var(--title-weight)",
 });
 
@@ -179,6 +229,8 @@ export const opacity = stylex.defineConsts({
   glyphMuted: "0.6",
   /** The same glyph on a tinted or solid plate, where 0.6 reads as dirt. */
   glyphOnTone: "0.8",
+  /** A trailing glyph that only firms up under the pointer. */
+  glyphResting: "0.45",
 });
 
 export const motion = stylex.defineConsts({
@@ -191,6 +243,25 @@ export const motion = stylex.defineConsts({
   easeOut: "cubic-bezier(0, 0, 0.2, 1)",
   /** One turn of a progress spinner. */
   spin: "1s",
+  /** Spatial changes that cross the screen: a sheet sliding up. */
+  long: "var(--dur-lg)",
+  /** A dialog's enter and exit, a step slower than a control's. */
+  standard: "var(--dur)",
+  /** A palette drops in from just above its resting place. */
+  paletteDrop: "0 -6px",
+  paletteScale: "0.99",
+  /** A dialog pops in from a touch smaller, and leaves a touch less so. */
+  dialogEnterScale: "0.96",
+  dialogExitScale: "0.97",
+  /** A popup's enter and exit. */
+  popup: "120ms",
+  /** One breath of a liveness dot. */
+  pulse: "1.4s",
+  /** How far a popup or tooltip grows into place. */
+  popupScale: "0.97",
+  /** A pressed plate that gives slightly, less than a button does. */
+  pressPlateScale: "0.98",
+  tooltipScale: "0.96",
 });
 
 /** The one keyboard focus treatment: a 2px accent-ink ring, 2px out. */
@@ -217,6 +288,13 @@ export const shadow = stylex.defineConsts({
   lg: "0 4px 12px -4px color-mix(in srgb, var(--tw-shadow-color, black) 5%, transparent), 0 18px 48px -14px color-mix(in srgb, var(--tw-shadow-color, black) 11%, transparent)",
   ringLg:
     "0 4px 12px -4px color-mix(in srgb, var(--tw-shadow-color, black) 5%, transparent), 0 18px 48px -14px color-mix(in srgb, var(--tw-shadow-color, black) 11%, transparent), 0 0 0 var(--smooth-ring-width, 1px) color-mix(in srgb, var(--smooth-ring-color) 50%, transparent)",
+  /** A bottom sheet's drop shadow, cast upward. */
+  sheet: "0 -12px 40px rgba(0, 0, 0, 0.35)",
+  /** The seam under a sticky bar once content scrolls beneath it. */
+  stickySeam: "inset 0 -1px 0 var(--divider)",
+  /** The tooltip chip: a soft drop plus its own ring colour. */
+  tooltip:
+    "0px 10px 38px -10px rgba(14, 18, 22, 0.35), 0px 10px 20px -15px rgba(14, 18, 22, 0.2), 0 0 0 1px var(--tooltip-ring)",
   /** The switch knob: a tight contact shadow plus a hairline, on white. */
   knob: "0 1px 3px rgba(0, 0, 0, 0.22), 0 0 0 1px rgba(0, 0, 0, 0.07)",
   /** Top-down shading that gives a solid plate a face (Tailwind's `plate-sheen`). */
@@ -248,12 +326,123 @@ export const geometry = stylex.defineConsts({
   checkBox: "16px",
   checkGlyph: "12px",
   radioDot: "6px",
+  /** A floating list: never narrower than a short label plus its glyph, and
+   *  never taller than the room the positioner reports. */
+  popupMinWidth: "180px",
+  popupMaxHeight: "min(60dvh, 420px, var(--available-height))",
+  /** A menu with a docked footer gets more room, since the footer does not
+   *  scroll with the list. */
+  popupMaxHeightFooter: "min(80dvh, 560px, var(--available-height))",
+  /** A popover's pointer: a 10px square on its point, hanging half off
+   *  the edge (one pixel less on the right, where the hairline sits). */
+  arrow: "10px",
+  arrowHang: "-6px",
+  arrowHangRight: "-5px",
+  /** The widest a tooltip runs before it truncates, or wraps when it is
+   *  multiline. */
+  tooltipMax: "280px",
+  tooltipMaxMultiline: "360px",
+  tooltipMaxHeight: "50vh",
+  /** A key cap inside a tooltip. */
+  keyCap: "16px",
+  keyCapPad: "3px",
+  /** The centered dialog: most of a phone's width, ~28rem on a desktop,
+   *  and never taller than the viewport leaves room for. */
+  dialogWidth: "90vw",
+  dialogMaxWidth: "28rem",
+  dialogMaxHeight: "85dvh",
+  /** A palette, and how far below the top it rests (less on a short
+   *  window). */
+  paletteWidth: "min(820px, 100%)",
+  paletteTop: "11vh",
+  paletteTopNarrow: "7vh",
+  /** A bottom sheet stops short of the top, and its sheet-style desktop
+   *  dialog is a little wider than a modal's. */
+  sheetMaxHeight: "94dvh",
+  sheetDialogWidth: "92vw",
+  sheetDialogMaxWidth: "30rem",
+  sheetDialogMaxHeight: "85vh",
+  /** The grabber pill at the top of a bottom sheet. */
+  grabberWidth: "36px",
+  grabberHeight: "5px",
+  /** An iOS action-sheet row: a 13px icon gap and 15px of block padding. */
+  sheetRowGap: "13px",
+  sheetRowPad: "15px",
+  /** A surface as tall as the dynamic viewport. */
+  fullHeight: "100dvh",
+  /** The safe areas a full-height surface keeps clear of. */
+  safeTop: "env(safe-area-inset-top)",
+  safeBottom: "env(safe-area-inset-bottom)",
+  /** A liveness dot, standalone and inline in text or a pill. */
+  dot: "8px",
+  dotInline: "7px",
+  /** The fade at the end of a clipped single line. */
+  fadeEdge: "24px",
+  /** Page column widths. */
+  pageNarrow: "760px",
+  pageDefault: "860px",
+  pageWide: "920px",
+  /** A page's own padding, and the gaps under its header and filters. These
+   *  sit off the spacing scale on purpose for now; folding them in is an
+   *  open decision (docs/design-system.md). */
+  pageTop: "28px",
+  pageBottom: "60px",
+  pageTopNarrow: "18px",
+  pageHeaderGap: "22px",
+  pageFiltersGap: "18px",
+  /** The Running pill's block padding. */
+  pillPadBlock: "3px",
+  /** A device code's letter spacing, handed back after the last letter so
+   *  the code stays centred. */
+  codeTracking: "0.14em",
+  codeTrackingBack: "-0.14em",
+  /** Half a pixel down: a word reads a touch high at the geometric centre. */
+  opticalNudge: "0 0.5px",
+  /** A divider rule. */
+  hairline: "1px",
+  /** A select's popup is never narrower than its trigger. */
+  anchorWidth: "var(--anchor-width)",
+  /** A searchable list: room for a query even off a narrow trigger. */
+  searchPopupMinWidth: "max(var(--anchor-width), 16rem)",
+  /** The tick column on a selectable row, the glyph's own box. */
+  tick: "17px",
+  /** A row's leading glyph. */
+  rowIcon: "16px",
 });
 
 /** The one breakpoint (720px, inclusive on the phone side) and hover gating. */
+/**
+ * Stacking layers. Only the ones the primitives own; a feature that needs a
+ * new layer adds it here, named for what it sits above.
+ */
+export const layer = stylex.defineConsts({
+  /** The app's top interaction layer: every menu, select, tooltip and hover
+   *  preview, above the pinned workspace summary wherever its trigger lives. */
+  floating: "2147483647",
+  /** A panel you keep open (above the page and its floating triggers). */
+  panel: "5000",
+  /** A palette's scrim and the palette over it. */
+  paletteScrim: "6000",
+  palette: "6001",
+  /** The modal tier: a dialog's scrim and the dialog. */
+  modalScrim: "10000",
+  modal: "10001",
+  /** A sticky bar inside a scrolling surface. */
+  sticky: "10",
+});
+
+/** Backdrop blurs: the faint one under a dialog's scrim, the heavier one
+ *  under a palette's. */
+export const blur = stylex.defineConsts({
+  scrim: "blur(1px)",
+  paletteScrim: "blur(6px)",
+});
+
 export const media = stylex.defineConsts({
   phone: "@media (max-width: 720px)",
   desktop: "@media (min-width: 721px)",
   hover: "@media (hover: hover)",
   forcedColors: "@media (forced-colors: active)",
+  /** A short or narrow window that pulls a palette up. */
+  narrow: "@media (width < 560px)",
 });

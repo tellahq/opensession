@@ -1,14 +1,12 @@
 import * as React from "react";
 import { Combobox as BaseCombobox } from "@base-ui/react/combobox";
 import { IconCheck, IconChevronDown, IconSearch } from "../components/icons";
+import * as stylex from "@stylexjs/stylex";
 import { cn } from "./cn";
-import {
-  FLOATING_OVERLAY_LAYER,
-  POPUP_HOOK,
-  popupItemClasses,
-  popupScrollClasses,
-  popupSurfaceClasses,
-} from "./popup-classes";
+import { field } from "./field-styles";
+import { POPUP_HOOK } from "./popup-classes";
+import { popup } from "./popup-styles";
+import { sx } from "./sx";
 import { selectTriggerClasses } from "./select-classes";
 import { restoreSelectFocusAfterClose } from "./select-focus";
 
@@ -112,13 +110,10 @@ function Trigger({
       {...props}
       className={selectTriggerClasses(size, false, className)}
     >
-      <span className="col-start-1 row-start-1 truncate">
+      <span {...stylex.props(field.triggerLabel)}>
         {children ?? <BaseCombobox.Value placeholder={placeholder} />}
       </span>
-      <IconChevronDown
-        size={16}
-        className="col-start-2 row-start-1 shrink-0 text-faint"
-      />
+      <IconChevronDown size={16} {...stylex.props(field.triggerChevron)} />
     </BaseCombobox.Trigger>
   );
 }
@@ -154,34 +149,32 @@ function Popup({
         align={align}
         sideOffset={sideOffset}
         collisionPadding={8}
-        className={cn(FLOATING_OVERLAY_LAYER, "outline-none")}
+        {...stylex.props(popup.positioner)}
       >
         <BaseCombobox.Popup
           finalFocus={() => restoreFocusRef?.current ?? true}
-          className={cn(
-            POPUP_HOOK,
-            popupSurfaceClasses,
-            // Wider than the trigger it opens from: a search field needs room
-            // for a query, and the rows it narrows to are longer than the
-            // truncated value the trigger shows.
-            "flex min-w-[max(var(--anchor-width),16rem)] flex-col",
-            className,
+          // Wider than the trigger it opens from: a search field needs room
+          // for a query, and the rows it narrows to are longer than the
+          // truncated value the trigger shows.
+          {...sx(
+            [popup.surface, popup.searchSurface],
+            cn(POPUP_HOOK, className),
           )}
         >
           {/* A row, not a field: the popup surface is the well here, so the
 					    search sits on it with a divider rather than in a second box. */}
-          <div className="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2 phone:min-h-11">
-            <IconSearch size={16} className="shrink-0 text-faint" />
+          <div {...stylex.props(popup.searchRow)}>
+            <IconSearch size={16} {...stylex.props(popup.searchIcon)} />
             <BaseCombobox.Input
               aria-label={searchLabel}
               placeholder={searchPlaceholder}
-              className="min-w-0 flex-1 border-0 bg-transparent p-0 text-control-label text-fg outline-none placeholder:text-faint phone:text-input-phone"
+              {...stylex.props(popup.searchInput)}
             />
           </div>
-          <BaseCombobox.Empty className="px-3 py-2.5 text-control-label text-dim empty:hidden">
+          <BaseCombobox.Empty {...stylex.props(popup.empty)}>
             {emptyText}
           </BaseCombobox.Empty>
-          <BaseCombobox.List className={popupScrollClasses}>
+          <BaseCombobox.List {...stylex.props(popup.scroll)}>
             {children}
           </BaseCombobox.List>
         </BaseCombobox.Popup>
@@ -201,17 +194,12 @@ function Item({ className, children, ...props }: ItemProps) {
   return (
     <BaseCombobox.Item
       {...props}
-      className={cn(
-        popupItemClasses,
-        // A finger's row on a phone; the desktop row stays the menu's.
-        "justify-between gap-3 phone:min-h-11 data-[disabled]:cursor-default data-[disabled]:opacity-40",
-        className,
-      )}
+      {...sx([popup.item, popup.selectItem, popup.touchRow], className)}
     >
-      <span className="min-w-0 truncate">{children}</span>
+      <span {...stylex.props(popup.truncate)}>{children}</span>
       {/* The tick's column is reserved on every row, as in `ui/select`, so
 			    the picked row is not wider than the rest. */}
-      <span className="flex size-[17px] shrink-0 items-center justify-center text-accent">
+      <span {...stylex.props(popup.tickSlot)}>
         <BaseCombobox.ItemIndicator>
           <IconCheck size={17} />
         </BaseCombobox.ItemIndicator>

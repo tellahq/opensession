@@ -1,16 +1,27 @@
 import * as React from "react";
 import { Tooltip as BaseTooltip } from "@base-ui/react/tooltip";
-import { cn } from "./cn";
+import * as stylex from "@stylexjs/stylex";
 import { ExclusivePopupProvider } from "./exclusive-popups";
-import { FLOATING_OVERLAY_LAYER } from "./popup-classes";
+import { popup } from "./popup-styles";
+import { sx } from "./sx";
+import {
+  color,
+  geometry,
+  leading,
+  motion,
+  radius,
+  corner,
+  shadow,
+  space,
+  text,
+  weight,
+} from "./tokens.stylex";
 import { usePopupsArmed } from "./popup-arming";
 
 /**
- * Tooltip on Base UI (Tooltip.Root/Trigger/Positioner/Popup), styled with
- * Tailwind tokens. First component of the ui/ layer —
- * the pattern to copy for new primitives: Base UI parts for behavior
- * (positioning, collision flip, focus/hover semantics, a11y), our classes via
- * cn() with className passthrough.
+ * Tooltip on Base UI (Tooltip.Root/Trigger/Positioner/Popup), styled in
+ * StyleX on the shared tokens: Base UI parts for behavior (positioning,
+ * collision flip, focus/hover semantics, a11y), our styles on top.
  *
  * Keeps the exact API of the old hand-rolled components/Tooltip.tsx
  * (label/side/offset/shortcut, single-element child, no wrapper DOM) so call
@@ -24,6 +35,72 @@ import { usePopupsArmed } from "./popup-arming";
  * data-instant disables transitions while the provider hands off between two
  * triggers, so the outgoing tooltip cannot remain visible beside the new one.
  */
+
+const STARTING = ":is([data-starting-style])";
+const ENDING = ":is([data-ending-style])";
+
+/** `color-mix` ink at a fixed strength over whatever surface is behind it. */
+const ink = (c: string, pct: number) =>
+  `color-mix(in oklab, ${c} ${pct}%, transparent)`;
+
+const styles = stylex.create({
+  // 13px medium text on a near-black chip, with its soft drop and the
+  // theme's ring.
+  chip: {
+    pointerEvents: "none",
+    display: "flex",
+    alignItems: "center",
+    gap: space.s8,
+    transformOrigin: "var(--transform-origin)",
+    transitionProperty: {
+      default: "scale, opacity",
+      ":is([data-instant])": "none",
+    },
+    transitionDuration: motion.popup,
+    transitionTimingFunction: motion.easeOut,
+    scale: { default: null, [STARTING]: motion.tooltipScale },
+    opacity: { default: null, [STARTING]: 0, [ENDING]: 0 },
+    borderRadius: radius.lg,
+    ["cornerShape"]: corner.squircle,
+    backgroundColor: color.tooltip,
+    paddingInline: space.s8,
+    paddingBlock: space.s4,
+    fontSize: text.label,
+    lineHeight: leading.snug,
+    fontWeight: weight.medium,
+    color: color.tooltipFg,
+    boxShadow: shadow.tooltip,
+  },
+  single: { maxWidth: geometry.tooltipMax, whiteSpace: "nowrap" },
+  multiline: {
+    maxWidth: geometry.tooltipMaxMultiline,
+    alignItems: "flex-start",
+    whiteSpace: "pre-wrap",
+  },
+  labelSingle: { overflow: "hidden", textOverflow: "ellipsis" },
+  labelMultiline: { maxHeight: geometry.tooltipMaxHeight, overflowY: "auto" },
+  keys: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: geometry.keyCapPad,
+  },
+  key: {
+    display: "inline-flex",
+    height: geometry.keyCap,
+    minWidth: geometry.keyCap,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.sm,
+    ["cornerShape"]: corner.squircle,
+    paddingInline: geometry.keyCapPad,
+    fontSize: text.label,
+    lineHeight: leading.small,
+    fontWeight: weight.medium,
+    fontFamily: "inherit",
+    backgroundColor: ink(color.onScrim, 20),
+    color: ink(color.onScrim, 75),
+  },
+});
 
 type Side = "top" | "bottom" | "left" | "right";
 type Align = "start" | "center" | "end";
@@ -80,40 +157,25 @@ export function Tooltip({
           align={align}
           sideOffset={offset}
           collisionPadding={6}
-          className={FLOATING_OVERLAY_LAYER}
+          {...stylex.props(popup.layer)}
         >
           <BaseTooltip.Popup
-            className={cn(
-              "pointer-events-none flex items-center gap-2",
-              "origin-[var(--transform-origin)] transition-[transform,opacity] duration-[120ms] ease-out",
-              "data-[starting-style]:scale-[0.96] data-[starting-style]:opacity-0",
-              "data-[ending-style]:opacity-0 data-[instant]:transition-none",
-              // 13px medium text on a near-black chip with
-              // its soft `shadow-popup` + our theme ring.
-              "rounded-lg bg-tooltip px-2 py-1 text-label leading-snug font-medium text-tooltip-fg",
-              "shadow-[0px_10px_38px_-10px_rgba(14,18,22,0.35),0px_10px_20px_-15px_rgba(14,18,22,0.2),0_0_0_1px_var(--tooltip-ring)]",
-              multiline
-                ? "max-w-[360px] items-start whitespace-pre-wrap"
-                : "max-w-[280px] whitespace-nowrap",
+            {...sx(
+              [styles.chip, multiline ? styles.multiline : styles.single],
               popupClassName,
             )}
           >
             <span
-              className={cn(
-                multiline
-                  ? "max-h-[50vh] overflow-y-auto"
-                  : "overflow-hidden text-ellipsis",
+              {...stylex.props(
+                multiline ? styles.labelMultiline : styles.labelSingle,
               )}
             >
               {label}
             </span>
             {shortcut && shortcut.length > 0 && (
-              <span className="inline-flex items-center gap-[3px]">
+              <span {...stylex.props(styles.keys)}>
                 {shortcut.map((k, i) => (
-                  <kbd
-                    key={i}
-                    className="inline-flex h-4 min-w-4 items-center justify-center rounded-sm px-[3px] text-xs font-medium [font-family:inherit] bg-white/20 text-white/75"
-                  >
+                  <kbd key={i} {...stylex.props(styles.key)}>
                     {k}
                   </kbd>
                 ))}

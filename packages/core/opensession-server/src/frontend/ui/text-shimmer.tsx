@@ -1,5 +1,26 @@
 import type { CSSProperties } from "react";
-import { cn } from "./cn";
+import * as stylex from "@stylexjs/stylex";
+import { sx } from "./sx";
+import { space } from "./tokens.stylex";
+
+const BAND =
+  "linear-gradient(90deg, transparent 25%, black 45%, black 55%, transparent 75%)";
+
+const styles = stylex.create({
+  root: { position: "relative", display: "inline-block", contain: "paint" },
+  highlight: {
+    pointerEvents: "none",
+    position: "absolute",
+    inset: space.s0,
+    userSelect: "none",
+    color: "var(--text-shimmer-highlight)",
+    maskImage: BAND,
+    maskRepeat: "no-repeat",
+    maskSize: "100% 100%",
+    willChange: "transform",
+  },
+  copy: { display: "block", width: "100%", willChange: "transform" },
+});
 
 const sweepAnimation: CSSProperties = {
   animationName: "text-shimmer-window",
@@ -31,20 +52,14 @@ export function TextShimmer({
   className?: string;
 }) {
   return (
-    <span
-      className={cn("relative inline-block [contain:paint]", className)}
-      data-text-shimmer=""
-    >
+    <span {...sx(styles.root, className)} data-text-shimmer="">
       <span>{children}</span>
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 select-none text-[var(--text-shimmer-highlight)] [mask-image:linear-gradient(90deg,transparent_25%,black_45%,black_55%,transparent_75%)] [mask-repeat:no-repeat] [mask-size:100%_100%] [will-change:transform] [-webkit-mask-image:linear-gradient(90deg,transparent_25%,black_45%,black_55%,transparent_75%)] [-webkit-mask-repeat:no-repeat] [-webkit-mask-size:100%_100%]"
+        {...stylex.props(styles.highlight)}
         style={sweepAnimation}
       >
-        <span
-          className="block w-full [will-change:transform]"
-          style={copyAnimation}
-        >
+        <span {...stylex.props(styles.copy)} style={copyAnimation}>
           {children}
         </span>
       </span>

@@ -944,7 +944,10 @@ html[data-accent="green"] {
 
   /* Status pulses — opacity breathing that encodes live session state
 	   (running vs waiting vs idle). The rule for this preference is "gentler,
-	   not zero: keep opacity, drop movement", and these are pure opacity. */
+	   not zero: keep opacity, drop movement", and these are pure opacity.
+	   `data-pulse` is the StyleX PulseDot (ui/status.tsx), which carries the
+	   attribute itself so no rename can orphan it. */
+  [data-pulse],
   .pr-check-mark-pending,
   .prc-mark-pending,
   .rv-check-dot-pending {

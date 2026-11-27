@@ -19,5 +19,5 @@ test("an open palette holds the page behind it still", async () => {
 test("the marker the lock keys off is still on every palette backdrop", async () => {
   const modal = await Bun.file(MODAL).text();
 
-  expect(modal).toContain('palette && "palette-backdrop"');
+  expect(modal).toContain('palette ? "palette-backdrop" : undefined');
 });

@@ -1,4 +1,14 @@
-import { cn } from "./cn";
+import * as stylex from "@stylexjs/stylex";
+import { sx } from "./sx";
+import {
+  color,
+  geometry,
+  motion,
+  radius,
+  space,
+  text,
+  weight,
+} from "./tokens.stylex";
 
 /**
  * Liveness indicators — the pulsing dot and the "Running" pill.
@@ -34,13 +44,38 @@ import { cn } from "./cn";
  * explicitly here keeps exactly what ships today.
  */
 
-// The exception rides on the element, not on a class name in base.css's
-// reduced-motion list: that blanket kills every animation with !important
-// and hands specific liveness signals back by class, so a rename silently
-// freezes the indicator. This one cannot be orphaned by a rename.
-const PULSE =
-  "animate-[pulse_1.4s_ease-in-out_infinite] " +
-  "motion-reduce:[animation-duration:1.4s]! motion-reduce:[animation-iteration-count:infinite]!";
+const pulse = stylex.keyframes({ "50%": { opacity: 0.5 } });
+
+const styles = stylex.create({
+  // The reduced-motion exception rides on the element (`data-pulse`), not on
+  // a class name in base.css's list: that blanket kills every animation with
+  // !important and hands specific liveness signals back by attribute, so a
+  // rename cannot silently freeze the indicator.
+  dot: {
+    flexShrink: 0,
+    borderRadius: radius.pill,
+    backgroundColor: color.yellow,
+    animationName: pulse,
+    animationDuration: motion.pulse,
+    animationTimingFunction: "ease-in-out",
+    animationIterationCount: "infinite",
+  },
+  standalone: { width: geometry.dot, height: geometry.dot },
+  inline: { width: geometry.dotInline, height: geometry.dotInline },
+  pill: {
+    display: "inline-flex",
+    flexShrink: 0,
+    alignItems: "center",
+    gap: space.s6,
+    borderRadius: radius.pill,
+    backgroundColor: color.yellowSoft,
+    paddingInline: space.s10,
+    paddingBlock: geometry.pillPadBlock,
+    fontSize: text.meta,
+    fontWeight: weight.strong,
+    color: color.yellow,
+  },
+});
 
 export function PulseDot({
   size = 8,
@@ -53,10 +88,9 @@ export function PulseDot({
   return (
     <span
       aria-hidden
-      className={cn(
-        "shrink-0 rounded-full bg-yellow",
-        size === 8 ? "size-2" : "size-[7px]",
-        PULSE,
+      data-pulse=""
+      {...sx(
+        [styles.dot, size === 8 ? styles.standalone : styles.inline],
         className,
       )}
     />
@@ -71,12 +105,7 @@ export function WorkingPill({
   className?: string;
 }) {
   return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 rounded-full bg-yellow-soft px-2.5 py-[3px] text-meta font-semibold text-yellow",
-        className,
-      )}
-    >
+    <span {...sx(styles.pill, className)}>
       <PulseDot size={7} />
       {children}
     </span>

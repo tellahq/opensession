@@ -10,7 +10,7 @@ describe("Fold", () => {
       </Fold>,
     );
     expect(html).toMatch(
-      /^<div class="min-w-0 outer"><div class="[^"]*inner">/,
+      /^<div class="fold__styles\.root outer"><div class="[^"]*inner">/,
     );
     expect(html).not.toContain("data-open");
     expect(html).not.toContain("data-closed");

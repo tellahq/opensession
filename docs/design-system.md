@@ -96,7 +96,13 @@ a primitive can be ported without touching its call sites, and why the port of
 routes, at both widths and in both themes, matched the Tailwind version.
 
 Ported so far: `Button`, `Badge`, `Card`, `Spinner`, `Switch`,
-`Checkbox`, `Radio`, `Segmented` and both `Tabs` styles. Shared pieces:
+`Checkbox`, `Radio`, `Segmented`, both `Tabs` styles, the field family
+(`Input`, `Textarea`, native `Select`, `Field`, and the select trigger in
+`ui/field-styles.ts`), and the popup family (`Menu`, `ContextMenu`, `Select`,
+`Combobox`, `Popover`, `Tooltip`, on `ui/popup-styles.ts`). The class-string
+helpers (`fieldClasses`, `selectTriggerClasses`, `popupSurfaceClasses` and
+friends) now return StyleX class names, so the raw controls that use them
+moved too. Shared pieces:
 `ui/sx.ts` (merges a primitive's StyleX props with a caller's legacy
 `className`, and defines the `LayoutStyles` type every `xstyle` uses),
 `ui/choice-styles.ts` (the box a Checkbox and a Radio share), and
@@ -112,6 +118,12 @@ things to know when porting:
   (the macOS switch track and knob, the checkbox box), live in `geometry`.
 - A primitive that sets `data-progress` keeps spinning under reduced motion,
   as `.animate-spin` did.
+- StyleX emits a rule inside `@media (hover: hover)` after every plain
+  pseudo-class or attribute state, whatever order the object lists them in.
+  A hover that shares a property with `:focus`, `:disabled` or an open state
+  must exclude that state (`":enabled:hover"`,
+  `":not([data-popup-open]):not(:focus):hover"`), or it wins under the
+  pointer.
 
 The order of work:
 
