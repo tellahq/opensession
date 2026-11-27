@@ -536,10 +536,7 @@ function TeammateAvatar({ name }: { name: string }) {
 const bubbleReveal =
   "[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-hover/bubble:opacity-100 [@media(hover:hover)]:group-focus-within/bubble:opacity-100";
 
-const bubbleActionBase =
-  "flex size-7 flex-none cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-faint select-none hover:bg-hover hover:text-dim";
-
-const bubbleActionClass = `${bubbleActionBase} ${bubbleReveal}`;
+const bubbleActionClass = `flex size-7 flex-none cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-faint select-none hover:bg-hover hover:text-dim ${bubbleReveal}`;
 
 /** Put a message you already sent back into the composer, so a typo is a fix
  * and a re-send rather than a re-type.
@@ -572,14 +569,14 @@ function EditAgainButton({ onClick }: { onClick: () => void }) {
 function DeletePendingButton({ onClick }: { onClick: () => void }) {
   return (
     <Tooltip label="Delete unsent message">
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={onClick}
         aria-label="Delete unsent message"
-        className={bubbleActionBase}
-      >
-        <IconTrash size={16} />
-      </button>
+        className="size-7 min-h-7 text-faint"
+        icon={<IconTrash size={16} />}
+      />
     </Tooltip>
   );
 }
