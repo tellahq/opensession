@@ -566,6 +566,12 @@ const SIGNALS: Signal[] = [
     count: countButtonRestyles,
   },
   {
+    id: "button-skin",
+    instead: "a Button variant in ui/button.tsx; `skin` is for ui/ primitives",
+    exempt: ["ui/"],
+    count: (source) => occurrences(stripComments(source), /\bskin=\{/g),
+  },
+  {
     id: "raw-hex-color",
     instead: "semantic color tokens from styles/tailwind.css",
     exempt: ["styles/"],

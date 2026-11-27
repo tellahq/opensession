@@ -7,6 +7,7 @@ import {
   setThinkingMessagesPref,
   setTurnPrefs,
 } from "./TranscriptBlocks.test-setup";
+import { OVERLAY_ACTION_HOST } from "../ui/overlay-action";
 
 const { TranscriptBlocks } = await import("./TranscriptBlocks");
 
@@ -83,9 +84,10 @@ describe("TranscriptBlocks shipped change action", () => {
     expect(html).toContain("%2Ftmp%2Ftoggle-after.png");
     expect(html).toContain('aria-label="Open screenshot preview"');
     expect(html).toContain('aria-label="Remove screenshot"');
-    expect(html).toContain("group/overlay-action");
-    expect(html).toContain("group-hover/overlay-action:opacity-100");
-    expect(html).toContain("bg-white");
+    // The preview carries the marker the action reveals on, and the action
+    // its white plate.
+    expect(html).toContain(OVERLAY_ACTION_HOST);
+    expect(html).toContain("overlay-action__styles.action");
     expect(html).toContain('aria-label="Add images"');
     expect(html).toContain('aria-label="Slack channel"');
     expect(html).toContain("field-styles__field.trigger");

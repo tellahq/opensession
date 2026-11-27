@@ -13,7 +13,7 @@ import { pngFromImageFile, pngFromImageUrl } from "../../lib/icon-image";
 import { REPO_TILE_INK, repoColor, repoIconFill } from "../../lib/repo-colors";
 import { errorMessage } from "../../lib/error-message";
 import { cn } from "../../ui/cn";
-import { OverlayAction } from "../../ui/overlay-action";
+import { OVERLAY_ACTION_HOST, OverlayAction } from "../../ui/overlay-action";
 import { Field } from "../../ui/input";
 import {
   SettingCard,
@@ -181,7 +181,12 @@ export function OrganizationProfileSection({
   const showIcon = !!settings?.organizationIconUrl && !iconFailed;
   const fallbackColor = repoColor(settings?.organizationName || "organization");
   const iconEditor = (
-    <div className="group/overlay-action relative flex shrink-0 flex-col items-center gap-1.5">
+    <div
+      className={cn(
+        OVERLAY_ACTION_HOST,
+        "relative flex shrink-0 flex-col items-center gap-1.5",
+      )}
+    >
       <button
         type="button"
         disabled={busy}
