@@ -379,6 +379,14 @@
   }
 }
 
+/* A true circle or capsule. Every other element already has round corners
+   unless base.css squircles it, but a StyleX primitive sets its own
+   `corner-shape: squircle`, so a caller's `rounded-full` has to restore the
+   round ends rather than only escape base.css's rule. */
+@utility rounded-full {
+  corner-shape: round;
+}
+
 /* The light on a solid plate: the accent CTA, the destructive confirm. A flat
    fill at that size reads as a printed rectangle. A few percent of top-down
    shading gives it a face, which is the whole difference between a colour and a

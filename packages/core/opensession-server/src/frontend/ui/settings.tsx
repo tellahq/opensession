@@ -393,7 +393,7 @@ export function SettingsHint({
  * shape behind them is now shared with every other field and, through it, with
  * every button.
  *
- * They go through `fieldClasses("md")` rather than composing `fieldClass` with
+ * They go through `fieldClasses("md")` rather than re-spelling the field with
  * their own padding, which is what had settings rendering 35px fields beside
  * the primitive's 32px ones — two field heights visible on one page, e.g.
  * /settings/connections. Reaching for the size step instead of re-spelling it
