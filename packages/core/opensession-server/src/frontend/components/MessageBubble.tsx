@@ -676,6 +676,8 @@ function CopyMessageLinkButton({ entryId }: { entryId: string }) {
 }
 
 /** The quiet row under a person's bubble: the real time, copy, link, edit.
+ * An unsent message shows only its edit and delete: there is nothing yet to
+ * react to, comment on, copy a link to, or send again.
  *
  * Those turns carry no label row to hang a MsgTime off, and a timestamp on
  * every one of them would just be noise while reading — so the time stays
@@ -696,8 +698,8 @@ function BubbleMeta({
 }: {
   ts?: string;
   onEdit?: () => void;
-  /** Offered while the message waits for a run to pick it up. Its edit takes
-   *  the place of the re-send edit above. */
+  /** Offered while the message waits for a run to pick it up. It replaces
+   *  every other action in the row. */
   pending?: { onEdit?: () => void; onDelete: () => void };
   copy?: { entry: TranscriptEntry; sessionId?: string };
   /** The entry a "Copy link" points at; omitted while it is not stored. */
@@ -705,11 +707,17 @@ function BubbleMeta({
   /** Offers reacting and commenting; omitted while the entry is not stored. */
   message?: MessageRef;
 }) {
+  const row = "absolute top-[calc(100%+2px)] right-0 flex items-center gap-1";
+  if (pending)
+    return (
+      <div className={row}>
+        <PendingMessageActions {...pending} />
+      </div>
+    );
   const label = ts ? fullTime(ts) : "";
-  if (!onEdit && !pending && !copy && !linkEntryId && !label && !message)
-    return null;
+  if (!onEdit && !copy && !linkEntryId && !label && !message) return null;
   return (
-    <div className="absolute top-[calc(100%+2px)] right-0 flex items-center gap-1">
+    <div className={row}>
       {/* First, so the icons stay one unbroken group after it. */}
       {label && (
         <span className="mr-1 hidden text-meta leading-none font-medium whitespace-nowrap text-faint select-none selection:bg-[rgba(0,0,0,0.01)] [@media(hover:hover)]:block [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-hover/bubble:opacity-100 [@media(hover:hover)]:group-focus-within/bubble:opacity-100">
@@ -721,9 +729,7 @@ function BubbleMeta({
       )}
       {copy && <CopyMessageButton {...copy} />}
       {linkEntryId && <CopyMessageLinkButton entryId={linkEntryId} />}
-      {onEdit && !pending && <EditAgainButton onClick={onEdit} />}
-      {/* Last, so they hold the bubble's edge while the hover actions are hidden. */}
-      {pending && <PendingMessageActions {...pending} />}
+      {onEdit && <EditAgainButton onClick={onEdit} />}
     </div>
   );
 }
