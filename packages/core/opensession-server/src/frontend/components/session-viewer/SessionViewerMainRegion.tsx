@@ -38,6 +38,7 @@ import { FeedWebPane } from "../FeedWebPane";
 import { ShellPanel } from "../TerminalPanel";
 import { PrPanel } from "../PrPanel";
 import { QuoteSelection } from "../QuoteSelection";
+import { StickyActivePrompt } from "../StickyActivePrompt";
 import {
   WorkspaceSetup,
   ConversationLoading,
@@ -938,6 +939,11 @@ export function SessionViewerMainRegion({
                 }}
               />
               <div ref={setTopFade} className={VIEWER_TOP_FADE} aria-hidden />
+              <StickyActivePrompt
+                containerRef={messagesRef}
+                entries={entries}
+                sessionId={session.id}
+              />
               <div
                 className={cn(
                   VIEWER_MESSAGES,
