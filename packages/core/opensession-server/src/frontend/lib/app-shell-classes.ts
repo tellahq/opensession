@@ -87,6 +87,18 @@ export const NEW_LAYOUT_ROW_HEIGHT =
 export const NEW_LAYOUT_ROW_PX = 36;
 
 /**
+ * The workspace's share of the row in a desktop shell that cannot move its
+ * lights: the lights' line stays 24px down, where the 48px sidebar row beside
+ * them centres too, but the row ends 4px sooner. Its labels and icons keep to
+ * the lights' line by sitting `--row-drop` lower than the row's middle, so the
+ * tabs start nearer the window's top and the sheet starts higher.
+ */
+const NEW_LAYOUT_PANE_ROW =
+  NEW_LAYOUT_ROW_HEIGHT +
+  " [html.wco:not(.titlebar-follows-row)_[data-minibar]~&]:[--desktop-header-h:44px]" +
+  " [html.wco:not(.titlebar-follows-row)_[data-minibar]~&]:[--row-drop:4px]";
+
+/**
  * The new layout's window row over the pane: the tab strip, then the page's
  * header. It is the grey of the minibar and the sidebar, and the panel under
  * it starts at this row's bottom edge. That edge is the top of the panel's
@@ -96,7 +108,9 @@ export const NEW_LAYOUT_ROW_PX = 36;
  */
 export const PANE_TOP_ROW =
   "relative flex min-w-0 shrink-0 items-stretch bg-sidebar " +
-  "[&:not(:has(>:not(:empty)))]:hidden";
+  "[&:not(:has(>:not(:empty)))]:hidden " +
+  // The header's controls keep to the lights' line (NEW_LAYOUT_PANE_ROW).
+  "[&_.wco-chrome]:pt-[var(--row-drop,0px)]";
 
 /**
  * The new layout's window-row controls beside the minibar: the sidebar
@@ -112,7 +126,7 @@ export const NEW_LAYOUT_CHROME_CONTROLS =
 /** The sidebar toggle while the sidebar is closed, at the size and the spot
  *  it has in the open sidebar's row (NEW_LAYOUT_CHROME_CONTROLS). */
 export const NEW_LAYOUT_SIDEBAR_REOPEN =
-  "new-layout:top-[calc((var(--desktop-header-h)-30px)/2)] new-layout:size-7.5 new-layout:[&_svg]:size-[22px]";
+  "new-layout:top-[calc((var(--desktop-header-h)-30px+var(--row-drop,0px))/2)] new-layout:size-7.5 new-layout:[&_svg]:size-[22px]";
 
 /** The strip's share of that row. The strip brings its own room at each end.
  *  With the sidebar collapsed, the floating re-open control sits over the
@@ -162,7 +176,7 @@ export const WORKSPACE_SHELL =
   // A page with no row is the whole panel: it keeps the same gap at the top
   // and rounds its own top corners.
   "new-layout:[&:not(:has([data-pane-top-row]>:not(:empty)))]:mt-1.5 new-layout:[&:not(:has([data-pane-top-row]>:not(:empty)))]:rounded-t-[10px] " +
-  NEW_LAYOUT_ROW_HEIGHT +
+  NEW_LAYOUT_PANE_ROW +
   " " +
   // An open media viewer lifts the session input above its scrim, which
   // this box's own stacking context would otherwise keep below it.

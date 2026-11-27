@@ -237,7 +237,9 @@ html:is(.wco, .desktop-shell):has([data-media-lightbox]) .wco-chrome {
    fullscreen, where the lights hide and the row packs left again). */
 .wco-nav-pane {
   position: absolute;
-  top: calc((var(--desktop-header-h) - 30px) / 2);
+  /* `--row-drop`: the new layout's lights' line sits below the row's middle
+     in a shell that cannot move its lights (app-shell-classes). */
+  top: calc((var(--desktop-header-h) - 30px + var(--row-drop, 0px)) / 2);
   left: 50px;
   z-index: 20;
 }

@@ -119,18 +119,20 @@ export const TAB_SCROLL =
 /**
  * The new layout's strip (`layout.attached`). It sits in the grey window row
  * rather than in a band of its own, so it paints no fill and no closing rule:
- * the row has both. A tab's body is 32px, centred on the row's middle line,
- * which is where the traffic lights and the row's icons sit; the active tab
- * carries on below it to the row's bottom edge, where it meets the sheet.
- * `--tab-inset` is the room above that body: 4px in the web's 40px row, 10px
- * in the Mac app's 52px one.
+ * the row has both. Tabs start `--tab-top` under the window's top edge and
+ * their labels sit on the row's line, where the traffic lights and the row's
+ * icons sit; the active tab carries on to the row's bottom edge, where it
+ * meets the sheet. That line is the row's middle, or `--row-drop` below it in
+ * a desktop shell that cannot move its lights (NEW_LAYOUT_PANE_ROW): 18px
+ * down a 36px row with the tab at 2px, or 24px down a 44px one with the tab
+ * at 4px.
  *
  * No `session-tabs` hook: that name tells the top bar a strip overlaps its
  * lower edge, and this one is beside the bar, not under it.
  */
 export const TAB_STRIP_ATTACHED =
   "group/strip relative flex min-w-0 flex-1 items-stretch gap-0.5 " +
-  "[--tab-inset:calc((var(--desktop-header-h)-32px)/2)] pt-[var(--tab-inset)]";
+  "[--tab-top:calc(2px+var(--row-drop,0px)/2)] pt-[var(--tab-top)]";
 
 /** Added to TAB_SCROLL: full height so a tab can reach the row's bottom edge,
  *  and above the panel's outline (WORKSPACE_SHELL, z 30) so the active tab
@@ -147,7 +149,8 @@ export const TAB_SCROLL_ATTACHED =
 /** The "+" and history controls after the tabs: lifted off the row's bottom
  *  by the same inset, so they centre on the row's middle line with the tab
  *  labels rather than on the strip below the inset. */
-export const TAB_CONTROL_ATTACHED = "mb-[var(--tab-inset)]";
+export const TAB_CONTROL_ATTACHED =
+  "mb-[calc(var(--tab-top)-var(--row-drop,0px))]";
 
 export const TAB_GROUP_ATTACHED =
   "relative inline-flex flex-none items-stretch gap-0.5";
@@ -279,10 +282,12 @@ const TAB_ATTACHED_BASE =
   "relative inline-flex max-w-[180px] shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
   "[corner-shape:round] border px-2.5 text-label shadow-none transition-[background-color,color]";
 const TAB_ATTACHED_OUTLINE = {
-  // The 32px body, then the inset again below it, down to the sheet.
-  active: "rounded-t-[8px] border-b-0 pb-[var(--tab-inset)]",
-  // 26px, centred on the row's middle line with the active tab's label.
-  inactive: "mt-[3px] mb-[calc(var(--tab-inset)+3px)] rounded-[8px]",
+  // The label centred between the tab's top and the row's line below it.
+  active:
+    "rounded-t-[8px] border-b-0 pb-[calc(var(--tab-top)-var(--row-drop,0px))]",
+  // 26px, centred on the row's line with the active tab's label.
+  inactive:
+    "mt-[calc(var(--desktop-header-h)/2-15px)] mb-[calc(var(--desktop-header-h)/2-var(--row-drop,0px)/2-13px)] rounded-[8px]",
 };
 
 function attachedTabClass({ active, waiting, colored }: TabState): string {
