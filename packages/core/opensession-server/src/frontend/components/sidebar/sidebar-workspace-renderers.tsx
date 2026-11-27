@@ -9,20 +9,14 @@ import type { ReviewQueueItem } from "../../lib/review-queue";
 import { activityBandFor, type ActivityBand } from "../../lib/sidebar-activity";
 import {
   SIDEBAR_GROUP,
-  SIDEBAR_GROUP_CHEVRON,
-  SIDEBAR_GROUP_CHEVRON_COLLAPSED,
-  SIDEBAR_GROUP_HEADER,
-  SIDEBAR_GROUP_HEADER_INSET,
   SIDEBAR_GROUP_NAME,
   SIDEBAR_LANE_COUNT,
   SIDEBAR_LANE_DROP_HOVER,
   SIDEBAR_LANE_EMPTY,
-  SIDEBAR_LANE_HEADER,
   SIDEBAR_LANE_NAME,
   SIDEBAR_STATUS_GROUP,
-  SIDEBAR_STICKY_LANE,
-  SIDEBAR_STICKY_LANE_NESTED,
-  SIDEBAR_STUCK_BACKING,
+  sidebarChevron,
+  sidebarHeader,
 } from "../../lib/sidebar-classes";
 import type { GroupBy } from "../../lib/sidebar-filter";
 import {
@@ -70,13 +64,8 @@ export function createWorkspaceGroupingRenderers({
       <div className={SIDEBAR_STATUS_GROUP} data-status-group key={gkey}>
         <button
           className={cn(
-            SIDEBAR_GROUP_HEADER,
-            SIDEBAR_GROUP_HEADER_INSET,
-            SIDEBAR_LANE_HEADER,
+            sidebarHeader({ kind: "lane", sticky: true, nested }),
             "transition-colors",
-            SIDEBAR_STICKY_LANE,
-            nested && SIDEBAR_STICKY_LANE_NESTED,
-            SIDEBAR_STUCK_BACKING,
           )}
           data-sticky-head
           onClick={() => toggleGroup(gkey)}
@@ -86,10 +75,7 @@ export function createWorkspaceGroupingRenderers({
           </span>
           <span className={SIDEBAR_LANE_COUNT}>{rows.length}</span>
           <IconChevronDown
-            className={cn(
-              SIDEBAR_GROUP_CHEVRON,
-              !open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
-            )}
+            className={sidebarChevron(!open)}
             size={12}
             style={{ transform: open ? "none" : "rotate(-90deg)" }}
           />
@@ -131,13 +117,8 @@ export function createWorkspaceGroupingRenderers({
       <div className={SIDEBAR_STATUS_GROUP} data-status-group key={gkey}>
         <button
           className={cn(
-            SIDEBAR_GROUP_HEADER,
-            SIDEBAR_GROUP_HEADER_INSET,
-            SIDEBAR_LANE_HEADER,
+            sidebarHeader({ kind: "lane", sticky: true, nested: !!ns }),
             "transition-colors",
-            SIDEBAR_STICKY_LANE,
-            ns && SIDEBAR_STICKY_LANE_NESTED,
-            SIDEBAR_STUCK_BACKING,
           )}
           data-sticky-head
           onClick={() => toggleGroup(gkey)}
@@ -147,10 +128,7 @@ export function createWorkspaceGroupingRenderers({
           </span>
           <span className={SIDEBAR_LANE_COUNT}>{rows.length + prs.length}</span>
           <IconChevronDown
-            className={cn(
-              SIDEBAR_GROUP_CHEVRON,
-              !open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
-            )}
+            className={sidebarChevron(!open)}
             size={12}
             style={{ transform: open ? "none" : "rotate(-90deg)" }}
           />
@@ -215,13 +193,8 @@ export function createWorkspaceGroupingRenderers({
         >
           <button
             className={cn(
-              SIDEBAR_GROUP_HEADER,
-              SIDEBAR_GROUP_HEADER_INSET,
-              SIDEBAR_LANE_HEADER,
+              sidebarHeader({ kind: "lane", sticky: true, nested: !!laneRepo }),
               "transition-colors",
-              SIDEBAR_STICKY_LANE,
-              !!laneRepo && SIDEBAR_STICKY_LANE_NESTED,
-              SIDEBAR_STUCK_BACKING,
             )}
             data-sticky-head
             onClick={() => toggleGroup(gkey)}
@@ -233,10 +206,7 @@ export function createWorkspaceGroupingRenderers({
               {items.length + prs.length}
             </span>
             <IconChevronDown
-              className={cn(
-                SIDEBAR_GROUP_CHEVRON,
-                !open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
-              )}
+              className={sidebarChevron(!open)}
               size={12}
               style={{ transform: open ? "none" : "rotate(-90deg)" }}
             />
@@ -320,13 +290,8 @@ export function createWorkspaceGroupingRenderers({
           <div className={SIDEBAR_STATUS_GROUP} data-status-group key={gkey}>
             <button
               className={cn(
-                SIDEBAR_GROUP_HEADER,
-                SIDEBAR_GROUP_HEADER_INSET,
-                SIDEBAR_LANE_HEADER,
+                sidebarHeader({ kind: "lane", sticky: true, nested }),
                 "transition-colors",
-                SIDEBAR_STICKY_LANE,
-                nested && SIDEBAR_STICKY_LANE_NESTED,
-                SIDEBAR_STUCK_BACKING,
               )}
               data-sticky-head
               onClick={() => toggleGroup(gkey)}
@@ -338,10 +303,7 @@ export function createWorkspaceGroupingRenderers({
                 {band.rows.length + band.prs.length}
               </span>
               <IconChevronDown
-                className={cn(
-                  SIDEBAR_GROUP_CHEVRON,
-                  !open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
-                )}
+                className={sidebarChevron(!open)}
                 size={12}
                 style={{ transform: open ? "none" : "rotate(-90deg)" }}
               />
@@ -381,13 +343,8 @@ export function createWorkspaceGroupingRenderers({
       <div className={SIDEBAR_STATUS_GROUP} data-status-group key={gkey}>
         <button
           className={cn(
-            SIDEBAR_GROUP_HEADER,
-            SIDEBAR_GROUP_HEADER_INSET,
-            SIDEBAR_LANE_HEADER,
+            sidebarHeader({ kind: "lane", sticky: true, nested }),
             "transition-colors",
-            SIDEBAR_STICKY_LANE,
-            nested && SIDEBAR_STICKY_LANE_NESTED,
-            SIDEBAR_STUCK_BACKING,
           )}
           data-sticky-head
           onClick={() => toggleGroup(gkey)}
@@ -397,10 +354,7 @@ export function createWorkspaceGroupingRenderers({
           </span>
           <span className={SIDEBAR_LANE_COUNT}>{rows.length}</span>
           <IconChevronDown
-            className={cn(
-              SIDEBAR_GROUP_CHEVRON,
-              !open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
-            )}
+            className={sidebarChevron(!open)}
             size={12}
             style={{ transform: open ? "none" : "rotate(-90deg)" }}
           />

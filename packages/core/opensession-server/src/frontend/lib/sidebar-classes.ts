@@ -17,7 +17,7 @@
  *
  *   36px  a FULL LINE. Session/PR/support/archived rows, and the headings
  *         that title a set of rows and lead with a mark: a repo or feed band,
- *         an automation group, Archived. See {@link SIDEBAR_HEADER_ROW}.
+ *         an automation group, Archived. See the `item` heading.
  *   32px  the tool rows, and only them. They lead with the same 22px glyph on
  *         the same rail as a full line, so the column reads unbroken, but the
  *         strip is a short list of places above the work rather than part of
@@ -29,7 +29,7 @@
  *         Recent / Yesterday / Urgent), and the top-level groupings that read
  *         as lanes over the whole list: Needs review, Approved, Awaiting
  *         review, Pinned.
- *         See {@link SIDEBAR_LANE_HEADER} and {@link SIDEBAR_BAND_TOGGLE}.
+ *         See the `lane` heading and {@link SIDEBAR_BAND_TOGGLE}.
  *
  * The HOVER FILL says whether clicking takes you somewhere. Only a line that
  * NAVIGATES paints one ({@link SIDEBAR_HOVER_LAYER}): the rows, the tool rows,
@@ -68,8 +68,20 @@
  */
 
 import * as stylex from "@stylexjs/stylex";
+import { cn } from "../ui/cn";
+import { sidebarHeaderMarker } from "../ui/markers.stylex";
 import { classString as sx } from "../ui/sx";
-import { color, media, sidebarScale as scale } from "../ui/tokens.stylex";
+import {
+  color,
+  corner,
+  media,
+  motion,
+  radius,
+  sidebarScale as scale,
+  space,
+  text,
+  weight,
+} from "../ui/tokens.stylex";
 
 /**
  * The pieces of the rail that are StyleX. The constants below that read
@@ -151,6 +163,127 @@ export const sidebarStyles = stylex.create({
     },
   },
   group: { marginBottom: scale.groupGapVar },
+  navX: {
+    "--sidebar-nav-x": {
+      default: scale.navX,
+      [media.desktop]: scale.navXDesktop,
+    },
+  },
+  list: {
+    flex: "none",
+    overflowY: "visible",
+    paddingInline: { default: space.s12, [media.desktop]: scale.navXVar },
+    paddingTop: scale.listTop,
+    paddingBottom: space.s0,
+  },
+  independentSection: {
+    display: "block",
+    minWidth: 0,
+    flex: "none",
+    marginInline: { default: space.s12, [media.desktop]: scale.navXVar },
+  },
+  independentScroll: {
+    minWidth: 0,
+    overflowY: "visible",
+    paddingBottom: space.s6,
+  },
+  // A lid, not a wash: see SIDEBAR_ROW_CHIP.
+  rowChip: {
+    backgroundColor: {
+      default: null,
+      ":hover": { default: null, [media.hover]: color.rowChip },
+    },
+  },
+
+  // ── Headings: see sidebarHeader ──
+  header: {
+    display: "flex",
+    width: "100%",
+    alignItems: "center",
+    gap: scale.railGap,
+    borderRadius: scale.headerRadius,
+    ["cornerShape"]: corner.squircle,
+    borderStyle: "none",
+    backgroundColor: color.transparent,
+    fontWeight: weight.medium,
+    letterSpacing: 0,
+    color: {
+      default: color.dim,
+      ":hover": { default: null, [media.hover]: color.fg },
+    },
+    paddingTop: { default: scale.headerPadPhone, [media.desktop]: space.s4 },
+    paddingRight: { default: space.s4, [media.desktop]: space.s6 },
+    paddingBottom: { default: scale.headerPadPhone, [media.desktop]: space.s4 },
+    paddingLeft: { default: space.s4, [media.desktop]: scale.railPadVar },
+  },
+  headerItem: {
+    fontSize: { default: text.body, [media.desktop]: text.itemTitle },
+    height: { default: null, [media.desktop]: scale.lineHeightVar },
+    minHeight: { default: null, [media.desktop]: scale.lineHeightVar },
+  },
+  headerLane: {
+    gap: scale.laneGap,
+    paddingTop: { default: scale.lanePadTopPhone, [media.desktop]: space.s4 },
+    paddingBottom: {
+      default: scale.lanePadBottomPhone,
+      [media.desktop]: space.s4,
+    },
+    fontSize: text.label,
+    fontWeight: weight.heading,
+    height: { default: null, [media.desktop]: scale.captionVar },
+    minHeight: { default: null, [media.desktop]: scale.captionVar },
+  },
+  headerSelected: { backgroundColor: color.selected, color: color.fg },
+  headerInert: { cursor: "default", color: color.dim },
+  stickyLane: {
+    position: { default: null, [media.desktop]: "sticky" },
+    top: { default: null, [media.desktop]: scale.bandSlotVar },
+    zIndex: { default: null, [media.desktop]: scale.laneLayer },
+  },
+  stickyLaneNested: {
+    top: {
+      default: null,
+      [media.desktop]: `calc(${scale.bandSlotVar} + ${scale.lineHeightVar})`,
+    },
+    zIndex: { default: null, [media.desktop]: scale.nestedLaneLayer },
+  },
+  groupName: {
+    minWidth: 0,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    textAlign: "left",
+  },
+  laneName: { paddingLeft: { default: space.s2, [media.desktop]: space.s0 } },
+  count: { fontWeight: weight.medium, color: color.faint },
+  dot: {
+    width: scale.dot,
+    height: scale.dot,
+    flexShrink: 0,
+    borderRadius: radius.pill,
+    opacity: scale.dotOpacity,
+  },
+  chevron: {
+    flexShrink: 0,
+    color: {
+      default: color.faint,
+      [stylex.when.ancestor(":hover", sidebarHeaderMarker)]: {
+        default: null,
+        [media.hover]: color.fg,
+      },
+    },
+    opacity: {
+      default: 0,
+      [stylex.when.ancestor(":hover", sidebarHeaderMarker)]: {
+        default: null,
+        [media.hover]: 1,
+      },
+    },
+    transitionProperty: "transform, opacity",
+    transitionDuration: motion.micro,
+    transitionTimingFunction: motion.ease,
+  },
+  chevronCollapsed: { opacity: 1 },
 });
 
 /**
@@ -208,8 +341,7 @@ export const SIDEBAR_DENSITY_VARS = sx(sidebarStyles.density);
  * other — and a truncating title faded out 14px short of that seam, which read
  * as the sidebar running out of room rather than as a margin.
  */
-export const SIDEBAR_NAV_X =
-  "[--sidebar-nav-x:6px] desktop:[--sidebar-nav-x:10px]";
+export const SIDEBAR_NAV_X = sx(sidebarStyles.navX);
 
 /**
  * The left padding a box inside that inset takes to put its leading mark back
@@ -275,19 +407,17 @@ export const SIDEBAR_RAIL_GAP = sx(sidebarStyles.railGap);
  * queries this box for its candidate rows, and an attribute says "hook" where a
  * class name would read as styling.
  */
-export const SIDEBAR_LIST =
-  "flex-none overflow-y-visible px-3 pt-px pb-0 desktop:px-[var(--sidebar-nav-x)]";
+export const SIDEBAR_LIST = sx(sidebarStyles.list);
 
 /**
  * Bands that are siblings of the workspace list (Automations, People) but
  * participate in the sidebar's single scroll flow rather than creating nested
  * scroll panes.
  */
-export const SIDEBAR_INDEPENDENT_SECTION =
-  "block min-w-0 flex-none mx-3 desktop:mx-[var(--sidebar-nav-x)]";
+export const SIDEBAR_INDEPENDENT_SECTION = sx(sidebarStyles.independentSection);
 
 /** The scroll flow inside one of those bands — visible, not a nested pane. */
-export const SIDEBAR_INDEPENDENT_SCROLL = "min-w-0 overflow-y-visible pb-1.5";
+export const SIDEBAR_INDEPENDENT_SCROLL = sx(sidebarStyles.independentScroll);
 
 /**
  * A hover painted as a background LAYER rather than a background colour — the
@@ -325,7 +455,7 @@ export const SIDEBAR_HOVER_LAYER = sx(sidebarStyles.hoverLayer);
  * of through its alpha, and it is never more see-through than the sidebar it
  * sits on.
  */
-export const SIDEBAR_ROW_CHIP = "hover:bg-[var(--row-chip)]";
+export const SIDEBAR_ROW_CHIP = sx(sidebarStyles.rowChip);
 
 /** A top-level group in the workspace list, and the gap after it. */
 export const SIDEBAR_GROUP = sx(sidebarStyles.group);
@@ -398,7 +528,7 @@ export const SIDEBAR_REPO_TILE = "size-[18px] shrink-0 text-meta";
  *
  * Neither is the hover FILL, nor a height: those are what separate the two
  * families that share this base. An item heading adds
- * {@link SIDEBAR_HEADER_ROW}; a caption adds {@link SIDEBAR_LANE_HEADER} and
+ * the `item` heading; a caption adds the `lane` heading and
  * takes neither. The ink brightening on hover stays on both — it is what says
  * a caption is still a toggle once the pill is gone.
  */
@@ -407,7 +537,7 @@ export const SIDEBAR_REPO_TILE = "size-[18px] shrink-0 text-meta";
    pixel between them is what says so; taken all the way down to the label step
    it stopped reading as the same app as the transcript. On a phone the sidebar
    IS the page, so its rows are the thing being read and stay at body. */
-export const SIDEBAR_GROUP_HEADER = `group/gh flex w-full items-center ${SIDEBAR_RAIL_GAP} rounded-[calc(10px*var(--rf))] border-none bg-transparent font-medium tracking-[0px] text-dim hover:text-fg`;
+const HEADER = sidebarStyles.header;
 
 /**
  * A FULL-LINE heading — a repo or feed band, an automation group, Archived.
@@ -425,11 +555,11 @@ export const SIDEBAR_GROUP_HEADER = `group/gh flex w-full items-center ${SIDEBAR
  * Desktop only. On phones the heading keeps the taller tap box its own inset
  * gives it.
  */
-export const SIDEBAR_HEADER_ROW =
-  "text-body desktop:h-[var(--sidebar-line-h)] desktop:min-h-[var(--sidebar-line-h)] desktop:text-item-title";
+const HEADER_ITEM = sidebarStyles.headerItem;
 
 /** Left pad puts the icon on the shared rail, whatever the list's inset is. */
-export const SIDEBAR_GROUP_HEADER_INSET = `pt-[11px] pr-1 pb-[11px] pl-1 desktop:pt-1 desktop:pr-1.5 desktop:pb-1 ${SIDEBAR_RAIL_PAD_DESKTOP}`;
+// Folded into HEADER: the left pad puts the mark on the shared rail, whatever
+// the list's inset is.
 
 /**
  * Status lanes, inbox bands and Snoozed — the groups nested inside a list or a
@@ -446,32 +576,35 @@ export const SIDEBAR_GROUP_HEADER_INSET = `pt-[11px] pr-1 pb-[11px] pl-1 desktop
  * like an item, and a list of five lanes then presented five clickable-looking
  * rows that lead nowhere between the rows that do.
  */
-export const SIDEBAR_LANE_HEADER =
-  "gap-[5px] pt-[9px] pb-[5px] text-label font-semibold desktop:h-[var(--sidebar-cap-h)] desktop:min-h-[var(--sidebar-cap-h)] desktop:pt-1 desktop:pb-1 " +
-  // Under a place title the captions can be quieter: the rows' own size in a
-  // regular weight, set apart by their muted ink alone.
-  "new-layout:text-item-title new-layout:font-normal";
+const HEADER_LANE = sidebarStyles.headerLane;
+
+/**
+ * Under a place title the captions can be quieter: the rows' own size in a
+ * regular weight, set apart by their muted ink alone. A sibling reach (the
+ * new layout is keyed off a `[data-minibar]` earlier in the body), so it
+ * stays a utility.
+ */
+const LANE_NEW_LAYOUT = "new-layout:text-item-title new-layout:font-normal";
 
 /**
  * The heading's own name. `truncate` before any width utility: it is the pair
  * of overflow rules that makes the ellipsis, and a min-width of 0 is what lets
  * a flex child shrink far enough to need one.
  */
-export const SIDEBAR_GROUP_NAME = "min-w-0 truncate text-left";
+export const SIDEBAR_GROUP_NAME = sx(sidebarStyles.groupName);
 
 /**
  * Phone lane captions keep a slight 2px inset for arm's-length reading.
  * Desktop captions sit directly on the header's content rail, while the hover
  * pill still runs the sidebar's full width.
  */
-export const SIDEBAR_LANE_NAME = "pl-0.5 desktop:pl-0";
+export const SIDEBAR_LANE_NAME = sx(sidebarStyles.laneName);
 
 /**
  * The collapse chevron. Revealed by the header's hover, and rotated to mark the
  * collapsed state by the call site's inline transform.
  */
-export const SIDEBAR_GROUP_CHEVRON =
-  "shrink-0 text-faint opacity-0 transition-[transform,opacity] group-hover/gh:text-fg group-hover/gh:opacity-100";
+const CHEVRON = sidebarStyles.chevron;
 
 /**
  * A collapsed heading keeps its chevron out of hover. Expanded, the rows below
@@ -484,7 +617,12 @@ export const SIDEBAR_GROUP_CHEVRON =
  * loud. Muting the label instead would say the opposite of what is true: a
  * collapsed group is hiding work, which is worth more attention, not less.
  */
-export const SIDEBAR_GROUP_CHEVRON_COLLAPSED = "opacity-100";
+const CHEVRON_COLLAPSED = sidebarStyles.chevronCollapsed;
+
+/** The collapse chevron on a group heading, in its open or collapsed state. */
+export function sidebarChevron(collapsed: boolean): string {
+  return sx(CHEVRON, collapsed && CHEVRON_COLLAPSED);
+}
 
 /**
  * The count on a group or band heading. Written phone-first for the same
@@ -503,17 +641,17 @@ export const SIDEBAR_GROUP_CHEVRON_COLLAPSED = "opacity-100";
  * numeral has no ascender, so the same nominal gap costs it more than it costs
  * a word.
  */
-export const SIDEBAR_GROUP_COUNT = "font-medium text-faint";
+export const SIDEBAR_GROUP_COUNT = sx(sidebarStyles.count);
 
 /**
  * The same count on a status-lane heading. Identical to
  * {@link SIDEBAR_GROUP_COUNT} today and kept as its own name because the two
  * headings are free to diverge; neither sets a size.
  */
-export const SIDEBAR_LANE_COUNT = "font-medium text-faint";
+export const SIDEBAR_LANE_COUNT = sx(sidebarStyles.count);
 
 /** The 7px liveness dot a lane or automation heading leads with. */
-export const SIDEBAR_GROUP_DOT = "size-[7px] shrink-0 rounded-full opacity-85";
+export const SIDEBAR_GROUP_DOT = sx(sidebarStyles.dot);
 
 /* The 22px glyph a top-level heading used to lead with is gone: Needs review,
    Approved, Awaiting review and Pinned are groupings rather than
@@ -565,7 +703,7 @@ export const SIDEBAR_AUTO_COG =
  * an owned automation's latest report. The step says "belongs to the heading
  * above", which is as true of a report as of a run; what says the group is
  * closed is the heading's own chevron, which is why that chevron shows at rest
- * rather than on hover (see {@link SIDEBAR_GROUP_CHEVRON_COLLAPSED}). Flatten
+ * rather than on hover (see the collapsed `sidebarChevron`). Flatten
  * the report onto the heading's rail instead and it stops reading as that
  * automation's finding and starts reading as another automation.
  *
@@ -626,15 +764,17 @@ export const SIDEBAR_STICKY_BAND_ROW =
  * now brings its own height from its family class, and the two agree with the
  * rows around them instead of with each other.
  */
-export const SIDEBAR_STICKY_LANE =
-  "desktop:sticky desktop:top-[var(--sidebar-band-slot)] desktop:z-[15] " +
+const STICKY_LANE = sidebarStyles.stickyLane;
+
+/** The stuck lane's trailing fade: a pseudo-element keyed on `data-stuck`, so
+ *  it stays a utility string. */
+export const SIDEBAR_STICKY_LANE_FADE =
   "desktop:data-[stuck]:after:pointer-events-none desktop:data-[stuck]:after:absolute desktop:data-[stuck]:after:top-[calc(100%-8px)] desktop:data-[stuck]:after:left-[-400px] desktop:data-[stuck]:after:right-[-400px] desktop:data-[stuck]:after:z-[-1] desktop:data-[stuck]:after:h-5 desktop:data-[stuck]:after:content-[''] desktop:data-[stuck]:after:[background:linear-gradient(to_bottom,var(--sidebar-material),transparent),linear-gradient(to_bottom,var(--sidebar-bg),transparent)]";
 
 /**
  * A status lane nested inside a repo band sits one row lower again — its repo
  * header already occupies the first sub-header slot — and must pass UNDER that
- * header, hence the lower z-index. Pass it after {@link SIDEBAR_STICKY_LANE}
- * through `cn()`, which resolves the pair to this one.
+ * header, hence the lower z-index.
  *
  * The offset is the band slot above it plus the repo header above it (an item):
  * 32 + 36 = 68 by default, 28 + 30 = 58 compact. Both of those heights are fixed
@@ -642,8 +782,52 @@ export const SIDEBAR_STICKY_LANE =
  * instead of a measurement; spelling it as the sum rather than as either
  * number is what keeps it right at both densities.
  */
-export const SIDEBAR_STICKY_LANE_NESTED =
-  "desktop:top-[calc(var(--sidebar-band-slot)+var(--sidebar-line-h))] desktop:z-[14]";
+const STICKY_LANE_NESTED = sidebarStyles.stickyLaneNested;
+
+export interface SidebarHeaderOptions {
+  /** `item`: a full-line heading that titles rows (a repo band, an
+   *  automation group, Archived). `lane`: a caption (a status lane, an inbox
+   *  band, Snoozed). */
+  kind: "item" | "lane";
+  /** Pins under the band slot on desktop, with the stuck backing and fade. */
+  sticky?: boolean;
+  /** Pins one item lower again, under its repo band's own heading. */
+  nested?: boolean;
+  /** The one heading that navigates (Archived) paints the hover layer. */
+  navigates?: boolean;
+  /** The navigating heading's selected state. */
+  selected?: boolean;
+  /** A caption that toggles nothing: no hover ink, no pointer. */
+  inert?: boolean;
+}
+
+/**
+ * A group heading in the workspace list, as one class string. Every heading
+ * shares the base box (the rail gap, the inset that puts its mark on the
+ * shared rail, the ink that brightens on hover); `kind` picks the item's
+ * line height or the caption's. One StyleX call, so the caption's tighter gap
+ * and padding beat the base's by argument order. `group/gh` stays on as the
+ * hook the automation cog's reveal reads.
+ */
+export function sidebarHeader(options: SidebarHeaderOptions): string {
+  const { kind, sticky = false, nested = false } = options;
+  return cn(
+    "group/gh",
+    kind === "lane" && LANE_NEW_LAYOUT,
+    sticky && SIDEBAR_STICKY_LANE_FADE,
+    sticky && SIDEBAR_STUCK_BACKING,
+    sx(
+      HEADER,
+      kind === "item" ? HEADER_ITEM : HEADER_LANE,
+      options.navigates === true && sidebarStyles.hoverLayer,
+      options.selected === true && sidebarStyles.headerSelected,
+      options.inert === true && sidebarStyles.headerInert,
+      sticky && STICKY_LANE,
+      sticky && nested && STICKY_LANE_NESTED,
+      sidebarHeaderMarker,
+    ),
+  );
+}
 
 /**
  * ── Band headings ───────────────────────────────────────────────────────────
@@ -653,7 +837,7 @@ export const SIDEBAR_STICKY_LANE_NESTED =
  * actions live on the right.
  *
  * The type is the CAPTION: the same 13px semibold ink a status lane wears (see
- * {@link SIDEBAR_LANE_HEADER}), at both widths. A band and a lane are the same
+ * the `lane` heading), at both widths. A band and a lane are the same
  * kind of thing on this rail, a glyphless word naming the rows under it, so the
  * sidebar carries ONE label rather than one per nesting level. This used to
  * step down to 11px faint on desktop and up to 15px on phones, which left a
@@ -690,7 +874,7 @@ export const SIDEBAR_BAND_TOGGLE =
   //
   // A band heading is a LABEL, so it paints no hover fill: only the ink
   // brightens, to `text-fg`, which is the same step a lane caption takes (see
-  // SIDEBAR_GROUP_HEADER). `--sidebar-cap-h` is the 28px label height; it sits
+  // sidebarHeader). `--sidebar-cap-h` is the 28px label height; it sits
   // inside the 32px slot SIDEBAR_STICKY_BAND_ROW reserves, so the caption keeps
   // a little air around it without the pinned slot growing. Compact takes the
   // pair to 24 inside 28, which is the same 4px of air.
@@ -712,7 +896,7 @@ export const SIDEBAR_BAND_TOGGLE_INSET = `pr-1 pl-2 desktop:pr-2 ${SIDEBAR_RAIL_
  */
 export const SIDEBAR_BAND_CHEVRON = "invisible shrink-0 text-faint";
 
-/** The band heading's counterpart to {@link SIDEBAR_GROUP_CHEVRON_COLLAPSED}. */
+/** The band heading's counterpart to the collapsed `sidebarChevron`. */
 export const SIDEBAR_BAND_CHEVRON_COLLAPSED = "visible";
 
 /**

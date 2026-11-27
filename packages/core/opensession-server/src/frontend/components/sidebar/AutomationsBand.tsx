@@ -1,27 +1,24 @@
 import React from "react";
 import type { AutomationOverviewByName } from "../../lib/automation-overview";
 import {
-  SIDEBAR_AUTO_COG,
   SIDEBAR_AUTOMATION_RUNS,
+  SIDEBAR_AUTO_COG,
   SIDEBAR_BAND_CHEVRON,
   SIDEBAR_BAND_CHEVRON_COLLAPSED,
   SIDEBAR_BAND_LABEL,
   SIDEBAR_BAND_TOGGLE,
   SIDEBAR_BAND_TOGGLE_INSET,
-  SIDEBAR_GROUP_CHEVRON,
-  SIDEBAR_GROUP_CHEVRON_COLLAPSED,
   SIDEBAR_GROUP_COUNT,
   SIDEBAR_GROUP_DOT,
-  SIDEBAR_GROUP_HEADER,
-  SIDEBAR_GROUP_HEADER_INSET,
   SIDEBAR_GROUP_NAME,
-  SIDEBAR_HEADER_ROW,
   SIDEBAR_INDEPENDENT_SCROLL,
   SIDEBAR_INDEPENDENT_SECTION,
   SIDEBAR_RAIL,
   SIDEBAR_STICKY_BAND,
   SIDEBAR_STICKY_BAND_ROW,
   SIDEBAR_STUCK_BACKING,
+  sidebarChevron,
+  sidebarHeader,
 } from "../../lib/sidebar-classes";
 import type { Group } from "../../lib/sidebar-types";
 import type { UnifiedSession } from "../../lib/types";
@@ -109,11 +106,7 @@ export function AutomationsBand({
             return (
               <React.Fragment key={group.key}>
                 <button
-                  className={cn(
-                    SIDEBAR_GROUP_HEADER,
-                    SIDEBAR_GROUP_HEADER_INSET,
-                    SIDEBAR_HEADER_ROW,
-                  )}
+                  className={sidebarHeader({ kind: "item" })}
                   onClick={() => onToggleGroup(group.key)}
                 >
                   {/* The dot is 7px but the header's leading column is a rail,
@@ -138,10 +131,7 @@ export function AutomationsBand({
                       nothing says whether the rows are all of them or one of
                       eight. */}
                   <IconChevronDown
-                    className={cn(
-                      SIDEBAR_GROUP_CHEVRON,
-                      !groupOpen && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
-                    )}
+                    className={sidebarChevron(!groupOpen)}
                     size={22}
                     style={{
                       transform: groupOpen ? "none" : "rotate(-90deg)",

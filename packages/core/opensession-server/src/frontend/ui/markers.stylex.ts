@@ -14,3 +14,5 @@ export const overlayActionMarker = stylex.defineMarker();
 export const titlePillMarker = stylex.defineMarker();
 /** A settings nav row: its glyph lights up with the row's hover and state. */
 export const settingsNavRowMarker = stylex.defineMarker();
+/** A sidebar group heading: its chevron shows with the heading's hover. */
+export const sidebarHeaderMarker = stylex.defineMarker();

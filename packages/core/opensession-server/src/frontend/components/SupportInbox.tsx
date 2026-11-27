@@ -8,15 +8,13 @@ import {
   sendTicketChange,
 } from "../lib/support-ticket-changes";
 import {
-  SIDEBAR_GROUP_HEADER,
-  SIDEBAR_GROUP_HEADER_INSET,
   SIDEBAR_GROUP_NAME,
   SIDEBAR_HOVER_LAYER,
   SIDEBAR_LANE_COUNT,
-  SIDEBAR_LANE_HEADER,
   SIDEBAR_LANE_NAME,
   SIDEBAR_RAIL,
   SIDEBAR_RAIL_GAP,
+  sidebarHeader,
 } from "../lib/sidebar-classes";
 import {
   SUPPORT_PRIORITY_DOT,
@@ -331,12 +329,7 @@ export function SupportInbox({
                     {/* The sidebar's lane caption, not a heading of its
 										    own: same tokens, same colour per priority. */}
                     <div
-                      className={cn(
-                        SIDEBAR_GROUP_HEADER,
-                        SIDEBAR_GROUP_HEADER_INSET,
-                        SIDEBAR_LANE_HEADER,
-                        "cursor-default hover:text-dim",
-                      )}
+                      className={sidebarHeader({ kind: "lane", inert: true })}
                     >
                       <span
                         className={cn(

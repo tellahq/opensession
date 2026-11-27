@@ -17,13 +17,10 @@ import type { SidebarMenuTool } from "./SidebarToolsMenu";
 import { cn } from "../../ui/cn";
 import type { NavigationActions } from "../../lib/navigation";
 import {
-  SIDEBAR_GROUP_HEADER,
-  SIDEBAR_GROUP_HEADER_INSET,
   SIDEBAR_GROUP_NAME,
-  SIDEBAR_HEADER_ROW,
-  SIDEBAR_HOVER_LAYER,
   SIDEBAR_RAIL,
   SIDEBAR_REPO_TILE,
+  sidebarHeader,
 } from "../../lib/sidebar-classes";
 import {
   mergeSidebarToolOrder,
@@ -243,15 +240,15 @@ export function createSidebarToolsModel({
   const archivedLink = (
     <button
       className={cn(
-        SIDEBAR_GROUP_HEADER,
-        SIDEBAR_GROUP_HEADER_INSET,
-        SIDEBAR_HEADER_ROW,
-        // The one heading that navigates, so the one heading that paints a
-        // fill. Its neighbours in the rail collapse a group instead and
-        // deliberately take none. See the two signals in sidebar-classes.ts.
-        SIDEBAR_HOVER_LAYER,
+        sidebarHeader({
+          kind: "item",
+          // The one heading that navigates, so the one heading that paints a
+          // fill. Its neighbours in the rail collapse a group instead and
+          // deliberately take none. See the two signals in sidebar-classes.ts.
+          navigates: true,
+          selected: archivedActive,
+        }),
         "transition-colors",
-        archivedActive && "bg-selected text-fg",
       )}
       data-selected={archivedActive || undefined}
       onClick={navigation.openArchived}

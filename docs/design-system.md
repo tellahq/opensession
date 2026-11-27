@@ -139,7 +139,14 @@ Feature areas follow the same pattern, one area at a time. The settings page
 and the phone settings sheet live in `lib/settings-classes.ts`; the sidebar
 pieces settings borrows (the density scale, the 22px rail and the gap after
 it, the hover layer, the group gap) are `sidebarStyles` in
-`lib/sidebar-classes.ts`, with their numbers in `sidebarScale`. Each class
+`lib/sidebar-classes.ts`, with their numbers in `sidebarScale`. The sidebar's
+containers and group headings followed: a heading is `sidebarHeader({ kind,
+sticky, nested, navigates, selected, inert })` and its chevron is
+`sidebarChevron(collapsed)`, each one StyleX call, so a caption's tighter gap
+beats the base's by argument order and the chevron reveals off
+`sidebarHeaderMarker` rather than a Tailwind group. The stuck backing and
+fade (pseudo-elements keyed on `data-stuck`) and the new layout's quieter
+caption (a sibling reach) stay utilities. Each class
 string constant is `classString(...)` from `ui/sx.ts`: pass every style one
 element wears in one call, so two styles that set the same property are
 settled by argument order, not stylesheet order. Hooks that CSS or tests read

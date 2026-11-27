@@ -7,22 +7,15 @@ import { ContextMenu } from "../../ui/menu";
 import type { NavigationActions } from "../../lib/navigation";
 import {
   SIDEBAR_ATTN_COUNT,
-  SIDEBAR_GROUP_CHEVRON,
-  SIDEBAR_GROUP_CHEVRON_COLLAPSED,
   SIDEBAR_GROUP_COUNT,
-  SIDEBAR_GROUP_HEADER,
-  SIDEBAR_GROUP_HEADER_INSET,
   SIDEBAR_GROUP_NAME,
-  SIDEBAR_HEADER_ROW,
   SIDEBAR_LANE_COUNT,
-  SIDEBAR_LANE_HEADER,
   SIDEBAR_LANE_NAME,
   SIDEBAR_RAIL,
   SIDEBAR_REPO_TILE,
   SIDEBAR_STATUS_GROUP,
-  SIDEBAR_STICKY_LANE,
-  SIDEBAR_STICKY_LANE_NESTED,
-  SIDEBAR_STUCK_BACKING,
+  sidebarChevron,
+  sidebarHeader,
 } from "../../lib/sidebar-classes";
 import { setSidebarFeedVisible } from "../../lib/sidebar-feeds";
 import type { FeedFilterValues } from "../../lib/sidebar-filter";
@@ -94,14 +87,7 @@ export function createSidebarFeedRenderers({
           key={`support-prio-${group.p}`}
         >
           <button
-            className={cn(
-              SIDEBAR_GROUP_HEADER,
-              SIDEBAR_GROUP_HEADER_INSET,
-              SIDEBAR_LANE_HEADER,
-              SIDEBAR_STICKY_LANE,
-              nested && SIDEBAR_STICKY_LANE_NESTED,
-              SIDEBAR_STUCK_BACKING,
-            )}
+            className={sidebarHeader({ kind: "lane", sticky: true, nested })}
             data-sticky-head
             onClick={() => toggleGroup(gkey)}
           >
@@ -118,11 +104,7 @@ export function createSidebarFeedRenderers({
               {items.length}
             </span>
             <IconChevronDown
-              className={cn(
-                SIDEBAR_GROUP_CHEVRON,
-                "ml-auto",
-                !groupIsOpen && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
-              )}
+              className={cn(sidebarChevron(!groupIsOpen), "ml-auto")}
               size={20}
               style={{
                 transform: groupIsOpen ? "none" : "rotate(-90deg)",
@@ -263,12 +245,8 @@ export function createSidebarFeedRenderers({
             render={
               <button
                 className={cn(
-                  SIDEBAR_GROUP_HEADER,
-                  SIDEBAR_GROUP_HEADER_INSET,
-                  SIDEBAR_HEADER_ROW,
+                  sidebarHeader({ kind: "item", sticky: true }),
                   "group transition-colors",
-                  SIDEBAR_STICKY_LANE,
-                  SIDEBAR_STUCK_BACKING,
                 )}
                 data-sticky-head
                 onClick={() => toggleGroup(gkey)}
@@ -300,10 +278,7 @@ export function createSidebarFeedRenderers({
               </span>
             )}
             <IconChevronDown
-              className={cn(
-                SIDEBAR_GROUP_CHEVRON,
-                !open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
-              )}
+              className={sidebarChevron(!open)}
               size={22}
               style={{ transform: open ? "none" : "rotate(-90deg)" }}
             />

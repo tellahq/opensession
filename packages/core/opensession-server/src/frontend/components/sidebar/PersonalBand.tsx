@@ -2,20 +2,15 @@ import React from "react";
 import { Reorder } from "motion/react";
 import {
   SIDEBAR_GROUP,
-  SIDEBAR_GROUP_CHEVRON,
-  SIDEBAR_GROUP_CHEVRON_COLLAPSED,
-  SIDEBAR_GROUP_HEADER,
-  SIDEBAR_GROUP_HEADER_INSET,
   SIDEBAR_GROUP_NAME,
   SIDEBAR_HOVER_LAYER,
   SIDEBAR_LANE_COUNT,
-  SIDEBAR_LANE_HEADER,
   SIDEBAR_LANE_NAME,
   SIDEBAR_PIN_DRAG_ACTIVE,
   SIDEBAR_PIN_ENTRY,
   SIDEBAR_PIN_ENTRY_DRAGGING,
-  SIDEBAR_STICKY_LANE,
-  SIDEBAR_STUCK_BACKING,
+  sidebarChevron,
+  sidebarHeader,
 } from "../../lib/sidebar-classes";
 import type { PersonalBandPinnedEntry } from "../../lib/sidebar-types";
 import { cn } from "../../ui/cn";
@@ -79,13 +74,7 @@ export function PersonalBand({
       {pinned && (
         <div className={SIDEBAR_GROUP}>
           <button
-            className={cn(
-              SIDEBAR_GROUP_HEADER,
-              SIDEBAR_GROUP_HEADER_INSET,
-              SIDEBAR_LANE_HEADER,
-              SIDEBAR_STICKY_LANE,
-              SIDEBAR_STUCK_BACKING,
-            )}
+            className={sidebarHeader({ kind: "lane", sticky: true })}
             data-sticky-head
             onClick={pinned.onToggle}
           >
@@ -94,10 +83,7 @@ export function PersonalBand({
             </span>
             <span className={SIDEBAR_LANE_COUNT}>{pinned.entries.length}</span>
             <IconChevronDown
-              className={cn(
-                SIDEBAR_GROUP_CHEVRON,
-                !pinned.open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
-              )}
+              className={sidebarChevron(!pinned.open)}
               size={12}
               style={{
                 transform: pinned.open ? "none" : "rotate(-90deg)",
