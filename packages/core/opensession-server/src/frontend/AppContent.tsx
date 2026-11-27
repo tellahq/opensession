@@ -134,6 +134,7 @@ import { NO_REPO } from "./lib/session-repo";
 import type { NewTabMorphOrigin } from "./lib/session-tabs-types";
 import { SIDEBAR_CHROME_BTN } from "./lib/sidebar-classes";
 import { useSidebarFilter } from "./lib/sidebar-filter";
+import { useListFilter } from "./hooks/useListFilter";
 import { ASK_BAND } from "./lib/sidebar-workspaces";
 import { saveTabSplit } from "./lib/split-tabs";
 import { getTabColors } from "./lib/tab-colors";
@@ -190,11 +191,12 @@ export function AppContent({
     goBackRoute(currentSessionRef.current?.parentSessionId ?? undefined);
   const currentUser = useCurrentUser();
   const sidebarFilter = useSidebarFilter();
+  const listFilter = useListFilter(sidebarFilter, places.current);
   const liveSessionsQueryInput: SidebarSessionsQueryOptions = {
     user: currentUser,
-    person: sidebarFilter.person,
-    repo: sidebarFilter.repo,
-    autoCreated: sidebarFilter.autoCreated,
+    person: listFilter.person,
+    repo: listFilter.repo,
+    autoCreated: listFilter.autoCreated,
   };
   if (route.view === "session") {
     liveSessionsQueryInput.selectedSessionId = route.id;

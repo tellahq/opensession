@@ -19,6 +19,8 @@ type WorkspaceMutationsParams = {
   goBack: () => void;
   /** Stops the Sessions button returning to a deleted conversation. */
   forgetConversation: (route: Route) => void;
+  /** The listed sessions, to find a deleted workspace's members. */
+  sessions: readonly UnifiedSession[];
   patch: (id: string, patch: Partial<UnifiedSession>) => void;
   refreshSessions: () => void;
   refreshWorkspaces: () => void;
@@ -35,6 +37,7 @@ export function useWorkspaceMutations({
   navigate,
   goBack,
   forgetConversation,
+  sessions,
   patch,
   refreshSessions,
   refreshWorkspaces,
@@ -100,9 +103,18 @@ export function useWorkspaceMutations({
     confirmRunningCloses(sessions, () => void archive());
   };
 
+  // Deleting a workspace deletes its sessions too. Forget all of them at
+  // once: the lists still hold them until their refresh lands.
+  const forgetDeletedWorkspace = (workspaceId: string) => {
+    forgetConversation({ view: "workspace", id: workspaceId });
+    for (const session of sessions)
+      if (session.workspaceId === workspaceId)
+        forgetConversation({ view: "session", id: session.id });
+  };
+
   const deleteWorkspaceFromHeader = async (workspaceId: string) => {
     await deleteWorkspaceApi(workspaceId);
-    forgetConversation({ view: "workspace", id: workspaceId });
+    forgetDeletedWorkspace(workspaceId);
     refreshWorkspaces();
     refreshSessions();
     if (route.view === "workspace" && route.id === workspaceId) goBack();
@@ -123,7 +135,7 @@ export function useWorkspaceMutations({
       console.error("Delete workspace failed:", error);
       throw error;
     });
-    forgetConversation({ view: "workspace", id: workspaceId });
+    forgetDeletedWorkspace(workspaceId);
     refreshWorkspaces();
     refreshSessions();
     if (wasOpen) navigate({ view: "prs" });

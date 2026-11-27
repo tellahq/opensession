@@ -68,6 +68,7 @@ import {
   sessionRepo,
   setFilter,
   useSidebarFilter,
+  filterForPlace,
 } from "../lib/sidebar-filter";
 import { sortActiveRows } from "../lib/active-order";
 import { useActiveRowDrag } from "../hooks/useActiveRowDrag";
@@ -259,7 +260,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   // Filter popover (group by / repo / sort) — its choices persist together.
   // The person lens is shared with Home's facepile (lib/sidebar-filter), so
   // a face picked there is the sidebar you come back to.
-  const filter = useSidebarFilter();
+  const filter = filterForPlace(useSidebarFilter(), place);
   const [filterOpen, setFilterOpen] = useState(false);
   const [addProject, setAddProject] = useState<AddRepoMode | null>(null);
   const [customizeOpen, setCustomizeOpen] = useState(false);

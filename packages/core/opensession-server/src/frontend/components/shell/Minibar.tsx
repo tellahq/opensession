@@ -1,7 +1,6 @@
 import { useSyncExternalStore, type ReactNode } from "react";
 import { useNavigation } from "../../hooks/useNavigation";
 import type { Place } from "../../lib/new-layout-place";
-import { getFilter, setFilter } from "../../lib/sidebar-filter";
 import {
   onSidebarToolsChanged,
   readHiddenSidebarTools,
@@ -94,13 +93,9 @@ export function Minibar({
         <PlaceButton
           label="Sessions"
           active={place === "sessions"}
-          onClick={() => {
-            // Sessions is your own list. A teammate's list picked elsewhere
-            // (the People page, a facepile, the list's own options) would
-            // otherwise come back with it.
-            if (getFilter().person !== "me") setFilter({ person: "me" });
-            onOpenSessions();
-          }}
+          // Sessions is always your own list (filterForPlace,
+          // lib/sidebar-filter.ts), however you reach it.
+          onClick={onOpenSessions}
           icon={<IconMessages size={22} />}
         />
         <PlaceButton
