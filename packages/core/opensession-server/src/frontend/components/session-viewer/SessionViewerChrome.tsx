@@ -220,8 +220,8 @@ interface ChromeWorkspaceActions {
   openPr: ((repo: string, branch: string) => void) | undefined;
   openAssetFromTranscript: (path: string) => void;
   openAssets: (() => void) | undefined;
-  setActivePanelOpen: (open: boolean) => void;
-  setDesktopPanelPage: (page: SidePanelPage) => void;
+  /** Open the side panel on `page`, or on its overview (the toggle). */
+  openActivePanel: (page?: SidePanelPage) => void;
   setSummaryOpen: Dispatch<SetStateAction<boolean>>;
   gitRefreshTick: number;
   reviewPage: PrReviewPage | null;
@@ -411,8 +411,7 @@ export function SessionViewerChrome({
     openPr,
     openAssetFromTranscript,
     openAssets,
-    setActivePanelOpen,
-    setDesktopPanelPage,
+    openActivePanel,
     setSummaryOpen,
     gitRefreshTick,
     reviewPage,
@@ -664,8 +663,7 @@ export function SessionViewerChrome({
                   setInfoPageScrolled(false);
                   setInfoPageOpen(true);
                 } else {
-                  setDesktopPanelPage("portals");
-                  setActivePanelOpen(true);
+                  openActivePanel("portals");
                 }
               }}
             >
@@ -1207,8 +1205,7 @@ export function SessionViewerChrome({
                       // canvas now that the side panel contains tools only.
                       onOpenPanelTab={(tab) => {
                         if (tab === "changes") {
-                          setDesktopPanelPage("changes");
-                          setActivePanelOpen(true);
+                          openActivePanel("changes");
                         } else {
                           openReview?.();
                         }
@@ -1246,7 +1243,7 @@ export function SessionViewerChrome({
 					    stays in the window's top-right corner instead of moving
 					    to the main area's edge. */}
                   {!isPhone && panelAvailable && !activePanelOpen && (
-                    <SidePanelToggle onClick={() => setActivePanelOpen(true)} />
+                    <SidePanelToggle onClick={() => openActivePanel()} />
                   )}
                 </>
               }

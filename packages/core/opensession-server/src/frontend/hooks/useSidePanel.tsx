@@ -17,6 +17,9 @@ import {
   closeSidePanelTab,
   finishSidePanelOpening,
   getSidePanelState,
+  openSidePanelOverview,
+  sidePanelBrowserOf,
+  sidePanelOpening,
   selectSidePanelPage,
   setSidePanelBrowser,
   setSidePanelOpen,
@@ -54,6 +57,8 @@ interface SidePanelStyle extends React.CSSProperties {
 export interface SidePanel {
   open: boolean;
   setOpen: (open: boolean) => void;
+  /** Open on the overview (see openSidePanelOverview): the toggle's action. */
+  openOverview: () => void;
   page: SidePanelPage;
   /** Select a page; a tab that is not in the strip yet is added. */
   setPage: (page: SidePanelPage) => void;
@@ -88,7 +93,7 @@ export function useSidePanel(key: string): SidePanel {
   const current = useSyncExternalStore(subscribeSidePanel, getSidePanelState);
   const { open, page } = sidePanelViewOf(current, key);
   const { tabs, dock } = current;
-  const entering = current.opening === key;
+  const entering = sidePanelOpening(current, key);
   useEffect(() => {
     if (!entering) return;
     const timer = window.setTimeout(
@@ -152,11 +157,12 @@ export function useSidePanel(key: string): SidePanel {
   return {
     open,
     setOpen: (next) => setSidePanelOpen(key, next),
+    openOverview: () => openSidePanelOverview(key),
     page,
     setPage: (next) => selectSidePanelPage(key, next),
     tabs,
     closeTab: (tab) => closeSidePanelTab(key, tab),
-    browser: current.browsers[key] ?? null,
+    browser: sidePanelBrowserOf(current, key),
     setBrowser: (target) => setSidePanelBrowser(key, target),
     dock,
     entering,

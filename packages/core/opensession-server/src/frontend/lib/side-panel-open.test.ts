@@ -86,7 +86,12 @@ describe("side panel tabs", () => {
         "browser",
       ]),
     });
-    expect(sidePanelTabs(storage)).toEqual(["review", "browser"]);
+    expect(sidePanelTabs(storage)).toEqual(["changes", "review", "browser"]);
+  });
+
+  test("an empty stored strip gets Changes back", () => {
+    const storage = memoryStorage({ [SIDE_PANEL_TABS_KEY]: "[]" });
+    expect(sidePanelTabs(storage)).toEqual(["changes"]);
   });
 
   test("closing the selected tab selects its neighbour, then the new-tab page", () => {

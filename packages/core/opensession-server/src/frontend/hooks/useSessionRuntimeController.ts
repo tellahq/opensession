@@ -44,7 +44,12 @@ import {
   preloadKeptFrame,
   viewTabScope,
 } from "../lib/kept-frames";
-import { getSidePanelState, opensInSidePanel } from "../lib/side-panel-store";
+import {
+  getSidePanelState,
+  opensInSidePanel,
+  sidePanelBrowserOf,
+  sidePanelKey,
+} from "../lib/side-panel-store";
 import { claimPreviewAutoOpen } from "../lib/preview-auto-open";
 import {
   getPreviewAutoOpenPref,
@@ -525,11 +530,11 @@ export function useSessionRuntimeController({
     if (!staging.embeddable) return;
     // The panel's Browser tab shows the preview only when nothing else was
     // handed to it.
-    if (inPanel && getSidePanelState().browsers[session.id]) return;
+    if (inPanel && sidePanelBrowserOf(getSidePanelState(), session.id)) return;
     preloadKeptFrame(
       keptFrameKey(
         inPanel ? "panel" : "staging",
-        inPanel ? session.id : viewTabScope(session),
+        inPanel ? sidePanelKey(session.id) : viewTabScope(session),
       ),
       { ...PREVIEW_FRAME, url: stagingHref(staging, session.previewPath) },
     );

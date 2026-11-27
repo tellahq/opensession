@@ -4,6 +4,7 @@
 // devices. Desktop widths only for now; phones keep the page stack.
 
 import { useSyncExternalStore } from "react";
+import { setSidePanelWindowWide } from "./side-panel-store";
 import * as userPref from "./user-pref";
 
 const pref = userPref.makeUserPref<boolean>({
@@ -19,6 +20,9 @@ const pref = userPref.makeUserPref<boolean>({
 });
 
 export const setNewLayoutPref = pref.set;
+
+// The new layout has one side panel for the window, not one per session.
+setSidePanelWindowWide(pref.get);
 
 export function useNewLayoutPref(): boolean {
   return useSyncExternalStore(pref.onChanged, pref.get, () => false);
