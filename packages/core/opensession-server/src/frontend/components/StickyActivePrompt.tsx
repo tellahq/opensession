@@ -1,7 +1,9 @@
 import { useEffect, useState, type RefObject } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import type { TranscriptEntry } from "../lib/types";
-import { IconArrowUp } from "./icons";
-import { Button } from "../ui/button";
+import { RAIL_GUTTER_CLASS } from "../lib/message-rail";
+import { STICKY_PROMPT_PILL } from "../lib/session-viewer-classes";
+import { duration, ease } from "../ui/motion";
 import {
   pickStickyPromptId,
   summarizeUserPrompt,
@@ -15,9 +17,9 @@ interface StickyActivePromptProps {
 }
 
 /**
- * Quiet floating header pinned at the top of the transcript viewport when the
- * reader has scrolled deep into a long assistant turn, showing the user prompt
- * that started the turn with one-click jump back.
+ * The prompt a long turn answers, pinned at the top of the transcript once its
+ * bubble has scrolled away. It sits where that bubble sat (right edge of the
+ * reading column) in the same wash, and a click scrolls back to it.
  */
 export function StickyActivePrompt({
   containerRef,
@@ -78,29 +80,42 @@ export function StickyActivePrompt({
   }, [containerRef, entries.length, sessionId]);
 
   const text = activeId ? promptById.get(activeId) : undefined;
-  if (!activeId || !text) return null;
 
   const jumpToPrompt = () => {
     const el = containerRef.current;
-    if (!el) return;
+    if (!el || !activeId) return;
     const target = el.querySelector<HTMLElement>(
       `.msg-user[data-eid="${CSS.escape(activeId)}"]`,
     );
     target?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  // Laid out like a transcript row (the scroller's side padding, the reading
+  // column, the summary card's step) so the pill lands on the bubble's edge.
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-2 z-20 flex justify-center px-6 phone:hidden">
-      <Button
-        variant="ghost"
-        size="sm"
-        icon={<IconArrowUp size={13} />}
-        onClick={jumpToPrompt}
-        title={text}
-        className="pointer-events-auto max-w-[min(720px,calc(100%-32px))] rounded-full border border-border/80 bg-panel/90 text-meta text-dim shadow-sm backdrop-blur-md hover:border-border-strong hover:text-fg"
-      >
-        <span className="truncate">{text}</span>
-      </Button>
+    <div
+      className={`pointer-events-none absolute inset-x-0 top-2 z-20 px-5 ${RAIL_GUTTER_CLASS} phone:hidden`}
+    >
+      <div className="mx-auto flex w-full max-w-[var(--session-col)] justify-end desktop:translate-x-[var(--ws-summary-step,0px)]">
+        <AnimatePresence initial={false}>
+          {activeId && text ? (
+            <motion.button
+              key="sticky-prompt"
+              type="button"
+              onClick={jumpToPrompt}
+              title={text}
+              aria-label={`Back to your message: ${text}`}
+              className={STICKY_PROMPT_PILL}
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ type: "tween", duration: duration.micro, ease }}
+            >
+              <span className="truncate">{text}</span>
+            </motion.button>
+          ) : null}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
