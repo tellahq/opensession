@@ -1,11 +1,34 @@
 import { useLayoutEffect } from "react";
 
+/** How far the rows under a pinned caption take to fade back in. */
+const PINNED_FADE_PX = 12;
+
+/**
+ * The mask for content that has scrolled `cut` pixels under a pinned heading:
+ * hidden down to the heading's bottom edge, then faded back in. Content that
+ * holds headings of its own (a repo band's lanes) is cut hard instead, or a
+ * lane pinned right under its band would sit in the fade. Null when nothing
+ * is under the heading.
+ */
+export function pinnedContentMask(cut: number, holdsHeadings: boolean) {
+  if (cut <= 0) return null;
+  const end = holdsHeadings ? cut : cut + PINNED_FADE_PX;
+  return `linear-gradient(transparent ${cut}px, #000 ${end}px)`;
+}
+
 export function useSidebarStickyHeadings(
   sidebarScrollRef: React.RefObject<HTMLDivElement | null>,
 ) {
   // CSS has no interoperable :stuck selector. Track the shared sidebar
-  // scrollport instead so section/lane labels can stay transparent in-flow and
-  // gain an opaque surface only while position:sticky is actively pinning them.
+  // scrollport instead, mark the headings position:sticky is actively
+  // pinning, and mask the rows that have scrolled under one.
+  //
+  // A pinned heading has no fill of its own. Over the desktop shell's
+  // translucent material no fill can match the chrome around it (the
+  // material is the window behind, which CSS cannot sample), so an opaque
+  // backing read as a shaded band. Instead the content after the heading,
+  // in the same parent, is masked from its top down to the heading's bottom
+  // edge, and fades back in just under it.
   useLayoutEffect(() => {
     const root = sidebarScrollRef.current;
     if (!root) return;
@@ -25,7 +48,11 @@ export function useSidebarStickyHeadings(
       sticky: boolean;
       top: number;
       stuck: boolean;
+      /** What scrolls under it: its later siblings, in document order. */
+      content: { el: HTMLElement; holdsHeadings: boolean }[];
     };
+    /** Content masked as last applied, so an unchanged mask costs no write. */
+    let masked = new Map<HTMLElement, string>();
     let heads: StickyHead[] = [];
     let stale = true;
     const rescan = () => {
@@ -35,11 +62,23 @@ export function useSidebarStickyHeadings(
       for (const el of root.querySelectorAll<HTMLElement>(selector)) {
         const style = getComputedStyle(el);
         const parent = el.parentElement;
+        const sticky = style.position === "sticky" && !!parent;
+        const content: StickyHead["content"] = [];
+        for (let sib = sticky ? el.nextElementSibling : null; sib;) {
+          if (sib instanceof HTMLElement) {
+            content.push({
+              el: sib,
+              holdsHeadings: !!sib.querySelector(selector),
+            });
+          }
+          sib = sib.nextElementSibling;
+        }
         heads.push({
           el,
           parent: parent ?? el,
-          sticky: style.position === "sticky" && !!parent,
+          sticky,
           top: Number.parseFloat(style.top) || 0,
+          content,
           // React owns className and rewrites it on rerender. The dedicated
           // data attribute is not part of that managed value, so it preserves
           // the backing while the scroll position remains unchanged.
@@ -57,6 +96,7 @@ export function useSidebarStickyHeadings(
       // did.
       const rootTop = root.getBoundingClientRect().top;
       const next: boolean[] = [];
+      const masks = new Map<HTMLElement, string>();
       for (const head of heads) {
         if (!head.sticky) {
           next.push(false);
@@ -74,7 +114,17 @@ export function useSidebarStickyHeadings(
         // position there, not static layout.)
         const displaced =
           rect.top - head.parent.getBoundingClientRect().top > 1.5;
-        next.push(pinned && displaced);
+        const stuck = pinned && displaced;
+        next.push(stuck);
+        if (!stuck) continue;
+        // The siblings are in vertical order, so the first one that starts
+        // below the heading ends the walk: usually one rect read per head.
+        for (const item of head.content) {
+          const cut = rect.bottom - item.el.getBoundingClientRect().top;
+          if (cut <= 0) break;
+          const mask = pinnedContentMask(cut, item.holdsHeadings);
+          if (mask) masks.set(item.el, mask);
+        }
       }
       for (let i = 0; i < heads.length; i++) {
         const head = heads[i]!;
@@ -83,6 +133,13 @@ export function useSidebarStickyHeadings(
         head.stuck = stuck;
         head.el.toggleAttribute("data-stuck", stuck);
       }
+      for (const [el, mask] of masks) {
+        if (masked.get(el) !== mask) el.style.maskImage = mask;
+      }
+      for (const el of masked.keys()) {
+        if (!masks.has(el)) el.style.maskImage = "";
+      }
+      masked = masks;
     };
     const schedule = () => {
       if (!frame) frame = requestAnimationFrame(update);
@@ -116,6 +173,7 @@ export function useSidebarStickyHeadings(
       mutationObserver.disconnect();
       densityObserver.disconnect();
       if (frame) cancelAnimationFrame(frame);
+      for (const el of masked.keys()) el.style.maskImage = "";
     };
   }, [sidebarScrollRef]);
 }
