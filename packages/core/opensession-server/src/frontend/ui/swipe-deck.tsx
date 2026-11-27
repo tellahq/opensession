@@ -5,8 +5,23 @@ import {
   useTransform,
   type PanInfo,
 } from "motion/react";
+import * as stylex from "@stylexjs/stylex";
+import { Button } from "./button";
 import { cn } from "./cn";
 import { SWIPE_DISTANCE, SWIPE_VELOCITY } from "../lib/swipe-deck";
+import {
+  color,
+  corner,
+  geometry,
+  layer,
+  leading,
+  radius,
+  shadow,
+  space,
+  text,
+  tracking,
+  weight,
+} from "./tokens.stylex";
 
 /**
  * The swipe-card mechanics shared by the decks (Support Tinder, catch-up):
@@ -103,10 +118,7 @@ export function SwipeCard<A extends string>({
 
   return (
     <motion.div
-      className={cn(
-        "flex touch-pan-y flex-col overflow-hidden rounded-xl bg-panel smooth-shadow-soft",
-        className,
-      )}
+      className={cn(stylex.props(styles.card).className, className)}
       style={{ x, rotate }}
       drag="x"
       dragConstraints={{ left: 0, right: 0 }}
@@ -121,13 +133,13 @@ export function SwipeCard<A extends string>({
     >
       {/* Swipe intent stamps. */}
       <motion.div
-        className="pointer-events-none absolute left-4 top-16 z-10 rounded-md border-2 border-red px-2.5 py-1 text-sm font-bold tracking-wide text-red"
+        className={stylex.props(styles.stamp, styles.stampLeft).className}
         style={{ opacity: leftTint, rotate: -12 }}
       >
         {stampLeft}
       </motion.div>
       <motion.div
-        className="pointer-events-none absolute right-4 top-16 z-10 rounded-md border-2 border-green px-2.5 py-1 text-sm font-bold tracking-wide text-green"
+        className={stylex.props(styles.stamp, styles.stampRight).className}
         style={{ opacity: rightTint, rotate: 12 }}
       >
         {stampRight}
@@ -158,26 +170,81 @@ export function DeckDone({
   onExit: () => void;
 }) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-      <div className="text-4xl">{emoji}</div>
-      <div className="text-item-title font-semibold text-fg">{title}</div>
-      <div className="max-w-xs text-sm text-dim">{message}</div>
-      <div className="mt-2 flex gap-2">
+    <div {...stylex.props(styles.done)}>
+      <div {...stylex.props(styles.emoji)}>{emoji}</div>
+      <div {...stylex.props(styles.doneTitle)}>{title}</div>
+      <div {...stylex.props(styles.doneMessage)}>{message}</div>
+      <div {...stylex.props(styles.doneActions)}>
         {secondary && (
-          <button
-            className="rounded-full border border-line bg-panel px-4 py-2.5 text-sm font-semibold text-dim hover:bg-surface hover:text-fg"
-            onClick={secondary.onClick}
-          >
-            {secondary.label}
-          </button>
+          <Button onClick={secondary.onClick}>{secondary.label}</Button>
         )}
-        <button
-          className="rounded-full bg-panel px-4 py-2.5 text-sm font-semibold text-fg hover:bg-surface"
-          onClick={onExit}
-        >
+        <Button variant="soft" onClick={onExit}>
           Done
-        </button>
+        </Button>
       </div>
     </div>
   );
 }
+
+const styles = stylex.create({
+  card: {
+    display: "flex",
+    touchAction: "pan-y",
+    flexDirection: "column",
+    overflow: "hidden",
+    borderRadius: radius.xl,
+    ["cornerShape"]: corner.squircle,
+    backgroundColor: color.panel,
+    boxShadow: shadow.lifted,
+  },
+  // The red/green word that fades in as a drag leans toward a decision.
+  stamp: {
+    pointerEvents: "none",
+    position: "absolute",
+    top: geometry.stampTop,
+    zIndex: layer.sticky,
+    borderRadius: radius.md,
+    ["cornerShape"]: corner.squircle,
+    borderWidth: geometry.stampBorder,
+    borderStyle: "solid",
+    paddingInline: space.s10,
+    paddingBlock: space.s4,
+    fontSize: text.label,
+    fontWeight: weight.bold,
+    lineHeight: leading.label,
+    letterSpacing: tracking.wide,
+  },
+  stampLeft: {
+    left: geometry.stampInset,
+    borderColor: color.red,
+    color: color.red,
+  },
+  stampRight: {
+    right: geometry.stampInset,
+    borderColor: color.green,
+    color: color.green,
+  },
+  done: {
+    display: "flex",
+    flex: "1 1 0%",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space.s12,
+    paddingInline: space.s24,
+    textAlign: "center",
+  },
+  emoji: { fontSize: text.glyphHero, lineHeight: leading.hero },
+  doneTitle: {
+    fontSize: text.itemTitle,
+    fontWeight: weight.strong,
+    color: color.fg,
+  },
+  doneMessage: {
+    maxWidth: geometry.measureNarrow,
+    fontSize: text.label,
+    lineHeight: leading.label,
+    color: color.dim,
+  },
+  doneActions: { marginTop: space.s8, display: "flex", gap: space.s8 },
+});

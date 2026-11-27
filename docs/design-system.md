@@ -109,7 +109,10 @@ parts, `Confirm`, sharing `ui/dialog-styles.ts`); and the leaves
 (`ui/settings.tsx`: the header, group label, plate, rows, hint and form
 parts); and the async states (`ui/state.tsx`: `EmptyState`, `LoadingState`,
 `InlineAlert` and the skeletons, whose bars take a `width` and a `line`
-rather than width utilities); and `Toast`. The class-string helpers (`fieldClasses`,
+rather than width utilities); `Toast`; `OverlayAction` (its preview spreads
+`OVERLAY_ACTION_HOST`, a StyleX marker, instead of `group/overlay-action`);
+the swipe decks' `SwipeCard` and `DeckDone`; and `DateRangePicker`. The
+class-string helpers (`fieldClasses`,
 `selectTriggerClasses`, `popupSurfaceClasses`, `collapsiblePanelClasses`,
 `listRowClass`, `SETTING_ROW`, `rowMenuTriggerClasses` and friends) now
 return StyleX class names, so the raw controls that use them moved too.
@@ -122,18 +125,19 @@ form titles' leading by `[data-setting-title]`. The inset rule between a
 card's rows and the control column's `[&>*]` cap stay utilities, because they
 style the caller's children.
 
-Still Tailwind inside `ui/`: `date-picker.tsx`, `swipe-deck.tsx`,
-`top-bar.tsx` and `overlay-action.tsx`. Each is tied to
-feature code through descendant selectors or shared `lib/*-classes.ts`
-strings (the app header's control classes, a caller's `group/overlay-action`),
-so they move with their call-site areas rather than alone.
+Still Tailwind inside `ui/`: `top-bar.tsx`, whose controls take the app
+header's glass classes from `lib/app-header-classes.ts`, so it moves with the
+header.
 
 Other shared pieces: `ui/sx.ts` (merges a primitive's StyleX props with a
 caller's legacy `className`, and defines the `LayoutStyles` type every
 `xstyle` uses), `ui/choice-styles.ts` (the box a Checkbox and a Radio share),
 `ui/focus-styles.ts` (the `focus-ring` utility as a style), and
 `ui/markers.stylex.ts` (named markers for `stylex.when.ancestor`, so a part
-reacts to its own control's hover or state, not to any ancestor's).
+reacts to its own control's hover or state, not to any ancestor's). A
+primitive that is a Button with a twist passes its extra look as Button's
+`skin` (the overlay action's white plate, a month step's disabled state);
+feature code never does, and `ui-audit`'s `button-skin` count holds that at 0.
 
 Things to know when porting:
 

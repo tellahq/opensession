@@ -91,6 +91,8 @@ export const color = stylex.defineConsts({
   settingsPlate: "var(--settings-plate)",
   /** `line` at a third: closes a block's shape without reading as a rule. */
   dividerSoft: "var(--divider-soft)",
+  /** A control over an image: white in both themes. */
+  overlaySurface: "#fff",
 });
 
 /**
@@ -173,6 +175,8 @@ export const text = stylex.defineConsts({
   sectionTitle: "var(--type-section-title)",
   pageTitle: "var(--type-page-title)",
   stat: "var(--type-stat)",
+  /** A lone emoji that is the whole illustration of a screen. */
+  glyphHero: "2.25rem",
   inputPhone: "var(--type-input-phone)",
 });
 
@@ -193,6 +197,8 @@ export const leading = stylex.defineConsts({
   relaxed: "1.625",
   /** A tooltip's line, a little tighter than running text. */
   snug: "1.375",
+  /** `text.glyphHero`'s own line. */
+  hero: "calc(2.5 / 2.25)",
   /** A field's small step, which keeps Tailwind's `text-xs` leading. */
   small: "calc(1 / 0.75)",
 });
@@ -213,6 +219,8 @@ export const tracking = stylex.defineConsts({
   tight: "-0.01em",
   /** A page's own title. */
   title: "-0.02em",
+  /** A stamped word in capitals' spirit, spaced out. */
+  wide: "0.025em",
 });
 
 export const weight = stylex.defineConsts({
@@ -237,6 +245,8 @@ export const opacity = stylex.defineConsts({
   glyphOnTone: "0.8",
   /** A trailing glyph that only firms up under the pointer. */
   glyphResting: "0.45",
+  /** A day outside the range a calendar allows. */
+  outOfRange: "0.45",
   /** The body under an alert's title, a step behind it. */
   secondary: "0.9",
 });
@@ -320,6 +330,9 @@ export const shadow = stylex.defineConsts({
   /** The forced-colors stand-in for a ring tier, which Windows High Contrast
    *  strips along with every box-shadow. */
   ringForced: "var(--smooth-ring-width, 1px) solid CanvasText",
+  /** A card lifted off the page while you handle it (the swipe decks). */
+  lifted:
+    "0 3px 10px -3px color-mix(in srgb, var(--tw-shadow-color, black) 4%, transparent), 0 20px 56px -16px color-mix(in srgb, var(--tw-shadow-color, black) 12%, transparent)",
   ringForcedOffset: "calc(-1 * var(--smooth-ring-width, 1px))",
 });
 
@@ -451,6 +464,15 @@ export const geometry = stylex.defineConsts({
   /** How far each toast behind the front one peeks out, and shrinks. */
   toastStackStep: "8px",
   toastStackShrink: "0.04",
+  /** A swipe card's intent stamp, under the card's header. */
+  stampInset: "16px",
+  stampTop: "64px",
+  stampBorder: "2px",
+  /** A line of prose under a headline, centred. */
+  measureNarrow: "20rem",
+  /** A month grid: 36px day columns, 44px on a phone (still inside 390px). */
+  monthWidth: "252px",
+  monthWidthPhone: "308px",
 });
 
 /** The one breakpoint (720px, inclusive on the phone side) and hover gating. */
@@ -474,6 +496,8 @@ export const layer = stylex.defineConsts({
   sticky: "10",
   /** A sticky table head over its own rows. */
   tableHead: "1",
+  /** An action pinned over a preview it belongs to. */
+  overPreview: "1",
 });
 
 /** Backdrop blurs: the faint one under a dialog's scrim, the heavier one

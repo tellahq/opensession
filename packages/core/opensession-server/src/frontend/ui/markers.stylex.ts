@@ -8,3 +8,5 @@ import * as stylex from "@stylexjs/stylex";
 export const tabMarker = stylex.defineMarker();
 export const disclosureMarker = stylex.defineMarker();
 export const deviceCodeMarker = stylex.defineMarker();
+/** The preview an `OverlayAction` sits over: hovering it reveals the action. */
+export const overlayActionMarker = stylex.defineMarker();

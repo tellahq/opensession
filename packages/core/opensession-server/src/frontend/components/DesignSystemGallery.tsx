@@ -52,6 +52,8 @@ import {
   TranscriptSkeleton,
 } from "../ui/state";
 import { PulseDot, WorkingPill } from "../ui/status";
+import { OVERLAY_ACTION_HOST, OverlayAction } from "../ui/overlay-action";
+import { DeckDone, SwipeCard } from "../ui/swipe-deck";
 import { Switch } from "../ui/switch";
 import { PlateTabs, UnderlineTabs } from "../ui/tabs";
 import {
@@ -592,6 +594,51 @@ export function DesignSystemGallery() {
           <SettingsHint>
             Forms use the same plate as a group of rows.
           </SettingsHint>
+        </section>
+
+        <section aria-label="Overlay action">
+          <SectionLabel>Overlay action</SectionLabel>
+          <div
+            data-overlay-demo=""
+            className={cn(OVERLAY_ACTION_HOST, "relative h-24 w-36")}
+          >
+            <div className="size-full rounded-md bg-accent-soft" />
+            <OverlayAction
+              aria-label="Remove preview"
+              icon={<IconPlus size={18} />}
+            />
+          </div>
+        </section>
+
+        <section aria-label="Swipe decks">
+          <SectionLabel>Swipe decks</SectionLabel>
+          <div className="grid grid-cols-1 gap-4 desktop:grid-cols-2">
+            <div className="relative h-56">
+              <SwipeCard
+                className="absolute inset-0"
+                custom={null}
+                exitFor={() => null}
+                exitDistance={400}
+                stampLeft="SKIP"
+                stampRight="KEEP"
+                onSwipeLeft={() => undefined}
+                onSwipeRight={() => undefined}
+              >
+                <div className="p-5 text-item-title text-fg">
+                  Drag the card to see its intent stamps.
+                </div>
+              </SwipeCard>
+            </div>
+            <Card className="flex h-56">
+              <DeckDone
+                emoji="🎉"
+                title="All caught up"
+                message="12 threads handled, 3 kept for later."
+                secondary={{ label: "Deal kept", onClick: () => undefined }}
+                onExit={() => undefined}
+              />
+            </Card>
+          </div>
         </section>
 
         <section aria-label="Squircle radius scale">

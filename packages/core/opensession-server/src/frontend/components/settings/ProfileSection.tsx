@@ -13,7 +13,7 @@ import { errorMessage } from "../../lib/error-message";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
 import { Field, FieldGrid, Input } from "../../ui/input";
-import { OverlayAction } from "../../ui/overlay-action";
+import { OVERLAY_ACTION_HOST, OverlayAction } from "../../ui/overlay-action";
 import { SettingsForm, SettingsGroupLabel } from "../../ui/settings";
 import { ResponsiveDialog } from "../../ui/sheet";
 import { Spinner } from "../../ui/spinner";
@@ -301,7 +301,9 @@ function ProfileCard({
 
 						    A touch client has no hover, so there the overlay stays
 						    on. */}
-            <div className="group/overlay-action relative mb-1 mt-1 w-max">
+            <div
+              className={cn(OVERLAY_ACTION_HOST, "relative mb-1 mt-1 w-max")}
+            >
               <button
                 type="button"
                 disabled={busy !== null}

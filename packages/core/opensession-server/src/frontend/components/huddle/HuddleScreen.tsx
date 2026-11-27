@@ -3,7 +3,7 @@ import type { HuddleMember } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
 import { Modal } from "../../ui/modal";
-import { OverlayAction } from "../../ui/overlay-action";
+import { OVERLAY_ACTION_HOST, OverlayAction } from "../../ui/overlay-action";
 import { IconExpand } from "../icons";
 
 /** A live stream in a muted, inline video element. */
@@ -76,7 +76,7 @@ export function HuddleScreen({
   const title = `${shown.user}'s screen`;
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="group/overlay-action relative">
+      <div className={cn(OVERLAY_ACTION_HOST, "relative")}>
         <StreamVideo
           stream={stream}
           label={title}

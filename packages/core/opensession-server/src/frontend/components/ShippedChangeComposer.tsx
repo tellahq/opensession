@@ -13,7 +13,8 @@ import { useSlackMentions } from "./useSlackMentions";
 import { imageFilesFromPaste, uploadFile } from "../lib/images";
 import { noAutofill } from "../lib/composer-autofill";
 import { Button } from "../ui/button";
-import { OverlayAction } from "../ui/overlay-action";
+import { cn } from "../ui/cn";
+import { OVERLAY_ACTION_HOST, OverlayAction } from "../ui/overlay-action";
 import { SearchSelect } from "../ui/combobox";
 import { toast } from "../ui/toast";
 import { Tooltip } from "../ui/tooltip";
@@ -497,7 +498,7 @@ export function ShippedChangeComposer({
             {screenshots.map((path, index) => (
               <div
                 key={path}
-                className="group/overlay-action relative shrink-0"
+                className={cn(OVERLAY_ACTION_HOST, "relative shrink-0")}
               >
                 <button
                   type="button"

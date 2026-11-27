@@ -25,10 +25,26 @@ import {
   type IsoDay,
   type RangeSpan,
 } from "../lib/date-grid";
+import * as stylex from "@stylexjs/stylex";
 import { Button } from "./button";
 import { cn } from "./cn";
+import { focusStyles } from "./focus-styles";
 import { Popover } from "./popover";
 import { Segmented, SegmentedKnob, SegmentedOption } from "./segmented";
+import { sx } from "./sx";
+import {
+  color,
+  controlHeight,
+  corner,
+  geometry,
+  media,
+  motion,
+  opacity,
+  radius,
+  space,
+  text,
+  weight,
+} from "./tokens.stylex";
 
 /**
  * Date range field: the span a page is showing, as ONE control — the presets
@@ -113,14 +129,7 @@ export function DateRangeField({
     // The track is the control's, not the toggle group's: everything on it is
     // one exclusive choice. Concentric corners, as in ui/segmented — the
     // options' `rounded-control` (12) plus this 2px padding is `rounded-lg`.
-    <div
-      role="group"
-      aria-label={label}
-      className={cn(
-        "inline-flex items-center rounded-lg bg-hover p-0.5",
-        className,
-      )}
-    >
+    <div role="group" aria-label={label} {...sx(styles.track, className)}>
       {presetsOnTrack && (
         <>
           <Segmented
@@ -141,10 +150,7 @@ export function DateRangeField({
           {/* The seam between the two halves of the control. Short of the
 					    track's full height, so it separates the options without
 					    reading as the edge of a second box. */}
-          <span
-            aria-hidden
-            className="mx-1 h-3.5 w-px shrink-0 bg-line-strong phone:mx-1.5 phone:h-5"
-          />
+          <span aria-hidden {...stylex.props(styles.seam)} />
         </>
       )}
       <Popover.Root open={open} onOpenChange={setOpen}>
@@ -153,31 +159,28 @@ export function DateRangeField({
           // the spoken one: a bare "Date range, button" says nothing about
           // what is being charted.
           aria-label={`${label}, ${rangeLabel}`}
-          className={cn(
-            "relative inline-flex cursor-pointer select-none items-center",
-            // The glyph's side is pulled in by the whitespace it carries,
-            // the way ui/button balances a leading icon.
-            "rounded-control py-1 pr-2.5 pl-1.5",
-            "text-control-label font-medium whitespace-nowrap",
-            "transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] focus-ring",
-            // Phones get the tap box the options beside it take.
-            "phone:py-2 phone:pr-3 phone:pl-2.5 phone:text-item-title",
-            rangeWearsKnob ? "text-fg" : "text-dim hover:text-fg",
-            "data-[popup-open]:text-fg",
-          )}
+          className={
+            stylex.props(
+              styles.trigger,
+              !rangeWearsKnob && styles.triggerQuiet,
+              focusStyles.ring,
+            ).className
+          }
         >
           {rangeWearsKnob && <SegmentedKnob knobId={knobId} />}
           {/* Above the knob, which fills the option. */}
-          <span className="relative flex items-center gap-1.5">
+          <span {...stylex.props(styles.triggerContent)}>
             {/* Support, not the label: the dates are what is being read. `dense`
 						    is what keeps this option the height of the ones beside it —
 						    at the icon scale's own floor the glyph, not the text, would
 						    set it, and the control would stand a step taller than the
 						    presets it shares a track with. */}
-            <IconCalendar size={16} dense className="shrink-0 opacity-55" />
-            <span className="[text-box:trim-both_cap_alphabetic]">
-              {rangeLabel}
-            </span>
+            <IconCalendar
+              size={16}
+              dense
+              className={stylex.props(styles.triggerGlyph).className}
+            />
+            <span {...stylex.props(styles.capTrim)}>{rangeLabel}</span>
           </span>
         </Popover.Trigger>
         <Popover.Popup align="end" sideOffset={6} initialFocus={false}>
@@ -398,7 +401,7 @@ function RangeCalendar({
   const canGoForward = !max || max >= addMonths(months[months.length - 1], 1);
 
   return (
-    <div className="p-2.5" role="group" aria-label={label}>
+    <div {...stylex.props(styles.calendar)} role="group" aria-label={label}>
       {presets.length > 0 && (
         <Segmented
           label="Preset ranges"
@@ -406,7 +409,8 @@ function RangeCalendar({
           value={activePreset === null ? null : String(activePreset)}
           onValueChange={(v) => onPreset(Number(v))}
           // Full width, so the options divide the popup rather than huddling
-          // in one corner of it.
+          // in one corner of it. A utility, because `[&>*]` reaches the
+          // options, which a style on the group cannot.
           className="mb-2 flex w-full [&>*]:flex-1"
         >
           {presets.map((p) => (
@@ -415,12 +419,12 @@ function RangeCalendar({
               value={String(p.days)}
               className="justify-center"
             >
-              <span className="w-full text-center">{p.label}</span>
+              <span {...stylex.props(styles.presetLabel)}>{p.label}</span>
             </SegmentedOption>
           ))}
         </Segmented>
       )}
-      <div ref={gridRef} onKeyDown={onKeyDown} className="flex gap-4">
+      <div ref={gridRef} onKeyDown={onKeyDown} {...stylex.props(styles.months)}>
         {months.map((month, index) => {
           const title = monthTitle(month);
           const first = index === 0;
@@ -429,13 +433,13 @@ function RangeCalendar({
             // Wider on a phone, where a day is a thumb target rather than a
             // click: 308px puts the columns on 44px and still clears the
             // 390px viewport.
-            <div key={month} className="w-[252px] phone:w-[308px]">
+            <div key={month} {...stylex.props(styles.month)}>
               {/* The title is centred between the chevrons rather than sitting
 							    on the grid's left edge: with two grids side by side, a
 							    left-aligned title and one pair of chevrons can't say which
 							    month a step is about. Each grid keeps the step that leaves
 							    the pair, on its own outer edge. */}
-              <div className="flex items-center justify-between gap-1 pb-1.5">
+              <div {...stylex.props(styles.monthHeader)}>
                 {first ? (
                   <MonthStep
                     label="Previous month"
@@ -444,14 +448,11 @@ function RangeCalendar({
                     icon={<IconChevronLeft size={20} />}
                   />
                 ) : (
-                  <span aria-hidden className="size-[26px]" />
+                  <span aria-hidden {...stylex.props(styles.stepSpacer)} />
                 )}
                 {/* Live, because a chevron turns the month without moving
 								    focus. */}
-                <div
-                  aria-live="polite"
-                  className="text-item-title font-semibold text-fg"
-                >
+                <div aria-live="polite" {...stylex.props(styles.monthTitle)}>
                   {title}
                 </div>
                 {last ? (
@@ -462,7 +463,7 @@ function RangeCalendar({
                     icon={<IconChevronRight size={20} />}
                   />
                 ) : (
-                  <span aria-hidden className="size-[26px]" />
+                  <span aria-hidden {...stylex.props(styles.stepSpacer)} />
                 )}
               </div>
 
@@ -472,13 +473,13 @@ function RangeCalendar({
 							    42-cell grid, because `role="grid"` wants real rows between
 							    it and its cells. */}
               <div role="grid" aria-label={title}>
-                <div role="row" className="grid grid-cols-7">
+                <div role="row" {...stylex.props(styles.week)}>
                   {headings.map((h) => (
                     <span
                       key={h.long}
                       role="columnheader"
                       aria-label={h.long}
-                      className="pb-1 text-center text-meta font-medium text-faint"
+                      {...stylex.props(styles.weekday)}
                     >
                       {/* The initial is decoration: every cell below announces
 											    its own weekday, and a `title` here would raise the
@@ -488,7 +489,7 @@ function RangeCalendar({
                   ))}
                 </div>
                 {monthGrid(month, weekStart).map((week) => (
-                  <div key={week[0]} role="row" className="grid grid-cols-7">
+                  <div key={week[0]} role="row" {...stylex.props(styles.week)}>
                     {week.map((day, i) => {
                       // A day from a neighbouring month is blank: with two
                       // grids on screen it would otherwise print the same date
@@ -499,7 +500,7 @@ function RangeCalendar({
                           <div
                             key={day}
                             role="gridcell"
-                            className="h-9 phone:h-12"
+                            {...stylex.props(styles.cell)}
                           />
                         );
                       }
@@ -567,7 +568,7 @@ function MonthStep({
       size="sm"
       aria-label={label}
       aria-disabled={enabled ? undefined : true}
-      className="aria-disabled:pointer-events-none aria-disabled:opacity-40"
+      skin={styles.stepDisabled}
       onClick={() => enabled && onStep()}
       icon={icon}
     />
@@ -603,15 +604,15 @@ function Day({
     <div
       role="gridcell"
       aria-selected={selected}
-      className="relative grid h-9 place-items-center phone:h-12"
+      {...stylex.props(styles.cell, styles.dayCell)}
     >
       {span && (
         <span
           aria-hidden
-          className={cn(
-            "pointer-events-none absolute inset-x-0 inset-y-0.5 bg-accent-soft",
-            span.open && "rounded-l-md",
-            span.close && "rounded-r-md",
+          {...stylex.props(
+            styles.band,
+            span.open && styles.bandOpen,
+            span.close && styles.bandClose,
           )}
         />
       )}
@@ -628,20 +629,13 @@ function Day({
         onClick={() => onPick(day)}
         onPointerEnter={onPreview}
         onFocus={onFocus}
-        className={cn(
-          "relative grid h-8 w-full cursor-pointer place-items-center rounded-md",
-          "text-control-label tabular-nums phone:h-11 phone:text-item-title",
-          "transition-[color,background-color] duration-[var(--dur-micro)] ease-[var(--ease)]",
-          "focus-ring text-fg",
+        {...stylex.props(
+          styles.day,
           // Today is marked by an edge rather than a fill: a second filled
           // day in the month would compete with the ends of the range.
-          today &&
-            !selected &&
-            "font-semibold ring-1 ring-line-strong ring-inset",
-          selected
-            ? "bg-accent font-semibold text-on-accent hover:bg-accent-hover"
-            : "hover:bg-hover",
-          "disabled:cursor-default disabled:text-faint disabled:opacity-45 disabled:hover:bg-transparent",
+          today && !selected && styles.today,
+          selected && styles.selected,
+          focusStyles.ring,
         )}
       >
         {dayOfMonth(day)}
@@ -649,3 +643,155 @@ function Day({
     </div>
   );
 }
+
+const styles = stylex.create({
+  // Concentric corners, as in ui/segmented: the options' `radius.control`
+  // (12) plus this 2px padding is `radius.lg`.
+  track: {
+    display: "inline-flex",
+    alignItems: "center",
+    borderRadius: radius.lg,
+    ["cornerShape"]: corner.squircle,
+    backgroundColor: color.hover,
+    padding: space.s2,
+  },
+  seam: {
+    marginInline: { default: space.s4, [media.phone]: space.s6 },
+    height: { default: space.s14, [media.phone]: space.s20 },
+    width: geometry.hairline,
+    flexShrink: 0,
+    backgroundColor: color.lineStrong,
+  },
+  trigger: {
+    position: "relative",
+    display: "inline-flex",
+    cursor: "pointer",
+    userSelect: "none",
+    alignItems: "center",
+    borderRadius: radius.control,
+    ["cornerShape"]: corner.squircle,
+    // The glyph's side is pulled in by the whitespace it carries, the way
+    // ui/button balances a leading icon. Phones get the tap box the options
+    // beside it take.
+    paddingBlock: { default: space.s4, [media.phone]: space.s8 },
+    paddingInlineEnd: { default: space.s10, [media.phone]: space.s12 },
+    paddingInlineStart: { default: space.s6, [media.phone]: space.s10 },
+    fontSize: { default: text.label, [media.phone]: text.itemTitle },
+    fontWeight: weight.medium,
+    whiteSpace: "nowrap",
+    color: color.fg,
+    transitionProperty:
+      "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke",
+    transitionDuration: motion.micro,
+    transitionTimingFunction: motion.ease,
+  },
+  triggerQuiet: {
+    color: {
+      default: color.dim,
+      ":hover": { default: null, [media.hover]: color.fg },
+      ":is([data-popup-open])": color.fg,
+    },
+  },
+  // Above the knob, which fills the option.
+  triggerContent: {
+    position: "relative",
+    display: "flex",
+    alignItems: "center",
+    gap: space.s6,
+  },
+  // Support, not the label: the dates are what is being read.
+  triggerGlyph: { flexShrink: 0, opacity: opacity.glyphMuted },
+  capTrim: { textBox: "trim-both cap alphabetic" },
+  calendar: { padding: space.s10 },
+  presetLabel: { width: "100%", textAlign: "center" },
+  months: { display: "flex", gap: space.s16 },
+  month: {
+    width: {
+      default: geometry.monthWidth,
+      [media.phone]: geometry.monthWidthPhone,
+    },
+  },
+  monthHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: space.s4,
+    paddingBottom: space.s6,
+  },
+  // Holds the place of the step the other grid carries.
+  stepSpacer: { width: controlHeight.sm, height: controlHeight.sm },
+  monthTitle: {
+    fontSize: text.itemTitle,
+    fontWeight: weight.strong,
+    color: color.fg,
+  },
+  week: {
+    display: "grid",
+    gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+  },
+  weekday: {
+    paddingBottom: space.s4,
+    textAlign: "center",
+    fontSize: text.meta,
+    fontWeight: weight.medium,
+    color: color.faint,
+  },
+  // 36px row holding a 32px chip: the 4px is the air between weeks.
+  cell: { height: { default: controlHeight.lg, [media.phone]: space.s48 } },
+  dayCell: { position: "relative", display: "grid", placeItems: "center" },
+  // The band takes exactly the chip's height, so an endpoint fuses with the
+  // span instead of standing a step taller than it.
+  band: {
+    pointerEvents: "none",
+    position: "absolute",
+    insetInline: space.s0,
+    insetBlock: space.s2,
+    backgroundColor: color.accentSoft,
+    ["cornerShape"]: corner.squircle,
+  },
+  bandOpen: {
+    borderStartStartRadius: radius.md,
+    borderEndStartRadius: radius.md,
+  },
+  bandClose: {
+    borderStartEndRadius: radius.md,
+    borderEndEndRadius: radius.md,
+  },
+  day: {
+    position: "relative",
+    display: "grid",
+    height: { default: controlHeight.md, [media.phone]: controlHeight.touch },
+    width: "100%",
+    cursor: { default: "pointer", ":disabled": "default" },
+    placeItems: "center",
+    borderRadius: radius.md,
+    ["cornerShape"]: corner.squircle,
+    fontSize: { default: text.label, [media.phone]: text.itemTitle },
+    fontVariantNumeric: "tabular-nums",
+    color: { default: color.fg, ":disabled": color.faint },
+    opacity: { default: null, ":disabled": opacity.outOfRange },
+    backgroundColor: {
+      default: null,
+      ":enabled:hover": { default: null, [media.hover]: color.hover },
+    },
+    transitionProperty: "color, background-color",
+    transitionDuration: motion.micro,
+    transitionTimingFunction: motion.ease,
+  },
+  today: {
+    fontWeight: weight.strong,
+    boxShadow: `inset 0 0 0 ${geometry.hairline} ${color.lineStrong}`,
+  },
+  selected: {
+    fontWeight: weight.strong,
+    color: { default: color.onAccent, ":disabled": color.faint },
+    backgroundColor: {
+      default: color.accent,
+      ":enabled:hover": { default: null, [media.hover]: color.accentHover },
+    },
+  },
+  stepDisabled: {
+    pointerEvents: { default: null, ":is([aria-disabled=true])": "none" },
+    opacity: { default: null, ":is([aria-disabled=true])": opacity.disabled },
+  },
+});

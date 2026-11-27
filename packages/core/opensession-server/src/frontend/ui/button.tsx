@@ -1,7 +1,11 @@
 import * as React from "react";
 import { IconChevronDown } from "../components/icons";
 import * as stylex from "@stylexjs/stylex";
-import type { StyleXStyles } from "@stylexjs/stylex";
+import type {
+  CompiledStyles,
+  StyleXArray,
+  StyleXStyles,
+} from "@stylexjs/stylex";
 import { cn } from "./cn";
 import {
   color,
@@ -469,6 +473,13 @@ export type ButtonProps = React.ComponentPropsWithoutRef<"button"> & {
    */
   xstyle?: ButtonLayoutStyles;
   /**
+   * A primitive's own look on top of the variant, for a control in `ui/`
+   * that IS a button with a twist (the overlay action's white plate and
+   * reveal). Not for feature code: `bun scripts/ui-audit.ts` fails any use
+   * outside `ui/` (`button-skin`), where the answer is a variant here.
+   */
+  skin?: StyleXArray<CompiledStyles | null | undefined | boolean>;
+  /**
    * @deprecated for anything but layout. Kept while call sites migrate to
    * `xstyle`; `bun scripts/ui-audit.ts` counts the visual overrides.
    */
@@ -486,6 +497,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       trailing,
       render,
       xstyle,
+      skin,
       className,
       children,
       ...rest
@@ -547,6 +559,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       icon != null && hasLabel && iconLeadPad[size],
       (caret || trailing != null) && hasLabel && caretTrailPad[size],
       iconOnly && iconOnlyPad[size],
+      skin,
       xstyle,
     );
     // A caller's Tailwind `className` still lands last and wins ties, as it
