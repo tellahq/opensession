@@ -1,30 +1,54 @@
 import { useSyncExternalStore, type ReactNode } from "react";
 import { useNavigation } from "../../hooks/useNavigation";
+import { useNotifications } from "../../hooks/useNotifications";
 import type { Place } from "../../lib/new-layout-place";
+import { unreadNotificationCount } from "../../lib/notifications";
 import {
   onSidebarToolsChanged,
   readHiddenSidebarTools,
 } from "../../lib/sidebar-tools";
 import { PLAIN_ID } from "../../lib/support-surface";
 import { Button } from "../../ui/button";
+import { cn } from "../../ui/cn";
 import { Tooltip } from "../../ui/tooltip";
 import { IconBook, IconFeed, IconLifebuoy, IconMessages } from "../icons";
 import { OrganizationSwitcher } from "../OrganizationSwitcher";
 import { UserAvatar } from "../UserAvatar";
 import { useCurrentUser } from "../UserPicker";
 
+// The rail's tiles are squircles, not the Button's circle: a column of
+// places reads as app tiles (the organization trigger above them has the
+// same corner), where a column of circles reads as a stack of badges.
+const RAIL_TILE = "rounded-control";
+
 // Lit while you are in the place. Ghost buttons already light for hover and
 // for their own open menu; this is the resting state of the current one.
 const PLACE_ACTIVE = "bg-selected text-fg hover:bg-selected";
 
+// Something new in the place: a dot on the glyph's top right corner.
+const PLACE_UNREAD_DOT =
+  "pointer-events-none absolute -top-0.5 -right-0.5 size-2 rounded-full bg-accent";
+
+function PlaceGlyph({ icon, unread }: { icon: ReactNode; unread: boolean }) {
+  return (
+    <span className="relative inline-flex">
+      {icon}
+      {unread && <span className={PLACE_UNREAD_DOT} aria-hidden />}
+    </span>
+  );
+}
+
 function PlaceButton({
   label,
   active,
+  unread = false,
   onClick,
   icon,
 }: {
   label: string;
   active: boolean;
+  /** Something new waits there. */
+  unread?: boolean;
   onClick: () => void;
   icon: ReactNode;
 }) {
@@ -33,9 +57,9 @@ function PlaceButton({
       <Button
         variant="ghost"
         size="lg"
-        icon={icon}
-        className={active ? PLACE_ACTIVE : undefined}
-        aria-label={label}
+        icon={<PlaceGlyph icon={icon} unread={unread} />}
+        className={cn(RAIL_TILE, active && PLACE_ACTIVE)}
+        aria-label={unread ? `${label}, new activity` : label}
         aria-current={active ? "page" : undefined}
         // Called bare: a navigation action handed the click event would read
         // it as its own optional argument.
@@ -78,6 +102,9 @@ export function Minibar({
   const navigation = useNavigation();
   const currentUser = useCurrentUser();
   const supportShown = useSupportShown();
+  const unreadNotifications = unreadNotificationCount(
+    useNotifications().threads,
+  );
 
   return (
     <nav
@@ -96,6 +123,9 @@ export function Minibar({
         <PlaceButton
           label="Sessions"
           active={place === "sessions"}
+          // Your own chats with something you have not read yet (the same
+          // list the next-unread button walks).
+          unread={navigation.unreadChats.length > 0}
           // Sessions is always your own list (filterForPlace,
           // lib/sidebar-filter.ts), however you reach it.
           onClick={onOpenSessions}
@@ -104,6 +134,8 @@ export function Minibar({
         <PlaceButton
           label="Activity"
           active={place === "activity"}
+          // The inbox lives in Activity, so its unread notifications do.
+          unread={unreadNotifications > 0}
           onClick={navigation.openFeed}
           icon={<IconFeed size={22} />}
         />
@@ -129,6 +161,7 @@ export function Minibar({
           variant="ghost"
           size="lg"
           icon={<UserAvatar name={currentUser} size={28} />}
+          className={RAIL_TILE}
           aria-label="Your settings"
           onClick={() => navigation.openSettings("myAccounts")}
         />
