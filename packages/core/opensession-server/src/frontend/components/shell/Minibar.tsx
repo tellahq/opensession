@@ -93,6 +93,9 @@ export function Minibar({
   return (
     <nav
       aria-label="Places"
+      // The workspace shell reads this to drop its edge shadow
+      // (WORKSPACE_SHELL, lib/app-shell-classes.ts).
+      data-minibar
       className="wco-chrome flex w-[52px] shrink-0 flex-col items-center gap-1 pt-1.5 pb-2 [html.wco_&]:pt-[var(--desktop-header-h)]"
     >
       <OrganizationSwitcher

@@ -74,6 +74,12 @@ export const WORKSPACE_SHELL =
   "relative z-[25] flex min-h-0 min-w-0 flex-1 overflow-hidden border-l border-divider bg-surface desktop:[box-shadow:var(--content-edge-shadow)] " +
   // Collapsed sidebar: nothing to divide from or cast depth onto.
   "[.app-body.sidebar-collapsed_&]:border-l-0 [.app-body.sidebar-collapsed_&]:[box-shadow:none] " +
+  // The new layout (components/shell/Minibar.tsx, an earlier sibling of this
+  // box) puts the sidebar and the workspace on one sheet, so the seam between
+  // them is a hairline and nothing is cast across it. With the sidebar
+  // collapsed the workspace meets the minibar instead and keeps the hairline.
+  // Keyed off the minibar's presence so AppShell stays free of state.
+  "[[data-minibar]~&]:[box-shadow:none] [.app-body.sidebar-collapsed_[data-minibar]~&]:border-l " +
   // An open media viewer lifts the session input above its scrim, which
   // this box's own stacking context would otherwise keep below it.
   "[html[data-lightbox-composer]_&]:z-auto " +
