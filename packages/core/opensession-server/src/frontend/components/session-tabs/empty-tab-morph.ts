@@ -76,8 +76,10 @@ export function animateEmptyTabOpen(
     ),
   ];
 
-  const title = tab.querySelector<HTMLElement>("[data-empty-tab-title]");
-  if (title)
+  // The title, and the ⋯ beside close on the new layout's open tab.
+  for (const title of tab.querySelectorAll<HTMLElement>(
+    "[data-empty-tab-title]",
+  ))
     animations.push(
       title.animate(
         [
@@ -171,8 +173,9 @@ export function animateEmptyTabClose(button: HTMLButtonElement): void {
       morphTiming(),
     ),
   ];
-  const title = ghost.querySelector<HTMLElement>("[data-empty-tab-title]");
-  if (title)
+  for (const title of ghost.querySelectorAll<HTMLElement>(
+    "[data-empty-tab-title]",
+  ))
     animations.push(
       title.animate(
         [

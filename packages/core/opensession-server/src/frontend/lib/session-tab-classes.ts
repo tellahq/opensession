@@ -333,12 +333,19 @@ export function tabClass(state: TabState): string {
 
 /** The label uses the close control's space while the tab is idle. Hovering
  *  reveals close over the title, with a wider fade keeping both legible. */
-export const TAB_TITLE =
+const TAB_TITLE_BASE =
   "session-tab-title block min-w-0 max-w-[150px] overflow-hidden " +
   "data-[overflow]:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_10px),transparent_100%)] " +
-  "desktop:max-w-[166px] " +
+  "desktop:max-w-[166px]";
+
+export const TAB_TITLE =
+  `${TAB_TITLE_BASE} ` +
   "desktop:group-hover/tab:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_36px),transparent_100%)] " +
   "desktop:group-focus-within/tab:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_36px),transparent_100%)]";
+
+/** The title of a tab whose ⋯ and close sit beside it rather than over it,
+ *  so hovering has nothing to fade the label for. */
+export const TAB_TITLE_INLINE_CONTROLS = TAB_TITLE_BASE;
 
 /** An icon-only view tab (Staging → a globe): drop the label's text metrics so
  *  the tab sizes to the glyph. */
@@ -458,6 +465,18 @@ const CLOSE_TOUCH = "size-[26px] -mr-1";
 
 export const tabCloseClass = (phone: boolean) =>
   `${CLOSE_BASE} ${phone ? CLOSE_TOUCH : `${CLOSE_OVERLAY_POSITION} ${CLOSE_OVERLAY_HIDDEN}`}`;
+
+/**
+ * The new layout's active session tab carries the session's ⋯ menu, then
+ * close, both always shown and in flow after the title. One 20px round box
+ * each, so the pair reads as the tab's own controls rather than the header's.
+ */
+export const TAB_INLINE_CONTROLS = "-mr-1 flex flex-none items-center gap-px";
+export const TAB_INLINE_CONTROL =
+  "inline-flex size-5 shrink-0 cursor-pointer items-center justify-center " +
+  "rounded-full border-0 bg-transparent p-0 text-dim " +
+  "transition-[background-color,color] hover:bg-pressed hover:text-fg " +
+  "data-[popup-open]:bg-pressed data-[popup-open]:text-fg";
 
 /**
  * The trailing controls use quiet chrome with no pill fill or shadow. History
