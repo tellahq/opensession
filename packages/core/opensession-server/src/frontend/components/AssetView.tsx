@@ -53,12 +53,14 @@ import { AssetAnnotationLayer } from "./AssetAnnotationLayer";
 import {
   IconArrowDown,
   IconArrowUpRight,
+  IconChevronDown,
   IconChevronLeft,
   IconChevronRight,
   IconCopy,
   IconDotsHorizontal,
   IconLink,
   IconMessage,
+  IconRefresh,
   IconTrash,
   IconX,
 } from "./icons";
@@ -306,6 +308,14 @@ function AssetMenu({
               <IconCopy size={18} className="text-faint" />
               Copy link
             </Menu.Item>
+            {/* The folder follows writes live (assets_changed); this is for
+                files an agent wrote straight to disk, which send no event. */}
+            {refresh && (
+              <Menu.Item onClick={refresh}>
+                <IconRefresh size={18} className="text-faint" />
+                Refresh files
+              </Menu.Item>
+            )}
             <Menu.Separator />
           </>
         )}
@@ -542,39 +552,31 @@ function AssetOverlayFooter({
 }
 
 /**
- * The Assets tab's file header and operations, in one row.
- *
- * The promotion into a tab earns a place on the surface. File operations
- * live behind the overflow, because a header of six
- * peer-looking text links makes the destructive one exactly as easy to hit as
- * the harmless ones. Omit `onOpenAsTab` where the tab IS the surface.
+ * The Assets tab's header: the file's name (a switcher when the folder holds
+ * more than one), then Annotate, Open in browser and the overflow menu. The
+ * tab is the file at full size, so the header is the only chrome it has.
  */
 export function AssetActions({
   sessionId,
   file,
+  files,
+  onSelectPath,
   refresh,
-  onOpenAsTab,
-  onClose,
   annotating,
   onAnnotate,
-  showMenu = true,
   showSize = false,
   className,
 }: {
   sessionId: string;
   file: SessionAssetFile;
-  /** Re-list the folder after a delete. */
+  /** The folder, for the name's switcher. */
+  files: SessionAssetFile[];
+  onSelectPath: (path: string) => void;
+  /** Re-list the folder after a delete, or on request. */
   refresh?: () => void;
-  /** Optionally promote this file into the workspace's Assets tab. */
-  onOpenAsTab?: () => void;
-  /** Dismiss the surface — the overlay's ✕. Also called after a delete, since
-   *  there is nothing left to show. */
-  onClose?: () => void;
   /** Annotate mode, or undefined when this file takes no comments. */
   annotating?: boolean;
   onAnnotate?: (on: boolean) => void;
-  /** Hide this menu when another row owns the file actions. */
-  showMenu?: boolean;
   /** False for a chip path whose folder listing has not caught up yet. */
   showSize?: boolean;
   className?: string;
@@ -583,33 +585,72 @@ export function AssetActions({
   const folder = file.path.includes("/")
     ? file.path.slice(0, file.path.lastIndexOf("/"))
     : null;
+  const rawUrl = sessionAssetPreviewUrl(sessionId, file);
+  const nativeShare = canUseNativeIOSShare();
+  const title = (
+    <>
+      <span className="truncate text-item-title font-semibold text-fg">
+        {name}
+      </span>
+      {folder && (
+        <span className="min-w-0 shrink truncate text-label text-faint">
+          {folder}
+        </span>
+      )}
+    </>
+  );
 
   return (
     <div
       className={cn(
-        "flex min-h-[var(--desktop-header-h)] shrink-0 items-center gap-2 border-b border-divider py-2 pr-2 pl-4",
+        "flex min-h-[var(--desktop-header-h)] shrink-0 items-center gap-1 border-b border-divider py-1.5 pr-2 pl-2",
         className,
       )}
     >
       <div className="min-w-0 flex-1" title={file.path}>
-        <div className="flex min-w-0 items-baseline gap-2">
-          <span className="truncate text-item-title font-semibold text-fg">
-            {name}
-          </span>
-          {folder && (
-            <span className="min-w-0 shrink truncate text-label text-faint">
-              {folder}
-            </span>
-          )}
-        </div>
-        {file.description && (
-          <div className="mt-0.5 line-clamp-2 text-label text-dim">
-            {file.description}
+        {files.length > 1 ? (
+          <Menu.Root>
+            <Menu.Trigger
+              aria-label={`${name}, switch file`}
+              className="focus-ring flex max-w-full min-w-0 cursor-pointer items-baseline gap-2 rounded-control border-0 bg-transparent px-2 py-1 text-left hover:bg-hover data-[popup-open]:bg-hover phone:min-h-11 phone:items-center"
+            >
+              {title}
+              <IconChevronDown
+                size={14}
+                className="shrink-0 self-center text-faint"
+              />
+            </Menu.Trigger>
+            <Menu.Popup
+              align="start"
+              className="max-h-[min(420px,70vh)] max-w-[min(420px,90vw)] min-w-[240px]"
+            >
+              <Menu.RadioGroup
+                value={file.path}
+                onValueChange={(path: string) => onSelectPath(path)}
+              >
+                {files.map((candidate) => (
+                  <Menu.RadioItem
+                    key={candidate.path}
+                    value={candidate.path}
+                    closeOnClick
+                  >
+                    <span className="min-w-0 flex-1 truncate">
+                      {candidate.path}
+                    </span>
+                    <Menu.Check on={candidate.path === file.path} />
+                  </Menu.RadioItem>
+                ))}
+              </Menu.RadioGroup>
+            </Menu.Popup>
+          </Menu.Root>
+        ) : (
+          <div className="flex min-w-0 items-baseline gap-2 px-2 py-1">
+            {title}
           </div>
         )}
       </div>
       {showSize && (
-        <span className="shrink-0 text-meta tabular-nums text-faint">
+        <span className="mr-1 shrink-0 text-meta tabular-nums text-faint phone:hidden">
           {formatAssetSize(file.size)}
         </span>
       )}
@@ -629,35 +670,30 @@ export function AssetActions({
           />
         </Tooltip>
       )}
-      {onOpenAsTab && (
+      <Tooltip label={nativeShare ? "Open or share" : "Open in browser"}>
         <Button
           variant="ghost"
           size="sm"
-          className="shrink-0"
-          onClick={onOpenAsTab}
-        >
-          Open as tab
-        </Button>
-      )}
-      {showMenu && (
-        <AssetMenu
-          sessionId={sessionId}
-          file={file}
-          refresh={refresh}
-          onClose={onClose}
+          icon={<IconArrowUpRight size={16} />}
+          className="shrink-0 phone:size-11"
+          aria-label={nativeShare ? "Open or share" : "Open in browser"}
+          {...(nativeShare
+            ? {
+                onClick: () =>
+                  void shareURL(rawUrl).catch((error) => {
+                    if (!nativeShareWasCancelled(error))
+                      toast("Could not share that link");
+                  }),
+              }
+            : { render: <a href={rawUrl} target="_blank" rel="noreferrer" /> })}
         />
-      )}
-      {onClose && (
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-label="Close"
-          className="size-7 shrink-0 justify-center px-0"
-          onClick={onClose}
-        >
-          <IconX size={16} />
-        </Button>
-      )}
+      </Tooltip>
+      <AssetMenu
+        sessionId={sessionId}
+        file={file}
+        refresh={refresh}
+        phone={false}
+      />
     </div>
   );
 }
