@@ -1,7 +1,12 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useIsPhone } from "../../hooks/useIsPhone";
-import { PANE_TOP_ROW, PANE_TOP_ROW_TABS } from "../../lib/app-shell-classes";
+import {
+  NEW_LAYOUT_ROW_PX,
+  PANE_TOP_ROW,
+  PANE_TOP_ROW_TABS,
+} from "../../lib/app-shell-classes";
 import { useNewLayoutPref } from "../../lib/new-layout-pref";
+import { os1Shell } from "../../lib/os1-shell";
 
 /**
  * The top of the pane: the page's top bar (`children`) and the session tab
@@ -25,6 +30,12 @@ export function PaneTopRow({
 }) {
   const isPhone = useIsPhone();
   const newLayout = useNewLayoutPref() && !isPhone;
+  // The desktop shell centres its traffic lights on this row, which is
+  // shorter in the new layout (NEW_LAYOUT_ROW_HEIGHT); the old layout's
+  // lights stay where a 48px row puts them.
+  useEffect(() => {
+    os1Shell()?.setTitlebarHeight?.(newLayout ? NEW_LAYOUT_ROW_PX : 48);
+  }, [newLayout]);
   if (!newLayout) {
     return (
       <>

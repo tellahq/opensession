@@ -910,6 +910,11 @@ function scheduleSaveWindowState(target) {
   data.saveTimer = setTimeout(() => saveWindowState(target), 400);
 }
 
+// The traffic lights' inset and their ~12px height, for centring them on the
+// web app's titlebar row.
+const TRAFFIC_LIGHT_X = 18;
+const TRAFFIC_LIGHT_SIZE = 12;
+
 function inWindow(url) {
   try {
     return IN_WINDOW_ORIGINS.includes(new URL(url).origin);
@@ -1169,7 +1174,8 @@ function createWindow(initialURL = null, initialAccountID = null) {
     titleBarOverlay: true,
     // No dedicated titlebar band in the frontend: its first content row (48px)
     // is the titlebar, so center the ~12px traffic lights on it ((48 - 12) / 2).
-    trafficLightPosition: { x: 18, y: 18 },
+    // The web app reports a different row height over os1:titlebar-height.
+    trafficLightPosition: { x: TRAFFIC_LIGHT_X, y: 18 },
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       sandbox: true,
@@ -1711,6 +1717,20 @@ app.whenReady().then(async () => {
     );
     app.setBadgeCount(total);
     buildAppMenu();
+  });
+
+  // The web app's first row is the titlebar, and its height depends on the
+  // layout the person picked (48px, or 36px in the new layout). It reports the
+  // height so the traffic lights stay centred on that row.
+  ipcMain.on("os1:titlebar-height", (e, height) => {
+    if (!inWindow(e.senderFrame?.url ?? "")) return;
+    if (!Number.isFinite(height) || height < 28 || height > 64) return;
+    const target = eventWindow(e);
+    if (!target || target.isDestroyed()) return;
+    target.setWindowButtonPosition({
+      x: TRAFFIC_LIGHT_X,
+      y: Math.round((height - TRAFFIC_LIGHT_SIZE) / 2),
+    });
   });
 
   // The web app asks for this from a notification click handler, where its own

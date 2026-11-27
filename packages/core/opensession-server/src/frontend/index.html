@@ -339,6 +339,12 @@
         if (window.os1 && window.os1.materialBackdrop === true)
           document.documentElement.classList.add("material-backdrop");
 
+        // Shells that can move their traffic lights onto the web app's row
+        // let the new layout use its shorter row there too (app-shell-classes,
+        // NEW_LAYOUT_ROW_HEIGHT); older ones keep the 48px row the lights fit.
+        if (window.os1 && typeof window.os1.setTitlebarHeight === "function")
+          document.documentElement.classList.add("titlebar-follows-row");
+
         // Window Controls Overlay detection → `html.wco` (drives the titlebar
         // band + drag region in base.css). JS instead of the display-mode
         // media query because Electron (the Open Session desktop shell) exposes the WCO
