@@ -3,6 +3,7 @@ import {
   color,
   controlHeight,
   corner,
+  leading,
   media,
   motion,
   opacity,
@@ -49,21 +50,21 @@ export const field = stylex.create({
     height: { default: null, [INPUT]: controlHeight.sm },
     paddingInline: space.s8,
     fontSize: text.label,
-    lineHeight: { default: "calc(1 / 0.75)", [INPUT]: 1 },
+    lineHeight: { default: leading.small, [INPUT]: leading.none },
   },
   md: {
     minHeight: controlHeight.md,
     height: { default: null, [INPUT]: controlHeight.md },
     paddingInline: space.s10,
     fontSize: text.label,
-    lineHeight: { default: "calc(1.25 / 0.875)", [INPUT]: 1 },
+    lineHeight: { default: leading.label, [INPUT]: leading.none },
   },
   lg: {
     minHeight: controlHeight.lg,
     height: { default: null, [INPUT]: controlHeight.lg },
     paddingInline: space.s12,
     fontSize: text.body,
-    lineHeight: { default: 1.5, [INPUT]: 1 },
+    lineHeight: { default: leading.body, [INPUT]: leading.none },
   },
   /** Multi-line entry, padded like a paragraph. */
   textarea: { resize: "vertical", paddingBlock: space.s8 },
@@ -84,9 +85,15 @@ export const field = stylex.create({
     textAlign: "left",
     gridTemplateColumns: "minmax(0, 1fr) auto",
     transitionProperty: "border-color, box-shadow",
+    // Hover is scoped off a focused or open trigger: StyleX emits the hover
+    // media query after every plain state, so a bare hover would grey the
+    // accent border under the pointer.
     borderColor: {
       default: color.line,
-      ":hover": { default: null, [media.hover]: color.lineStrong },
+      ":not([data-popup-open]):not(:focus):hover": {
+        default: null,
+        [media.hover]: color.lineStrong,
+      },
       ":focus": color.accent,
       ":is([data-popup-open])": color.accent,
     },
@@ -96,4 +103,35 @@ export const field = stylex.create({
     },
   },
   triggerWithIcon: { gridTemplateColumns: "auto minmax(0, 1fr) auto" },
+  // The trigger's parts. Every child sits on row 1 so the `sizeTo` copies
+  // stack under the value and widen the column instead of the row.
+  triggerIcon: {
+    display: "flex",
+    gridColumnStart: 1,
+    gridRowStart: 1,
+    width: space.s16,
+    height: space.s16,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    color: color.dim,
+  },
+  triggerLabel: {
+    gridRowStart: 1,
+    gridColumnStart: 1,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  /** The label after a leading icon. */
+  triggerLabelAfterIcon: { gridColumnStart: 2 },
+  /** A width-reserving copy of an option the trigger can show. */
+  triggerSizer: { visibility: "hidden" },
+  triggerChevron: {
+    gridRowStart: 1,
+    gridColumnStart: 2,
+    flexShrink: 0,
+    color: color.faint,
+  },
+  triggerChevronAfterIcon: { gridColumnStart: 3 },
 });

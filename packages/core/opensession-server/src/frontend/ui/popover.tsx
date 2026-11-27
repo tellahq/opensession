@@ -1,7 +1,94 @@
 import * as React from "react";
 import { Popover as BasePopover } from "@base-ui/react/popover";
-import { cn } from "./cn";
-import { FLOATING_OVERLAY_LAYER } from "./popup-classes";
+import * as stylex from "@stylexjs/stylex";
+import { popup } from "./popup-styles";
+import { sx } from "./sx";
+import {
+  color,
+  corner,
+  geometry,
+  media,
+  motion,
+  radius,
+  shadow,
+} from "./tokens.stylex";
+
+const STARTING = ":is([data-starting-style])";
+const ENDING = ":is([data-ending-style])";
+const onSide = (s: string) => `:is([data-side=${s}])`;
+
+const styles = stylex.create({
+  surface: {
+    borderRadius: radius.popup,
+    ["cornerShape"]: corner.squircle,
+    outline: {
+      default: "none",
+      [media.forcedColors]: shadow.ringForced,
+    },
+    outlineOffset: {
+      default: null,
+      [media.forcedColors]: shadow.ringForcedOffset,
+    },
+    backgroundColor: color.popupGlass,
+    backdropFilter: "var(--popup-blur)",
+    transformOrigin: "var(--transform-origin)",
+    transitionProperty: { default: "scale, opacity", [ENDING]: "none" },
+    transitionDuration: motion.popup,
+    transitionTimingFunction: motion.easeOut,
+    scale: { default: null, [STARTING]: motion.popupScale },
+    opacity: { default: null, [STARTING]: 0, [ENDING]: 0 },
+  },
+  // The ring override rides on the popup so the arrow, which continues that
+  // hairline, inherits the same value.
+  ringDefault: { "--smooth-ring-color": color.popupRing },
+  ringSoft: {
+    "--smooth-ring-color": `color-mix(in srgb, ${color.popupRing} 65%, ${color.popup})`,
+  },
+  sm: { boxShadow: shadow.ringSm },
+  md: { boxShadow: shadow.ringMd },
+  lg: { boxShadow: shadow.ringLg },
+  arrow: {
+    width: geometry.arrow,
+    height: geometry.arrow,
+    rotate: "45deg",
+    borderStyle: "solid",
+    borderWidth: 0,
+    borderColor: "var(--smooth-ring-color)",
+    backgroundColor: color.popupGlass,
+    backdropFilter: "var(--popup-blur)",
+    left: { default: null, [onSide("right")]: geometry.arrowHangRight },
+    right: { default: null, [onSide("left")]: geometry.arrowHang },
+    bottom: { default: null, [onSide("top")]: geometry.arrowHang },
+    top: { default: null, [onSide("bottom")]: geometry.arrowHang },
+    borderTopWidth: {
+      default: null,
+      [onSide("left")]: geometry.hairline,
+      [onSide("bottom")]: geometry.hairline,
+    },
+    borderRightWidth: {
+      default: null,
+      [onSide("left")]: geometry.hairline,
+      [onSide("top")]: geometry.hairline,
+    },
+    borderBottomWidth: {
+      default: null,
+      [onSide("right")]: geometry.hairline,
+      [onSide("top")]: geometry.hairline,
+    },
+    borderLeftWidth: {
+      default: null,
+      [onSide("right")]: geometry.hairline,
+      [onSide("bottom")]: geometry.hairline,
+    },
+    clipPath: {
+      default: null,
+      [onSide("right")]: "polygon(14% 0, 0 0, 0 100%, 100% 100%, 100% 86%)",
+      [onSide("left")]: "polygon(0 0, 100% 0, 100% 100%, 86% 100%, 0 14%)",
+      [onSide("top")]: "polygon(100% 0, 100% 100%, 0 100%, 0 86%, 86% 0)",
+      [onSide("bottom")]: "polygon(0 0, 100% 0, 100% 14%, 14% 100%, 0 100%)",
+    },
+  },
+});
 import { useExclusivePopup, useExclusivePopupDelay } from "./exclusive-popups";
 import {
   DeferredPopupRootContext,
@@ -57,7 +144,7 @@ function Trigger({
     <BasePopover.Trigger
       {...props}
       delay={groupedDelay}
-      className={cn(className)}
+      className={className}
     />
   );
 }
@@ -206,32 +293,18 @@ function Popup({
         collisionBoundary={collisionBoundary}
         // Keep the diamond clear of the popup's rounded corners.
         arrowPadding={14}
-        className={cn(
-          FLOATING_OVERLAY_LAYER,
-          "outline-none",
-          positionerClassName,
-        )}
+        {...sx(popup.positioner, positionerClassName)}
       >
         <BasePopover.Popup
           initialFocus={initialFocus}
           finalFocus={finalFocus}
           aria-label={ariaLabel}
-          className={cn(
-            // The ring override rides on the popup so the arrow, which
-            // continues that hairline, inherits the same value.
-            "rounded-popup [corner-shape:squircle] outline-none",
-            "bg-popup-glass [backdrop-filter:var(--popup-blur)]",
-            ring === "soft"
-              ? "[--smooth-ring-color:color-mix(in_srgb,var(--popup-ring)_65%,var(--popup-surface))]"
-              : "[--smooth-ring-color:var(--popup-ring)]",
-            elevation === "lg"
-              ? "smooth-shadow-ring-lg"
-              : elevation === "sm"
-                ? "smooth-shadow-ring-sm"
-                : "smooth-shadow-ring-md",
-            "origin-[var(--transform-origin)] transition-[transform,opacity] duration-[120ms] ease-out",
-            "data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0",
-            "data-[ending-style]:opacity-0 data-[ending-style]:transition-none",
+          {...sx(
+            [
+              styles.surface,
+              ring === "soft" ? styles.ringSoft : styles.ringDefault,
+              styles[elevation],
+            ],
             className,
           )}
         >
@@ -251,20 +324,7 @@ function Popup({
             // sliver past the diagonal, so the arrow's own fill covers
             // the popup's hairline where it would otherwise draw a line
             // across the arrow's base.
-            <BasePopover.Arrow
-              className={cn(
-                "size-[10px] rotate-45 [border-color:var(--smooth-ring-color)]",
-                "bg-popup-glass [backdrop-filter:var(--popup-blur)]",
-                "data-[side=right]:left-[-5px] data-[side=right]:border-b data-[side=right]:border-l",
-                "data-[side=right]:[clip-path:polygon(14%_0,0_0,0_100%,100%_100%,100%_86%)]",
-                "data-[side=left]:right-[-6px] data-[side=left]:border-t data-[side=left]:border-r",
-                "data-[side=left]:[clip-path:polygon(0_0,100%_0,100%_100%,86%_100%,0_14%)]",
-                "data-[side=top]:bottom-[-6px] data-[side=top]:border-r data-[side=top]:border-b",
-                "data-[side=top]:[clip-path:polygon(100%_0,100%_100%,0_100%,0_86%,86%_0)]",
-                "data-[side=bottom]:top-[-6px] data-[side=bottom]:border-t data-[side=bottom]:border-l",
-                "data-[side=bottom]:[clip-path:polygon(0_0,100%_0,100%_14%,14%_100%,0_100%)]",
-              )}
-            />
+            <BasePopover.Arrow {...stylex.props(styles.arrow)} />
           )}
           {children}
         </BasePopover.Popup>

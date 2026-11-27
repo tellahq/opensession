@@ -101,7 +101,9 @@ const styles = stylex.create({
   idle: {
     color: {
       default: color.dim,
-      ":hover": { default: null, [media.hover]: color.fg },
+      // Scoped to enabled options: StyleX emits the hover media query after
+      // `:disabled`, so a bare hover would light up an option it can't offer.
+      ":enabled:hover": { default: null, [media.hover]: color.fg },
       ":disabled": color.faint,
     },
   },

@@ -2,14 +2,11 @@ import * as React from "react";
 import { Menu as BaseMenu } from "@base-ui/react/menu";
 import { ContextMenu as BaseContextMenu } from "@base-ui/react/context-menu";
 import { IconCheck } from "../components/icons";
+import * as stylex from "@stylexjs/stylex";
 import { cn } from "./cn";
-import {
-  FLOATING_OVERLAY_LAYER,
-  POPUP_HOOK,
-  popupItemClasses,
-  popupScrollClasses,
-  popupSurfaceClasses,
-} from "./popup-classes";
+import { POPUP_HOOK } from "./popup-classes";
+import { popup } from "./popup-styles";
+import { sx } from "./sx";
 import {
   DeferredPopupRootContext,
   useDeferredPopupRoot,
@@ -139,26 +136,19 @@ function Popup({
         alignOffset={alignOffset}
         anchor={anchor}
         collisionPadding={8}
-        className={cn(
-          FLOATING_OVERLAY_LAYER,
-          "outline-none",
-          positionerClassName,
-        )}
+        {...sx(popup.positioner, positionerClassName)}
       >
         <BaseMenu.Popup
-          className={cn(
-            POPUP_HOOK,
-            popupSurfaceClasses,
-            footer &&
-              "flex max-h-[min(80dvh,560px,var(--available-height))] flex-col",
-            className,
+          {...sx(
+            [popup.surface, footer ? popup.withFooter : null],
+            cn(POPUP_HOOK, className),
           )}
           finalFocus={finalFocus}
         >
           <div
-            className={cn(
-              popupScrollClasses,
-              footer && "min-h-0 max-h-none flex-1",
+            {...stylex.props(
+              popup.scroll,
+              footer ? popup.scrollAboveFooter : null,
             )}
           >
             {children}
@@ -192,13 +182,13 @@ function ContextPopup({
     >
       <BaseContextMenu.Positioner
         collisionPadding={8}
-        className={cn(FLOATING_OVERLAY_LAYER, "outline-none")}
+        {...stylex.props(popup.positioner)}
       >
         <BaseContextMenu.Popup
-          className={cn(POPUP_HOOK, popupSurfaceClasses, className)}
+          {...sx(popup.surface, cn(POPUP_HOOK, className))}
           finalFocus={finalFocus}
         >
-          <div className={popupScrollClasses}>{children}</div>
+          <div {...stylex.props(popup.scroll)}>{children}</div>
         </BaseContextMenu.Popup>
       </BaseContextMenu.Positioner>
     </BaseContextMenu.Portal>
@@ -211,9 +201,7 @@ function Item({
 }: Omit<React.ComponentProps<typeof BaseMenu.Item>, "className"> & {
   className?: string;
 }) {
-  return (
-    <BaseMenu.Item {...props} className={cn(popupItemClasses, className)} />
-  );
+  return <BaseMenu.Item {...props} {...sx(popup.item, className)} />;
 }
 
 function SubmenuTrigger({
@@ -225,7 +213,7 @@ function SubmenuTrigger({
   return (
     <BaseMenu.SubmenuTrigger
       {...props}
-      className={cn(popupItemClasses, "data-[popup-open]:bg-hover", className)}
+      {...sx([popup.item, popup.itemOpen], className)}
     />
   );
 }
@@ -236,12 +224,7 @@ function RadioItem({
 }: Omit<React.ComponentProps<typeof BaseMenu.RadioItem>, "className"> & {
   className?: string;
 }) {
-  return (
-    <BaseMenu.RadioItem
-      {...props}
-      className={cn(popupItemClasses, className)}
-    />
-  );
+  return <BaseMenu.RadioItem {...props} {...sx(popup.item, className)} />;
 }
 
 function CheckboxItem({
@@ -250,12 +233,7 @@ function CheckboxItem({
 }: Omit<React.ComponentProps<typeof BaseMenu.CheckboxItem>, "className"> & {
   className?: string;
 }) {
-  return (
-    <BaseMenu.CheckboxItem
-      {...props}
-      className={cn(popupItemClasses, className)}
-    />
-  );
+  return <BaseMenu.CheckboxItem {...props} {...sx(popup.item, className)} />;
 }
 
 /**
@@ -279,11 +257,7 @@ export function MenuShortcut({
   className?: string;
   children: React.ReactNode;
 }) {
-  return (
-    <span className={cn("shrink-0 pl-4 text-label text-faint", className)}>
-      {children}
-    </span>
-  );
+  return <span {...sx(popup.shortcut, className)}>{children}</span>;
 }
 
 /**
@@ -312,17 +286,13 @@ export function MenuCheck({
     <IconCheck
       size={size}
       aria-hidden
-      className={cn("shrink-0 text-accent", !on && "invisible", className)}
+      {...sx([popup.check, !on && popup.checkOff], className)}
     />
   );
 }
 
 function Separator({ className }: { className?: string }) {
-  return (
-    <BaseMenu.Separator
-      className={cn("-mx-1.5 my-1.5 h-px bg-line", className)}
-    />
-  );
+  return <BaseMenu.Separator {...sx(popup.separator, className)} />;
 }
 
 function GroupLabel({
@@ -333,13 +303,7 @@ function GroupLabel({
   children?: React.ReactNode;
 }) {
   return (
-    <BaseMenu.GroupLabel
-      {...props}
-      className={cn(
-        "px-2 pb-1 text-meta font-semibold tracking-[-0.01em] text-faint",
-        className,
-      )}
-    />
+    <BaseMenu.GroupLabel {...props} {...sx(popup.groupLabel, className)} />
   );
 }
 

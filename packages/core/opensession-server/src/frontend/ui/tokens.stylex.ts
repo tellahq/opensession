@@ -25,6 +25,10 @@ export const color = stylex.defineConsts({
   control: "var(--control-surface)",
   button: "var(--button-surface)",
   popup: "var(--popup-surface)",
+  /** The popup surface held up to the light: translucent where the platform
+   *  can blur behind it, solid where it cannot. */
+  popupGlass: "var(--popup-glass)",
+  popupRing: "var(--popup-ring)",
   // Interaction washes: translucent ink, so one value reads on any surface.
   hover: "var(--hover)",
   pressed: "var(--hover-strong)",
@@ -66,6 +70,8 @@ export const color = stylex.defineConsts({
   accentControl: "var(--accent-control, var(--accent))",
   onAccentControl: "var(--on-accent-control, var(--on-accent))",
   panelSurface: "var(--panel-surface)",
+  tooltip: "var(--tooltip-bg)",
+  tooltipFg: "var(--tooltip-fg)",
   segmentedKnob: "var(--segmented-knob-surface)",
   segmentedKnobEdge: "var(--segmented-knob-edge)",
 });
@@ -151,11 +157,20 @@ export const text = stylex.defineConsts({
 });
 
 /**
- * Line height for single-line control labels (buttons, chips, tabs), as a
- * unitless ratio: 18.6px on a 13px label, 21.4px on a 15px one.
+ * Line heights, as unitless ratios. `label` is every single-line control
+ * label (buttons, chips, tabs): 18.6px on a 13px label, 21.4px on a 15px one.
  */
 export const leading = stylex.defineConsts({
   label: "calc(1.25 / 0.875)",
+  /** One line exactly the size of the type: a single-line input centred in
+   *  its box. */
+  none: "1",
+  /** Running text: a textarea, a description. */
+  body: "1.5",
+  /** A tooltip's line, a little tighter than running text. */
+  snug: "1.375",
+  /** A field's small step, which keeps Tailwind's `text-xs` leading. */
+  small: "calc(1 / 0.75)",
 });
 
 /**
@@ -163,11 +178,18 @@ export const leading = stylex.defineConsts({
  * regular; headings take `title` (500 in dark, 600 in light). Semibold and
  * bold are for prose emphasis, not chrome.
  */
+/** Letter spacing. `tight` pulls small bold labels together a hair. */
+export const tracking = stylex.defineConsts({
+  tight: "-0.01em",
+});
+
 export const weight = stylex.defineConsts({
   regular: "400",
   medium: "500",
   /** The selected underline tab, and emphasis inside prose. */
   strong: "600",
+  /** Group labels and section kickers. */
+  heading: "600",
   title: "var(--title-weight)",
 });
 
@@ -191,6 +213,11 @@ export const motion = stylex.defineConsts({
   easeOut: "cubic-bezier(0, 0, 0.2, 1)",
   /** One turn of a progress spinner. */
   spin: "1s",
+  /** A popup's enter and exit. */
+  popup: "120ms",
+  /** How far a popup or tooltip grows into place. */
+  popupScale: "0.97",
+  tooltipScale: "0.96",
 });
 
 /** The one keyboard focus treatment: a 2px accent-ink ring, 2px out. */
@@ -217,6 +244,9 @@ export const shadow = stylex.defineConsts({
   lg: "0 4px 12px -4px color-mix(in srgb, var(--tw-shadow-color, black) 5%, transparent), 0 18px 48px -14px color-mix(in srgb, var(--tw-shadow-color, black) 11%, transparent)",
   ringLg:
     "0 4px 12px -4px color-mix(in srgb, var(--tw-shadow-color, black) 5%, transparent), 0 18px 48px -14px color-mix(in srgb, var(--tw-shadow-color, black) 11%, transparent), 0 0 0 var(--smooth-ring-width, 1px) color-mix(in srgb, var(--smooth-ring-color) 50%, transparent)",
+  /** The tooltip chip: a soft drop plus its own ring colour. */
+  tooltip:
+    "0px 10px 38px -10px rgba(14, 18, 22, 0.35), 0px 10px 20px -15px rgba(14, 18, 22, 0.2), 0 0 0 1px var(--tooltip-ring)",
   /** The switch knob: a tight contact shadow plus a hairline, on white. */
   knob: "0 1px 3px rgba(0, 0, 0, 0.22), 0 0 0 1px rgba(0, 0, 0, 0.07)",
   /** Top-down shading that gives a solid plate a face (Tailwind's `plate-sheen`). */
@@ -248,9 +278,49 @@ export const geometry = stylex.defineConsts({
   checkBox: "16px",
   checkGlyph: "12px",
   radioDot: "6px",
+  /** A floating list: never narrower than a short label plus its glyph, and
+   *  never taller than the room the positioner reports. */
+  popupMinWidth: "180px",
+  popupMaxHeight: "min(60dvh, 420px, var(--available-height))",
+  /** A menu with a docked footer gets more room, since the footer does not
+   *  scroll with the list. */
+  popupMaxHeightFooter: "min(80dvh, 560px, var(--available-height))",
+  /** A popover's pointer: a 10px square on its point, hanging half off
+   *  the edge (one pixel less on the right, where the hairline sits). */
+  arrow: "10px",
+  arrowHang: "-6px",
+  arrowHangRight: "-5px",
+  /** The widest a tooltip runs before it truncates, or wraps when it is
+   *  multiline. */
+  tooltipMax: "280px",
+  tooltipMaxMultiline: "360px",
+  tooltipMaxHeight: "50vh",
+  /** A key cap inside a tooltip. */
+  keyCap: "16px",
+  keyCapPad: "3px",
+  /** A divider rule. */
+  hairline: "1px",
+  /** A select's popup is never narrower than its trigger. */
+  anchorWidth: "var(--anchor-width)",
+  /** A searchable list: room for a query even off a narrow trigger. */
+  searchPopupMinWidth: "max(var(--anchor-width), 16rem)",
+  /** The tick column on a selectable row, the glyph's own box. */
+  tick: "17px",
+  /** A row's leading glyph. */
+  rowIcon: "16px",
 });
 
 /** The one breakpoint (720px, inclusive on the phone side) and hover gating. */
+/**
+ * Stacking layers. Only the ones the primitives own; a feature that needs a
+ * new layer adds it here, named for what it sits above.
+ */
+export const layer = stylex.defineConsts({
+  /** The app's top interaction layer: every menu, select, tooltip and hover
+   *  preview, above the pinned workspace summary wherever its trigger lives. */
+  floating: "2147483647",
+});
+
 export const media = stylex.defineConsts({
   phone: "@media (max-width: 720px)",
   desktop: "@media (min-width: 721px)",
