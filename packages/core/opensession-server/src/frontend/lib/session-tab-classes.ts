@@ -84,7 +84,7 @@ export const TAB_STRIP =
   // Phone: pulled out of flow and pinned flush under the header's bottom edge,
   // so it reads as fixed chrome rather than a strip the transcript scrolls by.
   // The header's scroll-edge blur continues behind these glass controls.
-  "phone:absolute phone:inset-x-0 phone:top-[var(--pane-header-h)] phone:z-[6] " +
+  "phone:absolute phone:inset-x-0 phone:top-[var(--pane-header-h)] phone:z-6 " +
   "phone:m-0 phone:py-[5px] " +
   // A lone session with no view tabs has nothing to switch between, so the
   // strip is pure chrome on a phone — every tab is a .session-tab-reorder
@@ -144,7 +144,7 @@ export const TAB_STRIP_ATTACHED =
  *  collapsed the strip starts further in, past the re-open control, and the
  *  first tab gets its flare and the room for it back. */
 export const TAB_SCROLL_ATTACHED =
-  "relative z-[31] items-stretch pr-2.5 [.app-body.sidebar-collapsed_&]:pl-2.5";
+  "relative z-tab-strip items-stretch pr-2.5 [.app-body.sidebar-collapsed_&]:pl-2.5";
 
 /** The "+" and history controls after the tabs: lifted off the row's bottom
  *  by the same inset, so they centre on the row's middle line with the tab
@@ -190,9 +190,9 @@ export const TAB_GROUP_ATTACHED =
  */
 const TAB_ITEM_ATTACHED_FLARES =
   "[--tab-fill:var(--bg)] data-[colored]:[--tab-fill:color-mix(in_srgb,var(--tab-color)_14%,var(--bg))] " +
-  "before:pointer-events-none before:absolute before:bottom-0 before:-left-[7px] before:z-[1] before:hidden before:size-2 before:content-[''] " +
+  "before:pointer-events-none before:absolute before:bottom-0 before:-left-[7px] before:z-1 before:hidden before:size-2 before:content-[''] " +
   "before:[background:radial-gradient(circle_at_0_0,transparent_6.75px,var(--tab-edge,var(--divider))_7.25px,var(--tab-edge,var(--divider))_7.75px,var(--tab-fill)_8.25px)] " +
-  "after:pointer-events-none after:absolute after:bottom-0 after:-right-[7px] after:z-[1] after:hidden after:size-2 after:content-[''] " +
+  "after:pointer-events-none after:absolute after:bottom-0 after:-right-[7px] after:z-1 after:hidden after:size-2 after:content-[''] " +
   "after:[background:radial-gradient(circle_at_100%_0,transparent_6.75px,var(--tab-edge,var(--divider))_7.25px,var(--tab-edge,var(--divider))_7.75px,var(--tab-fill)_8.25px)] " +
   "[&:has(>[aria-selected=true])]:before:block [&:has(>[aria-selected=true])]:after:block " +
   "[.app-body:not(.sidebar-collapsed)_&]:first:before:hidden!";
@@ -238,7 +238,7 @@ export const TAB_ITEM_DRAGGING = `${TAB_CORNERS} cursor-grabbing bg-panel smooth
  * painted underneath would vanish exactly when the order changes.
  */
 export const TAB_DROP_SLOT =
-  "pointer-events-none absolute inset-y-2 z-[5] " +
+  "pointer-events-none absolute inset-y-2 z-5 " +
   "[animation:tab-drop-slot-in_var(--dur-micro)_var(--ease)] [transition:left_var(--dur)_var(--ease)] " +
   "motion-reduce:animate-none motion-reduce:transition-none " +
   "after:absolute after:inset-y-0 after:left-0 after:w-0.5 after:rounded-[1px] after:bg-accent after:content-['']";
@@ -450,7 +450,7 @@ const CLOSE_BASE =
 const CLOSE_OVERLAY_POSITION =
   "[@media_(hover:hover)_and_(pointer:fine)]:absolute " +
   "[@media_(hover:hover)_and_(pointer:fine)]:right-[var(--tab-close-inset,4px)] [@media_(hover:hover)_and_(pointer:fine)]:top-1/2 " +
-  "[@media_(hover:hover)_and_(pointer:fine)]:z-[1] [@media_(hover:hover)_and_(pointer:fine)]:m-0 " +
+  "[@media_(hover:hover)_and_(pointer:fine)]:z-1 [@media_(hover:hover)_and_(pointer:fine)]:m-0 " +
   "[@media_(hover:hover)_and_(pointer:fine)]:-translate-y-1/2 " +
   "[@media_(hover:hover)_and_(pointer:fine)]:transition-opacity";
 

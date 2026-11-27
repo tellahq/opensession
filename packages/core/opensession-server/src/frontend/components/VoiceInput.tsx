@@ -554,7 +554,7 @@ export function VoiceInput({
       {error && phase === "idle" && (
         <div
           role="alert"
-          className="absolute bottom-[calc(100%+8px)] right-0 z-[7] whitespace-nowrap rounded-control border border-[color-mix(in_srgb,var(--red)_40%,transparent)] bg-red-soft px-[11px] py-[7px] text-supporting font-medium text-red"
+          className="absolute bottom-[calc(100%+8px)] right-0 z-7 whitespace-nowrap rounded-control border border-[color-mix(in_srgb,var(--red)_40%,transparent)] bg-red-soft px-[11px] py-[7px] text-supporting font-medium text-red"
         >
           {error}
         </div>

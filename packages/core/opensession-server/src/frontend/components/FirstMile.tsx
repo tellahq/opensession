@@ -756,7 +756,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
         aria-label="Onboarding progress"
         // This top row doubles as the Electron window drag region; base.css
         // carves its step buttons back out so they remain clickable.
-        className="wco-chrome relative z-20 flex h-11 shrink-0 items-start justify-center"
+        className="wco-chrome relative z-float flex h-11 shrink-0 items-start justify-center"
       >
         {steps.map((item, stepIndex) => (
           <button
@@ -800,7 +800,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
           transition={{ type: "tween", duration: duration.micro, ease }}
           onAnimationComplete={finishPanelCrossfade}
           className={cn(
-            "relative z-10 flex max-h-full w-full self-center justify-self-center flex-col overflow-hidden rounded-2xl phone:h-full phone:max-h-none phone:max-w-none phone:self-stretch phone:rounded-none phone:[box-shadow:none]",
+            "relative z-sticky flex max-h-full w-full self-center justify-self-center flex-col overflow-hidden rounded-2xl phone:h-full phone:max-h-none phone:max-w-none phone:self-stretch phone:rounded-none phone:[box-shadow:none]",
             panelSize
               ? "max-w-none"
               : step.id === "ready"
@@ -956,7 +956,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
             aria-hidden={!navigationVisible}
             inert={!navigationVisible}
             className={cn(
-              "relative z-20 mt-auto shrink-0 px-6 pb-5 pt-4 phone:px-3 phone:pb-[max(12px,env(safe-area-inset-bottom))] phone:pt-3",
+              "relative z-float mt-auto shrink-0 px-6 pb-5 pt-4 phone:px-3 phone:pb-[max(12px,env(safe-area-inset-bottom))] phone:pt-3",
               !navigationVisible && "pointer-events-none",
             )}
           >

@@ -1398,7 +1398,7 @@ export function AppContent({
                       <button
                         className={cn(
                           SIDEBAR_CHROME_BTN,
-                          "sidebar-reopen absolute top-[calc((var(--desktop-header-h)-35px)/2)] left-2 z-20 hidden size-[34px] p-0",
+                          "sidebar-reopen absolute top-[calc((var(--desktop-header-h)-35px)/2)] left-2 z-float hidden size-[34px] p-0",
                           NEW_LAYOUT_SIDEBAR_REOPEN,
                           sidebarCollapsed && "desktop:inline-flex",
                         )}

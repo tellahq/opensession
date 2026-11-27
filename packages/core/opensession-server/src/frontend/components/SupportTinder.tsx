@@ -505,7 +505,7 @@ function TicketCard({
     // Exit flings left for spam/done (dealt with and gone), right for skip;
     // the card lives in normal flow, hence popOnExit.
     <SwipeCard
-      className="relative z-10 w-full"
+      className="relative z-sticky w-full"
       custom={custom}
       exitFor={(a) => (a === "spam" || a === "done" ? "left" : "right")}
       exitDistance={640}

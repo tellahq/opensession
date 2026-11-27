@@ -346,7 +346,7 @@ function Content({
     // Always body. Base UI nests a portal inside its parent's portal node, so
     // a dialog opened from a popover (the PR card's force merge confirm) would
     // land inside the popover's anchor and its stacking context. There the
-    // page's own z-[1] layers (the composer, the transcript fades) paint over
+    // page's own z-1 layers (the composer, the transcript fades) paint over
     // the scrim.
     <BaseDialog.Portal
       keepMounted={keepMounted}

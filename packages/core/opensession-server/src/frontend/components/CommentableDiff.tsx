@@ -95,7 +95,7 @@ const FILE_BODY =
 // Sidebar Changes still pins filenames. Its canvas fill masks passing code;
 // the filename row draws its own edge only while pinned.
 const STICKY_FILE_HEADER =
-  "sticky top-[calc(var(--review-file-header-top,0px)-1px)] z-[6] bg-surface";
+  "sticky top-[calc(var(--review-file-header-top,0px)-1px)] z-6 bg-surface";
 const STICKY_FILE_HEADER_SURFACE =
   "rounded-md bg-surface group-data-[stuck]:shadow-[inset_0_0_0_1px_var(--border),inset_0_-1px_0_var(--divider)]";
 

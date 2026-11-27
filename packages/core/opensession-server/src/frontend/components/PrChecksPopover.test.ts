@@ -38,8 +38,9 @@ const floatingFeatureSources = await Promise.all(
 );
 
 test("shared floating interactions paint above the workspace summary", () => {
-  expect(summarySource).toContain('positionerClassName="z-[2147483646]"');
-  // One layer token, one step above the summary's 2147483646.
+  expect(summarySource).toContain('positionerClassName="z-frame-hole"');
+  // One layer token, one step above the summary's frame-hole layer.
+  expect(tokensSource).toContain('frameHole: "2147483646"');
   expect(tokensSource).toContain('floating: "2147483647"');
   expect(popupStylesSource).toContain("layer: { zIndex: layer.floating }");
   expect(popupStylesSource).toContain(

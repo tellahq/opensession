@@ -339,7 +339,7 @@ export function SchedulePromptButton({
         // The class name stays: SessionViewer and Sidebar look for an open
         // overlay by this selector before taking a global key.
         <div
-          className="composer-schedule-modal-backdrop fixed inset-0 z-[300] flex items-center justify-center bg-black/40 p-5"
+          className="composer-schedule-modal-backdrop fixed inset-0 z-sheet-scrim flex items-center justify-center bg-black/40 p-5"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setCustomOpen(false);
           }}

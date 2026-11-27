@@ -887,7 +887,7 @@ export function SessionViewerMainRegion({
               createPortal(
                 <>
                   <motion.div
-                    className="pointer-events-none fixed inset-0 z-[12000] flex flex-col items-center justify-center bg-[color-mix(in_srgb,var(--bg-panel)_68%,transparent)] px-6 text-center"
+                    className="pointer-events-none fixed inset-0 z-drop-target flex flex-col items-center justify-center bg-[color-mix(in_srgb,var(--bg-panel)_68%,transparent)] px-6 text-center"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{
@@ -1349,7 +1349,7 @@ export function SessionViewerMainRegion({
                   <button
                     className={cn(
                       TRANSCRIPT_ICON_BUTTON,
-                      `absolute bottom-[calc(24px+var(--suggestions-under,0px))] left-1/2 z-[5] ${PILL_CENTRED}`,
+                      `absolute bottom-[calc(24px+var(--suggestions-under,0px))] left-1/2 z-5 ${PILL_CENTRED}`,
                     )}
                     type="button"
                     aria-label="Scroll to the bottom"

@@ -126,7 +126,7 @@ export function SandboxDesktopPane({ sessionId }: { sessionId: string }) {
           <div
             role="status"
             aria-label="Loading the desktop"
-            className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-panel"
+            className="pointer-events-none absolute inset-0 z-sticky flex items-center justify-center bg-panel"
           >
             <PageLoader className="text-dim" />
           </div>

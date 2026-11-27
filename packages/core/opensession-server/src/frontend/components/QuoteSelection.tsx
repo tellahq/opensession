@@ -408,7 +408,7 @@ export function QuoteSelection({
       initial={{ opacity: 0, scale: 0.96 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ type: "tween", duration: duration.micro, ease }}
-      className="fixed z-1000 inline-flex min-h-8 items-stretch overflow-hidden whitespace-nowrap rounded-[999px] bg-popup text-label font-semibold text-fg [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm"
+      className="fixed z-inline-float inline-flex min-h-8 items-stretch overflow-hidden whitespace-nowrap rounded-[999px] bg-popup text-label font-semibold text-fg [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm"
       style={{
         left: placement?.left ?? 0,
         top: placement?.top ?? 0,
@@ -426,7 +426,7 @@ export function QuoteSelection({
           size="md"
           icon={<IconCursor size={20} />}
           onClick={add}
-          className="rounded-none text-fg hover:text-fg focus-visible:z-[1]"
+          className="rounded-none text-fg hover:text-fg focus-visible:z-1"
         >
           Add to chat
         </Button>
@@ -438,7 +438,7 @@ export function QuoteSelection({
           icon={<IconMessage size={20} />}
           onClick={comment}
           className={cn(
-            "rounded-none text-fg hover:text-fg focus-visible:z-[1]",
+            "rounded-none text-fg hover:text-fg focus-visible:z-1",
             quoting && "border-l-line-strong",
           )}
         >
@@ -451,7 +451,7 @@ export function QuoteSelection({
           size="md"
           icon={<IconBrowserTab size={20} />}
           onClick={startNewChat}
-          className="rounded-none border-l-line-strong text-fg hover:text-fg focus-visible:z-[1]"
+          className="rounded-none border-l-line-strong text-fg hover:text-fg focus-visible:z-1"
         >
           Start new chat
         </Button>

@@ -217,7 +217,7 @@ function ThreadPanel({
       className={cn(
         "flex min-h-0 flex-col",
         phone
-          ? "absolute inset-0 z-20 bg-surface"
+          ? "absolute inset-0 z-float bg-surface"
           : "w-[min(420px,42%)] shrink-0 border-l border-divider",
       )}
     >

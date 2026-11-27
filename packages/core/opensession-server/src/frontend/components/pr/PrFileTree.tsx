@@ -607,7 +607,7 @@ export function PrFileTree({
           aria-valuenow={Math.round(renderedWidth)}
           tabIndex={0}
           className={cn(
-            "absolute inset-y-0 z-10 w-[9px] cursor-col-resize",
+            "absolute inset-y-0 z-sticky w-[9px] cursor-col-resize",
             "touch-none after:absolute after:inset-y-1 after:left-1 after:w-px after:bg-transparent after:transition-[background-color] after:content-[''] hover:after:bg-accent focus-visible:outline-none focus-visible:after:bg-accent [body.resizing-pr-file-tree_&]:after:bg-accent",
             side === "right" ? "-left-1" : "-right-1",
           )}

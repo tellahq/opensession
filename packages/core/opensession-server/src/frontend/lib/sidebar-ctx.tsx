@@ -9,7 +9,7 @@ import type { UnifiedSession } from "./types";
 // legacy.css is — so a separate stylesheet silently doesn't apply.
 export const CTX_MENU_STYLE: React.CSSProperties = {
   position: "fixed",
-  zIndex: 3000,
+  zIndex: "var(--layer-context-menu)",
   minWidth: 210,
   maxWidth: 320,
   maxHeight: "60vh",

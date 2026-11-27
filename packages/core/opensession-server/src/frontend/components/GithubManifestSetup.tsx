@@ -73,7 +73,7 @@ function GithubSetupStep({
       >
         <span className="sr-only">{label}</span>
       </Button>
-      <div className="pointer-events-none relative z-10 flex min-h-11 items-center px-3.5 text-base font-medium text-dim">
+      <div className="pointer-events-none relative z-sticky flex min-h-11 items-center px-3.5 text-base font-medium text-dim">
         <span
           aria-hidden="true"
           className={cn(

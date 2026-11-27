@@ -691,7 +691,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 #vg-tooltip-element {
   visibility: hidden;
   position: fixed;
-  z-index: 1000;
+  z-index: var(--layer-inline-float);
   max-width: 320px;
   padding: 6px 8px;
   font-size: 11px;

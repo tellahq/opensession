@@ -441,7 +441,7 @@ function PrivateAppSetup({
               Verify Caddy and the certificate, then try again.
             </InlineAlert>
           )}
-        <SettingsFormActions className="absolute inset-x-0 bottom-0 z-10 m-0 border-t border-line bg-raised px-5 py-4 phone:flex-col-reverse phone:bg-surface phone:px-4">
+        <SettingsFormActions className="absolute inset-x-0 bottom-0 z-sticky m-0 border-t border-line bg-raised px-5 py-4 phone:flex-col-reverse phone:bg-surface phone:px-4">
           <Button
             variant="soft"
             disabled={busy || !savedDomain}

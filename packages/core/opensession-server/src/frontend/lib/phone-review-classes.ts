@@ -6,7 +6,7 @@
  * last line can scroll out from behind the pill.
  */
 export const PHONE_REVIEW_PILL_DOCK =
-  "pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center px-3 pb-[max(12px,env(safe-area-inset-bottom))]";
+  "pointer-events-none absolute inset-x-0 bottom-0 z-sticky flex justify-center px-3 pb-[max(12px,env(safe-area-inset-bottom))]";
 
 export const PHONE_REVIEW_PILL =
   "pointer-events-auto flex max-w-full items-center gap-1 rounded-[999px] bg-raised p-1 smooth-shadow-ring-md";

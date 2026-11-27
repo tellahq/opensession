@@ -1004,15 +1004,15 @@ function CategoryPage({
 
   return (
     <SettingsPanel>
-      <h2 className="relative z-20 m-0 hidden px-5 text-section-title font-semibold text-fg phone:block">
+      <h2 className="relative z-float m-0 hidden px-5 text-section-title font-semibold text-fg phone:block">
         {category.pageTitle}
       </h2>
       <SettingsHeader
         title={category.pageTitle}
         description={`${category.description} ${count} ${count === 1 ? "memory" : "memories"}.`}
-        className="relative z-20 phone:mt-1.5"
+        className="relative z-float phone:mt-1.5"
       />
-      <div className="sticky top-0 z-10 mb-3 flex items-center justify-between gap-3 bg-surface px-5 py-2 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-11 before:bg-surface before:content-[''] after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-6 after:bg-[linear-gradient(to_bottom,var(--bg),transparent)] after:content-[''] phone:before:h-4">
+      <div className="sticky top-0 z-sticky mb-3 flex items-center justify-between gap-3 bg-surface px-5 py-2 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-11 before:bg-surface before:content-[''] after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-6 after:bg-[linear-gradient(to_bottom,var(--bg),transparent)] after:content-[''] phone:before:h-4">
         <Button
           size="sm"
           variant="ghost"

@@ -188,7 +188,7 @@ function AssetSideButton({
         }
         aria-label={label}
         className={cn(
-          "absolute top-1/2 z-20 size-10 -translate-y-1/2 rounded-full bg-raised smooth-shadow-sm",
+          "absolute top-1/2 z-float size-10 -translate-y-1/2 rounded-full bg-raised smooth-shadow-sm",
           previous ? "right-full mr-3" : "left-full ml-3",
         )}
         onClick={onClick}
@@ -512,7 +512,7 @@ function AssetOverlayFooter({
   return (
     <div
       className={cn(
-        "z-20 flex shrink-0 flex-col items-center gap-1 px-3 py-2",
+        "z-float flex shrink-0 flex-col items-center gap-1 px-3 py-2",
         !phone && "absolute left-0 right-0 top-full mt-2",
       )}
     >
@@ -1061,7 +1061,7 @@ export function AssetOverlay({
         <button
           type="button"
           aria-label="Close"
-          className="absolute right-[calc(12px+env(safe-area-inset-right,0px))] top-[calc(12px+env(safe-area-inset-top,0px))] z-20 grid size-11 place-items-center rounded-full border-0 bg-white/15 text-white backdrop-blur-xl transition-[transform,background-color] active:scale-[0.96] hover:bg-white/20"
+          className="absolute right-[calc(12px+env(safe-area-inset-right,0px))] top-[calc(12px+env(safe-area-inset-top,0px))] z-float grid size-11 place-items-center rounded-full border-0 bg-white/15 text-white backdrop-blur-xl transition-[transform,background-color] active:scale-[0.96] hover:bg-white/20"
           onClick={onClose}
         >
           <IconX size={24} />
@@ -1071,7 +1071,7 @@ export function AssetOverlay({
           <button
             type="button"
             aria-label="Close"
-            className="absolute right-0 top-0 z-20 grid size-10 place-items-center rounded-full border-0 bg-white/15 text-white backdrop-blur-xl transition-[transform,background-color] active:scale-[0.96] hover:bg-white/20"
+            className="absolute right-0 top-0 z-float grid size-10 place-items-center rounded-full border-0 bg-white/15 text-white backdrop-blur-xl transition-[transform,background-color] active:scale-[0.96] hover:bg-white/20"
             onClick={onClose}
           >
             <IconX size={20} />

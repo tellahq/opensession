@@ -358,7 +358,7 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
         closeDelay={140}
         aria-label="Jump to a message"
         className={cn(
-          "absolute top-1/2 z-[4] hidden -translate-y-1/2 cursor-pointer",
+          "absolute top-1/2 z-4 hidden -translate-y-1/2 cursor-pointer",
           "rounded-md border-0 bg-transparent p-0 focus-ring",
           // Both conditions on one stacked variant, so neither can
           // out-order the other. It matches the gutter the transcript

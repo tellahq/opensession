@@ -204,7 +204,7 @@ export function AppSidebar({
           // stack — full bleed under the pushed detail pane — rather than
           // a fixed-width column.
           isPhone
-            ? "absolute inset-0 z-[1] w-full"
+            ? "absolute inset-0 z-1 w-full"
             : "relative w-[var(--sidebar-w,280px)]",
           // Collapsed hides the whole left column; on phones the page
           // stack owns the sidebar and the class is inert.
@@ -352,7 +352,7 @@ export function AppSidebar({
 						    edge while the list scrolls. */}
         <div
           className={cn(
-            "absolute top-0 right-[-3px] z-30 h-full w-[7px] cursor-col-resize after:absolute after:top-0 after:right-[3px] after:h-full after:w-[2px] after:bg-transparent after:transition-[background] after:content-[''] hover:after:bg-line-strong [body.resizing-sidebar_&]:after:bg-faint",
+            "absolute top-0 right-[-3px] z-shell-overlay h-full w-[7px] cursor-col-resize after:absolute after:top-0 after:right-[3px] after:h-full after:w-[2px] after:bg-transparent after:transition-[background] after:content-[''] hover:after:bg-line-strong [body.resizing-sidebar_&]:after:bg-faint",
             isPhone && "hidden",
           )}
           onMouseDown={startSidebarResize}

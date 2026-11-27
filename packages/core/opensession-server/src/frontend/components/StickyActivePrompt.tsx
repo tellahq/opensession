@@ -94,7 +94,7 @@ export function StickyActivePrompt({
   // column, the summary card's step) so the pill lands on the bubble's edge.
   return (
     <div
-      className={`pointer-events-none absolute inset-x-0 top-2 z-20 px-5 ${RAIL_GUTTER_CLASS} phone:hidden`}
+      className={`pointer-events-none absolute inset-x-0 top-2 z-float px-5 ${RAIL_GUTTER_CLASS} phone:hidden`}
     >
       <div className="mx-auto flex w-full max-w-[var(--session-col)] justify-end desktop:translate-x-[var(--ws-summary-step,0px)]">
         <AnimatePresence initial={false}>

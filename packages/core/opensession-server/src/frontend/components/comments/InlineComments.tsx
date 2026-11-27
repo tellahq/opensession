@@ -531,7 +531,7 @@ export function InlineComments({
     <>
       <div
         ref={overlayRef}
-        className="pointer-events-none absolute inset-0 z-[5] overflow-hidden"
+        className="pointer-events-none absolute inset-0 z-5 overflow-hidden"
       >
         <div ref={layerRef} className="absolute inset-x-0 top-0">
           {cards.map((card) => {
@@ -565,7 +565,7 @@ export function InlineComments({
           icon={<IconMessages size={20} />}
           onClick={() => setListOpen(true)}
           aria-label={`Comments, ${openCount} open`}
-          className="absolute top-2 z-[6] phone:top-[calc(var(--header-h)+4px)]"
+          className="absolute top-2 z-6 phone:top-[calc(var(--header-h)+4px)]"
           // Beside the workspace summary when it covers the corner.
           style={{
             right: geometry
@@ -695,7 +695,7 @@ function MarginCard({
       onWheel={onWheel}
       className={cn(
         "pointer-events-auto absolute overflow-y-auto overscroll-contain rounded-xl bg-popup p-3 [--smooth-ring-color:var(--popup-ring)] motion-safe:transition-[top,box-shadow] motion-safe:duration-150",
-        active ? "z-[2] smooth-shadow-ring-md" : "smooth-shadow-ring-sm",
+        active ? "z-2 smooth-shadow-ring-md" : "smooth-shadow-ring-sm",
       )}
       style={{ top, left, width, maxHeight }}
     >

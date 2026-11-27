@@ -400,7 +400,7 @@ export function Reviews({
   return (
     <div className="relative flex min-h-0 flex-1">
       <div className="flex min-w-0 flex-1 flex-col overflow-y-auto phone:overflow-x-hidden">
-        <div className="sticky top-0 z-[3] bg-surface px-[22px] pt-4">
+        <div className="sticky top-0 z-3 bg-surface px-[22px] pt-4">
           <div className="mb-3 flex items-center justify-between gap-4">
             <h1 className="m-0 text-section-title font-title tracking-tight">
               Reviews

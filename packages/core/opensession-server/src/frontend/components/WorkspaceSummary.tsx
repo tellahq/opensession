@@ -444,7 +444,7 @@ export function WorkspaceSummary({
         positionMethod="absolute"
         // The summary stays above sticky workspace chrome, but reserves the
         // final z-index step for hover previews opened from inside the card.
-        positionerClassName="z-[2147483646]"
+        positionerClassName="z-frame-hole"
         // Pull past the header action row's 16px inset to leave a consistent
         // 12px edge gutter. Its quiet shadow does not need more clearance.
         alignOffset={-4}
@@ -1291,7 +1291,7 @@ export function WorkspaceSummaryBody({
         " [&_.ws-summary-band]:mx-0 [&_.ws-summary-band]:mb-0 [&_.ws-summary-band]:px-2 [&_.ws-summary-band]:py-3 [&_.ws-summary-band]:[border-radius:inherit]",
       )
     : prGroupRef
-      ? "sticky top-0 z-10 flex flex-col bg-panel-surface pt-2"
+      ? "sticky top-0 z-sticky flex flex-col bg-panel-surface pt-2"
       : cn(groupClass, "[&>.ws-summary-band:last-child]:mb-0");
 
   return (

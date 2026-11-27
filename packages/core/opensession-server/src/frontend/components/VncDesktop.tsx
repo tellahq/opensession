@@ -105,13 +105,13 @@ export function VncDesktop({
         <div
           role="status"
           aria-label="Connecting to the desktop"
-          className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-panel"
+          className="pointer-events-none absolute inset-0 z-sticky flex items-center justify-center bg-panel"
         >
           <PageLoader className="text-dim" />
         </div>
       ) : null}
       {state.phase === "closed" ? (
-        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-panel p-8 text-center">
+        <div className="absolute inset-0 z-sticky flex flex-col items-center justify-center gap-3 bg-panel p-8 text-center">
           <div className="text-base font-medium text-fg">{state.reason}</div>
           <Button variant="default" size="md" onClick={onRetry}>
             Reconnect

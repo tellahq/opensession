@@ -139,10 +139,10 @@ export const VIEWER_BRANCH_RENAME =
 export const VIEWER_HEADER_ACTIONS =
   // The tab strip overlaps the header's lower edge to tighten the two rows.
   // Keep every header action above that overlap so its bottom edge and hit area
-  // remain intact. And above the chat's sticky prompt pill (z-20,
+  // remain intact. And above the chat's sticky prompt pill (z-float,
   // StickyActivePrompt.tsx): the workspace summary card is portaled into this
   // row and hangs over the top of the chat, so this row's step is the card's.
-  "viewer-header-actions pwa-header-actions relative z-[21] flex shrink-0 items-center gap-0.5 phone:justify-end " +
+  "viewer-header-actions pwa-header-actions relative z-header-actions flex shrink-0 items-center gap-0.5 phone:justify-end " +
   // Phones give every control in the row a 44px touch target. Keyed off the
   // row rather than written on each control because these are shared
   // primitives (Button, and the source links below). A descendant selector also
@@ -244,7 +244,7 @@ export const VIEWER_MESSAGES_REGION = "relative flex min-h-0 flex-1 flex-col";
  * composer's fade does.
  */
 export const VIEWER_TOP_FADE =
-  "pointer-events-none absolute left-0 right-[14px] top-0 z-[1] h-6 " +
+  "pointer-events-none absolute left-0 right-[14px] top-0 z-1 h-6 " +
   "scrim-to-t " +
   "opacity-0 transition-opacity duration-150 motion-reduce:transition-none " +
   "data-[scrolled]:opacity-100 phone:hidden";
@@ -316,11 +316,11 @@ export const VIEWER_MESSAGES =
  * the box and reaches solid at the composer's edge, so rows dissolve into the composer instead of
  * being cut at it. Below that edge the box itself is solid page colour, so
  * nothing shows around the composer's rounded corners. The fade sits at
- * `z-[-1]` inside the box's own stacking context: behind the composer and the
+ * `-z-1` inside the box's own stacking context: behind the composer and the
  * floating action band, over the transcript.
  */
 export const VIEWER_INPUT =
-  "relative z-[1] mt-[calc(-1*(var(--session-under)_+_var(--next-rise,0px)))] shrink-0 px-5 pt-1 pb-3.5 " +
+  "relative z-1 mt-[calc(-1*(var(--session-under)_+_var(--next-rise,0px)))] shrink-0 px-5 pt-1 pb-3.5 " +
   // The same gutter the transcript keeps, so the input stays on the column's
   // edges rather than reaching past them.
   `${RAIL_GUTTER_CLASS} ` +
@@ -328,7 +328,7 @@ export const VIEWER_INPUT =
   // edge also fades an overlay scrollbar. Leave its narrow gutter unpainted;
   // raising the scroller would incorrectly lift transcript content too.
   "[background:linear-gradient(var(--bg),var(--bg))_left_bottom/calc(100%_-_14px)_calc(100%_-_var(--session-under)_-_var(--next-rise,0px))_no-repeat] " +
-  "before:pointer-events-none before:absolute before:left-0 before:right-[14px] before:z-[-1] before:content-[''] " +
+  "before:pointer-events-none before:absolute before:left-0 before:right-[14px] before:-z-1 before:content-[''] " +
   "before:top-[calc(var(--next-rise,0px)_-_32px)] before:h-[calc(32px_+_var(--session-under))] " +
   "before:scrim-to-b " +
   // Phone: clear the home indicator rather than jamming the composer against
@@ -348,7 +348,7 @@ export const VIEWER_INPUT =
   // one child out; the fade and the floating actions stay under the blur.
   "[html[data-lightbox-composer]_&]:z-auto " +
   "[html[data-lightbox-composer]_&>:has(.composer)]:relative " +
-  "[html[data-lightbox-composer]_&>:has(.composer)]:z-[11001]";
+  "[html[data-lightbox-composer]_&>:has(.composer)]:z-lightbox-composer";
 
 /**
  * The step the transcript and the composer take while the workspace summary
@@ -500,7 +500,7 @@ export const SESSION_BANNERS =
   // Phone: the session header floats over the top of the column, so an
   // in-flow row would sit hidden under it. Pin it under the header (and the
   // docked tab strip, when shown) like the strip itself.
-  "phone:absolute phone:inset-x-0 phone:top-[calc(var(--pane-header-h)+var(--strip-clearance,0px))] phone:z-[5] phone:px-3";
+  "phone:absolute phone:inset-x-0 phone:top-[calc(var(--pane-header-h)+var(--strip-clearance,0px))] phone:z-5 phone:px-3";
 
 /** A single notice pill. It carries no ink of its own: the caller supplies the
  *  tone, because two text-colour utilities on one element are resolved by
@@ -638,7 +638,7 @@ export const TRANSCRIPT_PILL_SPINNER =
  * It is a sibling of the scroll area rather than a row inside it, so it does
  * not inherit the transcript's own top padding. On a phone that padding is the
  * only thing holding content clear of the chrome: the bar there is a fixed
- * `z-40` overlay across the top of the pane, with the docked tab strip under
+ * `z-chrome` overlay across the top of the pane, with the docked tab strip under
  * it on a multi-session workspace. 12px therefore put the pill behind both,
  * rendered and covered and untappable at every scroll position. It clears the
  * same chrome the transcript clears.
@@ -647,7 +647,7 @@ export const TRANSCRIPT_PILL_SPINNER =
  * transcript. Its phone position clears the fixed navigation and tab chrome.
  */
 export const TRANSCRIPT_PILL_TOP =
-  `pointer-events-none absolute top-3 left-1/2 z-[5] ${PILL_CENTRED} ` +
+  `pointer-events-none absolute top-3 left-1/2 z-5 ${PILL_CENTRED} ` +
   "phone:top-[calc(var(--pane-header-h)+var(--strip-clearance,0px)+8px)]";
 
 /**
@@ -666,7 +666,7 @@ export const TRANSCRIPT_PILL_TOP =
  * touching whatever sits below it.
  */
 export const TRANSCRIPT_SYNC_SPOT =
-  "pointer-events-none absolute left-1/2 z-[5] flex " +
+  "pointer-events-none absolute left-1/2 z-5 flex " +
   "bottom-[calc(var(--session-under,0px)+var(--suggestions-under,0px)+8px)] " +
   PILL_CENTRED;
 
@@ -697,12 +697,12 @@ export const TRANSCRIPT_SYNC_SPOT =
  *  height first and clipped the strip inside it, down to nothing on a short
  *  viewport, while the sections that cannot shrink kept theirs. */
 export const INFO_PAGE =
-  "fixed inset-0 z-[60] flex flex-col gap-0.5 overflow-y-auto overscroll-contain bg-surface " +
+  "fixed inset-0 z-sheet flex flex-col gap-0.5 overflow-y-auto overscroll-contain bg-surface " +
   "pb-[max(16px,env(safe-area-inset-bottom,0px))] [&>*]:shrink-0 " +
   "[animation:session-info-in_var(--dur)_var(--ease)]";
 
 const INFO_TOPBAR =
-  "session-info-topbar sticky top-0 z-[4] flex items-center " +
+  "session-info-topbar sticky top-0 z-4 flex items-center " +
   "min-h-[calc(env(safe-area-inset-top,0px)+52px)] " +
   "pt-[env(safe-area-inset-top,0px)] px-2 pb-0 " +
   "[transition:background-color_var(--dur)_var(--ease)]";

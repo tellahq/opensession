@@ -166,7 +166,7 @@ export function SetupWidget({
     <aside
       aria-labelledby="sidebar-setup-title"
       className={cn(
-        "z-30 flex-none rounded-2xl border border-divider-soft bg-popup-glass p-2 [backdrop-filter:var(--popup-blur)] smooth-shadow-sm",
+        "z-shell-overlay flex-none rounded-2xl border border-divider-soft bg-popup-glass p-2 [backdrop-filter:var(--popup-blur)] smooth-shadow-sm",
         placement === "desktop" ? "mx-2 mb-2" : "mx-3 mt-3 mb-20",
       )}
       style={placement === "phone" ? { order: 100 } : undefined}

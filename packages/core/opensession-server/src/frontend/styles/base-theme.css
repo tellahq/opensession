@@ -388,6 +388,44 @@
   --chip-linear-fg: #9da6ee;
   --mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
   --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  /* Stacking layers, bottom to top. The one place an app-level z-index is
+	   written: Tailwind reads them as `z-<name>` and StyleX as `layer.<name>`.
+	   Inside a component's own stacking context, order siblings with small
+	   integers (`-z-1` to `z-9`) instead. */
+  --layer-sticky: 10;
+  --layer-float: 20;
+  --layer-header-actions: 21;
+  --layer-shell-pane: 25;
+  --layer-shell-overlay: 30;
+  --layer-tab-strip: 31;
+  --layer-chrome: 40;
+  --layer-drawer: 45;
+  --layer-dock: 50;
+  --layer-sheet: 60;
+  --layer-debug: 70;
+  --layer-voice: 90;
+  --layer-drag-ghost: 100;
+  --layer-notice: 200;
+  --layer-sheet-scrim: 300;
+  --layer-sheet-popup: 301;
+  --layer-fab: 500;
+  --layer-inline-float: 1000;
+  --layer-context-menu: 3000;
+  --layer-panel: 5000;
+  --layer-palette-scrim: 6000;
+  --layer-palette: 6001;
+  --layer-toast: 9500;
+  --layer-modal-scrim: 10000;
+  --layer-modal: 10001;
+  --layer-lightbox-under: 10999;
+  --layer-lightbox: 11000;
+  --layer-lightbox-composer: 11001;
+  --layer-drop-target: 12000;
+  /* frame-hole (2147483646) and floating (2147483647) sit at the top of the
+	   32-bit range, so they are written as numbers in tailwind.css and
+	   tokens.stylex.ts rather than read from here: through var(), Chrome
+	   rounds both to 2147480000, which ties them. */
+
   /* The web keeps desktop's compact metrics, while a phone promotes every role
 	   one rung. These are real custom properties, rather than values written
 	   directly into Tailwind's @theme block, so the same utility can follow the

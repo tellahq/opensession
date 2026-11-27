@@ -31,7 +31,7 @@
    · `border-transparent` is a real 1px border holding layout, not decoration.
      The wash is `inset-1` from the PADDING box, so dropping the border would
      grow it from 30px to 32px.
-   · `[&>*]:relative [&>*]:z-[1]` lifts the glyph (and the new-session
+   · `[&>*]:relative [&>*]:z-1` lifts the glyph (and the new-session
      footer's count badge) above the wash — the pseudo-element is positioned,
      so it would otherwise paint over static in-flow content.
    · It is a circle, like every button in the app, and so is its wash.
@@ -44,7 +44,7 @@
 export const paletteIconBtn =
   "relative inline-flex size-10 items-center justify-center rounded-full border border-transparent text-item-title text-dim transition-[color] hover:text-fg disabled:cursor-default disabled:opacity-50 " +
   "before:absolute before:inset-1 before:z-0 before:rounded-full before:[corner-shape:round] before:transition-[background,box-shadow] before:content-[''] hover:before:bg-hover " +
-  "[&>*]:relative [&>*]:z-[1] phone:[&_svg]:size-5";
+  "[&>*]:relative [&>*]:z-1 phone:[&_svg]:size-5";
 
 /** On reads as one filled accent chip: the glyph lights up with its wash. The
  *  hover colour is restated because the base's `hover:text-fg` is a different

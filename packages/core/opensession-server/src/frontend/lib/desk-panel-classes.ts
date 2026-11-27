@@ -8,7 +8,7 @@ export const DESK_PANEL_GRAB =
 /** Invisible strips along the shell's edges and squares on its corners. They
  *  sit inside the shell (it clips overflow), the corners listed last so they
  *  win over the edges where the two overlap. */
-export const DESK_PANEL_HANDLE = "absolute z-[1] touch-none";
+export const DESK_PANEL_HANDLE = "absolute z-1 touch-none";
 
 export const DESK_PANEL_HANDLES: {
   id: DeskResizeHandle;

@@ -77,7 +77,7 @@ export const PANEL_SHELL =
   // overlay over the session, anchored under the top bar (--header-h is 0 on
   // desktop, the bar's height on a phone) with PANEL_OVERLAY dimming behind it.
   "max-[920px]:fixed max-[920px]:top-[var(--header-h)] max-[920px]:right-0 max-[920px]:bottom-0 " +
-  "max-[920px]:z-30 max-[920px]:w-[min(480px,94vw)] max-[920px]:max-w-none max-[920px]:min-w-0 " +
+  "max-[920px]:z-shell-overlay max-[920px]:w-[min(480px,94vw)] max-[920px]:max-w-none max-[920px]:min-w-0 " +
   "max-[920px]:shadow-[-12px_0_32px_rgba(0,0,0,0.5)]";
 
 /**
@@ -104,7 +104,7 @@ export const PANEL_ENTER =
  * (0,3,0 over 0,2,0); this makes the two states mutually exclusive instead.
  */
 export const PANEL_RESIZE =
-  "absolute top-0 left-[-3px] z-[6] h-full w-[7px] cursor-col-resize phone:hidden " +
+  "absolute top-0 left-[-3px] z-6 h-full w-[7px] cursor-col-resize phone:hidden " +
   "after:absolute after:inset-y-0 after:left-[3px] after:w-0.5 after:bg-transparent " +
   "after:transition-[background-color] after:content-[''] " +
   "[body:not(.resizing-panel)_&]:hover:after:bg-line-strong " +
@@ -156,7 +156,7 @@ export const PANEL_INFO_TOP = "pt-2 [.panel-pr-plate:not(:empty)~*_&]:pt-0";
 /** The accent outline over the open panel while a tab is dragged onto it,
  *  the same paint as the main strip's split preview. */
 export const PANEL_DROP_PREVIEW =
-  "pointer-events-none absolute inset-2 z-[7] rounded-lg border-2 border-accent " +
+  "pointer-events-none absolute inset-2 z-7 rounded-lg border-2 border-accent " +
   "bg-[color-mix(in_srgb,var(--accent)_18%,transparent)]";
 
 /** The panel's scrolling content. */
@@ -213,6 +213,6 @@ export const PANEL_NEW_ROW =
  */
 export const PANEL_OVERLAY =
   "hidden " +
-  "max-[920px]:fixed max-[920px]:inset-[var(--header-h)_0_0_0] max-[920px]:z-[25] " +
+  "max-[920px]:fixed max-[920px]:inset-[var(--header-h)_0_0_0] max-[920px]:z-shell-pane " +
   "max-[920px]:block max-[920px]:bg-[rgba(0,0,0,0.45)] " +
-  "phone:inset-0 phone:z-[45] phone:bg-[rgba(0,0,0,0.5)]";
+  "phone:inset-0 phone:z-drawer phone:bg-[rgba(0,0,0,0.5)]";

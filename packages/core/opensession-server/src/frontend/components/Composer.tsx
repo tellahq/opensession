@@ -1580,7 +1580,7 @@ export function Composer({
           minimized && "composer-min",
           composerBox,
           minimized ? composerBoxMinimized : composerBoxExpanded,
-          "isolate before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-[inherit] before:[corner-shape:inherit] before:bg-[var(--composer-note-bg)] before:opacity-0 before:transition-opacity before:duration-150 before:ease-[cubic-bezier(0.32,0.72,0,1)] [&>*]:relative [&>*]:z-[1]",
+          "isolate before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-[inherit] before:[corner-shape:inherit] before:bg-[var(--composer-note-bg)] before:opacity-0 before:transition-opacity before:duration-150 before:ease-[cubic-bezier(0.32,0.72,0,1)] [&>*]:relative [&>*]:z-1",
           noteMode && "before:opacity-100",
           disabled && "opacity-60",
         )}
@@ -1590,7 +1590,7 @@ export function Composer({
             typing looks identical with the pref on. Sits above the input wrap's
             scroll-fade mask. */}
         {vimEnabled && vim.mode !== "insert" && (
-          <div className="pointer-events-none absolute right-3 top-2 z-[2] select-none rounded-sm border border-line bg-surface px-1.5 py-0.5 text-meta font-semibold tracking-wide text-dim">
+          <div className="pointer-events-none absolute right-3 top-2 z-2 select-none rounded-sm border border-line bg-surface px-1.5 py-0.5 text-meta font-semibold tracking-wide text-dim">
             {vim.mode === "normal"
               ? "NORMAL"
               : vim.mode === "visual"
@@ -1821,7 +1821,7 @@ export function Composer({
               // With the mirror painting the styled draft, the field's own
               // glyphs go transparent and only the caret stays visible.
               hlActive
-                ? "relative z-[1] break-words text-transparent caret-[var(--text)]"
+                ? "relative z-1 break-words text-transparent caret-[var(--text)]"
                 : "text-fg",
             )}
             // In the resting pill the full prompt would clip, so show a short

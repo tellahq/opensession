@@ -87,7 +87,7 @@ export function WorkflowAgentTranscript({ runId, agent, onBack }: Props) {
 
   return (
     <div className="flex min-h-0 flex-col">
-      <div className="sticky top-0 z-10 border-b border-divider bg-panel px-2 py-2">
+      <div className="sticky top-0 z-sticky border-b border-divider bg-panel px-2 py-2">
         <button
           className="flex w-full items-center gap-1.5 rounded-control px-1 py-0.5 text-left transition-colors hover:bg-hover"
           onClick={onBack}

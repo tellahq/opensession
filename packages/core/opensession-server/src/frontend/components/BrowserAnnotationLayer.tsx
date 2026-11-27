@@ -254,9 +254,9 @@ export function BrowserAnnotationLayer({
   return (
     <div
       ref={layerRef}
-      // Over the frame, which paints from KeptFrameLayer: z-10 lifts this
+      // Over the frame, which paints from KeptFrameLayer: z-sticky lifts this
       // above it. A crosshair says the page is not live while this is up.
-      className="absolute inset-0 z-10 cursor-crosshair touch-none overflow-hidden select-none"
+      className="absolute inset-0 z-sticky cursor-crosshair touch-none overflow-hidden select-none"
       data-testid="browser-annotation-layer"
       // A dialog around the layer leaves Esc to it (ui/sheet.tsx).
       data-consumes-escape=""

@@ -52,7 +52,7 @@ export const INBOX_ROW =
   "after:pointer-events-none after:absolute after:right-3 after:bottom-0 after:left-12 " +
   "after:h-px after:bg-line after:transition-opacity after:duration-[var(--dur-micro)] " +
   "hover:after:opacity-0 focus-within:after:opacity-0 " +
-  "phone:z-[1] phone:touch-pan-y phone:bg-surface phone:py-3.5 phone:pr-3.5 phone:pl-3.5 " +
+  "phone:z-1 phone:touch-pan-y phone:bg-surface phone:py-3.5 phone:pr-3.5 phone:pl-3.5 " +
   "phone:transform-[translateX(var(--swipe-x,0))] phone:after:left-[50px]";
 
 /** The last row, and the row above a lit one, drop their separator. */
@@ -82,7 +82,7 @@ export const INBOX_ROW_REASON =
 
 /** Desktop actions replace the timestamp on hover or keyboard focus. */
 export const INBOX_ROW_ACTIONS =
-  "absolute top-1.5 right-2 z-[1] flex items-center gap-0.5 opacity-0 transition-opacity " +
+  "absolute top-1.5 right-2 z-1 flex items-center gap-0.5 opacity-0 transition-opacity " +
   "duration-[var(--dur-micro)] ease-[var(--ease)] group-hover:opacity-100 " +
   "group-focus-within:opacity-100 phone:hidden";
 

@@ -243,7 +243,7 @@ html:is(.wco, .desktop-shell):has([data-media-lightbox]) .wco-chrome {
      in a shell that cannot move its lights (app-shell-classes). */
   top: calc((var(--desktop-header-h) - 30px + var(--row-drop, 0px)) / 2);
   left: 50px;
-  z-index: 20;
+  z-index: var(--layer-float);
 }
 /* These controls are siblings of the draggable header rather than descendants
    of it, so the generic header no-drag rule above does not reach them. Mark the

@@ -37,7 +37,7 @@ import { BROWSER_FRAME, BrowserLoading } from "./BrowserPane";
  * the pane's raised chrome and every popup still paint over it.
  *
  * The side panel's frames get a second layer, `panel`, mounted after the
- * panel's column. Below 920px the panel floats at z-30, so its frames rise
+ * panel's column. Below 920px the panel floats at z-shell-overlay, so its frames rise
  * with it; on a phone there is no panel. The layer itself takes no z-index,
  * so each frame stacks on its own: that is what lets a thumbnail rise above
  * the summary card it sits in.
@@ -153,10 +153,10 @@ function KeptFrameBox({
             // media viewer drops the shell's stacking context to lift the
             // composer, so the thumbnail steps just under the viewer (z
             // 11000) or it would paint over the open image.
-            "pointer-events-none absolute z-[2147483646] hidden bg-white " +
-            "[html[data-lightbox-composer]_&]:z-[10999]"
+            "pointer-events-none absolute z-frame-hole hidden bg-white " +
+            "[html[data-lightbox-composer]_&]:z-lightbox-under"
           : panel
-            ? "pointer-events-auto absolute hidden bg-white max-[920px]:z-30"
+            ? "pointer-events-auto absolute hidden bg-white max-[920px]:z-shell-overlay"
             : "pointer-events-auto absolute hidden bg-white"
       }
       data-kept-frame={frame.key}

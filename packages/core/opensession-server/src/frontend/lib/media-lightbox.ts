@@ -89,7 +89,7 @@ html[data-lightbox-transition="closing"]::view-transition-old(root) {
 }
 
 ::view-transition-group(${HERO_TRANSITION_NAME}) {
-  z-index: 11001;
+  z-index: var(--layer-lightbox-composer);
   animation-duration: var(--dur-lg);
   animation-timing-function: var(--ease);
 }

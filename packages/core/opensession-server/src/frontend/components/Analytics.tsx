@@ -171,7 +171,7 @@ function ChartTooltip({
     <div
       ref={ref}
       className={cn(
-        "pointer-events-none absolute z-10 rounded-popup [corner-shape:squircle] bg-popup",
+        "pointer-events-none absolute z-sticky rounded-popup [corner-shape:squircle] bg-popup",
         "px-3 py-2.5 [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-md",
         className,
       )}

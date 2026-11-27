@@ -142,9 +142,9 @@ export function DownloadAppsBody({
             <img
               src={`${BASE_PATH}/download-phone.webp`}
               alt="Open Session installed as a phone web app"
-              className="relative z-10 h-[130%] w-auto max-w-none origin-top rounded-2xl object-contain object-top smooth-shadow-lg"
+              className="relative z-sticky h-[130%] w-auto max-w-none origin-top rounded-2xl object-contain object-top smooth-shadow-lg"
             />
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-1/3 bg-gradient-to-b from-transparent to-surface" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-float h-1/3 bg-gradient-to-b from-transparent to-surface" />
           </div>
         }
         title="Web"
@@ -177,7 +177,7 @@ function AppCard({
   return (
     <section className="flex h-[20rem] flex-col overflow-hidden rounded-[calc(22px*var(--rf))] bg-surface desktop:h-[22rem]">
       <div className="min-h-0 flex-1">{preview}</div>
-      <div className="relative z-10 flex shrink-0 flex-col px-4 pb-4 desktop:px-5 desktop:pb-5">
+      <div className="relative z-sticky flex shrink-0 flex-col px-4 pb-4 desktop:px-5 desktop:pb-5">
         <h3 className="m-0 text-section-title font-semibold leading-tight text-fg">
           {title}
         </h3>

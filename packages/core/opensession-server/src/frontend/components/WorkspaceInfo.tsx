@@ -355,7 +355,7 @@ function CommentCard({
   const addBtn = onAddToInput && (
     <button
       type="button"
-      className="absolute right-1.5 top-1/2 z-[1] -translate-y-1/2 rounded-control border border-line-strong bg-panel px-2 py-0.5 text-meta font-semibold text-dim opacity-0 transition-opacity duration-150 group-hover:opacity-100 hover:border-faint hover:bg-hover hover:text-fg"
+      className="absolute right-1.5 top-1/2 z-1 -translate-y-1/2 rounded-control border border-line-strong bg-panel px-2 py-0.5 text-meta font-semibold text-dim opacity-0 transition-opacity duration-150 group-hover:opacity-100 hover:border-faint hover:bg-hover hover:text-fg"
       onClick={(e) => {
         e.stopPropagation();
         onAddToInput(formatPrCommentPrompt(comment, pr));

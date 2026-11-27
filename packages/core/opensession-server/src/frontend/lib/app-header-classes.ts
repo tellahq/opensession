@@ -86,10 +86,10 @@ import { cn } from "../ui/cn";
  */
 const APP_HEADER_OVERLAY =
   "app-header-overlay " +
-  "phone:fixed phone:inset-x-0 phone:top-0 phone:z-40 phone:bg-transparent " +
+  "phone:fixed phone:inset-x-0 phone:top-0 phone:z-chrome phone:bg-transparent " +
   "phone:pointer-events-none phone:*:pointer-events-auto " +
   "phone:before:absolute phone:before:inset-x-0 phone:before:top-0 " +
-  "phone:before:bottom-auto phone:before:z-[-1] phone:before:h-[calc(100%+30px)] " +
+  "phone:before:bottom-auto phone:before:-z-1 phone:before:h-[calc(100%+30px)] " +
   "phone:[.app:has(.session-tabs)_&]:before:h-full " +
   "phone:before:pointer-events-none phone:before:content-[''] " +
   // The fade is thinned deliberately. It used to be SOLID `--bg` for its first

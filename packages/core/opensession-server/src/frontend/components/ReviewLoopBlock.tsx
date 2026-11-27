@@ -294,7 +294,7 @@ function ReviewLoopResultRow({
     >
       <span
         className={cn(
-          "relative z-[1] flex size-[22px] flex-none self-center items-center justify-center",
+          "relative z-1 flex size-[22px] flex-none self-center items-center justify-center",
           passed ? "text-faint" : "text-red",
         )}
       >
