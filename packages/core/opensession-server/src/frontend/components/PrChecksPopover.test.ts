@@ -66,10 +66,11 @@ test("the summary separates its headline from PR metadata", () => {
   const summary = statusBarSource.slice(summaryStart, summaryEnd);
 
   expect(summaryStart).toBeGreaterThan(-1);
-  // The headline shares the first row with the action; the PR line runs on
-  // under both, so the action never cuts it short.
-  expect(summary).toContain("grid grid-cols-[auto_minmax(0,1fr)_auto]");
-  expect(summary).toContain("col-span-2 col-start-2 row-start-2");
+  // One line: the headline sized to its words, then the PR's mark and number
+  // as their own link, with the title in that link's hover.
+  expect(summary).toContain("flex flex-initial cursor-pointer");
+  expect(summary).toContain("<BrandMark name={provider.key}");
+  expect(summary).toContain("{pr.title || `#${pr.number}`}");
 });
 
 test("the summary's checks preview stays open with its parent", () => {

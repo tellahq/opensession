@@ -974,13 +974,26 @@ export function PrStatusBar({
   // Primary action for the current headline (right side of the strip). In the
   // session header it sizes up to the header's other bordered controls, so the
   // chip and the action read as a matched pair.
-  const actionBtn = variant === "header" ? PR_HEAD_BTN : "";
+  // The summary card's band is one line, so its action is a small pill: at
+  // the strip's 30px it set the band's height on its own.
+  const actionBtn =
+    variant === "header"
+      ? PR_HEAD_BTN
+      : variant === "summary"
+        ? "min-h-6 py-0 pr-2.5 text-meta"
+        : "";
   function withMergeUndo(button: React.ReactNode) {
     if (mergePhase !== "scheduled") return button;
     return (
       <span className="inline-flex shrink-0 items-center gap-1">
         <MergeUndoControl
-          className={variant === "header" ? undefined : "min-h-[30px]"}
+          className={
+            variant === "header"
+              ? undefined
+              : variant === "summary"
+                ? "min-h-6"
+                : "min-h-[30px]"
+          }
           deadline={mergeDeadline}
           onUndo={handleMerge}
         />
@@ -1379,17 +1392,20 @@ export function PrStatusBar({
     // wrapper would drop the focus ring with the box.
     const labelClass = cn(
       WS_SUMMARY_LABEL,
-      "col-start-2 row-start-1 flex cursor-pointer items-baseline gap-1.5 self-center rounded-sm border-none bg-transparent p-0 text-left focus-ring",
+      // Sized to its words rather than the row's spare room, so the PR's
+      // number sits right after the headline. Centred rather than on the
+      // baseline: the phone card makes the link 44px tall, and a baseline row
+      // rides to the top of that box.
+      "flex flex-initial cursor-pointer items-center gap-1.5 rounded-sm border-none bg-transparent p-0 text-left focus-ring",
     );
     const provider = pr ? providerFromUrl(pr.url) : null;
     const externalHint = provider
       ? `${isApple ? "⌘" : "Ctrl"}-click opens in ${provider.name}`
       : undefined;
-    // Two lines: the state with the action beside it, then which PR it is
-    // about. Only the first line shares the row with the action. The second
-    // runs on under it to the band's edge, so the button never cuts the PR's
-    // title short. One line read flat, and stacking the button over both
-    // left the title a third of the band.
+    // One line: the state, which PR it is (the provider's mark and number),
+    // then the action at the far end. The PR's title lives in the hover: it
+    // mostly repeats the session's own title, and as a second line it made
+    // the band twice as tall as the rows under it.
     // A passing total adds nothing next to "Ready to merge" and took the
     // headline's room, and hovering lists every check anyway. So the count
     // only shows while it still needs watching: something pending or failed
@@ -1429,31 +1445,35 @@ export function PrStatusBar({
     }
     // The provider mark makes the modified-click destination visible without
     // competing with the state or the primary action.
-    //
-    // The phone card makes every link a 44px target, which floated this line
-    // far under its headline. The headline and the action are the full-size
-    // targets, so this line keeps its text height (`[&&]` outranks the
-    // card's `[&_a]`).
-    const prLine = pr && provider && (
-      <a
-        className="group/prsum col-span-2 col-start-2 row-start-2 flex min-w-0 items-center gap-1 rounded-sm text-meta text-faint no-underline [&&]:min-h-0 hover:text-dim focus-ring"
-        href={pr.url}
-        target="_blank"
-        rel="noopener"
-        title={`#${pr.number} · ${pr.title}. ${externalHint}`}
-        onClick={(event) =>
-          openInReview(event, onOpenPrTab ? () => onOpenPrTab() : undefined)
+    const prNumber = pr && provider && (
+      <Tooltip
+        label={
+          <span className="flex flex-col gap-0.5">
+            <span>{pr.title || `#${pr.number}`}</span>
+            {externalHint && (
+              <span className="font-normal text-tooltip-fg/60">
+                {externalHint}
+              </span>
+            )}
+          </span>
         }
+        side="bottom"
+        align="start"
+        multiline
       >
-        <BrandMark name={provider.key} size={12} className="shrink-0" />
-        <span className="shrink-0">#{pr.number}</span>
-        {pr.title && <span className="min-w-0 truncate">{pr.title}</span>}
-        <IconArrowUpRight
-          dense
-          size={12}
-          className="shrink-0 opacity-0 transition-opacity duration-150 group-hover/prsum:opacity-100 group-focus-visible/prsum:opacity-100"
-        />
-      </a>
+        <a
+          className="flex shrink-0 items-center gap-1 rounded-sm text-meta text-faint no-underline hover:text-dim focus-ring"
+          href={pr.url}
+          target="_blank"
+          rel="noopener"
+          onClick={(event) =>
+            openInReview(event, onOpenPrTab ? () => onOpenPrTab() : undefined)
+          }
+        >
+          <BrandMark name={provider.key} size={12} className="shrink-0" />
+          <span>#{pr.number}</span>
+        </a>
+      </Tooltip>
     );
     // The row's contents, held apart from the element that carries them: with
     // a PR the row is a right-click target and so has to be a ContextMenu
@@ -1462,12 +1482,9 @@ export function PrStatusBar({
       <>
         {/* The preview environment this PR deployed leads the row, at the far
             end from Merge, Push or Pull: a 28px link next to the merge button
-            was too easy to hit by mistake. It is centred on both lines.
-            Renders nothing when the PR has no preview, and the column closes
-            up. */}
-        <span className="col-start-1 row-span-2 row-start-1 flex items-center self-center empty:hidden">
-          {children}
-        </span>
+            was too easy to hit by mistake. Renders nothing when the PR has
+            no preview, and the row closes up. */}
+        {children}
         {/* When checks exist, the headline is their control: hovering lists
 				    them and clicking opens Review's Checks tab. The PR's own title
 				    stays as the native fallback. */}
@@ -1495,6 +1512,11 @@ export function PrStatusBar({
             label={
               <span className="flex flex-col gap-0.5">
                 <span>Open review</span>
+                {pr.title && (
+                  <span className="font-normal text-tooltip-fg/60">
+                    {pr.title}
+                  </span>
+                )}
                 {externalHint && (
                   <span className="font-normal text-tooltip-fg/60">
                     {externalHint}
@@ -1537,20 +1559,20 @@ export function PrStatusBar({
             </button>
           </Tooltip>
         )}
-        <span className="col-start-3 row-start-1 ml-2 flex items-center self-center empty:hidden">
+        {prNumber}
+        <span className="ml-auto flex shrink-0 items-center empty:hidden">
           {renderAction()}
         </span>
-        {prLine}
       </>
     );
-    // Three columns: the preview mark, the words, the action. Without a
-    // preview mark, the headline takes a small step from the band's left edge
-    // instead. The row keeps its 38px floor for a band with one line.
+    // Without a preview mark, give the headline a small step from the band's
+    // left edge. With the small pill, the row only needs the card's own pitch,
+    // and 4px gaps leave "Ready to merge" whole beside a preview mark, the
+    // number and Merge in the 300px card.
     const summaryRowClass = cn(
       WS_SUMMARY_STATUS_ROW,
-      "grid grid-cols-[auto_minmax(0,1fr)_auto] gap-x-1.5 gap-y-0.5 py-1",
+      "min-h-8 gap-1",
       "[&&:not(:has([data-summary-preview]))]:pl-3",
-      "[&&:not(:has([data-summary-preview]))]:gap-x-0",
     );
     const primarySummary = (
       <div
