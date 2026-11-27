@@ -43,6 +43,7 @@ import { reviewLoopResult, type ReviewLoopResult } from "../lib/review-loop";
 import { useSidePanel } from "./useSidePanel";
 import { useSessionAssets } from "../components/AssetsPanel";
 import { setOpenAsset, useOpenAssetPath } from "../lib/asset-overlay-store";
+import { setAssetTabPath, useAssetTabPath } from "../lib/asset-tab-store";
 import { useSessionReports } from "../components/SessionReportsPanel";
 import { useSessionDatabases } from "../components/SessionDatabasesPanel";
 import { fetchThreadsApi } from "../lib/api";
@@ -375,8 +376,11 @@ export function useSessionViewStateController({
     () => assets.files.map((file) => file.path),
     [assets.files],
   );
-  const [selectedAssetPath, setSelectedAssetPath] = useState<string | null>(
-    null,
+  // Shared with the tab strip, which names the Assets tab after this file.
+  const selectedAssetPath = useAssetTabPath(session.id);
+  const setSelectedAssetPath = useCallback(
+    (path: string | null) => setAssetTabPath(session.id, path),
+    [session.id],
   );
   const overlayAssetPath = useOpenAssetPath(session.id);
   const setOverlayAssetPath = useCallback(
@@ -397,7 +401,7 @@ export function useSessionViewStateController({
       setOverlayAssetPath(null);
       openAssetsRef.current?.();
     },
-    [setOverlayAssetPath],
+    [setSelectedAssetPath, setOverlayAssetPath],
   );
   // An asset opened from the chat (its chip, a link, the inline card) opens
   // full size in the Assets tab. The overlay is only for a view with no tab.

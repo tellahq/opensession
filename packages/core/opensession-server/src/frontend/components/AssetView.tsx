@@ -266,7 +266,9 @@ function AssetMenu({
               )
             : phone
               ? "size-11 rounded-full bg-panel text-dim active:bg-pressed data-[popup-open]:bg-pressed data-[popup-open]:text-fg"
-              : "size-7 rounded-control bg-transparent text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg",
+              : // A small icon Button's pill, so it sits in AssetActions' row
+                // as one of its buttons.
+                "size-6.5 rounded-full bg-transparent text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg phone:size-11",
         )}
       >
         <IconDotsHorizontal size={phone ? 24 : 16} />
@@ -552,9 +554,11 @@ function AssetOverlayFooter({
 }
 
 /**
- * The Assets tab's header: the file's name (a switcher when the folder holds
- * more than one), then Annotate, Open in browser and the overflow menu. The
- * tab is the file at full size, so the header is the only chrome it has.
+ * The Assets tab's toolbar: a switcher when the folder holds more than one
+ * file and the file's size, then Annotate, Open in browser and the overflow
+ * menu. The tab above carries the file's name (asset-tab-store), so this is a
+ * thin row of tools on the tab's own sheet, its continuation rather than a
+ * second header.
  */
 export function AssetActions({
   sessionId,
@@ -582,43 +586,25 @@ export function AssetActions({
   className?: string;
 }) {
   const name = file.path.split("/").pop() || file.path;
-  const folder = file.path.includes("/")
-    ? file.path.slice(0, file.path.lastIndexOf("/"))
-    : null;
   const rawUrl = sessionAssetPreviewUrl(sessionId, file);
   const nativeShare = canUseNativeIOSShare();
-  const title = (
-    <>
-      <span className="truncate text-item-title font-semibold text-fg">
-        {name}
-      </span>
-      {folder && (
-        <span className="min-w-0 shrink truncate text-label text-faint">
-          {folder}
-        </span>
-      )}
-    </>
-  );
 
   return (
     <div
       className={cn(
-        "flex min-h-[var(--desktop-header-h)] shrink-0 items-center gap-1 border-b border-divider py-1.5 pr-2 pl-2",
+        "flex h-9 shrink-0 items-center gap-0.5 border-b border-divider-soft px-1.5 phone:h-auto phone:py-1",
         className,
       )}
     >
-      <div className="min-w-0 flex-1" title={file.path}>
-        {files.length > 1 ? (
+      <div className="flex min-w-0 flex-1 items-center gap-1">
+        {files.length > 1 && (
           <Menu.Root>
             <Menu.Trigger
               aria-label={`${name}, switch file`}
-              className="focus-ring flex max-w-full min-w-0 cursor-pointer items-baseline gap-2 rounded-control border-0 bg-transparent px-2 py-1 text-left hover:bg-hover data-[popup-open]:bg-hover phone:min-h-11 phone:items-center"
+              className="focus-ring flex h-6.5 shrink-0 cursor-pointer items-center gap-1 rounded-full border-0 bg-transparent px-2.5 text-label text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg phone:h-11"
             >
-              {title}
-              <IconChevronDown
-                size={14}
-                className="shrink-0 self-center text-faint"
-              />
+              {files.indexOf(file) + 1} of {files.length}
+              <IconChevronDown size={12} className="shrink-0 text-faint" />
             </Menu.Trigger>
             <Menu.Popup
               align="start"
@@ -643,17 +629,13 @@ export function AssetActions({
               </Menu.RadioGroup>
             </Menu.Popup>
           </Menu.Root>
-        ) : (
-          <div className="flex min-w-0 items-baseline gap-2 px-2 py-1">
-            {title}
-          </div>
+        )}
+        {showSize && (
+          <span className="shrink-0 px-1.5 text-meta tabular-nums text-faint">
+            {formatAssetSize(file.size)}
+          </span>
         )}
       </div>
-      {showSize && (
-        <span className="mr-1 shrink-0 text-meta tabular-nums text-faint phone:hidden">
-          {formatAssetSize(file.size)}
-        </span>
-      )}
       {annotating !== undefined && (
         <Tooltip label={annotating ? "Stop annotating" : "Annotate"}>
           <Button
