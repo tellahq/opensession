@@ -129,11 +129,13 @@ export const TAB_STRIP_ATTACHED =
   "group/strip relative flex min-w-0 flex-1 items-stretch gap-0.5 pt-1.5";
 
 /** Added to TAB_SCROLL: full height so a tab can reach the row's bottom edge,
- *  and above the row's hairline so the active tab covers it. The scroll masks
- *  itself when it overflows, which makes it a stacking context of its own, so
- *  the lift has to be here and not on the tab. The 10px at each end is room
- *  for the first and last tab's flare, which the scroll would otherwise clip. */
-export const TAB_SCROLL_ATTACHED = "relative z-[1] items-stretch px-2.5";
+ *  and above the panel's outline (WORKSPACE_SHELL, z 30) so the active tab
+ *  covers it. The scroll masks itself when it overflows, which makes it a
+ *  stacking context of its own, so the lift has to be here and not on the
+ *  tab. The 10px at the end is room for the last tab's flare, which the
+ *  scroll would otherwise clip. The 24px at the start is that, the panel's
+ *  own 10px corner, and 4px of straight line between the two curves. */
+export const TAB_SCROLL_ATTACHED = "relative z-[31] items-stretch pl-6 pr-2.5";
 
 export const TAB_GROUP_ATTACHED =
   "relative inline-flex flex-none items-stretch gap-0.5";

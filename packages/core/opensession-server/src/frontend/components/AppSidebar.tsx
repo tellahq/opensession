@@ -184,8 +184,8 @@ export function AppSidebar({
           "desktop:[background:linear-gradient(var(--sidebar-material),var(--sidebar-material)),var(--sidebar-bg)]",
           // `!`: the desktop shell's vibrancy rule clears this background by
           // name (html.material-backdrop .sidebar-container).
-          // The new layout: this column's first row is part of the grey
-          // window row, and the sheet starts under it (the wrapper below).
+          // The new layout: this column is part of the grey chrome the
+          // minibar and the window row are, so it paints nothing of its own.
           newLayout && cn("desktop:![background:none]", NEW_LAYOUT_ROW_HEIGHT),
           // On phones the sidebar is the root PAGE of the iOS-style
           // stack — full bleed under the pushed detail pane — rather than
@@ -261,84 +261,72 @@ export function AppSidebar({
           <NotificationBell />
           <TitleBar onSearch={() => commandMenuRef.current?.open()} />
         </div>
-        {/* The new layout's sheet: the list on the page fill, with the one
-            rounded corner where it meets the minibar and the window row. It
-            climbs a pixel so its top edge is the hairline the pane's row
-            draws. Elsewhere the wrapper dissolves and changes nothing. */}
-        <div
-          className={
-            newLayout
-              ? "-mt-px flex min-h-0 flex-1 flex-col overflow-hidden rounded-tl-[10px] [corner-shape:round] border-t border-l border-divider bg-surface [--sidebar-bg:var(--bg)] [--sidebar-material:var(--bg)]"
-              : "contents"
+        <Sidebar
+          ref={sidebarRef}
+          sessions={sessions}
+          registeredRepos={registeredRepoInfo.map((repo) => repo.id)}
+          directToMainBranches={Object.fromEntries(
+            registeredRepoInfo
+              .filter((repo) => repo.sharedCheckout)
+              .map((repo) => [repo.id, repo.defaultBranch]),
+          )}
+          sessionsError={sessionsError}
+          sessionsLoading={loading}
+          onRetrySessions={() => void refresh()}
+          workspaceDataReady={!loading && workspacesLoaded}
+          workspaces={workspaces}
+          teamViewing={teamViewing}
+          // Selection is navigation state, not hydrated session data. The
+          // route changes synchronously when a row opens; waiting for detail
+          // hydration makes the old row look selected while the new session
+          // is already loading.
+          selectedId={
+            route.view === "session" ? (listedSession?.id ?? route.id) : null
           }
-        >
-          <Sidebar
-            ref={sidebarRef}
-            sessions={sessions}
-            registeredRepos={registeredRepoInfo.map((repo) => repo.id)}
-            directToMainBranches={Object.fromEntries(
-              registeredRepoInfo
-                .filter((repo) => repo.sharedCheckout)
-                .map((repo) => [repo.id, repo.defaultBranch]),
-            )}
-            sessionsError={sessionsError}
-            sessionsLoading={loading}
-            onRetrySessions={() => void refresh()}
-            workspaceDataReady={!loading && workspacesLoaded}
-            workspaces={workspaces}
-            teamViewing={teamViewing}
-            // Selection is navigation state, not hydrated session data. The
-            // route changes synchronously when a row opens; waiting for detail
-            // hydration makes the old row look selected while the new session
-            // is already loading.
-            selectedId={
-              route.view === "session" ? (listedSession?.id ?? route.id) : null
-            }
-            prsActive={route.view === "prs"}
-            issuesActive={route.view === "issues"}
-            feedActive={route.view === "feed"}
-            connected={connected}
-            tasksActive={route.view === "tasks"}
-            taskCount={taskCount}
-            selectedWorkspaceId={sidebarWorkspaceId}
-            plainActive={route.view === "plain"}
-            supportTinderActive={route.view === "supporttinder"}
-            reportsActive={route.view === "reports"}
-            databasesActive={route.view === "databases"}
-            analyticsActive={route.view === "analytics"}
-            showDraftRow={productEmpty && githubConnectionState !== "loading"}
-            footerAccessory={
-              newLayout ? undefined : (
-                <UpdatePill addHandler={addHandler} variant="footer" />
-              )
-            }
-            draftRowActive={productEmpty && route.view === "prs"}
-            onRenameWorkspace={renameWorkspaceFromSidebar}
-            onDeleteWorkspace={deleteWorkspaceFromSidebar}
-            onToast={showToast}
-            // Only hand the sidebar the top-bar actions slot on the root
-            // page — on a pushed page (session, etc.) the sidebar is still
-            // mounted underneath and would portal its filter button into
-            // the session's top bar.
-            headerActionsEl={mobileDetail ? null : headerActionsEl}
-            catchUpActive={route.view === "catchup"}
-            onUnreadChatsChange={setUnreadChats}
-            archivedActive={route.view === "archived"}
-            place={newLayout ? places.current : undefined}
-            toolPage={isToolView(route.view) ? route.view : undefined}
-            onArchive={archiveSessionFromSidebar}
-            onArchiveWorkspace={archiveWorkspaceFromSidebar}
-            onRename={async (s, title) => {
-              await (async () => {
-                await renameSessionApi(s.id, title);
-              })().catch(async (e) => {
-                console.error("Rename failed:", e);
-              });
-              refresh();
-            }}
-            onSetStatus={setSessionLanes}
-          />
-        </div>
+          prsActive={route.view === "prs"}
+          issuesActive={route.view === "issues"}
+          feedActive={route.view === "feed"}
+          connected={connected}
+          tasksActive={route.view === "tasks"}
+          taskCount={taskCount}
+          selectedWorkspaceId={sidebarWorkspaceId}
+          plainActive={route.view === "plain"}
+          supportTinderActive={route.view === "supporttinder"}
+          reportsActive={route.view === "reports"}
+          databasesActive={route.view === "databases"}
+          analyticsActive={route.view === "analytics"}
+          showDraftRow={productEmpty && githubConnectionState !== "loading"}
+          footerAccessory={
+            newLayout ? undefined : (
+              <UpdatePill addHandler={addHandler} variant="footer" />
+            )
+          }
+          draftRowActive={productEmpty && route.view === "prs"}
+          onRenameWorkspace={renameWorkspaceFromSidebar}
+          onDeleteWorkspace={deleteWorkspaceFromSidebar}
+          onToast={showToast}
+          // Only hand the sidebar the top-bar actions slot on the root
+          // page — on a pushed page (session, etc.) the sidebar is still
+          // mounted underneath and would portal its filter button into
+          // the session's top bar.
+          headerActionsEl={mobileDetail ? null : headerActionsEl}
+          catchUpActive={route.view === "catchup"}
+          onUnreadChatsChange={setUnreadChats}
+          archivedActive={route.view === "archived"}
+          place={newLayout ? places.current : undefined}
+          toolPage={isToolView(route.view) ? route.view : undefined}
+          onArchive={archiveSessionFromSidebar}
+          onArchiveWorkspace={archiveWorkspaceFromSidebar}
+          onRename={async (s, title) => {
+            await (async () => {
+              await renameSessionApi(s.id, title);
+            })().catch(async (e) => {
+              console.error("Rename failed:", e);
+            });
+            refresh();
+          }}
+          onSetStatus={setSessionLanes}
+        />
         {/* Drag the right edge to resize: a hover/active hairline over a
 						    wider invisible grab strip. Hidden on mobile, where the drawer
 						    is a fixed width. It sits above both primary (20) and nested
