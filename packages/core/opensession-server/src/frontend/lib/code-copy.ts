@@ -83,16 +83,20 @@ function closeSettings(except?: HTMLElement): void {
 /**
  * Give every code fence under `root` its controls. Idempotent: a fence that
  * already sits in a wrapper is left alone, so this can run again after a
- * re-render without stacking controls. `wrap` is where each block's wrapping
- * switch starts: on in chat, where a fence reads at the turn's width, and off
- * in a document, where code keeps its lines and scrolls sideways.
+ * re-render without stacking controls. That includes a fence an upgraded
+ * block took inside itself (an artifact's or a JSON tree's hidden source):
+ * it is a level below the wrapper, and wrapping it again would show it.
+ * `wrap` is where each block's wrapping switch starts: on in chat, where a
+ * fence reads at the turn's width, and off in a document, where code keeps
+ * its lines and scrolls sideways.
  */
 export function decorateCodeBlocks(
   root: HTMLElement,
   { wrap: wrapLines = true }: { wrap?: boolean } = {},
 ): void {
   for (const pre of Array.from(root.querySelectorAll("pre"))) {
-    if (pre.parentElement?.classList.contains(WRAP_CLASS)) continue;
+    const owner = pre.parentElement?.closest(`.${WRAP_CLASS}`);
+    if (owner && root.contains(owner)) continue;
     // A ```mermaid or ```vega-lite fence is on its way to becoming a diagram
     // or a chart (MarkdownBody upgrades it asynchronously, after this has
     // run). Its source is not what anyone wants on the clipboard, and what
