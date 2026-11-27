@@ -115,133 +115,138 @@ export const TurnFooter = function TurnFooter({
   const chips = assets.filter((path) => !inline.includes(path));
 
   return (
-    <div
-      className={cn(
-        "mx-auto mb-[18px] flex w-full max-w-[var(--session-col)] flex-wrap items-center gap-x-0.5 gap-y-1.5",
-        className,
-      )}
-    >
+    <div className={cn("w-full", className)}>
+      {/* A little wider than the chat column: a page or picture reads better
+          with the room, and the column still caps it on a narrow window. */}
       {sessionId && inline.length > 0 && (
-        <div className="mb-1.5 flex basis-full flex-col gap-3">
+        <div className="mx-auto mb-2 flex w-full max-w-[calc(var(--session-col)+160px)] flex-col gap-3">
           {inline.map((path) => (
             <InlineAssetCard key={path} sessionId={sessionId} path={path} />
           ))}
         </div>
       )}
-      {duration && (
-        <Tooltip label={fullTime(entry.timestamp)}>
-          <span className="mr-1.5 pl-1 text-meta font-medium leading-4 text-faint">
-            {duration}
-          </span>
-        </Tooltip>
-      )}
-      {chips.map((path) => (
-        <AssetChip key={path} path={path} />
-      ))}
-      <div className={ACTIONS}>
-        <Tooltip label={copied ? "Copied" : "Copy message"}>
-          <button
-            type="button"
-            onClick={doCopy}
-            className={BTN}
-            aria-label={copied ? "Copied" : "Copy message"}
-          >
-            {copied ? (
-              <IconCheck size={20} className="text-green" />
-            ) : (
-              <IconCopy size={20} />
-            )}
-          </button>
-        </Tooltip>
-        <MessageActionButtons
-          message={{ entryId: entry.id, author: "Agent", text: entry.content }}
-          className="size-6 min-h-6"
-        />
-        <Menu.Root>
-          <Menu.Trigger
-            className={
-              BTN + " data-[popup-open]:bg-hover data-[popup-open]:text-dim"
-            }
-            aria-label="More message actions"
-          >
-            <IconDotsHorizontal size={20} />
-          </Menu.Trigger>
-          <Menu.Popup
-            side="bottom"
-            align="start"
-            sideOffset={4}
-            className="max-w-[380px]"
-          >
-            {onFork && (
-              <Menu.Item onClick={() => onFork(entry.id)}>
-                <IconCopy size={20} className="text-faint" />
-                Duplicate from here
-              </Menu.Item>
-            )}
-            {linkTo && (
-              <Menu.Item
-                onClick={() =>
-                  copyToClipboard(linkTo(entry.id), () => toast("Link copied"))
-                }
-              >
-                <IconLink size={20} className="text-faint" />
-                Copy link
-              </Menu.Item>
-            )}
-            {(onFork || linkTo) && <Menu.Separator className="my-1" />}
-            <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-medium text-faint">
-              <IconClock size={20} />
-              {fullTime(entry.timestamp)}
-            </div>
-            {entry.model && (
+      <div className="mx-auto mb-[18px] flex w-full max-w-[var(--session-col)] flex-wrap items-center gap-x-0.5 gap-y-1.5">
+        {duration && (
+          <Tooltip label={fullTime(entry.timestamp)}>
+            <span className="mr-1.5 pl-1 text-meta font-medium leading-4 text-faint">
+              {duration}
+            </span>
+          </Tooltip>
+        )}
+        {chips.map((path) => (
+          <AssetChip key={path} path={path} />
+        ))}
+        <div className={ACTIONS}>
+          <Tooltip label={copied ? "Copied" : "Copy message"}>
+            <button
+              type="button"
+              onClick={doCopy}
+              className={BTN}
+              aria-label={copied ? "Copied" : "Copy message"}
+            >
+              {copied ? (
+                <IconCheck size={20} className="text-green" />
+              ) : (
+                <IconCopy size={20} />
+              )}
+            </button>
+          </Tooltip>
+          <MessageActionButtons
+            message={{
+              entryId: entry.id,
+              author: "Agent",
+              text: entry.content,
+            }}
+            className="size-6 min-h-6"
+          />
+          <Menu.Root>
+            <Menu.Trigger
+              className={
+                BTN + " data-[popup-open]:bg-hover data-[popup-open]:text-dim"
+              }
+              aria-label="More message actions"
+            >
+              <IconDotsHorizontal size={20} />
+            </Menu.Trigger>
+            <Menu.Popup
+              side="bottom"
+              align="start"
+              sideOffset={4}
+              className="max-w-[380px]"
+            >
+              {onFork && (
+                <Menu.Item onClick={() => onFork(entry.id)}>
+                  <IconCopy size={20} className="text-faint" />
+                  Duplicate from here
+                </Menu.Item>
+              )}
+              {linkTo && (
+                <Menu.Item
+                  onClick={() =>
+                    copyToClipboard(linkTo(entry.id), () =>
+                      toast("Link copied"),
+                    )
+                  }
+                >
+                  <IconLink size={20} className="text-faint" />
+                  Copy link
+                </Menu.Item>
+              )}
+              {(onFork || linkTo) && <Menu.Separator className="my-1" />}
               <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-medium text-faint">
-                <IconSparkle size={20} />
-                Written by {messageModelLabel(entry.model)}
+                <IconClock size={20} />
+                {fullTime(entry.timestamp)}
               </div>
-            )}
-            {/* The chips' non-hover home. Paths are tidied rather than cut to
+              {entry.model && (
+                <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-medium text-faint">
+                  <IconSparkle size={20} />
+                  Written by {messageModelLabel(entry.model)}
+                </div>
+              )}
+              {/* The chips' non-hover home. Paths are tidied rather than cut to
                 the filename: with room for the whole line, which of two
                 same-named files a turn touched is worth more than the space. */}
-            {files.length > 0 && (
-              <>
-                <Menu.Separator className="my-1" />
-                {/* GroupLabel MUST live inside a Group — bare it throws Base UI
+              {files.length > 0 && (
+                <>
+                  <Menu.Separator className="my-1" />
+                  {/* GroupLabel MUST live inside a Group — bare it throws Base UI
                     error #31 and white-screens the app on open. */}
-                <Menu.Group>
-                  <Menu.GroupLabel className="pt-0.5">
-                    Changed files
-                  </Menu.GroupLabel>
-                  {files.slice(0, MAX_MENU_FILES).map((f) => (
-                    <div
-                      key={f.path}
-                      className="flex items-center gap-2 px-2 py-1 text-xs font-medium text-faint"
-                    >
-                      <ExtBadge name={fileName(f.path)} />
-                      <span className="min-w-0 flex-1 truncate text-dim">
-                        {tidyPath(f.path, pathRoots)}
-                      </span>
-                      <LineStats
-                        additions={f.additions}
-                        deletions={f.deletions}
-                      />
-                    </div>
-                  ))}
-                  {files.length > MAX_MENU_FILES && (
-                    <div className="px-2 py-1 text-xs font-medium text-faint">
-                      +{files.length - MAX_MENU_FILES} more
-                    </div>
-                  )}
-                </Menu.Group>
-              </>
-            )}
-          </Menu.Popup>
-        </Menu.Root>
+                  <Menu.Group>
+                    <Menu.GroupLabel className="pt-0.5">
+                      Changed files
+                    </Menu.GroupLabel>
+                    {files.slice(0, MAX_MENU_FILES).map((f) => (
+                      <div
+                        key={f.path}
+                        className="flex items-center gap-2 px-2 py-1 text-xs font-medium text-faint"
+                      >
+                        <ExtBadge name={fileName(f.path)} />
+                        <span className="min-w-0 flex-1 truncate text-dim">
+                          {tidyPath(f.path, pathRoots)}
+                        </span>
+                        <LineStats
+                          additions={f.additions}
+                          deletions={f.deletions}
+                        />
+                      </div>
+                    ))}
+                    {files.length > MAX_MENU_FILES && (
+                      <div className="px-2 py-1 text-xs font-medium text-faint">
+                        +{files.length - MAX_MENU_FILES} more
+                      </div>
+                    )}
+                  </Menu.Group>
+                </>
+              )}
+            </Menu.Popup>
+          </Menu.Root>
+        </div>
+        <TouchedFileChips files={files} max={isPhone ? 1 : MAX_CHIPS} />
+        <MessageThreadSummary
+          className="basis-full"
+          message={{ entryId: entry.id, author: "Agent", text: entry.content }}
+        />
       </div>
-      <TouchedFileChips files={files} max={isPhone ? 1 : MAX_CHIPS} />
-      <MessageThreadSummary
-        className="basis-full"
-        message={{ entryId: entry.id, author: "Agent", text: entry.content }}
-      />
     </div>
   );
 };

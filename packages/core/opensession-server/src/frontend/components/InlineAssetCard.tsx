@@ -1,14 +1,14 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { useCachedSessionAssets } from "../hooks/useApiResources";
 import { canAnnotateAsset } from "../lib/asset-annotation";
-import { useAssetTabOpener } from "../lib/asset-overlay-store";
+import { useOpenAsset } from "../lib/open-asset";
 import { assetFileFor, assetPreviewKind } from "../lib/asset-preview";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
 import { AssetAnnotationLayer } from "./AssetAnnotationLayer";
 import { AssetPreview } from "./AssetView";
-import { IconBrowserTab, IconMessage } from "./icons";
+import { IconExpand, IconMessage } from "./icons";
 
 /**
  * The width an HTML asset lays out at inline: a desktop window, drawn scaled
@@ -20,8 +20,8 @@ const PAGE_WIDTH = 1440;
 /**
  * An asset the answer produced or named, shown in place under it, so the file
  * is looked at where it was talked about instead of behind a chip. The row
- * above names it, Open as tab gives it the whole view, and Annotate comments
- * on it right here.
+ * above names it, Open full size gives it the Assets tab, and Annotate
+ * comments on it right here.
  *
  * The box has a fixed height per kind (a page keeps its desktop window's
  * 16:10): the transcript measures its rows, and a page that grew as it loaded
@@ -35,7 +35,7 @@ export function InlineAssetCard({
   path: string;
 }) {
   const files = useCachedSessionAssets(sessionId);
-  const openTab = useAssetTabOpener(sessionId);
+  const asset = useOpenAsset();
   const [annotating, setAnnotating] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -95,18 +95,16 @@ export function InlineAssetCard({
             />
           </Tooltip>
         )}
-        {openTab && (
-          <Tooltip label="Open as tab">
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={<IconBrowserTab size={16} />}
-              className="phone:size-11"
-              aria-label={`Open ${name} as tab`}
-              onClick={() => openTab(path)}
-            />
-          </Tooltip>
-        )}
+        <Tooltip label="Open full size">
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<IconExpand size={16} />}
+            className="phone:size-11"
+            aria-label={`Open ${name} full size`}
+            onClick={() => asset.open(path)}
+          />
+        </Tooltip>
       </figcaption>
       <div
         ref={boxRef}
