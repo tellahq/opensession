@@ -8,7 +8,7 @@ we emit one PNG per modern iPhone (portrait).
 
 These images are a redraw of the FIRST FRAME of the `#splash` markup in
 src/frontend/index.html, at device pixel scale: same radial background, same
-76pt mark, centered. That is the whole point of the file.
+88pt mark, centered. That is the whole point of the file.
 iOS shows this PNG, then WebKit paints `#splash` over it, and if the two agree
 the handoff is invisible; when they drift you get a visible jump on every cold
 launch. So the constants below are read from index.html, not invented here.
@@ -51,7 +51,7 @@ GRAD_RX, GRAD_RY = 1.20, 0.90
 GRAD_CX, GRAD_CY = 0.50, 0.35
 GRAD_STOP = 0.70
 
-LOGO_PT = 76  # .splash-logo width/height
+LOGO_PT = 88  # .splash-logo width/height
 
 # Portrait iPhones, matched by the media queries index.html writes.
 # (point_width, point_height, scale)

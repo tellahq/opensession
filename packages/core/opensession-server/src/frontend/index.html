@@ -396,7 +396,7 @@
             s[2] +
             ") and (orientation: portrait)";
           l.href =
-            prefix + "/splash/apple-splash-" + s[3] + "-" + s[4] + ".png?v=3";
+            prefix + "/splash/apple-splash-" + s[3] + "-" + s[4] + ".png?v=4";
           document.head.appendChild(l);
         });
       })();
@@ -447,14 +447,14 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 76px;
-        height: 76px;
+        width: 88px;
+        height: 88px;
         animation: splash-pulse 1.6s ease-in-out infinite;
       }
       .splash-logo img {
         display: block;
-        width: 76px;
-        height: 76px;
+        width: 88px;
+        height: 88px;
       }
       /* The pressed-in mark (the script after #splash): the same icon drawn
        by a shader into the page, with room around it for the ripples. Its
@@ -464,9 +464,9 @@
         position: absolute;
         left: 50%;
         top: 50%;
-        width: 182px;
-        height: 182px;
-        margin: -91px 0 0 -91px;
+        width: 212px;
+        height: 212px;
+        margin: -106px 0 0 -106px;
         pointer-events: none;
         visibility: hidden;
       }
@@ -539,7 +539,7 @@
           "out vec4 o;",
           "uniform sampler2D uTex;",
           "uniform float uTime, uIntro, uLight, uOver, uPx;",
-          // The icon's rounded square, in icon units (the 76px box is -0.5..0.5).
+          // The icon's rounded square, in icon units (the 88px box is -0.5..0.5).
           "float box(vec2 p) {",
           "  vec2 q = abs(p) - vec2(0.40) + 0.17;",
           "  return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - 0.17;",
@@ -583,15 +583,15 @@
           "  float glint = pow(max(dot(n, hv), 0.0), 120.0);",
           "  float fade = smoothstep(1.0, 0.65, length(v));",
           // The dark half keeps the faintest trace of its ink.
-          "  float ink = smoothstep(-0.01, 0.01, p.x - seam(p.y)) * smoothstep(0.0, -0.02, d) * mix(0.10, 0.035, uLight);",
+          "  float ink = smoothstep(-0.01, 0.01, p.x - seam(p.y)) * smoothstep(0.0, -0.02, d) * mix(0.14, 0.05, uLight);",
           "  float light = (max(shade, 0.0) * mix(1.4, 2.4, uLight) + glint * 0.08) * fade;",
           "  float dark = max(-shade, 0.0) * mix(1.8, 0.9, uLight) * fade + ink;",
           "  vec4 glare = vec4(clamp(light, 0.0, 1.0));",
           "  vec4 relief = glare + (1.0 - glare.a) * vec4(0.0, 0.0, 0.0, clamp(dark, 0.0, 1.0));",
-          // It opens on the coloured icon the img was showing, then the colour
-          // drains out and leaves the mark in the page.
+          // It opens on the coloured icon the img was showing, then most of the
+          // colour drains out and leaves the mark in the page.
           "  vec4 icon = texture(uTex, uvOf(p));",
-          "  o = mix(icon, relief, k);",
+          "  o = mix(icon, relief, k * 0.86);",
           "}",
         ].join("\n");
         var vs =
@@ -654,7 +654,7 @@
           var frame = function (now) {
             if (lost || !splash.isConnected) return;
             if (!t0) t0 = now;
-            var css = canvas.clientWidth || 182;
+            var css = canvas.clientWidth || 212;
             var size = Math.round(css * Math.min(devicePixelRatio || 1, 3));
             if (canvas.width !== size) canvas.width = canvas.height = size;
             gl.viewport(0, 0, size, size);
@@ -669,7 +669,7 @@
                 ? 1
                 : 0,
             );
-            gl.uniform1f(uOver, css / 76);
+            gl.uniform1f(uOver, css / 88);
             gl.uniform1f(uPx, 1 / size);
             gl.drawArrays(gl.TRIANGLES, 0, 3);
             splash.classList.add("splash-sunk");
