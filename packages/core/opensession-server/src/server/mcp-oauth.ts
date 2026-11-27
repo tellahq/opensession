@@ -306,7 +306,7 @@ const OAUTH_PRESETS: Record<string, OauthPreset> = {
     clientSecretEnv: "SLACK_OAUTH_CLIENT_SECRET",
     authorizeParams: {
       user_scope:
-        "channels:read,channels:write,groups:read,channels:history,groups:history,chat:write,files:write,users:read,search:read",
+        "channels:read,channels:write,groups:read,channels:history,groups:history,im:read,im:history,mpim:read,mpim:history,chat:write,files:read,files:write,reactions:write,users:read,search:read",
     },
     extract: (res) => ({
       accessToken: res?.authed_user?.access_token,

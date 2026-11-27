@@ -48,7 +48,9 @@ async function notifyInvite(invite: {
     actor: invite.from,
     url: invite.sessionId
       ? sessionUrl(invite.sessionId)
-      : `/workspace/${encodeURIComponent(workspaceId || "")}`,
+      : invite.roomId.startsWith("channel:")
+        ? `/channels/${encodeURIComponent(invite.roomId.slice("channel:".length))}`
+        : `/workspace/${encodeURIComponent(workspaceId || "")}`,
     eventKey: `huddle:${invite.roomId}:${invite.from}:${Date.now()}`,
   }).catch((error) =>
     console.warn(

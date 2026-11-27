@@ -129,6 +129,7 @@ import { PrRow } from "./PrRow";
 import { AutomationsBand } from "./sidebar/AutomationsBand";
 import { PlaceNav } from "./shell/PlaceNav";
 import { placeNavGroups } from "./shell/place-nav-model";
+import { ChannelsSidebar } from "./channels/ChannelsSidebar";
 import { useNewLayoutPref } from "../lib/new-layout-pref";
 import { DraftRow } from "./sidebar/DraftRow";
 import { FeedRow } from "./sidebar/FeedRows";
@@ -182,6 +183,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     catchUpActive,
     place,
     toolPage,
+    channelId,
     onUnreadChatsChange,
     onArchive,
     onArchiveWorkspace,
@@ -1401,6 +1403,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
           : row.key === workspaceMenu.id,
       )
     : undefined;
+
+  // Channels lists your Slack instead of your sessions: its own column.
+  if (place === "channels" && !isPhone)
+    return (
+      <ChannelsSidebar
+        density={density}
+        activeId={channelId}
+        onOpen={(id) => navigation.openChannels(id)}
+      />
+    );
 
   return (
     <>

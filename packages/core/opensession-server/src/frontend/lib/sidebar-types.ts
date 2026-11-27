@@ -79,6 +79,8 @@ export interface Props {
   /** The Automations, Goals or Security page, when one is open: Library
    *  lists them and marks the open one. */
   toolPage?: ToolSectionKey;
+  /** The Slack conversation open in the Channels place. */
+  channelId?: string;
   /** Report unread destinations, including collapsed groups and sibling tabs. */
   onUnreadChatsChange?: (chats: UnreadChat[]) => void;
   /**

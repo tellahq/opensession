@@ -84,7 +84,7 @@ const MAX_CHAT_CHARS = 2_000;
 /** How long an emptied room with notes waits for its last clips. */
 export const NOTES_GRACE_MS = 30_000;
 
-const ROOM_ID = /^(session|workspace):[\w.-]{1,128}$/;
+const ROOM_ID = /^(session|workspace|channel):[\w.-]{1,128}$/;
 
 const iceServerSchema = z.array(
   z.object({

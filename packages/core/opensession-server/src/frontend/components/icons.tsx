@@ -440,6 +440,16 @@ export function IconHash(p: IconProps) {
   );
 }
 
+// A padlock: a private Slack channel in the Channels place.
+export function IconLock(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <rect {...stroke} x="5.75" y="10.75" width="12.5" height="8.5" rx="2" />
+      <path {...stroke} d="M8.75 10.5V8a3.25 3.25 0 0 1 6.5 0v2.5" />
+    </Svg>
+  );
+}
+
 // Filled play triangle — starts the local app preview (replaces the raw "▶" glyph). The
 // round linejoin softens the tips so it matches the stroke set's rounding.
 export function IconPlay(p: IconProps) {

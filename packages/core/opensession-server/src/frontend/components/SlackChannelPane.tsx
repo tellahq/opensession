@@ -1,19 +1,11 @@
 import { BASE_PATH } from "../lib/base";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../ui/button";
-import { cn } from "../ui/cn";
-import {
-  composerBox,
-  composerBoxExpanded,
-  composerSend,
-  composerSendDefault,
-  composerTextarea,
-  composerTextareaPadding,
-  composerToolbar,
-} from "../lib/composer-classes";
-import { noAutofill } from "../lib/composer-autofill";
-import { IconArrowUp } from "./icons";
+import { ListRow } from "../ui/list-row";
+import { postMessage } from "../lib/api/slack-channels";
+import { ChannelComposer } from "./channels/ChannelComposer";
 import { errorMessage } from "../lib/error-message";
+import { SlackText as MessageText } from "./channels/SlackText";
 
 interface MessageReaction {
   name: string;
@@ -32,63 +24,6 @@ interface ChannelMessage {
   isBot: boolean;
   replyCount?: number;
   reactions?: MessageReaction[];
-}
-
-/** Markdown-lite renderer for slack text the route emits: ![:name:](url)
- *  custom-emoji images, [label](url) links, [[@Name]]/[[#chan]] mention
- *  chips, bare URLs — everything else as selectable text. */
-function MessageText({ text }: { text: string }) {
-  const parts: React.ReactNode[] = [];
-  const re =
-    /!\[([^\]]*)\]\((https?:[^)\s]+)\)|\[([^\]]+)\]\((https?:[^)\s]+)\)|\[\[([@#][^\]]+)\]\]|(https?:\/\/[^\s<>]+[^\s<>.,)\]}])/g;
-  let last = 0;
-  let m: RegExpExecArray | null;
-  let key = 0;
-  while ((m = re.exec(text))) {
-    if (m.index > last) parts.push(text.slice(last, m.index));
-    if (m[2] !== undefined) {
-      // Custom emoji image, sized to ride inline with the text.
-      parts.push(
-        <img
-          key={key++}
-          src={m[2]}
-          alt={m[1]}
-          title={m[1]}
-          className="inline-block h-[18px] w-[18px] align-text-bottom"
-        />,
-      );
-    } else if (m[5] !== undefined) {
-      parts.push(
-        <span
-          key={key++}
-          className="rounded-sm bg-accent-soft px-1 font-medium text-accent"
-        >
-          {m[5]}
-        </span>,
-      );
-    } else {
-      const href = m[4] || m[6];
-      const label = m[3] || m[6];
-      parts.push(
-        <a
-          key={key++}
-          href={href}
-          target="_blank"
-          rel="noreferrer"
-          className="text-link underline decoration-line underline-offset-2 hover:decoration-current"
-        >
-          {label}
-        </a>,
-      );
-    }
-    last = m.index + m[0].length;
-  }
-  if (last < text.length) parts.push(text.slice(last));
-  return (
-    <div className="select-text whitespace-pre-wrap break-words text-body leading-snug text-fg">
-      {parts}
-    </div>
-  );
 }
 
 function ReactionPills({ reactions }: { reactions?: MessageReaction[] }) {
@@ -177,14 +112,14 @@ function MessageRow({
         <MessageText text={m.text} />
         <ReactionPills reactions={m.reactions} />
         {depth === 0 && (m.replyCount || 0) > 0 && (
-          <button
-            className="mt-1 text-meta font-medium text-link hover:underline"
+          <ListRow
+            className="mt-1 min-h-0 w-auto p-0 text-meta font-medium text-link hover:bg-transparent hover:underline"
             onClick={toggleThread}
           >
             {expanded
               ? "Hide thread"
               : `${m.replyCount} repl${m.replyCount === 1 ? "y" : "ies"}`}
-          </button>
+          </ListRow>
         )}
         {expanded && (
           <div className="mt-1 border-l-2 border-line pl-3">
@@ -222,8 +157,6 @@ export function SlackChannelPane({
   const [loading, setLoading] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
-  const [sending, setSending] = useState(false);
   const aliveRef = useRef(true);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickBottomRef = useRef(true);
@@ -320,31 +253,17 @@ export function SlackChannelPane({
       });
   }
 
-  async function send() {
-    const text = draft.trim();
-    if (!text || sending) return;
-    setSending(true);
+  async function send(text: string): Promise<boolean> {
     setError(null);
-    await (async () => {
-      const res = await fetch(
-        `${BASE_PATH}/api/slack/channels/${encodeURIComponent(channelId)}/messages`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text }),
-        },
-      );
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
-      setDraft("");
-      stickBottomRef.current = true;
-      void loadNewest();
-    })()
-      .catch(async (error) => {
-        setError(errorMessage(error, "Failed to send message"));
+    return postMessage(channelId, text)
+      .then(() => {
+        stickBottomRef.current = true;
+        void loadNewest();
+        return true;
       })
-      .finally(async () => {
-        setSending(false);
+      .catch((error) => {
+        setError(errorMessage(error, "Failed to send message"));
+        return false;
       });
   }
 
@@ -387,59 +306,13 @@ export function SlackChannelPane({
           {error}
         </div>
       )}
-      {/* Same visual family as the sessions Composer (lib/composer-classes) —
-			    rounded card, borderless textarea, circular accent send — sized down
-			    for a chat channel. */}
       <div className="mx-auto w-full max-w-[calc(var(--session-col)+40px)] shrink-0 px-5 pt-1 pb-4">
-        {/* `composer` stays as a hook: base.css and legacy.css key phone
-				    keyboard/shadow behaviour off the class name. */}
-        <div
-          className={cn(
-            "composer",
-            composerBox,
-            composerBoxExpanded,
-            !asUser && "opacity-60",
-          )}
-        >
-          <textarea
-            // `composer-textarea` stays as a class NAME hook (the sidebar
-            // swipe guard and SessionViewer's global keys look for it).
-            className={cn(
-              "composer-textarea",
-              composerTextarea,
-              composerTextareaPadding,
-              "text-fg placeholder:text-faint",
-            )}
-            style={{ minHeight: 48 }}
-            placeholder={
-              asUser
-                ? "Message the channel as yourself…"
-                : "Connect Slack in Settings → Account to post as yourself"
-            }
-            value={draft}
-            disabled={!asUser || sending}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void send();
-              }
-            }}
-            rows={1}
-            {...noAutofill}
-          />
-          <div className={composerToolbar}>
-            <div className="shrink-0 grow basis-0" />
-            <button
-              className={cn(composerSend, composerSendDefault)}
-              onClick={send}
-              disabled={!asUser || !draft.trim() || sending}
-              aria-label="Send message"
-            >
-              <IconArrowUp size={24} />
-            </button>
-          </div>
-        </div>
+        <ChannelComposer
+          placeholder="Message the channel as yourself"
+          disabled={!asUser}
+          disabledHint="Connect Slack in Settings, Account to post as yourself"
+          onSend={send}
+        />
       </div>
     </div>
   );

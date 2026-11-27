@@ -151,6 +151,8 @@ import { ToastHost, toast } from "./ui/toast";
 import { PulseDot } from "./ui/status";
 import { Tooltip } from "./ui/tooltip";
 import { TopBar, TopBarActions, TopBarTitle } from "./ui/top-bar";
+import { ChannelsPage } from "./components/channels/ChannelsPage";
+import { channelsRoute } from "./lib/slack-conversations";
 
 interface PendingInitialPrompt {
   content: string;
@@ -1227,6 +1229,7 @@ export function AppContent({
     openAnalytics: () => navigate({ view: "analytics" }),
     openArchived: () => navigate({ view: "archived" }),
     openCatchUp: () => navigate({ view: "catchup" }),
+    openChannels: (id) => navigate(channelsRoute(id)),
     openSession,
     openWorkspace,
     openSessionReview: openReviewForSession,
@@ -1631,6 +1634,8 @@ export function AppContent({
                       onExit={leaveDeck}
                       onOpenSession={(id) => navigate({ view: "session", id })}
                     />
+                  ) : route.view === "channels" ? (
+                    <ChannelsPage route={route} navigate={navigate} />
                   ) : route.view === "catchup" ? (
                     <CatchUpDeck
                       sessions={sessions}

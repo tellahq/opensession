@@ -13,10 +13,16 @@
 
 import type { Route } from "./app-route";
 
-export type Place = "sessions" | "activity" | "support" | "library";
+export type Place =
+  | "sessions"
+  | "channels"
+  | "activity"
+  | "support"
+  | "library";
 
 const PLACE_OF_VIEW: Partial<Record<Route["view"], Place>> = {
   archived: "sessions",
+  channels: "channels",
   new: "sessions",
   feed: "activity",
   inbox: "activity",

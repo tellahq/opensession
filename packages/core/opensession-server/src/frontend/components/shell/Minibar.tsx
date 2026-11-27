@@ -25,6 +25,10 @@ import {
   IconSliders,
 } from "../icons";
 import { MINIBAR_ITEMS, type MinibarItem } from "./minibar-model";
+import {
+  hasUnreadConversation,
+  useSlackConversations,
+} from "../../lib/slack-conversations";
 import { OrganizationSwitcher } from "../OrganizationSwitcher";
 import { UserAvatar } from "../UserAvatar";
 import { useCurrentUser } from "../UserPicker";
@@ -183,8 +187,12 @@ export function Minibar({
   // A pinned page lights instead of the place it belongs to: one lit tile
   // says where you are.
   const pinnedHere = inBar.find((item) => item.onPage?.(route));
+  const channelsUnread = hasUnreadConversation(
+    useSlackConversations().payload?.conversations,
+  );
   const unread = (item: MinibarItem) =>
-    item.id === "activity" && unreadNotifications > 0;
+    (item.id === "activity" && unreadNotifications > 0) ||
+    (item.id === "channels" && channelsUnread);
   const open = (item: MinibarItem) => {
     item.open(navigation);
     if (item.place) onRevealSidebar();

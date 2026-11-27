@@ -31,6 +31,7 @@ function navigationFixture(openPrs: () => void): NavigationActions {
     openAnalytics() {},
     openArchived() {},
     openCatchUp() {},
+    openChannels() {},
     openSession() {},
     openWorkspace() {},
     openSessionReview() {},

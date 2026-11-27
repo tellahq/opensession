@@ -1,0 +1,158 @@
+import { BASE_PATH } from "../base";
+import { request } from "./request";
+
+// The Channels place's Slack calls (server/routes/slack-channels.ts). Reads
+// and posts go through the signed-in person's own Slack grant.
+
+export type ConversationKind = "channel" | "private" | "dm" | "group";
+
+export interface Conversation {
+  id: string;
+  name: string;
+  kind: ConversationKind;
+  userId?: string;
+  avatarUrl?: string;
+  unread?: boolean;
+  unreadCount?: number;
+  latestTs?: string;
+}
+
+export interface ConversationsPayload {
+  /** The person has connected their Slack account. */
+  connected: boolean;
+  conversations: Conversation[];
+  /** False for a grant from before direct messages were asked for. */
+  directMessages: boolean;
+}
+
+export interface ConversationInfo {
+  id: string;
+  name: string;
+  kind: ConversationKind;
+  avatarUrl?: string;
+  topic: string;
+  memberCount?: number;
+}
+
+export interface MessageReaction {
+  name: string;
+  count: number;
+  /** Unicode char for standard emoji. */
+  emoji?: string;
+  /** Image URL for custom workspace emoji. */
+  url?: string;
+  /** The person reacted with this one. */
+  mine?: boolean;
+}
+
+export interface MessageFile {
+  name: string;
+  /** Root-relative API path of an image's preview. */
+  thumb?: string;
+  width?: number;
+  height?: number;
+  permalink?: string;
+}
+
+export interface ChannelMessage {
+  ts: string;
+  userId?: string;
+  userName: string;
+  avatarUrl?: string;
+  text: string;
+  isBot: boolean;
+  replyCount?: number;
+  latestReply?: string;
+  replyUsers?: { name: string; avatarUrl?: string }[];
+  reactions?: MessageReaction[];
+  files?: MessageFile[];
+  edited?: boolean;
+  /** A thread reply also sent to the channel. */
+  broadcast?: boolean;
+}
+
+export interface MessagesPage {
+  messages: ChannelMessage[];
+  hasMore: boolean;
+  /** Read with the person's own grant (they can post). */
+  asUser: boolean;
+}
+
+const channelPath = (id: string) => `/slack/channels/${encodeURIComponent(id)}`;
+
+export function fetchConversations(): Promise<ConversationsPayload> {
+  return request("/slack/conversations", {
+    label: "Couldn't load your Slack channels",
+  });
+}
+
+export function fetchConversationInfo(id: string): Promise<ConversationInfo> {
+  return request(channelPath(id), { label: "Couldn't load this channel" });
+}
+
+export function fetchMessages(
+  id: string,
+  opts: { before?: string; thread?: string } = {},
+): Promise<MessagesPage> {
+  const params = new URLSearchParams();
+  if (opts.before) params.set("before", opts.before);
+  if (opts.thread) {
+    params.set("thread_ts", opts.thread);
+    params.set("limit", "100");
+  }
+  const query = params.size ? `?${params}` : "";
+  return request(`${channelPath(id)}/messages${query}`, {
+    label: "Couldn't load messages",
+  });
+}
+
+/** What the server takes to post: a reply names its thread's parent. */
+export interface PostMessageBody {
+  text: string;
+  thread_ts?: string;
+  /** A reply also sent to the channel. */
+  broadcast?: boolean;
+}
+
+export function postMessage(
+  id: string,
+  text: string,
+  thread?: { ts: string; broadcast?: boolean },
+): Promise<{ ok: boolean; ts?: string }> {
+  const body: PostMessageBody = { text };
+  if (thread) {
+    body.thread_ts = thread.ts;
+    body.broadcast = !!thread.broadcast;
+  }
+  return request(`${channelPath(id)}/messages`, {
+    method: "POST",
+    body,
+    label: "Couldn't send the message",
+  });
+}
+
+export function markRead(id: string, ts: string): Promise<{ ok: boolean }> {
+  return request(`${channelPath(id)}/read`, {
+    method: "POST",
+    body: { ts },
+    label: "Couldn't mark the channel read",
+  });
+}
+
+export function setReaction(
+  id: string,
+  ts: string,
+  name: string,
+  remove: boolean,
+): Promise<{ ok: boolean }> {
+  return request(`${channelPath(id)}/reactions`, {
+    method: "POST",
+    body: { ts, name, remove },
+    label: "Couldn't react",
+  });
+}
+
+/** A message file's preview as an <img> source. */
+export function fileSrc(thumb: string): string {
+  return `${BASE_PATH}${thumb}`;
+}

@@ -29,7 +29,8 @@ export type Route =
   | { view: "settings"; section?: SettingsSectionKey }
   | { view: "archived" }
   | { view: "inbox" }
-  | { view: "catchup" };
+  | { view: "catchup" }
+  | { view: "channels"; id?: string; thread?: string };
 
 const TOOL_VIEWS = new Set(["automations", "security", "goals"]);
 const SETTINGS_SECTIONS: ReadonlySet<string> = new Set<SettingsSectionKey>([
@@ -164,6 +165,15 @@ export function parseRoute(pathname: string): Route {
     return route;
   }
 
+  const channels = path.match(/^\/channels(?:\/([^/]+)(?:\/([^/]+))?)?$/);
+  if (channels) {
+    const route: Extract<Route, { view: "channels" }> = { view: "channels" };
+    if (channels[1]) route.id = decodeURIComponent(channels[1]);
+    if (channels[1] && channels[2])
+      route.thread = decodeURIComponent(channels[2]);
+    return route;
+  }
+
   if (path === "/analytics") return { view: "analytics" };
   if (path === "/feed" || path === "/people") return { view: "feed" };
   if (path === "/tasks") return { view: "tasks" };
@@ -273,6 +283,10 @@ export function routePath(route: Route): string {
       return `${BASE_PATH}/inbox`;
     case "catchup":
       return `${BASE_PATH}/catchup`;
+    case "channels":
+      return route.id
+        ? `${BASE_PATH}/channels/${encodeURIComponent(route.id)}${route.thread ? `/${encodeURIComponent(route.thread)}` : ""}`
+        : `${BASE_PATH}/channels`;
     case "supporttinder":
       return `${BASE_PATH}/support-tinder`;
     case "reviews":

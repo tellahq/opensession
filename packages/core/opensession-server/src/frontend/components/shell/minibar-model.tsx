@@ -10,6 +10,7 @@ import {
   IconDatabase,
   IconFeed,
   IconFile,
+  IconHash,
   IconIssue,
   IconLifebuoy,
   IconListCircles,
@@ -44,6 +45,13 @@ const onView =
 // Same glyphs as the place lists (PlaceNav, sidebar-tools-model), so a page
 // pinned here looks like the row it came from.
 export const MINIBAR_ITEMS: readonly MinibarItem[] = [
+  {
+    id: "channels",
+    label: "Channels",
+    icon: <IconHash size={24} />,
+    place: "channels",
+    open: (navigation) => navigation.openChannels(),
+  },
   {
     id: "activity",
     label: "Activity",

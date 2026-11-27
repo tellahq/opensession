@@ -24,6 +24,7 @@ export interface PlaceNavItem {
 
 const PLACE_TITLES: Record<Place, string> = {
   sessions: "Sessions",
+  channels: "Channels",
   activity: "Activity",
   support: "Support",
   library: "Library",

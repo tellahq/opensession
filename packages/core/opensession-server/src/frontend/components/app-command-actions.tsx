@@ -4,6 +4,7 @@ import { PRODUCT_NAME } from "../lib/brand";
 import { settingsPaletteActions } from "../lib/settings-sections";
 import { absoluteLink, copyToClipboard } from "../lib/share-link";
 import { shortcutPrimaryKeys } from "../lib/shortcuts";
+import { channelsRoute } from "../lib/slack-conversations";
 import { setThemePref, type EffectiveTheme } from "../lib/theme";
 import { copySessionTranscript } from "../lib/transcript-copy";
 import { TRANSCRIPT_FIND_EVENT } from "../lib/transcript-find";
@@ -26,6 +27,7 @@ import {
   IconMail,
   IconMoon,
   IconPlus,
+  IconHash,
   IconIssue,
   IconPullRequest,
   IconSearch,
@@ -301,6 +303,15 @@ export function buildAppCommandActions({
       keywords: ["github", "issue"],
       icon: <IconIssue size={18} />,
       run: () => navigate({ view: "issues" }),
+    },
+    {
+      id: "channels",
+      label: "Channels",
+      description: "Open your Slack channels and direct messages",
+      category: "Navigate",
+      keywords: ["slack", "dm", "message", "thread"],
+      icon: <IconHash size={18} />,
+      run: () => navigate(channelsRoute()),
     },
     {
       id: "feed",
