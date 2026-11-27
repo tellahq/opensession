@@ -8,6 +8,8 @@ import type { useSessions } from "../hooks/useSessions";
 import type { RepoInfo } from "../lib/api";
 import { renameSessionApi } from "../lib/api";
 import type { Route } from "../lib/app-route";
+import { useNewLayoutPref } from "../lib/new-layout-pref";
+import { Minibar } from "./shell/Minibar";
 import { SIDEBAR_CHROME_BTN } from "../lib/sidebar-classes";
 import type { UnifiedSession, Workspace } from "../lib/types";
 import { cn } from "../ui/cn";
@@ -124,11 +126,16 @@ export function AppSidebar({
     setSessionLanes,
   },
 }: AppSidebarProps) {
+  // The new layout leaves only the minibar on the chrome material. The
+  // sidebar takes the page's fill, and every pinned heading inside it reads
+  // its backing from the same two variables, so they are set once here.
+  const newLayout = useNewLayoutPref() && !isPhone;
   const sidebarStyle: CSSProperties & { "--sidebar-w": string } = {
     "--sidebar-w": `${sidebarWidth}px`,
   };
   return (
     <>
+      {newLayout && <Minibar route={route} connected={connected} />}
       {/* `sidebar-container` stays on the markup as a hook: base.css's
 					    platform chrome (html.material-backdrop, the reduced-transparency
 					    fallback) paints this surface by name. */}
@@ -144,6 +151,10 @@ export function AppSidebar({
           // compositor to re-rasterize the whole sidebar on any repaint
           // behind it (a scroll-flash amplifier).
           "desktop:[background:linear-gradient(var(--sidebar-material),var(--sidebar-material)),var(--sidebar-bg)]",
+          // `!`: the desktop shell's vibrancy rule clears this background by
+          // name (html.material-backdrop .sidebar-container).
+          newLayout &&
+            "[--sidebar-bg:var(--bg)] [--sidebar-material:var(--bg)] desktop:border-l desktop:border-divider desktop:!bg-surface",
           // On phones the sidebar is the root PAGE of the iOS-style
           // stack — full bleed under the pushed detail pane — rather than
           // a fixed-width column.
@@ -172,6 +183,10 @@ export function AppSidebar({
         <div
           className={cn(
             "sidebar-brand wco-chrome h-[var(--desktop-header-h)] min-w-0 shrink-0 items-center justify-start gap-2 py-0 pr-3 pl-[calc(var(--sidebar-icon-left)-8px)]",
+            // The minibar already covers its own width of the traffic
+            // lights, so this row clears only what is left of them.
+            newLayout &&
+              "[html.wco_&]:!pl-[max(calc(env(titlebar-area-x,78px)-52px),calc(var(--sidebar-icon-left)-8px))]",
             // No scroll hairline: the tools sit fixed below this row and
             // only the workspace list scrolls, so nothing passes under it.
             // The brand row (and its account menu) is a desktop

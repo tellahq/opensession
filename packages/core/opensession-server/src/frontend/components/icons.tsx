@@ -931,6 +931,20 @@ export function IconBook(p: IconProps) {
   );
 }
 
+/** A lifebuoy: support, as a place rather than a mailbox. */
+export function IconLifebuoy(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <circle {...stroke} cx="12" cy="12" r="7.25" />
+      <circle {...stroke} cx="12" cy="12" r="3.25" />
+      <path
+        {...stroke}
+        d="M9.75 9.75L6.9 6.9M14.25 9.75L17.1 6.9M14.25 14.25L17.1 17.1M9.75 14.25L6.9 17.1"
+      />
+    </Svg>
+  );
+}
+
 export function IconBranches(p: IconProps) {
   return (
     <Svg {...p}>

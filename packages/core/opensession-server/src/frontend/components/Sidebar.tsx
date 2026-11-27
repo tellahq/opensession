@@ -126,6 +126,7 @@ import { IconDotsHorizontal, IconMessages } from "./icons";
 import { AddProjectDialog, type AddRepoMode } from "./SetupRepos";
 import { PrRow } from "./PrRow";
 import { AutomationsBand } from "./sidebar/AutomationsBand";
+import { useNewLayoutPref } from "../lib/new-layout-pref";
 import { DraftRow } from "./sidebar/DraftRow";
 import { FeedRow } from "./sidebar/FeedRows";
 import { FilterPopover, RepoFilterChip } from "./sidebar/Filters";
@@ -188,10 +189,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   ref,
 ) {
   const navigation = useNavigation();
+  // The new layout's minibar holds the account, so this column loses its
+  // footer (components/shell/Minibar.tsx).
+  const newLayoutPref = useNewLayoutPref();
   const openSidebarSession = (session: UnifiedSession) => {
     navigation.openSession(session.id);
   };
   const isPhone = useIsPhone();
+  const newLayout = newLayoutPref && !isPhone;
   const [search, setSearch] = useState("");
   const peopleActivityNow = useSidebarPeopleActivityNow(sessions);
   // Groups are collapsed by default; the expanded set persists per browser
@@ -1790,11 +1795,18 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
           onNewSession={navigation.openNewWorkspace}
         />
       )}
-      {!isPhone && (
+      {!isPhone && !newLayout && (
         <SidebarAccountFooter
           onOpenSettings={navigation.openSettings}
           accessory={footerAccessory}
         />
+      )}
+      {/* The minibar holds the account and Settings in the new layout. The
+          Update nudge has no room there, so it keeps the foot of this list. */}
+      {newLayout && (
+        <div className="flex flex-none items-center px-3 py-2 empty:hidden">
+          {footerAccessory}
+        </div>
       )}
       <SidebarCustomizeDialog
         open={customizeOpen}
