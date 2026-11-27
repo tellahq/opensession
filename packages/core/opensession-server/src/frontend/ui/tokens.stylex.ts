@@ -512,6 +512,23 @@ export const geometry = stylex.defineConsts({
   logoStatusDot: "10px",
   logoStatusRing: "2px",
   logoStatusOffset: "-2px",
+  /** The settings page: its nav column, the air above its content, the
+   *  catalog column the Library takes, and the bottom air under a panel. */
+  settingsNavWidth: "232px",
+  settingsContentTop: "44px",
+  settingsColumnWide: "980px",
+  settingsPanelBottom: "88px",
+  /** The phone settings sheet: the list's bottom room for the search bar,
+   *  the inset of a row's rule (past the glyph), and the search glass's
+   *  reach above the bar. */
+  settingsSheetListBottom: "72px",
+  settingsSheetRuleInset: "54px",
+  settingsSheetGlyph: "28px",
+  settingsSheetGlassReach: "calc(100% + 30px)",
+  /** The desktop titlebar strip, and the shadow on the content's left edge
+   *  (`none` in dark). */
+  desktopHeaderHeight: "var(--desktop-header-h)",
+  contentEdgeShadow: "var(--content-edge-shadow)",
   /** A month grid: 36px day columns, 44px on a phone (still inside 390px). */
   monthWidth: "252px",
   monthWidthPhone: "308px",
@@ -550,6 +567,8 @@ export const blur = stylex.defineConsts({
   /** The phone top bar's glass. base-theme.css swaps the fill when the
    *  browser has no backdrop-filter or the person asks for less transparency. */
   headerControl: "var(--mobile-header-control-blur)",
+  /** The phone settings sheet's search bar glass. */
+  sheetSearch: "blur(16px) saturate(1.35)",
 });
 
 export const media = stylex.defineConsts({
@@ -562,4 +581,33 @@ export const media = stylex.defineConsts({
   /** Where a two-column form folds to one. */
   small: "@media (width < 40rem)",
   reducedMotion: "@media (prefers-reduced-motion: reduce)",
+});
+
+/**
+ * The sidebar's scale. The values the "Compact sidebar" preference swaps live
+ * in custom properties set on the rail's root (`SIDEBAR_DENSITY_VARS` in
+ * lib/sidebar-classes.ts); a row reads them through the `*Var` entries so one
+ * attribute retunes every row. The 22px rail and the 7px gap after it do not
+ * move with density: they are the left edge every title shares.
+ */
+export const sidebarScale = stylex.defineConsts({
+  rowPad: "7px",
+  rowPadCompact: "4px",
+  toolPad: "5px",
+  toolPadCompact: "4px",
+  lineHeight: "36px",
+  lineHeightCompact: "30px",
+  caption: "28px",
+  captionCompact: "24px",
+  bandSlot: "32px",
+  bandSlotCompact: "28px",
+  groupGap: "14px",
+  groupGapCompact: "8px",
+  rowAction: "26px",
+  rowActionCompact: "24px",
+  rail: "22px",
+  railGap: "7px",
+  rowPadVar: "var(--sidebar-row-pad)",
+  captionVar: "var(--sidebar-cap-h)",
+  groupGapVar: "var(--sidebar-group-gap)",
 });

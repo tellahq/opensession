@@ -12,3 +12,5 @@ export const deviceCodeMarker = stylex.defineMarker();
 export const overlayActionMarker = stylex.defineMarker();
 /** The tappable session title pill: its name dims while the pill is pressed. */
 export const titlePillMarker = stylex.defineMarker();
+/** A settings nav row: its glyph lights up with the row's hover and state. */
+export const settingsNavRowMarker = stylex.defineMarker();

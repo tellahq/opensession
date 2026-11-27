@@ -53,11 +53,12 @@ test("Electron titlebar drag regions do not depend on WCO visibility", async () 
   );
   expect(settings).toContain("!TOOL_SECTIONS.has(active) && (");
   expect(settings).toContain("className={SETTINGS_DRAG_HANDLE}");
-  expect(settingsClasses).toContain(
-    '"settings-drag-handle wco-chrome absolute inset-x-0 top-0 z-10 h-[var(--desktop-header-h)]"',
-  );
-  expect(settingsClasses).toContain("`settings-nav flex");
-  expect(settingsClasses).toContain('"settings-content flex');
+  // The hooks base-platform.css reads stay plain class names on the markup.
+  expect(settingsClasses).toContain('"settings-drag-handle wco-chrome"');
+  expect(settingsClasses).toContain('"settings-nav",');
+  expect(settingsClasses).toContain('"settings-content"');
+  expect(settingsClasses).toContain('tool && "settings-content-tool"');
+  expect(settingsClasses).toContain("height: geometry.desktopHeaderHeight");
   expect(css).toMatch(
     /html:is\(\.wco, \.desktop-shell\) \.settings-drag-handle \{\s*display: block;/,
   );

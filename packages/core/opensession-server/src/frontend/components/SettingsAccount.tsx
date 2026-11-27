@@ -1,7 +1,17 @@
 import React from "react";
-import { SETTINGS_NAV_ICON, SETTINGS_NAV_ROW } from "../lib/settings-classes";
-import { SIDEBAR_HOVER_LAYER, SIDEBAR_RAIL_GAP } from "../lib/sidebar-classes";
+import {
+  SETTINGS_ACCOUNT_FOOTER,
+  SETTINGS_ACCOUNT_ROW,
+  SETTINGS_ACCOUNT_SWITCH,
+  SETTINGS_NAV_ICON,
+  SETTINGS_NAV_ROW,
+  SETTINGS_SHEET_CAPTION,
+  SETTINGS_SHEET_GLYPH,
+  SETTINGS_SHEET_LABEL,
+  SETTINGS_SHEET_ROW,
+} from "../lib/settings-classes";
 import { Menu } from "../ui/menu";
+import { SETTINGS_PLATE } from "../ui/settings";
 import { IconCheck, IconChevronRight, IconLogOut } from "./icons";
 import {
   TEAM,
@@ -71,18 +81,16 @@ export function SettingsAccountFooter() {
     // bottom of that column, not a bar laid across it. Its 6px gutter is the
     // list's outdent spelled forwards, so the account row and Sign out sit on
     // the same rail as the sections above them.
-    <div className="sticky bottom-0 -mx-3 -mb-4 mt-auto flex flex-col border-x-0 border-b-0 border-t border-solid border-divider bg-sidebar px-1.5 pb-4 pt-3">
+    <div className={SETTINGS_ACCOUNT_FOOTER}>
       {githubAuth ? (
-        <div
-          className={`flex items-center ${SIDEBAR_RAIL_GAP} py-[var(--sidebar-row-pad)] pl-2.5 pr-2`}
-        >
+        <div className={SETTINGS_ACCOUNT_ROW}>
           <AccountIdentity name={currentUser} subtitle={subtitle} />
         </div>
       ) : (
         <Menu.Root>
           <Menu.Trigger
             aria-label="Switch account"
-            className={`flex w-full min-w-0 items-center ${SIDEBAR_RAIL_GAP} rounded-control border-none bg-transparent py-[var(--sidebar-row-pad)] pl-2.5 pr-2 text-left data-[popup-open]:bg-selected ${SIDEBAR_HOVER_LAYER}`}
+            className={SETTINGS_ACCOUNT_SWITCH}
           >
             <AccountIdentity name={currentUser} subtitle={subtitle} />
             <IconChevronRight size={20} className="shrink-0 text-faint" />
@@ -129,15 +137,12 @@ export function SettingsAccountFooter() {
 /** Phone: the last card in the settings sheet's root list. */
 export function SettingsAccountCard() {
   const { currentUser, githubAuth, canSignOut, subtitle } = useAccount();
-  const rowClass =
-    "relative flex w-full items-center gap-3 border-0 bg-transparent px-3.5 py-3 text-left after:absolute after:bottom-0 after:left-[54px] after:right-0 after:h-px after:bg-divider-soft last:after:hidden active:bg-hover";
+  const rowClass = SETTINGS_SHEET_ROW;
 
   return (
     <div>
-      <div className="mb-2 mt-5 px-1 text-control-label font-semibold text-faint">
-        Account
-      </div>
-      <div className="overflow-hidden rounded-2xl border border-divider-soft bg-settings-plate">
+      <div className={SETTINGS_SHEET_CAPTION}>Account</div>
+      <div className={SETTINGS_PLATE}>
         {githubAuth ? (
           <div className={rowClass}>
             <AccountIdentity name={currentUser} subtitle={subtitle} />
@@ -150,9 +155,7 @@ export function SettingsAccountCard() {
               onClick={() => setCurrentUser(name)}
             >
               <UserAvatar name={name} size={28} className="shrink-0" />
-              <span className="min-w-0 flex-1 text-item-title font-medium text-fg">
-                {name}
-              </span>
+              <span className={SETTINGS_SHEET_LABEL}>{name}</span>
               {name === currentUser && (
                 <IconCheck size={22} className="shrink-0 text-accent" />
               )}
@@ -161,12 +164,10 @@ export function SettingsAccountCard() {
         )}
         {canSignOut && (
           <button className={rowClass} onClick={() => void signOut()}>
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center text-dim">
+            <span className={SETTINGS_SHEET_GLYPH}>
               <IconLogOut size={20} />
             </span>
-            <span className="min-w-0 flex-1 text-item-title font-medium text-fg">
-              Sign out
-            </span>
+            <span className={SETTINGS_SHEET_LABEL}>Sign out</span>
           </button>
         )}
       </div>
