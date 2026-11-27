@@ -196,12 +196,22 @@ export function sidePanelTabs(storage: Read = localStorage): SidePanelTab[] {
       ? storedTabsSchema.safeParse(JSON.parse(stored))
       : null;
     if (parsed?.success)
-      return [...new Set(parsed.data.filter(isSidePanelTab))];
+      return withOverviewTab([...new Set(parsed.data.filter(isSidePanelTab))]);
   } catch {
     /* fall through to the default */
   }
   const page = sidePanelPage(storage);
   return page !== "new" && page !== "changes" ? ["changes", page] : ["changes"];
+}
+
+/**
+ * Changes is the panel's overview: the workspace summary with the diff under
+ * it, what the panel opens on. It always leads the strip and cannot be closed,
+ * so the panel never opens onto an empty strip. A strip stored before that
+ * rule gets it back in front.
+ */
+export function withOverviewTab(tabs: readonly SidePanelTab[]): SidePanelTab[] {
+  return tabs.includes("changes") ? [...tabs] : ["changes", ...tabs];
 }
 
 export function storeSidePanelTabs(

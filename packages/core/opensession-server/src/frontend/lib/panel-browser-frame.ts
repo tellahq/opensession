@@ -1,5 +1,6 @@
 import { keptFrameKey, type KeptFrameSpec } from "./kept-frames";
 import type { PanelBrowserTarget } from "./portal-pin";
+import { sidePanelKey } from "./side-panel-store";
 import { LINK_FRAME, PREVIEW_FRAME } from "./preview-url";
 
 /** The page a session's side panel Browser tab keeps loaded. */
@@ -25,7 +26,7 @@ export function panelBrowserFrame({
   staging: { embeddable?: boolean } | null;
   stagingUrl: string | null | undefined;
 }): PanelBrowserFrame | null {
-  const key = keptFrameKey("panel", sessionId);
+  const key = keptFrameKey("panel", sidePanelKey(sessionId));
   if (target?.kind === "url")
     return { key, spec: { ...LINK_FRAME, url: target.url } };
   if (target?.kind === "portal" || !stagingUrl || !staging?.embeddable)

@@ -195,8 +195,13 @@ export function SidePanelHost({
         {shown.map((tab) => {
           const active = current === tab;
           const name = label(tab);
+          // Changes is the overview the panel opens on, and a coordinator's
+          // Threads tab is the work: neither closes.
+          const closable =
+            tab !== "changes" && !(tab === "threads" && pinnedThreads);
+          const movable = !!onMoveToMain && isDockable(tab);
           return (
-            <ContextMenu.Root key={tab}>
+            <ContextMenu.Root key={tab} disabled={!closable && !movable}>
               <ContextMenu.Trigger
                 render={
                   <div
@@ -220,8 +225,7 @@ export function SidePanelHost({
                   <span className="truncate @max-[380px]:hidden">{name}</span>
                   {count(tab)}
                 </button>
-                {/* A coordinator's Threads tab stays: it is the work. */}
-                {!(tab === "threads" && pinnedThreads) && (
+                {closable && (
                   <button
                     type="button"
                     className={cn(
@@ -242,10 +246,12 @@ export function SidePanelHost({
                     <span className="grow">Move to main tabs</span>
                   </ContextMenu.Item>
                 )}
-                <ContextMenu.Item onClick={() => onCloseTab(tab)}>
-                  <IconX size={20} className={MENU_ICON} />
-                  <span className="grow">Close tab</span>
-                </ContextMenu.Item>
+                {closable && (
+                  <ContextMenu.Item onClick={() => onCloseTab(tab)}>
+                    <IconX size={20} className={MENU_ICON} />
+                    <span className="grow">Close tab</span>
+                  </ContextMenu.Item>
+                )}
               </ContextMenu.Popup>
             </ContextMenu.Root>
           );

@@ -7,6 +7,7 @@ import { PrPanel } from "../PrPanel";
 import { SessionPreviewSurface } from "../session/SessionPreviewSurface";
 import type { ReviewRegion } from "./SessionViewerMainRegion";
 import { SidePanelHost } from "../session/SidePanelHost";
+import { sidePanelKey } from "../../lib/side-panel-store";
 import { WorkflowPanel } from "../WorkflowPanel";
 import { WorkspaceSummaryBody } from "../WorkspaceSummary";
 import { WorkspaceWaiting } from "./busy-indicators";
@@ -334,7 +335,7 @@ function PanelBrowser({ content }: { content: PanelBrowserContent }) {
     return (
       <SessionPreviewSurface
         surface={{ kind: "browser", url: target.url }}
-        frameScope={sessionId}
+        frameScope={sidePanelKey(sessionId)}
         inPanel
         commentSessionId={sessionId}
       />
@@ -348,7 +349,7 @@ function PanelBrowser({ content }: { content: PanelBrowserContent }) {
         url: stagingUrl,
         shareLink,
       }}
-      frameScope={sessionId}
+      frameScope={sidePanelKey(sessionId)}
       inPanel
       commentSessionId={sessionId}
     />

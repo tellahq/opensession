@@ -15,6 +15,7 @@ import {
   setKeptPageDeploying,
   viewTabScope,
 } from "../lib/kept-frames";
+import { sidePanelKey } from "../lib/side-panel-store";
 import { checkClass, isDeployment } from "../lib/pr-status-derive";
 
 /**
@@ -105,7 +106,7 @@ export function useReloadOnFreshDeploy(
   );
   const inFlight = building || rebuilding || (!staging && deployPending);
   const url = staging ? stagingHref(staging, session.previewPath) : null;
-  const panelKey = keptFrameKey("panel", session.id);
+  const panelKey = keptFrameKey("panel", sidePanelKey(session.id));
   const stripKey = keptFrameKey("staging", viewTabScope(session));
   useEffect(() => {
     if (!url || !inFlight) return;
