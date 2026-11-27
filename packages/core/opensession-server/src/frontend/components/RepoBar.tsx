@@ -226,7 +226,7 @@ export function RepoBar({
           <span className="text-meta font-semibold leading-none text-faint">
             Repository
           </span>
-          <span className="truncate text-control-label leading-[1.2] text-fg">
+          <span className="truncate text-control-label leading-tight text-fg">
             {busy ?? repoLabel(primary)}
             {attached.length > 0 && (
               <span className="text-faint"> +{attached.length}</span>

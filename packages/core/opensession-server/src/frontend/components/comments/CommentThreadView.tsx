@@ -77,7 +77,7 @@ function CommentBody({
             <button
               key={src}
               type="button"
-              className="focus-ring block cursor-zoom-in rounded-lg leading-[0]"
+              className="focus-ring block cursor-zoom-in rounded-lg leading-0"
               onClick={(event) =>
                 openLightbox(
                   comment.images!.map((image) => ({

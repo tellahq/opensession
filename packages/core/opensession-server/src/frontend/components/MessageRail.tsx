@@ -476,7 +476,7 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
             {shown.preview}
           </p>
           {shown.reply && (
-            <p className="m-0 mt-2 line-clamp-3 text-label leading-normal text-dim">
+            <p className="m-0 mt-2 line-clamp-3 text-label leading-body text-dim">
               {shown.reply}
             </p>
           )}

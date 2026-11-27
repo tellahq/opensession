@@ -111,7 +111,7 @@ export function CardRows({ rows }: { rows: Array<[string, React.ReactNode]> }) {
   return (
     <div className="mt-[9px] flex flex-col gap-[3px]">
       {rows.map(([label, value], i) => (
-        <div className="flex gap-2 text-meta leading-[1.35]" key={i}>
+        <div className="flex gap-2 text-meta leading-snug" key={i}>
           <span className="w-[74px] shrink-0 text-faint">{label}</span>
           <span className="min-w-0 truncate text-dim">{value}</span>
         </div>
@@ -341,7 +341,7 @@ export function PrRowCard({ item }: { item: ReviewQueueItem }) {
         </span>
       </div>
 
-      <div className="mt-[5px] text-label font-semibold leading-[1.3]">
+      <div className="mt-[5px] text-label font-semibold leading-tight">
         {pr.title}
       </div>
 
@@ -439,7 +439,7 @@ export function SupportRowCard({
         </span>
       </div>
 
-      <div className="mt-[5px] text-label font-semibold leading-[1.3]">
+      <div className="mt-[5px] text-label font-semibold leading-tight">
         {t.title || customer}
       </div>
 

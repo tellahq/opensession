@@ -747,7 +747,7 @@ export function Prs({
                                 half its height; it stays in the row's tooltip,
                                 in search, and in the panel the row opens. */}
                             <span className="flex min-w-0 items-baseline gap-2">
-                              <span className="truncate text-item-title font-medium leading-[1.3] text-fg">
+                              <span className="truncate text-item-title font-medium leading-tight text-fg">
                                 {row.title}
                               </span>
                               {row.number && (

@@ -51,7 +51,7 @@ import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 /** 16px on phones, so iOS doesn't zoom a focused field; paragraph leading in a
     textarea. Both reach in from a dialog's body to its fields. */
 const FORM_FIELDS =
-  "[&_textarea]:leading-normal phone:[&_input]:text-input-phone phone:[&_select]:text-input-phone phone:[&_textarea]:text-input-phone";
+  "[&_textarea]:leading-body phone:[&_input]:text-input-phone phone:[&_select]:text-input-phone phone:[&_textarea]:text-input-phone";
 /** A link inside a row: the session an entry points at, the page that owns it. */
 const LINK = "cursor-pointer text-link no-underline hover:underline";
 

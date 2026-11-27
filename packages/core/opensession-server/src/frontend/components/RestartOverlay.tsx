@@ -282,13 +282,13 @@ export function RestartOverlay({ connected, addHandler }: Props) {
         <div className="text-item-title font-semibold text-fg">
           {backOnline ? "Back online" : `${PRODUCT_NAME} isn't responding`}
         </div>
-        <div className="text-label leading-[1.5] text-dim">
+        <div className="text-label leading-body text-dim">
           {backOnline
             ? "Refreshing…"
             : "The page will refresh automatically once the server is back."}
         </div>
         {!backOnline && restartBy && (
-          <div className="mt-1.5 max-w-full truncate text-label font-medium leading-[1.4] text-dim opacity-80">
+          <div className="mt-1.5 max-w-full truncate text-label font-medium leading-snug text-dim opacity-80">
             Triggered by {restartBy}
           </div>
         )}

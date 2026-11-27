@@ -25,7 +25,7 @@ export const PR_LIST = "-mx-3";
  *  sit at the same 19px, so a heavier state heading reads as the page's real
  *  title and pushes "Pull requests" into looking like a caption over it. */
 export const PR_SECTION_LABEL =
-  "m-0 mb-3.5 flex items-baseline gap-2 px-3 text-section-title font-title tracking-[-0.01em] text-fg";
+  "m-0 mb-3.5 flex items-baseline gap-2 px-3 text-section-title font-title tracking-tight text-fg";
 
 /** A date group: the same quiet label the archived list gives its own. The
  *  `px-3` pays back the list's outdent, so every label on the page and the row

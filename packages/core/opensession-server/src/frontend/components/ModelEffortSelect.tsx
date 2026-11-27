@@ -822,11 +822,11 @@ export function ModelEffortSelect({
             <ModelMark id={option.id} provider={option.engine} />
           </span>
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="min-w-0 truncate font-medium leading-[1.25]">
+            <span className="min-w-0 truncate font-medium leading-tight">
               {option.label}
             </span>
             {guidance && (
-              <span className="min-w-0 truncate text-meta leading-[1.3] text-faint">
+              <span className="min-w-0 truncate text-meta leading-tight text-faint">
                 {guidance.summary}
               </span>
             )}
@@ -953,7 +953,7 @@ export function ModelEffortSelect({
               <span className="text-meta font-semibold leading-none text-faint">
                 Model
               </span>
-              <span className="truncate text-control-label leading-[1.2] text-fg">
+              <span className="truncate text-control-label leading-tight text-fg">
                 {modelLabel}
               </span>
             </span>

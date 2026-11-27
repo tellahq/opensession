@@ -593,7 +593,7 @@ export function useFileMentions({
                       aria-selected={i === activeIdx}
                       data-mention-index={i}
                       className={cn(
-                        "flex cursor-pointer items-center gap-2.5 overflow-hidden rounded-control px-2.5 py-2 text-label leading-[1.3] whitespace-nowrap",
+                        "flex cursor-pointer items-center gap-2.5 overflow-hidden rounded-control px-2.5 py-2 text-label leading-tight whitespace-nowrap",
                         i === activeIdx && "bg-pressed",
                       )}
                       onMouseDown={(e) => {

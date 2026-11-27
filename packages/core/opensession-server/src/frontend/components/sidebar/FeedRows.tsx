@@ -304,7 +304,7 @@ export function FeedRow({
         </span>
       </Popover.Trigger>
       <RowCardPopup>
-        <div className="mt-[5px] text-label font-semibold leading-[1.3]">
+        <div className="mt-[5px] text-label font-semibold leading-tight">
           {item.title}
         </div>
         {item.preview && (

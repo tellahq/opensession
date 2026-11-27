@@ -327,7 +327,7 @@ function SectionHeading({
 }) {
   return (
     <div className="mb-1 flex items-baseline justify-between gap-3 border-b border-divider pb-3">
-      <h2 className="m-0 text-section-title font-title tracking-[-0.01em] text-fg">
+      <h2 className="m-0 text-section-title font-title tracking-tight text-fg">
         {children}
       </h2>
       {count != null && (

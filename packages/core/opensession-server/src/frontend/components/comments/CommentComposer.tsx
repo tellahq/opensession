@@ -141,7 +141,7 @@ export function CommentComposer({
             void submit();
           }
         }}
-        className="block max-h-48 min-h-6 w-full resize-none overflow-hidden border-none bg-transparent p-0 text-body leading-normal text-fg outline-none placeholder:text-faint phone:text-input-phone"
+        className="block max-h-48 min-h-6 w-full resize-none overflow-hidden border-none bg-transparent p-0 text-body leading-body text-fg outline-none placeholder:text-faint phone:text-input-phone"
       />
       {mentionPopup}
       {expanded && (

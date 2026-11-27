@@ -970,7 +970,7 @@ export function SessionSearch({
             ref={inputRef}
             // 16px at every width on purpose: anything smaller makes iOS zoom
             // the page when the palette's field takes focus.
-            className="flex-1 border-none bg-transparent font-sans text-input-phone leading-[1.4] text-fg outline-none placeholder:text-faint"
+            className="flex-1 border-none bg-transparent font-sans text-input-phone leading-snug text-fg outline-none placeholder:text-faint"
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -1089,7 +1089,7 @@ export function SessionSearch({
                         {result.action.label}
                       </span>
                       {result.action.description && (
-                        <span className="max-w-full truncate text-supporting leading-[1.35] text-dim">
+                        <span className="max-w-full truncate text-supporting leading-snug text-dim">
                           {result.action.description}
                         </span>
                       )}
@@ -1231,7 +1231,7 @@ export function SessionSearch({
                       {s.title}
                     </span>
                     {result.snippet && (
-                      <span className="max-w-full truncate text-supporting leading-[1.35] text-dim">
+                      <span className="max-w-full truncate text-supporting leading-snug text-dim">
                         {result.snippet}
                       </span>
                     )}

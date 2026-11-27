@@ -293,7 +293,7 @@ export function SidebarCtxMenu({
               // grouped right-click menu reads like every other menu.
               <div
                 key={i}
-                className="px-2 pt-1 pb-1 text-meta font-semibold tracking-[-0.01em] text-faint"
+                className="px-2 pt-1 pb-1 text-meta font-semibold tracking-tight text-faint"
               >
                 {entry.label}
               </div>

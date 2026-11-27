@@ -74,7 +74,7 @@ import { AutomationDataFlowEditor } from "./AutomationDataFlowEditor";
    and a multi-line brief keeps paragraph leading, which the type scale
    doesn't set. */
 const FORM_FIELDS =
-  "[&_textarea]:leading-normal phone:[&_input]:text-input-phone phone:[&_select]:text-input-phone phone:[&_textarea]:text-input-phone";
+  "[&_textarea]:leading-body phone:[&_input]:text-input-phone phone:[&_select]:text-input-phone phone:[&_textarea]:text-input-phone";
 /** The form's own layout, with no chrome of its own: whatever hosts it (the
  *  detail drawer, the create dialog) already provides the surface, the padding
  *  and the heading. */
@@ -862,7 +862,7 @@ function eventLabel(key: string): string {
 /** Left column of the drawer's Configuration grid. */
 function DetailKey({ children }: { children: React.ReactNode }) {
   return (
-    <span className="text-faint text-label leading-[1.7] whitespace-nowrap">
+    <span className="text-faint text-label leading-relaxed whitespace-nowrap">
       {children}
     </span>
   );
@@ -1201,7 +1201,7 @@ function ChooserRow({
         <span className="text-item-title font-semibold leading-5 text-fg">
           {title}
         </span>
-        <span className="text-supporting leading-normal text-faint">
+        <span className="text-supporting leading-body text-faint">
           {description}
         </span>
       </span>

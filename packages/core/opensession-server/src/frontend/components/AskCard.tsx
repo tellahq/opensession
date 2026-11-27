@@ -428,7 +428,7 @@ export function AskCard({
                       {opt.label}
                     </span>
                     {opt.description && (
-                      <span className="mt-0.5 block text-supporting leading-[1.45] text-dim">
+                      <span className="mt-0.5 block text-supporting leading-body text-dim">
                         {opt.description}
                       </span>
                     )}

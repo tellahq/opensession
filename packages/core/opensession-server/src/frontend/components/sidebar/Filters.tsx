@@ -417,13 +417,13 @@ export const RepoFilterChip = React.forwardRef<
     </>
   );
   const bodyClass =
-    "inline-flex min-w-0 items-center gap-[7px] rounded-full px-[3px] py-0.5 text-label leading-[1.15] hover:bg-hover data-[popup-open]:bg-hover";
+    "inline-flex min-w-0 items-center gap-[7px] rounded-full px-[3px] py-0.5 text-label leading-title hover:bg-hover data-[popup-open]:bg-hover";
 
   return (
     <span
       ref={ref}
       className={cn(
-        "inline-flex min-w-0 max-w-full items-center gap-px rounded-full border border-line bg-panel px-1 py-[3px] text-label leading-[1.15]",
+        "inline-flex min-w-0 max-w-full items-center gap-px rounded-full border border-line bg-panel px-1 py-[3px] text-label leading-title",
         variant === "inline" && "shrink-0 max-w-none",
         variant === "probe" &&
           "pointer-events-none absolute left-[-9999px] top-0 max-w-none invisible",

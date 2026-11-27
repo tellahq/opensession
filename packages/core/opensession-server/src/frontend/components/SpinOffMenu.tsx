@@ -202,7 +202,7 @@ export function SpinOffMenu({
               <span className="text-label font-semibold text-fg">
                 Build this
               </span>
-              <span className="text-supporting leading-[1.4] text-faint">
+              <span className="text-supporting leading-snug text-faint">
                 Start a coding session with this conversation as context
               </span>
             </Menu.Item>
@@ -215,7 +215,7 @@ export function SpinOffMenu({
             <span className="text-label font-semibold text-fg">
               Capture learnings → docs PR
             </span>
-            <span className="text-supporting leading-[1.4] text-faint">
+            <span className="text-supporting leading-snug text-faint">
               {AGENT_NAME} adds what was learned here to{" "}
               {session.repo || "the repository"} docs
             </span>
@@ -228,7 +228,7 @@ export function SpinOffMenu({
             <span className="text-label font-semibold text-fg">
               Analyze session
             </span>
-            <span className="text-supporting leading-[1.4] text-faint">
+            <span className="text-supporting leading-snug text-faint">
               What went well, what didn't, and a better prompt
             </span>
           </Menu.Item>
@@ -238,7 +238,7 @@ export function SpinOffMenu({
             <span className="text-label font-semibold text-fg">
               Reference this session
             </span>
-            <span className="text-supporting leading-[1.4] text-faint">
+            <span className="text-supporting leading-snug text-faint">
               Opens the new-session composer with a link to this one — you write
               the prompt
             </span>

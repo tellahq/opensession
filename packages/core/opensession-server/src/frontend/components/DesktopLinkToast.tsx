@@ -39,7 +39,7 @@ export function DesktopLinkToast() {
         >
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <img className="size-6 shrink-0" src="/mac-app-icon.png" alt="" />
-            <span className="min-w-0 flex-1 truncate text-supporting font-medium leading-[1.3] text-fg">
+            <span className="min-w-0 flex-1 truncate text-supporting font-medium leading-tight text-fg">
               View in the app
             </span>
           </div>

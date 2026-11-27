@@ -1612,7 +1612,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
                   !sessionsLoading &&
                   !sessionsError &&
                   hasWorkspaceFilter && (
-                    <div className="mx-4 my-7 text-center text-label leading-[1.4] text-faint">
+                    <div className="mx-4 my-7 text-center text-label leading-snug text-faint">
                       No matching workspaces
                     </div>
                   )}
@@ -1634,7 +1634,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
                   !hasWorkspaceFilter &&
                   !draftRow &&
                   (!isPhone || !productEmpty) && (
-                    <div className="mx-4 my-7 text-center text-label leading-[1.4] text-faint">
+                    <div className="mx-4 my-7 text-center text-label leading-snug text-faint">
                       No workspaces yet
                     </div>
                   )}
@@ -1645,10 +1645,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
                   isPhone && (
                     <div className="flex min-h-[360px] flex-col items-center justify-center px-7 py-12 text-center">
                       <IconMessages size={28} className="mb-3 text-dim" />
-                      <div className="text-section-title leading-[1.15] font-semibold tracking-[-0.02em] text-fg">
+                      <div className="text-section-title leading-title font-semibold tracking-title text-fg">
                         No sessions
                       </div>
-                      <p className="m-0 mt-1 max-w-[26ch] text-body leading-[1.45] text-dim text-pretty">
+                      <p className="m-0 mt-1 max-w-[26ch] text-body leading-body text-dim text-pretty">
                         Start one and it shows up here.
                       </p>
                       <div className="mt-4 flex flex-col items-center gap-1">

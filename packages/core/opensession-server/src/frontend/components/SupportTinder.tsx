@@ -536,7 +536,7 @@ function TicketCard({
           )}
           {prio && (
             <span
-              className={`shrink-0 rounded-full px-2 py-0.5 text-meta font-bold tracking-[-0.01em] ${prio.cls}`}
+              className={`shrink-0 rounded-full px-2 py-0.5 text-meta font-bold tracking-tight ${prio.cls}`}
             >
               {prio.label}
             </span>

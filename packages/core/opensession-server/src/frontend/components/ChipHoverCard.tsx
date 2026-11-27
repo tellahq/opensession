@@ -399,12 +399,12 @@ function CommitChipCardBody({ commit }: { commit: CommitDetails }) {
         </span>
       </div>
 
-      <div className="mt-[5px] text-label font-semibold leading-[1.3]">
+      <div className="mt-[5px] text-label font-semibold leading-tight">
         {commit.title}
       </div>
 
       {lede && (
-        <div className="mt-[3px] line-clamp-3 text-supporting leading-[1.4] text-dim">
+        <div className="mt-[3px] line-clamp-3 text-supporting leading-snug text-dim">
           {lede}
         </div>
       )}
@@ -485,7 +485,7 @@ function PrChipCardBody({ pr }: { pr: ChipPr }) {
         </span>
       </div>
 
-      <div className="mt-[5px] text-label font-semibold leading-[1.3]">
+      <div className="mt-[5px] text-label font-semibold leading-tight">
         {pr.title}
       </div>
 

@@ -336,7 +336,7 @@ export function Issues({ sessions, onOpenSession, topbarActionsEl }: Props) {
                             <RepoTile name={issue.repo} size={20} />
                           )}
                           <span className="flex min-w-0 items-baseline gap-2">
-                            <span className="truncate text-item-title font-medium leading-[1.3] text-fg">
+                            <span className="truncate text-item-title font-medium leading-tight text-fg">
                               {issue.title}
                             </span>
                             <span className="shrink-0 text-meta tabular-nums text-faint">
@@ -433,7 +433,7 @@ export function Issues({ sessions, onOpenSession, topbarActionsEl }: Props) {
               />
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 phone:px-4">
-              <h2 className="m-0 text-section-title font-title tracking-[-0.01em] text-fg">
+              <h2 className="m-0 text-section-title font-title tracking-tight text-fg">
                 {preview.title}
               </h2>
               <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-meta text-dim">

@@ -860,7 +860,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
                 <h1
                   ref={headingRef}
                   tabIndex={index > 0 ? -1 : undefined}
-                  className="m-0 text-balance text-page-title font-title leading-[1.1] tracking-[-0.012em] text-fg outline-none phone:text-section-title"
+                  className="m-0 text-balance text-page-title font-title leading-title tracking-tight text-fg outline-none phone:text-section-title"
                 >
                   {step.title}
                 </h1>
@@ -879,7 +879,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
                   <div
                     ref={panelScrollContentRef}
                     className={cn(
-                      "mx-auto w-full [&_[data-setting-title]]:text-dialog-title [&_[data-setting-title]]:phone:text-body [&_[data-settings-group-label]]:text-body [&_[data-settings-group-label]]:text-fg [&_[data-settings-hint]]:leading-[1.5] [&_[data-settings-hint]]:text-faint [&_[data-onboarding-caption]]:leading-[1.5]",
+                      "mx-auto w-full [&_[data-setting-title]]:text-dialog-title [&_[data-setting-title]]:phone:text-body [&_[data-settings-group-label]]:text-body [&_[data-settings-group-label]]:text-fg [&_[data-settings-hint]]:leading-body [&_[data-settings-hint]]:text-faint [&_[data-onboarding-caption]]:leading-body",
                       step.id === "ready" ? "max-w-[1160px]" : "max-w-[780px]",
                       step.id !== "github-account" &&
                         "[&_[data-settings-surface]:not(.personal-github-card)]:border-0 [&_[data-settings-surface]:not(.personal-github-card)]:bg-transparent! [&_[data-settings-surface]:not(.personal-github-card)]:shadow-none [&_[data-settings-surface]:not(.personal-github-card)]:[backdrop-filter:none]",

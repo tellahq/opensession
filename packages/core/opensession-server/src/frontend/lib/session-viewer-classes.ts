@@ -110,7 +110,7 @@ export const VIEWER_BRANCH =
  * precedes, since the name is what the bar is about.
  */
 export const VIEWER_CRUMB_UP =
-  "-mx-1.5 -my-[5px] h-7 max-w-[240px] shrink cursor-pointer overflow-hidden text-ellipsis rounded-md px-1.5 py-px leading-[26px] " +
+  "-mx-1.5 -my-[5px] h-7 max-w-[240px] shrink cursor-pointer overflow-hidden text-ellipsis rounded-md px-1.5 py-px leading-6.5 " +
   "text-label font-medium text-dim transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] " +
   "hover:bg-hover hover:text-fg";
 
@@ -121,7 +121,7 @@ export const VIEWER_CRUMB_UP =
  * lines up with the icon's middle; lifting the text a pixel left it high.
  */
 export const VIEWER_BRANCH_EDITABLE =
-  "-mx-1.5 -my-[5px] h-7 cursor-text rounded-md px-1.5 py-px leading-[26px] hover:bg-hover";
+  "-mx-1.5 -my-[5px] h-7 cursor-text rounded-md px-1.5 py-px leading-6.5 hover:bg-hover";
 
 /** Inline rename input, sized to sit in place of the name. */
 export const VIEWER_BRANCH_RENAME =
@@ -718,7 +718,7 @@ export const infoTopbarClass = (scrolled: boolean) =>
 
 const INFO_TOPBAR_TITLE =
   "pointer-events-none absolute right-14 bottom-0 left-14 block h-[52px] " +
-  "overflow-hidden text-ellipsis whitespace-nowrap text-center text-item-title font-semibold leading-[52px] tracking-[-0.01em] text-fg " +
+  "overflow-hidden text-ellipsis whitespace-nowrap text-center text-item-title font-semibold leading-13 tracking-tight text-fg " +
   // `transform`, not Tailwind's `translate` property: that is what the
   // transition beside it names.
   "[transition:opacity_var(--dur)_var(--ease),transform_var(--dur)_var(--ease)]";
@@ -740,7 +740,7 @@ export const INFO_HERO =
 /** 20px in the old sheet — the page's one heading, so it snaps to
  *  `text-page-title` (22px). */
 export const INFO_NAME =
-  "mt-[9px] max-w-full text-page-title font-semibold leading-[1.2] tracking-[-0.02em] break-words text-fg";
+  "mt-[9px] max-w-full text-page-title font-semibold leading-[1.2] tracking-title break-words text-fg";
 export const INFO_SUB =
   "flex min-h-11 w-full max-w-full items-center justify-center gap-x-1 px-6 text-label font-medium text-dim";
 
@@ -786,7 +786,7 @@ export const INFO_SECTION_CLASS = "grid gap-[5px]";
  * the kind of thing nobody can name and everybody can feel.
  */
 export const INFO_LABEL_CLASS =
-  "px-3 text-label font-semibold tracking-[-0.01em] text-faint";
+  "px-3 text-label font-semibold tracking-tight text-faint";
 export const INFO_LIST_CLASS =
   "grid gap-px overflow-hidden rounded-lg bg-panel p-1";
 

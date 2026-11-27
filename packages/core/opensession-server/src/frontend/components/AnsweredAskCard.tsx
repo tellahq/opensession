@@ -42,7 +42,7 @@ function ChoiceRow({
         {description && (
           <span
             className={cn(
-              "mt-0.5 block text-supporting leading-[1.45] [overflow-wrap:anywhere]",
+              "mt-0.5 block text-supporting leading-body [overflow-wrap:anywhere]",
               selected ? "text-dim" : "text-faint",
             )}
           >

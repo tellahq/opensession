@@ -155,7 +155,7 @@ export function SubagentPane({
           </button>
         )}
         {meta?.description && (
-          <div className="mt-1.5 text-supporting leading-[1.4] text-dim">
+          <div className="mt-1.5 text-supporting leading-snug text-dim">
             {meta.description}
           </div>
         )}

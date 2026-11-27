@@ -1590,7 +1590,7 @@ export function Composer({
             typing looks identical with the pref on. Sits above the input wrap's
             scroll-fade mask. */}
         {vimEnabled && vim.mode !== "insert" && (
-          <div className="pointer-events-none absolute right-3 top-2 z-[2] select-none rounded-sm border border-line bg-surface px-1.5 py-0.5 text-meta font-semibold tracking-wider text-dim">
+          <div className="pointer-events-none absolute right-3 top-2 z-[2] select-none rounded-sm border border-line bg-surface px-1.5 py-0.5 text-meta font-semibold tracking-wide text-dim">
             {vim.mode === "normal"
               ? "NORMAL"
               : vim.mode === "visual"
@@ -1791,7 +1791,7 @@ export function Composer({
                   the eye already is. A phone has no Tab key: its double tap
                   hint stays in the toolbar. */}
               {!isPhone && (
-                <kbd className="ml-1.5 inline-block h-[18px] rounded-sm border border-line px-1.5 align-middle text-meta leading-[16px] font-medium text-faint [font-family:inherit]">
+                <kbd className="ml-1.5 inline-block h-[18px] rounded-sm border border-line px-1.5 align-middle text-meta leading-4 font-medium text-faint [font-family:inherit]">
                   Tab
                 </kbd>
               )}
