@@ -1,8 +1,71 @@
 import * as React from "react";
 import { MOBILE_BACK, MOBILE_TOP_BAR_CONTROL } from "../lib/app-header-classes";
 import { IconChevronLeft } from "../components/icons";
+import * as stylex from "@stylexjs/stylex";
 import { Button, type ButtonProps } from "./button";
 import { cn } from "./cn";
+import { sx } from "./sx";
+import {
+  color,
+  controlHeight,
+  media,
+  motion,
+  radius,
+  space,
+  text,
+  weight,
+} from "./tokens.stylex";
+
+const styles = stylex.create({
+  bar: { display: "flex", minWidth: 0, alignItems: "center" },
+  leading: {
+    display: "flex",
+    minWidth: 0,
+    alignItems: "center",
+    gap: space.s8,
+  },
+  title: { minWidth: 0 },
+  actions: {
+    marginLeft: "auto",
+    display: "flex",
+    flexShrink: 0,
+    alignItems: "center",
+  },
+  phoneBar: {
+    position: { default: null, [media.phone]: "relative" },
+    height: { default: null, [media.phone]: controlHeight.touch },
+    flexShrink: { default: null, [media.phone]: 0 },
+    justifyContent: { default: null, [media.phone]: "center" },
+    paddingInline: { default: null, [media.phone]: space.s12 },
+  },
+  phoneTitle: {
+    fontSize: text.body,
+    fontWeight: weight.title,
+    color: color.fg,
+  },
+  // A round, filled action in a sheet's own top bar: a 44px target at every
+  // width, quieter than the page's floating glass controls.
+  phoneAction: {
+    width: controlHeight.touch,
+    height: controlHeight.touch,
+    minHeight: controlHeight.touch,
+    flexShrink: 0,
+    touchAction: "manipulation",
+    borderRadius: radius.pill,
+    backgroundColor: {
+      default: color.panel,
+      ":hover": { default: null, [media.hover]: color.pressed },
+    },
+    paddingInline: space.s0,
+    paddingBlock: space.s0,
+    color: {
+      default: color.dim,
+      ":hover": { default: null, [media.hover]: color.fg },
+    },
+    boxShadow: "none",
+    scale: { default: null, ":active": motion.pressScale },
+  },
+});
 
 /**
  * Shared application top-bar structure. Feature bars keep their own position,
@@ -17,8 +80,8 @@ export const TopBar = React.forwardRef<HTMLElement, TopBarProps>(
     return React.createElement(as, {
       ref,
       "data-top-bar": "",
-      className: cn("flex min-w-0 items-center", className),
       ...props,
+      ...sx(styles.bar, className, props.style),
     });
   },
 );
@@ -28,11 +91,7 @@ export const TopBarLeading = React.forwardRef<
   React.ComponentPropsWithoutRef<"div">
 >(function TopBarLeading({ className, ...props }, ref) {
   return (
-    <div
-      ref={ref}
-      className={cn("flex min-w-0 items-center gap-2", className)}
-      {...props}
-    />
+    <div ref={ref} {...props} {...sx(styles.leading, className, props.style)} />
   );
 });
 
@@ -40,7 +99,9 @@ export const TopBarTitle = React.forwardRef<
   HTMLDivElement,
   React.ComponentPropsWithoutRef<"div">
 >(function TopBarTitle({ className, ...props }, ref) {
-  return <div ref={ref} className={cn("min-w-0", className)} {...props} />;
+  return (
+    <div ref={ref} {...props} {...sx(styles.title, className, props.style)} />
+  );
 });
 
 export const TopBarActions = React.forwardRef<
@@ -48,11 +109,7 @@ export const TopBarActions = React.forwardRef<
   React.ComponentPropsWithoutRef<"div">
 >(function TopBarActions({ className, ...props }, ref) {
   return (
-    <div
-      ref={ref}
-      className={cn("ml-auto flex shrink-0 items-center", className)}
-      {...props}
-    />
+    <div ref={ref} {...props} {...sx(styles.actions, className, props.style)} />
   );
 });
 
@@ -68,10 +125,7 @@ export const PhoneTopBar = React.forwardRef<
     <TopBar
       as="header"
       ref={ref}
-      className={cn(
-        "phone:relative phone:h-11 phone:shrink-0 phone:justify-center phone:px-3",
-        className,
-      )}
+      className={cn(stylex.props(styles.phoneBar).className, className)}
       {...props}
     />
   );
@@ -84,7 +138,9 @@ export const PhoneTopBarTitle = React.forwardRef<
   return (
     <TopBarTitle
       ref={ref}
-      className={cn("text-body font-title text-fg", className)}
+      // A hook a host's leading rules can name (Settings sets titles to 1.1).
+      data-top-bar-title=""
+      className={cn(stylex.props(styles.phoneTitle).className, className)}
       {...props}
     />
   );
@@ -100,10 +156,9 @@ export const PhoneTopBarAction = React.forwardRef<
       ref={ref}
       variant="ghost"
       size="md"
-      className={cn(
-        "size-11 min-h-11 shrink-0 touch-manipulation rounded-full bg-panel p-0 text-dim shadow-none hover:bg-pressed active:scale-[0.96] [&_svg]:size-6",
-        className,
-      )}
+      skin={styles.phoneAction}
+      // The glyph is sized from here: a reach into the child.
+      className={cn("[&_svg]:size-6", className)}
       {...props}
     />
   );
@@ -123,6 +178,11 @@ export const TopBarAction = React.forwardRef<
       ref={ref}
       variant="ghost"
       size="md"
+      // A class string, not `skin`: a skin replaces Button's own values for
+      // a property at every width, and these are phone-only. At phone width
+      // they agree with Button wherever both set a property at the same
+      // priority (heights, widths, padding), so stylesheet order cannot flip
+      // the result.
       className={cn(floating && MOBILE_TOP_BAR_CONTROL, className)}
       {...props}
     />

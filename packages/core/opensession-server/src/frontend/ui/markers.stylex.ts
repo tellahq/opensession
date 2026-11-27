@@ -10,3 +10,5 @@ export const disclosureMarker = stylex.defineMarker();
 export const deviceCodeMarker = stylex.defineMarker();
 /** The preview an `OverlayAction` sits over: hovering it reveals the action. */
 export const overlayActionMarker = stylex.defineMarker();
+/** The tappable session title pill: its name dims while the pill is pressed. */
+export const titlePillMarker = stylex.defineMarker();

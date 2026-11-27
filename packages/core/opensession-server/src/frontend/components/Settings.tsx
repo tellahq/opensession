@@ -88,11 +88,11 @@ const GALLERY_SECTIONS = new Set<SettingsSectionKey>(["library", "setup"]);
 // fields, and tool panels. Body roles share 150% leading; heading and title
 // roles stay compact at 110%. The descendant rules deliberately beat local
 // one-off leading utilities so every section follows the page-level rhythm.
-// `data-setting-title` is how a StyleX row or form title is named here, since
-// it carries no `text-item-title` class.
+// `data-setting-title` and `data-top-bar-title` are how StyleX row, form and
+// phone bar titles are named here, since they carry no title class.
 const SETTINGS_LEADING =
   "leading-normal [&_*]:!leading-normal " +
-  "[&_[data-setting-title]]:!leading-[1.1] " +
+  "[&_[data-setting-title]]:!leading-[1.1] [&_[data-top-bar-title]]:!leading-[1.1] " +
   "[&_h1]:!leading-[1.1] [&_h2]:!leading-[1.1] [&_h3]:!leading-[1.1] " +
   "[&_h4]:!leading-[1.1] [&_h5]:!leading-[1.1] [&_h6]:!leading-[1.1] " +
   "[&_.font-title]:!leading-[1.1] [&_.text-item-title]:!leading-[1.1] " +

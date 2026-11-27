@@ -19,6 +19,16 @@ import {
   TRANSCRIPT_PILL_TOP,
 } from "../lib/session-viewer-classes";
 
+const headerStyles = await Bun.file(
+  new URL("../ui/app-header-styles.ts", import.meta.url),
+).text();
+const tokens = await Bun.file(
+  new URL("../ui/tokens.stylex.ts", import.meta.url),
+).text();
+
+/** StyleX names a class `<file>__<styles>.<key>` under test. */
+const style = (key: string) => `app-header-styles__appHeaderStyles.${key}`;
+
 const sessionViewer = await Bun.file(
   new URL("../components/SessionViewer.tsx", import.meta.url),
 ).text();
@@ -35,18 +45,22 @@ test("phone transcript chrome never changes the scroll viewport", () => {
 
 test("phone top-bar actions use neutral ink", () => {
   expect(MOBILE_TOP_BAR_CONTROL).toContain("phone:[&_svg]:size-[26px]");
-  expect(MOBILE_BACK).toContain(MOBILE_TOP_BAR_CONTROL);
+  expect(MOBILE_BACK).toContain(style("control"));
   expect(MOBILE_BACK).toContain("phone:[&_svg]:size-[34px]");
-  for (const control of [
-    MOBILE_TOP_BAR_CONTROL,
-    MOBILE_BACK,
-    MOBILE_SEARCH_BTN,
-    mobileFilterBtn(true),
-  ]) {
-    expect(control).toContain("phone:text-fg");
-    expect(control).not.toContain("phone:text-accent");
+  // The control, Search and an active Filter take the foreground; a resting
+  // Filter is dim. None of them is accent-coloured.
+  expect(headerStyles).toMatch(/control: \{[^}]*color: phone\(color\.fg\)/);
+  expect(headerStyles).toMatch(/searchSegment: \{\s*color: phone\(color\.fg\)/);
+  expect(headerStyles).toContain(
+    "filterSegmentActive: { color: phone(color.fg) }",
+  );
+  expect(headerStyles).not.toContain("color.accent");
+  expect(MOBILE_SEARCH_BTN).toContain(style("searchSegment"));
+  expect(mobileFilterBtn(true)).toContain(style("filterSegmentActive"));
+  expect(mobileFilterBtn(false)).not.toContain(style("filterSegmentActive"));
+  for (const control of [MOBILE_TOP_BAR_CONTROL, MOBILE_BACK]) {
+    expect(control).not.toContain("text-accent");
   }
-  expect(mobileFilterBtn(false)).toContain("phone:text-dim");
 });
 
 test("phone navigation chrome has no hard divider bars", async () => {
@@ -81,11 +95,18 @@ test("every floating phone header control is made of the same glass", async () =
 
   // The prefixed spelling is the whole point on iOS Safari and the installed
   // PWA, which still ship backdrop-filter only under `-webkit-`.
-  expect(MOBILE_CONTROL_GLASS).toContain(
-    "phone:[-webkit-backdrop-filter:var(--mobile-header-control-blur)]",
+  expect(headerStyles).toContain(
+    "WebkitBackdropFilter: phone(blur.headerControl)",
   );
+  expect(tokens).toContain(
+    'headerControl: "var(--mobile-header-control-blur)"',
+  );
+  expect(MOBILE_CONTROL_GLASS).toContain(style("glassEffects"));
+  expect(MOBILE_CONTROL_GLASS).toContain(style("glassFill"));
   for (const control of [MOBILE_BACK, HEADER_TITLE_PILL, APP_HEADER_ACTIONS]) {
-    expect(control).toContain(MOBILE_CONTROL_GLASS);
+    expect(control).toContain(style("glassEffects"));
+    expect(control).toContain(style("glassFill"));
+    expect(control).toContain(style("capsule"));
     // A page-coloured fill is what made these read as paper stickers.
     expect(control).not.toContain("phone:bg-surface");
   }
