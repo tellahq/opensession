@@ -74,7 +74,7 @@ type Variant =
   | "warning"
   | "danger-strong"
   | "success-strong";
-type Size = "sm" | "md" | "lg";
+type Size = "sm" | "md" | "lg" | "xl";
 
 /** `color-mix` ink at a fixed strength over whatever surface is behind it. */
 const ink = (c: string, pct: number) =>
@@ -163,6 +163,16 @@ const styles = stylex.create({
     fontSize: text.body,
     borderRadius: radius.pill,
   },
+  xl: {
+    minHeight: {
+      default: controlHeight.xl,
+      [media.phone]: controlHeight.touch,
+    },
+    lineHeight: leading.label,
+    paddingInline: space.s16,
+    fontSize: text.body,
+    borderRadius: radius.pill,
+  },
 
   // The air between glyph and label (see the doc block for the measurement).
   leadGap: { gap: space.s6 },
@@ -173,10 +183,12 @@ const styles = stylex.create({
   iconLead_sm: { paddingInlineStart: space.s8 },
   iconLead_md: { paddingInlineStart: space.s10 },
   iconLead_lg: { paddingInlineStart: space.s12 },
+  iconLead_xl: { paddingInlineStart: space.s12 },
   // Trailing caret + label: the same 4px shave, on the caret's side.
   caretTrail_sm: { paddingInlineEnd: space.s8 },
   caretTrail_md: { paddingInlineEnd: space.s10 },
   caretTrail_lg: { paddingInlineEnd: space.s12 },
+  caretTrail_xl: { paddingInlineEnd: space.s12 },
   // Icon-only: a square hit target, symmetric.
   iconOnly_sm: {
     width: { default: controlHeight.sm, [media.phone]: controlHeight.touch },
@@ -188,6 +200,10 @@ const styles = stylex.create({
   },
   iconOnly_lg: {
     width: { default: controlHeight.lg, [media.phone]: controlHeight.touch },
+    paddingInline: space.s0,
+  },
+  iconOnly_xl: {
+    width: { default: controlHeight.xl, [media.phone]: controlHeight.touch },
     paddingInline: space.s0,
   },
 
@@ -343,21 +359,29 @@ const styles = stylex.create({
   label: { textBox: "trim-both cap alphabetic" },
 });
 
-const sizeStyle = { sm: styles.sm, md: styles.md, lg: styles.lg } as const;
+const sizeStyle = {
+  sm: styles.sm,
+  md: styles.md,
+  lg: styles.lg,
+  xl: styles.xl,
+} as const;
 const iconLeadPad = {
   sm: styles.iconLead_sm,
   md: styles.iconLead_md,
   lg: styles.iconLead_lg,
+  xl: styles.iconLead_xl,
 } as const;
 const caretTrailPad = {
   sm: styles.caretTrail_sm,
   md: styles.caretTrail_md,
   lg: styles.caretTrail_lg,
+  xl: styles.caretTrail_xl,
 } as const;
 const iconOnlyPad = {
   sm: styles.iconOnly_sm,
   md: styles.iconOnly_md,
   lg: styles.iconOnly_lg,
+  xl: styles.iconOnly_xl,
 } as const;
 const variantStyle = {
   default: styles.default,
@@ -374,7 +398,7 @@ const variantStyle = {
 
 // The caret keys off the label, not the 20px icon step: an iconic-pro glyph
 // at 14 draws an arrow about as tall as the cap height of a 12px label.
-const caretSize: Record<Size, number> = { sm: 14, md: 16, lg: 18 };
+const caretSize: Record<Size, number> = { sm: 14, md: 16, lg: 18, xl: 18 };
 
 // Leading-icon dimming: full-strength plates (primary, tones) take the
 // lighter dim, neutral weights the stronger one. Icon-only stays undimmed.

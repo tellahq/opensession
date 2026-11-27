@@ -101,14 +101,16 @@ export const color = stylex.defineConsts({
 });
 
 /**
- * Control heights. Three on desktop and one touch target: a control is 26
- * (chips, inline actions), 32 (the default) or 36 (a page's primary row), and
- * anything a finger operates on a phone is 44. Nothing in between.
+ * Control heights. Four on desktop and one touch target: a control is 26
+ * (chips, inline actions), 32 (the default), 36 (a page's primary row) or 40
+ * (a tile on the new layout's minibar), and anything a finger operates on a
+ * phone is 44. Nothing in between.
  */
 export const controlHeight = stylex.defineConsts({
   sm: "26px",
   md: "32px",
   lg: "36px",
+  xl: "40px",
   touch: "44px",
 });
 

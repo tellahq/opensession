@@ -69,7 +69,7 @@ function PlaceButton({
     <Tooltip label={label} side="right">
       <Button
         variant="ghost"
-        size="lg"
+        size="xl"
         icon={<PlaceGlyph icon={icon} unread={unread} />}
         className={cn(RAIL_TILE, active && PLACE_ACTIVE)}
         aria-label={unread ? `${label}, new activity` : label}
@@ -90,7 +90,7 @@ function useSupportShown(): boolean {
   );
 }
 
-// A menu row's glyph column is 20px; the minibar draws its glyphs at 22.
+// A menu row's glyph column is 20px; the minibar draws its glyphs at 24.
 const MENU_ICON_SLOT = cn("inline-flex shrink-0 [&_svg]:size-5", MENU_ICON);
 
 /**
@@ -200,7 +200,7 @@ export function Minibar({
             // (WORKSPACE_SHELL, lib/app-shell-classes.ts).
             data-minibar
             className={cn(
-              "wco-chrome relative flex w-[52px] shrink-0 flex-col items-center gap-1 pt-1.5 pb-2 [html.wco_&]:pt-[var(--desktop-header-h)]",
+              "wco-chrome relative flex w-[56px] shrink-0 flex-col items-center gap-1 pt-1 pb-2 [html.wco_&]:pt-[var(--desktop-header-h)]",
               // A hairline between the rail and the sidebar. It stops short
               // of the window's bottom edge by the workspace panel's own 4px
               // gap (WORKSPACE_SHELL), so the two end on one line. In the
@@ -231,7 +231,7 @@ export function Minibar({
               onOpenSessions();
               onRevealSidebar();
             }}
-            icon={<IconMessages size={22} />}
+            icon={<IconMessages size={24} />}
           />
           {inBar.map((item) => (
             <PlaceButton
@@ -254,10 +254,10 @@ export function Minibar({
                 render={
                   <Button
                     variant="ghost"
-                    size="lg"
+                    size="xl"
                     icon={
                       <PlaceGlyph
-                        icon={<IconDotsHorizontal size={22} />}
+                        icon={<IconDotsHorizontal size={24} />}
                         // Something new in a place that is not in the bar.
                         unread={inMore.some(unread)}
                       />
@@ -296,8 +296,8 @@ export function Minibar({
         <Tooltip label="Your settings" side="right">
           <Button
             variant="ghost"
-            size="lg"
-            icon={<UserAvatar name={currentUser} size={28} />}
+            size="xl"
+            icon={<UserAvatar name={currentUser} size={30} />}
             className={RAIL_TILE}
             aria-label="Your settings"
             onClick={() => navigation.openSettings("myAccounts")}

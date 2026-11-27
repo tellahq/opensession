@@ -222,7 +222,7 @@ export function AppSidebar({
             // The minibar already covers its own width of the traffic
             // lights, so this row clears only what is left of them.
             newLayout &&
-              "[html.wco_&]:!pl-[max(calc(env(titlebar-area-x,78px)-52px),calc(var(--sidebar-icon-left)-8px))]",
+              "[html.wco_&]:!pl-[max(calc(env(titlebar-area-x,78px)-56px),calc(var(--sidebar-icon-left)-8px))]",
             // The same tighter controls the pane's side of this row has
             // (VIEWER_HEADER): 28px, with 20px glyphs.
             newLayout &&
