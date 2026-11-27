@@ -71,6 +71,7 @@ import type { useSessions } from "./useSessions";
 import { useWorkspaceArchive } from "./useWorkspaceArchive";
 import { useWorkspaceMutations } from "./useWorkspaceMutations";
 import type { useWorkspacePanes } from "./useWorkspacePanes";
+import { useNewLayoutPref } from "../lib/new-layout-pref";
 import { requestPanelBrowser, requestPortalPin } from "../lib/portal-pin";
 import {
   openSidePanelTab,
@@ -515,10 +516,14 @@ export function useSessionTabs({
   // either column of a split either. The split is kept, not cleared — going back
   // up to the parent restores it.
   const activeTabSplit = currentSession && !viewingWorker ? tabSplit : null;
+  // The new layout draws the strip in the window row, attached to the sheet,
+  // and draws it for a single tab too: there the tab is the session's name.
+  const attachedTabs = useNewLayoutPref() && !isPhone;
   const tabStripVisible = shouldShowTabStrip(
     stripTabIds.length,
     !!activeTabSplit,
     !!viewingWorker,
+    attachedTabs,
   );
   const deskFabPosition = useDeskFabPosition(
     !isPhone && !activeViewTabShown,
@@ -746,6 +751,8 @@ export function useSessionTabs({
    * archived-sessions menu.
    */
   function renderTabBar(side: SplitSide | null) {
+    // A split draws one bar per column; there is no shared bar to offer.
+    if (!side && activeTabSplit) return null;
     const ids =
       side && activeTabSplit
         ? side === "left"
@@ -776,6 +783,7 @@ export function useSessionTabs({
         }}
         layout={{
           inSplit: !!side,
+          attached: attachedTabs && !side,
           showHistory: side !== "left",
           moveAcrossSide: side ? otherSide(side) : undefined,
           morphingSessionId: newTabMorph?.id,

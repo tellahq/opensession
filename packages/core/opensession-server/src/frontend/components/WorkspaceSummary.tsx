@@ -1,3 +1,4 @@
+import { useTabsInTopRow } from "../lib/tab-row";
 import {
   useEffect,
   useEffectEvent,
@@ -305,6 +306,7 @@ export function WorkspaceSummary({
   hasRoom = true,
   ...body
 }: Props) {
+  const tabsInTopRow = useTabsInTopRow();
   /** The standing preference: whether this person keeps the card up. */
   const [pinned, setPinned] = useState(workspaceSummaryOpen);
   const pinnedRef = useRef(pinned);
@@ -456,7 +458,7 @@ export function WorkspaceSummary({
         // header's own bottom edge and 37px above the tab strip's: 8 + 12
         // with no strip, 37 + 12 with one.
         sideOffset={workspaceSummarySideOffset(
-          Boolean(tabStripVisible),
+          Boolean(tabStripVisible) && !tabsInTopRow,
           bannerHeight,
         )}
         elevation="sm"

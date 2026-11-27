@@ -34,13 +34,18 @@ import {
   TAB_FACES,
   TAB_FACES_MORE,
   TAB_GROUP,
+  TAB_GROUP_ATTACHED,
   TAB_HISTORY,
   TAB_ITEM,
+  TAB_ITEM_ATTACHED,
+  TAB_ITEM_ATTACHED_DRAGGING,
   TAB_ITEM_DRAGGING,
   TAB_NEW,
   TAB_RENAME,
   TAB_SCROLL,
+  TAB_SCROLL_ATTACHED,
   TAB_STRIP,
+  TAB_STRIP_ATTACHED,
   TAB_SWATCH,
   TAB_SWATCH_NONE,
   TAB_SWATCH_ON,
@@ -98,6 +103,7 @@ function ReorderTabItem({
   nextActive,
   draggable,
   dragging,
+  attached,
   onPointerDown,
   onDragStart,
   onDragEnd,
@@ -108,6 +114,7 @@ function ReorderTabItem({
   nextActive: boolean;
   draggable: boolean;
   dragging: boolean;
+  attached?: boolean;
   onPointerDown: (key: string, event: React.PointerEvent) => void;
   onDragStart: (key: string) => void;
   onDragEnd: (key: string) => void;
@@ -126,7 +133,10 @@ function ReorderTabItem({
       onDragEnd={() => onDragEnd(tabKey)}
       whileDrag={{ scale: 1.02, zIndex: 3 }}
       onClickCapture={onClickCapture}
-      className={dragging ? `${TAB_ITEM} ${TAB_ITEM_DRAGGING}` : TAB_ITEM}
+      className={cn(
+        attached ? TAB_ITEM_ATTACHED : TAB_ITEM,
+        dragging && (attached ? TAB_ITEM_ATTACHED_DRAGGING : TAB_ITEM_DRAGGING),
+      )}
     >
       {children}
     </Reorder.Item>
@@ -183,6 +193,7 @@ export function SessionTabs({
   );
   const {
     inSplit,
+    attached,
     showHistory = true,
     morphingSessionId,
     morphOrigin,
@@ -351,7 +362,10 @@ export function SessionTabs({
   // One tab of either kind → no strip. The pane header already names a lone
   // Chat, Review or other view, and carries the + that the hidden strip would
   // have owned. A session plus Review remains a real two-way choice.
-  if (!shouldShowTabStrip(tabs.length + viewTabs.length, inSplit)) return null;
+  if (
+    !shouldShowTabStrip(tabs.length + viewTabs.length, inSplit, false, attached)
+  )
+    return null;
 
   function closeEmptySession(
     button: HTMLButtonElement,
@@ -455,11 +469,15 @@ export function SessionTabs({
 
   return (
     <div
-      className={cn(TAB_STRIP, !inSplit && "desktop:-mt-[11px]")}
+      className={
+        attached
+          ? TAB_STRIP_ATTACHED
+          : cn(TAB_STRIP, !inSplit && "desktop:-mt-[11px]")
+      }
       role="tablist"
     >
       <div
-        className={TAB_SCROLL}
+        className={cn(TAB_SCROLL, attached && TAB_SCROLL_ATTACHED)}
         data-split={inSplit ? "" : undefined}
         ref={scrollRef}
       >
@@ -467,7 +485,7 @@ export function SessionTabs({
           as="div"
           axis="x"
           ref={groupRef}
-          className={TAB_GROUP}
+          className={attached ? TAB_GROUP_ATTACHED : TAB_GROUP}
           values={orderedKeys}
           onReorder={handleReorder}
         >
@@ -499,6 +517,7 @@ export function SessionTabs({
                   nextActive={nextActive}
                   draggable={tabDragEnabled && editKey !== key}
                   dragging={dropSlot?.key === key}
+                  attached={attached}
                   onPointerDown={handleItemPointerDown}
                   onDragStart={handleItemDragStart}
                   onDragEnd={handleItemDragEnd}
@@ -512,7 +531,7 @@ export function SessionTabs({
                         <div
                           role="tab"
                           aria-selected={v.active}
-                          className={`session-tab-view group/tab ${tabClass({ active: v.active, waiting: false, colored: false })}`}
+                          className={`session-tab-view group/tab ${tabClass({ active: v.active, waiting: false, colored: false, attached })}`}
                           onClick={() => onSelectView(v.id)}
                           title={v.label}
                         />
@@ -607,6 +626,7 @@ export function SessionTabs({
                 nextActive={nextActive}
                 draggable={tabDragEnabled && editKey !== key}
                 dragging={dropSlot?.key === key}
+                attached={attached}
                 onPointerDown={handleItemPointerDown}
                 onDragStart={handleItemDragStart}
                 onDragEnd={handleItemDragEnd}
@@ -628,6 +648,7 @@ export function SessionTabs({
                             active: key === activeId,
                             waiting,
                             colored: !!hex,
+                            attached,
                           }),
                           emptyVisual && "desktop:pr-7",
                         )}
@@ -851,7 +872,11 @@ export function SessionTabs({
       {/* Desktop: the "+" sits OUTSIDE the scroll so it's pinned and always
 				    visible — never scrolled off when the tabs overflow a narrow pane. */}
       {!isPhone && newTabButton}
-      {!isPhone && <div className={TAB_ACTIONS}>{historyMenu}</div>}
+      {!isPhone && (
+        // Attached, history follows the + instead of sitting at the far end
+        // of a row it now shares with the header's own controls.
+        <div className={cn(TAB_ACTIONS, attached && "ml-0")}>{historyMenu}</div>
+      )}
       {deleteTarget && (
         <DeleteSessionDialog
           open

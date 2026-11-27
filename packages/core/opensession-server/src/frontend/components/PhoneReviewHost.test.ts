@@ -29,10 +29,13 @@ test("focused phone Review replaces the title chrome and the workspace tabs", ()
   expect(app).toContain(
     "const tabStripShown = tabStripVisible && !focusedPhoneReview;",
   );
-  expect(app).toContain("!activeTabSplit && tabStripShown && (");
+  // The shared bar is handed to the pane's top row; a split draws one bar per
+  // column instead, which renderTabBar(null) answers with nothing.
+  expect(app).toContain(
+    "<PaneTopRow strip={tabStripShown && renderTabBar(null)}>",
+  );
   expect(app).toContain("tabStripVisible: tabStripShown,");
   expect(app).toContain("tabStripVisible={tabStripShown}");
-  expect(app).toContain("{renderTabBar(null)}");
   expect(app).toContain("{renderTabBar(side)}");
   expect(app).not.toContain("{!focusedPhoneReview && renderTabBar(side)}");
   expect(app).toContain("onBack={() => setActiveViewTab(null)}");

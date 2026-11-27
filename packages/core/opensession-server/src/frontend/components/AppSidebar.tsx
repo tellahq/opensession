@@ -9,6 +9,7 @@ import type { RepoInfo } from "../lib/api";
 import { renameSessionApi } from "../lib/api";
 import type { Route } from "../lib/app-route";
 import { usePlace } from "../lib/new-layout-place";
+import { NEW_LAYOUT_ROW_HEIGHT } from "../lib/app-shell-classes";
 import { useNewLayoutPref } from "../lib/new-layout-pref";
 import { Minibar } from "./shell/Minibar";
 import { SIDEBAR_CHROME_BTN } from "../lib/sidebar-classes";
@@ -157,8 +158,9 @@ export function AppSidebar({
           "desktop:[background:linear-gradient(var(--sidebar-material),var(--sidebar-material)),var(--sidebar-bg)]",
           // `!`: the desktop shell's vibrancy rule clears this background by
           // name (html.material-backdrop .sidebar-container).
-          newLayout &&
-            "[--sidebar-bg:var(--bg)] [--sidebar-material:var(--bg)] desktop:border-l desktop:border-divider desktop:!bg-surface",
+          // The new layout: this column's first row is part of the grey
+          // window row, and the sheet starts under it (the wrapper below).
+          newLayout && cn("desktop:![background:none]", NEW_LAYOUT_ROW_HEIGHT),
           // On phones the sidebar is the root PAGE of the iOS-style
           // stack — full bleed under the pushed detail pane — rather than
           // a fixed-width column.
@@ -233,67 +235,79 @@ export function AppSidebar({
           <NotificationBell />
           <TitleBar onSearch={() => commandMenuRef.current?.open()} />
         </div>
-        <Sidebar
-          ref={sidebarRef}
-          sessions={sessions}
-          registeredRepos={registeredRepoInfo.map((repo) => repo.id)}
-          directToMainBranches={Object.fromEntries(
-            registeredRepoInfo
-              .filter((repo) => repo.sharedCheckout)
-              .map((repo) => [repo.id, repo.defaultBranch]),
-          )}
-          sessionsError={sessionsError}
-          sessionsLoading={loading}
-          onRetrySessions={() => void refresh()}
-          workspaceDataReady={!loading && workspacesLoaded}
-          workspaces={workspaces}
-          teamViewing={teamViewing}
-          // Selection is navigation state, not hydrated session data. The
-          // route changes synchronously when a row opens; waiting for detail
-          // hydration makes the old row look selected while the new session
-          // is already loading.
-          selectedId={
-            route.view === "session" ? (listedSession?.id ?? route.id) : null
+        {/* The new layout's sheet: the list on the page fill, with the one
+            rounded corner where it meets the minibar and the window row. It
+            climbs a pixel so its top edge is the hairline the pane's row
+            draws. Elsewhere the wrapper dissolves and changes nothing. */}
+        <div
+          className={
+            newLayout
+              ? "-mt-px flex min-h-0 flex-1 flex-col overflow-hidden rounded-tl-[10px] border-t border-l border-divider bg-surface [--sidebar-bg:var(--bg)] [--sidebar-material:var(--bg)]"
+              : "contents"
           }
-          prsActive={route.view === "prs"}
-          issuesActive={route.view === "issues"}
-          feedActive={route.view === "feed"}
-          connected={connected}
-          tasksActive={route.view === "tasks"}
-          taskCount={taskCount}
-          selectedWorkspaceId={sidebarWorkspaceId}
-          plainActive={route.view === "plain"}
-          supportTinderActive={route.view === "supporttinder"}
-          reportsActive={route.view === "reports"}
-          databasesActive={route.view === "databases"}
-          analyticsActive={route.view === "analytics"}
-          showDraftRow={productEmpty && githubConnectionState !== "loading"}
-          footerAccessory={footerAccessory}
-          draftRowActive={productEmpty && route.view === "prs"}
-          onRenameWorkspace={renameWorkspaceFromSidebar}
-          onDeleteWorkspace={deleteWorkspaceFromSidebar}
-          onToast={showToast}
-          // Only hand the sidebar the top-bar actions slot on the root
-          // page — on a pushed page (session, etc.) the sidebar is still
-          // mounted underneath and would portal its filter button into
-          // the session's top bar.
-          headerActionsEl={mobileDetail ? null : headerActionsEl}
-          catchUpActive={route.view === "catchup"}
-          onUnreadChatsChange={setUnreadChats}
-          archivedActive={route.view === "archived"}
-          place={newLayout ? place : undefined}
-          onArchive={archiveSessionFromSidebar}
-          onArchiveWorkspace={archiveWorkspaceFromSidebar}
-          onRename={async (s, title) => {
-            await (async () => {
-              await renameSessionApi(s.id, title);
-            })().catch(async (e) => {
-              console.error("Rename failed:", e);
-            });
-            refresh();
-          }}
-          onSetStatus={setSessionLanes}
-        />
+        >
+          <Sidebar
+            ref={sidebarRef}
+            sessions={sessions}
+            registeredRepos={registeredRepoInfo.map((repo) => repo.id)}
+            directToMainBranches={Object.fromEntries(
+              registeredRepoInfo
+                .filter((repo) => repo.sharedCheckout)
+                .map((repo) => [repo.id, repo.defaultBranch]),
+            )}
+            sessionsError={sessionsError}
+            sessionsLoading={loading}
+            onRetrySessions={() => void refresh()}
+            workspaceDataReady={!loading && workspacesLoaded}
+            workspaces={workspaces}
+            teamViewing={teamViewing}
+            // Selection is navigation state, not hydrated session data. The
+            // route changes synchronously when a row opens; waiting for detail
+            // hydration makes the old row look selected while the new session
+            // is already loading.
+            selectedId={
+              route.view === "session" ? (listedSession?.id ?? route.id) : null
+            }
+            prsActive={route.view === "prs"}
+            issuesActive={route.view === "issues"}
+            feedActive={route.view === "feed"}
+            connected={connected}
+            tasksActive={route.view === "tasks"}
+            taskCount={taskCount}
+            selectedWorkspaceId={sidebarWorkspaceId}
+            plainActive={route.view === "plain"}
+            supportTinderActive={route.view === "supporttinder"}
+            reportsActive={route.view === "reports"}
+            databasesActive={route.view === "databases"}
+            analyticsActive={route.view === "analytics"}
+            showDraftRow={productEmpty && githubConnectionState !== "loading"}
+            footerAccessory={footerAccessory}
+            draftRowActive={productEmpty && route.view === "prs"}
+            onRenameWorkspace={renameWorkspaceFromSidebar}
+            onDeleteWorkspace={deleteWorkspaceFromSidebar}
+            onToast={showToast}
+            // Only hand the sidebar the top-bar actions slot on the root
+            // page — on a pushed page (session, etc.) the sidebar is still
+            // mounted underneath and would portal its filter button into
+            // the session's top bar.
+            headerActionsEl={mobileDetail ? null : headerActionsEl}
+            catchUpActive={route.view === "catchup"}
+            onUnreadChatsChange={setUnreadChats}
+            archivedActive={route.view === "archived"}
+            place={newLayout ? place : undefined}
+            onArchive={archiveSessionFromSidebar}
+            onArchiveWorkspace={archiveWorkspaceFromSidebar}
+            onRename={async (s, title) => {
+              await (async () => {
+                await renameSessionApi(s.id, title);
+              })().catch(async (e) => {
+                console.error("Rename failed:", e);
+              });
+              refresh();
+            }}
+            onSetStatus={setSessionLanes}
+          />
+        </div>
         {/* Drag the right edge to resize: a hover/active hairline over a
 						    wider invisible grab strip. Hidden on mobile, where the drawer
 						    is a fixed width. It sits above both primary (20) and nested

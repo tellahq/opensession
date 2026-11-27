@@ -58,7 +58,10 @@ import { RAIL_GUTTER_CLASS } from "./message-rail";
  */
 export const VIEWER_HEADER =
   "viewer-header wco-chrome flex h-[var(--desktop-header-h)] min-w-0 shrink-0 items-center justify-between gap-3 " +
-  "bg-surface px-4 " +
+  "bg-surface px-4 new-layout:bg-transparent " +
+  // Beside the tab strip the bar holds only its trailing controls, and the
+  // collapsed-sidebar inset belongs to the strip, which now leads the row.
+  "[[data-pane-top-row-tabs]~*_&]:pl-2 desktop:[.app-body.sidebar-collapsed_[data-pane-top-row-tabs]~*_&]:pl-2 " +
   // Collapsed desktop sidebar: the floating re-open + nav cluster overlays the
   // pane's left edge, so the row's text starts past it.
   "desktop:[.app-body.sidebar-collapsed_&]:pl-[148px] " +
@@ -67,6 +70,13 @@ export const VIEWER_HEADER =
   "phone:[.app-header-actions_&]:h-auto phone:[.app-header-actions_&]:gap-1.5 " +
   "phone:[.app-header-actions_&]:bg-transparent " +
   "phone:[.app-header-actions_&]:p-0";
+
+/**
+ * Hidden while the new layout's tab strip leads the window row. The tabs name
+ * the sessions there, so the header drops the name it would say again and
+ * keeps the marks and controls around it.
+ */
+export const HIDDEN_BESIDE_TABS = "[[data-pane-top-row-tabs]~*_&]:hidden";
 
 /** Workspace name + origin chip + status. Hidden on phones, where the ⋯ menu
  *  carries what it holds. */

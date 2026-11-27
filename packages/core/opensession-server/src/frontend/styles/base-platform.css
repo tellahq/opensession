@@ -270,3 +270,27 @@ html.wco .app-body.sidebar-collapsed .viewer-header,
 html.wco .app-body.sidebar-collapsed .detail-topbar-title {
   padding-left: calc(env(titlebar-area-x, 78px) + 148px);
 }
+/* The new layout (components/shell/Minibar.tsx). The minibar covers its own
+   52px of the traffic lights' width, so the pane's floating controls clear
+   only what is left of them. Where a tab strip leads the pane's row, the
+   inset past those controls is the strip's and the header beside it has none. */
+html.wco [data-minibar] ~ * .sidebar-reopen {
+  left: max(calc(env(titlebar-area-x, 78px) - 52px), 8px);
+}
+html.wco [data-minibar] ~ * .wco-nav-pane {
+  left: calc(max(env(titlebar-area-x, 78px) - 52px, 8px) + 42px);
+}
+html.wco .app-body.sidebar-collapsed [data-minibar] ~ * .viewer-header,
+html.wco .app-body.sidebar-collapsed [data-minibar] ~ * .detail-topbar-title {
+  padding-left: calc(max(env(titlebar-area-x, 78px) - 52px, 8px) + 148px);
+}
+html.wco .app-body.sidebar-collapsed [data-pane-top-row-tabs] {
+  padding-left: calc(max(env(titlebar-area-x, 78px) - 52px, 8px) + 140px);
+}
+html.wco
+  .app-body.sidebar-collapsed
+  [data-pane-top-row-tabs]
+  ~ *
+  .viewer-header {
+  padding-left: 8px;
+}

@@ -68,18 +68,50 @@ export const APP_BODY =
  * the box restores `.detail-pane` and the fixed panel portal to the layout
  * relationship their mobile positioning rules expect.
  */
+/**
+ * The new layout's window row is 40px, not 48: it holds tabs and a few
+ * controls, and the sheet under it is where the room should go. Set on the
+ * boxes beside the minibar because the variable is read all through them. The
+ * desktop shell keeps its own taller row, which its traffic lights centre on.
+ */
+export const NEW_LAYOUT_ROW_HEIGHT =
+  "[html:not(.wco)_[data-minibar]~&]:[--desktop-header-h:40px]";
+
+/**
+ * The new layout's window row over the pane: the tab strip, then the page's
+ * header. It is the grey of the minibar, and the sheet under it starts at the
+ * hairline along its bottom edge, which the active tab covers.
+ * `components/shell/PaneTopRow.tsx` renders it. Hidden while it holds nothing,
+ * on a page that brings a bar of its own.
+ */
+export const PANE_TOP_ROW =
+  "relative flex min-w-0 shrink-0 items-stretch bg-sidebar " +
+  "after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-divider after:content-[''] " +
+  "[&:not(:has(>:not(:empty)))]:hidden";
+
+/** The strip's share of that row. With the sidebar collapsed, the floating
+ *  re-open control sits over its first 48px. The desktop shell adds its
+ *  navigation cluster there and insets further (base-platform.css). */
+export const PANE_TOP_ROW_TABS =
+  "flex min-w-0 flex-1 items-stretch pl-2 [.app-body.sidebar-collapsed_&]:pl-12";
+
 export const WORKSPACE_SHELL =
   // Above the sidebar's pinned labels (z 20), so their scroll-under washes
   // cannot cut the shadow. The resize grabber stays above both at z 30.
   "relative z-[25] flex min-h-0 min-w-0 flex-1 overflow-hidden border-l border-divider bg-surface desktop:[box-shadow:var(--content-edge-shadow)] " +
   // Collapsed sidebar: nothing to divide from or cast depth onto.
   "[.app-body.sidebar-collapsed_&]:border-l-0 [.app-body.sidebar-collapsed_&]:[box-shadow:none] " +
-  // The new layout (components/shell/Minibar.tsx, an earlier sibling of this
-  // box) puts the sidebar and the workspace on one sheet, so the seam between
-  // them is a hairline and nothing is cast across it. With the sidebar
-  // collapsed the workspace meets the minibar instead and keeps the hairline.
-  // Keyed off the minibar's presence so AppShell stays free of state.
-  "[[data-minibar]~&]:[box-shadow:none] [.app-body.sidebar-collapsed_[data-minibar]~&]:border-l " +
+  // The new layout puts the sidebar and the workspace on one sheet under a
+  // window row (PANE_TOP_ROW below), so nothing is cast across the seam, and
+  // the seam is a hairline that starts under that row instead of a border
+  // that would cut through it. A page with no row keeps the line full height.
+  // A variant rather than state, so AppShell stays free of hooks.
+  "new-layout:border-l-0 new-layout:[box-shadow:none] " +
+  "new-layout:before:pointer-events-none new-layout:before:absolute new-layout:before:inset-y-0 new-layout:before:left-0 " +
+  "new-layout:before:z-30 new-layout:before:w-px new-layout:before:bg-divider new-layout:before:content-[''] " +
+  "new-layout:[&:has([data-pane-top-row]>:not(:empty))]:before:top-[calc(var(--desktop-header-h)-1px)] " +
+  NEW_LAYOUT_ROW_HEIGHT +
+  " " +
   // An open media viewer lifts the session input above its scrim, which
   // this box's own stacking context would otherwise keep below it.
   "[html[data-lightbox-composer]_&]:z-auto " +
@@ -184,7 +216,10 @@ export const SCROLL_EDGE_DIVIDER =
  *  level down from this row. */
 export const DETAIL_TOPBAR =
   `detail-topbar flex min-w-0 shrink-0 flex-col items-stretch empty:hidden ${SCROLL_EDGE_DIVIDER} ` +
-  "[.detail-pane:has(.session-tabs)_&]:after:content-none";
+  "[.detail-pane:has(.session-tabs)_&]:after:content-none " +
+  // In the new layout's window row the hairline is the row's own, and this
+  // bar takes what the tab strip beside it leaves, or all of it when alone.
+  "new-layout:after:hidden new-layout:only:flex-1";
 
 /**
  * The plain title. Matches `.viewer-header` and the sidebar brand row's height
@@ -210,7 +245,7 @@ export const DETAIL_TOPBAR =
  */
 export const DETAIL_TOPBAR_TITLE =
   "detail-topbar-title wco-chrome flex h-[var(--desktop-header-h)] items-center px-4 " +
-  "bg-surface " +
+  "bg-surface new-layout:bg-transparent " +
   "text-item-title font-semibold text-fg " +
   // Collapsed desktop sidebar: clear the floating re-open control and the
   // fallback nav/search cluster beside it.

@@ -87,13 +87,15 @@ export function clampSplitRatio(ratio: number): number {
 
 /** A lone tab is already named by the pane header, so only a real choice or a
  *  two-column split earns a tab strip. Workers render below their parent and
- *  never own workspace tabs. */
+ *  never own workspace tabs. `loneTab` is the new layout, where the strip is
+ *  the header's name and a single tab is drawn like any other. */
 export function shouldShowTabStrip(
   tabCount: number,
   inSplit = false,
   viewingWorker = false,
+  loneTab = false,
 ): boolean {
-  return !viewingWorker && (inSplit || tabCount > 1);
+  return !viewingWorker && (inSplit || tabCount > (loneTab ? 0 : 1));
 }
 
 export function getTabSplit(workspaceId: string): TabSplit | null {

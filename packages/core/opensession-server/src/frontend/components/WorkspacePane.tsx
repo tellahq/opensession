@@ -75,6 +75,7 @@ import {
   PANEL_SHELL,
 } from "../lib/session-panel-classes";
 import {
+  HIDDEN_BESIDE_TABS,
   VIEWER_BRANCH,
   VIEWER_BRANCH_EDITABLE,
   VIEWER_BRANCH_RENAME,
@@ -805,7 +806,7 @@ export function WorkspacePane({
         {workspace.repo && (
           <IconChevronRight
             size={18}
-            className="-mx-1 shrink-0 text-faint"
+            className={cn("-mx-1 shrink-0 text-faint", HIDDEN_BESIDE_TABS)}
             aria-hidden="true"
           />
         )}
@@ -828,6 +829,7 @@ export function WorkspacePane({
             className={cn(
               VIEWER_BRANCH,
               onRenameWorkspace && VIEWER_BRANCH_EDITABLE,
+              HIDDEN_BESIDE_TABS,
             )}
             title={
               onRenameWorkspace
