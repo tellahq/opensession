@@ -1,3 +1,4 @@
+import type { TabStripPlacement } from "../../lib/split-tabs";
 import type { ReactNode, Ref } from "react";
 import { createPortal } from "react-dom";
 import { BASE_PATH } from "../../lib/base";
@@ -55,7 +56,7 @@ interface SessionHeaderProps {
   menuTrailing?: ReactNode;
   isPhone: boolean;
   openNewSession?: NavigationActions["openNewSessionInWorkspace"];
-  tabStripVisible?: boolean;
+  tabStripVisible?: TabStripPlacement;
   workspaceSessionCount?: number;
   /** The workspace's sessions, totalled in the title card. */
   workspaceSessions?: UnifiedSession[];

@@ -1,3 +1,4 @@
+import type { TabStripPlacement } from "../../lib/split-tabs";
 import { useSessionVoice } from "../../hooks/useSessionVoice";
 import { useScrollEdge } from "../../hooks/useScrollEdge";
 import { useComposerAutocompleteEnabled } from "../../hooks/useComposerAutocomplete";
@@ -419,7 +420,7 @@ interface LayoutRegion {
   summaryStep: number;
   summaryStepStyle?: CSSProperties;
   summaryVisible: boolean;
-  tabStripVisible: boolean | undefined;
+  tabStripVisible: TabStripPlacement | undefined;
   setViewerInput: (node: HTMLDivElement | null) => void;
   leaveLatest: ComponentProps<typeof MessageRail>["leaveLatest"];
 }

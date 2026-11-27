@@ -1,8 +1,7 @@
-import { useEffect, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { PANE_TOP_ROW, PANE_TOP_ROW_TABS } from "../../lib/app-shell-classes";
 import { useNewLayoutPref } from "../../lib/new-layout-pref";
-import { setTabsInTopRow } from "../../lib/tab-row";
 
 /**
  * The top of the pane: the page's top bar (`children`) and the session tab
@@ -13,6 +12,9 @@ import { setTabsInTopRow } from "../../lib/tab-row";
  * so the bar keeps only its trailing controls. The strip is rendered here and
  * not portaled into the header, which remounts with every session, so its
  * scroll position and reorder state survive a change of tab.
+ *
+ * What lays itself out around the strip reads where it is from the
+ * `tabStripVisible` prop the pane hands down (TabStripPlacement).
  */
 export function PaneTopRow({
   strip,
@@ -23,12 +25,6 @@ export function PaneTopRow({
 }) {
   const isPhone = useIsPhone();
   const newLayout = useNewLayoutPref() && !isPhone;
-  const tabsInRow = newLayout && !!strip;
-  useEffect(() => {
-    setTabsInTopRow(tabsInRow);
-    return () => setTabsInTopRow(false);
-  }, [tabsInRow]);
-
   if (!newLayout) {
     return (
       <>

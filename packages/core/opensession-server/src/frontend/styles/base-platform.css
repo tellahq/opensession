@@ -285,7 +285,7 @@ html.wco .app-body.sidebar-collapsed [data-minibar] ~ * .detail-topbar-title {
   padding-left: calc(max(env(titlebar-area-x, 78px) - 52px, 8px) + 148px);
 }
 html.wco .app-body.sidebar-collapsed [data-pane-top-row-tabs] {
-  padding-left: calc(max(env(titlebar-area-x, 78px) - 52px, 8px) + 140px);
+  padding-left: calc(max(env(titlebar-area-x, 78px) - 52px, 8px) + 132px);
 }
 html.wco
   .app-body.sidebar-collapsed

@@ -475,6 +475,8 @@ export function SessionTabs({
           : cn(TAB_STRIP, !inSplit && "desktop:-mt-[11px]")
       }
       role="tablist"
+      // What the drag hit tests look for (TAB_STRIP_SELECTOR).
+      data-tab-strip=""
     >
       <div
         className={cn(TAB_SCROLL, attached && TAB_SCROLL_ATTACHED)}

@@ -8,7 +8,7 @@ import type { useSessions } from "../hooks/useSessions";
 import type { RepoInfo } from "../lib/api";
 import { renameSessionApi } from "../lib/api";
 import type { Route } from "../lib/app-route";
-import { usePlace } from "../lib/new-layout-place";
+import type { Place } from "../lib/new-layout-place";
 import { NEW_LAYOUT_ROW_HEIGHT } from "../lib/app-shell-classes";
 import { useNewLayoutPref } from "../lib/new-layout-pref";
 import { Minibar } from "./shell/Minibar";
@@ -24,6 +24,9 @@ import { ServerHealthMonitor } from "./ServerHealthMonitor";
 interface AppSidebarProps {
   data: {
     route: Route;
+    /** The new layout's place and the way back to your own list, both owned
+     *  by the route controller (hooks/useAppRoute.ts). */
+    places: { current: Place; openSessions: () => void };
     sessions: UnifiedSession[];
     registeredRepoInfo: RepoInfo[];
     sessionsError: ReturnType<typeof useSessions>["error"];
@@ -88,6 +91,7 @@ interface AppSidebarProps {
 export function AppSidebar({
   data: {
     route,
+    places,
     sessions,
     registeredRepoInfo,
     sessionsError,
@@ -132,14 +136,17 @@ export function AppSidebar({
   // sidebar takes the page's fill, and every pinned heading inside it reads
   // its backing from the same two variables, so they are set once here.
   const newLayout = useNewLayoutPref() && !isPhone;
-  const place = usePlace(route);
   const sidebarStyle: CSSProperties & { "--sidebar-w": string } = {
     "--sidebar-w": `${sidebarWidth}px`,
   };
   return (
     <>
       {newLayout && (
-        <Minibar route={route} place={place} connected={connected} />
+        <Minibar
+          place={places.current}
+          onOpenSessions={places.openSessions}
+          connected={connected}
+        />
       )}
       {/* `sidebar-container` stays on the markup as a hook: base.css's
 					    platform chrome (html.material-backdrop, the reduced-transparency
@@ -294,7 +301,7 @@ export function AppSidebar({
             catchUpActive={route.view === "catchup"}
             onUnreadChatsChange={setUnreadChats}
             archivedActive={route.view === "archived"}
-            place={newLayout ? place : undefined}
+            place={newLayout ? places.current : undefined}
             onArchive={archiveSessionFromSidebar}
             onArchiveWorkspace={archiveWorkspaceFromSidebar}
             onRename={async (s, title) => {

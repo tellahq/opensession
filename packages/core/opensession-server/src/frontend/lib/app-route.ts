@@ -74,6 +74,15 @@ const LEGACY_SETTINGS_SECTIONS = new Map<string, SettingsSectionKey>([
   ["identity", "general"],
 ]);
 
+/** The route that shows a Settings section. The tools that live in Settings
+ *  (Automations, Goals, Security) are routes of their own, and a link to one
+ *  as a plain section would open Settings with nothing in it. */
+export function settingsRoute(section?: SettingsSectionKey): Route {
+  return section && isToolView(section)
+    ? { view: section }
+    : { view: "settings", section };
+}
+
 export function isToolView(
   view: string,
 ): view is "automations" | "security" | "goals" {
@@ -273,6 +282,14 @@ export function routePath(route: Route): string {
     default:
       return `${BASE_PATH}/`;
   }
+}
+
+/** The Settings section a route shows, tools included. */
+export function settingsSectionOf(
+  route: Route,
+): SettingsSectionKey | undefined {
+  if (route.view === "settings") return route.section;
+  return isToolView(route.view) ? route.view : undefined;
 }
 
 export function isSettingsRoute(route: Route): boolean {

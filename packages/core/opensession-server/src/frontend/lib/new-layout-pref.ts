@@ -11,6 +11,9 @@ const pref = userPref.makeUserPref<boolean>({
   prefKey: "new-layout",
   changeEvent: "opensession-new-layout-changed",
   defaultValue: false,
+  // New after preferences began to sync, so there is no browser-wide value
+  // to carry over, and a shared one would opt the next person in.
+  perUser: true,
   decode: (v) => (v === "on" ? true : v === "off" ? false : null),
   encode: (on) => (on ? "on" : "off"),
 });

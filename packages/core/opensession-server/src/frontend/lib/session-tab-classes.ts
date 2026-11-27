@@ -40,6 +40,14 @@ const TAB_CORNERS = "rounded-full";
 /* ── The strip ──────────────────────────────────────────────────────────── */
 
 /**
+ * Finds a tab strip, whichever way it is drawn. SessionTabs puts
+ * `data-tab-strip` on every strip's root, and the drag hit tests (split a
+ * pane, drop on the side panel) measure from it. `session-tabs` cannot do
+ * this job: it is a styling hook the attached strip deliberately lacks.
+ */
+export const TAB_STRIP_SELECTOR = "[data-tab-strip]";
+
+/**
  * The bar itself. `group/strip` reveals history, which stays quiet until the
  * strip is pointed at. The new-tab + remains visible whenever the strip exists.
  *
@@ -123,8 +131,9 @@ export const TAB_STRIP_ATTACHED =
 /** Added to TAB_SCROLL: full height so a tab can reach the row's bottom edge,
  *  and above the row's hairline so the active tab covers it. The scroll masks
  *  itself when it overflows, which makes it a stacking context of its own, so
- *  the lift has to be here and not on the tab. */
-export const TAB_SCROLL_ATTACHED = "relative z-[1] items-stretch";
+ *  the lift has to be here and not on the tab. The 8px at each end is room for
+ *  the first and last tab's flare, which the scroll would otherwise clip. */
+export const TAB_SCROLL_ATTACHED = "relative z-[1] items-stretch px-2";
 
 export const TAB_GROUP_ATTACHED =
   "relative inline-flex flex-none items-stretch gap-0.5";
@@ -214,17 +223,31 @@ const TAB_ATTACHED_BASE =
   "relative inline-flex max-w-[200px] shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
   "rounded-t-[10px] border border-b-0 px-3 text-label shadow-none transition-[background-color,color]";
 
+/**
+ * Where the active tab meets the sheet, its sides flare out into the row's
+ * hairline instead of landing on it square. Each flare is an 8px box just
+ * outside the tab's foot, painted by one gradient: the row shows through
+ * inside the curve, the hairline is the curve, and the tab's own fill
+ * (`--tab-fill`) is the wedge under it. It overlaps the tab's border by its
+ * one pixel, so the border turns into the curve without a step.
+ */
+const TAB_ATTACHED_FLARES =
+  "before:pointer-events-none before:absolute before:bottom-0 before:-left-2 before:size-2 before:content-[''] " +
+  "before:[background:radial-gradient(circle_at_0_0,transparent_7px,var(--divider)_7.5px,var(--divider)_8px,var(--tab-fill)_8.5px)] " +
+  "after:pointer-events-none after:absolute after:bottom-0 after:-right-2 after:size-2 after:content-[''] " +
+  "after:[background:radial-gradient(circle_at_100%_0,transparent_7px,var(--divider)_7.5px,var(--divider)_8px,var(--tab-fill)_8.5px)]";
+
 function attachedTabClass({ active, waiting, colored }: TabState): string {
   const ink = active || waiting ? "text-fg" : "text-dim hover:text-fg";
   const surface = colored
     ? active
-      ? "border-divider bg-[color-mix(in_srgb,var(--tab-color)_14%,var(--bg))]"
+      ? "border-divider bg-[var(--tab-fill)] [--tab-fill:color-mix(in_srgb,var(--tab-color)_14%,var(--bg))]"
       : "border-transparent bg-[color-mix(in_srgb,var(--tab-color)_9%,transparent)] " +
         "hover:bg-[color-mix(in_srgb,var(--tab-color)_16%,transparent)]"
     : active
-      ? "border-divider bg-surface"
+      ? "border-divider bg-[var(--tab-fill)] [--tab-fill:var(--bg)]"
       : "border-transparent bg-transparent hover:bg-hover";
-  return `${TAB_ATTACHED_BASE} ${ink} ${surface}`;
+  return `${TAB_ATTACHED_BASE} ${ink} ${surface} ${active ? TAB_ATTACHED_FLARES : ""}`;
 }
 
 /**

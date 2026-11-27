@@ -81,7 +81,13 @@ import { useWorkspaces } from "./hooks/useWorkspaces";
 import { getActiveViewTab, saveActiveViewTab } from "./lib/active-view-tab";
 import { cachedRepos, resolveWorkspaceApi } from "./lib/api";
 import { buildAppCommandActions } from "./components/app-command-actions";
-import { isToolView, parseRoute, routePath, type Route } from "./lib/app-route";
+import {
+  parseRoute,
+  routePath,
+  settingsRoute,
+  settingsSectionOf,
+  type Route,
+} from "./lib/app-route";
 import { useDeskShowNavigation } from "./hooks/useDeskShowNavigation";
 import {
   APP_BODY,
@@ -175,6 +181,7 @@ export function AppContent({
     finishFirstMileNavigation,
     restoredSessionId,
     returnsToSession,
+    places,
     forgetLastSession,
     canonicalizePath,
   } = useAppRoute({ serviceWorker, currentUser: getCurrentUser });
@@ -957,7 +964,7 @@ export function AppContent({
           (route.view === "workspace" &&
             routeWorkspace &&
             Boolean(routeWorkspace.branch || reviewFocusPr?.branch)))));
-  const tabStripShown = tabStripVisible && !focusedPhoneReview;
+  const tabStripShown = !focusedPhoneReview && tabStripVisible;
 
   // Whether the bar is holding that name yet. It stays quiet while the page
   // below heads itself with the same word, and picks the name up once that
@@ -1204,7 +1211,7 @@ export function AppContent({
     openPrs: () => navigate({ view: "prs" }),
     openIssues: () => navigate({ view: "issues" }),
     openFeed: () => navigate({ view: "feed" }),
-    openSettings: (section) => navigate({ view: "settings", section }),
+    openSettings: (section) => navigate(settingsRoute(section)),
     openTasks: () => navigate({ view: "tasks" }),
     openAutomation: (name) => navigate({ view: "automations", id: name }),
     openPrItem: openPrWorkspace,
@@ -1295,19 +1302,9 @@ export function AppContent({
               <Settings
                 onBack={leaveSettings}
                 onOpenOnboarding={openFirstMile}
-                section={
-                  route.view === "settings"
-                    ? route.section
-                    : isToolView(route.view)
-                      ? route.view
-                      : undefined
-                }
+                section={settingsSectionOf(route)}
                 onShowRoot={() => navigate({ view: "settings" })}
-                onSelect={(key) =>
-                  isToolView(key)
-                    ? navigate({ view: key })
-                    : navigate({ view: "settings", section: key })
-                }
+                onSelect={(key) => navigate(settingsRoute(key))}
               >
                 {route.view === "automations" ? (
                   <Automations
@@ -1350,6 +1347,7 @@ export function AppContent({
                 <AppSidebar
                   data={{
                     route,
+                    places,
                     sessions,
                     registeredRepoInfo,
                     sessionsError,

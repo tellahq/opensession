@@ -1,7 +1,6 @@
-import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 import { useNavigation } from "../../hooks/useNavigation";
-import type { Route } from "../../lib/app-route";
-import { setLastPlace, type Place } from "../../lib/new-layout-place";
+import type { Place } from "../../lib/new-layout-place";
 import {
   onSidebarToolsChanged,
   readHiddenSidebarTools,
@@ -64,31 +63,18 @@ function useSupportShown(): boolean {
  * region (`wco-chrome`, base-platform.css).
  */
 export function Minibar({
-  route,
   place,
+  onOpenSessions,
   connected,
 }: {
-  route: Route;
   place: Place;
+  /** Show your own list (the route controller's `openSessions`). */
+  onOpenSessions: () => void;
   connected: boolean;
 }) {
   const navigation = useNavigation();
   const currentUser = useCurrentUser();
   const supportShown = useSupportShown();
-  // Sessions returns to the conversation you left for another place.
-  const lastSession = useRef<string | null>(null);
-  useEffect(() => {
-    if (route.view === "session" && place === "sessions")
-      lastSession.current = route.id;
-  }, [route, place]);
-  const openSessions = () => {
-    if (place === "sessions") return;
-    setLastPlace("sessions");
-    // From Activity with a session on screen, this is only a change of list.
-    if (route.view === "session" || route.view === "workspace") return;
-    if (lastSession.current) navigation.openSession(lastSession.current);
-    else navigation.openNewWorkspace();
-  };
 
   return (
     <nav
@@ -107,7 +93,7 @@ export function Minibar({
         <PlaceButton
           label="Sessions"
           active={place === "sessions"}
-          onClick={openSessions}
+          onClick={onOpenSessions}
           icon={<IconMessages size={22} />}
         />
         <PlaceButton

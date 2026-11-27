@@ -27,7 +27,7 @@ test("focused phone Review replaces the title chrome and the workspace tabs", ()
   expect(app).toContain("{!focusedPhoneReview && (");
   // The review header's back button replaces the strip, like GitHub's app.
   expect(app).toContain(
-    "const tabStripShown = tabStripVisible && !focusedPhoneReview;",
+    "const tabStripShown = !focusedPhoneReview && tabStripVisible;",
   );
   // The shared bar is handed to the pane's top row; a split draws one bar per
   // column instead, which renderTabBar(null) answers with nothing.

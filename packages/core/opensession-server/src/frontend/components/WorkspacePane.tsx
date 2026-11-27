@@ -1,3 +1,4 @@
+import type { TabStripPlacement } from "../lib/split-tabs";
 import { AGENT_NAME } from "../lib/brand";
 import {
   workspaceBranchList,
@@ -148,7 +149,7 @@ interface Props {
   focusPr?: PrFocus & { workspaceId?: string };
   /** Whether the workspace has a real choice of tabs. A lone Review pane keeps
    *  the strip hidden and moves its + into the header, like a lone Chat. */
-  tabStripVisible: boolean;
+  tabStripVisible: TabStripPlacement;
   /** Start a sibling session from the header when the lone-tab strip is hidden. */
   onNewSession?: (origin?: NewTabMorphOrigin) => void;
   /** The app's top-bar slot. The header row portals in here, the same slot and

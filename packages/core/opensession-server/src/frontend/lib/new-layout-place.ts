@@ -1,13 +1,16 @@
-// The new layout's places (components/shell/Minibar.tsx): which one a route
-// belongs to, and the one you were last in.
+// The new layout's places (components/shell/Minibar.tsx) and which one a
+// route belongs to.
 //
 // Most routes name their place. A session does not, because the same session
 // can be reached from your own list or from Activity, and Activity has to keep
 // its list beside the session you opened from it or you could not read through
 // a teammate's work without the list changing under you. So a session keeps
 // Activity when that is where you were, and otherwise belongs to Sessions.
+//
+// The route controller (hooks/useAppRoute.ts) owns the current place: it
+// applies this rule on every route it commits, and keeps the answer on the
+// history entry so Back and a reload restore it.
 
-import { useEffect, useSyncExternalStore } from "react";
 import type { Route } from "./app-route";
 
 export type Place = "sessions" | "activity" | "support" | "library";
@@ -32,39 +35,17 @@ const PLACE_OF_VIEW: Partial<Record<Route["view"], Place>> = {
   security: "library",
 };
 
-let lastPlace: Place = "sessions";
-const listeners = new Set<() => void>();
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
+/** True for a route whose view decides its place whatever came before. */
+export function routeNamesPlace(route: Route): boolean {
+  return PLACE_OF_VIEW[route.view] !== undefined;
 }
 
-/** Record the place you are in. The Sessions button calls it to leave
- *  Activity without leaving the session on screen. */
-export function setLastPlace(place: Place) {
-  if (place === lastPlace) return;
-  lastPlace = place;
-  for (const listener of listeners) listener();
-}
-
+/** The place `route` shows in, given the place you were in before it. */
 export function placeOfRoute(route: Route, last: Place): Place {
   return PLACE_OF_VIEW[route.view] ?? (last === "activity" ? last : "sessions");
 }
 
-/** The place this route shows in, remembered for the routes that name none. */
-export function usePlace(route: Route): Place {
-  const last = useSyncExternalStore(
-    subscribe,
-    () => lastPlace,
-    () => lastPlace,
-  );
-  // Only a route that names its place is recorded, and only when that name
-  // changes. A session never writes, so `setLastPlace("sessions")` from the
-  // Sessions button survives the renders between the click and the route.
-  const named = PLACE_OF_VIEW[route.view];
-  useEffect(() => {
-    if (named) setLastPlace(named);
-  }, [named]);
-  return placeOfRoute(route, last);
+/** A conversation: the kind of route the Sessions place returns to. */
+export function isConversationRoute(route: Route): boolean {
+  return route.view === "session" || route.view === "workspace";
 }

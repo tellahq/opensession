@@ -46,6 +46,7 @@ import {
   resolveSplit,
   saveTabSplit,
   shouldShowTabStrip,
+  type TabStripPlacement,
   type ResolvedSplit,
   type TabSplit,
 } from "../lib/split-tabs";
@@ -72,6 +73,7 @@ import { useWorkspaceArchive } from "./useWorkspaceArchive";
 import { useWorkspaceMutations } from "./useWorkspaceMutations";
 import type { useWorkspacePanes } from "./useWorkspacePanes";
 import { useNewLayoutPref } from "../lib/new-layout-pref";
+import { TAB_STRIP_SELECTOR } from "../lib/session-tab-classes";
 import { requestPanelBrowser, requestPortalPin } from "../lib/portal-pin";
 import {
   openSidePanelTab,
@@ -519,12 +521,16 @@ export function useSessionTabs({
   // The new layout draws the strip in the window row, attached to the sheet,
   // and draws it for a single tab too: there the tab is the session's name.
   const attachedTabs = useNewLayoutPref() && !isPhone;
-  const tabStripVisible = shouldShowTabStrip(
+  const tabStripVisible: TabStripPlacement = !shouldShowTabStrip(
     stripTabIds.length,
     !!activeTabSplit,
     !!viewingWorker,
     attachedTabs,
-  );
+  )
+    ? false
+    : attachedTabs && !activeTabSplit
+      ? "attached"
+      : "band";
   const deskFabPosition = useDeskFabPosition(
     !isPhone && !activeViewTabShown,
     `${focusedTopTabId ?? ""}:${activeTabSplit?.rightActive ?? ""}:${activeTabSplit?.ratio ?? ""}`,
@@ -615,7 +621,7 @@ export function useSessionTabs({
         return "panel";
       const pane = detailPaneRef.current?.getBoundingClientRect();
       const strip = detailPaneRef.current
-        ?.querySelector<HTMLElement>(".session-tabs")
+        ?.querySelector<HTMLElement>(TAB_STRIP_SELECTOR)
         ?.getBoundingClientRect();
       if (
         !panel &&
@@ -660,7 +666,7 @@ export function useSessionTabs({
     // No split yet: the drop has to clear the strip, and needs a tab to leave
     // behind — splitting off the only tab would just move the whole bar over.
     const strip = detailPaneRef.current
-      ?.querySelector<HTMLElement>(".session-tabs")
+      ?.querySelector<HTMLElement>(TAB_STRIP_SELECTOR)
       ?.getBoundingClientRect();
     if (!strip || point.y < strip.bottom + 8 || stripTabIds.length < 2)
       return null;

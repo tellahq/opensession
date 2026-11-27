@@ -89,11 +89,12 @@ export const PANE_TOP_ROW =
   "after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-divider after:content-[''] " +
   "[&:not(:has(>:not(:empty)))]:hidden";
 
-/** The strip's share of that row. With the sidebar collapsed, the floating
- *  re-open control sits over its first 48px. The desktop shell adds its
- *  navigation cluster there and insets further (base-platform.css). */
+/** The strip's share of that row. The strip brings its own 8px at each end.
+ *  With the sidebar collapsed, the floating re-open control sits over the
+ *  row's first 48px. The desktop shell adds its navigation cluster there and
+ *  insets further (base-platform.css). */
 export const PANE_TOP_ROW_TABS =
-  "flex min-w-0 flex-1 items-stretch pl-2 [.app-body.sidebar-collapsed_&]:pl-12";
+  "flex min-w-0 flex-1 items-stretch [.app-body.sidebar-collapsed_&]:pl-10";
 
 export const WORKSPACE_SHELL =
   // Above the sidebar's pinned labels (z 20), so their scroll-under washes

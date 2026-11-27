@@ -804,3 +804,106 @@ describe("session memory", () => {
     expect(fake.storage.has("opensession-last-session-user")).toBe(false);
   });
 });
+
+describe("places", () => {
+  test("a route that names its place decides it", () => {
+    const fake = fakeBrowser({ path: "/feed" });
+    const controller = new AppRouteController(fake.browser);
+    expect(controller.place).toBe("activity");
+
+    controller.navigate({ view: "issues" });
+    expect(controller.place).toBe("library");
+  });
+
+  test("a session opened from Activity keeps Activity, on its entry too", () => {
+    const fake = fakeBrowser({ path: "/feed", state: { d: 0 } });
+    fake.setAutoPop(true);
+    const controller = new AppRouteController(fake.browser);
+    controller.start(false);
+
+    controller.navigate({ view: "session", id: "theirs" });
+    expect(controller.place).toBe("activity");
+    expect(fake.calls.at(-1)).toMatchObject({
+      type: "push",
+      state: { d: 1, place: "activity" },
+    });
+
+    // Leave for another place and come Back: the entry restores Activity.
+    controller.navigate({ view: "issues" });
+    expect(controller.place).toBe("library");
+    fake.browser.history.go(-1);
+    expect(controller.getCurrentRoute()).toEqual({
+      view: "session",
+      id: "theirs",
+    });
+    expect(controller.place).toBe("activity");
+  });
+
+  test("a session opened anywhere else belongs to Sessions", () => {
+    const fake = fakeBrowser({ path: "/issues", state: { d: 0 } });
+    const controller = new AppRouteController(fake.browser);
+
+    controller.navigate({ view: "session", id: "mine" });
+    expect(controller.place).toBe("sessions");
+    expect(fake.calls.at(-1)).toMatchObject({ state: { d: 1 } });
+    expect(fake.calls.at(-1)).not.toMatchObject({
+      state: { place: "activity" },
+    });
+  });
+
+  test("Sessions keeps the conversation on screen and changes only the list", () => {
+    const fake = fakeBrowser({ path: "/feed", state: { d: 0 } });
+    const controller = new AppRouteController(fake.browser);
+    controller.navigate({ view: "session", id: "theirs" });
+    let published = 0;
+    controller.subscribe(() => published++);
+
+    controller.openSessions();
+    expect(controller.place).toBe("sessions");
+    expect(controller.getCurrentRoute()).toEqual({
+      view: "session",
+      id: "theirs",
+    });
+    expect(fake.calls.at(-1)).toEqual({
+      type: "replace",
+      state: { d: 1 },
+      path: "/session/theirs",
+    });
+    expect(published).toBe(1);
+  });
+
+  test("Sessions returns to the conversation last open there", () => {
+    const fake = fakeBrowser({ path: "/session/mine", state: { d: 0 } });
+    const controller = new AppRouteController(fake.browser);
+    controller.navigate({ view: "feed" });
+    controller.navigate({ view: "session", id: "theirs" });
+    expect(controller.place).toBe("activity");
+    controller.navigate({ view: "issues" });
+
+    controller.openSessions();
+    expect(controller.getCurrentRoute()).toEqual({
+      view: "session",
+      id: "mine",
+    });
+    expect(controller.place).toBe("sessions");
+  });
+
+  test("Sessions shows the list on a fresh load with no conversation to return to", () => {
+    const fake = fakeBrowser({ path: "/issues", state: { d: 0 } });
+    const controller = new AppRouteController(fake.browser);
+    let published = 0;
+    controller.subscribe(() => published++);
+
+    controller.openSessions();
+    expect(controller.place).toBe("sessions");
+    expect(controller.getCurrentRoute()).toEqual({ view: "issues" });
+    expect(published).toBe(1);
+
+    // Picking a session from that list stays in Sessions.
+    controller.navigate({ view: "session", id: "mine" });
+    expect(controller.place).toBe("sessions");
+    // Going back to the page restores its own place.
+    controller.navigate({ view: "issues" });
+    expect(controller.place).toBe("library");
+  });
+});
