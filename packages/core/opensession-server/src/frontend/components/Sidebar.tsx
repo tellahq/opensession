@@ -1341,7 +1341,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   // strip that used to name whose sidebar this is went with the same move: the
   // Workspaces band heading says it once.
   //
-  // The band used to earn its place by pinning (SIDEBAR_STICKY_BAND, still on
+  // The band used to earn its place by pinning (`stickyBand`, still on
   // it for the phone layout). Out here it does not have to: it is simply above
   // the scrollport, which is what pinning was imitating. That also means the
   // tier-2 lane headers inside the list pin at the scroll's own top rather than

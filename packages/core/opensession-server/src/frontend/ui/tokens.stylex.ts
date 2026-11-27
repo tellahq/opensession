@@ -694,4 +694,22 @@ export const sidebarScale = stylex.defineConsts({
   attnLeading: "16px",
   /** An automation's runs indent their marks one step past the heading's. */
   nestedIconLeft: "28px",
+  /** Band headings: the toggle's corner, the filter button's box, and the
+   *  dot that marks a set filter (inset from the button's corner). */
+  bandRadius: "calc(8px * var(--rf))",
+  bandAction: "28px",
+  filterDot: "6px",
+  filterDotInset: "5px",
+  /** The Workspaces header's icon buttons and their glyph metric, stepped up
+   *  on phones where the whole sidebar is a tap surface. */
+  headerButton: "34px",
+  headerButtonPhone: "38px",
+  headerGlyph: "20px",
+  headerGlyphPhone: "22px",
+  /** The automation cog: a 24px slot that eats the heading's 4px padding so
+   *  its target runs the row's full height. */
+  cogWidth: "24px",
+  cogBleed: "-4px",
+  /** The sticky band slot rides above the pinned lanes. */
+  bandLayer: "20",
 });

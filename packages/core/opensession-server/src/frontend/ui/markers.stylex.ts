@@ -19,3 +19,8 @@ export const sidebarHeaderMarker = stylex.defineMarker();
 /** A sidebar row: its title, chips, time and facepile read its hover and its
  *  `data-selected` / `data-waiting` / `data-unread` state through this. */
 export const sidebarRowMarker = stylex.defineMarker();
+/** A sidebar band toggle (Automations, Team, Workspaces): its chevron shows
+ *  with the toggle's hover. */
+export const sidebarBandMarker = stylex.defineMarker();
+/** The Workspaces header row: its caption brightens with the row's hover. */
+export const sidebarWorkspacesHeadMarker = stylex.defineMarker();
