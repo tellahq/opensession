@@ -11,13 +11,16 @@ import type { UnifiedSession } from "./types";
 const NONE: readonly UnifiedSession[] = [];
 let list: readonly UnifiedSession[] = NONE;
 let byId = new Map<string, UnifiedSession>();
+let byGoal = new Map<string, UnifiedSession>();
 const listeners = new Set<() => void>();
 
 export function publishSessionRecords(next: readonly UnifiedSession[]): void {
   if (next === list) return;
   list = next;
   byId = new Map();
+  byGoal = new Map();
   for (const session of next) {
+    if (session.goalId) byGoal.set(session.goalId, session);
     byId.set(session.id, session);
     for (const alias of session.aliasIds ?? []) byId.set(alias, session);
   }
@@ -38,5 +41,14 @@ export function useSessionRecords(): readonly UnifiedSession[] {
 export function useSessionRecord(id: string | null): UnifiedSession | null {
   return useSyncExternalStore(subscribe, () =>
     id ? (byId.get(id) ?? null) : null,
+  );
+}
+
+/** The session a goal drives, or null before its first wake. */
+export function useGoalSessionRecord(
+  goalId: string | null,
+): UnifiedSession | null {
+  return useSyncExternalStore(subscribe, () =>
+    goalId ? (byGoal.get(goalId) ?? null) : null,
   );
 }

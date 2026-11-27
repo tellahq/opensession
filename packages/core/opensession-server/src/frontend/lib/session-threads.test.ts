@@ -5,6 +5,8 @@ import {
   isCoordinating,
   sessionThreads,
   spawnedThreadId,
+  startedGoalId,
+  startedGoalName,
   threadState,
   threadStatusLine,
 } from "./session-threads";
@@ -150,6 +152,31 @@ describe("spawnedThreadId", () => {
         {},
         "Depth limit reached",
       ),
+    ).toBeNull();
+  });
+});
+
+describe("startedGoalId", () => {
+  test("reads the goal a create_goal call started, through mcp_call too", () => {
+    const result =
+      "Created goal *Ship it* [`goal-01a2-b3`], mode code. First wake soon.";
+    expect(
+      startedGoalId("mcp__opensession-goals__create_goal", {}, result),
+    ).toBe("goal-01a2-b3");
+    const input = {
+      name: "opensession-goals_create_goal",
+      arguments: { name: "Ship it", mission: "…" },
+    };
+    expect(startedGoalId("mcp_call", input, result)).toBe("goal-01a2-b3");
+    expect(startedGoalName("mcp_call", input)).toBe("Ship it");
+  });
+
+  test("ignores other tools and failed calls", () => {
+    expect(
+      startedGoalId("mcp__opensession-goals__get_goal", {}, "Created goal x"),
+    ).toBeNull();
+    expect(
+      startedGoalId("mcp__opensession-goals__create_goal", {}, "Error: nope"),
     ).toBeNull();
   });
 });

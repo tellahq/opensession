@@ -33,7 +33,12 @@ import {
   type SuggestedTask,
 } from "@tellahq/opensession-protocol/tool-presentation";
 import { unplacedMedia } from "../lib/placed-media";
-import { spawnedThreadId, spawnedThreadPrompt } from "../lib/session-threads";
+import {
+  spawnedThreadId,
+  spawnedThreadPrompt,
+  startedGoalId,
+  startedGoalName,
+} from "../lib/session-threads";
 import { ThreadCards, type SpawnedThread } from "./threads/ThreadCards";
 import {
   IconChevronDown,
@@ -949,9 +954,10 @@ function turnHtmlRenders(
 }
 
 /**
- * The sessions a turn started with `spawn_task` or `create_session`, in call
- * order. The id is in the result, so a call still running shows nothing yet
- * and a refused one never does.
+ * The sessions a turn started with `spawn_task` or `create_session`, and the
+ * goals it started with `create_goal`, in call order. The id is in the
+ * result, so a call still running shows nothing yet and a refused one never
+ * does.
  */
 function turnSpawnedThreads(
   items: TranscriptEntry[],
@@ -964,11 +970,22 @@ function turnSpawnedThreads(
     if (
       !name.includes("spawn_task") &&
       !name.includes("create_session") &&
+      !name.includes("create_goal") &&
       name.toLowerCase() !== "mcp_call"
     )
       continue;
     const result = toolResults.get(entry.toolUseId);
     if (!result || result.isError) continue;
+    const goalId = startedGoalId(name, entry.toolInput, result.content);
+    if (goalId) {
+      out.push({
+        id: entry.id,
+        threadId: null,
+        goalId,
+        prompt: startedGoalName(name, entry.toolInput),
+      });
+      continue;
+    }
     const threadId = spawnedThreadId(name, entry.toolInput, result.content);
     if (threadId)
       out.push({
