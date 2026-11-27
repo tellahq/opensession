@@ -280,7 +280,9 @@ export type TabState = {
  */
 const TAB_ATTACHED_BASE =
   "relative inline-flex max-w-[180px] shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
-  "[corner-shape:round] border px-2.5 text-label shadow-none transition-[background-color,color]";
+  "[corner-shape:round] border px-2.5 text-label shadow-none transition-[background-color,color] " +
+  // Close sits as far in from the right edge as the label from the left.
+  "[--tab-close-inset:6px]";
 const TAB_ATTACHED_OUTLINE = {
   // The label centred between the tab's top and the row's line below it.
   active:
@@ -447,7 +449,7 @@ const CLOSE_BASE =
  * changes its width and never asks Motion to shuffle every sibling. */
 const CLOSE_OVERLAY_POSITION =
   "[@media_(hover:hover)_and_(pointer:fine)]:absolute " +
-  "[@media_(hover:hover)_and_(pointer:fine)]:right-1 [@media_(hover:hover)_and_(pointer:fine)]:top-1/2 " +
+  "[@media_(hover:hover)_and_(pointer:fine)]:right-[var(--tab-close-inset,4px)] [@media_(hover:hover)_and_(pointer:fine)]:top-1/2 " +
   "[@media_(hover:hover)_and_(pointer:fine)]:z-[1] [@media_(hover:hover)_and_(pointer:fine)]:m-0 " +
   "[@media_(hover:hover)_and_(pointer:fine)]:-translate-y-1/2 " +
   "[@media_(hover:hover)_and_(pointer:fine)]:transition-opacity";
