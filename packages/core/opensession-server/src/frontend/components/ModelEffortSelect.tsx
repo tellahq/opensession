@@ -23,10 +23,9 @@ import {
   IconSparkle,
   IconUndo,
 } from "./icons";
-import {
-  formatModelGuidanceTitle,
-  modelGuidanceFor,
-} from "../lib/model-guidance";
+import { modelGuidanceFor, uniqueModelGuidances } from "../lib/model-guidance";
+import { isTouchPrimary } from "../lib/platform";
+import { ModelGuidanceFooter } from "./ModelGuidanceFooter";
 import { ModelMark } from "./ModelMark";
 import { BrandMark } from "./BrandTile";
 import { UserAvatar } from "./UserAvatar";
@@ -425,6 +424,9 @@ export function ModelEffortSelect({
   const [hoveredModelId, setHoveredModelId] = React.useState<string | null>(
     null,
   );
+  const [hoveredMoreModelId, setHoveredMoreModelId] = React.useState<
+    string | null
+  >(null);
   const draftTopIdsRef = React.useRef<string[] | null>(null);
   // A drop ends in a click on the row under the pointer; it must not pick it.
   const justDragged = React.useRef(false);
@@ -752,7 +754,10 @@ export function ModelEffortSelect({
     if (ids) setTopModelOrder(ids.map(idTail));
   };
 
-  const renderModelOption = (option: ModelMenuOption) => {
+  const renderModelOption = (
+    option: ModelMenuOption,
+    onPreview?: (id: string) => void,
+  ) => {
     const selected = isSelected(option);
     const nextModelInfo = modelById.get(option.id);
     const nextEfforts = nextModelInfo?.efforts ?? [];
@@ -771,8 +776,8 @@ export function ModelEffortSelect({
     const guidance = modelGuidanceFor(option.id);
     const item = (
       <Menu.Item
-        onPointerEnter={() => setHoveredModelId(option.id)}
-        onFocus={() => setHoveredModelId(option.id)}
+        onPointerEnter={onPreview ? () => onPreview(option.id) : undefined}
+        onFocus={onPreview ? () => onPreview(option.id) : undefined}
         onClick={() => {
           onModelChange(routed ?? option.value);
           pushRecentModel(option.id);
@@ -802,8 +807,7 @@ export function ModelEffortSelect({
             ? modelTitle
             : offEngine
               ? "Not available in this session"
-              : (reuploadHint ??
-                (guidance ? formatModelGuidanceTitle(guidance) : undefined))
+              : (reuploadHint ?? undefined)
         }
         className={cn(
           PICKER_ROW_GAP,
@@ -812,15 +816,17 @@ export function ModelEffortSelect({
           disabled && "opacity-55",
         )}
       >
-        <span className="flex min-w-0 flex-1 items-center gap-2">
+        <span className="flex min-w-0 flex-1 items-center gap-2.5">
           {/* The slot stays fixed so rows without a mark keep their labels aligned. */}
           <span className="flex size-4 shrink-0 items-center justify-center text-dim">
             <ModelMark id={option.id} provider={option.engine} />
           </span>
-          <span className="flex min-w-0 flex-1 flex-col">
-            <span className="min-w-0 truncate">{option.label}</span>
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="min-w-0 truncate font-medium leading-[1.25]">
+              {option.label}
+            </span>
             {guidance && (
-              <span className="min-w-0 truncate text-[11px] leading-tight text-faint">
+              <span className="min-w-0 truncate text-meta leading-[1.3] text-faint">
                 {guidance.summary}
               </span>
             )}
@@ -832,7 +838,66 @@ export function ModelEffortSelect({
     return React.cloneElement(item, { key: option.value || option.id });
   };
 
-  const previewGuidance = modelGuidanceFor(hoveredModelId ?? effectiveBase);
+  const topSizerGuidances = uniqueModelGuidances([
+    ...topOptions.map((option) => option.id),
+    effectiveBase,
+  ]);
+  const topPreviewOption = hoveredModelId
+    ? topById.get(hoveredModelId)
+    : topOptions.find(isSelected);
+  const topPreview = topPreviewOption
+    ? {
+        id: topPreviewOption.id,
+        label: topPreviewOption.label,
+        engine: topPreviewOption.engine,
+        guidance: modelGuidanceFor(topPreviewOption.id),
+      }
+    : {
+        id: effectiveBase,
+        label: modelLabel,
+        engine: modelInfo?.provider,
+        guidance: modelGuidanceFor(effectiveBase),
+      };
+  const topGuidanceFooter =
+    topOptions.length > 0 &&
+    topSizerGuidances.length > 0 &&
+    (!isTouchPrimary || topPreview.guidance !== null) ? (
+      <ModelGuidanceFooter
+        active={topPreview}
+        sizerGuidances={topSizerGuidances}
+      />
+    ) : undefined;
+
+  const moreMenuOptions = primaryFirst
+    ? morePrimaryOptions
+    : [...morePrimaryOptions, ...otherOptions];
+  const moreSizerGuidances = uniqueModelGuidances(
+    moreMenuOptions.map((option) => option.id),
+  );
+  const morePreviewOption =
+    (hoveredMoreModelId
+      ? moreMenuOptions.find((option) => option.id === hoveredMoreModelId)
+      : undefined) ??
+    selectedMoreOption ??
+    moreMenuOptions.find((option) => modelGuidanceFor(option.id) !== null) ??
+    moreMenuOptions[0];
+  const morePreviewGuidance = morePreviewOption
+    ? modelGuidanceFor(morePreviewOption.id)
+    : null;
+  const moreGuidanceFooter =
+    morePreviewOption &&
+    moreSizerGuidances.length > 0 &&
+    (!isTouchPrimary || morePreviewGuidance !== null) ? (
+      <ModelGuidanceFooter
+        active={{
+          id: morePreviewOption.id,
+          label: morePreviewOption.label,
+          engine: morePreviewOption.engine,
+          guidance: morePreviewGuidance,
+        }}
+        sizerGuidances={moreSizerGuidances}
+      />
+    ) : undefined;
 
   const menuRowTrigger = triggerVariant === "menu-row";
   const heroTrigger = triggerVariant === "hero";
@@ -842,7 +907,10 @@ export function ModelEffortSelect({
     <Menu.Root
       open={open}
       onOpenChange={(next) => {
-        if (!next) setHoveredModelId(null);
+        if (!next) {
+          setHoveredModelId(null);
+          setHoveredMoreModelId(null);
+        }
         setMenuOpen(next);
       }}
     >
@@ -944,8 +1012,11 @@ export function ModelEffortSelect({
               : "end"
         }
         sideOffset={6}
+        footer={topGuidanceFooter}
         className={cn(
-          "max-w-[min(360px,calc(100vw-1rem))]",
+          topGuidanceFooter
+            ? "w-[min(376px,calc(100vw-1rem))]"
+            : "max-w-[min(376px,calc(100vw-1rem))]",
           menuRowTrigger && "min-w-[220px]",
         )}
       >
@@ -985,28 +1056,18 @@ export function ModelEffortSelect({
                   "bg-popup [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm",
               )}
             >
-              {renderModelOption(option)}
+              {renderModelOption(option, setHoveredModelId)}
             </Reorder.Item>
           ))}
         </Reorder.Group>
-        {previewGuidance && (
-          <div className="mx-1.5 my-1 rounded-md border border-border-subtle bg-panel px-2.5 py-1.5 text-[11px] leading-snug text-dim">
-            <div className="line-clamp-2">
-              <span className="font-medium text-fg">Strong at:</span>{" "}
-              {previewGuidance.strongAt.join(" · ")}
-            </div>
-            {previewGuidance.watchFor.length > 0 && (
-              <div className="mt-0.5 line-clamp-2 text-faint">
-                <span className="font-medium text-dim">Watch for:</span>{" "}
-                {previewGuidance.watchFor.join(" · ")}
-              </div>
-            )}
-          </div>
-        )}
         {hasMoreModels && (
-          <Menu.SubmenuRoot>
+          <Menu.SubmenuRoot
+            onOpenChange={(next) => {
+              if (!next) setHoveredMoreModelId(null);
+            }}
+          >
             <Menu.SubmenuTrigger className="justify-between gap-3">
-              <span className="flex min-w-0 flex-1 items-center gap-2">
+              <span className="flex min-w-0 flex-1 items-center gap-2.5">
                 <span className="size-4 shrink-0" />
                 <span className="min-w-0 truncate">More models</span>
               </span>
@@ -1017,7 +1078,14 @@ export function ModelEffortSelect({
                 <IconChevronRight className="shrink-0" size={17} />
               </span>
             </Menu.SubmenuTrigger>
-            <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
+            <Menu.Popup
+              footer={moreGuidanceFooter}
+              className={
+                moreGuidanceFooter
+                  ? "w-[min(376px,calc(100vw-1rem))]"
+                  : "max-w-[min(376px,calc(100vw-1rem))]"
+              }
+            >
               {reuploadHint && <MenuHint>{reuploadHint}</MenuHint>}
               {groupedPrimary
                 ? providerGroups.map((g, i) => (
@@ -1025,11 +1093,15 @@ export function ModelEffortSelect({
                       {i > 0 && <Menu.Separator className="my-1" />}
                       <Menu.Group>
                         <Menu.GroupLabel>{g.label}</Menu.GroupLabel>
-                        {g.options.map((option) => renderModelOption(option))}
+                        {g.options.map((option) =>
+                          renderModelOption(option, setHoveredMoreModelId),
+                        )}
                       </Menu.Group>
                     </React.Fragment>
                   ))
-                : morePrimaryOptions.map((option) => renderModelOption(option))}
+                : morePrimaryOptions.map((option) =>
+                    renderModelOption(option, setHoveredMoreModelId),
+                  )}
               {primaryFirst && otherOptions.length > 0 && (
                 <>
                   {morePrimaryOptions.length > 0 && (
@@ -1067,7 +1139,9 @@ export function ModelEffortSelect({
                       {otherGroups.length > 1 && (
                         <Menu.GroupLabel>{g.label}</Menu.GroupLabel>
                       )}
-                      {g.options.map((option) => renderModelOption(option))}
+                      {g.options.map((option) =>
+                        renderModelOption(option, setHoveredMoreModelId),
+                      )}
                     </Menu.Group>
                   </React.Fragment>
                 ))}
