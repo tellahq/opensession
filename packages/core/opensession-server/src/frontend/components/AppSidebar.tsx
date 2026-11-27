@@ -330,7 +330,9 @@ export function AppSidebar({
           archivedActive={route.view === "archived"}
           place={newLayout ? places.current : undefined}
           toolPage={isToolView(route.view) ? route.view : undefined}
-          channelId={route.view === "channels" ? route.id : undefined}
+          channelId={
+            route.view === "channels" ? (route.page ?? route.id) : undefined
+          }
           onArchive={archiveSessionFromSidebar}
           onArchiveWorkspace={archiveWorkspaceFromSidebar}
           onRename={async (s, title) => {

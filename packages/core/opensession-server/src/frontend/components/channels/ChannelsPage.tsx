@@ -24,6 +24,8 @@ import { ChannelCallButton } from "./ChannelCallButton";
 import { ChannelComposer } from "./ChannelComposer";
 import { ChannelMessageRow } from "./ChannelMessageRow";
 import { ConversationGlyph, ConversationList } from "./ConversationList";
+import { DraftsPage } from "./DraftsPage";
+import { ThreadsPage } from "./ThreadsPage";
 
 type Navigate = (route: Route, opts?: { replace?: boolean }) => void;
 
@@ -235,6 +237,7 @@ function ThreadPanel({
       <div className="shrink-0 px-5 pt-1 pb-[max(16px,env(safe-area-inset-bottom))] phone:px-3">
         <ChannelComposer
           key={thread}
+          draftOf={{ channelId, thread }}
           placeholder="Reply"
           disabled={!replies.asUser}
           disabledHint={NO_GRANT_HINT}
@@ -270,9 +273,13 @@ export function ChannelsPage({
   // Desktop with nothing chosen: open the first channel, as Slack does.
   const first = payload?.conversations[0]?.id;
   useEffect(() => {
-    if (!route.id && !phone && first)
+    if (!route.id && !route.page && !phone && first)
       navigate({ view: "channels", id: first }, { replace: true });
-  }, [route.id, phone, first, navigate]);
+  }, [route.id, route.page, phone, first, navigate]);
+
+  useEffect(() => {
+    if (route.page) rememberChannel(route.page);
+  }, [route.page]);
 
   if (payload && !payload.connected)
     return (
@@ -293,6 +300,9 @@ export function ChannelsPage({
         account is connected.
       </EmptyState>
     );
+
+  if (route.page === "threads") return <ThreadsPage navigate={navigate} />;
+  if (route.page === "drafts") return <DraftsPage navigate={navigate} />;
 
   if (!route.id) {
     if (phone)
@@ -410,6 +420,7 @@ function ConversationView({
         <div className="shrink-0 px-5 pt-1 pb-[max(16px,env(safe-area-inset-bottom))] phone:px-3">
           <ChannelComposer
             key={channelId}
+            draftOf={{ channelId }}
             placeholder={label ? `Message ${label}` : "Message"}
             disabled={!main.asUser}
             disabledHint={NO_GRANT_HINT}

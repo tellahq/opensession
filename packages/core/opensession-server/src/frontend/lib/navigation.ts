@@ -44,8 +44,9 @@ export interface NavigationActions {
   openAnalytics(): void;
   openArchived(): void;
   openCatchUp(): void;
-  /** The Channels place: `id`, or the conversation you last had open. */
-  openChannels(id?: string): void;
+  /** The Channels place: a conversation id, `threads` or `drafts`, or
+   *  whatever you last had open there. */
+  openChannels(target?: string): void;
 
   openSession(id: string, created?: UnifiedSession | null): void;
   openWorkspace(id: string, preferredSessionId?: string): void;

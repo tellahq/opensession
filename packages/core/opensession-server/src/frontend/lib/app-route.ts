@@ -30,7 +30,20 @@ export type Route =
   | { view: "archived" }
   | { view: "inbox" }
   | { view: "catchup" }
-  | { view: "channels"; id?: string; thread?: string };
+  | {
+      view: "channels";
+      id?: string;
+      thread?: string;
+      /** Threads or Drafts & sent, instead of a conversation. */
+      page?: ChannelsPageName;
+    };
+
+/** The Channels place's own pages, which sit above its conversations. */
+export type ChannelsPageName = "threads" | "drafts";
+
+export function isChannelsPage(value: string): value is ChannelsPageName {
+  return value === "threads" || value === "drafts";
+}
 
 const TOOL_VIEWS = new Set(["automations", "security", "goals"]);
 const SETTINGS_SECTIONS: ReadonlySet<string> = new Set<SettingsSectionKey>([
@@ -168,9 +181,10 @@ export function parseRoute(pathname: string): Route {
   const channels = path.match(/^\/channels(?:\/([^/]+)(?:\/([^/]+))?)?$/);
   if (channels) {
     const route: Extract<Route, { view: "channels" }> = { view: "channels" };
-    if (channels[1]) route.id = decodeURIComponent(channels[1]);
-    if (channels[1] && channels[2])
-      route.thread = decodeURIComponent(channels[2]);
+    const first = channels[1] ? decodeURIComponent(channels[1]) : undefined;
+    if (first && isChannelsPage(first) && !channels[2]) route.page = first;
+    else if (first) route.id = first;
+    if (first && channels[2]) route.thread = decodeURIComponent(channels[2]);
     return route;
   }
 
@@ -284,6 +298,7 @@ export function routePath(route: Route): string {
     case "catchup":
       return `${BASE_PATH}/catchup`;
     case "channels":
+      if (route.page) return `${BASE_PATH}/channels/${route.page}`;
       return route.id
         ? `${BASE_PATH}/channels/${encodeURIComponent(route.id)}${route.thread ? `/${encodeURIComponent(route.thread)}` : ""}`
         : `${BASE_PATH}/channels`;

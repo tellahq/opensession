@@ -11,6 +11,7 @@ import {
   type ChannelSection,
   type SidebarGroup,
 } from "../../lib/channel-sections";
+import { useChannelDrafts } from "../../lib/channel-drafts";
 import { cn } from "../../ui/cn";
 import { useConfirm } from "../../ui/confirm";
 import { ListRow } from "../../ui/list-row";
@@ -24,12 +25,17 @@ import {
   IconFolderPlus,
   IconHash,
   IconLock,
+  IconMessages,
   IconPencil,
+  IconSend,
   IconTrash,
   IconX,
 } from "../icons";
 import { RenameDialog } from "../RenameDialog";
-import { sidebarToolRowClass } from "../sidebar/SidebarToolsNav";
+import {
+  SidebarToolRowBody,
+  sidebarToolRowClass,
+} from "../sidebar/SidebarToolsNav";
 import { UserAvatar } from "../UserAvatar";
 
 /** A conversation's leading mark: `#`, a lock, or the person's photo. */
@@ -66,6 +72,48 @@ export function ConversationGlyph({
     );
   const Glyph = conversation.kind === "private" ? IconLock : IconHash;
   return <Glyph size={size} className="shrink-0 text-faint" />;
+}
+
+const PAGES = [
+  { id: "threads", label: "Threads", icon: <IconMessages /> },
+  { id: "drafts", label: "Drafts & sent", icon: <IconSend /> },
+] as const;
+
+/** Threads and Drafts & sent, above the sections, as the tools sit above
+ *  the session list. Drafts counts what is waiting to be sent. */
+function PageRows({
+  activeId,
+  onOpen,
+}: {
+  activeId?: string;
+  onOpen: (id: string) => void;
+}) {
+  const drafts = useChannelDrafts().length;
+  return (
+    <div className="flex flex-col gap-0.5 pb-3">
+      {PAGES.map((page) => {
+        const active = page.id === activeId;
+        return (
+          <ListRow
+            key={page.id}
+            className={cn(
+              sidebarToolRowClass(active),
+              active ? "hover:bg-selected" : "hover:bg-transparent",
+            )}
+            aria-current={active ? "page" : undefined}
+            onClick={() => onOpen(page.id)}
+          >
+            <SidebarToolRowBody
+              icon={page.icon}
+              label={page.label}
+              count={page.id === "drafts" ? drafts : undefined}
+              active={active}
+            />
+          </ListRow>
+        );
+      })}
+    </div>
+  );
 }
 
 /** What the name dialog is doing: naming a new section (with the
@@ -305,12 +353,20 @@ export function ConversationList({
   const [confirm, confirmDialog] = useConfirm();
 
   if (loading)
-    return <ListSkeleton rows={8} variant="bare" className="px-2 pt-2" />;
+    return (
+      <div className="pb-4">
+        <PageRows activeId={activeId} onOpen={onOpen} />
+        <ListSkeleton rows={8} variant="bare" className="px-2" />
+      </div>
+    );
   if (error && !conversations.length)
     return (
-      <InlineAlert appearance="plain" className="mx-3 my-4">
-        {error}
-      </InlineAlert>
+      <div className="pb-4">
+        <PageRows activeId={activeId} onOpen={onOpen} />
+        <InlineAlert appearance="plain" className="mx-3 my-4">
+          {error}
+        </InlineAlert>
+      </div>
     );
   const groups = sidebarGroups(conversations, sections);
   const commit = () => {
@@ -321,6 +377,7 @@ export function ConversationList({
   };
   return (
     <div className="pb-4">
+      <PageRows activeId={activeId} onOpen={onOpen} />
       {groups.map((group, index) => (
         <Group
           key={group.key}

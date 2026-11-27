@@ -1,6 +1,11 @@
 import { expect, test } from "bun:test";
 import type { ChannelMessage } from "./api/slack-channels";
-import { layoutMessages, toggledReactions } from "./channel-messages";
+import {
+  layoutMessages,
+  peopleLine,
+  shortWhen,
+  toggledReactions,
+} from "./channel-messages";
 
 const at = (date: string, user = "UADA"): ChannelMessage => ({
   ts: String(new Date(date).getTime() / 1000),
@@ -47,4 +52,19 @@ test("toggles the person's own reaction", () => {
     emoji: "👍",
     mine: true,
   });
+});
+
+test("names who is in a thread, briefly", () => {
+  expect(peopleLine(["Ada", "Ada", "Grace"])).toBe("Ada and Grace");
+  expect(peopleLine(["Ada", "Grace", "Alan"])).toBe("Ada, Grace and Alan");
+  expect(peopleLine(["Ada", "Grace", "Alan", "Linus"])).toBe(
+    "Ada, Grace and 2 others",
+  );
+});
+
+test("a list row's time: today's clock, then Yesterday, then the date", () => {
+  const now = new Date(2026, 10, 27, 15, 0);
+  expect(shortWhen(new Date(2026, 10, 26, 9, 0), now)).toBe("Yesterday");
+  expect(shortWhen(new Date(2026, 10, 27, 9, 5), now)).toMatch(/9.05/);
+  expect(shortWhen(new Date(2025, 0, 3), now)).toMatch(/2025/);
 });
