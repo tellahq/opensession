@@ -45,17 +45,25 @@ Doctor checks the exact server PID, port owner, launch commit, boot ID, disposab
 
 The helper controls the run's private Chrome page over CDP. It uses the accessibility tree for element lookup and dispatches browser mouse and keyboard input. Use exact accessible roles and names from the current feature map.
 
-Open a desktop route:
+Open a desktop route (optionally pinning `--theme light` or `--theme dark`):
 
 ```bash
-./.agents/skills/verify-opensession/bin/verify-opensession browser "$RUN_ID" open --route /goals --width 1440 --height 900
+./.agents/skills/verify-opensession/bin/verify-opensession browser "$RUN_ID" open --route /goals --width 1440 --height 900 --theme dark
 ```
 
 Open the phone web client by changing the viewport. Widths at or below 720 use mobile emulation, a device pixel ratio of 3, and touch-first media (`hover: none`, `pointer: coarse`), so hover-only affordances swap to their phone form as they would on a device:
 
 ```bash
-./.agents/skills/verify-opensession/bin/verify-opensession browser "$RUN_ID" open --route /session/bks-demo-pr --width 390 --height 844
+./.agents/skills/verify-opensession/bin/verify-opensession browser "$RUN_ID" open --route /session/bks-demo-pr --width 390 --height 844 --theme light
 ```
+
+Capture the full 2×2 visual matrix (desktop + phone × dark + light) in one command:
+
+```bash
+./.agents/skills/verify-opensession/bin/verify-opensession visual-check "$RUN_ID" --route /goals --prefix goals --wait-role heading --wait-name "Goals"
+```
+
+Add `--full-page` when verifying a long scrollable surface such as `/design-system` or settings. After capturing, open and inspect every PNG with the `read` tool against the design checklist in `.agents/skills/opensession-ui/SKILL.md` — functional pass alone is not enough for visual changes.
 
 Common actions:
 

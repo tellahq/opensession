@@ -855,7 +855,7 @@ function StepNotice({ entry }: { entry: TranscriptEntry }) {
         )}
       </div>
       {hasRecap && open && (
-        <div className="ml-7 mt-1.5 rounded-lg border border-border-subtle border-l-2 border-l-accent bg-panel px-3.5 py-2.5 text-supporting text-fg">
+        <div className="ml-7 mt-1.5 rounded-lg border-l-2 border-l-accent bg-panel px-3.5 py-2.5 text-supporting text-fg">
           <ClampedBody
             className="markdown"
             content={entry.content}

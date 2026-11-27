@@ -121,7 +121,7 @@ function readViewport() {
   }
 }
 
-async function applyViewport({ width, height }) {
+async function applyViewport({ width, height, theme }) {
   const phone = width <= 720;
   await send("Emulation.setDeviceMetricsOverride", {
     width,
@@ -136,17 +136,19 @@ async function applyViewport({ width, height }) {
     enabled: phone,
     maxTouchPoints: phone ? 5 : 1,
   });
-  await send("Emulation.setEmulatedMedia", {
-    features: phone
-      ? [
-          { name: "hover", value: "none" },
-          { name: "pointer", value: "coarse" },
-        ]
-      : [
-          { name: "hover", value: "hover" },
-          { name: "pointer", value: "fine" },
-        ],
-  });
+  const features = phone
+    ? [
+        { name: "hover", value: "none" },
+        { name: "pointer", value: "coarse" },
+      ]
+    : [
+        { name: "hover", value: "hover" },
+        { name: "pointer", value: "fine" },
+      ];
+  if (theme === "light" || theme === "dark") {
+    features.push({ name: "prefers-color-scheme", value: theme });
+  }
+  await send("Emulation.setEmulatedMedia", { features });
 }
 
 const role = flag("role");
@@ -192,6 +194,13 @@ async function matchingNode() {
 }
 
 async function nodeCenter(node) {
+  try {
+    await send("DOM.scrollIntoViewIfNeeded", {
+      backendNodeId: node.backendDOMNodeId,
+    });
+  } catch {
+    // Some inline/SVG nodes reject scrollIntoViewIfNeeded; fall through to box model.
+  }
   const model = await send("DOM.getBoxModel", {
     backendNodeId: node.backendDOMNodeId,
   });
@@ -242,13 +251,33 @@ async function waitForReady() {
   const deadline = Date.now() + timeout;
   while (Date.now() <= deadline) {
     const result = await send("Runtime.evaluate", {
-      expression: "document.readyState === 'complete'",
+      expression: `(() => {
+        if (document.readyState !== "complete") return false;
+        const twLink = document.querySelector('link[rel="stylesheet"][href*="tailwind"]');
+        if (!twLink) return false;
+        return Boolean(twLink.sheet);
+      })()`,
       returnByValue: true,
     });
-    if (result?.result?.value === true) return;
+    if (result?.result?.value === true) {
+      await send("Runtime.evaluate", {
+        expression: "document.fonts ? document.fonts.ready.then(() => true) : true",
+        awaitPromise: true,
+        returnByValue: true,
+      });
+      return;
+    }
     await Bun.sleep(100);
   }
   fail("page did not finish loading");
+}
+
+function validateTheme(value) {
+  if (value === undefined) return undefined;
+  if (value !== "light" && value !== "dark") {
+    fail(`--theme must be "light" or "dark" (got ${JSON.stringify(value)})`);
+  }
+  return value;
 }
 
 try {
@@ -261,12 +290,38 @@ try {
       const route = flag("route", "/");
       const width = Number(flag("width", "1440"));
       const height = Number(flag("height", "900"));
-      const viewport = { width, height };
+      const theme = validateTheme(flag("theme"));
+      const viewport = { width, height, ...(theme ? { theme } : {}) };
       writeFileSync(viewportFile, JSON.stringify(viewport));
       await applyViewport(viewport);
-      await send("Page.navigate", { url: new URL(route, appUrl).href });
+      if (theme) {
+        // Seed localStorage and html[data-theme] before first paint so theme
+        // switches never capture a half-transitioned frame.
+        await send("Page.addScriptToEvaluateOnNewDocument", {
+          source: `try {
+            localStorage.setItem("opensession-theme", ${JSON.stringify(theme)});
+            document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)});
+            document.documentElement.style.colorScheme = ${JSON.stringify(theme)};
+          } catch {}`,
+        });
+      }
+      const targetUrl = new URL(route, appUrl).href;
+      if (target.url === targetUrl) {
+        await send("Page.reload", { ignoreCache: true });
+      } else {
+        await send("Page.navigate", { url: targetUrl });
+      }
       await waitForReady();
-      console.log(new URL(route, appUrl).href);
+      if (theme) {
+        await send("Runtime.evaluate", {
+          expression: `(() => {
+            try { localStorage.setItem("opensession-theme", ${JSON.stringify(theme)}); } catch {}
+            document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)});
+            document.documentElement.style.colorScheme = ${JSON.stringify(theme)};
+          })()`,
+        });
+      }
+      console.log(targetUrl);
       break;
     }
     case "click": {
@@ -398,18 +453,44 @@ try {
     }
     case "screenshot": {
       const path = resolve(requiredFlag("path"));
+      const fullPage = argv.includes("--full-page");
+      const savedViewport = readViewport();
+      if (fullPage && savedViewport) {
+        // Open Session locks html/body/#root to viewport height and scrolls
+        // pages inside [data-page-scroll], so expand the emulated viewport to
+        // the scroller's full height for --full-page captures.
+        const measured = await send("Runtime.evaluate", {
+          expression: `(() => {
+            const scroller = document.querySelector("[data-page-scroll]");
+            const contentH = scroller ? scroller.scrollHeight : document.documentElement.scrollHeight;
+            return Math.min(6000, Math.max(window.innerHeight, Math.ceil(contentH)));
+          })()`,
+          returnByValue: true,
+        });
+        const fullHeight = Number(measured?.result?.value);
+        if (Number.isFinite(fullHeight) && fullHeight > savedViewport.height) {
+          await applyViewport({ ...savedViewport, height: fullHeight });
+          await Bun.sleep(150);
+        }
+      }
       const deadline = Date.now() + 10_000;
       let previous = "";
       let data = "";
-      while (Date.now() < deadline) {
-        const result = await send("Page.captureScreenshot", {
-          format: "png",
-          captureBeyondViewport: false,
-        });
-        data = result.data;
-        if (data && data === previous) break;
-        previous = data;
-        await Bun.sleep(300);
+      try {
+        while (Date.now() < deadline) {
+          const result = await send("Page.captureScreenshot", {
+            format: "png",
+            captureBeyondViewport: fullPage,
+          });
+          data = result.data;
+          if (data && data === previous) break;
+          previous = data;
+          await Bun.sleep(300);
+        }
+      } finally {
+        if (fullPage && savedViewport) {
+          await applyViewport(savedViewport);
+        }
       }
       if (!data) fail("Chrome returned no screenshot data");
       mkdirSync(dirname(path), { recursive: true });

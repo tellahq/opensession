@@ -1,8 +1,12 @@
 # Working on the Open Session web UI
 
 The root `AGENTS.md` still applies. This file defines the consistency rules for
-everything under `packages/core/opensession-server/src/frontend/`. Preserve the established Open Session visual
-language instead of introducing a new local style for each feature.
+everything under `packages/core/opensession-server/src/frontend/`. For a
+one-page token/primitive cheat sheet and the mandatory visual self-critique
+loop, load `.agents/skills/opensession-ui/SKILL.md`. Preserve the established
+Open Session visual language instead of introducing a new local style for each
+feature. On a dev or demo instance, open `/design-system` to inspect real
+surfaces and primitives live in dark and light mode.
 
 ## Copy and naming
 
@@ -92,16 +96,19 @@ What a desktop-shaped surface is usually missing at 390px:
 `phone:hidden` is the last resort, not the phone layout. When you use it, the
 same change says where that thing went instead.
 
-Verify at the real width rather than by reasoning about the classes:
+Verify at the real width and in both themes on an isolated worktree instance
+rather than by reasoning about the classes:
 
 ```
-bun scripts/capture-ui.ts /tmp/after-phone.png --route /new --width 390 --height 844
+./.agents/skills/verify-opensession/bin/verify-opensession visual-check "$RUN_ID" --route /new --prefix new
 ```
 
-Any width at or below 720 captures at phone density with the desktop chrome
-off. `bun scripts/css-shots.ts <name>` sweeps routes x {desktop, mobile} x
-{dark, light} and `--diff` compares two runs, which is what keeps a phone
-layout from regressing once it exists.
+`visual-check` captures desktop (1440x900) and phone (390x844, touch-first
+media) in both dark and light mode against your local checkout. Do not run
+`bun scripts/capture-ui.ts` without `OPENSESSION_URL` pointed at an isolated
+server: by default it hits `http://127.0.0.1:3850`, which serves the live
+deployed release rather than uncommitted edits. `bun scripts/css-shots.ts <name>`
+sweeps routes x {desktop, mobile} x {dark, light} when diffing a CSS refactor.
 
 ## Styling
 
@@ -227,9 +234,11 @@ layout from regressing once it exists.
   reload.
 - Keep state close to where it is used. Do not add a new context, store, or
   abstraction for state that belongs to one component tree.
-- Run `bun run typecheck` and the relevant `bun test` targets after code
-  changes. For visible changes, capture the real page at both 1440x900 and
-  390x844 with `scripts/capture-ui.ts` and look at each, then exercise
-  keyboard interaction, loading, empty, and error states that the change
-  affects. The phone capture is the one that catches what reasoning about the
-  classes does not.
+- Run `bun run typecheck`, `bun scripts/ui-audit.ts`, and the relevant
+  `bun test` targets after code changes. For visible changes, capture desktop
+  (1440x900) and phone (390x844) in both dark and light themes with
+  `.agents/skills/verify-opensession/` (`visual-check`) against your isolated
+  checkout, open every PNG, and critique it against
+  `.agents/skills/opensession-ui/SKILL.md`. Exercise keyboard interaction,
+  loading, empty, and error states that the change affects. The phone and
+  light-mode captures catch what reasoning about classes does not.

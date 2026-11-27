@@ -312,7 +312,7 @@ function NoticeRow({
     return (
       <div className={cn(msgSystemRow, "my-3 w-full")} data-eid={entry.id}>
         <div className="flex w-full items-center gap-3">
-          <span aria-hidden="true" className="h-px flex-1 bg-border-subtle" />
+          <span aria-hidden="true" className="h-px flex-1 bg-divider" />
           <span
             className={cn(msgSystemText, "shrink-0 gap-1.5")}
             data-tone="info"
@@ -334,12 +334,12 @@ function NoticeRow({
               </>
             )}
           </span>
-          <span aria-hidden="true" className="h-px flex-1 bg-border-subtle" />
+          <span aria-hidden="true" className="h-px flex-1 bg-divider" />
         </div>
         {hasRecap && open && (
           <section
             aria-label="Thread recap"
-            className="mx-auto mt-2.5 w-full max-w-[600px] rounded-lg border border-border-subtle border-l-2 border-l-accent bg-panel px-4 py-3 text-left"
+            className="mx-auto mt-2.5 w-full max-w-[600px] rounded-lg border-l-2 border-l-accent bg-panel px-4 py-3 text-left"
           >
             <div className="mb-1.5 text-label font-semibold text-dim">
               Thread recap

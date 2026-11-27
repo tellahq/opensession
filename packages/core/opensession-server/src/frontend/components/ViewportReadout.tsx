@@ -59,7 +59,7 @@ function ViewportReadoutPanel() {
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none fixed top-[45%] left-2 z-[70] max-w-[calc(100vw-16px)] rounded-md bg-popup px-2 py-1.5 font-mono text-[11px] leading-4 text-fg shadow-md"
+      className="pointer-events-none fixed top-[45%] left-2 z-[70] max-w-[calc(100vw-16px)] rounded-md bg-popup px-2 py-1.5 font-mono text-meta leading-4 text-fg smooth-shadow-md"
     >
       {lines.map((line) => (
         <div key={line.slice(0, 4)} className="wrap-anywhere">

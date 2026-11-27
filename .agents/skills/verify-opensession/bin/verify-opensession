@@ -10,6 +10,7 @@ usage() {
 usage: verify-opensession launch <run-id>
        verify-opensession doctor <run-id>
        verify-opensession browser <run-id> <browser command> [flags]
+       verify-opensession visual-check <run-id> --route <path> --prefix <name> [--wait-role <role> --wait-name <name>] [--full-page]
        verify-opensession api <run-id> <path>
        verify-opensession cleanup <run-id>
 EOF
@@ -264,6 +265,46 @@ EOF
     load_run
     shift 2
     exec bun "$ROOT/.agents/skills/verify-opensession/bin/browser.mjs" "$RUN_DIR" "$@"
+    ;;
+
+  visual-check)
+    load_run
+    shift 2
+    route="/"
+    prefix="check"
+    wait_role=""
+    wait_name=""
+    full_page=()
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --route) route="${2:?--route requires a value}"; shift 2 ;;
+        --prefix) prefix="${2:?--prefix requires a value}"; shift 2 ;;
+        --wait-role) wait_role="${2:?--wait-role requires a value}"; shift 2 ;;
+        --wait-name) wait_name="${2:?--wait-name requires a value}"; shift 2 ;;
+        --full-page) full_page=(--full-page); shift ;;
+        *) echo "unknown visual-check flag: $1" >&2; exit 2 ;;
+      esac
+    done
+    case "$prefix" in
+      *[!a-zA-Z0-9_-]*)
+        echo "--prefix may contain only letters, digits, underscores, and hyphens" >&2
+        exit 2
+        ;;
+    esac
+    for spec in "desktop 1440 900" "phone 390 844"; do
+      read -r vp_name vp_w vp_h <<<"$spec"
+      for theme in dark light; do
+        bun "$ROOT/.agents/skills/verify-opensession/bin/browser.mjs" "$RUN_DIR" \
+          open --route "$route" --width "$vp_w" --height "$vp_h" --theme "$theme" >/dev/null
+        if [ -n "$wait_role" ] && [ -n "$wait_name" ]; then
+          bun "$ROOT/.agents/skills/verify-opensession/bin/browser.mjs" "$RUN_DIR" \
+            wait --role "$wait_role" --name "$wait_name" >/dev/null
+        fi
+        out="$EVIDENCE_DIR/${prefix}-${vp_name}-${theme}.png"
+        bun "$ROOT/.agents/skills/verify-opensession/bin/browser.mjs" "$RUN_DIR" \
+          screenshot --path "$out" "${full_page[@]}"
+      done
+    done
     ;;
 
   api)

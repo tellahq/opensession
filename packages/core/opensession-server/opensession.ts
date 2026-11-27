@@ -482,6 +482,10 @@ const server: import("bun").Server<WSClientData> = hotServe({
       "/reviews",
       "/reviews/*",
       "/support/*",
+      ...(process.env.OPENSESSION_DEV === "1" ||
+      process.env.OPENSESSION_DEMO === "1"
+        ? ["/design-system"]
+        : []),
     ].map((p) => [
       p,
       p === "/session/*" || p === "/workspace/*" ? sessionSpaEntry : spaEntry,

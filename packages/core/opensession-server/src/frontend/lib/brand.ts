@@ -29,6 +29,7 @@ type InstanceBrand = {
   defaultRepoId?: string;
   plainWorkspaceId?: string;
   agentationEnabled?: boolean;
+  devMode?: boolean;
 };
 
 declare global {
@@ -67,6 +68,9 @@ export const PLAIN_WORKSPACE_ID = INSTANCE.plainWorkspaceId || null;
 
 /** Visual page feedback is an operator-only tool, opt-in at server startup. */
 export const AGENTATION_ENABLED = INSTANCE.agentationEnabled === true;
+
+/** True on OPENSESSION_DEV=1 HMR servers (unpatched index.html) and demo builds. */
+export const IS_DEV_MODE = INSTANCE.devMode === true || !INSTANCE.productName;
 
 /**
  * A session's origin as shown in the UI. `opensession` — and `backstage`, the

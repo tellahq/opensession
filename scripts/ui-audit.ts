@@ -37,6 +37,304 @@ const BUDGET_FILE = join(import.meta.dir, "ui-audit-budget.json");
 /** Radii the scale actually names (styles/tailwind.css), in px before `--rf`. */
 const RADIUS_SCALE = new Set([2, 4, 7, 12, 14, 16, 18, 22]);
 
+const TAILWIND_CSS = readFileSync(
+  join(FRONTEND, "styles/tailwind.css"),
+  "utf8",
+);
+
+/** Color names defined by `--color-*` in `styles/tailwind.css`. */
+const THEME_COLOR_TOKENS = new Set(
+  [...TAILWIND_CSS.matchAll(/--color-([a-z0-9-]+)\s*:/g)].map((m) => m[1]!),
+);
+
+/** Type-scale names defined by `--text-*` in `styles/tailwind.css`. */
+const THEME_TEXT_TOKENS = new Set(
+  [...TAILWIND_CSS.matchAll(/--text-([a-z0-9-]+)\s*:/g)]
+    .map((m) => m[1]!)
+    .filter((name) => !name.includes("--")),
+);
+
+/** CSS classes declared in `src/frontend/styles/**\/*.css` so hook classes are never flagged. */
+const STYLESHEET_CLASSES = (() => {
+  const out = new Set<string>();
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir)) {
+      const path = join(dir, entry);
+      if (statSync(path).isDirectory()) {
+        walk(path);
+        continue;
+      }
+      if (!entry.endsWith(".css")) continue;
+      const css = readFileSync(path, "utf8");
+      for (const match of css.matchAll(
+        /\.([a-z][a-z0-9-]*)(?=[\s.,:{[\]>+~)])/g,
+      )) {
+        out.add(match[1]!);
+      }
+      for (const match of css.matchAll(/@utility\s+([a-z][a-z0-9-]*)\b/g)) {
+        out.add(match[1]!);
+      }
+    }
+  };
+  walk(join(FRONTEND, "styles"));
+  return out;
+})();
+
+const STOCK_PALETTE_RE =
+  /\b(?:bg|text|border|border-[trblxyse]|ring|divide|outline|fill|stroke|from|to|via|decoration|accent|caret|placeholder)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-(?:50|100|200|300|400|500|600|700|800|900|950)\b/g;
+
+const STOCK_PALETTE_VALUE_RE =
+  /^(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-(?:50|100|200|300|400|500|600|700|800|900|950)$/;
+
+const COLOR_KEYWORDS = new Set([
+  "transparent",
+  "current",
+  "inherit",
+  "white",
+  "black",
+]);
+
+const NON_COLOR_BG = new Set([
+  ...COLOR_KEYWORDS,
+  "none",
+  "auto",
+  "cover",
+  "contain",
+  "center",
+  "top",
+  "bottom",
+  "left",
+  "right",
+  "repeat",
+  "no-repeat",
+  "repeat-x",
+  "repeat-y",
+  "repeat-round",
+  "repeat-space",
+  "fixed",
+  "local",
+  "scroll",
+  "radial",
+  "conic",
+]);
+
+const NON_COLOR_BORDER = new Set([
+  ...COLOR_KEYWORDS,
+  "0",
+  "2",
+  "4",
+  "8",
+  "x",
+  "y",
+  "t",
+  "r",
+  "b",
+  "l",
+  "s",
+  "e",
+  "solid",
+  "dashed",
+  "dotted",
+  "double",
+  "hidden",
+  "none",
+  "collapse",
+  "separate",
+  "box",
+  "color",
+  "width",
+  "style",
+  "radius",
+  "top-width",
+  "right-width",
+  "bottom-width",
+  "left-width",
+  "top-color",
+  "right-color",
+  "bottom-color",
+  "left-color",
+  "top-style",
+  "right-style",
+  "bottom-style",
+  "left-style",
+]);
+
+const NON_COLOR_BORDER_SIDE = new Set([...COLOR_KEYWORDS, "0", "2", "4", "8"]);
+
+const NON_COLOR_TEXT = new Set([
+  ...COLOR_KEYWORDS,
+  ...THEME_TEXT_TOKENS,
+  "left",
+  "center",
+  "right",
+  "justify",
+  "start",
+  "end",
+  "wrap",
+  "nowrap",
+  "balance",
+  "pretty",
+  "ellipsis",
+  "clip",
+  "align",
+  "indent",
+  "transform",
+  "decoration",
+  "overflow",
+  "rendering",
+  "size-adjust",
+  "xs",
+  "sm",
+  "base",
+  "lg",
+  "xl",
+  "2xl",
+  "3xl",
+  "4xl",
+  "5xl",
+  "6xl",
+  "7xl",
+  "8xl",
+  "9xl",
+]);
+
+const NON_COLOR_RING = new Set([
+  ...COLOR_KEYWORDS,
+  "0",
+  "1",
+  "2",
+  "4",
+  "8",
+  "inset",
+]);
+
+/** Strip JS/TS comments while preserving quoted string literals. */
+function stripComments(source: string): string {
+  let out = "";
+  let i = 0;
+  while (i < source.length) {
+    const ch = source[i]!;
+    if (ch === '"' || ch === "'" || ch === "`") {
+      out += ch;
+      i++;
+      while (i < source.length) {
+        if (source[i] === "\\" && i + 1 < source.length) {
+          out += source[i]! + source[i + 1]!;
+          i += 2;
+          continue;
+        }
+        out += source[i]!;
+        if (source[i] === ch) {
+          i++;
+          break;
+        }
+        i++;
+      }
+      continue;
+    }
+    if (ch === "/" && source[i + 1] === "/") {
+      while (i < source.length && source[i] !== "\n") i++;
+      continue;
+    }
+    if (ch === "/" && source[i + 1] === "*") {
+      i += 2;
+      while (i < source.length && !(source[i] === "*" && source[i + 1] === "/"))
+        i++;
+      i += 2;
+      continue;
+    }
+    out += ch;
+    i++;
+  }
+  return out;
+}
+
+/**
+ * Find `bg-*`, `border-*`, `text-*`, and `ring-*` utilities in string literals
+ * that reference a color/text token not defined in `styles/tailwind.css`.
+ * Tailwind v4 silently drops unknown color utilities, so e.g. `border-border/80`
+ * falls back to `currentColor` and `bg-canvas/50` renders nothing.
+ */
+export function findUnknownThemeTokens(source: string): string[] {
+  const clean = stripComments(source);
+  const found: string[] = [];
+  for (const strMatch of clean.matchAll(/(["'`])((?:\\.|(?!\1)[^\\])*)\1/g)) {
+    const literal = strMatch[2]!;
+    if (/^[./]|https?:\/\//.test(literal)) continue;
+    for (const rawTok of literal.split(/\s+/)) {
+      // Strip up to three variant prefixes (hover:, dark:, group-hover/x:, [&>svg]:).
+      let tok = rawTok.replace(/!$/, "");
+      for (let step = 0; step < 3; step++) {
+        const next = tok.replace(
+          /^(?:[a-z0-9-]+(?:\/[a-z0-9-]+)?|\[[^\]]+\]):/i,
+          "",
+        );
+        if (next === tok) break;
+        tok = next;
+      }
+      if (
+        !tok ||
+        tok.startsWith("[") ||
+        tok.startsWith("--") ||
+        tok.includes(":")
+      )
+        continue;
+      if (STYLESHEET_CLASSES.has(tok)) continue;
+
+      const match = tok.match(
+        /^(border-[trblxyse]|bg|border|text|ring)-([a-z0-9][a-z0-9-]*)(?:\/\d+)?$/,
+      );
+      if (!match) continue;
+      const [, prefix, name] = match as [string, string, string];
+      if (THEME_COLOR_TOKENS.has(name)) continue;
+      // Stock Tailwind palette colors are counted under `stock-palette-color`.
+      if (STOCK_PALETTE_VALUE_RE.test(name)) continue;
+
+      if (
+        prefix === "bg" &&
+        (NON_COLOR_BG.has(name) ||
+          name.startsWith("blend-") ||
+          name.startsWith("size-") ||
+          name.startsWith("position-") ||
+          name.startsWith("clip-") ||
+          name.startsWith("origin-") ||
+          name.startsWith("gradient-") ||
+          name.startsWith("linear-"))
+      )
+        continue;
+      if (
+        prefix === "border" &&
+        (NON_COLOR_BORDER.has(name) ||
+          /^\d+$/.test(name) ||
+          name.startsWith("spacing-"))
+      )
+        continue;
+      if (
+        prefix.startsWith("border-") &&
+        (NON_COLOR_BORDER_SIDE.has(name) || /^\d+$/.test(name))
+      )
+        continue;
+      if (
+        prefix === "text" &&
+        (NON_COLOR_TEXT.has(name) ||
+          name.startsWith("shadow-") ||
+          name.startsWith("shimmer-"))
+      )
+        continue;
+      if (
+        prefix === "ring" &&
+        (NON_COLOR_RING.has(name) ||
+          /^\d+$/.test(name) ||
+          name.startsWith("offset-"))
+      )
+        continue;
+
+      found.push(tok);
+    }
+  }
+  return found;
+}
+
 type Signal = {
   id: string;
   /** One line, printed beside the count: what to reach for instead. */
@@ -113,6 +411,41 @@ const SIGNALS: Signal[] = [
     instead: "wrap it in a ui/ primitive first, then use that",
     exempt: ["ui/"],
     count: (source) => occurrences(source, /from "@base-ui/g),
+  },
+  {
+    id: "unknown-theme-token",
+    instead:
+      "semantic tokens defined in styles/tailwind.css (bg-panel, border-line, border-divider, text-fg, text-dim, text-dialog-title)",
+    exempt: ["styles/"],
+    count: (source) => findUnknownThemeTokens(source).length,
+  },
+  {
+    id: "stock-palette-color",
+    instead:
+      "semantic tokens from styles/tailwind.css — never stock Tailwind palette colors (slate/gray/zinc/blue-500)",
+    exempt: ["styles/"],
+    count: (source) => occurrences(stripComments(source), STOCK_PALETTE_RE),
+  },
+  {
+    id: "stock-shadow",
+    instead:
+      "smooth-shadow-xs/sm/md/lg or smooth-shadow-ring-sm/md/lg from styles/smooth-shadow.css",
+    exempt: ["styles/"],
+    count: (source) =>
+      occurrences(
+        stripComments(source),
+        /(?<!smooth-)\bshadow-(?:2xs|xs|sm|md|lg|xl|2xl)\b/g,
+      ),
+  },
+  {
+    id: "raw-hex-color",
+    instead: "semantic color tokens from styles/tailwind.css",
+    exempt: ["styles/"],
+    count: (source) =>
+      occurrences(
+        stripComments(source),
+        /\b(?:bg|text|border|ring)-\[#[0-9a-fA-F]{3,8}\]/g,
+      ),
   },
 ];
 
