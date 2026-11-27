@@ -169,8 +169,18 @@ file.
 The picker starts with the Vertex models Pi's catalog describes. Newer models
 run by id (`pi/google-vertex/<model>`). Add them to **Picker models** or type
 the id. A Gemini model missing from Pi's catalog runs with a 1M-token window,
-64K output, image input, and the model's default thinking, and is not priced
-until it has a catalog row in `model-providers.json`.
+64K output, image input, and the model's default thinking. Gemini 4 Neon,
+Hydrogen, Carbon, and Argon have built-in price estimates; other unknown ids
+need a catalog row in `model-providers.json` to report costs.
+
+Gemini 4 estimates use Google's standard USD list prices, including cached
+input and reasoning output, with the regional uplift outside `global`.
+They exclude account discounts and invoice credits, including Carbon and
+Argon's introductory credit through November 30, 2026. Neon and Hydrogen
+cache-write rates begin January 12, 2027; the current Pi adapter reports no
+cache writes. See [Google's pricing](https://cloud.google.com/model-garden/pricing).
+Explicit catalog rows override these defaults. Rates apply when a request
+finishes; previously recorded zero-cost usage is not backfilled.
 
 Legacy top-level counterparts such as `~/.opensession-claude-accounts.json`
 remain supported when the grouped path is absent. Run `opensession doctor`

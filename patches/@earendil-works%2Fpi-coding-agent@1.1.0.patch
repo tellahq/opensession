@@ -1,5 +1,5 @@
 diff --git a/dist/config.d.ts b/dist/config.d.ts
-index a1f218a..1185895 100644
+index a1f218a4a88ec94c1b8a0cfc3a571cfdb4b70274..11858952e0254f4464ee6e52f50b18cebcd072e9 100644
 --- a/dist/config.d.ts
 +++ b/dist/config.d.ts
 @@ -77,6 +77,8 @@ export declare function resolveCodemodeWorkerSpecifier(runtime: "bun-binary" | "
@@ -12,7 +12,7 @@ index a1f218a..1185895 100644
  export type InstallChange = {
      kind: "updated";
 diff --git a/dist/config.js b/dist/config.js
-index 62eb303..a7d7d54 100644
+index 62eb303e5ca396e4107081868790506673344faa..a7d7d545de2a748b279c203711ec9e2417e4ae97 100644
 --- a/dist/config.js
 +++ b/dist/config.js
 @@ -416,11 +416,21 @@ export function resolveCodemodeWorkerSpecifier(runtime, moduleUrl) {
@@ -37,8 +37,157 @@ index 62eb303..a7d7d54 100644
      const runtime = isBunBinary ? "bun-binary" : isBundledNode ? "bundled-node" : "unbundled";
      const specifier = resolveCodemodeWorkerSpecifier(runtime, import.meta.url);
      if (runtime !== "bundled-node" || !(specifier instanceof URL))
+diff --git a/dist/core/compaction/compaction.js b/dist/core/compaction/compaction.js
+index e4992e8d2bff8aa6d2a4b044c9cf571d9e7f2fa2..9c49050dff7640bd9be879ea098c86b5c91d7823 100644
+--- a/dist/core/compaction/compaction.js
++++ b/dist/core/compaction/compaction.js
+@@ -350,7 +350,13 @@ export function findCutPoint(entries, startIndex, endIndex, keepRecentTokens) {
+             // Prefer the closest valid cut point at or after this entry. If trailing
+             // tool results exceed the budget by themselves, keep their preceding
+             // assistant tool call instead of falling back to the first message.
+-            cutIndex = cutPoints.find((candidate) => candidate >= i) ?? cutPoints[cutPoints.length - 1];
++            // A single old message can be larger than the entire new model window.
++            // Keeping that message makes compaction a no-op after a model switch.
++            // Prefer the next safe boundary so it is summarized instead; never
++            // split a tool call from its results or omit the newest user input.
++            cutIndex = (messageTokens > keepRecentTokens
++                ? cutPoints.find((candidate) => candidate > i)
++                : undefined) ?? cutPoints.find((candidate) => candidate >= i) ?? cutPoints[cutPoints.length - 1];
+             break;
+         }
+     }
+@@ -507,6 +513,59 @@ function buildSummarizationContext(promptText) {
+         ],
+     });
+ }
++/**
++ * Open Session patch: overflow recovery must not send an oversized history to
++ * the same model again as one summarization request. Bound serialized text by
++ * UTF-8 bytes (a conservative token upper bound), reserving output and framing.
++ * Carry each completed summary into the next chunk and account for every call.
++ */
++async function summarizeWithinWindow(text, previousSummary, model, options, streamFn, retry, callbacks, buildPrompt, label) {
++    const prompt = buildPrompt(text, previousSummary);
++    const window = model.contextWindow;
++    const framing = Buffer.byteLength(SUMMARIZATION_SYSTEM_PROMPT, "utf8") + 1024;
++    const fits = (value, outputTokens) => Buffer.byteLength(value, "utf8") + framing + outputTokens <= window;
++    const complete = async (value, requestOptions) => {
++        requestOptions.signal?.throwIfAborted();
++        const response = await completeSummarization(model, buildSummarizationContext(value), requestOptions, streamFn, retry, callbacks);
++        const failure = getSummarizationFailure(response, label);
++        if (failure) throw new Error(failure);
++        if (response.stopReason === "aborted") throw new Error(`${label} aborted`);
++        if (response.content.some((block) => block.type === "toolCall")) throw new Error(`${label} attempted to call a tool`);
++        const summary = contentText(response.content);
++        if (!summary.trim()) throw new Error(`${label} returned an empty summary`);
++        return { text: summary, usage: response.usage };
++    };
++    if (!Number.isFinite(window) || window <= 0 || fits(prompt, options.maxTokens)) {
++        return complete(prompt, options);
++    }
++    // reserveTokens also controls when compaction starts; on large windows it
++    // can be hundreds of thousands. A rolling summary needs a bounded output.
++    const boundedOptions = { ...options, maxTokens: Math.min(options.maxTokens, 16384, Math.floor(window / 8)) };
++    if (boundedOptions.maxTokens < 1) throw new Error(`${label}: model context window is too small`);
++    // An old summary can itself exceed the new model's window after switching
++    // models. Feed it through the same chunker rather than dropping it.
++    let pending = Buffer.from(previousSummary
++        ? `<previous-summary>\n${previousSummary}\n</previous-summary>\n\n${text}`
++        : text, "utf8");
++    if (!pending.length) throw new Error(`${label}: summary instructions exceed the model context window`);
++    let summary;
++    let usage;
++    while (pending.length > 0) {
++        boundedOptions.signal?.throwIfAborted();
++        const overhead = Buffer.byteLength(buildPrompt("", summary), "utf8") + framing + boundedOptions.maxTokens;
++        const available = Math.floor(window - overhead);
++        if (available < 4) throw new Error(`${label}: summary instructions and retained summary exceed the model context window`);
++        let end = Math.min(pending.length, available);
++        // Do not split a UTF-8 character; all source text must reach a chunk.
++        while (end < pending.length && (pending[end] & 0xc0) === 0x80) end--;
++        const chunk = pending.subarray(0, end).toString("utf8");
++        const result = await complete(buildPrompt(chunk, summary), boundedOptions);
++        summary = result.text;
++        usage = usage ? combineUsage(usage, result.usage) : result.usage;
++        pending = pending.subarray(end);
++    }
++    return { text: summary, usage };
++}
+ /** Generate or update a conversation summary and return its provider usage. */
+ export async function generateSummaryWithUsage(currentMessages, model, reserveTokens, apiKey, headers, signal, customInstructions, previousSummary, thinkingLevel, streamFn, env, retry, callbacks, sessionId) {
+     const maxTokens = Math.min(Math.floor(0.8 * reserveTokens), model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY);
+@@ -519,24 +578,14 @@ export async function generateSummaryWithUsage(currentMessages, model, reserveTo
+     // Convert to LLM messages first (handles custom types like bashExecution, custom, etc.)
+     const llmMessages = convertToLlm(currentMessages);
+     const conversationText = serializeConversation(llmMessages);
+-    // Build the prompt with conversation wrapped in tags
+-    let promptText = `<conversation>\n${conversationText}\n</conversation>\n\n`;
+-    if (previousSummary) {
+-        promptText += `<previous-summary>\n${previousSummary}\n</previous-summary>\n\n`;
+-    }
+-    promptText += basePrompt;
+     const completionOptions = createSummarizationOptions(model, maxTokens, apiKey, headers, env, signal, thinkingLevel, sessionId);
+-    const response = await completeSummarization(model, buildSummarizationContext(promptText), completionOptions, streamFn, retry, callbacks);
+-    const failure = getSummarizationFailure(response, "Summarization");
+-    if (failure) {
+-        throw new Error(failure);
+-    }
+-    if (response.content.some((block) => block.type === "toolCall")) {
+-        throw new Error("Summarization attempted to call a tool");
+-    }
+-    const textContent = contentText(response.content);
+-    return { text: textContent, usage: response.usage };
++    return summarizeWithinWindow(conversationText, previousSummary, model, completionOptions, streamFn, retry, callbacks, (chunk, summary) => {
++        let promptText = `<conversation>\n${chunk}\n</conversation>\n\n`;
++        if (summary) promptText += `<previous-summary>\n${summary}\n</previous-summary>\n\n`;
++        return promptText + (summary ? UPDATE_SUMMARIZATION_PROMPT : basePrompt) + (summary && customInstructions ? `\n\nAdditional focus: ${customInstructions}` : "");
++    }, "Summarization");
+ }
++
+ function isProjectedTurnStart(entry) {
+     if (entry.sourceEntry.type === "compaction")
+         return false;
+@@ -569,7 +618,13 @@ function findProjectedCutPoint(entries, startIndex, endIndex, keepRecentTokens)
+         accumulatedTokens += messageTokens;
+         if (accumulatedTokens >= keepRecentTokens) {
+             exceededBudget = true;
+-            cutIndex = cutPoints.find((candidate) => candidate >= i) ?? cutPoints[cutPoints.length - 1];
++            // A single old message can be larger than the entire new model window.
++            // Keeping that message makes compaction a no-op after a model switch.
++            // Prefer the next safe boundary so it is summarized instead; never
++            // split a tool call from its results or omit the newest user input.
++            cutIndex = (messageTokens > keepRecentTokens
++                ? cutPoints.find((candidate) => candidate > i)
++                : undefined) ?? cutPoints.find((candidate) => candidate >= i) ?? cutPoints[cutPoints.length - 1];
+             break;
+         }
+     }
+@@ -727,18 +782,10 @@ async function generateTurnPrefixSummary(messages, model, reserveTokens, apiKey,
+     const maxTokens = Math.min(Math.floor(0.5 * reserveTokens), model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY); // Smaller budget for turn prefix
+     const llmMessages = convertToLlm(messages);
+     const conversationText = serializeConversation(llmMessages);
+-    const promptText = `# Conversation\n${conversationText}\n\n# Instructions\n${TURN_PREFIX_SUMMARIZATION_PROMPT}`;
+-    const response = await completeSummarization(model, buildSummarizationContext(promptText), createSummarizationOptions(model, maxTokens, apiKey, headers, env, signal, thinkingLevel, sessionId), streamFn, retry, callbacks);
+-    const failure = getSummarizationFailure(response, "Turn prefix summarization");
+-    if (failure) {
+-        throw new Error(failure);
+-    }
+-    if (response.content.some((block) => block.type === "toolCall")) {
+-        throw new Error("Turn prefix summarization attempted to call a tool");
+-    }
+-    return {
+-        text: contentText(response.content),
+-        usage: response.usage,
+-    };
++    return summarizeWithinWindow(conversationText, undefined, model,
++        createSummarizationOptions(model, maxTokens, apiKey, headers, env, signal, thinkingLevel, sessionId),
++        streamFn, retry, callbacks, (chunk, summary) =>
++            `# Conversation\n${chunk}\n\n${summary ? `<previous-summary>\n${summary}\n</previous-summary>\n\nMerge this summary with the new conversation chunk.\n\n` : ""}# Instructions\n${TURN_PREFIX_SUMMARIZATION_PROMPT}`,
++        "Turn prefix summarization");
+ }
+ //# sourceMappingURL=compaction.js.map
 diff --git a/dist/index.d.ts b/dist/index.d.ts
-index 9f9bd73..a76569e 100644
+index 9f9bd7370e5ecc288de58d20e81b2a0aadb6ea4b..a76569e26ae79325627012cdeda0580c4514af36 100644
 --- a/dist/index.d.ts
 +++ b/dist/index.d.ts
 @@ -41,4 +41,6 @@ export { convertToPng } from "./utils/image-convert.ts";
@@ -50,7 +199,7 @@ index 9f9bd73..a76569e 100644
  //# sourceMappingURL=index.d.ts.map
 \ No newline at end of file
 diff --git a/dist/index.js b/dist/index.js
-index c48934f..e5ec639 100644
+index c48934f78d61fd5f5f8008bc9e09d8c4558d330a..e5ec639fd25cf05784d5b8d8df8defc5721f238e 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -50,4 +50,6 @@ export { formatDimensionNote, resizeImage } from "./utils/image-resize.js";

@@ -6,6 +6,7 @@ import {
   normalizeVertexCredential,
   vertexCredentialLabel,
   vertexFallbackModel,
+  vertexModelCost,
   vertexPiCredential,
   vertexProject,
 } from "./vertex-provider";
@@ -101,6 +102,64 @@ test("unknown Gemini ids run with Gemini limits and the model's own thinking", (
     input: ["text", "image"],
     contextWindow: 1_048_576,
     maxTokens: 65_536,
+  });
+});
+
+describe("Vertex standard list-price reporting", () => {
+  const now = Date.parse("2026-11-27T12:00:00Z");
+  test.each([
+    ["neon", 3, 15, 0.15],
+    ["hydrogen", 1.5, 7.5, 0.075],
+    ["carbon", 4, 20, 0.2],
+    ["argon", 4, 20, 0.2],
+  ] as const)(
+    "prices Gemini 4 %s before invoice credits",
+    (name, input, output, cacheRead) => {
+      expect(vertexModelCost(`gemini-4-${name}`, "global", now)).toEqual({
+        input,
+        output,
+        cacheRead,
+        cacheWrite: 0,
+      });
+    },
+  );
+
+  test("regional requests use regional prices", () => {
+    expect(vertexModelCost("gemini-4-neon", "europe-west2", now)).toEqual({
+      input: 3.3,
+      output: 16.5,
+      cacheRead: 0.165,
+      cacheWrite: 0,
+    });
+  });
+
+  test("cache-write fees start on their effective date", () => {
+    expect(
+      vertexModelCost(
+        "gemini-4-neon",
+        "global",
+        Date.parse("2027-01-12T00:00:00Z"),
+      )?.cacheWrite,
+    ).toBe(3.75);
+    expect(
+      vertexModelCost(
+        "gemini-4-hydrogen",
+        "global",
+        Date.parse("2027-01-11T23:59:59Z"),
+      )?.cacheWrite,
+    ).toBe(0);
+    expect(
+      vertexModelCost(
+        "gemini-4-carbon",
+        "global",
+        Date.parse("2027-01-12T00:00:00Z"),
+      )?.cacheWrite,
+    ).toBe(0);
+  });
+
+  test("unknown models remain explicitly unpriced", () => {
+    expect(vertexModelCost("gemini-future", "global", now)).toBeUndefined();
+    expect(vertexFallbackModel("gemini-future").cost.input).toBe(0);
   });
 });
 

@@ -158,20 +158,58 @@ export async function vertexPiCredential(
   };
 }
 
+/** Standard PayGo USD per million tokens, before account discounts and invoice
+ * credits (including Carbon/Argon's introductory 50% credit). Thinking tokens
+ * use the output rate. Source: https://cloud.google.com/model-garden/pricing
+ * Cache-write billing for Neon/Hydrogen begins on 2027-01-12; the current Pi
+ * adapter reports no cache writes, but metadata must not price them early. */
+export function vertexModelCost(
+  id: string,
+  location = VERTEX_DEFAULT_LOCATION,
+  at = Date.now(),
+) {
+  const input = {
+    "gemini-4-neon": 3,
+    "gemini-4-hydrogen": 1.5,
+    "gemini-4-carbon": 4,
+    "gemini-4-argon": 4,
+  }[id];
+  if (input === undefined) return undefined;
+  const regional = location === VERTEX_DEFAULT_LOCATION ? 1 : 1.1;
+  const price = (rate: number) => Number((rate * regional).toFixed(6));
+  const writes =
+    (id === "gemini-4-neon" || id === "gemini-4-hydrogen") &&
+    at >= Date.parse("2027-01-12T00:00:00Z");
+  return {
+    input: price(input),
+    output: price(input * 5),
+    cacheRead: price(input * 0.05),
+    cacheWrite: writes ? price(input * 1.25) : 0,
+  };
+}
+
 /**
  * The row a Gemini model missing from Pi's Vertex catalog runs with. Every
  * Gemini since 2.5 takes images and a 1M-token window with 64K output.
  * Thinking is left at the model's default: Pi picks the thinking wire format
  * from the model id, and a newer family may reject the one it guesses.
  */
-export function vertexFallbackModel(id: string) {
+export function vertexFallbackModel(
+  id: string,
+  location = VERTEX_DEFAULT_LOCATION,
+) {
   const gemini = /^gemini-/.test(id);
   return {
     id,
     name: id,
     reasoning: false,
     input: (gemini ? ["text", "image"] : ["text"]) as Array<"text" | "image">,
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    cost: vertexModelCost(id, location) ?? {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+    },
     contextWindow: gemini ? 1_048_576 : 131_072,
     maxTokens: gemini ? 65_536 : 32_768,
   };

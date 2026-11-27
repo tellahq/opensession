@@ -780,7 +780,7 @@ export function buildPiThirdPartyProviderPlan(input: {
           ? []
           : [
               input.providerID === VERTEX_PROVIDER_ID
-                ? vertexFallbackModel(input.modelID)
+                ? vertexFallbackModel(input.modelID, input.configured?.location)
                 : {
                     id: input.modelID,
                     name: input.modelID,
