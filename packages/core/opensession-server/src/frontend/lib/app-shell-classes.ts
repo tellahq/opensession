@@ -79,22 +79,17 @@ export const NEW_LAYOUT_ROW_HEIGHT =
 
 /**
  * The new layout's window row over the pane: the tab strip, then the page's
- * header. It is the grey of the minibar, and the sheet under it starts at the
- * hairline along its bottom edge, which the active tab covers.
+ * header. It is the grey of the minibar and the sidebar, and the panel under
+ * it starts at this row's bottom edge. That edge is the top of the panel's
+ * outline (WORKSPACE_SHELL), which the active tab covers.
  * `components/shell/PaneTopRow.tsx` renders it. Hidden while it holds nothing,
  * on a page that brings a bar of its own.
  */
 export const PANE_TOP_ROW =
   "relative flex min-w-0 shrink-0 items-stretch bg-sidebar " +
-  // The hairline, the active tab's border and the curve that joins the two
-  // are one line, so they share one colour: the divider as it reads on this
-  // row, made opaque. The divider itself is translucent, and where two
-  // strokes of it overlap (they do at both ends of the curve) it doubles.
-  "[--tab-edge:color-mix(in_srgb,var(--border)_55%,var(--sidebar-bg))] " +
-  "after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-[var(--tab-edge)] after:content-[''] " +
   "[&:not(:has(>:not(:empty)))]:hidden";
 
-/** The strip's share of that row. The strip brings its own 10px at each end.
+/** The strip's share of that row. The strip brings its own room at each end.
  *  With the sidebar collapsed, the floating re-open control sits over the
  *  row's first 48px. The desktop shell adds its navigation cluster there and
  *  insets further (base-platform.css). */
@@ -107,15 +102,41 @@ export const WORKSPACE_SHELL =
   "relative z-[25] flex min-h-0 min-w-0 flex-1 overflow-hidden border-l border-divider bg-surface desktop:[box-shadow:var(--content-edge-shadow)] " +
   // Collapsed sidebar: nothing to divide from or cast depth onto.
   "[.app-body.sidebar-collapsed_&]:border-l-0 [.app-body.sidebar-collapsed_&]:[box-shadow:none] " +
-  // The new layout puts the sidebar and the workspace on one sheet under a
-  // window row (PANE_TOP_ROW below), so nothing is cast across the seam, and
-  // the seam is a hairline that starts under that row instead of a border
-  // that would cut through it. A page with no row keeps the line full height.
-  // A variant rather than state, so AppShell stays free of hooks.
+  // The new layout: the minibar, the sidebar and the window row are one grey
+  // chrome, and the workspace is the only panel on it. A quiet one: a
+  // hairline outline, a 10px corner, and a 6px gap to the window at the right
+  // and the bottom. Nothing is cast across the seam. A variant rather than
+  // state, so AppShell stays free of hooks.
+  //
+  // The outline is one opaque colour, shared with the active tab's border and
+  // the curve at its foot (lib/session-tab-classes.ts): the divider as it
+  // reads on the chrome. The divider itself is translucent, and where two
+  // strokes of it overlap it doubles.
   "new-layout:border-l-0 new-layout:[box-shadow:none] " +
-  "new-layout:before:pointer-events-none new-layout:before:absolute new-layout:before:inset-y-0 new-layout:before:left-0 " +
-  "new-layout:before:z-30 new-layout:before:w-px new-layout:before:bg-divider new-layout:before:content-[''] " +
+  "new-layout:[--tab-edge:color-mix(in_srgb,var(--border)_55%,var(--sidebar-bg))] " +
+  "new-layout:mr-1.5 new-layout:mb-1.5 new-layout:rounded-b-[10px] new-layout:[corner-shape:round] " +
+  // The outline is drawn over the content rather than as a border, because
+  // the window row is inside this box and a border would run up its sides.
+  // Under a row it starts at the row's bottom edge. The tab strip sits above
+  // it (TAB_SCROLL_ATTACHED), so the active tab can cover the line.
+  "new-layout:before:pointer-events-none new-layout:before:absolute new-layout:before:inset-0 new-layout:before:z-30 " +
+  "new-layout:before:rounded-[10px] new-layout:before:rounded-tl-[var(--panel-tl)] new-layout:before:border new-layout:before:border-[color:var(--tab-edge)] new-layout:before:content-[''] " +
   "new-layout:[&:has([data-pane-top-row]>:not(:empty))]:before:top-[calc(var(--desktop-header-h)-1px)] " +
+  // The bottom corners are this box's own, so its clip rounds them. The top
+  // ones are under the row and inside the box, so the chrome is painted back
+  // over the content outside each arc.
+  "new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:pointer-events-none new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:absolute new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:inset-x-0 new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:top-[calc(var(--desktop-header-h)-1px)] " +
+  "new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:z-30 new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:h-2.5 new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:content-[''] " +
+  "new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:[background:radial-gradient(circle_at_100%_100%,transparent_9.75px,var(--sidebar-bg)_10.25px)_left_top/var(--panel-tl)_var(--panel-tl)_no-repeat,radial-gradient(circle_at_0_100%,transparent_9.75px,var(--sidebar-bg)_10.25px)_right_top/10px_10px_no-repeat] " +
+  // The first tab stands on the panel's left edge. While it is the open
+  // one its side is that edge carried straight up, so the panel has no corner
+  // of its own there. Not with the sidebar collapsed, where the strip starts
+  // further in and the corner is the panel's again.
+  "new-layout:[--panel-tl:10px] " +
+  "[.app-body:not(.sidebar-collapsed)_&]:[&:has([data-pane-top-row-tabs]_.session-tab-reorder:first-child>[aria-selected=true])]:[--panel-tl:0px] " +
+  // A page with no row is the whole panel: it keeps the same gap at the top
+  // and rounds its own top corners.
+  "new-layout:[&:not(:has([data-pane-top-row]>:not(:empty)))]:mt-1.5 new-layout:[&:not(:has([data-pane-top-row]>:not(:empty)))]:rounded-t-[10px] " +
   NEW_LAYOUT_ROW_HEIGHT +
   " " +
   // An open media viewer lifts the session input above its scrim, which

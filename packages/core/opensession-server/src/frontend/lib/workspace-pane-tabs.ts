@@ -2,7 +2,7 @@ import type { ActiveViewTab } from "./active-view-tab";
 import type { Workspace } from "./types";
 
 export type WorkspacePaneTab = "review" | "conversation" | "video";
-export type PaneTabIcon = "globe";
+export type PaneTabIcon = "globe" | "file";
 
 export interface PaneTabDescriptor {
   id: string;
@@ -31,6 +31,8 @@ interface BuildWorkspacePaneTabsInput {
   portalLabel: string | null;
   desktopOpen: ReadonlySet<string>;
   assetsOpen: ReadonlySet<string>;
+  /** The file the Assets tab shows; the tab takes its name. */
+  assetsPath?: string | null;
   terminalOpen: ReadonlySet<string>;
   subagentLabel: string | null;
 }
@@ -53,6 +55,7 @@ export function buildWorkspacePaneTabs({
   portalLabel,
   desktopOpen,
   assetsOpen,
+  assetsPath,
   terminalOpen,
   subagentLabel,
 }: BuildWorkspacePaneTabsInput): PaneTabDescriptor[] {
@@ -117,9 +120,10 @@ export function buildWorkspacePaneTabs({
   if (assetsOpen.has(workspaceKey)) {
     tabs.push({
       id: `assets:${workspaceKey}`,
-      label: "Assets",
+      label: assetsPath?.split("/").pop() || "Assets",
       active: activeViewTab === "assets",
       dotClass: null,
+      icon: "file",
     });
   }
   if (terminalOpen.has(workspaceKey)) {

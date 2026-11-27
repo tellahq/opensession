@@ -8,7 +8,7 @@ import { onShellUpdated } from "../lib/push";
 import { PERSISTENT_NOTICE_CARD } from "../lib/notification-classes";
 import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
-import { IconRefresh } from "./icons";
+import { IconArrowDown } from "./icons";
 
 interface Props {
   addHandler: (handler: (msg: WSServerMessage) => void) => () => void;
@@ -202,7 +202,16 @@ export function UpdatePill({ addHandler, variant = "card" }: Props) {
         <Button
           variant="primary"
           size="md"
-          icon={<IconRefresh size={20} />}
+          icon={
+            // The arrow drops through and lands again each time the
+            // pointer enters; the span clips it to the glyph's own box.
+            <span className="inline-flex size-5 overflow-hidden">
+              <IconArrowDown
+                size={20}
+                className="motion-safe:[button:hover:not(:disabled)_&]:animate-[update-arrow-drop_0.6s]"
+              />
+            </span>
+          }
           onClick={refresh}
           disabled={refreshing}
           aria-label={hint}

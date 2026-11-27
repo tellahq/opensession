@@ -9,7 +9,8 @@ import {
   useSyncExternalStore,
 } from "react";
 import { refWebPanel } from "../components/FeedWebPane";
-import { IconGlobe } from "../components/icons";
+import { IconFile, IconGlobe } from "../components/icons";
+import { useAssetTabPath } from "../lib/asset-tab-store";
 import {
   getActiveViewTab,
   saveActiveViewTab,
@@ -532,6 +533,7 @@ export function useWorkspacePanes({
       ? (sessionPrPresentation(sessionPrRefs(currentSession)).primary?.number ??
         currentSession.prNumber)
       : undefined) ?? wsRecord?.prNumber;
+  const assetsPath = useAssetTabPath(currentSession?.id);
   const paneViewTabs: ViewTab[] = buildWorkspacePaneTabs({
     workspaceKey: wsKey,
     sessionId: currentSession?.id,
@@ -552,11 +554,18 @@ export function useWorkspacePanes({
     portalLabel: currentPortalTarget?.name ?? null,
     desktopOpen,
     assetsOpen,
+    assetsPath,
     terminalOpen,
     subagentLabel: subagentStack.at(-1)?.label ?? null,
   }).map(({ icon, ...tab }) =>
-    icon === "globe"
-      ? { ...tab, icon: createElement(IconGlobe, { size: 16, dense: true }) }
+    icon
+      ? {
+          ...tab,
+          icon: createElement(icon === "globe" ? IconGlobe : IconFile, {
+            size: 16,
+            dense: true,
+          }),
+        }
       : tab,
   );
 

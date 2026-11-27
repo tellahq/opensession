@@ -563,6 +563,10 @@ function EditAgainButton({ onClick }: { onClick: () => void }) {
   );
 }
 
+/** `rounded-md`, not Button's pill: these sit in the same row of bare icons
+ * as copy and link, so they share one hover shape. */
+const pendingActionClass = "size-7 min-h-7 rounded-md px-0 text-faint";
+
 /** Change or delete a message the conversation accepted but no run has read
  * yet. Edit takes it back into the composer, so it is never sent twice.
  * Unlike the hover actions these stay on the page: a message stuck in this
@@ -583,7 +587,7 @@ function PendingMessageActions({
             size="sm"
             onClick={onEdit}
             aria-label="Edit unsent message"
-            className="size-7 min-h-7 text-faint"
+            className={pendingActionClass}
             icon={<IconPencil size={16} />}
           />
         </Tooltip>
@@ -594,7 +598,7 @@ function PendingMessageActions({
           size="sm"
           onClick={onDelete}
           aria-label="Delete unsent message"
-          className="size-7 min-h-7 text-faint"
+          className={pendingActionClass}
           icon={<IconTrash size={16} />}
         />
       </Tooltip>
@@ -671,7 +675,7 @@ function CopyMessageLinkButton({ entryId }: { entryId: string }) {
   );
 }
 
-/** The quiet row under a person's bubble: copy, link, edit, and the real time.
+/** The quiet row under a person's bubble: the real time, copy, link, edit.
  *
  * Those turns carry no label row to hang a MsgTime off, and a timestamp on
  * every one of them would just be noise while reading — so the time stays
@@ -706,17 +710,18 @@ function BubbleMeta({
     return null;
   return (
     <div className="absolute top-[calc(100%+2px)] right-0 flex items-center gap-1">
+      {/* First, so the icons stay one unbroken group after it. */}
+      {label && (
+        <span className="mr-1 hidden text-meta leading-none font-medium whitespace-nowrap text-faint select-none selection:bg-[rgba(0,0,0,0.01)] [@media(hover:hover)]:block [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-hover/bubble:opacity-100 [@media(hover:hover)]:group-focus-within/bubble:opacity-100">
+          {label}
+        </span>
+      )}
       {message && (
         <MessageActionButtons message={message} className={bubbleReveal} />
       )}
       {copy && <CopyMessageButton {...copy} />}
       {linkEntryId && <CopyMessageLinkButton entryId={linkEntryId} />}
       {onEdit && !pending && <EditAgainButton onClick={onEdit} />}
-      {label && (
-        <span className="hidden text-meta leading-none font-medium whitespace-nowrap text-faint select-none selection:bg-[rgba(0,0,0,0.01)] [@media(hover:hover)]:block [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-hover/bubble:opacity-100 [@media(hover:hover)]:group-focus-within/bubble:opacity-100">
-          {label}
-        </span>
-      )}
       {/* Last, so they hold the bubble's edge while the hover actions are hidden. */}
       {pending && <PendingMessageActions {...pending} />}
     </div>

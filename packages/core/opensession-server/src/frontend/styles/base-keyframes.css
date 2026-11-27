@@ -261,3 +261,28 @@
     transform: translateY(0) scale(1);
   }
 }
+
+/* The minibar's update button: on hover its down arrow drops out through the
+   bottom of its clip box and falls back in from the top, like a download
+   landing. It accelerates out and decelerates in, so the timing lives in the
+   keyframes and the caller passes only a duration. Clip box: UpdatePill. */
+@keyframes update-arrow-drop {
+  0% {
+    transform: translateY(0);
+    opacity: 1;
+    animation-timing-function: cubic-bezier(0.55, 0, 1, 0.45);
+  }
+  40% {
+    transform: translateY(80%);
+    opacity: 0;
+  }
+  40.01% {
+    transform: translateY(-80%);
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
