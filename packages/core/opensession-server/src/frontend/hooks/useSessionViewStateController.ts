@@ -65,6 +65,8 @@ import type { TranscriptViewStore } from "../lib/transcript-view-store";
 import type { SessionPrRef } from "../lib/types";
 import type { PortalTarget } from "../lib/portals";
 import { dropKeptFrame, keptFrameKey } from "../lib/kept-frames";
+import { sidePanelKey } from "../lib/side-panel-store";
+import type { SidePanelPage } from "../lib/side-panel-open";
 import {
   onPanelBrowserRequest,
   type PanelBrowserTarget,
@@ -293,6 +295,16 @@ export function useSessionViewStateController({
   const setActivePanelOpen = showReview
     ? setReviewPanelOpen
     : sidePanel.setOpen;
+  // Open the panel on `page`. Without one (the side panel toggle) Review's own
+  // panel just opens, and the session's opens on its overview, never on
+  // whatever tool page it last showed.
+  const openActivePanel = (page?: SidePanelPage) => {
+    if (page) {
+      sidePanel.setPage(page);
+      setActivePanelOpen(true);
+    } else if (showReview) setReviewPanelOpen(true);
+    else sidePanel.openOverview();
+  };
   const [panelPage, setPanelPage] = useState<
     null | "changes" | "portals" | "agents" | "terminal"
   >(null);
@@ -351,12 +363,14 @@ export function useSessionViewStateController({
   );
   useEffect(() => onPanelBrowserRequest(takePanelBrowserRequest), []);
   const closePanelBrowser = () => {
-    dropKeptFrame(keptFrameKey("panel", session.id));
+    dropKeptFrame(keptFrameKey("panel", sidePanelKey(session.id)));
     sidePanel.setBrowser(null);
     sidePanel.closeTab("browser");
   };
+  // In the new layout the panel is the window's, so the pinned Portal can be
+  // another session's; it is still this panel's to close or expand.
   const closePinnedPortal = () => {
-    if (pinnedPortal?.sessionId !== session.id) return;
+    if (!pinnedPortal) return;
     closePanelBrowser();
   };
   /** Hand the Browser tab's page over (to the main strip) and close the tab. */
@@ -366,7 +380,7 @@ export function useSessionViewStateController({
     return target;
   };
   const expandPinnedPortal = () => {
-    if (pinnedPortal?.sessionId !== session.id) return null;
+    if (!pinnedPortal) return null;
     const target = pinnedPortal;
     closePanelBrowser();
     return target;
@@ -518,6 +532,7 @@ export function useSessionViewStateController({
       panelResizeHandle: sidePanel.resizeHandle,
       activePanelOpen,
       setActivePanelOpen,
+      openActivePanel,
       panelPage,
       setPanelPage,
       panelTerminalMounted,

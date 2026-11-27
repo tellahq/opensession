@@ -4,6 +4,7 @@ import type { ReviewRegion } from "../components/session-viewer/SessionViewerMai
 import type { PanelBrowserTarget } from "../lib/portal-pin";
 import type { PortalTarget } from "../lib/portals";
 import {
+  withOverviewTab,
   withSidePanelTab,
   type SidePanelDockable,
   type SidePanelTab,
@@ -16,6 +17,7 @@ import {
   addSidePanelTab,
   setSidePanelDock,
   sidePanelDockOf,
+  sidePanelTouched,
   subscribeSidePanel,
 } from "../lib/side-panel-store";
 import { summaryBrowserFrame } from "../lib/panel-browser-frame";
@@ -30,6 +32,7 @@ import { useIsCoordinating } from "../lib/coordinator-mode";
 import { useSessionRecords } from "../lib/session-records";
 import { useWorkspaceRecord } from "../lib/workspace-records";
 import type { Workspace } from "../lib/types";
+import { useNewLayoutPref } from "../lib/new-layout-pref";
 
 /** The Space tab's inputs: the space and the conversation coordinating it. */
 /** The Threads tab: the session whose threads it lists, and whether the
@@ -92,9 +95,11 @@ export function useSidePanelTabs({
   const { closePanelTab, setPanelTerminalMounted, panelEntering } = panel;
   // A page attached to this session keeps its Browser tab in the strip, even
   // after another session closed its own.
-  const withBrowser = panelBrowser
-    ? withSidePanelTab(panel.panelTabs, "browser")
-    : panel.panelTabs;
+  const withBrowser = withOverviewTab(
+    panelBrowser
+      ? withSidePanelTab(panel.panelTabs, "browser")
+      : panel.panelTabs,
+  );
   // A coordinating session always leads its strip with the Threads tab; one
   // that merely started threads can open it like any other tab.
   const self = useSessionRecord(preview.sessionId);
@@ -124,7 +129,11 @@ export function useSidePanelTabs({
   // Threads tab: the threads are half of what it is. After that the person's
   // own open or closed choice sticks, like any session's.
   useEffect(() => {
-    if (canHost && coordinating && !getSidePanelState().views[hostKey])
+    if (
+      canHost &&
+      coordinating &&
+      !sidePanelTouched(getSidePanelState(), hostKey)
+    )
       openSidePanelTab("threads", hostKey);
   }, [canHost, coordinating, hostKey]);
 
@@ -168,9 +177,13 @@ export function useSidePanelTabs({
 
   // The summary card previews the Browser tab's page while it is not on
   // screen, opening that tab when clicked.
-  const browserDock = useSyncExternalStore(subscribeSidePanel, () =>
+  // In the new layout Browser opens in the main tabs, so the card's page
+  // lives there, unless this session's page was moved to the panel.
+  const newLayout = useNewLayoutPref();
+  const storedDock = useSyncExternalStore(subscribeSidePanel, () =>
     sidePanelDockOf("browser"),
   );
+  const browserDock = newLayout && panelBrowser ? "panel" : storedDock;
   const autoOpenPref = useSyncExternalStore(
     onPreviewAutoOpenChanged,
     getPreviewAutoOpenPref,

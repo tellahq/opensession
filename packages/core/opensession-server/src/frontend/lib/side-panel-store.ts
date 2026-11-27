@@ -55,6 +55,27 @@ export interface SidePanelState {
 let state: SidePanelState | null = null;
 const listeners = new Set<() => void>();
 
+/**
+ * Whether the panel is one for the whole window rather than each session's
+ * own: the new layout's rule, so switching tabs leaves the panel as it is
+ * (open or closed, its page, its Browser page). Only its content follows the
+ * session on screen. lib/new-layout-pref registers the getter, which keeps
+ * this store free of the user-pref module.
+ */
+let windowWide: () => boolean = () => false;
+
+export function setSidePanelWindowWide(getter: () => boolean): void {
+  windowWide = getter;
+}
+
+/** The key one window-wide panel is stored under. */
+const WINDOW_KEY = "window";
+
+/** The key `key`'s panel state lives under: its own, or the window's. */
+export function sidePanelKey(key: string): string {
+  return windowWide() ? WINDOW_KEY : key;
+}
+
 function load(): SidePanelState {
   try {
     return {
@@ -136,11 +157,30 @@ export function sidePanelViewOf(
   current: SidePanelState,
   key: string,
 ): Required<SidePanelView> {
+  const own = sidePanelKey(key);
   return sidePanelViewFor(
-    current.views[key],
-    !!current.browsers[key],
+    current.views[own],
+    !!current.browsers[own],
     current.lastPage,
   );
+}
+
+/** The page attached to `key`'s Browser tab, if any. */
+export function sidePanelBrowserOf(
+  current: SidePanelState,
+  key: string,
+): PanelBrowserTarget | null {
+  return current.browsers[sidePanelKey(key)] ?? null;
+}
+
+/** Whether anyone has opened or closed `key`'s panel yet. */
+export function sidePanelTouched(current: SidePanelState, key: string) {
+  return !!current.views[sidePanelKey(key)];
+}
+
+/** An action just opened `key`'s panel (see SidePanelState.opening). */
+export function sidePanelOpening(current: SidePanelState, key: string) {
+  return current.opening === sidePanelKey(key);
 }
 
 /** Write `key`'s view, moving it to the newest end of the stored map. */
@@ -150,19 +190,20 @@ function withView(
 ): Pick<SidePanelState, "views" | "opening"> {
   const current = getSidePanelState();
   const was = sidePanelViewOf(current, key);
+  const own = sidePanelKey(key);
   const views = { ...current.views };
-  delete views[key];
-  views[key] = view;
+  delete views[own];
+  views[own] = view;
   return {
     views,
-    opening: view.open && !was.open ? key : current.opening,
+    opening: view.open && !was.open ? own : current.opening,
   };
 }
 
 export function setSidePanelOpen(key: string, open: boolean): void {
   const current = getSidePanelState();
   const view = sidePanelViewOf(current, key);
-  if (view.open === open && current.views[key]) return;
+  if (view.open === open && sidePanelTouched(current, key)) return;
   update(withView(key, { ...view, open }));
 }
 
@@ -198,6 +239,18 @@ export function openSidePanelTab(tab: SidePanelTab, key = hosts.at(-1)): void {
   });
 }
 
+/**
+ * Open `key`'s panel on its overview: Changes, the workspace summary with the
+ * diff under it. A coordinating session's overview is its Threads tab when
+ * that is where it was left. The side panel toggle opens this, whatever page
+ * was showing when the panel closed, so it never opens onto a tool page or
+ * the new-tab list.
+ */
+export function openSidePanelOverview(key: string): void {
+  const view = sidePanelViewOf(getSidePanelState(), key);
+  openSidePanelTab(view.page === "threads" ? "threads" : "changes", key);
+}
+
 /** Add `tab` to the strip without selecting it or opening any panel. */
 export function addSidePanelTab(tab: SidePanelTab): void {
   const current = getSidePanelState();
@@ -206,12 +259,12 @@ export function addSidePanelTab(tab: SidePanelTab): void {
 }
 
 /**
- * Close `tab` in the strip; `key`'s page moves to a neighbour. Closing the
- * last tab closes `key`'s panel too.
+ * Close `tab` in the strip; `key`'s page moves to a neighbour. Changes, the
+ * overview, stays (see withOverviewTab).
  */
 export function closeSidePanelTab(key: string, tab: SidePanelTab): void {
   const current = getSidePanelState();
-  if (!current.tabs.includes(tab)) return;
+  if (tab === "changes" || !current.tabs.includes(tab)) return;
   const view = sidePanelViewOf(current, key);
   const next = withoutSidePanelTab(current.tabs, view.page, tab);
   const open = view.open && next.tabs.length > 0;
@@ -227,14 +280,15 @@ export function setSidePanelBrowser(
   target: PanelBrowserTarget | null,
 ): void {
   const current = getSidePanelState();
+  const own = sidePanelKey(key);
   const browsers = { ...current.browsers };
-  delete browsers[key];
+  delete browsers[own];
   if (!target) {
-    if (!current.browsers[key]) return;
+    if (!current.browsers[own]) return;
     update({ browsers });
     return;
   }
-  browsers[key] = target;
+  browsers[own] = target;
   update({
     ...withView(key, { open: true, page: "browser" }),
     browsers,
@@ -245,10 +299,16 @@ export function setSidePanelBrowser(
 
 /** The panel finished sliding in. */
 export function finishSidePanelOpening(key: string): void {
-  if (getSidePanelState().opening === key) update({ opening: null });
+  if (sidePanelOpening(getSidePanelState(), key)) update({ opening: null });
 }
 
+/**
+ * Where `kind` opens. In the new layout a Browser page always opens in the
+ * main tabs; moving one to the panel (tab menu, or dragging it over) is for
+ * that page only, and does not make the next one open there.
+ */
 export function sidePanelDockOf(kind: SidePanelDockable): "panel" | "main" {
+  if (kind === "browser" && windowWide()) return "main";
   return getSidePanelState().dock[kind];
 }
 
@@ -256,6 +316,7 @@ export function setSidePanelDock(
   kind: SidePanelDockable,
   place: "panel" | "main",
 ): void {
+  if (kind === "browser" && windowWide()) return;
   const { dock } = getSidePanelState();
   if (dock[kind] !== place) update({ dock: { ...dock, [kind]: place } });
 }
@@ -281,7 +342,9 @@ export function registerSidePanelHost(key: string): () => void {
 /** Whether a viewer can show the panel right now (see registerSidePanelHost):
  *  any viewer, or the one for `key`. */
 export function sidePanelHostOnScreen(key?: string): boolean {
-  return key ? hosts.includes(key) : hosts.length > 0;
+  return key
+    ? hosts.some((host) => sidePanelKey(host) === sidePanelKey(key))
+    : hosts.length > 0;
 }
 
 /** Light the open panel up as a drop target while a tab is dragged over it. */
@@ -298,4 +361,5 @@ export function opensInSidePanel(kind: SidePanelDockable): boolean {
 export function resetSidePanelStateForTest(): void {
   state = null;
   hosts = [];
+  windowWide = () => false;
 }

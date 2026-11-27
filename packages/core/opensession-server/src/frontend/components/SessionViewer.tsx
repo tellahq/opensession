@@ -743,6 +743,7 @@ export function SessionViewer({
   const { desktopPanelPage, setDesktopPanelPage } = viewState.panel;
   const { panelStyle, panelResizeHandle } = viewState.panel;
   const { activePanelOpen, setActivePanelOpen } = viewState.panel;
+  const { openActivePanel } = viewState.panel;
   const { panelPage, setPanelPage } = viewState.panel;
   const { panelTerminalMounted, setPanelTerminalMounted } = viewState.panel;
   const { pinnedPortal, pinPortal, autoPinPortal } = viewState.panel;
@@ -1609,8 +1610,7 @@ export function SessionViewer({
           openPr,
           openAssetFromTranscript,
           openAssets,
-          setActivePanelOpen,
-          setDesktopPanelPage,
+          openActivePanel,
           setSummaryOpen,
           gitRefreshTick,
           reviewPage: showReview ? reviewPage : null,
