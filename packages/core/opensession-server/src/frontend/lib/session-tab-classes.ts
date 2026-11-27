@@ -474,9 +474,12 @@ export const tabCloseClass = (phone: boolean) =>
  * button with a 28px squircle plate, nearly the tab's own height; close is
  * just its glyph, inking up on hover with no plate of its own.
  */
-/** The open tab grows by its ⋯, so the title keeps the room it had. */
-export const TAB_WITH_MENU = "max-w-[230px]";
-export const TAB_INLINE_CONTROLS = "-mr-1 flex flex-none items-center gap-0.5";
+/** New-layout session tabs share one width, open or not, so selecting a tab
+ *  never resizes it and never slides its neighbours. The open tab's title
+ *  gives up the room its ⋯ and close take. */
+export const TAB_SESSION_FIXED = "w-[200px] max-w-none";
+export const TAB_INLINE_CONTROLS =
+  "-mr-1 ml-auto flex flex-none items-center gap-0.5";
 export const TAB_MENU_CONTROL =
   "inline-flex size-7 shrink-0 cursor-pointer items-center justify-center " +
   "rounded-md border-0 bg-transparent p-0 text-dim " +
