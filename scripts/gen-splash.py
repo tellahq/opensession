@@ -8,7 +8,7 @@ we emit one PNG per modern iPhone (portrait).
 
 These images are a redraw of the FIRST FRAME of the `#splash` markup in
 src/frontend/index.html, at device pixel scale: same radial background, same
-76pt mark, same 18pt gap, same five bars. That is the whole point of the file.
+76pt mark, centered. That is the whole point of the file.
 iOS shows this PNG, then WebKit paints `#splash` over it, and if the two agree
 the handoff is invisible; when they drift you get a visible jump on every cold
 launch. So the constants below are read from index.html, not invented here.
@@ -18,7 +18,9 @@ The mark itself is the native app icon (os1-ios's asset catalog), the same
 black-and-white artwork the Electron shell and the web app icons use. Do not
 paint anything extra behind or below it: an earlier version of this script
 added a glow and its own audio bars, which meant the launch image never
-matched the shell it handed off to.
+matched the shell it handed off to. The shell's shader draws the mark sunk
+into the page, but its first frame is the plain icon, which is what this
+draws.
 
     python3 scripts/gen-splash.py
 
@@ -30,7 +32,7 @@ PWAs cache these for a day.
 """
 
 import os
-from PIL import Image, ImageDraw
+from PIL import Image
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
 OUT_DIR = os.path.join(ROOT, "packages", "core", "opensession-server", "src", "frontend", "splash")
@@ -50,13 +52,6 @@ GRAD_CX, GRAD_CY = 0.50, 0.35
 GRAD_STOP = 0.70
 
 LOGO_PT = 76  # .splash-logo width/height
-GAP_PT = 18  # #splash gap
-BAR_W_PT = 4  # .splash-bars span width
-BAR_GAP_PT = 5  # .splash-bars gap
-BAR_BAND_PT = 14  # .splash-bars height
-BAR_HEIGHTS_PT = [6, 10, 14, 10, 6]
-BAR_ALPHAS = [0.4, 0.7, 1.0, 0.7, 0.4]
-BAR_COLOR = (236, 236, 236)  # currentColor — body { color: #ececec }
 
 # Portrait iPhones, matched by the media queries index.html writes.
 # (point_width, point_height, scale)
@@ -103,33 +98,11 @@ def render(logo_master, pt_w, pt_h, scale):
     w, h = pt_w * scale, pt_h * scale
     img = gradient(w, h).convert("RGBA")
 
-    # #splash is a centered flex column: logo, gap, bar band.
-    content_pt = LOGO_PT + GAP_PT + BAR_BAND_PT
-    top = (pt_h - content_pt) / 2 * scale
-    cx = w // 2
-
+    # #splash centers the mark on its own.
     logo_px = LOGO_PT * scale
     logo = logo_master.resize((logo_px, logo_px), Image.Resampling.LANCZOS)
-    img.alpha_composite(logo, (cx - logo_px // 2, round(top)))
-
-    bars = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    bd = ImageDraw.Draw(bars)
-    bar_w = BAR_W_PT * scale
-    gap = BAR_GAP_PT * scale
-    total = len(BAR_HEIGHTS_PT) * bar_w + (len(BAR_HEIGHTS_PT) - 1) * gap
-    band_top = top + (LOGO_PT + GAP_PT) * scale
-    band_mid = band_top + BAR_BAND_PT * scale / 2
-    x = cx - total // 2
-    for hh, alpha in zip(BAR_HEIGHTS_PT, BAR_ALPHAS):
-        bar_h = hh * scale
-        y0 = round(band_mid - bar_h / 2)
-        bd.rounded_rectangle(
-            [x, y0, x + bar_w - 1, y0 + bar_h - 1],
-            radius=bar_w / 2,
-            fill=BAR_COLOR + (round(255 * alpha),),
-        )
-        x += bar_w + gap
-    return Image.alpha_composite(img, bars).convert("RGB")
+    img.alpha_composite(logo, (w // 2 - logo_px // 2, round((h - logo_px) / 2)))
+    return img.convert("RGB")
 
 
 def main():
