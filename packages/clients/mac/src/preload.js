@@ -84,6 +84,11 @@ contextBridge.exposeInMainWorld("os1", {
   // window stays where it is, so the click routed the app to the right session
   // behind whatever the person was actually looking at.
   focusWindow: () => ipcRenderer.send("os1:focus-window"),
+  // Centre the traffic lights on the web app's titlebar row, whose height
+  // follows the layout. Its presence is also the capability check: an older
+  // shell without it keeps the lights where a 48px row wants them.
+  setTitlebarHeight: (height) =>
+    ipcRenderer.send("os1:titlebar-height", Number(height) || 0),
   // A screenshot of this window inside rect (CSS pixels), for a Browser tab
   // comment: the page cannot read a framed cross-origin page's pixels.
   capturePage: (rect) => ipcRenderer.invoke("os1:capture-page", rect),

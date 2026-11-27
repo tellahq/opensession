@@ -37,6 +37,9 @@ export interface OS1ShellBridge {
   localFolders?: NativeLocalFolders;
   materialBackdrop?: boolean;
   focusWindow?: () => void;
+  /** Centre the traffic lights on a titlebar row of this height (os1-mac
+   *  preload). Older shells lack it and keep the lights for a 48px row. */
+  setTitlebarHeight?: (height: number) => void;
   /** Dock badge count (os1-mac preload). */
   setBadge?: (count: number) => void;
   organizations?: unknown;
