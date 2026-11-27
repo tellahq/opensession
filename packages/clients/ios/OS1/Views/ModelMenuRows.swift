@@ -1,19 +1,24 @@
 import SwiftUI
 
-/// The model choices every model menu opens on: the curated five in the
-/// person's synced order, then "More models" with the rest of the catalog in
+/// The model choices every model menu opens on: the five from the person's
+/// recent picks and the curated best, in their synced order, then "More models" with the rest of the catalog in
 /// sections by provider. See `TopModels`.
 ///
-/// Callers draw the row, since each surface picks a model its own way.
+/// Callers draw the row, since each surface picks a model its own way; a
+/// row's action calls `TopModels.recordPick`.
 struct ModelMenuRows<Row: View>: View {
     @AppStorage(TopModels.storageKey) private var savedOrder = ""
+    @AppStorage(TopModels.recentStorageKey) private var savedRecent = "[]"
 
     let catalog: ModelCatalog
     let isSelected: (ModelOption) -> Bool
     @ViewBuilder let row: (ModelOption) -> Row
 
     var body: some View {
-        let split = catalog.topModels(order: TopModels.decodeOrder(savedOrder))
+        let split = catalog.topModels(
+            order: TopModels.decodeOrder(savedOrder),
+            recent: TopModels.decodeRecent(savedRecent) ?? []
+        )
         ForEach(split.top) { option in
             row(option)
         }

@@ -80,4 +80,40 @@ final class TopModelsTests: XCTestCase {
             ["pi/anthropic/claude-haiku-5-5", "claude-mythos-5-2"]
         )
     }
+
+    func testRecentPickTakesTheLastCuratedSlot() {
+        let split = TopModels.split(
+            (catalog + ["pi/google/gemini-4-neon"]).map { option($0) },
+            recent: ["gemini-4-neon"]
+        )
+        XCTAssertEqual(
+            split.top.map { TopModels.tail($0.id) },
+            ["claude-fable-5-2", "claude-opus-5-5", "claude-sonnet-5-5", "gpt-6.2-astra", "gemini-4-neon"]
+        )
+        XCTAssertTrue(split.more.contains { $0.id == "pi/openai/gpt-6.2-sol" })
+    }
+
+    func testRecentPicksReplaceTheCuratedFiveInAStableOrder() {
+        let recent = ["grok-5", "claude-haiku-5-5", "gpt-6.1-terra", "claude-opus-5-5", "gpt-6.2-sol", "claude-fable-5-2"]
+        let split = TopModels.split(catalog.map { option($0) }, recent: recent)
+        XCTAssertEqual(
+            split.top.map { TopModels.tail($0.id) },
+            ["claude-opus-5-5", "gpt-6.2-sol", "claude-haiku-5-5", "gpt-6.1-terra", "grok-5"]
+        )
+        let again = TopModels.split(
+            catalog.map { option($0) }, recent: TopModels.addRecent(recent, "pi/xai/grok-5")
+        )
+        XCTAssertEqual(again.top.map(\.id), split.top.map(\.id))
+    }
+
+    func testDecodeRecentReadsTheWebShape() {
+        XCTAssertEqual(
+            TopModels.decodeRecent(#"["pi/google/gemini-4-neon","gemini-4-neon",3,"","gpt-6.2-sol"]"#),
+            ["gemini-4-neon", "gpt-6.2-sol"]
+        )
+        XCTAssertNil(TopModels.decodeRecent("{}"))
+        XCTAssertNil(TopModels.decodeRecent(nil))
+        XCTAssertEqual(TopModels.normalizedRecent("[]"), "[]")
+        XCTAssertEqual(TopModels.addRecent(["a", "b", "c"], "pi/x/c"), ["c", "a", "b"])
+    }
 }

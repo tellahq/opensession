@@ -1,11 +1,12 @@
 import Foundation
 
-/// The model menus' top level: five curated models, in the order the person
-/// dragged them into on the web (`top-model-order`), with the rest of the
-/// catalog one hop away under "More models", grouped by provider.
+/// The model menus' top level: five models, in the order the person dragged
+/// them into on the web (`top-model-order`), with the rest of the catalog one
+/// hop away under "More models", grouped by provider.
 ///
-/// Which five is curated here; only their order is the person's. Menus can't
-/// drag, so this app reads the synced order and never writes it.
+/// Which five follows the person's recent picks (`recent-models`), with the
+/// curated best filling the slots they leave. Menus can't drag, so this app
+/// reads the synced order and never writes it; picks it records itself.
 enum TopModels {
     /// How many models a menu lists at its top level.
     static let count = 5
@@ -25,6 +26,14 @@ enum TopModels {
     static let prefKey = "top-model-order"
     /// The local cache `NativePreferences` hydrates and the menus read.
     static let storageKey = "os1.models.topOrder"
+
+    /// Synced ui-pref of models picked from a model menu: a JSON list of id
+    /// tails, newest first. The web's `lib/model-recents.ts`.
+    static let recentPrefKey = "recent-models"
+    /// Its local cache, the same JSON.
+    static let recentStorageKey = "os1.models.recent"
+    /// Kept beyond the five shown so a smaller catalog still fills the top.
+    static let recentLimit = 12
 
     /// Stored form ("claude-opus-5-5,gpt-6.2-sol") to tails, trimmed, with
     /// blanks and repeats dropped and the first occurrence's place kept. The
@@ -50,30 +59,97 @@ enum TopModels {
         id.split(separator: "/").last.map(String.init) ?? id
     }
 
-    /// Split a catalog into the top-level five and the rest. The curated five
-    /// come first; a catalog missing some of them fills the gap from its own
-    /// order, so the top level is never short while models remain. `order`
-    /// reorders the five but never changes which five they are; a model it
-    /// does not name keeps its curated place after the ones it does.
-    static func split(
-        _ options: [ModelOption], order: [String] = []
-    ) -> (top: [ModelOption], more: [ModelOption]) {
-        let curated = curatedTails.compactMap { wanted in
-            options.first { tail($0.id) == wanted }
+    /// Stored recents to tails, newest first, without blanks or repeats; nil
+    /// when the value is not a JSON list. Full ids an earlier web menu stored
+    /// read as their tails. The web's `decodeRecentModels`.
+    static func decodeRecent(_ raw: String?) -> [String]? {
+        guard let data = raw?.data(using: .utf8),
+              let list = (try? JSONSerialization.jsonObject(with: data)) as? [Any]
+        else { return nil }
+        var seen = Set<String>()
+        let tails = list.compactMap { item -> String? in
+            guard let id = item as? String else { return nil }
+            let value = tail(id.trimmingCharacters(in: .whitespacesAndNewlines))
+            guard !value.isEmpty, seen.insert(value).inserted else { return nil }
+            return value
         }
+        return Array(tails.prefix(recentLimit))
+    }
+
+    static func encodeRecent(_ tails: [String]) -> String {
+        guard let data = try? JSONSerialization.data(withJSONObject: tails),
+              let text = String(data: data, encoding: .utf8)
+        else { return "[]" }
+        return text
+    }
+
+    /// What `NativePreferences` stores for the recents, or nil to keep the
+    /// default.
+    static func normalizedRecent(_ raw: String?) -> String? {
+        decodeRecent(raw).map(encodeRecent)
+    }
+
+    /// `tails` with `id`'s tail moved to the front. The web's `addRecentModel`.
+    static func addRecent(_ tails: [String], _ id: String) -> [String] {
+        let value = tail(id)
+        let rest = tails.filter { $0 != value }
+        return Array((value.isEmpty ? rest : [value] + rest).prefix(recentLimit))
+    }
+
+    /// Record a pick from a model menu here at once, then sync the account's
+    /// pref so the web and other devices list it too.
+    @MainActor
+    static func recordPick(_ id: String) {
+        let defaults = UserDefaults.standard
+        let current = decodeRecent(defaults.string(forKey: recentStorageKey)) ?? []
+        let next = addRecent(current, id)
+        guard next != current else { return }
+        let encoded = encodeRecent(next)
+        defaults.set(encoded, forKey: recentStorageKey)
+        guard ServerConfig.shared.isConfigured else { return }
+        let requestContext = NativePreferences.context()
+        NativePreferences.beginLocalWrite()
+        Task {
+            defer { NativePreferences.endLocalWrite() }
+            guard var confirmed = try? await SettingsAPI.updateUiPrefs(
+                user: requestContext.user,
+                prefs: [recentPrefKey: encoded]
+            ) else { return }
+            // A newer pick made while this one was in flight wins locally.
+            confirmed[recentPrefKey] = UserDefaults.standard.string(forKey: recentStorageKey) ?? encoded
+            _ = NativePreferences.apply(confirmed, for: requestContext)
+        }
+    }
+
+    /// Split a catalog into the top-level five and the rest. `recent` (tails,
+    /// newest first) decides which five: recent picks come in first, and the
+    /// curated best, then the catalog's own order, fill what is left, so the
+    /// top level is never short while models remain. The five are listed in
+    /// a fixed order so a pick never moves the rows: `order` first, then
+    /// curated, then catalog order. The web's `pickTopModels`.
+    static func split(
+        _ options: [ModelOption], order: [String] = [], recent: [String] = []
+    ) -> (top: [ModelOption], more: [ModelOption]) {
+        let byTails = { (tails: [String]) in
+            tails.compactMap { wanted in options.first { tail($0.id) == wanted } }
+        }
+        let curated = byTails(curatedTails)
         let curatedIDs = Set(curated.map(\.id))
-        let picked = Array((curated + options.filter { !curatedIDs.contains($0.id) }).prefix(count))
+        let best = curated + options.filter { !curatedIDs.contains($0.id) }
+        var chosen = Set<String>()
+        for option in byTails(recent) + best where chosen.count < count {
+            chosen.insert(option.id)
+        }
         let rank = { (option: ModelOption) in
             order.firstIndex(of: tail(option.id)) ?? order.count
         }
-        let top = picked.enumerated()
+        let top = best.filter { chosen.contains($0.id) }.enumerated()
             .sorted { a, b in
                 let (ra, rb) = (rank(a.element), rank(b.element))
                 return ra != rb ? ra < rb : a.offset < b.offset
             }
             .map(\.element)
-        let topIDs = Set(top.map(\.id))
-        return (top, options.filter { !topIDs.contains($0.id) })
+        return (top, options.filter { !chosen.contains($0.id) })
     }
 
     /// One "More models" section.
@@ -141,7 +217,9 @@ enum TopModels {
 extension ModelCatalog {
     /// The catalog as the menus list it, top five first. Regular models fill
     /// a gap in the five before presets do.
-    func topModels(order: [String]) -> (top: [ModelOption], more: [ModelOption]) {
-        TopModels.split(regular + presets, order: order)
+    func topModels(
+        order: [String], recent: [String] = []
+    ) -> (top: [ModelOption], more: [ModelOption]) {
+        TopModels.split(regular + presets, order: order, recent: recent)
     }
 }

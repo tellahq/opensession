@@ -38,7 +38,10 @@ struct ModelSettingsMenu: View {
                 ) { option in
                     let routed = ModelCatalog.routedID(option.id, engine: currentEngine)
                     Button {
-                        if let routed { viewModel.changeModel(to: routed, option: option) }
+                        if let routed {
+                            viewModel.changeModel(to: routed, option: option)
+                            TopModels.recordPick(option.id)
+                        }
                     } label: {
                         if option.id == ModelCatalog.baseID(currentModel) {
                             Label(option.displayLabel, systemImage: "checkmark")

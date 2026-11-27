@@ -144,6 +144,14 @@ enum NativePreferences {
             resetMissing: true,
             in: defaults
         )
+        // Models picked from any model menu, which decide the menus' five.
+        set(
+            TopModels.normalizedRecent(prefs[TopModels.recentPrefKey]),
+            default: "[]",
+            key: TopModels.recentStorageKey,
+            resetMissing: true,
+            in: defaults
+        )
         set(
             validated(prefs["send-key"], allowed: ["enter", "mod-enter"]),
             default: "enter",

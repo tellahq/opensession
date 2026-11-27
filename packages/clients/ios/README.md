@@ -240,8 +240,9 @@ passed`, the whole message and nothing else) draws as one compact row per
   share, hide or restore, and archive, matching the sidebar row's long-press
   menu. The model settings menu (the toolbar's slider control on macOS, nested
   in the actions menu on iOS, and the composer's model name) has the web
-  menu's shape: five curated models (`Models/TopModels.swift`, mirroring the
-  web's list) in the order the account dragged them into on the web (the
+  menu's shape: five models, the account's recent picks (the synced
+  `recent-models` pref, which picks here also write) filled from a curated
+  list (`Models/TopModels.swift`, mirroring the web's), in the order the account dragged them into on the web (the
   synced `top-model-order` pref, read-only here), More models with the rest
   grouped by provider, Effort, Speed, and an Options submenu. The new-session
   model chip and worktree details list models the same way

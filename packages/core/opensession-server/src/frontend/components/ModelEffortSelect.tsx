@@ -48,6 +48,7 @@ import {
 import { UsageCost, UsageDetails } from "./UsageMeter";
 import { setUsageBarPref, useUsageBarPref } from "../lib/usage-bar-pref";
 import { setTopModelOrder, useTopModelOrder } from "../lib/top-model-order";
+import { pushRecentModel, useRecentModels } from "../lib/model-recents";
 import { Reorder } from "motion/react";
 
 export const EFFORTS = [
@@ -77,8 +78,9 @@ const PRIMARY_MODEL_ID_SET = new Set<string>(PRIMARY_MODEL_IDS);
 export const TOP_MODEL_COUNT = 5;
 
 /** The best current models, by id tail, in the order the picker lists them.
- * Update this when a model ships or retires so the top of the picker stays
- * the five most people want; everything else sits under "More models". */
+ * They fill the top level until a person's recent picks take their places,
+ * so update this when a model ships or retires; everything else sits under
+ * "More models". */
 const TOP_MODEL_TAILS = [
   "claude-fable-5-2",
   "claude-opus-5-5",
@@ -91,34 +93,40 @@ const idTail = (id: string) => id.split("/").pop() || "";
 
 /**
  * Split the picker's first-class entries into the top-level five and the rest.
- * The curated best come first; a catalog missing some of them fills the gap
- * from its own order, so the top level is never short while models remain.
- * `order` is the person's dragged order (id tails): it reorders the five but
- * never changes which five they are. A model it does not name keeps its
- * curated place after the ones it does.
+ * `recent` (id tails, newest first) decides which five: the models a person
+ * picked lately come in first, and the curated best, then the catalog's own
+ * order, fill the slots left over, so someone with no picks yet sees the best
+ * five and the top level is never short while models remain.
+ * The five are listed in a fixed order so a pick never moves the rows around:
+ * `order`, the person's dragged order (id tails), first, then curated, then
+ * catalog order.
  */
 export function pickTopModels<T extends { id: string }>(
   options: readonly T[],
   order: readonly string[] = [],
+  recent: readonly string[] = [],
 ) {
   const tail = (o: T) => idTail(o.id);
-  const curated = TOP_MODEL_TAILS.flatMap((t) => {
-    const option = options.find((o) => tail(o) === t);
-    return option ? [option] : [];
-  });
-  const top = [
-    ...curated,
-    ...options.filter((o) => !curated.includes(o)),
-  ].slice(0, TOP_MODEL_COUNT);
+  const byTails = (tails: readonly string[]) =>
+    tails.flatMap((t) => {
+      const option = options.find((o) => tail(o) === t);
+      return option ? [option] : [];
+    });
+  const curated = byTails(TOP_MODEL_TAILS);
+  const best = [...curated, ...options.filter((o) => !curated.includes(o))];
+  const chosen = new Set(
+    [...new Set([...byTails(recent), ...best])].slice(0, TOP_MODEL_COUNT),
+  );
   const rank = (o: T) => {
     const i = order.indexOf(tail(o));
     return i === -1 ? order.length : i;
   };
-  const ordered = top
+  const top = best
+    .filter((o) => chosen.has(o))
     .map((o, i) => [o, i] as const)
     .sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1])
     .map(([o]) => o);
-  return { top: ordered, more: options.filter((o) => !top.includes(o)) };
+  return { top, more: options.filter((o) => !chosen.has(o)) };
 }
 
 /** Engine display names, keyed by ModelOption.provider — only used for the
@@ -405,6 +413,7 @@ export function ModelEffortSelect({
   const effectiveModel = model || defaultModel;
   const usageBarOn = useUsageBarPref();
   const savedTopOrder = useTopModelOrder();
+  const recentModels = useRecentModels();
   // Mid-drag, Motion's in-flight order of the top five (option ids); saved as
   // the person's order when the row is dropped.
   const [draftTopIds, setDraftTopIds] = React.useState<string[] | null>(null);
@@ -655,6 +664,7 @@ export function ModelEffortSelect({
     const { top: topOptions, more: morePrimaryOptions } = pickTopModels(
       primaryOptions,
       savedTopOrder,
+      recentModels,
     );
     // "More models" sections by upstream provider (Anthropic / OpenAI / xAI /
     // …): a flat list stops scanning well once third-party providers join the
@@ -755,6 +765,7 @@ export function ModelEffortSelect({
       <Menu.Item
         onClick={() => {
           onModelChange(routed ?? option.value);
+          pushRecentModel(option.id);
           if (
             onEffortChange &&
             !nextEfforts.includes(effort ?? "") &&

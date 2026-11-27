@@ -1277,6 +1277,7 @@ struct NewSessionView: View {
             return
         }
         model = routed
+        TopModels.recordPick(option.id)
         defaultEffortForCurrentModel()
         speed = SpeedChoices.afterModelChange(speed, next: option)
     }
