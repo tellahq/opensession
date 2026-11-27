@@ -34,12 +34,7 @@ describe("placeOverride", () => {
   });
 });
 
-const GONE = {
-  exists: false,
-  liveSessions: 0,
-  archivedSessions: 0,
-  draft: false,
-};
+const GONE = { exists: false, liveSessions: 0, archivedSessions: 0 };
 
 describe("workspaceReopens", () => {
   const there = { ...GONE, exists: true };
@@ -58,11 +53,8 @@ describe("workspaceReopens", () => {
     ).toBe(true);
   });
 
-  test("an empty one does, and so does one kept for its draft", () => {
+  test("an empty one does", () => {
     expect(workspaceReopens(there)).toBe(true);
-    expect(
-      workspaceReopens({ ...there, archivedSessions: 1, draft: true }),
-    ).toBe(true);
   });
 });
 

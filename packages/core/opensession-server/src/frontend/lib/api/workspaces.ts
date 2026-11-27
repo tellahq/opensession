@@ -92,7 +92,6 @@ export interface WorkspaceState {
   exists: boolean;
   liveSessions: number;
   archivedSessions: number;
-  draft: boolean;
 }
 
 /**

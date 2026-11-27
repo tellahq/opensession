@@ -110,7 +110,11 @@ import { pathExists } from "../shared/path-exists";
 import { isClientSessionId, isNativeSessionId, newSessionId } from "../paths";
 import { githubMutationCredential } from "./github-credential";
 import { conditionalJsonResponse } from "../http-json";
-import { indexedActiveWorkspaceIds } from "../session-list-store";
+import {
+  indexedActiveWorkspaceIds,
+  indexedCoverage,
+  indexedWorkspaceMembers,
+} from "../session-list-store";
 
 /**
  * Validate a `draft` field from a workspace create/patch body. `null` (clear)
@@ -165,21 +169,21 @@ export async function deleteWorkspaceMemberSessions(
 
 /** A workspace as its record and its member sessions describe it. */
 export function workspaceState(
-  workspace: { id: string; draft?: unknown } | undefined,
+  workspace: { id: string } | null,
   members: readonly { archived?: boolean }[],
-): {
-  exists: boolean;
-  liveSessions: number;
-  archivedSessions: number;
-  draft: boolean;
-} {
+): { exists: boolean; liveSessions: number; archivedSessions: number } {
   const archivedSessions = members.filter((member) => member.archived).length;
   return {
     exists: !!workspace,
     liveSessions: members.length - archivedSessions,
     archivedSessions,
-    draft: !!workspace?.draft,
   };
+}
+
+/** Whether the session index holds every session, live and archived. */
+async function sessionIndexComplete(): Promise<boolean> {
+  if (await indexedCoverage("include")) return true;
+  return (await indexedCoverage("exclude")) && (await indexedCoverage("only"));
 }
 
 /**
@@ -739,16 +743,19 @@ export async function handleWorkspaceRoutes(
   const stateMatch = path.match(/^\/api\/workspaces\/([^/]+)\/state$/);
   if (stateMatch && req.method === "GET") {
     const id = decodeURIComponent(stateMatch[1]);
-    const [workspaces, sessions] = await Promise.all([
-      listWorkspaces(),
-      getSessionListSnapshotAsync(),
+    // The members come off the workspace index, so the cost follows this
+    // workspace and not the whole history. An index still being built would
+    // read as "no sessions", which is an answer; say it is not known yet.
+    if (!(await sessionIndexComplete()))
+      return Response.json(
+        { error: "The session list is still loading" },
+        { status: 503 },
+      );
+    const [workspace, members] = await Promise.all([
+      getWorkspace(id),
+      indexedWorkspaceMembers(id),
     ]);
-    return Response.json(
-      workspaceState(
-        workspaces.find((workspace) => workspace.id === id),
-        sessions.filter((session) => session.workspaceId === id),
-      ),
-    );
+    return Response.json(workspaceState(workspace, members));
   }
 
   // Discard a sidebar draft. Never deletes sessions: the draft may sit on a

@@ -73,7 +73,6 @@ type WorkspaceState = {
   exists: boolean;
   liveSessions: number;
   archivedSessions: number;
-  draft: boolean;
 };
 
 /** Asks the server about a conversation. */
@@ -88,12 +87,17 @@ export type ConversationLookUp = {
  * Whether a workspace is still somewhere to go back to. A deleted one is
  * not, and neither is an archived one: archiving archives every session and
  * keeps the record, so it shows as sessions that are all archived. One with
- * no sessions at all is only empty (a ticket nobody has started on), and one
- * holding a draft is still listed for that draft, so both reopen.
+ * no sessions at all is only empty (a ticket nobody has started on) and
+ * reopens.
+ *
+ * Nothing else counts. A draft parked on an archived workspace keeps its row
+ * in the list, but the workspace was still archived, and not going back to it
+ * costs one click on that row where going back would undo the archive on
+ * screen.
  */
 export function workspaceReopens(state: WorkspaceState): boolean {
   if (!state.exists) return false;
-  return state.liveSessions > 0 || state.archivedSessions === 0 || state.draft;
+  return state.liveSessions > 0 || state.archivedSessions === 0;
 }
 
 /**

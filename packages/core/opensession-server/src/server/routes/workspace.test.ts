@@ -123,13 +123,12 @@ test("a session-less PR workspace is its own new-session source", () => {
 
 test("workspace state tells an archived workspace from an empty or deleted one", () => {
   const record = { id: "ws-1" };
-  expect(workspaceState(undefined, [])).toEqual({
+  expect(workspaceState(null, [])).toEqual({
     exists: false,
     liveSessions: 0,
     archivedSessions: 0,
-    draft: false,
   });
-  expect(workspaceState(record, [])).toMatchObject({
+  expect(workspaceState(record, [])).toEqual({
     exists: true,
     liveSessions: 0,
     archivedSessions: 0,
@@ -137,16 +136,26 @@ test("workspace state tells an archived workspace from an empty or deleted one",
   // Archiving a workspace archives its sessions and keeps the record.
   expect(
     workspaceState(record, [{ archived: true }, { archived: true }]),
-  ).toMatchObject({ exists: true, liveSessions: 0, archivedSessions: 2 });
-  expect(
-    workspaceState({ ...record, draft: { text: "later" } }, [
-      {},
-      { archived: true },
-    ]),
-  ).toEqual({
+  ).toEqual({ exists: true, liveSessions: 0, archivedSessions: 2 });
+  expect(workspaceState(record, [{}, { archived: true }])).toEqual({
     exists: true,
     liveSessions: 1,
     archivedSessions: 1,
-    draft: true,
   });
+});
+
+test("workspace state reads one workspace's members and never guesses from an unbuilt index", async () => {
+  const source = await Bun.file(
+    new URL("./workspace.ts", import.meta.url),
+  ).text();
+  const route = source.slice(
+    source.indexOf("/state$/"),
+    source.indexOf("/draft$/"),
+  );
+  expect(route).toContain("indexedWorkspaceMembers(id)");
+  expect(route).toContain("getWorkspace(id)");
+  expect(route).toContain("sessionIndexComplete()");
+  expect(route).toContain("status: 503");
+  expect(route).not.toContain("getSessionListSnapshotAsync");
+  expect(route).not.toContain("listWorkspaces(");
 });
