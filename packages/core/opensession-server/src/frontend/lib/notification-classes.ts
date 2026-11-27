@@ -27,6 +27,6 @@ export const PERSISTENT_NOTICE_SHELF =
 /** Card shared by durable update and desktop-link prompts. */
 export const PERSISTENT_NOTICE_CARD =
   "pointer-events-auto flex w-full items-center justify-between gap-2 " +
-  "rounded-row border border-[color:var(--composer-border)] bg-[var(--composer-surface)] " +
+  "rounded-control border border-[color:var(--composer-border)] bg-[var(--composer-surface)] " +
   "smooth-shadow-md py-1.5 pr-1.5 pl-3 phone:shadow-[var(--composer-shadow)] " +
   "animate-[update-toast-in_var(--dur-lg)_var(--ease)] motion-reduce:animate-none";

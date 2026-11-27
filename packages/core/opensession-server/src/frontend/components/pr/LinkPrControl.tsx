@@ -60,11 +60,7 @@ export function LinkPrControl({
           <Button
             variant={tab ? "ghost" : "soft"}
             size="sm"
-            className={
-              tab
-                ? "px-2.5 text-xs text-faint phone:min-h-11"
-                : "phone:min-h-11"
-            }
+            className={tab ? "px-2.5 text-xs text-faint" : ""}
             icon={tab ? undefined : <IconLink size={20} />}
             title="Link another PR to this session"
           >
@@ -106,11 +102,7 @@ export function LinkPrControl({
           <div className="flex justify-end gap-2.5">
             <Popover.Close
               render={
-                <Button
-                  variant="soft"
-                  className="phone:min-h-11"
-                  disabled={busy}
-                >
+                <Button variant="soft" disabled={busy}>
                   Cancel
                 </Button>
               }
@@ -118,7 +110,6 @@ export function LinkPrControl({
             <Button
               type="submit"
               variant="primary"
-              className="phone:min-h-11"
               disabled={busy || !val.trim()}
             >
               {busy ? "Linking…" : "Link PR"}

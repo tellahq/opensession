@@ -336,7 +336,7 @@ export function Feed({
             size="sm"
             icon={<IconRepo size={18} />}
             caret
-            className="shrink-0 phone:min-h-11"
+            className="shrink-0"
           >
             <span className="max-w-[150px] truncate">
               {repo === "all" ? "In all repos" : `In ${repoLabel(repo)}`}

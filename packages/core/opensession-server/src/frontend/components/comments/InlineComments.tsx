@@ -565,7 +565,7 @@ export function InlineComments({
           icon={<IconMessages size={16} />}
           onClick={() => setListOpen(true)}
           aria-label={`Comments, ${openCount} open`}
-          className="absolute top-2 z-[6] phone:top-[calc(var(--header-h)+4px)] phone:min-h-11"
+          className="absolute top-2 z-[6] phone:top-[calc(var(--header-h)+4px)]"
           // Beside the workspace summary when it covers the corner.
           style={{
             right: geometry
@@ -750,7 +750,7 @@ function CommentsList({
             icon={<IconX size={18} />}
             aria-label="Close"
             onClick={onClose}
-            className="ml-auto phone:min-h-11 phone:min-w-11"
+            className="ml-auto phone:min-w-11"
           />
         </div>
         <div className="flex gap-1 px-4 pb-2" role="tablist">
@@ -768,7 +768,6 @@ function CommentsList({
               role="tab"
               aria-selected={filter === value}
               onClick={() => setFilter(value)}
-              className="phone:min-h-11"
             >
               {label}
             </Button>
@@ -791,7 +790,7 @@ function CommentsList({
                   key={thread.id}
                   type="button"
                   onClick={() => onOpen(thread)}
-                  className="focus-ring flex w-full flex-col gap-1.5 rounded-row px-2.5 py-2.5 text-left hover:bg-hover"
+                  className="focus-ring flex w-full flex-col gap-1.5 rounded-control px-2.5 py-2.5 text-left hover:bg-hover"
                 >
                   {thread.anchor ? (
                     <ThreadPassage thread={thread} className="line-clamp-2" />

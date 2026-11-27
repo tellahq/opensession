@@ -351,7 +351,7 @@ export function RepoBar({
                           <span className="text-faint">· {r.branch}</span>
                         </span>
                         <button
-                          className="cursor-pointer rounded border-0 bg-transparent p-0.5 text-faint hover:text-fg"
+                          className="cursor-pointer rounded-xs border-0 bg-transparent p-0.5 text-faint hover:text-fg"
                           onClick={() => detach(r.repo)}
                           title="Detach (leaves the worktree on disk)"
                           aria-label={`Detach ${repoLabel(r.repo)}`}

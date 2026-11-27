@@ -199,7 +199,7 @@ function ScriptRunRow({
           <Button
             variant="ghost"
             size="sm"
-            className="-my-1 -mr-1.5 shrink-0 phone:min-h-11 phone:min-w-11"
+            className="-my-1 -mr-1.5 shrink-0 phone:min-w-11"
             icon={<IconX size={16} />}
             aria-label="Close"
             onClick={close}
@@ -226,7 +226,6 @@ function ScriptRunRow({
             <Button
               variant="soft"
               size="sm"
-              className="phone:min-h-11"
               onClick={() =>
                 confirm({
                   title: "Stop this script?",
@@ -270,7 +269,7 @@ function ScriptRunRow({
                   type="button"
                   size="lg"
                   variant="ghost"
-                  className="phone:min-h-11 phone:flex-1"
+                  className="phone:flex-1"
                 />
               }
             >
@@ -280,7 +279,7 @@ function ScriptRunRow({
               type="button"
               size="lg"
               variant="soft"
-              className="phone:min-h-11 phone:flex-1"
+              className="phone:flex-1"
               onClick={() => {
                 setCloseOpen(false);
                 onHide();
@@ -292,7 +291,7 @@ function ScriptRunRow({
               type="button"
               size="lg"
               variant="danger-strong"
-              className="phone:min-h-11 phone:flex-1"
+              className="phone:flex-1"
               onClick={() => {
                 setCloseOpen(false);
                 void stop().then((ok) => ok && onHide());

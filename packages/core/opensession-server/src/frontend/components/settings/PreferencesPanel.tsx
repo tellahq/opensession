@@ -1180,7 +1180,6 @@ export function PreferencesPanel() {
               size="sm"
               variant="ghost"
               icon={<IconPlus size={16} />}
-              className="phone:min-h-11"
               onClick={() =>
                 setCheckoutOverrideDraft({
                   repo: "",
@@ -1306,7 +1305,6 @@ export function PreferencesPanel() {
                 />
                 <Button
                   variant="soft"
-                  className="phone:min-h-11"
                   disabled={!checkoutOverrideDraft.repo}
                   onClick={() => {
                     setSessionCheckoutPref(
@@ -1320,7 +1318,6 @@ export function PreferencesPanel() {
                 </Button>
                 <Button
                   variant="ghost"
-                  className="phone:min-h-11"
                   onClick={() => setCheckoutOverrideDraft(null)}
                 >
                   Cancel

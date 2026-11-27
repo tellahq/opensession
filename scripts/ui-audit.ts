@@ -335,6 +335,114 @@ export function findUnknownThemeTokens(source: string): string[] {
   return found;
 }
 
+/** The balanced-paren body of every `<callee>(` call in `source`. */
+function callBodies(source: string, callee: string): string[] {
+  const out: string[] = [];
+  let from = 0;
+  for (;;) {
+    const at = source.indexOf(`${callee}(`, from);
+    if (at < 0) return out;
+    let i = at + callee.length + 1;
+    let depth = 1;
+    let quote: string | null = null;
+    while (i < source.length && depth > 0) {
+      const ch = source[i]!;
+      if (quote) {
+        if (ch === "\\") i++;
+        else if (ch === quote) quote = null;
+      } else if (ch === '"' || ch === "'" || ch === "`") quote = ch;
+      else if (ch === "(" || ch === "{" || ch === "[") depth++;
+      else if (ch === ")" || ch === "}" || ch === "]") depth--;
+      i++;
+    }
+    out.push(source.slice(at + callee.length + 1, i - 1));
+    from = i;
+  }
+}
+
+/** Properties whose value must come from a scale in ui/tokens.stylex.ts. */
+const SCALED_PROPS =
+  /\b(?:(?:min|max)?(?:Height|Width)|height|width|size|inset\w*|top|right|bottom|left|padding\w*|margin\w*|gap|rowGap|columnGap|borderRadius|border\w*Radius|fontSize|fontWeight|lineHeight)\s*:\s*(-?\d*\.?\d+)\b/g;
+const RAW_LITERAL =
+  /(["'`])(?:(?!\1)[^\\]|\\.)*?(?:\b\d*\.?\d+(?:px|rem|em|vh|vw|dvh|svh)\b|#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?|oklch|lab|lch)\()(?:(?!\1)[^\\]|\\.)*\1/g;
+
+/**
+ * Raw lengths and colours inside `stylex.create`. StyleX code has no
+ * arbitrary-value syntax to grep for, so this looks at the values: a number
+ * on a sized property (other than 0) or a string carrying a unit or a colour.
+ * Every one of them belongs in ui/tokens.stylex.ts as a named step.
+ */
+export function countStylexRawValues(source: string): number {
+  let n = 0;
+  for (const body of callBodies(stripComments(source), "stylex.create")) {
+    for (const m of body.matchAll(SCALED_PROPS)) if (Number(m[1]) !== 0) n++;
+    n += body.match(RAW_LITERAL)?.length ?? 0;
+  }
+  return n;
+}
+
+/**
+ * Utilities a caller may still put on a `<Button>`: where it sits, not how it
+ * looks. Everything else on a Button's className restyles the primitive
+ * locally (a patched height, a recoloured label, a squared corner) and is
+ * what `xstyle`'s type now refuses.
+ */
+const BUTTON_LAYOUT_UTILITY =
+  /^-?(?:m[trblxyse]?-|ml-auto|mr-auto|mx-auto|flex-(?:1|auto|none|initial)$|shrink|grow|basis-|self-|justify-self-|order-|col-|row-|w-|min-w-|max-w-|hidden$|absolute$|relative$|sticky$|fixed$|static$|inset-|top-|right-|bottom-|left-|z-|group(?:\/|$)|peer(?:\/|$)|phone:hidden$|desktop:hidden$|sr-only$|pointer-events-|cursor-|touch-|select-|animate-|transition|duration-|ease-|delay-)/;
+
+/** Visual utilities passed to `<Button className=…>` outside ui/. */
+export function countButtonRestyles(source: string): number {
+  let n = 0;
+  const clean = stripComments(source);
+  for (const tag of clean.matchAll(/<Button\b/g)) {
+    // The JSX opening tag runs to the first `>` at brace depth 0.
+    let i = tag.index! + 7;
+    let depth = 0;
+    let quote: string | null = null;
+    let end = -1;
+    while (i < clean.length) {
+      const ch = clean[i]!;
+      if (quote) {
+        if (ch === "\\") i++;
+        else if (ch === quote) quote = null;
+      } else if (ch === '"' || ch === "'" || ch === "`") quote = ch;
+      else if (ch === "{") depth++;
+      else if (ch === "}") depth--;
+      else if (ch === ">" && depth === 0) {
+        end = i;
+        break;
+      }
+      i++;
+    }
+    if (end < 0) continue;
+    const attrs = clean.slice(tag.index!, end);
+    const at = attrs.search(/\bclassName=/);
+    if (at < 0) continue;
+    // Only the className attribute's own literals.
+    let value = attrs.slice(at + "className=".length);
+    if (value.startsWith("{")) {
+      let d = 0;
+      let j = 0;
+      for (; j < value.length; j++) {
+        if (value[j] === "{") d++;
+        else if (value[j] === "}" && --d === 0) break;
+      }
+      value = value.slice(0, j + 1);
+    } else value = value.slice(0, value.indexOf('"', 1) + 1);
+    for (const lit of value.matchAll(/(["'`])((?:\\.|(?!\1)[^\\])*)\1/g)) {
+      for (const raw of lit[2]!.split(/\s+/)) {
+        if (!raw || raw.includes("${")) continue;
+        const base = raw.replace(/^(?:[^:[\]]+:|\[[^\]]+\]:)+/, "");
+        if (!/^-?[a-z[]/.test(base)) continue;
+        if (BUTTON_LAYOUT_UTILITY.test(raw) || BUTTON_LAYOUT_UTILITY.test(base))
+          continue;
+        n++;
+      }
+    }
+  }
+  return n;
+}
+
 type Signal = {
   id: string;
   /** One line, printed beside the count: what to reach for instead. */
@@ -373,7 +481,7 @@ const SIGNALS: Signal[] = [
     // rounded-[999px] is sanctioned: it is the squircle-preserving pill, and
     // rounded-full is the opt-out (see src/frontend/AGENTS.md).
     instead:
-      "the radius scale — rounded-sm/md/lg/xl/2xl, rounded-control/row/popup",
+      "the radius scale — rounded-xs/sm/md/lg/xl/2xl, rounded-control/popup",
     exempt: ["styles/"],
     count: (source) => {
       let n = 0;
@@ -381,6 +489,12 @@ const SIGNALS: Signal[] = [
         /\brounded-(?:\w+-)?\[calc\((\d+)px\s*\*\s*var\(--rf\)\)\]/g,
       ))
         if (!RADIUS_SCALE.has(Number(match[1]))) n++;
+      // Retired aliases: bare `rounded` (xs), `rounded-row` (control),
+      // `rounded-panel` (lg), and the steps past 2xl.
+      n += occurrences(
+        stripComments(source),
+        /(?<=["'`\s:])rounded(?:-(?:[trblse]{1,2}-)?(?:row|panel|section|3xl|4xl))?(?=["'`\s])/g,
+      );
       return n;
     },
   },
@@ -436,6 +550,20 @@ const SIGNALS: Signal[] = [
         stripComments(source),
         /(?<!smooth-)\bshadow-(?:2xs|xs|sm|md|lg|xl|2xl)\b/g,
       ),
+  },
+  {
+    id: "stylex-raw-value",
+    instead:
+      "a named step from ui/tokens.stylex.ts (space, controlHeight, radius, text, color)",
+    exempt: ["ui/tokens.stylex.ts"],
+    count: countStylexRawValues,
+  },
+  {
+    id: "button-restyle",
+    instead:
+      "Button's variant and size, xstyle for placement, or a new variant in ui/button.tsx",
+    exempt: ["ui/"],
+    count: countButtonRestyles,
   },
   {
     id: "raw-hex-color",

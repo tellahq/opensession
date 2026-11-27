@@ -442,7 +442,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
 
                 <div>
                   <div className={SECTION_LABEL}>Mission</div>
-                  <div className="bg-surface border border-line rounded-panel px-3.5 py-3 text-label leading-relaxed text-dim whitespace-pre-wrap">
+                  <div className="bg-surface border border-line rounded-lg px-3.5 py-3 text-label leading-relaxed text-dim whitespace-pre-wrap">
                     {sel.mission}
                   </div>
                 </div>

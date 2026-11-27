@@ -126,7 +126,7 @@ export const REPORTS_LIST =
  * SETTINGS_NAV_ROW's doc has the longer version of that argument.
  */
 export const REPORTS_ROW =
-  "group mt-1.5 flex w-full cursor-pointer items-start rounded-row border-0 " +
+  "group mt-1.5 flex w-full cursor-pointer items-start rounded-control border-0 " +
   "bg-transparent py-3.5 pr-3 pl-2.5 text-left data-active:bg-selected " +
   `${SIDEBAR_RAIL_GAP} ${SIDEBAR_HOVER_LAYER}`;
 

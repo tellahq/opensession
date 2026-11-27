@@ -141,7 +141,6 @@ export function NewRepoForm({
           {ownersError}{" "}
           <Button
             variant="ghost"
-            className="phone:min-h-11"
             disabled={busy}
             onClick={() => setLoadAttempt((attempt) => attempt + 1)}
           >
@@ -184,7 +183,6 @@ export function NewRepoForm({
         {!onGithub && (
           <Button
             variant="primary"
-            className="phone:min-h-11"
             disabled={!valid || busy || owners === null}
             onClick={submit}
           >
@@ -198,7 +196,6 @@ export function NewRepoForm({
             {githubUrl && !busy ? (
               <Button
                 variant={opened ? "soft" : "primary"}
-                className="phone:min-h-11"
                 render={
                   <a
                     href={githubUrl}
@@ -212,17 +209,12 @@ export function NewRepoForm({
                 Open GitHub
               </Button>
             ) : (
-              <Button variant="primary" className="phone:min-h-11" disabled>
+              <Button variant="primary" disabled>
                 Open GitHub
               </Button>
             )}
             {opened && (
-              <Button
-                variant="primary"
-                className="phone:min-h-11"
-                disabled={busy}
-                onClick={submit}
-              >
+              <Button variant="primary" disabled={busy} onClick={submit}>
                 {busy ? "Connecting…" : "Connect repository"}
               </Button>
             )}

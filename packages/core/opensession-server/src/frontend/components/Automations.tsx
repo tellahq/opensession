@@ -562,7 +562,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
 
                 <div>
                   <div className={SECTION_LABEL}>Instructions</div>
-                  <div className="bg-surface rounded-panel px-3.5 py-3 text-label leading-relaxed text-dim whitespace-pre-wrap">
+                  <div className="bg-surface rounded-lg px-3.5 py-3 text-label leading-relaxed text-dim whitespace-pre-wrap">
                     {sel.prompt}
                   </div>
                 </div>
@@ -1189,7 +1189,7 @@ function ChooserRow({
   return (
     <button
       type="button"
-      className="flex w-full cursor-pointer items-start gap-3 rounded-row px-2.5 py-2.25 text-left transition-colors hover:bg-hover"
+      className="flex w-full cursor-pointer items-start gap-3 rounded-control px-2.5 py-2.25 text-left transition-colors hover:bg-hover"
       onClick={onClick}
     >
       {/* Normalize the drawn height, not the SVG box, the way the list rows do. */}
@@ -1401,7 +1401,7 @@ function McpPicker({
           {loadError}
         </InlineAlert>
       )}
-      <div className="bg-surface rounded-panel overflow-hidden">
+      <div className="bg-surface rounded-lg overflow-hidden">
         <div className="flex items-center gap-2 border-b border-divider px-3 py-2">
           {/* Chrome-less on purpose: the picker's own panel is the surface, so
               a second well inside it would read as a box in a box. */}
@@ -1768,7 +1768,7 @@ function AutomationForm({
               Run the automation when any of these conditions are met
             </span>
           </div>
-          <div className="bg-surface rounded-panel px-3 py-2.5 flex flex-col gap-2.5">
+          <div className="bg-surface rounded-lg px-3 py-2.5 flex flex-col gap-2.5">
             <label className={FIELD_LABEL}>
               Schedule
               <Select

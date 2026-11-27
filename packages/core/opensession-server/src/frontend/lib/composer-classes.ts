@@ -243,7 +243,7 @@ export const composerFlapBorder =
 
 /* ── The queue flap ───────────────────────────────────────────────
    The flap that folds out from behind the composer: a dimmer panel flush with
-   the composer's edges, rounded only on top, its bottom tucked under the
+   the composer's edges, rounded-xs only on top, its bottom tucked under the
    composer box. The negative bottom margin is what does the tucking — the
    composer is a later positioned sibling, so it paints over the seam.
 

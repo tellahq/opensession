@@ -76,7 +76,7 @@ export function SessionVoiceHost({
               <Button
                 variant="ghost"
                 size="sm"
-                className="-ml-2.5 max-w-full gap-1 text-fg phone:min-h-11"
+                className="-ml-2.5 max-w-full gap-1 text-fg"
                 aria-label="Return to thread"
                 title={call.title}
                 onClick={() => call.sessionId && onOpenSession(call.sessionId)}
@@ -105,7 +105,6 @@ export function SessionVoiceHost({
               <Button
                 variant="ghost"
                 size="sm"
-                className="phone:min-h-11"
                 onClick={sessionVoice.dismissError}
               >
                 Dismiss

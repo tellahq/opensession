@@ -97,7 +97,6 @@ export function MessageCommentsPane({
           icon={<IconChevronDown size={20} className="rotate-180" />}
           disabled={commented.length === 0 || index === 0}
           onClick={() => step(-1)}
-          className="phone:size-11"
         />
       </Tooltip>
       <Tooltip label="Next commented message">
@@ -111,7 +110,6 @@ export function MessageCommentsPane({
             (index >= 0 && index === commented.length - 1)
           }
           onClick={() => step(1)}
-          className="phone:size-11"
         />
       </Tooltip>
     </div>

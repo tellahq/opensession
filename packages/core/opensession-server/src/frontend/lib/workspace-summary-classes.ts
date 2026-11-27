@@ -14,7 +14,7 @@
  * row is the target, which is what makes a 300px card usable without aiming.
  *
  * The grammar is the left sidebar's, deliberately. A shared leading rail, a
- * band label over its own rows, and the same `rounded-row` pill under the
+ * band label over its own rows, and the same `rounded-control` pill under the
  * pointer. This is the sidebar's shape at the other edge of the window, so it
  * should not need learning twice.
  */
@@ -103,7 +103,7 @@ const BAND_ROW = " [.ws-summary-band_&]:mx-0 [.ws-summary-band_&]:w-full";
 
 export const WS_SUMMARY_ROW =
   "group/ws mx-2 flex h-[31px] w-[calc(100%_-_16px)] min-w-0 shrink-0 cursor-pointer items-center gap-1.5 " +
-  "rounded-row border-none bg-transparent px-2 text-left text-item-title text-fg " +
+  "rounded-control border-none bg-transparent px-2 text-left text-item-title text-fg " +
   "hover:bg-hover focus-ring " +
   // Inside the PR band the row is already inset by the band, and the neutral
   // hover plate would sit as a grey patch on a tinted surface. Give up the
@@ -120,7 +120,7 @@ export const WS_SUMMARY_ROW =
  */
 export const WS_SUMMARY_STATUS_ROW =
   "mx-2 flex min-h-[38px] w-[calc(100%_-_16px)] min-w-0 shrink-0 items-center gap-1.5 " +
-  "rounded-row pr-2 pl-2.5 text-left text-item-title text-fg" +
+  "rounded-control pr-2 pl-2.5 text-left text-item-title text-fg" +
   BAND_ROW;
 
 /**

@@ -18,7 +18,7 @@ import { cn } from "./cn";
  *    matters." The tone carries that.
  *  - `rounded-sm`, matching the majority of what it replaces. A capsule reads
  *    as a control you can press; a badge is not pressable, and the softer rect
- *    also stays concentric inside the `rounded-md`/`rounded-row` boxes these
+ *    also stays concentric inside the `rounded-md`/`rounded-control` boxes these
  *    live in.
  *  - Tones name the *state*, not the colour. A call site asking for `success`
  *    keeps meaning success when the palette moves; one asking for `green`

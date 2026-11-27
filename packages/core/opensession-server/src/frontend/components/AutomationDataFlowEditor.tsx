@@ -90,7 +90,7 @@ export function AutomationDataFlowEditor({
         </div>
 
         {inputs.length === 0 ? (
-          <div className="rounded-panel border border-dashed border-line px-3 py-3 text-label text-faint">
+          <div className="rounded-lg border border-dashed border-line px-3 py-3 text-label text-faint">
             No collected inputs. The run receives only its instructions and
             trigger context.
           </div>
@@ -101,7 +101,7 @@ export function AutomationDataFlowEditor({
             const reports =
               input.source.type === "reports" ? input.source : null;
             return (
-              <div key={input.id} className="rounded-panel bg-surface p-3">
+              <div key={input.id} className="rounded-lg bg-surface p-3">
                 <div className="mb-2 flex min-h-10 items-center gap-2">
                   <Select
                     className="max-w-[150px]"
@@ -331,13 +331,13 @@ export function AutomationDataFlowEditor({
         </div>
 
         {outputs.length === 0 ? (
-          <div className="rounded-panel border border-dashed border-line px-3 py-3 text-label text-faint">
+          <div className="rounded-lg border border-dashed border-line px-3 py-3 text-label text-faint">
             No required output. The run behaves like a normal automation
             session.
           </div>
         ) : (
           outputs.map((output, index) => (
-            <div key={output.id} className="rounded-panel bg-surface p-3">
+            <div key={output.id} className="rounded-lg bg-surface p-3">
               <div className="flex min-h-10 items-center gap-2">
                 <span className="w-[110px] shrink-0 text-label font-medium text-fg">
                   {output.type === "report" ? "Report" : "Slack"}

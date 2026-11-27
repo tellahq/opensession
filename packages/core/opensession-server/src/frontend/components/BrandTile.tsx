@@ -8,7 +8,7 @@ import { markTileClass, markTileShadow } from "../lib/mark-tile";
  *
  * Shape, corner and lift come from lib/mark-tile, which the house glyph plates
  * in the library also draw. A grid mixing the two has to read as one family,
- * and it did not while each side rounded and lit itself. */
+ * and it did not while each side rounded-xs and lit itself. */
 export function IconTile({ name, size = 34 }: { name: string; size?: number }) {
   const key = name.toLowerCase();
   const canonicalKey = brandKey(key);

@@ -87,7 +87,7 @@ export const ERROR =
 
    The bottom pad is deeper than the top one because it is measured against a
    different thing: the top is a hairline, the bottom is the card's own edge,
-   rounded at ~30px. Create is a 36px plate inside a 40px row, so 14px here
+   rounded-xs at ~30px. Create is a 36px plate inside a 40px row, so 14px here
    leaves it the same 16px clearance the side padding gives it. The safe-area
    inset clears the home indicator at rest, but the keyboard covers that edge
    while a field is focused, so the ordinary 12px pad takes over then. */
@@ -118,7 +118,7 @@ export const ASK_BTN_ON =
  *  A pseudo-element rather than a background on the card, because the palette
  *  is glass over a dimmed page: the tint has to sit ON the blur and fade in and
  *  out with it intact. Children are lifted above it, and the shell's own
- *  `overflow-hidden` clips it to the rounded corner. */
+ *  `overflow-hidden` clips it to the rounded-xs corner. */
 export const ASK_SURFACE =
   "isolate " +
   "before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-[inherit] before:[corner-shape:inherit] before:bg-[var(--palette-ask-bg)] before:opacity-0 before:transition-opacity before:duration-150 before:ease-[cubic-bezier(0.32,0.72,0,1)] " +

@@ -100,7 +100,7 @@ export function ReportTasksDialog({
           {tasks.map((task, index) => (
             <label
               key={index}
-              className="flex cursor-pointer items-start gap-2.5 rounded-row px-2 py-2 hover:bg-hover"
+              className="flex cursor-pointer items-start gap-2.5 rounded-control px-2 py-2 hover:bg-hover"
             >
               <Checkbox
                 className="mt-0.5"

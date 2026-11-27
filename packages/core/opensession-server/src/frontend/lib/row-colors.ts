@@ -51,4 +51,4 @@ export function rowTintHex(colorKey: string | null): string | null {
  * selection fill still read through it.
  */
 export const ROW_TINT_CLASS =
-  "before:pointer-events-none before:absolute before:inset-0 before:-z-1 before:rounded-row before:bg-[color-mix(in_srgb,var(--row-tint)_13%,transparent)] before:content-['']";
+  "before:pointer-events-none before:absolute before:inset-0 before:-z-1 before:rounded-control before:bg-[color-mix(in_srgb,var(--row-tint)_13%,transparent)] before:content-['']";

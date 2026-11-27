@@ -1593,7 +1593,6 @@ function ProviderSummaryRow({
             <Button
               size="sm"
               variant="ghost"
-              className="phone:min-h-11"
               aria-expanded={expanded}
               onClick={onToggle}
             >
@@ -1603,7 +1602,6 @@ function ProviderSummaryRow({
           <Button
             size="sm"
             variant="ghost"
-            className="phone:min-h-11"
             icon={<IconPlus size={16} />}
             onClick={onAdd}
           >
@@ -1671,7 +1669,6 @@ export function ProviderAccountsSection({
               <Button
                 size="sm"
                 variant="ghost"
-                className="phone:min-h-11"
                 icon={
                   <IconHistory
                     size={16}
@@ -1691,7 +1688,7 @@ export function ProviderAccountsSection({
                     size={onboarding ? "md" : "sm"}
                     variant={onboarding ? "primary" : "default"}
                     className={cn(
-                      "phone:min-h-11",
+                      "",
                       onboarding && "bg-fg text-bg hover:bg-fg/85",
                     )}
                     icon={<IconPlus size={16} />}

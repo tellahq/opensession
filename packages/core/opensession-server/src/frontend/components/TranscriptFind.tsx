@@ -396,7 +396,6 @@ export function TranscriptFind({
                 aria-label="Older match"
                 disabled={count === 0}
                 onClick={() => step(-1)}
-                className="phone:size-11"
               />
             </Tooltip>
             <Tooltip label="Newer match" shortcut={["⇧", "↵"]}>
@@ -407,7 +406,6 @@ export function TranscriptFind({
                 aria-label="Newer match"
                 disabled={count === 0}
                 onClick={() => step(1)}
-                className="phone:size-11"
               />
             </Tooltip>
             <Tooltip label="Close" shortcut={["Esc"]}>
@@ -417,7 +415,6 @@ export function TranscriptFind({
                 icon={<IconX size={18} />}
                 aria-label="Close find"
                 onClick={close}
-                className="phone:size-11"
               />
             </Tooltip>
           </div>

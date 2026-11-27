@@ -280,7 +280,7 @@ function BuildGroupFlap({
             variant="ghost"
             size="sm"
             // Negative margins keep the touch target from growing the row.
-            className="-my-1.5 -mr-1 shrink-0 phone:-my-3 phone:-mr-[13px] phone:min-h-11 phone:min-w-11"
+            className="-my-1.5 -mr-1 shrink-0 phone:-my-3 phone:-mr-[13px] phone:min-w-11"
             icon={<IconX size={16} />}
             aria-label="Close"
             onClick={onHide}

@@ -11,12 +11,16 @@ import {
   releaseCdpBrowser,
 } from "../../../../../../scripts/lib/cdp-browser";
 import { activeFrontendDist, compileAssets } from "../../server/frontend-build";
+import { stylexBuildPlugin } from "../../server/stylex-transform";
 
 const meta = await compileAssets();
 const build = await Bun.build({
   entrypoints: [join(import.meta.dir, "collapsible-fixture.tsx")],
   target: "browser",
   define: { "process.env.NODE_ENV": '"production"' },
+  // The fixture renders ui/ primitives; their StyleX CSS is in the
+  // compileAssets() sheet linked below, under the same class names.
+  plugins: [stylexBuildPlugin()],
 });
 if (!build.success) throw new Error(build.logs.join("\n"));
 const script = await build.outputs[0]!.text();

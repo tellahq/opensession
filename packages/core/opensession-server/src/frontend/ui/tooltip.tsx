@@ -90,7 +90,7 @@ export function Tooltip({
               "data-[ending-style]:opacity-0 data-[instant]:transition-none",
               // 13px medium text on a near-black chip with
               // its soft `shadow-popup` + our theme ring.
-              "rounded-panel bg-tooltip px-2 py-1 text-label leading-snug font-medium text-tooltip-fg",
+              "rounded-lg bg-tooltip px-2 py-1 text-label leading-snug font-medium text-tooltip-fg",
               "shadow-[0px_10px_38px_-10px_rgba(14,18,22,0.35),0px_10px_20px_-15px_rgba(14,18,22,0.2),0_0_0_1px_var(--tooltip-ring)]",
               multiline
                 ? "max-w-[360px] items-start whitespace-pre-wrap"

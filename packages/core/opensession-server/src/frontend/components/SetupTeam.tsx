@@ -142,9 +142,7 @@ export function TeamSection({
             <Button
               size="sm"
               variant="default"
-              className={
-                onboarding || githubAuth ? "phone:min-h-11" : undefined
-              }
+              className={onboarding || githubAuth ? "" : undefined}
               icon={<IconPlus size={16} />}
               onClick={() => {
                 setEditing(null);
@@ -157,7 +155,6 @@ export function TeamSection({
               <Button
                 size="sm"
                 variant="default"
-                className="phone:min-h-11"
                 icon={
                   inviteCopied ? (
                     <IconCheck size={16} />

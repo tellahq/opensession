@@ -1,3 +1,8 @@
 [test]
 # Even a direct `bun test file.test.ts` must not inherit the operator's stores.
 preload = ["./scripts/test-setup.ts"]
+
+[serve.static]
+# StyleX compile step for the OPENSESSION_DEV=1 HTML-import server (see the
+# plugin's header). The production bundle runs the same transform itself.
+plugins = ["./packages/core/opensession-server/src/server/stylex-dev-plugin.ts"]

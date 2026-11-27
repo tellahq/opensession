@@ -510,7 +510,6 @@ function RepoActionsMenu({
               <Button
                 type="button"
                 variant="ghost"
-                className="phone:min-h-11"
                 disabled={saving === "branch"}
                 onClick={() => setBranchDialogOpen(false)}
               >
@@ -519,7 +518,6 @@ function RepoActionsMenu({
               <Button
                 type="submit"
                 variant="primary"
-                className="phone:min-h-11"
                 disabled={!normalized || !changed || !!saving}
               >
                 {saving === "branch" ? "Saving…" : "Save"}

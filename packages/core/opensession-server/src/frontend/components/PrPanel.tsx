@@ -1687,7 +1687,7 @@ export function PrPanel({
             <Button
               variant="ghost"
               size="sm"
-              className="desktop:-mr-1.5 phone:size-11 phone:rounded-full"
+              className="desktop:-mr-1.5 phone:rounded-full"
               aria-label="Code view settings"
               icon={<IconSliders size={18} />}
             />
@@ -1852,7 +1852,7 @@ export function PrPanel({
             <Button
               variant="ghost"
               size="sm"
-              className="desktop:-mr-1.5 phone:size-11 phone:rounded-full"
+              className="desktop:-mr-1.5 phone:rounded-full"
               aria-label="Pull request actions"
               icon={<IconDotsHorizontal size={18} />}
             />

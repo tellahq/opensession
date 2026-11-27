@@ -141,7 +141,7 @@ export function YouShouldKnowNotice({
                     variant="ghost"
                     icon={<IconDotsHorizontal size={16} />}
                     aria-label={`${tag} options`}
-                    className="-my-1 -me-2 rounded-full text-faint phone:size-11"
+                    className="-my-1 -me-2 rounded-full text-faint"
                   />
                 }
               />
@@ -167,7 +167,7 @@ export function YouShouldKnowNotice({
             <Button
               size="sm"
               variant="soft"
-              className="rounded-full phone:min-h-11"
+              className="rounded-full"
               onClick={ask}
             >
               Ask about this
@@ -177,7 +177,7 @@ export function YouShouldKnowNotice({
             <Button
               size="sm"
               variant="ghost"
-              className="rounded-full phone:min-h-11 phone:px-2"
+              className="rounded-full phone:px-2"
               aria-expanded={open}
               trailing={
                 <IconChevronDown
@@ -197,7 +197,7 @@ export function YouShouldKnowNotice({
             <Button
               size="sm"
               variant="ghost"
-              className="rounded-full phone:min-h-11 phone:px-2"
+              className="rounded-full phone:px-2"
               onClick={() => void remember()}
             >
               I knew this
@@ -207,7 +207,7 @@ export function YouShouldKnowNotice({
             <Button
               size="sm"
               variant="ghost"
-              className="rounded-full phone:min-h-11 phone:px-2"
+              className="rounded-full phone:px-2"
               onClick={() => setUnfolded(false)}
             >
               Fold

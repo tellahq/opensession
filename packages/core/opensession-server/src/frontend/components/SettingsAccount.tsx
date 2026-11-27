@@ -82,7 +82,7 @@ export function SettingsAccountFooter() {
         <Menu.Root>
           <Menu.Trigger
             aria-label="Switch account"
-            className={`flex w-full min-w-0 items-center ${SIDEBAR_RAIL_GAP} rounded-row border-none bg-transparent py-[var(--sidebar-row-pad)] pl-2.5 pr-2 text-left data-[popup-open]:bg-selected ${SIDEBAR_HOVER_LAYER}`}
+            className={`flex w-full min-w-0 items-center ${SIDEBAR_RAIL_GAP} rounded-control border-none bg-transparent py-[var(--sidebar-row-pad)] pl-2.5 pr-2 text-left data-[popup-open]:bg-selected ${SIDEBAR_HOVER_LAYER}`}
           >
             <AccountIdentity name={currentUser} subtitle={subtitle} />
             <IconChevronRight size={20} className="shrink-0 text-faint" />

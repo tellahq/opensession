@@ -7,6 +7,33 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { testEnvironment } from "./test-isolated";
+import {
+  transformStylex,
+  usesStylex,
+} from "../packages/core/opensession-server/src/server/stylex-transform";
+
+// StyleX has no runtime: a component that calls `stylex.create` throws on
+// import unless the compile step rewrote it. Tests run it in StyleX's `test`
+// mode, which keeps class names stable and emits no CSS.
+Bun.plugin({
+  name: "opensession-stylex-test",
+  setup(build) {
+    build.onLoad({ filter: /\/src\/frontend\/.*\.tsx?$/ }, async (args) => {
+      const source = await Bun.file(args.path).text();
+      if (!usesStylex(args.path, source)) {
+        return {
+          contents: source,
+          loader: args.path.endsWith(".tsx") ? "tsx" : "ts",
+        };
+      }
+      const { code } = await transformStylex(args.path, source, "test");
+      return {
+        contents: code,
+        loader: args.path.endsWith(".tsx") ? "tsx" : "ts",
+      };
+    });
+  },
+});
 
 if (!process.env.OPENSESSION_TEST_ISOLATED_HOME) {
   const home = mkdtempSync(join(tmpdir(), "os-unit-"));

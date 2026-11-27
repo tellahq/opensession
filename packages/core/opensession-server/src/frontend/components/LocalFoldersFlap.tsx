@@ -143,7 +143,6 @@ function LocalFoldersFlap({ sessionId, folders, grants, waiting }: FlapProps) {
             key={grant.id}
             variant="ghost"
             size="sm"
-            className="phone:min-h-11"
             icon={<IconFolder size={18} aria-hidden />}
             onClick={() =>
               void reauthorizeLocalFolder(grant.id).then((ok) => {

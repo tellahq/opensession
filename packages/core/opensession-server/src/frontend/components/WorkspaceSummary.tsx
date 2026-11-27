@@ -943,7 +943,7 @@ export function WorkspaceSummaryBody({
           delay={200}
           closeDelay={90}
           type="button"
-          className="mx-2 flex min-h-7 w-[calc(100%_-_16px)] min-w-0 items-center gap-1.5 rounded-row px-2 text-left transition-colors hover:bg-hover focus-ring"
+          className="mx-2 flex min-h-7 w-[calc(100%_-_16px)] min-w-0 items-center gap-1.5 rounded-control px-2 text-left transition-colors hover:bg-hover focus-ring"
           onClick={() => go(() => onOpenPanelTab("changes"))}
           aria-label={`${file.path} · open in Changes`}
         >
@@ -1397,7 +1397,7 @@ export function WorkspaceSummaryBody({
               <Button
                 variant="ghost"
                 size="sm"
-                className="group/review h-full min-h-0 gap-0 rounded-sm p-0 [color:inherit] [font-size:inherit] [font-weight:inherit] hover:bg-transparent hover:[color:inherit] active:scale-100"
+                className="group/review h-full min-h-0 gap-0 rounded-sm p-0 [font-size:inherit] [font-weight:inherit] hover:bg-transparent active:scale-100"
                 onClick={() => go(onOpenPr)}
                 aria-label="Open review"
               >
@@ -1455,7 +1455,7 @@ export function WorkspaceSummaryBody({
                     type="button"
                     className={cn(
                       WS_SUMMARY_ACTION,
-                      "focus-ring shrink-0 cursor-pointer rounded-row border-none bg-transparent px-1 transition-[color,scale] hover:text-accent active:scale-[0.96] disabled:cursor-default disabled:opacity-50",
+                      "focus-ring shrink-0 cursor-pointer rounded-control border-none bg-transparent px-1 transition-[color,scale] hover:text-accent active:scale-[0.96] disabled:cursor-default disabled:opacity-50",
                     )}
                     onClick={() => void rerunOsReview()}
                     disabled={reviewStarting}
@@ -1643,7 +1643,7 @@ export function WorkspaceSummaryBody({
                   type="button"
                   className={cn(
                     WS_SUMMARY_ACTION,
-                    "focus-ring shrink-0 cursor-pointer rounded-row border-none bg-transparent px-2 hover:bg-hover disabled:cursor-default disabled:hover:bg-transparent",
+                    "focus-ring shrink-0 cursor-pointer rounded-control border-none bg-transparent px-2 hover:bg-hover disabled:cursor-default disabled:hover:bg-transparent",
                   )}
                   onClick={askCommit}
                   disabled={prompted}

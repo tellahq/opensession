@@ -1520,7 +1520,7 @@ export function Composer({
       )}
       {/* Keep the compact action outside the full-width stack so the first
           flap retains its top corners, even when the action is present. */}
-      {/* Stacked flaps read as one panel: only the top one keeps its rounded
+      {/* Stacked flaps read as one panel: only the top one keeps its rounded-xs
           corners, and each later one meets it with a straight seam. */}
       {flaps && (
         <div className="flex flex-col [&>*:not(:first-child)]:rounded-t-none">
@@ -1560,7 +1560,7 @@ export function Composer({
         // visible radius morph.
         //
         // Full-width flaps share a squared seam with the composer. A compact
-        // action instead tucks behind its rounded top edge with a small inset.
+        // action instead tucks behind its rounded-xs top edge with a small inset.
         initial={false}
         animate={{
           borderTopLeftRadius: minimized ? 999 : flaps ? 0 : composerRadius(),
@@ -2349,7 +2349,7 @@ export function Composer({
         >
           <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-red" />
           <span>Press</span>
-          <kbd className="rounded border border-red/30 bg-red/10 px-1 py-px font-mono text-[10.5px] leading-none text-red">
+          <kbd className="rounded-xs border border-red/30 bg-red/10 px-1 py-px font-mono text-[10.5px] leading-none text-red">
             Esc
           </kbd>
           <span>again to stop</span>

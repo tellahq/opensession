@@ -164,7 +164,7 @@ export function PersonalBand({
       {autoCreatedRows > 0 && (
         <button
           className={cn(
-            "mb-1 flex w-full items-center gap-1.5 rounded-row px-4 py-1.5 text-left text-label text-faint",
+            "mb-1 flex w-full items-center gap-1.5 rounded-control px-4 py-1.5 text-left text-label text-faint",
             SIDEBAR_HOVER_LAYER,
             "hover:text-dim",
           )}

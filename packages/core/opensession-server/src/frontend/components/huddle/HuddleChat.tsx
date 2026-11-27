@@ -77,13 +77,7 @@ export function HuddleChat({ messages }: { messages: HuddleChatMessage[] }) {
           className="min-w-0 flex-1 phone:h-11 phone:text-base"
           onChange={(event) => setDraft(event.target.value)}
         />
-        <Button
-          size="sm"
-          variant="soft"
-          type="submit"
-          className="phone:min-h-11"
-          disabled={!draft.trim()}
-        >
+        <Button size="sm" variant="soft" type="submit" disabled={!draft.trim()}>
           Send
         </Button>
       </form>

@@ -71,7 +71,7 @@ export function NoteBubble({
             size="sm"
             variant="ghost"
             onClick={() => setExpanded(true)}
-            className="ml-auto shrink-0 phone:min-h-11"
+            className="ml-auto shrink-0"
           >
             Show
           </Button>

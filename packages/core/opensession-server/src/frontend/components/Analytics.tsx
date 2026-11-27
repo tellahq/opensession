@@ -723,7 +723,7 @@ function PersonRepoBars({
         <div
           key={p.name}
           className={cn(
-            "-mx-2 flex items-center gap-3 rounded-row px-2 py-1.5 text-label",
+            "-mx-2 flex items-center gap-3 rounded-control px-2 py-1.5 text-label",
             hover?.index === i && "bg-hover",
           )}
           onMouseMove={(e) => show(i, e)}
@@ -1876,7 +1876,7 @@ export function Analytics() {
                               href={pr.url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="-mx-2 flex items-center gap-2.5 rounded-row px-2 py-1.5 text-label no-underline hover:bg-hover"
+                              className="-mx-2 flex items-center gap-2.5 rounded-control px-2 py-1.5 text-label no-underline hover:bg-hover"
                             >
                               <span
                                 className="size-2 shrink-0 rounded-full"

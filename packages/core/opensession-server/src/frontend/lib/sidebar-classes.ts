@@ -266,7 +266,7 @@ export const SIDEBAR_STATUS_GROUP = "[[data-status-group]+&]:mt-2";
  */
 export const SIDEBAR_LANE_EMPTY = "opacity-55";
 export const SIDEBAR_LANE_DROP_HOVER =
-  "rounded-row bg-pressed opacity-100 shadow-[inset_0_0_0_1px_var(--accent,#6b8afd)]";
+  "rounded-control bg-pressed opacity-100 shadow-[inset_0_0_0_1px_var(--accent,#6b8afd)]";
 
 /** The drag-to-reorder wrapper around each Pinned row (Motion Reorder.Item). */
 export const SIDEBAR_PIN_ENTRY = "relative";
@@ -283,7 +283,7 @@ export const SIDEBAR_PIN_ENTRY = "relative";
  * list-level selector did — so the list needs no class of its own.
  */
 export const SIDEBAR_PIN_ENTRY_DRAGGING =
-  "z-[5] rounded-row bg-bg smooth-shadow-ring-sm";
+  "z-[5] rounded-control bg-bg smooth-shadow-ring-sm";
 export const SIDEBAR_PIN_DRAG_ACTIVE = "[&>*]:pointer-events-none";
 
 /**
@@ -793,7 +793,7 @@ export const SIDEBAR_WS_ACTIONS_TOUCH = "[@media(hover:none)]:inline-flex";
  *
  * The size is {@link SIDEBAR_DENSITY_VARS}'s, so it steps down with the line
  * height and keeps its 5px / 3px margin inside the row at either setting.
- * `rounded-md` against the row's `rounded-row` is roughly concentric at both:
+ * `rounded-md` against the row's `rounded-control` is roughly concentric at both:
  * the chip's corner plus the air around it lands on the row's own.
  *
  * Its colour is the call site's: a pinned action stays accent even under the
@@ -872,12 +872,13 @@ export const SIDEBAR_WS_SNOOZE =
  * sheet. The wrapper carries the 2px gap between rows, so the row inside it
  * must not add its own or wrapped rows would gap twice.
  *
- * `rounded-row` is what clips the revealed actions to the row's own corner —
+ * `rounded-control` is what clips the revealed actions to the row's own corner —
  * and, because base.css grants `corner-shape: squircle` to every `rounded-*`
  * class, it is also what lets this name drop out of the hand-written list of
  * legacy classes base.css squircles there.
  */
-export const SIDEBAR_SWIPE_ROW = "relative mt-0.5 overflow-hidden rounded-row";
+export const SIDEBAR_SWIPE_ROW =
+  "relative mt-0.5 overflow-hidden rounded-control";
 
 /**
  * One revealed action behind the row. Hidden until the gesture opens its side,

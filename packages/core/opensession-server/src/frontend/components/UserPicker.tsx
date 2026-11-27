@@ -147,7 +147,7 @@ function AuthBackdrop() {
  * why the first thing a new teammate saw looked like a different product from
  * the one behind it.
  *
- * One card, one corner, one width. Its `rounded-3xl` shape is a small step
+ * One card, one corner, one width. Its `rounded-2xl` shape is a small step
  * softer than the standard container, and its shared popup glass lets the new
  * artwork read through without competing with the content. The popup token
  * becomes opaque when blur is unavailable or reduced transparency is enabled.
@@ -175,7 +175,7 @@ function AuthCard({
     // shell capability keeps this working if WCO geometry disappears.
     <div className="relative flex h-screen items-center justify-center overflow-hidden p-6 [html.wco_&]:[-webkit-app-region:drag] [html.wco_&]:[app-region:drag] [html.desktop-shell_&]:[-webkit-app-region:drag] [html.desktop-shell_&]:[app-region:drag]">
       <AuthBackdrop />
-      <div className="relative w-[400px] max-w-full rounded-3xl bg-popup-glass p-8 text-center shadow-(--auth-card-edge) [backdrop-filter:var(--popup-blur)] phone:p-6 [html.wco_&]:[-webkit-app-region:no-drag] [html.wco_&]:[app-region:no-drag] [html.desktop-shell_&]:[-webkit-app-region:no-drag] [html.desktop-shell_&]:[app-region:no-drag]">
+      <div className="relative w-[400px] max-w-full rounded-2xl bg-popup-glass p-8 text-center shadow-(--auth-card-edge) [backdrop-filter:var(--popup-blur)] phone:p-6 [html.wco_&]:[-webkit-app-region:no-drag] [html.wco_&]:[app-region:no-drag] [html.desktop-shell_&]:[-webkit-app-region:no-drag] [html.desktop-shell_&]:[app-region:no-drag]">
         <AuthMark />
         {/* Medium, not semibold: at 19px on the card's own paper the heavier
 				    step read as a slab rather than a heading. */}

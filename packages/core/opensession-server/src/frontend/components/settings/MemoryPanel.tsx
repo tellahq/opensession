@@ -404,7 +404,6 @@ function MemoryRow({
                   <Button
                     size="sm"
                     variant="primary"
-                    className="phone:min-h-11"
                     disabled={busy || !draft.trim()}
                     onClick={() => void save()}
                   >
@@ -413,7 +412,6 @@ function MemoryRow({
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="phone:min-h-11"
                     disabled={busy}
                     onClick={() => {
                       setDraft(summary);
@@ -784,17 +782,12 @@ function AddMemoryDialog({
         <Modal.Footer>
           <Modal.Close
             render={
-              <Button
-                className="phone:min-h-11"
-                variant="ghost"
-                disabled={busy}
-              >
+              <Button variant="ghost" disabled={busy}>
                 Cancel
               </Button>
             }
           />
           <Button
-            className="phone:min-h-11"
             variant="primary"
             disabled={
               busy ||
@@ -909,17 +902,12 @@ function MergeMemoryDialog({
         <Modal.Footer>
           <Modal.Close
             render={
-              <Button
-                className="phone:min-h-11"
-                variant="ghost"
-                disabled={busy}
-              >
+              <Button variant="ghost" disabled={busy}>
                 Cancel
               </Button>
             }
           />
           <Button
-            className="phone:min-h-11"
             variant="primary"
             disabled={
               busy || !summary.trim() || (kind === "status" && !expiresAt)
@@ -1032,7 +1020,6 @@ function CategoryPage({
         <Button
           size="sm"
           variant="ghost"
-          className="phone:min-h-11"
           icon={<IconChevronLeft size={18} />}
           onClick={onBack}
         >
@@ -1063,21 +1050,14 @@ function CategoryPage({
                   <IconX size={16} />
                 </span>
               </Button>
-              <Button
-                size="sm"
-                variant="soft"
-                className="phone:min-h-11"
-                onClick={() => setMerging(true)}
-              >
+              <Button size="sm" variant="soft" onClick={() => setMerging(true)}>
                 Merge
               </Button>
             </>
           )}
           <Button
             size="sm"
-            className={
-              selectedIds.size >= 2 ? "phone:hidden" : "phone:min-h-11"
-            }
+            className={selectedIds.size >= 2 ? "phone:hidden" : ""}
             icon={<IconPlus size={16} />}
             disabled={!canAdd}
             onClick={() => setAdding(true)}
@@ -1206,7 +1186,6 @@ function CategoryPage({
               <Button
                 size="sm"
                 variant="ghost"
-                className="phone:min-h-11"
                 disabled={!cursorHistory.length}
                 onClick={() => {
                   const history = cursorHistory.slice(0, -1);
@@ -1220,7 +1199,6 @@ function CategoryPage({
               <Button
                 size="sm"
                 variant="ghost"
-                className="phone:min-h-11"
                 disabled={!nextCursor}
                 onClick={() => {
                   setCursorHistory((history) => [...history, cursor]);

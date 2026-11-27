@@ -16,7 +16,7 @@ import { UsageDetails } from "../UsageMeter";
 import { useCurrentUser } from "../UserPicker";
 import { ACCOUNT_TITLE, AccountValue, LimitRows, Track } from "./UsageParts";
 
-// Each cell sits in a slot that owns the divider, so a cell's rounded hover
+// Each cell sits in a slot that owns the divider, so a cell's rounded-xs hover
 // wash never bends the line beside it. Cells are padded the same and the row
 // is pulled out by that padding, so the first label lines up with the flap.
 const slot =

@@ -335,7 +335,7 @@ export function AskCard({
                 setSubmitted(true);
                 onDismiss();
               }}
-              className="-my-1.5 -mr-1.5 ml-auto phone:min-h-11 phone:min-w-11"
+              className="-my-1.5 -mr-1.5 ml-auto phone:min-w-11"
             />
           </Tooltip>
         )}

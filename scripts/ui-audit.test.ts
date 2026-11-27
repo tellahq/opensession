@@ -1,5 +1,10 @@
 import { expect, test } from "bun:test";
-import { auditCounts, findUnknownThemeTokens } from "./ui-audit";
+import {
+  auditCounts,
+  countButtonRestyles,
+  countStylexRawValues,
+  findUnknownThemeTokens,
+} from "./ui-audit";
 
 /**
  * The ratchet. Each count may fall freely and never rise: a new raw `<button>`
@@ -56,3 +61,27 @@ test("unknown-theme-token catches hallucinated tokens and ignores valid utilitie
  * Banking progress stays a deliberate act: `bun scripts/ui-audit.ts --save`,
  * measured against HEAD in a detached worktree (the CLI refuses a dirty tree).
  */
+
+test("stylex-raw-value flags raw lengths and colours, not tokens", () => {
+  const bad = `
+    const s = stylex.create({
+      a: { height: 31, paddingInline: "9px", color: "#fff", gap: 0 },
+      b: { backgroundColor: { default: "rgb(0 0 0 / 0.5)", ":hover": color.hover } },
+    });
+  `;
+  expect(countStylexRawValues(bad)).toBe(4);
+  const good = `
+    const s = stylex.create({
+      a: { minHeight: controlHeight.md, paddingInline: space.s12, color: color.fg, flexShrink: 0 },
+    });
+  `;
+  expect(countStylexRawValues(good)).toBe(0);
+});
+
+test("button-restyle counts look-changing utilities, not placement", () => {
+  const src = `
+    <Button className="ml-auto shrink-0 w-full phone:min-h-11 text-faint" />
+    <Button variant="ghost" className={cn("self-start", open && "bg-pressed")}>x</Button>
+  `;
+  expect(countButtonRestyles(src)).toBe(3);
+});

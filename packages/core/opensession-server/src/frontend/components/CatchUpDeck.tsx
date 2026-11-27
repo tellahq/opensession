@@ -552,9 +552,9 @@ function CardBody({
             </InlineAlert>
           ) : entries === null ? (
             <div className="space-y-2">
-              <div className="h-3 w-1/3 animate-pulse rounded bg-surface" />
-              <div className="h-3 w-full animate-pulse rounded bg-surface" />
-              <div className="h-3 w-4/5 animate-pulse rounded bg-surface" />
+              <div className="h-3 w-1/3 animate-pulse rounded-xs bg-surface" />
+              <div className="h-3 w-full animate-pulse rounded-xs bg-surface" />
+              <div className="h-3 w-4/5 animate-pulse rounded-xs bg-surface" />
             </div>
           ) : entries.length === 0 ? (
             <div className="text-sm text-faint">No messages yet.</div>

@@ -481,7 +481,7 @@ export function Archived({
             }
             caret
             aria-label={`Owner, ${ownerLabel}`}
-            className="shrink-0 phone:min-h-11"
+            className="shrink-0"
           >
             <span className="max-w-[150px] truncate">{ownerLabel}</span>
           </Button>
@@ -530,7 +530,7 @@ export function Archived({
               }
               caret
               aria-label={`Repository, ${repo === "all" ? "All repos" : repoLabel(repo)}`}
-              className="shrink-0 phone:min-h-11"
+              className="shrink-0"
             >
               <span className="max-w-[150px] truncate">
                 {repo === "all" ? "All repos" : repoLabel(repo)}
@@ -577,10 +577,7 @@ export function Archived({
               size="sm"
               icon={<IconFilter size={18} />}
               aria-label={`Reason, ${REASON_LABEL[reason]}`}
-              className={cn(
-                "shrink-0 phone:min-h-11",
-                reason !== "all" && "text-fg",
-              )}
+              className={cn("shrink-0", reason !== "all" && "text-fg")}
             />
           }
         />

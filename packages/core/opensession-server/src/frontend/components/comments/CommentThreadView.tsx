@@ -378,7 +378,6 @@ export function CommentThreadView({
         icon={resolved ? <IconUndo size={16} /> : <IconCheck size={16} />}
         onClick={() => void setStatus(resolved ? "open" : "resolved")}
         aria-label={resolved ? "Reopen" : "Resolve"}
-        className="phone:min-h-11"
       >
         {resolved ? "Reopen" : "Resolve"}
       </Button>
@@ -500,7 +499,6 @@ export function CommentThreadView({
             variant="soft"
             icon={<IconArrowUpRight size={16} />}
             onClick={() => onSendToSession(thread)}
-            className="phone:min-h-11"
           >
             Send to session
           </Button>

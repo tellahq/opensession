@@ -112,7 +112,22 @@ sweeps routes x {desktop, mobile} x {dark, light} when diffing a CSS refactor.
 
 ## Styling
 
-- Use Tailwind utilities for new and touched UI. `styles/legacy.css` is empty
+The UI is migrating to StyleX primitives with closed scales; read
+`docs/design-system.md` for the decisions and the plan.
+
+- Primitives in `ui/` are authored in StyleX (`stylex.create`) against
+  `ui/tokens.stylex.ts`, and only against it: `bun scripts/ui-audit.ts`
+  rejects a raw length, unit or colour inside `stylex.create` anywhere else
+  (`stylex-raw-value`, budget 0). A value the scales lack is a decision for
+  the tokens file, not a literal at the call site.
+- A ported primitive takes an `xstyle` prop whose type only accepts
+  placement (margin, flex, grid, width). Move it with `xstyle`; change its look
+  with `variant` and `size`, or add a variant to the primitive. Do not pass
+  visual utilities through `<Button className>`: `button-restyle` counts
+  them and only goes down.
+- Feature code in `components/` still uses Tailwind for its own layout until
+  its area migrates.
+- Use Tailwind utilities for new and touched feature UI. `styles/legacy.css` is empty
   and stays that way; component styling lives in a `lib/*-classes.ts` string
   beside its component, or in a primitive in `ui/`. A class name left on the
   markup is a hook for something else (base.css, a `closest()` call, another
@@ -137,9 +152,9 @@ sweeps routes x {desktop, mobile} x {dark, light} when diffing a CSS refactor.
   borderless, and a card that still carries a normal fill has nothing to
   trade.
 - Round generously, and scale the radius with the box. The scale in
-  `styles/tailwind.css` runs `rounded-sm` 4, `rounded-md` 7, `rounded-lg` 14,
-  `rounded-xl` 18, `rounded-2xl` 22, plus the named chrome corners
-  `rounded-control` / `rounded-row` (12) and `rounded-popup` (16) — each of them
+  `styles/tailwind.css` runs `rounded-xs` 2, `rounded-sm` 4, `rounded-md` 7,
+  `rounded-lg` 14, `rounded-xl` 18, `rounded-2xl` 22, plus the named chrome
+  corners `rounded-control` (12) and `rounded-popup` (16) — each of them
   authored as `calc(<n>px * var(--rf))`, so a browser with `corner-shape`
   support renders them 1.35x larger. A small
   control keeps a small corner; a card takes `rounded-xl`, and a container that

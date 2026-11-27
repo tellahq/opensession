@@ -72,8 +72,9 @@ Every utility below is real and theme-aware across dark and light mode.
 ### Radii (all `rounded-*` are squircles except `rounded-full`)
 - `rounded-sm` (4) — badges, compact tags
 - `rounded-md` (7) — inline code, small chips
-- `rounded-control` / `rounded-row` (12) — inputs, selects, selectable list rows
-- `rounded-lg` (14) — segmented tracks, medium panels (`rounded-panel`)
+- `rounded-xs` (2) — keycaps, hairline chips
+- `rounded-control` (12) — inputs, selects, selectable list rows
+- `rounded-lg` (14) — segmented tracks, medium panels, tooltips
 - `rounded-popup` (16) — floating popovers, menus, PiP/hover cards
 - `rounded-xl` (18) — cards (`Card`)
 - `rounded-2xl` (22) — card containers (`SettingCard`, dialogs)
@@ -86,6 +87,19 @@ Every utility below is real and theme-aware across dark and light mode.
 - `smooth-shadow-md` / `smooth-shadow-ring-md` — menus, popovers, floating cards
 - `smooth-shadow-lg` / `smooth-shadow-ring-lg` — modals, palettes, large overlays
 - The `smooth-shadow-ring-*` tiers already include a 1px theme-resolved hairline ring. **Never add `border` or `ring-*` on top of a `smooth-shadow-ring-*` element.**
+
+---
+
+## StyleX primitives (`ui/tokens.stylex.ts`)
+
+Primitives in `ui/` are moving to StyleX (see `docs/design-system.md`); `Button` is the first. When writing or porting one:
+
+- Import every value from `ui/tokens.stylex.ts`: `color.*`, `space.s<px>`, `controlHeight.sm/md/lg/touch`, `radius.*`, `text.*`, `weight.*`, `opacity.*`, `focus.*`, `motion.*`, `shadow.*`, `media.*`. A raw `31`, `"9px"` or `"#fff"` inside `stylex.create` fails `stylex-raw-value`.
+- Gate hover behind `media.hover` (`":hover": { default: null, [media.hover]: value }`), as Tailwind's `hover:` does.
+- Expose `xstyle?: StyleXStyles<{ margin…, flex…, width… }>` for placement only, and keep merging a caller's `className` last while call sites migrate.
+- Prove parity: dump computed styles of every instance on the same routes against `main` (both widths, both themes) and diff them before calling a port done.
+
+On a `<Button>`, place it with `xstyle` and pick its look with `variant` / `size`. Visual utilities on `<Button className>` are counted by `button-restyle`.
 
 ---
 

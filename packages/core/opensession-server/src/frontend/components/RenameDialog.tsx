@@ -63,7 +63,7 @@ export function RenameDialog({
               type="button"
               size="lg"
               variant="soft"
-              className="phone:min-h-11 phone:flex-1"
+              className="phone:flex-1"
               onClick={onCancel}
             >
               Cancel
@@ -72,7 +72,7 @@ export function RenameDialog({
               type="submit"
               size="lg"
               variant="primary"
-              className="phone:min-h-11 phone:flex-1"
+              className="phone:flex-1"
               disabled={!allowEmpty && !shown.trim()}
             >
               Rename
