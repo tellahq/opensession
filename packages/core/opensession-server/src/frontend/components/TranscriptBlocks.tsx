@@ -135,6 +135,9 @@ interface Props {
   onEditMessage?: (entry: TranscriptEntry) => void;
   /** Deletes one of your messages that no run has picked up yet. */
   onDeletePendingMessage?: (entryId: string) => void;
+  /** Takes one of your messages that no run has picked up yet back into the
+   *  composer. */
+  onEditPendingMessage?: (entryId: string) => void;
   /** Starts a turn that picks the work back up after a run failed. Offered on
    *  the last block only: an older failure has already been moved past, and a
    *  Continue button on it would restart work the session went on to do. */
@@ -834,6 +837,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
   onFork,
   onEditMessage,
   onDeletePendingMessage,
+  onEditPendingMessage,
   onContinue,
   onOpenSubagent,
   owner,
@@ -1146,6 +1150,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
                   ? undefined
                   : onDeletePendingMessage
               }
+              onEditPending={onEditPendingMessage}
               // Between the fold's flush tool rows an answer spaces like
               // narration. One with its footer under it keeps the turn's
               // margin, which the lifted footer sits in.
@@ -1323,6 +1328,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
               ? undefined
               : onDeletePendingMessage
           }
+          onEditPending={onEditPendingMessage}
           onContinue={i === groupedBlocks.length - 1 ? onContinue : undefined}
         />
       );

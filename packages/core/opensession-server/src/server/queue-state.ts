@@ -160,7 +160,7 @@ export function isEditableQueueItem(item?: QueueItem): boolean {
   );
 }
 
-function queueActorMatches(item: QueueItem, actor?: string): boolean {
+export function queueActorMatches(item: QueueItem, actor?: string): boolean {
   return !!actor && !!item.user && userMatchesAny(actor, [item.user]);
 }
 

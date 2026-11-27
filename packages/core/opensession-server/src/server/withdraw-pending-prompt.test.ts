@@ -6,6 +6,7 @@ import {
   queueDisplayState,
 } from "./queue-state";
 import {
+  takePendingPromptForEdit,
   withdrawablePendingPrompt,
   withdrawPendingPrompt,
 } from "./withdraw-pending-prompt";
@@ -65,6 +66,34 @@ describe("withdrawing a message no run picked up", () => {
       expect(promptDispatches.get(sessionId)?.promptEntryId).toBe("entry-2");
     } finally {
       await promptDispatches.delete(sessionId);
+    }
+  });
+
+  test("hands your own waiting message back for editing, not someone else's", async () => {
+    const sessionId = `withdraw-edit-${crypto.randomUUID()}`;
+    try {
+      await promptQueues.set(sessionId, [
+        {
+          id: "mine",
+          content: "fix the typo",
+          user: "Acme Dev",
+          promptEntryId: "entry-3",
+        },
+      ]);
+      expect(
+        await takePendingPromptForEdit({ id: sessionId }, "entry-3", "Other"),
+      ).toBeUndefined();
+      expect(promptQueues.get(sessionId)).toHaveLength(1);
+
+      const taken = await takePendingPromptForEdit(
+        { id: sessionId },
+        "entry-3",
+        "Acme Dev",
+      );
+      expect(taken?.content).toBe("fix the typo");
+      expect(promptQueues.has(sessionId)).toBe(false);
+    } finally {
+      await promptQueues.delete(sessionId);
     }
   });
 });
