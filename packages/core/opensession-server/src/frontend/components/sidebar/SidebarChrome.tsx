@@ -1,19 +1,14 @@
 import React from "react";
 import type { NavigationActions } from "../../lib/navigation";
 import {
-  SIDEBAR_BAND_CHEVRON,
-  SIDEBAR_BAND_CHEVRON_COLLAPSED,
+  SIDEBAR_BAND_HOOK,
   SIDEBAR_DENSITY_VARS,
-  SIDEBAR_HEADER_BTN,
-  SIDEBAR_HEADER_BTN_DESKTOP,
-  SIDEBAR_HEADER_BTN_PHONE,
-  SIDEBAR_HOVER_LAYER,
   SIDEBAR_NAV_X,
-  SIDEBAR_PLACE_TITLE,
-  SIDEBAR_PLACE_TITLE_GAP,
-  SIDEBAR_STICKY_BAND,
-  SIDEBAR_STICKY_BAND_ROW,
-  SIDEBAR_STUCK_BACKING,
+  SIDEBAR_WORKSPACES_HEAD,
+  sidebarBandChevron,
+  sidebarHeaderButton,
+  sidebarWorkspacesBand,
+  sidebarWorkspacesTitle,
 } from "../../lib/sidebar-classes";
 import {
   personLensFilter,
@@ -159,33 +154,15 @@ export function SidebarChrome({
       )}
 
       <div
-        className={cn(
-          // SIDEBAR_STICKY_BAND_ROW folds this into one fixed slot, but it is
-          // desktop-gated, so on phones the raw `mt-1 pt-3` stands. With the
-          // caption hidden and the chevron invisible-but-in-layout, that was a
-          // near-empty band between the tool cards and the first project, which
-          // read as the strip being bottom-heavy. Nothing to set off there.
-          "mt-1 pb-0.5 pt-3 phone:mt-0 phone:pt-0",
-          // A borrowed lens hides the tools strip, so this bar becomes the
-          // first thing in the phone scroll. Give it enough air to clear the
-          // floating top bar's fade instead of letting its top edge wash out.
-          borrowedLens && "phone:pt-4",
-          // A caption starts on the rail's 16px text column; the borrowed
-          // lens's strip is a filled bar, so it takes the rows' own 8px
-          // inset instead and lines up with the workspace pills under it.
-          borrowedLens ? "px-2" : "px-[16px] pr-[7px]",
-          SIDEBAR_STICKY_BAND,
-          SIDEBAR_STICKY_BAND_ROW,
-          SIDEBAR_STUCK_BACKING,
-          // The place title's gap, as PlaceNav sets it. This row is fixed
-          // chrome above the scrollport here, so nothing pins against it.
-          newLayout && SIDEBAR_PLACE_TITLE_GAP,
-        )}
+        // In the new layout this row is fixed chrome above the scrollport,
+        // so nothing pins against it.
+        className={sidebarWorkspacesBand({ borrowedLens, newLayout })}
         data-sticky-head
       >
         <div
           className={cn(
-            "group/wshead flex min-w-0 items-center gap-1.5 desktop:w-full",
+            SIDEBAR_WORKSPACES_HEAD,
+            "flex min-w-0 items-center gap-1.5 desktop:w-full",
             // In someone else's sidebar this row IS the strip: one bar that
             // names whose lanes these are, takes you back out, and carries
             // the header's own actions. The name was being said twice —
@@ -242,14 +219,15 @@ export function SidebarChrome({
           ) : (
             <button
               className={cn(
-                "group/wstoggle flex min-w-0 items-center gap-[5px] [font:inherit]",
+                SIDEBAR_BAND_HOOK,
+                "flex min-w-0 items-center gap-[5px] [font:inherit]",
                 // On phones the caption is hidden and the chevron only paints on
                 // hover, so while the band is open this button is a 22px row of
                 // nothing between the tool cards and the first project. That row
                 // is most of what made the strip read bottom-heavy, and an
                 // invisible tap target is not an affordance worth its space.
                 // Collapsed it stays: the chevron IS visible then
-                // (SIDEBAR_BAND_CHEVRON_COLLAPSED), and it is the only way to
+                // (sidebarBandChevron), and it is the only way to
                 // open the band back up.
                 isPhone && workspacesOpen && "hidden",
               )}
@@ -266,15 +244,10 @@ export function SidebarChrome({
             "Workspaces" on phones, so the in-header title is redundant
             there. */}
               <span
-                className={cn(
-                  // The band caption, same as SIDEBAR_BAND_LABEL wears one
-                  // section down: this heading is written inline rather than
-                  // composed from it only because of the strip above.
-                  "shrink-0 text-label font-semibold text-dim group-hover/wshead:text-fg",
-                  // The new layout's place title instead (PlaceNav).
-                  newLayout && SIDEBAR_PLACE_TITLE,
-                  isPhone && "hidden",
-                )}
+                className={sidebarWorkspacesTitle({
+                  newLayout,
+                  hidden: isPhone,
+                })}
                 ref={(element) => {
                   titleRef.current = element;
                 }}
@@ -282,11 +255,10 @@ export function SidebarChrome({
                 {newLayout ? "Sessions" : "Workspaces"}
               </span>
               <IconChevronDown
-                className={cn(
-                  SIDEBAR_BAND_CHEVRON,
-                  "group-hover/wstoggle:visible",
-                  !workspacesOpen && SIDEBAR_BAND_CHEVRON_COLLAPSED,
-                )}
+                className={sidebarBandChevron({
+                  collapsed: !workspacesOpen,
+                  brighten: false,
+                })}
                 size={18}
                 style={{
                   transform: workspacesOpen ? "none" : "rotate(-90deg)",
@@ -324,23 +296,16 @@ export function SidebarChrome({
             <Tooltip label="Workspace options">
               <button
                 ref={setFilterButton}
-                className={cn(
-                  SIDEBAR_HEADER_BTN,
-                  isPhone
-                    ? cn(SIDEBAR_HEADER_BTN_PHONE, "min-h-[38px] min-w-[38px]")
-                    : SIDEBAR_HEADER_BTN_DESKTOP,
-                  "inline-flex items-center justify-center",
-                  // The open state paints the stronger wash and the hover now
-                  // layers OVER it (SIDEBAR_HOVER_LAYER), so the button no
-                  // longer has to withhold its hover to keep from washing
-                  // itself back out while open.
-                  SIDEBAR_HOVER_LAYER,
-                  filterOpen && "border-line-strong bg-pressed",
-                  // A set filter is already spelled out in the header (the repo
-                  // chip) and in the popover itself, so the button stays a plain
-                  // glyph: full contrast under the pointer or while open.
-                  filterOpen ? "text-fg" : "text-dim hover:text-fg",
-                )}
+                // The open state paints the stronger wash and the hover layers
+                // OVER it, so the button does not have to withhold its hover
+                // to keep from washing itself back out while open. A set
+                // filter is already spelled out in the header (the repo chip)
+                // and in the popover itself, so the button stays a plain
+                // glyph: full contrast under the pointer or while open.
+                className={sidebarHeaderButton({
+                  phone: isPhone,
+                  filter: { open: filterOpen },
+                })}
                 // A Base UI tooltip is a DESCRIPTION, not a name, so an
                 // icon-only trigger still needs one of its own. The phone twin
                 // below always carried this; the desktop button did not.
@@ -362,13 +327,7 @@ export function SidebarChrome({
             workspace. */}
             <Tooltip label="New session" shortcut={newSessionKeys ?? undefined}>
               <button
-                className={cn(
-                  SIDEBAR_HEADER_BTN,
-                  isPhone
-                    ? SIDEBAR_HEADER_BTN_PHONE
-                    : SIDEBAR_HEADER_BTN_DESKTOP,
-                  "inline-flex items-center justify-center text-dim hover:bg-hover hover:text-fg",
-                )}
+                className={sidebarHeaderButton({ phone: isPhone })}
                 onClick={navigation.openNewWorkspace}
               >
                 <IconPlus size={22} />

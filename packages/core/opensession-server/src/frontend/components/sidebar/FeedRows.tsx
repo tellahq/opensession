@@ -1,11 +1,10 @@
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { fetchFeedFilterOptions, relativeTime } from "../../lib/api";
 import {
-  SIDEBAR_BAND_ACTION,
-  SIDEBAR_FILTER_DOT,
   SIDEBAR_RAIL,
   SIDEBAR_ROW_TITLE,
   SIDEBAR_WS_ACTION,
+  sidebarBandAction,
   sidebarRow,
   sidebarRowActions,
   sidebarRowTime,
@@ -425,14 +424,7 @@ export function FeedFilterMenu({
             tabIndex={0}
             aria-label={`Filter ${feed.title}`}
             title={`Filter ${feed.title}`}
-            className={cn(
-              SIDEBAR_BAND_ACTION,
-              // Unlike the workspace header's filter, this one's hover beat
-              // its filtered tint in the old sheet's source order — so the
-              // accent is a resting colour here, not a sticky one.
-              active ? "text-accent" : "text-dim",
-              active && SIDEBAR_FILTER_DOT,
-            )}
+            className={sidebarBandAction(active)}
             onClick={(e: React.MouseEvent) => e.stopPropagation()}
           />
         }

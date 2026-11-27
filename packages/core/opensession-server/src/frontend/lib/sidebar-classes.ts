@@ -69,7 +69,12 @@
 
 import * as stylex from "@stylexjs/stylex";
 import { cn } from "../ui/cn";
-import { sidebarHeaderMarker, sidebarRowMarker } from "../ui/markers.stylex";
+import {
+  sidebarBandMarker,
+  sidebarHeaderMarker,
+  sidebarRowMarker,
+  sidebarWorkspacesHeadMarker,
+} from "../ui/markers.stylex";
 import { classString as sx, type Styles } from "../ui/sx";
 import {
   color,
@@ -603,6 +608,219 @@ export const sidebarStyles = stylex.create({
   attnBlue: { backgroundColor: color.blue },
   attnRed: { backgroundColor: color.red },
   automationRuns: { "--sidebar-icon-left": scale.nestedIconLeft },
+
+  // ── Bands: see sidebarBandHeading ──
+  bandHeading: {
+    fontSize: text.label,
+    fontWeight: weight.heading,
+    color: color.dim,
+    paddingBlock: space.s0,
+    paddingLeft: space.s0,
+    paddingRight: { default: space.s8, [media.desktop]: space.s0 },
+  },
+  stickyBand: {
+    position: { default: null, [media.desktop]: "sticky" },
+    top: { default: null, [media.desktop]: space.s0 },
+    zIndex: { default: null, [media.desktop]: scale.bandLayer },
+    display: { default: null, [media.desktop]: "flex" },
+    height: { default: null, [media.desktop]: scale.bandSlotVar },
+    minHeight: { default: null, [media.desktop]: scale.bandSlotVar },
+    alignItems: { default: null, [media.desktop]: "center" },
+    marginTop: { default: null, [media.desktop]: space.s0 },
+  },
+  bandToggle: {
+    margin: space.s0,
+    display: "flex",
+    minHeight: scale.captionVar,
+    width: "100%",
+    cursor: "pointer",
+    alignItems: "center",
+    gap: scale.laneGap,
+    borderRadius: scale.bandRadius,
+    ["cornerShape"]: corner.squircle,
+    // `none`, not a zero width: that is what the `border: none` this
+    // replaced computed to.
+    borderStyle: "none",
+    backgroundColor: color.transparent,
+    paddingBlock: space.s4,
+    paddingRight: { default: space.s4, [media.desktop]: space.s8 },
+    paddingLeft: { default: space.s8, [media.desktop]: scale.railPadVar },
+    textAlign: "left",
+    fontFamily: "inherit",
+    fontSize: "inherit",
+    fontStyle: "inherit",
+    fontWeight: "inherit",
+    lineHeight: "inherit",
+    color: {
+      default: "inherit",
+      ":hover": { default: null, [media.hover]: color.fg },
+    },
+  },
+  bandChevron: {
+    flexShrink: 0,
+    visibility: {
+      default: "hidden",
+      [stylex.when.ancestor(":hover", sidebarBandMarker)]: {
+        default: null,
+        [media.hover]: "visible",
+      },
+    },
+    color: color.faint,
+  },
+  bandChevronBrighten: {
+    color: {
+      default: color.faint,
+      [stylex.when.ancestor(":hover", sidebarBandMarker)]: {
+        default: null,
+        [media.hover]: color.dim,
+      },
+    },
+  },
+  bandChevronCollapsed: { visibility: "visible" },
+  workspacesBand: {
+    paddingTop: space.s0,
+    paddingBottom: { default: space.s2, [media.desktop]: space.s0 },
+    paddingLeft: space.s16,
+    paddingRight: scale.chipEdge,
+  },
+  workspacesBandBorrowed: {
+    paddingTop: { default: space.s16, [media.desktop]: space.s0 },
+    paddingInline: space.s8,
+  },
+  placeTitle: {
+    fontSize: text.dialogTitle,
+    fontWeight: weight.heading,
+    color: color.fg,
+  },
+  placeTitleGap: { marginBottom: space.s8 },
+  workspacesTitle: {
+    flexShrink: 0,
+    fontSize: text.label,
+    fontWeight: weight.heading,
+    color: {
+      default: color.dim,
+      [stylex.when.ancestor(":hover", sidebarWorkspacesHeadMarker)]: {
+        default: null,
+        [media.hover]: color.fg,
+      },
+    },
+  },
+  workspacesTitlePlace: {
+    fontSize: text.dialogTitle,
+    color: color.fg,
+  },
+  hidden: { display: "none" },
+
+  // ── Chrome and header buttons ──
+  chromeButton: {
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.control,
+    ["cornerShape"]: corner.squircle,
+    color: {
+      default: color.faint,
+      ":hover": { default: null, [media.hover]: color.fg },
+    },
+    backgroundColor: {
+      default: null,
+      ":hover": { default: null, [media.hover]: color.hover },
+    },
+    transitionProperty: "color, background",
+    transitionDuration: motion.micro,
+    transitionTimingFunction: motion.ease,
+  },
+  headerButton: {
+    display: "inline-flex",
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.control,
+    ["cornerShape"]: corner.squircle,
+    width: scale.headerButton,
+    height: scale.headerButton,
+    fontSize: scale.headerGlyph,
+    fontWeight: weight.medium,
+    lineHeight: leading.none,
+    color: {
+      default: color.dim,
+      ":hover": { default: null, [media.hover]: color.fg },
+    },
+  },
+  headerButtonPhone: {
+    width: scale.headerButtonPhone,
+    height: scale.headerButtonPhone,
+    fontSize: scale.headerGlyphPhone,
+  },
+  headerButtonWash: {
+    backgroundColor: {
+      default: null,
+      ":hover": { default: null, [media.hover]: color.hover },
+    },
+  },
+  headerButtonOpen: {
+    borderColor: color.lineStrong,
+    backgroundColor: color.pressed,
+    color: color.fg,
+  },
+  bandAction: {
+    marginLeft: "auto",
+    display: "inline-flex",
+    width: scale.bandAction,
+    height: scale.bandAction,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.control,
+    ["cornerShape"]: corner.squircle,
+    backgroundColor: {
+      default: null,
+      ":hover": { default: null, [media.hover]: color.hover },
+    },
+    color: {
+      default: color.dim,
+      ":hover": { default: null, [media.hover]: color.fg },
+    },
+  },
+  bandActionActive: {
+    position: "relative",
+    color: {
+      default: color.accent,
+      ":hover": { default: null, [media.hover]: color.fg },
+    },
+    "::after": {
+      content: "''",
+      position: "absolute",
+      top: scale.filterDotInset,
+      right: scale.filterDotInset,
+      width: scale.filterDot,
+      height: scale.filterDot,
+      borderRadius: radius.pill,
+      backgroundColor: color.accent,
+    },
+  },
+  autoCog: {
+    position: "relative",
+    marginBlock: scale.cogBleed,
+    marginLeft: "auto",
+    display: {
+      default: "none",
+      [stylex.when.ancestor(":hover", sidebarHeaderMarker)]: {
+        default: null,
+        [media.hover]: "inline-flex",
+      },
+    },
+    width: scale.cogWidth,
+    flexShrink: 0,
+    cursor: "pointer",
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "stretch",
+    color: {
+      default: color.dim,
+      ":hover": { default: null, [media.hover]: color.fg },
+    },
+  },
 });
 
 /**
@@ -852,9 +1070,9 @@ export const SIDEBAR_REPO_TILE = "size-[18px] shrink-0 text-meta";
 /**
  * ── Group headers ───────────────────────────────────────────────────────────
  * The collapsible headings INSIDE the workspace list: Needs review, Pinned,
- * Archived, the repo bands, the automation groups. `group/gh` is what the
- * chevron and the automation cog key their reveal off, so it has to ride on
- * every one of them.
+ * Archived, the repo bands, the automation groups. sidebarHeaderMarker is
+ * what the chevron and the automation cog key their reveal off, so it rides
+ * on every one of them.
  *
  * Padding is deliberately not here — the Archived heading wears its own,
  * and two utilities from the same group in one string would leave the winner
@@ -1020,11 +1238,14 @@ export const SIDEBAR_GROUP_DOT = sx(sidebarStyles.dot);
  * a heading you were only reading carried a filled box at its end, which read
  * as a second, already-lit control rather than as the row's own hover.
  */
-export const SIDEBAR_AUTO_COG =
-  "relative -my-1 ml-auto hidden w-6 shrink-0 cursor-pointer items-center justify-center self-stretch text-dim group-hover/gh:inline-flex hover:text-fg " +
+export const SIDEBAR_AUTO_COG = cn(
+  // The wash and the wider target are pseudo-elements, and the glyph rides
+  // above the wash through a child reach: utilities.
   "before:absolute before:top-1/2 before:left-1/2 before:z-0 before:size-7 before:-translate-x-1/2 before:-translate-y-1/2 before:rounded-[calc(6px*var(--rf))] before:[corner-shape:var(--cs)] before:transition-[background] before:content-[''] hover:before:bg-pressed " +
-  "after:absolute after:-inset-x-1 after:inset-y-0 after:content-[''] " +
-  "[&>svg]:relative [&>svg]:z-[1]";
+    "after:absolute after:-inset-x-1 after:inset-y-0 after:content-[''] " +
+    "[&>svg]:relative [&>svg]:z-[1]",
+  sx(sidebarStyles.autoCog),
+);
 
 /**
  * What sits under an automation heading: its latest report, then its runs.
@@ -1067,11 +1288,10 @@ export const SIDEBAR_AUTOMATION_RUNS = sx(sidebarStyles.automationRuns);
  * page that scrolls as one, and nothing pins.
  */
 
-/** Tier 1 — a band heading pinned at the top of the rail. */
-export const SIDEBAR_STICKY_BAND = "desktop:sticky desktop:top-0 desktop:z-20";
-
-/**
- * One invariant row height for the tier-1 headings, which is what stops the
+/*
+ * Tier 1: a band heading pinned at the top of the rail. `stickyBand` (worn
+ * through sidebarBandHeading and sidebarWorkspacesBand) gives the tier-1
+ * headings one invariant row height, which is what stops the
  * outgoing and incoming labels peeking around each other while one section
  * pushes the next away. It overrides whatever vertical padding/margin the
  * heading wears in the phone layout, so it is written at the same `min-[721px]`
@@ -1084,9 +1304,6 @@ export const SIDEBAR_STICKY_BAND = "desktop:sticky desktop:top-0 desktop:z-20";
  * left over is the air a heading wants above the rows it names. It is also
  * what every tier-2 header pins under, so the offsets below start from it.
  */
-export const SIDEBAR_STICKY_BAND_ROW =
-  "desktop:mt-0 desktop:flex desktop:h-[var(--sidebar-band-slot)] desktop:min-h-[var(--sidebar-band-slot)] desktop:items-center desktop:py-0";
-
 /**
  * Tier 2: a lane / repo / status header, pinned one band-row lower. Once
  * pinned, its trailing fade makes the rows passing underneath remain visible
@@ -1141,13 +1358,11 @@ export interface SidebarHeaderOptions {
  * shares the base box (the rail gap, the inset that puts its mark on the
  * shared rail, the ink that brightens on hover); `kind` picks the item's
  * line height or the caption's. One StyleX call, so the caption's tighter gap
- * and padding beat the base's by argument order. `group/gh` stays on as the
- * hook the automation cog's reveal reads.
+ * and padding beat the base's by argument order.
  */
 export function sidebarHeader(options: SidebarHeaderOptions): string {
   const { kind, sticky = false, nested = false } = options;
   return cn(
-    "group/gh",
     kind === "lane" && LANE_NEW_LAYOUT,
     sticky && SIDEBAR_STICKY_LANE_FADE,
     sticky && SIDEBAR_STUCK_BACKING,
@@ -1180,48 +1395,98 @@ export function sidebarHeader(options: SidebarHeaderOptions): string {
  * made Automations and Earlier read as two different kinds of thing in the same
  * column.
  */
-export const SIDEBAR_BAND_LABEL = "text-label font-semibold text-dim";
+/**
+ * The Automations and Team band headings: the caption, pinned in the band
+ * slot on desktop over the stuck backing. A band heading carries no leading
+ * mark, so on phones it takes the 8px a 22px glyph spends on its own padding
+ * before the ink starts.
+ */
+export function sidebarBandHeading(): string {
+  return cn(
+    SIDEBAR_STUCK_BACKING,
+    sx(sidebarStyles.bandHeading, sidebarStyles.stickyBand),
+  );
+}
+
+export interface SidebarWorkspacesBandOptions {
+  /** Someone else's sidebar: this row is the lens bar, a filled strip on
+   *  the rows' 8px inset, with air on phones to clear the floating top
+   *  bar's fade. */
+  borrowedLens: boolean;
+  /** The place title's gap under it, as PlaceNav sets it. */
+  newLayout: boolean;
+}
+
+/**
+ * The Workspaces band row in the sidebar's chrome. A caption starts on the
+ * rail's 16px text column. Phones drop its top air: with the caption hidden
+ * and the chevron invisible but in layout, it was a near-empty band between
+ * the tool cards and the first project.
+ */
+export function sidebarWorkspacesBand(
+  options: SidebarWorkspacesBandOptions,
+): string {
+  return cn(
+    SIDEBAR_STUCK_BACKING,
+    sx(
+      sidebarStyles.workspacesBand,
+      options.borrowedLens && sidebarStyles.workspacesBandBorrowed,
+      sidebarStyles.stickyBand,
+      options.newLayout && sidebarStyles.placeTitleGap,
+    ),
+  );
+}
+
+/** The Workspaces header row, as the hook its caption brightens with. */
+export const SIDEBAR_WORKSPACES_HEAD = sx(sidebarWorkspacesHeadMarker);
+
+export interface SidebarWorkspacesTitleOptions {
+  /** The new layout's place title instead of the band caption. */
+  newLayout: boolean;
+  hidden: boolean;
+}
+
+/** The Workspaces caption, or the new layout's place title in its place. */
+export function sidebarWorkspacesTitle(
+  options: SidebarWorkspacesTitleOptions,
+): string {
+  return sx(
+    sidebarStyles.workspacesTitle,
+    options.newLayout && sidebarStyles.workspacesTitlePlace,
+    options.hidden && sidebarStyles.hidden,
+  );
+}
 
 /**
  * The new layout names each place (Sessions, Activity, Support, Library) at the
  * top of its sidebar. It is the sidebar's title, not a caption over a band, so
  * it is set a clear step above the rows in full ink.
  */
-export const SIDEBAR_PLACE_TITLE = "text-dialog-title font-semibold text-fg";
+export const SIDEBAR_PLACE_TITLE = sx(sidebarStyles.placeTitle);
 
 /**
  * The air between a place title and the first row under it. The title's slot
  * centers a 19px line in 32px, which left only a few pixels above the first
  * row's pill, so the title read as stuck to the list.
  */
-export const SIDEBAR_PLACE_TITLE_GAP = "mb-2";
+export const SIDEBAR_PLACE_TITLE_GAP = sx(sidebarStyles.placeTitleGap);
 
 /**
- * The heading's toggle button. Horizontal padding is NOT here: each band sits
- * at a different inset, and two utilities from the same group in one string
- * would leave the winner to Tailwind's internal ordering rather than to the
- * call site. Give it `group/band` so the chevron can key off its hover.
+ * The heading's toggle button. A band heading is a LABEL, so it paints no
+ * hover fill: only the ink brightens, to `fg`, which is the same step a lane
+ * caption takes (see sidebarHeader). `--sidebar-cap-h` is the 28px label
+ * height; it sits inside the 32px band slot, so the caption keeps a little
+ * air around it without the pinned slot growing. Compact takes the pair to
+ * 24 inside 28, which is the same 4px of air.
+ *
+ * The desktop inset lands the glyphless labels on the same 16px rail as
+ * Tools, Workspaces and lane captions; phones keep the tighter base inset.
+ * It carries sidebarBandMarker, so the chevron keys off its hover.
  */
-export const SIDEBAR_BAND_TOGGLE =
-  // `border-none`, not `border-0`: the latter zeroes the width but leaves the
-  // style at Tailwind's `solid` default, which is not what the `border: none`
-  // this replaced computed to. Width resolves to 0 under either.
-  //
-  // A band heading is a LABEL, so it paints no hover fill: only the ink
-  // brightens, to `text-fg`, which is the same step a lane caption takes (see
-  // sidebarHeader). `--sidebar-cap-h` is the 28px label height; it sits
-  // inside the 32px slot SIDEBAR_STICKY_BAND_ROW reserves, so the caption keeps
-  // a little air around it without the pinned slot growing. Compact takes the
-  // pair to 24 inside 28, which is the same 4px of air.
-  "group/band m-0 flex min-h-[var(--sidebar-cap-h)] w-full cursor-pointer items-center gap-[5px] rounded-[calc(8px*var(--rf))] border-none bg-transparent py-1 text-left text-inherit [font:inherit] hover:text-fg";
-
-/**
- * The inset the Automations and People headings take. The desktop value lands
- * the glyphless labels on the same 16px rail as Tools, Workspaces and lane
- * captions. The phone layout keeps its tighter base inset.
- */
-export const SIDEBAR_BAND_TOGGLE_INSET =
-  "pr-1 pl-2 desktop:pr-2 desktop:pl-[calc(var(--sidebar-icon-left,16px)-var(--sidebar-nav-x,6px))]";
+export const SIDEBAR_BAND_TOGGLE = sx(
+  sidebarStyles.bandToggle,
+  sidebarBandMarker,
+);
 
 /**
  * The chevron reveals on hover but stays IN LAYOUT at all times (visibility,
@@ -1230,10 +1495,25 @@ export const SIDEBAR_BAND_TOGGLE_INSET =
  * and nudge the whole list below. Reserved-but-hidden costs only trailing
  * space at the row's right edge, which is invisible.
  */
-export const SIDEBAR_BAND_CHEVRON = "invisible shrink-0 text-faint";
+export interface SidebarBandChevronOptions {
+  /** Stays visible while the band is folded: the counterpart to the
+   *  collapsed `sidebarChevron`. */
+  collapsed: boolean;
+  /** Lifts its ink a step under the pointer too. */
+  brighten: boolean;
+}
 
-/** The band heading's counterpart to the collapsed `sidebarChevron`. */
-export const SIDEBAR_BAND_CHEVRON_COLLAPSED = "visible";
+export function sidebarBandChevron(options: SidebarBandChevronOptions): string {
+  return sx(
+    sidebarStyles.bandChevron,
+    options.brighten && sidebarStyles.bandChevronBrighten,
+    options.collapsed && sidebarStyles.bandChevronCollapsed,
+  );
+}
+
+/** A toggle that is not SIDEBAR_BAND_TOGGLE (the Workspaces one) wears this
+ *  so its chevron still reveals on its hover. */
+export const SIDEBAR_BAND_HOOK = sx(sidebarBandMarker);
 
 /**
  * The full-width surface a header paints once it is actually pinned. It uses
@@ -1275,46 +1555,41 @@ export const SIDEBAR_STUCK_BACKING =
  * the same group in one string would leave the winner to Tailwind's internal
  * ordering rather than to the call site.
  */
-export const SIDEBAR_CHROME_BTN =
-  "shrink-0 items-center justify-center rounded-control text-faint transition-[color,background] hover:bg-hover hover:text-fg";
+export const SIDEBAR_CHROME_BTN = sx(sidebarStyles.chromeButton);
+
+export interface SidebarHeaderButtonOptions {
+  phone: boolean;
+  /** The filter button. Its open state paints the stronger wash and full
+   *  ink, and its hover layers over that wash rather than replacing it. */
+  filter?: { open: boolean };
+}
 
 /**
- * The square icon buttons in the workspace header — the filter and the new
- * session "+". 20px glyph type on a 34px box, stepped up to 22 on 38 at phone
- * widths, where the whole sidebar is a tap surface. The hover wash is applied
- * by the call site rather than baked in, because the filter button's `active`
- * state paints a stronger wash that hovering must NOT wash back out.
+ * The square icon buttons in the workspace header: the options button and
+ * the new session "+". 20px glyph type on a 34px box, stepped up to 22 on 38
+ * at phone widths, where the whole sidebar is a tap surface.
  */
-export const SIDEBAR_HEADER_BTN = "shrink-0 rounded-control font-medium";
-/**
- * Size and type step together, so each viewport carries its whole pair rather
- * than overriding half of the other's. `leading-none` has to sit AFTER the
- * `text-*` in the same string: cn() is tailwind-merge, which files `leading`
- * as a conflict of `font-size`, so a later type size silently drops an earlier
- * line-height and the glyph starts riding on `normal`.
- */
-export const SIDEBAR_HEADER_BTN_PHONE = "size-[38px] text-[22px] leading-none";
-export const SIDEBAR_HEADER_BTN_DESKTOP =
-  "size-[34px] text-[20px] leading-none";
+export function sidebarHeaderButton(
+  options: SidebarHeaderButtonOptions,
+): string {
+  const { filter } = options;
+  return sx(
+    sidebarStyles.headerButton,
+    options.phone && sidebarStyles.headerButtonPhone,
+    filter ? sidebarStyles.hoverLayer : sidebarStyles.headerButtonWash,
+    filter?.open === true && sidebarStyles.headerButtonOpen,
+  );
+}
 
 /**
- * The trailing icon button on a band heading (the feed filter). Carries no
- * resting colour of its own: the call site picks exactly one, because two
- * `text-*` utilities on one element are decided by Tailwind's internal order,
- * not by which one you wrote last.
+ * The trailing icon button on a band heading (the feed filter). While a
+ * non-default filter is applied it rests in the accent and wears a dot. Its
+ * hover still lifts the ink to `fg`: unlike the workspace header's filter,
+ * the accent is a resting colour here, not a sticky one.
  */
-export const SIDEBAR_BAND_ACTION =
-  "ml-auto inline-flex size-7 shrink-0 items-center justify-center rounded-control hover:bg-hover hover:text-fg";
-
-/**
- * The dot a filter button wears while a non-default filter is applied — the
- * mark only; its accent TEXT colour is the call site's, for the reason above.
- * A bare `border-radius: 50%` with no corner-shape of its own, so
- * `rounded-full` — the one radius spelling base.css does NOT squircle — is the
- * correct spelling here.
- */
-export const SIDEBAR_FILTER_DOT =
-  "relative after:absolute after:top-[5px] after:right-[5px] after:size-1.5 after:rounded-full after:bg-accent after:content-['']";
+export function sidebarBandAction(active: boolean): string {
+  return sx(sidebarStyles.bandAction, active && sidebarStyles.bandActionActive);
+}
 
 /**
  * The attention count on a COLLAPSED band — urgent rows must not vanish inside

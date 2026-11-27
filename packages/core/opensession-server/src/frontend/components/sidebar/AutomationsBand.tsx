@@ -3,20 +3,15 @@ import type { AutomationOverviewByName } from "../../lib/automation-overview";
 import {
   SIDEBAR_AUTOMATION_RUNS,
   SIDEBAR_AUTO_COG,
-  SIDEBAR_BAND_CHEVRON,
-  SIDEBAR_BAND_CHEVRON_COLLAPSED,
-  SIDEBAR_BAND_LABEL,
   SIDEBAR_BAND_TOGGLE,
-  SIDEBAR_BAND_TOGGLE_INSET,
   SIDEBAR_GROUP_COUNT,
   SIDEBAR_GROUP_DOT,
   SIDEBAR_GROUP_NAME,
   SIDEBAR_INDEPENDENT_SCROLL,
   SIDEBAR_INDEPENDENT_SECTION,
   SIDEBAR_RAIL,
-  SIDEBAR_STICKY_BAND,
-  SIDEBAR_STICKY_BAND_ROW,
-  SIDEBAR_STUCK_BACKING,
+  sidebarBandChevron,
+  sidebarBandHeading,
   sidebarChevron,
   sidebarHeader,
 } from "../../lib/sidebar-classes";
@@ -59,20 +54,9 @@ export function AutomationsBand({
         hasPeople ? "pb-2" : "pb-7",
       )}
     >
-      <div
-        className={cn(
-          SIDEBAR_BAND_LABEL,
-          // A band heading carries no leading mark, so on phones it takes the
-          // 8px a 22px glyph spends on its own padding before the ink starts.
-          "py-0 pl-0 pr-2 desktop:pr-0",
-          SIDEBAR_STICKY_BAND,
-          SIDEBAR_STICKY_BAND_ROW,
-          SIDEBAR_STUCK_BACKING,
-        )}
-        data-sticky-head
-      >
+      <div className={sidebarBandHeading()} data-sticky-head>
         <button
-          className={cn(SIDEBAR_BAND_TOGGLE, SIDEBAR_BAND_TOGGLE_INSET)}
+          className={SIDEBAR_BAND_TOGGLE}
           onClick={onToggleBand}
           title={open ? "Collapse automations" : "Expand automations"}
         >
@@ -87,11 +71,7 @@ export function AutomationsBand({
             )}
           </span>
           <IconChevronDown
-            className={cn(
-              SIDEBAR_BAND_CHEVRON,
-              "group-hover/band:visible group-hover/band:text-dim",
-              !open && SIDEBAR_BAND_CHEVRON_COLLAPSED,
-            )}
+            className={sidebarBandChevron({ collapsed: !open, brighten: true })}
             size={18}
             style={{ transform: open ? "none" : "rotate(-90deg)" }}
           />

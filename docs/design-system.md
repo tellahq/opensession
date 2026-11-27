@@ -160,7 +160,13 @@ swipe actions are `sidebarSwipeAction({ side, open, dragging })`, and a
 session's state dot is the `StatusDot` primitive in `ui/status.tsx`: an
 element that has to keep animating under reduced motion carries a
 `data-pulse` attribute that base-theme.css hands its duration back to, since
-a class string cannot carry `!important`. Each class
+a class string cannot carry `!important`. Band headings are
+`sidebarBandHeading()` around `SIDEBAR_BAND_TOGGLE`, whose chevron
+(`sidebarBandChevron({ collapsed, brighten })`) reveals off
+`sidebarBandMarker`; the Workspaces row is `sidebarWorkspacesBand(...)`
+with `sidebarWorkspacesTitle(...)` and `sidebarHeaderButton({ phone,
+filter })`, and a feed band's filter is `sidebarBandAction(active)`, its
+set-filter dot a StyleX `::after`. Each class
 string constant is `classString(...)` from `ui/sx.ts`: pass every style one
 element wears in one call, so two styles that set the same property are
 settled by argument order, not stylesheet order. Hooks that CSS or tests read
