@@ -25,7 +25,8 @@ import { createHash, randomBytes } from "crypto";
 
 export const GITHUB_CREDENTIAL_PATH = "/workload-identity/github-token";
 export const GITHUB_CREDENTIAL_URL_ENV = "OPENSESSION_GITHUB_CREDENTIAL_URL";
-export const GITHUB_CREDENTIAL_TOKEN_ENV = "OPENSESSION_GITHUB_CREDENTIAL_TOKEN";
+export const GITHUB_CREDENTIAL_TOKEN_ENV =
+  "OPENSESSION_GITHUB_CREDENTIAL_TOKEN";
 
 /** An entry no command has refreshed for this long is dropped. Runs send a
  *  command far more often than this; a forgotten one must not live forever. */
@@ -143,7 +144,8 @@ export function ghShimEnsureScript(home: string): string {
   );
 }
 
-const INLINE_HELPER = /^!f\(\) \{ .*echo "password=\$\{?([A-Za-z0-9_]+)\}?"; \}; f$/;
+const INLINE_HELPER =
+  /^!f\(\) \{ .*echo "password=\$\{?([A-Za-z0-9_]+)\}?"; \}; f$/;
 
 /**
  * Take the GitHub credentials out of a command's environment and keep them
@@ -199,7 +201,8 @@ export function brokerGithubCredentials(input: {
     const key = env[`GIT_CONFIG_KEY_${index}`];
     if (key === undefined) break;
     if (!/^credential\..*\.helper$/.test(key)) continue;
-    const variable = env[`GIT_CONFIG_VALUE_${index}`]?.match(INLINE_HELPER)?.[1];
+    const variable =
+      env[`GIT_CONFIG_VALUE_${index}`]?.match(INLINE_HELPER)?.[1];
     if (variable && isBrokeredGithubVariable(variable))
       env[`GIT_CONFIG_VALUE_${index}`] = brokeredGitCredentialHelper(variable);
   }
