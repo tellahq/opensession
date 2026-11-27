@@ -104,8 +104,8 @@ export const WORKSPACE_SHELL =
   "[.app-body.sidebar-collapsed_&]:border-l-0 [.app-body.sidebar-collapsed_&]:[box-shadow:none] " +
   // The new layout: the minibar, the sidebar and the window row are one grey
   // chrome, and the workspace is the only panel on it. A quiet one: a
-  // hairline outline, a 10px corner, and a 6px gap to the window at the right
-  // and the bottom. Nothing is cast across the seam. A variant rather than
+  // hairline outline, a 10px corner, a 6px gap to the window at the right
+  // and a 4px one at the bottom. Nothing is cast across the seam. A variant rather than
   // state, so AppShell stays free of hooks.
   //
   // The outline is one opaque colour, shared with the active tab's border and
@@ -114,7 +114,7 @@ export const WORKSPACE_SHELL =
   // strokes of it overlap it doubles.
   "new-layout:border-l-0 new-layout:[box-shadow:none] " +
   "new-layout:[--tab-edge:color-mix(in_srgb,var(--border)_55%,var(--sidebar-bg))] " +
-  "new-layout:mr-1.5 new-layout:mb-1.5 new-layout:rounded-b-[10px] new-layout:[corner-shape:round] " +
+  "new-layout:mr-1.5 new-layout:mb-1 new-layout:rounded-b-[10px] new-layout:[corner-shape:round] " +
   // The outline is drawn over the content rather than as a border, because
   // the window row is inside this box and a border would run up its sides.
   // Under a row it starts at the row's bottom edge. The tab strip sits above
