@@ -1533,10 +1533,10 @@ html[data-theme="light"] span.commit-ref:hover {
   z-index: -1;
 }
 .markdown .md-code-diff .diff-add::before {
-  background: var(--green-soft);
+  background: var(--diff-add-soft);
 }
 .markdown .md-code-diff .diff-del::before {
-  background: var(--red-soft);
+  background: var(--diff-del-soft);
 }
 
 /* ── Docs (`.markdown wiki-doc`) ─────────────────────────────

@@ -50,6 +50,11 @@
                 : "dark";
           var h = document.documentElement;
           h.setAttribute("data-theme", eff);
+          if (
+            localStorage.getItem("opensession-diff-palette") === "colorblind"
+          ) {
+            h.setAttribute("data-diff-palette", "colorblind");
+          }
           var accent = localStorage.getItem("opensession-accent");
           // Accents whose colour was retired; keep in sync with RETIRED_THEMES in
           // lib/accent-theme.ts, which is what runs once the bundle is up.

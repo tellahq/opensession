@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getCurrentUser } from "../../components/UserPicker";
+import { getDictationVocabulary } from "../dictation-vocabulary";
 import { ApiError, BASE, request } from "./request";
 import {
   accountLimitsFromUsage,
@@ -54,8 +55,13 @@ export async function suggestBranch(prompt: string): Promise<string | null> {
 
 /** Voice dictation: send a recorded clip (raw body), get the transcript back.
  * Bypasses `request` — the body is audio bytes, not JSON. */
-export async function transcribeClip(audio: Blob): Promise<string> {
-  const res = await fetch(`${BASE}/transcribe`, {
+export async function transcribeClip(
+  audio: Blob,
+  opts?: { vocabulary?: string },
+): Promise<string> {
+  const prompt = (opts?.vocabulary ?? getDictationVocabulary()).trim();
+  const query = prompt ? `?prompt=${encodeURIComponent(prompt)}` : "";
+  const res = await fetch(`${BASE}/transcribe${query}`, {
     method: "POST",
     headers: { "Content-Type": audio.type || "audio/webm" },
     body: audio,

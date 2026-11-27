@@ -153,6 +153,8 @@
   --color-chart-8: var(--chart-8);
   --color-red: var(--red);
   --color-red-soft: var(--red-soft);
+  --color-diff-add: var(--diff-add);
+  --color-diff-del: var(--diff-del);
   --color-purple: var(--purple);
 
   /* Tool-family hues (transcript timeline) */

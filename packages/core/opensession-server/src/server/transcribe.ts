@@ -78,6 +78,17 @@ function extForMime(mime: string): string {
   return "webm";
 }
 
+export const MAX_TRANSCRIBE_PROMPT_CHARS = 500;
+
+export function sanitizeTranscribePrompt(raw?: string | null): string {
+  if (!raw) return "";
+  return raw
+    .replace(/[\r\n]+/g, ", ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, MAX_TRANSCRIBE_PROMPT_CHARS);
+}
+
 /** OpenAI-compatible transcription endpoint (OpenAI itself and Groq). */
 async function transcribeHosted(
   endpoint: string,
@@ -85,10 +96,12 @@ async function transcribeHosted(
   model: string,
   audio: Blob,
   ext: string,
+  prompt?: string,
 ): Promise<string> {
   const form = new FormData();
   form.append("file", audio, `audio.${ext}`);
   form.append("model", model);
+  if (prompt) form.append("prompt", prompt);
   const res = await fetch(endpoint, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}` },
@@ -105,7 +118,11 @@ async function transcribeHosted(
   return json.text.trim();
 }
 
-async function transcribeLocal(audio: Blob, ext: string): Promise<string> {
+async function transcribeLocal(
+  audio: Blob,
+  ext: string,
+  prompt?: string,
+): Promise<string> {
   const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const inPath = join(tmpdir(), `dictate-${stamp}.${ext}`);
   const wavPath = join(tmpdir(), `dictate-${stamp}.wav`);
@@ -148,6 +165,7 @@ async function transcribeLocal(audio: Blob, ext: string): Promise<string> {
           "1",
           "-np", // no progress/system prints on stderr
           "-nt", // no timestamps — plain text lines on stdout
+          ...(prompt ? ["--prompt", prompt] : []),
         ],
         "transcribe",
         // Outlives nothing: systemd stops a run the gateway forgot.
@@ -194,8 +212,10 @@ export async function localWhisperAvailable(): Promise<boolean> {
 export async function transcribeAudio(
   audio: Blob,
   mime: string,
+  opts?: { prompt?: string },
 ): Promise<{ text: string; provider: string }> {
   const ext = extForMime(mime);
+  const prompt = sanitizeTranscribePrompt(opts?.prompt);
   const errors: string[] = [];
 
   const openaiKey = process.env.OPENAI_API_KEY;
@@ -208,6 +228,7 @@ export async function transcribeAudio(
           "gpt-4o-mini-transcribe",
           audio,
           ext,
+          prompt || undefined,
         ),
         provider: "openai",
       };
@@ -226,6 +247,7 @@ export async function transcribeAudio(
           "whisper-large-v3-turbo",
           audio,
           ext,
+          prompt || undefined,
         ),
         provider: "groq",
       };
@@ -237,7 +259,9 @@ export async function transcribeAudio(
   if (await localWhisperAvailable()) {
     try {
       return {
-        text: await inLocalLane(() => transcribeLocal(audio, ext)),
+        text: await inLocalLane(() =>
+          transcribeLocal(audio, ext, prompt || undefined),
+        ),
         provider: "whisper.cpp",
       };
     } catch (e: any) {
