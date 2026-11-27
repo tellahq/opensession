@@ -54,7 +54,7 @@ import {
   TAB_INLINE_CONTROLS,
   TAB_TITLE,
   TAB_TITLE_INLINE_CONTROLS,
-  TAB_WITH_MENU,
+  TAB_SESSION_FIXED,
   TAB_VICON,
   tabClass,
   tabCloseClass,
@@ -721,7 +721,7 @@ export function SessionTabs({
                             attached,
                           }),
                           emptyVisual && !menuInTab && "desktop:pr-7",
-                          menuInTab && TAB_WITH_MENU,
+                          attached && !isPhone && TAB_SESSION_FIXED,
                         )}
                         style={style}
                         onClick={() => onSelect(session)}
