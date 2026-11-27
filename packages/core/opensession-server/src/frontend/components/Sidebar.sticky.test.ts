@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import {
-  SIDEBAR_STICKY_LANE_FADE,
-  SIDEBAR_STUCK_BACKING,
-  sidebarHeader,
-} from "../lib/sidebar-classes";
+import { pinnedContentMask } from "../hooks/useSidebarStickyHeadings";
+import { sidebarHeader } from "../lib/sidebar-classes";
 
 const sidebarSource = await Bun.file(
   new URL("./Sidebar.tsx", import.meta.url),
@@ -22,19 +19,32 @@ describe("sidebar sticky headings", () => {
   test("keeps the stuck marker across React className updates", () => {
     // React replaces an element's managed className on any sidebar rerender.
     // The scroll position may not change afterward, so an imperative class
-    // would disappear without another scroll event to restore the backing.
+    // would disappear without another scroll event to restore it.
     expect(source).toContain('el.hasAttribute("data-stuck")');
     expect(source).toContain('el.toggleAttribute("data-stuck", stuck)');
     expect(source).not.toContain('classList.toggle("is-stuck"');
   });
 
-  test("keys both sticky surfaces from the persistent marker", () => {
-    expect(SIDEBAR_STICKY_LANE_FADE).toContain("data-[stuck]:after");
-    expect(SIDEBAR_STUCK_BACKING).toContain("data-[stuck]:before");
+  test("a pinned heading paints no fill over the chrome", () => {
+    // Over the desktop shell's translucent material, a fill reads as a
+    // shaded band; the rows under the heading are masked instead.
     const sticky = sidebarHeader({ kind: "lane", sticky: true });
-    expect(sticky).toContain(SIDEBAR_STICKY_LANE_FADE);
-    expect(sticky).toContain(SIDEBAR_STUCK_BACKING);
+    expect(sticky).not.toContain("data-[stuck]:before");
+    expect(sticky).not.toContain("data-[stuck]:after");
     expect(sticky).not.toContain("is-stuck");
+  });
+
+  test("masks content under a pinned heading down to its bottom edge", () => {
+    expect(pinnedContentMask(0, false)).toBeNull();
+    expect(pinnedContentMask(-4, false)).toBeNull();
+    expect(pinnedContentMask(20, false)).toBe(
+      "linear-gradient(transparent 20px, #000 32px)",
+    );
+    // A band's content holds its own pinned lanes, which sit right under the
+    // band's heading: a fade there would dim them.
+    expect(pinnedContentMask(20, true)).toBe(
+      "linear-gradient(transparent 20px, #000 20px)",
+    );
   });
 
   test("reveals keyboard-selected rows below the sticky caption", () => {

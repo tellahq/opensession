@@ -1279,7 +1279,8 @@ export const SIDEBAR_AUTOMATION_RUNS = sx(sidebarStyles.automationRuns);
  * slot, and the lane, repo and status headers under it pin one row lower.
  * Every pinning element also carries `data-sticky-head`, which is what
  * Sidebar's scroll listener queries. CSS has no interoperable `:stuck`, so JS
- * toggles `data-stuck` and only then does a header paint its backing. This must
+ * toggles `data-stuck`, and masks the rows under a stuck header
+ * (hooks/useSidebarStickyHeadings.ts): a header paints no fill. This must
  * be a dedicated attribute rather than an imperative class: React owns
  * `className` and rewrites it on a sidebar rerender, even while the scroll
  * position stays put.
@@ -1306,8 +1307,8 @@ export const SIDEBAR_AUTOMATION_RUNS = sx(sidebarStyles.automationRuns);
  */
 /**
  * Tier 2: a lane / repo / status header, pinned one band-row lower. Once
- * pinned, its trailing fade makes the rows passing underneath remain visible
- * without leaving a hard edge below the caption.
+ * pinned, the rows passing underneath are masked out and fade back in just
+ * under the caption.
  *
  * Position only — this used to pin a 30px height on everything it touched,
  * which is where the rail's third and fourth heights came from: a repo band
@@ -1317,11 +1318,6 @@ export const SIDEBAR_AUTOMATION_RUNS = sx(sidebarStyles.automationRuns);
  * rows around them instead of with each other.
  */
 const STICKY_LANE = sidebarStyles.stickyLane;
-
-/** The stuck lane's trailing fade: a pseudo-element keyed on `data-stuck`, so
- *  it stays a utility string. */
-export const SIDEBAR_STICKY_LANE_FADE =
-  "desktop:data-[stuck]:after:pointer-events-none desktop:data-[stuck]:after:absolute desktop:data-[stuck]:after:top-[calc(100%-8px)] desktop:data-[stuck]:after:left-[-400px] desktop:data-[stuck]:after:right-[-400px] desktop:data-[stuck]:after:z-[-1] desktop:data-[stuck]:after:h-5 desktop:data-[stuck]:after:content-[''] desktop:data-[stuck]:after:[background:linear-gradient(to_bottom,var(--sidebar-material),transparent),linear-gradient(to_bottom,var(--sidebar-bg),transparent)]";
 
 /**
  * A status lane nested inside a repo band sits one row lower again — its repo
@@ -1341,7 +1337,7 @@ export interface SidebarHeaderOptions {
    *  automation group, Archived). `lane`: a caption (a status lane, an inbox
    *  band, Snoozed). */
   kind: "item" | "lane";
-  /** Pins under the band slot on desktop, with the stuck backing and fade. */
+  /** Pins under the band slot on desktop, masking the rows under it. */
   sticky?: boolean;
   /** Pins one item lower again, under its repo band's own heading. */
   nested?: boolean;
@@ -1364,8 +1360,6 @@ export function sidebarHeader(options: SidebarHeaderOptions): string {
   const { kind, sticky = false, nested = false } = options;
   return cn(
     kind === "lane" && LANE_NEW_LAYOUT,
-    sticky && SIDEBAR_STICKY_LANE_FADE,
-    sticky && SIDEBAR_STUCK_BACKING,
     sx(
       HEADER,
       kind === "item" ? HEADER_ITEM : HEADER_LANE,
@@ -1397,15 +1391,12 @@ export function sidebarHeader(options: SidebarHeaderOptions): string {
  */
 /**
  * The Automations and Team band headings: the caption, pinned in the band
- * slot on desktop over the stuck backing. A band heading carries no leading
+ * slot on desktop. A band heading carries no leading
  * mark, so on phones it takes the 8px a 22px glyph spends on its own padding
  * before the ink starts.
  */
 export function sidebarBandHeading(): string {
-  return cn(
-    SIDEBAR_STUCK_BACKING,
-    sx(sidebarStyles.bandHeading, sidebarStyles.stickyBand),
-  );
+  return sx(sidebarStyles.bandHeading, sidebarStyles.stickyBand);
 }
 
 export interface SidebarWorkspacesBandOptions {
@@ -1426,14 +1417,11 @@ export interface SidebarWorkspacesBandOptions {
 export function sidebarWorkspacesBand(
   options: SidebarWorkspacesBandOptions,
 ): string {
-  return cn(
-    SIDEBAR_STUCK_BACKING,
-    sx(
-      sidebarStyles.workspacesBand,
-      options.borrowedLens && sidebarStyles.workspacesBandBorrowed,
-      sidebarStyles.stickyBand,
-      options.newLayout && sidebarStyles.placeTitleGap,
-    ),
+  return sx(
+    sidebarStyles.workspacesBand,
+    options.borrowedLens && sidebarStyles.workspacesBandBorrowed,
+    sidebarStyles.stickyBand,
+    options.newLayout && sidebarStyles.placeTitleGap,
   );
 }
 
@@ -1514,19 +1502,6 @@ export function sidebarBandChevron(options: SidebarBandChevronOptions): string {
 /** A toggle that is not SIDEBAR_BAND_TOGGLE (the Workspaces one) wears this
  *  so its chevron still reveals on its hover. */
 export const SIDEBAR_BAND_HOOK = sx(sidebarBandMarker);
-
-/**
- * The full-width surface a header paints once it is actually pinned. It uses
- * the sidebar's exact material and extends one pixel below the host so rows
- * cannot show through its translucent bottom border. The ±400px overhang keeps
- * the backing edge-to-edge regardless of the heading's own inset; the sidebar
- * clips the excess horizontally.
- *
- * This deliberately avoids backdrop-filter. Toggling blur from the scroll
- * listener re-rasterized the whole sidebar mid-scroll on loaded machines.
- */
-export const SIDEBAR_STUCK_BACKING =
-  "desktop:data-[stuck]:before:absolute desktop:data-[stuck]:before:top-0 desktop:data-[stuck]:before:bottom-[-1px] desktop:data-[stuck]:before:left-[-400px] desktop:data-[stuck]:before:right-[-400px] desktop:data-[stuck]:before:z-[-1] desktop:data-[stuck]:before:content-[''] desktop:data-[stuck]:before:[background:linear-gradient(var(--sidebar-material),var(--sidebar-material)),var(--sidebar-bg)]";
 
 /**
  * The live-state dot a row, group header or hover card carries, minus the
