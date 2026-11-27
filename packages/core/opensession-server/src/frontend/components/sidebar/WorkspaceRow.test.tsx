@@ -1,9 +1,6 @@
 import { expect, test } from "bun:test";
 import React, { type ReactElement, type ReactNode } from "react";
-import {
-  SIDEBAR_SWIPE_ACTION_UNSNOOZE,
-  SIDEBAR_SWIPE_ROW,
-} from "../../lib/sidebar-classes";
+import { SIDEBAR_SWIPE_ROW } from "../../lib/sidebar-classes";
 import type { WsRow } from "../../lib/sidebar-types";
 
 Object.assign(globalThis, {
@@ -239,7 +236,8 @@ test("a snoozed row's leading swipe wakes it instead of pinning", () => {
   );
 
   expect(pinAction).toBeUndefined();
-  expect(wakeAction?.props.className).toContain(SIDEBAR_SWIPE_ACTION_UNSNOOZE);
+  // StyleX names a class `<file>__<styles>.<key>` under test.
+  expect(wakeAction?.props.className).toContain("sidebarStyles.swipeUnsnooze");
   wakeAction?.props.onClick?.({ stopPropagation: () => {} });
   expect({ closedSwipe, pinned, unsnoozed }).toEqual({
     closedSwipe: 1,

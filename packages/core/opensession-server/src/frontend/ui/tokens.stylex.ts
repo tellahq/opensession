@@ -61,6 +61,9 @@ export const color = stylex.defineConsts({
   blueSoft: "var(--blue-soft)",
   // Ink on a dark media scrim, where the theme does not apply.
   onScrim: "#fff",
+  /** Ink on a solid red or yellow plate (a phone row's swipe actions). */
+  onRed: "#fff",
+  onYellow: "#17130a",
   transparent: "transparent",
   /** The sidebar's hover wash pre-composited onto its surface: an action
    *  chip floating on a hovered row (see base.css). */
@@ -293,6 +296,8 @@ export const motion = stylex.defineConsts({
   popup: "120ms",
   /** One breath of a liveness dot. */
   pulse: "1.4s",
+  /** A waiting dot breathes a touch quicker: it is asking for someone. */
+  pulseWaiting: "1.2s",
   /** How far a popup or tooltip grows into place. */
   popupScale: "0.97",
   /** A pressed plate that gives slightly, less than a button does. */
@@ -323,6 +328,11 @@ export const focus = stylex.defineConsts({
  * either the way it could with the utilities.
  */
 export const shadow = stylex.defineConsts({
+  /** The glow around a status dot that needs a person: failed, waiting. */
+  glowRed: "0 0 6px var(--red)",
+  glowBlue: "0 0 6px var(--blue)",
+  /** A lane lit up as a drop target. */
+  dropRing: "inset 0 0 0 1px var(--accent, #6b8afd)",
   xs: "0 1px 2px -1px color-mix(in srgb, var(--tw-shadow-color, black) 5%, transparent), 0 2px 5px -3px color-mix(in srgb, var(--tw-shadow-color, black) 7%, transparent)",
   sm: "0 1px 3px -1px color-mix(in srgb, var(--tw-shadow-color, black) 6%, transparent), 0 4px 10px -4px color-mix(in srgb, var(--tw-shadow-color, black) 9%, transparent)",
   ringSm:
@@ -673,4 +683,15 @@ export const sidebarScale = stylex.defineConsts({
   faceRingHover: "var(--sidebar-row-hover)",
   faceRingSelected: "var(--sidebar-row-selected)",
   faceRingSelectedHover: "var(--sidebar-row-selected-hover)",
+  /** A phone row's swipe action: as wide as the drag has pulled it. */
+  swipeActionWidth: "var(--swipe-action-w, 82px)",
+  /** A lane that would take a drop but holds nothing yet. */
+  laneEmpty: "0.55",
+  /** A pinned entry being dragged rides above its neighbours. */
+  dragLayer: "5",
+  /** The urgent count on a band: a glyph metric, and the line it centres on. */
+  attnText: "10px",
+  attnLeading: "16px",
+  /** An automation's runs indent their marks one step past the heading's. */
+  nestedIconLeft: "28px",
 });

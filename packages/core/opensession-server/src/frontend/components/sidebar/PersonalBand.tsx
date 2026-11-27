@@ -6,11 +6,9 @@ import {
   SIDEBAR_HOVER_LAYER,
   SIDEBAR_LANE_COUNT,
   SIDEBAR_LANE_NAME,
-  SIDEBAR_PIN_DRAG_ACTIVE,
-  SIDEBAR_PIN_ENTRY,
-  SIDEBAR_PIN_ENTRY_DRAGGING,
   sidebarChevron,
   sidebarHeader,
+  sidebarPinEntry,
 } from "../../lib/sidebar-classes";
 import type { PersonalBandPinnedEntry } from "../../lib/sidebar-types";
 import { cn } from "../../ui/cn";
@@ -110,11 +108,10 @@ export function PersonalBand({
                   }
                   onDragEnd={pinned.onEntryDragEnd}
                   whileDrag={{ scale: 1.01 }}
-                  className={cn(
-                    SIDEBAR_PIN_ENTRY,
-                    pinned.dragKey && SIDEBAR_PIN_DRAG_ACTIVE,
-                    pinned.dragKey === entry.key && SIDEBAR_PIN_ENTRY_DRAGGING,
-                  )}
+                  className={sidebarPinEntry({
+                    dragActive: !!pinned.dragKey,
+                    dragging: pinned.dragKey === entry.key,
+                  })}
                   onClickCapture={pinned.onEntryClickCapture}
                 >
                   {entry.node}

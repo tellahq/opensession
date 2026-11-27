@@ -1,3 +1,4 @@
+import { StatusDot } from "../../ui/status";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { useShortcutKeys } from "../../hooks/useShortcutBindings";
 import { hasDraft } from "../../lib/drafts";
@@ -6,17 +7,11 @@ import {
   SIDEBAR_RAIL,
   SIDEBAR_RAIL_GAP,
   SIDEBAR_ROW_TITLE,
-  SIDEBAR_STATUS_DOT,
-  SIDEBAR_SWIPE_ACTION,
-  SIDEBAR_SWIPE_ACTION_ARCHIVE,
-  SIDEBAR_SWIPE_ACTION_OPEN,
-  SIDEBAR_SWIPE_ACTION_STAR,
-  SIDEBAR_SWIPE_ACTION_STAR_ON,
-  SIDEBAR_SWIPE_ACTION_TRANSITION,
   SIDEBAR_SWIPE_ROW,
   sidebarRow,
   sidebarRowChip,
   sidebarRowChipStyles,
+  sidebarSwipeAction,
 } from "../../lib/sidebar-classes";
 import {
   isClaimed,
@@ -360,12 +355,11 @@ export function SidebarItem({
       >
         {isPhone && !canKeepInSidebar && (
           <button
-            className={cn(
-              SIDEBAR_SWIPE_ACTION,
-              SIDEBAR_SWIPE_ACTION_ARCHIVE,
-              openSide === "archive" && SIDEBAR_SWIPE_ACTION_OPEN,
-              dragging ? "transition-none" : SIDEBAR_SWIPE_ACTION_TRANSITION,
-            )}
+            className={sidebarSwipeAction({
+              side: "archive",
+              open: openSide === "archive",
+              dragging: dragging,
+            })}
             data-swipe-action="archive"
             onClick={(e) => {
               e.stopPropagation();
@@ -380,12 +374,11 @@ export function SidebarItem({
         )}
         {isPhone && (
           <button
-            className={cn(
-              SIDEBAR_SWIPE_ACTION,
-              pinned ? SIDEBAR_SWIPE_ACTION_STAR_ON : SIDEBAR_SWIPE_ACTION_STAR,
-              openSide === "star" && SIDEBAR_SWIPE_ACTION_OPEN,
-              dragging ? "transition-none" : SIDEBAR_SWIPE_ACTION_TRANSITION,
-            )}
+            className={sidebarSwipeAction({
+              side: pinned ? "starOn" : "star",
+              open: openSide === "star",
+              dragging: dragging,
+            })}
             data-swipe-action="star"
             onClick={(e) => {
               e.stopPropagation();
@@ -498,17 +491,11 @@ export function SidebarItem({
               )}
               {failed && <span className="sr-only">Last run failed</span>}
               {waitingForInput ? (
-                <span
-                  className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.waiting}`}
-                />
+                <StatusDot state="waiting" />
               ) : failed ? (
-                <span
-                  className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.failed}`}
-                />
+                <StatusDot state="failed" />
               ) : session.isRunning ? (
-                <span
-                  className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.running}`}
-                />
+                <StatusDot state="running" />
               ) : (
                 <WsPrStatusMark
                   sessions={[session]}

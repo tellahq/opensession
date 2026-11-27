@@ -954,6 +954,10 @@ html[data-accent="green"] {
     animation-duration: 1.4s !important;
     animation-iteration-count: infinite !important;
   }
+  /* A waiting StatusDot breathes at its own, quicker rate. */
+  [data-pulse="waiting"] {
+    animation-duration: 1.2s !important;
+  }
   /* The caret below also has its animation in this file (see "Transcript
 	   liveness" further down), so this duration restates the rule's value. */
   .pr-bar-checking {

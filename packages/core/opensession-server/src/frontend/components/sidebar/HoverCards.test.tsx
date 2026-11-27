@@ -106,7 +106,8 @@ describe("hover cards drop the repo and the idle timestamp", () => {
         onOpen={() => {}}
       />,
     );
-    const dot = "size-2 shrink-0 rounded-full";
+    // StyleX names a class `<file>__<styles>.<key>` under test.
+    const dot = "dotStyles.dot";
 
     for (const idle of [sessionIdle, workspaceIdle]) {
       expect(idle).not.toContain(dot);
@@ -326,7 +327,7 @@ describe("workspace PR status marks", () => {
         shipsDirectlyToMain
       />,
     );
-    expect(html).toContain("bg-faint");
+    expect(html).toContain("dotStyles.idle");
     expect(html).not.toContain("no pull request");
   });
 });
@@ -350,8 +351,8 @@ describe("workspace run status marks", () => {
         size={18}
       />,
     );
-    expect(html).toContain("bg-yellow");
-    expect(html).not.toContain("bg-red");
+    expect(html).toContain("dotStyles.running");
+    expect(html).not.toContain("dotStyles.failed");
   });
 
   test("a failed top-level session stays red", () => {
@@ -368,8 +369,8 @@ describe("workspace run status marks", () => {
         size={18}
       />,
     );
-    expect(html).toContain("bg-red");
-    expect(html).not.toContain("bg-blue");
+    expect(html).toContain("dotStyles.failed");
+    expect(html).not.toContain("dotStyles.waiting");
   });
 });
 

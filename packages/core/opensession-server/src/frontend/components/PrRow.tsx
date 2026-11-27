@@ -1,3 +1,4 @@
+import { StatusDot } from "../ui/status";
 import React from "react";
 import type { ReviewQueueItem } from "../lib/review-queue";
 import { isBotAuthor } from "../lib/pr-comments";
@@ -5,7 +6,6 @@ import { prStatusMark } from "../lib/pr-status";
 import {
   SIDEBAR_RAIL,
   SIDEBAR_ROW_TITLE,
-  SIDEBAR_STATUS_DOT,
   SIDEBAR_WS_ACTION,
   sidebarRow,
   sidebarRowActions,
@@ -114,10 +114,7 @@ export function PrRow({
 			    The state glyph it replaces is a step away, in the hover card. */}
           <span className={SIDEBAR_RAIL}>
             {needsMyReview ? (
-              <span
-                className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.waiting}`}
-                title="Needs your review"
-              />
+              <StatusDot state="waiting" title="Needs your review" />
             ) : (
               <PrStateMark item={item} size={18} />
             )}

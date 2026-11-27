@@ -5,6 +5,7 @@ import {
   geometry,
   motion,
   radius,
+  shadow,
   space,
   text,
   weight,
@@ -14,7 +15,7 @@ import {
  * Liveness indicators — the pulsing dot and the "Running" pill.
  *
  * Both are yellow, not green: yellow is this app's in-progress tone (the
- * "In progress" lane, `SIDEBAR_STATUS_DOT.running`, the sidebar run clock),
+ * "In progress" lane, the running StatusDot below, the sidebar run clock),
  * while green means a finished, reviewable result — "Ready to merge", an open
  * PR, a passing check. A green dot on running work read as "done" next to
  * those.
@@ -76,6 +77,61 @@ const styles = stylex.create({
     color: color.yellow,
   },
 });
+
+const dotStyles = stylex.create({
+  dot: {
+    width: geometry.dot,
+    height: geometry.dot,
+    flexShrink: 0,
+    borderRadius: radius.pill,
+  },
+  /** Yellow to match the "In progress" lane: green means "In review". */
+  running: {
+    backgroundColor: color.yellow,
+    animationName: pulse,
+    animationDuration: motion.pulse,
+    animationTimingFunction: "ease-in-out",
+    animationIterationCount: "infinite",
+  },
+  /** A question for the person: blue, glowing, breathing. */
+  waiting: {
+    backgroundColor: color.blue,
+    boxShadow: shadow.glowBlue,
+    animationName: pulse,
+    animationDuration: motion.pulseWaiting,
+    animationTimingFunction: "ease-in-out",
+    animationIterationCount: "infinite",
+  },
+  /** A stopped run is actionable, but it is not a question for the person. */
+  failed: { backgroundColor: color.red, boxShadow: shadow.glowRed },
+  idle: { backgroundColor: color.faint },
+});
+
+export type StatusDotState = "running" | "waiting" | "failed" | "idle";
+
+/**
+ * A session's state as the 8px dot a sidebar row or hover card leads with.
+ * The live states breathe, and keep breathing under reduced motion: they
+ * carry `data-pulse` (base-theme.css hands them their duration back), with
+ * the waiting dot's quicker breath keyed on its value.
+ */
+export function StatusDot({
+  state,
+  title,
+}: {
+  state: StatusDotState;
+  title?: string;
+}) {
+  return (
+    <span
+      title={title}
+      data-pulse={
+        state === "running" || state === "waiting" ? state : undefined
+      }
+      {...stylex.props(dotStyles.dot, dotStyles[state])}
+    />
+  );
+}
 
 export function PulseDot({
   size = 8,
