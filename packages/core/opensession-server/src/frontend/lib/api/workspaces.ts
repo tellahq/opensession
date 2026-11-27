@@ -87,6 +87,20 @@ export async function fetchWorkspaces(options?: {
   }
 }
 
+/**
+ * Whether a workspace still exists. The sidebar's list cannot say: it keeps
+ * only workspaces with live work, plus the one it is asked to include, which
+ * is how this asks. Throws when the request fails, so a caller never takes
+ * "could not reach the server" for "gone".
+ */
+export async function workspaceExistsApi(id: string): Promise<boolean> {
+  const data = await request<{ workspaces?: { id: string }[] }>(
+    `/workspaces?active=1&includeWorkspaceId=${encodeURIComponent(id)}`,
+    { label: "Failed to look up the workspace" },
+  );
+  return (data?.workspaces ?? []).some((workspace) => workspace.id === id);
+}
+
 export async function createWorkspaceApi(input: {
   name: string;
   repo?: string;

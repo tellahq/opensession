@@ -6,7 +6,7 @@ import type { useGithubConnectionState } from "../hooks/useGithubConnectionState
 import type { useSessionTabs } from "../hooks/useSessionTabs";
 import type { useSessions } from "../hooks/useSessions";
 import type { RepoInfo } from "../lib/api";
-import { fetchSession, renameSessionApi } from "../lib/api";
+import { fetchSession, renameSessionApi, workspaceExistsApi } from "../lib/api";
 import type { Route } from "../lib/app-route";
 import { conversationExists, type Place } from "../lib/new-layout-place";
 import { NEW_LAYOUT_ROW_HEIGHT } from "../lib/app-shell-classes";
@@ -151,7 +151,10 @@ export function AppSidebar({
           place={places.current}
           onOpenSessions={() =>
             places.openSessions((route) =>
-              conversationExists(route, sessions, workspaces, fetchSession),
+              conversationExists(route, sessions, workspaces, {
+                session: fetchSession,
+                workspace: workspaceExistsApi,
+              }),
             )
           }
           connected={connected}

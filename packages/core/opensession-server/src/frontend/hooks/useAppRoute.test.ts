@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { AppRouteController, type AppRouteBrowser } from "./useAppRoute";
+import type { Route } from "../lib/app-route";
 
 type HistoryCall =
   | { type: "push" | "replace"; state: unknown; path: string }
@@ -13,6 +14,7 @@ type FakeBrowser = {
   storage: Map<string, string>;
   emitPop(path: string, state?: AppRouteBrowser["history"]["state"]): void;
   emitPush(url: string): void;
+  emitDeleted(route: Route): void;
   runTimers(): void;
   setAutoPop(value: boolean): void;
 };
@@ -37,6 +39,7 @@ function fakeBrowser({
   const popListeners = new Set<() => void>();
   const timers: Array<{ callback: () => void; delay: number }> = [];
   let pushListener: ((url: string) => void) | undefined;
+  const deletedListeners = new Set<(route: Route) => void>();
   let autoPop = false;
   let entries = [{ url: new URL(path, origin), state }];
   let index = 0;
@@ -136,6 +139,12 @@ function fakeBrowser({
         if (pushListener === listener) pushListener = undefined;
       };
     },
+    listenForConversationDeleted(listener) {
+      deletedListeners.add(listener);
+      return () => {
+        deletedListeners.delete(listener);
+      };
+    },
     schedule(callback, delay) {
       timers.push({ callback, delay });
     },
@@ -156,6 +165,9 @@ function fakeBrowser({
     },
     emitPush(url) {
       pushListener?.(url);
+    },
+    emitDeleted(route) {
+      for (const listener of [...deletedListeners]) listener(route);
     },
     runTimers() {
       for (const timer of timers.splice(0)) timer.callback();
@@ -999,6 +1011,29 @@ describe("places", () => {
     controller.openSessions(() => true);
     expect(controller.getCurrentRoute()).toEqual({ view: "prs" });
     expect(controller.place).toBe("sessions");
+  });
+
+  test("a delete announced while running is forgotten, until stopped", () => {
+    const fake = fakeBrowser({ path: "/session/mine", state: { d: 0 } });
+    const controller = new AppRouteController(fake.browser);
+    const stop = controller.start(false);
+    controller.navigate({ view: "prs" });
+
+    // Any delete path: the viewer's menu, a tab, a discarded empty tab.
+    fake.emitDeleted({ view: "session", id: "mine" });
+    controller.openSessions(() => true);
+    expect(controller.getCurrentRoute()).toEqual({ view: "prs" });
+    expect(controller.place).toBe("sessions");
+
+    stop();
+    controller.navigate({ view: "session", id: "next" });
+    controller.navigate({ view: "prs" });
+    fake.emitDeleted({ view: "session", id: "next" });
+    controller.openSessions(() => true);
+    expect(controller.getCurrentRoute()).toEqual({
+      view: "session",
+      id: "next",
+    });
   });
 
   test("forgetting another conversation keeps the one to return to", () => {

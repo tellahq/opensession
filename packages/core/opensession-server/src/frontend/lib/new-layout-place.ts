@@ -69,29 +69,43 @@ export function isConversationRoute(route: Route): boolean {
 
 type SessionState = { id: string; archived?: boolean };
 
+/** Asks the server about a conversation the loaded lists leave out. */
+export type ConversationLookUp = {
+  /** The session, or null for an unknown id. */
+  session: (id: string) => Promise<Omit<SessionState, "id"> | null>;
+  /** Whether the workspace still exists. */
+  workspace: (id: string) => Promise<boolean>;
+};
+
 /**
  * Whether a remembered conversation can still be opened: its session is not
  * archived, or its workspace still exists. The Sessions button asks before it
  * returns to one, so a conversation deleted or archived since (here, in
  * another tab, or by a teammate) is not reopened.
  *
- * A session missing from the loaded list is not taken as gone: the list is
- * scoped by the sidebar's lens and by recent activity, so it can leave out a
- * live one. `lookUp` asks the server instead (null for an unknown id).
+ * A conversation missing from the loaded lists is not taken as gone. The
+ * session list is scoped by the sidebar's lens and by recent activity, and
+ * the workspace list keeps only workspaces with live work or the one on
+ * screen, so either can leave out a conversation that still opens. `lookUp`
+ * asks the server instead, and a failed request rejects: unknown is not gone.
  */
 export function conversationExists(
   route: Route,
   sessions: readonly SessionState[],
   workspaces: readonly { id: string }[],
-  lookUp?: (id: string) => Promise<Omit<SessionState, "id"> | null>,
+  lookUp?: ConversationLookUp,
 ): boolean | Promise<boolean> {
   if (route.view === "session") {
     const listed = sessions.find((session) => session.id === route.id);
     if (listed) return !listed.archived;
     if (!lookUp) return false;
-    return lookUp(route.id).then((session) => !!session && !session.archived);
+    return lookUp
+      .session(route.id)
+      .then((session) => !!session && !session.archived);
   }
-  if (route.view === "workspace")
-    return workspaces.some((workspace) => workspace.id === route.id);
+  if (route.view === "workspace") {
+    if (workspaces.some((workspace) => workspace.id === route.id)) return true;
+    return lookUp ? lookUp.workspace(route.id) : false;
+  }
   return false;
 }

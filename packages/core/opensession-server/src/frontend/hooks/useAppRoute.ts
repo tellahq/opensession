@@ -88,6 +88,8 @@ export type AppRouteBrowser = {
   recordRecent(sessionId: string): void;
   listenForPopState(listener: () => void): () => void;
   listenForPushNavigate(listener: (url: string) => void): () => void;
+  /** A conversation was deleted (lib/conversation-deleted.ts). */
+  listenForConversationDeleted(listener: (route: Route) => void): () => void;
   schedule(callback: () => void, delay: number): void;
 };
 
@@ -277,9 +279,16 @@ export class AppRouteController {
           }
         })
       : () => {};
+    // Every delete ends in the delete API, which announces it. Heard here,
+    // the conversation stops being a place to return to before the lists
+    // that still hold it refresh.
+    const stopDeleted = this.browser.listenForConversationDeleted((route) =>
+      this.forgetConversation(route),
+    );
     return () => {
       stopPop();
       stopPush();
+      stopDeleted();
     };
   }
 
@@ -539,6 +548,7 @@ function browserAdapter(currentUser: () => string): AppRouteBrowser {
       return () => window.removeEventListener("popstate", listener);
     },
     listenForPushNavigate: onPushNavigate,
+    listenForConversationDeleted: onConversationDeleted,
     schedule(callback, delay) {
       window.setTimeout(callback, delay);
     },
@@ -579,11 +589,6 @@ export function useAppRoute({
   }));
 
   useLayoutEffect(() => controller.subscribe(setSnapshot), [controller]);
-  useEffect(
-    () =>
-      onConversationDeleted((route) => controller.forgetConversation(route)),
-    [controller],
-  );
   useEffect(() => controller.start(serviceWorker), [controller, serviceWorker]);
   useEffect(
     () => controller.rememberRoute(snapshot.route),

@@ -51,9 +51,10 @@ describe("conversationExists", () => {
       ["shelved", { archived: true }],
     ]);
     const exists = (id: string) =>
-      conversationExists({ view: "session", id }, sessions, workspaces, (key) =>
-        Promise.resolve(server.get(key) ?? null),
-      );
+      conversationExists({ view: "session", id }, sessions, workspaces, {
+        session: (key) => Promise.resolve(server.get(key) ?? null),
+        workspace: () => Promise.resolve(false),
+      });
     expect(exists("live")).toBe(true);
     expect(await exists("hidden")).toBe(true);
     expect(await exists("shelved")).toBe(false);
@@ -65,5 +66,29 @@ describe("conversationExists", () => {
       conversationExists({ view: "workspace", id }, sessions, workspaces);
     expect(exists("ws-1")).toBe(true);
     expect(exists("ws-deleted")).toBe(false);
+  });
+
+  test("an unlisted workspace is looked up, not taken as gone", async () => {
+    // A ticket's workspace with no live session: real, but off the list.
+    const server = new Set(["ws-quiet"]);
+    const exists = (id: string) =>
+      conversationExists({ view: "workspace", id }, sessions, workspaces, {
+        session: () => Promise.resolve(null),
+        workspace: (key) => Promise.resolve(server.has(key)),
+      });
+    expect(exists("ws-1")).toBe(true);
+    expect(await exists("ws-quiet")).toBe(true);
+    expect(await exists("ws-deleted")).toBe(false);
+  });
+
+  test("a failed lookup rejects, so the conversation is not forgotten", async () => {
+    const down = () => Promise.reject(new Error("offline"));
+    const exists = (route: Parameters<typeof conversationExists>[0]) =>
+      conversationExists(route, sessions, workspaces, {
+        session: down,
+        workspace: down,
+      });
+    await expect(exists({ view: "workspace", id: "ws-x" })).rejects.toThrow();
+    await expect(exists({ view: "session", id: "s-x" })).rejects.toThrow();
   });
 });
