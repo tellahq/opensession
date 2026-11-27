@@ -219,6 +219,10 @@ export function AppSidebar({
             // lights, so this row clears only what is left of them.
             newLayout &&
               "[html.wco_&]:!pl-[max(calc(env(titlebar-area-x,78px)-52px),calc(var(--sidebar-icon-left)-8px))]",
+            // The same tighter controls the pane's side of this row has
+            // (VIEWER_HEADER): 28px, with 20px glyphs.
+            newLayout &&
+              "[&_:is(button,a)]:size-7 [&_:is(button,a)]:min-h-7 [&_svg]:size-5",
             // No scroll hairline: the tools sit fixed below this row and
             // only the workspace list scrolls, so nothing passes under it.
             // The brand row (and its account menu) is a desktop

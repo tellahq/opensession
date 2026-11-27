@@ -133,9 +133,12 @@ export const TAB_STRIP_ATTACHED =
  *  covers it. The scroll masks itself when it overflows, which makes it a
  *  stacking context of its own, so the lift has to be here and not on the
  *  tab. The 10px at the end is room for the last tab's flare, which the
- *  scroll would otherwise clip. The 24px at the start is that, the panel's
- *  own 10px corner, and 4px of straight line between the two curves. */
-export const TAB_SCROLL_ATTACHED = "relative z-[31] items-stretch pl-6 pr-2.5";
+ *  scroll would otherwise clip. There is none at the start: the first tab
+ *  stands on the panel's left edge (see the flares below). With the sidebar
+ *  collapsed the strip starts further in, past the re-open control, and the
+ *  first tab gets its flare and the room for it back. */
+export const TAB_SCROLL_ATTACHED =
+  "relative z-[31] items-stretch pr-2.5 [.app-body.sidebar-collapsed_&]:pl-2.5";
 
 export const TAB_GROUP_ATTACHED =
   "relative inline-flex flex-none items-stretch gap-0.5";
@@ -169,6 +172,10 @@ export const TAB_GROUP_ATTACHED =
  * They belong to this wrapper, not to the tab. A tab can clip itself (an
  * empty tab does, for its opening morph), and a flare is outside its box.
  * The wrapper is the same size and never clips.
+ *
+ * The first tab has no flare on its left. It stands on the panel's left
+ * edge, so its side is that edge carried straight up, and the panel gives up
+ * its own corner under it (`--panel-tl`, WORKSPACE_SHELL).
  */
 const TAB_ITEM_ATTACHED_FLARES =
   "[--tab-fill:var(--bg)] data-[colored]:[--tab-fill:color-mix(in_srgb,var(--tab-color)_14%,var(--bg))] " +
@@ -176,7 +183,8 @@ const TAB_ITEM_ATTACHED_FLARES =
   "before:[background:radial-gradient(circle_at_0_0,transparent_8.75px,var(--tab-edge,var(--divider))_9.25px,var(--tab-edge,var(--divider))_9.75px,var(--tab-fill)_10.25px)] " +
   "after:pointer-events-none after:absolute after:bottom-0 after:-right-[9px] after:z-[1] after:hidden after:size-2.5 after:content-[''] " +
   "after:[background:radial-gradient(circle_at_100%_0,transparent_8.75px,var(--tab-edge,var(--divider))_9.25px,var(--tab-edge,var(--divider))_9.75px,var(--tab-fill)_10.25px)] " +
-  "[&:has(>[aria-selected=true])]:before:block [&:has(>[aria-selected=true])]:after:block";
+  "[&:has(>[aria-selected=true])]:before:block [&:has(>[aria-selected=true])]:after:block " +
+  "[.app-body:not(.sidebar-collapsed)_&]:first:before:hidden!";
 
 export const TAB_ITEM_ATTACHED = `session-tab-reorder relative inline-flex shrink-0 items-stretch ${TAB_ITEM_ATTACHED_FLARES}`;
 

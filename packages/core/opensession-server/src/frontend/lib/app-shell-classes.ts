@@ -120,14 +120,20 @@ export const WORKSPACE_SHELL =
   // Under a row it starts at the row's bottom edge. The tab strip sits above
   // it (TAB_SCROLL_ATTACHED), so the active tab can cover the line.
   "new-layout:before:pointer-events-none new-layout:before:absolute new-layout:before:inset-0 new-layout:before:z-30 " +
-  "new-layout:before:rounded-[10px] new-layout:before:border new-layout:before:border-[color:var(--tab-edge)] new-layout:before:content-[''] " +
+  "new-layout:before:rounded-[10px] new-layout:before:rounded-tl-[var(--panel-tl)] new-layout:before:border new-layout:before:border-[color:var(--tab-edge)] new-layout:before:content-[''] " +
   "new-layout:[&:has([data-pane-top-row]>:not(:empty))]:before:top-[calc(var(--desktop-header-h)-1px)] " +
   // The bottom corners are this box's own, so its clip rounds them. The top
   // ones are under the row and inside the box, so the chrome is painted back
   // over the content outside each arc.
   "new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:pointer-events-none new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:absolute new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:inset-x-0 new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:top-[calc(var(--desktop-header-h)-1px)] " +
   "new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:z-30 new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:h-2.5 new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:content-[''] " +
-  "new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:[background:radial-gradient(circle_at_100%_100%,transparent_9.75px,var(--sidebar-bg)_10.25px)_left_top/10px_10px_no-repeat,radial-gradient(circle_at_0_100%,transparent_9.75px,var(--sidebar-bg)_10.25px)_right_top/10px_10px_no-repeat] " +
+  "new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:[background:radial-gradient(circle_at_100%_100%,transparent_9.75px,var(--sidebar-bg)_10.25px)_left_top/var(--panel-tl)_var(--panel-tl)_no-repeat,radial-gradient(circle_at_0_100%,transparent_9.75px,var(--sidebar-bg)_10.25px)_right_top/10px_10px_no-repeat] " +
+  // The first tab stands on the panel's left edge. While it is the open
+  // one its side is that edge carried straight up, so the panel has no corner
+  // of its own there. Not with the sidebar collapsed, where the strip starts
+  // further in and the corner is the panel's again.
+  "new-layout:[--panel-tl:10px] " +
+  "[.app-body:not(.sidebar-collapsed)_&]:[&:has([data-pane-top-row-tabs]_.session-tab-reorder:first-child>[aria-selected=true])]:[--panel-tl:0px] " +
   // A page with no row is the whole panel: it keeps the same gap at the top
   // and rounds its own top corners.
   "new-layout:[&:not(:has([data-pane-top-row]>:not(:empty)))]:mt-1.5 new-layout:[&:not(:has([data-pane-top-row]>:not(:empty)))]:rounded-t-[10px] " +
