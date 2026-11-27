@@ -114,6 +114,7 @@ import {
   PiResourceLockManager,
   piResourceLockTools,
 } from "./pi-resource-locks";
+import { piSecretRedactionTools } from "./pi-secret-redaction";
 import {
   guardStripeApprovalCall,
   recordStripeDraftInvoice,
@@ -983,7 +984,10 @@ export function piCodemodeExtension(
           if (key === "registerTool") {
             return (tool: ToolDefinition<any, any, any>) =>
               target.registerTool(
-                piSteeringBoundaryTools([tool], steeringPending)[0]!,
+                piSteeringBoundaryTools(
+                  piSecretRedactionTools([tool]),
+                  steeringPending,
+                )[0]!,
               );
           }
           const value = Reflect.get(target, key);
@@ -3224,9 +3228,11 @@ async function* runPiAttempt(
     });
     const resourceLocks = new PiResourceLockManager();
     const customTools = piSteeringBoundaryTools(
-      piGuidanceDiscoveryTools(
-        piResourceLockTools(baseCustomTools, resourceLocks, cwd),
-        guidanceDiscovery,
+      piSecretRedactionTools(
+        piGuidanceDiscoveryTools(
+          piResourceLockTools(baseCustomTools, resourceLocks, cwd),
+          guidanceDiscovery,
+        ),
       ),
       () => steeringBoundaryPending,
     );
