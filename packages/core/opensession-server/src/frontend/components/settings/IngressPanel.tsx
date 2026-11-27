@@ -445,7 +445,7 @@ function PrivateAppSetup({
           <Button
             variant="soft"
             disabled={busy || !savedDomain}
-            className="phone:min-h-11 phone:w-full phone:justify-center"
+            className="phone:w-full phone:justify-center"
             onClick={onVerify}
           >
             {action === "verify" ? "Checking…" : "Verify address"}
@@ -459,7 +459,7 @@ function PrivateAppSetup({
               !settings.custom.caddyInstalled ||
               !settings.app.domain.legoInstalled
             }
-            className="phone:min-h-11 phone:w-full phone:justify-center"
+            className="phone:w-full phone:justify-center"
             onClick={onSetup}
           >
             {action === "setup"
@@ -544,7 +544,7 @@ function PrivateAppSetup({
                   !dnsRecord ||
                   !settings.custom.caddyInstalled
                 }
-                className="phone:min-h-11 phone:w-full phone:justify-center"
+                className="phone:w-full phone:justify-center"
                 onClick={onSaveManual}
               >
                 {action === "save" ? "Saving…" : "Save app domain"}
@@ -1335,7 +1335,7 @@ export function IngressPanel({
                                 settings.exposure !== method ||
                                 !settings.publicBaseUrl
                               }
-                              className="phone:min-h-11 phone:w-full phone:justify-center"
+                              className="phone:w-full phone:justify-center"
                               onClick={() =>
                                 void run("test", testPublicIngress, (next) =>
                                   next.health === "ready"
@@ -1353,7 +1353,7 @@ export function IngressPanel({
                             <Button
                               variant="primary"
                               disabled={!!busy || !!missingTool || invalidInput}
-                              className="phone:min-h-11 phone:w-full phone:justify-center"
+                              className="phone:w-full phone:justify-center"
                               onClick={() => void applyMethod()}
                             >
                               {busy === "apply"

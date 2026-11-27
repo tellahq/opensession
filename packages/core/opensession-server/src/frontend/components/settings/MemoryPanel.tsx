@@ -1031,7 +1031,7 @@ function CategoryPage({
               <Button
                 size="sm"
                 variant="ghost"
-                className="group phone:min-h-11"
+                className="group"
                 aria-label={`Clear ${selectedIds.size} selected memories`}
                 title="Clear selection"
                 onClick={() => setSelectedIds(new Set())}
@@ -1067,7 +1067,7 @@ function CategoryPage({
           {selectedIds.size >= 2 && (
             <Button
               size="sm"
-              className="hidden phone:inline-flex phone:min-h-11 phone:w-11"
+              className="hidden phone:inline-flex"
               icon={<IconPlus size={18} />}
               aria-label="Add memory"
               title="Add memory"

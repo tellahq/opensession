@@ -369,7 +369,6 @@ export function GithubAccountApps({
                           <Button
                             size="sm"
                             variant="primary"
-                            className="phone:min-h-11"
                             render={
                               <a
                                 href={`${BASE_PATH}/api/connections/github/oauth/start?appId=${encodeURIComponent(app.id)}&returnTo=${encodeURIComponent(returnTo)}`}

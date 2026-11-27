@@ -109,7 +109,7 @@ parts, `Confirm`, sharing `ui/dialog-styles.ts`); and the leaves
 (`ui/settings.tsx`: the header, group label, plate, rows, hint and form
 parts); and the async states (`ui/state.tsx`: `EmptyState`, `LoadingState`,
 `InlineAlert` and the skeletons, whose bars take a `width` and a `line`
-rather than width utilities). The class-string helpers (`fieldClasses`,
+rather than width utilities); and `Toast`. The class-string helpers (`fieldClasses`,
 `selectTriggerClasses`, `popupSurfaceClasses`, `collapsiblePanelClasses`,
 `listRowClass`, `SETTING_ROW`, `rowMenuTriggerClasses` and friends) now
 return StyleX class names, so the raw controls that use them moved too.
@@ -122,8 +122,8 @@ form titles' leading by `[data-setting-title]`. The inset rule between a
 card's rows and the control column's `[&>*]` cap stay utilities, because they
 style the caller's children.
 
-Still Tailwind inside `ui/`: `toast.tsx`, `date-picker.tsx`,
-`swipe-deck.tsx`, `top-bar.tsx` and `overlay-action.tsx`. Each is tied to
+Still Tailwind inside `ui/`: `date-picker.tsx`, `swipe-deck.tsx`,
+`top-bar.tsx` and `overlay-action.tsx`. Each is tied to
 feature code through descendant selectors or shared `lib/*-classes.ts`
 strings (the app header's control classes, a caller's `group/overlay-action`),
 so they move with their call-site areas rather than alone.

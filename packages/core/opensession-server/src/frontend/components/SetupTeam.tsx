@@ -447,7 +447,7 @@ export function GithubMemberDialog({
           <Button
             variant="primary"
             type="submit"
-            className="w-full phone:min-h-11"
+            className="w-full"
             disabled={!github.trim() || saving}
           >
             {saving ? "Adding…" : actionLabel}
@@ -458,7 +458,7 @@ export function GithubMemberDialog({
               <Button
                 variant="primary"
                 type="button"
-                className="w-full phone:min-h-11"
+                className="w-full"
                 icon={
                   <CopyCheck
                     copied={inviteCopy.copied}

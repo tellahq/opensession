@@ -274,6 +274,11 @@ export const motion = stylex.defineConsts({
   breath: "2s",
   breathEase: "cubic-bezier(0.4, 0, 0.6, 1)",
   ghostDelay: "180ms",
+  /** A toast settling into its stack: a long, soft ease-out. */
+  toastEase: "cubic-bezier(0.23, 1, 0.32, 1)",
+  /** How far a toast rises and grows as it arrives and leaves. */
+  toastDrop: "0 8px",
+  toastScale: "0.96",
 });
 
 /** The one keyboard focus treatment: a 2px accent-ink ring, 2px out. */
@@ -439,6 +444,13 @@ export const geometry = stylex.defineConsts({
   /** The transcript's reading column, and the space between two turns. */
   sessionColumn: "var(--session-col)",
   turnGap: "18px",
+  /** A toast: as wide as its message, up to 480px, never past the window. */
+  toastMaxWidth: "min(480px, calc(100vw - 32px))",
+  toastMaxWidthPhone: "calc(100vw - 24px)",
+  toastFrontHeight: "var(--toast-frontmost-height)",
+  /** How far each toast behind the front one peeks out, and shrinks. */
+  toastStackStep: "8px",
+  toastStackShrink: "0.04",
 });
 
 /** The one breakpoint (720px, inclusive on the phone side) and hover gating. */
@@ -480,4 +492,5 @@ export const media = stylex.defineConsts({
   narrow: "@media (width < 560px)",
   /** Where a two-column form folds to one. */
   small: "@media (width < 40rem)",
+  reducedMotion: "@media (prefers-reduced-motion: reduce)",
 });

@@ -124,7 +124,7 @@ export function WorkspaceSettingsDialog({
                 <Button
                   variant="default"
                   caret
-                  className="w-full justify-start phone:min-h-11"
+                  className="w-full justify-start"
                   icon={
                     sharing.collaborators.length ? (
                       <span className="flex -space-x-1.5">

@@ -540,7 +540,6 @@ function FilterMenu<Value extends string>({
             type="button"
             variant="ghost"
             size="sm"
-            className="phone:min-h-11"
             icon={icon}
             caret
             data-session-filter

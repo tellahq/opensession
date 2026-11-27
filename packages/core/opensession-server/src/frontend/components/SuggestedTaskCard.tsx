@@ -122,7 +122,7 @@ export function SuggestedTaskCard({
           <Button
             variant="primary"
             size="sm"
-            className="rounded-l-none border-l-on-accent/25 phone:min-h-11 phone:w-11"
+            className="rounded-l-none border-l-on-accent/25"
             icon={<IconPencil />}
             aria-label="Edit before starting"
             title="Edit before starting"
