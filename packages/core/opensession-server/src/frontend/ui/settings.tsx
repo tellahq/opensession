@@ -1,15 +1,37 @@
 import * as React from "react";
-import { Card } from "./card";
+import * as stylex from "@stylexjs/stylex";
 import { cn } from "./cn";
+import { SELECTABLE } from "./dialog-styles";
 import { fieldClasses } from "./input";
 import { markTileClass } from "../lib/mark-tile";
 import { Skeleton, SkeletonBar } from "./state";
+import { sx } from "./sx";
+import {
+  color,
+  corner,
+  geometry,
+  leading,
+  media,
+  motion,
+  radius,
+  space,
+  text,
+  tracking,
+  weight,
+} from "./tokens.stylex";
+
+/**
+ * True inside the phone settings sheet, which names the section in its own
+ * nav bar, so a panel's header leaves its h1 out there.
+ */
+export const SettingsInSheet = React.createContext(false);
 
 export function SettingsPanel({
   className,
+  style,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
-  return <div className={cn("w-full max-w-[720px]", className)} {...props} />;
+  return <div {...props} {...sx(styles.panel, className, style)} />;
 }
 
 /**
@@ -23,33 +45,30 @@ export function SettingsHeader({
   description,
   actions,
   className,
+  style,
   ...props
 }: Omit<React.ComponentPropsWithoutRef<"header">, "title"> & {
   title: React.ReactNode;
   description?: React.ReactNode;
   actions?: React.ReactNode;
 }) {
+  const inSheet = React.useContext(SettingsInSheet);
   return (
-    <header
-      className={cn(
-        "mb-5 flex items-start justify-between gap-4 px-5",
-        className,
-      )}
-      {...props}
-    >
-      <div className="min-w-0">
-        <h1 className="m-0 text-page-title font-title tracking-[-0.02em] text-fg [.settings-sheet_&]:hidden">
-          {title}
-        </h1>
+    <header {...props} {...sx(styles.header, className, style)}>
+      <div {...stylex.props(styles.shrinkable)}>
+        {!inSheet && <h1 {...stylex.props(styles.pageTitle)}>{title}</h1>}
         {description && (
-          <p className="m-0 mt-1.5 text-supporting leading-relaxed text-dim [.settings-sheet_&]:mt-0">
+          <p
+            {...sx(
+              [styles.headerDescription, !inSheet && styles.belowTitle],
+              SELECTABLE,
+            )}
+          >
             {description}
           </p>
         )}
       </div>
-      {actions && (
-        <div className="flex shrink-0 items-center gap-2">{actions}</div>
-      )}
+      {actions && <div {...stylex.props(styles.actions)}>{actions}</div>}
     </header>
   );
 }
@@ -63,24 +82,18 @@ export function SettingsHeader({
 export function SettingsGroupLabel({
   actions,
   className,
+  style,
   children,
   ...props
 }: React.ComponentPropsWithoutRef<"div"> & { actions?: React.ReactNode }) {
   return (
     <div
       data-settings-group-label=""
-      className={cn(
-        // mt-9: a group's card and the hint under it read as one block, so
-        // the space above the next label is what separates the groups.
-        "mb-2 mt-9 flex min-h-6 flex-wrap items-center justify-between gap-x-2 gap-y-1.5 px-5 text-label font-semibold text-faint",
-        className,
-      )}
       {...props}
+      {...sx(styles.groupLabel, className, style)}
     >
-      <span className="min-w-0">{children}</span>
-      {actions && (
-        <div className="flex shrink-0 items-center gap-1.5">{actions}</div>
-      )}
+      <span {...stylex.props(styles.shrinkable)}>{children}</span>
+      {actions && <div {...stylex.props(styles.groupActions)}>{actions}</div>}
     </div>
   );
 }
@@ -89,10 +102,10 @@ export function SettingsGroupLabel({
  * Together they separate a group from the page, so a page of settings reads as
  * a few blocks rather than a stack of outlined boxes.
  *
- * Card supplies the borderless base, so this adds the corner, fill and outline.
- * A settings group is a CONTAINER of rows rather than a single card, and
- * the scale gives a container the largest step: `rounded-2xl` (22px × --rf), the
- * same corner the phone sheet's section list already carries.
+ * It is `Card`'s surface with three changes: the corner, the fill and the
+ * outline. A settings group is a CONTAINER of rows rather than a single card,
+ * and the scale gives a container the largest step: `radius.xxl` (22px × --rf),
+ * the same corner the phone sheet's section list already carries.
  *
  * The fill is `settings-plate`, not `raised`: a page of these is a column of
  * blocks, and at the full L1 grey the column reads as the page's material
@@ -112,9 +125,11 @@ export function SettingsGroupLabel({
  * close the block's shape, and the fill under it is already saying where the
  * block is. At the row weight the outline was the loudest thing on the page.
  * `divider-soft` is `line` at a third, so it lands well under the rules it
- * contains and the block reads as one object rather than a frame. */
-const settingsSurface =
-  "rounded-2xl border border-divider-soft bg-settings-plate";
+ * contains and the block reads as one object rather than a frame.
+ *
+ * `data-settings-surface` is the hook a host restyles every plate inside it
+ * by (onboarding flattens them onto its own panel). */
+const SURFACE = { "data-settings-surface": "" };
 
 /**
  * The rule between two groups of rows: inset from the card's edges, so it
@@ -124,8 +139,12 @@ const settingsSurface =
  *
  * It is drawn as a pseudo-element rather than a `border-t`, because a border
  * cannot be inset: it would need padding on the row, which would move the
- * text. `inset-x-5` matches `SettingRow`'s own `px-5`, so the rule starts where
- * a title starts and ends where a control ends.
+ * text. `inset-x-5` matches `SettingRow`'s own 20px inline padding, so the
+ * rule starts where a title starts and ends where a control ends.
+ *
+ * It stays a Tailwind string because it styles the card's children, which a
+ * StyleX style on the card cannot reach, and the children are whatever the
+ * caller puts there, not only `SettingRow`.
  */
 const settingGroupRule =
   "[&>*+*]:relative [&>*+*]:before:pointer-events-none [&>*+*]:before:absolute [&>*+*]:before:inset-x-5 [&>*+*]:before:top-0 [&>*+*]:before:h-px [&>*+*]:before:bg-line [&>*+*]:before:content-['']";
@@ -143,17 +162,18 @@ const settingGroupRule =
  */
 export function SettingCard({
   className,
+  style,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
   return (
-    <Card
-      className={cn(
-        settingsSurface,
-        "overflow-hidden",
-        settingGroupRule,
-        className,
-      )}
+    <div
+      {...SURFACE}
       {...props}
+      {...sx(
+        [styles.surface, styles.clip],
+        cn(settingGroupRule, className),
+        style,
+      )}
     />
   );
 }
@@ -165,9 +185,10 @@ export function SettingCard({
  */
 export function SettingGroup({
   className,
+  style,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
-  return <div className={cn("flex flex-col", className)} {...props} />;
+  return <div {...props} {...sx(styles.group, className, style)} />;
 }
 
 /**
@@ -215,9 +236,9 @@ export function SettingCardSkeleton({
     <Skeleton label={label} className={className} {...props}>
       <SettingCard>
         {GHOST_ROWS.slice(0, rows).map((row) => (
-          <SettingRow
+          <div
             key={row.title}
-            className={cn(icon !== undefined && "gap-3")}
+            {...stylex.props(styles.row, icon !== undefined && styles.rowTile)}
           >
             {icon !== undefined && (
               // Inline size, like IconTile's own: the tile scale is a
@@ -228,10 +249,10 @@ export function SettingCardSkeleton({
               />
             )}
             <SettingRowText>
-              <SkeletonBar className={row.title} />
-              <SkeletonBar className={cn("mt-2 h-2.5", row.description)} />
+              <SkeletonBar width={row.title} />
+              <SkeletonBar width={row.description} line="supporting" />
             </SettingRowText>
-          </SettingRow>
+          </div>
         ))}
       </SettingCard>
     </Skeleton>
@@ -243,15 +264,14 @@ export function SettingCardSkeleton({
  * row has — the title is a repo or a tool, the description is a line of prose
  * about it. Ragged for the reason ui/state gives, and paired rather than drawn
  * from one pool so a title never comes out longer than the sentence under it.
- * Literal utilities: Tailwind only compiles class names it can find.
  */
 const GHOST_ROWS = [
-  { title: "w-[34%]", description: "w-[78%]" },
-  { title: "w-[22%]", description: "w-[54%]" },
-  { title: "w-[41%]", description: "w-[67%]" },
-  { title: "w-[27%]", description: "w-[85%]" },
-  { title: "w-[36%]", description: "w-[61%]" },
-  { title: "w-[24%]", description: "w-[73%]" },
+  { title: "34%", description: "78%" },
+  { title: "22%", description: "54%" },
+  { title: "41%", description: "67%" },
+  { title: "27%", description: "85%" },
+  { title: "36%", description: "61%" },
+  { title: "24%", description: "73%" },
 ];
 
 /** A section for content that isn't a list of rows — an editor, a picker, a
@@ -259,9 +279,16 @@ const GHOST_ROWS = [
  * the page's rhythm instead of floating on it. */
 export function SettingsSection({
   className,
+  style,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
-  return <Card className={cn(settingsSurface, "p-5", className)} {...props} />;
+  return (
+    <div
+      {...SURFACE}
+      {...props}
+      {...sx([styles.surface, styles.sectionPad], className, style)}
+    />
+  );
 }
 
 /**
@@ -279,71 +306,63 @@ export function SettingsSection({
  */
 export function SettingRow({
   className,
+  style,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
-  return (
-    <div
-      className={cn(
-        "flex flex-wrap items-center gap-x-4 gap-y-2.5 px-5 py-4",
-        className,
-      )}
-      {...props}
-    />
-  );
+  return <div {...props} {...sx(styles.row, className, style)} />;
 }
 
 export function SettingRowText({
   className,
+  style,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
-  return (
-    <div
-      className={cn("min-w-0 flex-1 phone:min-w-[45%]", className)}
-      {...props}
-    />
-  );
+  return <div {...props} {...sx(styles.rowText, className, style)} />;
 }
 
 export function SettingRowTitle({
   className,
+  style,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
   // data-setting-title mirrors data-setting-description below: a hook a
   // surface can scale from outside (FirstMile promotes these one heading
-  // step) without the primitive knowing who is hosting it.
+  // step, Settings sets their leading) without the primitive knowing who is
+  // hosting it.
   return (
     <div
       data-setting-title=""
-      className={cn("text-item-title font-medium text-fg", className)}
       {...props}
+      {...sx(styles.rowTitle, className, style)}
     />
   );
 }
 
 export function SettingRowDescription({
   className,
+  style,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
   return (
     <div
       data-setting-description=""
-      className={cn("mt-1 text-supporting text-dim phone:text-meta", className)}
       {...props}
+      {...sx(styles.rowDescription, cn(SELECTABLE, className), style)}
     />
   );
 }
 
+/** `phone:[&>*]:max-w-full` stays a utility: it reaches the control's own
+ *  children, which a style on this box cannot. */
 export function SettingRowControl({
   className,
+  style,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
   return (
     <div
-      className={cn(
-        "ml-auto shrink-0 phone:max-w-[50%] phone:[&>*]:max-w-full",
-        className,
-      )}
       {...props}
+      {...sx(styles.rowControl, cn("phone:[&>*]:max-w-full", className), style)}
     />
   );
 }
@@ -356,32 +375,23 @@ export function SettingRowControl({
  */
 export function StatusChip({ label, dot }: { label: string; dot: string }) {
   return (
-    <span className="flex flex-shrink-0 items-center gap-1.5 text-label text-dim">
-      <span className="h-1.5 w-1.5 rounded-full" style={{ background: dot }} />
+    <span {...stylex.props(styles.chip)}>
+      <span {...stylex.props(styles.chipDot)} style={{ background: dot }} />
       {label}
     </span>
   );
 }
 
-/** The ⋯ trigger for a row's overflow menu: quiet until hovered or open.
- *  Shared so a row's actions look the same on every settings page.
- *
- *  `before:-inset-2` grows the 28px box to a 44px target without moving
- *  anything, which a row whose only path to an action is this menu needs on a
- *  phone. It is the last thing in the row, so the grown area overlaps only the
- *  status text beside it. */
-export const rowMenuTriggerClasses =
-  "relative flex size-7 shrink-0 items-center justify-center rounded-md text-faint transition-[color,background] before:absolute before:-inset-2 before:content-[''] hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg";
-
 export function SettingsHint({
   className,
+  style,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
   return (
     <div
       data-settings-hint=""
-      className={cn("mt-2 px-5 text-supporting text-faint", className)}
       {...props}
+      {...sx(styles.hint, cn(SELECTABLE, className), style)}
     />
   );
 }
@@ -403,58 +413,46 @@ export const settingsSelectClass = fieldClasses("md", "cursor-pointer");
 
 export function SettingsForm({
   className,
+  style,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
   return (
     <div
-      className={cn(
-        settingsSurface,
-        "mb-3 flex flex-col gap-3.5 p-5",
-        className,
-      )}
+      {...SURFACE}
       {...props}
+      {...sx([styles.surface, styles.form], className, style)}
     />
   );
 }
 
 export function SettingsFormTitle({
   className,
+  style,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
   return (
     <div
       data-setting-title=""
-      className={cn("mb-4 text-item-title font-semibold text-fg", className)}
       {...props}
+      {...sx(styles.formTitle, className, style)}
     />
   );
 }
 
 export function SettingsFormRow({
   className,
+  style,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
-  return (
-    <div
-      className={cn("grid grid-cols-2 gap-3 max-sm:grid-cols-1", className)}
-      {...props}
-    />
-  );
+  return <div {...props} {...sx(styles.formRow, className, style)} />;
 }
 
 export function SettingsField({
   className,
+  style,
   ...props
 }: React.ComponentPropsWithoutRef<"label">) {
-  return (
-    <label
-      className={cn(
-        "mb-3 flex min-w-0 flex-col gap-1.5 text-label font-medium text-dim",
-        className,
-      )}
-      {...props}
-    />
-  );
+  return <label {...props} {...sx(styles.field, className, style)} />;
 }
 
 export const settingsInputClass = fieldClasses("md");
@@ -465,9 +463,203 @@ export const settingsTextareaClass = fieldClasses("md", "resize-y py-2");
 
 export function SettingsFormActions({
   className,
+  style,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
-  return (
-    <div className={cn("mt-1 flex justify-end gap-2", className)} {...props} />
-  );
+  return <div {...props} {...sx(styles.formActions, className, style)} />;
 }
+
+const styles = stylex.create({
+  panel: { width: "100%", maxWidth: geometry.settingsColumn },
+  header: {
+    marginBottom: space.s20,
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: space.s16,
+    paddingInline: space.s20,
+  },
+  shrinkable: { minWidth: 0 },
+  pageTitle: {
+    margin: space.s0,
+    fontSize: text.pageTitle,
+    fontWeight: weight.title,
+    letterSpacing: tracking.title,
+    color: color.fg,
+  },
+  // 400, like every supporting line: base.css runs the app at 500.
+  headerDescription: {
+    margin: space.s0,
+    fontSize: text.label,
+    fontWeight: weight.regular,
+    lineHeight: leading.relaxed,
+    color: color.dim,
+  },
+  belowTitle: { marginTop: space.s6 },
+  actions: {
+    display: "flex",
+    flexShrink: 0,
+    alignItems: "center",
+    gap: space.s8,
+  },
+  // A group's card and the hint under it read as one block, so the space
+  // above the next label is what separates the groups.
+  groupLabel: {
+    marginBottom: space.s8,
+    marginTop: geometry.settingsGroupGap,
+    display: "flex",
+    minHeight: space.s24,
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "space-between",
+    columnGap: space.s8,
+    rowGap: space.s6,
+    paddingInline: space.s20,
+    fontSize: text.label,
+    fontWeight: weight.heading,
+    color: color.faint,
+  },
+  groupActions: {
+    display: "flex",
+    flexShrink: 0,
+    alignItems: "center",
+    gap: space.s6,
+  },
+  surface: {
+    borderRadius: radius.xxl,
+    ["cornerShape"]: corner.squircle,
+    borderWidth: geometry.hairline,
+    borderStyle: "solid",
+    borderColor: color.dividerSoft,
+    backgroundColor: color.settingsPlate,
+  },
+  clip: { overflow: "hidden" },
+  sectionPad: { padding: space.s20 },
+  group: { display: "flex", flexDirection: "column" },
+  row: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    columnGap: space.s16,
+    rowGap: space.s10,
+    paddingInline: space.s20,
+    paddingBlock: space.s16,
+  },
+  rowTile: { columnGap: space.s12, rowGap: space.s12 },
+  rowText: {
+    minWidth: { default: 0, [media.phone]: "45%" },
+    flex: "1 1 0%",
+  },
+  rowTitle: {
+    fontSize: text.itemTitle,
+    fontWeight: weight.medium,
+    color: color.fg,
+  },
+  rowDescription: {
+    marginTop: space.s4,
+    fontSize: { default: text.label, [media.phone]: text.meta },
+    fontWeight: weight.regular,
+    color: color.dim,
+  },
+  rowControl: {
+    marginInlineStart: "auto",
+    flexShrink: 0,
+    maxWidth: { default: null, [media.phone]: "50%" },
+  },
+  chip: {
+    display: "flex",
+    flexShrink: 0,
+    alignItems: "center",
+    gap: space.s6,
+    fontSize: text.label,
+    color: color.dim,
+  },
+  chipDot: {
+    width: geometry.dotSmall,
+    height: geometry.dotSmall,
+    borderRadius: radius.pill,
+  },
+  rowMenuTrigger: {
+    position: "relative",
+    display: "flex",
+    width: geometry.rowMenuTrigger,
+    height: geometry.rowMenuTrigger,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.md,
+    ["cornerShape"]: corner.squircle,
+    color: {
+      default: color.faint,
+      ":hover": { default: null, [media.hover]: color.fg },
+      ":is([data-popup-open])": color.fg,
+    },
+    backgroundColor: {
+      default: null,
+      ":hover": { default: null, [media.hover]: color.hover },
+      ":is([data-popup-open])": color.hover,
+    },
+    transitionProperty: "color, background",
+    transitionDuration: motion.micro,
+    transitionTimingFunction: motion.ease,
+    "::before": {
+      content: "''",
+      position: "absolute",
+      inset: `calc(-1 * ${space.s8})`,
+    },
+  },
+  hint: {
+    marginTop: space.s8,
+    paddingInline: space.s20,
+    fontSize: text.label,
+    fontWeight: weight.regular,
+    color: color.faint,
+  },
+  form: {
+    marginBottom: space.s12,
+    display: "flex",
+    flexDirection: "column",
+    gap: space.s14,
+    padding: space.s20,
+  },
+  formTitle: {
+    marginBottom: space.s16,
+    fontSize: text.itemTitle,
+    fontWeight: weight.strong,
+    color: color.fg,
+  },
+  formRow: {
+    display: "grid",
+    gridTemplateColumns: {
+      default: "repeat(2, minmax(0, 1fr))",
+      [media.small]: "repeat(1, minmax(0, 1fr))",
+    },
+    gap: space.s12,
+  },
+  field: {
+    marginBottom: space.s12,
+    display: "flex",
+    minWidth: 0,
+    flexDirection: "column",
+    gap: space.s6,
+    fontSize: text.label,
+    fontWeight: weight.medium,
+    color: color.dim,
+  },
+  formActions: {
+    marginTop: space.s4,
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: space.s8,
+  },
+});
+
+/** The ⋯ trigger for a row's overflow menu: quiet until hovered or open.
+ *  Shared so a row's actions look the same on every settings page.
+ *
+ *  The `::before` grows the 28px box to a 44px target without moving
+ *  anything, which a row whose only path to an action is this menu needs on a
+ *  phone. It is the last thing in the row, so the grown area overlaps only the
+ *  status text beside it. */
+export const rowMenuTriggerClasses =
+  stylex.props(styles.rowMenuTrigger).className ?? "";

@@ -87,6 +87,10 @@ export const color = stylex.defineConsts({
   tooltipFg: "var(--tooltip-fg)",
   segmentedKnob: "var(--segmented-knob-surface)",
   segmentedKnobEdge: "var(--segmented-knob-edge)",
+  /** A settings group's plate: lighter than `raised`, held by a soft edge. */
+  settingsPlate: "var(--settings-plate)",
+  /** `line` at a third: closes a block's shape without reading as a rule. */
+  dividerSoft: "var(--divider-soft)",
 });
 
 /**
@@ -207,6 +211,8 @@ export const font = stylex.defineConsts({
 /** Letter spacing. `tight` pulls small bold labels together a hair. */
 export const tracking = stylex.defineConsts({
   tight: "-0.01em",
+  /** A page's own title. */
+  title: "-0.02em",
 });
 
 export const weight = stylex.defineConsts({
@@ -231,6 +237,8 @@ export const opacity = stylex.defineConsts({
   glyphOnTone: "0.8",
   /** A trailing glyph that only firms up under the pointer. */
   glyphResting: "0.45",
+  /** The body under an alert's title, a step behind it. */
+  secondary: "0.9",
 });
 
 export const motion = stylex.defineConsts({
@@ -262,6 +270,10 @@ export const motion = stylex.defineConsts({
   /** A pressed plate that gives slightly, less than a button does. */
   pressPlateScale: "0.98",
   tooltipScale: "0.96",
+  /** A skeleton's slow breath, and how long it holds back before showing. */
+  breath: "2s",
+  breathEase: "cubic-bezier(0.4, 0, 0.6, 1)",
+  ghostDelay: "180ms",
 });
 
 /** The one keyboard focus treatment: a 2px accent-ink ring, 2px out. */
@@ -411,6 +423,22 @@ export const geometry = stylex.defineConsts({
   tick: "17px",
   /** A row's leading glyph. */
   rowIcon: "16px",
+  /** A settings page's reading column. */
+  settingsColumn: "720px",
+  /** The space above a settings group's label: what separates the groups. */
+  settingsGroupGap: "36px",
+  /** A row's quiet overflow-menu trigger. */
+  rowMenuTrigger: "28px",
+  /** A status chip's dot. */
+  dotSmall: "6px",
+  /** A link's underline, clear of descenders. */
+  underlineOffset: "2px",
+  /** Ghost rows: the padding of the row each one stands in for. */
+  ghostCardPadBlock: "11px",
+  ghostRowPadBlock: "13px",
+  /** The transcript's reading column, and the space between two turns. */
+  sessionColumn: "var(--session-col)",
+  turnGap: "18px",
 });
 
 /** The one breakpoint (720px, inclusive on the phone side) and hover gating. */
@@ -450,4 +478,6 @@ export const media = stylex.defineConsts({
   forcedColors: "@media (forced-colors: active)",
   /** A short or narrow window that pulls a palette up. */
   narrow: "@media (width < 560px)",
+  /** Where a two-column form folds to one. */
+  small: "@media (width < 40rem)",
 });

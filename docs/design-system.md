@@ -105,17 +105,28 @@ parts, `Confirm`, sharing `ui/dialog-styles.ts`); and the leaves
 (`PulseDot`, `WorkingPill`, `ListRow`, the page layout and header,
 `FloatingStatus`, `OverflowFadeText`, the collapsible panel, `Disclosure`,
 `Fold`, `CopyCheck`, `DeviceCode`, `TextShimmer`, the setting rows,
-`HoldToConfirmButton`'s fill, `DataGrid`). The class-string helpers
-(`fieldClasses`, `selectTriggerClasses`, `popupSurfaceClasses`,
-`collapsiblePanelClasses`, `listRowClass`, `SETTING_ROW` and friends) now
+`HoldToConfirmButton`'s fill, `DataGrid`); the settings primitives
+(`ui/settings.tsx`: the header, group label, plate, rows, hint and form
+parts); and the async states (`ui/state.tsx`: `EmptyState`, `LoadingState`,
+`InlineAlert` and the skeletons, whose bars take a `width` and a `line`
+rather than width utilities). The class-string helpers (`fieldClasses`,
+`selectTriggerClasses`, `popupSurfaceClasses`, `collapsiblePanelClasses`,
+`listRowClass`, `SETTING_ROW`, `rowMenuTriggerClasses` and friends) now
 return StyleX class names, so the raw controls that use them moved too.
 
-Still Tailwind inside `ui/`: `settings.tsx`, `state.tsx`, `toast.tsx`,
-`date-picker.tsx`, `swipe-deck.tsx`, `top-bar.tsx` and `overlay-action.tsx`.
-Each is tied to feature code through descendant selectors or shared
-`lib/*-classes.ts` strings (the settings plate's `bg-settings-plate` hook,
-`.settings-sheet` ancestors, the app header's control classes), so they move
-with their call-site areas rather than alone.
+Hooks the settings port replaced: the phone sheet tells a panel's header to
+leave its h1 out through the `SettingsInSheet` context, not a
+`.settings-sheet` ancestor selector; a host restyles the plates inside it by
+`[data-settings-surface]`, not `.bg-settings-plate`; and Settings sets row and
+form titles' leading by `[data-setting-title]`. The inset rule between a
+card's rows and the control column's `[&>*]` cap stay utilities, because they
+style the caller's children.
+
+Still Tailwind inside `ui/`: `toast.tsx`, `date-picker.tsx`,
+`swipe-deck.tsx`, `top-bar.tsx` and `overlay-action.tsx`. Each is tied to
+feature code through descendant selectors or shared `lib/*-classes.ts`
+strings (the app header's control classes, a caller's `group/overlay-action`),
+so they move with their call-site areas rather than alone.
 
 Other shared pieces: `ui/sx.ts` (merges a primitive's StyleX props with a
 caller's legacy `className`, and defines the `LayoutStyles` type every

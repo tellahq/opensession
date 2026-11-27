@@ -30,6 +30,7 @@ import {
   type ToolSectionKey,
 } from "../lib/settings-sections";
 import { Input } from "../ui/input";
+import { SettingsInSheet } from "../ui/settings";
 import { PhonePage, SheetIconButton } from "../ui/sheet";
 import { PhoneTopBar, PhoneTopBarTitle } from "../ui/top-bar";
 import { Connections } from "./Connections";
@@ -87,8 +88,11 @@ const GALLERY_SECTIONS = new Set<SettingsSectionKey>(["library", "setup"]);
 // fields, and tool panels. Body roles share 150% leading; heading and title
 // roles stay compact at 110%. The descendant rules deliberately beat local
 // one-off leading utilities so every section follows the page-level rhythm.
+// `data-setting-title` is how a StyleX row or form title is named here, since
+// it carries no `text-item-title` class.
 const SETTINGS_LEADING =
   "leading-normal [&_*]:!leading-normal " +
+  "[&_[data-setting-title]]:!leading-[1.1] " +
   "[&_h1]:!leading-[1.1] [&_h2]:!leading-[1.1] [&_h3]:!leading-[1.1] " +
   "[&_h4]:!leading-[1.1] [&_h5]:!leading-[1.1] [&_h6]:!leading-[1.1] " +
   "[&_.font-title]:!leading-[1.1] [&_.text-item-title]:!leading-[1.1] " +
@@ -451,7 +455,7 @@ function MobileSettings({
       className={cn("settings-sheet", SETTINGS_LEADING)}
     >
       {(dismiss) => (
-        <>
+        <SettingsInSheet.Provider value>
           <PhoneTopBar>
             {detail && (
               <SheetIconButton
@@ -463,7 +467,7 @@ function MobileSettings({
               </SheetIconButton>
             )}
             {/* The sheet's own title, and the only one on phones: the panel
-						    h1 hides in here (`[.settings-sheet_&]:hidden` in ui/settings).
+						    h1 stays out in here (`SettingsInSheet` in ui/settings).
 						    This compact navigation chrome uses the 17px body step instead of
 						    the larger desktop page-heading scale. */}
             <PhoneTopBarTitle>
@@ -575,7 +579,7 @@ function MobileSettings({
               )}
             </div>
           </div>
-        </>
+        </SettingsInSheet.Provider>
       )}
     </PhonePage>
   );

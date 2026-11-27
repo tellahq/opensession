@@ -1,12 +1,30 @@
 import * as React from "react";
+import * as stylex from "@stylexjs/stylex";
+import type { StyleXStyles } from "@stylexjs/stylex";
 import {
   IconInfoCircle,
   IconWarningTriangle,
   IconX,
 } from "../components/icons";
 import { cn } from "./cn";
+import { SELECTABLE } from "./dialog-styles";
+import { focusStyles } from "./focus-styles";
 import { PageLoader } from "./page-loader";
 import { Spinner } from "./spinner";
+import { sx } from "./sx";
+import {
+  color,
+  corner,
+  geometry,
+  leading,
+  media,
+  motion,
+  opacity,
+  radius,
+  space,
+  text,
+  weight,
+} from "./tokens.stylex";
 
 /**
  * Async-state primitives — one language for "nothing here yet", "fetching"
@@ -49,17 +67,243 @@ import { Spinner } from "./spinner";
  * own surface. Never the meaning: the same state reads the same everywhere. */
 export type StatePlacement = "block" | "card" | "row";
 
-const placements: Record<StatePlacement, string> = {
+/** A tone's ink at a fixed strength over whatever is behind it. */
+const ink = (c: string, pct: number) =>
+  `color-mix(in oklab, ${c} ${pct}%, transparent)`;
+
+const pulse = stylex.keyframes({ "50%": { opacity: 0.5 } });
+
+const styles = stylex.create({
   // Stands in for a whole region: the `.loading`/`.empty` look (40px of air,
   // centred) so it reads as "this area is empty", not "this row is".
-  block: "flex flex-col items-center justify-center gap-2 py-10 text-center",
+  block: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space.s8,
+    paddingBlock: space.s40,
+    textAlign: "center",
+  },
   // Stands in for a card: borrows SettingCard's surface so the page's rhythm
   // survives the emptiness.
-  card: "rounded-2xl bg-raised px-5 py-4",
+  card: {
+    borderRadius: radius.xxl,
+    ["cornerShape"]: corner.squircle,
+    backgroundColor: color.raised,
+    paddingInline: space.s20,
+    paddingBlock: space.s16,
+  },
   // Lives inside a card's row list: matches SettingRow's padding so it lands
   // on the same left edge as the rows it replaces.
-  row: "px-5 py-4",
-};
+  row: { paddingInline: space.s20, paddingBlock: space.s16 },
+
+  emptyIcon: { color: color.faint },
+  emptyTitle: {
+    fontSize: text.label,
+    fontWeight: weight.medium,
+    color: color.fg,
+  },
+  emptyBody: {
+    fontSize: text.label,
+    fontWeight: weight.regular,
+    lineHeight: leading.snug,
+    color: color.dim,
+  },
+  measure: { maxWidth: "46ch" },
+  actionBlock: { marginTop: space.s4 },
+  actionInline: { marginTop: space.s8 },
+  loadingLabel: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: space.s8,
+    fontSize: text.label,
+    fontWeight: weight.regular,
+    color: color.faint,
+  },
+  dim: { color: color.dim },
+
+  // The delay sits on the outside and the breath on the inside: both
+  // animate opacity, so they cannot share an element.
+  ghostFrame: {
+    animationName: "ghost-in",
+    animationDuration: motion.standard,
+    animationTimingFunction: motion.ease,
+    animationDelay: motion.ghostDelay,
+    animationFillMode: "both",
+  },
+  ghost: {
+    animationName: pulse,
+    animationDuration: motion.breath,
+    animationTimingFunction: motion.breathEase,
+    animationIterationCount: "infinite",
+  },
+  bar: {
+    height: space.s12,
+    borderRadius: radius.sm,
+    ["cornerShape"]: corner.squircle,
+    backgroundColor: color.hover,
+  },
+  barSupporting: { marginTop: space.s8, height: space.s10 },
+  barWidth: (width: string) => ({ width }),
+
+  column: { display: "flex", flexDirection: "column" },
+  cardsGap: { gap: space.s6 },
+  bareGap: { gap: space.s2 },
+  ghostCard: {
+    borderRadius: radius.control,
+    ["cornerShape"]: corner.squircle,
+    borderWidth: geometry.hairline,
+    borderStyle: "solid",
+    borderColor: color.line,
+    backgroundColor: color.panel,
+    paddingInline: space.s14,
+    paddingBlock: geometry.ghostCardPadBlock,
+  },
+  ghostRow: {
+    paddingInline: space.s14,
+    paddingBlock: geometry.ghostRowPadBlock,
+  },
+  ghostRowDivided: {
+    borderTopWidth: geometry.hairline,
+    borderTopStyle: "solid",
+    borderTopColor: color.line,
+  },
+  turn: {
+    marginInline: "auto",
+    marginBottom: geometry.turnGap,
+    display: "flex",
+    width: "100%",
+    maxWidth: geometry.sessionColumn,
+    flexDirection: "column",
+  },
+  turnLines: { gap: space.s10 },
+  bubble: (height: string, width: string) => ({ height, width }),
+  bubbleBar: {
+    alignSelf: "flex-end",
+    borderRadius: radius.lg,
+  },
+
+  plain: {
+    display: "flex",
+    alignItems: "center",
+    gap: space.s8,
+    fontSize: text.label,
+    fontWeight: weight.regular,
+    color: color.dim,
+  },
+  shrinkable: { minWidth: 0 },
+  noShrink: { flexShrink: 0 },
+  plainTitle: { fontWeight: weight.medium, color: color.fg },
+  plainRetry: {
+    flexShrink: 0,
+    whiteSpace: "nowrap",
+    borderRadius: radius.sm,
+    ["cornerShape"]: corner.squircle,
+    fontWeight: weight.medium,
+    color: color.fg,
+    textUnderlineOffset: geometry.underlineOffset,
+    textDecorationLine: {
+      default: null,
+      ":hover": { default: null, [media.hover]: "underline" },
+    },
+  },
+  dismiss: {
+    position: "relative",
+    display: "flex",
+    width: space.s24,
+    height: space.s24,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.pill,
+    "::before": {
+      content: "''",
+      position: "absolute",
+      inset: `calc(-1 * ${space.s8})`,
+    },
+  },
+  plainDismiss: {
+    marginInlineStart: "auto",
+    color: {
+      default: color.faint,
+      ":hover": { default: null, [media.hover]: color.fg },
+    },
+    transitionProperty:
+      "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke",
+    transitionDuration: motion.micro,
+    transitionTimingFunction: motion.ease,
+  },
+
+  box: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: space.s8,
+    borderRadius: radius.md,
+    ["cornerShape"]: corner.squircle,
+    borderWidth: geometry.hairline,
+    borderStyle: "solid",
+    paddingInline: space.s12,
+    paddingBlock: space.s10,
+    fontSize: text.label,
+    lineHeight: leading.label,
+  },
+  error: {
+    borderColor: ink(color.red, 40),
+    backgroundColor: color.redSoft,
+    color: color.red,
+  },
+  warn: {
+    borderColor: ink(color.yellow, 40),
+    backgroundColor: color.yellowSoft,
+    color: color.yellow,
+  },
+  info: {
+    borderColor: ink(color.blue, 40),
+    backgroundColor: color.blueSoft,
+    color: color.blue,
+  },
+  errorInk: { color: color.red },
+  warnInk: { color: color.yellow },
+  infoInk: { color: color.blue },
+  pressable: { cursor: "pointer" },
+  boxBody: { minWidth: 0, flex: "1 1 0%" },
+  boxTitle: { fontWeight: weight.medium },
+  boxTitled: { marginTop: space.s2, opacity: opacity.secondary },
+  boxRetry: {
+    flexShrink: 0,
+    alignSelf: "center",
+    whiteSpace: "nowrap",
+    fontSize: text.label,
+    fontWeight: weight.medium,
+    textDecorationLine: "underline",
+    textUnderlineOffset: geometry.underlineOffset,
+  },
+  // Visually 24px so it sits inside the box's 10px padding; the
+  // pseudo-element takes the hit area out to 40px.
+  boxDismiss: { marginInlineEnd: `calc(-1 * ${space.s4})` },
+  fades: {
+    opacity: {
+      default: opacity.glyphOnTone,
+      ":hover": { default: null, [media.hover]: 1 },
+    },
+    transitionProperty: "opacity",
+    transitionDuration: motion.micro,
+    transitionTimingFunction: motion.ease,
+  },
+  fadesMore: {
+    opacity: {
+      default: opacity.glyphMuted,
+      ":hover": { default: null, [media.hover]: 1 },
+    },
+  },
+});
+
+const placements = {
+  block: styles.block,
+  card: styles.card,
+  row: styles.row,
+} satisfies Record<StatePlacement, StyleXStyles>;
 
 export function EmptyState({
   icon,
@@ -67,6 +311,7 @@ export function EmptyState({
   action,
   placement = "block",
   className,
+  style,
   children,
   ...props
 }: Omit<React.ComponentPropsWithoutRef<"div">, "title"> & {
@@ -80,22 +325,21 @@ export function EmptyState({
 }) {
   const block = placement === "block";
   return (
-    <div className={cn(placements[placement], className)} {...props}>
-      {block && icon && <span className="text-faint">{icon}</span>}
-      {title && (
-        <div className="text-control-label font-medium text-fg">{title}</div>
-      )}
+    <div {...props} {...sx(placements[placement], className, style)}>
+      {block && icon && <span {...stylex.props(styles.emptyIcon)}>{icon}</span>}
+      {title && <div {...stylex.props(styles.emptyTitle)}>{title}</div>}
       {children && (
-        <div
-          className={cn(
-            "text-supporting leading-snug text-dim",
-            block && "max-w-[46ch]",
-          )}
-        >
+        <div {...sx([styles.emptyBody, block && styles.measure], SELECTABLE)}>
           {children}
         </div>
       )}
-      {action && <div className={cn(block ? "mt-1" : "mt-2")}>{action}</div>}
+      {action && (
+        <div
+          {...stylex.props(block ? styles.actionBlock : styles.actionInline)}
+        >
+          {action}
+        </div>
+      )}
     </div>
   );
 }
@@ -104,6 +348,7 @@ export function LoadingState({
   placement = "block",
   spinner = true,
   className,
+  style,
   children,
   ...props
 }: React.ComponentPropsWithoutRef<"div"> & {
@@ -122,11 +367,13 @@ export function LoadingState({
     <div
       role="status"
       aria-live="polite"
-      className={cn(placements[placement], className)}
       {...props}
+      {...sx(placements[placement], className, style)}
     >
-      {block && spinner && <PageLoader className="text-dim" />}
-      <div className="inline-flex items-center gap-2 text-supporting text-faint">
+      {block && spinner && (
+        <PageLoader className={stylex.props(styles.dim).className} />
+      )}
+      <div {...sx(styles.loadingLabel, SELECTABLE)}>
         {!block && spinner && <Spinner />}
         {children}
       </div>
@@ -155,6 +402,7 @@ export function LoadingState({
 export function Skeleton({
   label = "Loading",
   className,
+  style,
   children,
   ...props
 }: React.ComponentPropsWithoutRef<"div"> & { label?: string }) {
@@ -163,44 +411,61 @@ export function Skeleton({
       role="status"
       aria-live="polite"
       aria-label={label}
-      className="[animation:ghost-in_var(--dur)_var(--ease)_180ms_both]"
+      {...stylex.props(styles.ghostFrame)}
       {...props}
     >
-      <div className={cn("animate-pulse", className)}>{children}</div>
+      <div {...sx(styles.ghost, className, style)}>{children}</div>
     </div>
   );
 }
 
 /**
  * One bar of ghost ink — a line of text that hasn't arrived. The height is a
- * title's; pass `h-2.5` for the supporting line under it. Every skeleton draws
- * with this so they share a weight and a corner, and so a change to what a
- * placeholder is made of is one edit.
+ * title's; `line="supporting"` is the shorter line under one, with the space
+ * above it. Every skeleton draws with this so they share a weight and a
+ * corner, and so a change to what a placeholder is made of is one edit.
  */
 export function SkeletonBar({
+  width,
+  line = "title",
   className,
+  style,
   ...props
-}: React.ComponentPropsWithoutRef<"div">) {
+}: React.ComponentPropsWithoutRef<"div"> & {
+  /** How much of the row the line it stands in for takes, e.g. `"62%"`. */
+  width?: string;
+  line?: "title" | "supporting";
+}) {
   return (
-    <div className={cn("h-3 rounded-sm bg-hover", className)} {...props} />
+    <div
+      {...props}
+      {...sx(
+        [
+          styles.bar,
+          line === "supporting" && styles.barSupporting,
+          width !== undefined && styles.barWidth(width),
+        ],
+        className,
+        style,
+      )}
+    />
   );
 }
 
 /**
  * Ragged on purpose — a column of equal bars reads as a component, and a
  * component that never resolves reads as a bug. Uneven ones read as titles
- * about to arrive. Literal utilities rather than a built string or an inline
- * width: Tailwind only compiles class names it can find in the source.
+ * about to arrive.
  */
 const SKELETON_WIDTHS = [
-  "w-[62%]",
-  "w-[41%]",
-  "w-[73%]",
-  "w-[52%]",
-  "w-[35%]",
-  "w-[66%]",
-  "w-[47%]",
-  "w-[58%]",
+  "62%",
+  "41%",
+  "73%",
+  "52%",
+  "35%",
+  "66%",
+  "47%",
+  "58%",
 ];
 
 /**
@@ -221,6 +486,7 @@ export function ListSkeleton({
   rowClassName,
   label = "Loading",
   className,
+  style,
   ...props
 }: React.ComponentPropsWithoutRef<"div"> & {
   rows?: number;
@@ -240,31 +506,30 @@ export function ListSkeleton({
   return (
     <Skeleton
       label={label}
-      className={cn(
-        "flex flex-col",
-        cards
-          ? "gap-1.5"
-          : divided
-            ? "[&>*+*]:border-t [&>*+*]:border-line"
-            : "gap-0.5",
-        className,
-      )}
       {...props}
+      {...sx(
+        [
+          styles.column,
+          cards && styles.cardsGap,
+          !cards && !divided && styles.bareGap,
+        ],
+        className,
+        style,
+      )}
     >
       {Array.from({ length: rows }, (_, i) => (
         <div
           key={i}
-          className={cn(
-            cards
-              ? "rounded-control border border-line bg-panel px-3.5 py-[11px]"
-              : "px-3.5 py-[13px]",
+          {...sx(
+            [
+              cards ? styles.ghostCard : styles.ghostRow,
+              divided && i > 0 && styles.ghostRowDivided,
+            ],
             rowClassName,
           )}
         >
-          <SkeletonBar
-            className={SKELETON_WIDTHS[i % SKELETON_WIDTHS.length]}
-          />
-          {cards && <SkeletonBar className="mt-2 h-2.5 w-[26%]" />}
+          <SkeletonBar width={SKELETON_WIDTHS[i % SKELETON_WIDTHS.length]} />
+          {cards && <SkeletonBar width="26%" line="supporting" />}
         </div>
       ))}
     </Skeleton>
@@ -289,32 +554,35 @@ export function ListSkeleton({
  * a turn to scroll to.
  */
 const TRANSCRIPT_GHOST_TURNS: {
-  bubble: string;
+  bubble: { height: string; width: string };
   lines: string[];
 }[] = [
-  { bubble: "h-[42px] w-[42%]", lines: ["w-[68%]", "w-[84%]", "w-[51%]"] },
-  { bubble: "h-[32px] w-[28%]", lines: ["w-[76%]", "w-[38%]"] },
+  { bubble: { height: "42px", width: "42%" }, lines: ["68%", "84%", "51%"] },
+  { bubble: { height: "32px", width: "28%" }, lines: ["76%", "38%"] },
 ];
 
 export function TranscriptSkeleton({
   className,
+  style,
   label = "Loading conversation",
   ...props
 }: React.ComponentPropsWithoutRef<"div"> & { label?: string }) {
   return (
-    <Skeleton
-      label={label}
-      className={cn("flex flex-col", className)}
-      {...props}
-    >
-      {TRANSCRIPT_GHOST_TURNS.map((turn) => (
-        <React.Fragment key={turn.bubble}>
-          <div className="mx-auto mb-4.5 flex w-full max-w-[var(--session-col)] flex-col">
-            <SkeletonBar className={cn("self-end rounded-lg", turn.bubble)} />
+    <Skeleton label={label} {...props} {...sx(styles.column, className, style)}>
+      {TRANSCRIPT_GHOST_TURNS.map(({ bubble, lines }) => (
+        <React.Fragment key={bubble.width}>
+          <div {...stylex.props(styles.turn)}>
+            <div
+              {...stylex.props(
+                styles.bar,
+                styles.bubbleBar,
+                styles.bubble(bubble.height, bubble.width),
+              )}
+            />
           </div>
-          <div className="mx-auto mb-4.5 flex w-full max-w-[var(--session-col)] flex-col gap-2.5">
-            {turn.lines.map((width) => (
-              <SkeletonBar key={width} className={width} />
+          <div {...stylex.props(styles.turn, styles.turnLines)}>
+            {lines.map((width) => (
+              <SkeletonBar key={width} width={width} />
             ))}
           </div>
         </React.Fragment>
@@ -326,14 +594,12 @@ export function TranscriptSkeleton({
 type AlertVariant = "error" | "warn" | "info";
 
 // Border at 40% of the hue over its soft fill — the `.form-error` recipe,
-// generalised. Spelled `border-<tone>/40`, the same way `Badge`'s outline set
-// spells it; a hand-written color-mix here is a second vocabulary for one
-// recipe.
-const alertVariants: Record<AlertVariant, string> = {
-  error: "border-red/40 bg-red-soft text-red",
-  warn: "border-yellow/40 bg-yellow-soft text-yellow",
-  info: "border-blue/40 bg-blue-soft text-blue",
-};
+// generalised, with the same `ink` mix `Badge`'s outline set uses.
+const alertVariants = {
+  error: styles.error,
+  warn: styles.warn,
+  info: styles.info,
+} satisfies Record<AlertVariant, StyleXStyles>;
 
 // The plain appearance drops the box for one quiet line led by a tinted glyph,
 // for a note under a control (a composer) where a filled box would outweigh
@@ -347,11 +613,11 @@ const alertGlyphs: Record<
   info: IconInfoCircle,
 };
 
-const alertTextColors: Record<AlertVariant, string> = {
-  error: "text-red",
-  warn: "text-yellow",
-  info: "text-blue",
-};
+const alertTextColors = {
+  error: styles.errorInk,
+  warn: styles.warnInk,
+  info: styles.infoInk,
+} satisfies Record<AlertVariant, StyleXStyles>;
 
 export function InlineAlert({
   variant = "error",
@@ -361,6 +627,7 @@ export function InlineAlert({
   onRetry,
   retryLabel = "Try again",
   className,
+  style,
   children,
   onClick,
   ...props
@@ -380,25 +647,24 @@ export function InlineAlert({
     return (
       <div
         role="alert"
-        className={cn(
-          "flex items-center gap-2 text-supporting text-dim",
-          className,
-        )}
         onClick={onClick}
         {...props}
+        {...sx(styles.plain, cn(SELECTABLE, className), style)}
       >
         <Glyph
           aria-hidden
-          className={cn("shrink-0", alertTextColors[variant])}
+          className={
+            stylex.props(styles.noShrink, alertTextColors[variant]).className
+          }
         />
-        <div className="min-w-0">
-          {title && <span className="font-medium text-fg">{title} </span>}
+        <div {...stylex.props(styles.shrinkable)}>
+          {title && <span {...stylex.props(styles.plainTitle)}>{title} </span>}
           {children}
         </div>
         {onRetry && (
           <button
             type="button"
-            className="focus-ring shrink-0 whitespace-nowrap rounded-sm font-medium text-fg underline-offset-2 hover:underline"
+            {...stylex.props(styles.plainRetry, focusStyles.ring)}
             onClick={onRetry}
           >
             {retryLabel}
@@ -408,7 +674,11 @@ export function InlineAlert({
           <button
             type="button"
             aria-label="Dismiss"
-            className="focus-ring relative ml-auto flex size-6 shrink-0 items-center justify-center rounded-full text-faint transition-colors hover:text-fg before:absolute before:-inset-2 before:content-['']"
+            {...stylex.props(
+              styles.dismiss,
+              styles.plainDismiss,
+              focusStyles.ring,
+            )}
             onClick={onDismiss}
           >
             <IconX size={20} />
@@ -420,28 +690,32 @@ export function InlineAlert({
   return (
     <div
       role="alert"
-      className={cn(
-        "flex items-start gap-2 rounded-md border px-3 py-2.5 text-sm",
-        alertVariants[variant],
-        onDismiss && "cursor-pointer",
-        className,
-      )}
       onClick={(e) => {
         onClick?.(e);
         onDismiss?.();
       }}
       {...props}
+      {...sx(
+        [styles.box, alertVariants[variant], onDismiss && styles.pressable],
+        className,
+        style,
+      )}
     >
-      <div className="min-w-0 flex-1">
-        {title && <div className="font-medium">{title}</div>}
-        <div className={cn("min-w-0", title && "mt-0.5 opacity-90")}>
+      <div {...stylex.props(styles.boxBody)}>
+        {title && <div {...stylex.props(styles.boxTitle)}>{title}</div>}
+        <div
+          {...stylex.props(
+            styles.shrinkable,
+            Boolean(title) && styles.boxTitled,
+          )}
+        >
           {children}
         </div>
       </div>
       {onRetry && (
         <button
           type="button"
-          className="focus-ring shrink-0 self-center whitespace-nowrap text-supporting font-medium underline underline-offset-2 opacity-80 transition-opacity hover:opacity-100"
+          {...stylex.props(styles.boxRetry, styles.fades, focusStyles.ring)}
           onClick={(e) => {
             e.stopPropagation();
             onRetry();
@@ -454,9 +728,13 @@ export function InlineAlert({
         <button
           type="button"
           aria-label="Dismiss"
-          // Visually 24px so it sits inside the box's 10px padding; the
-          // pseudo-element takes the hit area out to 40px.
-          className="focus-ring relative -mr-1 flex size-6 shrink-0 items-center justify-center rounded-full opacity-60 transition-opacity hover:opacity-100 before:absolute before:-inset-2 before:content-['']"
+          {...stylex.props(
+            styles.dismiss,
+            styles.boxDismiss,
+            styles.fades,
+            styles.fadesMore,
+            focusStyles.ring,
+          )}
           onClick={(e) => {
             e.stopPropagation();
             onDismiss();
