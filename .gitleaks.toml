@@ -7,6 +7,12 @@ useDefault = true
 description = "Intentional secret-shaped inputs verify that memory extraction drops credentials"
 paths = ['''^test/memory-bench/secrets-exclusion\.json$''']
 
+[[allowlists]]
+description = "Made-up PEM blocks and a Stripe-shaped test key are the inputs of the tool-output redaction tests"
+paths = [
+  '''^packages/core/opensession-server/src/server/pi-secret-redaction\.test\.ts$''',
+]
+
 [[rules]]
 id = "generic-api-key"
 
