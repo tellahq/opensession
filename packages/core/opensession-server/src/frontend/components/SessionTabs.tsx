@@ -50,10 +50,11 @@ import {
   TAB_SWATCH,
   TAB_SWATCH_NONE,
   TAB_SWATCH_ON,
-  TAB_INLINE_CONTROL,
+  TAB_CLOSE_INLINE,
   TAB_INLINE_CONTROLS,
   TAB_TITLE,
   TAB_TITLE_INLINE_CONTROLS,
+  TAB_WITH_MENU,
   TAB_VICON,
   tabClass,
   tabCloseClass,
@@ -657,7 +658,7 @@ export function SessionTabs({
               <button
                 type="button"
                 className={
-                  menuInTab ? TAB_INLINE_CONTROL : tabCloseClass(isPhone)
+                  menuInTab ? TAB_CLOSE_INLINE : tabCloseClass(isPhone)
                 }
                 style={
                   emptyVisual && !isPhone && !menuInTab
@@ -720,6 +721,7 @@ export function SessionTabs({
                             attached,
                           }),
                           emptyVisual && !menuInTab && "desktop:pr-7",
+                          menuInTab && TAB_WITH_MENU,
                         )}
                         style={style}
                         onClick={() => onSelect(session)}

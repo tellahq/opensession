@@ -470,15 +470,21 @@ export const tabCloseClass = (phone: boolean) =>
 
 /**
  * The new layout's active session tab carries the session's ⋯ menu, then
- * close, both always shown and in flow after the title. One 20px round box
- * each, so the pair reads as the tab's own controls rather than the header's.
+ * close, both always shown and in flow after the title. The ⋯ is a real
+ * button with a 28px squircle plate, nearly the tab's own height; close is
+ * just its glyph, inking up on hover with no plate of its own.
  */
-export const TAB_INLINE_CONTROLS = "-mr-1 flex flex-none items-center gap-px";
-export const TAB_INLINE_CONTROL =
-  "inline-flex size-5 shrink-0 cursor-pointer items-center justify-center " +
-  "rounded-full border-0 bg-transparent p-0 text-dim " +
-  "transition-[background-color,color] hover:bg-pressed hover:text-fg " +
+/** The open tab grows by its ⋯, so the title keeps the room it had. */
+export const TAB_WITH_MENU = "max-w-[230px]";
+export const TAB_INLINE_CONTROLS = "-mr-1 flex flex-none items-center gap-0.5";
+export const TAB_MENU_CONTROL =
+  "inline-flex size-7 shrink-0 cursor-pointer items-center justify-center " +
+  "rounded-md border-0 bg-transparent p-0 text-dim " +
+  "transition-[background-color,color] hover:bg-hover hover:text-fg " +
   "data-[popup-open]:bg-pressed data-[popup-open]:text-fg";
+export const TAB_CLOSE_INLINE =
+  "inline-flex size-5 shrink-0 cursor-pointer items-center justify-center " +
+  "border-0 bg-transparent p-0 text-dim transition-colors hover:text-fg";
 
 /**
  * The trailing controls use quiet chrome with no pill fill or shadow. History

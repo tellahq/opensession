@@ -88,7 +88,7 @@ import {
   TopBarTitle,
 } from "../../ui/top-bar";
 import { cn } from "../../ui/cn";
-import { TAB_INLINE_CONTROL } from "../../lib/session-tab-classes";
+import { TAB_MENU_CONTROL } from "../../lib/session-tab-classes";
 import { useTabMenuSlot } from "../../lib/tab-menu-slot";
 import { toast } from "../../ui/toast";
 import { copySessionTranscript } from "../../lib/transcript-copy";
@@ -966,7 +966,7 @@ export function SessionViewerChrome({
                   // buttons by construction instead of by hand-matching.
                   render={
                     menuInTab ? (
-                      <button type="button" className={TAB_INLINE_CONTROL}>
+                      <button type="button" className={TAB_MENU_CONTROL}>
                         <IconDotsHorizontal size={16} aria-hidden="true" />
                       </button>
                     ) : infoPageOpen ? (
