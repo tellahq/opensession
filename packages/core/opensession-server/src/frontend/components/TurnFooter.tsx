@@ -23,7 +23,10 @@ import {
 import { useMessageLink } from "../lib/message-link";
 import { copyToClipboard } from "../lib/share-link";
 import { toast } from "../ui/toast";
-import { useOpenAsset } from "../lib/open-asset";
+import { useOpenAsset, useOpenAssetPaths } from "../lib/open-asset";
+import { inlineAssetPaths } from "../lib/inline-assets";
+import { useMessageCommentsSession } from "../lib/message-comments";
+import { InlineAssetCard } from "./InlineAssetCard";
 import { formatDuration, fullTime } from "../lib/time";
 import { friendlyModelSlug, routedModelParts } from "./ModelEffortSelect";
 import { canonicalToolName, useToolPathRoots } from "./ToolCallBlock";
@@ -101,6 +104,15 @@ export const TurnFooter = function TurnFooter({
   };
 
   const duration = durationMs === null ? null : formatDuration(durationMs);
+  // What the answer made or named shows in place; the rest stay chips.
+  const sessionId = useMessageCommentsSession();
+  const openAsset = useOpenAsset();
+  const knownAssets = useOpenAssetPaths();
+  const inline =
+    sessionId && openAsset.available
+      ? inlineAssetPaths(assets, entry.content, knownAssets)
+      : [];
+  const chips = assets.filter((path) => !inline.includes(path));
 
   return (
     <div
@@ -109,6 +121,13 @@ export const TurnFooter = function TurnFooter({
         className,
       )}
     >
+      {sessionId && inline.length > 0 && (
+        <div className="mb-1.5 flex basis-full flex-col gap-3">
+          {inline.map((path) => (
+            <InlineAssetCard key={path} sessionId={sessionId} path={path} />
+          ))}
+        </div>
+      )}
       {duration && (
         <Tooltip label={fullTime(entry.timestamp)}>
           <span className="mr-1.5 pl-1 text-meta font-medium leading-4 text-faint">
@@ -116,7 +135,7 @@ export const TurnFooter = function TurnFooter({
           </span>
         </Tooltip>
       )}
-      {assets.map((path) => (
+      {chips.map((path) => (
         <AssetChip key={path} path={path} />
       ))}
       <div className={ACTIONS}>

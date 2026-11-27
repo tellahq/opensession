@@ -57,3 +57,38 @@ export function openAssetPathFor(sessionId: string): string | null {
 export function getOpenAssetForTest(): OpenAsset {
   return current;
 }
+
+/**
+ * How a session promotes one of its assets into its Assets tab, registered by
+ * that session's viewer where the tab exists. Transcript surfaces read it to
+ * offer "Open as tab" only where it does something.
+ */
+const tabOpeners = new Map<string, (path: string) => void>();
+const tabListeners = new Set<() => void>();
+
+function subscribeTabs(listener: () => void): () => void {
+  tabListeners.add(listener);
+  return () => tabListeners.delete(listener);
+}
+
+export function registerAssetTabOpener(
+  sessionId: string,
+  open: (path: string) => void,
+): () => void {
+  tabOpeners.set(sessionId, open);
+  for (const listener of tabListeners) listener();
+  return () => {
+    if (tabOpeners.get(sessionId) !== open) return;
+    tabOpeners.delete(sessionId);
+    for (const listener of tabListeners) listener();
+  };
+}
+
+/** Open `path` in `sessionId`'s Assets tab, or null where there is none. */
+export function useAssetTabOpener(
+  sessionId: string | null,
+): ((path: string) => void) | null {
+  return useSyncExternalStore(subscribeTabs, () =>
+    sessionId ? (tabOpeners.get(sessionId) ?? null) : null,
+  );
+}

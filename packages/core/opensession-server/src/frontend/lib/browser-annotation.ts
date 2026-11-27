@@ -116,6 +116,8 @@ export function markBox(
 
 export interface BrowserComment {
   url: string;
+  /** Set for a session asset: the comment names the file, not a URL. */
+  asset?: string;
   mark: BrowserMark;
   /** The frame's size in CSS pixels. */
   view: { width: number; height: number };
@@ -150,7 +152,9 @@ export function browserCommentMessage(comment: BrowserComment): string {
       ? `, scrolled to (${px(scroll.x)}, ${px(scroll.y)})`
       : "";
   const lines = [
-    `Browser comment on ${comment.url}`,
+    comment.asset
+      ? `Comment on asset \`${comment.asset.replaceAll("`", "'")}\``
+      : `Browser comment on ${comment.url}`,
     `${where} in a ${px(view.width)}×${px(view.height)} view${scrolled}`,
   ];
   const element = inspected?.element;

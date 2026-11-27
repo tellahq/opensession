@@ -12,7 +12,7 @@
  * promotion, and the way into the folder around the file.
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState, type Ref } from "react";
 import {
   deleteSessionAssetApi,
   sessionAssetDownloadUrl,
@@ -48,6 +48,8 @@ import { Tooltip } from "../ui/tooltip";
 import { MarkdownBody } from "./MarkdownBody";
 import { renderMarkdown } from "../lib/markdown";
 import { openLightbox } from "../lib/media-lightbox";
+import { canAnnotateAsset } from "../lib/asset-annotation";
+import { AssetAnnotationLayer } from "./AssetAnnotationLayer";
 import {
   IconArrowDown,
   IconArrowUpRight,
@@ -325,6 +327,8 @@ function AssetOverlayActionBar({
   refresh,
   onClose,
   onOpenAsTab,
+  annotating,
+  onAnnotate,
   phone,
 }: {
   sessionId: string;
@@ -332,6 +336,9 @@ function AssetOverlayActionBar({
   refresh: () => void;
   onClose: () => void;
   onOpenAsTab?: () => void;
+  /** Annotate mode, or undefined when this file takes no comments. */
+  annotating?: boolean;
+  onAnnotate: (on: boolean) => void;
   phone: boolean;
 }) {
   const rawUrl = sessionAssetPreviewUrl(sessionId, file);
@@ -339,7 +346,6 @@ function AssetOverlayActionBar({
   const downloadUrl = sessionAssetDownloadUrl(sessionId, file);
   const nativeShare = canUseNativeIOSShare();
   const name = file.path.split("/").pop() || "asset";
-  const commentable = assetPreviewKind(file.path) === "image";
   const actionClass = cn(
     "shrink-0 cursor-pointer",
     phone &&
@@ -374,31 +380,20 @@ function AssetOverlayActionBar({
           "rounded-full bg-white/10 p-1 ring-1 ring-white/10 backdrop-blur-xl",
       )}
     >
-      {commentable && (
+      {annotating !== undefined && (
         <Button
           variant="overlay"
           size={actionSize}
           icon={<IconMessage size={phone ? 24 : 20} />}
-          className={actionClass}
-          aria-label={phone ? "Comment" : undefined}
-          onClick={() =>
-            openLightbox(
-              [
-                {
-                  kind: "image",
-                  src: rawUrl,
-                  sessionTitle: file.path,
-                  description: file.description,
-                  commentSessionId: sessionId,
-                },
-              ],
-              0,
-              null,
-              { startCommenting: true },
-            )
-          }
+          className={cn(
+            actionClass,
+            annotating && (phone ? "bg-white/20 text-white" : "bg-white/20"),
+          )}
+          aria-label={phone ? "Annotate" : undefined}
+          aria-pressed={annotating}
+          onClick={() => onAnnotate(!annotating)}
         >
-          {actionLabel("Comment")}
+          {actionLabel(annotating ? "Done" : "Annotate")}
         </Button>
       )}
       {nativeShare ? (
@@ -560,6 +555,8 @@ export function AssetActions({
   refresh,
   onOpenAsTab,
   onClose,
+  annotating,
+  onAnnotate,
   showMenu = true,
   showSize = false,
   className,
@@ -573,6 +570,9 @@ export function AssetActions({
   /** Dismiss the surface — the overlay's ✕. Also called after a delete, since
    *  there is nothing left to show. */
   onClose?: () => void;
+  /** Annotate mode, or undefined when this file takes no comments. */
+  annotating?: boolean;
+  onAnnotate?: (on: boolean) => void;
   /** Hide this menu when another row owns the file actions. */
   showMenu?: boolean;
   /** False for a chip path whose folder listing has not caught up yet. */
@@ -612,6 +612,22 @@ export function AssetActions({
         <span className="shrink-0 text-meta tabular-nums text-faint">
           {formatAssetSize(file.size)}
         </span>
+      )}
+      {annotating !== undefined && (
+        <Tooltip label={annotating ? "Stop annotating" : "Annotate"}>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<IconMessage size={16} />}
+            className={cn(
+              "shrink-0 phone:size-11",
+              annotating && "bg-hover text-fg hover:bg-pressed",
+            )}
+            aria-pressed={annotating}
+            aria-label={annotating ? "Stop annotating" : "Annotate"}
+            onClick={() => onAnnotate?.(!annotating)}
+          />
+        </Tooltip>
       )}
       {onOpenAsTab && (
         <Button
@@ -657,12 +673,15 @@ export function AssetPreview({
   onOpenNewSession,
   onBackdropClick,
   className,
+  ref,
 }: {
   sessionId: string;
   file: SessionAssetFile;
+  /** The scrolling root, which an annotation layer reads and scrolls. */
+  ref?: Ref<HTMLDivElement>;
   /** A link inside an HTML asset that spells out a new session — the artifact
    *  can hand work back to the app it was written in. */
-  onOpenNewSession: (prefill: NewSessionPrefill) => void;
+  onOpenNewSession?: (prefill: NewSessionPrefill) => void;
   /** Dismiss an overlay when the letterboxed image canvas is clicked. */
   onBackdropClick?: () => void;
   className?: string;
@@ -693,7 +712,7 @@ export function AssetPreview({
   }, [rawUrl, kind]);
 
   return (
-    <div className={cn("min-h-0 flex-1 overflow-auto", className)}>
+    <div ref={ref} className={cn("min-h-0 flex-1 overflow-auto", className)}>
       {kind === "html" ? (
         // allow-same-origin so the page can fetch() sibling assets
         // (./data.json); the sandbox still blocks top navigation. The
@@ -712,7 +731,7 @@ export function AssetPreview({
                   ? clickEvent.target.closest("a")
                   : null;
               const prefill = link ? parseNewSessionLink(link.href) : null;
-              if (!prefill) return;
+              if (!prefill || !onOpenNewSession) return;
               clickEvent.preventDefault();
               onOpenNewSession(prefill);
             });
@@ -838,11 +857,14 @@ export function AssetOverlay({
   const [lastPath, setLastPath] = useState<string | null>(path);
   const [listedPath, setListedPath] = useState<string | null>(null);
   const [missingPath, setMissingPath] = useState<string | null>(null);
+  // The file being annotated: moving to another file leaves the mode.
+  const [annotatingPath, setAnnotatingPath] = useState<string | null>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (path) {
       setLastPath(path);
       setMissingPath(null);
-    }
+    } else setAnnotatingPath(null);
   }, [path]);
   useEffect(() => {
     if (!path) return;
@@ -904,6 +926,7 @@ export function AssetOverlay({
   const name = file.path.split("/").pop() || file.path;
   const kind = assetPreviewKind(file.path);
   const visual = kind === "image" || kind === "video";
+  const annotating = Boolean(path) && annotatingPath === file.path;
   const listed = files.some((candidate) => candidate.path === shown);
   const listedIndex = files.findIndex((candidate) => candidate.path === shown);
   const navigate = (direction: -1 | 1) => {
@@ -942,6 +965,8 @@ export function AssetOverlay({
       refresh={refresh}
       onClose={onClose}
       onOpenAsTab={onOpenAsTab ? () => onOpenAsTab(file.path) : undefined}
+      annotating={canAnnotateAsset(kind) ? annotating : undefined}
+      onAnnotate={(on) => setAnnotatingPath(on ? file.path : null)}
       phone={isPhone}
     />
   );
@@ -984,6 +1009,7 @@ export function AssetOverlay({
             </div>
           ) : (
             <AssetPreview
+              ref={previewRef}
               sessionId={sessionId}
               file={file}
               onBackdropClick={onClose}
@@ -991,6 +1017,14 @@ export function AssetOverlay({
                 onClose();
                 onOpenNewSession(prefill);
               }}
+            />
+          )}
+          {annotating && (
+            <AssetAnnotationLayer
+              sessionId={sessionId}
+              path={file.path}
+              preview={previewRef}
+              onExit={() => setAnnotatingPath(null)}
             />
           )}
         </div>

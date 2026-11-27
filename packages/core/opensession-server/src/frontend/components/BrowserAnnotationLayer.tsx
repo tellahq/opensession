@@ -74,13 +74,30 @@ export function BrowserAnnotationLayer({
   sessionId,
   url,
   frame,
+  asset,
+  inspect,
+  capture,
+  scrollBy,
+  hint = "Click an element or drag an area",
   onExit,
 }: {
   sessionId: string;
   /** The page's current address, as the address bar shows it. */
   url: string;
   /** The framed page, looked up when needed: kept frames live elsewhere. */
-  frame: () => HTMLIFrameElement | null;
+  frame?: () => HTMLIFrameElement | null;
+  /** A session asset under the layer: the comment names it instead of a URL. */
+  asset?: string;
+  /** Read what is at a point directly, instead of asking the framed page. */
+  inspect?: (
+    layer: HTMLElement,
+    point: { x: number; y: number },
+  ) => InspectReply | null;
+  /** The comment's picture, when the default window capture does not fit. */
+  capture?: (layer: DOMRect, box: FrameRect) => Promise<File | null>;
+  /** Scroll what is under the layer; true when it moved. */
+  scrollBy?: (dx: number, dy: number) => boolean;
+  hint?: string;
   onExit: () => void;
 }) {
   const layerRef = useRef<HTMLDivElement>(null);
@@ -117,14 +134,35 @@ export function BrowserAnnotationLayer({
   const onKey = useEffectEvent((event: KeyboardEvent) => {
     if (event.key !== "Escape") return;
     event.preventDefault();
+    // Esc belongs to the comment layer, not the dialog or chat behind it.
+    event.stopPropagation();
     if (pending && !sending) reset();
     else if (!pending) onExit();
   });
   useEffect(() => {
+    // Capture phase, so Esc closes the comment before the transcript reads it
+    // as the first press of a stop.
     const listener = (event: KeyboardEvent) => onKey(event);
-    window.addEventListener("keydown", listener);
-    return () => window.removeEventListener("keydown", listener);
+    window.addEventListener("keydown", listener, true);
+    return () => window.removeEventListener("keydown", listener, true);
   }, []);
+  // A wheel over the layer scrolls what is under it. Native and non-passive:
+  // when the page moved, the chat around it must not scroll too.
+  const onWheel = useEffectEvent((event: WheelEvent) => {
+    if (scrollBy?.(event.deltaX, event.deltaY)) event.preventDefault();
+  });
+  useEffect(() => {
+    const layer = layerRef.current;
+    if (!layer) return;
+    const listener = (event: WheelEvent) => onWheel(event);
+    layer.addEventListener("wheel", listener, { passive: false });
+    return () => layer.removeEventListener("wheel", listener);
+  }, []);
+  const inspectAt = (point: { x: number; y: number }) => {
+    const layer = layerRef.current;
+    if (inspect) return Promise.resolve(layer ? inspect(layer, point) : null);
+    return inspectFrame(frame?.() ?? null, point);
+  };
 
   useLayoutEffect(() => {
     if (!pending) return;
@@ -147,7 +185,7 @@ export function BrowserAnnotationLayer({
   const hoverAt = async (point: { x: number; y: number }) => {
     if (hoverBusy.current || pending) return;
     hoverBusy.current = true;
-    const reply = await inspectFrame(frame(), point);
+    const reply = await inspectAt(point);
     hoverBusy.current = false;
     setHover(reply?.element ?? null);
   };
@@ -159,9 +197,11 @@ export function BrowserAnnotationLayer({
     setHover(null);
     const layer = layerRef.current?.getBoundingClientRect();
     if (!layer) return;
-    const inspected = await inspectFrame(frame(), markCenter(mark));
+    const inspected = await inspectAt(markCenter(mark));
     const box = markBox(mark, inspected?.element ?? null);
-    const screenshot = await captureMarkedFrame(layer, box).catch(() => null);
+    const screenshot = await (capture ?? captureMarkedFrame)(layer, box).catch(
+      () => null,
+    );
     setPending({
       mark,
       inspected,
@@ -177,7 +217,7 @@ export function BrowserAnnotationLayer({
     setError(null);
     await submitPageComment({
       sessionId,
-      text: browserCommentMessage({ url, ...pending, text: typed }),
+      text: browserCommentMessage({ url, asset, ...pending, text: typed }),
       files: pending.screenshot ? [pending.screenshot] : [],
     }).then(
       () => {
@@ -218,6 +258,8 @@ export function BrowserAnnotationLayer({
       // above it. A crosshair says the page is not live while this is up.
       className="absolute inset-0 z-10 cursor-crosshair touch-none overflow-hidden select-none"
       data-testid="browser-annotation-layer"
+      // A dialog around the layer leaves Esc to it (ui/sheet.tsx).
+      data-consumes-escape=""
       onPointerMove={(event) => {
         if (press) {
           setPress({ ...press, end: local(event) });
@@ -246,7 +288,7 @@ export function BrowserAnnotationLayer({
       {!pending && !press ? (
         <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center">
           <div className="rounded-[999px] bg-popup-glass px-3 py-1.5 text-label text-fg [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-md">
-            Click an element or drag an area
+            {hint}
           </div>
         </div>
       ) : null}
