@@ -923,9 +923,14 @@ export function MediaLightboxGallery({
         </div>
       </div>
 
+      {/* Positioned, so the stage paints above the absolute scrim before it.
+          A static stage only rose above it while the enter animation's
+          opacity made a stacking context; a video, whose wrapper is not
+          positioned the way the photo viewer's is, then sank under the
+          frost once the animation settled. */}
       <div
         className={cn(
-          "flex min-h-0 flex-1 items-center justify-center gap-3 pb-3 pt-[calc(64px+env(safe-area-inset-top))]",
+          "relative flex min-h-0 flex-1 items-center justify-center gap-3 pb-3 pt-[calc(64px+env(safe-area-inset-top))]",
           isPhone && "gap-0 px-0",
         )}
         style={
