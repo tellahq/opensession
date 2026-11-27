@@ -239,8 +239,8 @@ describe("grouped tool run row", () => {
     );
 
     expect(html).toContain(">Error<");
-    expect(html).toContain("data-[open]:animate-[collapsible-open_");
-    expect(html).toContain("h-auto");
+    // The animated collapsible panel, not a bare one that would snap.
+    expect(html).toContain("collapsible__collapsible.panel");
     // The expanded detail names the failure. A trailing × looked like a close
     // button and repeated the same state on the summary row.
     expect(html).not.toContain('d="M17.25 6.75L6.75 17.25"');

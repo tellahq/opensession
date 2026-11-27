@@ -14,8 +14,27 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { MIN_ICON_SIZE } from "../components/icons";
 import { copyToClipboard, shareOrCopyLink } from "../lib/share-link";
-import { cn } from "./cn";
+import * as stylex from "@stylexjs/stylex";
+import { sx } from "./sx";
 import { toast as fireToast } from "./toast";
+import { color } from "./tokens.stylex";
+
+const styles = stylex.create({
+  box: {
+    position: "relative",
+    display: "inline-grid",
+    placeItems: "center",
+  },
+  // The idle glyph and the check share one grid cell, so the swap never
+  // shifts what sits beside the box.
+  cell: {
+    gridColumnStart: 1,
+    gridRowStart: 1,
+    display: "grid",
+    placeItems: "center",
+  },
+  check: { color: color.green },
+});
 
 /**
  * A checkmark that draws itself on mount — the shared "success" gesture used by
@@ -89,29 +108,20 @@ export function CopyCheck({
   const [animatedOnMount] = useState(copied);
   if (!animated)
     return (
-      <span
-        className={cn("relative inline-grid place-items-center", className)}
-        style={{ width: box, height: box }}
-      >
-        <span className="col-start-1 row-start-1 grid place-items-center">
-          {idle}
-        </span>
+      <span {...sx(styles.box, className)} style={{ width: box, height: box }}>
+        <span {...stylex.props(styles.cell)}>{idle}</span>
       </span>
     );
   return (
-    <span
-      className={cn("relative inline-grid place-items-center", className)}
-      style={{ width: box, height: box }}
-    >
+    <span {...sx(styles.box, className)} style={{ width: box, height: box }}>
       {/* Mounted by the first copy, so the check that starts here pops in. */}
       <AnimatePresence initial={!animatedOnMount} mode="popLayout">
         {copied ? (
           <motion.span
             key="check"
-            className={cn(
-              "col-start-1 row-start-1 grid place-items-center text-green",
-              checkClassName,
-            )}
+            className={
+              sx([styles.cell, styles.check], checkClassName).className
+            }
             initial={{ opacity: 0, scale: 0.4, rotate: -12 }}
             animate={{ opacity: 1, scale: 1, rotate: 0 }}
             exit={{ opacity: 0, scale: 0.6 }}
@@ -122,7 +132,7 @@ export function CopyCheck({
         ) : (
           <motion.span
             key="idle"
-            className="col-start-1 row-start-1 grid place-items-center"
+            className={stylex.props(styles.cell).className}
             initial={{ opacity: 0, scale: 0.6 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.6 }}

@@ -16,6 +16,9 @@
  * Re-exported rather than wrapped: the parts API is the thing being reused,
  * and a prop-shaped stand-in for it would be a second Disclosure.
  */
+import * as stylex from "@stylexjs/stylex";
+import { motion } from "./tokens.stylex";
+
 export { Collapsible } from "@base-ui/react/collapsible";
 
 /**
@@ -33,5 +36,25 @@ export { Collapsible } from "@base-ui/react/collapsible";
  * hiding a closed panel, and any display utility on the same element would
  * outrank it.
  */
+export const collapsible = stylex.create({
+  panel: {
+    height: "auto",
+    overflow: "hidden",
+    display: { default: null, ":is([hidden])": "none" },
+    // The keyframes live in base-keyframes.css: they read Base UI's measured
+    // `--collapsible-panel-height`, which no element-scoped rule can own.
+    animationName: {
+      default: null,
+      ":is([data-open])": "collapsible-open",
+      ":is([data-closed])": "collapsible-close",
+    },
+    animationDuration: motion.standard,
+    animationTimingFunction: motion.ease,
+    animationFillMode: { default: null, ":is([data-closed])": "forwards" },
+  },
+});
+
+/** The panel style as one class string, for a caller composing Base UI's
+ *  parts with its own classes. */
 export const collapsiblePanelClasses =
-  "h-auto overflow-hidden data-[open]:animate-[collapsible-open_var(--dur)_var(--ease)] data-[closed]:animate-[collapsible-close_var(--dur)_var(--ease)_forwards] [&[hidden]]:hidden";
+  stylex.props(collapsible.panel).className ?? "";

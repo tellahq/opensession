@@ -80,6 +80,8 @@ export const color = stylex.defineConsts({
   scrimLight: "rgb(0 0 0 / 0.22)",
   /** The heavier dimming under a bottom sheet or sheet-style dialog. */
   scrimSheet: "rgb(0 0 0 / 0.45)",
+  /** Opaque ink for a mask gradient: only its alpha matters. */
+  mask: "#000",
   purple: "var(--purple)",
   tooltip: "var(--tooltip-bg)",
   tooltipFg: "var(--tooltip-fg)",
@@ -196,6 +198,12 @@ export const leading = stylex.defineConsts({
  * regular; headings take `title` (500 in dark, 600 in light). Semibold and
  * bold are for prose emphasis, not chrome.
  */
+/** Font families: the app's own stack is inherited, so only the exceptions
+ *  are named. */
+export const font = stylex.defineConsts({
+  mono: "var(--mono)",
+});
+
 /** Letter spacing. `tight` pulls small bold labels together a hair. */
 export const tracking = stylex.defineConsts({
   tight: "-0.01em",
@@ -206,6 +214,8 @@ export const weight = stylex.defineConsts({
   medium: "500",
   /** The selected underline tab, and emphasis inside prose. */
   strong: "600",
+  /** A code to read out and type elsewhere. */
+  bold: "700",
   /** Group labels and section kickers. */
   heading: "600",
   title: "var(--title-weight)",
@@ -219,6 +229,8 @@ export const opacity = stylex.defineConsts({
   glyphMuted: "0.6",
   /** The same glyph on a tinted or solid plate, where 0.6 reads as dirt. */
   glyphOnTone: "0.8",
+  /** A trailing glyph that only firms up under the pointer. */
+  glyphResting: "0.45",
 });
 
 export const motion = stylex.defineConsts({
@@ -243,8 +255,12 @@ export const motion = stylex.defineConsts({
   dialogExitScale: "0.97",
   /** A popup's enter and exit. */
   popup: "120ms",
+  /** One breath of a liveness dot. */
+  pulse: "1.4s",
   /** How far a popup or tooltip grows into place. */
   popupScale: "0.97",
+  /** A pressed plate that gives slightly, less than a button does. */
+  pressPlateScale: "0.98",
   tooltipScale: "0.96",
 });
 
@@ -357,6 +373,31 @@ export const geometry = stylex.defineConsts({
   /** The safe areas a full-height surface keeps clear of. */
   safeTop: "env(safe-area-inset-top)",
   safeBottom: "env(safe-area-inset-bottom)",
+  /** A liveness dot, standalone and inline in text or a pill. */
+  dot: "8px",
+  dotInline: "7px",
+  /** The fade at the end of a clipped single line. */
+  fadeEdge: "24px",
+  /** Page column widths. */
+  pageNarrow: "760px",
+  pageDefault: "860px",
+  pageWide: "920px",
+  /** A page's own padding, and the gaps under its header and filters. These
+   *  sit off the spacing scale on purpose for now; folding them in is an
+   *  open decision (docs/design-system.md). */
+  pageTop: "28px",
+  pageBottom: "60px",
+  pageTopNarrow: "18px",
+  pageHeaderGap: "22px",
+  pageFiltersGap: "18px",
+  /** The Running pill's block padding. */
+  pillPadBlock: "3px",
+  /** A device code's letter spacing, handed back after the last letter so
+   *  the code stays centred. */
+  codeTracking: "0.14em",
+  codeTrackingBack: "-0.14em",
+  /** Half a pixel down: a word reads a touch high at the geometric centre. */
+  opticalNudge: "0 0.5px",
   /** A divider rule. */
   hairline: "1px",
   /** A select's popup is never narrower than its trigger. */

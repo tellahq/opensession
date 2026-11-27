@@ -1,5 +1,53 @@
 import * as React from "react";
-import { cn } from "./cn";
+import * as stylex from "@stylexjs/stylex";
+import { focusStyles } from "./focus-styles";
+import { sx } from "./sx";
+import {
+  color,
+  controlHeight,
+  corner,
+  media,
+  motion,
+  radius,
+  space,
+} from "./tokens.stylex";
+
+const styles = stylex.create({
+  row: {
+    display: "flex",
+    width: "100%",
+    minWidth: 0,
+    alignItems: "flex-start",
+    gap: space.s10,
+    textAlign: "left",
+    minHeight: { default: null, [media.phone]: controlHeight.touch },
+    ["cornerShape"]: corner.squircle,
+    backgroundColor: {
+      default: null,
+      ":hover": { default: null, [media.hover]: color.hover },
+    },
+    transitionProperty:
+      "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke",
+    transitionDuration: motion.micro,
+    transitionTimingFunction: motion.ease,
+  },
+  plain: {
+    borderRadius: radius.md,
+    paddingInline: space.s8,
+    paddingBlock: space.s6,
+  },
+  // A card row stands on its own fill; under the pointer the wash replaces
+  // it, as on a plain row.
+  card: {
+    borderRadius: radius.xl,
+    backgroundColor: {
+      default: color.panel,
+      ":hover": { default: color.panel, [media.hover]: color.hover },
+    },
+    paddingInline: space.s12,
+    paddingBlock: space.s8,
+  },
+});
 
 /**
  * A whole list row that is one action: a thread, a comment, a file. Full
@@ -12,11 +60,8 @@ import { cn } from "./cn";
  */
 /** The row's look, for a row that has to be a link rather than a button. */
 export function listRowClass(variant: "plain" | "card" = "plain") {
-  return cn(
-    "focus-ring flex w-full min-w-0 items-start gap-2.5 text-left transition-colors hover:bg-hover phone:min-h-11",
-    variant === "card"
-      ? "rounded-xl bg-panel px-3 py-2"
-      : "rounded-md px-2 py-1.5",
+  return (
+    stylex.props(styles.row, styles[variant], focusStyles.ring).className ?? ""
   );
 }
 
@@ -29,7 +74,7 @@ export function ListRow({
   return (
     <button
       type={type}
-      className={cn(listRowClass(variant), className)}
+      {...sx([styles.row, styles[variant], focusStyles.ring], className)}
       {...props}
     />
   );

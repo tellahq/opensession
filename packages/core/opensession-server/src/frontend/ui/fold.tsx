@@ -1,6 +1,9 @@
 import * as React from "react";
-import { Collapsible, collapsiblePanelClasses } from "./collapsible";
-import { cn } from "./cn";
+import * as stylex from "@stylexjs/stylex";
+import { Collapsible, collapsible } from "./collapsible";
+import { sx } from "./sx";
+
+const styles = stylex.create({ root: { minWidth: 0 } });
 
 /**
  * Fold — animates a region's height between open and closed.
@@ -52,10 +55,8 @@ export function Fold({
       </PlainFold>
     );
   return (
-    <Collapsible.Root open={open} className={cn("min-w-0", className)}>
-      <Collapsible.Panel
-        className={cn(collapsiblePanelClasses, panelClassName)}
-      >
+    <Collapsible.Root open={open} {...sx(styles.root, className)}>
+      <Collapsible.Panel {...sx(collapsible.panel, panelClassName)}>
         {children}
       </Collapsible.Panel>
     </Collapsible.Root>
@@ -64,7 +65,7 @@ export function Fold({
 
 /** The open fold before its first close: the same two boxes Base UI renders,
  *  without its mount-time measurement. Closing sets the height Base UI would
- *  have measured and lets `collapsiblePanelClasses` play the close keyframes;
+ *  have measured and lets `collapsible.panel` play the close keyframes;
  *  reopening mid-close drops `data-closed` and the block is open again. */
 function PlainFold({
   open,
@@ -106,11 +107,11 @@ function PlainFold({
     };
   }, [open]);
   return (
-    <div className={cn("min-w-0", className)}>
+    <div {...sx(styles.root, className)}>
       <div
         ref={panelRef}
         data-closed={open ? undefined : ""}
-        className={cn(collapsiblePanelClasses, panelClassName)}
+        {...sx(collapsible.panel, panelClassName)}
       >
         {children}
       </div>

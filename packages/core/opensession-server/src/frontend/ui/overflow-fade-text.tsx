@@ -1,12 +1,26 @@
 import React, { useEffect, useRef } from "react";
-import { cn } from "./cn";
+import * as stylex from "@stylexjs/stylex";
+import { sx } from "./sx";
+import { color, geometry } from "./tokens.stylex";
 
-const OVERFLOW_FADE =
-  "min-w-0 overflow-hidden whitespace-nowrap text-clip " +
-  "data-[overflow]:[-webkit-mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_24px),transparent_100%)] " +
-  "data-[overflow]:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_24px),transparent_100%)] " +
-  "rtl:data-[overflow]:[-webkit-mask-image:linear-gradient(to_left,#000_0,#000_calc(100%_-_24px),transparent_100%)] " +
-  "rtl:data-[overflow]:[mask-image:linear-gradient(to_left,#000_0,#000_calc(100%_-_24px),transparent_100%)]";
+const OVERFLOW = ":is([data-overflow])";
+const RTL_OVERFLOW = ":is([data-overflow]):dir(rtl)";
+const fade = (to: string) =>
+  `linear-gradient(to ${to}, ${color.mask} 0, ${color.mask} calc(100% - ${geometry.fadeEdge}), transparent 100%)`;
+
+const styles = stylex.create({
+  text: {
+    minWidth: 0,
+    overflow: "hidden",
+    whiteSpace: "nowrap",
+    textOverflow: "clip",
+    maskImage: {
+      default: null,
+      [OVERFLOW]: fade("right"),
+      [RTL_OVERFLOW]: fade("left"),
+    },
+  },
+});
 
 /** Clips single-line text and adds a soft trailing fade only when it overflows. */
 export function OverflowFadeText({
@@ -32,7 +46,7 @@ export function OverflowFadeText({
   }, [children]);
 
   return (
-    <span ref={ref} className={cn(OVERFLOW_FADE, className)} {...props}>
+    <span ref={ref} {...sx(styles.text, className)} {...props}>
       {children}
     </span>
   );

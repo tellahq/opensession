@@ -6,3 +6,5 @@ import * as stylex from "@stylexjs/stylex";
  * StyleX's shared default marker.
  */
 export const tabMarker = stylex.defineMarker();
+export const disclosureMarker = stylex.defineMarker();
+export const deviceCodeMarker = stylex.defineMarker();
