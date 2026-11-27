@@ -3,6 +3,7 @@ import {
   buildGoalShippingInstructions,
   buildShipButtons,
   buildShipPrompt,
+  buildSyncBranchPrompt,
   buildWorktreePublicationNote,
   parseShipActions,
   parseShipMode,
@@ -191,8 +192,19 @@ describe("Ship button", () => {
         repo: directRepo,
         mode: "direct",
         checkout: "worktree",
-      })[0].label,
-    ).toBe("Ship");
+      }).map((b) => [b.id, b.label, !!b.primary]),
+    ).toEqual([
+      ["ship", "Ship", true],
+      ["sync-branch", "Sync branch", false],
+    ]);
+    expect(
+      buildShipButtons({
+        repo: directRepo,
+        mode: "direct",
+        checkout: "shared",
+      }).map((b) => b.id),
+    ).toEqual(["ship"]);
+    expect(buildSyncBranchPrompt("trunk")).toContain("origin/trunk");
   });
 
   test("parseShipActions drops malformed entries and caps the list", () => {

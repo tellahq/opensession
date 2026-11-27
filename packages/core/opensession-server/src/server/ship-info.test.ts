@@ -56,6 +56,7 @@ describe("sessionShipInfo", () => {
     expect(info.available && info.mode).toBe("pull-request");
     expect(info.available && info.buttons.map((b) => b.label)).toEqual([
       "Create PR",
+      "Sync branch",
     ]);
     const open = await sessionShipInfo(
       session({

@@ -345,7 +345,21 @@ export interface ShipButton {
   primary?: boolean;
 }
 
-/** Ship first, then the repository's own buttons. */
+const CUSTOM_SYNC_ACTION_RE =
+  /\b(sync|rebase|restack|update branch|merge main)\b/i;
+
+/** Prompt for syncing a worktree branch with the remote default branch. */
+export function buildSyncBranchPrompt(defaultBranch: string): string {
+  return [
+    `Sync this branch with \`origin/${defaultBranch}\`:`,
+    `1. Run \`git fetch origin\` and check whether \`origin/${defaultBranch}\` has commits not yet on this branch.`,
+    `2. Merge \`origin/${defaultBranch}\` into this branch without rewriting shared history. If there are merge conflicts, resolve them while preserving the intent of both sides.`,
+    "3. Run the repository's required checks if anything changed, commit the merge, and report what was integrated.",
+  ].join("\n");
+}
+
+/** Ship first, then Sync branch on worktrees (unless the repo already defines
+ *  its own rebase/sync action), then the repository's own buttons. */
 export function buildShipButtons(input: ShipActionsInput): ShipButton[] {
   const prFlow = input.mode === "pull-request" && input.checkout !== "shared";
   const ship: ShipButton = {
@@ -360,9 +374,24 @@ export function buildShipButtons(input: ShipActionsInput): ShipButton[] {
     prompt: buildShipPrompt(input),
     primary: true,
   };
+  const custom = input.custom || [];
+  const hasCustomSync = custom.some((action) =>
+    CUSTOM_SYNC_ACTION_RE.test(action.label),
+  );
+  const sync: ShipButton[] =
+    input.checkout === "worktree" && !hasCustomSync
+      ? [
+          {
+            id: "sync-branch",
+            label: "Sync branch",
+            prompt: buildSyncBranchPrompt(input.repo.defaultBranch),
+          },
+        ]
+      : [];
   return [
     ship,
-    ...(input.custom || []).map((action, index) => ({
+    ...sync,
+    ...custom.map((action, index) => ({
       id: `custom-${index}`,
       label: action.label,
       prompt: action.prompt,
