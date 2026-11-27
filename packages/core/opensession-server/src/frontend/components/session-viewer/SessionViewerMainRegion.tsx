@@ -39,6 +39,7 @@ import { ShellPanel } from "../TerminalPanel";
 import { PrPanel } from "../PrPanel";
 import { QuoteSelection } from "../QuoteSelection";
 import { StickyActivePrompt } from "../StickyActivePrompt";
+import { LookingAtImagePip } from "../LookingAtImagePip";
 import {
   WorkspaceSetup,
   ConversationLoading,
@@ -943,6 +944,11 @@ export function SessionViewerMainRegion({
                 containerRef={messagesRef}
                 entries={entries}
                 sessionId={session.id}
+              />
+              <LookingAtImagePip
+                containerRef={messagesRef}
+                sessionId={session.id}
+                entryCount={entries.length}
               />
               <div
                 className={cn(

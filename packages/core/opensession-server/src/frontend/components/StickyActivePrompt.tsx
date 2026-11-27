@@ -1,6 +1,7 @@
 import { useEffect, useState, type RefObject } from "react";
 import type { TranscriptEntry } from "../lib/types";
 import { IconArrowUp } from "./icons";
+import { Button } from "../ui/button";
 import {
   pickStickyPromptId,
   summarizeUserPrompt,
@@ -90,15 +91,16 @@ export function StickyActivePrompt({
 
   return (
     <div className="pointer-events-none absolute inset-x-0 top-2 z-20 flex justify-center px-6 phone:hidden">
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
+        icon={<IconArrowUp size={13} />}
         onClick={jumpToPrompt}
         title={text}
-        className="pointer-events-auto flex max-w-[min(720px,calc(100%-32px))] items-center gap-2 rounded-full border border-border/80 bg-panel/90 px-3 py-1.5 text-left text-meta text-dim shadow-sm backdrop-blur-md transition-colors hover:border-border-strong hover:text-fg"
+        className="pointer-events-auto max-w-[min(720px,calc(100%-32px))] rounded-full border border-border/80 bg-panel/90 text-meta text-dim shadow-sm backdrop-blur-md hover:border-border-strong hover:text-fg"
       >
-        <IconArrowUp size={12} className="shrink-0 text-faint" />
         <span className="truncate">{text}</span>
-      </button>
+      </Button>
     </div>
   );
 }
