@@ -158,7 +158,9 @@ export async function runGoal(goal: Goal): Promise<void> {
           branch: goal.mode === "code" ? headBranch || branch : "",
           worktreeDir: cwd,
           ...(goal.mode === "code" ? { repo: getRepo(goal.repo).id } : {}),
-          title: `${goal.name} — goal`,
+          // The goal's own name: the session reads as the goal in the
+          // sidebar and in the card of the chat that started it.
+          title: goal.name,
           mode: goal.mode,
           goalId: goal.id,
           lastActivity: new Date().toISOString(),

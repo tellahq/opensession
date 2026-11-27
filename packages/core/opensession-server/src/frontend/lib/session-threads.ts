@@ -210,6 +210,36 @@ export function spawnedThreadId(
   return match?.[1] ?? null;
 }
 
+/**
+ * The goal a create_goal call started, read from its result (`Created goal
+ * *Name* [\`goal-…\`]`). Its session only exists from the goal's first
+ * wake, so a card finds it by this id. Null for any other call.
+ */
+export function startedGoalId(
+  rawName: string,
+  rawInput: TranscriptEntry["toolInput"],
+  result: string | undefined,
+): string | null {
+  const { toolName } = unwrapMcpDispatcher(rawName, rawInput);
+  const mcp = parseMcpTool(toolName);
+  if (mcp?.server !== "opensession-goals" || mcp.tool !== "create_goal")
+    return null;
+  const match = result?.match(/^Created goal .*?\[`(goal-[A-Za-z0-9_-]+)`\]/);
+  return match?.[1] ?? null;
+}
+
+const goalInputSchema = z.object({ name: z.string() });
+
+/** The name a create_goal call gave its goal. */
+export function startedGoalName(
+  rawName: string,
+  rawInput: TranscriptEntry["toolInput"],
+): string {
+  const { input } = unwrapMcpDispatcher(rawName, rawInput);
+  const parsed = goalInputSchema.safeParse(input);
+  return parsed.success ? parsed.data.name : "";
+}
+
 const promptSchema = z.object({ prompt: z.string() });
 
 /** The prompt a spawn_task or create_session call started its thread on. */

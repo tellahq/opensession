@@ -204,15 +204,15 @@ export function buildWorkspaceRows({
     members.sort((a, b) =>
       (a.createdAt || "").localeCompare(b.createdAt || ""),
     );
-    const renamed = members.find((session) => session.titleOverridden);
+    // A name someone chose, or a goal's name, says more than its branch.
+    const named = members.find(
+      (session) => session.titleOverridden || session.goalId,
+    );
     rows.push(
       createRow(
         `wt:${worktreeDir}`,
         null,
-        renamed?.title ||
-          members[0]?.branch ||
-          members[0]?.title ||
-          "Workspace",
+        named?.title || members[0]?.branch || members[0]?.title || "Workspace",
         members,
       ),
     );

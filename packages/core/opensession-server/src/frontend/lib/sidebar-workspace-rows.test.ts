@@ -184,4 +184,18 @@ describe("buildWorkspaceRows", () => {
       lastActivity: "2026-08-18T13:00:00.000Z",
     });
   });
+
+  test("a goal's worktree row takes the goal's name, not its branch", () => {
+    const rows = build({
+      sessions: [
+        session("goal-run", {
+          worktreeDir: "/repo/worktrees/goal-3aa45b37",
+          branch: "goal-3aa45b37",
+          title: "Channels: Slack parity",
+          goalId: "goal-1",
+        }),
+      ],
+    });
+    expect(rows[0]?.name).toBe("Channels: Slack parity");
+  });
 });

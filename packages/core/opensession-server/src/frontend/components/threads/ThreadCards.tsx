@@ -2,7 +2,10 @@ import { useIsPhone } from "../../hooks/useIsPhone";
 import { useNavigation } from "../../hooks/useNavigation";
 import { openThreadTab } from "../../lib/thread-tabs";
 import type { UnifiedSession } from "../../lib/types";
-import { useSessionRecord } from "../../lib/session-records";
+import {
+  useGoalSessionRecord,
+  useSessionRecord,
+} from "../../lib/session-records";
 import {
   threadState,
   threadStatusLine,
@@ -14,7 +17,7 @@ import {
   MessageThreadSummary,
 } from "../comments/MessageActions";
 import { ListRow } from "../../ui/list-row";
-import { IconRobot } from "../icons";
+import { IconRobot, IconTarget } from "../icons";
 import { THREAD_DOT } from "./thread-classes";
 import { useThreadActivity } from "./useThreadActivity";
 
@@ -22,8 +25,21 @@ import { useThreadActivity } from "./useThreadActivity";
 export interface SpawnedThread {
   /** The tool call's entry id, stable across re-renders. */
   id: string;
-  threadId: string;
+  /** Null for a goal, whose session is found by `goalId`. */
+  threadId: string | null;
+  /** A goal the turn started: its session only exists from its first
+   *  wake. */
+  goalId?: string;
+  /** What it was asked to do, or a goal's name. */
   prompt: string;
+}
+
+/** The session a card stands for: the thread itself, or the one a goal
+ *  drives once it has woken. */
+function useCardSession(spawned: SpawnedThread) {
+  const goalSession = useGoalSessionRecord(spawned.goalId ?? null);
+  const thread = useSessionRecord(spawned.threadId);
+  return spawned.goalId ? goalSession : thread;
 }
 
 /**
@@ -43,9 +59,10 @@ export function ThreadCards({ threads }: { threads: SpawnedThread[] }) {
 }
 
 function ThreadCard({ spawned }: { spawned: SpawnedThread }) {
-  const thread = useSessionRecord(spawned.threadId);
+  const thread = useCardSession(spawned);
   const fallbackTitle =
-    spawned.prompt.split("\n")[0]?.trim().slice(0, 80) || "Thread";
+    spawned.prompt.split("\n")[0]?.trim().slice(0, 80) ||
+    (spawned.goalId ? "Goal" : "Thread");
   const message = {
     entryId: spawned.id,
     author: "Agent",
@@ -72,41 +89,56 @@ function ThreadCardBody({
   fallbackTitle: string;
 }) {
   const navigation = useNavigation();
-  const thread = useSessionRecord(spawned.threadId);
+  const thread = useCardSession(spawned);
   const phone = useIsPhone();
   const working = thread ? threadState(thread) === "working" : false;
-  const activity = useThreadActivity(spawned.threadId, working);
+  const activity = useThreadActivity(thread?.id ?? "", working);
+  const goal = !!spawned.goalId;
   return (
     <ListRow
       className="items-center gap-3 rounded-lg py-1.5 pl-2 font-sans"
-      aria-label={`Open thread: ${thread?.title || fallbackTitle}${thread ? `, ${threadStatusLine(thread)}` : ""}`}
+      aria-label={`Open ${goal ? "goal" : "thread"}: ${thread?.title || fallbackTitle}${thread ? `, ${cardStatus(thread)}` : ""}`}
+      // A goal's session only exists from its first wake.
+      disabled={!thread && goal}
       onClick={() => {
+        const id = thread?.id ?? spawned.threadId;
+        if (!id) return;
         // A tab of its own beside the conversation on desktop; a phone
         // opens the thread as its own page.
-        if (!phone) openThreadTab(spawned.threadId);
-        navigation.openSession(spawned.threadId);
+        if (!phone) openThreadTab(id);
+        navigation.openSession(id);
       }}
     >
       {thread ? (
         <ThreadCardSummary thread={thread} activity={activity} />
       ) : (
         <>
-          <AgentMark state={null} />
-          <ThreadCardText title={fallbackTitle} status="Thread" />
+          <AgentMark state={null} goal={goal} />
+          <ThreadCardText
+            title={fallbackTitle}
+            status={goal ? "Goal, starting" : "Thread"}
+          />
         </>
       )}
     </ListRow>
   );
 }
 
-/** A robot on a round tile, with the thread's state dot on its corner. */
-function AgentMark({ state }: { state: ThreadState | null }) {
+/** A robot (a target for a goal) on a round tile, with the thread's state
+ *  dot on its corner. */
+function AgentMark({
+  state,
+  goal = false,
+}: {
+  state: ThreadState | null;
+  goal?: boolean;
+}) {
   return (
     <span
       aria-hidden="true"
       className="relative flex size-7 shrink-0 items-center justify-center rounded-full bg-bg text-dim"
     >
-      <IconRobot size={20} />
+      {goal ? <IconTarget size={20} /> : <IconRobot size={20} />}
       <span
         className={cn(
           "absolute right-0 bottom-0 size-2.5 rounded-full ring-2 ring-panel",
@@ -158,13 +190,20 @@ export function ThreadCardSummary({
   const state = threadState(thread);
   return (
     <>
-      <AgentMark state={state} />
+      <AgentMark state={state} goal={!!thread.goalId} />
       <ThreadCardText
         title={thread.title}
-        status={threadStatusLine(thread)}
+        status={cardStatus(thread)}
         activity={state === "working" ? activity : null}
         blocked={state === "blocked"}
       />
     </>
   );
+}
+
+/** A goal between rounds is waiting for its next wake, not idle. */
+function cardStatus(thread: UnifiedSession): string {
+  if (thread.goalId && threadState(thread) === "idle")
+    return "Goal, between rounds";
+  return threadStatusLine(thread);
 }

@@ -78,4 +78,10 @@ describe("thread cards under a turn", () => {
     expect(html).toContain("Merged #42");
     expect(html).not.toContain("Shipped");
   });
+
+  test("a goal between rounds says so, with a target instead of a robot", () => {
+    const html = render({ goalId: "goal-1", mode: "code" });
+    expect(html).toContain("Goal, between rounds");
+    expect(html).not.toContain("Idle");
+  });
 });
