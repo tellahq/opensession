@@ -448,9 +448,10 @@ export const SIDEBAR_GROUP_HEADER_INSET = `pt-[11px] pr-1 pb-[11px] pl-1 desktop
  */
 export const SIDEBAR_LANE_HEADER =
   "gap-[5px] pt-[9px] pb-[5px] text-label font-semibold desktop:h-[var(--sidebar-cap-h)] desktop:min-h-[var(--sidebar-cap-h)] desktop:pt-1 desktop:pb-1 " +
-  // Under a place title the captions can be quieter: the rows' own size in a
-  // regular weight, set apart by their muted ink alone.
-  "new-layout:text-item-title new-layout:font-normal";
+  // Under a place title the captions take the rows' own size and weight,
+  // set apart by their muted ink alone. Regular weight read too thin beside
+  // the medium rows; the Channels sidebar's section headings match this.
+  "new-layout:text-item-title new-layout:font-medium";
 
 /**
  * The heading's own name. `truncate` before any width utility: it is the pair

@@ -440,6 +440,150 @@ export function IconHash(p: IconProps) {
   );
 }
 
+// Message formatting, for the Channels composer's toolbar (Slack's own row:
+// bold, italic, strikethrough, link, lists, quote, code, code block).
+export function IconBold(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path
+        {...stroke}
+        d="M7.75 5.75h5a3 3 0 0 1 0 6h-5v-6Zm0 6h5.75a3.25 3.25 0 0 1 0 6.5H7.75v-6.5Z"
+      />
+    </Svg>
+  );
+}
+
+export function IconItalic(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path {...stroke} d="M10.75 5.75h6.5M6.75 18.25h6.5M14 5.75l-4 12.5" />
+    </Svg>
+  );
+}
+
+export function IconStrikethrough(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path {...stroke} d="M4.75 12h14.5" />
+      <path
+        {...stroke}
+        d="M16.25 7.5c-.6-1.2-2.1-1.95-4.15-1.95-2.4 0-4.1 1.15-4.1 3 0 .9.4 1.6 1.1 2.1M8 16.25c.55 1.3 2.15 2.2 4.25 2.2 2.55 0 4.25-1.25 4.25-3.15 0-.7-.2-1.3-.65-1.8"
+      />
+    </Svg>
+  );
+}
+
+export function IconListBullet(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path {...stroke} d="M10.75 6.75h8.5M10.75 12h8.5M10.75 17.25h8.5" />
+      <circle cx="6" cy="6.75" r="1.25" fill="currentColor" />
+      <circle cx="6" cy="12" r="1.25" fill="currentColor" />
+      <circle cx="6" cy="17.25" r="1.25" fill="currentColor" />
+    </Svg>
+  );
+}
+
+export function IconListOrdered(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path {...stroke} d="M10.75 6.75h8.5M10.75 12h8.5M10.75 17.25h8.5" />
+      <path
+        {...stroke}
+        d="M5 5.25l1.25-.5v4M5 13.25c0-.75.55-1.25 1.25-1.25s1.25.45 1.25 1.1c0 .9-2.5 1.65-2.5 2.9h2.5"
+      />
+    </Svg>
+  );
+}
+
+export function IconQuote(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path
+        {...stroke}
+        d="M5.75 4.75v14.5M10.75 7.75h8.5M10.75 12h8.5M10.75 16.25h5.5"
+      />
+    </Svg>
+  );
+}
+
+export function IconCode(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path
+        {...stroke}
+        d="M8.25 7.75 4 12l4.25 4.25M15.75 7.75 20 12l-4.25 4.25M13.25 5.75l-2.5 12.5"
+      />
+    </Svg>
+  );
+}
+
+export function IconCodeBlock(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <rect
+        {...stroke}
+        x="4.75"
+        y="4.75"
+        width="14.5"
+        height="14.5"
+        rx="2.25"
+      />
+      <path
+        {...stroke}
+        d="M10 9.75 7.75 12 10 14.25M14 9.75 16.25 12 14 14.25"
+      />
+    </Svg>
+  );
+}
+
+// A plain face: the composer's emoji button (IconReactionAdd is the one
+// with a plus, for reacting to a message).
+export function IconSmile(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <circle {...stroke} cx="12" cy="12" r="7.25" />
+      <path {...stroke} d="M9 14.25c.75.9 1.8 1.5 3 1.5s2.25-.6 3-1.5" />
+      <circle cx="9.5" cy="10" r="1" fill="currentColor" />
+      <circle cx="14.5" cy="10" r="1" fill="currentColor" />
+    </Svg>
+  );
+}
+
+// A paper plane: send a chat message, as Slack draws it.
+export function IconSend(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path
+        {...stroke}
+        d="M5.4 4.95 19.25 12 5.4 19.05a.5.5 0 0 1-.7-.6L7 12 4.7 5.55a.5.5 0 0 1 .7-.6ZM7 12h5.75"
+      />
+    </Svg>
+  );
+}
+
+// A curved arrow to the right: share or forward a message.
+export function IconForward(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path
+        {...stroke}
+        d="M14.25 6.25 19.25 11l-5 4.75M19 11h-7.25c-3.9 0-7 2.9-7 6.75"
+      />
+    </Svg>
+  );
+}
+
+export function IconDotsVertical(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <circle cx="12" cy="6.5" r="1.4" fill="currentColor" />
+      <circle cx="12" cy="12" r="1.4" fill="currentColor" />
+      <circle cx="12" cy="17.5" r="1.4" fill="currentColor" />
+    </Svg>
+  );
+}
+
 // A padlock: a private Slack channel in the Channels place.
 export function IconLock(p: IconProps) {
   return (

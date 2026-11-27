@@ -213,6 +213,12 @@ export async function handleSlackChannelRoutes(
 
   // The composer's "@" picker. Signed-in only: it is the workspace roster.
   if (path === "/api/slack/users" && req.method === "GET") {
+    // The demo instance runs without sign-in and without Slack.
+    if (process.env.OPENSESSION_DEMO === "1") {
+      const { demoSlackMentionUsers } =
+        await import("../../agents/slack/user-directory");
+      return Response.json({ users: demoSlackMentionUsers() });
+    }
     if (!ctx.authUser?.login && !ctx.authUser?.name)
       return Response.json({ error: "Sign in first" }, { status: 401 });
     const { demoSlackMentionUsers, slackMentionUsers } =
@@ -331,6 +337,34 @@ export async function handleSlackChannelRoutes(
       },
       { status: res?.error === "missing_scope" ? 403 : 502 },
     );
+  }
+
+  // A message's link in Slack, for Copy link and Open in Slack.
+  const linkMatch = path.match(/^\/api\/slack\/channels\/([^/]+)\/permalink$/);
+  if (linkMatch && req.method === "GET") {
+    const channelId = decodeURIComponent(linkMatch[1]!);
+    const ts = url.searchParams.get("ts") || "";
+    if (!/^\d+\.\d+$/.test(ts))
+      return Response.json({ error: "ts required" }, { status: 400 });
+    if (process.env.OPENSESSION_DEMO === "1")
+      return Response.json({
+        url: `https://example.slack.com/archives/${channelId}/p${ts.replace(".", "")}`,
+      });
+    const caller = callerOf(ctx);
+    const { mcpUserGrantToken } = await import("../mcp-oauth");
+    const grantToken = caller ? mcpUserGrantToken("slack", caller) : undefined;
+    const { slackApiGet } = await import("../../agents/slack/slack-api");
+    const res = await slackApiGet(
+      "chat.getPermalink",
+      { channel: channelId, message_ts: ts },
+      grantToken,
+    ).catch(() => null);
+    if (!res?.ok || typeof res.permalink !== "string")
+      return Response.json(
+        { error: res?.error || "permalink failed" },
+        { status: 502 },
+      );
+    return Response.json({ url: res.permalink });
   }
 
   // A conversation's header: name, kind, topic and member count.

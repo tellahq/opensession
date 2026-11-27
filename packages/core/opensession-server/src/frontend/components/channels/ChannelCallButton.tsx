@@ -1,7 +1,7 @@
 import { joinHuddle, leaveHuddle, useHuddles } from "../../lib/huddle";
 import { Button } from "../../ui/button";
 import { Tooltip } from "../../ui/tooltip";
-import { IconCall } from "../icons";
+import { IconHeadphones } from "../icons";
 import { UserAvatar } from "../UserAvatar";
 
 /**
@@ -28,7 +28,7 @@ export function ChannelCallButton({
         <Button
           size="sm"
           variant="success"
-          icon={<IconCall size={18} />}
+          icon={<IconHeadphones size={20} />}
           onClick={leaveHuddle}
         >
           In call
@@ -42,7 +42,7 @@ export function ChannelCallButton({
         <Button
           size="sm"
           variant="success"
-          icon={<IconCall size={18} />}
+          icon={<IconHeadphones size={20} />}
           onClick={() => void joinHuddle({ roomId, label })}
         >
           Join call
@@ -60,7 +60,7 @@ export function ChannelCallButton({
       <Button
         size="sm"
         variant="ghost"
-        icon={<IconCall size={18} />}
+        icon={<IconHeadphones size={20} />}
         aria-label="Start a call"
         onClick={() => void joinHuddle({ roomId, label })}
       />
