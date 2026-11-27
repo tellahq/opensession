@@ -1,5 +1,26 @@
 import * as React from "react";
-import { cn } from "./cn";
+import * as stylex from "@stylexjs/stylex";
+import { field } from "./field-styles";
+import { sx } from "./sx";
+import { color, media, space, text, weight } from "./tokens.stylex";
+
+const styles = stylex.create({
+  field: {
+    display: "flex",
+    minWidth: 0,
+    flexDirection: "column",
+    gap: space.s6,
+  },
+  label: { fontSize: text.label, fontWeight: weight.medium, color: color.dim },
+  grid: {
+    display: "grid",
+    gridTemplateColumns: {
+      default: "repeat(2, minmax(0, 1fr))",
+      [media.phone]: "repeat(1, minmax(0, 1fr))",
+    },
+    gap: space.s12,
+  },
+});
 
 /**
  * Field primitive — the shared optics for single-line inputs, multi-line
@@ -26,28 +47,14 @@ import { cn } from "./cn";
 
 type Size = "sm" | "md" | "lg";
 
-/** Height/padding/type per step — mirrors `Button`'s `sizes`.
- * Inputs take the exact step height rather than only a minimum, so their
- * single line can be centered consistently across Chromium and WebKit. */
-const sizes: Record<Size, string> = {
-  sm: "min-h-[26px] px-2 text-xs [&:where(input)]:h-[26px]",
-  md: "min-h-8 px-2.5 text-sm [&:where(input)]:h-8",
-  lg: "min-h-9 px-3 text-base [&:where(input)]:h-9",
-};
-
 /**
- * Everything a field shares regardless of element: corner, fill, border,
- * placeholder, focus, disabled. Exported for the few natively-styled controls
+ * The field's classes as one string, for the few natively-styled controls
  * that cannot be one of the components below (a `<select>` needing its own
- * appearance reset, a contenteditable).
+ * appearance reset, a contenteditable). The caller's classes land last and
+ * win a tie, as they did under tailwind-merge.
  */
-export const fieldClass =
-  // Block padding and a one-line box center input text vertically. The element
-  // selector deliberately leaves multiline textareas and native selects alone.
-  "w-full rounded-control border border-line bg-surface text-fg outline-none transition-colors placeholder:text-faint focus:border-accent disabled:cursor-default disabled:opacity-40 [&:where(input)]:py-0 [&:where(input)]:leading-none";
-
 export function fieldClasses(size: Size = "md", className?: string) {
-  return cn(fieldClass, sizes[size], className);
+  return sx([field.base, field[size]], className).className;
 }
 
 // `ComponentProps` rather than `ComponentPropsWithoutRef`: under React 19 a ref
@@ -61,7 +68,7 @@ type InputProps = Omit<React.ComponentProps<"input">, "size"> & {
 };
 
 export function Input({ className, size = "md", ...props }: InputProps) {
-  return <input className={fieldClasses(size, className)} {...props} />;
+  return <input {...sx([field.base, field[size]], className)} {...props} />;
 }
 
 type TextareaProps = React.ComponentProps<"textarea"> & {
@@ -73,7 +80,7 @@ type TextareaProps = React.ComponentProps<"textarea"> & {
 export function Textarea({ className, size = "md", ...props }: TextareaProps) {
   return (
     <textarea
-      className={fieldClasses(size, cn("resize-y py-2", className))}
+      {...sx([field.base, field[size], field.textarea], className)}
       {...props}
     />
   );
@@ -91,7 +98,7 @@ type SelectProps = Omit<React.ComponentProps<"select">, "size"> & {
 export function Select({ className, size = "md", ...props }: SelectProps) {
   return (
     <select
-      className={fieldClasses(size, cn("cursor-pointer", className))}
+      {...sx([field.base, field[size], field.select], className)}
       {...props}
     />
   );
@@ -117,11 +124,8 @@ export function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label
-      className={cn("flex min-w-0 flex-col gap-1.5", className)}
-      {...props}
-    >
-      <span className="text-label font-medium text-dim">{label}</span>
+    <label {...sx(styles.field, className)} {...props}>
+      <span {...stylex.props(styles.label)}>{label}</span>
       {children}
     </label>
   );
@@ -134,10 +138,5 @@ export function FieldGrid({
   className,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
-  return (
-    <div
-      className={cn("grid grid-cols-2 gap-3 phone:grid-cols-1", className)}
-      {...props}
-    />
-  );
+  return <div {...sx(styles.grid, className)} {...props} />;
 }

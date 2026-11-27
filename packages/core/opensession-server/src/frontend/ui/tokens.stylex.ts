@@ -29,6 +29,8 @@ export const color = stylex.defineConsts({
   hover: "var(--hover)",
   pressed: "var(--hover-strong)",
   selected: "var(--selected)",
+  /** Opaque track surface: switches, meters, neutral badges. */
+  active: "var(--bg-active)",
   // Ink.
   fg: "var(--text)",
   dim: "var(--text-dim)",
@@ -42,6 +44,7 @@ export const color = stylex.defineConsts({
   accent: "var(--accent)",
   accentHover: "var(--accent-hover)",
   accentInk: "var(--accent-ink)",
+  accentSoft: "var(--accent-soft)",
   onAccent: "var(--on-accent)",
   // Status ink and their soft plates.
   green: "var(--green)",
@@ -55,6 +58,16 @@ export const color = stylex.defineConsts({
   // Ink on a dark media scrim, where the theme does not apply.
   onScrim: "#fff",
   transparent: "transparent",
+  current: "currentColor",
+  /** A switch knob: white on every track, in both themes. */
+  knob: "#fff",
+  /** The "on" fill of a switch, checkbox or radio. Two accents (white and
+   *  yellow) swap it for blue, where the accent itself reads as off. */
+  accentControl: "var(--accent-control, var(--accent))",
+  onAccentControl: "var(--on-accent-control, var(--on-accent))",
+  panelSurface: "var(--panel-surface)",
+  segmentedKnob: "var(--segmented-knob-surface)",
+  segmentedKnobEdge: "var(--segmented-knob-edge)",
 });
 
 /**
@@ -107,6 +120,18 @@ export const radius = stylex.defineConsts({
   xl: "calc(18px * var(--rf))",
   xxl: "calc(22px * var(--rf))",
   pill: "calc(infinity * 1px)",
+  /** A pill that keeps the squircle (Tailwind's `rounded-[999px]`). */
+  capsule: "999px",
+});
+
+/**
+ * The corner shape every radius except `pill` takes: `squircle` where the
+ * browser supports it, plain `round` elsewhere (base-global.css sets `--cs`).
+ * Tailwind gets the same through `[class*="rounded-"]`; StyleX elements carry
+ * no such class, so they ask for it.
+ */
+export const corner = stylex.defineConsts({
+  squircle: "var(--cs)",
 });
 
 /**
@@ -141,6 +166,8 @@ export const leading = stylex.defineConsts({
 export const weight = stylex.defineConsts({
   regular: "400",
   medium: "500",
+  /** The selected underline tab, and emphasis inside prose. */
+  strong: "600",
   title: "var(--title-weight)",
 });
 
@@ -159,6 +186,11 @@ export const motion = stylex.defineConsts({
   micro: "var(--dur-micro)",
   /** Whole-control press tick. */
   pressScale: "0.96",
+  /** A sliding indicator (the underline under a tab). */
+  slide: "200ms",
+  easeOut: "cubic-bezier(0, 0, 0.2, 1)",
+  /** One turn of a progress spinner. */
+  spin: "1s",
 });
 
 /** The one keyboard focus treatment: a 2px accent-ink ring, 2px out. */
@@ -167,12 +199,55 @@ export const focus = stylex.defineConsts({
   offset: "2px",
 });
 
-/** Elevation. Never a stock shadow; never a border on top of a ring tier. */
+/**
+ * Elevation, the same tiers as styles/smooth-shadow.css. Never a stock
+ * shadow, and never a border on top of a ring tier: the ring IS the edge.
+ * The shadow ink follows `--tw-shadow-color` and the ring follows
+ * `--smooth-ring-color` / `--smooth-ring-width`, so a surface can re-tint
+ * either the way it could with the utilities.
+ */
 export const shadow = stylex.defineConsts({
-  xs: "0 1px 2px -1px color-mix(in srgb, black 5%, transparent), 0 2px 5px -3px color-mix(in srgb, black 7%, transparent)",
+  xs: "0 1px 2px -1px color-mix(in srgb, var(--tw-shadow-color, black) 5%, transparent), 0 2px 5px -3px color-mix(in srgb, var(--tw-shadow-color, black) 7%, transparent)",
+  sm: "0 1px 3px -1px color-mix(in srgb, var(--tw-shadow-color, black) 6%, transparent), 0 4px 10px -4px color-mix(in srgb, var(--tw-shadow-color, black) 9%, transparent)",
+  ringSm:
+    "0 1px 3px -1px color-mix(in srgb, var(--tw-shadow-color, black) 6%, transparent), 0 4px 10px -4px color-mix(in srgb, var(--tw-shadow-color, black) 9%, transparent), 0 0 0 var(--smooth-ring-width, 1px) color-mix(in srgb, var(--smooth-ring-color) 80%, transparent)",
+  md: "0 2px 6px -2px color-mix(in srgb, var(--tw-shadow-color, black) 5%, transparent), 0 10px 28px -8px color-mix(in srgb, var(--tw-shadow-color, black) 10%, transparent)",
+  ringMd:
+    "0 2px 6px -2px color-mix(in srgb, var(--tw-shadow-color, black) 5%, transparent), 0 10px 28px -8px color-mix(in srgb, var(--tw-shadow-color, black) 10%, transparent), 0 0 0 var(--smooth-ring-width, 1px) color-mix(in srgb, var(--smooth-ring-color) 65%, transparent)",
+  lg: "0 4px 12px -4px color-mix(in srgb, var(--tw-shadow-color, black) 5%, transparent), 0 18px 48px -14px color-mix(in srgb, var(--tw-shadow-color, black) 11%, transparent)",
+  ringLg:
+    "0 4px 12px -4px color-mix(in srgb, var(--tw-shadow-color, black) 5%, transparent), 0 18px 48px -14px color-mix(in srgb, var(--tw-shadow-color, black) 11%, transparent), 0 0 0 var(--smooth-ring-width, 1px) color-mix(in srgb, var(--smooth-ring-color) 50%, transparent)",
+  /** The switch knob: a tight contact shadow plus a hairline, on white. */
+  knob: "0 1px 3px rgba(0, 0, 0, 0.22), 0 0 0 1px rgba(0, 0, 0, 0.07)",
   /** Top-down shading that gives a solid plate a face (Tailwind's `plate-sheen`). */
   plateSheen:
     "linear-gradient(to bottom, transparent, rgb(255 255 255 / 0.035) 35%, rgb(255 255 255 / 0.01) 55%, rgb(0 0 0 / 0.05))",
+  /** The forced-colors stand-in for a ring tier, which Windows High Contrast
+   *  strips along with every box-shadow. */
+  ringForced: "var(--smooth-ring-width, 1px) solid CanvasText",
+  ringForcedOffset: "calc(-1 * var(--smooth-ring-width, 1px))",
+});
+
+/**
+ * Fixed control geometry measured off a native reference rather than picked
+ * from the scales. The switch is macOS 26's NSSwitch: a 54x24 track with a
+ * 2px inset and a 32x20 capsule knob; `sm` is the same switch at 44x20.
+ */
+export const geometry = stylex.defineConsts({
+  switchTrackW: "54px",
+  switchTrackH: "24px",
+  switchThumbW: "32px",
+  switchThumbH: "20px",
+  switchTravel: "18px",
+  switchTrackWSm: "44px",
+  switchTrackHSm: "20px",
+  switchThumbWSm: "26px",
+  switchThumbHSm: "16px",
+  switchTravelSm: "14px",
+  /** Checkbox and radio box, and the check glyph inside it. */
+  checkBox: "16px",
+  checkGlyph: "12px",
+  radioDot: "6px",
 });
 
 /** The one breakpoint (720px, inclusive on the phone side) and hover gating. */

@@ -95,6 +95,24 @@ a primitive can be ported without touching its call sites, and why the port of
 `Button` renders identically: every computed style of every button on nine
 routes, at both widths and in both themes, matched the Tailwind version.
 
+Ported so far: `Button`, `Badge`, `Card`, `Spinner`, `Switch`,
+`Checkbox`, `Radio`, `Segmented` and both `Tabs` styles. Shared pieces:
+`ui/sx.ts` (merges a primitive's StyleX props with a caller's legacy
+`className`, and defines the `LayoutStyles` type every `xstyle` uses),
+`ui/choice-styles.ts` (the box a Checkbox and a Radio share), and
+`ui/markers.stylex.ts` (named markers for `stylex.when.ancestor`, so a tab's
+inner plate reacts to its own tab's hover, not to any ancestor's). Three
+things to know when porting:
+
+- base.css squircles any element whose class contains `rounded-`. StyleX
+  classes don't match, so a rounded StyleX element sets
+  `["cornerShape"]: corner.squircle` itself. The key is quoted because the
+  lint bans "shape" in symbol names.
+- Values that are measured off a native control, not picked from a scale
+  (the macOS switch track and knob, the checkbox box), live in `geometry`.
+- A primitive that sets `data-progress` keeps spinning under reduced motion,
+  as `.animate-spin` did.
+
 The order of work:
 
 1. **Primitives.** Port `ui/` one primitive at a time, each with a locked

@@ -1,32 +1,38 @@
 import * as React from "react";
 import { Radio as BaseRadio } from "@base-ui/react/radio";
 import { RadioGroup as BaseRadioGroup } from "@base-ui/react/radio-group";
-import { cn } from "./cn";
+import * as stylex from "@stylexjs/stylex";
+import { choice } from "./choice-styles";
+import { sx } from "./sx";
+import { color, geometry, radius } from "./tokens.stylex";
 
-type RadioProps = React.ComponentProps<typeof BaseRadio.Root>;
+const styles = stylex.create({
+  dot: {
+    width: geometry.radioDot,
+    height: geometry.radioDot,
+    borderRadius: radius.pill,
+    backgroundColor: color.onAccentControl,
+  },
+});
+
+type RadioProps = Omit<
+  React.ComponentProps<typeof BaseRadio.Root>,
+  "className"
+> & {
+  className?: string;
+};
 type RadioGroupProps = React.ComponentProps<typeof BaseRadioGroup>;
 
 /** The app's radio control for choosing one option from a visible set. */
 export function Radio({ className, ...props }: RadioProps) {
   return (
-    <BaseRadio.Root
-      className={cn(
-        "flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-full border border-line-strong bg-surface p-0 outline-none",
-        "transition-[background-color,border-color] duration-[var(--dur-micro)] ease-[var(--ease)]",
-        "hover:border-faint",
-        "data-[checked]:border-accent-control data-[checked]:bg-accent-control data-[checked]:hover:border-accent-control",
-        "focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
-        "data-[disabled]:cursor-default data-[disabled]:opacity-40",
-        className,
-      )}
-      {...props}
-    >
-      <BaseRadio.Indicator className="size-1.5 rounded-full bg-on-accent-control" />
+    <BaseRadio.Root {...props} {...sx([choice.box, choice.round], className)}>
+      <BaseRadio.Indicator {...stylex.props(styles.dot)} />
     </BaseRadio.Root>
   );
 }
 
 /** Coordinates a visible set of `Radio` controls. */
 export function RadioGroup({ className, ...props }: RadioGroupProps) {
-  return <BaseRadioGroup className={cn(className)} {...props} />;
+  return <BaseRadioGroup className={className} {...props} />;
 }

@@ -1,33 +1,25 @@
-import { cn } from "./cn";
-import { fieldClasses } from "./input";
+import { field } from "./field-styles";
+import { sx } from "./sx";
 
 type Size = "sm" | "md" | "lg";
 
 /**
- * The field-shaped trigger `ui/select` and `ui/combobox` share: a select and
- * a searchable select sit in the same rows, so they open from the same box.
- *
- * The chevron sits in flow in its own grid column, so the field's own padding
- * is what separates it from the edge. A select lifts slightly under the
- * pointer; opening still reads like focus, with the border carrying that
- * state as on every other field.
+ * The field-shaped trigger `ui/select` and `ui/combobox` share, as one class
+ * string: a select and a searchable select sit in the same rows, so they open
+ * from the same box. See `field.trigger` for the look.
  */
 export function selectTriggerClasses(
   size: Size = "md",
   iconSlot = false,
   className?: string,
 ) {
-  return cn(
-    fieldClasses(
-      size,
-      cn(
-        "inline-grid cursor-pointer items-center gap-2 pr-2 text-left",
-        iconSlot
-          ? "grid-cols-[auto_minmax(0,1fr)_auto]"
-          : "grid-cols-[minmax(0,1fr)_auto]",
-      ),
-    ),
-    "transition-[border-color,box-shadow] hover:border-line-strong enabled:hover:smooth-shadow-xs data-[popup-open]:border-accent",
+  return sx(
+    [
+      field.base,
+      field[size],
+      field.trigger,
+      iconSlot ? field.triggerWithIcon : null,
+    ],
     className,
-  );
+  ).className;
 }

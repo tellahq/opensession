@@ -928,9 +928,11 @@ html[data-accent="green"] {
 	   on a hook class per spinner: the old name list silently stopped
 	   matching whenever a migration renamed an element, and a frozen spinner
 	   next to live output reads as a hung app. Anything spelt `animate-spin`
-	   or `animate-[spin_…]` is a progress indicator by construction. */
+	   or `animate-[spin_…]` is a progress indicator by construction, and so is
+	   the StyleX Spinner, which carries `data-progress` instead of a class. */
   [class*="animate-spin"],
-  [class*="animate-[spin"] {
+  [class*="animate-[spin"],
+  [data-progress] {
     animation-duration: 0.8s !important;
     animation-iteration-count: infinite !important;
   }

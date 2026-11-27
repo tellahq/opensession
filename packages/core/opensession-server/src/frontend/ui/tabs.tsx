@@ -1,6 +1,175 @@
 import { Tabs as BaseTabs } from "@base-ui/react/tabs";
 import type * as React from "react";
-import { cn } from "./cn";
+import * as stylex from "@stylexjs/stylex";
+import { tabMarker } from "./markers.stylex";
+import { sx } from "./sx";
+import {
+  color,
+  controlHeight,
+  corner,
+  focus,
+  media,
+  motion,
+  radius,
+  space,
+  text,
+  weight,
+} from "./tokens.stylex";
+
+const ACTIVE = ":is([data-active])";
+const focusRing = {
+  outline: { default: null, ":focus-visible": focus.ring },
+  outlineOffset: { default: null, ":focus-visible": focus.offset },
+  outlineColor: {
+    default: null,
+    [media.forcedColors]: { default: null, ":focus-visible": "Highlight" },
+  },
+} as const;
+
+const styles = stylex.create({
+  root: { display: "flex", minWidth: 0, alignItems: "stretch" },
+  list: {
+    position: "relative",
+    display: "flex",
+    minWidth: 0,
+    alignItems: "stretch",
+    gap: space.s4,
+  },
+  indicator: {
+    position: "absolute",
+    bottom: space.s0,
+    left: "var(--active-tab-left)",
+    height: space.s2,
+    width: "var(--active-tab-width)",
+    borderRadius: radius.capsule,
+    ["cornerShape"]: corner.squircle,
+    backgroundColor: color.accent,
+    transitionProperty: {
+      default: "left, width",
+      "@media (prefers-reduced-motion: reduce)": "none",
+    },
+    transitionDuration: motion.slide,
+    transitionTimingFunction: motion.easeOut,
+  },
+  tab: {
+    ...focusRing,
+    display: "flex",
+    flexShrink: 0,
+    cursor: "pointer",
+    alignItems: "center",
+    borderRadius: radius.control,
+    ["cornerShape"]: corner.squircle,
+    borderWidth: 0,
+    backgroundColor: color.transparent,
+    padding: space.s0,
+    fontSize: text.label,
+    color: { default: color.dim, [ACTIVE]: color.fg },
+    fontWeight: { default: null, [ACTIVE]: weight.strong },
+  },
+  // The wash sits on an inner plate so the underline keeps the row's full
+  // height under it.
+  tabPlate: {
+    display: "flex",
+    alignItems: "center",
+    gap: space.s6,
+    borderRadius: radius.control,
+    ["cornerShape"]: corner.squircle,
+    paddingInline: space.s8,
+    paddingBlock: space.s4,
+    transitionProperty: "color, background-color, border-color",
+    transitionDuration: motion.micro,
+    transitionTimingFunction: motion.ease,
+    backgroundColor: {
+      default: null,
+      [stylex.when.ancestor(":hover", tabMarker)]: {
+        default: null,
+        [media.hover]: color.hover,
+      },
+    },
+    color: {
+      default: null,
+      [stylex.when.ancestor(":hover", tabMarker)]: {
+        default: null,
+        [media.hover]: color.fg,
+      },
+    },
+  },
+  tabIcon: {
+    display: "inline-flex",
+    flexShrink: 0,
+    color: {
+      default: color.faint,
+      [stylex.when.ancestor(ACTIVE, tabMarker)]: color.dim,
+    },
+  },
+  count: {
+    borderRadius: radius.capsule,
+    ["cornerShape"]: corner.squircle,
+    backgroundColor: color.hover,
+    paddingInline: space.s6,
+    fontSize: text.meta,
+    fontWeight: weight.medium,
+    color: color.dim,
+    fontVariantNumeric: "tabular-nums",
+  },
+  plateList: {
+    display: "flex",
+    minWidth: 0,
+    alignItems: "center",
+    gap: space.s4,
+  },
+  plateTab: {
+    ...focusRing,
+    display: "flex",
+    minWidth: 0,
+    flexShrink: 0,
+    cursor: "pointer",
+    alignItems: "center",
+    gap: space.s6,
+    borderRadius: radius.lg,
+    ["cornerShape"]: corner.squircle,
+    borderStyle: "none",
+    paddingInline: space.s8,
+    paddingBlock: space.s4,
+    minHeight: { default: null, [media.phone]: controlHeight.touch },
+    fontSize: text.label,
+    transitionProperty: "color, background-color, border-color",
+    transitionDuration: motion.micro,
+    transitionTimingFunction: motion.ease,
+    backgroundColor: {
+      default: color.transparent,
+      ":hover": { default: null, [media.hover]: color.hover },
+      [ACTIVE]: color.hover,
+    },
+    color: {
+      default: color.dim,
+      ":hover": { default: null, [media.hover]: color.fg },
+      [ACTIVE]: color.fg,
+    },
+  },
+  plateIcon: {
+    position: "relative",
+    display: "inline-flex",
+    flexShrink: 0,
+    color: color.dim,
+  },
+  // An attention dot, cut out of the plate by a ring of the panel's surface.
+  attention: {
+    position: "absolute",
+    top: `calc(-1 * ${space.s2})`,
+    right: `calc(-1 * ${space.s2})`,
+    width: space.s8,
+    height: space.s8,
+    borderRadius: radius.pill,
+    backgroundColor: color.blue,
+    boxShadow: `0 0 0 ${space.s2} ${color.panelSurface}`,
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+});
 
 /**
  * Underline tabs: the pages of one object (a pull request's Overview and
@@ -30,14 +199,11 @@ function Root({
     <BaseTabs.Root
       value={value}
       onValueChange={onValueChange}
-      className={cn("flex min-w-0 items-stretch", className)}
+      {...sx(styles.root, className)}
     >
-      <BaseTabs.List
-        aria-label={label}
-        className="relative flex min-w-0 items-stretch gap-1"
-      >
+      <BaseTabs.List aria-label={label} {...stylex.props(styles.list)}>
         {children}
-        <BaseTabs.Indicator className="absolute bottom-0 left-[var(--active-tab-left)] h-0.5 w-[var(--active-tab-width)] rounded-[999px] bg-accent transition-[left,width] duration-200 ease-out motion-reduce:transition-none" />
+        <BaseTabs.Indicator {...stylex.props(styles.indicator)} />
       </BaseTabs.List>
     </BaseTabs.Root>
   );
@@ -55,23 +221,14 @@ function Tab({
   children: React.ReactNode;
 }) {
   return (
-    <BaseTabs.Tab
-      value={value}
-      className="group/tab focus-ring flex shrink-0 cursor-pointer items-center rounded-control border-0 bg-transparent px-0 py-0 text-label text-dim data-[active]:font-semibold data-[active]:text-fg"
-    >
+    <BaseTabs.Tab value={value} {...stylex.props(styles.tab, tabMarker)}>
       {/* The wash sits on an inner plate so the underline keeps the row's
           full height under it. */}
-      <span className="flex items-center gap-1.5 rounded-control px-2 py-1 transition-colors group-hover/tab:bg-hover group-hover/tab:text-fg">
-        {icon && (
-          <span className="inline-flex shrink-0 text-faint group-data-[active]/tab:text-dim">
-            {icon}
-          </span>
-        )}
+      <span {...stylex.props(styles.tabPlate)}>
+        {icon && <span {...stylex.props(styles.tabIcon)}>{icon}</span>}
         {children}
         {count !== undefined && (
-          <span className="rounded-[999px] bg-hover px-1.5 text-meta font-medium text-dim tabular-nums">
-            {count}
-          </span>
+          <span {...stylex.props(styles.count)}>{count}</span>
         )}
       </span>
     </BaseTabs.Tab>
@@ -105,10 +262,7 @@ function PlateRoot<T extends string>({
       onValueChange={(next: T) => onValueChange(next)}
       className={className}
     >
-      <BaseTabs.List
-        aria-label={label}
-        className="flex min-w-0 items-center gap-1"
-      >
+      <BaseTabs.List aria-label={label} {...stylex.props(styles.plateList)}>
         {children}
       </BaseTabs.List>
     </BaseTabs.Root>
@@ -127,24 +281,14 @@ function PlateTab({
   children: React.ReactNode;
 }) {
   return (
-    <BaseTabs.Tab
-      value={value}
-      className={cn(
-        "focus-ring flex min-w-0 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border-none bg-transparent px-2 py-1",
-        "text-label text-dim transition-colors hover:bg-hover hover:text-fg phone:min-h-11",
-        "data-[active]:bg-hover data-[active]:text-fg",
-      )}
-    >
-      <span className="relative inline-flex shrink-0 text-dim">
+    <BaseTabs.Tab value={value} {...stylex.props(styles.plateTab)}>
+      <span {...stylex.props(styles.plateIcon)}>
         {icon}
         {attention && (
-          <span
-            aria-hidden="true"
-            className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-blue ring-2 ring-[var(--panel-surface)]"
-          />
+          <span aria-hidden="true" {...stylex.props(styles.attention)} />
         )}
       </span>
-      <span className="truncate">{children}</span>
+      <span {...stylex.props(styles.truncate)}>{children}</span>
     </BaseTabs.Tab>
   );
 }
