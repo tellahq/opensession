@@ -138,3 +138,11 @@ export const QUICK_REACTIONS: readonly { name: string; emoji: string }[] = [
   { name: "heart", emoji: "❤️" },
   { name: "joy", emoji: "😂" },
 ];
+
+/** Up in an empty composer edits this one, as in Slack: the person's
+ *  latest message in the list. */
+export function lastEditable(
+  messages: readonly ChannelMessage[],
+): ChannelMessage | undefined {
+  return messages.findLast((m) => m.mine && m.source !== undefined);
+}

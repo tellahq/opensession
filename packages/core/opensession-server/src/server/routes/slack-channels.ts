@@ -8,6 +8,7 @@
  * requires the caller's own grant — messages appear AS THEM (that's the
  * point); without a grant the route 403s with a pointer to the Account page.
  */
+import { z } from "zod";
 import type { RouteContext } from "./context";
 import {
   SLACK_THREAD_TARGET,
@@ -67,6 +68,38 @@ function demoSlackChannels(): SlackChannelOption[] {
 
 function callerOf(ctx: Pick<RouteContext, "authUser">): string | undefined {
   return ctx.authUser?.login || ctx.authUser?.name || undefined;
+}
+
+const SLACK_TS = /^\d+\.\d+$/;
+
+/** An edit: the message's ts and its new text. */
+export const EditMessageBody = z.object({
+  ts: z.string().regex(SLACK_TS),
+  text: z.string().trim().min(1),
+});
+
+/** Slack's refusals of an edit or a delete, as one short sentence. */
+export function messageChangeError(
+  error: string | undefined,
+  action: "edit" | "delete",
+): string {
+  switch (error) {
+    case "cant_update_message":
+    case "cant_delete_message":
+      return `Slack doesn't let you ${action} this message`;
+    case "edit_window_closed":
+      return "The time to edit this message has passed";
+    case "message_not_found":
+      return "This message is gone";
+    case "msg_too_long":
+      return "That message is too long";
+    case "missing_scope":
+      return `Reconnect Slack in Settings, Account to ${action} from here`;
+    default:
+      return action === "edit"
+        ? "Couldn't save the edit"
+        : "Couldn't delete the message";
+  }
 }
 
 /** `raw` when it names a file on Slack's own file host, else undefined. */
@@ -616,7 +649,73 @@ export async function handleSlackChannelRoutes(
     }
   }
 
+  // Edit or delete one of the caller's own messages, as them. Slack itself
+  // refuses another person's message (cant_update_message).
+  if (req.method === "PATCH" || req.method === "DELETE") {
+    const action = req.method === "PATCH" ? "edit" : "delete";
+    if (!grantToken)
+      return Response.json(
+        {
+          error: `Connect your Slack account in Settings, Account to ${action}`,
+        },
+        { status: 403 },
+      );
+    const { slackApiCall } = await import("../../agents/slack/slack-api");
+    if (action === "delete") {
+      const ts = url.searchParams.get("ts") || "";
+      if (!SLACK_TS.test(ts))
+        return Response.json({ error: "ts required" }, { status: 400 });
+      const res = await slackApiCall(
+        "chat.delete",
+        { channel: channelId, ts },
+        grantToken,
+      ).catch(() => null);
+      if (res?.ok) return Response.json({ ok: true });
+      return Response.json(
+        { error: messageChangeError(res?.error, "delete") },
+        { status: res?.error === "missing_scope" ? 403 : 502 },
+      );
+    }
+    const body = EditMessageBody.safeParse(await req.json().catch(() => null));
+    if (!body.success)
+      return Response.json({ error: "ts and text required" }, { status: 400 });
+    const res = await slackApiCall(
+      "chat.update",
+      { channel: channelId, ts: body.data.ts, text: body.data.text },
+      grantToken,
+    ).catch(() => null);
+    if (!res?.ok)
+      return Response.json(
+        { error: messageChangeError(res?.error, "edit") },
+        { status: res?.error === "missing_scope" ? 403 : 502 },
+      );
+    const stored =
+      typeof res.message?.text === "string"
+        ? res.message.text
+        : String(res.text ?? body.data.text);
+    return Response.json(await editedView(grantToken, stored));
+  }
+
   return undefined;
+}
+
+/** What the web swaps into an edited message: its rendered text and the
+ *  source it edits from next time. `stored` is the text as Slack saved it
+ *  (chat.update echoes it, entities escaped). */
+async function editedView(
+  grantToken: string,
+  stored: string,
+): Promise<{ ok: true; text: string; source: string }> {
+  const { customEmojiMap, emojifySlackText } =
+    await import("../../agents/slack/emoji");
+  const { editableSource, renderSlackText } =
+    await import("../../agents/slack/message-view");
+  const custom = await customEmojiMap(grantToken);
+  return {
+    ok: true,
+    text: await renderSlackText(stored, (t) => emojifySlackText(t, custom)),
+    source: editableSource(stored),
+  };
 }
 
 // The demo instance has no Slack: each demo conversation keeps a short,
@@ -639,10 +738,14 @@ function demoHistory(channelId: string): any[] {
     "Shipped the fix, it's on staging again.",
     "Looks great now 🎉",
   ];
+  // The fourth line is the demo reader's own, so Edit and Delete show.
+  const you = { userName: "You", userId: "UDEMOYOU", mine: true };
   history = lines.map((text, index) => ({
     ts: `${now - 86400 - (lines.length - index) * 900}.000100`,
     text,
-    ...people[index % people.length]!,
+    ...(index === 3
+      ? { ...you, source: text }
+      : people[index % people.length]!),
     isBot: false,
     replyCount: index === 2 ? 2 : 0,
     ...(index === 2
@@ -708,6 +811,9 @@ async function demoChannelMessages(
     const message = {
       ts: `${Math.floor(Date.now() / 1000)}.${String(Date.now() % 1000).padStart(6, "0")}`,
       text,
+      source: text,
+      mine: true,
+      userId: "UDEMOYOU",
       userName: "You",
       isBot: false,
       replyCount: 0,
@@ -720,6 +826,43 @@ async function demoChannelMessages(
       if (parent) parent.replyCount = (parent.replyCount || 0) + 1;
     } else history.push(message);
     return Response.json({ ok: true, ts: message.ts });
+  }
+  if (req.method === "PATCH" || req.method === "DELETE") {
+    // A thread's replies live under `<channel>:<parent ts>`.
+    const lists = [...demoHistories.entries()]
+      .filter(([key]) => key === channelId || key.startsWith(`${channelId}:`))
+      .map(([, list]) => list);
+    if (req.method === "DELETE") {
+      const ts = url.searchParams.get("ts");
+      for (const list of lists) {
+        const index = list.findIndex((m) => m.ts === ts && m.mine);
+        if (index >= 0) {
+          list.splice(index, 1);
+          return Response.json({ ok: true });
+        }
+      }
+      return Response.json(
+        { error: messageChangeError("cant_delete_message", "delete") },
+        { status: 502 },
+      );
+    }
+    const body = EditMessageBody.safeParse(await req.json().catch(() => null));
+    if (!body.success)
+      return Response.json({ error: "ts and text required" }, { status: 400 });
+    const message = lists.flat().find((m) => m.ts === body.data.ts && m.mine);
+    if (!message)
+      return Response.json(
+        { error: messageChangeError("cant_update_message", "edit") },
+        { status: 502 },
+      );
+    message.text = body.data.text;
+    message.source = body.data.text;
+    message.edited = true;
+    return Response.json({
+      ok: true,
+      text: body.data.text,
+      source: body.data.text,
+    });
   }
   return Response.json({ error: "Not found" }, { status: 404 });
 }

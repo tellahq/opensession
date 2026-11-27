@@ -69,6 +69,10 @@ export interface ChannelMessage {
   edited?: boolean;
   /** A thread reply also sent to the channel. */
   broadcast?: boolean;
+  /** The reader wrote it, so they may edit or delete it. */
+  mine?: boolean;
+  /** For an own message: its Slack markup, to edit from. */
+  source?: string;
 }
 
 export interface MessagesPage {
@@ -128,6 +132,28 @@ export function postMessage(
     method: "POST",
     body,
     label: "Couldn't send the message",
+  });
+}
+
+export function editMessage(
+  id: string,
+  ts: string,
+  text: string,
+): Promise<{ ok: boolean; text: string; source: string }> {
+  return request(`${channelPath(id)}/messages`, {
+    method: "PATCH",
+    body: { ts, text },
+    label: "Couldn't save the edit",
+  });
+}
+
+export function deleteMessage(
+  id: string,
+  ts: string,
+): Promise<{ ok: boolean }> {
+  return request(`${channelPath(id)}/messages?ts=${encodeURIComponent(ts)}`, {
+    method: "DELETE",
+    label: "Couldn't delete the message",
   });
 }
 

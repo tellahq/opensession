@@ -1,4 +1,10 @@
-import { useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   encodeSlackMentions,
   type SlackMentionUser,
@@ -108,6 +114,9 @@ export function ChannelComposer({
   autoFocus,
   draftOf,
   compact = false,
+  initial,
+  onCancel,
+  onEditLast,
 }: {
   placeholder: string;
   disabled: boolean;
@@ -121,9 +130,18 @@ export function ChannelComposer({
   draftOf?: { channelId: string; thread?: string };
   /** Start with the formatting row hidden, for a box among other content. */
   compact?: boolean;
+  /** Text to start from instead of a saved draft: the message being edited. */
+  initial?: { text: string; mentions: Map<string, string> };
+  /** Editing a message: Cancel and Save replace the send button, Esc
+   *  cancels. */
+  onCancel?: () => void;
+  /** Up in the empty box: edit the person's last message, as Slack does. */
+  onEditLast?: () => void;
 }) {
-  const [stored] = useState(() =>
-    draftOf ? readDraft(draftOf.channelId, draftOf.thread) : undefined,
+  const [stored] = useState(
+    () =>
+      initial ??
+      (draftOf ? readDraft(draftOf.channelId, draftOf.thread) : undefined),
   );
   const [draft, setDraftText] = useState(stored?.text ?? "");
   const [sending, setSending] = useState(false);
@@ -140,6 +158,17 @@ export function ChannelComposer({
   const textRef = useRef<HTMLTextAreaElement>(null);
   const sendKey = effectiveSendKey("enter");
   const canSend = !disabled && !sending && !!draft.trim();
+  const editingMessage = !!onCancel;
+
+  // An edit opens with the caret after the text, ready to change its end.
+  const focusAtEnd = useEffectEvent(() => {
+    const el = textRef.current;
+    if (!initial || !el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+    setCaret(el.value.length);
+  });
+  useEffect(() => focusAtEnd(), []);
 
   const mention = mentionContextAt(draft, caret);
   const emoji = mention ? null : emojiContextAt(draft, caret);
@@ -372,6 +401,22 @@ export function ChannelComposer({
                 return;
               }
             }
+            if (event.key === "Escape" && onCancel) {
+              event.preventDefault();
+              onCancel();
+              return;
+            }
+            if (
+              event.key === "ArrowUp" &&
+              onEditLast &&
+              !draft &&
+              !event.shiftKey &&
+              !event.altKey
+            ) {
+              event.preventDefault();
+              onEditLast();
+              return;
+            }
             const mod = event.metaKey || event.ctrlKey;
             if (mod && !event.shiftKey && event.key.toLowerCase() === "b") {
               event.preventDefault();
@@ -436,16 +481,32 @@ export function ChannelComposer({
             />
           </Tooltip>
           <div className="min-w-0 flex-1" />
-          <Tooltip label="Send now" shortcut={["↵"]}>
-            <Button
-              variant={canSend ? "success-strong" : "ghost"}
-              size="md"
-              icon={<IconSend size={22} />}
-              aria-label="Send message"
-              disabled={!canSend}
-              onClick={() => void send()}
-            />
-          </Tooltip>
+          {editingMessage ? (
+            <div className="flex items-center gap-1.5">
+              <Button variant="default" size="sm" onClick={onCancel}>
+                Cancel
+              </Button>
+              <Button
+                variant="success-strong"
+                size="sm"
+                disabled={!canSend}
+                onClick={() => void send()}
+              >
+                Save
+              </Button>
+            </div>
+          ) : (
+            <Tooltip label="Send now" shortcut={["↵"]}>
+              <Button
+                variant={canSend ? "success-strong" : "ghost"}
+                size="md"
+                icon={<IconSend size={22} />}
+                aria-label="Send message"
+                disabled={!canSend}
+                onClick={() => void send()}
+              />
+            </Tooltip>
+          )}
         </div>
       </div>
       {broadcastLabel && (

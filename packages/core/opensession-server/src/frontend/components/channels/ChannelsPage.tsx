@@ -9,7 +9,7 @@ import {
   type Conversation,
   type ConversationInfo,
 } from "../../lib/api/slack-channels";
-import { layoutMessages } from "../../lib/channel-messages";
+import { lastEditable, layoutMessages } from "../../lib/channel-messages";
 import { docTitle } from "../../lib/brand";
 import {
   rememberChannel,
@@ -17,6 +17,7 @@ import {
 } from "../../lib/slack-conversations";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
+import { useConfirm } from "../../ui/confirm";
 import { EmptyState, InlineAlert, LoadingState } from "../../ui/state";
 import { Tooltip } from "../../ui/tooltip";
 import { IconHash, IconPeople, IconX } from "../icons";
@@ -59,6 +60,15 @@ function MessageList({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stick = useRef(true);
   const items = layoutMessages(state.messages);
+  const [confirm, confirmDialog] = useConfirm();
+  const askDelete = (message: ChannelMessage) =>
+    confirm({
+      title: "Delete message?",
+      description: "It is removed for everyone. This can't be undone.",
+      confirmLabel: "Delete",
+      destructive: true,
+      onConfirm: () => state.remove(message),
+    });
 
   // Follow new messages while you are at the bottom, and stay put when
   // older ones load above.
@@ -145,13 +155,38 @@ function MessageList({
                 onOpenThread={
                   onOpenThread ? () => onOpenThread(item.message.ts) : undefined
                 }
+                {...ownMessageProps(state, item.message, askDelete)}
               />
             ),
           )
         )}
       </div>
+      {confirmDialog}
     </div>
   );
+}
+
+/** Up in an empty composer: open the person's latest message to edit. */
+function editLast(state: ReturnType<typeof useChannelMessages>) {
+  if (!state.asUser) return;
+  const message = lastEditable(state.messages);
+  if (message) state.setEditing(message.ts);
+}
+
+/** Edit and Delete for the person's own message; nothing for anyone else's. */
+function ownMessageProps(
+  state: ReturnType<typeof useChannelMessages>,
+  message: ChannelMessage,
+  askDelete: (message: ChannelMessage) => void,
+): Partial<React.ComponentProps<typeof ChannelMessageRow>> {
+  if (!state.asUser || !message.mine || message.source === undefined) return {};
+  return {
+    editing: state.editing === message.ts,
+    onEdit: () => state.setEditing(message.ts),
+    onSaveEdit: (text) => state.edit(message, text),
+    onCancelEdit: () => state.setEditing(null),
+    onDelete: () => askDelete(message),
+  };
 }
 
 function ThreadPanel({
@@ -243,6 +278,7 @@ function ThreadPanel({
           disabledHint={NO_GRANT_HINT}
           broadcastLabel={`Also send to ${channelLabel}`}
           onSend={replies.send}
+          onEditLast={() => editLast(replies)}
           autoFocus={!phone}
         />
       </div>
@@ -425,6 +461,7 @@ function ConversationView({
             disabled={!main.asUser}
             disabledHint={NO_GRANT_HINT}
             onSend={(text) => main.send(text)}
+            onEditLast={() => editLast(main)}
             autoFocus={!phone && !thread}
           />
         </div>

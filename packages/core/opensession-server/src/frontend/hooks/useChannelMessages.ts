@@ -1,5 +1,7 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import {
+  deleteMessage,
+  editMessage,
   fetchMessages,
   markRead,
   postMessage,
@@ -24,6 +26,13 @@ export interface ChannelMessagesState {
   loadOlder: () => Promise<void>;
   send: (text: string, broadcast?: boolean) => Promise<boolean>;
   react: (message: ChannelMessage, name: string, emoji?: string) => void;
+  /** The ts of the message open for editing. */
+  editing: string | null;
+  setEditing: (ts: string | null) => void;
+  /** Save an edit of the person's own message. */
+  edit: (message: ChannelMessage, text: string) => Promise<boolean>;
+  /** Delete the person's own message. */
+  remove: (message: ChannelMessage) => void;
   reload: () => void;
 }
 
@@ -43,6 +52,7 @@ export function useChannelMessages(
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [asUser, setAsUser] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
+  const [editing, setEditing] = useState<string | null>(null);
   const lastMarked = useRef("");
   // The open conversation's fetch, so a send can refresh it in place.
   const refresh = useRef<(() => Promise<void>) | null>(null);
@@ -63,6 +73,7 @@ export function useChannelMessages(
     setLoading(true);
     setError(null);
     setHasMore(false);
+    setEditing(null);
     lastMarked.current = "";
     const load = () =>
       fetchMessages(channelId, { thread })
@@ -149,6 +160,42 @@ export function useChannelMessages(
     });
   }
 
+  async function edit(message: ChannelMessage, text: string) {
+    if (text === message.source) {
+      setEditing(null);
+      return true;
+    }
+    try {
+      const saved = await editMessage(channelId, message.ts, text);
+      replace(message.ts, (m) => ({
+        ...m,
+        text: saved.text,
+        source: saved.source,
+        edited: true,
+      }));
+      setEditing(null);
+      return true;
+    } catch (e) {
+      toast(errorMessage(e, "Couldn't save the edit"), { variant: "error" });
+      return false;
+    }
+  }
+
+  function remove(message: ChannelMessage) {
+    const index = messages.findIndex((m) => m.ts === message.ts);
+    setMessages((previous) => previous.filter((m) => m.ts !== message.ts));
+    void deleteMessage(channelId, message.ts).catch((e) => {
+      setMessages((previous) =>
+        previous.some((m) => m.ts === message.ts)
+          ? previous
+          : previous.toSpliced(Math.max(index, 0), 0, message),
+      );
+      toast(errorMessage(e, "Couldn't delete the message"), {
+        variant: "error",
+      });
+    });
+  }
+
   return {
     messages,
     loading,
@@ -159,6 +206,10 @@ export function useChannelMessages(
     loadOlder,
     send,
     react,
+    editing,
+    setEditing,
+    edit,
+    remove,
     reload: () => setReloadKey((key) => key + 1),
   };
 }
