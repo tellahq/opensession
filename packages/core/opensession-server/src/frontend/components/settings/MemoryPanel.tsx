@@ -466,13 +466,13 @@ function MemoryRow({
                   />
                 )}
               </div>
-              <div className="flex min-h-10 items-center justify-between gap-2 phone:mt-1 phone:flex-wrap">
-                <div className="flex h-10 min-w-0 items-center">
+              <div className="flex min-h-9 items-center justify-between gap-2 phone:mt-1 phone:flex-wrap">
+                <div className="flex h-9 min-w-0 items-center">
                   {!expanded && (canExpand || row.entry.hasDetails) && (
                     <button
                       type="button"
                       aria-expanded="false"
-                      className="focus-ring inline-flex h-10 min-h-10 items-center rounded-md border-0 bg-transparent px-0 text-meta font-semibold leading-none text-dim opacity-0 transition-opacity duration-150 hover:text-fg group-hover/memory:opacity-100 group-focus-within/memory:opacity-100 phone:h-11 phone:min-h-11 phone:opacity-100"
+                      className="focus-ring inline-flex h-9 min-h-9 items-center rounded-md border-0 bg-transparent px-0 text-meta font-semibold leading-none text-dim opacity-0 transition-opacity duration-150 hover:text-fg group-hover/memory:opacity-100 group-focus-within/memory:opacity-100 phone:h-11 phone:min-h-11 phone:opacity-100"
                       onClick={() => void expand()}
                     >
                       Read all
@@ -482,7 +482,7 @@ function MemoryRow({
                     <button
                       type="button"
                       aria-expanded="true"
-                      className="focus-ring inline-flex h-10 min-h-10 items-center rounded-md border-0 bg-transparent px-0 text-meta font-semibold leading-none text-dim hover:text-fg phone:h-11 phone:min-h-11"
+                      className="focus-ring inline-flex h-9 min-h-9 items-center rounded-md border-0 bg-transparent px-0 text-meta font-semibold leading-none text-dim hover:text-fg phone:h-11 phone:min-h-11"
                       onClick={() => setExpanded(false)}
                     >
                       Show less
@@ -492,10 +492,9 @@ function MemoryRow({
                 <div className="ml-auto flex h-10 shrink-0 items-center justify-end gap-1 opacity-0 transition-opacity duration-150 group-hover/memory:opacity-100 group-focus-within/memory:opacity-100 phone:opacity-100">
                   {review && (
                     <Button
-                      size="sm"
+                      size="lg"
                       variant="ghost"
                       aria-label="Confirm memory"
-                      className="size-10 min-h-10 phone:size-11 phone:min-h-11"
                       icon={<IconCheck size={16} />}
                       disabled={busy}
                       onClick={() => void act("confirm")}
@@ -503,14 +502,13 @@ function MemoryRow({
                   )}
                   {state === "active" && (
                     <Button
-                      size="sm"
+                      size="lg"
                       variant="ghost"
                       aria-label={
                         row.entry.tier === "pinned"
                           ? "Unpin memory"
                           : "Pin memory"
                       }
-                      className="size-10 min-h-10 phone:size-11 phone:min-h-11"
                       icon={<IconPin size={16} />}
                       disabled={busy}
                       onClick={() =>
@@ -519,10 +517,9 @@ function MemoryRow({
                     />
                   )}
                   <Button
-                    size="sm"
+                    size="lg"
                     variant="ghost"
                     aria-label="Edit memory"
-                    className="size-10 min-h-10 phone:size-11 phone:min-h-11"
                     icon={<IconPencil size={16} />}
                     disabled={busy}
                     onClick={() => {
@@ -531,12 +528,11 @@ function MemoryRow({
                     }}
                   />
                   <Button
-                    size="sm"
+                    size="lg"
                     variant="ghost"
                     aria-label={
                       state === "archived" ? "Restore memory" : "Archive memory"
                     }
-                    className="size-10 min-h-10 phone:size-11 phone:min-h-11"
                     icon={
                       state === "archived" ? (
                         <IconRestore size={16} />
@@ -551,10 +547,10 @@ function MemoryRow({
                   />
                   {state === "archived" && (
                     <Button
-                      size="sm"
+                      size="lg"
                       variant="ghost"
                       aria-label="Delete memory permanently"
-                      className="size-10 min-h-10 hover:text-red phone:size-11 phone:min-h-11"
+                      className="hover:text-red"
                       icon={<IconTrash size={16} />}
                       disabled={busy}
                       onClick={() =>
