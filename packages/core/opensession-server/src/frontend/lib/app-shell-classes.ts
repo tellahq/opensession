@@ -73,30 +73,32 @@ export const APP_BODY =
  * controls, and the sheet under it is where the room should go. Set on the
  * boxes beside the minibar because the variable is read all through them.
  *
- * The desktop shell takes the same 36px when it can move its traffic lights
- * onto the row (`titlebar-follows-row`, set in index.html; PaneTopRow reports
- * the height). An older shell keeps its lights where a 48px row centres them
- * ((48 - 12) / 2 in its main.js), so the row stays 48px there.
+ * The desktop shell's row is set by its traffic lights, which centre on the
+ * sidebar's row beside them: 48px in a shell that cannot move them ((48 - 12)
+ * / 2 in its main.js), and 44px in one that can (`titlebar-follows-row`, set
+ * in index.html; PaneTopRow reports the height), 2px higher and no further,
+ * so the lights keep their room at the window's corner.
  */
 export const NEW_LAYOUT_ROW_HEIGHT =
   "[html:not(.wco)_[data-minibar]~&]:[--desktop-header-h:36px] " +
   "[html.wco_[data-minibar]~&]:[--desktop-header-h:48px] " +
-  "[html.wco.titlebar-follows-row_[data-minibar]~&]:[--desktop-header-h:36px]";
+  "[html.wco.titlebar-follows-row_[data-minibar]~&]:[--desktop-header-h:44px]";
 
-/** The new layout's row height, for a shell that centres its lights on it. */
-export const NEW_LAYOUT_ROW_PX = 36;
+/** The sidebar row a shell that can move its lights centres them on. */
+export const NEW_LAYOUT_LIGHTS_ROW_PX = 44;
 
 /**
- * The workspace's share of the row in a desktop shell that cannot move its
- * lights: the lights' line stays 24px down, where the 48px sidebar row beside
- * them centres too, but the row ends 4px sooner. Its labels and icons keep to
- * the lights' line by sitting `--row-drop` lower than the row's middle, so the
- * tabs start nearer the window's top and the sheet starts higher.
+ * The workspace's share of the row in the desktop shell: 4px shorter than the
+ * sidebar's row beside the lights (44px, or 40px once the lights can move up).
+ * Its labels and icons keep to the lights' line by sitting `--row-drop` lower
+ * than the row's middle, so the tabs start nearer the window's top and the
+ * sheet starts higher.
  */
 const NEW_LAYOUT_PANE_ROW =
-  NEW_LAYOUT_ROW_HEIGHT +
-  " [html.wco:not(.titlebar-follows-row)_[data-minibar]~&]:[--desktop-header-h:44px]" +
-  " [html.wco:not(.titlebar-follows-row)_[data-minibar]~&]:[--row-drop:4px]";
+  "[html:not(.wco)_[data-minibar]~&]:[--desktop-header-h:36px]" +
+  " [html.wco_[data-minibar]~&]:[--desktop-header-h:44px]" +
+  " [html.wco.titlebar-follows-row_[data-minibar]~&]:[--desktop-header-h:40px]" +
+  " [html.wco_[data-minibar]~&]:[--row-drop:4px]";
 
 /**
  * The new layout's window row over the pane: the tab strip, then the page's
