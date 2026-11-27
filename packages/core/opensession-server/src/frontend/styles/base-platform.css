@@ -142,14 +142,54 @@ body:is(.resizing-sidebar, .resizing-panel, .resizing-tab-split) {
 /* The chrome is the sidebar colour at 88%, so the window material shows a
    little of what is behind the window through it, about as much as the
    native app's own sidebar does. Nothing on it may paint the sidebar colour
-   opaque, or it reads as a shaded slab: a pinned sidebar heading masks the
-   rows under it instead of covering them (useSidebarStickyHeadings). */
+   opaque, or it reads as a shaded slab: a pinned sidebar heading has no fill,
+   and the rows fade out as they slide under it (below). */
 @media (min-width: 721px) {
   html.material-backdrop {
     --sidebar-material: color-mix(in srgb, var(--sidebar-bg) 88%, transparent);
     --sidebar-material-sheen: transparent;
   }
 }
+/* A pinned sidebar heading has no fill, so the rows after it fade out as
+   they slide under it instead of being covered. useSidebarStickyHeadings
+   marks the rows (`data-pin-fade`) and puts the line, the pinned heading's
+   bottom edge measured from the top of the list, on the heading's parent
+   (`--pin-line`). A row fades over the last 16px before its top reaches that
+   line, so it is gone by the time it would touch the heading.
+
+   A scroll-driven animation rather than a scroll listener: the browser runs
+   it in step with the scroll, where the listener's masks trailed it by a
+   frame or more and rows showed through the heading while they caught up.
+   Opacity, so it also runs off the main thread. `view()` reads the nearest
+   scroll container above the row, which is the list itself: nothing between
+   them may clip its overflow, or the line is measured from the wrong box. */
+@keyframes sidebar-pin-fade {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@media (min-width: 721px) {
+  [data-pin-fade] {
+    animation-name: sidebar-pin-fade;
+    animation-duration: auto;
+    animation-timing-function: linear;
+    animation-fill-mode: both;
+    animation-timeline: view(block calc(var(--pin-line, 0px) + 16px) 0px);
+    animation-range: exit 0% exit 16px;
+  }
+}
+/* Not motion: it advances only as far as the reader scrolls. The reduced-
+   motion blanket's 0.01ms duration would finish it at once and park every
+   row at `to`, invisible; `auto` hands the range back to the timeline. */
+@media (min-width: 721px) and (prefers-reduced-motion: reduce) {
+  [data-pin-fade] {
+    animation-duration: auto !important;
+  }
+}
+
 /* Sidebar top row clears the traffic lights. env(titlebar-area-x) is the
    controls' right edge on macOS; it drops to 0 in fullscreen (lights hidden)
    and on Windows (controls on the right), where the default padding wins. */

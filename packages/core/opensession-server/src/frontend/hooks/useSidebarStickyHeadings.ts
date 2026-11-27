@@ -1,42 +1,71 @@
 import { useLayoutEffect } from "react";
 
-/** How far the rows under a pinned caption take to fade back in. */
-const PINNED_FADE_PX = 12;
+/** Every heading that can pin marks itself with this, so the hook never has
+ *  to know which family it belongs to (band, lane, repo, status), or survive
+ *  the class names being restyled. */
+const HEAD = "[data-sticky-head]";
+
+/** Content taller than this is a list of rows, not a row: its children fade
+ *  one by one, or a whole list would vanish once its top reached the line. */
+const ROW_MAX_PX = 120;
+
+/** The part of an element the row walk reads, so it runs without a DOM. */
+export interface FadeNode<T> {
+  readonly children: Iterable<T>;
+  readonly nextElementSibling: T | null;
+  matches(selector: string): boolean;
+  querySelector(selector: string): object | null;
+}
 
 /**
- * The mask for content that has scrolled `cut` pixels under a pinned heading:
- * hidden down to the heading's bottom edge, then faded back in. Content that
- * holds headings of its own (a repo band's lanes) is cut hard instead, or a
- * lane pinned right under its band would sit in the fade. Null when nothing
- * is under the heading.
+ * The elements that fade out as they slide under a pinned heading: the
+ * content after it, split into rows. Something holding headings of its own
+ * (a repo band's lanes) is split too, so those headings are never faded;
+ * each of them marks its own rows. `height` reads an element's layout height.
  */
-export function pinnedContentMask(cut: number, holdsHeadings: boolean) {
-  if (cut <= 0) return null;
-  const end = holdsHeadings ? cut : cut + PINNED_FADE_PX;
-  return `linear-gradient(transparent ${cut}px, #000 ${end}px)`;
+export function pinnedFadeTargets<T extends FadeNode<T>>(
+  head: T,
+  height: (el: T) => number,
+): T[] {
+  const out: T[] = [];
+  const visit = (el: T) => {
+    if (el.matches(HEAD)) return;
+    const children = [...el.children];
+    const split =
+      children.length > 0 &&
+      (el.querySelector(HEAD) !== null || height(el) > ROW_MAX_PX);
+    if (!split) {
+      out.push(el);
+      return;
+    }
+    for (const child of children) visit(child);
+  };
+  for (let sib = head.nextElementSibling; sib; sib = sib.nextElementSibling) {
+    visit(sib);
+  }
+  return out;
 }
 
 export function useSidebarStickyHeadings(
   sidebarScrollRef: React.RefObject<HTMLDivElement | null>,
 ) {
   // CSS has no interoperable :stuck selector. Track the shared sidebar
-  // scrollport instead, mark the headings position:sticky is actively
-  // pinning, and mask the rows that have scrolled under one.
+  // scrollport instead and mark the headings position:sticky is actively
+  // pinning.
   //
   // A pinned heading has no fill of its own. Over the desktop shell's
   // translucent material no fill can match the chrome around it (the
   // material is the window behind, which CSS cannot sample), so an opaque
-  // backing read as a shaded band. Instead the content after the heading,
-  // in the same parent, is masked from its top down to the heading's bottom
-  // edge, and fades back in just under it.
+  // backing read as a shaded band. Instead the rows after a heading fade out
+  // as they reach its bottom edge (`[data-pin-fade]`, base-platform.css).
+  // The fade is a scroll-driven animation, so the browser runs it in step
+  // with the scroll; this only says which rows fade and where the line is,
+  // and only when the list changes. Driving it from the scroll listener lagged
+  // the scroll by a frame or more, and rows showed through while it caught up.
   useLayoutEffect(() => {
     const root = sidebarScrollRef.current;
     if (!root) return;
     let frame = 0;
-    // Every heading that can pin marks itself with `data-sticky-head`, so
-    // this listener never has to know which family it belongs to (band,
-    // lane, repo, status) — or survive the class names being restyled.
-    const selector = "[data-sticky-head]";
     // What a header's own styles say: whether it pins at all, and the offset
     // it pins at. A scroll frame cannot change either, and reading them is a
     // style recalc per header, so they are cached here and re-read only when
@@ -48,43 +77,59 @@ export function useSidebarStickyHeadings(
       sticky: boolean;
       top: number;
       stuck: boolean;
-      /** What scrolls under it: its later siblings, in document order. */
-      content: { el: HTMLElement; holdsHeadings: boolean }[];
     };
-    /** Content masked as last applied, so an unchanged mask costs no write. */
-    let masked = new Map<HTMLElement, string>();
     let heads: StickyHead[] = [];
+    /** What carries the fade as last applied: the rows, and the parents
+     *  holding each heading's line. */
+    let faded = new Set<HTMLElement>();
+    let lined = new Set<HTMLElement>();
     let stale = true;
     const rescan = () => {
       stale = false;
       const applied = new Map(heads.map((h) => [h.el, h.stuck]));
       heads = [];
-      for (const el of root.querySelectorAll<HTMLElement>(selector)) {
+      const nextFaded = new Set<HTMLElement>();
+      const nextLined = new Set<HTMLElement>();
+      for (const el of root.querySelectorAll<HTMLElement>(HEAD)) {
         const style = getComputedStyle(el);
         const parent = el.parentElement;
         const sticky = style.position === "sticky" && !!parent;
-        const content: StickyHead["content"] = [];
-        for (let sib = sticky ? el.nextElementSibling : null; sib;) {
-          if (sib instanceof HTMLElement) {
-            content.push({
-              el: sib,
-              holdsHeadings: !!sib.querySelector(selector),
-            });
-          }
-          sib = sib.nextElementSibling;
-        }
+        const top = Number.parseFloat(style.top) || 0;
         heads.push({
           el,
           parent: parent ?? el,
           sticky,
-          top: Number.parseFloat(style.top) || 0,
-          content,
+          top,
           // React owns className and rewrites it on rerender. The dedicated
-          // data attribute is not part of that managed value, so it preserves
-          // the backing while the scroll position remains unchanged.
+          // data attribute is not part of that managed value, so it survives
+          // a rerender while the scroll position remains unchanged.
           stuck: applied.get(el) ?? el.hasAttribute("data-stuck"),
         });
+        if (!sticky || !parent) continue;
+        // The line rows fade out at: where the heading's bottom edge sits
+        // once pinned. Set on the parent, so the rows after the heading
+        // inherit it, and a nested heading's own parent overrides it for the
+        // rows under that one.
+        parent.style.setProperty(
+          "--pin-line",
+          `${Math.round(top + el.offsetHeight)}px`,
+        );
+        nextLined.add(parent);
+        for (const row of pinnedFadeTargets<Element>(el, (n) =>
+          n instanceof HTMLElement ? n.offsetHeight : 0,
+        )) {
+          if (row instanceof HTMLElement) nextFaded.add(row);
+        }
       }
+      for (const el of nextFaded) el.setAttribute("data-pin-fade", "");
+      for (const el of faded) {
+        if (!nextFaded.has(el)) el.removeAttribute("data-pin-fade");
+      }
+      for (const el of lined) {
+        if (!nextLined.has(el)) el.style.removeProperty("--pin-line");
+      }
+      faded = nextFaded;
+      lined = nextLined;
     };
 
     const update = () => {
@@ -96,7 +141,6 @@ export function useSidebarStickyHeadings(
       // did.
       const rootTop = root.getBoundingClientRect().top;
       const next: boolean[] = [];
-      const masks = new Map<HTMLElement, string>();
       for (const head of heads) {
         if (!head.sticky) {
           next.push(false);
@@ -114,17 +158,7 @@ export function useSidebarStickyHeadings(
         // position there, not static layout.)
         const displaced =
           rect.top - head.parent.getBoundingClientRect().top > 1.5;
-        const stuck = pinned && displaced;
-        next.push(stuck);
-        if (!stuck) continue;
-        // The siblings are in vertical order, so the first one that starts
-        // below the heading ends the walk: usually one rect read per head.
-        for (const item of head.content) {
-          const cut = rect.bottom - item.el.getBoundingClientRect().top;
-          if (cut <= 0) break;
-          const mask = pinnedContentMask(cut, item.holdsHeadings);
-          if (mask) masks.set(item.el, mask);
-        }
+        next.push(pinned && displaced);
       }
       for (let i = 0; i < heads.length; i++) {
         const head = heads[i]!;
@@ -133,13 +167,6 @@ export function useSidebarStickyHeadings(
         head.stuck = stuck;
         head.el.toggleAttribute("data-stuck", stuck);
       }
-      for (const [el, mask] of masks) {
-        if (masked.get(el) !== mask) el.style.maskImage = mask;
-      }
-      for (const el of masked.keys()) {
-        if (!masks.has(el)) el.style.maskImage = "";
-      }
-      masked = masks;
     };
     const schedule = () => {
       if (!frame) frame = requestAnimationFrame(update);
@@ -173,7 +200,8 @@ export function useSidebarStickyHeadings(
       mutationObserver.disconnect();
       densityObserver.disconnect();
       if (frame) cancelAnimationFrame(frame);
-      for (const el of masked.keys()) el.style.maskImage = "";
+      for (const el of faded) el.removeAttribute("data-pin-fade");
+      for (const el of lined) el.style.removeProperty("--pin-line");
     };
   }, [sidebarScrollRef]);
 }
