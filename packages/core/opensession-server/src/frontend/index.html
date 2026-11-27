@@ -444,6 +444,7 @@
         pointer-events: none;
       }
       .splash-logo {
+        position: relative;
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -455,6 +456,29 @@
         display: block;
         width: 76px;
         height: 76px;
+      }
+      /* The sunken mark (the script after #splash): the same icon drawn by a
+       shader into the page, with room around it for the ripples. Its first
+       frame is the plain icon, so swapping it in for the img is invisible and
+       the launch images from scripts/gen-splash.py still match. */
+      .splash-depth {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 182px;
+        height: 182px;
+        margin: -91px 0 0 -91px;
+        pointer-events: none;
+        visibility: hidden;
+      }
+      .splash-sunk .splash-logo {
+        animation: none;
+      }
+      .splash-sunk .splash-logo img {
+        visibility: hidden;
+      }
+      .splash-sunk .splash-depth {
+        visibility: visible;
       }
       /* ui/page-loader wears this same wave for regions inside the app that have
        not arrived yet. The shell cannot import the bundle's CSS, so it keeps
@@ -528,12 +552,193 @@
   <body>
     <div id="splash">
       <span class="splash-logo"
-        ><img src="/mac-app-icon.png?v=7" alt=""
-      /></span>
+        ><img src="/mac-app-icon.png?v=7" alt="" /><canvas
+          class="splash-depth"
+          aria-hidden="true"
+        ></canvas
+      ></span>
       <span class="splash-bars"
         ><span></span><span></span><span></span><span></span><span></span
       ></span>
     </div>
+    <script>
+      // The launch mark, sunk into the page. One fragment shader draws the icon
+      // under a thin liquid surface: the surface swells where it closes over
+      // the icon's edge, a slow wave rings out from it every beat, a light
+      // drifts across and catches the gloss, and the icon wavers a little
+      // through it. The page around the icon takes the same light, so the two
+      // read as one material instead of an icon placed on top.
+      //
+      // Plain script on purpose: it has to run before the bundle parses. It
+      // draws only while #splash is in the document; without WebGL 2, or if the
+      // context is lost, the plain img stays. Reduced motion gets one still,
+      // fully sunk frame.
+      (function () {
+        var splash = document.getElementById("splash");
+        var img = splash && splash.querySelector(".splash-logo img");
+        var canvas = splash && splash.querySelector(".splash-depth");
+        if (!img || !canvas) return;
+        var gl;
+        try {
+          gl = canvas.getContext("webgl2", {
+            alpha: true,
+            premultipliedAlpha: true,
+            antialias: false,
+            powerPreference: "low-power",
+          });
+        } catch (e) {}
+        if (!gl) return;
+        var still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+        var fs = [
+          "#version 300 es",
+          "precision highp float;",
+          "in vec2 v;",
+          "out vec4 o;",
+          "uniform sampler2D uTex;",
+          "uniform float uTime, uIntro, uLight, uOver, uPx;",
+          // The icon's rounded square, in icon units (the 76px box is -0.5..0.5).
+          "float box(vec2 p) {",
+          "  vec2 q = abs(p) - vec2(0.40) + 0.17;",
+          "  return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - 0.17;",
+          "}",
+          "vec2 uvOf(vec2 p) { return vec2(p.x + 0.5, 0.5 - p.y); }",
+          // Height of the liquid surface: a swell over the edge, one wave per
+          // 2.4s beat that leaves the edge and fades as it spreads, and a slow
+          // drift that stays close to the icon.
+          "float surface(vec2 p, float t) {",
+          "  float d = box(p);",
+          "  float x = (d - 0.004) / 0.032;",
+          "  float swell = 0.006 * exp(-x * x);",
+          "  float r = max(d, 0.0);",
+          "  float beat = fract(t / 2.4);",
+          "  float y = (r - 0.02 - beat * 0.34) / 0.08;",
+          "  float rings = 0.0026 * sin(y * 4.4) * exp(-y * y) * (1.0 - beat) * smoothstep(0.0, 0.06, r);",
+          "  float drift = 0.0011 * (sin(p.x * 9.0 + t * 0.8) * sin(p.y * 7.0 - t * 0.6) + 0.7 * sin((p.x - p.y) * 13.0 + t * 1.1));",
+          "  return swell + rings + drift * exp(-r * 9.0);",
+          "}",
+          "void main() {",
+          "  vec2 p = v * uOver * 0.5;",
+          "  float t = uTime;",
+          "  float k = uIntro * uIntro * (3.0 - 2.0 * uIntro);",
+          "  float e = uPx * uOver;",
+          "  float h = surface(p, t);",
+          "  vec3 n = normalize(vec3(-(surface(p + vec2(e, 0.0), t) - h) / e * k, -(surface(p + vec2(0.0, e), t) - h) / e * k, 1.0));",
+          "  float d = box(p);",
+          // Seen through the surface the icon wavers, but not at its edge,
+          // which stays crisp under the crease.
+          "  vec2 uv = uvOf(p) + vec2(-n.x, n.y) * 0.06 * k * smoothstep(0.0, -0.06, d);",
+          "  vec4 c = texture(uTex, uv);",
+          "  vec3 col = c.a > 0.0 ? c.rgb / c.a : vec3(0.0);",
+          // Darker toward its edge, so it sits below the surface.
+          "  col *= 1.0 - k * 0.28 * smoothstep(-0.09, 0.0, box(uv - 0.5 + vec2(0.012, 0.018)));",
+          "  vec3 key = normalize(vec3(-0.4, 0.65, 1.0));",
+          "  float shade = dot(n, key) - key.z;",
+          "  vec3 lp = vec3(0.45 * cos(t * 0.5 + 0.6), 0.2 + 0.28 * sin(t * 0.5 + 0.6), 0.5);",
+          "  vec3 hv = normalize(normalize(lp - vec3(p, 0.0)) + vec3(0.0, 0.0, 1.0));",
+          "  float glint = pow(max(dot(n, hv), 0.0), 120.0);",
+          "  float sheen = pow(max(dot(n, hv), 0.0), 14.0);",
+          "  float fade = smoothstep(1.0, 0.65, length(v));",
+          "  float on = c.a;",
+          "  float light = k * (max(shade, 0.0) * 2.2 + glint * mix(0.12, 0.9, on) + sheen * 0.1 * on);",
+          "  float crease = exp(-pow(d / 0.012, 2.0)) * mix(0.35, 0.18, uLight);",
+          "  float dark = k * (max(-shade, 0.0) * mix(1.6, 0.8, uLight) + crease);",
+          "  light *= mix(fade, 1.0, on);",
+          "  dark *= mix(fade, 1.0, on);",
+          "  vec4 icon = vec4(col, 1.0) * c.a;",
+          "  vec4 glare = vec4(clamp(light, 0.0, 1.0));",
+          "  vec4 shadow = vec4(0.0, 0.0, 0.0, clamp(dark, 0.0, 1.0));",
+          "  vec4 under = icon + (1.0 - icon.a) * shadow;",
+          "  under.rgb *= 1.0 - shadow.a * on;",
+          "  o = glare + (1.0 - glare.a) * under;",
+          "}",
+        ].join("\n");
+        var vs =
+          "#version 300 es\nin vec2 a;\nout vec2 v;\nvoid main() { v = a; gl_Position = vec4(a, 0.0, 1.0); }";
+        var shader = function (type, src) {
+          var s = gl.createShader(type);
+          gl.shaderSource(s, src);
+          gl.compileShader(s);
+          return s;
+        };
+        var prog = gl.createProgram();
+        gl.attachShader(prog, shader(gl.VERTEX_SHADER, vs));
+        gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, fs));
+        gl.bindAttribLocation(prog, 0, "a");
+        gl.linkProgram(prog);
+        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return;
+        gl.useProgram(prog);
+        gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+        gl.bufferData(
+          gl.ARRAY_BUFFER,
+          new Float32Array([-1, -1, 3, -1, -1, 3]),
+          gl.STATIC_DRAW,
+        );
+        gl.enableVertexAttribArray(0);
+        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+        var at = function (name) {
+          return gl.getUniformLocation(prog, name);
+        };
+        var uTime = at("uTime");
+        var uIntro = at("uIntro");
+        var uLight = at("uLight");
+        var uOver = at("uOver");
+        var uPx = at("uPx");
+        var lost = false;
+        canvas.addEventListener("webglcontextlost", function () {
+          lost = true;
+          splash.classList.remove("splash-sunk");
+        });
+        var start = function () {
+          if (lost || !img.naturalWidth) return;
+          gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+          gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+          gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.RGBA,
+            gl.RGBA,
+            gl.UNSIGNED_BYTE,
+            img,
+          );
+          gl.generateMipmap(gl.TEXTURE_2D);
+          gl.texParameteri(
+            gl.TEXTURE_2D,
+            gl.TEXTURE_MIN_FILTER,
+            gl.LINEAR_MIPMAP_LINEAR,
+          );
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          var t0 = 0;
+          var frame = function (now) {
+            if (lost || !splash.isConnected) return;
+            if (!t0) t0 = now;
+            var css = canvas.clientWidth || 182;
+            var size = Math.round(css * Math.min(devicePixelRatio || 1, 3));
+            if (canvas.width !== size) canvas.width = canvas.height = size;
+            gl.viewport(0, 0, size, size);
+            // The surface settles in over the first second, starting from
+            // the flat icon the img was showing.
+            var t = (now - t0) / 1000;
+            gl.uniform1f(uTime, still ? 1.4 : t);
+            gl.uniform1f(uIntro, still ? 1 : Math.min(1, t / 1.2));
+            gl.uniform1f(
+              uLight,
+              document.documentElement.getAttribute("data-theme") === "light"
+                ? 1
+                : 0,
+            );
+            gl.uniform1f(uOver, css / 76);
+            gl.uniform1f(uPx, 1 / size);
+            gl.drawArrays(gl.TRIANGLES, 0, 3);
+            splash.classList.add("splash-sunk");
+            if (!still) requestAnimationFrame(frame);
+          };
+          requestAnimationFrame(frame);
+        };
+        if (img.complete) start();
+        else img.addEventListener("load", start, { once: true });
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="./App.tsx"></script>
   </body>
