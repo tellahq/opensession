@@ -15,7 +15,8 @@ export interface ChannelSection {
 }
 
 export interface SidebarGroup {
-  /** A section's id, or `channels` / `direct` for the built-in groups. */
+  /** A section's id, or `channels`, `direct` or `hidden` for the built-in
+   *  groups. */
   key: string;
   title: string;
   emoji?: string;
@@ -82,16 +83,53 @@ export function movedChannel(
 
 const isDirect = (c: Conversation) => c.kind === "dm" || c.kind === "group";
 
+/** The stored hidden conversation ids, dropping anything that is not one. */
+export function decodeHidden(raw: string | null | undefined): string[] | null {
+  if (!raw) return null;
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  const list = z.array(z.unknown()).safeParse(json);
+  if (!list.success) return null;
+  return list.data.flatMap((entry) => {
+    const id = z.string().safeParse(entry);
+    return id.success ? [id.data] : [];
+  });
+}
+
+/**
+ * Whether a hidden conversation still sits out of sight. The one you have
+ * open stays where it is, and a direct message comes back when someone
+ * writes, as Slack reopens a closed one.
+ */
+export function staysHidden(
+  conversation: Conversation,
+  hidden: ReadonlySet<string>,
+  activeId?: string,
+): boolean {
+  if (!hidden.has(conversation.id) || conversation.id === activeId)
+    return false;
+  return !(isDirect(conversation) && conversation.unread);
+}
+
 /**
  * The sidebar's groups: your sections first, in your order and with their
  * conversations in your order, then every other channel, then every other
- * direct and group message. A conversation you have left drops out of its
- * section without being forgotten, so it comes back if you rejoin.
+ * direct and group message, then the ones you hid. A conversation you have
+ * left drops out of its section without being forgotten, so it comes back
+ * if you rejoin.
  */
 export function sidebarGroups(
-  conversations: readonly Conversation[],
+  all: readonly Conversation[],
   sections: readonly ChannelSection[],
+  hidden: ReadonlySet<string> = new Set(),
+  activeId?: string,
 ): SidebarGroup[] {
+  const out = all.filter((c) => staysHidden(c, hidden, activeId));
+  const conversations = all.filter((c) => !out.includes(c));
   const byId = new Map(conversations.map((c) => [c.id, c]));
   const placed = new Set<string>();
   const groups: SidebarGroup[] = sections.map((section) => {
@@ -123,6 +161,7 @@ export function sidebarGroups(
       title: "Direct messages",
       rows: rest.filter(isDirect),
     },
+    { key: "hidden", title: "Hidden", rows: out },
   );
   return groups;
 }

@@ -6,6 +6,7 @@
 
 import { useSyncExternalStore } from "react";
 import {
+  decodeHidden,
   decodeSections,
   movedChannel,
   withoutChannel,
@@ -15,6 +16,7 @@ import * as userPref from "./user-pref";
 
 export {
   sidebarGroups,
+  staysHidden,
   type ChannelSection,
   type SidebarGroup,
 } from "./channel-section-model";
@@ -96,4 +98,43 @@ export function moveSection(id: string, by: -1 | 1): void {
   if (from < 0 || to < 0 || to >= sections.length) return;
   [sections[from], sections[to]] = [sections[to]!, sections[from]!];
   save(sections);
+}
+
+// Conversations you hid, the way Slack's sidebar leaves out channels you
+// do not want to see. Slack does not tell apps which ones those are, so
+// this is Open Session's own list, a per-person pref like the sections.
+const hiddenPref = userPref.makeUserPref<string>({
+  localKey: "opensession-channel-hidden",
+  prefKey: "channel-hidden",
+  changeEvent: "opensession-channel-hidden-changed",
+  defaultValue: "[]",
+  perUser: true,
+  decode: (raw) => (decodeHidden(raw) ? raw! : null),
+  encode: (value) => value,
+});
+
+let hiddenRaw = "";
+let hiddenSet: ReadonlySet<string> = new Set();
+function hiddenOf(raw: string): ReadonlySet<string> {
+  if (raw !== hiddenRaw) {
+    hiddenRaw = raw;
+    hiddenSet = new Set(decodeHidden(raw) ?? []);
+  }
+  return hiddenSet;
+}
+
+export function useHiddenChannels(): ReadonlySet<string> {
+  return hiddenOf(
+    useSyncExternalStore(hiddenPref.onChanged, hiddenPref.get, hiddenPref.get),
+  );
+}
+
+/** Hide or show conversations in the Channels sidebar. */
+export function setChannelsHidden(ids: readonly string[], hide: boolean): void {
+  const next = new Set(hiddenOf(hiddenPref.get()));
+  for (const id of ids) {
+    if (hide) next.add(id);
+    else next.delete(id);
+  }
+  hiddenPref.set(JSON.stringify([...next]));
 }

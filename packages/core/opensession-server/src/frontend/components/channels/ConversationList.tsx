@@ -6,7 +6,9 @@ import {
   moveChannelToSection,
   moveSection,
   renameSection,
+  setChannelsHidden,
   sidebarGroups,
+  useHiddenChannels,
   useChannelSections,
   type ChannelSection,
   type SidebarGroup,
@@ -22,6 +24,8 @@ import {
   IconArrowUp,
   IconChevronDown,
   IconChevronRight,
+  IconEye,
+  IconEyeOff,
   IconFolderPlus,
   IconHash,
   IconLock,
@@ -129,11 +133,14 @@ function ConversationRow({
   active,
   sections,
   inSection,
+  hidden,
   onOpen,
   onNewSection,
 }: {
   conversation: Conversation;
   active: boolean;
+  /** It sits under Hidden. */
+  hidden: boolean;
   sections: readonly ChannelSection[];
   /** The section of your own it sits in. */
   inSection?: string;
@@ -203,6 +210,17 @@ function ConversationRow({
             <span className="grow">Remove from section</span>
           </ContextMenu.Item>
         )}
+        <ContextMenu.Separator />
+        <ContextMenu.Item
+          onClick={() => setChannelsHidden([conversation.id], !hidden)}
+        >
+          {hidden ? (
+            <IconEye size={20} className={MENU_ICON} />
+          ) : (
+            <IconEyeOff size={20} className={MENU_ICON} />
+          )}
+          <span className="grow">{hidden ? "Show in sidebar" : "Hide"}</span>
+        </ContextMenu.Item>
       </ContextMenu.Popup>
     </ContextMenu.Root>
   );
@@ -231,8 +249,10 @@ function Group({
   onRename: (section: ChannelSection) => void;
   onDelete: (section: ChannelSection) => void;
 }) {
-  const [open, setOpen] = useState(true);
+  // Hidden starts folded: it is there to find things, not to read.
+  const [open, setOpen] = useState(group.key !== "hidden");
   const section = group.section;
+  const ids = group.rows.map((row) => row.id);
   // A built-in group with nothing left in it has nothing to say; an empty
   // section of your own stays, so you can see where to move things.
   if (!group.rows.length && !section) return null;
@@ -255,6 +275,11 @@ function Group({
         >
           {group.emoji && <span aria-hidden>{group.emoji}</span>}
           <span className="min-w-0 truncate">{group.title}</span>
+          {group.key === "hidden" && (
+            <span className="font-normal text-faint tabular-nums">
+              {ids.length}
+            </span>
+          )}
           <IconChevronDown
             size={16}
             className={cn(
@@ -288,6 +313,18 @@ function Group({
             <IconFolderPlus size={20} className={MENU_ICON} />
             <span className="grow">New section…</span>
           </ContextMenu.Item>
+          {group.key === "channels" && (
+            <ContextMenu.Item onClick={() => setChannelsHidden(ids, true)}>
+              <IconEyeOff size={20} className={MENU_ICON} />
+              <span className="grow">Hide all {ids.length}</span>
+            </ContextMenu.Item>
+          )}
+          {group.key === "hidden" && (
+            <ContextMenu.Item onClick={() => setChannelsHidden(ids, false)}>
+              <IconEye size={20} className={MENU_ICON} />
+              <span className="grow">Show all in sidebar</span>
+            </ContextMenu.Item>
+          )}
           {section && (
             <>
               <ContextMenu.Separator />
@@ -311,6 +348,7 @@ function Group({
               active={conversation.id === activeId}
               sections={sections}
               inSection={section?.id}
+              hidden={group.key === "hidden"}
               onOpen={onOpen}
               onNewSection={onNewSection}
             />
@@ -349,6 +387,7 @@ export function ConversationList({
   touch?: boolean;
 }) {
   const sections = useChannelSections();
+  const hidden = useHiddenChannels();
   const [naming, setNaming] = useState<Naming | null>(null);
   const [confirm, confirmDialog] = useConfirm();
 
@@ -368,7 +407,7 @@ export function ConversationList({
         </InlineAlert>
       </div>
     );
-  const groups = sidebarGroups(conversations, sections);
+  const groups = sidebarGroups(conversations, sections, hidden, activeId);
   const commit = () => {
     if (!naming?.draft.trim()) return;
     if (naming.mode === "new") createSection(naming.draft, naming.channelId);
