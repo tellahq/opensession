@@ -1,6 +1,17 @@
 import * as React from "react";
 import { Switch as BaseSwitch } from "@base-ui/react/switch";
-import { cn } from "./cn";
+import * as stylex from "@stylexjs/stylex";
+import { sx } from "./sx";
+import {
+  color,
+  focus,
+  geometry,
+  motion,
+  opacity,
+  radius,
+  shadow,
+  space,
+} from "./tokens.stylex";
 
 type SwitchSize = "md" | "sm";
 
@@ -11,32 +22,59 @@ type SwitchSize = "md" | "sm";
  *  the native app. "sm" is the same switch at 44×20, for dense rows where the
  *  full control would outweigh the row it sits in.
  *
- *  The shape lives in these two strings rather than inside the component
+ *  The shape lives in these styles rather than inside one component
  *  because `SwitchIndicator` below draws the same switch without owning the
  *  press: a switch in a menu row that had drifted from a switch in a settings
  *  row would read as a different control. Both are keyed off `data-checked`,
  *  which Base UI sets on the real thing and the indicator sets by hand. */
-const trackClasses = (size: SwitchSize) =>
-  cn(
-    "relative inline-flex shrink-0 rounded-full bg-active",
-    size === "sm" ? "h-5 w-11" : "h-6 w-[54px]",
-    // The checked track is the selected app accent, matching native
-    // controls, through --accent-control: Black and Honey swap it for
-    // a blue in dark mode, where a white or yellow track stops reading
-    // as "on". Every other accent resolves straight through.
-    "transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] data-[checked]:bg-accent-control",
-  );
+const CHECKED = ":is([data-checked])";
 
-/** The knob is a 32×20 capsule, not a circle. That wider shape is most of
- *  what reads as the current macOS switch. The small size keeps the 2px inset
- *  and the capsule, at 26×16. */
-const thumbClasses = (size: SwitchSize) =>
-  cn(
-    "absolute left-0.5 top-0.5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.22),0_0_0_1px_rgba(0,0,0,0.07)] transition-[translate,background-color] duration-[var(--dur-micro)] ease-[var(--ease)] data-[checked]:bg-on-accent-control",
-    size === "sm"
-      ? "h-4 w-[26px] data-[checked]:translate-x-[14px]"
-      : "h-5 w-8 data-[checked]:translate-x-[18px]",
-  );
+const styles = stylex.create({
+  track: {
+    position: "relative",
+    display: "inline-flex",
+    flexShrink: 0,
+    borderRadius: radius.pill,
+    backgroundColor: { default: color.active, [CHECKED]: color.accentControl },
+    transitionProperty: "color, background-color, border-color",
+    transitionDuration: motion.micro,
+    transitionTimingFunction: motion.ease,
+  },
+  trackMd: { width: geometry.switchTrackW, height: geometry.switchTrackH },
+  trackSm: { width: geometry.switchTrackWSm, height: geometry.switchTrackHSm },
+  // The press, focus and disabled states belong to the real control only;
+  // the indicator below answers no pointer.
+  control: {
+    cursor: { default: "pointer", ":is([data-disabled])": "default" },
+    opacity: { default: null, ":is([data-disabled])": opacity.disabled },
+    outline: { default: "none", ":focus-visible": focus.ring },
+    outlineOffset: { default: null, ":focus-visible": focus.offset },
+  },
+  indicator: { pointerEvents: "none" },
+  // The knob is a capsule, not a circle (32x20, 26x16 small): that wider
+  // shape is most of what reads as the current macOS switch.
+  thumb: {
+    position: "absolute",
+    insetInlineStart: space.s2,
+    top: space.s2,
+    borderRadius: radius.pill,
+    backgroundColor: { default: color.knob, [CHECKED]: color.onAccentControl },
+    boxShadow: shadow.knob,
+    transitionProperty: "translate, background-color",
+    transitionDuration: motion.micro,
+    transitionTimingFunction: motion.ease,
+  },
+  thumbMd: {
+    width: geometry.switchThumbW,
+    height: geometry.switchThumbH,
+    translate: { default: null, [CHECKED]: geometry.switchTravel },
+  },
+  thumbSm: {
+    width: geometry.switchThumbWSm,
+    height: geometry.switchThumbHSm,
+    translate: { default: null, [CHECKED]: geometry.switchTravelSm },
+  },
+});
 
 const STRETCH_ANIMATION_ID = "switch-thumb-stretch";
 
@@ -82,11 +120,12 @@ export function Switch({
   const thumbRef = React.useRef<HTMLSpanElement>(null);
   return (
     <BaseSwitch.Root
-      className={cn(
-        trackClasses(size),
-        "cursor-pointer outline-none",
-        "focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
-        "data-[disabled]:cursor-default data-[disabled]:opacity-40",
+      {...sx(
+        [
+          styles.track,
+          size === "sm" ? styles.trackSm : styles.trackMd,
+          styles.control,
+        ],
         className,
       )}
       onCheckedChange={(checked, eventDetails) => {
@@ -95,7 +134,13 @@ export function Switch({
       }}
       {...props}
     >
-      <BaseSwitch.Thumb ref={thumbRef} className={thumbClasses(size)} />
+      <BaseSwitch.Thumb
+        ref={thumbRef}
+        {...stylex.props(
+          styles.thumb,
+          size === "sm" ? styles.thumbSm : styles.thumbMd,
+        )}
+      />
     </BaseSwitch.Root>
   );
 }
@@ -125,9 +170,22 @@ export function SwitchIndicator({
     <span
       aria-hidden
       data-checked={checked}
-      className={cn(trackClasses(size), "pointer-events-none", className)}
+      {...sx(
+        [
+          styles.track,
+          size === "sm" ? styles.trackSm : styles.trackMd,
+          styles.indicator,
+        ],
+        className,
+      )}
     >
-      <span data-checked={checked} className={thumbClasses(size)} />
+      <span
+        data-checked={checked}
+        {...stylex.props(
+          styles.thumb,
+          size === "sm" ? styles.thumbSm : styles.thumbMd,
+        )}
+      />
     </span>
   );
 }

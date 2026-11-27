@@ -20,7 +20,7 @@ test("reports transcript loading inside the session context slot", () => {
   expect(html).toContain("data-session-context");
   expect(html).toContain("data-transcript-loading");
   expect(html).toContain("Loading transcript…");
-  expect(html).toContain("animate-spin");
+  expect(html).toContain("spinner__styles.ring");
   expect(html).toContain("h-5");
   expect(html).not.toContain("Loading session context");
 });

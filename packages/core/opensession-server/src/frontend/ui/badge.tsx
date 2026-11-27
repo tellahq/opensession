@@ -1,5 +1,7 @@
 import * as React from "react";
-import { cn } from "./cn";
+import * as stylex from "@stylexjs/stylex";
+import { type LayoutStyles, sx } from "./sx";
+import { color, corner, radius, space, text, weight } from "./tokens.stylex";
 
 /**
  * Badge — a label that reports state, not an action.
@@ -34,61 +36,102 @@ import { cn } from "./cn";
 type Tone = "neutral" | "accent" | "success" | "warning" | "danger" | "info";
 type Variant = "soft" | "outline";
 
-const soft: Record<Tone, string> = {
-  neutral: "bg-active text-dim",
-  accent: "bg-accent-soft text-accent",
-  success: "bg-green-soft text-green",
-  warning: "bg-yellow-soft text-yellow",
-  danger: "bg-red-soft text-red",
-  info: "bg-blue-soft text-blue",
-};
+/** A tone's ink at a fixed strength over whatever is behind it. */
+const ink = (c: string, pct: number) =>
+  `color-mix(in oklab, ${c} ${pct}%, transparent)`;
 
-// The outline set borrows the tone's own ink for its edge at low strength, so
-// a warning chip does not read as a neutral box with yellow text in it.
-const outline: Record<Tone, string> = {
-  // `text-dim`, not `text-faint`: an outlined chip already gives up the fill
-  // that a soft badge reads against, and faint ink on top of that leaves the
-  // label barely there — which matters most here, since the neutral outline
-  // is the one that carries names (a branch, "current") rather than states.
-  neutral: "border border-line text-dim",
-  accent: "border border-accent/40 text-accent",
-  success: "border border-green/40 text-green",
-  warning: "border border-yellow/40 text-yellow",
-  danger: "border border-red/40 text-red",
-  info: "border border-blue/40 text-blue",
-};
+const styles = stylex.create({
+  base: {
+    display: "inline-flex",
+    flexShrink: 0,
+    alignItems: "center",
+    gap: space.s4,
+    borderRadius: radius.sm,
+    ["cornerShape"]: corner.squircle,
+    paddingInline: space.s6,
+    paddingBlock: space.s2,
+    fontSize: text.meta,
+    fontWeight: weight.regular,
+    whiteSpace: "nowrap",
+  },
+  outline: { borderStyle: "solid", borderWidth: 1 },
+  dot: {
+    width: space.s6,
+    height: space.s6,
+    flexShrink: 0,
+    borderRadius: radius.pill,
+    backgroundColor: color.current,
+  },
+  soft_neutral: { backgroundColor: color.active, color: color.dim },
+  soft_accent: { backgroundColor: color.accentSoft, color: color.accentInk },
+  soft_success: { backgroundColor: color.greenSoft, color: color.green },
+  soft_warning: { backgroundColor: color.yellowSoft, color: color.yellow },
+  soft_danger: { backgroundColor: color.redSoft, color: color.red },
+  soft_info: { backgroundColor: color.blueSoft, color: color.blue },
+  outline_neutral: { borderColor: color.line, color: color.dim },
+  outline_accent: {
+    borderColor: ink(color.accent, 40),
+    color: color.accentInk,
+  },
+  outline_success: { borderColor: ink(color.green, 40), color: color.green },
+  outline_warning: { borderColor: ink(color.yellow, 40), color: color.yellow },
+  outline_danger: { borderColor: ink(color.red, 40), color: color.red },
+  outline_info: { borderColor: ink(color.blue, 40), color: color.blue },
+});
+
+const toneStyle = {
+  soft: {
+    neutral: styles.soft_neutral,
+    accent: styles.soft_accent,
+    success: styles.soft_success,
+    warning: styles.soft_warning,
+    danger: styles.soft_danger,
+    info: styles.soft_info,
+  },
+  outline: {
+    neutral: styles.outline_neutral,
+    accent: styles.outline_accent,
+    success: styles.outline_success,
+    warning: styles.outline_warning,
+    danger: styles.outline_danger,
+    info: styles.outline_info,
+  },
+} as const;
 
 export type BadgeProps = React.ComponentPropsWithoutRef<"span"> & {
   tone?: Tone;
   variant?: Variant;
   /** A leading state dot, filled with the tone's ink. */
   dot?: boolean;
+  /** Placement only; tone and variant decide the look. */
+  xstyle?: LayoutStyles;
 };
 
 export function Badge({
   tone = "neutral",
   variant = "soft",
   dot,
+  xstyle,
   className,
+  style,
   children,
   ...rest
 }: BadgeProps) {
   return (
     <span
-      className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5",
-        "text-meta whitespace-nowrap",
-        variant === "outline" ? outline[tone] : soft[tone],
-        className,
-      )}
       {...rest}
-    >
-      {dot && (
-        <span
-          className="size-1.5 shrink-0 rounded-full bg-current"
-          aria-hidden="true"
-        />
+      {...sx(
+        [
+          styles.base,
+          variant === "outline" && styles.outline,
+          toneStyle[variant][tone],
+          xstyle,
+        ],
+        className,
+        style,
       )}
+    >
+      {dot && <span {...stylex.props(styles.dot)} aria-hidden="true" />}
       {children}
     </span>
   );

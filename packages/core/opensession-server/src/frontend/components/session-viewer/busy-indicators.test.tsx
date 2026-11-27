@@ -46,7 +46,7 @@ describe("TranscriptSyncing", () => {
     expect(html).toContain(
       "bottom-[calc(var(--session-under,0px)+var(--suggestions-under,0px)+8px)]",
     );
-    expect(html).toContain("animate-spin");
+    expect(html).toContain("spinner__styles.ring");
     expect(html).toContain("Checking for new messages");
     expect(html).not.toContain("Loading transcript");
   });

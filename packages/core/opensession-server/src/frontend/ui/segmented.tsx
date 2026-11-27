@@ -2,7 +2,19 @@ import { Toggle } from "@base-ui/react/toggle";
 import { ToggleGroup } from "@base-ui/react/toggle-group";
 import { motion } from "motion/react";
 import * as React from "react";
-import { cn } from "./cn";
+import * as stylex from "@stylexjs/stylex";
+import { sx } from "./sx";
+import {
+  color,
+  corner,
+  media,
+  motion as timing,
+  radius,
+  shadow,
+  space,
+  text,
+  weight,
+} from "./tokens.stylex";
 import { duration, ease } from "./motion";
 
 /**
@@ -51,10 +63,67 @@ import { duration, ease } from "./motion";
  *  content it filters rather than a setting being read on its own. */
 type Size = "sm" | "md";
 
-const optionSizes: Record<Size, string> = {
-  sm: "px-2 py-0.5",
-  md: "px-2.5 py-1",
-};
+const styles = stylex.create({
+  track: {
+    display: "inline-flex",
+    borderRadius: radius.lg,
+    ["cornerShape"]: corner.squircle,
+    backgroundColor: color.hover,
+    padding: space.s2,
+  },
+  option: {
+    position: "relative",
+    display: "inline-flex",
+    cursor: { default: "pointer", ":disabled": "default" },
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.control,
+    ["cornerShape"]: corner.squircle,
+    borderWidth: 0,
+    backgroundColor: color.transparent,
+    textAlign: "center",
+    fontSize: { default: text.label, [media.phone]: text.itemTitle },
+    fontWeight: weight.medium,
+    whiteSpace: "nowrap",
+    transitionProperty: "color, background-color, border-color",
+    transitionDuration: timing.micro,
+    transitionTimingFunction: timing.ease,
+  },
+  sm: {
+    paddingInline: { default: space.s8, [media.phone]: space.s12 },
+    paddingBlock: { default: space.s2, [media.phone]: space.s8 },
+  },
+  md: {
+    paddingInline: { default: space.s10, [media.phone]: space.s12 },
+    paddingBlock: { default: space.s4, [media.phone]: space.s8 },
+  },
+  selected: { color: { default: color.fg, ":disabled": color.faint } },
+  idle: {
+    color: {
+      default: color.dim,
+      ":hover": { default: null, [media.hover]: color.fg },
+      ":disabled": color.faint,
+    },
+  },
+  // Above the knob, which is absolutely positioned over the option.
+  label: {
+    position: "relative",
+    display: "flex",
+    alignItems: "center",
+    gap: space.s6,
+  },
+  knob: {
+    position: "absolute",
+    inset: space.s0,
+    borderRadius: radius.control,
+    ["cornerShape"]: corner.squircle,
+    borderStyle: "solid",
+    borderWidth: 1,
+    borderColor: color.segmentedKnobEdge,
+    backgroundColor: color.segmentedKnob,
+    boxShadow: shadow.sm,
+  },
+});
 
 const SegmentedContext = React.createContext<{
   knobId: string;
@@ -102,7 +171,7 @@ export function Segmented({
           const picked = next[0];
           if (picked !== undefined && picked !== value) onValueChange(picked);
         }}
-        className={cn("inline-flex rounded-lg bg-hover p-0.5", className)}
+        {...sx(styles.track, className)}
         {...props}
       >
         {children}
@@ -124,23 +193,22 @@ export function SegmentedOption({
   return (
     <Toggle
       value={value}
-      className={cn(
-        "relative inline-flex cursor-pointer items-center justify-center rounded-control border-0 bg-transparent text-center text-control-label font-medium",
-        optionSizes[size],
-        "whitespace-nowrap transition-colors duration-[var(--dur-micro)] ease-[var(--ease)]",
-        // Phones get the tap box; the desktop control is a reading size.
-        "phone:px-3 phone:py-2 phone:text-item-title",
-        selected ? "text-fg" : "text-dim hover:text-fg",
-        // An option the data can't offer yet stays in place, greyed: taking
-        // it out would shift the ones beside it as the page loads.
-        "disabled:cursor-default disabled:text-faint disabled:hover:text-faint",
+      // Phones get the tap box; the desktop control is a reading size. An
+      // option the data can't offer yet stays in place, greyed: taking it out
+      // would shift the ones beside it as the page loads.
+      {...sx(
+        [
+          styles.option,
+          size === "sm" ? styles.sm : styles.md,
+          selected ? styles.selected : styles.idle,
+        ],
         className,
       )}
       {...props}
     >
       {selected && <SegmentedKnob knobId={knobId} />}
       {/* Above the knob, which is absolutely positioned over the option. */}
-      <span className="relative flex items-center gap-1.5">{children}</span>
+      <span {...stylex.props(styles.label)}>{children}</span>
     </Toggle>
   );
 }
@@ -159,7 +227,7 @@ export function SegmentedKnob({ knobId }: { knobId: string }) {
     <motion.span
       layoutId={knobId}
       aria-hidden
-      className="absolute inset-0 rounded-control border border-[var(--segmented-knob-edge)] bg-[var(--segmented-knob-surface)] smooth-shadow-sm"
+      {...stylex.props(styles.knob)}
       transition={{ type: "tween", duration: duration.base, ease }}
     />
   );

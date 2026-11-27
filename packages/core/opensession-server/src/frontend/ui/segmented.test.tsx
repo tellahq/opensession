@@ -13,9 +13,7 @@ describe("Segmented", () => {
 
     expect(html.match(/<button[^>]+>/g)).toHaveLength(2);
     expect(
-      html.match(
-        /<button[^>]+class="[^"]*justify-center[^"]*text-center[^"]*"/g,
-      ),
+      html.match(/<button[^>]+class="[^"]*segmented__styles\.option[^"]*"/g),
     ).toHaveLength(2);
   });
 });
