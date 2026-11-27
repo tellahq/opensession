@@ -66,7 +66,10 @@ test("the summary separates its headline from PR metadata", () => {
   const summary = statusBarSource.slice(summaryStart, summaryEnd);
 
   expect(summaryStart).toBeGreaterThan(-1);
-  expect(summary).toContain("flex-col justify-center gap-1");
+  // The headline shares the first row with the action; the PR line runs on
+  // under both, so the action never cuts it short.
+  expect(summary).toContain("grid grid-cols-[auto_minmax(0,1fr)_auto]");
+  expect(summary).toContain("col-span-2 col-start-2 row-start-2");
 });
 
 test("the summary's checks preview stays open with its parent", () => {

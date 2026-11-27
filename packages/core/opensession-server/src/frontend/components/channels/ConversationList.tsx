@@ -1,11 +1,35 @@
 import { useState } from "react";
 import type { Conversation } from "../../lib/api/slack-channels";
-import { conversationSections } from "../../lib/slack-conversations";
-import { sidebarToolRowClass } from "../sidebar/SidebarToolsNav";
+import {
+  createSection,
+  deleteSection,
+  moveChannelToSection,
+  moveSection,
+  renameSection,
+  sidebarGroups,
+  useChannelSections,
+  type ChannelSection,
+  type SidebarGroup,
+} from "../../lib/channel-sections";
 import { cn } from "../../ui/cn";
+import { useConfirm } from "../../ui/confirm";
 import { ListRow } from "../../ui/list-row";
+import { ContextMenu, MENU_ICON, Menu } from "../../ui/menu";
 import { InlineAlert, ListSkeleton } from "../../ui/state";
-import { IconChevronDown, IconHash, IconLock } from "../icons";
+import {
+  IconArrowDown,
+  IconArrowUp,
+  IconChevronDown,
+  IconChevronRight,
+  IconFolderPlus,
+  IconHash,
+  IconLock,
+  IconPencil,
+  IconTrash,
+  IconX,
+} from "../icons";
+import { RenameDialog } from "../RenameDialog";
+import { sidebarToolRowClass } from "../sidebar/SidebarToolsNav";
 import { UserAvatar } from "../UserAvatar";
 
 /** A conversation's leading mark: `#`, a lock, or the person's photo. */
@@ -44,71 +68,208 @@ export function ConversationGlyph({
   return <Glyph size={size} className="shrink-0 text-faint" />;
 }
 
-function Section({
-  title,
-  conversations,
+/** What the name dialog is doing: naming a new section (with the
+ *  conversation it was asked for from), or renaming one. */
+type Naming =
+  | { mode: "new"; channelId?: string; draft: string }
+  | { mode: "rename"; id: string; draft: string };
+
+const SUB_ARROW = <IconChevronRight size={16} className="text-faint" />;
+
+function ConversationRow({
+  conversation,
+  active,
+  sections,
+  inSection,
+  onOpen,
+  onNewSection,
+}: {
+  conversation: Conversation;
+  active: boolean;
+  sections: readonly ChannelSection[];
+  /** The section of your own it sits in. */
+  inSection?: string;
+  onOpen: (id: string) => void;
+  onNewSection: (channelId: string) => void;
+}) {
+  const unread = !!conversation.unread;
+  const targets = sections.filter((section) => section.id !== inSection);
+  return (
+    <ContextMenu.Root>
+      <ContextMenu.Trigger
+        render={
+          <ListRow
+            className={cn(
+              sidebarToolRowClass(active),
+              active ? "hover:bg-selected" : "hover:bg-transparent",
+              unread && !active && "font-semibold text-fg",
+            )}
+            aria-current={active ? "page" : undefined}
+            onClick={() => onOpen(conversation.id)}
+          />
+        }
+      >
+        <ConversationGlyph conversation={conversation} />
+        <span className="min-w-0 flex-1 truncate">{conversation.name}</span>
+        {!!conversation.unreadCount && (
+          <span
+            className="ml-auto rounded-full bg-accent px-1.5 text-meta leading-[18px] font-semibold text-on-accent tabular-nums"
+            aria-label={`${conversation.unreadCount} unread`}
+          >
+            {conversation.unreadCount}
+          </span>
+        )}
+      </ContextMenu.Trigger>
+      <ContextMenu.Popup>
+        <ContextMenu.SubmenuRoot>
+          <ContextMenu.SubmenuTrigger>
+            <IconFolderPlus size={20} className={MENU_ICON} />
+            <span className="grow">Move to section</span>
+            {SUB_ARROW}
+          </ContextMenu.SubmenuTrigger>
+          <Menu.Popup className="min-w-[180px]">
+            {targets.map((section) => (
+              <Menu.Item
+                key={section.id}
+                onClick={() =>
+                  moveChannelToSection(conversation.id, section.id)
+                }
+              >
+                <span className="grow truncate">
+                  {section.emoji ? `${section.emoji} ` : ""}
+                  {section.name}
+                </span>
+              </Menu.Item>
+            ))}
+            {targets.length > 0 && <Menu.Separator />}
+            <Menu.Item onClick={() => onNewSection(conversation.id)}>
+              <span className="grow">New section…</span>
+            </Menu.Item>
+          </Menu.Popup>
+        </ContextMenu.SubmenuRoot>
+        {inSection && (
+          <ContextMenu.Item
+            onClick={() => moveChannelToSection(conversation.id, null)}
+          >
+            <IconX size={20} className={MENU_ICON} />
+            <span className="grow">Remove from section</span>
+          </ContextMenu.Item>
+        )}
+      </ContextMenu.Popup>
+    </ContextMenu.Root>
+  );
+}
+
+function Group({
+  group,
+  index,
+  sectionCount,
+  sections,
   activeId,
   onOpen,
   touch,
+  onNewSection,
+  onRename,
+  onDelete,
 }: {
-  title: string;
-  conversations: Conversation[];
+  group: SidebarGroup;
+  index: number;
+  sectionCount: number;
+  sections: readonly ChannelSection[];
   activeId?: string;
   onOpen: (id: string) => void;
   touch: boolean;
+  onNewSection: (channelId?: string) => void;
+  onRename: (section: ChannelSection) => void;
+  onDelete: (section: ChannelSection) => void;
 }) {
   const [open, setOpen] = useState(true);
-  if (!conversations.length) return null;
+  const section = group.section;
+  // A built-in group with nothing left in it has nothing to say; an empty
+  // section of your own stays, so you can see where to move things.
+  if (!group.rows.length && !section) return null;
   return (
     <div className="mt-3 first:mt-1">
-      <ListRow
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
-        className={cn(
-          "items-center gap-1 py-0 px-[calc(var(--sidebar-icon-left,16px)-var(--sidebar-nav-x,10px))] text-body text-dim hover:bg-transparent hover:text-fg",
-          touch ? "min-h-11" : "h-[var(--sidebar-cap-h,28px)] min-h-0",
-        )}
-      >
-        {title}
-        <IconChevronDown
-          size={16}
-          className={cn(
-            "text-faint transition-transform",
-            !open && "-rotate-90",
+      <ContextMenu.Root>
+        <ContextMenu.Trigger
+          render={
+            <ListRow
+              aria-expanded={open}
+              onClick={() => setOpen(!open)}
+              className={cn(
+                "items-center gap-1 py-0 px-[calc(var(--sidebar-icon-left,16px)-var(--sidebar-nav-x,10px))] text-body text-dim hover:bg-transparent hover:text-fg",
+                touch ? "min-h-11" : "h-[var(--sidebar-cap-h,28px)] min-h-0",
+              )}
+            />
+          }
+        >
+          {group.emoji && <span aria-hidden>{group.emoji}</span>}
+          <span className="min-w-0 truncate">{group.title}</span>
+          <IconChevronDown
+            size={16}
+            className={cn(
+              "shrink-0 text-faint transition-transform",
+              !open && "-rotate-90",
+            )}
+          />
+        </ContextMenu.Trigger>
+        <ContextMenu.Popup>
+          {section && (
+            <>
+              <ContextMenu.Item onClick={() => onRename(section)}>
+                <IconPencil size={20} className={MENU_ICON} />
+                <span className="grow">Rename section</span>
+              </ContextMenu.Item>
+              {index > 0 && (
+                <ContextMenu.Item onClick={() => moveSection(section.id, -1)}>
+                  <IconArrowUp size={20} className={MENU_ICON} />
+                  <span className="grow">Move up</span>
+                </ContextMenu.Item>
+              )}
+              {index < sectionCount - 1 && (
+                <ContextMenu.Item onClick={() => moveSection(section.id, 1)}>
+                  <IconArrowDown size={20} className={MENU_ICON} />
+                  <span className="grow">Move down</span>
+                </ContextMenu.Item>
+              )}
+            </>
           )}
-        />
-      </ListRow>
+          <ContextMenu.Item onClick={() => onNewSection()}>
+            <IconFolderPlus size={20} className={MENU_ICON} />
+            <span className="grow">New section…</span>
+          </ContextMenu.Item>
+          {section && (
+            <>
+              <ContextMenu.Separator />
+              <ContextMenu.Item
+                onClick={() => onDelete(section)}
+                className="text-red data-[highlighted]:bg-red-soft"
+              >
+                <IconTrash size={20} className="text-red" />
+                <span className="grow">Delete section</span>
+              </ContextMenu.Item>
+            </>
+          )}
+        </ContextMenu.Popup>
+      </ContextMenu.Root>
       {open && (
         <div className="flex flex-col gap-0.5">
-          {conversations.map((conversation) => {
-            const active = conversation.id === activeId;
-            const unread = !!conversation.unread;
-            return (
-              <ListRow
-                key={conversation.id}
-                className={cn(
-                  sidebarToolRowClass(active),
-                  active ? "hover:bg-selected" : "hover:bg-transparent",
-                  unread && !active && "font-semibold text-fg",
-                )}
-                aria-current={active ? "page" : undefined}
-                onClick={() => onOpen(conversation.id)}
-              >
-                <ConversationGlyph conversation={conversation} />
-                <span className="min-w-0 flex-1 truncate">
-                  {conversation.name}
-                </span>
-                {!!conversation.unreadCount && (
-                  <span
-                    className="ml-auto rounded-full bg-accent px-1.5 text-meta leading-[18px] font-semibold text-on-accent tabular-nums"
-                    aria-label={`${conversation.unreadCount} unread`}
-                  >
-                    {conversation.unreadCount}
-                  </span>
-                )}
-              </ListRow>
-            );
-          })}
+          {group.rows.map((conversation) => (
+            <ConversationRow
+              key={conversation.id}
+              conversation={conversation}
+              active={conversation.id === activeId}
+              sections={sections}
+              inSection={section?.id}
+              onOpen={onOpen}
+              onNewSection={onNewSection}
+            />
+          ))}
+          {section && !group.rows.length && (
+            <p className="px-[calc(var(--sidebar-icon-left,16px)-var(--sidebar-nav-x,10px))] py-1 text-meta text-faint">
+              Right-click a channel to move it here
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -116,8 +277,10 @@ function Section({
 }
 
 /**
- * A person's Slack sidebar: channels, then direct and group messages, with
- * unread ones in bold and a count on a direct message, as Slack shows them.
+ * A person's Slack sidebar: their own sections first (Start, Projects, ...),
+ * then the other channels, then direct and group messages, with unread ones
+ * in bold and a count on a direct message, as Slack shows them. Right-click a
+ * row, or long-press it on a touch screen, to move it between sections.
  */
 export function ConversationList({
   conversations,
@@ -135,6 +298,10 @@ export function ConversationList({
   /** Phone rows: 44px targets. */
   touch?: boolean;
 }) {
+  const sections = useChannelSections();
+  const [naming, setNaming] = useState<Naming | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
+
   if (loading)
     return <ListSkeleton rows={8} variant="bare" className="px-2 pt-2" />;
   if (error && !conversations.length)
@@ -143,23 +310,53 @@ export function ConversationList({
         {error}
       </InlineAlert>
     );
-  const { channels, direct } = conversationSections(conversations);
+  const groups = sidebarGroups(conversations, sections);
+  const commit = () => {
+    if (!naming?.draft.trim()) return;
+    if (naming.mode === "new") createSection(naming.draft, naming.channelId);
+    else renameSection(naming.id, naming.draft);
+    setNaming(null);
+  };
   return (
     <div className="pb-4">
-      <Section
-        title="Channels"
-        conversations={channels}
-        activeId={activeId}
-        onOpen={onOpen}
-        touch={touch}
+      {groups.map((group, index) => (
+        <Group
+          key={group.key}
+          group={group}
+          index={index}
+          sectionCount={sections.length}
+          sections={sections}
+          activeId={activeId}
+          onOpen={onOpen}
+          touch={touch}
+          onNewSection={(channelId) =>
+            setNaming({ mode: "new", channelId, draft: "" })
+          }
+          onRename={(section) =>
+            setNaming({ mode: "rename", id: section.id, draft: section.name })
+          }
+          onDelete={(section) =>
+            confirm({
+              title: `Delete ${section.name}?`,
+              description:
+                "Its channels go back under Channels and Direct messages.",
+              confirmLabel: "Delete",
+              destructive: true,
+              onConfirm: () => deleteSection(section.id),
+            })
+          }
+        />
+      ))}
+      <RenameDialog
+        title={naming?.mode === "rename" ? "Rename section" : "New section"}
+        submitLabel={naming?.mode === "rename" ? "Rename" : "Create"}
+        placeholder="Projects"
+        draft={naming?.draft ?? null}
+        onDraftChange={(draft) => naming && setNaming({ ...naming, draft })}
+        onCommit={commit}
+        onCancel={() => setNaming(null)}
       />
-      <Section
-        title="Direct messages"
-        conversations={direct}
-        activeId={activeId}
-        onOpen={onOpen}
-        touch={touch}
-      />
+      {confirmDialog}
     </div>
   );
 }

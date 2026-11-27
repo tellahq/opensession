@@ -94,6 +94,22 @@ export const PANE_TOP_ROW =
   "relative flex min-w-0 shrink-0 items-stretch bg-sidebar " +
   "[&:not(:has(>:not(:empty)))]:hidden";
 
+/**
+ * The new layout's window-row controls beside the minibar: the sidebar
+ * toggle, the bell, back, forward and search. One size whether the sidebar
+ * is open or closed, so the toggle does not grow when it is the only thing
+ * left in the row (NEW_LAYOUT_SIDEBAR_REOPEN). A 30px box with 22px glyphs,
+ * a step up from the pane's own 28px controls: these are the window's
+ * navigation, not one session's actions.
+ */
+export const NEW_LAYOUT_CHROME_CONTROLS =
+  "[&_:is(button,a)]:size-7.5 [&_:is(button,a)]:min-h-7.5 [&_:is(button,a)]:p-0 [&_svg]:size-[22px]";
+
+/** The sidebar toggle while the sidebar is closed, at the size and the spot
+ *  it has in the open sidebar's row (NEW_LAYOUT_CHROME_CONTROLS). */
+export const NEW_LAYOUT_SIDEBAR_REOPEN =
+  "new-layout:top-[calc((var(--desktop-header-h)-30px)/2)] new-layout:size-7.5 new-layout:[&_svg]:size-[22px]";
+
 /** The strip's share of that row. The strip brings its own room at each end.
  *  With the sidebar collapsed, the floating re-open control sits over the
  *  row's first 48px. The desktop shell adds its navigation cluster there and

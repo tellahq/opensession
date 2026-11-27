@@ -21,6 +21,7 @@ const KEY_RE = /^[a-z][a-zA-Z0-9-]{0,40}$/;
 const MAX_VALUE_LEN = 200;
 const LONG_VALUE_KEYS = new Set([
   "active-order",
+  "channel-sections",
   "repo-order",
   "session-checkouts",
   "shortcuts",
