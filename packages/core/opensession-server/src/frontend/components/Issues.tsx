@@ -389,8 +389,9 @@ export function Issues({ sessions, onOpenSession, topbarActionsEl }: Props) {
                 </span>
               </div>
               <Button
+                size="lg"
                 variant="ghost"
-                className="min-h-10 shrink-0 phone:min-h-11"
+                className="shrink-0"
                 render={
                   <a href={preview.url} target="_blank" rel="noreferrer" />
                 }
@@ -399,8 +400,9 @@ export function Issues({ sessions, onOpenSession, topbarActionsEl }: Props) {
               </Button>
               {previewSession ? (
                 <Button
+                  size="lg"
                   variant="primary"
-                  className="min-h-10 shrink-0 phone:min-h-11"
+                  className="shrink-0"
                   onClick={() => {
                     onOpenSession(previewSession.id);
                     setPreview(null);
@@ -410,8 +412,9 @@ export function Issues({ sessions, onOpenSession, topbarActionsEl }: Props) {
                 </Button>
               ) : (
                 <Button
+                  size="lg"
                   variant="primary"
-                  className="min-h-10 shrink-0 phone:min-h-11"
+                  className="shrink-0"
                   disabled={starting || previewStarting || preview.assigned}
                   onClick={() => void start(preview)}
                 >
@@ -421,8 +424,9 @@ export function Issues({ sessions, onOpenSession, topbarActionsEl }: Props) {
                 </Button>
               )}
               <Button
+                size="lg"
                 variant="ghost"
-                className="size-10 shrink-0 phone:size-11"
+                className="shrink-0"
                 icon={<IconX size={20} />}
                 aria-label="Close issue"
                 onClick={() => setPreview(null)}

@@ -252,10 +252,11 @@ export function NextUnreadButton({ phone = false }: { phone?: boolean }) {
         >
           {chats.map((chat) => (
             <Button
+              size="lg"
               key={chat.id}
               data-unread-destination
               variant="ghost"
-              className="min-h-10 w-full justify-start gap-2 whitespace-normal px-2.5 py-2 text-left text-sm phone:min-h-11"
+              className="w-full justify-start gap-2 whitespace-normal px-2.5 py-2 text-left text-sm"
               onClick={() => choose(chat.id)}
               aria-label={`Open unread session: ${chat.title}`}
             >

@@ -823,8 +823,9 @@ export function Prs({
               </div>
               {preview.workspaceId ? (
                 <Button
+                  size="lg"
                   variant="default"
-                  className="min-h-10 shrink-0 phone:min-h-11"
+                  className="shrink-0"
                   icon={<IconSidebarLeft size={18} />}
                   onClick={() => {
                     onOpenWorkspace(preview.workspaceId!, preview);
@@ -835,8 +836,9 @@ export function Prs({
                 </Button>
               ) : preview.state === "OPEN" ? (
                 <Button
+                  size="lg"
                   variant="default"
-                  className="min-h-10 shrink-0 phone:min-h-11"
+                  className="shrink-0"
                   icon={<IconSidebarLeft size={18} />}
                   disabled={addingToSidebar}
                   onClick={() => void addPreviewToSidebar()}
@@ -845,8 +847,9 @@ export function Prs({
                 </Button>
               ) : null}
               <Button
+                size="lg"
                 variant="ghost"
-                className="size-10 shrink-0 phone:size-11"
+                className="shrink-0"
                 icon={<IconX size={20} />}
                 aria-label="Close pull request"
                 onClick={() => setPreview(null)}
