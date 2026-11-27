@@ -9,11 +9,20 @@ import { IconPencil } from "../icons";
  *  here?" without opening the session. */
 export function DraftTooltipLabel({ draftKey }: { draftKey: string }) {
   const { text, attachments } = draftPreview(loadDraft(draftKey));
+  // One line: the sentence trims to the tooltip's width, and the closing
+  // quote and attachment count stay outside the trim.
   return (
-    <span>
-      <span className="font-semibold">Draft</span>
-      {text && ` “${text}”`}
-      {attachments && <span className="opacity-70">{` · ${attachments}`}</span>}
+    <span className="flex max-w-full min-w-0 items-baseline">
+      <span className="shrink-0 font-semibold">Draft</span>
+      {text && (
+        <>
+          <span className="ml-1 min-w-0 truncate">“{text}</span>
+          <span className="shrink-0">”</span>
+        </>
+      )}
+      {attachments && (
+        <span className="shrink-0 whitespace-pre opacity-70">{` · ${attachments}`}</span>
+      )}
     </span>
   );
 }
@@ -27,7 +36,7 @@ export function DraftPencil({
   className?: string;
 }) {
   return (
-    <Tooltip label={<DraftTooltipLabel draftKey={draftKey} />} multiline>
+    <Tooltip label={<DraftTooltipLabel draftKey={draftKey} />}>
       <span
         className={cn(SIDEBAR_WS_DRAFT, className)}
         data-ws-draft=""
