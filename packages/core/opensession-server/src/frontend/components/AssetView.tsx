@@ -830,7 +830,7 @@ export function AssetPreview({
         ) : text === null ? (
           <div className="p-4 text-label text-faint">Loading…</div>
         ) : (
-          <pre className="whitespace-pre-wrap break-words px-4 py-3 font-mono text-label leading-[1.5] text-fg">
+          <pre className="whitespace-pre-wrap break-words px-4 py-3 font-mono text-label leading-body text-fg">
             {text}
             {file.size > ASSET_TEXT_CAP ? "\n… (truncated preview)" : ""}
           </pre>

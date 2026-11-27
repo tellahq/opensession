@@ -2,6 +2,7 @@
   "raw-button": 302,
   "raw-form-control": 88,
   "arbitrary-text-size": 22,
+  "arbitrary-leading": 2,
   "off-scale-radius": 9,
   "patched-control-height": 30,
   "adhoc-overlay": 8,

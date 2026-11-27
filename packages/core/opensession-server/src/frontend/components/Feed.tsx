@@ -513,7 +513,7 @@ export function Feed({
                               size={16}
                               className="self-center"
                             />
-                            <span className="truncate text-item-title font-medium leading-[1.3] text-fg">
+                            <span className="truncate text-item-title font-medium leading-tight text-fg">
                               {row.title}
                             </span>
                             {row.ref && (

@@ -130,10 +130,10 @@ export function SetupWidget({
         onFocusCapture={() => void setup.refetch()}
       >
         <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
-          <span className="max-w-full truncate text-supporting font-medium leading-[1.3] text-fg">
+          <span className="max-w-full truncate text-supporting font-medium leading-tight text-fg">
             Get started
           </span>
-          <span className="tabular-nums text-meta leading-[1.3] text-faint">
+          <span className="tabular-nums text-meta leading-tight text-faint">
             {completed.length} of {items.length}
           </span>
         </div>

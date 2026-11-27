@@ -84,7 +84,7 @@ export const TYPE_SPECIMENS: readonly TypeSpecimen[] = [
     token: "text-page-title font-title",
     sizes: "24 / 28",
     sample: "Design system",
-    sampleClass: "text-page-title font-title tracking-[-0.02em] text-fg",
+    sampleClass: "text-page-title font-title tracking-title text-fg",
   },
   {
     token: "text-section-title font-title",

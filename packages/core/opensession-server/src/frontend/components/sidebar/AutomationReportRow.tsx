@@ -68,7 +68,7 @@ export function AutomationReportRow({
       <RowCardPopup>
         <div className="text-sm font-medium text-fg">{report.title}</div>
         {report.summary && (
-          <p className="mt-1.5 text-xs leading-[1.5] text-dim">
+          <p className="mt-1.5 text-xs leading-body text-dim">
             {report.summary}
           </p>
         )}

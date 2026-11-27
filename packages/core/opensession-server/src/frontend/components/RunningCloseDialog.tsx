@@ -19,7 +19,7 @@ export function RunningCloseDialog({
       disablePointerDismissal
     >
       <Modal.Content widthClassName="max-w-[34rem]" className="gap-5">
-        <Modal.Title className="m-0 text-dialog-title font-semibold tracking-[-0.01em] text-fg">
+        <Modal.Title className="m-0 text-dialog-title font-semibold tracking-tight text-fg">
           Close running session
           {runningCount === 1 ? "" : "s"}?
         </Modal.Title>

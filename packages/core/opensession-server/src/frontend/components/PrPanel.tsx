@@ -2035,7 +2035,7 @@ export function PrPanel({
             <TopBar as="header" className="h-11 shrink-0 gap-2 px-4">
               {targetPicker}
               <h1
-                className="m-0 flex min-w-0 flex-1 items-center gap-1.5 text-item-title leading-[1.2]"
+                className="m-0 flex min-w-0 flex-1 items-center gap-1.5 text-item-title leading-tight"
                 title={`${pr.title} #${pr.number}`}
               >
                 <Tooltip label={`Open on ${provider.name}`}>

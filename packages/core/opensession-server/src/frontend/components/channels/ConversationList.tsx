@@ -169,7 +169,7 @@ function ConversationRow({
         <span className="min-w-0 flex-1 truncate">{conversation.name}</span>
         {!!conversation.unreadCount && (
           <span
-            className="ml-auto rounded-full bg-accent px-1.5 text-meta leading-[18px] font-semibold text-on-accent tabular-nums"
+            className="ml-auto rounded-full bg-accent px-1.5 text-meta leading-4.5 font-semibold text-on-accent tabular-nums"
             aria-label={`${conversation.unreadCount} unread`}
           >
             {conversation.unreadCount}

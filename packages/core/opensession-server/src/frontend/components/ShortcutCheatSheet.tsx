@@ -70,7 +70,7 @@ function CheatSheet({
         initialFocus={listRef}
       >
         <div className="flex items-center gap-3 border-b border-divider px-5 py-4">
-          <Modal.Title className="m-0 min-w-0 flex-1 text-item-title font-semibold leading-tight tracking-[-0.01em] text-fg">
+          <Modal.Title className="m-0 min-w-0 flex-1 text-item-title font-semibold leading-tight tracking-tight text-fg">
             Keyboard shortcuts
           </Modal.Title>
           {onCustomize && (

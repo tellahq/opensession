@@ -149,7 +149,7 @@ export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 
       <div
         className={cn(
-          "flex min-w-0 items-center gap-[7px] text-label font-semibold leading-[1.3]",
+          "flex min-w-0 items-center gap-[7px] text-label font-semibold leading-tight",
           hasHead && "mt-[5px]",
         )}
       >
@@ -189,7 +189,7 @@ export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
       {rows.length > 0 && (
         <div className="mt-[9px] flex flex-col gap-[3px]">
           {rows.map(([label, value], i) => (
-            <div className="flex gap-2 text-meta leading-[1.35]" key={i}>
+            <div className="flex gap-2 text-meta leading-snug" key={i}>
               <span className="w-[74px] shrink-0 text-faint">{label}</span>
               <span className="min-w-0 truncate text-dim">{value}</span>
             </div>
@@ -576,7 +576,7 @@ function WsOverviewInfo({
 
       <div
         className={cn(
-          "flex min-w-0 items-center gap-[7px] text-label font-semibold leading-[1.3]",
+          "flex min-w-0 items-center gap-[7px] text-label font-semibold leading-tight",
           hasHead && "mt-[5px]",
         )}
       >

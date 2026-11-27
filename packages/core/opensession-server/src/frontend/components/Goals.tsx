@@ -50,7 +50,7 @@ import { errorMessage } from "../lib/error-message";
 /** The two rules that reach in from the form to its fields: 16px on phones, so
     iOS doesn't zoom a focused field, and paragraph leading in a textarea. */
 const FORM_FIELDS =
-  "[&_textarea]:leading-normal phone:[&_input]:text-input-phone phone:[&_select]:text-input-phone phone:[&_textarea]:text-input-phone";
+  "[&_textarea]:leading-body phone:[&_input]:text-input-phone phone:[&_select]:text-input-phone phone:[&_textarea]:text-input-phone";
 /** .automations-drawer-section-label */
 const SECTION_LABEL = "mb-1.5 text-label font-semibold text-faint";
 /** .automation-session-link */
@@ -549,7 +549,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
 /** Left column of the drawer's Configuration grid. */
 function DetailKey({ children }: { children: React.ReactNode }) {
   return (
-    <span className="text-faint text-label leading-[1.7] whitespace-nowrap">
+    <span className="text-faint text-label leading-relaxed whitespace-nowrap">
       {children}
     </span>
   );

@@ -65,7 +65,7 @@ import { promptScrollEdges } from "../lib/prompt-scroll";
 const BODY =
   "relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
 const TEXTAREA =
-  "block min-h-[132px] w-full resize-none overflow-hidden border-none bg-transparent font-sans text-body leading-[1.55] text-fg outline-none placeholder:text-faint disabled:opacity-60";
+  "block min-h-[132px] w-full resize-none overflow-hidden border-none bg-transparent font-sans text-body leading-body text-fg outline-none placeholder:text-faint disabled:opacity-60";
 
 /** How long the draft has to hold still before the palette is handed it. This
  *  is the branch-name suggestion's debounce, moved down here: the palette is

@@ -127,7 +127,7 @@ export function SelectionToSession({
               <textarea
                 autoFocus
                 {...noAutofill}
-                className="resize-y rounded-md border border-line-strong bg-raised px-2.5 py-2 font-sans text-label leading-[1.45] text-fg outline-none focus:border-accent"
+                className="resize-y rounded-md border border-line-strong bg-raised px-2.5 py-2 font-sans text-label leading-body text-fg outline-none focus:border-accent"
                 rows={2}
                 placeholder="Message to the session (optional)… ⌘↵ to send"
                 value={message}

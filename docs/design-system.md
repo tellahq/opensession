@@ -32,6 +32,11 @@ its odd values. A rule in a document does not stop that. A type does.
    Icon sizes are the same idea as a type: `IconSize` and `DenseIconSize` in
    `components/icons.tsx`, so `size={17}` is a compile error rather than a
    number the icon silently clamps.
+   Line height and tracking are closed on both sides: StyleX's `leading`
+   and `tracking`, and the same names as Tailwind theme values
+   (`leading-title`, `leading-body`, `tracking-tight`, `tracking-title`). A
+   line box that must equal its control's height takes a spacing step
+   (`leading-6.5`); `ui-audit`'s `arbitrary-leading` counts the rest.
 2. **Primitives** (`ui/*.tsx`). Authored in StyleX against the tokens. Each
    one owns its look completely and exposes `variant` / `size` for the
    choices the system has made, plus an `xstyle` prop whose type only accepts

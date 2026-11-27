@@ -328,7 +328,7 @@ export function UpdatePill({ addHandler, variant = "card" }: Props) {
   return (
     <div className={PERSISTENT_NOTICE_CARD} role="status" aria-live="polite">
       <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
-        <span className="max-w-full truncate text-supporting font-medium leading-[1.3] text-fg">
+        <span className="max-w-full truncate text-supporting font-medium leading-tight text-fg">
           {forced
             ? `Updating in ${secondsLeft}s…`
             : restart
@@ -337,7 +337,7 @@ export function UpdatePill({ addHandler, variant = "card" }: Props) {
         </span>
         {detail && (
           <Tooltip label={detail} side="top" multiline>
-            <span className="max-w-full truncate text-meta font-medium leading-[1.3] text-dim">
+            <span className="max-w-full truncate text-meta font-medium leading-tight text-dim">
               {detail}
             </span>
           </Tooltip>

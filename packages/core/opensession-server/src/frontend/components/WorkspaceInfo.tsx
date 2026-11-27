@@ -385,7 +385,7 @@ function CommentCard({
         aria-label={`Comment by ${comment.author}`}
       >
         {avatar}
-        <span className="min-w-0 flex-1 truncate text-supporting font-medium leading-[1.35] text-fg">
+        <span className="min-w-0 flex-1 truncate text-supporting font-medium leading-snug text-fg">
           {title}
         </span>
         <span className="shrink-0 text-meta text-faint">
@@ -794,7 +794,7 @@ function AgentReviewCard({
                       <div className="font-semibold text-fg">
                         {action.label}
                       </div>
-                      <div className="mt-0.5 text-supporting leading-[1.35] text-faint">
+                      <div className="mt-0.5 text-supporting leading-snug text-faint">
                         {action.hint}
                       </div>
                     </div>

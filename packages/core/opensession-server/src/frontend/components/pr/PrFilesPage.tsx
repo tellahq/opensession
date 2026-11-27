@@ -511,7 +511,7 @@ export function PrFilesPage({
                     <div className="flex flex-col gap-3">
                       <div className="flex flex-wrap items-start gap-3">
                         <div className="min-w-0 flex-1">
-                          <h2 className="m-0 text-item-title font-semibold tracking-[-0.01em] text-fg">
+                          <h2 className="m-0 text-item-title font-semibold tracking-tight text-fg">
                             {currentGuide.sections.length} focused review step
                             {currentGuide.sections.length === 1 ? "" : "s"}
                           </h2>

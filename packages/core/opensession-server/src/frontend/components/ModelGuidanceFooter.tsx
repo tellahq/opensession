@@ -21,10 +21,10 @@ function GuidanceBody({ guidance }: { guidance: ModelGuidance }) {
             <span className="size-1.5 rounded-full bg-green" />
           </span>
           <div className="min-w-0">
-            <div className="text-meta font-medium leading-[1.35] text-fg">
+            <div className="text-meta font-medium leading-snug text-fg">
               Strong at
             </div>
-            <ul className="m-0 mt-0.5 flex list-none flex-col gap-0.5 p-0 text-meta leading-[1.4] text-dim">
+            <ul className="m-0 mt-0.5 flex list-none flex-col gap-0.5 p-0 text-meta leading-snug text-dim">
               {guidance.strongAt.map((point) => (
                 <li key={point}>{point}</li>
               ))}
@@ -41,10 +41,10 @@ function GuidanceBody({ guidance }: { guidance: ModelGuidance }) {
             <span className="size-1.5 rounded-full bg-yellow-tint" />
           </span>
           <div className="min-w-0">
-            <div className="text-meta font-medium leading-[1.35] text-dim">
+            <div className="text-meta font-medium leading-snug text-dim">
               Watch for
             </div>
-            <ul className="m-0 mt-0.5 flex list-none flex-col gap-0.5 p-0 text-meta leading-[1.4] text-faint">
+            <ul className="m-0 mt-0.5 flex list-none flex-col gap-0.5 p-0 text-meta leading-snug text-faint">
               {guidance.watchFor.map((point) => (
                 <li key={point}>{point}</li>
               ))}
@@ -98,7 +98,7 @@ export function ModelGuidanceFooter({
             <GuidanceBody guidance={active.guidance} />
           ) : (
             <div className="grid grid-cols-[16px_minmax(0,1fr)] gap-x-2.5">
-              <p className="col-start-2 m-0 text-meta leading-[1.4] text-faint">
+              <p className="col-start-2 m-0 text-meta leading-snug text-faint">
                 No notes for this model yet.
               </p>
             </div>

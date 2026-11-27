@@ -51,12 +51,12 @@ export function ImageThumbs({
   return (
     <div className="mb-2 flex flex-wrap gap-2">
       {images.map((src, i) => (
-        <div key={i} className="relative leading-[0]">
+        <div key={i} className="relative leading-0">
           <button
             type="button"
             // The radius is only visible through the focus ring, which has to
             // follow the thumbnail's corner rather than cut across it.
-            className="focus-ring block cursor-zoom-in rounded-control leading-[0]"
+            className="focus-ring block cursor-zoom-in rounded-control leading-0"
             onClick={(event) =>
               openLightbox(
                 images.map((image, imageIndex) => {

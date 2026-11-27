@@ -127,7 +127,7 @@ const ROW_ACTION =
 /* The comment card and the pending-comment card share their surface. */
 const CARD = "mx-2 my-1.5 flex flex-col rounded-md bg-panel font-sans";
 const CARD_INPUT =
-  "resize-y rounded-md border border-line-strong bg-raised px-2.5 py-2 font-sans text-label leading-[1.45] text-fg outline-none focus:border-accent";
+  "resize-y rounded-md border border-line-strong bg-raised px-2.5 py-2 font-sans text-label leading-body text-fg outline-none focus:border-accent";
 
 /* The "Organizing files…" / "AI organized" note, left of the toolbar's actions. */
 const GROUPS_NOTE =
@@ -596,7 +596,7 @@ export function CommentableDiff({ patch, options }: Props) {
             </button>
           )}
         </div>
-        <div className="text-label leading-[1.45] whitespace-pre-wrap text-fg [overflow-wrap:anywhere]">
+        <div className="text-label leading-body whitespace-pre-wrap text-fg [overflow-wrap:anywhere]">
           {comment.text}
         </div>
       </div>

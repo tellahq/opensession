@@ -510,7 +510,7 @@ function ChartCard({
   children: React.ReactNode;
 }) {
   const heading = (
-    <h3 className="m-0 text-item-title font-semibold tracking-[-0.01em] text-fg">
+    <h3 className="m-0 text-item-title font-semibold tracking-tight text-fg">
       {title}
     </h3>
   );

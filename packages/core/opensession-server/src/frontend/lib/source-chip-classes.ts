@@ -15,7 +15,7 @@ import type { SessionSource } from "./types";
  * for the light theme on their own; see the note there.
  */
 export const SOURCE_CHIP =
-  "shrink-0 rounded-full px-2 py-0.5 text-meta font-bold tracking-[-0.01em]";
+  "shrink-0 rounded-full px-2 py-0.5 text-meta font-bold tracking-tight";
 
 /** Neutral pill — the origins that get no hue of their own. */
 const NEUTRAL = "bg-active text-dim";

@@ -114,7 +114,7 @@ export function ReportTasksDialog({
                 </span>
                 {/* No `block` beside the clamp: both set `display`, and the
 								    plain one wins, which silently unclamps the preview. */}
-                <span className="mt-0.5 line-clamp-2 text-supporting leading-normal text-faint">
+                <span className="mt-0.5 line-clamp-2 text-supporting leading-body text-faint">
                   {task.prompt}
                 </span>
               </span>

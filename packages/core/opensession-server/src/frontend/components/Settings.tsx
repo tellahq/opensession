@@ -96,14 +96,14 @@ const GALLERY_SECTIONS = new Set<SettingsSectionKey>(["library", "setup"]);
 // `data-setting-title` and `data-top-bar-title` are how StyleX row, form and
 // phone bar titles are named here, since they carry no title class.
 const SETTINGS_LEADING =
-  "leading-normal [&_*]:!leading-normal " +
-  "[&_[data-setting-title]]:!leading-[1.1] [&_[data-top-bar-title]]:!leading-[1.1] " +
-  "[&_.settings-title]:!leading-[1.1] " +
-  "[&_h1]:!leading-[1.1] [&_h2]:!leading-[1.1] [&_h3]:!leading-[1.1] " +
-  "[&_h4]:!leading-[1.1] [&_h5]:!leading-[1.1] [&_h6]:!leading-[1.1] " +
-  "[&_.font-title]:!leading-[1.1] [&_.text-item-title]:!leading-[1.1] " +
-  "[&_.text-dialog-title]:!leading-[1.1] [&_.text-section-title]:!leading-[1.1] " +
-  "[&_.text-page-title]:!leading-[1.1] [&_.text-stat]:!leading-[1.1]";
+  "leading-body [&_*]:!leading-body " +
+  "[&_[data-setting-title]]:!leading-title [&_[data-top-bar-title]]:!leading-title " +
+  "[&_.settings-title]:!leading-title " +
+  "[&_h1]:!leading-title [&_h2]:!leading-title [&_h3]:!leading-title " +
+  "[&_h4]:!leading-title [&_h5]:!leading-title [&_h6]:!leading-title " +
+  "[&_.font-title]:!leading-title [&_.text-item-title]:!leading-title " +
+  "[&_.text-dialog-title]:!leading-title [&_.text-section-title]:!leading-title " +
+  "[&_.text-page-title]:!leading-title [&_.text-stat]:!leading-title";
 
 type Section = (typeof SECTIONS)[number];
 type SectionGroup = { group: string; items: Section[] };

@@ -254,7 +254,7 @@ function ScriptRunRow({
       <Modal.Root open={closeOpen} onOpenChange={setCloseOpen}>
         <Modal.Content role="alertdialog" widthClassName="max-w-[25rem]">
           <div className="flex flex-col gap-1.5">
-            <Modal.Title className="m-0 text-balance text-dialog-title font-semibold leading-tight tracking-[-0.01em] text-fg">
+            <Modal.Title className="m-0 text-balance text-dialog-title font-semibold leading-tight tracking-tight text-fg">
               Close this card?
             </Modal.Title>
             <Modal.Description className="m-0 text-pretty text-supporting font-normal leading-relaxed text-dim">

@@ -203,7 +203,7 @@ export function useSlackMentions({
                 id={`${popupId}-option-${i}`}
                 aria-selected={i === activeIdx}
                 className={cn(
-                  "flex cursor-pointer items-center gap-2.5 overflow-hidden rounded-control px-2.5 py-2 text-label leading-[1.3] whitespace-nowrap phone:min-h-11",
+                  "flex cursor-pointer items-center gap-2.5 overflow-hidden rounded-control px-2.5 py-2 text-label leading-tight whitespace-nowrap phone:min-h-11",
                   i === activeIdx && "bg-pressed",
                 )}
                 onMouseDown={(event) => {

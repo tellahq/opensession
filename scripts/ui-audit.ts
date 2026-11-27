@@ -477,6 +477,17 @@ const SIGNALS: Signal[] = [
     count: (source) => occurrences(source, /\btext-\[[0-9.]+px\]/g),
   },
   {
+    id: "arbitrary-leading",
+    instead:
+      "the line-height and tracking scales: leading-none/title/tight/snug/body/relaxed, a spacing step for a line box that fills its control (leading-6.5), tracking-tight/title/wide",
+    exempt: ["styles/"],
+    count: (source) =>
+      occurrences(
+        source,
+        /\b(?:leading|tracking)-\[-?[0-9.]+(?:px|em|rem)?\]/g,
+      ),
+  },
+  {
     id: "off-scale-radius",
     // rounded-[999px] is sanctioned: it is the squircle-preserving pill, and
     // rounded-full is the opt-out (see src/frontend/AGENTS.md).

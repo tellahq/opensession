@@ -402,7 +402,7 @@ export function Reviews({
       <div className="flex min-w-0 flex-1 flex-col overflow-y-auto phone:overflow-x-hidden">
         <div className="sticky top-0 z-[3] bg-surface px-[22px] pt-4">
           <div className="mb-3 flex items-center justify-between gap-4">
-            <h1 className="m-0 text-section-title font-title tracking-[-0.01em]">
+            <h1 className="m-0 text-section-title font-title tracking-tight">
               Reviews
             </h1>
             <div className="flex w-60 items-center gap-[7px] rounded-md border border-line bg-raised px-2.5 py-1.5 text-faint transition-[border-color,background-color] focus-within:border-line-strong focus-within:bg-panel">
@@ -458,7 +458,7 @@ export function Reviews({
               divider spans the full width. */}
           {filtered.length > 0 && (
             <div
-              className={`${ROW} -mx-[22px] bg-surface py-[9px] text-meta font-semibold tracking-[-0.01em] text-faint phone:hidden`}
+              className={`${ROW} -mx-[22px] bg-surface py-[9px] text-meta font-semibold tracking-tight text-faint phone:hidden`}
               role="row"
             >
               <span className={C_STATE}>Status</span>
@@ -508,7 +508,7 @@ export function Reviews({
                   </span>
                   <span className={C_TITLE} role="cell">
                     <span className="flex min-w-0 items-baseline gap-2">
-                      <span className="truncate text-item-title leading-[1.3] font-medium">
+                      <span className="truncate text-item-title leading-tight font-medium">
                         {cleanTitle(s)}
                       </span>
                       {prNum(s) && (
@@ -558,7 +558,7 @@ export function Reviews({
                         </span>
                       )}
                       {s.linearIssue && (
-                        <Badge className="tracking-[0.02em]">
+                        <Badge className="tracking-wide">
                           {s.linearIssue.identifier}
                         </Badge>
                       )}

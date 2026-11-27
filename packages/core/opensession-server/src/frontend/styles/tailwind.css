@@ -355,6 +355,19 @@
   --text-stat--line-height: var(--type-stat-line);
   --text-stat--letter-spacing: -0.025em;
 
+  /* Line height and letter spacing, the same closed scales as `leading` and
+	   `tracking` in ui/tokens.stylex.ts. Stock Tailwind already has none (1),
+	   tight (1.25), snug (1.375) and relaxed (1.625) at these values; `title`
+	   and `body` are added so both systems use one set of names. A line box
+	   that has to equal its control's height uses the spacing scale
+	   (`leading-6.5` is 26px), never an arbitrary value. Stock
+	   `tracking-tight` is -0.025em, tighter than this app's text wants, so it
+	   is redefined to the token. */
+  --leading-title: 1.1;
+  --leading-body: 1.5;
+  --tracking-tight: -0.01em;
+  --tracking-title: -0.02em;
+
   /* Interaction geometry: `hit-target` uses 40px for pointer layouts and
 	   expands to the WCAG-friendly 44px touch convention on coarse pointers. */
   --spacing-hit-target: 40px;

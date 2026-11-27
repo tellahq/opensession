@@ -866,7 +866,7 @@ function ConnectionCard({
             <div className="col-span-2 row-start-2 flex items-baseline justify-between gap-4">
               {connection.qualification && (
                 <details className="ml-10 min-w-0 text-meta text-faint">
-                  <summary className="h-[26px] w-fit cursor-pointer select-none leading-[26px] hover:text-fg">
+                  <summary className="h-[26px] w-fit cursor-pointer select-none leading-6.5 hover:text-fg">
                     Diagnostics
                   </summary>
                   <div className="mt-1 grid gap-0.5 pl-3">
@@ -1396,7 +1396,7 @@ export function SandboxesPanel() {
                     <div className="col-span-2 row-start-2 flex items-baseline justify-between gap-4">
                       {(operation || environment.failureCode) && (
                         <details className="ml-10 min-w-0 text-meta text-faint">
-                          <summary className="h-[26px] w-fit cursor-pointer select-none leading-[26px] hover:text-fg">
+                          <summary className="h-[26px] w-fit cursor-pointer select-none leading-6.5 hover:text-fg">
                             Details
                           </summary>
                           <div className="mt-1 grid gap-0.5 pl-3">

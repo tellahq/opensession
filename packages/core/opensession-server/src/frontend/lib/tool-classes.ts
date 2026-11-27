@@ -26,7 +26,7 @@
  * out-runs a phone-width pane — the run of tabs hangs past the edge instead
  * of wrapping. */
 export const TOOL_PRE =
-  "tool-pre m-0 max-h-80 overflow-y-auto font-mono text-meta leading-[1.5] " +
+  "tool-pre m-0 max-h-80 overflow-y-auto font-mono text-meta leading-body " +
   "whitespace-pre-wrap [word-break:break-word] [tab-size:2] text-dim";
 
 /** The sunk surface a snippet sits on. */

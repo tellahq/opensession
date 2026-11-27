@@ -66,7 +66,7 @@ export const composerBoxMinimized =
 /** The draft field and the code/mention mirror behind it both take this, which
  *  is what keeps them glyph-identical. */
 export const composerTextarea =
-  "block max-h-[320px] min-h-0 w-full resize-none border-none bg-transparent text-body leading-[1.55] outline-none phone:max-h-[240px] phone:text-input-phone";
+  "block max-h-[320px] min-h-0 w-full resize-none border-none bg-transparent text-body leading-body outline-none phone:max-h-[240px] phone:text-input-phone";
 export const composerTextareaPadding = "px-0 pt-0.5 pb-1";
 /** In the resting pill the field is one row inside a 4px-inset box, so it
  *  carries the horizontal breathing room and no vertical padding at all. */
@@ -221,7 +221,7 @@ export const fileChipCardPaddingRemovable = "pr-[26px]";
  *  chip has always rendered; closing it up is a design change, not a migration. */
 export const fileChipCardPadding = "pr-[26px]";
 export const fileChipThumb =
-  "inline-flex size-[34px] shrink-0 items-center justify-center rounded-control bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] text-[10px] font-bold tracking-[0.02em] text-accent";
+  "inline-flex size-[34px] shrink-0 items-center justify-center rounded-control bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] text-[10px] font-bold tracking-wide text-accent";
 export const fileChipMeta = "flex min-w-0 flex-col gap-px";
 /** The chip's title. 13px (text-label) rather than the stylesheet's off-scale
  *  12px — it is interface copy, and the card's height comes from the 34px
@@ -333,7 +333,7 @@ export const composerQueueImageCount =
  *  string with leading last: tailwind-merge files `leading` as a conflict of
  *  `font-size`, so a later `text-*` would drop an earlier `leading-*`. */
 export const composerQueueBody =
-  "selectable min-w-0 flex-1 cursor-text truncate text-label leading-[1.45]";
+  "selectable min-w-0 flex-1 cursor-text truncate text-label leading-body";
 /** Whose message it is. `github` outranks `human` — both were equally specific
  *  in the stylesheet and github came last. */
 export const composerQueueBodyTone = {

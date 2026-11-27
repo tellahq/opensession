@@ -62,7 +62,7 @@ export const msgOwnTurn = "pt-1";
  * to be `.msg-label::before`; that rule is gone from legacy.css.
  */
 export const msgLabel =
-  "msg-label mb-1.25 flex flex-row-reverse items-center gap-1.75 text-meta font-semibold tracking-[-0.01em] text-faint selection:bg-[rgba(0,0,0,0.01)] [&_*::selection]:bg-[rgba(0,0,0,0.01)]";
+  "msg-label mb-1.25 flex flex-row-reverse items-center gap-1.75 text-meta font-semibold tracking-tight text-faint selection:bg-[rgba(0,0,0,0.01)] [&_*::selection]:bg-[rgba(0,0,0,0.01)]";
 
 /** A teammate's reply routed back into the session — a warm teal, so it reads
  *  as someone else stepping in rather than the driver's own words. */
@@ -131,7 +131,7 @@ export const msgReasoningShimmer = msgActivityShimmer;
  * names it.
  */
 const msgSystemBase =
-  "msg-system-text inline-block max-w-[min(560px,100%)] self-center py-1.5 text-center text-meta leading-[1.45] text-faint";
+  "msg-system-text inline-block max-w-[min(560px,100%)] self-center py-1.5 text-center text-meta leading-body text-faint";
 
 /** The centered notice pill itself. */
 export const msgSystemText = `${msgSystemBase} rounded-control bg-panel px-3.5`;
@@ -140,7 +140,7 @@ export const msgSystemText = `${msgSystemBase} rounded-control bg-panel px-3.5`;
  *  card: the muted type, with no surface under it, across the full reading
  *  column. */
 export const msgSystemInline =
-  "msg-system-text block w-full py-1.5 text-meta leading-[1.45] text-faint";
+  "msg-system-text block w-full py-1.5 text-meta leading-body text-faint";
 
 /**
  * A toned notice reads as a sentence, not a banner: everything the server and

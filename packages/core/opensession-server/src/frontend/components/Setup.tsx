@@ -144,7 +144,7 @@ function SetupPageSection({
   return (
     <section id={sectionAnchor(id)} className={cn("scroll-mt-4", className)}>
       <div className="mb-3 px-5">
-        <h2 className="m-0 text-section-title font-title tracking-[-0.015em] text-fg">
+        <h2 className="m-0 text-section-title font-title tracking-tight text-fg">
           {title}
         </h2>
         <p className="m-0 mt-1.5 max-w-[62ch] text-supporting leading-relaxed text-dim">
