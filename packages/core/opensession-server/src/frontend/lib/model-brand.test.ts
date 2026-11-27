@@ -26,5 +26,8 @@ describe("modelBrandKey", () => {
 
   test("draws the Gemini mark for Gemini API models", () => {
     expect(modelBrandKey("pi/google/gemini-3.5-flash", "pi")).toBe("gemini");
+    expect(modelBrandKey("pi/google-vertex/gemini-3.8-flash", "pi")).toBe(
+      "gemini",
+    );
   });
 });

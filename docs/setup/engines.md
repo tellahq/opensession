@@ -84,6 +84,8 @@ key under **Settings → Providers**:
   OpenAI API keys.
 - `pi/google/*` uses a Gemini API key from Google AI Studio, added under
   **Gemini**. See [Gemini and Google AI plans](#gemini-and-google-ai-plans).
+- `pi/google-vertex/*` runs Gemini on a Google Cloud project through Vertex AI,
+  added under **Vertex AI**. See [Vertex AI](#vertex-ai).
 - Other providers use one API key, an optional base URL, and the provider's
   model ids under **Your own providers**. `anthropic` and `openai` cannot be
   configured there because they use the account pools.
@@ -145,6 +147,30 @@ with monthly Google Cloud developer credits that pay for Gemini API usage:
 
 When the credits run out, usage is billed to the linked billing account.
 Set a budget on it if that should not happen.
+
+### Vertex AI
+
+Vertex AI runs Gemini on your own Google Cloud project, under that project's
+quota, billing, and Google Cloud terms. Under **Settings → Providers → Vertex
+AI**, paste one of:
+
+- A service account key file (JSON) for an account with the **Vertex AI
+  User** role (`roles/aiplatform.user`). The project defaults to the key's
+  `project_id`.
+- A Vertex API key, if your organization allows them.
+
+Location defaults to `global`, which serves every Gemini model. Set a region
+such as `us-central1` to keep requests in that region. The credential is
+stored as the `google-vertex` provider in `model-providers.json`. A service
+account key also gets a copy under `~/.opensession/secrets/google-vertex/`
+(mode `0600`), because Pi's Vertex adapter reads service account keys from a
+file.
+
+The picker starts with the Vertex models Pi's catalog describes. Newer models
+run by id (`pi/google-vertex/<model>`). Add them to **Picker models** or type
+the id. A Gemini model missing from Pi's catalog runs with a 1M-token window,
+64K output, image input, and the model's default thinking, and is not priced
+until it has a catalog row in `model-providers.json`.
 
 Legacy top-level counterparts such as `~/.opensession-claude-accounts.json`
 remain supported when the grouped path is absent. Run `opensession doctor`

@@ -7,6 +7,11 @@
 import { homeDir } from "./paths";
 import { stateDir } from "./paths";
 import { writeJsonAtomicAsync } from "./shared/atomic-write";
+import {
+  VERTEX_PICKER_MODELS,
+  VERTEX_PROVIDER_ID,
+  vertexCredentialLabel,
+} from "./vertex-provider";
 import { chmod, readFile } from "fs/promises";
 import { dirname, isAbsolute, resolve } from "path";
 import {
@@ -74,6 +79,10 @@ export interface ModelProviderConfig {
   api?: ProviderApi;
   /** Display name for the provider (defaults to the id). */
   name?: string;
+  /** Google Vertex AI only: the Google Cloud project to bill (defaults to
+   *  the service account's own project) and the location (`global`). */
+  project?: string;
+  location?: string;
   /** Operator-pinned per-model metadata, keyed by model id. */
   catalog?: Record<string, ProviderCatalogModel>;
   /** JSON file with more catalog rows; relative to the config file's
@@ -231,6 +240,7 @@ export function defaultPickerModelsForProvider(id: string): readonly string[] {
   if (id === "wafer") return WAFER_PICKER_MODELS;
   // Gemini API keys: models Pi already describes. Discovery adds newer ones.
   if (id === "google") return ["gemini-3.5-flash", "gemini-3.1-pro-preview"];
+  if (id === VERTEX_PROVIDER_ID) return VERTEX_PICKER_MODELS;
   return [];
 }
 
@@ -561,6 +571,10 @@ function providerMap(
     )
       cfg.api = r.api as ProviderApi;
     if (typeof r.name === "string" && r.name.trim()) cfg.name = r.name.trim();
+    if (typeof r.project === "string" && r.project.trim())
+      cfg.project = r.project.trim();
+    if (typeof r.location === "string" && r.location.trim())
+      cfg.location = r.location.trim();
     if (typeof r.catalogFile === "string" && r.catalogFile.trim())
       cfg.catalogFile = r.catalogFile.trim();
     if (r.discoverModels === true) cfg.discoverModels = true;
@@ -782,6 +796,9 @@ export interface ModelProviderSettingsInput {
   /** `""` clears the protocol (back to a Pi-known slug). */
   api?: ProviderApi | "";
   name?: string;
+  /** Google Vertex AI project and location. */
+  project?: string;
+  location?: string;
   discoverModels?: boolean;
 }
 
@@ -817,7 +834,9 @@ export async function setModelProvider(
     const raw = await readRawModelProviderConfig();
     const providers = rawProviders(raw);
     const next: Record<string, unknown> = { ...rawProvider(providers, id) };
-    const setString = (key: "apiKey" | "baseURL" | "api" | "name") => {
+    const setString = (
+      key: "apiKey" | "baseURL" | "api" | "name" | "project" | "location",
+    ) => {
       const value = cfg[key];
       if (value === undefined) return;
       if (value) next[key] = value;
@@ -827,6 +846,8 @@ export async function setModelProvider(
     setString("baseURL");
     setString("api");
     setString("name");
+    setString("project");
+    setString("location");
     if (cfg.discoverModels !== undefined) {
       if (cfg.discoverModels) next.discoverModels = true;
       else delete next.discoverModels;
@@ -905,6 +926,8 @@ export function removePickerModel(id: string): Promise<string[]> {
  *  leaves the server. */
 export function maskProviderKey(key: string | undefined): string {
   if (!key) return "";
+  const serviceAccount = vertexCredentialLabel(key);
+  if (serviceAccount) return serviceAccount;
   if (key.length <= 8) return "…";
   return `${key.slice(0, 4)}…${key.slice(-4)}`;
 }

@@ -12,6 +12,7 @@ import {
 import type { ModelProviderConfig } from "./model-providers";
 import type { XaiAccount, bindXaiAccount } from "./xai-accounts";
 import { XAI_OAUTH_PROVIDER } from "./xai-provider-id";
+import { VERTEX_PROVIDER_ID, vertexPiCredential } from "./vertex-provider";
 import { bridgePinHeaders } from "./anthropic-bridge-pin";
 import { isCompiledBinary } from "../runner-host/exe";
 import { checkPhotonWasm } from "./photon-wasm";
@@ -136,6 +137,8 @@ export interface PiRuntimeBindingDependencies {
     builtinModelIds: readonly string[];
   }) => { config: PiProviderConfigInput } | { error: string };
   bindXaiAccount: typeof bindXaiAccount;
+  /** Seeds a service-account Vertex provider (tests stub the key file). */
+  vertexCredential?: typeof vertexPiCredential;
   now?: () => number;
 }
 
@@ -402,6 +405,18 @@ export async function createPiRuntimeBinding(
   await input.beforeRuntimeLoad?.({ ...evidence });
   const sdk = await (deps.loadSdk ?? loadPiSdk)();
   const credentials = new MemoryCredentialStore();
+  // A service-account Vertex provider authenticates through a stored
+  // credential (key file, project, location) rather than an API key.
+  const vertexCredential =
+    input.providerID === VERTEX_PROVIDER_ID && input.configuredProvider
+      ? await (deps.vertexCredential ?? vertexPiCredential)(
+          input.configuredProvider,
+        )
+      : undefined;
+  if (vertexCredential) {
+    const credential = vertexCredential;
+    await credentials.modify(VERTEX_PROVIDER_ID, async () => credential);
+  }
   if (seededOpenaiCredential) {
     const credential = seededOpenaiCredential;
     await credentials.modify("openai-codex", async () => credential);
@@ -524,8 +539,15 @@ export async function createPiRuntimeBinding(
         .map((candidate) => candidate.id),
     });
     if ("error" in plan) throw new Error(plan.error);
-    runtime.registerProvider(input.providerID, plan.config);
-    await runtime.setRuntimeApiKey(input.providerID, provider.apiKey!);
+    if (vertexCredential) {
+      // The stored credential authenticates; the key field holds the
+      // service account JSON, which must never be sent as an API key.
+      const { apiKey: _serviceAccount, ...config } = plan.config;
+      runtime.registerProvider(input.providerID, config);
+    } else {
+      runtime.registerProvider(input.providerID, plan.config);
+      await runtime.setRuntimeApiKey(input.providerID, provider.apiKey!);
+    }
     model = runtime.getModel(input.providerID, input.modelID);
     if (!model) {
       throw new Error(

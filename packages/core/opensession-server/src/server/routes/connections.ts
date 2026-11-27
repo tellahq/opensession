@@ -37,6 +37,13 @@ import {
 } from "../model-providers";
 import { canDiscoverModels, discoverProviderModels } from "../model-discovery";
 import {
+  normalizeVertexCredential,
+  VERTEX_DEFAULT_LOCATION,
+  VERTEX_PROVIDER_ID,
+  vertexProject,
+  vertexServiceAccount,
+} from "../vertex-provider";
+import {
   isPiModelId,
   piEngineEnabled,
   readPiEngineConfig,
@@ -58,6 +65,13 @@ function publicProvider(
     ...(p.baseURL ? { baseURL: p.baseURL } : {}),
     ...(p.api ? { api: p.api } : {}),
     ...(p.name ? { name: p.name } : {}),
+    ...(id === VERTEX_PROVIDER_ID
+      ? {
+          ...(p.project ? { project: p.project } : {}),
+          ...(vertexProject(p) ? { billedProject: vertexProject(p) } : {}),
+          location: p.location || VERTEX_DEFAULT_LOCATION,
+        }
+      : {}),
     ...(p.discoverModels ? { discoverModels: true } : {}),
     ...(p.discovered?.at ? { discoveredAt: p.discovered.at } : {}),
     ...(p.catalogFile ? { catalogFile: p.catalogFile } : {}),
@@ -552,11 +566,20 @@ export async function handleConnectionsRoutes(
     if (!body || typeof body !== "object") {
       return Response.json({ error: "Invalid JSON" }, { status: 400 });
     }
-    const apiKey =
-      typeof body.apiKey === "string"
-        ? // Strip all whitespace — pasted keys often carry line-wrap newlines.
-          body.apiKey.replace(/\s+/g, "")
-        : undefined;
+    let apiKey: string | undefined;
+    try {
+      apiKey =
+        typeof body.apiKey !== "string"
+          ? undefined
+          : id === VERTEX_PROVIDER_ID
+            ? // A Vertex API key, or a service account file whose private
+              // key must keep its spaces.
+              normalizeVertexCredential(body.apiKey)
+            : // Strip all whitespace — pasted keys often carry line-wrap newlines.
+              body.apiKey.replace(/\s+/g, "");
+    } catch (e: any) {
+      return Response.json({ error: e?.message }, { status: 400 });
+    }
     const baseURL =
       typeof body.baseURL === "string" ? body.baseURL.trim() : undefined;
     const api = typeof body.api === "string" ? body.api.trim() : undefined;
@@ -567,6 +590,10 @@ export async function handleConnectionsRoutes(
       );
     }
     const name = typeof body.name === "string" ? body.name.trim() : undefined;
+    const project =
+      typeof body.project === "string" ? body.project.trim() : undefined;
+    const location =
+      typeof body.location === "string" ? body.location.trim() : undefined;
     const discoverModels =
       typeof body.discoverModels === "boolean"
         ? body.discoverModels
@@ -574,12 +601,30 @@ export async function handleConnectionsRoutes(
     const models = Array.isArray(body.models)
       ? body.models.filter((m: unknown): m is string => typeof m === "string")
       : undefined;
+    if (id === VERTEX_PROVIDER_ID) {
+      const stored = modelProviders()[id];
+      const effective = {
+        apiKey: apiKey ?? stored?.apiKey,
+        project: project ?? stored?.project,
+      };
+      if (vertexServiceAccount(effective.apiKey) && !vertexProject(effective)) {
+        return Response.json(
+          {
+            error:
+              "The service account key has no project_id. Enter the Google Cloud project to bill.",
+          },
+          { status: 400 },
+        );
+      }
+    }
     try {
       await setModelProvider(id, {
         apiKey,
         baseURL,
         api: api as ModelProviderConfig["api"] | "" | undefined,
         name,
+        project,
+        location,
         discoverModels,
       });
       // setModelProvider validated the effective provider before writing.

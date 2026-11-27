@@ -20,6 +20,7 @@ import {
   rowMenuTriggerClasses,
   settingsInputClass,
 } from "../ui/settings";
+import { Textarea } from "../ui/input";
 import { Menu } from "../ui/menu";
 import { Checkbox } from "../ui/checkbox";
 import { IconTile } from "./BrandTile";
@@ -47,6 +48,11 @@ interface ProviderInfo {
    *  slug Pi already knows. */
   api?: string;
   name?: string;
+  /** Google Vertex AI: the project set in Settings, the one it bills (that
+   *  project, else the service account's own), and the location. */
+  project?: string;
+  billedProject?: string;
+  location?: string;
   discoverModels?: boolean;
   discoveredAt?: string;
   catalogFile?: string;
@@ -62,6 +68,11 @@ interface ProviderInfo {
 const GEMINI_PROVIDER_ID = "google";
 const GEMINI_KEY_URL = "https://aistudio.google.com/apikey";
 const GEMINI_BILLING_URL = "https://aistudio.google.com/billing";
+
+/** Pi's slug for Vertex AI (a Google Cloud service account or API key). */
+const VERTEX_PROVIDER_ID = "google-vertex";
+const VERTEX_KEY_URL =
+  "https://cloud.google.com/iam/docs/keys-create-delete#creating";
 
 /** Common pi provider slugs, offered as datalist suggestions. */
 const COMMON_PROVIDER_IDS = [
@@ -146,8 +157,11 @@ export function ModelProvidersPanel() {
   }
 
   const gemini = providers?.find((p) => p.id === GEMINI_PROVIDER_ID);
+  const vertex = providers?.find((p) => p.id === VERTEX_PROVIDER_ID);
   const ownProviders =
-    providers?.filter((p) => p.id !== GEMINI_PROVIDER_ID) ?? [];
+    providers?.filter(
+      (p) => p.id !== GEMINI_PROVIDER_ID && p.id !== VERTEX_PROVIDER_ID,
+    ) ?? [];
 
   return (
     <>
@@ -156,6 +170,13 @@ export function ModelProvidersPanel() {
         loaded={providers !== null}
         onSaved={load}
         onDiscover={handleDiscover}
+        onRemove={handleRemove}
+      />
+
+      <VertexSection
+        provider={vertex}
+        loaded={providers !== null}
+        onSaved={load}
         onRemove={handleRemove}
       />
 
@@ -392,22 +413,234 @@ function GeminiKeyForm({
   );
 }
 
+/** Vertex AI runs Gemini on a Google Cloud project: a service account key
+ * (or a Vertex API key) bills that project's Vertex quota and terms. */
+function VertexSection({
+  provider,
+  loaded,
+  onSaved,
+  onRemove,
+}: {
+  provider: ProviderInfo | undefined;
+  loaded: boolean;
+  onSaved: () => void;
+  onRemove: (p: ProviderInfo) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+
+  return (
+    <>
+      <SettingsGroupLabel>Vertex AI</SettingsGroupLabel>
+      <SettingCard>
+        {!loaded ? (
+          <LoadingState placement="row">Loading Vertex AI…</LoadingState>
+        ) : editing || !provider ? (
+          <VertexForm
+            provider={provider}
+            onCancel={provider ? () => setEditing(false) : undefined}
+            onSaved={() => {
+              setEditing(false);
+              onSaved();
+            }}
+          />
+        ) : (
+          <ProviderRow
+            provider={provider}
+            title="Vertex AI"
+            tile="gemini"
+            details={[provider.billedProject, provider.location]
+              .filter(Boolean)
+              .join(" · ")}
+            onRemove={onRemove}
+            menuItems={
+              <Menu.Item onClick={() => setEditing(true)}>
+                <IconRefresh size={16} />
+                Edit
+              </Menu.Item>
+            }
+          />
+        )}
+      </SettingCard>
+      <SettingsHint>
+        Runs Gemini on your Google Cloud project and bills that project. New
+        models Pi does not know yet run by id: add them to Picker models or type{" "}
+        <code>pi/google-vertex/&lt;model&gt;</code> in the picker.
+      </SettingsHint>
+    </>
+  );
+}
+
+/** What the Vertex form sends to the provider settings route. */
+interface VertexSettingsPayload {
+  project: string;
+  location: string;
+  apiKey?: string;
+  models?: string[];
+}
+
+function VertexForm({
+  provider,
+  onCancel,
+  onSaved,
+}: {
+  provider: ProviderInfo | undefined;
+  onCancel?: () => void;
+  onSaved: () => void;
+}) {
+  const [credential, setCredential] = useState("");
+  const [project, setProject] = useState(provider?.project ?? "");
+  const [location, setLocation] = useState(provider?.location ?? "global");
+  const [models, setModels] = useState(
+    provider?.models.map((m) => m.split("/").slice(2).join("/")).join(", ") ??
+      "",
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const canSave = !saving && (!!provider || !!credential.trim());
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    await (async () => {
+      const modelIds = models
+        .split(/[\s,]+/)
+        .map((m) => m.trim())
+        .filter(Boolean);
+      const payload: VertexSettingsPayload = {
+        project: project.trim(),
+        location: location.trim(),
+      };
+      // An edit without a new key keeps the stored one.
+      if (credential.trim()) payload.apiKey = credential;
+      if (modelIds.length) payload.models = modelIds;
+      const res = await fetch(
+        `${BASE_PATH}/api/settings/model-providers/${VERTEX_PROVIDER_ID}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+      toast("Vertex AI saved");
+      setSaving(false);
+      onSaved();
+    })().catch(async (error) => {
+      setError(errorMessage(error, "Failed to save Vertex AI"));
+      setSaving(false);
+    });
+  }
+
+  return (
+    <form
+      className="flex flex-col gap-3 px-5 py-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (canSave) void handleSave();
+      }}
+    >
+      <div className="flex items-start gap-x-3">
+        <IconTile name="gemini" size={28} />
+        <SettingRowText>
+          <SettingRowTitle>
+            {provider ? "Edit Vertex AI" : "Vertex AI"}
+          </SettingRowTitle>
+          <SettingRowDescription>
+            Paste a{" "}
+            <a
+              href={VERTEX_KEY_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="text-link underline"
+            >
+              service account key
+            </a>{" "}
+            with the Vertex AI User role, or a Vertex API key.
+          </SettingRowDescription>
+        </SettingRowText>
+      </div>
+      <SettingsFormRow className="grid-cols-1">
+        <SettingsField className="mb-0">
+          {provider
+            ? "Replace key (optional)"
+            : "Service account key or API key"}
+          <Textarea
+            className="font-mono text-meta"
+            rows={4}
+            spellCheck={false}
+            autoComplete="off"
+            value={credential}
+            onChange={(e) => setCredential(e.target.value)}
+            placeholder='{"type": "service_account", …}'
+          />
+        </SettingsField>
+      </SettingsFormRow>
+      <SettingsFormRow>
+        <SettingsField className="mb-0">
+          Project
+          <input
+            className={settingsInputClass}
+            value={project}
+            onChange={(e) => setProject(e.target.value)}
+            placeholder={provider?.billedProject ?? "From the key file"}
+          />
+        </SettingsField>
+        <SettingsField className="mb-0">
+          Location
+          <input
+            className={settingsInputClass}
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            placeholder="global"
+          />
+        </SettingsField>
+      </SettingsFormRow>
+      <SettingsFormRow className="grid-cols-1">
+        <SettingsField className="mb-0">
+          Picker models
+          <input
+            className={settingsInputClass}
+            value={models}
+            onChange={(e) => setModels(e.target.value)}
+            placeholder="gemini-3.8-flash, gemini-3.1-pro-preview"
+          />
+        </SettingsField>
+      </SettingsFormRow>
+      {error && <InlineAlert>{error}</InlineAlert>}
+      <SettingsFormActions>
+        {onCancel && (
+          <Button variant="soft" onClick={onCancel} disabled={saving}>
+            Cancel
+          </Button>
+        )}
+        <Button variant="primary" type="submit" disabled={!canSave}>
+          {saving ? "Saving…" : "Save"}
+        </Button>
+      </SettingsFormActions>
+    </form>
+  );
+}
+
 function ProviderRow({
   provider: p,
   title,
   tile,
+  details,
   menuItems,
   onDiscover,
   onRemove,
 }: {
   provider: ProviderInfo;
+  /** Extra summary text after the masked key. */
+  details?: string;
   /** Replaces the id-based title (the Gemini row names the product). */
   title?: string;
   /** Brand tile name, when it differs from the provider id. */
   tile?: string;
   /** Extra menu items ahead of Discover and Remove. */
   menuItems?: React.ReactNode;
-  onDiscover: (p: ProviderInfo) => void;
+  onDiscover?: (p: ProviderInfo) => void;
   onRemove: (p: ProviderInfo) => void;
 }) {
   return (
@@ -422,6 +655,7 @@ function ProviderRow({
         </SettingRowTitle>
         <SettingRowDescription className="truncate">
           {p.apiKeyMasked || "no API key stored"}
+          {details && ` · ${details}`}
           {p.baseURL && ` · ${p.baseURL}`}
           {p.api && " · OpenAI-compatible"}
           {p.catalogModels > 0 &&
@@ -459,7 +693,7 @@ function ProviderRow({
           </Menu.Trigger>
           <Menu.Popup align="end" sideOffset={4}>
             {menuItems}
-            {p.canDiscover && (
+            {p.canDiscover && onDiscover && (
               <Menu.Item onClick={() => onDiscover(p)}>
                 <IconSearch size={16} />
                 Discover models

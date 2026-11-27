@@ -63,6 +63,7 @@ import {
   type ModelProviderConfig,
   type PiProviderCatalog,
 } from "./model-providers";
+import { VERTEX_PROVIDER_ID, vertexFallbackModel } from "./vertex-provider";
 import { markCodexExhausted, type CodexAccount } from "./codex-accounts";
 import {
   pickAccount as pickClaudeAccount,
@@ -778,15 +779,17 @@ export function buildPiThirdPartyProviderPlan(input: {
         ...(catalogKnown
           ? []
           : [
-              {
-                id: input.modelID,
-                name: input.modelID,
-                reasoning: true,
-                input: ["text"] as Array<"text" | "image">,
-                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-                contextWindow: FALLBACK_CONTEXT_WINDOW,
-                maxTokens: FALLBACK_MAX_TOKENS,
-              },
+              input.providerID === VERTEX_PROVIDER_ID
+                ? vertexFallbackModel(input.modelID)
+                : {
+                    id: input.modelID,
+                    name: input.modelID,
+                    reasoning: true,
+                    input: ["text"] as Array<"text" | "image">,
+                    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                    contextWindow: FALLBACK_CONTEXT_WINDOW,
+                    maxTokens: FALLBACK_MAX_TOKENS,
+                  },
             ]),
       ];
   const api = custom?.api ?? ours?.api;

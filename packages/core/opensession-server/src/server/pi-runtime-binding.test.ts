@@ -37,6 +37,7 @@ function harness(
   if (options.account?.kind === "api_key") builtin("openai", "gpt-test");
   builtin("anthropic", "claude-test");
   builtin("wafer", "wafer-test");
+  builtin("google-vertex", "gemini-test");
   const runtime = {
     getModel(provider: string, id: string) {
       return models.get(`${provider}/${id}`);
@@ -397,6 +398,75 @@ describe("createPiRuntimeBinding", () => {
       "setRuntimeApiKey",
     ]);
     expect(h.calls.at(-1)).toEqual(["setRuntimeApiKey", "wafer", "wafer-key"]);
+  });
+
+  test("binds a service-account Vertex provider through a stored credential, never as an API key", async () => {
+    const h = harness();
+    const serviceAccount = JSON.stringify({
+      type: "service_account",
+      project_id: "acme-project",
+      client_email: "agent@acme-project.iam.gserviceaccount.com",
+      private_key:
+        "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----\n",
+    });
+    const credential = {
+      type: "api_key" as const,
+      env: {
+        GOOGLE_APPLICATION_CREDENTIALS: "/state/vertex.json",
+        GOOGLE_CLOUD_PROJECT: "acme-project",
+        GOOGLE_CLOUD_LOCATION: "global",
+      },
+    };
+    const seeded: unknown[] = [];
+    const deps = {
+      ...h.deps,
+      vertexCredential: async (provider: unknown) => {
+        seeded.push(provider);
+        return credential;
+      },
+      buildThirdPartyProviderPlan: (planInput: any) => {
+        h.calls.push(["buildThirdPartyProviderPlan", planInput]);
+        return { config: { apiKey: planInput.apiKey, models: [] } };
+      },
+    };
+    await createPiRuntimeBinding(
+      input("google-vertex", "gemini-test", h, {
+        configuredProvider: { apiKey: serviceAccount },
+        dependencies: deps as any,
+      }),
+    );
+    expect(seeded).toEqual([{ apiKey: serviceAccount }]);
+    const create = h.calls.find(([name]) => name === "create")!;
+    expect(await create[1].credentials.read("google-vertex")).toEqual(
+      credential,
+    );
+    expect(h.calls.map(([name]) => name)).toEqual([
+      "loadSdk",
+      "create",
+      "buildThirdPartyProviderPlan",
+      "registerProvider",
+    ]);
+    expect(h.calls.at(-1)).toEqual([
+      "registerProvider",
+      "google-vertex",
+      { models: [] },
+    ]);
+  });
+
+  test("binds a Vertex API key like any other key", async () => {
+    const h = harness();
+    await createPiRuntimeBinding(
+      input("google-vertex", "gemini-test", h, {
+        configuredProvider: { apiKey: "vertex-key" },
+      }),
+    );
+    const create = h.calls.find(([name]) => name === "create")!;
+    expect(await create[1].credentials.read("google-vertex")).toBeUndefined();
+    expect(h.calls.at(-1)).toEqual([
+      "setRuntimeApiKey",
+      "google-vertex",
+      "vertex-key",
+    ]);
   });
 
   test("preserves the unknown-model error after fallback registration fails", async () => {
