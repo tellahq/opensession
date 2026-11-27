@@ -71,13 +71,33 @@ const styles = stylex.create({
     color: color.tooltipFg,
     boxShadow: shadow.tooltip,
   },
-  single: { maxWidth: geometry.tooltipMax, whiteSpace: "nowrap" },
+  // One line is centred on its CAP BAND (see `capBand`), so the chip keeps
+  // the height an untrimmed line gave it and centres the trimmed one in it.
+  single: {
+    maxWidth: geometry.tooltipMax,
+    whiteSpace: "nowrap",
+    minHeight: `calc(${text.label} * ${leading.snug} + 2 * ${space.s4})`,
+    paddingBlock: 0,
+  },
   multiline: {
     maxWidth: geometry.tooltipMaxMultiline,
     alignItems: "flex-start",
     whiteSpace: "pre-wrap",
   },
   labelSingle: { overflow: "hidden", textOverflow: "ellipsis" },
+  // The line box carries the font's descender space, so flex centring put
+  // the label and keycap letters about 1.75px high. `text-box` trims the box
+  // to cap height and baseline, the same fix as the Button label. Browsers
+  // without it keep the untrimmed line, centred as before.
+  capBand: { textBox: "trim-both cap alphabetic" },
+  // The single-line label also clips to truncate, which would cut off the
+  // ascenders and descenders the trim leaves outside its box. Equal padding
+  // gives the ink room inside the clip, and the matching negative margin
+  // keeps it out of the layout, so the cap band stays the centre.
+  inkRoom: {
+    paddingBlock: geometry.inkRoom,
+    marginBlock: `calc(-1 * ${geometry.inkRoom})`,
+  },
   labelMultiline: { maxHeight: geometry.tooltipMaxHeight, overflowY: "auto" },
   keys: {
     display: "inline-flex",
@@ -167,7 +187,9 @@ export function Tooltip({
           >
             <span
               {...stylex.props(
-                multiline ? styles.labelMultiline : styles.labelSingle,
+                multiline
+                  ? styles.labelMultiline
+                  : [styles.labelSingle, styles.capBand, styles.inkRoom],
               )}
             >
               {label}
@@ -176,7 +198,7 @@ export function Tooltip({
               <span {...stylex.props(styles.keys)}>
                 {shortcut.map((k, i) => (
                   <kbd key={i} {...stylex.props(styles.key)}>
-                    {k}
+                    <span {...stylex.props(styles.capBand)}>{k}</span>
                   </kbd>
                 ))}
               </span>

@@ -388,6 +388,9 @@ export const geometry = stylex.defineConsts({
   tooltipMax: "280px",
   tooltipMaxMultiline: "360px",
   tooltipMaxHeight: "50vh",
+  /** Room for ascenders and descenders around a cap-trimmed line that also
+   *  clips (a truncating tooltip label): padded in, margined back out. */
+  inkRoom: "0.3em",
   /** A key cap inside a tooltip. */
   keyCap: "16px",
   keyCapPad: "3px",

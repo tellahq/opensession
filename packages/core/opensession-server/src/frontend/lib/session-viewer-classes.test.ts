@@ -6,7 +6,14 @@ import {
 } from "./session-viewer-classes";
 
 test("the desktop tab strip cannot cover the header actions", () => {
-  expect(VIEWER_HEADER_ACTIONS).toContain("relative z-[1]");
+  expect(VIEWER_HEADER_ACTIONS).toContain("relative z-[21]");
+});
+
+test("the summary card in the header actions clears the chat's sticky prompt", () => {
+  // The card is portaled into this row, so the row's step is the card's. The
+  // sticky prompt pill over the top of the chat is z-20.
+  const step = Number(/\bz-\[(\d+)\]/.exec(VIEWER_HEADER_ACTIONS)?.[1]);
+  expect(step).toBeGreaterThan(20);
 });
 
 test("the focused phone composer is fixed close to the keyboard edge", () => {
