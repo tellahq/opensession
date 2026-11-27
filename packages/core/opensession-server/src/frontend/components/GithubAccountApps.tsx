@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { BASE_PATH } from "../lib/base";
 import { request } from "../lib/api/request";
 import { errorMessage } from "../lib/error-message";
 import { githubManifestAction } from "../lib/github-app-setup";
@@ -20,6 +21,7 @@ interface AccountApp {
   slug: string;
   keyConfigured: boolean;
   webhookConfigured: boolean;
+  oauthReady?: boolean;
   installUrl: string;
   settingsUrl: string;
   /** Null when GitHub could not be asked. */
@@ -48,7 +50,11 @@ type OwnerType = "personal" | "organization";
  * the same manifest flow as the first. Open Session picks the App by
  * repository owner.
  */
-export function GithubAccountApps() {
+export function GithubAccountApps({
+  returnTo = "settings",
+}: {
+  returnTo?: "welcome" | "settings";
+} = {}) {
   const [data, setData] = useState<AccountAppsData | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -135,10 +141,10 @@ export function GithubAccountApps() {
           ? {
               additional: true,
               owner,
-              returnTo: "settings",
+              returnTo,
               organization: organization.trim(),
             }
-          : { additional: true, owner, returnTo: "settings" };
+          : { additional: true, owner, returnTo };
       const body = await setupRequest<{ action: string; manifest: string }>(
         "/api/setup/github/manifest",
         { method: "POST", json },
@@ -335,22 +341,23 @@ export function GithubAccountApps() {
                       Enable Device Flow
                     </Button>
                   )}
-                  {app.installed !== true && (
-                    <Button
-                      size="sm"
-                      className="phone:min-h-11"
-                      icon={<IconArrowUpRight size={16} />}
-                      render={
-                        <a
-                          href={app.installUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                        />
-                      }
-                    >
-                      Install on {app.owner}
-                    </Button>
-                  )}
+                  <Button
+                    size="sm"
+                    variant={app.installed === true ? "ghost" : "default"}
+                    className="phone:min-h-11"
+                    icon={<IconArrowUpRight size={16} />}
+                    render={
+                      <a
+                        href={app.installUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      />
+                    }
+                  >
+                    {app.installed === true
+                      ? "Choose repositories"
+                      : `Install on ${app.owner}`}
+                  </Button>
                   {account && !account.needsReconnect ? (
                     <Button
                       size="sm"
@@ -362,13 +369,36 @@ export function GithubAccountApps() {
                     </Button>
                   ) : (
                     signIn?.appId !== app.id && (
-                      <Button
-                        size="sm"
-                        className="phone:min-h-11"
-                        onClick={() => void startSignIn(app)}
-                      >
-                        {account ? "Sign in again" : "Sign in"}
-                      </Button>
+                      <>
+                        {app.oauthReady && (
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            className="phone:min-h-11"
+                            render={
+                              <a
+                                href={`${BASE_PATH}/api/connections/github/oauth/start?appId=${encodeURIComponent(app.id)}&returnTo=${encodeURIComponent(returnTo)}`}
+                              />
+                            }
+                          >
+                            {account
+                              ? "Reconnect GitHub"
+                              : "Sign in with GitHub"}
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant={app.oauthReady ? "ghost" : "default"}
+                          className="phone:min-h-11"
+                          onClick={() => void startSignIn(app)}
+                        >
+                          {app.oauthReady
+                            ? "Use device code"
+                            : account
+                              ? "Sign in again"
+                              : "Sign in"}
+                        </Button>
+                      </>
                     )
                   )}
                   <Button

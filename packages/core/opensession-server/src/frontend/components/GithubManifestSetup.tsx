@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useReducedMotion } from "motion/react";
 import { BASE_PATH } from "../lib/base";
 import { Button } from "../ui/button";
+import { Checkbox } from "../ui/checkbox";
 import { cn } from "../ui/cn";
 import { Input } from "../ui/input";
 import { Segmented, SegmentedOption } from "../ui/segmented";
@@ -29,6 +30,13 @@ import {
   type ChipTone,
   type SetupGithub,
 } from "./setup-shared";
+
+interface GithubManifestRequest {
+  owner: GithubAppOwnerType;
+  returnTo: "welcome" | "settings";
+  organization?: string;
+  public?: boolean;
+}
 
 function GithubSetupStep({
   label,
@@ -143,6 +151,7 @@ export function GithubManifestSetup({
         : ""),
   });
   const [starting, setStarting] = useState(false);
+  const [multiAccount, setMultiAccount] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const installationOwner = ownerDrafts[owner];
   const formInstallationOwner = ownerDrafts[formOwner];
@@ -175,10 +184,13 @@ export function GithubManifestSetup({
     setStarting(true);
     setError(null);
     try {
-      const json =
-        owner === "organization"
-          ? { owner, returnTo, organization: installationOwner.trim() }
-          : { owner, returnTo };
+      const json: GithubManifestRequest = { owner, returnTo };
+      if (owner === "organization") {
+        json.organization = installationOwner.trim();
+      }
+      if (multiAccount) {
+        json.public = true;
+      }
       const body = await setupRequest<{ action: string; manifest: string }>(
         "/api/setup/github/manifest",
         { method: "POST", json },
@@ -299,10 +311,25 @@ export function GithubManifestSetup({
           </label>
         )}
       </div>
-      <p className="m-0 text-supporting leading-snug text-dim">
-        GitHub creates this App as private, so it can only be installed on the
-        account that owns it. You can add Apps for other accounts later.
-      </p>
+      {!github.clientIdConfigured && (
+        <div className="flex flex-col gap-1.5">
+          <label className="flex cursor-pointer items-center gap-2 text-supporting text-fg">
+            <Checkbox
+              checked={multiAccount}
+              onCheckedChange={(next) => setMultiAccount(Boolean(next))}
+              disabled={starting}
+            />
+            <span>
+              Allow installing on multiple accounts (personal + organization)
+            </span>
+          </label>
+          <p className="m-0 pl-6 text-meta leading-snug text-faint">
+            {multiAccount
+              ? "Creates a public GitHub App so one App can be installed on both your organization and personal account."
+              : "Leave off for a private App on one account only. You can add another App for a personal or organization account below."}
+          </p>
+        </div>
+      )}
       <div className="flex flex-col gap-2">
         <GithubSetupStep
           label="Create GitHub app"
@@ -339,9 +366,7 @@ export function GithubManifestSetup({
           href={installUrl}
         />
       </div>
-      {returnTo === "settings" && github.clientIdConfigured && (
-        <GithubAccountApps />
-      )}
+      {github.clientIdConfigured && <GithubAccountApps returnTo={returnTo} />}
       {result === "created" && (
         <SettingsHint className="m-0">
           GitHub App created. Enable Device Flow before you install it.

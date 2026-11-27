@@ -114,6 +114,8 @@ export function buildGithubAppManifest(input: {
   ingressUrl?: string;
   /** Additional per-account App: deliveries go to its own webhook path. */
   additionalAppId?: string;
+  /** When true, creates a public App installable on both personal and org accounts. */
+  public?: boolean;
 }): Record<string, unknown> {
   const ingressUrl = input.ingressUrl?.trim().replace(/\/+$/, "") || "";
   const hookBaseUrl = ingressUrl || `${input.origin}${input.publicPrefix}`;
@@ -123,7 +125,8 @@ export function buildGithubAppManifest(input: {
       `Open Session (${Math.random().toString(36).slice(2, 6)})`,
     url: input.origin,
     redirect_url: manifestCallbackUrl(input.origin, input.publicPrefix),
-    public: false,
+    callback_url: `${input.origin}${input.publicPrefix}/api/connections/github/oauth/callback`,
+    public: input.public === true,
     default_permissions: GITHUB_APP_GRANT_PERMISSIONS,
     default_events: GITHUB_APP_MANIFEST_EVENTS,
     // GitHub rejects a manifest with subscribed events and no hook URL. A
@@ -313,6 +316,7 @@ export async function handleSetupGithubManifestRoutes(
       organization?: unknown;
       returnTo?: unknown;
       additional?: unknown;
+      public?: unknown;
     } | null;
     const additional = body?.additional === true;
     if (
@@ -401,6 +405,7 @@ export async function handleSetupGithubManifestRoutes(
           ...(pending.additionalAppId
             ? { additionalAppId: pending.additionalAppId }
             : {}),
+          ...(body?.public === true && !additional ? { public: true } : {}),
         }),
       ),
     });

@@ -111,7 +111,7 @@ export interface GithubConnectedAccount {
   scopes?: string;
   /** App device flow is the only accepted source. Older refresh-backed App
    * grants predate this discriminator and remain valid. */
-  source?: "device";
+  source?: "device" | "oauth";
   connectedAt: string;
   /** GitHub has permanently rejected the stored refresh token, so the access
    *  token can no longer be renewed. Nothing server-side can revive it — the
@@ -143,6 +143,7 @@ const REFRESH_SKEW_MS = 40 * 60_000;
 function tokenUsable(account: StoredAccount): boolean {
   const appGrant =
     account.source === "device" ||
+    account.source === "oauth" ||
     (!account.source && !!account.expiresAt && !!account.refreshToken);
   if (!account.token || !appGrant) return false;
   if (!account.expiresAt) return true; // legacy non-expiring token
@@ -367,7 +368,7 @@ const GITHUB_DEVICE_VERIFICATION_URI = "https://github.com/login/device";
 
 /** The client id (and secret) of the App a device flow or refresh runs
  * against: the primary App, or an additional one by id. */
-function appClient(appId?: string | null): {
+export function githubAppOAuthClient(appId?: string | null): {
   clientId: string | null;
   clientSecret: string | null;
 } {
@@ -386,7 +387,7 @@ export async function startGithubDeviceFlow(
   // job (operator mode: signed in; simple mode: App configured), not the
   // flow's — starting a device code is a read-only call to GitHub.
   const clientId = appId
-    ? appClient(appId).clientId
+    ? githubAppOAuthClient(appId).clientId
     : githubAppIdentity().clientId;
   if (!clientId)
     return { error: "GitHub connect is not configured (no client id)" };
@@ -464,12 +465,67 @@ export function validateGithubTokenLogin(
  * own /user to learn WHO authorized (the login is ground truth from GitHub —
  * never client-supplied) and stores the token under that login.
  */
+
+/**
+ * Exchange a GitHub App web OAuth authorization code for a user-to-server
+ * token and store it under the login GitHub reports for the token. Lets users
+ * sign in with one browser click when the App has a client secret and callback
+ * URL configured, without manually enabling Device Flow.
+ */
+export async function exchangeGithubOAuthCode(
+  code: string,
+  redirectUri: string,
+  expectedLogin?: string | null,
+  appId?: string | null,
+): Promise<DeviceFlowPoll> {
+  const { clientId, clientSecret } = githubAppOAuthClient(appId);
+  if (!clientId || !clientSecret) {
+    return {
+      status: "error",
+      error: "GitHub App OAuth client credentials are not configured",
+    };
+  }
+  const res = await fetchWithTimeout(
+    "https://github.com/login/oauth/access_token",
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        client_id: clientId,
+        client_secret: clientSecret,
+        code,
+        redirect_uri: redirectUri,
+      }),
+    },
+  );
+  const body: any = await res.json().catch(() => null);
+  if (!body || !res.ok) {
+    return {
+      status: "error",
+      error: `GitHub OAuth token exchange failed (${res.status})`,
+    };
+  }
+  if (body.error) {
+    return { status: "error", error: body.error_description || body.error };
+  }
+  const token: string | undefined = body.access_token;
+  if (typeof token !== "string" || !token) {
+    return { status: "error", error: "GitHub returned no access token" };
+  }
+  return identifyAndStoreToken(token, body, expectedLogin, appId, "oauth");
+}
+
 export async function pollGithubDeviceFlow(
   deviceCode: string,
   expectedLogin?: string | null,
   appId?: string | null,
 ): Promise<DeviceFlowPoll> {
-  const { clientId } = appId ? appClient(appId) : githubAppIdentity();
+  const { clientId } = appId
+    ? githubAppOAuthClient(appId)
+    : githubAppIdentity();
   if (!clientId)
     return { status: "error", error: "No OAuth client id configured" };
   const res = await fetchWithTimeout(
@@ -648,6 +704,7 @@ async function identifyAndStoreToken(
   grant: TokenGrant,
   expectedLogin?: string | null,
   appId?: string | null,
+  source: "device" | "oauth" = "device",
 ): Promise<DeviceFlowPoll> {
   const scope = grant.scope;
   const userRes = await fetchWithTimeout("https://api.github.com/user", {
@@ -682,7 +739,7 @@ async function identifyAndStoreToken(
         ? { name: user.name }
         : {}),
       ...(typeof scope === "string" && scope ? { scopes: scope } : {}),
-      source: "device",
+      source,
       connectedAt: new Date().toISOString(),
       ...grantExpiryFields(grant),
     };
@@ -744,7 +801,7 @@ export async function refreshGithubToken(
   login: string,
   appId?: string | null,
 ): Promise<boolean> {
-  const { clientId, clientSecret } = appClient(appId);
+  const { clientId, clientSecret } = githubAppOAuthClient(appId);
   if (!clientId || !clientSecret) return false;
   const key = login.toLowerCase();
   const account = (await readStoreFresh(appId)).users[key];
@@ -827,7 +884,7 @@ export async function refreshExpiringGithubTokens(): Promise<void> {
   // githubUserAuthActive() left those tokens to expire and drop out of
   // soleGithubAccount() until a manual reconnect.
   for (const appId of [null, ...additionalGithubApps().map((a) => a.id)]) {
-    const { clientId, clientSecret } = appClient(appId);
+    const { clientId, clientSecret } = githubAppOAuthClient(appId);
     if (!clientId || !clientSecret) continue;
     for (const account of Object.values((await readStoreFresh(appId)).users)) {
       if (!account.refreshToken || !account.expiresAt) continue;
