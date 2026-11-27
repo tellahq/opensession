@@ -18,17 +18,14 @@ import { DeferredSettings as Settings } from "./components/DeferredSettings";
 import {
   Analytics,
   Archived,
-  Automations,
   CatchUpDeck,
   Databases,
   Feed,
   FirstMile,
-  Goals,
   Issues,
   Prs,
   Reports,
   Reviews,
-  Security,
   SupportInbox,
   SupportPreview,
   SupportTinder,
@@ -49,7 +46,7 @@ import { RestartOverlay } from "./components/RestartOverlay";
 import { RunningCloseDialog } from "./components/RunningCloseDialog";
 import { SessionSplit } from "./components/SessionSplit";
 import { ShortcutCheatSheet } from "./components/ShortcutCheatSheet";
-import { UpdatePill } from "./components/UpdatePill";
+import { ToolPage } from "./components/ToolPage";
 import {
   UserGate,
   getCurrentUser,
@@ -84,6 +81,7 @@ import { buildAppCommandActions } from "./components/app-command-actions";
 import {
   parseRoute,
   routePath,
+  isToolView,
   settingsRoute,
   settingsSectionOf,
   type Route,
@@ -1310,27 +1308,7 @@ export function AppContent({
                 onShowRoot={() => navigate({ view: "settings" })}
                 onSelect={(key) => navigate(settingsRoute(key))}
               >
-                {route.view === "automations" ? (
-                  <Automations
-                    onOpenSession={(id) => navigate({ view: "session", id })}
-                    selectedId={route.id}
-                    onSelect={(id) =>
-                      navigate({ view: "automations", id: id || undefined })
-                    }
-                  />
-                ) : route.view === "security" ? (
-                  <Security
-                    onOpenSession={(id) => navigate({ view: "session", id })}
-                  />
-                ) : route.view === "goals" ? (
-                  <Goals
-                    onOpenSession={(id) => navigate({ view: "session", id })}
-                    selectedId={route.id}
-                    onSelect={(id) =>
-                      navigate({ view: "goals", id: id || undefined })
-                    }
-                  />
-                ) : null}
+                <ToolPage route={route} navigate={navigate} />
               </Settings>
             )}
             {/* On phones the app-body stays mounted beneath the Settings sheet
@@ -1370,9 +1348,7 @@ export function AppContent({
                     showToast,
                     panelIcon,
                     sidebarToggleKeys,
-                    footerAccessory: (
-                      <UpdatePill addHandler={addHandler} variant="footer" />
-                    ),
+                    addHandler,
                   }}
                   shell={{
                     sidebarCollapsed,
@@ -1588,6 +1564,9 @@ export function AppContent({
                     />
                   ) : route.view === "analytics" ? (
                     <Analytics />
+                  ) : !settingsActive && isToolView(route.view) ? (
+                    // The new layout: these are pages of the app, not Settings.
+                    <ToolPage route={route} navigate={navigate} pane />
                   ) : route.view === "feed" ? (
                     <Feed
                       sessions={sessions}

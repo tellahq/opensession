@@ -131,9 +131,9 @@ export const TAB_STRIP_ATTACHED =
 /** Added to TAB_SCROLL: full height so a tab can reach the row's bottom edge,
  *  and above the row's hairline so the active tab covers it. The scroll masks
  *  itself when it overflows, which makes it a stacking context of its own, so
- *  the lift has to be here and not on the tab. The 8px at each end is room for
- *  the first and last tab's flare, which the scroll would otherwise clip. */
-export const TAB_SCROLL_ATTACHED = "relative z-[1] items-stretch px-2";
+ *  the lift has to be here and not on the tab. The 10px at each end is room
+ *  for the first and last tab's flare, which the scroll would otherwise clip. */
+export const TAB_SCROLL_ATTACHED = "relative z-[1] items-stretch px-2.5";
 
 export const TAB_GROUP_ATTACHED =
   "relative inline-flex flex-none items-stretch gap-0.5";
@@ -143,17 +143,23 @@ export const TAB_GROUP_ATTACHED =
  * hairline square: it curves outward and becomes that hairline, so the tab
  * and the sheet under it read as one outlined shape.
  *
- * Each flare is an 8px box at the tab's foot, just outside it, painted by one
+ * Each flare is a 10px box at the tab's foot, just outside it, painted by one
  * gradient: the row shows through inside the curve, the hairline is the
  * curve, and the tab's fill (`--tab-fill`) is the wedge under it. It overlaps
  * the tab's own border by that border's one pixel, and sits above it, so the
  * straight edge turns into the curve without a step.
  *
- * The curve is the band from 7px to 8px of the gradient, as wide as the
+ * The curve is the band from 9px to 10px of the gradient, as wide as the
  * border it continues and on the same pixels where they meet. Each edge of
  * it is a half-pixel ramp centred on that edge, which is what smooths it.
  * All three strokes use the row's opaque `--tab-edge` (PANE_TOP_ROW), since
  * they overlap at both ends.
+ *
+ * One outline, one curve: a gradient can only draw a circular arc, so the
+ * tab's top corners and the sheet's corner beside the minibar
+ * (components/AppSidebar.tsx) are circular arcs of the same 10px
+ * (`[corner-shape:round]`) and not the app's squircle. A squircle at the top
+ * of a tab whose feet are arcs reads as two different roundings.
  *
  * Every class here is spelled out in full. Tailwind reads this file as text,
  * so a class assembled from a constant is never generated.
@@ -164,16 +170,16 @@ export const TAB_GROUP_ATTACHED =
  */
 const TAB_ITEM_ATTACHED_FLARES =
   "[--tab-fill:var(--bg)] data-[colored]:[--tab-fill:color-mix(in_srgb,var(--tab-color)_14%,var(--bg))] " +
-  "before:pointer-events-none before:absolute before:bottom-0 before:-left-[7px] before:z-[1] before:hidden before:size-2 before:content-[''] " +
-  "before:[background:radial-gradient(circle_at_0_0,transparent_6.75px,var(--tab-edge,var(--divider))_7.25px,var(--tab-edge,var(--divider))_7.75px,var(--tab-fill)_8.25px)] " +
-  "after:pointer-events-none after:absolute after:bottom-0 after:-right-[7px] after:z-[1] after:hidden after:size-2 after:content-[''] " +
-  "after:[background:radial-gradient(circle_at_100%_0,transparent_6.75px,var(--tab-edge,var(--divider))_7.25px,var(--tab-edge,var(--divider))_7.75px,var(--tab-fill)_8.25px)] " +
+  "before:pointer-events-none before:absolute before:bottom-0 before:-left-[9px] before:z-[1] before:hidden before:size-2.5 before:content-[''] " +
+  "before:[background:radial-gradient(circle_at_0_0,transparent_8.75px,var(--tab-edge,var(--divider))_9.25px,var(--tab-edge,var(--divider))_9.75px,var(--tab-fill)_10.25px)] " +
+  "after:pointer-events-none after:absolute after:bottom-0 after:-right-[9px] after:z-[1] after:hidden after:size-2.5 after:content-[''] " +
+  "after:[background:radial-gradient(circle_at_100%_0,transparent_8.75px,var(--tab-edge,var(--divider))_9.25px,var(--tab-edge,var(--divider))_9.75px,var(--tab-fill)_10.25px)] " +
   "[&:has(>[aria-selected=true])]:before:block [&:has(>[aria-selected=true])]:after:block";
 
 export const TAB_ITEM_ATTACHED = `session-tab-reorder relative inline-flex shrink-0 items-stretch ${TAB_ITEM_ATTACHED_FLARES}`;
 
 export const TAB_ITEM_ATTACHED_DRAGGING =
-  "cursor-grabbing rounded-t-[10px] bg-panel smooth-shadow-ring-sm";
+  "cursor-grabbing rounded-t-[10px] [corner-shape:round] bg-panel smooth-shadow-ring-sm";
 
 /**
  * The drag-to-reorder group wraps EVERY tab — sessions and view panes alike —
@@ -252,7 +258,7 @@ export type TabState = {
  */
 const TAB_ATTACHED_BASE =
   "relative inline-flex max-w-[200px] shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
-  "rounded-t-[10px] border border-b-0 px-3 text-label shadow-none transition-[background-color,color]";
+  "rounded-t-[10px] [corner-shape:round] border border-b-0 px-3 text-label shadow-none transition-[background-color,color]";
 
 function attachedTabClass({ active, waiting, colored }: TabState): string {
   const ink = active || waiting ? "text-fg" : "text-dim hover:text-fg";

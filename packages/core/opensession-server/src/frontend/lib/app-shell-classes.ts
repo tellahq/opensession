@@ -94,7 +94,7 @@ export const PANE_TOP_ROW =
   "after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-[var(--tab-edge)] after:content-[''] " +
   "[&:not(:has(>:not(:empty)))]:hidden";
 
-/** The strip's share of that row. The strip brings its own 8px at each end.
+/** The strip's share of that row. The strip brings its own 10px at each end.
  *  With the sidebar collapsed, the floating re-open control sits over the
  *  row's first 48px. The desktop shell adds its navigation cluster there and
  *  insets further (base-platform.css). */

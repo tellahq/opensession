@@ -6,7 +6,9 @@ import { PRODUCT_NAME } from "../lib/brand";
 import { subscribeFrontendVersion } from "../lib/frontend-version";
 import { onShellUpdated } from "../lib/push";
 import { PERSISTENT_NOTICE_CARD } from "../lib/notification-classes";
+import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
+import { IconRefresh } from "./icons";
 
 interface Props {
   addHandler: (handler: (msg: WSServerMessage) => void) => () => void;
@@ -14,7 +16,9 @@ interface Props {
   // variant that sits next to the brand logo on phones. "footer" is the
   // desktop one: a small accent button beside Settings at the bottom of the
   // sidebar, so the nudge lives in the chrome rather than floating over it.
-  variant?: "card" | "pill" | "footer";
+  // "icon" is the new layout's: one round accent button in the minibar, above
+  // your account, with the words in its tooltip.
+  variant?: "card" | "pill" | "footer" | "icon";
 }
 
 /** Grace before a forced update reloads a VISIBLE tab (hidden tabs reload
@@ -182,6 +186,30 @@ export function UpdatePill({ addHandler, variant = "card" }: Props) {
         ? "Restart"
         : "Refresh";
   const detail = restart ? shellVersion : by;
+
+  if (variant === "icon") {
+    const hint = refreshing
+      ? restart
+        ? "Restarting…"
+        : "Refreshing…"
+      : forced
+        ? `Updating in ${secondsLeft}s. Click to refresh now.`
+        : restart
+          ? `${PRODUCT_NAME} ${shellVersion ?? "update"} is ready. Restart to install it.`
+          : `New update available${by ? ` (${by})` : ""}. Click to refresh.`;
+    return (
+      <Tooltip label={hint} side="right" multiline>
+        <Button
+          variant="primary"
+          size="md"
+          icon={<IconRefresh size={20} />}
+          onClick={refresh}
+          disabled={refreshing}
+          aria-label={hint}
+        />
+      </Tooltip>
+    );
+  }
 
   if (variant === "footer") {
     const label = refreshing

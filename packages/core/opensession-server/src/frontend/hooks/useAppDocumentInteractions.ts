@@ -2,7 +2,8 @@ import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import type { SidebarHandle } from "../components/Sidebar";
 import { getCurrentUser } from "../components/UserPicker";
-import { isSettingsRoute, type Route } from "../lib/app-route";
+import { isSettingsRoute, isToolView, type Route } from "../lib/app-route";
+import { useNewLayoutPref } from "../lib/new-layout-pref";
 import { closestHTMLElement, eventTargetElement } from "../lib/event-target";
 import { trackKeyboardInset } from "../lib/keyboard-inset";
 import { initAlerts } from "../lib/notify";
@@ -88,9 +89,12 @@ export function useAppDocumentInteractions({
   }, [setTabColors]);
 
   // Settings (and the tool surfaces it hosts) render as a full page on
-  // desktop, but as a bottom sheet over the root list on phones.
-  const settingsActive = isSettingsRoute(route);
+  // desktop, but as a bottom sheet over the root list on phones. The new
+  // layout takes the tool surfaces back: Automations, Goals and Security are
+  // pages of the app there, listed in Library, and Settings is not involved.
   const isPhone = useIsPhone();
+  const toolPage = useNewLayoutPref() && !isPhone && isToolView(route.view);
+  const settingsActive = isSettingsRoute(route) && !toolPage;
   const borrowedSidebar = sidebarFilter.person !== "me";
 
   // A pushed detail page is showing (anything but the sidebar-root home view).

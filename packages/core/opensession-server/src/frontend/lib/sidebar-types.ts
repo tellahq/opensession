@@ -1,4 +1,5 @@
 import type { Place } from "./new-layout-place";
+import type { ToolSectionKey } from "./settings-sections";
 import React from "react";
 import type { UnreadChat } from "./unread-chats";
 import type { UnifiedSession, Workspace } from "./types";
@@ -75,6 +76,9 @@ export interface Props {
   /** The new layout's place, which decides what this column lists. Absent in
    *  the default layout, where it lists everything. */
   place?: Place;
+  /** The Automations, Goals or Security page, when one is open: Library
+   *  lists them and marks the open one. */
+  toolPage?: ToolSectionKey;
   /** Report unread destinations, including collapsed groups and sibling tabs. */
   onUnreadChatsChange?: (chats: UnreadChat[]) => void;
   /**
