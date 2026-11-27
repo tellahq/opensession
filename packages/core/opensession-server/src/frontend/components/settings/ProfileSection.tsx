@@ -248,7 +248,7 @@ function ProfileCard({
 					    so it has to hold its own contrast in both themes instead of
 					    following the page. Same reason its ink is hard black. */}
           <span
-            className="absolute -bottom-0.5 -right-0.5 grid size-8 place-items-center rounded-full bg-white text-black shadow-sm"
+            className="absolute -bottom-0.5 -right-0.5 grid size-8 place-items-center rounded-full bg-white text-black smooth-shadow-sm"
             aria-hidden
           >
             {busy === "picture" ? (

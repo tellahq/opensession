@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { auditCounts } from "./ui-audit";
+import { auditCounts, findUnknownThemeTokens } from "./ui-audit";
 
 /**
  * The ratchet. Each count may fall freely and never rise: a new raw `<button>`
@@ -17,6 +17,30 @@ test("design-system drift stays under budget", () => {
       `${id}: ${count} exceeds ${budget}. See bun scripts/ui-audit.ts --files ${id}`,
     ).toBeLessThanOrEqual(budget);
   }
+});
+
+test("unknown-theme-token catches hallucinated tokens and ignores valid utilities", () => {
+  const bad = `
+    <div className="rounded-panel border border-border/80 bg-canvas/50 text-title">
+      <span className="border-border-subtle bg-muted text-muted-foreground" />
+    </div>
+  `;
+  expect(findUnknownThemeTokens(bad)).toEqual([
+    "border-border/80",
+    "bg-canvas/50",
+    "text-title",
+    "border-border-subtle",
+    "bg-muted",
+    "text-muted-foreground",
+  ]);
+
+  const good = `
+    // Comment mentioning border-border and bg-canvas should not count
+    <div className="rounded-popup border-l-2 border-l-accent border-b-0 bg-panel/95 hover:bg-hover text-dialog-title text-fg ring-1 ring-line">
+      <span className="border-divider bg-popup-glass text-dim smooth-shadow-ring-md" />
+    </div>
+  `;
+  expect(findUnknownThemeTokens(good)).toEqual([]);
 });
 
 /*

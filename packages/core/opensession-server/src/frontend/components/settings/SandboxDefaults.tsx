@@ -178,7 +178,7 @@ function SandboxDefaultRow({ scope }: { scope: Scope }) {
                     {overrides.map((item) => (
                       <span
                         key={item.repoId}
-                        className="inline-flex items-center gap-1 rounded-md border border-border-subtle bg-panel-surface px-2 py-0.5 text-meta text-fg"
+                        className="inline-flex items-center gap-1 rounded-md border border-divider-soft bg-panel-surface px-2 py-0.5 text-meta text-fg"
                       >
                         <span className="font-medium">{item.label}</span>
                         <span className="text-faint">·</span>

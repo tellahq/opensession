@@ -327,7 +327,7 @@ function TranscriptMotionPlayer({
         <div ref={spacerRef} aria-hidden="true" />
       </div>
       <div className="mx-auto flex min-h-16 w-full max-w-[var(--session-col)] shrink-0 items-center px-4">
-        <div className="flex min-h-11 w-full items-center rounded-control bg-panel px-3.5 text-input text-faint shadow-sm">
+        <div className="flex min-h-11 w-full items-center rounded-control bg-panel px-3.5 text-body text-faint smooth-shadow-xs">
           Synthetic composer
         </div>
       </div>

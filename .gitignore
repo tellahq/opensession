@@ -107,6 +107,8 @@ deploy/sandbox/microvm/.cache-busybox-source.tar.bz2
 !.agents/skills/audit-codebase/**
 !.agents/skills/verify-opensession/
 !.agents/skills/verify-opensession/**
+!.agents/skills/opensession-ui/
+!.agents/skills/opensession-ui/**
 !.agents/skills/bro/
 !.agents/skills/bro/**
 !.agents/skills/receipts/
