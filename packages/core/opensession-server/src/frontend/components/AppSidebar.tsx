@@ -155,6 +155,10 @@ export function AppSidebar({
       {newLayout && (
         <Minibar
           place={places.current}
+          route={route}
+          onRevealSidebar={() => {
+            if (sidebarCollapsed) toggleSidebarCollapsed();
+          }}
           onOpenSessions={() =>
             places.openSessions((route) =>
               conversationExists(route, sessions, workspaces, {
