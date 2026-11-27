@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  type FadeNode,
-  pinnedFadeTargets,
-} from "../hooks/useSidebarStickyHeadings";
+import { pinnedClipTargets } from "../hooks/useSidebarStickyHeadings";
 import { sidebarHeader } from "../lib/sidebar-classes";
 
 const sidebarSource = await Bun.file(
@@ -30,58 +27,28 @@ describe("sidebar sticky headings", () => {
 
   test("a pinned heading paints no fill over the chrome", () => {
     // Over the desktop shell's translucent material, a fill reads as a
-    // shaded band; the rows fade out as they slide under the heading.
+    // shaded band; what scrolls under the heading is cut off at its edge.
     const sticky = sidebarHeader({ kind: "lane", sticky: true });
     expect(sticky).not.toContain("data-[stuck]:before");
     expect(sticky).not.toContain("data-[stuck]:after");
     expect(sticky).not.toContain("is-stuck");
   });
 
-  test("fades the rows after a pinned heading, never a heading", () => {
-    // A minimal element: an id, children, and whether it is a heading.
-    interface Fake extends FadeNode<Fake> {
-      id: string;
-      head: boolean;
-      children: Fake[];
-      nextElementSibling: Fake | null;
-    }
-    const holdsHead = (n: Fake): boolean =>
-      n.children.some((k) => k.head || holdsHead(k));
-    const node = (id: string, children: Fake[] = [], head = false): Fake => {
-      const fake: Fake = {
-        id,
-        head,
-        children,
-        nextElementSibling: null,
-        matches: () => head,
-        querySelector: () => (holdsHead(fake) ? fake : null),
-      };
-      return fake;
+  test("cuts off everything after a pinned heading in its parent", () => {
+    type Fake = { id: string; nextElementSibling: Fake | null };
+    const chain = (...ids: string[]) => {
+      const nodes: Fake[] = ids.map((id) => ({ id, nextElementSibling: null }));
+      nodes.forEach((n, i) => (n.nextElementSibling = nodes[i + 1] ?? null));
+      return nodes[0]!;
     };
-    const link = (parent: Fake) => {
-      parent.children.forEach((kid, i) => {
-        kid.nextElementSibling = parent.children[i + 1] ?? null;
-        link(kid);
-      });
-      return parent;
-    };
-    // A repo band: its heading, then a block holding a lane (a heading over
-    // rows), then a tall list block that fades row by row, then a short one.
-    const lane = node("lane", [], true);
-    const repo = node("repo", [], true);
-    link(
-      node("band", [
-        repo,
-        node("lanes", [node("laneBox", [lane, node("r1"), node("r2")])]),
-        node("list", [node("a1"), node("a2")]),
-        node("short", [node("label")]),
-      ]),
-    );
-    const height = (el: Fake) => (el.id === "list" ? 400 : 36);
-    const ids = (head: Fake) =>
-      pinnedFadeTargets(head, height).map((el) => el.id);
-    expect(ids(repo)).toEqual(["r1", "r2", "a1", "a2", "short"]);
-    expect(ids(lane)).toEqual(["r1", "r2"]);
+    // A repo heading, then the block holding its lanes: the block is cut
+    // as a whole, so a lane heading pushed out of its lane is cut too.
+    expect(pinnedClipTargets(chain("repo", "lanes")).map((n) => n.id)).toEqual([
+      "lanes",
+    ]);
+    expect(
+      pinnedClipTargets(chain("lane", "r1", "r2")).map((n) => n.id),
+    ).toEqual(["r1", "r2"]);
   });
 
   test("reveals keyboard-selected rows below the sticky caption", () => {

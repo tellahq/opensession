@@ -5,49 +5,25 @@ import { useLayoutEffect, useRef } from "react";
  *  the class names being restyled. */
 const HEAD = "[data-sticky-head]";
 
-/** Content taller than this is a list of rows, not a row: its children fade
- *  one by one, or a whole list would vanish once its top reached the line. */
-const ROW_MAX_PX = 120;
-
-/** The part of an element the row walk reads, so it runs without a DOM. */
-export interface FadeNode<T> {
-  readonly children: Iterable<T>;
-  readonly nextElementSibling: T | null;
-  matches(selector: string): boolean;
-  querySelector(selector: string): object | null;
-}
-
 /**
- * The elements that fade out as they slide under a pinned heading: the
- * content after it, split into rows. Something holding headings of its own
- * (a repo band's lanes) is split too, so those headings are never faded;
- * each of them marks its own rows. `height` reads an element's layout height.
+ * What slides under a pinned heading: everything after it in its parent.
+ * Each is hidden at the heading's bottom edge as it scrolls up, rows and the
+ * blocks holding lanes alike, so a lane heading pushed up out of its lane is
+ * hidden under the project heading above it too.
  */
-export function pinnedFadeTargets<T extends FadeNode<T>>(
+export function pinnedClipTargets<T extends { nextElementSibling: T | null }>(
   head: T,
-  height: (el: T) => number,
 ): T[] {
   const out: T[] = [];
-  const visit = (el: T) => {
-    if (el.matches(HEAD)) return;
-    const children = [...el.children];
-    const split =
-      children.length > 0 &&
-      (el.querySelector(HEAD) !== null || height(el) > ROW_MAX_PX);
-    if (!split) {
-      out.push(el);
-      return;
-    }
-    for (const child of children) visit(child);
-  };
   for (let sib = head.nextElementSibling; sib; sib = sib.nextElementSibling) {
-    visit(sib);
+    out.push(sib);
   }
   return out;
 }
 
 /**
- * Track the pinned headings of one sidebar list and fade the rows under them.
+ * Track the pinned headings of one sidebar list and cut off what scrolls
+ * under them.
  * Returns the teardown.
  */
 function bindStickyHeadings(root: HTMLElement): () => void {
@@ -58,11 +34,11 @@ function bindStickyHeadings(root: HTMLElement): () => void {
   // A pinned heading has no fill of its own. Over the desktop shell's
   // translucent material no fill can match the chrome around it (the
   // material is the window behind, which CSS cannot sample), so an opaque
-  // backing read as a shaded band. Instead the rows after a heading fade out
-  // as they reach its bottom edge (`[data-pin-fade]`, base-platform.css).
-  // The fade is a scroll-driven animation, so the browser runs it in step
-  // with the scroll; this only says which rows fade and where the line is,
-  // and only when the list changes. A scroll listener runs after the frame
+  // backing read as a shaded band. Instead what scrolls up under a heading is
+  // cut off at its bottom edge (`[data-pin-clip]`, base-platform.css). The
+  // cut is a scroll-driven animation, so the browser runs it in step with the
+  // scroll; this only says what is cut and where the line is, and only when
+  // the list changes. A scroll listener runs after the frame
   // it reacts to is drawn, so masks driven from it trail the scroll.
   let frame = 0;
   // What a header's own styles say: whether it pins at all, and the offset
@@ -78,16 +54,16 @@ function bindStickyHeadings(root: HTMLElement): () => void {
     stuck: boolean;
   };
   let heads: StickyHead[] = [];
-  /** What carries the fade as last applied: the rows, and the parents
+  /** What carries the cut as last applied: what is cut, and the parents
    *  holding each heading's line. */
-  let faded = new Set<HTMLElement>();
+  let clipped = new Set<HTMLElement>();
   let lined = new Set<HTMLElement>();
   let stale = true;
   const rescan = () => {
     stale = false;
     const applied = new Map(heads.map((h) => [h.el, h.stuck]));
     heads = [];
-    const nextFaded = new Set<HTMLElement>();
+    const nextClipped = new Set<HTMLElement>();
     const nextLined = new Set<HTMLElement>();
     for (const el of root.querySelectorAll<HTMLElement>(HEAD)) {
       const style = getComputedStyle(el);
@@ -105,7 +81,7 @@ function bindStickyHeadings(root: HTMLElement): () => void {
         stuck: applied.get(el) ?? el.hasAttribute("data-stuck"),
       });
       if (!sticky || !parent) continue;
-      // The line rows fade out at: where the heading's bottom edge sits
+      // The line things are cut at: where the heading's bottom edge sits
       // once pinned. Set on the parent, so the rows after the heading
       // inherit it, and a nested heading's own parent overrides it for the
       // rows under that one.
@@ -114,20 +90,25 @@ function bindStickyHeadings(root: HTMLElement): () => void {
         `${Math.round(top + el.offsetHeight)}px`,
       );
       nextLined.add(parent);
-      for (const row of pinnedFadeTargets<Element>(el, (n) =>
-        n instanceof HTMLElement ? n.offsetHeight : 0,
-      )) {
-        if (row instanceof HTMLElement) nextFaded.add(row);
+      for (const item of pinnedClipTargets<Element>(el)) {
+        if (item instanceof HTMLElement) nextClipped.add(item);
       }
     }
-    for (const el of nextFaded) el.setAttribute("data-pin-fade", "");
-    for (const el of faded) {
-      if (!nextFaded.has(el)) el.removeAttribute("data-pin-fade");
+    // A block holding headings of its own is cut hard, so the lane heading
+    // pinned right under its project does not sit in a fade.
+    for (const el of nextClipped) {
+      el.setAttribute(
+        "data-pin-clip",
+        el.querySelector(HEAD) === null ? "fade" : "cut",
+      );
+    }
+    for (const el of clipped) {
+      if (!nextClipped.has(el)) el.removeAttribute("data-pin-clip");
     }
     for (const el of lined) {
       if (!nextLined.has(el)) el.style.removeProperty("--pin-line");
     }
-    faded = nextFaded;
+    clipped = nextClipped;
     lined = nextLined;
   };
 
@@ -199,7 +180,7 @@ function bindStickyHeadings(root: HTMLElement): () => void {
     mutationObserver.disconnect();
     densityObserver.disconnect();
     if (frame) cancelAnimationFrame(frame);
-    for (const el of faded) el.removeAttribute("data-pin-fade");
+    for (const el of clipped) el.removeAttribute("data-pin-clip");
     for (const el of lined) el.style.removeProperty("--pin-line");
   };
 }
