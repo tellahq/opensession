@@ -67,21 +67,30 @@ export function isConversationRoute(route: Route): boolean {
   return route.view === "session" || route.view === "workspace";
 }
 
+type SessionState = { id: string; archived?: boolean };
+
 /**
- * Whether a remembered conversation can still be opened: its session is in
- * the list and not archived, or its workspace still exists. The Sessions
- * button asks before it returns to one, so a conversation deleted or archived
- * since (here, in another tab, or by a teammate) is not reopened.
+ * Whether a remembered conversation can still be opened: its session is not
+ * archived, or its workspace still exists. The Sessions button asks before it
+ * returns to one, so a conversation deleted or archived since (here, in
+ * another tab, or by a teammate) is not reopened.
+ *
+ * A session missing from the loaded list is not taken as gone: the list is
+ * scoped by the sidebar's lens and by recent activity, so it can leave out a
+ * live one. `lookUp` asks the server instead (null for an unknown id).
  */
 export function conversationExists(
   route: Route,
-  sessions: readonly { id: string; archived?: boolean }[],
+  sessions: readonly SessionState[],
   workspaces: readonly { id: string }[],
-): boolean {
-  if (route.view === "session")
-    return sessions.some(
-      (session) => session.id === route.id && !session.archived,
-    );
+  lookUp?: (id: string) => Promise<Omit<SessionState, "id"> | null>,
+): boolean | Promise<boolean> {
+  if (route.view === "session") {
+    const listed = sessions.find((session) => session.id === route.id);
+    if (listed) return !listed.archived;
+    if (!lookUp) return false;
+    return lookUp(route.id).then((session) => !!session && !session.archived);
+  }
   if (route.view === "workspace")
     return workspaces.some((workspace) => workspace.id === route.id);
   return false;

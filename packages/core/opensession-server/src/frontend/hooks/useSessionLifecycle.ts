@@ -12,8 +12,6 @@ type SessionLifecycleParams = {
   route: Route;
   navigate: (next: Route, opts?: { replace?: boolean }) => void;
   goBack: () => void;
-  /** Stops the Sessions button returning to a deleted conversation. */
-  forgetConversation: (route: Route) => void;
   currentSession: UnifiedSession | null;
   workspaceSessions: UnifiedSession[];
   activeWorkspaceId: string | null;
@@ -50,7 +48,6 @@ export function useSessionLifecycle({
   route,
   navigate,
   goBack,
-  forgetConversation,
   currentSession,
   workspaceSessions,
   activeWorkspaceId,
@@ -183,7 +180,6 @@ export function useSessionLifecycle({
       ? workspaceSessions.find((candidate) => candidate.id !== session.id)
       : undefined;
     await deleteSessionApi(session.id, cleanWorktree);
-    forgetConversation({ view: "session", id: session.id });
     remove(session.id);
     if (wasOpen) {
       if (next) navigate({ view: "session", id: next.id });

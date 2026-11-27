@@ -45,6 +45,21 @@ describe("conversationExists", () => {
     expect(exists("deleted")).toBe(false);
   });
 
+  test("an unlisted session is looked up, not taken as gone", async () => {
+    const server = new Map([
+      ["hidden", { archived: false }],
+      ["shelved", { archived: true }],
+    ]);
+    const exists = (id: string) =>
+      conversationExists({ view: "session", id }, sessions, workspaces, (key) =>
+        Promise.resolve(server.get(key) ?? null),
+      );
+    expect(exists("live")).toBe(true);
+    expect(await exists("hidden")).toBe(true);
+    expect(await exists("shelved")).toBe(false);
+    expect(await exists("deleted")).toBe(false);
+  });
+
   test("a workspace has to exist", () => {
     const exists = (id: string) =>
       conversationExists({ view: "workspace", id }, sessions, workspaces);

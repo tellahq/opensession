@@ -8,6 +8,7 @@ import {
   type Route,
 } from "../lib/app-route";
 import { BASE_PATH, stripBasePath } from "../lib/base";
+import { onConversationDeleted } from "../lib/conversation-deleted";
 import { keepsSingleHistoryEntry } from "../lib/history-mode";
 import { onPushNavigate } from "../lib/push";
 import { pushRecent } from "../lib/recents";
@@ -178,19 +179,39 @@ export class AppRouteController {
    * pick a session from it.
    *
    * `stillThere` says whether a remembered conversation can still be opened.
-   * One that was deleted or archived since is forgotten instead.
+   * One that was deleted or archived since is forgotten instead. When it
+   * has to ask the server, the list shows at once and the conversation
+   * opens once confirmed, unless you have moved on by then.
    */
-  openSessions(stillThere: (route: Route) => boolean = () => true): void {
+  openSessions(
+    stillThere: (route: Route) => boolean | Promise<boolean> = () => true,
+  ): void {
     if (this.currentPlace === "sessions") return;
     if (!isConversationRoute(this.route) && this.sessionsReturn) {
       const target = this.sessionsReturn;
-      this.sessionsReturn = null;
-      if (stillThere(target)) {
+      const verdict = stillThere(target);
+      if (verdict === true) {
         // Set first, so the conversation lands in Sessions even when the
         // page being left is one of Activity's.
         this.currentPlace = "sessions";
         this.navigate(target);
         return;
+      }
+      if (verdict === false) {
+        this.sessionsReturn = null;
+      } else {
+        const from = this.route;
+        verdict.then(
+          (there) => {
+            // Forgotten, replaced, or left behind meanwhile.
+            if (this.sessionsReturn !== target) return;
+            if (!there) this.sessionsReturn = null;
+            else if (this.route === from && this.currentPlace === "sessions")
+              this.navigate(target);
+          },
+          // Unknown, not gone: it stays remembered for the next click.
+          () => {},
+        );
       }
     }
     // The page stays, so its entry records the choice: Back to it, a reload,
@@ -553,11 +574,16 @@ export function useAppRoute({
       controller.forgetLastSession(expected),
     canonicalizePath: (path: string) => controller.canonicalizePath(path),
     forgetConversation: (route: Route) => controller.forgetConversation(route),
-    openSessions: (stillThere?: (route: Route) => boolean) =>
+    openSessions: (stillThere?: (route: Route) => boolean | Promise<boolean>) =>
       controller.openSessions(stillThere),
   }));
 
   useLayoutEffect(() => controller.subscribe(setSnapshot), [controller]);
+  useEffect(
+    () =>
+      onConversationDeleted((route) => controller.forgetConversation(route)),
+    [controller],
+  );
   useEffect(() => controller.start(serviceWorker), [controller, serviceWorker]);
   useEffect(
     () => controller.rememberRoute(snapshot.route),

@@ -1498,6 +1498,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
                 repos={repos}
                 people={peopleWithAgent}
                 currentUser={currentUser}
+                personPinned={place === "sessions"}
                 onChange={setFilter}
                 onClose={() => setFilterOpen(false)}
                 onCustomize={() => {

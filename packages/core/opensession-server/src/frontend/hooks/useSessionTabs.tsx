@@ -1256,7 +1256,6 @@ export function useSessionTabs({
     route,
     navigate,
     goBack,
-    forgetConversation,
     currentSession,
     workspaceSessions,
     activeWorkspaceId,

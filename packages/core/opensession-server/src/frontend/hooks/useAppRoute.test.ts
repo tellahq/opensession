@@ -951,6 +951,44 @@ describe("places", () => {
     expect(controller.getCurrentRoute()).toEqual({ view: "issues" });
   });
 
+  test("Sessions asks the server about a conversation the list leaves out", async () => {
+    const fake = fakeBrowser({ path: "/session/mine", state: { d: 0 } });
+    const controller = new AppRouteController(fake.browser);
+    controller.navigate({ view: "feed" });
+
+    // Live, just not listed: the list shows at once, the session once known.
+    controller.openSessions(() => Promise.resolve(true));
+    expect(controller.getCurrentRoute()).toEqual({ view: "feed" });
+    expect(controller.place).toBe("sessions");
+    await Promise.resolve();
+    expect(controller.getCurrentRoute()).toEqual({
+      view: "session",
+      id: "mine",
+    });
+  });
+
+  test("a server lookup that finds nothing forgets it, and one you left behind does nothing", async () => {
+    const fake = fakeBrowser({ path: "/session/mine", state: { d: 0 } });
+    const controller = new AppRouteController(fake.browser);
+    controller.navigate({ view: "feed" });
+
+    let answer!: (there: boolean) => void;
+    controller.openSessions(
+      () => new Promise<boolean>((resolve) => (answer = resolve)),
+    );
+    controller.navigate({ view: "issues" });
+    answer(true);
+    await Promise.resolve();
+    expect(controller.getCurrentRoute()).toEqual({ view: "issues" });
+
+    controller.navigate({ view: "feed" });
+    controller.openSessions(() => Promise.resolve(false));
+    await Promise.resolve();
+    controller.navigate({ view: "feed" });
+    controller.openSessions(() => true);
+    expect(controller.getCurrentRoute()).toEqual({ view: "feed" });
+  });
+
   test("Sessions forgets a conversation deleted before the lists refresh", () => {
     const fake = fakeBrowser({ path: "/workspace/ws-1", state: { d: 0 } });
     const controller = new AppRouteController(fake.browser);
