@@ -147,6 +147,15 @@ export const popup = stylex.create({
     flexDirection: "column",
   },
   scrollAboveFooter: { minHeight: 0, maxHeight: "none", flex: "1" },
+  /** A popup with a docked side panel: the list column, then the panel. */
+  withAside: {
+    display: "flex",
+    maxHeight: geometry.popupMaxHeightFooter,
+    flexDirection: "row",
+    alignItems: "stretch",
+  },
+  /** The list column beside an aside: it takes the width the panel leaves. */
+  asideList: { minWidth: 0, flex: "1" },
   /** A select's popup: never narrower than its trigger. */
   anchorWidth: { minWidth: geometry.anchorWidth },
   separator: {

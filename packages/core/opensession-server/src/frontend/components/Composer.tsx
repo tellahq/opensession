@@ -1992,38 +1992,10 @@ export function Composer({
             />
           )}
 
-          {/* Ask mode used to keep a marker here, next to the "+". It says
-              itself in a chip above the field now, with the ✕ that leaves it
-              (see ComposerContextChip), which is where note mode already
-              said itself: two states that both wash the box now name
-              themselves in the same place and the same shape. */}
-          {/* `grow basis-0 shrink-0` rather than `flex-1`: every direct child of
-              the toolbar is pinned at flex-shrink 0 so the model pill is the
-              only thing that gives way, and a shorthand would take that back. */}
-          {/* On a phone the prediction is taken with a gesture, so its hint
-              waits in the spare width here. It takes only width nobody else
-              wants: where the row has too little left, it hides rather than
-              squeezing the model pill. On desktop the Tab key cap sits
-              inline behind the guess instead. */}
-          {!minimized && !phoneDictating && (
-            <div className="@container flex min-w-0 shrink-0 grow basis-0 items-center justify-end">
-              {shownPrediction && isPhone && (
-                <span
-                  className="pointer-events-none text-meta font-medium whitespace-nowrap text-faint @max-[68px]:hidden"
-                  aria-hidden="true"
-                >
-                  Double tap
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Model + effort live together on the right edge (ChatGPT-style):
-              one pill, effort levels up top, the model behind a submenu.
-              Phones reorder it next to the + button via flex order (see
-              composerToolbarSelect). It stays out of the resting phone pill
-              because that state is minimized, but returns when the installed
-              PWA composer expands. */}
+          {/* Model + effort live together in one pill at the left edge, right
+              after the "+", where the new-session palette keeps it too. It
+              stays out of the resting phone pill because that state is
+              minimized, but returns when the installed PWA composer expands. */}
           {!phoneDictating && (
             <ModelRow
               minimized={minimized}
@@ -2051,6 +2023,33 @@ export function Composer({
               effortUpLabel={effortUpLabel}
               onOpenChange={setModelMenuOpen}
             />
+          )}
+
+          {/* Ask mode used to keep a marker here, next to the "+". It says
+              itself in a chip above the field now, with the ✕ that leaves it
+              (see ComposerContextChip), which is where note mode already
+              said itself: two states that both wash the box now name
+              themselves in the same place and the same shape. */}
+          {/* `grow basis-0 shrink-0` rather than `flex-1`: every direct child of
+              the toolbar is pinned at flex-shrink 0 so the model pill is the
+              only thing that gives way, and a shorthand would take that back.
+              This spacer pushes the mic and send to the right edge. */}
+          {/* On a phone the prediction is taken with a gesture, so its hint
+              waits in the spare width here. It takes only width nobody else
+              wants: where the row has too little left, it hides rather than
+              squeezing the model pill. On desktop the Tab key cap sits
+              inline behind the guess instead. */}
+          {!minimized && !phoneDictating && (
+            <div className="@container flex min-w-0 shrink-0 grow basis-0 items-center justify-end">
+              {shownPrediction && isPhone && (
+                <span
+                  className="pointer-events-none text-meta font-medium whitespace-nowrap text-faint @max-[68px]:hidden"
+                  aria-hidden="true"
+                >
+                  Double tap
+                </span>
+              )}
+            </div>
           )}
 
           {/* Wrapper around the dictation mic — gives Motion a layout box so it

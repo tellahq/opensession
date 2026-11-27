@@ -128,10 +128,9 @@ export const composerToolbarMinimized = "contents";
 /** The one flexible item in the row, and the wrapper it has to be granted to:
  *  the model pill sits inside a Motion layout box, and pinning the shrink on
  *  the pill itself left the WRAPPER rigid — the row stayed wider than the
- *  composer and pushed the send button off its right edge on phones. Phones
- *  also pull it to the front of the row, next to the "+". */
-export const composerToolbarSelect =
-  "inline-flex min-w-0 shrink phone:order-[-1]";
+ *  composer and pushed the send button off its right edge on phones. It
+ *  follows the "+" in source order, on every width. */
+export const composerToolbarSelect = "inline-flex min-w-0 shrink";
 /** The pill's toolbar-only metrics: it may shrink to a 34px stub here (the
  *  new-session footer lets it go to 0 instead), and phones tighten its
  *  padding. No width cap: the toolbar pins every other child at
