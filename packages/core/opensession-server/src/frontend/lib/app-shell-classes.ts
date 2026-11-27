@@ -71,11 +71,16 @@ export const APP_BODY =
 /**
  * The new layout's window row is 40px, not 48: it holds tabs and a few
  * controls, and the sheet under it is where the room should go. Set on the
- * boxes beside the minibar because the variable is read all through them. The
- * desktop shell keeps its own taller row, which its traffic lights centre on.
+ * boxes beside the minibar because the variable is read all through them.
+ *
+ * The desktop shell's row is 48px, not the old layout's 52: the Mac app places
+ * its traffic lights for a 48px row ((48 - 12) / 2 in its main.js), so the
+ * tabs and controls centre on the lights exactly, and 4px less row leaves the
+ * tabs less air above them and a shorter run down to the sheet.
  */
 export const NEW_LAYOUT_ROW_HEIGHT =
-  "[html:not(.wco)_[data-minibar]~&]:[--desktop-header-h:40px]";
+  "[html:not(.wco)_[data-minibar]~&]:[--desktop-header-h:40px] " +
+  "[html.wco_[data-minibar]~&]:[--desktop-header-h:48px]";
 
 /**
  * The new layout's window row over the pane: the tab strip, then the page's
