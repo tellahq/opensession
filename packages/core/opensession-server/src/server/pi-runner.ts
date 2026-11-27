@@ -111,6 +111,10 @@ import {
   piGuidanceDiscoveryTools,
 } from "./pi-guidance";
 import {
+  PiResourceLockManager,
+  piResourceLockTools,
+} from "./pi-resource-locks";
+import {
   guardStripeApprovalCall,
   recordStripeDraftInvoice,
   stripeApprovalsEnforced,
@@ -3218,8 +3222,12 @@ async function* runPiAttempt(
       listGlob: async (pattern, baseDir) =>
         guardedOps.find.glob(pattern, baseDir, { ignore: [], limit: 64 }),
     });
+    const resourceLocks = new PiResourceLockManager();
     const customTools = piSteeringBoundaryTools(
-      piGuidanceDiscoveryTools(baseCustomTools, guidanceDiscovery),
+      piGuidanceDiscoveryTools(
+        piResourceLockTools(baseCustomTools, resourceLocks, cwd),
+        guidanceDiscovery,
+      ),
       () => steeringBoundaryPending,
     );
     // Codemode only orchestrates the tools above, so a run without any has
