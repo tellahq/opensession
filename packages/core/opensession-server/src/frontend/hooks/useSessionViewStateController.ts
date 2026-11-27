@@ -42,7 +42,11 @@ import { useSessionRuntimeController } from "./useSessionRuntimeController";
 import { reviewLoopResult, type ReviewLoopResult } from "../lib/review-loop";
 import { useSidePanel } from "./useSidePanel";
 import { useSessionAssets } from "../components/AssetsPanel";
-import { setOpenAsset, useOpenAssetPath } from "../lib/asset-overlay-store";
+import {
+  registerAssetTabOpener,
+  setOpenAsset,
+  useOpenAssetPath,
+} from "../lib/asset-overlay-store";
 import { useSessionReports } from "../components/SessionReportsPanel";
 import { useSessionDatabases } from "../components/SessionDatabasesPanel";
 import { fetchThreadsApi } from "../lib/api";
@@ -403,6 +407,12 @@ export function useSessionViewStateController({
     },
     [setOverlayAssetPath],
   );
+  // Transcript rows offer "Open as tab" only where this session has one.
+  const canOpenAssetTab = Boolean(openAssets);
+  useEffect(() => {
+    if (!canOpenAssetTab) return;
+    return registerAssetTabOpener(session.id, promoteAssetToTab);
+  }, [canOpenAssetTab, session.id, promoteAssetToTab]);
   const sessionReports = useSessionReports(session.id, addHandler);
   const sessionDatabases = useSessionDatabases(session.id, addHandler);
   const [threads, setThreads] = useState<CommentThread[]>([]);

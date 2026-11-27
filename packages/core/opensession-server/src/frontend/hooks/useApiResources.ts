@@ -147,6 +147,20 @@ export function useSessionAssetsResource(
 }
 
 /**
+ * The session's asset list as its viewer last loaded it, without fetching:
+ * transcript rows mount and unmount while the chat scrolls, and the viewer
+ * already keeps this list live.
+ */
+export function useCachedSessionAssets(
+  sessionId: string | null,
+): SessionAssetFile[] | undefined {
+  return useSWR<SessionAssetFile[]>(
+    sessionId ? apiSWRKey.sessionAssets(sessionId) : null,
+    null,
+  ).data;
+}
+
+/**
  * Workspace and session hover cards share this resource with the right panel.
  * `loadOverview` keeps its compatibility fallbacks for older servers; SWR owns
  * remount caching and in-flight request deduplication.

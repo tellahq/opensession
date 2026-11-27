@@ -10,7 +10,7 @@
  * best fits each surface.
  */
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { SessionAssetFile } from "../lib/api";
 import { useSessionAssetsResource } from "../hooks/useApiResources";
 import type { WSServerMessage } from "../lib/types";
@@ -18,7 +18,9 @@ import type { NewSessionPrefill } from "../lib/new-session-link";
 import { Button } from "../ui/button";
 import { AssetActions, AssetPreview } from "./AssetView";
 import { AssetsFileList } from "./AssetsFileList";
-import { resolvedAssetPath } from "../lib/asset-preview";
+import { assetPreviewKind, resolvedAssetPath } from "../lib/asset-preview";
+import { canAnnotateAsset } from "../lib/asset-annotation";
+import { AssetAnnotationLayer } from "./AssetAnnotationLayer";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { Collapsible, collapsiblePanelClasses } from "../ui/collapsible";
 import { IconChevronRight, IconRefresh } from "./icons";
@@ -80,6 +82,9 @@ export function AssetsPanel({
   const file = files.find((f) => f.path === selected) || null;
   const isPhone = useIsPhone();
   const [filesOpen, setFilesOpen] = useState(false);
+  // The file being annotated: picking another file leaves the mode.
+  const [annotatingPath, setAnnotatingPath] = useState<string | null>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
 
   if (!files.length) {
     return (
@@ -168,13 +173,30 @@ export function AssetsPanel({
             sessionId={sessionId}
             file={file}
             refresh={refresh}
+            annotating={
+              canAnnotateAsset(assetPreviewKind(file.path))
+                ? annotatingPath === file.path
+                : undefined
+            }
+            onAnnotate={(on) => setAnnotatingPath(on ? file.path : null)}
             showSize
           />
-          <AssetPreview
-            sessionId={sessionId}
-            file={file}
-            onOpenNewSession={onOpenNewSession}
-          />
+          <div className="relative flex min-h-0 flex-1 flex-col">
+            <AssetPreview
+              ref={previewRef}
+              sessionId={sessionId}
+              file={file}
+              onOpenNewSession={onOpenNewSession}
+            />
+            {annotatingPath === file.path && (
+              <AssetAnnotationLayer
+                sessionId={sessionId}
+                path={file.path}
+                preview={previewRef}
+                onExit={() => setAnnotatingPath(null)}
+              />
+            )}
+          </div>
         </div>
       ) : null}
     </div>

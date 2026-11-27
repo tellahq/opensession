@@ -127,9 +127,11 @@ export function ResponsiveDialog({
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        // This capture listener runs before a portalled Base UI menu. Let the
-        // menu consume the first Escape instead of closing the whole dialog.
-        if (document.querySelector(".app-menu-popup")) return;
+        // This capture listener runs before a portalled Base UI menu or a
+        // layer inside the dialog (an annotation layer). Let it consume the
+        // first Escape instead of closing the whole dialog.
+        if (document.querySelector(".app-menu-popup, [data-consumes-escape]"))
+          return;
         e.stopPropagation();
         onClose();
       }
