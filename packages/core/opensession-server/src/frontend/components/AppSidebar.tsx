@@ -39,6 +39,11 @@ interface AppSidebarProps {
       openSessions: (
         stillThere?: (route: Route) => boolean | Promise<boolean>,
       ) => void;
+      /** Another place's button: back to the page last open there. */
+      openPlace: (
+        place: Exclude<Place, "sessions">,
+        openDefault: () => void,
+      ) => void;
     };
     sessions: UnifiedSession[];
     registeredRepoInfo: RepoInfo[];
@@ -170,6 +175,7 @@ export function AppSidebar({
               }),
             )
           }
+          onOpenPlace={places.openPlace}
           connected={connected}
           accessory={<UpdatePill addHandler={addHandler} variant="icon" />}
         />

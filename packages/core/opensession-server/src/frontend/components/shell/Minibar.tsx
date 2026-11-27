@@ -155,6 +155,7 @@ export function Minibar({
   place,
   route,
   onOpenSessions,
+  onOpenPlace,
   onRevealSidebar,
   connected,
   accessory,
@@ -163,6 +164,12 @@ export function Minibar({
   route: Route;
   /** Show your own list (the route controller's `openSessions`). */
   onOpenSessions: () => void;
+  /** Go to another place: the page you last had open there, or else
+   *  `openDefault` (the route controller's `openPlace`). */
+  onOpenPlace: (
+    place: Exclude<Place, "sessions">,
+    openDefault: () => void,
+  ) => void;
   /** Open the sidebar if it is closed: a place is its list, so going to
    *  one shows it. */
   onRevealSidebar: () => void;
@@ -193,9 +200,13 @@ export function Minibar({
   const unread = (item: MinibarItem) =>
     (item.id === "activity" && unreadNotifications > 0) ||
     (item.id === "channels" && channelsUnread);
+  // A place reopens what you last had open in it; a pinned page opens
+  // itself.
   const open = (item: MinibarItem) => {
-    item.open(navigation);
-    if (item.place) onRevealSidebar();
+    const openDefault = () => item.open(navigation);
+    if (!item.place || item.place === "sessions") return openDefault();
+    onOpenPlace(item.place, openDefault);
+    onRevealSidebar();
   };
 
   return (

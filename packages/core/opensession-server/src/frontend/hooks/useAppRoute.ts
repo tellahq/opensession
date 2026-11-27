@@ -122,6 +122,17 @@ function navState(
   return state;
 }
 
+function sameConversation(remembered: Route | null | undefined, route: Route) {
+  return (
+    !!remembered &&
+    isConversationRoute(remembered) &&
+    remembered.view === route.view &&
+    "id" in remembered &&
+    "id" in route &&
+    remembered.id === route.id
+  );
+}
+
 /** Owns the logical route and the metadata carried by browser history entries. */
 export class AppRouteController {
   // Assigned by `commit`, which the constructor always reaches.
@@ -130,6 +141,8 @@ export class AppRouteController {
   private currentPlace: Place = "sessions";
   /** The conversation last shown in Sessions, which its button returns to. */
   private sessionsReturn: Route | null = null;
+  /** The page last shown in each other place, which its button returns to. */
+  private readonly placeReturns = new Map<Place, Route>();
   /** The return target the server is being asked about, if any, and the
    *  page the Sessions button was last clicked on while it was. */
   private returnLookup: { target: Route; from: Route } | null = null;
@@ -230,6 +243,25 @@ export class AppRouteController {
     this.publish();
   }
 
+  /**
+   * A place's button besides Sessions. It returns to the page you last had
+   * open in that place (a channel, a Library page, a session opened from
+   * Activity), or calls `openDefault` for its first page when there is none
+   * yet. Already in the place, the page on screen is that page, so nothing
+   * changes.
+   */
+  openPlace(place: Exclude<Place, "sessions">, openDefault: () => void): void {
+    if (this.currentPlace === place) return;
+    const target = this.placeReturns.get(place);
+    if (!target) {
+      openDefault();
+      return;
+    }
+    // Set first, so a session remembered in Activity lands in Activity.
+    this.currentPlace = place;
+    this.navigate(target);
+  }
+
   private returnOnceConfirmed(target: Route, verdict: Promise<boolean>): void {
     const lookup = { target, from: this.route };
     this.returnLookup = lookup;
@@ -258,15 +290,10 @@ export class AppRouteController {
    * the Sessions button does not return to it while the lists still hold it.
    */
   forgetConversation(route: Route): void {
-    const remembered = this.sessionsReturn;
-    if (
-      remembered &&
-      remembered.view === route.view &&
-      "id" in remembered &&
-      "id" in route &&
-      remembered.id === route.id
-    )
+    if (sameConversation(this.sessionsReturn, route))
       this.sessionsReturn = null;
+    for (const [place, remembered] of this.placeReturns)
+      if (sameConversation(remembered, route)) this.placeReturns.delete(place);
   }
 
   snapshot(): RouteSnapshot {
@@ -543,8 +570,9 @@ export class AppRouteController {
   private commit(route: Route, place: Place): void {
     this.route = route;
     this.currentPlace = place;
-    if (this.currentPlace === "sessions" && isConversationRoute(route))
-      this.sessionsReturn = route;
+    if (this.currentPlace === "sessions") {
+      if (isConversationRoute(route)) this.sessionsReturn = route;
+    } else this.placeReturns.set(this.currentPlace, route);
   }
 
   private publish(): void {
@@ -606,6 +634,8 @@ export function useAppRoute({
     forgetConversation: (route: Route) => controller.forgetConversation(route),
     openSessions: (stillThere?: (route: Route) => boolean | Promise<boolean>) =>
       controller.openSessions(stillThere),
+    openPlace: (place: Exclude<Place, "sessions">, openDefault: () => void) =>
+      controller.openPlace(place, openDefault),
   }));
 
   useLayoutEffect(() => controller.subscribe(setSnapshot), [controller]);
@@ -622,7 +652,11 @@ export function useAppRoute({
     restoredSessionId: controller.restoredSessionId,
     // The new layout's place: read at render like the two above, since every
     // change to it publishes a snapshot.
-    places: { current: controller.place, openSessions: actions.openSessions },
+    places: {
+      current: controller.place,
+      openSessions: actions.openSessions,
+      openPlace: actions.openPlace,
+    },
     ...actions,
   };
 }

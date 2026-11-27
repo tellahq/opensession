@@ -851,6 +851,64 @@ describe("places", () => {
     expect(controller.place).toBe("activity");
   });
 
+  test("a place returns to the page last open in it", () => {
+    const fake = fakeBrowser({ path: "/channels/C1", state: { d: 0 } });
+    const controller = new AppRouteController(fake.browser);
+    controller.navigate({ view: "goals" });
+    controller.navigate({ view: "session", id: "mine" });
+    let defaults = 0;
+
+    controller.openPlace("library", () => defaults++);
+    expect(controller.getCurrentRoute()).toEqual({ view: "goals" });
+    expect(controller.place).toBe("library");
+
+    controller.openPlace("channels", () => defaults++);
+    expect(controller.getCurrentRoute()).toEqual({
+      view: "channels",
+      id: "C1",
+    });
+    expect(defaults).toBe(0);
+
+    // Never visited: its first page.
+    controller.openPlace("support", () => defaults++);
+    expect(defaults).toBe(1);
+  });
+
+  test("already in the place, its button changes nothing", () => {
+    const fake = fakeBrowser({ path: "/issues", state: { d: 0 } });
+    const controller = new AppRouteController(fake.browser);
+    const calls = fake.calls.length;
+    let defaults = 0;
+    controller.openPlace("library", () => defaults++);
+    expect(controller.getCurrentRoute()).toEqual({ view: "issues" });
+    expect(fake.calls.length).toBe(calls);
+    expect(defaults).toBe(0);
+  });
+
+  test("Activity returns to the session opened from it, in Activity", () => {
+    const fake = fakeBrowser({ path: "/feed", state: { d: 0 } });
+    const controller = new AppRouteController(fake.browser);
+    controller.navigate({ view: "session", id: "theirs" });
+    controller.navigate({ view: "issues" });
+
+    controller.openPlace("activity", () => {});
+    expect(controller.getCurrentRoute()).toEqual({
+      view: "session",
+      id: "theirs",
+    });
+    expect(controller.place).toBe("activity");
+    expect(fake.calls.at(-1)).toMatchObject({
+      state: { place: "activity" },
+    });
+
+    // Deleted since: back to Activity's first page instead.
+    controller.navigate({ view: "issues" });
+    controller.forgetConversation({ view: "session", id: "theirs" });
+    let defaults = 0;
+    controller.openPlace("activity", () => defaults++);
+    expect(defaults).toBe(1);
+  });
+
   test("a session opened anywhere else belongs to Sessions", () => {
     const fake = fakeBrowser({ path: "/issues", state: { d: 0 } });
     const controller = new AppRouteController(fake.browser);
