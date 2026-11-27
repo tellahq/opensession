@@ -158,9 +158,8 @@ body:is(.resizing-sidebar, .resizing-panel, .resizing-tab-split) {
    line, so it is gone by the time it would touch the heading.
 
    A scroll-driven animation rather than a scroll listener: the browser runs
-   it in step with the scroll, where the listener's masks trailed it by a
-   frame or more and rows showed through the heading while they caught up.
-   Opacity, so it also runs off the main thread. `view()` reads the nearest
+   it in step with the scroll, where a listener runs after the frame it
+   reacts to is drawn. Opacity, so it also runs off the main thread. `view()` reads the nearest
    scroll container above the row, which is the list itself: nothing between
    them may clip its overflow, or the line is measured from the wrong box. */
 @keyframes sidebar-pin-fade {
