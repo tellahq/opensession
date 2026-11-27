@@ -90,7 +90,6 @@ import {
   MERGE_CHOICE_TITLE,
   mergeChoices,
 } from "../lib/merge-choices";
-import { BrandMark } from "./BrandTile";
 import { PrChecksPopover } from "./PrChecksPopover";
 import { PrSeriesRows } from "./PrSeriesRows";
 import { MergeUndoControl } from "./pr/MergeUndoControl";
@@ -1379,37 +1378,43 @@ export function PrStatusBar({
     // wrapper would drop the focus ring with the box.
     const labelClass = cn(
       WS_SUMMARY_LABEL,
-      "group/prsum flex cursor-pointer flex-col justify-center gap-1 rounded-sm border-none bg-transparent p-0 text-left focus-ring",
+      "group/prsum flex cursor-pointer items-baseline gap-1.5 rounded-sm border-none bg-transparent p-0 text-left focus-ring",
     );
     const provider = pr ? providerFromUrl(pr.url) : null;
     const externalHint = provider
       ? `${isApple ? "⌘" : "Ctrl"}-click opens in ${provider.name}`
       : undefined;
-    // Two lines inside the one target: the state and its checks, then which PR
-    // it is about.
-    // The provider mark makes the modified-click destination visible without
-    // competing with the state or the primary action.
+    // One line inside the one target: the state, then which PR it is about.
+    // The card is 300px wide and the action owns the row's right end, so a
+    // second line for the PR only made the band tall while the button still
+    // cut both lines short. The PR's title gives way first, then the
+    // headline; the state is what the band exists to say.
+    //
+    // A passing total adds nothing next to "Ready to merge", and the hover
+    // lists every check anyway, so the count only shows while it still needs
+    // watching: something pending or failed that the headline doesn't count.
+    const showChecksCount =
+      checksPr &&
+      !headlineCountsChecks &&
+      (checksSummary.failed > 0 || checksSummary.pending > 0);
     const labelBody = (
       <>
-        <span className="flex min-w-0 items-baseline gap-1.5">
-          <span className="min-w-0 truncate text-item-title text-fg">
-            {headlineLabel}
-          </span>
-          {checksPr && !headlineCountsChecks && (
-            <span className={cn("shrink-0 text-meta", checksTone)}>
-              {checksLabel}
-            </span>
-          )}
+        <span className="min-w-0 truncate text-item-title text-fg [flex-shrink:0.001]">
+          {headlineLabel}
         </span>
-        {pr && provider && (
-          <span className="flex min-w-0 items-center gap-1 text-meta text-faint group-hover/prsum:text-dim">
-            <BrandMark name={provider.key} size={12} className="shrink-0" />
+        {showChecksCount && (
+          <span className={cn("shrink-0 text-meta", checksTone)}>
+            {checksLabel}
+          </span>
+        )}
+        {pr && (
+          <span className="flex min-w-0 flex-1 items-baseline gap-1 text-meta text-faint group-hover/prsum:text-dim">
             <span className="shrink-0">#{pr.number}</span>
             {pr.title && <span className="min-w-0 truncate">{pr.title}</span>}
             <IconArrowUpRight
               dense
               size={12}
-              className="shrink-0 opacity-0 transition-opacity duration-150 group-hover/prsum:opacity-100 group-focus-visible/prsum:opacity-100"
+              className="shrink-0 self-center opacity-0 transition-opacity duration-150 group-hover/prsum:opacity-100 group-focus-visible/prsum:opacity-100"
             />
           </span>
         )}
