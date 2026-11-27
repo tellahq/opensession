@@ -73,7 +73,7 @@ export function GithubPrivateKeyField({
           type="button"
           icon={<IconArrowUpToLine size={20} />}
           disabled={saving}
-          className="shrink-0 phone:min-h-11 phone:justify-center"
+          className="shrink-0 phone:justify-center"
           onClick={() => inputRef.current?.click()}
         >
           {selected

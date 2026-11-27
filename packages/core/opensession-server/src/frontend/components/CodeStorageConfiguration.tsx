@@ -160,7 +160,7 @@ export function CodeStorageConfiguration({
         {connected && (
           <Button
             size="sm"
-            className="shrink-0 hover:border-red hover:text-red phone:min-h-11"
+            className="shrink-0 hover:border-red hover:text-red"
             onClick={() => void disconnect()}
           >
             Disconnect

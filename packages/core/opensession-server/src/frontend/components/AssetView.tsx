@@ -661,7 +661,7 @@ export function AssetActions({
             size="sm"
             icon={<IconMessage size={16} />}
             className={cn(
-              "shrink-0 phone:size-11",
+              "shrink-0",
               annotating && "bg-hover text-fg hover:bg-pressed",
             )}
             aria-pressed={annotating}
@@ -675,7 +675,7 @@ export function AssetActions({
           variant="ghost"
           size="sm"
           icon={<IconArrowUpRight size={16} />}
-          className="shrink-0 phone:size-11"
+          className="shrink-0"
           aria-label={nativeShare ? "Open or share" : "Open in browser"}
           {...(nativeShare
             ? {

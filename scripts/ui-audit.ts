@@ -481,7 +481,7 @@ const SIGNALS: Signal[] = [
     // rounded-[999px] is sanctioned: it is the squircle-preserving pill, and
     // rounded-full is the opt-out (see src/frontend/AGENTS.md).
     instead:
-      "the radius scale — rounded-sm/md/lg/xl/2xl, rounded-control/row/popup",
+      "the radius scale — rounded-xs/sm/md/lg/xl/2xl, rounded-control/popup",
     exempt: ["styles/"],
     count: (source) => {
       let n = 0;
@@ -489,6 +489,12 @@ const SIGNALS: Signal[] = [
         /\brounded-(?:\w+-)?\[calc\((\d+)px\s*\*\s*var\(--rf\)\)\]/g,
       ))
         if (!RADIUS_SCALE.has(Number(match[1]))) n++;
+      // Retired aliases: bare `rounded` (xs), `rounded-row` (control),
+      // `rounded-panel` (lg), and the steps past 2xl.
+      n += occurrences(
+        stripComments(source),
+        /(?<=["'`\s:])rounded(?:-(?:[trblse]{1,2}-)?(?:row|panel|section|3xl|4xl))?(?=["'`\s])/g,
+      );
       return n;
     },
   },

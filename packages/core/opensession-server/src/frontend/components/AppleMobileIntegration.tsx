@@ -289,15 +289,8 @@ function AppleMobileSetupDialog({
         </div>
 
         <Modal.Footer>
-          <Modal.Close
-            render={
-              <Button className="phone:min-h-11" disabled={saving}>
-                Cancel
-              </Button>
-            }
-          />
+          <Modal.Close render={<Button disabled={saving}>Cancel</Button>} />
           <Button
-            className="phone:min-h-11"
             variant="primary"
             onClick={() => void save()}
             disabled={saving}
@@ -367,7 +360,7 @@ export function AppleMobileIntegration({ teamNames }: { teamNames: string[] }) {
           </div>
           <Button
             size="sm"
-            className="ml-auto phone:min-h-11"
+            className="ml-auto"
             variant={tone === "off" ? "primary" : "default"}
             onClick={() => setOpen(true)}
           >

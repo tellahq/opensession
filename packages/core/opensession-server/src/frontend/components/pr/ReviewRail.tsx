@@ -379,7 +379,7 @@ function RailGroupLabel({ children }: { children: React.ReactNode }) {
 /** Shared shape for the rail's one-line summaries, whether they expand in
  *  place or lead somewhere. */
 const RAIL_ROW =
-  "flex w-full items-center gap-2 rounded-row border-0 bg-transparent px-1.5 py-1.5 text-left text-label text-fg hover:bg-hover phone:min-h-11";
+  "flex w-full items-center gap-2 rounded-control border-0 bg-transparent px-1.5 py-1.5 text-left text-label text-fg hover:bg-hover phone:min-h-11";
 
 /** A one-line summary that opens its own detail in place. */
 function RollupRow({
@@ -400,7 +400,7 @@ function RollupRow({
   return (
     <div className={`relative ${RAIL_ROW}`}>
       <button
-        className="absolute inset-0 cursor-pointer rounded-row border-0 bg-transparent p-0"
+        className="absolute inset-0 cursor-pointer rounded-control border-0 bg-transparent p-0"
         onClick={onToggle}
         aria-expanded={open}
         aria-label={label}

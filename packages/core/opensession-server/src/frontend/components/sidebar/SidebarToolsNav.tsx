@@ -95,7 +95,7 @@ export function SidebarToolsNav({
           // Phones override it to the 13px the session rows take
           // (SIDEBAR_ROW, lib/sidebar-classes.ts) for a 48px box: 32px is
           // a reading height, not a tap target.
-          `w-full ${SIDEBAR_RAIL_GAP} rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[var(--sidebar-tool-pad)] phone:py-[13px] text-body font-medium text-dim desktop:text-item-title hover:text-fg`,
+          `w-full ${SIDEBAR_RAIL_GAP} rounded-control bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[var(--sidebar-tool-pad)] phone:py-[13px] text-body font-medium text-dim desktop:text-item-title hover:text-fg`,
           SIDEBAR_HOVER_LAYER,
           tool.active && "bg-selected text-fg",
         );

@@ -72,8 +72,9 @@ Every utility below is real and theme-aware across dark and light mode.
 ### Radii (all `rounded-*` are squircles except `rounded-full`)
 - `rounded-sm` (4) — badges, compact tags
 - `rounded-md` (7) — inline code, small chips
-- `rounded-control` / `rounded-row` (12) — inputs, selects, selectable list rows
-- `rounded-lg` (14) — segmented tracks, medium panels (`rounded-panel`)
+- `rounded-xs` (2) — keycaps, hairline chips
+- `rounded-control` (12) — inputs, selects, selectable list rows
+- `rounded-lg` (14) — segmented tracks, medium panels, tooltips
 - `rounded-popup` (16) — floating popovers, menus, PiP/hover cards
 - `rounded-xl` (18) — cards (`Card`)
 - `rounded-2xl` (22) — card containers (`SettingCard`, dialogs)

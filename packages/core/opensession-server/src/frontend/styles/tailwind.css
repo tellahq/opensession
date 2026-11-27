@@ -196,9 +196,6 @@
 	   instead of `font-semibold`, or that heading is the one that stays heavy
 	   in dark. */
   --font-weight-title: var(--title-weight);
-  --radius-panel: calc(var(--radius) * var(--rf));
-  /* The large standalone section shared by the website and first-run setup. */
-  --radius-section: calc(28px * var(--rf));
   /* The corner every button and chip in the chrome shares. legacy.css authors
 	   it as `calc(10px * var(--rf))` on .btn-viewer-pin / .btn-panel-toggle /
 	   .btn-viewer-newsession and friends; naming it here lets the Button primitive
@@ -214,19 +211,6 @@
 	   half-height). One token carries the whole chrome, so buttons, chips and
 	   the split Create button move together rather than drifting apart. */
   --radius-control: calc(12px * var(--rf));
-  /* The corner of a full-width selectable ROW in a left rail — a session in
-	   the sidebar, a section in settings' side nav, a person, a tool. It used
-	   to be one step softer than a control; the control has since caught up to
-	   it, so the two now describe the same corner. The token stays because the
-	   two answer different questions — a row is a surface you land on, a
-	   control a thing you press — and either may move without the other.
-	   legacy.css authors it as `calc(12px * var(--rf))` on
-	   .sidebar-item and .settings-sidenav-item; naming it here is what stops a
-	   Tailwind-authored row reaching for `rounded-lg` (18.9px) or `rounded-panel`
-	   (also 18.9px) and landing a third of a corner away from the rows it is
-	   stacked against. There is no 12px step in the scale below, which is
-	   precisely why those rows had drifted. */
-  --radius-row: calc(12px * var(--rf));
   /* The corner of a floating popup — hover card, menu, filter panel. Rounder
 	   than the controls inside it, on purpose: those are pressed, this is a
 	   whole surface that arrived over the page, and at 300px a control's
@@ -258,7 +242,10 @@
   --radius-lg: calc(14px * var(--rf));
   --radius-xl: calc(18px * var(--rf));
   --radius-2xl: calc(22px * var(--rf));
-  --radius-3xl: calc(26px * var(--rf));
+  /* The scale stops at 2xl (a container of cards). Tailwind's stock 3xl and
+	   4xl are switched off so they cannot come back as a rounder one-off. */
+  --radius-3xl: initial;
+  --radius-4xl: initial;
   /* The person tile: a face, a photo or an initial, at every size from the
 	   14px chip to the 26px people row. It is the one corner in the app
 	   written as a share of its box rather than in px, because it has to hold
@@ -437,12 +424,4 @@
     min-inline-size: var(--spacing-hit-target-touch);
     min-block-size: var(--spacing-hit-target-touch);
   }
-}
-
-/* Tailwind's bare `rounded` is a stock 0.25rem that predates this scale, and it
-   is the one radius utility with no theme token behind it. Point it at the
-   smallest step so the few remaining call sites stay on the grid; prefer
-   `rounded-sm` / `rounded-md` / `rounded-lg`. */
-.rounded {
-  border-radius: var(--radius-xs);
 }

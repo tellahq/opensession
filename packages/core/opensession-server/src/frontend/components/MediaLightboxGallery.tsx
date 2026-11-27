@@ -846,7 +846,7 @@ export function MediaLightboxGallery({
         </span>
         <Button
           variant="ghost"
-          className={cn(LIGHTBOX_TOOL_CLASS, "phone:min-h-11")}
+          className={LIGHTBOX_TOOL_CLASS}
           onClick={resetComment}
         >
           Cancel

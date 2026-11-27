@@ -44,7 +44,6 @@ export function GithubRepoAccess({
         {installUrl && (
           <Button
             size="sm"
-            className="phone:min-h-11"
             icon={<IconArrowUpRight size={16} />}
             render={<a href={installUrl} target="_blank" rel="noreferrer" />}
           >
@@ -54,7 +53,7 @@ export function GithubRepoAccess({
         <Button
           size="sm"
           variant="ghost"
-          className="aria-disabled:opacity-40 phone:min-h-11"
+          className="aria-disabled:opacity-40"
           aria-disabled={refreshing}
           aria-busy={refreshing}
           onClick={() => {

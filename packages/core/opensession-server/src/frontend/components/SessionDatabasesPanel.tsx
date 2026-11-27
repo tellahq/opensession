@@ -74,7 +74,7 @@ export function SessionDatabasesPanel({
         <button
           key={meta.id}
           type="button"
-          className="-mx-2 flex min-h-11 w-[calc(100%+16px)] cursor-pointer items-center gap-2 rounded-row border-0 bg-transparent px-2 py-1.5 text-left hover:bg-hover"
+          className="-mx-2 flex min-h-11 w-[calc(100%+16px)] cursor-pointer items-center gap-2 rounded-control border-0 bg-transparent px-2 py-1.5 text-left hover:bg-hover"
           onClick={() => onOpen(meta.id)}
         >
           <span className="min-w-0 flex-1">

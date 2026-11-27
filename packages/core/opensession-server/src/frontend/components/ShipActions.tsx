@@ -78,7 +78,7 @@ export function ShipActions({
         key={button.id}
         variant={button.primary ? "primary" : "default"}
         size="sm"
-        className="phone:min-h-11 phone:px-3.5 phone:text-sm"
+        className="phone:px-3.5 phone:text-sm"
         icon={
           button.primary ? (
             info.mode === "direct" ? (
@@ -159,7 +159,7 @@ export function DirectShipNotice({
         <Button
           variant="default"
           size="sm"
-          className="ml-auto phone:min-h-11"
+          className="ml-auto"
           onClick={onShare}
         >
           Share in Slack

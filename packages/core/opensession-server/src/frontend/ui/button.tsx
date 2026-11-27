@@ -122,27 +122,39 @@ const styles = stylex.create({
   // Padding sits half a step wider than it did as a rect: a pill's ends eat
   // into the label's air.
   //
-  // The line box is the type role's, not 1: the label is trimmed to its cap
-  // band (`styles.label`), so it only shows on an element child or a wrap.
-  // An earlier `leading-none` here never applied (tailwind-merge dropped it
-  // for the size's `text-*`), so the role's leading is what has shipped.
+  // At phone width every size is a 44px touch target: a finger does not get
+  // smaller with the label. Call sites used to patch `phone:min-h-11` on one
+  // button at a time, and the ones that forgot shipped 26px targets.
+  //
+  // One line box for every size (`leading.label`). The label is trimmed to
+  // its cap band (`styles.label`), so it only shows on an element child or a
+  // wrap.
   sm: {
-    minHeight: controlHeight.sm,
-    lineHeight: leading.chip,
+    minHeight: {
+      default: controlHeight.sm,
+      [media.phone]: controlHeight.touch,
+    },
+    lineHeight: leading.label,
     paddingInline: space.s12,
     fontSize: text.label,
     borderRadius: radius.pill,
   },
   md: {
-    minHeight: controlHeight.md,
-    lineHeight: leading.control,
+    minHeight: {
+      default: controlHeight.md,
+      [media.phone]: controlHeight.touch,
+    },
+    lineHeight: leading.label,
     paddingInline: space.s14,
     fontSize: text.label,
     borderRadius: radius.pill,
   },
   lg: {
-    minHeight: controlHeight.lg,
-    lineHeight: leading.body,
+    minHeight: {
+      default: controlHeight.lg,
+      [media.phone]: controlHeight.touch,
+    },
+    lineHeight: leading.label,
     paddingInline: space.s16,
     fontSize: text.body,
     borderRadius: radius.pill,
@@ -162,9 +174,18 @@ const styles = stylex.create({
   caretTrail_md: { paddingInlineEnd: space.s10 },
   caretTrail_lg: { paddingInlineEnd: space.s12 },
   // Icon-only: a square hit target, symmetric.
-  iconOnly_sm: { width: controlHeight.sm, paddingInline: space.s0 },
-  iconOnly_md: { width: controlHeight.md, paddingInline: space.s0 },
-  iconOnly_lg: { width: controlHeight.lg, paddingInline: space.s0 },
+  iconOnly_sm: {
+    width: { default: controlHeight.sm, [media.phone]: controlHeight.touch },
+    paddingInline: space.s0,
+  },
+  iconOnly_md: {
+    width: { default: controlHeight.md, [media.phone]: controlHeight.touch },
+    paddingInline: space.s0,
+  },
+  iconOnly_lg: {
+    width: { default: controlHeight.lg, [media.phone]: controlHeight.touch },
+    paddingInline: space.s0,
+  },
 
   // ── Variants ──
   //
@@ -311,7 +332,7 @@ const styles = stylex.create({
   glyph: { display: "inline-flex", flexShrink: 0, alignItems: "center" },
   glyphMuted: { opacity: opacity.glyphMuted },
   glyphOnTone: { opacity: opacity.glyphOnTone },
-  caret: { flexShrink: 0, opacity: opacity.affordance },
+  caret: { flexShrink: 0, opacity: opacity.glyphMuted },
   // A text label is centred on its CAP BAND, not its line box: the line box
   // carries the font's descender space, which put the ink ~1.75px high.
   // `text-box` trims to cap height and baseline, right in every font.

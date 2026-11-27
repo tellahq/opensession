@@ -39,7 +39,7 @@ export function DeleteSessionDialog({
             type="button"
             size="lg"
             variant={hasWorktree ? "warning" : "danger-strong"}
-            className="phone:min-h-11 phone:flex-1"
+            className="phone:flex-1"
             disabled={deleting}
             onClick={() => onDelete(false)}
           >
@@ -50,7 +50,7 @@ export function DeleteSessionDialog({
               type="button"
               size="lg"
               variant="danger-strong"
-              className="phone:min-h-11 phone:flex-1"
+              className="phone:flex-1"
               disabled={deleting}
               onClick={() => onDelete(true)}
             >

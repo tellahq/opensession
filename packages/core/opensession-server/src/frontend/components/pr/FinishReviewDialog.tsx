@@ -102,7 +102,7 @@ export function FinishReviewDialog({
               role="radio"
               aria-checked={event === verdict.event}
               data-active={event === verdict.event || undefined}
-              className="group focus-ring flex cursor-pointer items-start gap-2.5 rounded-row border border-line bg-surface px-3 py-2.5 text-left transition-[background-color,border-color] hover:bg-hover data-active:border-accent data-active:bg-accent-soft"
+              className="group focus-ring flex cursor-pointer items-start gap-2.5 rounded-control border border-line bg-surface px-3 py-2.5 text-left transition-[background-color,border-color] hover:bg-hover data-active:border-accent data-active:bg-accent-soft"
               onClick={() => onEventChange(verdict.event)}
             >
               <span className="mt-px flex size-4 shrink-0 items-center justify-center rounded-full border border-line-strong transition-colors group-data-active:border-accent group-data-active:bg-accent">
@@ -144,7 +144,7 @@ export function FinishReviewDialog({
             </label>
           )}
         {event === "APPROVE" && !canMerge && onFixChecks && (
-          <div className="flex items-center justify-between gap-3 rounded-row bg-red-soft px-3 py-2">
+          <div className="flex items-center justify-between gap-3 rounded-control bg-red-soft px-3 py-2">
             <span className="text-supporting text-red">
               Checks must pass before you can merge.
             </span>

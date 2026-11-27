@@ -842,7 +842,6 @@ export function IngressPanel({
                 <StatusChip {...domainStatus} />
                 <Button
                   size="sm"
-                  className="phone:min-h-11"
                   disabled={!settings}
                   onClick={() => setSurface("domain")}
                 >
@@ -861,7 +860,6 @@ export function IngressPanel({
                 <StatusChip {...callbackStatus} />
                 <Button
                   size="sm"
-                  className="phone:min-h-11"
                   disabled={!settings}
                   onClick={() => setSurface("callbacks")}
                 >

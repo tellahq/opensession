@@ -81,7 +81,7 @@ const LIST =
  *  the sidebar's one-line row padding; everything else — corner, rail gap,
  *  hover layer, `bg-selected` for the open one — is the shared row grammar. */
 const ROW =
-  "group mt-0.5 flex w-full cursor-pointer items-start rounded-row border-0 " +
+  "group mt-0.5 flex w-full cursor-pointer items-start rounded-control border-0 " +
   "bg-transparent py-2.5 pr-3 pl-2.5 text-left data-active:bg-selected " +
   `${SIDEBAR_RAIL_GAP} ${SIDEBAR_HOVER_LAYER}`;
 

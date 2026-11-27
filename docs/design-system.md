@@ -47,39 +47,42 @@ growing with the number of screens.
 
 ## Decisions
 
-| Scale          | Values                                                                             | Notes                                                           |
-| -------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| Control height | 26 / 32 / 36, touch 44                                                             | `controlHeight.sm/md/lg/touch`. Nothing in between.             |
-| Spacing        | 0, 2, 4, 6, 8, 10, 12, 14, 16, 20, 24, 32, 40, 48                                  | `space.s<px>`. A 2px step to 16, then 4, then 8. No odd values. |
-| Radius         | 2, 4, 7, 12 (control), 14, 16 (popup), 18, 22, pill                                | Each `calc(<n>px * var(--rf))`, so squircle browsers get 1.35x. |
-| Type           | meta 11, label 13, item title 14, body 15, dialog 17, section 19, page 24, stat 28 | Roles, not sizes. Each promotes one rung on phone.              |
-| Weight         | regular 400, medium 500, title (500 dark / 600 light)                              | Semibold and bold are for prose, not chrome.                    |
-| Opacity        | disabled 0.4, muted glyph 0.6, glyph on a tone 0.8, affordance 0.55                | Named by meaning.                                               |
-| Focus          | 2px accent-ink ring, 2px offset                                                    | One treatment for every control.                                |
-| Motion         | `var(--ease)`, `var(--dur-micro)`, press scale 0.96                                |                                                                 |
-| Breakpoint     | phone at 720px and below, desktop above                                            | `media.phone` / `media.desktop`.                                |
+| Scale          | Values                                                                             | Notes                                                                                  |
+| -------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Control height | 26 / 32 / 36, touch 44                                                             | `controlHeight.sm/md/lg/touch`. Nothing in between; every Button is 44 at phone width. |
+| Spacing        | 0, 2, 4, 6, 8, 10, 12, 14, 16, 20, 24, 32, 40, 48                                  | `space.s<px>`. A 2px step to 16, then 4, then 8. No odd values.                        |
+| Radius         | 2, 4, 7, 12 (control), 14, 16 (popup), 18, 22, pill                                | Nothing past 22. Each `calc(<n>px * var(--rf))`, so squircle browsers get 1.35x.       |
+| Type           | meta 11, label 13, item title 14, body 15, dialog 17, section 19, page 24, stat 28 | Roles, not sizes. Each promotes one rung on phone.                                     |
+| Weight         | regular 400, medium 500, title (500 dark / 600 light)                              | Semibold and bold are for prose, not chrome.                                           |
+| Opacity        | disabled 0.4, muted glyph 0.6, glyph on a tone 0.8                                 | Named by meaning.                                                                      |
+| Focus          | 2px accent-ink ring, 2px offset                                                    | One treatment for every control.                                                       |
+| Motion         | `var(--ease)`, `var(--dur-micro)`, press scale 0.96                                |                                                                                        |
+| Breakpoint     | phone at 720px and below, desktop above                                            | `media.phone` / `media.desktop`.                                                       |
 
 Colours and type are `defineConsts` aliases over the theme custom properties
 in `styles/base-theme.css`, so light and dark (and any subtree that re-points a
 property, like the side panel plate) keep working unchanged.
 
+### Decided since the first port
+
+1. **Phone touch height.** Every Button is 44px tall at phone width, and an
+   icon-only one 44px square. The 124 call sites that patched
+   `phone:min-h-11` / `phone:size-11` onto a Button no longer do.
+2. **Label line height.** One `leading.label` for every Button size.
+3. **Radius aliases.** `rounded` became `rounded-xs`, `rounded-row` became
+   `rounded-control`, `rounded-panel` became `rounded-lg`, and the two
+   surfaces on `rounded-section` / `rounded-3xl` (the first-run and sign-in
+   cards) take `rounded-2xl`. The aliases are gone from the theme and
+   `off-scale-radius` counts any that come back.
+4. **Caret opacity.** The menu chevron takes the same 0.6 as every muted glyph.
+
 ### Open decisions
 
-These are inconsistencies the port preserved on purpose, so that it changes
-nothing visually. Each one is a choice to make, then a single edit:
-
-1. **Phone touch height.** More than a hundred call sites patch
-   `phone:min-h-11` / `phone:size-11` onto a Button. Making every Button 44px
-   at phone width would delete them all and fix the ones that forgot.
-2. **Label line height.** Button labels at 13px carry three different line
-   heights (`leading.chip/control/body`), inherited from Tailwind's stock
-   `text-xs` / `text-sm` / `text-base`. One value would do.
-3. **Radius aliases.** `rounded`, `rounded-xs`, `rounded-3xl`, `rounded-section`,
-   `rounded-panel` and `rounded-row` (equal to `rounded-control`) can fold into
-   the scale above.
-4. **Size aliases in type.** `text-xs`, `text-sm` and `text-base` (140 uses)
-   are spellings of `label` and `body`.
-5. **Caret opacity.** 0.55 against the 0.6 of every other muted glyph.
+1. **Type roles own their line height.** `text-label`, `text-meta` and the
+   other roles set a size but no line height, so they inherit `normal`, while
+   `text-xs` / `text-sm` / `text-base` (137 uses) carry Tailwind's stock
+   leading. Folding the aliases into the roles needs the roles to decide a
+   line height first, and that moves every row in the app by a pixel or two.
 
 ## Migration
 

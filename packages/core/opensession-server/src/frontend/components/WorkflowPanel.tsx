@@ -775,7 +775,6 @@ function RunCard({
             <Button
               variant="soft"
               size="sm"
-              className="phone:min-h-11"
               onClick={() => onAction(run.runId, "pause")}
             >
               Pause
@@ -785,7 +784,6 @@ function RunCard({
             <Button
               variant="default"
               size="sm"
-              className="phone:min-h-11"
               onClick={() => onAction(run.runId, "resume")}
             >
               Resume
@@ -795,7 +793,6 @@ function RunCard({
             <Button
               variant="default"
               size="sm"
-              className="phone:min-h-11"
               onClick={() => onAction(run.runId, "cancel")}
             >
               Stop
@@ -1059,11 +1056,7 @@ const AgentRow = function AgentRow({
 							    (the transcript view polls). */}
               <div className="flex flex-wrap items-center gap-1">
                 {a.status !== "pending" && (
-                  <Button
-                    size="sm"
-                    className="phone:min-h-11"
-                    onClick={() => onOpenConversation(a.seq)}
-                  >
+                  <Button size="sm" onClick={() => onOpenConversation(a.seq)}>
                     View conversation
                     <span className="text-faint">→</span>
                   </Button>
@@ -1072,7 +1065,6 @@ const AgentRow = function AgentRow({
                   <Button
                     variant="soft"
                     size="sm"
-                    className="phone:min-h-11"
                     onClick={() => onAction(a.seq, "retry")}
                   >
                     Retry
@@ -1082,7 +1074,6 @@ const AgentRow = function AgentRow({
                   <Button
                     variant="soft"
                     size="sm"
-                    className="phone:min-h-11"
                     onClick={() => onAction(a.seq, "skip")}
                   >
                     Stop agent

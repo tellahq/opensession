@@ -303,7 +303,7 @@ export function PrFileTree({
         variant="ghost"
         aria-current={activeFile === file.path ? "location" : undefined}
         className={cn(
-          "group flex min-h-8 min-w-0 items-center justify-start gap-2 rounded-row px-2 text-left text-label text-dim phone:min-h-11",
+          "group flex min-h-8 min-w-0 items-center justify-start gap-2 rounded-control px-2 text-left text-label text-dim phone:min-h-11",
           activeFile === file.path && "bg-pressed text-fg",
         )}
         title={file.path}
@@ -399,7 +399,6 @@ export function PrFileTree({
             disabled={reviewedFiles === undefined}
             aria-pressed={unreviewedOnly}
             onClick={() => setUnreviewedOnly((value) => !value)}
-            className="phone:min-h-11"
           >
             Unreviewed
           </Button>
@@ -411,7 +410,7 @@ export function PrFileTree({
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="ml-auto phone:size-11"
+                      className="ml-auto"
                       aria-label="Review progress"
                       icon={<IconDotsHorizontal size={18} />}
                     />

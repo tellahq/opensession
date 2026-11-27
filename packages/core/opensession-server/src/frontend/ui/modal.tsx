@@ -108,7 +108,7 @@ function Content({
           ? [
               // `relative` anchors overlays a palette draws inside itself
               // (the dictation HUD); `overflow-hidden` keeps the rows'
-              // dividers inside the rounded shell.
+              // dividers inside the rounded-xs shell.
               "relative flex flex-col overflow-hidden outline-none",
               // A 22px base rather than the scale's `rounded-xl`: an
               // overlay this size carries a rounder corner than the

@@ -176,7 +176,6 @@ function Dock() {
               className={cn(collapsed && "rotate-180")}
             />
           }
-          className="phone:size-11"
           onClick={() => setCollapsed(!collapsed)}
         />
       </div>
@@ -243,7 +242,6 @@ function Dock() {
             aria-label={call.muted ? "Unmute" : "Mute"}
             aria-pressed={call.muted}
             icon={call.muted ? <IconMicOff size={20} /> : <IconMic size={20} />}
-            className="phone:size-11"
             onClick={() => setHuddleMuted(!call.muted)}
           />
         </Tooltip>
@@ -255,7 +253,6 @@ function Dock() {
               aria-label={call.screen ? "Stop sharing" : "Share your screen"}
               aria-pressed={!!call.screen}
               icon={<IconScreenShare size={20} />}
-              className="phone:size-11"
               disabled={call.status !== "live"}
               onClick={() =>
                 call.screen ? stopScreenShare() : void startScreenShare()
@@ -277,7 +274,6 @@ function Dock() {
               }
               aria-pressed={call.chatOpen}
               icon={<IconMessage size={20} />}
-              className="phone:size-11"
               onClick={() => {
                 setHuddleChatOpen(!call.chatOpen);
                 if (!call.chatOpen) setCollapsed(false);
@@ -302,7 +298,6 @@ function Dock() {
                   variant="soft"
                   aria-label="Invite to huddle"
                   icon={<IconPeople size={20} />}
-                  className="phone:size-11"
                 />
               }
             />
@@ -339,7 +334,6 @@ function Dock() {
             size="sm"
             variant={room?.notes ? "success" : "soft"}
             aria-pressed={!!room?.notes}
-            className="phone:min-h-11"
             disabled={call.status !== "live"}
             onClick={() => setHuddleNotes(!room?.notes)}
           >
@@ -347,12 +341,7 @@ function Dock() {
           </Button>
         </Tooltip>
         <span className="flex-1" />
-        <Button
-          size="sm"
-          variant="danger-strong"
-          className="phone:min-h-11"
-          onClick={leaveHuddle}
-        >
+        <Button size="sm" variant="danger-strong" onClick={leaveHuddle}>
           Leave
         </Button>
       </div>

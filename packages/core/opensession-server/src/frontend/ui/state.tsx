@@ -282,7 +282,7 @@ export function ListSkeleton({
  * mean "the words are on their way".
  *
  * The geometry is the transcript's own: the reading column, `mb-4.5` between
- * turns, bubbles right-aligned and rounded like `msgBubbleUser`. So the ghosts
+ * turns, bubbles right-aligned and rounded-xs like `msgBubbleUser`. So the ghosts
  * sit where the real rows will, and nothing jumps when they land. What it does
  * NOT reuse is `msgRow` itself — that string carries the `.msg` hook
  * `useSessionScroll` queries to find turn boundaries, and a placeholder is not

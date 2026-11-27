@@ -54,7 +54,7 @@ export function SessionVoiceStatus({
           <Button
             size="sm"
             variant="ghost"
-            className="shrink-0 phone:min-h-11"
+            className="shrink-0"
             onClick={onDismiss}
           >
             Dismiss

@@ -301,7 +301,6 @@ export function GithubAccountApps({
                       <Button
                         size="sm"
                         variant="primary"
-                        className="phone:min-h-11"
                         icon={<IconArrowUpRight size={16} />}
                         render={
                           <a
@@ -316,7 +315,6 @@ export function GithubAccountApps({
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="phone:min-h-11"
                         onClick={() => setSignIn(null)}
                       >
                         Cancel
@@ -328,7 +326,6 @@ export function GithubAccountApps({
                   {app.installed !== true && (
                     <Button
                       size="sm"
-                      className="phone:min-h-11"
                       icon={<IconArrowUpRight size={16} />}
                       render={
                         <a
@@ -344,7 +341,6 @@ export function GithubAccountApps({
                   <Button
                     size="sm"
                     variant={app.installed === true ? "ghost" : "default"}
-                    className="phone:min-h-11"
                     icon={<IconArrowUpRight size={16} />}
                     render={
                       <a
@@ -362,7 +358,6 @@ export function GithubAccountApps({
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="phone:min-h-11"
                       onClick={() => void signOut(app, account.login)}
                     >
                       Sign out
@@ -389,7 +384,6 @@ export function GithubAccountApps({
                         <Button
                           size="sm"
                           variant={app.oauthReady ? "ghost" : "default"}
-                          className="phone:min-h-11"
                           onClick={() => void startSignIn(app)}
                         >
                           {app.oauthReady
@@ -404,7 +398,7 @@ export function GithubAccountApps({
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="ml-auto phone:min-h-11"
+                    className="ml-auto"
                     onClick={() => remove(app)}
                   >
                     Remove
@@ -459,7 +453,6 @@ export function GithubAccountApps({
           <Button
             size="sm"
             variant="primary"
-            className="phone:min-h-11"
             disabled={
               starting || (owner === "organization" && !organization.trim())
             }
@@ -468,12 +461,7 @@ export function GithubAccountApps({
             Add GitHub account
           </Button>
           {data.apps.length > 0 && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="phone:min-h-11"
-              onClick={() => void load(true)}
-            >
+            <Button size="sm" variant="ghost" onClick={() => void load(true)}>
               Refresh
             </Button>
           )}

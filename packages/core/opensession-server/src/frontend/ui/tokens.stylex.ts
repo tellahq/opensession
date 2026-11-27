@@ -126,15 +126,11 @@ export const text = stylex.defineConsts({
 });
 
 /**
- * Line heights for single-line control labels, as unitless ratios. Three
- * values for one 13px label is an accident inherited from Tailwind's stock
- * `text-xs` / `text-sm` / `text-base` leading, kept so the port renders
- * identically; docs/design-system.md lists unifying them as an open decision.
+ * Line height for single-line control labels (buttons, chips, tabs), as a
+ * unitless ratio: 18.6px on a 13px label, 21.4px on a 15px one.
  */
 export const leading = stylex.defineConsts({
-  chip: "calc(1 / 0.75)",
-  control: "calc(1.25 / 0.875)",
-  body: "1.5",
+  label: "calc(1.25 / 0.875)",
 });
 
 /**
@@ -151,12 +147,11 @@ export const weight = stylex.defineConsts({
 /** The few opacities that mean something. */
 export const opacity = stylex.defineConsts({
   disabled: "0.4",
-  /** A supporting glyph beside a label on a neutral control. */
+  /** A supporting glyph beside a label on a neutral control, and the
+   *  trailing chevron of a menu trigger. */
   glyphMuted: "0.6",
   /** The same glyph on a tinted or solid plate, where 0.6 reads as dirt. */
   glyphOnTone: "0.8",
-  /** A trailing chevron, quieter than the label it qualifies. */
-  affordance: "0.55",
 });
 
 export const motion = stylex.defineConsts({

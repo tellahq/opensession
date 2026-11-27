@@ -359,7 +359,7 @@ export function BrowserAnnotationLayer({
                 variant="ghost"
                 size="lg"
                 icon={<IconX size={16} />}
-                className="shrink-0 rounded-[999px] phone:size-11"
+                className="shrink-0 rounded-[999px]"
                 onClick={reset}
                 disabled={sending}
                 aria-label="Cancel comment"
@@ -371,7 +371,7 @@ export function BrowserAnnotationLayer({
                 variant="primary"
                 size="lg"
                 icon={<IconArrowUp size={17} />}
-                className="shrink-0 rounded-[999px] phone:size-11"
+                className="shrink-0 rounded-[999px]"
                 disabled={!text.trim() || sending}
                 aria-label={sending ? "Sending comment" : "Send comment"}
               />

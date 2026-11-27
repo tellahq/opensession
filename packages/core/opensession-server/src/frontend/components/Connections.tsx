@@ -392,7 +392,7 @@ export function Connections() {
                       {MCP_BLURBS.get(s.name) || "MCP server"}
                     </div>
                     <div className="mt-0.5 flex items-center gap-1.5 text-meta text-faint">
-                      <span className="rounded bg-active px-1.5 py-px">
+                      <span className="rounded-xs bg-active px-1.5 py-px">
                         {s.transport}
                       </span>
                       <span className="truncate" title={s.target}>

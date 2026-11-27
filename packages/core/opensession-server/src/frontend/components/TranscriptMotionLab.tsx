@@ -106,7 +106,6 @@ export function TranscriptMotionLab({
         <div className="flex shrink-0 items-center gap-2">
           <Button
             variant="soft"
-            className="phone:min-h-11"
             onClick={() => {
               setStatus("running");
               setRun((value) => value + 1);
@@ -117,7 +116,6 @@ export function TranscriptMotionLab({
           {profile === "motion" && (
             <Button
               variant="soft"
-              className="phone:min-h-11"
               onClick={() => {
                 setStatus("running");
                 setSeed((value) => value + 1);

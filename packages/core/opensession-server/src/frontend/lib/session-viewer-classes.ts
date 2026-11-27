@@ -776,7 +776,7 @@ export const INFO_LIST_CLASS =
 export const INFO_LIST =
   "session-info-list grid gap-px overflow-hidden rounded-2xl bg-panel p-2 " +
   "[&>button]:min-h-11 [&>button]:w-full [&>button]:justify-start [&>button]:gap-2 [&>button]:text-left " +
-  "[&>button]:rounded-row [&>button]:border-0 " +
+  "[&>button]:rounded-control [&>button]:border-0 " +
   "[&>button]:bg-transparent [&>button]:px-3 [&>button]:py-2 [&>button]:text-label [&>button]:text-fg " +
   "[&>button:hover]:bg-hover";
 

@@ -89,7 +89,7 @@ const msgBubble =
  *  corner is a plain round one: base-global.css squircles every `rounded-*`
  *  except `rounded-full`, and a squircled pill reads as a soft rectangle. */
 export const msgBubbleUser = `${msgBubble} rounded-lg bg-bubble-user px-3.5 py-2.5 data-single-line:rounded-[999px] data-single-line:[corner-shape:round]`;
-export const msgBubbleHuman = `${msgBubble} rounded-row bg-[rgba(31,158,138,0.12)] px-3.5 py-2.25`;
+export const msgBubbleHuman = `${msgBubble} rounded-control bg-[rgba(31,158,138,0.12)] px-3.5 py-2.25`;
 
 /**
  * The row a live turn streams into. `overflow-anchor: none` keeps the browser's
@@ -134,7 +134,7 @@ const msgSystemBase =
   "msg-system-text inline-block max-w-[min(560px,100%)] self-center py-1.5 text-center text-meta leading-[1.45] text-faint";
 
 /** The centered notice pill itself. */
-export const msgSystemText = `${msgSystemBase} rounded-row bg-panel px-3.5`;
+export const msgSystemText = `${msgSystemBase} rounded-control bg-panel px-3.5`;
 
 /** A status line that reads as an aside in the transcript rather than as a
  *  card: the muted type, with no surface under it, across the full reading

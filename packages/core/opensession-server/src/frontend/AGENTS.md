@@ -152,9 +152,9 @@ The UI is migrating to StyleX primitives with closed scales; read
   borderless, and a card that still carries a normal fill has nothing to
   trade.
 - Round generously, and scale the radius with the box. The scale in
-  `styles/tailwind.css` runs `rounded-sm` 4, `rounded-md` 7, `rounded-lg` 14,
-  `rounded-xl` 18, `rounded-2xl` 22, plus the named chrome corners
-  `rounded-control` / `rounded-row` (12) and `rounded-popup` (16) — each of them
+  `styles/tailwind.css` runs `rounded-xs` 2, `rounded-sm` 4, `rounded-md` 7,
+  `rounded-lg` 14, `rounded-xl` 18, `rounded-2xl` 22, plus the named chrome
+  corners `rounded-control` (12) and `rounded-popup` (16) — each of them
   authored as `calc(<n>px * var(--rf))`, so a browser with `corner-shape`
   support renders them 1.35x larger. A small
   control keeps a small corner; a card takes `rounded-xl`, and a container that

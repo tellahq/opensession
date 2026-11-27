@@ -126,7 +126,7 @@ export const SETTINGS_NAV_CAPTION =
  * already measures its container plus those two negative margins; `w-full`
  * would size it to the container alone and pull the pill back in on the right.
  */
-export const SETTINGS_BACK = `group -mx-1.5 mb-2 flex cursor-pointer items-center ${SIDEBAR_RAIL_GAP} rounded-row border-none bg-transparent py-[var(--sidebar-row-pad)] pr-2 pl-2.5 text-left text-item-title font-medium text-dim hover:text-fg ${SIDEBAR_HOVER_LAYER}`;
+export const SETTINGS_BACK = `group -mx-1.5 mb-2 flex cursor-pointer items-center ${SIDEBAR_RAIL_GAP} rounded-control border-none bg-transparent py-[var(--sidebar-row-pad)] pr-2 pl-2.5 text-left text-item-title font-medium text-dim hover:text-fg ${SIDEBAR_HOVER_LAYER}`;
 
 /**
  * The scrolling content column beside the nav. `tool` sections fill it
@@ -211,7 +211,7 @@ export const SETTINGS_SHEET_SEARCH_BAR =
  * selected row lifts it instead of swapping one wash for a lighter one. See
  * SIDEBAR_HOVER_LAYER, which explains why that has to be a layer.
  */
-export const SETTINGS_NAV_ROW = `group mt-0.5 flex w-full cursor-pointer items-center ${SIDEBAR_RAIL_GAP} rounded-row border-none bg-transparent py-[var(--sidebar-row-pad)] pr-2 pl-2.5 text-left text-item-title font-medium text-dim hover:text-fg data-active:bg-selected data-active:text-fg ${SIDEBAR_HOVER_LAYER}`;
+export const SETTINGS_NAV_ROW = `group mt-0.5 flex w-full cursor-pointer items-center ${SIDEBAR_RAIL_GAP} rounded-control border-none bg-transparent py-[var(--sidebar-row-pad)] pr-2 pl-2.5 text-left text-item-title font-medium text-dim hover:text-fg data-active:bg-selected data-active:text-fg ${SIDEBAR_HOVER_LAYER}`;
 
 /**
  * The row's glyph well: the sidebar's 22px rail, not an 18px box. The glyphs

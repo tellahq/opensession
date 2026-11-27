@@ -209,13 +209,7 @@ function CommitRow({
               Session
             </Button>
           )}
-          <Button
-            size="sm"
-            variant="default"
-            className="phone:min-h-11"
-            disabled={busy}
-            onClick={revert}
-          >
+          <Button size="sm" variant="default" disabled={busy} onClick={revert}>
             Revert
           </Button>
         </div>
@@ -292,7 +286,6 @@ function RemoteSection({
         <Button
           type="submit"
           disabled={busy || url.trim() === (status.url || "")}
-          className="phone:min-h-11"
         >
           Save
         </Button>
@@ -301,7 +294,6 @@ function RemoteSection({
             type="button"
             variant="default"
             disabled={busy}
-            className="phone:min-h-11"
             onClick={() => void run(() => syncMemoryRemote(repo), "Synced")}
           >
             Sync now
@@ -411,7 +403,6 @@ export function MemoryRepoPage({
         <Button
           size="sm"
           variant="ghost"
-          className="phone:min-h-11"
           icon={<IconChevronLeft size={18} />}
           onClick={onBack}
         >

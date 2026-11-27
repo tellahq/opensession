@@ -112,7 +112,7 @@ export function SuggestedTaskCard({
           <Button
             variant="primary"
             size="sm"
-            className="flex-1 rounded-r-none phone:min-h-11"
+            className="flex-1 rounded-r-none"
             icon={<IconPlay />}
             disabled={!navigation || starting}
             onClick={start}

@@ -276,7 +276,6 @@ export function PrFilesPage({
             <Button
               variant="soft"
               size="sm"
-              className="phone:min-h-11"
               icon={<IconFile size={18} />}
               onClick={() => setFilesOpen(true)}
             >
@@ -312,7 +311,6 @@ export function PrFilesPage({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="phone:size-11"
                   aria-label="Previous file"
                   aria-keyshortcuts="k"
                   disabled={!previous}
@@ -324,7 +322,6 @@ export function PrFilesPage({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="phone:size-11"
                   aria-label="Next file"
                   aria-keyshortcuts="j"
                   disabled={!next}
@@ -337,7 +334,7 @@ export function PrFilesPage({
                   <Button
                     variant="soft"
                     size="sm"
-                    className="phone:order-2 phone:min-h-11"
+                    className="phone:order-2"
                     aria-keyshortcuts="n"
                     disabled={!unreviewed}
                     onClick={() => navigate(unreviewed)}
@@ -567,7 +564,7 @@ export function PrFilesPage({
                                 aria-current={
                                   index === currentStep ? "step" : undefined
                                 }
-                                className="max-w-[260px] phone:min-h-11"
+                                className="max-w-[260px]"
                                 onClick={() => showStep(index)}
                               >
                                 <span className="tabular-nums text-faint">
@@ -629,7 +626,6 @@ export function PrFilesPage({
                       <div className="flex flex-wrap items-center gap-2">
                         <Button
                           variant="soft"
-                          className="phone:min-h-11"
                           icon={<IconChevronRight size={18} />}
                           onClick={() => showStep(currentStep + 1)}
                         >
@@ -638,7 +634,6 @@ export function PrFilesPage({
                         {reviewedFiles && onSetReviewed && (
                           <Button
                             variant="ghost"
-                            className="phone:min-h-11"
                             onClick={() => {
                               onSetReviewed(
                                 guideSections[currentStep].files.filter(

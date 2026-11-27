@@ -181,7 +181,7 @@ export function SidebarChrome({
             // once by a strip above the tools, once by this heading — and
             // each said it with its own ✕.
             borrowedLens &&
-              "min-h-10 w-full rounded-row bg-blue-soft pl-3 pr-1 phone:min-h-12 phone:pl-3.5 desktop:h-full desktop:min-h-0",
+              "min-h-10 w-full rounded-control bg-blue-soft pl-3 pr-1 phone:min-h-12 phone:pl-3.5 desktop:h-full desktop:min-h-0",
           )}
           ref={headRef}
         >

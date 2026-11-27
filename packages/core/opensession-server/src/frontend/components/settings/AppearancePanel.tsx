@@ -181,7 +181,7 @@ function ThemeCard({
       data-active={active || undefined}
       onClick={onClick}
     >
-      <div className="relative aspect-16/10 w-full overflow-hidden rounded-row border-2 border-line transition-[border-color,box-shadow] group-hover:border-faint group-data-active:border-accent group-data-active:shadow-[0_0_0_1px_var(--accent)]">
+      <div className="relative aspect-16/10 w-full overflow-hidden rounded-control border-2 border-line transition-[border-color,box-shadow] group-hover:border-faint group-data-active:border-accent group-data-active:shadow-[0_0_0_1px_var(--accent)]">
         {/* System = light base with the dark mock clipped over the right half. */}
         <ThemeMock tone={option === "dark" ? "dark" : "light"} />
         {option === "system" && (
