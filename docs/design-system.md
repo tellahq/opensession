@@ -146,7 +146,16 @@ sticky, nested, navigates, selected, inert })` and its chevron is
 beats the base's by argument order and the chevron reveals off
 `sidebarHeaderMarker` rather than a Tailwind group. The stuck backing and
 fade (pseudo-elements keyed on `data-stuck`) and the new layout's quieter
-caption (a sibling reach) stay utilities. Each class
+caption (a sibling reach) stay utilities. Rows work the same way: every
+family (session, workspace, PR, feed, report, draft) is `sidebarRow({ layout,
+swipe, selected, chips, standing })`, where `chips` is how much of the right
+end the hover actions take. Its parts (`SIDEBAR_ROW_TITLE`, `sidebarRowChip`,
+`sidebarRowActions`, `sidebarRowTime`, the ticker, snooze badge and facepile)
+read the row's hover and its `data-selected` / `data-waiting` / `data-unread`
+state through `sidebarRowMarker`. A component that merges a caller's chip
+into its own look, like `KeepInSidebarMark`, takes the chip as `xstyle` and
+applies both in one `stylex.props` call, because a StyleX class string handed
+to a Tailwind `cn()` loses to the component's own utilities. Each class
 string constant is `classString(...)` from `ui/sx.ts`: pass every style one
 element wears in one call, so two styles that set the same property are
 settled by argument order, not stylesheet order. Hooks that CSS or tests read

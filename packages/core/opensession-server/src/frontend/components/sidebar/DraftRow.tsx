@@ -1,14 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { hasDraft, onDraftsChanged } from "../../lib/drafts";
 import {
-  SIDEBAR_HOVER_LAYER,
   SIDEBAR_RAIL,
+  SIDEBAR_ROW_TITLE,
   SIDEBAR_WS_DRAFT,
-  SIDEBAR_WS_ROW,
+  sidebarRow,
 } from "../../lib/sidebar-classes";
 import { cn } from "../../ui/cn";
 import { IconPencil, IconPlus } from "../icons";
-import { SIDEBAR_ROW, SIDEBAR_ROW_TITLE } from "./SidebarItem";
 
 /**
  * The session that hasn't started yet.
@@ -42,12 +41,7 @@ export function DraftRow({
   useEffect(() => onDraftsChanged(() => setDraft(hasDraft("new-session"))), []);
   return (
     <button
-      className={cn(
-        SIDEBAR_ROW,
-        SIDEBAR_WS_ROW,
-        SIDEBAR_HOVER_LAYER,
-        active && "bg-selected",
-      )}
+      className={sidebarRow({ layout: "rail", selected: active, chips: 3 })}
       data-sidebar-row=""
       data-selected={active || undefined}
       onClick={onClick}

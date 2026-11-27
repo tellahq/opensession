@@ -3,7 +3,6 @@ import React, { type ReactElement, type ReactNode } from "react";
 import {
   SIDEBAR_SWIPE_ACTION_UNSNOOZE,
   SIDEBAR_SWIPE_ROW,
-  SIDEBAR_WS_ROW,
 } from "../../lib/sidebar-classes";
 import type { WsRow } from "../../lib/sidebar-types";
 
@@ -139,7 +138,8 @@ test("renders workspace row state and wires row and swipe actions", () => {
   );
 
   expect(tree.props.className).toBe(SIDEBAR_SWIPE_ROW);
-  expect(rowButton?.props.className).toContain(SIDEBAR_WS_ROW);
+  // A rail row: StyleX names the class `<file>__<styles>.<key>` under test.
+  expect(rowButton?.props.className).toContain("sidebarStyles.rowRail");
   expect(rowButton?.props["data-unread"]).toBe(true);
   expect(
     elements.some((element) => element.type === WorkspaceDraftIndicator),

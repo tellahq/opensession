@@ -69,11 +69,12 @@
 
 import * as stylex from "@stylexjs/stylex";
 import { cn } from "../ui/cn";
-import { sidebarHeaderMarker } from "../ui/markers.stylex";
-import { classString as sx } from "../ui/sx";
+import { sidebarHeaderMarker, sidebarRowMarker } from "../ui/markers.stylex";
+import { classString as sx, type Styles } from "../ui/sx";
 import {
   color,
   corner,
+  leading,
   media,
   motion,
   radius,
@@ -82,6 +83,13 @@ import {
   text,
   weight,
 } from "../ui/tokens.stylex";
+
+/** A row's right padding: at rest, at rest on a phone, and under a pointer. */
+const rowRight = (rest: string, restPhone: string, hover: string) => ({
+  default: rest,
+  [media.phone]: restPhone,
+  ":hover": { default: null, [media.hover]: hover },
+});
 
 /**
  * The pieces of the rail that are StyleX. The constants below that read
@@ -284,6 +292,231 @@ export const sidebarStyles = stylex.create({
     transitionTimingFunction: motion.ease,
   },
   chevronCollapsed: { opacity: 1 },
+
+  // ── Rows: see sidebarRow ──
+  row: {
+    position: "relative",
+    marginTop: space.s2,
+    width: "100%",
+    borderRadius: radius.control,
+    ["cornerShape"]: corner.squircle,
+    borderWidth: 0,
+    backgroundColor: color.transparent,
+    paddingBlock: {
+      default: scale.rowPadVar,
+      [media.phone]: scale.rowPadPhone,
+    },
+    paddingLeft: {
+      default: scale.railPadVar,
+      [media.phone]: scale.rowInsetPhone,
+    },
+    textAlign: "left",
+    color: color.fg,
+  },
+  rowRail: { display: "flex", alignItems: "center", gap: scale.railGap },
+  rowBlock: { display: "block" },
+  rowSwipe: { zIndex: 1, marginTop: space.s0, touchAction: "pan-y" },
+  rowSelected: { backgroundColor: color.selected },
+  reserve1: { paddingRight: rowRight(space.s8, space.s8, scale.reserve1) },
+  reserve2: { paddingRight: rowRight(space.s8, space.s8, scale.reserve2) },
+  reserve3: { paddingRight: rowRight(space.s8, space.s8, scale.reserve3) },
+  reserve4: { paddingRight: rowRight(space.s8, space.s8, scale.reserve4) },
+  standing1: {
+    paddingRight: rowRight(
+      scale.reserve1,
+      scale.reserveStandingPhone,
+      scale.reserve1,
+    ),
+  },
+  standing2: {
+    paddingRight: rowRight(
+      scale.reserve1,
+      scale.reserveStandingPhone,
+      scale.reserve2,
+    ),
+  },
+  title: {
+    minWidth: 0,
+    flex: "1 1 0%",
+    overflow: "hidden",
+    whiteSpace: "nowrap",
+    WebkitMaskImage: `linear-gradient(to right, ${color.mask} ${scale.titleFade}, transparent)`,
+    maskImage: `linear-gradient(to right, ${color.mask} ${scale.titleFade}, transparent)`,
+    fontSize: { default: text.body, [media.desktop]: text.itemTitle },
+    lineHeight: scale.titleLeading,
+    fontWeight: {
+      default: weight.medium,
+      [stylex.when.ancestor(":is([data-waiting])", sidebarRowMarker)]:
+        weight.heading,
+      [stylex.when.ancestor(":is([data-finished-unread])", sidebarRowMarker)]:
+        weight.heading,
+    },
+    color: {
+      default: color.dim,
+      [stylex.when.ancestor(":is([data-selected])", sidebarRowMarker)]:
+        color.fg,
+      [stylex.when.ancestor(":is([data-unread])", sidebarRowMarker)]: color.fg,
+    },
+  },
+  // A session row's positioned chip (pin, archive, keep).
+  chip: {
+    position: "absolute",
+    top: "50%",
+    translate: "0 -50%",
+    display: {
+      default: "none",
+      [stylex.when.ancestor(":hover", sidebarRowMarker)]: {
+        default: null,
+        [media.hover]: "flex",
+      },
+    },
+    width: scale.rowActionVar,
+    height: scale.rowActionVar,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.md,
+    ["cornerShape"]: corner.squircle,
+    fontSize: scale.chipGlyph,
+    lineHeight: leading.none,
+    color: {
+      default: color.faint,
+      ":hover": { default: null, [media.hover]: color.fg },
+    },
+  },
+  chipEdge: { right: scale.chipEdge },
+  chipSecond: { right: scale.chipSecond },
+  chipOn: { backgroundColor: color.pressed, color: color.fg },
+  chipStanding: {
+    display: "flex",
+    right: { default: scale.chipEdge, [media.phone]: space.s0 },
+    width: { default: scale.rowActionVar, [media.phone]: scale.touchTarget },
+    height: { default: scale.rowActionVar, [media.phone]: scale.touchTarget },
+  },
+  // A rail row's chip cluster, and one chip in it.
+  rowActions: {
+    position: "absolute",
+    top: "50%",
+    right: scale.chipEdge,
+    translate: "0 -50%",
+    display: {
+      default: "none",
+      [stylex.when.ancestor(":hover", sidebarRowMarker)]: {
+        default: null,
+        [media.hover]: "inline-flex",
+      },
+    },
+    alignItems: "center",
+    gap: space.s4,
+    borderRadius: radius.sm,
+    ["cornerShape"]: corner.squircle,
+  },
+  rowActionsHidden: { display: "none" },
+  rowAction: {
+    display: "inline-flex",
+    width: scale.rowActionVar,
+    height: scale.rowActionVar,
+    cursor: "pointer",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.md,
+    ["cornerShape"]: corner.squircle,
+  },
+  time: {
+    marginLeft: "auto",
+    minWidth: { default: scale.timeMin, [media.desktop]: scale.timeMinDesktop },
+    flex: "0 0 auto",
+    justifyContent: "flex-end",
+    paddingRight: { default: space.s6, [media.desktop]: space.s4 },
+    textAlign: "right",
+    fontSize: text.meta,
+    fontWeight: weight.regular,
+    color: color.faint,
+  },
+  timeReveal: {
+    display: {
+      default: "none",
+      [stylex.when.ancestor(":hover", sidebarRowMarker)]: {
+        default: null,
+        [media.hover]: "inline-flex",
+      },
+    },
+  },
+  timeRevealTouch: {
+    display: {
+      default: "none",
+      [stylex.when.ancestor(":hover", sidebarRowMarker)]: {
+        default: null,
+        [media.hover]: "inline-flex",
+      },
+      [media.touch]: "inline-flex",
+    },
+  },
+  timeHidden: { display: "none" },
+  ticker: {
+    marginLeft: "auto",
+    minWidth: { default: scale.timeMin, [media.desktop]: scale.timeMinDesktop },
+    flex: "0 0 auto",
+    justifyContent: "flex-end",
+    paddingRight: { default: space.s2, [media.desktop]: space.s4 },
+    textAlign: "right",
+    fontSize: text.meta,
+    fontWeight: weight.regular,
+    fontVariantNumeric: "tabular-nums",
+    color: color.yellow,
+    display: {
+      default: null,
+      [stylex.when.ancestor(":hover", sidebarRowMarker)]: {
+        default: null,
+        [media.hover]: "none",
+      },
+    },
+  },
+  snooze: {
+    marginLeft: "auto",
+    display: {
+      default: "inline-flex",
+      [stylex.when.ancestor(":hover", sidebarRowMarker)]: {
+        default: null,
+        [media.hover]: "none",
+      },
+    },
+    flex: "0 0 auto",
+    alignItems: "center",
+    gap: space.s4,
+    fontSize: text.meta,
+    fontWeight: weight.regular,
+    fontVariantNumeric: "tabular-nums",
+    color: color.faint,
+  },
+  draft: {
+    display: "inline-flex",
+    flex: "0 0 auto",
+    alignItems: "center",
+    color: color.dim,
+  },
+  // The facepile's avatars ring themselves in the row's own fill, so it
+  // follows the row's hover and selection.
+  faces: {
+    display: "flex",
+    flexShrink: 0,
+    alignItems: "center",
+    "--sidebar-face-ring": {
+      default: scale.faceRing,
+      [stylex.when.ancestor(":not([data-selected]):hover", sidebarRowMarker)]: {
+        default: null,
+        [media.hover]: scale.faceRingHover,
+      },
+      [stylex.when.ancestor(":is([data-selected])", sidebarRowMarker)]:
+        scale.faceRingSelected,
+      [stylex.when.ancestor(":is([data-selected]):hover", sidebarRowMarker)]: {
+        default: null,
+        [media.hover]: scale.faceRingSelectedHover,
+      },
+    },
+  },
+  face: {
+    marginLeft: { default: null, ":not(:first-child)": scale.faceOverlap },
+  },
 });
 
 /**
@@ -334,7 +567,7 @@ export const SIDEBAR_DENSITY_VARS = sx(sidebarStyles.density);
  * outer air could not be changed without re-deriving four inner values and
  * getting the shared rail wrong in whichever one was missed. Only the tool row
  * ever expressed it as the subtraction it is; now they all do, through
- * {@link SIDEBAR_RAIL_PAD}, and the air is one number.
+ * `sidebarScale.railPadVar`, and the air is one number.
  *
  * 10px, not the 6 it was. At 6 the pill sat all but against both edges of the
  * column — a window edge on one side, the seam with the reading pane on the
@@ -343,22 +576,10 @@ export const SIDEBAR_DENSITY_VARS = sx(sidebarStyles.density);
  */
 export const SIDEBAR_NAV_X = sx(sidebarStyles.navX);
 
-/**
- * The left padding a box inside that inset takes to put its leading mark back
- * on the shared rail. Fallbacks are today's numbers, so a row rendered outside
- * the sidebar's own root still lands where it always did.
- *
- * Two spellings of one value, both written out: Tailwind compiles the class
- * names it can FIND, variant and all, so a `desktop:` prefix glued on at a
- * call site would compile to nothing. Rows take the bare one (their phone
- * padding overrides it); the headings, which only re-inset on desktop, take
- * the prefixed one.
- */
-export const SIDEBAR_RAIL_PAD =
-  "pl-[calc(var(--sidebar-icon-left,16px)-var(--sidebar-nav-x,6px))]";
-export const SIDEBAR_RAIL_PAD_DESKTOP =
-  "desktop:pl-[calc(var(--sidebar-icon-left,16px)-var(--sidebar-nav-x,6px))]";
-
+/* The left padding a box inside that inset takes to put its leading mark back
+   on the shared rail is `sidebarScale.railPadVar`, which rows and headings
+   read. Its fallbacks are today's numbers, so a row rendered outside the
+   sidebar's own root still lands where it always did. */
 /**
  * The sidebar's leading column. Every row and group header opens with one of
  * these, whatever it holds — a 22px glyph, a 20px one, a 7px status dot, a
@@ -886,7 +1107,8 @@ export const SIDEBAR_BAND_TOGGLE =
  * the glyphless labels on the same 16px rail as Tools, Workspaces and lane
  * captions. The phone layout keeps its tighter base inset.
  */
-export const SIDEBAR_BAND_TOGGLE_INSET = `pr-1 pl-2 desktop:pr-2 ${SIDEBAR_RAIL_PAD_DESKTOP}`;
+export const SIDEBAR_BAND_TOGGLE_INSET =
+  "pr-1 pl-2 desktop:pr-2 desktop:pl-[calc(var(--sidebar-icon-left,16px)-var(--sidebar-nav-x,6px))]";
 
 /**
  * The chevron reveals on hover but stays IN LAYOUT at all times (visibility,
@@ -1010,63 +1232,40 @@ export const SIDEBAR_ATTN_COUNT =
  * out-rank anything. The same rule applies to the action colours below.
  */
 
-/**
- * A workspace row: {@link SIDEBAR_ROW} laid out as one flex line, so the rail,
- * the title and the trailing cluster sit on the sidebar's shared columns. The
- * gap is {@link SIDEBAR_RAIL_GAP}, the same one every railed family takes.
+/* A rail row (`sidebarRow({ layout: "rail" })`) is one flex line, so the
+ * rail, the title and the trailing cluster sit on the sidebar's shared
+ * columns. The gap is the rail gap, the same one every railed family takes.
  *
- * On hover the line gives up its right end to {@link SIDEBAR_WS_ACTIONS}, which
+ * On hover the line gives up its right end to `sidebarRowActions`, which
  * floats over that spot. The reserve lives here, on the row, because it is the
  * row that has to clear it: it used to be a margin on the time badge, which
  * left a row without a time (a PR row, a ticket with no status change) with its
  * title running under the icons — invisible for as long as the actions wore an
  * opaque plate to cover it, and plainly wrong once they stopped.
- * Spelled `hover:`, not `group-hover:`: the row IS the `group`, and Tailwind's
- * group variant only matches a group's DESCENDANTS. Either way it is
- * hover-device-only, so touch layouts never pay for it.
+ * The reserve is the row's own `:hover`, gated to hover devices, so touch
+ * layouts never pay for it.
  *
- * 98px is the cluster (7px right edge + three chips + the gaps) plus a little
+ * 98px (`chips: 3`) is the cluster (7px right edge + three chips + the gaps) plus a little
  * air, and it is the number the session rows reserve for the same trio, so a
  * title truncates at one place in the rail rather than 12px
  * earlier on the families that share this row.
  */
-export const SIDEBAR_WS_ROW = `flex items-center ${SIDEBAR_RAIL_GAP} hover:pr-[98px]`;
 
-/**
- * Pin + snooze + archive, floated over the row's right edge so revealing them can never
+/* Pin + snooze + archive, floated over the row's right edge so revealing them can never
  * change the row's height. The cluster used to wear an opaque plate, because a
  * long title runs under it; it doesn't need one — the row itself now reserves
- * that space on hover (see {@link SIDEBAR_WS_ROW}), so the title has
+ * that space on hover (see sidebarRow's `chips`), so the title has
  * re-truncated clear of the actions by the time they appear. A solid chip would
  * also cut a hole in the translucent row underneath it.
  *
- * Resting `display` is the CALL SITE's, because it is the one thing that
- * differs between a live row (hover only), a row whose swipe action is open
- * (never) and an archived row on touch (always).
+ * The reveal is gated to real hover devices: on touch a sticky first-tap
+ * `:hover` would otherwise expose actions that live behind the swipe gesture
+ * there. A row whose swipe action is open hides the cluster outright.
  */
-export const SIDEBAR_WS_ACTIONS =
-  "absolute top-1/2 right-[7px] -translate-y-1/2 items-center gap-1 rounded-sm";
-
-/**
- * The hover-only reveal. `group-hover` is gated to real hover devices by
- * Tailwind, which is exactly what the `@media (hover: hover)` around the old
- * rule was for: on touch a sticky first-tap `:hover` would otherwise expose
- * actions that live behind the swipe gesture there.
- */
-export const SIDEBAR_WS_ACTIONS_HOVER = "hidden group-hover:inline-flex";
-
-/**
- * An archived row carries no swipe gesture — that is a live-row affordance —
- * so its unarchive/pin pair is the only way back from the band and has to stay
- * visible on touch. Resting rather than hover-revealed, so it drops the plate
- * (which would read as a chip on every row) and the title reserves the space
- * instead.
- */
-export const SIDEBAR_WS_ACTIONS_TOUCH = "[@media(hover:none)]:inline-flex";
 
 /**
  * One icon button in that cluster — the same box the session rows' pin and
- * archive wear (ROW_ACTION in sidebar/SidebarItem.tsx), so one hover chip
+ * archive wear (sidebarRowChip), so one hover chip
  * covers the whole rail. It was a flat 32px here while the session rows next
  * to it painted 26, which showed as two different chip heights on one column;
  * at the compact density 32 was also TALLER than the 30px row, so the chip
@@ -1083,23 +1282,23 @@ export const SIDEBAR_WS_ACTIONS_TOUCH = "[@media(hover:none)]:inline-flex";
  * three `color` declarations that used to be settled by where their rules sat
  * in the sheet relative to each other.
  */
-export const SIDEBAR_WS_ACTION = `inline-flex size-[var(--sidebar-row-action,26px)] cursor-pointer items-center justify-center rounded-md ${SIDEBAR_ROW_CHIP}`;
+export const SIDEBAR_WS_ACTION_STYLES: Styles = [
+  sidebarStyles.rowAction,
+  sidebarStyles.rowChip,
+];
+export const SIDEBAR_WS_ACTION = sx(SIDEBAR_WS_ACTION_STYLES);
 
-/**
- * Compact last-activity time. It has no `display` of its own on purpose: as a
+/* A row's compact last-activity time (sidebarRowTime). It has no `display`
+ * of its own at rest on purpose: as a
  * flex item it blockifies, and `text-right` is what right-aligns the digits at
  * rest, while `justify-end` is what right-aligns them once a reveal turns it
  * into a flex box. When something precedes it, that element's own
  * `margin-left: auto` has already pushed the pair right — a second auto margin
  * would split the free space and strand one of them mid-row.
+ *
+ * Revealed, it is hidden at rest and shown on the row's hover. The room for
+ * the action cluster is the row's own, so the time carries no margin for it.
  */
-export const SIDEBAR_WS_TIME =
-  "ml-auto min-w-[28px] flex-[0_0_auto] justify-end pr-1.5 text-right text-meta text-faint desktop:min-w-[34px] desktop:pr-1";
-
-/** Hidden at rest and revealed on row hover. The room for the action cluster is
- *  the row's own (see {@link SIDEBAR_WS_ROW}), so this no longer carries a
- *  margin of its own. Call sites that need an always-visible time omit this. */
-export const SIDEBAR_WS_TIME_HOVER = "hidden group-hover:inline-flex";
 
 /**
  * Live "in progress" elapsed ticker — it sits where the time badge would, in
@@ -1113,8 +1312,7 @@ export const SIDEBAR_WS_TIME_HOVER = "hidden group-hover:inline-flex";
  * see formatDuration), so it stays about as wide as the idle time badge it
  * stands in for instead of growing a clock's worth of digits.
  */
-export const SIDEBAR_WS_TICKER =
-  "ml-auto min-w-[28px] flex-[0_0_auto] justify-end pr-0.5 text-right text-meta tabular-nums text-yellow group-hover:hidden desktop:min-w-[34px] desktop:pr-1";
+export const SIDEBAR_WS_TICKER = sx(sidebarStyles.ticker);
 
 /**
  * Teammates focused on this row's work, as the same overlapping pile used by
@@ -1124,28 +1322,22 @@ export const SIDEBAR_WS_TICKER =
  * including the extra layer where selection and hover meet, instead of cutting
  * a sidebar-coloured halo through it.
  */
-export const SIDEBAR_WS_FACES =
-  "flex shrink-0 items-center [--sidebar-face-ring:var(--sidebar-bg)] " +
-  "group-hover:[--sidebar-face-ring:var(--sidebar-row-hover)] " +
-  "group-data-[selected]:[--sidebar-face-ring:var(--sidebar-row-selected)] " +
-  "group-hover:group-data-[selected]:[--sidebar-face-ring:var(--sidebar-row-selected-hover)]";
-export const SIDEBAR_WS_FACE = "[&:not(:first-child)]:-ml-1.5";
+export const SIDEBAR_WS_FACES = sx(sidebarStyles.faces);
+export const SIDEBAR_WS_FACE = sx(sidebarStyles.face);
 
 /**
  * Slack-style unsent-draft pencil. Its left margin is the call site's: on a
  * workspace row it pins itself to the right edge, unless a ticker or a snooze
  * countdown already did that pushing.
  */
-export const SIDEBAR_WS_DRAFT =
-  "inline-flex flex-[0_0_auto] items-center text-dim";
+export const SIDEBAR_WS_DRAFT = sx(sidebarStyles.draft);
 
 /**
  * Wake countdown on a snoozed workspace row (moon + "1h"). It stands in for
  * the idle time badge, so it rests in that same right-edge slot, matches its
  * type, and yields to the pin/archive actions like every other trailing badge.
  */
-export const SIDEBAR_WS_SNOOZE =
-  "ml-auto inline-flex flex-[0_0_auto] items-center gap-1 text-meta tabular-nums text-faint group-hover:hidden";
+export const SIDEBAR_WS_SNOOZE = sx(sidebarStyles.snooze);
 
 /**
  * ── Swipe rows ──────────────────────────────────────────────────────────────
@@ -1215,3 +1407,128 @@ export const SIDEBAR_STATUS_DOT = {
     "bg-blue shadow-[0_0_6px_var(--blue)] animate-[pulse_1.2s_ease-in-out_infinite] motion-reduce:[animation-duration:1.2s]! motion-reduce:[animation-iteration-count:infinite]!",
   idle: "bg-faint",
 } as const;
+
+export interface SidebarRowOptions {
+  /** `rail`: the row lays its mark, title and trailing meta out on the rail
+   *  (every family but the session row). `block`: a session row, which
+   *  stacks its own lines. */
+  layout: "rail" | "block";
+  /** Inside a swipe shell: the shell carries the 2px gap and the row the
+   *  slide, above the revealed actions. */
+  swipe?: boolean;
+  selected?: boolean;
+  /** How many chips the row's right end makes room for under the pointer:
+   *  8px of edge plus 30px a chip. */
+  chips: 1 | 2 | 3 | 4;
+  /** One chip stands at rest (Team's add): the room for it is kept without
+   *  a pointer, at its 44px touch size on phones. */
+  standing?: boolean;
+}
+
+/**
+ * The sidebar's selectable row: the box every list family wears (session,
+ * workspace, PR, support, feed, report and draft rows), as one StyleX call.
+ * State rides `data-selected` / `data-waiting` / `data-unread` on the row,
+ * and its parts read it through `sidebarRowMarker`. `group` stays on as a hook
+ * for the few parts that still reveal on the row's hover through Tailwind.
+ * `data-sidebar-row` is the hook the row walker queries by, set at the call
+ * site.
+ *
+ * `--sidebar-row-pad` around the 22px rail is the ITEM height (36px, 30px
+ * compact), the box the tool rows and item headings take too. Phones keep a
+ * 13px pad at both densities: there the row is a tap target.
+ */
+export function sidebarRow(options: SidebarRowOptions): string {
+  const { chips, standing = false } = options;
+  const reserve = standing
+    ? chips === 1
+      ? sidebarStyles.standing1
+      : sidebarStyles.standing2
+    : chips === 1
+      ? sidebarStyles.reserve1
+      : chips === 2
+        ? sidebarStyles.reserve2
+        : chips === 3
+          ? sidebarStyles.reserve3
+          : sidebarStyles.reserve4;
+  return cn(
+    "group",
+    sx(
+      sidebarStyles.row,
+      options.layout === "rail"
+        ? sidebarStyles.rowRail
+        : sidebarStyles.rowBlock,
+      options.swipe === true && sidebarStyles.rowSwipe,
+      reserve,
+      sidebarStyles.hoverLayer,
+      options.selected === true && sidebarStyles.rowSelected,
+      sidebarRowMarker,
+    ),
+  );
+}
+
+/**
+ * A row's title: one line that fades out at the available edge instead of
+ * ending in an ellipsis. Read conversations stay quiet; unread ones brighten,
+ * then bold once the agent finishes. A blocked one bolds too, because it
+ * needs a person.
+ */
+export const SIDEBAR_ROW_TITLE = sx(sidebarStyles.title);
+
+export interface SidebarRowChipOptions {
+  /** `edge`: the row's right end. `second`: one chip in from it. */
+  slot: "edge" | "second";
+  /** A pinned pin: pressed, in full ink. */
+  on?: boolean;
+  /** Visible at rest, at touch size on phones (Team's add). */
+  standing?: boolean;
+}
+
+/**
+ * A session row's positioned chip, revealed by the row's hover. A lid, not a
+ * wash: its hover takes `--row-chip` (see SIDEBAR_ROW_CHIP).
+ */
+export function sidebarRowChipStyles(options: SidebarRowChipOptions): Styles {
+  return [
+    sidebarStyles.chip,
+    sidebarStyles.rowChip,
+    options.slot === "edge" ? sidebarStyles.chipEdge : sidebarStyles.chipSecond,
+    options.on === true && sidebarStyles.chipOn,
+    options.standing === true && sidebarStyles.chipStanding,
+  ];
+}
+
+export function sidebarRowChip(options: SidebarRowChipOptions): string {
+  return sx(sidebarRowChipStyles(options));
+}
+
+/**
+ * A rail row's hover chip cluster (pin, snooze, archive, keep): it takes the
+ * metadata's place at the far right on the row's hover. `hidden` keeps it out
+ * entirely, for a row whose swipe action owns that edge.
+ */
+export function sidebarRowActions(hidden = false): string {
+  return sx(sidebarStyles.rowActions, hidden && sidebarStyles.rowActionsHidden);
+}
+
+export interface SidebarRowTimeOptions {
+  /** Shown only under the row's hover. */
+  reveal: boolean;
+  /** Revealed: also shown on a touch device, which has no hover. */
+  touch?: boolean;
+  /** Hidden at rest (a running row shows its duration there instead); a
+   *  revealed time still takes the hover. */
+  hidden?: boolean;
+}
+
+/** A row's trailing time. */
+export function sidebarRowTime(options: SidebarRowTimeOptions): string {
+  return sx(
+    sidebarStyles.time,
+    options.reveal
+      ? options.touch === true
+        ? sidebarStyles.timeRevealTouch
+        : sidebarStyles.timeReveal
+      : options.hidden === true && sidebarStyles.timeHidden,
+  );
+}

@@ -473,7 +473,7 @@ export const SETTINGS_SHEET_SEARCH_BAR = sx(styles.sheetSearchBar);
  * A row in the settings navigation: the section list and the account block
  * under it, which are one list visually and were two copies of this string.
  *
- * This is SIDEBAR_ROW: the same 2px gap between rows, the same
+ * This is the sidebar row (sidebarRow): the same 2px gap between rows, the same
  * `--sidebar-row-pad` box around a 22px rail, the same 7px to the title, the
  * same asymmetric 10/8 gutters.
  *

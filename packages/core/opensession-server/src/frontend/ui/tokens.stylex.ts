@@ -580,6 +580,8 @@ export const media = stylex.defineConsts({
   phone: "@media (max-width: 720px)",
   desktop: "@media (min-width: 721px)",
   hover: "@media (hover: hover)",
+  /** A touch-first device: what a pointer would reveal stands instead. */
+  touch: "@media (hover: none)",
   forcedColors: "@media (forced-colors: active)",
   /** A short or narrow window that pulls a palette up. */
   narrow: "@media (width < 560px)",
@@ -640,4 +642,35 @@ export const sidebarScale = stylex.defineConsts({
   /** The liveness dot a lane or automation heading leads with. */
   dot: "7px",
   dotOpacity: "0.85",
+  /** Rows: a phone row's tap padding, and its left inset onto the 16px
+   *  rail (written against `--sidebar-icon-left` so a nested family indents
+   *  at phone width too). */
+  rowPadPhone: "13px",
+  rowInsetPhone: "calc(var(--sidebar-icon-left, 16px) - 12px)",
+  /** The right end a row gives up to its chips: 8px of edge plus 30px per
+   *  chip, and a standing chip's 44px touch box plus that edge on phones. */
+  reserve1: "38px",
+  reserve2: "68px",
+  reserve3: "98px",
+  reserve4: "128px",
+  reserveStandingPhone: "52px",
+  /** A row title: its leading, and where its trailing fade starts. */
+  titleLeading: "1.35",
+  titleFade: "calc(100% - 24px)",
+  /** A row's hover chip: its density-following box, the glyph metric inside
+   *  it, and the two slots it takes (the row's edge, and one chip in from
+   *  it plus the 4px between them). */
+  rowActionVar: "var(--sidebar-row-action, 26px)",
+  chipGlyph: "15px",
+  chipEdge: "7px",
+  chipSecond: "calc(var(--sidebar-row-action, 26px) + 11px)",
+  touchTarget: "44px",
+  /** A row's trailing time, ticker and facepile. */
+  timeMin: "28px",
+  timeMinDesktop: "34px",
+  faceOverlap: "-6px",
+  faceRing: "var(--sidebar-bg)",
+  faceRingHover: "var(--sidebar-row-hover)",
+  faceRingSelected: "var(--sidebar-row-selected)",
+  faceRingSelectedHover: "var(--sidebar-row-selected-hover)",
 });

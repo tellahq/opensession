@@ -22,7 +22,7 @@
  * property another string in the same `className` already sets. Two utilities
  * for one property are settled by Tailwind's output order rather than by the
  * order they are written, so the time badge below spells its own box instead
- * of appending an override to SIDEBAR_WS_TIME.
+ * of appending an override to the sidebar row time (sidebarRowTime).
  */
 
 import { SIDEBAR_HOVER_LAYER, SIDEBAR_RAIL_GAP } from "./sidebar-classes";
@@ -146,7 +146,7 @@ export const REPORTS_ROW_LATEST =
   "group-data-active:text-dim phone:text-[14px]";
 
 /**
- * When it landed. SIDEBAR_WS_TIME's box without the gutter that string
+ * When it landed. The sidebar row time's box without the gutter it
  * reserves for the sidebar's pin/archive cluster: these rows have no hover
  * actions, so the digits sit on the row's own right padding.
  */
