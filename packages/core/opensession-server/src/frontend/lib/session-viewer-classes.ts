@@ -570,13 +570,13 @@ export const FLOATING_PILL_BUTTON = `${FLOATING_PILL} ${PILL_PRESSABLE} after:-i
  * The prompt a long turn answers, pinned over the top of the transcript once
  * its bubble scrolls away (StickyActivePrompt). It is that bubble in short:
  * the same accent wash, right-aligned on the reading column, one line. The
- * wash is opaque, so prose scrolling under it never reads through. Regular
+ * wash is opaque, so prose scrolling under it never reads through. No ring,
+ * like the bubble: the wash and a soft shadow lift it off the page. Regular
  * weight, since it quotes the person's words rather than naming an action.
  */
 export const STICKY_PROMPT_PILL =
   "pointer-events-auto inline-flex min-w-0 max-w-[min(480px,70%)] rounded-[999px] [corner-shape:round] " +
-  "bg-bubble-user px-3.5 py-1.5 text-left text-label text-fg " +
-  "[--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm " +
+  "bg-bubble-user px-3.5 py-1.5 text-left text-label text-fg smooth-shadow-sm " +
   `${PILL_PRESSABLE} after:-inset-1`;
 
 /** A compact transcript action whose visible surface is only the glyph. */
