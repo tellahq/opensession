@@ -12,8 +12,12 @@ test("settings uses a full-screen phone page without sheet drag chrome", async (
   expect(settingsSource).not.toContain(
     'className={cn("settings-sheet h-[93dvh]"',
   );
+  // A page fills the dynamic viewport edge to edge, no rounded sheet top.
   expect(sheetSource).toContain(
-    '"inset-0 h-dvh max-h-none rounded-none bg-surface',
+    "phone ? (phonePage ? styles.page : styles.sheet) : styles.dialog",
+  );
+  expect(sheetSource).toMatch(
+    /page: \{\s*inset: space\.s0,\s*height: geometry\.fullHeight,\s*maxHeight: "none",\s*borderRadius: 0,/,
   );
   expect(sheetSource).toContain("phone && !phonePage && showPhoneGrabber");
 });

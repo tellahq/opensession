@@ -1,7 +1,146 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
+import * as stylex from "@stylexjs/stylex";
 import { cn } from "./cn";
+import { sx } from "./sx";
 import { PhoneTopBarAction } from "./top-bar";
+import {
+  color,
+  corner,
+  geometry,
+  layer,
+  motion,
+  radius,
+  shadow,
+  space,
+  text,
+  weight,
+} from "./tokens.stylex";
+
+const styles = stylex.create({
+  root: { position: "fixed", inset: space.s0, zIndex: layer.modalScrim },
+  parked: { visibility: "hidden", pointerEvents: "none" },
+  backdrop: {
+    position: "absolute",
+    inset: space.s0,
+    backgroundColor: color.scrimSheet,
+  },
+  fade: {
+    transitionProperty: "opacity",
+    transitionTimingFunction: motion.ease,
+  },
+  fadePhone: { transitionDuration: motion.long },
+  fadeDesktop: { transitionDuration: motion.standard },
+  hidden: { opacity: 0 },
+  panel: {
+    position: "absolute",
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
+    outline: "none",
+    ["cornerShape"]: corner.squircle,
+  },
+  // A full-height phone page: edge to edge, clear of both safe areas.
+  page: {
+    inset: space.s0,
+    height: geometry.fullHeight,
+    maxHeight: "none",
+    borderRadius: 0,
+    backgroundColor: color.page,
+    paddingBottom: geometry.safeBottom,
+    paddingTop: geometry.safeTop,
+    boxShadow: "none",
+  },
+  sheet: {
+    insetInline: space.s0,
+    bottom: space.s0,
+    maxHeight: geometry.sheetMaxHeight,
+    borderTopLeftRadius: radius.sheet,
+    borderTopRightRadius: radius.sheet,
+    backgroundColor: color.page,
+    paddingBottom: geometry.safeBottom,
+    boxShadow: shadow.sheet,
+  },
+  dialog: {
+    left: "50%",
+    top: "50%",
+    maxHeight: geometry.sheetDialogMaxHeight,
+    width: geometry.sheetDialogWidth,
+    maxWidth: geometry.sheetDialogMaxWidth,
+    translate: "-50% -50%",
+    borderRadius: radius.xl,
+    backgroundColor: color.raised,
+    boxShadow: shadow.ringLg,
+  },
+  slide: {
+    transitionProperty: "transform, translate, scale, rotate",
+    transitionDuration: motion.long,
+    transitionTimingFunction: motion.ease,
+  },
+  slidOut: { translate: "0 100%" },
+  pop: {
+    transformOrigin: "center",
+    transitionProperty: "scale, opacity",
+    transitionDuration: motion.standard,
+    transitionTimingFunction: motion.ease,
+  },
+  poppedOut: { scale: motion.dialogEnterScale, opacity: 0 },
+  grabberRow: {
+    display: "flex",
+    flexShrink: 0,
+    touchAction: "none",
+    justifyContent: "center",
+    paddingBottom: space.s6,
+    paddingTop: space.s10,
+  },
+  grabber: {
+    height: geometry.grabberHeight,
+    width: geometry.grabberWidth,
+    borderRadius: radius.pill,
+    backgroundColor: color.active,
+  },
+  body: {
+    minHeight: 0,
+    overflowY: "auto",
+    overscrollBehavior: "contain",
+    paddingInline: space.s10,
+    paddingBottom: space.s14,
+  },
+  title: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    paddingInline: space.s12,
+    paddingBottom: space.s8,
+    paddingTop: space.s6,
+    fontSize: text.label,
+    color: color.faint,
+  },
+  separator: {
+    marginInline: space.s10,
+    marginBlock: space.s6,
+    height: geometry.hairline,
+    backgroundColor: color.line,
+  },
+  item: {
+    display: "flex",
+    width: "100%",
+    alignItems: "center",
+    gap: geometry.sheetRowGap,
+    borderRadius: radius.control,
+    ["cornerShape"]: corner.squircle,
+    paddingInline: space.s14,
+    paddingBlock: geometry.sheetRowPad,
+    textAlign: "left",
+    fontSize: text.body,
+    backgroundColor: { default: null, ":active": color.pressed },
+  },
+  default: { color: color.fg },
+  danger: { color: color.red },
+  accent: { fontWeight: weight.strong, color: color.accentInk },
+  green: { fontWeight: weight.strong, color: color.green },
+  purple: { fontWeight: weight.strong, color: color.purple },
+});
 
 /**
  * The app's sheet/dialog language for surfaces that own their own open state —
@@ -235,10 +374,7 @@ export function ResponsiveDialog({
 
   return createPortal(
     <div
-      className={cn(
-        "fixed inset-0 z-[10000]",
-        parked && "invisible pointer-events-none",
-      )}
+      {...stylex.props(styles.root, parked && styles.parked)}
       role="dialog"
       aria-modal={parked ? undefined : "true"}
       aria-label={label}
@@ -246,14 +382,16 @@ export function ResponsiveDialog({
     >
       {!phonePage && (
         <div
-          className={cn(
-            "absolute inset-0 bg-black/45",
-            backdropClassName,
-            animated && [
-              "transition-opacity",
-              phone ? "duration-[var(--dur-lg)]" : "duration-[var(--dur)]",
-              shown ? "opacity-100" : "opacity-0",
+          {...sx(
+            [
+              styles.backdrop,
+              animated && [
+                styles.fade,
+                phone ? styles.fadePhone : styles.fadeDesktop,
+                !shown && styles.hidden,
+              ],
             ],
+            backdropClassName,
           )}
           onClick={onClose}
         />
@@ -261,37 +399,29 @@ export function ResponsiveDialog({
       <div
         ref={panelRef}
         tabIndex={-1}
-        className={cn(
-          // Radii are authored the way base.css authors every corner in the
-          // app, `calc(<px> * var(--rf))`, so they follow the squircle bump
-          // and its circular fallback with everything else.
-          "absolute flex flex-col overflow-hidden outline-none [corner-shape:squircle]",
-          phone
-            ? phonePage
-              ? "inset-0 h-dvh max-h-none rounded-none bg-surface pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] shadow-none"
-              : "inset-x-0 bottom-0 max-h-[94dvh] rounded-t-[calc(var(--sheet-radius,34px)*var(--rf))] bg-surface pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_40px_rgba(0,0,0,0.35)]"
-            : "left-1/2 top-1/2 max-h-[85vh] w-[92vw] max-w-[30rem] -translate-x-1/2 -translate-y-1/2 rounded-[calc(18px*var(--rf))] bg-raised smooth-shadow-ring-lg",
-          animated &&
-            (phone
-              ? [
-                  "transition-transform duration-[var(--dur-lg)] ease-[var(--ease)]",
-                  shown ? "translate-y-0" : "translate-y-full",
-                ]
-              : [
-                  "origin-center transition-[transform,opacity] duration-[var(--dur)] ease-[var(--ease)]",
-                  shown ? "scale-100 opacity-100" : "scale-[0.96] opacity-0",
-                ]),
+        // Radii are authored the way base.css authors every corner in the
+        // app, `calc(<px> * var(--rf))`, so they follow the squircle bump and
+        // its circular fallback with everything else.
+        {...sx(
+          [
+            styles.panel,
+            phone ? (phonePage ? styles.page : styles.sheet) : styles.dialog,
+            animated &&
+              (phone
+                ? [styles.slide, !shown && styles.slidOut]
+                : [styles.pop, !shown && styles.poppedOut]),
+          ],
           phone ? sheetClassName : modalClassName,
         )}
       >
         {phone && !phonePage && showPhoneGrabber && (
           <div
-            className="flex shrink-0 touch-none justify-center pb-1.5 pt-2.5"
+            {...stylex.props(styles.grabberRow)}
             onTouchStart={onTouchStart}
             onTouchMove={onTouchMove}
             onTouchEnd={onTouchEnd}
           >
-            <div className="h-[5px] w-9 rounded-full bg-active" />
+            <div {...stylex.props(styles.grabber)} />
           </div>
         )}
         {children instanceof Function ? children(onClose) : children}
@@ -322,16 +452,7 @@ export function SheetBody({
   className?: string;
   children: React.ReactNode;
 }) {
-  return (
-    <div
-      className={cn(
-        "min-h-0 overflow-y-auto overscroll-contain px-2.5 pb-3.5",
-        className,
-      )}
-    >
-      {children}
-    </div>
-  );
+  return <div {...sx(styles.body, className)}>{children}</div>;
 }
 
 /** The sheet's own heading — the object the actions below it act on. */
@@ -342,21 +463,12 @@ export function SheetTitle({
   className?: string;
   children: React.ReactNode;
 }) {
-  return (
-    <div
-      className={cn(
-        "truncate px-3 pb-2 pt-1.5 text-label text-faint",
-        className,
-      )}
-    >
-      {children}
-    </div>
-  );
+  return <div {...sx(styles.title, className)}>{children}</div>;
 }
 
 /** Hairline between two groups of sheet actions. */
 export function SheetSeparator({ className }: { className?: string }) {
-  return <div className={cn("mx-2.5 my-1.5 h-px bg-line", className)} />;
+  return <div {...sx(styles.separator, className)} />;
 }
 
 /**
@@ -364,19 +476,20 @@ export function SheetSeparator({ className }: { className?: string }) {
  * — a sheet only ever appears on touch.
  *
  * `tone` exists instead of a colour className because the row colours its icon
- * as well as its label: two `text-*` utilities aimed at the same subject don't
- * compose, so each variant has to name both of its colours in one place.
+ * as well as its label, so each variant names both of its colours in one
+ * place. The icon's colour is a descendant rule StyleX cannot write, so it
+ * stays a utility until the icon is a part of the row.
  */
-const SHEET_ITEM_TONE = {
-  /** Icons stay quiet against the label — the legacy sheet's look. */
-  default: "text-fg [&_svg]:text-faint",
-  danger: "text-red [&_svg]:text-red",
-  accent: "font-semibold text-accent [&_svg]:text-faint",
-  green: "font-semibold text-green [&_svg]:text-faint",
-  purple: "font-semibold text-purple [&_svg]:text-faint",
+const SHEET_ITEM_ICON = {
+  /** Icons stay quiet against the label: the legacy sheet's look. */
+  default: "[&_svg]:text-faint",
+  danger: "[&_svg]:text-red",
+  accent: "[&_svg]:text-faint",
+  green: "[&_svg]:text-faint",
+  purple: "[&_svg]:text-faint",
 } as const;
 
-export type SheetItemTone = keyof typeof SHEET_ITEM_TONE;
+export type SheetItemTone = keyof typeof SHEET_ITEM_ICON;
 
 export function SheetItem({
   tone = "default",
@@ -387,10 +500,9 @@ export function SheetItem({
   return (
     <button
       type="button"
-      className={cn(
-        "flex w-full items-center gap-[13px] rounded-control px-3.5 py-[15px] text-left text-body active:bg-pressed [&_svg]:shrink-0",
-        SHEET_ITEM_TONE[tone],
-        className,
+      {...sx(
+        [styles.item, styles[tone]],
+        cn("[&_svg]:shrink-0", SHEET_ITEM_ICON[tone], className),
       )}
       {...rest}
     >

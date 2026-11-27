@@ -1,7 +1,232 @@
 import * as React from "react";
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
-import { cn } from "./cn";
+import * as stylex from "@stylexjs/stylex";
 import { IconX } from "../components/icons";
+import { cn } from "./cn";
+import { dialogText, SELECTABLE } from "./dialog-styles";
+import { focusStyles } from "./focus-styles";
+import { sx } from "./sx";
+import {
+  blur,
+  color,
+  controlHeight,
+  corner,
+  geometry,
+  layer,
+  media,
+  motion,
+  radius,
+  shadow,
+  space,
+} from "./tokens.stylex";
+
+const STARTING = ":is([data-starting-style])";
+const ENDING = ":is([data-ending-style])";
+const HIDDEN = ":is([hidden])";
+
+const styles = stylex.create({
+  // Base UI's keepMounted popup receives `hidden` when closed. This outranks
+  // the shell's own `display: flex`.
+  shell: {
+    display: { default: "flex", [HIDDEN]: "none" },
+    flexDirection: "column",
+    outline: "none",
+    // A 22px base rather than the scale's `xl`: an overlay this size carries
+    // a rounder corner than the controls inside it.
+    borderRadius: radius.xxl,
+    ["cornerShape"]: corner.squircle,
+    // --dialog-ring, not --popup-ring: a shell on a scrim needs a firmer
+    // hairline than a menu over the page (base.css). In light the two
+    // resolve to the same line.
+    "--smooth-ring-color": color.dialogRing,
+    boxShadow: shadow.ringLg,
+    opacity: { default: null, [STARTING]: 0, [ENDING]: 0 },
+  },
+  palette: {
+    // `relative` anchors overlays a palette draws inside itself (the
+    // dictation HUD); `overflow: hidden` keeps the rows' dividers inside the
+    // corner.
+    position: "relative",
+    overflow: "hidden",
+    // The glass the menus are made of, denser because this one sits over a
+    // dimming backdrop. --palette-glass falls back to the opaque fill without
+    // backdrop-filter and under prefers-reduced-transparency (base.css).
+    backgroundColor: color.paletteGlass,
+    backdropFilter: "var(--popup-blur)",
+    // Drops in from just above its resting place, the way a palette
+    // summoned by a keystroke should.
+    transformOrigin: "top",
+    transitionProperty: "translate, scale, opacity",
+    transitionDuration: motion.micro,
+    transitionTimingFunction: motion.ease,
+    translate: {
+      default: null,
+      [STARTING]: motion.paletteDrop,
+      [ENDING]: motion.paletteDrop,
+    },
+    scale: {
+      default: null,
+      [STARTING]: motion.paletteScale,
+      [ENDING]: motion.paletteScale,
+    },
+  },
+  paletteWidth: { width: geometry.paletteWidth },
+  // Above the page and its floating triggers, below the palettes and the
+  // modal tier: a panel you keep open should never sit over a dialog you
+  // were asked to answer. Opaque, not glass: there is no scrim under this
+  // one. The caller sets the transform origin to the corner it is parked in.
+  floating: {
+    position: "fixed",
+    zIndex: layer.panel,
+    overflow: "hidden",
+    backgroundColor: color.raised,
+    transitionProperty: "scale, opacity",
+    transitionDuration: motion.micro,
+    transitionTimingFunction: motion.ease,
+    scale: {
+      default: null,
+      [STARTING]: motion.dialogEnterScale,
+      [ENDING]: motion.dialogExitScale,
+    },
+  },
+  // A restrained dialog shell: lifted surface, soft edge, and enough radius
+  // to read as a modal without becoming a card. Centred with translate so
+  // the enter scale keeps it pinned to the middle while it pops.
+  centered: {
+    position: "fixed",
+    left: "50%",
+    top: "50%",
+    zIndex: layer.modal,
+    width: geometry.dialogWidth,
+    translate: "-50% -50%",
+    maxHeight: geometry.dialogMaxHeight,
+    overflowY: "auto",
+    overscrollBehavior: "contain",
+    backgroundColor: color.raised,
+    padding: space.s24,
+    gap: space.s16,
+    transformOrigin: "center",
+    transitionProperty: "scale, opacity",
+    transitionDuration: motion.standard,
+    transitionTimingFunction: motion.ease,
+    scale: {
+      default: null,
+      [STARTING]: motion.dialogEnterScale,
+      [ENDING]: motion.dialogExitScale,
+    },
+  },
+  centeredWidth: { maxWidth: geometry.dialogMaxWidth },
+  backdrop: {
+    position: "fixed",
+    inset: space.s0,
+    transitionProperty: "opacity",
+    transitionTimingFunction: motion.easeOut,
+    opacity: { default: null, [STARTING]: 0, [ENDING]: 0 },
+  },
+  // Palettes sit on their own, lower tier so anything that has always
+  // floated above them (the caret-anchored mention popup at 10500, the modal
+  // tier) keeps doing so. A lighter tint over a heavier blur: the palette is
+  // glass, so the scrim composites THROUGH it.
+  backdropPalette: {
+    zIndex: layer.paletteScrim,
+    backgroundColor: color.scrimLight,
+    backdropFilter: blur.paletteScrim,
+    transitionDuration: motion.micro,
+  },
+  backdropModal: {
+    zIndex: layer.modalScrim,
+    backgroundColor: color.scrim,
+    backdropFilter: blur.scrim,
+    transitionDuration: motion.standard,
+  },
+  viewport: {
+    position: "fixed",
+    inset: space.s0,
+    zIndex: layer.palette,
+    display: { default: "flex", [HIDDEN]: "none" },
+    alignItems: "flex-start",
+    justifyContent: "center",
+    paddingInline: space.s16,
+    paddingBottom: space.s16,
+    paddingTop: {
+      default: geometry.paletteTop,
+      [media.narrow]: geometry.paletteTopNarrow,
+    },
+  },
+  // `top` cancels the negative top margin, and the two stay a pair: sticky
+  // pins the MARGIN box, so with `top: 0` the negative margin lands the bar
+  // 24px down the shell and leaves a strip of content sliding past above
+  // it. Both are the shell's padding. The bottom padding is the air the bar
+  // keeps under the title, handed straight back by the negative bottom
+  // margin, so the resting header keeps its height.
+  header: {
+    position: "sticky",
+    top: `calc(-1 * ${space.s24})`,
+    zIndex: layer.sticky,
+    display: "flex",
+    alignItems: "flex-start",
+    gap: space.s12,
+    backgroundColor: color.raised,
+    marginInline: `calc(-1 * ${space.s24})`,
+    marginBottom: `calc(-1 * ${space.s12})`,
+    marginTop: `calc(-1 * ${space.s24})`,
+    paddingInline: space.s24,
+    paddingBottom: space.s12,
+    paddingTop: space.s24,
+    // The seam is an inset shadow rather than a border, the way the other
+    // sticky bars draw theirs: it costs no layout.
+    transitionProperty: "box-shadow",
+    transitionDuration: motion.micro,
+    transitionTimingFunction: motion.ease,
+  },
+  headerScrolled: { boxShadow: shadow.stickySeam },
+  // In the header row the title takes the space the close button leaves.
+  title: { flex: "1" },
+  // The header's negative margin already reclaims 12px of the shell's gap;
+  // pulling this line back 2px more leaves it just under the sticky bar's
+  // painted edge rather than behind it.
+  description: { marginTop: `calc(-1 * ${space.s2})` },
+  // A 32px circle with an invisible 4px apron, so the corner target is
+  // bigger than the glyph's wash.
+  close: {
+    position: "relative",
+    marginRight: `calc(-1 * ${space.s6})`,
+    marginTop: `calc(-1 * ${space.s4})`,
+    display: "flex",
+    width: controlHeight.md,
+    height: controlHeight.md,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.pill,
+    padding: space.s0,
+    color: {
+      default: color.faint,
+      ":hover": { default: null, [media.hover]: color.fg },
+    },
+    backgroundColor: {
+      default: null,
+      ":hover": { default: null, [media.hover]: color.hover },
+    },
+    transitionProperty:
+      "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke",
+    transitionDuration: motion.micro,
+    transitionTimingFunction: motion.ease,
+    "::after": {
+      content: "''",
+      position: "absolute",
+      inset: `calc(-1 * ${space.s4})`,
+    },
+  },
+  footer: {
+    marginTop: space.s8,
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: space.s10,
+  },
+});
 
 /**
  * Centered modal dialog on Base UI parts, styled with Tailwind tokens. The
@@ -100,77 +325,16 @@ function Content({
       // scale (Tailwind writes translate + scale into one transform) keeps
       // the dialog pinned to the middle while it pops. The palette variant
       // is laid out by the Viewport instead, so it only owns its own size.
-      className={cn(
-        // Base UI's keepMounted popup receives `hidden` when closed. This
-        // explicit rule outranks display utilities such as `flex`.
-        "[&[hidden]]:hidden",
-        palette
-          ? [
-              // `relative` anchors overlays a palette draws inside itself
-              // (the dictation HUD); `overflow-hidden` keeps the rows'
-              // dividers inside the rounded-xs shell.
-              "relative flex flex-col overflow-hidden outline-none",
-              // A 22px base rather than the scale's `rounded-xl`: an
-              // overlay this size carries a rounder corner than the
-              // controls inside it. Same corner as the centered dialog,
-              // one step up from the 18px it used to carry.
-              "rounded-[calc(22px*var(--rf))]",
-              // The same glass the menus and hover cards are made of
-              // (ui/menu.tsx), so the palette reads as one more floating
-              // surface rather than an opaque card — just denser, because
-              // this one sits over a dimming backdrop. --palette-glass
-              // falls back to the opaque fill without backdrop-filter and
-              // under prefers-reduced-transparency (base.css).
-              "bg-palette-glass [backdrop-filter:var(--popup-blur)]",
-              // --dialog-ring, not --popup-ring: a shell on a scrim needs a
-              // firmer hairline than a menu over the page (base.css). In
-              // light the two resolve to the same line.
-              "[--smooth-ring-color:var(--dialog-ring)] smooth-shadow-ring-lg",
-              // Drops in from just above its resting place, the way a
-              // palette summoned by a keystroke should.
-              "origin-top transition-[transform,opacity] duration-[var(--dur-micro)] ease-[var(--ease)]",
-              "data-[starting-style]:-translate-y-1.5 data-[starting-style]:scale-[0.99] data-[starting-style]:opacity-0",
-              "data-[ending-style]:-translate-y-1.5 data-[ending-style]:scale-[0.99] data-[ending-style]:opacity-0",
-              widthClassName ?? "w-[min(820px,100%)]",
-            ]
-          : floating
-            ? [
-                // Above the page and its floating triggers (z-500), below
-                // the palettes (6000) and the modal tier (10000): a panel you
-                // keep open should never sit over a dialog you were asked to
-                // answer.
-                "fixed z-[5000] flex flex-col overflow-hidden outline-none",
-                "rounded-[calc(22px*var(--rf))]",
-                // Opaque, not the palette's glass: there is no scrim under
-                // this one, so glass would show the transcript it floats over
-                // through its own rows.
-                "bg-raised",
-                "[--smooth-ring-color:var(--dialog-ring)] smooth-shadow-ring-lg",
-                // The caller sets the transform origin to the corner the
-                // panel is parked in.
-                "transition-[transform,opacity] duration-[var(--dur-micro)] ease-[var(--ease)]",
-                "data-[starting-style]:scale-[0.96] data-[starting-style]:opacity-0",
-                "data-[ending-style]:scale-[0.97] data-[ending-style]:opacity-0",
-                widthClassName,
-              ]
-            : [
-                "fixed left-1/2 top-1/2 z-[10001] w-[90vw] -translate-x-1/2 -translate-y-1/2",
-                widthClassName ?? "max-w-[28rem]",
-                "max-h-[85dvh] overflow-y-auto overscroll-contain outline-none",
-                // A restrained dialog shell: lifted surface, soft edge,
-                // and enough radius to read as a modal without becoming a card.
-                // The edge is --dialog-ring rather than the shared hairline: on
-                // a scrim the fill's step above the page all but disappears, so
-                // the line is what holds the shape (base.css).
-                "rounded-[calc(22px*var(--rf))] bg-raised",
-                "[--smooth-ring-color:var(--dialog-ring)] smooth-shadow-ring-lg",
-                "p-6",
-                "flex flex-col gap-4",
-                "origin-center transition-[transform,opacity] duration-[var(--dur)] ease-[var(--ease)]",
-                "data-[starting-style]:scale-[0.96] data-[starting-style]:opacity-0",
-                "data-[ending-style]:scale-[0.97] data-[ending-style]:opacity-0",
-              ],
-        className,
+      {...sx(
+        [
+          styles.shell,
+          palette
+            ? [styles.palette, widthClassName ? null : styles.paletteWidth]
+            : floating
+              ? styles.floating
+              : [styles.centered, widthClassName ? null : styles.centeredWidth],
+        ],
+        cn(widthClassName, className),
       )}
       initialFocus={initialFocus}
       {...popupProps}
@@ -193,44 +357,25 @@ function Content({
 			    chords keep working while it is open (lib/blocking-overlay). */}
       {!floating && (
         <BaseDialog.Backdrop
-          className={cn(
-            "fixed inset-0 transition-opacity ease-out",
-            "data-[starting-style]:opacity-0 data-[ending-style]:opacity-0",
-            // Palettes sit on their own, lower tier so anything that has
-            // always floated above them (the caret-anchored mention popup at
-            // 10500, the modal tier at 10000) keeps doing so.
-            // A lighter tint than the opaque shell needed, over a heavier
-            // blur: the palette is glass now, so the scrim composites
-            // THROUGH it — at the old 42% the page's dimming showed up
-            // inside the palette as a grey wash over its own fill.
-            palette
-              ? "z-[6000] bg-black/22 backdrop-blur-[6px] duration-[var(--dur-micro)]"
-              : "z-[10000] bg-black/25 backdrop-blur-[1px] duration-[var(--dur)]",
-            // `palette-backdrop` rides along purely as a runtime marker, and
-            // nothing styles it any more: the window-level chords (archive,
-            // pin, tab switching, open pull request) decline a keystroke while
-            // one is open, via `blockingOverlayOpen()` in
-            // lib/blocking-overlay, and a palette must keep matching it.
-            // That helper qualifies every marker with `:not([hidden])`, which
-            // is load-bearing rather than tidy: a `keepMounted` palette (the
-            // Desk) is in the DOM from boot, so the unqualified selector read
-            // true forever and every one of those chords was dead. The stylesheet rule it used to carry
-            // said the same z-index/tint/blur written above, plus flex and
-            // padding that are inert on a childless backdrop, so deleting it
-            // changed nothing visually. The NAME is removable once those two
-            // guards move to `[role=dialog]`, which App already uses for its
-            // bare-"n" check.
-            palette && "palette-backdrop",
+          // `palette-backdrop` rides along purely as a runtime marker that
+          // nothing styles: the window-level chords (archive, pin, tab
+          // switching, open pull request) decline a keystroke while one is
+          // open, via `blockingOverlayOpen()` in lib/blocking-overlay. That
+          // helper qualifies every marker with `:not([hidden])`, which is
+          // load-bearing: a `keepMounted` palette (the Desk) is in the DOM
+          // from boot. The name is removable once those guards move to
+          // `[role=dialog]`, which App already uses for its bare-"n" check.
+          {...sx(
+            [
+              styles.backdrop,
+              palette ? styles.backdropPalette : styles.backdropModal,
+            ],
+            palette ? "palette-backdrop" : undefined,
           )}
         />
       )}
       {palette ? (
-        <BaseDialog.Viewport
-          className={cn(
-            "fixed inset-0 z-[6001] flex items-start justify-center px-4 pb-4 pt-[11vh] max-[560px]:pt-[7vh] [&[hidden]]:hidden",
-            viewportClassName,
-          )}
-        >
+        <BaseDialog.Viewport {...sx(styles.viewport, viewportClassName)}>
           {popup}
         </BaseDialog.Viewport>
       ) : (
@@ -322,35 +467,17 @@ function Header({
     <>
       <div
         ref={setNode}
-        className={cn(
-          // `-top-6` cancels `-mt-6`, and the two must stay a pair: sticky
-          // pins the MARGIN box, so with `top-0` the negative margin lands
-          // the bar 24px down the shell and leaves a strip of content
-          // sliding past above it (measured). Both are the shell's `p-6`.
-          "sticky -top-6 z-10 flex items-start gap-3 bg-raised",
-          // `pb-3` is the air the bar keeps under the title, so text
-          // passing beneath disappears with a gap rather than touching it.
-          // `-mb-3` hands it straight back, leaving the resting header the
-          // height it has always had.
-          "-mx-6 -mb-3 -mt-6 px-6 pb-3 pt-6",
-          // The seam is an inset shadow rather than a border, the way the
-          // other sticky bars in the app draw theirs (PrPanel's file strip):
-          // it costs no layout, so a dialog that never scrolls is not 1px
-          // taller than it was for the sake of a line it will never show.
-          "transition-[box-shadow] duration-[var(--dur-micro)]",
-          scrolled && "shadow-[inset_0_-1px_0_var(--divider)]",
-          className,
-        )}
+        {...sx([styles.header, scrolled && styles.headerScrolled], className)}
       >
         {/* Base UI renders Title as <h2> and Description as <p>; preflight
 				    isn't imported (base.css owns resets), so zero their UA margins
 				    or the <h2> top margin reads as phantom padding above the head. */}
-        <BaseDialog.Title className="m-0 min-w-0 flex-1 text-balance text-dialog-title font-semibold leading-tight tracking-[-0.01em] text-fg">
+        <BaseDialog.Title {...stylex.props(dialogText.title, styles.title)}>
           {title}
         </BaseDialog.Title>
         <BaseDialog.Close
           aria-label="Close"
-          className="focus-ring relative -mr-1.5 -mt-1 flex size-8 shrink-0 items-center justify-center rounded-full p-0 text-faint transition-colors after:absolute after:-inset-1 after:content-[''] hover:bg-hover hover:text-fg"
+          {...stylex.props(styles.close, focusStyles.ring)}
         >
           <IconX size={20} />
         </BaseDialog.Close>
@@ -363,7 +490,9 @@ function Header({
 			    edge; the old -mt-2.5 moved its first 6px behind that opaque bar and
 			    clipped the tops of every standard modal description. */}
       {description && (
-        <BaseDialog.Description className="m-0 -mt-0.5 text-pretty text-supporting font-normal leading-relaxed text-dim">
+        <BaseDialog.Description
+          {...sx([dialogText.description, styles.description], SELECTABLE)}
+        >
           {description}
         </BaseDialog.Description>
       )}
@@ -384,16 +513,7 @@ function Footer({
   className?: string;
   children: React.ReactNode;
 }) {
-  return (
-    <div
-      className={cn(
-        "mt-2 flex flex-wrap items-center justify-end gap-2.5",
-        className,
-      )}
-    >
-      {children}
-    </div>
-  );
+  return <div {...sx(styles.footer, className)}>{children}</div>;
 }
 
 export const Modal = {

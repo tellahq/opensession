@@ -1,6 +1,18 @@
 import * as React from "react";
+import * as stylex from "@stylexjs/stylex";
 import { Modal } from "./modal";
 import { Button } from "./button";
+import { dialogText, SELECTABLE } from "./dialog-styles";
+import { sx } from "./sx";
+import { media, space } from "./tokens.stylex";
+
+const styles = stylex.create({
+  // 6px between title and consequence, the same step Modal.Header holds, so
+  // an alert and a full dialog open on one rhythm.
+  text: { display: "flex", flexDirection: "column", gap: space.s6 },
+  // The two buttons split the row on a phone.
+  action: { flex: { default: null, [media.phone]: "1" } },
+});
 
 /**
  * The app's confirmation alert: a title, an optional one-sentence
@@ -72,14 +84,10 @@ export function ConfirmDialog({
         widthClassName="max-w-[25rem]"
         initialFocus={destructive ? cancelRef : confirmRef}
       >
-        {/* 6px between title and consequence, the same step Modal.Header
-				    holds, so an alert and a full dialog open on one rhythm. */}
-        <div className="flex flex-col gap-1.5">
-          <Modal.Title className="m-0 text-balance text-dialog-title font-semibold leading-tight tracking-[-0.01em] text-fg">
-            {title}
-          </Modal.Title>
+        <div {...stylex.props(styles.text)}>
+          <Modal.Title {...stylex.props(dialogText.title)}>{title}</Modal.Title>
           {description && (
-            <Modal.Description className="m-0 text-pretty text-supporting font-normal leading-relaxed text-dim">
+            <Modal.Description {...sx(dialogText.description, SELECTABLE)}>
               {description}
             </Modal.Description>
           )}
@@ -90,7 +98,7 @@ export function ConfirmDialog({
             type="button"
             size="lg"
             variant="soft"
-            className="phone:min-h-11 phone:flex-1"
+            xstyle={styles.action}
             onClick={() => onOpenChange(false)}
           >
             {cancelLabel}
@@ -100,7 +108,7 @@ export function ConfirmDialog({
             type="button"
             size="lg"
             variant={destructive ? "danger-strong" : "primary"}
-            className="phone:min-h-11 phone:flex-1"
+            xstyle={styles.action}
             onClick={() => {
               onOpenChange(false);
               onConfirm();
