@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { pinnedContentMask } from "../hooks/useSidebarStickyHeadings";
+import { pinnedClipTargets } from "../hooks/useSidebarStickyHeadings";
 import { sidebarHeader } from "../lib/sidebar-classes";
 
 const sidebarSource = await Bun.file(
@@ -27,24 +27,28 @@ describe("sidebar sticky headings", () => {
 
   test("a pinned heading paints no fill over the chrome", () => {
     // Over the desktop shell's translucent material, a fill reads as a
-    // shaded band; the rows under the heading are masked instead.
+    // shaded band; what scrolls under the heading is cut off at its edge.
     const sticky = sidebarHeader({ kind: "lane", sticky: true });
     expect(sticky).not.toContain("data-[stuck]:before");
     expect(sticky).not.toContain("data-[stuck]:after");
     expect(sticky).not.toContain("is-stuck");
   });
 
-  test("masks content under a pinned heading down to its bottom edge", () => {
-    expect(pinnedContentMask(0, false)).toBeNull();
-    expect(pinnedContentMask(-4, false)).toBeNull();
-    expect(pinnedContentMask(20, false)).toBe(
-      "linear-gradient(transparent 20px, #000 32px)",
-    );
-    // A band's content holds its own pinned lanes, which sit right under the
-    // band's heading: a fade there would dim them.
-    expect(pinnedContentMask(20, true)).toBe(
-      "linear-gradient(transparent 20px, #000 20px)",
-    );
+  test("cuts off everything after a pinned heading in its parent", () => {
+    type Fake = { id: string; nextElementSibling: Fake | null };
+    const chain = (...ids: string[]) => {
+      const nodes: Fake[] = ids.map((id) => ({ id, nextElementSibling: null }));
+      nodes.forEach((n, i) => (n.nextElementSibling = nodes[i + 1] ?? null));
+      return nodes[0]!;
+    };
+    // A repo heading, then the block holding its lanes: the block is cut
+    // as a whole, so a lane heading pushed out of its lane is cut too.
+    expect(pinnedClipTargets(chain("repo", "lanes")).map((n) => n.id)).toEqual([
+      "lanes",
+    ]);
+    expect(
+      pinnedClipTargets(chain("lane", "r1", "r2")).map((n) => n.id),
+    ).toEqual(["r1", "r2"]);
   });
 
   test("reveals keyboard-selected rows below the sticky caption", () => {

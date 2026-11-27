@@ -142,14 +142,81 @@ body:is(.resizing-sidebar, .resizing-panel, .resizing-tab-split) {
 /* The chrome is the sidebar colour at 88%, so the window material shows a
    little of what is behind the window through it, about as much as the
    native app's own sidebar does. Nothing on it may paint the sidebar colour
-   opaque, or it reads as a shaded slab: a pinned sidebar heading masks the
-   rows under it instead of covering them (useSidebarStickyHeadings). */
+   opaque, or it reads as a shaded slab: a pinned sidebar heading has no fill,
+   and what scrolls under it is cut off at its edge (below). */
 @media (min-width: 721px) {
   html.material-backdrop {
     --sidebar-material: color-mix(in srgb, var(--sidebar-bg) 88%, transparent);
     --sidebar-material-sheen: transparent;
   }
 }
+/* A pinned sidebar heading has no fill, so what scrolls up under it is cut
+   off at its bottom edge instead of being covered. useSidebarStickyHeadings
+   marks what follows each heading (`data-pin-clip`) and puts the line, the
+   pinned heading's bottom edge measured from the top of the list, on the
+   heading's parent (`--pin-line`).
+
+   A row fades over the last 12px before the line, pixel by pixel, so it
+   thins out at the heading's edge rather than being sliced through its
+   letters, and only the part of it that is that close fades. The fade is a
+   mask: a gradient twice the row's height, clear for its first 12px, that
+   slides down the row by exactly as far as the row has crossed the line
+   less 12px. A block holding headings of its own (a project's lanes) is cut
+   hard at the line instead: a lane heading pinned right under the project
+   sits in that 12px and must not fade, but one pushed up out of its lane
+   is cut there.
+
+   Scroll-driven animations rather than a scroll listener: the browser runs
+   them in step with the scroll, where a listener runs after the frame it
+   reacts to is drawn. `view()` reads the nearest scroll container above the
+   element, which is the list itself: nothing between them may clip its
+   overflow, or the line is measured from the wrong box. */
+@keyframes sidebar-pin-fade {
+  from {
+    mask-position: 0 -12px;
+  }
+  to {
+    mask-position: 0 -100%;
+  }
+}
+@keyframes sidebar-pin-cut {
+  from {
+    clip-path: inset(0 -100vw 0 -100vw);
+  }
+  to {
+    clip-path: inset(100% -100vw 0 -100vw);
+  }
+}
+@media (min-width: 721px) {
+  [data-pin-clip] {
+    animation-duration: auto;
+    animation-timing-function: linear;
+    animation-fill-mode: both;
+  }
+  [data-pin-clip="fade"] {
+    mask-image: linear-gradient(transparent, #000 12px);
+    mask-size: 100% 200%;
+    mask-repeat: no-repeat;
+    animation-name: sidebar-pin-fade;
+    animation-timeline: view(block calc(var(--pin-line, 0px) + 12px) 0px);
+    animation-range: exit-crossing 0% exit-crossing calc(100% + 12px);
+  }
+  [data-pin-clip="cut"] {
+    animation-name: sidebar-pin-cut;
+    animation-timeline: view(block var(--pin-line, 0px) 0px);
+    animation-range: exit-crossing 0% exit-crossing 100%;
+  }
+}
+/* Not motion: it advances only as far as the reader scrolls. The reduced-
+   motion blanket's 0.01ms duration would finish it at once and park every
+   row at `to`, hidden entirely; `auto` hands the range back to the
+   timeline. */
+@media (min-width: 721px) and (prefers-reduced-motion: reduce) {
+  [data-pin-clip] {
+    animation-duration: auto !important;
+  }
+}
+
 /* Sidebar top row clears the traffic lights. env(titlebar-area-x) is the
    controls' right edge on macOS; it drops to 0 in fullscreen (lights hidden)
    and on Windows (controls on the right), where the default padding wins. */

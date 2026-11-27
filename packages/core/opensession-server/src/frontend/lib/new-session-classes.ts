@@ -123,12 +123,13 @@ export const ASK_SURFACE =
   "isolate " +
   "before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-[inherit] before:[corner-shape:inherit] before:bg-[var(--palette-ask-bg)] before:opacity-0 before:transition-opacity before:duration-150 before:ease-[cubic-bezier(0.32,0.72,0,1)] " +
   "[&>*]:relative [&>*]:z-1";
-/** The one flexible footer item. The palette has room for the model's full
- *  name, so it opts out of palettePill's generic 180px cap. On phones the
- *  effort suffix steps aside first and leaves that room to the model. */
+/** The one flexible footer item, last on the left beside the attach and
+ *  overflow buttons. The palette has room for the model's full name, so it
+ *  opts out of palettePill's generic 180px cap. On phones the effort suffix
+ *  steps aside first and leaves that room to the model. */
 export const MODEL_PILL = cn(
   palettePill,
-  "shrink min-w-0 max-w-none phone:ml-auto phone:min-h-11 phone:[&_[data-effort]]:hidden max-[560px]:px-[9px]",
+  "shrink min-w-0 max-w-none phone:min-h-11 phone:[&_[data-effort]]:hidden max-[560px]:px-[9px]",
 );
 
 // A dropped socket is recoverable: the same idempotent create is replayed as

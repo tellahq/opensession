@@ -25,6 +25,7 @@ import {
 } from "./icons";
 import { modelGuidanceFor, uniqueModelGuidances } from "../lib/model-guidance";
 import { isTouchPrimary } from "../lib/platform";
+import { useIsPhone } from "../hooks/useIsPhone";
 import { ModelGuidanceFooter } from "./ModelGuidanceFooter";
 import { ModelMark } from "./ModelMark";
 import { BrandMark } from "./BrandTile";
@@ -347,6 +348,14 @@ type ModelMenuOption = {
 };
 
 const PICKER_ROW_GAP = "mb-0.5 last:mb-0";
+/** The settings rows under the models (Effort, Speed, More models, Options):
+ *  the models' title size, so the two groups read as one menu. */
+const SETTING_ROW = "justify-between gap-3 py-2 text-item-title";
+/** Popup widths: with notes docked under the list, with them in a card
+ *  beside it, and a cap for a menu without notes. */
+const POPUP_WIDTH = "w-[min(376px,calc(100vw-1rem))]";
+const POPUP_WIDTH_ASIDE = "w-[min(600px,calc(100vw-1rem))]";
+const POPUP_WIDTH_CAP = "max-w-[min(376px,calc(100vw-1rem))]";
 
 /** Ink for a weekly-remaining figure: colour only once it is running out. */
 const REMAINING_TONE: Record<WeeklyRemainingRow["tone"], string> = {
@@ -811,22 +820,22 @@ export function ModelEffortSelect({
         }
         className={cn(
           PICKER_ROW_GAP,
-          "justify-between gap-3",
+          "justify-between gap-3 py-2",
           selected && "bg-hover",
           disabled && "opacity-55",
         )}
       >
-        <span className="flex min-w-0 flex-1 items-center gap-2.5">
+        <span className="flex min-w-0 flex-1 items-center gap-3">
           {/* The slot stays fixed so rows without a mark keep their labels aligned. */}
-          <span className="flex size-4 shrink-0 items-center justify-center text-dim">
-            <ModelMark id={option.id} provider={option.engine} />
+          <span className="flex size-5 shrink-0 items-center justify-center text-fg">
+            <ModelMark id={option.id} provider={option.engine} size={18} />
           </span>
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="min-w-0 truncate font-medium leading-tight">
+            <span className="min-w-0 truncate text-item-title font-medium leading-tight">
               {option.label}
             </span>
             {guidance && (
-              <span className="min-w-0 truncate text-meta leading-tight text-faint">
+              <span className="min-w-0 truncate text-label leading-tight text-dim">
                 {guidance.summary}
               </span>
             )}
@@ -858,6 +867,12 @@ export function ModelEffortSelect({
         engine: modelInfo?.provider,
         guidance: modelGuidanceFor(effectiveBase),
       };
+  // A desktop pointer previews models by hovering them, so their notes sit
+  // in a card beside the list; a phone docks them underneath instead.
+  const isPhone = useIsPhone();
+  const guidancePlacement =
+    isTouchPrimary || isPhone ? ("footer" as const) : ("aside" as const);
+  const guidanceAside = guidancePlacement === "aside";
   const topGuidanceFooter =
     topOptions.length > 0 &&
     topSizerGuidances.length > 0 &&
@@ -865,6 +880,7 @@ export function ModelEffortSelect({
       <ModelGuidanceFooter
         active={topPreview}
         sizerGuidances={topSizerGuidances}
+        placement={guidancePlacement}
       />
     ) : undefined;
 
@@ -896,6 +912,7 @@ export function ModelEffortSelect({
           guidance: morePreviewGuidance,
         }}
         sizerGuidances={moreSizerGuidances}
+        placement={guidancePlacement}
       />
     ) : undefined;
 
@@ -1004,19 +1021,18 @@ export function ModelEffortSelect({
         )}
       </Menu.Trigger>
       <Menu.Popup
-        align={
-          menuRowTrigger || fieldTrigger
-            ? "start"
-            : heroTrigger
-              ? "center"
-              : "end"
-        }
+        // The pill sits at the input's left edge, so the menu grows rightward
+        // from it, like the field and menu-row triggers.
+        align={heroTrigger ? "center" : "start"}
         sideOffset={6}
-        footer={topGuidanceFooter}
+        footer={guidanceAside ? undefined : topGuidanceFooter}
+        aside={guidanceAside ? topGuidanceFooter : undefined}
         className={cn(
-          topGuidanceFooter
-            ? "w-[min(376px,calc(100vw-1rem))]"
-            : "max-w-[min(376px,calc(100vw-1rem))]",
+          !topGuidanceFooter
+            ? POPUP_WIDTH_CAP
+            : guidanceAside
+              ? POPUP_WIDTH_ASIDE
+              : POPUP_WIDTH,
           menuRowTrigger && "min-w-[220px]",
         )}
       >
@@ -1060,17 +1076,88 @@ export function ModelEffortSelect({
             </Reorder.Item>
           ))}
         </Reorder.Group>
+        {topOptions.length > 0 && <Menu.Separator className="my-1" />}
+        {hasEffort && (
+          <Menu.SubmenuRoot>
+            <Menu.SubmenuTrigger className={SETTING_ROW}>
+              <span className="min-w-0 truncate">Effort</span>
+              <span className="flex flex-none items-center gap-1 text-dim">
+                {effortLabel}
+                <IconChevronRight className="shrink-0 text-dim" size={20} />
+              </span>
+            </Menu.SubmenuTrigger>
+            <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
+              {effortReuploadHint && <MenuHint>{effortReuploadHint}</MenuHint>}
+              {effortOptions.map((e) => {
+                const selected = effectiveEffort === e.id;
+                return (
+                  <Menu.Item
+                    key={e.id}
+                    onClick={() => onEffortChange!(e.id)}
+                    className={cn(
+                      PICKER_ROW_GAP,
+                      "justify-between gap-3",
+                      selected && "bg-hover",
+                    )}
+                  >
+                    <span className="min-w-0 truncate">{e.label}</span>
+                    <Menu.Check on={selected} className="text-dim" />
+                  </Menu.Item>
+                );
+              })}
+            </Menu.Popup>
+          </Menu.SubmenuRoot>
+        )}
+        {showSpeedRow && (
+          <Menu.SubmenuRoot>
+            <Menu.SubmenuTrigger className={SETTING_ROW}>
+              <span className="min-w-0 truncate">Speed</span>
+              <span className="flex flex-none items-center gap-1 text-dim">
+                {SPEED_LABELS[effectiveSpeed]}
+                <IconChevronRight className="shrink-0 text-dim" size={20} />
+              </span>
+            </Menu.SubmenuTrigger>
+            <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
+              {speedOptions.map((o) => {
+                const selected = effectiveSpeed === o;
+                return (
+                  <Menu.Item
+                    key={o}
+                    onClick={() => {
+                      // Faster tiers run on a subscription account, so picking
+                      // one while on auto pins the account it will actually
+                      // use: a Pro $500 login for Ultrafast.
+                      const pin =
+                        o === "ultrafast"
+                          ? ultrafastAccount
+                          : subscriptionAccount;
+                      if (o !== "standard" && !currentAccount && pin) {
+                        onAccountChange?.(pin.id);
+                      }
+                      onSpeedChange!(o);
+                    }}
+                    className={cn(
+                      "justify-between gap-3",
+                      selected && "bg-hover",
+                    )}
+                  >
+                    <span className="min-w-0 truncate">{SPEED_LABELS[o]}</span>
+                    <Menu.Check on={selected} className="text-dim" />
+                  </Menu.Item>
+                );
+              })}
+            </Menu.Popup>
+          </Menu.SubmenuRoot>
+        )}
+        {/* The rest of the catalog, one hop away. */}
         {hasMoreModels && (
           <Menu.SubmenuRoot
             onOpenChange={(next) => {
               if (!next) setHoveredMoreModelId(null);
             }}
           >
-            <Menu.SubmenuTrigger className="justify-between gap-3">
-              <span className="flex min-w-0 flex-1 items-center gap-2.5">
-                <span className="size-4 shrink-0" />
-                <span className="min-w-0 truncate">More models</span>
-              </span>
+            <Menu.SubmenuTrigger className={SETTING_ROW}>
+              <span className="min-w-0 truncate">More models</span>
               <span className="flex min-w-0 flex-none items-center gap-1 text-dim">
                 {selectedMoreOption && (
                   <span className="truncate">{selectedMoreOption.label}</span>
@@ -1079,11 +1166,14 @@ export function ModelEffortSelect({
               </span>
             </Menu.SubmenuTrigger>
             <Menu.Popup
-              footer={moreGuidanceFooter}
+              footer={guidanceAside ? undefined : moreGuidanceFooter}
+              aside={guidanceAside ? moreGuidanceFooter : undefined}
               className={
-                moreGuidanceFooter
-                  ? "w-[min(376px,calc(100vw-1rem))]"
-                  : "max-w-[min(376px,calc(100vw-1rem))]"
+                !moreGuidanceFooter
+                  ? POPUP_WIDTH_CAP
+                  : guidanceAside
+                    ? POPUP_WIDTH_ASIDE
+                    : POPUP_WIDTH
               }
             >
               {reuploadHint && <MenuHint>{reuploadHint}</MenuHint>}
@@ -1154,86 +1244,10 @@ export function ModelEffortSelect({
             </Menu.Popup>
           </Menu.SubmenuRoot>
         )}
-        {(topOptions.length > 0 || hasMoreModels) && (
-          <Menu.Separator className="my-1" />
-        )}
-        {hasEffort && (
-          <Menu.SubmenuRoot>
-            <Menu.SubmenuTrigger className="justify-between gap-3">
-              <span className="min-w-0 truncate">Effort</span>
-              <span className="flex flex-none items-center gap-1 text-dim">
-                {effortLabel}
-                <IconChevronRight className="shrink-0 text-dim" size={20} />
-              </span>
-            </Menu.SubmenuTrigger>
-            <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
-              {effortReuploadHint && <MenuHint>{effortReuploadHint}</MenuHint>}
-              {effortOptions.map((e) => {
-                const selected = effectiveEffort === e.id;
-                return (
-                  <Menu.Item
-                    key={e.id}
-                    onClick={() => onEffortChange!(e.id)}
-                    className={cn(
-                      PICKER_ROW_GAP,
-                      "justify-between gap-3",
-                      selected && "bg-hover",
-                    )}
-                  >
-                    <span className="min-w-0 truncate">{e.label}</span>
-                    <Menu.Check on={selected} className="text-dim" />
-                  </Menu.Item>
-                );
-              })}
-            </Menu.Popup>
-          </Menu.SubmenuRoot>
-        )}
-        {showSpeedRow && (
-          <Menu.SubmenuRoot>
-            <Menu.SubmenuTrigger className="justify-between gap-3">
-              <span className="min-w-0 truncate">Speed</span>
-              <span className="flex flex-none items-center gap-1 text-dim">
-                {SPEED_LABELS[effectiveSpeed]}
-                <IconChevronRight className="shrink-0 text-dim" size={20} />
-              </span>
-            </Menu.SubmenuTrigger>
-            <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
-              {speedOptions.map((o) => {
-                const selected = effectiveSpeed === o;
-                return (
-                  <Menu.Item
-                    key={o}
-                    onClick={() => {
-                      // Faster tiers run on a subscription account, so picking
-                      // one while on auto pins the account it will actually
-                      // use: a Pro $500 login for Ultrafast.
-                      const pin =
-                        o === "ultrafast"
-                          ? ultrafastAccount
-                          : subscriptionAccount;
-                      if (o !== "standard" && !currentAccount && pin) {
-                        onAccountChange?.(pin.id);
-                      }
-                      onSpeedChange!(o);
-                    }}
-                    className={cn(
-                      "justify-between gap-3",
-                      selected && "bg-hover",
-                    )}
-                  >
-                    <span className="min-w-0 truncate">{SPEED_LABELS[o]}</span>
-                    <Menu.Check on={selected} className="text-dim" />
-                  </Menu.Item>
-                );
-              })}
-            </Menu.Popup>
-          </Menu.SubmenuRoot>
-        )}
-        {(hasEffort || showSpeedRow) && <Menu.Separator className="my-1" />}
         {/* Everything set once and left alone: account, fallback, usage and
             the defaults. Kept off the top level so the menu stays short. */}
         <Menu.SubmenuRoot>
-          <Menu.SubmenuTrigger className="justify-between gap-3">
+          <Menu.SubmenuTrigger className={SETTING_ROW}>
             <span className="min-w-0 truncate">Options</span>
             <IconChevronRight className="shrink-0 text-dim" size={20} />
           </Menu.SubmenuTrigger>

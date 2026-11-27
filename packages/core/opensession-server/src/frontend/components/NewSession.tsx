@@ -2046,11 +2046,10 @@ export function NewSession({
                   </Menu.SubmenuRoot>
                 </Menu.Popup>
               </Menu.Root>
-            </div>
-
-            <div className={FOOTER_RIGHT}>
-              {/* Visible on phones too, so a non-default (dumber) model is
-                never silently in effect. Only phone dictation covers it. */}
+              {/* Left, beside the input's own buttons, as in the session
+                composer. Visible on phones too, so a non-default (dumber)
+                model is never silently in effect. Only phone dictation
+                covers it. */}
               {!phoneDictating && (
                 <ModelEffortSelect
                   selection={{
@@ -2080,6 +2079,9 @@ export function NewSession({
                   }}
                 />
               )}
+            </div>
+
+            <div className={FOOTER_RIGHT}>
               <VoiceInput
                 className={FOOTER_ICON_BTN}
                 disabled={busy}
