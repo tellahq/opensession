@@ -31,7 +31,16 @@ import {
   SettingRowDescription,
   SettingRowText,
   SettingRowTitle,
+  SettingCardSkeleton,
+  SettingsField,
+  SettingsForm,
+  SettingsFormActions,
+  SettingsFormRow,
+  SettingsFormTitle,
   SettingsGroupLabel,
+  SettingsHint,
+  StatusChip,
+  rowMenuTriggerClasses,
 } from "../ui/settings";
 import { ResponsiveDialog } from "../ui/sheet";
 import {
@@ -39,6 +48,7 @@ import {
   InlineAlert,
   ListSkeleton,
   LoadingState,
+  TranscriptSkeleton,
 } from "../ui/state";
 import { PulseDot, WorkingPill } from "../ui/status";
 import { Switch } from "../ui/switch";
@@ -47,6 +57,7 @@ import {
   IconBolt,
   IconCheck,
   IconChecklist,
+  IconDotsHorizontal,
   IconFilter,
   IconPlus,
   IconRepo,
@@ -468,6 +479,88 @@ export function DesignSystemGallery() {
               </div>
             </Card>
           </div>
+
+          <div className="mt-4 flex flex-col gap-3">
+            <InlineAlert
+              variant="info"
+              title="Box with actions"
+              onRetry={() => undefined}
+              onDismiss={() => undefined}
+            >
+              Clicking the box dismisses it, like the ×.
+            </InlineAlert>
+            <InlineAlert
+              appearance="plain"
+              variant="error"
+              title="Not sent."
+              onRetry={() => undefined}
+              onDismiss={() => undefined}
+            >
+              The plain line sits under a control.
+            </InlineAlert>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-4 desktop:grid-cols-2">
+            <EmptyState
+              icon={<IconChecklist size={22} />}
+              title="Nothing archived yet"
+              action={<Button size="sm">Open sessions</Button>}
+            >
+              A block stands in for a whole region.
+            </EmptyState>
+            <div className="flex flex-col gap-4">
+              <ListSkeleton rows={2} />
+              <ListSkeleton variant="bare" rows={2} />
+            </div>
+            <SettingCardSkeleton rows={2} icon={28} />
+            <TranscriptSkeleton />
+          </div>
+
+          <SettingCard className="mt-4">
+            <SettingRow>
+              <SettingRowText>
+                <SettingRowTitle>acme/web</SettingRowTitle>
+                <SettingRowDescription>
+                  A connected row carries its state and a quiet menu.
+                </SettingRowDescription>
+              </SettingRowText>
+              <SettingRowControl className="flex items-center gap-3">
+                <StatusChip label="Connected" dot="var(--green)" />
+                <Menu.Root>
+                  <Menu.Trigger
+                    className={rowMenuTriggerClasses}
+                    aria-label="Manage acme/web"
+                  >
+                    <IconDotsHorizontal size={18} />
+                  </Menu.Trigger>
+                  <Menu.Popup align="end" sideOffset={4}>
+                    <Menu.Item>Disconnect</Menu.Item>
+                  </Menu.Popup>
+                </Menu.Root>
+              </SettingRowControl>
+            </SettingRow>
+          </SettingCard>
+
+          <SettingsForm className="mt-4">
+            <SettingsFormTitle>New runner</SettingsFormTitle>
+            <SettingsFormRow>
+              <SettingsField>
+                Name
+                <Input placeholder="mac-mini" />
+              </SettingsField>
+              <SettingsField>
+                Host
+                <Input placeholder="runner.example.test" />
+              </SettingsField>
+            </SettingsFormRow>
+            <SettingsFormActions>
+              <Button variant="ghost">Cancel</Button>
+              <Button>Add runner</Button>
+            </SettingsFormActions>
+          </SettingsForm>
+          <SettingsHint>
+            Forms use the same plate as a group of rows.
+          </SettingsHint>
         </section>
 
         <section aria-label="Squircle radius scale">

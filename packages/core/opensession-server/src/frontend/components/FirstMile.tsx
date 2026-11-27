@@ -882,7 +882,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
                       "mx-auto w-full [&_[data-setting-title]]:text-dialog-title [&_[data-setting-title]]:phone:text-body [&_[data-settings-group-label]]:text-body [&_[data-settings-group-label]]:text-fg [&_[data-settings-hint]]:leading-[1.5] [&_[data-settings-hint]]:text-faint [&_[data-onboarding-caption]]:leading-[1.5]",
                       step.id === "ready" ? "max-w-[1160px]" : "max-w-[780px]",
                       step.id !== "github-account" &&
-                        "[&_.bg-settings-plate:not(.personal-github-card)]:border-0 [&_.bg-settings-plate:not(.personal-github-card)]:bg-transparent! [&_.bg-settings-plate:not(.personal-github-card)]:shadow-none [&_.bg-settings-plate:not(.personal-github-card)]:[backdrop-filter:none]",
+                        "[&_[data-settings-surface]:not(.personal-github-card)]:border-0 [&_[data-settings-surface]:not(.personal-github-card)]:bg-transparent! [&_[data-settings-surface]:not(.personal-github-card)]:shadow-none [&_[data-settings-surface]:not(.personal-github-card)]:[backdrop-filter:none]",
                       "[&_input]:h-9 [&_input]:min-h-9 [&_input]:px-3 [&_input]:text-base [&_select]:min-h-9 [&_textarea]:min-h-9",
                     )}
                   >
@@ -909,7 +909,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
                               rows={1}
                               icon={30}
                               label="Loading GitHub account"
-                              className="[&_.bg-settings-plate]:min-h-[72px] [&_.bg-settings-plate]:border-line! [&_.bg-settings-plate]:bg-button!"
+                              className="[&_[data-settings-surface]]:min-h-[72px] [&_[data-settings-surface]]:border-line! [&_[data-settings-surface]]:bg-button!"
                             />
                           }
                         />

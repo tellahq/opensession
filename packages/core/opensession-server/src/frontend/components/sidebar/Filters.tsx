@@ -18,7 +18,7 @@ import {
   SETTING_GLYPH,
   SETTING_ROW,
   SETTING_ROW_PRESSABLE,
-} from "../../lib/setting-row-classes";
+} from "../../ui/setting-row-styles";
 import {
   type SettingOption,
   ValueOptions,
