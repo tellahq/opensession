@@ -203,7 +203,6 @@ function CommitRow({
             <Button
               size="sm"
               variant="ghost"
-              className="phone:min-h-11"
               render={<a href={`${BASE_PATH}/session/${commit.sessionId}`} />}
             >
               Session

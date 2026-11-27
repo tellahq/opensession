@@ -106,7 +106,7 @@ export function YouShouldKnowNotice({
         <Button
           size="sm"
           variant="ghost"
-          className="flex w-full max-w-[560px] justify-start self-start font-normal text-faint phone:min-h-11"
+          className="flex w-full max-w-[560px] justify-start self-start font-normal text-faint"
           icon={<IconCheck />}
           trailing={use === "asked" ? "Asked" : "Known"}
           onClick={() => setUnfolded(true)}

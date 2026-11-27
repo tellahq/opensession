@@ -99,7 +99,7 @@ export function UsageRing({
         <Button
           variant="soft"
           size="md"
-          className="mt-3 w-full phone:min-h-11"
+          className="mt-3 w-full"
           onClick={() => setUsageBarPref(true)}
         >
           Show usage bar

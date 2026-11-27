@@ -961,7 +961,6 @@ export function CommentableDiff({ patch, options }: Props) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="phone:size-11"
                         aria-label={`File actions for ${file.name}`}
                         icon={<IconDotsHorizontal size={18} />}
                       />
