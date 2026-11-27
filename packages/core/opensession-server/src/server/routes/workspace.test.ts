@@ -4,6 +4,7 @@ import {
   archiveWorkspaceMemberSessions,
   deleteWorkspaceMemberSessions,
   workspaceSessionSource,
+  workspaceState,
 } from "./workspace";
 
 function workspaceDeleteContext(): RouteContext {
@@ -117,5 +118,35 @@ test("a session-less PR workspace is its own new-session source", () => {
     branch: "fix-login",
     worktreeDir: null,
     mode: "code",
+  });
+});
+
+test("workspace state tells an archived workspace from an empty or deleted one", () => {
+  const record = { id: "ws-1" };
+  expect(workspaceState(undefined, [])).toEqual({
+    exists: false,
+    liveSessions: 0,
+    archivedSessions: 0,
+    draft: false,
+  });
+  expect(workspaceState(record, [])).toMatchObject({
+    exists: true,
+    liveSessions: 0,
+    archivedSessions: 0,
+  });
+  // Archiving a workspace archives its sessions and keeps the record.
+  expect(
+    workspaceState(record, [{ archived: true }, { archived: true }]),
+  ).toMatchObject({ exists: true, liveSessions: 0, archivedSessions: 2 });
+  expect(
+    workspaceState({ ...record, draft: { text: "later" } }, [
+      {},
+      { archived: true },
+    ]),
+  ).toEqual({
+    exists: true,
+    liveSessions: 1,
+    archivedSessions: 1,
+    draft: true,
   });
 });

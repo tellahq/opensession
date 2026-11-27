@@ -69,13 +69,32 @@ export function isConversationRoute(route: Route): boolean {
 
 type SessionState = { id: string; archived?: boolean };
 
-/** Asks the server about a conversation the loaded lists leave out. */
+type WorkspaceState = {
+  exists: boolean;
+  liveSessions: number;
+  archivedSessions: number;
+  draft: boolean;
+};
+
+/** Asks the server about a conversation. */
 export type ConversationLookUp = {
   /** The session, or null for an unknown id. */
   session: (id: string) => Promise<Omit<SessionState, "id"> | null>;
-  /** Whether the workspace still exists. */
-  workspace: (id: string) => Promise<boolean>;
+  /** The workspace's record and member sessions. */
+  workspace: (id: string) => Promise<WorkspaceState>;
 };
+
+/**
+ * Whether a workspace is still somewhere to go back to. A deleted one is
+ * not, and neither is an archived one: archiving archives every session and
+ * keeps the record, so it shows as sessions that are all archived. One with
+ * no sessions at all is only empty (a ticket nobody has started on), and one
+ * holding a draft is still listed for that draft, so both reopen.
+ */
+export function workspaceReopens(state: WorkspaceState): boolean {
+  if (!state.exists) return false;
+  return state.liveSessions > 0 || state.archivedSessions === 0 || state.draft;
+}
 
 /**
  * Whether a remembered conversation can still be opened: its session is not
@@ -83,11 +102,11 @@ export type ConversationLookUp = {
  * returns to one, so a conversation deleted or archived since (here, in
  * another tab, or by a teammate) is not reopened.
  *
- * A conversation missing from the loaded lists is not taken as gone. The
- * session list is scoped by the sidebar's lens and by recent activity, and
- * the workspace list keeps only workspaces with live work or the one on
- * screen, so either can leave out a conversation that still opens. `lookUp`
- * asks the server instead, and a failed request rejects: unknown is not gone.
+ * A session missing from the loaded list is not taken as gone: the list is
+ * scoped by the sidebar's lens and by recent activity, so it can leave out a
+ * live one. A workspace is always asked about, listed or not: the list drops
+ * a quiet one that still opens, and keeps one that another tab archived.
+ * `lookUp` asks the server, and a failed request rejects: unknown is not gone.
  */
 export function conversationExists(
   route: Route,
@@ -104,8 +123,8 @@ export function conversationExists(
       .then((session) => !!session && !session.archived);
   }
   if (route.view === "workspace") {
-    if (workspaces.some((workspace) => workspace.id === route.id)) return true;
-    return lookUp ? lookUp.workspace(route.id) : false;
+    if (lookUp) return lookUp.workspace(route.id).then(workspaceReopens);
+    return workspaces.some((workspace) => workspace.id === route.id);
   }
   return false;
 }

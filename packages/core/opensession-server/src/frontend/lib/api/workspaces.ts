@@ -87,18 +87,25 @@ export async function fetchWorkspaces(options?: {
   }
 }
 
+/** A workspace as the server's record and member sessions describe it. */
+export interface WorkspaceState {
+  exists: boolean;
+  liveSessions: number;
+  archivedSessions: number;
+  draft: boolean;
+}
+
 /**
- * Whether a workspace still exists. The sidebar's list cannot say: it keeps
- * only workspaces with live work, plus the one it is asked to include, which
- * is how this asks. Throws when the request fails, so a caller never takes
- * "could not reach the server" for "gone".
+ * The server's word on a workspace. The sidebar's list cannot give it: it
+ * keeps only workspaces with live work, and it keeps the record of one whose
+ * sessions were all archived. Throws when the request fails, so a caller
+ * never takes "could not reach the server" for "gone".
  */
-export async function workspaceExistsApi(id: string): Promise<boolean> {
-  const data = await request<{ workspaces?: { id: string }[] }>(
-    `/workspaces?active=1&includeWorkspaceId=${encodeURIComponent(id)}`,
+export async function fetchWorkspaceState(id: string): Promise<WorkspaceState> {
+  return request<WorkspaceState>(
+    `/workspaces/${encodeURIComponent(id)}/state`,
     { label: "Failed to look up the workspace" },
   );
-  return (data?.workspaces ?? []).some((workspace) => workspace.id === id);
 }
 
 export async function createWorkspaceApi(input: {

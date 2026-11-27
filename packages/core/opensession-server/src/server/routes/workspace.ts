@@ -163,6 +163,25 @@ export async function deleteWorkspaceMemberSessions(
   }
 }
 
+/** A workspace as its record and its member sessions describe it. */
+export function workspaceState(
+  workspace: { id: string; draft?: unknown } | undefined,
+  members: readonly { archived?: boolean }[],
+): {
+  exists: boolean;
+  liveSessions: number;
+  archivedSessions: number;
+  draft: boolean;
+} {
+  const archivedSessions = members.filter((member) => member.archived).length;
+  return {
+    exists: !!workspace,
+    liveSessions: members.length - archivedSessions,
+    archivedSessions,
+    draft: !!workspace?.draft,
+  };
+}
+
 /**
  * Archive every listed session through the normal archive route, so running
  * agents are stopped, pins dropped and drafts cleared exactly as for one
@@ -712,6 +731,24 @@ export async function handleWorkspaceRoutes(
       members.map((member) => member.id),
     );
     return Response.json({ ok: result.failed.length === 0, ...result });
+  }
+
+  // What a client asks before going back to a workspace it remembers. The
+  // record alone cannot say: archiving a workspace archives its sessions and
+  // keeps the record, so "archived" and "empty" differ only in the sessions.
+  const stateMatch = path.match(/^\/api\/workspaces\/([^/]+)\/state$/);
+  if (stateMatch && req.method === "GET") {
+    const id = decodeURIComponent(stateMatch[1]);
+    const [workspaces, sessions] = await Promise.all([
+      listWorkspaces(),
+      getSessionListSnapshotAsync(),
+    ]);
+    return Response.json(
+      workspaceState(
+        workspaces.find((workspace) => workspace.id === id),
+        sessions.filter((session) => session.workspaceId === id),
+      ),
+    );
   }
 
   // Discard a sidebar draft. Never deletes sessions: the draft may sit on a

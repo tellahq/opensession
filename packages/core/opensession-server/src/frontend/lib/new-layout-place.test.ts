@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   conversationExists,
+  workspaceReopens,
   placeOfRoute,
   placeOverride,
 } from "./new-layout-place";
@@ -33,6 +34,38 @@ describe("placeOverride", () => {
   });
 });
 
+const GONE = {
+  exists: false,
+  liveSessions: 0,
+  archivedSessions: 0,
+  draft: false,
+};
+
+describe("workspaceReopens", () => {
+  const there = { ...GONE, exists: true };
+
+  test("a deleted workspace does not", () => {
+    expect(workspaceReopens(GONE)).toBe(false);
+  });
+
+  test("an archived one does not: every session it has is archived", () => {
+    expect(workspaceReopens({ ...there, archivedSessions: 3 })).toBe(false);
+  });
+
+  test("one with live work does, whatever else was archived", () => {
+    expect(
+      workspaceReopens({ ...there, liveSessions: 1, archivedSessions: 3 }),
+    ).toBe(true);
+  });
+
+  test("an empty one does, and so does one kept for its draft", () => {
+    expect(workspaceReopens(there)).toBe(true);
+    expect(
+      workspaceReopens({ ...there, archivedSessions: 1, draft: true }),
+    ).toBe(true);
+  });
+});
+
 describe("conversationExists", () => {
   const sessions = [{ id: "live" }, { id: "old", archived: true }];
   const workspaces = [{ id: "ws-1" }];
@@ -53,7 +86,7 @@ describe("conversationExists", () => {
     const exists = (id: string) =>
       conversationExists({ view: "session", id }, sessions, workspaces, {
         session: (key) => Promise.resolve(server.get(key) ?? null),
-        workspace: () => Promise.resolve(false),
+        workspace: () => Promise.resolve(GONE),
       });
     expect(exists("live")).toBe(true);
     expect(await exists("hidden")).toBe(true);
@@ -68,15 +101,19 @@ describe("conversationExists", () => {
     expect(exists("ws-deleted")).toBe(false);
   });
 
-  test("an unlisted workspace is looked up, not taken as gone", async () => {
-    // A ticket's workspace with no live session: real, but off the list.
-    const server = new Set(["ws-quiet"]);
+  test("a workspace is asked about, listed or not", async () => {
+    const server = new Map([
+      // Listed here, but another tab archived it since.
+      ["ws-1", { ...GONE, exists: true, archivedSessions: 2 }],
+      // A ticket's workspace with no session: real, but off the list.
+      ["ws-quiet", { ...GONE, exists: true }],
+    ]);
     const exists = (id: string) =>
       conversationExists({ view: "workspace", id }, sessions, workspaces, {
         session: () => Promise.resolve(null),
-        workspace: (key) => Promise.resolve(server.has(key)),
+        workspace: (key) => Promise.resolve(server.get(key) ?? GONE),
       });
-    expect(exists("ws-1")).toBe(true);
+    expect(await exists("ws-1")).toBe(false);
     expect(await exists("ws-quiet")).toBe(true);
     expect(await exists("ws-deleted")).toBe(false);
   });
