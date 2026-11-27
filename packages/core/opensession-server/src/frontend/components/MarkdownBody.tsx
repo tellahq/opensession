@@ -7,7 +7,12 @@ import {
   useRef,
   useState,
 } from "react";
+import { decorateCodeAnnotations } from "../lib/code-annotations";
 import { attachCodeCopy, decorateCodeBlocks } from "../lib/code-copy";
+import {
+  attachSmartTableCopy,
+  decorateMarkdownTables,
+} from "../lib/markdown-tables";
 import {
   FENCE_UPGRADERS,
   type FenceUpgrader,
@@ -285,6 +290,7 @@ export function MarkdownBody({
           pre.replaceWith(shikiPre);
         }
       }
+      decorateCodeAnnotations(el);
     })().then(
       () => {
         // A cancelled pass may have skipped replacements (the alive-gated
@@ -316,14 +322,26 @@ export function MarkdownBody({
   useEffect(() => {
     if (!enhance) return;
     const el = ref.current;
-    if (!el || !html.includes("<pre")) return;
-    decorateCodeBlocks(el, { wrap: wrapCode });
+    if (!el) return;
+    if (html.includes("<pre")) {
+      decorateCodeBlocks(el, { wrap: wrapCode });
+      decorateCodeAnnotations(el);
+    }
+    if (html.includes("<table")) {
+      decorateMarkdownTables(el);
+    }
   }, [enhance, html, theme, visible, wrapCode]);
 
   useEffect(() => {
     if (!enhance) return;
     const el = ref.current;
-    return el ? attachCodeCopy(el) : undefined;
+    if (!el) return;
+    const detachCode = attachCodeCopy(el);
+    const detachTable = attachSmartTableCopy(el);
+    return () => {
+      detachCode();
+      detachTable();
+    };
   }, [enhance]);
 
   useEffect(() => {

@@ -1616,3 +1616,110 @@ html[data-theme="light"] span.commit-ref:hover {
     opacity: 0.5;
   }
 }
+
+/* Smart prose tables (lib/markdown-tables.ts): typed columns, wide breakout, Copy CSV. */
+.markdown .md-smart-table-wrap {
+  position: relative;
+  margin: 4px 0 12px;
+}
+.markdown .md-smart-table-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.markdown .md-smart-table-wrap table {
+  display: table;
+  width: 100%;
+  margin: 0;
+  overflow: visible;
+}
+@media (min-width: 1100px) {
+  .markdown .md-smart-table-wrap[data-wide="true"] {
+    width: min(calc(100% + 120px), calc(100vw - 80px));
+    max-width: none;
+  }
+}
+.markdown [data-col-type="number"] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.markdown [data-col-type="code"] {
+  white-space: nowrap;
+}
+.markdown .md-smart-table-copy {
+  position: absolute;
+  top: -2px;
+  right: 0;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+}
+.markdown .md-smart-table-wrap:hover .md-smart-table-copy,
+.markdown .md-smart-table-copy:focus-visible,
+.markdown .md-smart-table-copy[data-copied] {
+  opacity: 1;
+}
+.markdown .md-smart-table-copy:hover,
+.markdown .md-smart-table-copy:focus-visible {
+  color: var(--text-fg);
+  border-color: var(--border-strong);
+}
+.markdown .md-smart-table-copy-glyph {
+  display: inline-flex;
+  align-items: center;
+}
+.markdown .md-smart-table-copy-glyph svg {
+  width: 12px;
+  height: 12px;
+}
+.markdown .md-smart-table-copy-glyph[data-state="done"] {
+  display: none;
+  color: var(--green);
+}
+.markdown
+  .md-smart-table-copy[data-copied]
+  .md-smart-table-copy-glyph[data-state="idle"] {
+  display: none;
+}
+.markdown
+  .md-smart-table-copy[data-copied]
+  .md-smart-table-copy-glyph[data-state="done"] {
+  display: inline-flex;
+}
+
+/* Code margin annotations (lib/code-annotations.ts). */
+.markdown pre.md-code-annotated .md-code-annotated-line {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 12px;
+  width: 100%;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border-radius: 3px;
+}
+.markdown pre.md-code-annotated .md-code-margin-note {
+  margin-left: auto;
+  padding-left: 8px;
+  border-left: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-style: normal;
+  color: var(--text-dim);
+  white-space: normal;
+  user-select: text;
+}

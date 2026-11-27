@@ -39,6 +39,18 @@ let settingsId = 0;
  * breaks are.
  */
 function codeText(pre: HTMLElement): string {
+  if (pre.classList.contains("md-code-annotated")) {
+    const clone = pre.cloneNode(true);
+    if (clone instanceof HTMLElement) {
+      for (const note of Array.from(
+        clone.querySelectorAll(".md-code-margin-note"),
+      )) {
+        note.remove();
+      }
+      const cleaned = clone.textContent || "";
+      return cleaned.replace(/\n+$/, "");
+    }
+  }
   const text = pre.innerText || pre.textContent || "";
   // A fence always ends in a newline the author did not type.
   return text.replace(/\n+$/, "");
