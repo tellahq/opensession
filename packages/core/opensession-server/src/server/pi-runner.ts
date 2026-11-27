@@ -121,6 +121,7 @@ import {
   usesApplyPatchTool,
 } from "./pi-apply-patch";
 import { piSecretRedactionTools } from "./pi-secret-redaction";
+import { piSkillUnlockTools } from "./pi-skill-tools";
 import {
   guardStripeApprovalCall,
   recordStripeDraftInvoice,
@@ -3255,9 +3256,12 @@ async function* runPiAttempt(
     const resourceLocks = new PiResourceLockManager();
     const customTools = piSteeringBoundaryTools(
       piSecretRedactionTools(
-        piGuidanceDiscoveryTools(
-          piResourceLockTools(baseCustomTools, resourceLocks, cwd),
-          guidanceDiscovery,
+        piSkillUnlockTools(
+          piGuidanceDiscoveryTools(
+            piResourceLockTools(baseCustomTools, resourceLocks, cwd),
+            guidanceDiscovery,
+          ),
+          mcpBridge,
         ),
       ),
       () => steeringBoundaryPending,
