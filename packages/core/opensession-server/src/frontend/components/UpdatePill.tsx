@@ -1,3 +1,4 @@
+import * as stylex from "@stylexjs/stylex";
 import { os1Shell } from "../lib/os1-shell";
 import React, { useEffect, useState } from "react";
 import { z } from "zod";
@@ -8,8 +9,15 @@ import { onShellUpdated } from "../lib/push";
 import { PERSISTENT_NOTICE_CARD } from "../lib/notification-classes";
 import { chordFromEvent, glyphsFor } from "../lib/shortcuts";
 import { Button } from "../ui/button";
+import { space } from "../ui/tokens.stylex";
 import { Tooltip } from "../ui/tooltip";
 import { IconArrowDown } from "./icons";
+
+const styles = stylex.create({
+  // The minibar's column gap is 4px; the update icon keeps a little more
+  // room from the account avatar under it.
+  icon: { marginBottom: space.s6 },
+});
 
 interface Props {
   addHandler: (handler: (msg: WSServerMessage) => void) => () => void;
@@ -249,6 +257,7 @@ export function UpdatePill({ addHandler, variant = "card" }: Props) {
           onClick={refresh}
           disabled={refreshing}
           aria-label={hint}
+          xstyle={styles.icon}
         />
       </Tooltip>
     );
