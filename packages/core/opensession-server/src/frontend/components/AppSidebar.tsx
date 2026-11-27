@@ -8,7 +8,7 @@ import type { useSessions } from "../hooks/useSessions";
 import type { RepoInfo } from "../lib/api";
 import { renameSessionApi } from "../lib/api";
 import type { Route } from "../lib/app-route";
-import type { Place } from "../lib/new-layout-place";
+import { conversationExists, type Place } from "../lib/new-layout-place";
 import { NEW_LAYOUT_ROW_HEIGHT } from "../lib/app-shell-classes";
 import { useNewLayoutPref } from "../lib/new-layout-pref";
 import { Minibar } from "./shell/Minibar";
@@ -26,7 +26,10 @@ interface AppSidebarProps {
     route: Route;
     /** The new layout's place and the way back to your own list, both owned
      *  by the route controller (hooks/useAppRoute.ts). */
-    places: { current: Place; openSessions: () => void };
+    places: {
+      current: Place;
+      openSessions: (stillThere?: (route: Route) => boolean) => void;
+    };
     sessions: UnifiedSession[];
     registeredRepoInfo: RepoInfo[];
     sessionsError: ReturnType<typeof useSessions>["error"];
@@ -144,7 +147,11 @@ export function AppSidebar({
       {newLayout && (
         <Minibar
           place={places.current}
-          onOpenSessions={places.openSessions}
+          onOpenSessions={() =>
+            places.openSessions((route) =>
+              conversationExists(route, sessions, workspaces),
+            )
+          }
           connected={connected}
         />
       )}

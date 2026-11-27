@@ -1,5 +1,9 @@
-import { expect, test } from "bun:test";
-import { placeOfRoute } from "./new-layout-place";
+import { describe, expect, test } from "bun:test";
+import {
+  conversationExists,
+  placeOfRoute,
+  placeOverride,
+} from "./new-layout-place";
 
 test("a route that names its place ignores where you were", () => {
   expect(placeOfRoute({ view: "feed" }, "sessions")).toBe("activity");
@@ -14,4 +18,37 @@ test("a session stays in Activity and otherwise belongs to Sessions", () => {
   expect(placeOfRoute(session, "sessions")).toBe("sessions");
   expect(placeOfRoute(session, "library")).toBe("sessions");
   expect(placeOfRoute(session, "support")).toBe("sessions");
+});
+
+describe("placeOverride", () => {
+  test("records only a place the route does not give", () => {
+    expect(placeOverride({ view: "session", id: "a" }, "sessions")).toBe(
+      undefined,
+    );
+    expect(placeOverride({ view: "session", id: "a" }, "activity")).toBe(
+      "activity",
+    );
+    expect(placeOverride({ view: "issues" }, "library")).toBe(undefined);
+    expect(placeOverride({ view: "issues" }, "sessions")).toBe("sessions");
+  });
+});
+
+describe("conversationExists", () => {
+  const sessions = [{ id: "live" }, { id: "old", archived: true }];
+  const workspaces = [{ id: "ws-1" }];
+
+  test("a session has to be listed and not archived", () => {
+    const exists = (id: string) =>
+      conversationExists({ view: "session", id }, sessions, workspaces);
+    expect(exists("live")).toBe(true);
+    expect(exists("old")).toBe(false);
+    expect(exists("deleted")).toBe(false);
+  });
+
+  test("a workspace has to exist", () => {
+    const exists = (id: string) =>
+      conversationExists({ view: "workspace", id }, sessions, workspaces);
+    expect(exists("ws-1")).toBe(true);
+    expect(exists("ws-deleted")).toBe(false);
+  });
 });

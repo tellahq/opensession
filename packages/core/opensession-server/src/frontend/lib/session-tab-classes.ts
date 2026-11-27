@@ -138,10 +138,6 @@ export const TAB_SCROLL_ATTACHED = "relative z-[1] items-stretch px-2";
 export const TAB_GROUP_ATTACHED =
   "relative inline-flex flex-none items-stretch gap-0.5";
 
-/** The active attached tab's fill when it wears a colour (`--tab-color`). */
-const ATTACHED_COLORED_FILL =
-  "color-mix(in_srgb,var(--tab-color)_14%,var(--bg))";
-
 /**
  * Where the active tab meets the sheet, its border does not land on the row's
  * hairline square: it curves outward and becomes that hairline, so the tab
@@ -153,16 +149,25 @@ const ATTACHED_COLORED_FILL =
  * the tab's own border by that border's one pixel, and sits above it, so the
  * straight edge turns into the curve without a step.
  *
+ * The curve is the band from 7px to 8px of the gradient, as wide as the
+ * border it continues and on the same pixels where they meet. Each edge of
+ * it is a half-pixel ramp centred on that edge, which is what smooths it.
+ * All three strokes use the row's opaque `--tab-edge` (PANE_TOP_ROW), since
+ * they overlap at both ends.
+ *
+ * Every class here is spelled out in full. Tailwind reads this file as text,
+ * so a class assembled from a constant is never generated.
+ *
  * They belong to this wrapper, not to the tab. A tab can clip itself (an
  * empty tab does, for its opening morph), and a flare is outside its box.
  * The wrapper is the same size and never clips.
  */
 const TAB_ITEM_ATTACHED_FLARES =
-  `[--tab-fill:var(--bg)] data-[colored]:[--tab-fill:${ATTACHED_COLORED_FILL}] ` +
+  "[--tab-fill:var(--bg)] data-[colored]:[--tab-fill:color-mix(in_srgb,var(--tab-color)_14%,var(--bg))] " +
   "before:pointer-events-none before:absolute before:bottom-0 before:-left-[7px] before:z-[1] before:hidden before:size-2 before:content-[''] " +
-  "before:[background:radial-gradient(circle_at_0_0,transparent_7px,var(--divider)_7.5px,var(--divider)_8px,var(--tab-fill)_8.5px)] " +
+  "before:[background:radial-gradient(circle_at_0_0,transparent_6.75px,var(--tab-edge,var(--divider))_7.25px,var(--tab-edge,var(--divider))_7.75px,var(--tab-fill)_8.25px)] " +
   "after:pointer-events-none after:absolute after:bottom-0 after:-right-[7px] after:z-[1] after:hidden after:size-2 after:content-[''] " +
-  "after:[background:radial-gradient(circle_at_100%_0,transparent_7px,var(--divider)_7.5px,var(--divider)_8px,var(--tab-fill)_8.5px)] " +
+  "after:[background:radial-gradient(circle_at_100%_0,transparent_6.75px,var(--tab-edge,var(--divider))_7.25px,var(--tab-edge,var(--divider))_7.75px,var(--tab-fill)_8.25px)] " +
   "[&:has(>[aria-selected=true])]:before:block [&:has(>[aria-selected=true])]:after:block";
 
 export const TAB_ITEM_ATTACHED = `session-tab-reorder relative inline-flex shrink-0 items-stretch ${TAB_ITEM_ATTACHED_FLARES}`;
@@ -253,11 +258,11 @@ function attachedTabClass({ active, waiting, colored }: TabState): string {
   const ink = active || waiting ? "text-fg" : "text-dim hover:text-fg";
   const surface = colored
     ? active
-      ? `border-divider bg-[var(--tab-fill)] [--tab-fill:${ATTACHED_COLORED_FILL}]`
+      ? "border-[color:var(--tab-edge,var(--divider))] bg-[var(--tab-fill)] [--tab-fill:color-mix(in_srgb,var(--tab-color)_14%,var(--bg))]"
       : "border-transparent bg-[color-mix(in_srgb,var(--tab-color)_9%,transparent)] " +
         "hover:bg-[color-mix(in_srgb,var(--tab-color)_16%,transparent)]"
     : active
-      ? "border-divider bg-[var(--tab-fill)] [--tab-fill:var(--bg)]"
+      ? "border-[color:var(--tab-edge,var(--divider))] bg-[var(--tab-fill)] [--tab-fill:var(--bg)]"
       : "border-transparent bg-transparent hover:bg-hover";
   return `${TAB_ATTACHED_BASE} ${ink} ${surface}`;
 }

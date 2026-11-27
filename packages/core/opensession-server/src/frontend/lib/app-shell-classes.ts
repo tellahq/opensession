@@ -86,7 +86,12 @@ export const NEW_LAYOUT_ROW_HEIGHT =
  */
 export const PANE_TOP_ROW =
   "relative flex min-w-0 shrink-0 items-stretch bg-sidebar " +
-  "after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-divider after:content-[''] " +
+  // The hairline, the active tab's border and the curve that joins the two
+  // are one line, so they share one colour: the divider as it reads on this
+  // row, made opaque. The divider itself is translucent, and where two
+  // strokes of it overlap (they do at both ends of the curve) it doubles.
+  "[--tab-edge:color-mix(in_srgb,var(--border)_55%,var(--sidebar-bg))] " +
+  "after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-[var(--tab-edge)] after:content-[''] " +
   "[&:not(:has(>:not(:empty)))]:hidden";
 
 /** The strip's share of that row. The strip brings its own 8px at each end.

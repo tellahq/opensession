@@ -935,6 +935,61 @@ describe("places", () => {
     expect(controller.place).toBe("activity");
   });
 
+  test("Sessions does not reopen a conversation that is gone", () => {
+    const fake = fakeBrowser({ path: "/workspace/ws-1", state: { d: 0 } });
+    const controller = new AppRouteController(fake.browser);
+    controller.navigate({ view: "issues" });
+
+    // The workspace was deleted meanwhile: only the list changes.
+    controller.openSessions(() => false);
+    expect(controller.getCurrentRoute()).toEqual({ view: "issues" });
+    expect(controller.place).toBe("sessions");
+
+    // And it stays forgotten once asked about.
+    controller.navigate({ view: "issues" });
+    controller.openSessions(() => true);
+    expect(controller.getCurrentRoute()).toEqual({ view: "issues" });
+  });
+
+  test("a page keeps the Sessions list chosen beside it across Settings", () => {
+    const fake = fakeBrowser({ path: "/issues", state: { d: 0 } });
+    fake.setAutoPop(true);
+    const controller = new AppRouteController(fake.browser);
+    controller.start(false);
+
+    controller.openSessions();
+    expect(fake.calls.at(-1)).toEqual({
+      type: "replace",
+      state: { d: 0, place: "sessions" },
+      path: "/issues",
+    });
+
+    controller.navigate({ view: "settings" });
+    controller.leaveSettings();
+    expect(controller.getCurrentRoute()).toEqual({ view: "issues" });
+    expect(controller.place).toBe("sessions");
+  });
+
+  test("and when closing Settings has no history to pop", () => {
+    const fake = fakeBrowser({
+      path: "/issues",
+      state: { d: 0 },
+      singleHistoryEntry: true,
+    });
+    const controller = new AppRouteController(fake.browser);
+    controller.openSessions();
+
+    controller.navigate({ view: "settings" });
+    controller.leaveSettings();
+    expect(controller.getCurrentRoute()).toEqual({ view: "issues" });
+    expect(controller.place).toBe("sessions");
+    expect(fake.calls.at(-1)).toMatchObject({
+      type: "replace",
+      state: { place: "sessions" },
+      path: "/issues",
+    });
+  });
+
   test("Sessions shows the list on a fresh load with no conversation to return to", () => {
     const fake = fakeBrowser({ path: "/issues", state: { d: 0 } });
     const controller = new AppRouteController(fake.browser);

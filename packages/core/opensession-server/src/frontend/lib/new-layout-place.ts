@@ -35,9 +35,26 @@ const PLACE_OF_VIEW: Partial<Record<Route["view"], Place>> = {
   security: "library",
 };
 
-/** True for a route whose view decides its place whatever came before. */
-export function routeNamesPlace(route: Route): boolean {
-  return PLACE_OF_VIEW[route.view] !== undefined;
+/**
+ * A place the route alone does not give, which its history entry therefore
+ * has to record: a conversation opened from Activity, or a page you chose to
+ * see your own list beside (the Sessions button, with no conversation to
+ * return to).
+ */
+export type PlaceOverride = "activity" | "sessions";
+
+/** The place `route` shows in when nothing says otherwise. */
+export function defaultPlaceOf(route: Route): Place {
+  return PLACE_OF_VIEW[route.view] ?? "sessions";
+}
+
+/** What an entry showing `route` in `place` has to record, if anything. */
+export function placeOverride(
+  route: Route,
+  place: Place,
+): PlaceOverride | undefined {
+  if (place === defaultPlaceOf(route)) return undefined;
+  return place === "activity" || place === "sessions" ? place : undefined;
 }
 
 /** The place `route` shows in, given the place you were in before it. */
@@ -48,4 +65,24 @@ export function placeOfRoute(route: Route, last: Place): Place {
 /** A conversation: the kind of route the Sessions place returns to. */
 export function isConversationRoute(route: Route): boolean {
   return route.view === "session" || route.view === "workspace";
+}
+
+/**
+ * Whether a remembered conversation can still be opened: its session is in
+ * the list and not archived, or its workspace still exists. The Sessions
+ * button asks before it returns to one, so a conversation deleted or archived
+ * since (here, in another tab, or by a teammate) is not reopened.
+ */
+export function conversationExists(
+  route: Route,
+  sessions: readonly { id: string; archived?: boolean }[],
+  workspaces: readonly { id: string }[],
+): boolean {
+  if (route.view === "session")
+    return sessions.some(
+      (session) => session.id === route.id && !session.archived,
+    );
+  if (route.view === "workspace")
+    return workspaces.some((workspace) => workspace.id === route.id);
+  return false;
 }

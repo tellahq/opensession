@@ -104,6 +104,11 @@ export function animateEmptyTabOpen(
   void Promise.allSettled(
     animations.map((animation) => animation.finished),
   ).then(() => {
+    // The last frame is the tab at rest, so letting go of it changes nothing
+    // on screen. Holding it would: a filled transform, even the identity,
+    // keeps the tab off the pixel grid, and its border then sits a fraction
+    // of a pixel from everything drawn around it.
+    for (const animation of animations) animation.cancel();
     delete tab.dataset.emptyTabMorph;
   });
 }
