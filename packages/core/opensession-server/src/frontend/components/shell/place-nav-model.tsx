@@ -7,8 +7,9 @@ import type { SidebarToolsNavItem } from "../sidebar/SidebarToolsNav";
 import type { PlaceNavItem } from "./PlaceNav";
 
 // Which of today's pages each place lists, in runs. A tool is a page of the
-// app; a settings section is one that still lives in Settings and opens there
-// until it has a page in its place.
+// app. A settings section is one Settings defines: Automations, Goals and
+// Security are pages of the app here, and the rest open in Settings until
+// they have a page in their place.
 type Entry =
   | { tool: SidebarToolId }
   | { settings: SettingsSectionKey; label?: string };
@@ -17,7 +18,11 @@ const PLACE_PAGES: Partial<Record<Place, Entry[][]>> = {
   activity: [[{ tool: "feed" }, { tool: "tasks" }, { tool: "catchup" }]],
   library: [
     [{ tool: "prs" }, { tool: "issues" }],
-    [{ settings: "automations" }, { settings: "goals" }],
+    [
+      { settings: "automations" },
+      { settings: "goals" },
+      { settings: "security" },
+    ],
     [{ tool: "reports" }, { tool: "databases" }, { tool: "analytics" }],
     [
       { settings: "repos" },
@@ -33,6 +38,7 @@ export function placeNavGroups(
   place: Place,
   tools: SidebarToolsNavItem[],
   navigation: NavigationActions,
+  openPage?: SettingsSectionKey,
 ): PlaceNavItem[][] | null {
   const pages = PLACE_PAGES[place];
   if (!pages) return null;
@@ -51,7 +57,7 @@ export function placeNavGroups(
           id: `settings:${section.key}`,
           label: entry.label ?? section.label,
           icon: React.cloneElement(section.icon, { size: 22 }),
-          active: false,
+          active: section.key === openPage,
           onClick: () => navigation.openSettings(section.key),
         },
       ];

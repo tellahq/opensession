@@ -66,11 +66,14 @@ export function Minibar({
   place,
   onOpenSessions,
   connected,
+  accessory,
 }: {
   place: Place;
   /** Show your own list (the route controller's `openSessions`). */
   onOpenSessions: () => void;
   connected: boolean;
+  /** Sits above your account: the Update nudge, as an icon. */
+  accessory?: ReactNode;
 }) {
   const navigation = useNavigation();
   const currentUser = useCurrentUser();
@@ -120,6 +123,7 @@ export function Minibar({
         />
       </div>
       <div className="min-h-0 flex-1" />
+      {accessory}
       <Tooltip label="Your settings" side="right">
         <Button
           variant="ghost"

@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { ComponentProps, CSSProperties, ReactNode } from "react";
 import type { useAppDocumentInteractions } from "../hooks/useAppDocumentInteractions";
 import type { useAppShell } from "../hooks/useAppShell";
 import type { useAppViewState } from "../hooks/useAppViewState";
@@ -11,11 +11,12 @@ import {
   fetchWorkspaceState,
   renameSessionApi,
 } from "../lib/api";
-import type { Route } from "../lib/app-route";
+import { isToolView, type Route } from "../lib/app-route";
 import { conversationExists, type Place } from "../lib/new-layout-place";
 import { NEW_LAYOUT_ROW_HEIGHT } from "../lib/app-shell-classes";
 import { useNewLayoutPref } from "../lib/new-layout-pref";
 import { Minibar } from "./shell/Minibar";
+import { UpdatePill } from "./UpdatePill";
 import { SIDEBAR_CHROME_BTN } from "../lib/sidebar-classes";
 import type { UnifiedSession, Workspace } from "../lib/types";
 import { cn } from "../ui/cn";
@@ -54,8 +55,9 @@ interface AppSidebarProps {
     showToast: (message: string) => void;
     panelIcon: ReactNode;
     sidebarToggleKeys: string[] | null;
-    /** The Update nudge, shown beside Settings in the account footer. */
-    footerAccessory?: ReactNode;
+    /** Feeds the Update nudge: beside Settings in the account footer, or an
+     *  icon above your account in the new layout's minibar. */
+    addHandler: ComponentProps<typeof UpdatePill>["addHandler"];
   };
   shell: Pick<
     ReturnType<typeof useAppShell>["sidebar"],
@@ -119,7 +121,7 @@ export function AppSidebar({
     showToast,
     panelIcon,
     sidebarToggleKeys,
-    footerAccessory,
+    addHandler,
   },
   shell: {
     sidebarCollapsed,
@@ -162,6 +164,7 @@ export function AppSidebar({
             )
           }
           connected={connected}
+          accessory={<UpdatePill addHandler={addHandler} variant="icon" />}
         />
       )}
       {/* `sidebar-container` stays on the markup as a hook: base.css's
@@ -265,7 +268,7 @@ export function AppSidebar({
         <div
           className={
             newLayout
-              ? "-mt-px flex min-h-0 flex-1 flex-col overflow-hidden rounded-tl-[10px] border-t border-l border-divider bg-surface [--sidebar-bg:var(--bg)] [--sidebar-material:var(--bg)]"
+              ? "-mt-px flex min-h-0 flex-1 flex-col overflow-hidden rounded-tl-[10px] [corner-shape:round] border-t border-l border-divider bg-surface [--sidebar-bg:var(--bg)] [--sidebar-material:var(--bg)]"
               : "contents"
           }
         >
@@ -304,7 +307,11 @@ export function AppSidebar({
             databasesActive={route.view === "databases"}
             analyticsActive={route.view === "analytics"}
             showDraftRow={productEmpty && githubConnectionState !== "loading"}
-            footerAccessory={footerAccessory}
+            footerAccessory={
+              newLayout ? undefined : (
+                <UpdatePill addHandler={addHandler} variant="footer" />
+              )
+            }
             draftRowActive={productEmpty && route.view === "prs"}
             onRenameWorkspace={renameWorkspaceFromSidebar}
             onDeleteWorkspace={deleteWorkspaceFromSidebar}
@@ -318,6 +325,7 @@ export function AppSidebar({
             onUnreadChatsChange={setUnreadChats}
             archivedActive={route.view === "archived"}
             place={newLayout ? places.current : undefined}
+            toolPage={isToolView(route.view) ? route.view : undefined}
             onArchive={archiveSessionFromSidebar}
             onArchiveWorkspace={archiveWorkspaceFromSidebar}
             onRename={async (s, title) => {

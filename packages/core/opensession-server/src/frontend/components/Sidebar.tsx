@@ -181,6 +181,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     archivedActive,
     catchUpActive,
     place,
+    toolPage,
     onUnreadChatsChange,
     onArchive,
     onArchiveWorkspace,
@@ -1385,7 +1386,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   // else; a place with pages lists those, and Activity adds the teammates and
   // automation runs that used to trail your sessions.
   const placeGroups = place
-    ? placeNavGroups(place, allTools, navigation)
+    ? placeNavGroups(place, allTools, navigation, toolPage)
     : null;
   const listsSessions = !placeGroups;
   const listsOthers = !place || place === "activity";
@@ -1834,13 +1835,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
           onOpenSettings={navigation.openSettings}
           accessory={footerAccessory}
         />
-      )}
-      {/* The minibar holds the account and Settings in the new layout. The
-          Update nudge has no room there, so it keeps the foot of this list. */}
-      {newLayout && (
-        <div className="flex flex-none items-center px-3 py-2 empty:hidden">
-          {footerAccessory}
-        </div>
       )}
       <SidebarCustomizeDialog
         open={customizeOpen}
