@@ -123,6 +123,7 @@ import type { TypingPresence } from "../../lib/typing";
 import type { SessionViewerProps } from "../../lib/session-viewer-bindings";
 import type { QueueReceipt } from "../../lib/session-queue";
 import type { FileAttachment } from "../../lib/images";
+import type { QuickAction } from "../../lib/quick-actions";
 import type { ReplySuggestion } from "../../lib/reply-suggestions";
 import type { PrFocus } from "../../lib/pr-focus";
 import type { PrReviewPage } from "../PrPanel";
@@ -334,6 +335,7 @@ interface ActionBandRegion {
   scrollAction: boolean;
   isPhone: boolean;
   replySuggestions: ReplySuggestion[];
+  quickActions?: QuickAction[];
   pickReplySuggestion: (text: string) => void;
   prediction: string | null;
   transcriptDownKeys: string[] | null;
@@ -605,6 +607,7 @@ export function SessionViewerMainRegion({
     scrollAction: scrollReady,
     isPhone,
     replySuggestions,
+    quickActions,
     pickReplySuggestion,
     prediction,
     transcriptDownKeys,
@@ -1391,6 +1394,7 @@ export function SessionViewerMainRegion({
                               isPhone && "w-full flex-none self-stretch",
                             )}
                             suggestions={replySuggestions}
+                            quickActions={quickActions}
                             onPick={pickReplySuggestion}
                           />
                         )}

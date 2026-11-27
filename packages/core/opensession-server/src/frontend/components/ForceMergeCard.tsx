@@ -5,6 +5,7 @@ import { AGENT_NAME } from "../lib/brand";
 import type { ForceMergeRequest } from "../lib/force-merge-store";
 import { useForceMerge } from "../hooks/useForceMerge";
 import { Button } from "../ui/button";
+import { HoldToConfirmButton } from "../ui/hold-to-confirm-button";
 
 /** POST an answer. Outside the component so its throws stay out of React
  *  Compiler's way. */
@@ -170,14 +171,16 @@ function RequestCard({
           Cancel
         </Button>
         {canConfirm && (
-          <Button
+          <HoldToConfirmButton
             variant="danger-strong"
             size="lg"
             disabled={busy !== null}
-            onClick={() => void submit("confirm")}
-          >
-            {busy === "confirm" ? "Merging…" : "Merge anyway"}
-          </Button>
+            busy={busy === "confirm"}
+            label="Hold to merge anyway"
+            holdingLabel="Keep holding…"
+            busyLabel="Merging…"
+            onConfirm={() => void submit("confirm")}
+          />
         )}
       </div>
     </section>

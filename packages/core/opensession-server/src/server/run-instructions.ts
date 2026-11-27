@@ -337,7 +337,7 @@ export function buildRunInstructions(input: {
       ' Live fences: mermaid (quote labels with punctuation: `A["v1 (beta)"]`, ' +
       '`-->|"@x"|`), math, csv, json, ansi, palette, metrics (`Label: value ' +
       "(delta)`), choices (a reply per line, click sends), tree, artifact (static " +
-      "HTML), svg, slides (`---`); `> [!NOTE]` is a callout. Three or more items " +
+      "HTML), svg, slides (`---`), copy; `> [!NOTE]` is a callout. Three or more items " +
       "compared on the same fields (PRs, options, results) read best as a Markdown " +
       "table, one row each with short cells; keep prose for fewer, and a chart or " +
       "mermaid when the point is a trend or a flow.",
