@@ -14,6 +14,10 @@ import {
   SIDEBAR_STUCK_BACKING,
 } from "../../lib/sidebar-classes";
 import {
+  type FilterMenuStore,
+  useFilterMenuOpen,
+} from "../../lib/sidebar-filter-menu";
+import {
   personLensFilter,
   personLensValue,
   setFilter,
@@ -42,7 +46,6 @@ interface SidebarChromeState {
   borrowedLens: boolean;
   workspacesOpen: boolean;
   repoInline: boolean;
-  filterOpen: boolean;
   newSessionKeys: string[] | null;
 }
 
@@ -74,7 +77,7 @@ interface SidebarChromeRefs {
 
 interface SidebarChromeActions {
   navigation: NavigationActions;
-  setFilterOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  filterMenu: FilterMenuStore;
   onToggleWorkspaces: () => void;
 }
 
@@ -94,7 +97,6 @@ export function SidebarChrome({
     borrowedLens,
     workspacesOpen,
     repoInline,
-    filterOpen,
     newSessionKeys,
   },
   tools: {
@@ -105,7 +107,7 @@ export function SidebarChrome({
   },
   identity: { filter, currentUser, personLensName, repos },
   refs: { headRef, titleRef, actionsRef, probeRef, setFilterButton },
-  actions: { navigation, setFilterOpen, onToggleWorkspaces },
+  actions: { navigation, filterMenu, onToggleWorkspaces },
 }: SidebarChromeProps) {
   return (
     <div
@@ -308,41 +310,11 @@ export function SidebarChrome({
             )}
             ref={actionsRef}
           >
-            <Tooltip label="Workspace options">
-              <button
-                ref={setFilterButton}
-                className={cn(
-                  SIDEBAR_HEADER_BTN,
-                  isPhone
-                    ? cn(SIDEBAR_HEADER_BTN_PHONE, "min-h-[38px] min-w-[38px]")
-                    : SIDEBAR_HEADER_BTN_DESKTOP,
-                  "inline-flex items-center justify-center",
-                  // The open state paints the stronger wash and the hover now
-                  // layers OVER it (SIDEBAR_HOVER_LAYER), so the button no
-                  // longer has to withhold its hover to keep from washing
-                  // itself back out while open.
-                  SIDEBAR_HOVER_LAYER,
-                  filterOpen && "border-line-strong bg-pressed",
-                  // A set filter is already spelled out in the header (the repo
-                  // chip) and in the popover itself, so the button stays a plain
-                  // glyph: full contrast under the pointer or while open.
-                  filterOpen ? "text-fg" : "text-dim hover:text-fg",
-                )}
-                // A Base UI tooltip is a DESCRIPTION, not a name, so an
-                // icon-only trigger still needs one of its own. The phone twin
-                // below always carried this; the desktop button did not.
-                aria-label="Workspace options"
-                onClick={() => setFilterOpen((o) => !o)}
-              >
-                {/* 22, the scale's standalone step: these are section-header
-              actions, not the primary buttons or window chrome that take
-              24. At 24 the plus drew a 16px span against the 15.5 of the
-              search glyph in the titlebar row right above, and the filter
-              is filled bars, so the pair read a step larger than the row
-              they sit under. */}
-                <IconDotsHorizontal size={22} />
-              </button>
-            </Tooltip>
+            <WorkspaceOptionsButton
+              isPhone={isPhone}
+              filterMenu={filterMenu}
+              setFilterButton={setFilterButton}
+            />
             {/* ⌘S, not the ⌘⌥N this used to advertise: that chord opens a
             sibling session inside the workspace you have open, while
             this button (onNewSession → the palette) starts one in a new
@@ -370,5 +342,56 @@ export function SidebarChrome({
         </div>
       </div>
     </div>
+  );
+}
+
+/** Subscribes to the popover's open state on its own, so the pressed look
+ *  does not re-render the rest of the chrome. */
+function WorkspaceOptionsButton({
+  isPhone,
+  filterMenu,
+  setFilterButton,
+}: {
+  isPhone: boolean;
+  filterMenu: FilterMenuStore;
+  setFilterButton: SidebarChromeRefs["setFilterButton"];
+}) {
+  const filterOpen = useFilterMenuOpen(filterMenu);
+  return (
+    <Tooltip label="Workspace options">
+      <button
+        ref={setFilterButton}
+        className={cn(
+          SIDEBAR_HEADER_BTN,
+          isPhone
+            ? cn(SIDEBAR_HEADER_BTN_PHONE, "min-h-[38px] min-w-[38px]")
+            : SIDEBAR_HEADER_BTN_DESKTOP,
+          "inline-flex items-center justify-center",
+          // The open state paints the stronger wash and the hover now
+          // layers OVER it (SIDEBAR_HOVER_LAYER), so the button no
+          // longer has to withhold its hover to keep from washing
+          // itself back out while open.
+          SIDEBAR_HOVER_LAYER,
+          filterOpen && "border-line-strong bg-pressed",
+          // A set filter is already spelled out in the header (the repo
+          // chip) and in the popover itself, so the button stays a plain
+          // glyph: full contrast under the pointer or while open.
+          filterOpen ? "text-fg" : "text-dim hover:text-fg",
+        )}
+        // A Base UI tooltip is a DESCRIPTION, not a name, so an
+        // icon-only trigger still needs one of its own. The phone twin
+        // in Sidebar always carried this; the desktop button did not.
+        aria-label="Workspace options"
+        onClick={filterMenu.toggle}
+      >
+        {/* 22, the scale's standalone step: these are section-header
+      actions, not the primary buttons or window chrome that take
+      24. At 24 the plus drew a 16px span against the 15.5 of the
+      search glyph in the titlebar row right above, and the filter
+      is filled bars, so the pair read a step larger than the row
+      they sit under. */}
+        <IconDotsHorizontal size={22} />
+      </button>
+    </Tooltip>
   );
 }
