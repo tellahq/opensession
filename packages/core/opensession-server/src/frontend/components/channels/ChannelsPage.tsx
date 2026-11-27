@@ -5,6 +5,7 @@ import { useNavigation } from "../../hooks/useNavigation";
 import type { Route } from "../../lib/app-route";
 import {
   fetchConversationInfo,
+  type ChannelMessage,
   type Conversation,
   type ConversationInfo,
 } from "../../lib/api/slack-channels";
@@ -18,7 +19,7 @@ import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
 import { EmptyState, InlineAlert, LoadingState } from "../../ui/state";
 import { Tooltip } from "../../ui/tooltip";
-import { IconHash, IconX } from "../icons";
+import { IconHash, IconPeople, IconX } from "../icons";
 import { ChannelCallButton } from "./ChannelCallButton";
 import { ChannelComposer } from "./ChannelComposer";
 import { ChannelMessageRow } from "./ChannelMessageRow";
@@ -38,12 +39,16 @@ const NO_GRANT_HINT = "Connect Slack in Settings, Account to post";
 function MessageList({
   state,
   channelId,
+  conversationId,
   openThread,
   onOpenThread,
   intro,
 }: {
   state: ReturnType<typeof useChannelMessages>;
+  /** Keys the scroll position: a channel, or a thread in it. */
   channelId: string;
+  /** The Slack conversation the messages belong to. */
+  conversationId: string;
   openThread?: string;
   onOpenThread?: (ts: string) => void;
   /** Above a thread's replies: its first message. */
@@ -85,7 +90,7 @@ function MessageList({
         stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
       }}
     >
-      <div className="flex min-h-full flex-col justify-end px-2 pt-4 pb-2">
+      <div className="flex min-h-full flex-col justify-end pt-4 pb-2">
         {state.hasMore && onOpenThread && (
           <div className="mb-2 flex justify-center">
             <Button
@@ -114,17 +119,19 @@ function MessageList({
         ) : (
           items.map((item) =>
             item.kind === "day" ? (
+              // Slack's day divider: a rule across, the day in a pill on it.
               <div
                 key={item.key}
-                className="sticky top-0 z-[5] my-2 flex justify-center"
+                className="relative my-3 flex justify-center before:absolute before:inset-x-0 before:top-1/2 before:h-px before:bg-divider"
               >
-                <span className="rounded-full bg-panel px-3 py-1 text-meta font-medium text-dim">
+                <span className="relative rounded-full border border-line bg-surface px-3.5 py-0.5 text-meta font-semibold text-fg">
                   {item.label}
                 </span>
               </div>
             ) : (
               <ChannelMessageRow
                 key={item.key}
+                channelId={conversationId}
                 message={item.message}
                 head={item.head}
                 threadOpen={openThread === item.message.ts}
@@ -150,12 +157,19 @@ function ThreadPanel({
   thread,
   channelLabel,
   parent,
+  onReactParent,
   onClose,
 }: {
   channelId: string;
   thread: string;
   channelLabel: string;
-  parent: ReturnType<typeof useChannelMessages>["messages"][number] | undefined;
+  parent: ChannelMessage | undefined;
+  /** Reacting to the thread's first message updates the channel's copy. */
+  onReactParent: (
+    message: ChannelMessage,
+    name: string,
+    emoji?: string,
+  ) => void;
   onClose: () => void;
 }) {
   const replies = useChannelMessages(channelId, thread);
@@ -170,9 +184,9 @@ function ThreadPanel({
           : "w-[min(420px,42%)] shrink-0 border-l border-divider",
       )}
     >
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-divider-soft px-4">
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-divider-soft px-5">
         <div className="min-w-0 flex-1">
-          <span className="text-item-title font-semibold text-fg">Thread</span>
+          <span className="text-item-title font-bold text-fg">Thread</span>
           <span className="ml-2 truncate text-meta text-faint">
             {channelLabel}
           </span>
@@ -192,12 +206,24 @@ function ThreadPanel({
       <MessageList
         state={replies}
         channelId={`${channelId}:${thread}`}
+        conversationId={channelId}
         intro={
           parent && (
-            <div className="mb-1 border-b border-divider-soft pb-2">
-              <ChannelMessageRow message={parent} head />
+            <div className="mb-1">
+              <ChannelMessageRow
+                channelId={channelId}
+                message={parent}
+                head
+                onReact={
+                  replies.asUser
+                    ? (name, emoji) => onReactParent(parent, name, emoji)
+                    : undefined
+                }
+              />
+              {/* Slack's "15 replies" rule between the message and its
+                  thread. */}
               {!!parent.replyCount && (
-                <div className="px-3 pt-2 text-meta text-faint">
+                <div className="flex items-center gap-3 px-5 pt-3 pb-1 text-meta text-dim after:h-px after:flex-1 after:bg-divider">
                   {parent.replyCount}{" "}
                   {parent.replyCount === 1 ? "reply" : "replies"}
                 </div>
@@ -206,7 +232,7 @@ function ThreadPanel({
           )
         }
       />
-      <div className="shrink-0 px-3 pt-1 pb-[max(12px,env(safe-area-inset-bottom))]">
+      <div className="shrink-0 px-5 pt-1 pb-[max(16px,env(safe-area-inset-bottom))] phone:px-3">
         <ChannelComposer
           key={thread}
           placeholder="Reply"
@@ -350,22 +376,25 @@ function ConversationView({
         aria-label={label || "Channel"}
         className="flex min-w-0 flex-1 flex-col"
       >
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-divider-soft px-4">
-          {head && <ConversationGlyph conversation={head} size={20} />}
-          <h1 className="min-w-0 truncate text-item-title font-semibold text-fg">
+        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-divider-soft px-5">
+          {head && <ConversationGlyph conversation={head} size={22} />}
+          <h1 className="min-w-0 truncate text-dialog-title font-bold text-fg">
             {head?.name ?? ""}
           </h1>
           {info?.topic && (
-            <span className="min-w-0 flex-1 truncate text-meta text-faint phone:hidden">
+            <span className="ml-3 min-w-0 flex-1 truncate text-body text-dim phone:hidden">
               {info.topic}
             </span>
           )}
           <div className="ml-auto flex shrink-0 items-center gap-1">
             {info?.memberCount !== undefined &&
               (info.kind === "channel" || info.kind === "private") && (
-                <span className="px-1 text-meta text-faint tabular-nums">
-                  {info.memberCount}{" "}
-                  {info.memberCount === 1 ? "member" : "members"}
+                <span
+                  className="flex items-center gap-1 px-1.5 text-body text-dim tabular-nums"
+                  aria-label={`${info.memberCount} ${info.memberCount === 1 ? "member" : "members"}`}
+                >
+                  <IconPeople size={20} />
+                  {info.memberCount}
                 </span>
               )}
             {label && <ChannelCallButton channelId={channelId} label={label} />}
@@ -374,10 +403,11 @@ function ConversationView({
         <MessageList
           state={main}
           channelId={channelId}
+          conversationId={channelId}
           openThread={thread}
           onOpenThread={(ts) => openThread(ts)}
         />
-        <div className="shrink-0 px-3 pt-1 pb-[max(12px,env(safe-area-inset-bottom))]">
+        <div className="shrink-0 px-5 pt-1 pb-[max(16px,env(safe-area-inset-bottom))] phone:px-3">
           <ChannelComposer
             key={channelId}
             placeholder={label ? `Message ${label}` : "Message"}
@@ -395,6 +425,7 @@ function ConversationView({
           thread={thread}
           channelLabel={label}
           parent={parent}
+          onReactParent={main.react}
           onClose={() => openThread()}
         />
       )}

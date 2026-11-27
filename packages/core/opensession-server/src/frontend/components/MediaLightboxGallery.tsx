@@ -110,12 +110,9 @@ export function MediaLightboxGallery({
   const [copiedImageSrc, setCopiedImageSrc] = useState<string | null>(null);
   const copiedImage = !!item && copiedImageSrc === item.src;
   // The session input stays usable over a desktop viewer: the picture and
-  // its tools fit above it, centred on its column, and the scrim leaves it
-  // lit (LIGHTBOX_COMPOSER_SELECTOR). Null where the page has no input.
-  const [composerBox, setComposerBox] = useState<{
-    top: number;
-    centerX: number;
-  } | null>(null);
+  // its tools fit above it, and the scrim leaves it lit
+  // (LIGHTBOX_COMPOSER_SELECTOR). Null where the page has no input.
+  const [composerTop, setComposerTop] = useState<number | null>(null);
   const composerRef = useRef<HTMLElement | null>(null);
   const [savingSrc, setSavingSrc] = useState<string | null>(null);
   const nativeShare = canUseNativeIOSShare();
@@ -384,14 +381,9 @@ export function MediaLightboxGallery({
     const root = document.documentElement;
     root.dataset.lightboxComposer = "";
     const measure = () => {
-      const rect = composer.getBoundingClientRect();
-      const next = { top: rect.top, centerX: rect.left + rect.width / 2 };
-      setComposerBox((current) =>
-        current &&
-        Math.abs(current.top - next.top) < 0.5 &&
-        Math.abs(current.centerX - next.centerX) < 0.5
-          ? current
-          : next,
+      const top = composer.getBoundingClientRect().top;
+      setComposerTop((current) =>
+        current !== null && Math.abs(current - top) < 0.5 ? current : top,
       );
     };
     measure();
@@ -404,7 +396,7 @@ export function MediaLightboxGallery({
       window.removeEventListener("resize", measure);
       delete root.dataset.lightboxComposer;
       composerRef.current = null;
-      setComposerBox(null);
+      setComposerTop(null);
     };
   }, [isPhone]);
 
@@ -626,16 +618,11 @@ export function MediaLightboxGallery({
     .filter(Boolean)
     .join(" · ");
   const description = item.description?.trim();
-  // Desktop centres the picture and its tools on the input's column rather
-  // than the window, so the three stay in line when the sidebars push the
-  // input off centre. The shift is paid as extra padding on the far side.
-  const columnShift =
-    !isPhone && composerBox ? composerBox.centerX - viewport.width / 2 : 0;
-  const columnPadding = !isPhone
-    ? {
-        paddingLeft: 16 + Math.max(0, 2 * columnShift),
-        paddingRight: 16 + Math.max(0, -2 * columnShift),
-      }
+  // Desktop centres the picture and its tools on the window and gives them
+  // its full width: the viewer sits over every pane, sidebars included, so
+  // an open sidebar or panel never pushes the picture aside or shrinks it.
+  const sidePadding = !isPhone
+    ? { paddingLeft: 16, paddingRight: 16 }
     : undefined;
   // Wide enough for a sentence, never wider than the screen it floats on.
   const commentCardWidth = Math.min(340, Math.max(220, viewport.width - 24));
@@ -862,7 +849,7 @@ export function MediaLightboxGallery({
       role="dialog"
       tabIndex={-1}
       // Not modal while the session input stays usable beside it.
-      aria-modal={composerBox ? undefined : "true"}
+      aria-modal={composerTop !== null ? undefined : "true"}
       aria-label={LIGHTBOX_PREVIEW_LABEL[item.kind]}
       initial={useHeroTransition ? false : { opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -879,14 +866,9 @@ export function MediaLightboxGallery({
       <div ref={scrimRef} className={LIGHTBOX_SCRIM_CLASS} aria-hidden />
       {/* Where you are in the set, centred on the picture rather than on
           the top bar: the bar's sides differ in width (window controls on
-          the left, the actions on the right), and the picture follows the
-          input's column, which the sidebars can push off the window's
-          middle. */}
+          the left, the actions on the right). */}
       {many && !isPhone && (
-        <div
-          className="pointer-events-none absolute top-[calc(12px+env(safe-area-inset-top))] z-10 flex h-10 -translate-x-1/2 items-center text-meta font-medium tabular-nums text-dim"
-          style={{ left: `calc(50% + ${columnShift}px)` }}
-        >
+        <div className="pointer-events-none absolute left-1/2 top-[calc(12px+env(safe-area-inset-top))] z-10 flex h-10 -translate-x-1/2 items-center text-meta font-medium tabular-nums text-dim">
           {index + 1} of {items.length}
         </div>
       )}
@@ -942,7 +924,7 @@ export function MediaLightboxGallery({
                   ? "none"
                   : "padding 0.25s cubic-bezier(0.77, 0, 0.175, 1)",
               }
-            : columnPadding
+            : sidePadding
         }
         onMouseDown={(e) => {
           if (e.target === e.currentTarget) requestClose();
@@ -1264,11 +1246,12 @@ export function MediaLightboxGallery({
         <div
           className="z-10 flex shrink-0 flex-col items-center gap-2"
           style={{
-            ...columnPadding,
+            ...sidePadding,
             // Rests just above the input, or on the window's edge without one.
-            paddingBottom: composerBox
-              ? Math.max(16, viewport.height - composerBox.top + 16)
-              : 20,
+            paddingBottom:
+              composerTop !== null
+                ? Math.max(16, viewport.height - composerTop + 16)
+                : 20,
           }}
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) requestClose();

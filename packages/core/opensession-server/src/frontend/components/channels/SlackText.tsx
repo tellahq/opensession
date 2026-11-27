@@ -1,58 +1,103 @@
-import React from "react";
+import type { ReactNode } from "react";
+import {
+  slackBlocks,
+  type SlackBlock,
+  type SlackInline,
+} from "../../lib/slack-markup";
 
-/** Markdown-lite renderer for slack text the route emits: ![:name:](url)
- *  custom-emoji images, [label](url) links, [[@Name]]/[[#chan]] mention
- *  chips, bare URLs — everything else as selectable text. */
-export function SlackText({ text }: { text: string }) {
-  const parts: React.ReactNode[] = [];
-  const re =
-    /!\[([^\]]*)\]\((https?:[^)\s]+)\)|\[([^\]]+)\]\((https?:[^)\s]+)\)|\[\[([@#][^\]]+)\]\]|(https?:\/\/[^\s<>]+[^\s<>.,)\]}])/g;
-  let last = 0;
-  let m: RegExpExecArray | null;
-  let key = 0;
-  while ((m = re.exec(text))) {
-    if (m.index > last) parts.push(text.slice(last, m.index));
-    if (m[2] !== undefined) {
+function Inline({ node }: { node: SlackInline }): ReactNode {
+  switch (node.type) {
+    case "text":
+      return node.text;
+    case "bold":
+      return (
+        <strong className="font-bold">
+          <Inlines nodes={node.children} />
+        </strong>
+      );
+    case "italic":
+      return (
+        <em>
+          <Inlines nodes={node.children} />
+        </em>
+      );
+    case "strike":
+      return (
+        <s>
+          <Inlines nodes={node.children} />
+        </s>
+      );
+    case "code":
+      return (
+        <code className="rounded-sm bg-hover px-1 py-px font-mono text-[0.88em] text-red">
+          {node.text}
+        </code>
+      );
+    case "emoji":
       // Custom emoji image, sized to ride inline with the text.
-      parts.push(
+      return (
         <img
-          key={key++}
-          src={m[2]}
-          alt={m[1]}
-          title={m[1]}
-          className="inline-block h-[18px] w-[18px] align-text-bottom"
-        />,
+          src={node.url}
+          alt={node.name}
+          title={node.name}
+          className="inline-block size-[18px] align-text-bottom"
+        />
       );
-    } else if (m[5] !== undefined) {
-      parts.push(
-        <span
-          key={key++}
-          className="rounded-sm bg-accent-soft px-1 font-medium text-accent"
-        >
-          {m[5]}
-        </span>,
+    case "tag":
+      return (
+        <span className="rounded-sm bg-accent-soft px-1 font-medium text-accent">
+          {node.label}
+        </span>
       );
-    } else {
-      const href = m[4] || m[6];
-      const label = m[3] || m[6];
-      parts.push(
+    case "link":
+      return (
         <a
-          key={key++}
-          href={href}
+          href={node.href}
           target="_blank"
           rel="noreferrer"
-          className="text-link underline decoration-line underline-offset-2 hover:decoration-current"
+          className="text-link hover:underline"
         >
-          {label}
-        </a>,
+          {node.label}
+        </a>
       );
-    }
-    last = m.index + m[0].length;
   }
-  if (last < text.length) parts.push(text.slice(last));
+}
+
+function Inlines({ nodes }: { nodes: SlackInline[] }) {
+  return nodes.map((node, index) => <Inline key={index} node={node} />);
+}
+
+function Block({ block }: { block: SlackBlock }) {
+  if (block.type === "code")
+    return (
+      <pre className="my-1 overflow-x-auto rounded-md border border-line bg-hover px-3 py-2 font-mono text-meta leading-relaxed whitespace-pre">
+        {block.text}
+      </pre>
+    );
+  if (block.type === "quote")
+    return (
+      <blockquote className="my-0.5 border-l-4 border-line-strong pl-3 text-dim">
+        <Inlines nodes={block.inlines} />
+      </blockquote>
+    );
+  return (
+    <p className="m-0">
+      <Inlines nodes={block.inlines} />
+    </p>
+  );
+}
+
+/**
+ * Slack message text, as Slack shows it: paragraphs, quotes and code blocks,
+ * bold, italic, strikethrough and inline code, links, @ and # tags and
+ * custom emoji (lib/slack-markup.ts parses it).
+ */
+export function SlackText({ text }: { text: string }) {
   return (
     <div className="select-text whitespace-pre-wrap break-words text-body leading-snug text-fg">
-      {parts}
+      {slackBlocks(text).map((block, index) => (
+        <Block key={index} block={block} />
+      ))}
     </div>
   );
 }

@@ -74,6 +74,19 @@ export function replySummary(message: ChannelMessage): string {
   return `${count} ${count === 1 ? "reply" : "replies"}`;
 }
 
+/** "just now", "45 minutes ago", "3 hours ago", "2 days ago", as Slack
+ *  words a thread's last reply. */
+export function timeAgo(ts: string, now = Date.now()): string {
+  const seconds = Math.max(0, (now - tsDate(ts).getTime()) / 1000);
+  const unit = (n: number, word: string) =>
+    `${n} ${word}${n === 1 ? "" : "s"} ago`;
+  if (seconds < 60) return "just now";
+  if (seconds < 3600) return unit(Math.floor(seconds / 60), "minute");
+  if (seconds < 86_400) return unit(Math.floor(seconds / 3600), "hour");
+  if (seconds < 30 * 86_400) return unit(Math.floor(seconds / 86_400), "day");
+  return tsDate(ts).toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
 /** Reactions after the person toggled `name`. */
 export function toggledReactions(
   message: ChannelMessage,

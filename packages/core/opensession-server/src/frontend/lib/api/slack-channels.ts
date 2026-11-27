@@ -152,6 +152,15 @@ export function setReaction(
   });
 }
 
+export function fetchPermalink(
+  id: string,
+  ts: string,
+): Promise<{ url: string }> {
+  return request(`${channelPath(id)}/permalink?ts=${encodeURIComponent(ts)}`, {
+    label: "Couldn't get the message link",
+  });
+}
+
 /** A message file's preview as an <img> source. */
 export function fileSrc(thumb: string): string {
   return `${BASE_PATH}${thumb}`;

@@ -800,12 +800,13 @@ const HEADER_ITEM = sidebarStyles.headerItem;
 const HEADER_LANE = sidebarStyles.headerLane;
 
 /**
- * Under a place title the captions can be quieter: the rows' own size in a
- * regular weight, set apart by their muted ink alone. A sibling reach (the
- * new layout is keyed off a `[data-minibar]` earlier in the body), so it
- * stays a utility.
+ * Under a place title the captions take the rows' own size and weight, set
+ * apart by their muted ink alone. Regular weight read too thin beside the
+ * medium rows; the Channels sidebar's section headings match this. A
+ * sibling reach (the new layout is keyed off a `[data-minibar]` earlier in
+ * the body), so it stays a utility.
  */
-const LANE_NEW_LAYOUT = "new-layout:text-item-title new-layout:font-normal";
+const LANE_NEW_LAYOUT = "new-layout:text-item-title new-layout:font-medium";
 
 /**
  * The heading's own name. `truncate` before any width utility: it is the pair
