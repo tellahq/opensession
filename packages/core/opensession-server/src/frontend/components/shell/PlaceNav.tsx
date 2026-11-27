@@ -4,6 +4,7 @@ import {
   SIDEBAR_DENSITY_VARS,
   SIDEBAR_NAV_X,
   SIDEBAR_PLACE_TITLE,
+  SIDEBAR_PLACE_TITLE_GAP,
 } from "../../lib/sidebar-classes";
 import { cn } from "../../ui/cn";
 import { ListRow } from "../../ui/list-row";
@@ -55,6 +56,7 @@ export function PlaceNav({
       <div
         className={cn(
           SIDEBAR_PLACE_TITLE,
+          SIDEBAR_PLACE_TITLE_GAP,
           "flex h-[var(--sidebar-band-slot)] items-center px-4",
         )}
       >

@@ -1,6 +1,12 @@
 import { useSyncExternalStore, type ReactNode } from "react";
 import { useNavigation } from "../../hooks/useNavigation";
 import { useNotifications } from "../../hooks/useNotifications";
+import type { Route } from "../../lib/app-route";
+import {
+  parseMinibarItems,
+  setMinibarItemShown,
+  useMinibarItems,
+} from "../../lib/minibar-pref";
 import type { Place } from "../../lib/new-layout-place";
 import { unreadNotificationCount } from "../../lib/notifications";
 import {
@@ -10,8 +16,15 @@ import {
 import { PLAIN_ID } from "../../lib/support-surface";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
+import { ContextMenu, Menu, MENU_ICON } from "../../ui/menu";
 import { Tooltip } from "../../ui/tooltip";
-import { IconBook, IconFeed, IconLifebuoy, IconMessages } from "../icons";
+import {
+  IconChevronRight,
+  IconDotsHorizontal,
+  IconMessages,
+  IconSliders,
+} from "../icons";
+import { MINIBAR_ITEMS, type MinibarItem } from "./minibar-model";
 import { OrganizationSwitcher } from "../OrganizationSwitcher";
 import { UserAvatar } from "../UserAvatar";
 import { useCurrentUser } from "../UserPicker";
@@ -56,7 +69,7 @@ function PlaceButton({
     <Tooltip label={label} side="right">
       <Button
         variant="ghost"
-        size="lg"
+        size="xl"
         icon={<PlaceGlyph icon={icon} unread={unread} />}
         className={cn(RAIL_TILE, active && PLACE_ACTIVE)}
         aria-label={unread ? `${label}, new activity` : label}
@@ -77,10 +90,58 @@ function useSupportShown(): boolean {
   );
 }
 
+// A menu row's glyph column is 20px; the minibar draws its glyphs at 24.
+const MENU_ICON_SLOT = cn("inline-flex shrink-0 [&_svg]:size-5", MENU_ICON);
+
+/**
+ * A tick per item the minibar can carry, places first, then pages. Shared by
+ * the minibar's right-click menu and ⋯ → Show in minibar, which are two ways
+ * to the same choice. Rows stay open on click, so pinning three pages is one
+ * visit.
+ */
+function MinibarItemToggles({
+  items,
+  shown,
+}: {
+  items: readonly MinibarItem[];
+  shown: ReadonlySet<string>;
+}) {
+  const places = items.filter((item) => item.place);
+  const pages = items.filter((item) => !item.place);
+  const row = (item: MinibarItem) => (
+    <Menu.CheckboxItem
+      key={item.id}
+      checked={shown.has(item.id)}
+      onCheckedChange={(on) => setMinibarItemShown(item.id, on)}
+    >
+      <span className={MENU_ICON_SLOT}>{item.icon}</span>
+      <span className="grow truncate">{item.label}</span>
+      <Menu.Check on={shown.has(item.id)} size={20} className="text-dim" />
+    </Menu.CheckboxItem>
+  );
+  return (
+    <>
+      <Menu.Group>
+        <Menu.GroupLabel>Places</Menu.GroupLabel>
+        {places.map(row)}
+      </Menu.Group>
+      <Menu.Separator />
+      <Menu.Group>
+        <Menu.GroupLabel>Pages</Menu.GroupLabel>
+        {pages.map(row)}
+      </Menu.Group>
+    </>
+  );
+}
+
 /**
  * The new layout's left edge: the organization at the top, the places under
  * it, and you at the bottom. It is the only part of the window left on the
  * chrome material; the sidebar and the workspace sit on the page beside it.
+ *
+ * What it carries besides Sessions is yours to choose: right-click it, or
+ * use ⋯ → Show in minibar, to drop a place or pin a single page beside them
+ * (lib/minibar-pref.ts). Whatever is left out sits in the ⋯ menu.
  *
  * Desktop only. In the desktop shell the traffic lights sit over its top, so
  * the organization starts one header row down and the column is a drag
@@ -88,13 +149,19 @@ function useSupportShown(): boolean {
  */
 export function Minibar({
   place,
+  route,
   onOpenSessions,
+  onRevealSidebar,
   connected,
   accessory,
 }: {
   place: Place;
+  route: Route;
   /** Show your own list (the route controller's `openSessions`). */
   onOpenSessions: () => void;
+  /** Open the sidebar if it is closed: a place is its list, so going to
+   *  one shows it. */
+  onRevealSidebar: () => void;
   connected: boolean;
   /** Sits above your account: the Update nudge, as an icon. */
   accessory?: ReactNode;
@@ -105,76 +172,141 @@ export function Minibar({
   const unreadNotifications = unreadNotificationCount(
     useNotifications().threads,
   );
+  const shown = parseMinibarItems(useMinibarItems());
+
+  // Support leaves the minibar along with the sidebar tool it opens.
+  const items = MINIBAR_ITEMS.filter(
+    (item) => item.id !== "support" || supportShown,
+  );
+  const inBar = items.filter((item) => shown.has(item.id));
+  const inMore = items.filter((item) => !shown.has(item.id));
+  // A pinned page lights instead of the place it belongs to: one lit tile
+  // says where you are.
+  const pinnedHere = inBar.find((item) => item.onPage?.(route));
+  const unread = (item: MinibarItem) =>
+    item.id === "activity" && unreadNotifications > 0;
+  const open = (item: MinibarItem) => {
+    item.open(navigation);
+    if (item.place) onRevealSidebar();
+  };
 
   return (
-    <nav
-      aria-label="Places"
-      // The workspace shell reads this to drop its edge shadow
-      // (WORKSPACE_SHELL, lib/app-shell-classes.ts).
-      data-minibar
-      className={cn(
-        "wco-chrome relative flex w-[52px] shrink-0 flex-col items-center gap-1 pt-1.5 pb-2 [html.wco_&]:pt-[var(--desktop-header-h)]",
-        // A hairline between the rail and the sidebar. It stops short of the
-        // window's bottom edge by the workspace panel's own 4px gap
-        // (WORKSPACE_SHELL), so the two end on one line. In the desktop shell
-        // the traffic lights reach past the rail, so there it starts under
-        // their row. With the sidebar closed there is nothing to divide: the
-        // panel sits right beside the rail.
-        "after:pointer-events-none after:absolute after:top-0 after:bottom-1 after:right-0 after:w-px after:bg-divider after:content-[''] [html.wco_&]:after:top-[var(--desktop-header-h)] [.app-body.sidebar-collapsed_&]:after:hidden",
-      )}
-    >
-      <OrganizationSwitcher
-        connected={connected}
-        onOpenSettings={navigation.openSettings}
-        variant="minibar"
-      />
-      <div className="mt-1 flex flex-col items-center gap-1">
-        <PlaceButton
-          label="Sessions"
-          active={place === "sessions"}
-          // Your own chats with something you have not read yet (the same
-          // list the next-unread button walks).
-          unread={navigation.unreadChats.length > 0}
-          // Sessions is always your own list (filterForPlace,
-          // lib/sidebar-filter.ts), however you reach it.
-          onClick={onOpenSessions}
-          icon={<IconMessages size={22} />}
-        />
-        <PlaceButton
-          label="Activity"
-          active={place === "activity"}
-          // The inbox lives in Activity, so its unread notifications do.
-          unread={unreadNotifications > 0}
-          onClick={navigation.openFeed}
-          icon={<IconFeed size={22} />}
-        />
-        {supportShown && (
-          <PlaceButton
-            label="Support"
-            active={place === "support"}
-            onClick={navigation.openPlain}
-            icon={<IconLifebuoy size={22} />}
+    <ContextMenu.Root>
+      <ContextMenu.Trigger
+        render={
+          <nav
+            aria-label="Places"
+            // The workspace shell reads this to drop its edge shadow
+            // (WORKSPACE_SHELL, lib/app-shell-classes.ts).
+            data-minibar
+            className={cn(
+              "wco-chrome relative flex w-[56px] shrink-0 flex-col items-center gap-1 pt-1 pb-2 [html.wco_&]:pt-[var(--desktop-header-h)]",
+              // A hairline between the rail and the sidebar. It stops short
+              // of the window's bottom edge by the workspace panel's own 4px
+              // gap (WORKSPACE_SHELL), so the two end on one line. In the
+              // desktop shell the traffic lights reach past the rail, so
+              // there it starts under their row. With the sidebar closed
+              // there is nothing to divide: the panel sits right beside the
+              // rail.
+              "after:pointer-events-none after:absolute after:top-0 after:bottom-1 after:right-0 after:w-px after:bg-divider after:content-[''] [html.wco_&]:after:top-[var(--desktop-header-h)] [.app-body.sidebar-collapsed_&]:after:hidden",
+            )}
           />
-        )}
-        <PlaceButton
-          label="Library"
-          active={place === "library"}
-          onClick={navigation.openPrs}
-          icon={<IconBook size={22} />}
+        }
+      >
+        <OrganizationSwitcher
+          connected={connected}
+          onOpenSettings={navigation.openSettings}
+          variant="minibar"
         />
-      </div>
-      <div className="min-h-0 flex-1" />
-      {accessory}
-      <Tooltip label="Your settings" side="right">
-        <Button
-          variant="ghost"
-          size="lg"
-          icon={<UserAvatar name={currentUser} size={28} />}
-          className={RAIL_TILE}
-          aria-label="Your settings"
-          onClick={() => navigation.openSettings("myAccounts")}
-        />
-      </Tooltip>
-    </nav>
+        <div className="mt-1 flex flex-col items-center gap-1">
+          <PlaceButton
+            label="Sessions"
+            active={place === "sessions" && !pinnedHere}
+            // Your own chats with something you have not read yet (the same
+            // list the next-unread button walks).
+            unread={navigation.unreadChats.length > 0}
+            // Sessions is always your own list (filterForPlace,
+            // lib/sidebar-filter.ts), however you reach it.
+            onClick={() => {
+              onOpenSessions();
+              onRevealSidebar();
+            }}
+            icon={<IconMessages size={24} />}
+          />
+          {inBar.map((item) => (
+            <PlaceButton
+              key={item.id}
+              label={item.label}
+              active={
+                item.place
+                  ? !pinnedHere && place === item.place
+                  : item === pinnedHere
+              }
+              // The inbox lives in Activity, so its unread notifications do.
+              unread={unread(item)}
+              onClick={() => open(item)}
+              icon={item.icon}
+            />
+          ))}
+          <Menu.Root>
+            <Tooltip label="More" side="right">
+              <Menu.Trigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="xl"
+                    icon={
+                      <PlaceGlyph
+                        icon={<IconDotsHorizontal size={24} />}
+                        // Something new in a place that is not in the bar.
+                        unread={inMore.some(unread)}
+                      />
+                    }
+                    className={RAIL_TILE}
+                    aria-label="More"
+                  />
+                }
+              />
+            </Tooltip>
+            <Menu.Popup side="right" align="start" className="min-w-[220px]">
+              {inMore.map((item) => (
+                <Menu.Item key={item.id} onClick={() => open(item)}>
+                  <span className={MENU_ICON_SLOT}>
+                    <PlaceGlyph icon={item.icon} unread={unread(item)} />
+                  </span>
+                  <span className="grow truncate">{item.label}</span>
+                </Menu.Item>
+              ))}
+              {inMore.length > 0 && <Menu.Separator />}
+              <Menu.SubmenuRoot>
+                <Menu.SubmenuTrigger>
+                  <IconSliders size={20} className={MENU_ICON} />
+                  <span className="grow">Show in minibar</span>
+                  <IconChevronRight size={16} className="text-faint" />
+                </Menu.SubmenuTrigger>
+                <Menu.Popup className="min-w-[220px]">
+                  <MinibarItemToggles items={items} shown={shown} />
+                </Menu.Popup>
+              </Menu.SubmenuRoot>
+            </Menu.Popup>
+          </Menu.Root>
+        </div>
+        <div className="min-h-0 flex-1" />
+        {accessory}
+        <Tooltip label="Your settings" side="right">
+          <Button
+            variant="ghost"
+            size="xl"
+            icon={<UserAvatar name={currentUser} size={30} />}
+            className={RAIL_TILE}
+            aria-label="Your settings"
+            onClick={() => navigation.openSettings("myAccounts")}
+          />
+        </Tooltip>
+      </ContextMenu.Trigger>
+      <ContextMenu.Popup className="min-w-[220px]">
+        <MinibarItemToggles items={items} shown={shown} />
+      </ContextMenu.Popup>
+    </ContextMenu.Root>
   );
 }

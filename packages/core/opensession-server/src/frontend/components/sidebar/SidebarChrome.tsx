@@ -10,6 +10,7 @@ import {
   SIDEBAR_HOVER_LAYER,
   SIDEBAR_NAV_X,
   SIDEBAR_PLACE_TITLE,
+  SIDEBAR_PLACE_TITLE_GAP,
   SIDEBAR_STICKY_BAND,
   SIDEBAR_STICKY_BAND_ROW,
   SIDEBAR_STUCK_BACKING,
@@ -176,6 +177,9 @@ export function SidebarChrome({
           SIDEBAR_STICKY_BAND,
           SIDEBAR_STICKY_BAND_ROW,
           SIDEBAR_STUCK_BACKING,
+          // The place title's gap, as PlaceNav sets it. This row is fixed
+          // chrome above the scrollport here, so nothing pins against it.
+          newLayout && SIDEBAR_PLACE_TITLE_GAP,
         )}
         data-sticky-head
       >

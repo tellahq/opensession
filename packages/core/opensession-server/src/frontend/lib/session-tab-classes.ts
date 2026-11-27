@@ -119,14 +119,18 @@ export const TAB_SCROLL =
 /**
  * The new layout's strip (`layout.attached`). It sits in the grey window row
  * rather than in a band of its own, so it paints no fill and no closing rule:
- * the row has both. Tabs hang from 8px below the row's top edge to its bottom,
- * where the active one meets the sheet.
+ * the row has both. A tab's body is 32px, centred on the row's middle line,
+ * which is where the traffic lights and the row's icons sit; the active tab
+ * carries on below it to the row's bottom edge, where it meets the sheet.
+ * `--tab-inset` is the room above that body: 4px in the web's 40px row, 10px
+ * in the Mac app's 52px one.
  *
  * No `session-tabs` hook: that name tells the top bar a strip overlaps its
  * lower edge, and this one is beside the bar, not under it.
  */
 export const TAB_STRIP_ATTACHED =
-  "group/strip relative flex min-w-0 flex-1 items-stretch gap-0.5 pt-2";
+  "group/strip relative flex min-w-0 flex-1 items-stretch gap-0.5 " +
+  "[--tab-inset:calc((var(--desktop-header-h)-32px)/2)] pt-[var(--tab-inset)]";
 
 /** Added to TAB_SCROLL: full height so a tab can reach the row's bottom edge,
  *  and above the panel's outline (WORKSPACE_SHELL, z 30) so the active tab
@@ -140,6 +144,11 @@ export const TAB_STRIP_ATTACHED =
 export const TAB_SCROLL_ATTACHED =
   "relative z-[31] items-stretch pr-2.5 [.app-body.sidebar-collapsed_&]:pl-2.5";
 
+/** The "+" and history controls after the tabs: lifted off the row's bottom
+ *  by the same inset, so they centre on the row's middle line with the tab
+ *  labels rather than on the strip below the inset. */
+export const TAB_CONTROL_ATTACHED = "mb-[var(--tab-inset)]";
+
 export const TAB_GROUP_ATTACHED =
   "relative inline-flex flex-none items-stretch gap-0.5";
 
@@ -148,22 +157,21 @@ export const TAB_GROUP_ATTACHED =
  * hairline square: it curves outward and becomes that hairline, so the tab
  * and the sheet under it read as one outlined shape.
  *
- * Each flare is a 10px box at the tab's foot, just outside it, painted by one
+ * Each flare is an 8px box at the tab's foot, just outside it, painted by one
  * gradient: the row shows through inside the curve, the hairline is the
  * curve, and the tab's fill (`--tab-fill`) is the wedge under it. It overlaps
  * the tab's own border by that border's one pixel, and sits above it, so the
  * straight edge turns into the curve without a step.
  *
- * The curve is the band from 9px to 10px of the gradient, as wide as the
+ * The curve is the band from 7px to 8px of the gradient, as wide as the
  * border it continues and on the same pixels where they meet. Each edge of
  * it is a half-pixel ramp centred on that edge, which is what smooths it.
  * All three strokes use the row's opaque `--tab-edge` (PANE_TOP_ROW), since
  * they overlap at both ends.
  *
  * One outline, one curve: a gradient can only draw a circular arc, so the
- * tab's top corners and the sheet's corner beside the minibar
- * (components/AppSidebar.tsx) are circular arcs of the same 10px
- * (`[corner-shape:round]`) and not the app's squircle. A squircle at the top
+ * tab's top corners are circular arcs of the same 8px (`[corner-shape:round]`)
+ * and not the app's squircle. A squircle at the top
  * of a tab whose feet are arcs reads as two different roundings.
  *
  * Every class here is spelled out in full. Tailwind reads this file as text,
@@ -179,17 +187,17 @@ export const TAB_GROUP_ATTACHED =
  */
 const TAB_ITEM_ATTACHED_FLARES =
   "[--tab-fill:var(--bg)] data-[colored]:[--tab-fill:color-mix(in_srgb,var(--tab-color)_14%,var(--bg))] " +
-  "before:pointer-events-none before:absolute before:bottom-0 before:-left-[9px] before:z-[1] before:hidden before:size-2.5 before:content-[''] " +
-  "before:[background:radial-gradient(circle_at_0_0,transparent_8.75px,var(--tab-edge,var(--divider))_9.25px,var(--tab-edge,var(--divider))_9.75px,var(--tab-fill)_10.25px)] " +
-  "after:pointer-events-none after:absolute after:bottom-0 after:-right-[9px] after:z-[1] after:hidden after:size-2.5 after:content-[''] " +
-  "after:[background:radial-gradient(circle_at_100%_0,transparent_8.75px,var(--tab-edge,var(--divider))_9.25px,var(--tab-edge,var(--divider))_9.75px,var(--tab-fill)_10.25px)] " +
+  "before:pointer-events-none before:absolute before:bottom-0 before:-left-[7px] before:z-[1] before:hidden before:size-2 before:content-[''] " +
+  "before:[background:radial-gradient(circle_at_0_0,transparent_6.75px,var(--tab-edge,var(--divider))_7.25px,var(--tab-edge,var(--divider))_7.75px,var(--tab-fill)_8.25px)] " +
+  "after:pointer-events-none after:absolute after:bottom-0 after:-right-[7px] after:z-[1] after:hidden after:size-2 after:content-[''] " +
+  "after:[background:radial-gradient(circle_at_100%_0,transparent_6.75px,var(--tab-edge,var(--divider))_7.25px,var(--tab-edge,var(--divider))_7.75px,var(--tab-fill)_8.25px)] " +
   "[&:has(>[aria-selected=true])]:before:block [&:has(>[aria-selected=true])]:after:block " +
   "[.app-body:not(.sidebar-collapsed)_&]:first:before:hidden!";
 
 export const TAB_ITEM_ATTACHED = `session-tab-reorder relative inline-flex shrink-0 items-stretch ${TAB_ITEM_ATTACHED_FLARES}`;
 
 export const TAB_ITEM_ATTACHED_DRAGGING =
-  "cursor-grabbing rounded-t-[10px] [corner-shape:round] bg-panel smooth-shadow-ring-sm";
+  "cursor-grabbing rounded-t-[8px] [corner-shape:round] bg-panel smooth-shadow-ring-sm";
 
 /**
  * The drag-to-reorder group wraps EVERY tab — sessions and view panes alike —
@@ -271,9 +279,10 @@ const TAB_ATTACHED_BASE =
   "relative inline-flex max-w-[180px] shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
   "[corner-shape:round] border px-2.5 text-label shadow-none transition-[background-color,color]";
 const TAB_ATTACHED_OUTLINE = {
-  active: "rounded-t-[10px] border-b-0",
-  // 24px, centred on the active tab's label line.
-  inactive: "my-1 rounded-[10px]",
+  // The 32px body, then the inset again below it, down to the sheet.
+  active: "rounded-t-[8px] border-b-0 pb-[var(--tab-inset)]",
+  // 26px, centred on the row's middle line with the active tab's label.
+  inactive: "mt-[3px] mb-[calc(var(--tab-inset)+3px)] rounded-[8px]",
 };
 
 function attachedTabClass({ active, waiting, colored }: TabState): string {

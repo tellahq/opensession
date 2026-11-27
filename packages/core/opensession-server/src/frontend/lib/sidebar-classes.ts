@@ -671,6 +671,13 @@ export const SIDEBAR_BAND_LABEL = "text-label font-semibold text-dim";
 export const SIDEBAR_PLACE_TITLE = "text-dialog-title font-semibold text-fg";
 
 /**
+ * The air between a place title and the first row under it. The title's slot
+ * centers a 19px line in 32px, which left only a few pixels above the first
+ * row's pill, so the title read as stuck to the list.
+ */
+export const SIDEBAR_PLACE_TITLE_GAP = "mb-2";
+
+/**
  * The heading's toggle button. Horizontal padding is NOT here: each band sits
  * at a different inset, and two utilities from the same group in one string
  * would leave the winner to Tailwind's internal ordering rather than to the
