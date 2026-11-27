@@ -1,9 +1,13 @@
 {
-  "raw-button": 305,
-  "raw-form-control": 113,
-  "arbitrary-text-size": 104,
-  "off-scale-radius": 18,
-  "patched-control-height": 37,
-  "adhoc-overlay": 11,
-  "raw-base-ui": 0
+  "raw-button": 303,
+  "raw-form-control": 88,
+  "arbitrary-text-size": 27,
+  "off-scale-radius": 11,
+  "patched-control-height": 31,
+  "adhoc-overlay": 8,
+  "raw-base-ui": 0,
+  "unknown-theme-token": 0,
+  "stock-palette-color": 0,
+  "stock-shadow": 0,
+  "raw-hex-color": 6
 }

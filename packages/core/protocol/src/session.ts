@@ -399,6 +399,9 @@ export type ProtocolClientMessage =
       requestId?: string;
       queueId?: string;
       queueIndex?: number;
+      /** Deletes a conversation message no run has picked up yet, by its
+       * transcript entry id, instead of a queued item. */
+      entryId?: string;
     }
   | {
       type: "take_queued_prompt";

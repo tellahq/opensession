@@ -1,14 +1,22 @@
-import React from "react";
+import React, { lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { MotionConfig } from "motion/react";
 import { EffectRegistryProvider } from "./components/EffectRegistryProvider";
 import { AgentationFeedback } from "./components/AgentationFeedback";
 import { TranscriptMotionLab } from "./components/TranscriptMotionLab";
+import { IS_DEV_MODE } from "./lib/brand";
+import { isDesignSystemRoute } from "./lib/design-system-route";
 import { transcriptMotionFixtureOptions } from "./lib/transcript-motion-scenarios";
 import { TooltipProvider } from "./ui/tooltip";
 import { AppContent } from "./AppContent";
 import { startLocalFolderBridge } from "./lib/local-folders/bridge";
 import type { AppProps } from "./lib/app-types";
+
+const DesignSystemGallery = lazy(() =>
+  import("./components/DesignSystemGallery").then((module) => ({
+    default: module.DesignSystemGallery,
+  })),
+);
 
 declare global {
   interface Window {
@@ -41,9 +49,12 @@ if (!embeddedDemo) {
     location.pathname,
     location.search,
   );
+  const designSystemGallery =
+    IS_DEV_MODE && isDesignSystemRoute(location.pathname);
   // Folders on this computer connected to sessions (lib/local-folders) stay
   // reachable while any window is open. Opens no socket unless one is.
-  if (!transcriptMotionFixture) startLocalFolderBridge();
+  if (!transcriptMotionFixture && !designSystemGallery)
+    startLocalFolderBridge();
   // `reducedMotion="user"` makes every `motion.*` component honour the OS
   // setting. Motion's default is "never", so without this the CSS blanket in
   // legacy.css would quietly cover only half the app — Motion animates inline
@@ -59,6 +70,12 @@ if (!embeddedDemo) {
           speed={transcriptMotionFixture.speed}
           profile={transcriptMotionFixture.profile}
         />
+      ) : designSystemGallery ? (
+        <TooltipProvider>
+          <Suspense fallback={null}>
+            <DesignSystemGallery />
+          </Suspense>
+        </TooltipProvider>
       ) : (
         <TooltipProvider>
           <>

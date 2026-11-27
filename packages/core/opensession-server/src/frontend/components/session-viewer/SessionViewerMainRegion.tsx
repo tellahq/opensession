@@ -899,7 +899,7 @@ export function SessionViewerMainRegion({
                     data-file-drop-overlay
                   >
                     <IconArrowUpToLine size={40} className="text-fg" />
-                    <div className="mt-4 text-title font-semibold text-fg">
+                    <div className="mt-4 text-dialog-title font-title text-fg">
                       Add files
                     </div>
                     <div className="mt-1 text-label text-dim">
@@ -1108,6 +1108,13 @@ export function SessionViewerMainRegion({
                         onLayout={relayout}
                         reviewResult={reviewResult}
                         onEditMessage={editSentMessageInComposer}
+                        onDeletePendingMessage={(entryId) =>
+                          send({
+                            type: "delete_queued_prompt",
+                            sessionId: session.id,
+                            entryId,
+                          })
+                        }
                         // Same gate the composer sends under: a busy session
                         // is already continuing, and one you cannot type into
                         // must not offer a button that types for you.

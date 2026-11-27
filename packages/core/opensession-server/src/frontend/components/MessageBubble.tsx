@@ -37,6 +37,7 @@ import {
   IconLightbulb,
   IconLink,
   IconPencil,
+  IconTrash,
 } from "./icons";
 import { TextShimmer } from "../ui/text-shimmer";
 import { plainStatusText } from "../lib/progress-updates";
@@ -312,7 +313,7 @@ function NoticeRow({
     return (
       <div className={cn(msgSystemRow, "my-3 w-full")} data-eid={entry.id}>
         <div className="flex w-full items-center gap-3">
-          <span aria-hidden="true" className="h-px flex-1 bg-border-subtle" />
+          <span aria-hidden="true" className="h-px flex-1 bg-divider" />
           <span
             className={cn(msgSystemText, "shrink-0 gap-1.5")}
             data-tone="info"
@@ -334,12 +335,12 @@ function NoticeRow({
               </>
             )}
           </span>
-          <span aria-hidden="true" className="h-px flex-1 bg-border-subtle" />
+          <span aria-hidden="true" className="h-px flex-1 bg-divider" />
         </div>
         {hasRecap && open && (
           <section
             aria-label="Thread recap"
-            className="mx-auto mt-2.5 w-full max-w-[600px] rounded-lg border border-border-subtle border-l-2 border-l-accent bg-panel px-4 py-3 text-left"
+            className="mx-auto mt-2.5 w-full max-w-[600px] rounded-lg border-l-2 border-l-accent bg-panel px-4 py-3 text-left"
           >
             <div className="mb-1.5 text-label font-semibold text-dim">
               Thread recap
@@ -562,6 +563,24 @@ function EditAgainButton({ onClick }: { onClick: () => void }) {
   );
 }
 
+/** Take back a message the conversation accepted but no run has read yet.
+ * Unlike the hover actions it stays on the page: a message stuck in this
+ * state is the thing the person is looking at. */
+function DeletePendingButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Tooltip label="Delete unsent message">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={onClick}
+        aria-label="Delete unsent message"
+        className="size-7 min-h-7 text-faint"
+        icon={<IconTrash size={16} />}
+      />
+    </Tooltip>
+  );
+}
+
 /** Copy the message text as sent. A wire-clamped entry only carries its head,
  * so its full content is fetched first; the pending ClipboardItem keeps the
  * click's user activation while the fetch runs (WebKit drops it otherwise). */
@@ -645,12 +664,15 @@ function CopyMessageLinkButton({ entryId }: { entryId: string }) {
 function BubbleMeta({
   ts,
   onEdit,
+  onDelete,
   copy,
   linkEntryId,
   message,
 }: {
   ts?: string;
   onEdit?: () => void;
+  /** Offered while the message waits for a run to pick it up. */
+  onDelete?: () => void;
   copy?: { entry: TranscriptEntry; sessionId?: string };
   /** The entry a "Copy link" points at; omitted while it is not stored. */
   linkEntryId?: string;
@@ -658,7 +680,8 @@ function BubbleMeta({
   message?: MessageRef;
 }) {
   const label = ts ? fullTime(ts) : "";
-  if (!onEdit && !copy && !linkEntryId && !label && !message) return null;
+  if (!onEdit && !onDelete && !copy && !linkEntryId && !label && !message)
+    return null;
   return (
     <div className="absolute top-[calc(100%+2px)] right-0 flex items-center gap-1">
       {message && (
@@ -672,6 +695,8 @@ function BubbleMeta({
           {label}
         </span>
       )}
+      {/* Last, so it holds the bubble's edge while the hover actions are hidden. */}
+      {onDelete && <DeletePendingButton onClick={onDelete} />}
     </div>
   );
 }
@@ -702,6 +727,9 @@ interface Props {
   /** A just-sent turn the server has not stored yet: its id is the client's
    *  own, so there is nothing a link to it could open. */
   optimistic?: boolean;
+  /** Offered with `pendingDelivery` on your own turns: deletes the message
+   *  before a run picks it up. */
+  onDeletePending?: (entryId: string) => void;
   /** Offered on a failed run's notice: starts a turn that picks the work back
    *  up. Passed only for the notice a person can still act on — the last one,
    *  on an idle session (see TranscriptBlocks). */
@@ -991,6 +1019,7 @@ export const MessageBubble = function MessageBubble({
   sessionId,
   onEdit,
   optimistic,
+  onDeletePending,
   onContinue,
   step = false,
 }: Props) {
@@ -1192,6 +1221,11 @@ export const MessageBubble = function MessageBubble({
           <BubbleMeta
             ts={fromOther ? undefined : e.timestamp}
             onEdit={!fromOther && onEdit ? () => onEdit(e) : undefined}
+            onDelete={
+              !fromOther && pendingDelivery && onDeletePending
+                ? () => onDeletePending(e.id)
+                : undefined
+            }
             copy={
               !fromOther && displayContent ? { entry: e, sessionId } : undefined
             }

@@ -30,7 +30,7 @@ export function FullPageFileDropOverlay({
             data-composer-file-drop-overlay
           >
             <IconArrowUpToLine size={40} className="text-fg" />
-            <div className="mt-4 text-title font-semibold text-fg">
+            <div className="mt-4 text-dialog-title font-title text-fg">
               Add files
             </div>
             <div className="mt-1 text-label text-dim">

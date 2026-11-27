@@ -204,13 +204,19 @@ initialization.
 
 ## Frontend
 
-Follow `packages/core/opensession-server/src/frontend/AGENTS.md`.
+Read `.agents/skills/opensession-ui/SKILL.md` and
+`packages/core/opensession-server/src/frontend/AGENTS.md` before editing any
+web UI. Use `.agents/skills/verify-opensession/SKILL.md` (`visual-check`) to
+inspect desktop and phone in both dark and light themes on an isolated dev/demo
+instance — never assume uncommitted worktree edits appear on port `3850`.
 
 Use Base UI primitives from `frontend/ui/`, Tailwind utilities, and existing
-semantic color tokens. Keep `styles/legacy.css` empty. Do not introduce raw
-colors or one-off primitives. Check desktop and phone at shipped pixel density.
-Use Motion presets from `ui/motion.ts`, preserve reduced-motion behavior, and
-publish visual proof for user-visible changes.
+semantic color tokens from `styles/tailwind.css` (`bun scripts/ui-audit.ts`
+guards against raw controls, stock palette colors, stock shadows, and undefined
+tokens). Keep `styles/legacy.css` empty. Check `/design-system` on a dev/demo
+instance for a live reference of primitives and surfaces. Use Motion presets
+from `ui/motion.ts`, preserve reduced-motion behavior, and publish visual
+proof for user-visible changes.
 
 Keep UI copy short, direct, sentence case, and consistent with `CONCEPTS.md`.
 Do not use em dashes.
