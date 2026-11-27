@@ -130,6 +130,8 @@ export class AppRouteController {
   private currentPlace: Place = "sessions";
   /** The conversation last shown in Sessions, which its button returns to. */
   private sessionsReturn: Route | null = null;
+  /** The return target the server is being asked about, if any. */
+  private returnLookup: Route | null = null;
   private firstMile: boolean;
   private readonly listeners = new Set<(snapshot: RouteSnapshot) => void>();
 
@@ -184,13 +186,17 @@ export class AppRouteController {
    * One that was deleted or archived since is forgotten instead. When it
    * has to ask the server, the list shows at once and the conversation
    * opens once confirmed, unless you have moved on by then.
+   *
+   * Clicking it again while your list is already beside a page asks again,
+   * so a lookup that failed (the connection dropped) is not the last word.
+   * One still in flight answers the click instead of a second request.
    */
   openSessions(
     stillThere: (route: Route) => boolean | Promise<boolean> = () => true,
   ): void {
-    if (this.currentPlace === "sessions") return;
-    if (!isConversationRoute(this.route) && this.sessionsReturn) {
-      const target = this.sessionsReturn;
+    const shown = this.currentPlace === "sessions";
+    const target = isConversationRoute(this.route) ? null : this.sessionsReturn;
+    if (target && target !== this.returnLookup) {
       const verdict = stillThere(target);
       if (verdict === true) {
         // Set first, so the conversation lands in Sessions even when the
@@ -199,23 +205,10 @@ export class AppRouteController {
         this.navigate(target);
         return;
       }
-      if (verdict === false) {
-        this.sessionsReturn = null;
-      } else {
-        const from = this.route;
-        verdict.then(
-          (there) => {
-            // Forgotten, replaced, or left behind meanwhile.
-            if (this.sessionsReturn !== target) return;
-            if (!there) this.sessionsReturn = null;
-            else if (this.route === from && this.currentPlace === "sessions")
-              this.navigate(target);
-          },
-          // Unknown, not gone: it stays remembered for the next click.
-          () => {},
-        );
-      }
+      if (verdict === false) this.sessionsReturn = null;
+      else this.returnOnceConfirmed(target, verdict);
     }
+    if (shown) return;
     // The page stays, so its entry records the choice: Back to it, a reload,
     // or closing Settings over it then shows your list again.
     const state = currentNavState(this.browser);
@@ -231,6 +224,30 @@ export class AppRouteController {
     );
     this.commit(this.route, "sessions");
     this.publish();
+  }
+
+  private returnOnceConfirmed(target: Route, verdict: Promise<boolean>): void {
+    this.returnLookup = target;
+    const settle = () => {
+      if (this.returnLookup === target) this.returnLookup = null;
+    };
+    verdict.then(
+      (there) => {
+        settle();
+        // Forgotten or replaced meanwhile.
+        if (this.sessionsReturn !== target) return;
+        if (!there) this.sessionsReturn = null;
+        // Still waiting on it: your list beside a page. Opening a
+        // conversation or leaving for another place is moving on.
+        else if (
+          this.currentPlace === "sessions" &&
+          !isConversationRoute(this.route)
+        )
+          this.navigate(target);
+      },
+      // Unknown, not gone: it stays remembered, and the next click asks again.
+      settle,
+    );
   }
 
   /**

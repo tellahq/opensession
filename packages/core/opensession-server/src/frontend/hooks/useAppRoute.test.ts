@@ -1001,6 +1001,65 @@ describe("places", () => {
     expect(controller.getCurrentRoute()).toEqual({ view: "feed" });
   });
 
+  test("a failed lookup is asked again on the next click", async () => {
+    const fake = fakeBrowser({ path: "/session/mine", state: { d: 0 } });
+    const controller = new AppRouteController(fake.browser);
+    controller.navigate({ view: "issues" });
+
+    controller.openSessions(() => Promise.reject(new Error("offline")));
+    await Promise.resolve();
+    expect(controller.getCurrentRoute()).toEqual({ view: "issues" });
+    expect(controller.place).toBe("sessions");
+
+    // Sessions is already selected: the click still retries.
+    controller.openSessions(() => Promise.resolve(true));
+    await Promise.resolve();
+    expect(controller.getCurrentRoute()).toEqual({
+      view: "session",
+      id: "mine",
+    });
+    expect(controller.place).toBe("sessions");
+  });
+
+  test("clicks while a lookup is pending do not ask again", async () => {
+    const fake = fakeBrowser({ path: "/session/mine", state: { d: 0 } });
+    const controller = new AppRouteController(fake.browser);
+    controller.navigate({ view: "issues" });
+
+    let asked = 0;
+    let answer!: (there: boolean) => void;
+    const lookUp = () => {
+      asked += 1;
+      return new Promise<boolean>((resolve) => (answer = resolve));
+    };
+    controller.openSessions(lookUp);
+    controller.openSessions(lookUp);
+    controller.openSessions(lookUp);
+    expect(asked).toBe(1);
+
+    answer(true);
+    await Promise.resolve();
+    expect(controller.getCurrentRoute()).toEqual({
+      view: "session",
+      id: "mine",
+    });
+  });
+
+  test("Sessions already selected with nothing to return to does nothing", () => {
+    const fake = fakeBrowser({ path: "/issues", state: { d: 0 } });
+    const controller = new AppRouteController(fake.browser);
+    controller.openSessions();
+    const calls = fake.calls.length;
+    let published = 0;
+    controller.subscribe(() => published++);
+
+    controller.openSessions(() => {
+      throw new Error("nothing to look up");
+    });
+    expect(fake.calls.length).toBe(calls);
+    expect(published).toBe(0);
+  });
+
   test("Sessions forgets a conversation deleted before the lists refresh", () => {
     const fake = fakeBrowser({ path: "/workspace/ws-1", state: { d: 0 } });
     const controller = new AppRouteController(fake.browser);
