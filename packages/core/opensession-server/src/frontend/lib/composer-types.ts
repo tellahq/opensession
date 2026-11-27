@@ -46,6 +46,8 @@ export interface ComposerConfig {
    * asked for", which a boolean cannot say twice in a row.
    */
   stopRequest?: number;
+  /** Bumped on bare Escape presses outside the composer to drive double-Esc stop confirmation. */
+  escStopRequest?: number;
   models: ModelOption[];
   defaultModel: string;
   /** Current model id; an empty string selects the default. */

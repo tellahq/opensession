@@ -60,6 +60,7 @@ import { useWorkspaceRecord } from "../lib/workspace-records";
 import { ownedBy } from "../lib/sidebar-lanes";
 import { copyToClipboard } from "../lib/share-link";
 import { matchesShortcut } from "../lib/shortcuts";
+import { shouldHandleTranscriptEscape } from "../lib/esc-stop-confirm";
 import type {
   SessionPrRef,
   TranscriptEntry,
@@ -394,14 +395,20 @@ export function useSessionRuntimeController({
   // there is no second copy of any of that here. (The stop BUTTON stays
   // immediate: pressing it is already deliberate.)
   const [stopRequest, setStopRequest] = useState(0);
+  const [escStopRequest, setEscStopRequest] = useState(0);
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (!focused || e.defaultPrevented) return;
-      if (!matchesShortcut(e, "run-stop")) return;
-      // Nothing running: leave the chord alone rather than swallowing it.
       if (!isBusy || forkFrom) return;
-      e.preventDefault();
-      setStopRequest((count) => count + 1);
+      if (matchesShortcut(e, "run-stop")) {
+        e.preventDefault();
+        setStopRequest((count) => count + 1);
+        return;
+      }
+      if (shouldHandleTranscriptEscape(e)) {
+        e.preventDefault();
+        setEscStopRequest((count) => count + 1);
+      }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -652,6 +659,7 @@ export function useSessionRuntimeController({
       stopRequestedAt,
       setStopRequestedAt,
       stopRequest,
+      escStopRequest,
       waitingForWorkspace,
       settingUpWorkspace,
     },

@@ -368,6 +368,7 @@ interface ComposerStanding {
 interface ComposerConfiguration {
   stopRequestedAt: number | null;
   stopRequest: number;
+  escStopRequest: number;
   composerPrefill: ComposerProps["config"]["prefill"];
   models: ComposerProps["config"]["models"];
   defaultModel: string;
@@ -634,6 +635,7 @@ export function SessionViewerMainRegion({
   const {
     stopRequestedAt: composerStopRequestedAt,
     stopRequest,
+    escStopRequest,
     composerPrefill,
     models,
     defaultModel,
@@ -1543,6 +1545,7 @@ export function SessionViewerMainRegion({
                       // Bumped by the ⌘. listener above; the composer opens the
                       // same confirmation Escape does.
                       stopRequest,
+                      escStopRequest,
                       prefill: composerPrefill,
                       models,
                       defaultModel,

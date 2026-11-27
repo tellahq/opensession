@@ -715,7 +715,7 @@ export function SessionViewer({
   const { typingPresence, setTypingPresence } = presenceController;
   const { workspacePreparing, setWorkspacePreparing } = presenceController;
   const { isBusy, busySince, stopRequestedAt } = runController;
-  const { setStopRequestedAt, stopRequest } = runController;
+  const { setStopRequestedAt, stopRequest, escStopRequest } = runController;
   const { waitingForWorkspace, settingUpWorkspace } = runController;
   const { deployment: staging, url: stagingUrl } = stagingController;
   const { status: previewStatus } = previewController;
@@ -1826,6 +1826,7 @@ export function SessionViewer({
             configuration: {
               stopRequestedAt,
               stopRequest,
+              escStopRequest,
               composerPrefill,
               models,
               defaultModel,

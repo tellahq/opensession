@@ -124,8 +124,7 @@ import { useVimMode } from "../hooks/useVimMode";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { motion, AnimatePresence } from "motion/react";
 
-/** How long the first Escape of a run stays armed waiting for the second. */
-const ESC_STOP_WINDOW_MS = 1500;
+import { ESC_STOP_WINDOW_MS } from "../lib/esc-stop-confirm";
 import { composerMorph } from "../ui/motion";
 import { shortModelLabel } from "./ModelEffortSelect";
 import type {
@@ -213,6 +212,7 @@ export function Composer({
     busy,
     stopping,
     stopRequest,
+    escStopRequest,
     models,
     defaultModel,
     model,
@@ -703,10 +703,22 @@ export function Composer({
   // ESC_STOP_WINDOW_MS stops the turn. The pending timer is the armed state. A
   // turn that ends on its own disarms it, so a late Escape never stops the
   // NEXT turn.
+  const [escArmed, setEscArmed] = useState(false);
   const escArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   function disarmEsc() {
     if (escArmTimer.current) clearTimeout(escArmTimer.current);
     escArmTimer.current = null;
+    setEscArmed(false);
+  }
+  function handleEscStopPress() {
+    if (!busy || !onStop || disabled) return;
+    if (escArmTimer.current) {
+      disarmEsc();
+      onStop();
+      return;
+    }
+    setEscArmed(true);
+    escArmTimer.current = setTimeout(disarmEsc, ESC_STOP_WINDOW_MS);
   }
   useEffect(() => () => disarmEsc(), []);
   useEffect(() => {
@@ -734,6 +746,25 @@ export function Composer({
     lastStopRequest.current = asked;
     if (busy && onStop && !disabled) requestStop();
   }, [stopRequest, busy, onStop, disabled]);
+  const lastEscStopRequest = useRef(escStopRequest ?? 0);
+  useEffect(() => {
+    const asked = escStopRequest ?? 0;
+    if (asked === lastEscStopRequest.current) return;
+    lastEscStopRequest.current = asked;
+    if (!busy || !onStop || disabled) return;
+    if (escArmTimer.current) {
+      clearTimeout(escArmTimer.current);
+      escArmTimer.current = null;
+      setEscArmed(false);
+      onStop();
+      return;
+    }
+    setEscArmed(true);
+    escArmTimer.current = setTimeout(() => {
+      escArmTimer.current = null;
+      setEscArmed(false);
+    }, ESC_STOP_WINDOW_MS);
+  }, [escStopRequest, busy, onStop, disabled]);
 
   // Which toolbar popover is open ("add" menu or "goal" editor). Closed on an
   // outside click or after an action.
@@ -1430,12 +1461,7 @@ export function Composer({
       e.preventDefault();
       e.stopPropagation();
       if (e.repeat) return;
-      if (escArmTimer.current) {
-        disarmEsc();
-        onStop();
-        return;
-      }
-      escArmTimer.current = setTimeout(disarmEsc, ESC_STOP_WINDOW_MS);
+      handleEscStopPress();
       return;
     }
     // Inside an unclosed ``` fence, plain Enter inserts a newline instead of
@@ -2099,6 +2125,7 @@ export function Composer({
                   // Acknowledged: the press registered, the engine is winding
                   // down. Not `disabled` — pressing again re-sends the cancel.
                   stopping && "opacity-60",
+                  escArmed && "ring-2 ring-red/45",
                 )}
                 onPress={onStop}
                 disabled={disabled}
@@ -2314,10 +2341,25 @@ export function Composer({
       </motion.div>
       {/* The keyboard-shortcut hint is irrelevant on touch and eats vertical
           space right where the keyboard appears. */}
-      {hint && (
-        <div className="mt-[7px] text-center text-meta text-faint phone:hidden">
-          {hint}
+      {escArmed && busy && !stopping ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="mt-[7px] flex items-center justify-center gap-1.5 text-center text-meta font-medium text-red"
+        >
+          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-red" />
+          <span>Press</span>
+          <kbd className="rounded border border-red/30 bg-red/10 px-1 py-px font-mono text-[10.5px] leading-none text-red">
+            Esc
+          </kbd>
+          <span>again to stop</span>
         </div>
+      ) : (
+        hint && (
+          <div className="mt-[7px] text-center text-meta text-faint phone:hidden">
+            {hint}
+          </div>
+        )
       )}
       {/* Outside the toolbar: the stop button lives in a row that the phone
           composer unmounts when it minimizes, and the question has to survive
