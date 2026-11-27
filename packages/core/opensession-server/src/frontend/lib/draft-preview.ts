@@ -1,21 +1,23 @@
 import type { ComposerDraft } from "./drafts";
 
-/** How long a draft's text can run in its sidebar hover before it trims. */
-const PREVIEW_MAX = 280;
+/** A cap for a first "sentence" that never ends, such as a pasted log. The
+ *  tooltip trims to its own width well before this. */
+const PREVIEW_MAX = 200;
 
 function countLabel(count: number, one: string): string | null {
   if (count === 0) return null;
   return `${count} ${one}${count === 1 ? "" : "s"}`;
 }
 
-/** What a draft holds, as the sidebar pencil's hover reads it: the text on
- *  one line, trimmed past a few lines' worth, and what is attached. */
+/** What a draft holds, as the sidebar pencil's hover reads it: its first
+ *  sentence on one line, and what is attached. */
 export function draftPreview(d: ComposerDraft) {
   const flat = d.text.replace(/\s+/g, " ").trim();
+  const sentence = /^.*?[.!?](?=\s|$)/.exec(flat)?.[0] ?? flat;
   const text =
-    flat.length > PREVIEW_MAX
-      ? `${flat.slice(0, PREVIEW_MAX).trimEnd()}…`
-      : flat;
+    sentence.length > PREVIEW_MAX
+      ? `${sentence.slice(0, PREVIEW_MAX).trimEnd()}…`
+      : sentence;
   const parts = [
     countLabel(d.images.length, "image"),
     countLabel(d.files.length + d.pastedTexts.length, "attachment"),

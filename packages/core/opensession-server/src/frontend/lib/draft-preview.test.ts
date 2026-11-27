@@ -10,10 +10,22 @@ test("draft preview flattens the text onto one line", () => {
   });
 });
 
-test("draft preview trims a long draft", () => {
+test("draft preview keeps only the first sentence", () => {
+  expect(
+    draftPreview({
+      ...empty,
+      text: "I couldn't get the pencil to cover the Archive icon. On hover it moved left.",
+    }).text,
+  ).toBe("I couldn't get the pencil to cover the Archive icon.");
+  expect(
+    draftPreview({ ...empty, text: "Ship v1.2 today? Then tell Sam." }).text,
+  ).toBe("Ship v1.2 today?");
+});
+
+test("draft preview trims a sentence that never ends", () => {
   const { text } = draftPreview({ ...empty, text: "word ".repeat(100) });
   expect(text.endsWith("…")).toBe(true);
-  expect(text.length).toBeLessThanOrEqual(281);
+  expect(text.length).toBeLessThanOrEqual(201);
 });
 
 test("draft preview counts what is attached", () => {
