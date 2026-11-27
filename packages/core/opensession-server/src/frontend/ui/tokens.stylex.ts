@@ -62,6 +62,9 @@ export const color = stylex.defineConsts({
   // Ink on a dark media scrim, where the theme does not apply.
   onScrim: "#fff",
   transparent: "transparent",
+  /** The sidebar's hover wash pre-composited onto its surface: an action
+   *  chip floating on a hovered row (see base.css). */
+  rowChip: "var(--row-chip)",
   current: "currentColor",
   /** A switch knob: white on every track, in both themes. */
   knob: "#fff",
@@ -612,4 +615,29 @@ export const sidebarScale = stylex.defineConsts({
   rowPadVar: "var(--sidebar-row-pad)",
   captionVar: "var(--sidebar-cap-h)",
   groupGapVar: "var(--sidebar-group-gap)",
+  lineHeightVar: "var(--sidebar-line-h)",
+  bandSlotVar: "var(--sidebar-band-slot)",
+  /** The air between the column's edges and the boxes in it (the pill, the
+   *  bands), and the left pad that puts a box's mark back on the rail. */
+  navX: "6px",
+  navXDesktop: "10px",
+  navXVar: "var(--sidebar-nav-x)",
+  railPadVar:
+    "calc(var(--sidebar-icon-left, 16px) - var(--sidebar-nav-x, 6px))",
+  /** The list's top hairline of air, so a first row's pill clears the edge. */
+  listTop: "1px",
+  /** Headings: the rounded box, a phone heading's taller tap padding, and a
+   *  lane caption's tighter gap and phone padding. */
+  headerRadius: "calc(10px * var(--rf))",
+  headerPadPhone: "11px",
+  laneGap: "5px",
+  lanePadTopPhone: "9px",
+  lanePadBottomPhone: "5px",
+  /** A pinned lane caption sits under the band slot; one nested under a repo
+   *  band sits a step lower in the stack. */
+  laneLayer: "15",
+  nestedLaneLayer: "14",
+  /** The liveness dot a lane or automation heading leads with. */
+  dot: "7px",
+  dotOpacity: "0.85",
 });

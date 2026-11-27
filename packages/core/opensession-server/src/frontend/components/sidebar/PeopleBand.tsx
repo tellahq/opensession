@@ -6,19 +6,16 @@ import {
   SIDEBAR_BAND_LABEL,
   SIDEBAR_BAND_TOGGLE,
   SIDEBAR_BAND_TOGGLE_INSET,
-  SIDEBAR_GROUP_CHEVRON,
-  SIDEBAR_GROUP_CHEVRON_COLLAPSED,
   SIDEBAR_GROUP_COUNT,
-  SIDEBAR_GROUP_HEADER,
-  SIDEBAR_GROUP_HEADER_INSET,
   SIDEBAR_GROUP_NAME,
-  SIDEBAR_HEADER_ROW,
   SIDEBAR_INDEPENDENT_SCROLL,
   SIDEBAR_INDEPENDENT_SECTION,
   SIDEBAR_RAIL,
   SIDEBAR_STICKY_BAND,
   SIDEBAR_STICKY_BAND_ROW,
   SIDEBAR_STUCK_BACKING,
+  sidebarChevron,
+  sidebarHeader,
 } from "../../lib/sidebar-classes";
 import type { SidebarPersonSessions } from "../../lib/sidebar-people";
 import type { UnifiedSession } from "../../lib/types";
@@ -92,11 +89,7 @@ export function PeopleBand({
             return (
               <React.Fragment key={group.key}>
                 <button
-                  className={cn(
-                    SIDEBAR_GROUP_HEADER,
-                    SIDEBAR_GROUP_HEADER_INSET,
-                    SIDEBAR_HEADER_ROW,
-                  )}
+                  className={sidebarHeader({ kind: "item" })}
                   onClick={(event) => {
                     const header = event.currentTarget;
                     onToggleGroup(groupKey);
@@ -119,10 +112,7 @@ export function PeopleBand({
                     {group.activeSessions.length}
                   </span>
                   <IconChevronDown
-                    className={cn(
-                      SIDEBAR_GROUP_CHEVRON,
-                      !personOpen && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
-                    )}
+                    className={sidebarChevron(!personOpen)}
                     size={22}
                     style={{
                       transform: personOpen ? "none" : "rotate(-90deg)",

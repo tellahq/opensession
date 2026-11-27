@@ -2,17 +2,12 @@ import React from "react";
 import type { ReviewQueueItem } from "../../lib/review-queue";
 import {
   SIDEBAR_ATTN_COUNT,
-  SIDEBAR_GROUP_CHEVRON,
-  SIDEBAR_GROUP_CHEVRON_COLLAPSED,
   SIDEBAR_GROUP_COUNT,
-  SIDEBAR_GROUP_HEADER,
-  SIDEBAR_GROUP_HEADER_INSET,
   SIDEBAR_GROUP_NAME,
-  SIDEBAR_HEADER_ROW,
   SIDEBAR_RAIL,
   SIDEBAR_REPO_TILE,
-  SIDEBAR_STICKY_LANE,
-  SIDEBAR_STUCK_BACKING,
+  sidebarChevron,
+  sidebarHeader,
 } from "../../lib/sidebar-classes";
 import type { SidebarProjectBands } from "../../lib/sidebar-derived";
 import type { WsRow } from "../../lib/sidebar-types";
@@ -154,12 +149,8 @@ export function ProjectBands({
             >
               <button
                 className={cn(
-                  SIDEBAR_GROUP_HEADER,
-                  SIDEBAR_GROUP_HEADER_INSET,
-                  SIDEBAR_HEADER_ROW,
+                  sidebarHeader({ kind: "item", sticky: true }),
                   "group transition-colors",
-                  SIDEBAR_STICKY_LANE,
-                  SIDEBAR_STUCK_BACKING,
                 )}
                 data-sticky-head
                 draggable={projects.canReorder && project.repo !== askBand}
@@ -226,10 +217,7 @@ export function ProjectBands({
                   </span>
                 )}
                 <IconChevronDown
-                  className={cn(
-                    SIDEBAR_GROUP_CHEVRON,
-                    !open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
-                  )}
+                  className={sidebarChevron(!open)}
                   size={22}
                   style={{ transform: open ? "none" : "rotate(-90deg)" }}
                 />

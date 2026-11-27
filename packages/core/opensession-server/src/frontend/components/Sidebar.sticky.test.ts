@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
-  SIDEBAR_STICKY_LANE,
+  SIDEBAR_STICKY_LANE_FADE,
   SIDEBAR_STUCK_BACKING,
+  sidebarHeader,
 } from "../lib/sidebar-classes";
 
 const sidebarSource = await Bun.file(
@@ -28,11 +29,12 @@ describe("sidebar sticky headings", () => {
   });
 
   test("keys both sticky surfaces from the persistent marker", () => {
-    expect(SIDEBAR_STICKY_LANE).toContain("data-[stuck]:after");
+    expect(SIDEBAR_STICKY_LANE_FADE).toContain("data-[stuck]:after");
     expect(SIDEBAR_STUCK_BACKING).toContain("data-[stuck]:before");
-    expect(`${SIDEBAR_STICKY_LANE} ${SIDEBAR_STUCK_BACKING}`).not.toContain(
-      "is-stuck",
-    );
+    const sticky = sidebarHeader({ kind: "lane", sticky: true });
+    expect(sticky).toContain(SIDEBAR_STICKY_LANE_FADE);
+    expect(sticky).toContain(SIDEBAR_STUCK_BACKING);
+    expect(sticky).not.toContain("is-stuck");
   });
 
   test("reveals keyboard-selected rows below the sticky caption", () => {
@@ -53,8 +55,8 @@ describe("sidebar sticky headings", () => {
       activeStart,
       activeEnd,
     );
-    expect(activeSection).toContain("nested && SIDEBAR_STICKY_LANE_NESTED");
-    expect(activeSection).not.toContain("ns && SIDEBAR_STICKY_LANE_NESTED");
+    expect(activeSection).toContain("sticky: true, nested })");
+    expect(activeSection).not.toContain("nested: !!ns");
     expect(workspaceRenderersSource).toContain("const nested = !!laneRepo;");
     expect(projectBandsSource).toContain(
       'projects.scratchRows,\n            "scratch::",',

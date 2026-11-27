@@ -197,8 +197,8 @@ function Group({
               aria-expanded={open}
               onClick={() => setOpen(!open)}
               className={cn(
-                // The session list's lane caption (SIDEBAR_LANE_HEADER under the
-                // new layout): the rows' size and weight, in muted ink.
+                // The session list's new-layout lane caption (LANE_NEW_LAYOUT
+                // in sidebar-classes): the rows' size and weight, in muted ink.
                 "items-center gap-1 py-0 px-[calc(var(--sidebar-icon-left,16px)-var(--sidebar-nav-x,10px))] text-body font-medium text-dim hover:bg-transparent hover:text-fg desktop:text-item-title",
                 touch ? "min-h-11" : "h-[var(--sidebar-cap-h,28px)] min-h-0",
               )}
