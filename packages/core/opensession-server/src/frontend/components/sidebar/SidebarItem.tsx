@@ -14,7 +14,6 @@ import {
   SIDEBAR_SWIPE_ACTION_STAR_ON,
   SIDEBAR_SWIPE_ACTION_TRANSITION,
   SIDEBAR_SWIPE_ROW,
-  SIDEBAR_WS_DRAFT,
   sidebarRow,
   sidebarRowChip,
   sidebarRowChipStyles,
@@ -52,6 +51,7 @@ import {
   SheetTitle,
 } from "../../ui/sheet";
 import { Tooltip } from "../../ui/tooltip";
+import { DraftPencil } from "./DraftPencil";
 import { RowCardPopup, useRowHoverCard } from "../SidebarRowCards";
 import { AutoCreatedMark } from "./AutoCreatedMark";
 import { KeepInSidebarMark } from "./KeepInSidebarMark";
@@ -590,13 +590,10 @@ export function SidebarItem({
               </span>
             )}
             {!editing && hasDraft(`session:${session.id}`) && (
-              <span
-                className={cn(SIDEBAR_WS_DRAFT, "ml-1.5")}
-                data-ws-draft=""
-                aria-label="Unsent draft. Return to finish it."
-              >
-                <IconPencil size={20} />
-              </span>
+              <DraftPencil
+                draftKey={`session:${session.id}`}
+                className="ml-1.5"
+              />
             )}
           </div>
           {/* The block meta lives on its own line below the title. The row itself
