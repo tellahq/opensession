@@ -112,7 +112,13 @@ export function Minibar({
       // The workspace shell reads this to drop its edge shadow
       // (WORKSPACE_SHELL, lib/app-shell-classes.ts).
       data-minibar
-      className="wco-chrome flex w-[52px] shrink-0 flex-col items-center gap-1 pt-1.5 pb-2 [html.wco_&]:pt-[var(--desktop-header-h)]"
+      className={cn(
+        "wco-chrome relative flex w-[52px] shrink-0 flex-col items-center gap-1 pt-1.5 pb-2 [html.wco_&]:pt-[var(--desktop-header-h)]",
+        // A hairline between the rail and the sidebar, the full height of
+        // the window. In the desktop shell the traffic lights reach past the
+        // rail, so there it starts under their row.
+        "after:pointer-events-none after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-divider after:content-[''] [html.wco_&]:after:top-[var(--desktop-header-h)]",
+      )}
     >
       <OrganizationSwitcher
         connected={connected}
