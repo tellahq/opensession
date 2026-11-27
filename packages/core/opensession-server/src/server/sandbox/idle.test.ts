@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+import { sandboxIdlePolicy, setSandboxIdlePolicy } from "./config";
 import { afterEach, describe, expect, test } from "bun:test";
 import {
   idleSessionId,
@@ -200,5 +204,32 @@ describe("two idle timers", () => {
   test("provider session ids map back to the session", () => {
     expect(idleSessionId(`abc${PORTAL_SANDBOX_SUFFIX}`)).toBe("abc");
     expect(idleSessionId("abc")).toBe("abc");
+  });
+
+  test("setSandboxIdlePolicy persists validated idle timers to sandbox.json", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "os-sandbox-idle-"));
+    const prev = process.env.OPENSESSION_SANDBOX_CONFIG;
+    process.env.OPENSESSION_SANDBOX_CONFIG = join(dir, "sandbox.json");
+    try {
+      const saved = await setSandboxIdlePolicy({
+        agentMinutes: 10,
+        humanMinutes: 45,
+      });
+      expect(saved).toEqual({ agentMinutes: 10, humanMinutes: 45 });
+      expect(sandboxIdlePolicy()).toEqual({
+        agentMs: 10 * 60_000,
+        humanMs: 45 * 60_000,
+      });
+      await expect(
+        setSandboxIdlePolicy({ agentMinutes: 0, humanMinutes: 20 }),
+      ).rejects.toThrow(/agentMinutes/);
+      await expect(
+        setSandboxIdlePolicy({ agentMinutes: 5, humanMinutes: 999 }),
+      ).rejects.toThrow(/humanMinutes/);
+    } finally {
+      if (prev === undefined) delete process.env.OPENSESSION_SANDBOX_CONFIG;
+      else process.env.OPENSESSION_SANDBOX_CONFIG = prev;
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

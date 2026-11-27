@@ -7,6 +7,7 @@ import {
   sandboxConfig,
   sandboxIdlePolicy,
   setRepoPreSetupScript,
+  setSandboxIdlePolicy,
   setWorkspaceResumeScript,
 } from "../sandbox/config";
 import { forgetProjectPreparationSignature } from "../sandbox/remote-repo-template";
@@ -159,6 +160,29 @@ export async function handleSandboxesRoutes(
 
   if (path === "/api/sandbox/lifecycle" && req.method === "GET") {
     return Response.json(sandboxLifecyclePayload());
+  }
+
+  if (path === "/api/sandbox/lifecycle/idle" && req.method === "PUT") {
+    const body = (await req.json().catch(() => null)) as {
+      agentMinutes?: unknown;
+      humanMinutes?: unknown;
+    } | null;
+    if (
+      !body ||
+      typeof body.agentMinutes !== "number" ||
+      typeof body.humanMinutes !== "number"
+    ) {
+      return errorResponse("agentMinutes and humanMinutes must be numbers");
+    }
+    try {
+      await setSandboxIdlePolicy({
+        agentMinutes: body.agentMinutes,
+        humanMinutes: body.humanMinutes,
+      });
+      return Response.json(sandboxLifecyclePayload());
+    } catch (error) {
+      return errorResponse(error);
+    }
   }
 
   if (

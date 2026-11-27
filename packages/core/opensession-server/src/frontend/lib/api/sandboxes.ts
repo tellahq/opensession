@@ -132,6 +132,17 @@ export interface SandboxLifecycleSettings {
   preSetupScripts: Record<string, string>;
 }
 
+export function saveSandboxIdlePolicy(input: {
+  agentMinutes: number;
+  humanMinutes: number;
+}): Promise<SandboxLifecycleSettings> {
+  return request("/sandbox/lifecycle/idle", {
+    method: "PUT",
+    body: input,
+    label: "Failed to save Sandbox idle sleep settings",
+  });
+}
+
 export function fetchSandboxLifecycle(): Promise<SandboxLifecycleSettings> {
   return request("/sandbox/lifecycle", {
     label: "Failed to load Sandbox lifecycle settings",

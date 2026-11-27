@@ -1,9 +1,16 @@
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import {
+  createSessionApi,
   fetchSandboxStatus,
   saveSandboxDefault,
   type SandboxStatusInfo,
 } from "../../lib/api";
+import { NavigationContext } from "../../hooks/useNavigation";
+import { BASE_PATH } from "../../lib/base";
+import {
+  buildSandboxCachingPrompt,
+  projectSandboxOverrides,
+} from "../../lib/sandbox-setup-prompt";
 import { fetchRepos, type RepoInfo } from "../../lib/api/repos";
 import {
   fetchSandboxLifecycle,
@@ -42,6 +49,8 @@ function providerLabel(id: string): string {
 function SandboxDefaultRow({ scope }: { scope: Scope }) {
   const user = getCurrentUser();
   const [status, setStatus] = useState<SandboxStatusInfo | null>(null);
+  const [repos, setRepos] = useState<RepoInfo[]>([]);
+  const [showOverrides, setShowOverrides] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   useEffect(() => {
@@ -52,7 +61,12 @@ function SandboxDefaultRow({ scope }: { scope: Scope }) {
           errorMessage(error, "Failed to load available sandbox providers"),
         ),
       );
-  }, [user]);
+    if (scope === "workspace") {
+      fetchRepos()
+        .then(setRepos)
+        .catch(() => {});
+    }
+  }, [scope, user]);
 
   if (!status?.defaults) {
     return (
@@ -129,13 +143,56 @@ function SandboxDefaultRow({ scope }: { scope: Scope }) {
       });
   }
 
+  const overrides =
+    scope === "workspace"
+      ? projectSandboxOverrides(status.defaults, repos)
+      : [];
+
   return (
     <SettingRow
       title="New sessions run in"
       desc={
-        scope === "personal"
-          ? "Where your new sessions run. The Sandbox choice in the new session menu overrides this per session."
-          : "Where new sessions run for everyone, and which provider a Sandbox means."
+        scope === "personal" ? (
+          "Where your new sessions run. The Sandbox choice in the new session menu overrides this per session."
+        ) : (
+          <span className="flex flex-col gap-1.5">
+            <span>
+              Where new sessions run for everyone, and which provider a Sandbox
+              means.
+            </span>
+            {overrides.length > 0 && (
+              <span className="flex flex-col gap-1">
+                <span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-auto px-0 py-0 text-meta font-medium text-dim hover:bg-transparent hover:text-fg"
+                    onClick={() => setShowOverrides((open) => !open)}
+                  >
+                    Overridden by {overrides.length}{" "}
+                    {overrides.length === 1 ? "project" : "projects"}
+                  </Button>
+                </span>
+                {showOverrides && (
+                  <span className="flex flex-wrap gap-1.5 pt-0.5">
+                    {overrides.map((item) => (
+                      <span
+                        key={item.repoId}
+                        className="inline-flex items-center gap-1 rounded-md border border-border-subtle bg-panel-surface px-2 py-0.5 text-meta text-fg"
+                      >
+                        <span className="font-medium">{item.label}</span>
+                        <span className="text-faint">·</span>
+                        <span className="text-dim">
+                          {providerLabel(item.provider)}
+                        </span>
+                      </span>
+                    ))}
+                  </span>
+                )}
+              </span>
+            )}
+          </span>
+        )
       }
       control={
         <div className={saving ? "pointer-events-none opacity-60" : undefined}>
@@ -162,9 +219,11 @@ export function PersonalSandboxDefaultRow() {
  */
 function ProjectSandboxDefaults() {
   const user = getCurrentUser();
+  const navigation = use(NavigationContext);
   const [status, setStatus] = useState<SandboxStatusInfo | null>(null);
   const [repos, setRepos] = useState<RepoInfo[]>([]);
   const [saving, setSaving] = useState<string | null>(null);
+  const [configuringRepo, setConfiguringRepo] = useState<string | null>(null);
   const [lifecycle, setLifecycle] = useState<SandboxLifecycleSettings | null>(
     null,
   );
@@ -209,6 +268,37 @@ function ProjectSandboxDefaults() {
         }),
       )
       .finally(() => setSaving(null));
+  }
+
+  async function configureWithAgent(repo: RepoInfo) {
+    if (configuringRepo) return;
+    setConfiguringRepo(repo.id);
+    const label = repo.label || repo.id;
+    try {
+      const { id } = await createSessionApi({
+        prompt: buildSandboxCachingPrompt(label),
+        repo: repo.id,
+        mode: "code",
+        user,
+        requestId: crypto.randomUUID(),
+      });
+      if (navigation) {
+        navigation.openSession(id);
+      } else {
+        window.location.assign(
+          `${BASE_PATH}/session/${encodeURIComponent(id)}`,
+        );
+      }
+    } catch (error) {
+      toast(
+        errorMessage(
+          error,
+          "Could not start the Sandbox caching setup session",
+        ),
+        { variant: "error" },
+      );
+      setConfiguringRepo(null);
+    }
   }
 
   return (
@@ -318,9 +408,21 @@ function ProjectSandboxDefaults() {
                       : "Optional. Set up Sandboxes for this project without committing anything."
                   }
                   control={
-                    <Button size="sm" onClick={() => setScriptRepo(repo)}>
-                      {lifecycle.preSetupScripts[repo.id] ? "Edit" : "Add"}
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={configuringRepo !== null}
+                        onClick={() => void configureWithAgent(repo)}
+                      >
+                        {configuringRepo === repo.id
+                          ? "Starting…"
+                          : "Configure with agent"}
+                      </Button>
+                      <Button size="sm" onClick={() => setScriptRepo(repo)}>
+                        {lifecycle.preSetupScripts[repo.id] ? "Edit" : "Add"}
+                      </Button>
+                    </div>
                   }
                 />
               ) : null}
