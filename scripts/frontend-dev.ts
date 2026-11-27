@@ -33,6 +33,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import spaEntry from "../packages/core/opensession-server/src/frontend/index.html";
+import { DEV_STYLEX_CSS } from "../packages/core/opensession-server/src/server/stylex-dev-plugin";
 
 const UPSTREAM = process.env.OS1_UPSTREAM || "http://127.0.0.1:3850";
 const WS_UPSTREAM = UPSTREAM.replace(/^http/, "ws") + "/ws";
@@ -211,25 +212,37 @@ async function tailwindCss(): Promise<Response> {
 // injected stylesheet.
 const TW_REFRESH = `<script>
 (() => {
-	let last = null;
+	const last = {};
 	setInterval(async () => {
-		try {
-			const css = await (await fetch("/tailwind-dev.css", { cache: "no-store" })).text();
-			if (last !== null && css !== last) {
-				const link = document.querySelector('link[href^="/tailwind-dev.css"]');
-				if (link) link.href = "/tailwind-dev.css?v=" + last.length;
-			}
-			last = css;
-		} catch {}
+		for (const href of ["/stylex-dev.css", "/tailwind-dev.css"]) {
+			try {
+				const css = await (await fetch(href, { cache: "no-store" })).text();
+				if (last[href] !== undefined && css !== last[href]) {
+					const link = document.querySelector('link[href^="' + href + '"]');
+					if (link) link.href = href + "?v=" + Date.now();
+				}
+				last[href] = css;
+			} catch {}
+		}
 	}, 3000);
 })();
 </script>`;
+
+// StyleX primitives: bunfig.toml's [serve.static] plugin compiles them in
+// Bun's HTML-import pipeline and writes the sheet; serve it ahead of Tailwind,
+// the order prod uses (see stylexCss in src/server/stylex-transform.ts).
+async function stylexCss(): Promise<Response> {
+  const file = Bun.file(DEV_STYLEX_CSS);
+  return new Response((await file.exists()) ? file : "", {
+    headers: { "content-type": "text/css", "cache-control": "no-store" },
+  });
+}
 
 async function shell(req: Request): Promise<Response> {
   const res = await fetch(new URL("/__shell", req.url));
   const html = (await res.text()).replace(
     "</head>",
-    `  <link rel="stylesheet" href="/tailwind-dev.css">\n${TW_REFRESH}\n</head>`,
+    `  <link rel="stylesheet" href="/stylex-dev.css">\n  <link rel="stylesheet" href="/tailwind-dev.css">\n${TW_REFRESH}\n</head>`,
   );
   return new Response(html, {
     status: res.status,
@@ -245,6 +258,7 @@ const server = Bun.serve<Bridge>({
   idleTimeout: 240,
   routes: {
     "/__shell": spaEntry,
+    "/stylex-dev.css": stylexCss,
     "/tailwind-dev.css": tailwindCss,
     ...Object.fromEntries(spaRoutes.map((p) => [p, shell])),
     ...Object.fromEntries(proxied.map((p) => [p, proxy])),

@@ -17,6 +17,12 @@ import {
 import { dirname, join, relative, resolve, sep } from "path";
 import type { BunFile, BunPlugin } from "bun";
 import { EMBEDDED_FRONTEND } from "./embedded-frontend";
+import {
+  stylexCss,
+  transformStylex,
+  usesStylex,
+  type StylexRule,
+} from "./stylex-transform";
 import { activeRunRecords } from "./run-journal";
 import { writeFileAtomicAsync } from "./shared/atomic-write";
 import {
@@ -213,6 +219,17 @@ export async function devTailwindCss(): Promise<string | null> {
   }
 }
 
+/**
+ * The dev-mode StyleX sheet the HMR server's plugin keeps current
+ * (stylex-dev-plugin.ts), or null in prod / before any StyleX file loaded.
+ * Prod never uses this path: there the rules ride in the global sheet.
+ */
+export async function devStylexCss(): Promise<string | null> {
+  if (!IS_DEV) return null;
+  const file = Bun.file(join(FRONTEND_DIST, ".stylex-dev.css"));
+  return (await file.exists()) ? await file.text() : null;
+}
+
 // ── Prebuilt mode ────────────────────────────────────────────────────────────
 // A release artefact (scripts/build-release.ts) ships .frontend-dist compiled
 // on the build host and installs dependencies with --production, so the box
@@ -283,9 +300,14 @@ function currentMeta(): BundleMeta | null {
 // compiler only runs here (prod bundle + release artefact).
 type TransformSync = typeof import("oxc-transform-react").transformSync;
 
+// StyleX runs in the same onLoad, first: Bun hands a file to one onLoad
+// callback only, so two plugins over the same sources would silently skip
+// whichever came second. Its rules land in `stylexRules`, keyed by file so a
+// rebuild replaces a file's rules rather than piling up stale ones.
 function reactCompilerPlugin(
   count: { n: number },
   transformSync: TransformSync,
+  stylexRules: Map<string, StylexRule[]>,
 ): BunPlugin {
   return {
     name: "oxc-react-compiler",
@@ -294,7 +316,12 @@ function reactCompilerPlugin(
         // Only our own sources: vendored deps ship pre-built and must keep
         // their exact published output.
         if (!args.path.startsWith(FRONTEND_SRC)) return undefined;
-        const sourceText = await Bun.file(args.path).text();
+        let sourceText = await Bun.file(args.path).text();
+        if (usesStylex(args.path, sourceText)) {
+          const sx = await transformStylex(args.path, sourceText, "build");
+          sourceText = sx.code;
+          stylexRules.set(args.path, sx.rules);
+        }
         const lang = args.path.endsWith(".tsx")
           ? "tsx"
           : args.path.endsWith(".ts")
@@ -350,6 +377,7 @@ export async function compileAssets(): Promise<BundleMeta> {
   // the next boot rather than being masked by a post-build stamp.
   const inputsHash = await frontendInputsHash();
   compilerCount.n = 0;
+  const stylexRules = new Map<string, StylexRule[]>();
   const result = await Bun.build({
     entrypoints: [`${FRONTEND_SRC}/App.tsx`],
     outdir: FRONTEND_DIST,
@@ -365,7 +393,7 @@ export async function compileAssets(): Promise<BundleMeta> {
       chunk: "[name]-[hash].[ext]",
       asset: "[name]-[hash].[ext]",
     },
-    plugins: [reactCompilerPlugin(compilerCount, transformSync)],
+    plugins: [reactCompilerPlugin(compilerCount, transformSync, stylexRules)],
     // Without this, React resolves to its development build. That build
     // records a performance.measure entry for every component render and
     // never clears them, so a tab streaming messages grows without bound.
@@ -408,6 +436,10 @@ export async function compileAssets(): Promise<BundleMeta> {
     () => importedCss[nextImport++] ?? "",
   );
   cssSrc += `\n${await Bun.file(`${FRONTEND_SRC}/styles/legacy.css`).text()}`;
+  // StyleX primitives (ui/*.tsx), last in this sheet and so ahead of the
+  // Tailwind sheet linked after it: see stylexCss() for why that order.
+  const sxCss = await stylexCss([...stylexRules.values()].flat());
+  if (sxCss) cssSrc += `\n\n/* ── StyleX (generated) ── */\n${sxCss}\n`;
   // xterm stylesheet (the Shell tab) rides along in the same file, vendored
   // straight from the installed package so it can't drift from the JS.
   try {
@@ -896,6 +928,13 @@ export async function frontendInputsHash(): Promise<string> {
   try {
     parts.push(
       `lock:${Bun.hash(await readFile(join(REPO_ROOT, "bun.lock"))).toString(36)}`,
+    );
+  } catch {}
+  // The StyleX transform decides class names and the CSS they map to, so a
+  // change to its options is a change to the bundle.
+  try {
+    parts.push(
+      `stylex:${Bun.hash(await readFile(join(import.meta.dir, "stylex-transform.ts"))).toString(36)}`,
     );
   } catch {}
   const entries = await readdir(FRONTEND_SRC, {

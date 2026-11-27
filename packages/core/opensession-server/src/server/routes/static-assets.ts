@@ -16,6 +16,7 @@ import {
 } from "../config";
 import {
   REPO_ROOT,
+  devStylexCss,
   devTailwindCss,
   frontend,
   frontendDistFile,
@@ -162,6 +163,20 @@ export async function handleStaticAssetsRoutes(
         "Content-Type": "text/css; charset=utf-8",
         // Recompiled on every frontend edit — never let a reload keep an
         // old sheet.
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+
+  // Dev-mode StyleX sheet, the counterpart of /tailwind.css above: the
+  // HMR server's StyleX plugin writes it, index.html's bootstrap links it
+  // just ahead of the Tailwind sheet so the two cascade as they do in prod.
+  if (path === "/stylex.css" && req.method === "GET") {
+    const css = await devStylexCss();
+    if (css === null) return new Response("Not found", { status: 404 });
+    return new Response(css, {
+      headers: {
+        "Content-Type": "text/css; charset=utf-8",
         "Cache-Control": "no-store",
       },
     });

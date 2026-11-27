@@ -89,6 +89,19 @@ Every utility below is real and theme-aware across dark and light mode.
 
 ---
 
+## StyleX primitives (`ui/tokens.stylex.ts`)
+
+Primitives in `ui/` are moving to StyleX (see `docs/design-system.md`); `Button` is the first. When writing or porting one:
+
+- Import every value from `ui/tokens.stylex.ts`: `color.*`, `space.s<px>`, `controlHeight.sm/md/lg/touch`, `radius.*`, `text.*`, `weight.*`, `opacity.*`, `focus.*`, `motion.*`, `shadow.*`, `media.*`. A raw `31`, `"9px"` or `"#fff"` inside `stylex.create` fails `stylex-raw-value`.
+- Gate hover behind `media.hover` (`":hover": { default: null, [media.hover]: value }`), as Tailwind's `hover:` does.
+- Expose `xstyle?: StyleXStyles<{ margin…, flex…, width… }>` for placement only, and keep merging a caller's `className` last while call sites migrate.
+- Prove parity: dump computed styles of every instance on the same routes against `main` (both widths, both themes) and diff them before calling a port done.
+
+On a `<Button>`, place it with `xstyle` and pick its look with `variant` / `size`. Visual utilities on `<Button className>` are counted by `button-restyle`.
+
+---
+
 ## Never write these (caught by `bun scripts/ui-audit.ts`)
 
 | Don't write | Write instead |

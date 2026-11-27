@@ -1395,7 +1395,7 @@ export function WorkspaceSummaryBody({
               <Button
                 variant="ghost"
                 size="sm"
-                className="group/review h-full min-h-0 gap-0 rounded-sm p-0 [color:inherit] [font-size:inherit] [font-weight:inherit] hover:bg-transparent hover:[color:inherit] active:scale-100"
+                className="group/review h-full min-h-0 gap-0 rounded-sm p-0 [font-size:inherit] [font-weight:inherit] hover:bg-transparent active:scale-100"
                 onClick={() => go(onOpenPr)}
                 aria-label="Open review"
               >

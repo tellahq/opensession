@@ -28,6 +28,7 @@
     "@shadcn/react": "^0.3.0",
     "@shikijs/langs": "3.23.0",
     "@shikijs/themes": "3.23.0",
+    "@stylexjs/stylex": "0.19.2",
     "@tanstack/react-virtual": "^3.13.12",
     "@team-plain/typescript-sdk": "^5.12.1",
     "@tellahq/opensession-protocol": "workspace:*",
@@ -60,6 +61,9 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@babel/core": "^7.28.0",
+    "@babel/plugin-syntax-typescript": "^7.27.0",
+    "@stylexjs/babel-plugin": "0.19.2",
     "@tailwindcss/cli": "^4.3.2",
     "@types/bun": "latest",
     "@types/react": "^19.0.0",

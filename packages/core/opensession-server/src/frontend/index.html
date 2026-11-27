@@ -131,8 +131,12 @@
         document.addEventListener("DOMContentLoaded", function () {
           if (
             !document.querySelector('link[rel="stylesheet"][href*="tailwind-"]')
-          )
+          ) {
+            // StyleX first: Tailwind utilities win ties against it, as in
+            // the prod bundle where StyleX ends the global sheet.
+            add("stylesheet", prefix + "/stylex.css");
             add("stylesheet", prefix + "/tailwind.css");
+          }
         });
 
         // The desktop workspace shell follows the host OS's window language.

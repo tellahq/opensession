@@ -112,7 +112,22 @@ sweeps routes x {desktop, mobile} x {dark, light} when diffing a CSS refactor.
 
 ## Styling
 
-- Use Tailwind utilities for new and touched UI. `styles/legacy.css` is empty
+The UI is migrating to StyleX primitives with closed scales; read
+`docs/design-system.md` for the decisions and the plan.
+
+- Primitives in `ui/` are authored in StyleX (`stylex.create`) against
+  `ui/tokens.stylex.ts`, and only against it: `bun scripts/ui-audit.ts`
+  rejects a raw length, unit or colour inside `stylex.create` anywhere else
+  (`stylex-raw-value`, budget 0). A value the scales lack is a decision for
+  the tokens file, not a literal at the call site.
+- A ported primitive takes an `xstyle` prop whose type only accepts
+  placement (margin, flex, grid, width). Move it with `xstyle`; change its look
+  with `variant` and `size`, or add a variant to the primitive. Do not pass
+  visual utilities through `<Button className>`: `button-restyle` counts
+  them and only goes down.
+- Feature code in `components/` still uses Tailwind for its own layout until
+  its area migrates.
+- Use Tailwind utilities for new and touched feature UI. `styles/legacy.css` is empty
   and stays that way; component styling lives in a `lib/*-classes.ts` string
   beside its component, or in a primitive in `ui/`. A class name left on the
   markup is a hook for something else (base.css, a `closest()` call, another

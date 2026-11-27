@@ -1,11 +1,28 @@
 import * as React from "react";
 import { IconChevronDown } from "../components/icons";
+import * as stylex from "@stylexjs/stylex";
+import type { StyleXStyles } from "@stylexjs/stylex";
 import { cn } from "./cn";
+import {
+  color,
+  controlHeight,
+  focus,
+  leading,
+  media,
+  motion,
+  opacity,
+  radius,
+  shadow,
+  space,
+  text,
+  weight,
+} from "./tokens.stylex";
 
 /**
- * Button primitive — the shared optics for text, icon+label, and icon-only
- * buttons. New buttons go through this; legacy `.btn-*` classes in legacy.css
- * migrate here opportunistically when touched (strangler pattern).
+ * Button primitive: the shared optics for text, icon+label, and icon-only
+ * buttons. The first primitive authored in StyleX against the closed scales in
+ * `tokens.stylex.ts` (see docs/design-system.md): callers place it with
+ * `xstyle`, and pick its look with `variant` and `size`.
  *
  * The icon/spacing rules are ported from a mature button system
  * (webapp Button.res + ButtonWithIcon.res — the product these iconic-pro
@@ -55,184 +72,324 @@ type Variant =
   | "success-strong";
 type Size = "sm" | "md" | "lg";
 
-const sizes: Record<Size, string> = {
-  // Heights bracket the app's existing chrome: 32px matches the viewer
-  // header buttons, 26px the chip/inline tier.
+/** `color-mix` ink at a fixed strength over whatever surface is behind it. */
+const ink = (c: string, pct: number) =>
+  `color-mix(in oklab, ${c} ${pct}%, transparent)`;
+
+const styles = stylex.create({
+  base: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    borderStyle: "solid",
+    borderWidth: 1,
+    whiteSpace: "nowrap",
+    userSelect: "none",
+    // Inert on a <button>, load-bearing under `render`: an <a> underlines
+    // its text by default, so a button that navigates would arrive looking
+    // like body copy.
+    textDecoration: "none",
+    fontWeight: weight.medium,
+    // Tailwind interop while callers still pass utilities: `text-meta` and
+    // friends read their weight from this, and before the port Button's
+    // `font-medium` set it. Delete with the last Tailwind caller.
+    "--tw-font-weight": weight.medium,
+    transitionProperty: "color, background-color, border-color, filter, scale",
+    transitionTimingFunction: motion.ease,
+    transitionDuration: motion.micro,
+    scale: { default: null, ":active": motion.pressScale },
+    // One keyboard focus treatment for every variant, with the forced-colors
+    // fallback, instead of each engine's default outline.
+    outline: { default: null, ":focus-visible": focus.ring },
+    outlineOffset: { default: null, ":focus-visible": focus.offset },
+    outlineColor: {
+      default: null,
+      [media.forcedColors]: { default: null, ":focus-visible": "Highlight" },
+    },
+    pointerEvents: { default: null, ":disabled": "none" },
+    opacity: { default: null, ":disabled": opacity.disabled },
+  },
+
+  // Heights bracket the app's chrome: 32 matches the viewer header buttons,
+  // 26 the chip/inline tier.
   //
   // One shape across every size and variant: a pill, and a circle when the
-  // button is icon-only. It matches the composer's send disc, the new-session
-  // Create and the tabs, so every pressable plate in the app reads as one
-  // family. `rounded-full` is also the opt-out from base.css's squircle
-  // (a squircle at 50% is a lobed blob, not a pill). It used to be
-  // `rounded-control`, a soft rect that only went pill-like on the short sizes.
+  // button is icon-only. It matches the composer's send disc, the
+  // new-session Create and the tabs, so every pressable plate in the app
+  // reads as one family. A true pill also opts out of base.css's squircle (a
+  // squircle at 50% is a lobed blob).
   //
   // Padding sits half a step wider than it did as a rect: a pill's ends eat
-  // into the label's air, so the same px-3 read cramped once the corners went
-  // round.
+  // into the label's air.
   //
-  // There used to be an `xs` between nothing and `sm`, 24px against 26px with
-  // the same padding, type and corner. Two names for one control: the 2px
-  // never told anyone anything, and choosing between them was a coin toss.
-  sm: "min-h-[26px] px-3 text-xs rounded-full",
-  md: "min-h-8 px-3.5 text-sm rounded-full",
-  lg: "min-h-9 px-4 text-base rounded-full",
-};
+  // The line box is the type role's, not 1: the label is trimmed to its cap
+  // band (`styles.label`), so it only shows on an element child or a wrap.
+  // An earlier `leading-none` here never applied (tailwind-merge dropped it
+  // for the size's `text-*`), so the role's leading is what has shipped.
+  sm: {
+    minHeight: controlHeight.sm,
+    lineHeight: leading.chip,
+    paddingInline: space.s12,
+    fontSize: text.label,
+    borderRadius: radius.pill,
+  },
+  md: {
+    minHeight: controlHeight.md,
+    lineHeight: leading.control,
+    paddingInline: space.s14,
+    fontSize: text.label,
+    borderRadius: radius.pill,
+  },
+  lg: {
+    minHeight: controlHeight.lg,
+    lineHeight: leading.body,
+    paddingInline: space.s16,
+    fontSize: text.body,
+    borderRadius: radius.pill,
+  },
 
-// Leading icon + label: shave 4px off the icon side, which is the glyph's own
-// whitespace minus the label's side bearing (see doc block).
-const iconLeadPad: Record<Size, string> = {
-  sm: "pl-2",
-  md: "pl-2.5",
-  lg: "pl-3",
-};
+  // The air between glyph and label (see the doc block for the measurement).
+  leadGap: { gap: space.s6 },
+  plainGap: { gap: space.s4 },
 
-// Trailing caret + label: the same 4px shave, on the caret's side.
-const caretTrailPad: Record<Size, string> = {
-  sm: "pr-2",
-  md: "pr-2.5",
-  lg: "pr-3",
-};
+  // Leading icon + label: shave 4px off the icon side, which is the glyph's
+  // own whitespace minus the label's side bearing.
+  iconLead_sm: { paddingInlineStart: space.s8 },
+  iconLead_md: { paddingInlineStart: space.s10 },
+  iconLead_lg: { paddingInlineStart: space.s12 },
+  // Trailing caret + label: the same 4px shave, on the caret's side.
+  caretTrail_sm: { paddingInlineEnd: space.s8 },
+  caretTrail_md: { paddingInlineEnd: space.s10 },
+  caretTrail_lg: { paddingInlineEnd: space.s12 },
+  // Icon-only: a square hit target, symmetric.
+  iconOnly_sm: { width: controlHeight.sm, paddingInline: space.s0 },
+  iconOnly_md: { width: controlHeight.md, paddingInline: space.s0 },
+  iconOnly_lg: { width: controlHeight.lg, paddingInline: space.s0 },
 
-// The air between glyph and label. One gap utility only: a second one on the
-// same element resolves by Tailwind's output order rather than by the order
-// they are written, so the two cases pick a value instead of layering.
-const LEAD_GAP = "gap-1.5";
-const PLAIN_GAP = "gap-1";
+  // ── Variants ──
+  //
+  // Which one, in one line each. The question a variant answers is what the
+  // button is FOR on its surface, not how loud you want it:
+  //
+  // - `primary`: the answer. One per surface, and only where there is one.
+  // - `default`: a control standing alone on the page (a header action, a
+  //   toolbar, a card's single button). Raised, so it reads as a thing to
+  //   press against a surface that is otherwise flat.
+  // - `soft`: everything in a row that is not the answer, or any neutral
+  //   button sitting ON a panel or card. A grey plate, no edge.
+  // - `ghost`: a control that is mostly reporting state (a filter, an icon
+  //   in a row). Quiet until you reach for it.
+  // - `overlay`: an inverse ghost floating over a dark media scrim.
+  // - the tones: `danger`, `success` and `warning` are tinted plates that
+  //   propose; `danger-strong` and `success-strong` are solid ones that
+  //   commit.
+  //
+  // Hover rules sit behind `(hover: hover)` so a tap on a phone does not
+  // leave a stuck wash; `:is([data-popup-open])` is Base UI's open state, so a
+  // menu trigger stays lit while its menu is open.
 
-// The caret keys off the label, not the 20px icon step: an iconic-pro glyph at
-// 14 draws an arrow about as tall as the cap height of a 12px label, which is
-// the proportion a dropdown affordance wants. Bigger and it competes with the
-// text it qualifies.
+  // Paper in light, graphite in dark: the hairline and the cast shadow are
+  // what say "raised", so the fill does not have to.
+  default: {
+    backgroundColor: color.button,
+    borderColor: {
+      default: color.line,
+      ":hover": { default: null, [media.hover]: color.lineStrong },
+    },
+    color: {
+      default: color.dim,
+      ":hover": { default: null, [media.hover]: color.fg },
+    },
+    boxShadow: shadow.xs,
+  },
+  // Solid ink, for the one dominant action on a surface. The label is
+  // `onAccent`, not white: on an ink fill white-on-white is what dark mode
+  // would get. The hover takes `accentHover`, which picks its own direction
+  // per accent.
+  primary: {
+    backgroundColor: {
+      default: color.accent,
+      ":hover": { default: null, [media.hover]: color.accentHover },
+    },
+    borderColor: color.transparent,
+    color: color.onAccent,
+    backgroundImage: shadow.plateSheen,
+    boxShadow: shadow.xs,
+  },
+  // A plate with no hairline: the quiet neutral button. The step is
+  // RELATIVE (ink over whatever is behind it), so it holds its shape on a
+  // panel, a card, or the sidebar's translucent material.
+  soft: {
+    backgroundColor: {
+      default: ink(color.fg, 8),
+      ":hover": { default: null, [media.hover]: ink(color.fg, 13) },
+      ":is([data-popup-open])": ink(color.fg, 13),
+    },
+    borderColor: color.transparent,
+    color: {
+      default: color.dim,
+      ":hover": { default: null, [media.hover]: color.fg },
+      ":is([data-popup-open])": color.fg,
+    },
+  },
+  ghost: {
+    backgroundColor: {
+      default: null,
+      ":hover": { default: null, [media.hover]: color.hover },
+      ":is([data-popup-open])": color.hover,
+    },
+    borderColor: color.transparent,
+    color: {
+      default: color.dim,
+      ":hover": { default: null, [media.hover]: color.fg },
+      ":is([data-popup-open])": color.fg,
+    },
+  },
+  overlay: {
+    backgroundColor: {
+      default: color.transparent,
+      ":hover": { default: null, [media.hover]: ink(color.onScrim, 15) },
+    },
+    borderColor: color.transparent,
+    color: {
+      default: ink(color.onScrim, 60),
+      ":hover": { default: null, [media.hover]: color.onScrim },
+    },
+  },
+  // The tones: a tinted plate that PROPOSES, a solid one that COMMITS. The
+  // tint is the `-soft` token, so it layers over any surface; the hover
+  // doubles it rather than adding an edge. Yellow has no strong half: it
+  // qualifies an action, and nothing in the app commits in yellow.
+  success: {
+    backgroundColor: {
+      default: color.greenSoft,
+      ":hover": { default: null, [media.hover]: ink(color.green, 22) },
+    },
+    borderColor: color.transparent,
+    color: color.green,
+  },
+  danger: {
+    backgroundColor: {
+      default: color.redSoft,
+      ":hover": { default: null, [media.hover]: ink(color.red, 22) },
+    },
+    borderColor: color.transparent,
+    color: color.red,
+  },
+  warning: {
+    backgroundColor: {
+      default: color.yellowSoft,
+      ":hover": { default: null, [media.hover]: ink(color.yellow, 22) },
+    },
+    borderColor: color.transparent,
+    color: color.yellow,
+  },
+  dangerStrong: {
+    backgroundColor: color.red,
+    borderColor: color.transparent,
+    color: color.onScrim,
+    backgroundImage: shadow.plateSheen,
+    boxShadow: shadow.xs,
+    filter: {
+      default: null,
+      ":hover": { default: null, [media.hover]: "brightness(110%)" },
+    },
+  },
+  successStrong: {
+    backgroundColor: color.green,
+    borderColor: color.transparent,
+    color: color.onScrim,
+    backgroundImage: shadow.plateSheen,
+    boxShadow: shadow.xs,
+    filter: {
+      default: null,
+      ":hover": { default: null, [media.hover]: "brightness(110%)" },
+    },
+  },
+
+  // ── Inner parts ──
+  glyph: { display: "inline-flex", flexShrink: 0, alignItems: "center" },
+  glyphMuted: { opacity: opacity.glyphMuted },
+  glyphOnTone: { opacity: opacity.glyphOnTone },
+  caret: { flexShrink: 0, opacity: opacity.affordance },
+  // A text label is centred on its CAP BAND, not its line box: the line box
+  // carries the font's descender space, which put the ink ~1.75px high.
+  // `text-box` trims to cap height and baseline, right in every font.
+  label: { textBox: "trim-both cap alphabetic" },
+});
+
+const sizeStyle = { sm: styles.sm, md: styles.md, lg: styles.lg } as const;
+const iconLeadPad = {
+  sm: styles.iconLead_sm,
+  md: styles.iconLead_md,
+  lg: styles.iconLead_lg,
+} as const;
+const caretTrailPad = {
+  sm: styles.caretTrail_sm,
+  md: styles.caretTrail_md,
+  lg: styles.caretTrail_lg,
+} as const;
+const iconOnlyPad = {
+  sm: styles.iconOnly_sm,
+  md: styles.iconOnly_md,
+  lg: styles.iconOnly_lg,
+} as const;
+const variantStyle = {
+  default: styles.default,
+  primary: styles.primary,
+  soft: styles.soft,
+  ghost: styles.ghost,
+  overlay: styles.overlay,
+  success: styles.success,
+  danger: styles.danger,
+  warning: styles.warning,
+  "danger-strong": styles.dangerStrong,
+  "success-strong": styles.successStrong,
+} as const;
+
+// The caret keys off the label, not the 20px icon step: an iconic-pro glyph
+// at 14 draws an arrow about as tall as the cap height of a 12px label.
 const caretSize: Record<Size, number> = { sm: 14, md: 16, lg: 18 };
 
-// Icon-only: square hit target, symmetric.
-const iconOnlyPad: Record<Size, string> = {
-  sm: "w-[26px] px-0",
-  md: "w-8 px-0",
-  lg: "w-9 px-0",
-};
-
-// Solid ink: the heaviest weight, for the one dominant action on a surface (a
-// page header's CTA, a panel's single call to action). It was once a second
-// variant named `ink`, because the brand accent was red and, at that size, it
-// shouted. The accent is ink now, so the two names described one plate; the
-// older one is gone.
-//
-// The label is `text-on-accent` rather than a literal white: on an ink fill,
-// white-on-white is what you get in dark mode. And `brightness-110` (what
-// `primary` used to hover with) is invisible on a near-white or near-black
-// fill, so the hover takes `--accent-hover`, which picks its own direction:
-// toward the page while the accent is ink, deeper into the hue once it isn't.
-//
-// `plate-sheen` (styles/tailwind.css) is the top-down shading that keeps this
-// from reading as a flat printed rectangle. It is a white-then-black overlay,
-// so it costs the variant nothing per palette and survives the ink accent at
-// both ends of the light/dark range.
-const INK =
-  "bg-accent border-transparent text-on-accent plate-sheen smooth-shadow-xs hover:bg-accent-hover";
+// Leading-icon dimming: full-strength plates (primary, tones) take the
+// lighter dim, neutral weights the stronger one. Icon-only stays undimmed.
+const dimsOnTone = new Set<Variant>([
+  "primary",
+  "success",
+  "danger",
+  "warning",
+  "danger-strong",
+  "success-strong",
+]);
 
 /**
- * Which one, in one line each. The question a variant answers is what the
- * button is FOR on its surface, not how loud you want it:
- *
- * - `primary` — the answer. One per surface, and only where there is one.
- * - `default` — a control standing alone on the page: a header action, a
- *   toolbar, a card's single button. Raised, so it reads as a thing to press
- *   against a surface that is otherwise flat.
- * - `soft` — everything in a row that is not the answer: the Cancel beside a
- *   form's primary, two or more peers with no answer among them, or any
- *   neutral button sitting ON a panel or card. A grey plate, no edge. Raised
- *   plates in a row read as cards inside a card, and a hairline around each
- *   one draws a box about a label nobody is being asked to read.
- * - `ghost` — a control that is mostly reporting state (a filter, an icon in
- *   a row). Quiet until you reach for it.
- * - `overlay` — an inverse ghost floating over a dark media scrim.
- * - the tones — `danger`, `success` and `warning` are tinted plates that
- *   propose; `danger-strong` and `success-strong` are solid ones that commit.
- *   Two weights, no outline, so a Delete beside a Cancel is a red plate in a
- *   row of plates rather than a boxed label shouting over the quiet half.
+ * What a caller may change about a Button: where it sits, never what it looks
+ * like. Size, colour, padding and corner come from `size` and `variant`; a
+ * surface that needs something else needs a new variant, agreed once, rather
+ * than a local override that the next screen copies.
  */
-const variants: Record<Variant, string> = {
-  // The raised control look of the newest chrome (viewer Share button).
-  // Paper in light (`bg-button`), graphite in dark: the hairline and the cast
-  // shadow are what say "raised", so the fill does not have to — see the
-  // --button-surface note in base.css.
-  default:
-    "bg-button border-line text-dim smooth-shadow-xs hover:text-fg hover:border-line-strong",
-  primary: INK,
-  // A plate with no hairline: the quiet neutral button, and the one to reach
-  // for whenever a row holds more than one action (Cancel beside Save, a
-  // card's Run now · Edit · Delete). `default` cannot simply drop its border,
-  // because its fill is paper in light and the border plus shadow are what
-  // say raised — a row of them reads as plates inside a plate. `soft` steps
-  // the fill instead, so it still reads as a pressable thing at a quieter
-  // weight, and the hover goes one more step rather than adding an edge.
-  //
-  // The step is RELATIVE — ink over whatever is behind it, the same trick as
-  // --hover — not a fixed surface value. It used to be `bg-control`, which is
-  // tuned against the page: on a panel, where most of these rows actually
-  // live, #ebebeb on #f0f0f0 all but disappeared in light. 8% ink lands on
-  // that same #ebebeb over the white page, so nothing moved where the old
-  // value was right, and it holds its shape on a panel, a card, or the
-  // sidebar's translucent material.
-  soft: "bg-fg/8 border-transparent text-dim hover:bg-fg/13 hover:text-fg data-[popup-open]:bg-fg/13 data-[popup-open]:text-fg",
-  // No plate at all until you reach for it. A ghost is the right weight for a
-  // control that is *reporting state* as much as inviting a press — a filter
-  // that says "In all workspaces" is mostly a label — so the row stays quiet
-  // and the wash arrives on hover. `data-popup-open` is Base UI's: when the
-  // ghost is a menu trigger it has to stay lit while its own menu is open, or
-  // the thing you just clicked disappears out from under the popup.
-  ghost:
-    "border-transparent text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg",
-  // Media previews float directly on a dark scrim rather than an app surface.
-  // Keep their safe action clusters as quiet inverse ghosts until hover; the
-  // shared variant lets lightboxes use Button's spacing, focus, and anchor
-  // rendering instead of rebuilding those fundamentals around raw controls.
-  overlay:
-    "border-transparent bg-transparent text-white/60 hover:bg-white/15 hover:text-white",
-  // The tones come in two weights and no third: a tinted plate that PROPOSES
-  // the action, and a solid one that COMMITS it. Both are fills, like every
-  // variant above — a tone used to be an outline, which put a red box around
-  // a Delete sitting next to a grey Cancel and made the quiet half of a
-  // confirm the loudest thing in the row.
-  //
-  // The tint is the `-soft` token, a 10-14% wash of the tone itself, so it
-  // layers over a panel, a card or the page without knowing which it is —
-  // the same relative step `soft` takes. The hover doubles it rather than
-  // adding an edge.
-  //
-  // Green is the second-most reached-for colour in the app after the accent
-  // (approve a review, merge, mark read), so it earns a pair of its own.
-  success: "bg-green-soft border-transparent text-green hover:bg-green/22",
-  danger: "bg-red-soft border-transparent text-red hover:bg-red/22",
-  // Yellow has no strong half: it qualifies an action ("delete the session,
-  // keep the worktree"), and nothing in the app commits in yellow.
-  warning: "bg-yellow-soft border-transparent text-yellow hover:bg-yellow/22",
-  // Solid red plate — the button that actually does the irreversible thing
-  // (a modal's confirm, the second click of a two-click close). Shares
-  // `primary`'s shape, so the two swap cleanly in a footer.
-  "danger-strong":
-    "bg-red border-transparent text-white plate-sheen smooth-shadow-xs hover:brightness-110",
-  // Solid green plate, for the affirmative action a surface wants read first
-  // — the deck's Skip, a workspace's Approve — where the tint would let a
-  // destructive neighbour dominate the row.
-  "success-strong":
-    "bg-green border-transparent text-white plate-sheen smooth-shadow-xs hover:brightness-110",
-};
-
-// Leading-icon dimming per variant (icon-only stays full strength).
-const iconDim: Record<Variant, string> = {
-  default: "opacity-60",
-  primary: "opacity-80",
-  soft: "opacity-60",
-  ghost: "opacity-60",
-  overlay: "opacity-60",
-  success: "opacity-80",
-  danger: "opacity-80",
-  warning: "opacity-80",
-  "danger-strong": "opacity-80",
-  "success-strong": "opacity-80",
-};
+export type ButtonLayoutStyles = StyleXStyles<{
+  margin?: string | number | null;
+  marginBlock?: string | number | null;
+  marginInline?: string | number | null;
+  marginTop?: string | number | null;
+  marginBottom?: string | number | null;
+  marginInlineStart?: string | number | null;
+  marginInlineEnd?: string | number | null;
+  flex?: string | number | null;
+  flexGrow?: string | number | null;
+  flexShrink?: string | number | null;
+  flexBasis?: string | number | null;
+  alignSelf?: string | number | null;
+  justifySelf?: string | number | null;
+  order?: string | number | null;
+  gridArea?: string | number | null;
+  gridColumn?: string | number | null;
+  gridRow?: string | number | null;
+  width?: string | number | null;
+  maxWidth?: string | number | null;
+  minWidth?: string | number | null;
+}>;
 
 type ButtonRenderProps = React.ComponentPropsWithoutRef<"button"> & {
   ref?: React.ForwardedRef<HTMLButtonElement>;
@@ -284,6 +441,17 @@ export type ButtonProps = React.ComponentPropsWithoutRef<"button"> & {
    * should not be followed has no href.
    */
   render?: React.ReactElement<ButtonRenderProps>;
+  /**
+   * Layout-only StyleX overrides (margin, flex, grid placement, width). The
+   * type rejects anything that would change how the button looks; reach for
+   * `variant` and `size` for that.
+   */
+  xstyle?: ButtonLayoutStyles;
+  /**
+   * @deprecated for anything but layout. Kept while call sites migrate to
+   * `xstyle`; `bun scripts/ui-audit.ts` counts the visual overrides.
+   */
+  className?: string;
 };
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
@@ -296,6 +464,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       caret,
       trailing,
       render,
+      xstyle,
       className,
       children,
       ...rest
@@ -317,7 +486,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       children != null &&
       (children.constructor === String || children.constructor === Number);
     const label = hasPlainLabel ? (
-      <span className="[text-box:trim-both_cap_alphabetic]">{children}</span>
+      <span {...stylex.props(styles.label)}>{children}</span>
     ) : (
       children
     );
@@ -325,9 +494,13 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       <>
         {icon != null && (
           <span
-            className={cn(
-              "inline-flex shrink-0 items-center",
-              !iconOnly && iconTone === "muted" && iconDim[variant],
+            {...stylex.props(
+              styles.glyph,
+              !iconOnly &&
+                iconTone === "muted" &&
+                (dimsOnTone.has(variant)
+                  ? styles.glyphOnTone
+                  : styles.glyphMuted),
             )}
           >
             {icon}
@@ -335,40 +508,35 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         )}
         {label}
         {trailing != null && (
-          <span className="inline-flex shrink-0 items-center">{trailing}</span>
+          <span {...stylex.props(styles.glyph)}>{trailing}</span>
         )}
         {caret && (
           <IconChevronDown
-            className="shrink-0 opacity-55"
+            className={stylex.props(styles.caret).className}
             size={caretSize[size]}
           />
         )}
       </>
     );
-    const optics = cn(
-      // `no-underline` is inert on a <button> and load-bearing under
-      // `render`: an <a> underlines its text by default, so without it a
-      // button that navigates arrives looking like body copy.
-      "inline-flex items-center justify-center border whitespace-nowrap select-none no-underline",
-      icon != null && hasLabel ? LEAD_GAP : PLAIN_GAP,
-      // Text utilities carry different stock line heights even though this
-      // button scale pins its own heights. A single tight line box gives
-      // labels the same optical centre as fixed-size icons and chevrons.
-      "leading-none",
-      "font-medium transition-[color,background-color,border-color,filter,scale] active:scale-[0.96]",
-      // One keyboard focus treatment for every variant. Without it a
-      // Button falls back to the browser's default outline, which
-      // differs per engine and sits tight against the corner; the
-      // shared utility also carries the forced-colors fallback.
-      "focus-ring",
-      "disabled:pointer-events-none disabled:opacity-40",
-      sizes[size],
-      variants[variant],
+    const optics = stylex.props(
+      styles.base,
+      icon != null && hasLabel ? styles.leadGap : styles.plainGap,
+      sizeStyle[size],
+      variantStyle[variant],
       icon != null && hasLabel && iconLeadPad[size],
       (caret || trailing != null) && hasLabel && caretTrailPad[size],
       iconOnly && iconOnlyPad[size],
-      className,
+      xstyle,
     );
+    // A caller's Tailwind `className` still lands last and wins ties, as it
+    // did through tailwind-merge: the StyleX sheet is linked ahead of the
+    // utilities (see stylexCss in src/server/stylex-transform.ts). New code
+    // passes `xstyle` instead, which can only move the button, not restyle it.
+    const merged = (own?: string) => cn(optics.className, className, own);
+    const style =
+      optics.style || rest.style
+        ? { ...optics.style, ...rest.style }
+        : undefined;
 
     if (render) {
       // The caller's element is the more specific of the two, so its own
@@ -378,13 +546,20 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       return React.cloneElement(render, {
         ...rest,
         ref,
-        className: cn(optics, own.className),
+        className: merged(own.className),
+        style: own.style ? { ...style, ...own.style } : style,
         children: content,
       });
     }
 
     return (
-      <button type="button" ref={ref} className={optics} {...rest}>
+      <button
+        type="button"
+        ref={ref}
+        {...rest}
+        className={merged()}
+        style={style}
+      >
         {content}
       </button>
     );
