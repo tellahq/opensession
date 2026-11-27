@@ -36,17 +36,37 @@ export function makeUserPref<T>(opts: {
   decode: (raw: string | null | undefined) => T | null;
   /** Value → the string stored on the server (and locally for non-defaults). */
   encode: (value: T) => string;
+  /**
+   * Keep one cached value per signed-in person instead of one per browser.
+   *
+   * The shared cache dates from when these preferences lived only in
+   * localStorage, and hydration still pushes a cached value up for a person
+   * the server has nothing for. On a browser two people use, that hands the
+   * first person's choice to the second and saves it as theirs. A preference
+   * born after the sync has no such value to rescue, so it sets this: the
+   * cache is the person's own, and nothing is pushed up on their behalf.
+   */
+  perUser?: boolean;
 }): UserPref<T> {
   const { localKey, prefKey, changeEvent, defaultValue, decode, encode } = opts;
+  const perUser = opts.perUser ?? false;
 
-  function get(): T {
-    return decode(localStorage.getItem(localKey)) ?? defaultValue;
+  function keyFor(user: string): string {
+    return perUser ? `${localKey}:${user}` : localKey;
   }
 
-  function writeLocal(value: T) {
+  function read(user: string): T {
+    return decode(localStorage.getItem(keyFor(user))) ?? defaultValue;
+  }
+
+  function get(): T {
+    return read(getCurrentUser());
+  }
+
+  function writeLocal(value: T, user = getCurrentUser()) {
     // The default's absence is its stored form.
-    if (value === defaultValue) localStorage.removeItem(localKey);
-    else localStorage.setItem(localKey, encode(value));
+    if (value === defaultValue) localStorage.removeItem(keyFor(user));
+    else localStorage.setItem(keyFor(user), encode(value));
   }
 
   // Bumped on every local set; an in-flight hydration only applies if nothing
@@ -79,21 +99,24 @@ export function makeUserPref<T>(opts: {
     if (writeStamp !== stampAtStart) return; // user changed it mid-fetch
     const server = decode(prefs[prefKey]);
     if (server !== null) {
-      if (server !== get()) {
-        writeLocal(server);
+      // Written under the person it was fetched for, who may no longer be
+      // the one signed in.
+      if (server !== read(user)) {
+        writeLocal(server, user);
         window.dispatchEvent(new Event(changeEvent));
       }
-    } else if (get() !== defaultValue) {
+    } else if (!perUser && get() !== defaultValue) {
       // This browser has a local value the server doesn't know yet: push it up.
       void saveUiPrefsApi(user, { [prefKey]: encode(get()) }).catch(() => {});
     }
   }
 
   whenCurrentUserReady((user) => void hydrate(user));
-  window.addEventListener(
-    USER_CHANGE_EVENT,
-    () => void hydrate(getCurrentUser()),
-  );
+  window.addEventListener(USER_CHANGE_EVENT, () => {
+    // A per-person cache already holds the new person's value.
+    if (perUser) window.dispatchEvent(new Event(changeEvent));
+    void hydrate(getCurrentUser());
+  });
 
   function onChanged(handler: () => void): () => void {
     window.addEventListener(changeEvent, handler);
@@ -102,7 +125,8 @@ export function makeUserPref<T>(opts: {
 
   // Mirror changes made in another tab (storage events don't fire same-tab).
   window.addEventListener("storage", (e) => {
-    if (e.key === localKey) window.dispatchEvent(new Event(changeEvent));
+    if (e.key === keyFor(getCurrentUser()))
+      window.dispatchEvent(new Event(changeEvent));
   });
 
   return { get, set, onChanged };

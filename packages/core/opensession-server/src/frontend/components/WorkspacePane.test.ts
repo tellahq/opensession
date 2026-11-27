@@ -304,7 +304,7 @@ test("Review loading and errors stay centered beside the summary", () => {
 });
 
 test("a lone Review hides the tab strip, closes the toolbar gap, and keeps New tab in the header", () => {
-  expect(source).toContain("tabStripVisible: boolean");
+  expect(source).toContain("tabStripVisible: TabStripPlacement");
   expect(source).toContain("!tabStripVisible && onNewSession");
   expect(source).toContain("tabStripVisible={tabStripVisible}");
   expect(source).toContain("flushToolbarTop={!tabStripVisible}");

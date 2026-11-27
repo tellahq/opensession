@@ -91,8 +91,8 @@ export function workspaceSummaryShouldDismissAfterRouting(
  *  banner strip under it. Review gives the card its own column, so its inner
  *  PR bars need no extra clearance. */
 export function workspaceSummarySideOffset(
-  tabStripVisible: boolean,
+  tabStripBand: boolean,
   bannerHeight = 0,
 ): number {
-  return (tabStripVisible ? 49 : 20) + bannerHeight;
+  return (tabStripBand ? 49 : 20) + bannerHeight;
 }

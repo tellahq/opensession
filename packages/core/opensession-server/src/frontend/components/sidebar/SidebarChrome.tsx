@@ -34,6 +34,7 @@ import {
 import { RepoFilterChip } from "./Filters";
 import type { SidebarToolsNavItem } from "./SidebarToolsNav";
 import { SidebarToolsNav } from "./SidebarToolsNav";
+import { useNewLayoutPref } from "../../lib/new-layout-pref";
 
 interface SidebarChromeState {
   density: string;
@@ -107,6 +108,9 @@ export function SidebarChrome({
   refs: { headRef, titleRef, actionsRef, probeRef, setFilterButton },
   actions: { navigation, setFilterOpen, onToggleWorkspaces },
 }: SidebarChromeProps) {
+  // The new layout's minibar holds the organization and the places, so the
+  // strip that listed them goes and this heading names the one place left.
+  const newLayout = useNewLayoutPref() && !isPhone;
   return (
     <div
       // Desktop lifts this strip out of the scrollport, so it sets the rail's
@@ -134,21 +138,23 @@ export function SidebarChrome({
       "Remove from toolbar" that already lived there. Take the last
       tool off and the organization selector remains; the sidebar's own
       right-click menu still lists every tool. */}
-      <SidebarToolsNav
-        connected={connected}
-        isPhone={isPhone}
-        tools={visibleTools}
-        menuTools={sidebarMenuTools}
-        team={team}
-        personLensValue={personLensValue(filter.person, currentUser)}
-        personLensName={personLensName}
-        onOpenSettings={navigation.openSettings}
-        onSetToolVisible={setToolVisible}
-        onSetSupportSurface={setSupportSurface}
-        onPickPerson={(next) =>
-          setFilter({ person: personLensFilter(next, currentUser) })
-        }
-      />
+      {!newLayout && (
+        <SidebarToolsNav
+          connected={connected}
+          isPhone={isPhone}
+          tools={visibleTools}
+          menuTools={sidebarMenuTools}
+          team={team}
+          personLensValue={personLensValue(filter.person, currentUser)}
+          personLensName={personLensName}
+          onOpenSettings={navigation.openSettings}
+          onSetToolVisible={setToolVisible}
+          onSetSupportSurface={setSupportSurface}
+          onPickPerson={(next) =>
+            setFilter({ person: personLensFilter(next, currentUser) })
+          }
+        />
+      )}
 
       <div
         className={cn(
@@ -266,7 +272,7 @@ export function SidebarChrome({
                   titleRef.current = element;
                 }}
               >
-                Workspaces
+                {newLayout ? "Sessions" : "Workspaces"}
               </span>
               <IconChevronDown
                 className={cn(

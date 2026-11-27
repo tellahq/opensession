@@ -46,6 +46,16 @@
    put a `desktop:` and an `lg:` on one property and it will. */
 @custom-variant phone (@media (max-width: 720px));
 @custom-variant desktop (@media (min-width: 721px));
+/* The opt-in new layout (components/shell/Minibar.tsx). The minibar is the
+   first child of the app body, so everything the layout restyles is either a
+   later sibling of it or inside one. Keyed off the markup rather than a class
+   on <html>, so it is right on the first paint and needs no effect to set. */
+@custom-variant new-layout {
+  [data-minibar] ~ &,
+  [data-minibar] ~ * & {
+    @slot;
+  }
+}
 
 /* Design tokens: map the existing base.css variables (which already carry
    dark/light theming via html[data-theme]) into Tailwind's namespace, so

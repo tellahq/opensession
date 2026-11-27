@@ -69,6 +69,11 @@ export interface SessionTabsLayout {
    * holding one tab must still be able to hand it over.
    */
   inSplit?: boolean;
+  /**
+   * The new layout's strip: it sits in the window row, the active tab is
+   * attached to the sheet under it, and it shows even for a single tab.
+   */
+  attached?: boolean;
   /** Show the archived-sessions menu — only the rightmost bar does. */
   showHistory?: boolean;
   /** Client-minted tab id available in the same optimistic render as the click. */

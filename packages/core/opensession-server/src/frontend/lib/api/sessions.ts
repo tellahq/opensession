@@ -2,6 +2,7 @@ import type { SessionSpeed } from "@tellahq/opensession-protocol/session";
 import { ApiError, BASE, request } from "./request";
 import type { TranscriptEntry, UnifiedSession } from "../types";
 import { resolveAnonymousUserPath } from "../auth-ready";
+import { announceConversationDeleted } from "../conversation-deleted";
 import { preparePromptImages } from "../images";
 
 /**
@@ -431,6 +432,7 @@ export async function deleteSessionApi(
     method: "DELETE",
     label: "Failed to delete",
   });
+  announceConversationDeleted({ view: "session", id: sessionId });
 }
 
 /** Returns `stoppedRun: true` when archiving gracefully stopped an in-flight,

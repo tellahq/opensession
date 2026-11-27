@@ -40,6 +40,14 @@ const TAB_CORNERS = "rounded-full";
 /* ── The strip ──────────────────────────────────────────────────────────── */
 
 /**
+ * Finds a tab strip, whichever way it is drawn. SessionTabs puts
+ * `data-tab-strip` on every strip's root, and the drag hit tests (split a
+ * pane, drop on the side panel) measure from it. `session-tabs` cannot do
+ * this job: it is a styling hook the attached strip deliberately lacks.
+ */
+export const TAB_STRIP_SELECTOR = "[data-tab-strip]";
+
+/**
  * The bar itself. `group/strip` reveals history, which stays quiet until the
  * strip is pointed at. The new-tab + remains visible whenever the strip exists.
  *
@@ -109,6 +117,65 @@ export const TAB_SCROLL =
   "supports-[animation-timeline:scroll()]:data-[overflow]:[mask-image:linear-gradient(to_right,transparent_0,#000_var(--tabs-fade-start),#000_calc(100%_-_max(var(--tabs-fade-end),var(--tabs-control-fade-end,0px))),transparent_100%)]";
 
 /**
+ * The new layout's strip (`layout.attached`). It sits in the grey window row
+ * rather than in a band of its own, so it paints no fill and no closing rule:
+ * the row has both. Tabs hang from 6px below the row's top edge to its bottom,
+ * where the active one meets the sheet.
+ *
+ * No `session-tabs` hook: that name tells the top bar a strip overlaps its
+ * lower edge, and this one is beside the bar, not under it.
+ */
+export const TAB_STRIP_ATTACHED =
+  "group/strip relative flex min-w-0 flex-1 items-stretch gap-0.5 pt-1.5";
+
+/** Added to TAB_SCROLL: full height so a tab can reach the row's bottom edge,
+ *  and above the row's hairline so the active tab covers it. The scroll masks
+ *  itself when it overflows, which makes it a stacking context of its own, so
+ *  the lift has to be here and not on the tab. The 8px at each end is room for
+ *  the first and last tab's flare, which the scroll would otherwise clip. */
+export const TAB_SCROLL_ATTACHED = "relative z-[1] items-stretch px-2";
+
+export const TAB_GROUP_ATTACHED =
+  "relative inline-flex flex-none items-stretch gap-0.5";
+
+/**
+ * Where the active tab meets the sheet, its border does not land on the row's
+ * hairline square: it curves outward and becomes that hairline, so the tab
+ * and the sheet under it read as one outlined shape.
+ *
+ * Each flare is an 8px box at the tab's foot, just outside it, painted by one
+ * gradient: the row shows through inside the curve, the hairline is the
+ * curve, and the tab's fill (`--tab-fill`) is the wedge under it. It overlaps
+ * the tab's own border by that border's one pixel, and sits above it, so the
+ * straight edge turns into the curve without a step.
+ *
+ * The curve is the band from 7px to 8px of the gradient, as wide as the
+ * border it continues and on the same pixels where they meet. Each edge of
+ * it is a half-pixel ramp centred on that edge, which is what smooths it.
+ * All three strokes use the row's opaque `--tab-edge` (PANE_TOP_ROW), since
+ * they overlap at both ends.
+ *
+ * Every class here is spelled out in full. Tailwind reads this file as text,
+ * so a class assembled from a constant is never generated.
+ *
+ * They belong to this wrapper, not to the tab. A tab can clip itself (an
+ * empty tab does, for its opening morph), and a flare is outside its box.
+ * The wrapper is the same size and never clips.
+ */
+const TAB_ITEM_ATTACHED_FLARES =
+  "[--tab-fill:var(--bg)] data-[colored]:[--tab-fill:color-mix(in_srgb,var(--tab-color)_14%,var(--bg))] " +
+  "before:pointer-events-none before:absolute before:bottom-0 before:-left-[7px] before:z-[1] before:hidden before:size-2 before:content-[''] " +
+  "before:[background:radial-gradient(circle_at_0_0,transparent_6.75px,var(--tab-edge,var(--divider))_7.25px,var(--tab-edge,var(--divider))_7.75px,var(--tab-fill)_8.25px)] " +
+  "after:pointer-events-none after:absolute after:bottom-0 after:-right-[7px] after:z-[1] after:hidden after:size-2 after:content-[''] " +
+  "after:[background:radial-gradient(circle_at_100%_0,transparent_6.75px,var(--tab-edge,var(--divider))_7.25px,var(--tab-edge,var(--divider))_7.75px,var(--tab-fill)_8.25px)] " +
+  "[&:has(>[aria-selected=true])]:before:block [&:has(>[aria-selected=true])]:after:block";
+
+export const TAB_ITEM_ATTACHED = `session-tab-reorder relative inline-flex shrink-0 items-stretch ${TAB_ITEM_ATTACHED_FLARES}`;
+
+export const TAB_ITEM_ATTACHED_DRAGGING =
+  "cursor-grabbing rounded-t-[10px] bg-panel smooth-shadow-ring-sm";
+
+/**
  * The drag-to-reorder group wraps EVERY tab — sessions and view panes alike —
  * so a pane can be dragged in among the sessions. `flex-none` is load-bearing:
  * the tabs inside never shrink, so a group allowed to shrink would collapse
@@ -173,7 +240,32 @@ export type TabState = {
   waiting: boolean;
   /** A user-chosen swatch, supplied inline as `--tab-color`. */
   colored: boolean;
+  /** The new layout's tab, attached to the sheet under the window row. */
+  attached?: boolean;
 };
+
+/**
+ * An attached tab. The active one is a piece of the sheet: its fill, a
+ * hairline up both sides and over the top, and no bottom edge. The rest are
+ * words on the row until they are pointed at. Every tab carries the border, in
+ * a colour or not, so selecting one moves nothing.
+ */
+const TAB_ATTACHED_BASE =
+  "relative inline-flex max-w-[200px] shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
+  "rounded-t-[10px] border border-b-0 px-3 text-label shadow-none transition-[background-color,color]";
+
+function attachedTabClass({ active, waiting, colored }: TabState): string {
+  const ink = active || waiting ? "text-fg" : "text-dim hover:text-fg";
+  const surface = colored
+    ? active
+      ? "border-[color:var(--tab-edge,var(--divider))] bg-[var(--tab-fill)] [--tab-fill:color-mix(in_srgb,var(--tab-color)_14%,var(--bg))]"
+      : "border-transparent bg-[color-mix(in_srgb,var(--tab-color)_9%,transparent)] " +
+        "hover:bg-[color-mix(in_srgb,var(--tab-color)_16%,transparent)]"
+    : active
+      ? "border-[color:var(--tab-edge,var(--divider))] bg-[var(--tab-fill)] [--tab-fill:var(--bg)]"
+      : "border-transparent bg-transparent hover:bg-hover";
+  return `${TAB_ATTACHED_BASE} ${ink} ${surface}`;
+}
 
 /**
  * The selected tab is the only ordinary desktop tab with a surface. Phone tabs
@@ -182,6 +274,7 @@ export type TabState = {
  * while inactive.
  */
 export function tabClass(state: TabState): string {
+  if (state.attached) return attachedTabClass(state);
   const { active, waiting, colored } = state;
   const ink = active || waiting ? "text-fg" : "text-dim hover:text-fg";
   const surface = colored

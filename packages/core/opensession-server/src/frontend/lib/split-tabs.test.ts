@@ -45,6 +45,9 @@ describe("split tabs", () => {
     expect(shouldShowTabStrip(2)).toBe(true);
     expect(shouldShowTabStrip(1, true)).toBe(true);
     expect(shouldShowTabStrip(2, false, true)).toBe(false);
+    expect(shouldShowTabStrip(1, false, false, true)).toBe(true);
+    expect(shouldShowTabStrip(0, false, false, true)).toBe(false);
+    expect(shouldShowTabStrip(1, false, true, true)).toBe(false);
   });
 
   test("persists a clamped split per workspace", () => {

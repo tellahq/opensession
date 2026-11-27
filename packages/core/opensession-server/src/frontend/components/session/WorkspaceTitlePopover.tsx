@@ -3,6 +3,7 @@ import { useSessionGitResource } from "../../hooks/useApiResources";
 import { relativeTime } from "../../lib/api";
 import { cachedRepos } from "../../lib/repo-cache";
 import {
+  HIDDEN_BESIDE_TABS,
   VIEWER_BRANCH,
   VIEWER_BRANCH_EDITABLE,
 } from "../../lib/session-viewer-classes";
@@ -111,6 +112,9 @@ export function WorkspaceTitlePopover({
           VIEWER_BRANCH_EDITABLE,
           "flex cursor-pointer items-center gap-2 text-left",
           "data-[popup-open]:bg-hover",
+          // Beside the tab strip the glyph alone opens the card; with no
+          // glyph there is nothing left to press.
+          !leading && HIDDEN_BESIDE_TABS,
         )}
         aria-label={title}
         onDoubleClick={
@@ -123,7 +127,9 @@ export function WorkspaceTitlePopover({
         }
       >
         {leading}
-        <OverflowFadeText>{title}</OverflowFadeText>
+        <OverflowFadeText className={HIDDEN_BESIDE_TABS}>
+          {title}
+        </OverflowFadeText>
       </Popover.Trigger>
       <Popover.Popup
         side="bottom"

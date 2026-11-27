@@ -44,6 +44,7 @@ import {
   setDefaultRepoPref,
 } from "../../lib/default-repo-pref";
 import { setDeskShownPref, useDeskShown } from "../../lib/desk-pref";
+import { setNewLayoutPref, useNewLayoutPref } from "../../lib/new-layout-pref";
 import {
   getDeskVoicePref,
   onDeskVoiceChanged,
@@ -335,6 +336,30 @@ function DeskVoiceApiKeyRow({ deskShown }: { deskShown: boolean }) {
           </div>
         }
       />
+    </>
+  );
+}
+
+function LayoutPanel() {
+  const on = useNewLayoutPref();
+  return (
+    <>
+      <SettingsGroupLabel>Layout</SettingsGroupLabel>
+      <SettingCard>
+        <SettingGroup>
+          <SettingRow
+            title="New layout"
+            desc="A minibar of places beside a sidebar of your sessions. Desktop only for now."
+            control={
+              <Switch
+                aria-label="New layout"
+                checked={on}
+                onCheckedChange={setNewLayoutPref}
+              />
+            }
+          />
+        </SettingGroup>
+      </SettingCard>
     </>
   );
 }
@@ -1396,6 +1421,7 @@ export function PreferencesPanel() {
       <VoiceAudioSection />
       <DictationVocabularySection />
       <DeskPanel />
+      <LayoutPanel />
       <PersonalPromptPanel />
       <PendingSendsSection />
       <DebugSection />

@@ -17,6 +17,7 @@ const {
   FILTER_VERSION,
   defaultByProject,
   defaultGroupBy,
+  filterForPlace,
   includesEmptyRepoBands,
   readStoredFilter,
 } = await import("./sidebar-filter");
@@ -235,5 +236,31 @@ describe("readStoredFilter", () => {
   test("one unreadable field does not reset the others", () => {
     write({ v: FILTER_VERSION, byProject: 3, prs: "all" });
     expect(readStoredFilter().prs).toBe("all");
+  });
+});
+
+describe("filterForPlace", () => {
+  const teammate: FilterState = {
+    groupBy: "inbox",
+    byProject: false,
+    repo: "all",
+    person: "grace",
+    sort: "updated",
+    prs: "all",
+    autoCreated: "show",
+    emptyProjects: "show",
+  };
+
+  test("the new layout's Sessions place always lists your own sessions", () => {
+    expect(filterForPlace(teammate, "sessions")).toEqual({
+      ...teammate,
+      person: "me",
+    });
+  });
+
+  test("any other place, and the old layout, keep the stored lens", () => {
+    expect(filterForPlace(teammate, "activity")).toBe(teammate);
+    expect(filterForPlace(teammate, "library")).toBe(teammate);
+    expect(filterForPlace(teammate, undefined)).toBe(teammate);
   });
 });

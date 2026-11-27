@@ -85,15 +85,25 @@ export function clampSplitRatio(ratio: number): number {
   return Math.min(0.8, Math.max(0.2, ratio));
 }
 
+/**
+ * Where the tab strip is, for everything that lays itself out around it.
+ * `band` is a row of its own under the pane header. `attached` is the new
+ * layout's strip, in the window row beside the header: it still owns the +
+ * and the history menu, but nothing below the header has to clear it.
+ */
+export type TabStripPlacement = false | "band" | "attached";
+
 /** A lone tab is already named by the pane header, so only a real choice or a
  *  two-column split earns a tab strip. Workers render below their parent and
- *  never own workspace tabs. */
+ *  never own workspace tabs. `loneTab` is the new layout, where the strip is
+ *  the header's name and a single tab is drawn like any other. */
 export function shouldShowTabStrip(
   tabCount: number,
   inSplit = false,
   viewingWorker = false,
+  loneTab = false,
 ): boolean {
-  return !viewingWorker && (inSplit || tabCount > 1);
+  return !viewingWorker && (inSplit || tabCount > (loneTab ? 0 : 1));
 }
 
 export function getTabSplit(workspaceId: string): TabSplit | null {

@@ -8,6 +8,7 @@ import {
   type Route,
 } from "../lib/app-route";
 import { BASE_PATH, stripBasePath } from "../lib/base";
+import { onConversationDeleted } from "../lib/conversation-deleted";
 import { keepsSingleHistoryEntry } from "../lib/history-mode";
 import { onPushNavigate } from "../lib/push";
 import { pushRecent } from "../lib/recents";
@@ -20,12 +21,24 @@ import {
   type SessionReturn,
 } from "../lib/session-return";
 
+import {
+  defaultPlaceOf,
+  isConversationRoute,
+  placeOfRoute,
+  placeOverride,
+  type Place,
+  type PlaceOverride,
+} from "../lib/new-layout-place";
+
 const LAST_SESSION_KEY = "opensession-last-session";
 const LAST_SESSION_USER_KEY = "opensession-last-session-user";
 const POP_FALLBACK_MS = 150;
 
 type NavState = {
   d: number | null;
+  /** The entry's place when its route alone does not give it
+   *  (lib/new-layout-place.ts). */
+  place?: PlaceOverride;
   settingsReturn?: SettingsReturn;
   /** The session a PR or workspace link was followed from. */
   sessionReturn?: SessionReturn;
@@ -75,6 +88,8 @@ export type AppRouteBrowser = {
   recordRecent(sessionId: string): void;
   listenForPopState(listener: () => void): () => void;
   listenForPushNavigate(listener: (url: string) => void): () => void;
+  /** A conversation was deleted (lib/conversation-deleted.ts). */
+  listenForConversationDeleted(listener: (route: Route) => void): () => void;
   schedule(callback: () => void, delay: number): void;
 };
 
@@ -96,9 +111,12 @@ function navState(
   depth: number | null,
   settingsReturn?: SettingsReturn,
   sessionReturn?: SessionReturn,
+  place?: PlaceOverride,
 ): NavState {
-  if (depth === null && !settingsReturn && !sessionReturn) return null;
+  if (depth === null && !settingsReturn && !sessionReturn && !place)
+    return null;
   const state: NonNullable<NavState> = { d: depth };
+  if (place) state.place = place;
   if (settingsReturn) state.settingsReturn = settingsReturn;
   if (sessionReturn) state.sessionReturn = sessionReturn;
   return state;
@@ -106,7 +124,15 @@ function navState(
 
 /** Owns the logical route and the metadata carried by browser history entries. */
 export class AppRouteController {
-  private route: Route;
+  // Assigned by `commit`, which the constructor always reaches.
+  private route!: Route;
+  /** The place the current route shows in (lib/new-layout-place.ts). */
+  private currentPlace: Place = "sessions";
+  /** The conversation last shown in Sessions, which its button returns to. */
+  private sessionsReturn: Route | null = null;
+  /** The return target the server is being asked about, if any, and the
+   *  page the Sessions button was last clicked on while it was. */
+  private returnLookup: { target: Route; from: Route } | null = null;
   private firstMile: boolean;
   private readonly listeners = new Set<(snapshot: RouteSnapshot) => void>();
 
@@ -118,14 +144,20 @@ export class AppRouteController {
     this.firstMile = firstMileRequested(landingPath, landingSearch);
 
     if (parsed.view === "prs" && !this.firstMile) {
-      browser.history.replaceState(navState(0), "", browser.location.pathname);
+      // Keep a place chosen on this entry (the Sessions list beside Pull
+      // requests), so a reload of / still shows it.
+      browser.history.replaceState(
+        navState(0, undefined, undefined, currentNavState(browser)?.place),
+        "",
+        browser.location.pathname,
+      );
       const rememberedUser = browser.storage.getItem(LAST_SESSION_USER_KEY);
       const lastSessionId =
         rememberedUser === browser.currentUser()
           ? browser.storage.getItem(LAST_SESSION_KEY)
           : null;
       if (lastSessionId) {
-        this.route = { view: "session", id: lastSessionId };
+        this.commit({ view: "session", id: lastSessionId }, "sessions");
         this.pushEntry(
           {
             d: browser.singleHistoryEntry ? 0 : 1,
@@ -137,7 +169,104 @@ export class AppRouteController {
       }
     }
 
-    this.route = parsed;
+    this.commit(parsed, this.entryPlace(parsed));
+  }
+
+  /** The place the current route shows in. */
+  get place(): Place {
+    return this.currentPlace;
+  }
+
+  /**
+   * The Sessions button. It shows your own list: beside the conversation on
+   * screen when there is one, else with the conversation you last had open
+   * there. With neither, only the list changes and the page stays until you
+   * pick a session from it.
+   *
+   * `stillThere` says whether a remembered conversation can still be opened.
+   * One that was deleted or archived since is forgotten instead. When it
+   * has to ask the server, the list shows at once and the conversation
+   * opens once confirmed, unless you have moved on by then.
+   *
+   * Clicking it again while your list is already beside a page asks again,
+   * so a lookup that failed (the connection dropped) is not the last word.
+   * One still in flight answers the click instead of a second request.
+   */
+  openSessions(
+    stillThere: (route: Route) => boolean | Promise<boolean> = () => true,
+  ): void {
+    const shown = this.currentPlace === "sessions";
+    const target = isConversationRoute(this.route) ? null : this.sessionsReturn;
+    if (target && target === this.returnLookup?.target) {
+      // Already asking. The answer returns you from here instead.
+      this.returnLookup.from = this.route;
+    } else if (target) {
+      const verdict = stillThere(target);
+      if (verdict === true) {
+        // Set first, so the conversation lands in Sessions even when the
+        // page being left is one of Activity's.
+        this.currentPlace = "sessions";
+        this.navigate(target);
+        return;
+      }
+      if (verdict === false) this.sessionsReturn = null;
+      else this.returnOnceConfirmed(target, verdict);
+    }
+    if (shown) return;
+    // The page stays, so its entry records the choice: Back to it, a reload,
+    // or closing Settings over it then shows your list again.
+    const state = currentNavState(this.browser);
+    this.browser.history.replaceState(
+      navState(
+        state?.d ?? null,
+        state?.settingsReturn,
+        state?.sessionReturn,
+        placeOverride(this.route, "sessions"),
+      ),
+      "",
+      `${this.browser.location.pathname}${this.browser.location.search}${this.browser.location.hash}`,
+    );
+    this.commit(this.route, "sessions");
+    this.publish();
+  }
+
+  private returnOnceConfirmed(target: Route, verdict: Promise<boolean>): void {
+    const lookup = { target, from: this.route };
+    this.returnLookup = lookup;
+    const settle = () => {
+      if (this.returnLookup === lookup) this.returnLookup = null;
+    };
+    verdict.then(
+      (there) => {
+        settle();
+        // Forgotten or replaced meanwhile.
+        if (this.sessionsReturn !== target) return;
+        if (!there) this.sessionsReturn = null;
+        // Only from the page the button was clicked on, with your list
+        // still beside it. Anything opened since (a session, Archived,
+        // another place) is where you chose to be.
+        else if (this.route === lookup.from && this.currentPlace === "sessions")
+          this.navigate(target);
+      },
+      // Unknown, not gone: it stays remembered, and the next click asks again.
+      settle,
+    );
+  }
+
+  /**
+   * Called once a conversation is deleted, before navigating away from it, so
+   * the Sessions button does not return to it while the lists still hold it.
+   */
+  forgetConversation(route: Route): void {
+    const remembered = this.sessionsReturn;
+    if (
+      remembered &&
+      remembered.view === route.view &&
+      "id" in remembered &&
+      "id" in route &&
+      remembered.id === route.id
+    )
+      this.sessionsReturn = null;
   }
 
   snapshot(): RouteSnapshot {
@@ -155,7 +284,8 @@ export class AppRouteController {
         this.browser.location.pathname,
         this.browser.location.search,
       );
-      this.route = parseRoute(this.browser.location.pathname);
+      const route = parseRoute(this.browser.location.pathname);
+      this.commit(route, this.entryPlace(route));
       this.publish();
     });
     const stopPush = serviceWorker
@@ -169,9 +299,16 @@ export class AppRouteController {
           }
         })
       : () => {};
+    // Every delete ends in the delete API, which announces it. Heard here,
+    // the conversation stops being a place to return to before the lists
+    // that still hold it refresh.
+    const stopDeleted = this.browser.listenForConversationDeleted((route) =>
+      this.forgetConversation(route),
+    );
     return () => {
       stopPop();
       stopPush();
+      stopDeleted();
     };
   }
 
@@ -200,12 +337,14 @@ export class AppRouteController {
     const logicalReplace = opts?.replace ?? samePath;
     const replace = this.browser.singleHistoryEntry || logicalReplace;
     const depth = entryDepth(this.browser);
+    const currentPlace = placeOverride(current, this.currentPlace);
     const settingsReturn = settingsReturnForNavigation({
       currentIsSettings: isSettingsRoute(current),
       nextIsSettings: isSettingsRoute(next),
       currentReturn: currentNavState(this.browser)?.settingsReturn,
       currentPath: `${this.browser.location.pathname}${this.browser.location.search}${this.browser.location.hash}`,
       currentDepth: depth,
+      currentPlace,
       replace,
     });
     const sessionReturn = sessionReturnForNavigation({
@@ -216,11 +355,18 @@ export class AppRouteController {
       // should land on the conversation the link was in.
       currentPath: routePath(current),
       currentDepth: depth,
+      currentPlace,
       logicalReplace,
       pushed: !replace,
     });
+    const nextPlace = placeOfRoute(next, this.currentPlace);
     const nextState = (nextDepth: number | null) =>
-      navState(nextDepth, settingsReturn, sessionReturn);
+      navState(
+        nextDepth,
+        settingsReturn,
+        sessionReturn,
+        placeOverride(next, nextPlace),
+      );
 
     if (replace) {
       this.browser.history.replaceState(
@@ -237,7 +383,7 @@ export class AppRouteController {
         path,
       );
     }
-    this.route = next;
+    this.commit(next, nextPlace);
     this.publish();
   }
 
@@ -308,7 +454,10 @@ export class AppRouteController {
       `${path}${url.search}${url.hash}`,
     );
     this.firstMile = false;
-    if (leavingWelcome) this.route = { view: "prs" };
+    if (leavingWelcome) {
+      const home: Route = { view: "prs" };
+      this.commit(home, defaultPlaceOf(home));
+    }
     this.publish();
   }
 
@@ -342,16 +491,21 @@ export class AppRouteController {
   }
 
   // Pop the entries pushed since `target` was left, or rewrite this entry to
-  // it when they are gone (single-entry history, or a pruned stack).
+  // it when they are gone (single-entry history, or a pruned stack). The
+  // rewrite takes its place from the target too: the pages opened since can
+  // have moved it (Settings to Goals is Library), and it is the page being
+  // returned to that is on screen.
   private returnTo(target: SettingsReturn | SessionReturn): void {
     const restore = () => {
       const url = new URL(target.path, this.browser.location.origin);
+      const route = parseRoute(url.pathname);
+      const place = target.place ?? defaultPlaceOf(route);
       this.browser.history.replaceState(
-        navState(target.depth),
+        navState(target.depth, undefined, undefined, target.place),
         "",
         `${url.pathname}${url.search}${url.hash}`,
       );
-      this.route = parseRoute(url.pathname);
+      this.commit(route, place);
       this.publish();
     };
     if (target.steps > 0) this.popOr(target.steps, restore);
@@ -380,6 +534,19 @@ export class AppRouteController {
     }, POP_FALLBACK_MS);
   }
 
+  /** The place the current history entry shows `route` in. */
+  private entryPlace(route: Route): Place {
+    return currentNavState(this.browser)?.place ?? defaultPlaceOf(route);
+  }
+
+  /** Every route change ends here, so the place can never lag the route. */
+  private commit(route: Route, place: Place): void {
+    this.route = route;
+    this.currentPlace = place;
+    if (this.currentPlace === "sessions" && isConversationRoute(route))
+      this.sessionsReturn = route;
+  }
+
   private publish(): void {
     const snapshot = this.snapshot();
     for (const listener of this.listeners) listener(snapshot);
@@ -401,6 +568,7 @@ function browserAdapter(currentUser: () => string): AppRouteBrowser {
       return () => window.removeEventListener("popstate", listener);
     },
     listenForPushNavigate: onPushNavigate,
+    listenForConversationDeleted: onConversationDeleted,
     schedule(callback, delay) {
       window.setTimeout(callback, delay);
     },
@@ -435,6 +603,9 @@ export function useAppRoute({
     forgetLastSession: (expected?: string | readonly string[]) =>
       controller.forgetLastSession(expected),
     canonicalizePath: (path: string) => controller.canonicalizePath(path),
+    forgetConversation: (route: Route) => controller.forgetConversation(route),
+    openSessions: (stillThere?: (route: Route) => boolean | Promise<boolean>) =>
+      controller.openSessions(stillThere),
   }));
 
   useLayoutEffect(() => controller.subscribe(setSnapshot), [controller]);
@@ -449,6 +620,9 @@ export function useAppRoute({
     forceFirstMile: snapshot.forceFirstMile,
     returnsToSession: controller.returnsToSession,
     restoredSessionId: controller.restoredSessionId,
+    // The new layout's place: read at render like the two above, since every
+    // change to it publishes a snapshot.
+    places: { current: controller.place, openSessions: actions.openSessions },
     ...actions,
   };
 }

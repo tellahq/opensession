@@ -37,7 +37,8 @@ export function OrganizationSwitcher({
 }: {
   connected: boolean;
   onOpenSettings: (section?: "general" | "members") => void;
-  variant?: "sidebar" | "topbar";
+  /** `minibar` is the new layout's icon-only trigger at the top of the rail. */
+  variant?: "sidebar" | "topbar" | "minibar";
 }) {
   const name = useOrganizationName();
   const bridge = organizationBridge();
@@ -108,7 +109,23 @@ export function OrganizationSwitcher({
   return (
     <>
       <Menu.Root onOpenChange={(open) => open && loadMenu()}>
-        {variant === "topbar" ? (
+        {variant === "minibar" ? (
+          <Menu.Trigger
+            className="focus-ring relative flex size-9 shrink-0 items-center justify-center rounded-control bg-transparent p-0 text-fg transition-[background-color,scale] hover:bg-hover active:scale-[0.96] motion-reduce:transform-none"
+            aria-label={`Open organization menu, current: ${name}`}
+          >
+            <span className="relative inline-flex size-7 items-center justify-center">
+              <OrganizationAppIcon className="size-7 rounded-md object-cover" />
+              <span
+                className={APP_LOGO_STATUS}
+                style={{
+                  background: connected ? "var(--green)" : "var(--red)",
+                }}
+                title={status}
+              />
+            </span>
+          </Menu.Trigger>
+        ) : variant === "topbar" ? (
           <Menu.Trigger
             className="focus-ring relative flex size-11 shrink-0 items-center justify-center rounded-control bg-transparent p-0 text-fg transition-[background-color,scale] active:scale-[0.96] active:bg-hover motion-reduce:transform-none"
             aria-label={`Open organization menu, current: ${name}`}
@@ -149,7 +166,7 @@ export function OrganizationSwitcher({
         )}
 
         <Menu.Popup
-          side="bottom"
+          side={variant === "minibar" ? "right" : "bottom"}
           align="start"
           sideOffset={5}
           className="w-[290px] max-w-[calc(100vw-16px)]"
