@@ -101,6 +101,7 @@ interface UseSessionTabsOptions {
     getCurrentRoute: ReturnType<typeof useAppRoute>["getCurrentRoute"];
     canonicalizePath: ReturnType<typeof useAppRoute>["canonicalizePath"];
     forgetLastSession: ReturnType<typeof useAppRoute>["forgetLastSession"];
+    forgetConversation: ReturnType<typeof useAppRoute>["forgetConversation"];
     goBack: () => void;
   };
   source: {
@@ -211,6 +212,7 @@ export function useSessionTabs({
     getCurrentRoute,
     canonicalizePath,
     forgetLastSession,
+    forgetConversation,
     goBack,
   } = routing;
   const {
@@ -1233,6 +1235,7 @@ export function useSessionTabs({
     route,
     navigate,
     goBack,
+    forgetConversation,
     patch,
     refreshSessions: refresh,
     refreshWorkspaces,

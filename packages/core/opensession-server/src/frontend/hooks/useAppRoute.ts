@@ -138,7 +138,13 @@ export class AppRouteController {
     this.firstMile = firstMileRequested(landingPath, landingSearch);
 
     if (parsed.view === "prs" && !this.firstMile) {
-      browser.history.replaceState(navState(0), "", browser.location.pathname);
+      // Keep a place chosen on this entry (the Sessions list beside Pull
+      // requests), so a reload of / still shows it.
+      browser.history.replaceState(
+        navState(0, undefined, undefined, currentNavState(browser)?.place),
+        "",
+        browser.location.pathname,
+      );
       const rememberedUser = browser.storage.getItem(LAST_SESSION_USER_KEY);
       const lastSessionId =
         rememberedUser === browser.currentUser()
@@ -202,6 +208,22 @@ export class AppRouteController {
     );
     this.commit(this.route, "sessions");
     this.publish();
+  }
+
+  /**
+   * Called once a conversation is deleted, before navigating away from it, so
+   * the Sessions button does not return to it while the lists still hold it.
+   */
+  forgetConversation(route: Route): void {
+    const remembered = this.sessionsReturn;
+    if (
+      remembered &&
+      remembered.view === route.view &&
+      "id" in remembered &&
+      "id" in route &&
+      remembered.id === route.id
+    )
+      this.sessionsReturn = null;
   }
 
   snapshot(): RouteSnapshot {
@@ -530,6 +552,7 @@ export function useAppRoute({
     forgetLastSession: (expected?: string | readonly string[]) =>
       controller.forgetLastSession(expected),
     canonicalizePath: (path: string) => controller.canonicalizePath(path),
+    forgetConversation: (route: Route) => controller.forgetConversation(route),
     openSessions: (stillThere?: (route: Route) => boolean) =>
       controller.openSessions(stillThere),
   }));

@@ -17,6 +17,8 @@ type WorkspaceMutationsParams = {
   route: Route;
   navigate: (next: Route, opts?: { replace?: boolean }) => void;
   goBack: () => void;
+  /** Stops the Sessions button returning to a deleted conversation. */
+  forgetConversation: (route: Route) => void;
   patch: (id: string, patch: Partial<UnifiedSession>) => void;
   refreshSessions: () => void;
   refreshWorkspaces: () => void;
@@ -32,6 +34,7 @@ export function useWorkspaceMutations({
   route,
   navigate,
   goBack,
+  forgetConversation,
   patch,
   refreshSessions,
   refreshWorkspaces,
@@ -99,6 +102,7 @@ export function useWorkspaceMutations({
 
   const deleteWorkspaceFromHeader = async (workspaceId: string) => {
     await deleteWorkspaceApi(workspaceId);
+    forgetConversation({ view: "workspace", id: workspaceId });
     refreshWorkspaces();
     refreshSessions();
     if (route.view === "workspace" && route.id === workspaceId) goBack();
@@ -119,6 +123,7 @@ export function useWorkspaceMutations({
       console.error("Delete workspace failed:", error);
       throw error;
     });
+    forgetConversation({ view: "workspace", id: workspaceId });
     refreshWorkspaces();
     refreshSessions();
     if (wasOpen) navigate({ view: "prs" });

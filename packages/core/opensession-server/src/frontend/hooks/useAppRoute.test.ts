@@ -951,6 +951,47 @@ describe("places", () => {
     expect(controller.getCurrentRoute()).toEqual({ view: "issues" });
   });
 
+  test("Sessions forgets a conversation deleted before the lists refresh", () => {
+    const fake = fakeBrowser({ path: "/workspace/ws-1", state: { d: 0 } });
+    const controller = new AppRouteController(fake.browser);
+    controller.forgetConversation({ view: "workspace", id: "ws-1" });
+    controller.navigate({ view: "prs" });
+
+    // The stale lists still hold it, but it is not reopened.
+    controller.openSessions(() => true);
+    expect(controller.getCurrentRoute()).toEqual({ view: "prs" });
+    expect(controller.place).toBe("sessions");
+  });
+
+  test("forgetting another conversation keeps the one to return to", () => {
+    const fake = fakeBrowser({ path: "/workspace/ws-1", state: { d: 0 } });
+    const controller = new AppRouteController(fake.browser);
+    controller.forgetConversation({ view: "workspace", id: "ws-2" });
+    controller.navigate({ view: "prs" });
+    controller.openSessions(() => true);
+    expect(controller.getCurrentRoute()).toEqual({
+      view: "workspace",
+      id: "ws-1",
+    });
+  });
+
+  test("Pull requests keeps the Sessions list chosen beside it across a reload", () => {
+    const fake = fakeBrowser({ path: "/", state: { d: 0 } });
+    new AppRouteController(fake.browser).openSessions();
+    const chosen = fake.calls.at(-1);
+    expect(chosen).toEqual({
+      type: "replace",
+      state: { d: 0, place: "sessions" },
+      path: "/",
+    });
+
+    const reloaded = new AppRouteController(
+      fakeBrowser({ path: "/", state: { d: 0, place: "sessions" } }).browser,
+    );
+    expect(reloaded.getCurrentRoute()).toEqual({ view: "prs" });
+    expect(reloaded.place).toBe("sessions");
+  });
+
   test("a page keeps the Sessions list chosen beside it across Settings", () => {
     const fake = fakeBrowser({ path: "/issues", state: { d: 0 } });
     fake.setAutoPop(true);

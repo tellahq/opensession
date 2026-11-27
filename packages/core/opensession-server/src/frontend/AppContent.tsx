@@ -183,6 +183,7 @@ export function AppContent({
     returnsToSession,
     places,
     forgetLastSession,
+    forgetConversation,
     canonicalizePath,
   } = useAppRoute({ serviceWorker, currentUser: getCurrentUser });
   const goBack = () =>
@@ -843,6 +844,7 @@ export function AppContent({
       getCurrentRoute,
       canonicalizePath,
       forgetLastSession,
+      forgetConversation,
       goBack,
     },
     source: {
