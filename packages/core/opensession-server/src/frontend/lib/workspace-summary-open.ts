@@ -37,11 +37,31 @@ export function openWorkspaceSummary(): void {
  * the words it is summarising. That is the width where it hides itself and
  * waits to be asked for instead.
  *
- * Measured on the session header rather than the window: the sidebar and the
- * side panel both eat into it, so the window's own width says little about
- * how much pane is left.
+ * Measured on the pane rather than the window: the sidebar and the side panel
+ * both eat into it, so the window's own width says little about how much pane
+ * is left.
  */
 export const WS_SUMMARY_ROOM_W = 1120;
+
+/**
+ * The element whose width answers that question.
+ *
+ * By default it is the header itself, which spans the pane. In the new layout
+ * the header shares the pane's top row with the session tabs and is only as
+ * wide as its own controls, so the row is measured instead: it spans the pane
+ * the way the header used to.
+ */
+export function workspaceSummaryRoomElement(header: HTMLElement): HTMLElement {
+  return header.closest<HTMLElement>("[data-pane-top-row]") ?? header;
+}
+
+/** An element's content-box width, which is what a ResizeObserver reports. */
+export function contentWidth(el: HTMLElement): number {
+  const box = getComputedStyle(el);
+  return (
+    el.clientWidth - parseFloat(box.paddingLeft) - parseFloat(box.paddingRight)
+  );
+}
 
 /**
  * How far the reading column moves left while the card is open.

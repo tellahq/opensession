@@ -9,6 +9,10 @@ import { fetchGitStatus } from "../lib/api";
 import { blockingOverlayOpen } from "../lib/blocking-overlay";
 import { PHONE_QUERY } from "../lib/breakpoints";
 import { matchesShortcut } from "../lib/shortcuts";
+import {
+  contentWidth,
+  workspaceSummaryRoomElement,
+} from "../lib/workspace-summary-open";
 import { editableOwnsCaretChord } from "../lib/sidebar-swipe";
 
 interface ShippedShareIdentity {
@@ -54,6 +58,9 @@ export function useSessionHeaderLayout(identity: HeaderLayoutIdentity) {
     useState<HTMLDivElement | null>(null);
   const desktopChangesRef = useRef<HTMLDivElement>(null);
   const [headerW, setHeaderW] = useState(0);
+  // The pane's width, for the summary card's room. The header's own width
+  // stopped answering that in the new layout (workspaceSummaryRoomElement).
+  const [paneW, setPaneW] = useState(0);
   // Whether the header's workspace-summary card is up. The transcript and
   // composer shift out from under it while it is, and the header's own PR
   // strip and preview globe stand down, so this lives here rather than inside
@@ -68,16 +75,17 @@ export function useSessionHeaderLayout(identity: HeaderLayoutIdentity) {
     // lands after it, and this width decides whether the summary card has room
     // to stand open. A frame late is a frame of a card lying across a narrow
     // transcript. Content box, to match what the observer reports below.
-    const box = getComputedStyle(el);
-    setHeaderW(
-      el.clientWidth -
-        parseFloat(box.paddingLeft) -
-        parseFloat(box.paddingRight),
-    );
+    const room = workspaceSummaryRoomElement(el);
+    setHeaderW(contentWidth(el));
+    setPaneW(contentWidth(room));
     const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) setHeaderW(entry.contentRect.width);
+      for (const entry of entries) {
+        if (entry.target === el) setHeaderW(entry.contentRect.width);
+        if (entry.target === room) setPaneW(entry.contentRect.width);
+      }
     });
     observer.observe(el);
+    if (room !== el) observer.observe(room);
     return () => observer.disconnect();
   }, [identity.topbarEl]);
   // Collapse before the inline row can overrun: the title's non-shrinkable
@@ -106,7 +114,7 @@ export function useSessionHeaderLayout(identity: HeaderLayoutIdentity) {
       setReviewSessionActionTarget,
       desktopChangesRef,
     },
-    width: { headerW, compactHeader },
+    width: { headerW, paneW, compactHeader },
     summary: { summaryOpen, setSummaryOpen },
     viewport: { isPhone },
   };

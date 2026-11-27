@@ -593,7 +593,7 @@ export function useSessionHeaderLayoutController(
     topbarEl,
     workspaceSummaryOpen,
   });
-  const { headerW } = headerLayout.width;
+  const { paneW } = headerLayout.width;
   const { summaryOpen } = headerLayout.summary;
   const { isPhone } = headerLayout.viewport;
   useEffect(() => {
@@ -608,10 +608,10 @@ export function useSessionHeaderLayoutController(
   // when the panel closes. The stored preference is left alone, and the
   // header button still opens the card as an overlay.
   const summaryHasRoom =
-    (headerW === 0 || headerW >= WS_SUMMARY_ROOM_W) && !activePanelOpen;
+    (paneW === 0 || paneW >= WS_SUMMARY_ROOM_W) && !activePanelOpen;
   const summaryVisible =
     summaryOpen && summaryHasRoom && !isPhone && hasRepoWork;
-  const summaryStep = summaryVisible ? workspaceSummaryShift(headerW) : 0;
+  const summaryStep = summaryVisible ? workspaceSummaryShift(paneW) : 0;
   const summaryStepStyle: WorkspaceSummaryStyle | undefined =
     summaryStep > 0 ? { "--ws-summary-step": `-${summaryStep}px` } : undefined;
   useEffect(() => {

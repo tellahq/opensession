@@ -117,7 +117,11 @@ import { sessionCarriesPr } from "../lib/session-prs";
 import type { NewTabMorphOrigin } from "../lib/session-tabs-types";
 import { ArchivedSessionItems } from "./ArchivedSessionItems";
 import { RenameDialog } from "./RenameDialog";
-import { WS_SUMMARY_ROOM_W } from "../lib/workspace-summary-open";
+import {
+  contentWidth,
+  workspaceSummaryRoomElement,
+  WS_SUMMARY_ROOM_W,
+} from "../lib/workspace-summary-open";
 
 interface Props {
   workspace: Workspace;
@@ -662,23 +666,19 @@ export function WorkspacePane({
   const headerActionsRef = useRef<HTMLDivElement>(null);
   const [reviewSessionActionTarget, setReviewSessionActionTarget] =
     useState<HTMLDivElement | null>(null);
-  const [headerW, setHeaderW] = useState(0);
+  const [paneW, setPaneW] = useState(0);
   useLayoutEffect(() => {
-    const el = headerRef.current;
-    if (!el) return;
-    const box = getComputedStyle(el);
-    setHeaderW(
-      el.clientWidth -
-        parseFloat(box.paddingLeft) -
-        parseFloat(box.paddingRight),
-    );
+    const header = headerRef.current;
+    if (!header) return;
+    const el = workspaceSummaryRoomElement(header);
+    setPaneW(contentWidth(el));
     const observer = new ResizeObserver(([entry]) => {
-      setHeaderW(entry.contentRect.width);
+      setPaneW(entry.contentRect.width);
     });
     observer.observe(el);
     return () => observer.disconnect();
   }, [topbarEl]);
-  const reviewSummaryHasRoom = headerW === 0 || headerW >= WS_SUMMARY_ROOM_W;
+  const reviewSummaryHasRoom = paneW === 0 || paneW >= WS_SUMMARY_ROOM_W;
 
   function commitWorkspaceRename() {
     const name = renameDraft?.trim();
