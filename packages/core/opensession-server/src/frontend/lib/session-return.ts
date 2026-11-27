@@ -1,4 +1,5 @@
 import type { Route } from "./app-route";
+import type { PlaceOverride } from "./new-layout-place";
 
 /**
  * The session a person was reading when they followed a link out of it to a
@@ -11,6 +12,9 @@ export type SessionReturn = {
   depth: number | null;
   /** History entries pushed since leaving the session. */
   steps: number;
+  /** The new layout's place the session was showing in, when it was not
+   *  Sessions, so Back restores it there. */
+  place?: PlaceOverride;
 };
 
 const DRILL_IN_VIEWS: ReadonlySet<Route["view"]> = new Set([
@@ -31,6 +35,7 @@ export function sessionReturnForNavigation({
   currentReturn,
   currentPath,
   currentDepth,
+  currentPlace,
   logicalReplace,
   pushed,
 }: {
@@ -40,6 +45,7 @@ export function sessionReturnForNavigation({
   /** Where Back should land for the current route. */
   currentPath: string;
   currentDepth: number | null;
+  currentPlace?: PlaceOverride;
   /** The caller asked to refine or redirect the current entry. */
   logicalReplace: boolean;
   /** A history entry is actually added (false in single-entry history). */
@@ -49,7 +55,12 @@ export function sessionReturnForNavigation({
   if (logicalReplace) return currentReturn;
   if (!DRILL_IN_VIEWS.has(next.view)) return undefined;
   if (current.view === "session")
-    return { path: currentPath, depth: currentDepth, steps: pushed ? 1 : 0 };
+    return {
+      path: currentPath,
+      depth: currentDepth,
+      steps: pushed ? 1 : 0,
+      ...(currentPlace && { place: currentPlace }),
+    };
   return currentReturn
     ? { ...currentReturn, steps: currentReturn.steps + (pushed ? 1 : 0) }
     : undefined;

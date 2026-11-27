@@ -1,6 +1,7 @@
 import React from "react";
 import { z } from "zod";
 import { DEFAULT_REPO_ID } from "./brand";
+import type { Place } from "./new-layout-place";
 import type { Group } from "./sidebar-types";
 import type { FeedItem, UnifiedSession } from "./types";
 import { sessionRepoOr } from "./session-repo";
@@ -145,6 +146,20 @@ export function defaultGroupBy(): GroupBy {
 export function defaultByProject(): boolean {
   const count = repoCount();
   return count === null || count > 1;
+}
+
+/**
+ * The lens a list shows. The new layout's Sessions place is always your own
+ * list, so a teammate picked elsewhere (the People page, a facepile, an
+ * @mention) stays stored for those surfaces but does not scope it.
+ */
+export function filterForPlace(
+  filter: FilterState,
+  place: Place | undefined,
+): FilterState {
+  return place === "sessions" && filter.person !== "me"
+    ? { ...filter, person: "me" }
+    : filter;
 }
 
 export interface FilterState {

@@ -772,7 +772,10 @@ export function AssetPreview({
               onOpenNewSession(prefill);
             });
           }}
-          className="h-full w-full border-0 bg-white"
+          // Block, not the default inline: an inline frame sits on a text
+          // baseline and the descender gap below it makes the preview
+          // scroll by a few pixels.
+          className="block h-full w-full border-0 bg-white"
         />
       ) : kind === "pdf" ? (
         // No sandbox: Chrome's built-in PDF viewer won't render in a
@@ -781,7 +784,7 @@ export function AssetPreview({
           key={rawUrl}
           title={file.path}
           src={rawUrl}
-          className="h-full w-full border-0"
+          className="block h-full w-full border-0"
         />
       ) : kind === "image" ? (
         <div
@@ -816,7 +819,7 @@ export function AssetPreview({
           </button>
         </div>
       ) : kind === "video" ? (
-        <video src={rawUrl} controls className="h-full w-full" />
+        <video src={rawUrl} controls className="block h-full w-full" />
       ) : kind === "audio" ? (
         <div className="p-4">
           <audio src={rawUrl} controls className="w-full" />

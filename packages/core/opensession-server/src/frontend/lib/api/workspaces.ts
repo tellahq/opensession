@@ -87,6 +87,26 @@ export async function fetchWorkspaces(options?: {
   }
 }
 
+/** A workspace as the server's record and member sessions describe it. */
+export interface WorkspaceState {
+  exists: boolean;
+  liveSessions: number;
+  archivedSessions: number;
+}
+
+/**
+ * The server's word on a workspace. The sidebar's list cannot give it: it
+ * keeps only workspaces with live work, and it keeps the record of one whose
+ * sessions were all archived. Throws when the request fails, so a caller
+ * never takes "could not reach the server" for "gone".
+ */
+export async function fetchWorkspaceState(id: string): Promise<WorkspaceState> {
+  return request<WorkspaceState>(
+    `/workspaces/${encodeURIComponent(id)}/state`,
+    { label: "Failed to look up the workspace" },
+  );
+}
+
 export async function createWorkspaceApi(input: {
   name: string;
   repo?: string;

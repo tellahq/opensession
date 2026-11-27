@@ -1,3 +1,4 @@
+import type { TabStripPlacement } from "../../lib/split-tabs";
 import type { useSessionModelWorkflowController } from "../../hooks/useSessionModelWorkflowController";
 import { HuddleButton, huddleTarget } from "../huddle/HuddleButton";
 import type React from "react";
@@ -127,7 +128,7 @@ interface ChromeIdentity {
   workerSessions: React.ComponentProps<typeof SessionHeader>["workerSessions"];
   archivedSessions: UnifiedSession[] | undefined;
   workspaceSessions: UnifiedSession[] | undefined;
-  tabStripVisible: boolean | undefined;
+  tabStripVisible: TabStripPlacement | undefined;
   deskOwner: string;
   currentUser: string;
   newSiblingKeys: string[] | null;

@@ -23,6 +23,68 @@ export interface SidebarToolsNavItem {
   count?: number;
 }
 
+/** One row of the tools strip: the box, its type and its selected fill. The
+ *  new layout's place lists (components/shell/PlaceNav.tsx) wear it too. */
+export function sidebarToolRowClass(active: boolean) {
+  return cn(
+    // One look at both widths. Only the box changes, and only
+    // because a phone row is pressed rather than read.
+    "group flex items-center text-left transition-colors",
+    // Rows use control-label type, with glyphs matching the
+    // sidebar's standard 22px leading rail.
+    // `--sidebar-tool-pad` is 5px for a 32px box: the tools are a
+    // short utility strip above the work lists, and at the session
+    // rows' 36px the four of them took more of the rail than what
+    // they lead to. The glyph and the label's left rail are
+    // untouched, so they still line up with the rows below; only
+    // the air around them is tighter.
+    // Don't take it below 30. At 28 (`py-[3px]`, the pre-ffd11ffc
+    // value) the 22px glyph has 3px of margin and the hover pill
+    // stops reading as a row; the compact density's 4px stops at
+    // 30, level with the rows under it rather than below them.
+    // Phones override it to the 13px the session rows take
+    // (SIDEBAR_ROW, lib/sidebar-classes.ts) for a 48px box: 32px is
+    // a reading height, not a tap target.
+    `w-full ${SIDEBAR_RAIL_GAP} rounded-control bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[var(--sidebar-tool-pad)] phone:py-[13px] text-body font-medium text-dim desktop:text-item-title hover:text-fg`,
+    SIDEBAR_HOVER_LAYER,
+    active && "bg-selected text-fg",
+  );
+}
+
+export function SidebarToolRowBody({
+  icon,
+  label,
+  count,
+  active,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  count?: number;
+  active: boolean;
+}) {
+  return (
+    <>
+      <span
+        className={cn(
+          "inline-flex text-faint [&_svg]:size-[22px]",
+          active ? "text-dim" : "group-hover:text-dim",
+        )}
+      >
+        {icon}
+      </span>
+      {label}
+      {!!count && (
+        // `rounded-full`, not `rounded-[999px]`: this pill never
+        // carried a corner-shape, and rounded-full is the one
+        // radius spelling base.css does NOT squircle.
+        <span className="ml-auto rounded-full bg-accent px-[7px] py-px text-meta leading-[1.5] font-semibold text-on-accent">
+          {count}
+        </span>
+      )}
+    </>
+  );
+}
+
 export function SidebarToolsNav({
   connected,
   isPhone,
@@ -76,49 +138,14 @@ export function SidebarToolsNav({
         />
       </div>
       {tools.map((tool) => {
-        const rowClass = cn(
-          // One look at both widths. Only the box changes, and only
-          // because a phone row is pressed rather than read.
-          "group flex items-center text-left transition-colors",
-          // Rows use control-label type, with glyphs matching the
-          // sidebar's standard 22px leading rail.
-          // `--sidebar-tool-pad` is 5px for a 32px box: the tools are a
-          // short utility strip above the work lists, and at the session
-          // rows' 36px the four of them took more of the rail than what
-          // they lead to. The glyph and the label's left rail are
-          // untouched, so they still line up with the rows below; only
-          // the air around them is tighter.
-          // Don't take it below 30. At 28 (`py-[3px]`, the pre-ffd11ffc
-          // value) the 22px glyph has 3px of margin and the hover pill
-          // stops reading as a row; the compact density's 4px stops at
-          // 30, level with the rows under it rather than below them.
-          // Phones override it to the 13px the session rows take
-          // (SIDEBAR_ROW, lib/sidebar-classes.ts) for a 48px box: 32px is
-          // a reading height, not a tap target.
-          `w-full ${SIDEBAR_RAIL_GAP} rounded-control bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[var(--sidebar-tool-pad)] phone:py-[13px] text-body font-medium text-dim desktop:text-item-title hover:text-fg`,
-          SIDEBAR_HOVER_LAYER,
-          tool.active && "bg-selected text-fg",
-        );
+        const rowClass = sidebarToolRowClass(tool.active);
         const rowBody = (
-          <>
-            <span
-              className={cn(
-                "inline-flex text-faint [&_svg]:size-[22px]",
-                tool.active ? "text-dim" : "group-hover:text-dim",
-              )}
-            >
-              {tool.icon}
-            </span>
-            {tool.label}
-            {!!tool.count && (
-              // `rounded-full`, not `rounded-[999px]`: this pill never
-              // carried a corner-shape, and rounded-full is the one
-              // radius spelling base.css does NOT squircle.
-              <span className="ml-auto rounded-full bg-accent px-[7px] py-px text-meta leading-[1.5] font-semibold text-on-accent">
-                {tool.count}
-              </span>
-            )}
-          </>
+          <SidebarToolRowBody
+            icon={tool.icon}
+            label={tool.label}
+            count={tool.count}
+            active={tool.active}
+          />
         );
         // Right-click drops this tool from the strip, the same gesture
         // the feed headers use to hide themselves, and opens the chooser

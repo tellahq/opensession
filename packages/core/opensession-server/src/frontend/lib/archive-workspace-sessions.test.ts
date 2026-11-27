@@ -101,3 +101,43 @@ test("a failed workspace request restores every shown session", async () => {
   expect([h.state.get("a"), h.state.get("b")]).toEqual([false, false]);
   expect(h.remembered).toEqual([]);
 });
+
+test("says the workspace is archived once every member is", async () => {
+  const told: string[] = [];
+  const h = harness({
+    archiveWorkspace: async () => ({ archived: ["a", "review"], failed: [] }),
+    workspaceArchived: (id) => told.push(id),
+  });
+  await archiveWorkspaceSessions([session("a", "ws")], h.deps);
+  expect(told).toEqual(["ws"]);
+});
+
+test("does not say so when a member failed, or the request did", async () => {
+  const told: string[] = [];
+  const partial = harness({
+    archiveWorkspace: async () => ({ archived: ["a"], failed: ["b"] }),
+    workspaceArchived: (id) => told.push(id),
+  });
+  await archiveWorkspaceSessions(
+    [session("a", "ws"), session("b", "ws")],
+    partial.deps,
+  );
+  const down = harness({
+    archiveWorkspace: async () => {
+      throw new Error("offline");
+    },
+    workspaceArchived: (id) => told.push(id),
+  });
+  await archiveWorkspaceSessions([session("a", "ws")], down.deps);
+  expect(told).toEqual([]);
+});
+
+test("sessions from several workspaces archive none of them whole", async () => {
+  const told: string[] = [];
+  const h = harness({ workspaceArchived: (id) => told.push(id) });
+  await archiveWorkspaceSessions(
+    [session("a", "ws-1"), session("b", "ws-2")],
+    h.deps,
+  );
+  expect(told).toEqual([]);
+});

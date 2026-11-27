@@ -46,6 +46,7 @@ import {
   resolveSplit,
   saveTabSplit,
   shouldShowTabStrip,
+  type TabStripPlacement,
   type ResolvedSplit,
   type TabSplit,
 } from "../lib/split-tabs";
@@ -71,6 +72,8 @@ import type { useSessions } from "./useSessions";
 import { useWorkspaceArchive } from "./useWorkspaceArchive";
 import { useWorkspaceMutations } from "./useWorkspaceMutations";
 import type { useWorkspacePanes } from "./useWorkspacePanes";
+import { useNewLayoutPref } from "../lib/new-layout-pref";
+import { TAB_STRIP_SELECTOR } from "../lib/session-tab-classes";
 import { requestPanelBrowser, requestPortalPin } from "../lib/portal-pin";
 import {
   openSidePanelTab,
@@ -98,6 +101,7 @@ interface UseSessionTabsOptions {
     getCurrentRoute: ReturnType<typeof useAppRoute>["getCurrentRoute"];
     canonicalizePath: ReturnType<typeof useAppRoute>["canonicalizePath"];
     forgetLastSession: ReturnType<typeof useAppRoute>["forgetLastSession"];
+    forgetConversation: ReturnType<typeof useAppRoute>["forgetConversation"];
     goBack: () => void;
   };
   source: {
@@ -208,6 +212,7 @@ export function useSessionTabs({
     getCurrentRoute,
     canonicalizePath,
     forgetLastSession,
+    forgetConversation,
     goBack,
   } = routing;
   const {
@@ -515,11 +520,19 @@ export function useSessionTabs({
   // either column of a split either. The split is kept, not cleared — going back
   // up to the parent restores it.
   const activeTabSplit = currentSession && !viewingWorker ? tabSplit : null;
-  const tabStripVisible = shouldShowTabStrip(
+  // The new layout draws the strip in the window row, attached to the sheet,
+  // and draws it for a single tab too: there the tab is the session's name.
+  const attachedTabs = useNewLayoutPref() && !isPhone;
+  const tabStripVisible: TabStripPlacement = !shouldShowTabStrip(
     stripTabIds.length,
     !!activeTabSplit,
     !!viewingWorker,
-  );
+    attachedTabs,
+  )
+    ? false
+    : attachedTabs && !activeTabSplit
+      ? "attached"
+      : "band";
   const deskFabPosition = useDeskFabPosition(
     !isPhone && !activeViewTabShown,
     `${focusedTopTabId ?? ""}:${activeTabSplit?.rightActive ?? ""}:${activeTabSplit?.ratio ?? ""}`,
@@ -610,7 +623,7 @@ export function useSessionTabs({
         return "panel";
       const pane = detailPaneRef.current?.getBoundingClientRect();
       const strip = detailPaneRef.current
-        ?.querySelector<HTMLElement>(".session-tabs")
+        ?.querySelector<HTMLElement>(TAB_STRIP_SELECTOR)
         ?.getBoundingClientRect();
       if (
         !panel &&
@@ -655,7 +668,7 @@ export function useSessionTabs({
     // No split yet: the drop has to clear the strip, and needs a tab to leave
     // behind — splitting off the only tab would just move the whole bar over.
     const strip = detailPaneRef.current
-      ?.querySelector<HTMLElement>(".session-tabs")
+      ?.querySelector<HTMLElement>(TAB_STRIP_SELECTOR)
       ?.getBoundingClientRect();
     if (!strip || point.y < strip.bottom + 8 || stripTabIds.length < 2)
       return null;
@@ -746,6 +759,8 @@ export function useSessionTabs({
    * archived-sessions menu.
    */
   function renderTabBar(side: SplitSide | null) {
+    // A split draws one bar per column; there is no shared bar to offer.
+    if (!side && activeTabSplit) return null;
     const ids =
       side && activeTabSplit
         ? side === "left"
@@ -776,6 +791,7 @@ export function useSessionTabs({
         }}
         layout={{
           inSplit: !!side,
+          attached: attachedTabs && !side,
           showHistory: side !== "left",
           moveAcrossSide: side ? otherSide(side) : undefined,
           morphingSessionId: newTabMorph?.id,
@@ -1219,6 +1235,8 @@ export function useSessionTabs({
     route,
     navigate,
     goBack,
+    forgetConversation,
+    sessions,
     patch,
     refreshSessions: refresh,
     refreshWorkspaces,

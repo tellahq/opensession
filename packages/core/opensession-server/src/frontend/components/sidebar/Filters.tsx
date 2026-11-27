@@ -113,6 +113,7 @@ export function FilterPopover({
   repos,
   people,
   currentUser,
+  personPinned = false,
   onChange,
   onClose,
   onAddProject,
@@ -122,6 +123,9 @@ export function FilterPopover({
   repos: string[];
   people: Array<{ key: string; label: string }>;
   currentUser: string;
+  /** The list is always yours here (the new layout's Sessions place), so a
+   *  Person choice would change nothing in it. */
+  personPinned?: boolean;
   onChange: (patch: Partial<FilterState>) => void;
   onClose: () => void;
   onCustomize: () => void;
@@ -209,12 +213,14 @@ export function FilterPopover({
             </Menu.CheckboxItem>
           }
         />
-        <ValueRow
-          label="Person"
-          value={filter.person}
-          options={personOptions}
-          onSelect={(v) => onChange({ person: v })}
-        />
+        {!personPinned && (
+          <ValueRow
+            label="Person"
+            value={filter.person}
+            options={personOptions}
+            onSelect={(v) => onChange({ person: v })}
+          />
+        )}
         {/* The settings you set once and forget, one level in: what the
 				    list is made of and who it is for stays on the panel, and the
 				    rest is here.

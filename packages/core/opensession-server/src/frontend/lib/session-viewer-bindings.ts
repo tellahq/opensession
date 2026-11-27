@@ -1,3 +1,4 @@
+import type { TabStripPlacement } from "./split-tabs";
 import type { RefWebPanel } from "../components/FeedWebPane";
 import type { RelatedSession } from "../components/SessionRelations";
 import type { SubagentRef } from "../components/SubagentPane";
@@ -122,7 +123,7 @@ export interface SessionViewerWorkspaceBinding {
   /** True when the tab strip is on screen (2+ sessions, an open view tab, or a
    * split). The strip carries its own "+", so the header one stands down
    * rather than showing a second plus a few pixels above it. */
-  tabStripVisible?: boolean;
+  tabStripVisible?: TabStripPlacement;
   /** This workspace's closed sessions, newest activity first. With no strip
    * there is no history button, so the ⋯ menu carries the list instead. */
   archivedSessions?: UnifiedSession[];

@@ -1,3 +1,4 @@
+import type { TabStripPlacement } from "../lib/split-tabs";
 import { AGENT_NAME } from "../lib/brand";
 import {
   workspaceBranchList,
@@ -75,6 +76,7 @@ import {
   PANEL_SHELL,
 } from "../lib/session-panel-classes";
 import {
+  HIDDEN_BESIDE_TABS,
   VIEWER_BRANCH,
   VIEWER_BRANCH_EDITABLE,
   VIEWER_BRANCH_RENAME,
@@ -147,7 +149,7 @@ interface Props {
   focusPr?: PrFocus & { workspaceId?: string };
   /** Whether the workspace has a real choice of tabs. A lone Review pane keeps
    *  the strip hidden and moves its + into the header, like a lone Chat. */
-  tabStripVisible: boolean;
+  tabStripVisible: TabStripPlacement;
   /** Start a sibling session from the header when the lone-tab strip is hidden. */
   onNewSession?: (origin?: NewTabMorphOrigin) => void;
   /** The app's top-bar slot. The header row portals in here, the same slot and
@@ -805,7 +807,7 @@ export function WorkspacePane({
         {workspace.repo && (
           <IconChevronRight
             size={18}
-            className="-mx-1 shrink-0 text-faint"
+            className={cn("-mx-1 shrink-0 text-faint", HIDDEN_BESIDE_TABS)}
             aria-hidden="true"
           />
         )}
@@ -828,6 +830,7 @@ export function WorkspacePane({
             className={cn(
               VIEWER_BRANCH,
               onRenameWorkspace && VIEWER_BRANCH_EDITABLE,
+              HIDDEN_BESIDE_TABS,
             )}
             title={
               onRenameWorkspace

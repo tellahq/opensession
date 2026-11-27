@@ -11,6 +11,7 @@ import { AppMobileHeader } from "./components/AppMobileHeader";
 import { AppSessionPane } from "./components/AppSessionPane";
 import { AppShell } from "./components/AppShell";
 import { AppSidebar } from "./components/AppSidebar";
+import { PaneTopRow } from "./components/shell/PaneTopRow";
 import { ChipHoverCards } from "./components/ChipHoverCard";
 import { CommandMenuHost } from "./components/CommandMenuHost";
 import { DeferredSettings as Settings } from "./components/DeferredSettings";
@@ -80,7 +81,13 @@ import { useWorkspaces } from "./hooks/useWorkspaces";
 import { getActiveViewTab, saveActiveViewTab } from "./lib/active-view-tab";
 import { cachedRepos, resolveWorkspaceApi } from "./lib/api";
 import { buildAppCommandActions } from "./components/app-command-actions";
-import { isToolView, parseRoute, routePath, type Route } from "./lib/app-route";
+import {
+  parseRoute,
+  routePath,
+  settingsRoute,
+  settingsSectionOf,
+  type Route,
+} from "./lib/app-route";
 import { useDeskShowNavigation } from "./hooks/useDeskShowNavigation";
 import {
   APP_BODY,
@@ -127,6 +134,7 @@ import { NO_REPO } from "./lib/session-repo";
 import type { NewTabMorphOrigin } from "./lib/session-tabs-types";
 import { SIDEBAR_CHROME_BTN } from "./lib/sidebar-classes";
 import { useSidebarFilter } from "./lib/sidebar-filter";
+import { useListFilter } from "./hooks/useListFilter";
 import { ASK_BAND } from "./lib/sidebar-workspaces";
 import { saveTabSplit } from "./lib/split-tabs";
 import { getTabColors } from "./lib/tab-colors";
@@ -174,18 +182,21 @@ export function AppContent({
     finishFirstMileNavigation,
     restoredSessionId,
     returnsToSession,
+    places,
     forgetLastSession,
+    forgetConversation,
     canonicalizePath,
   } = useAppRoute({ serviceWorker, currentUser: getCurrentUser });
   const goBack = () =>
     goBackRoute(currentSessionRef.current?.parentSessionId ?? undefined);
   const currentUser = useCurrentUser();
   const sidebarFilter = useSidebarFilter();
+  const listFilter = useListFilter(sidebarFilter, places.current);
   const liveSessionsQueryInput: SidebarSessionsQueryOptions = {
     user: currentUser,
-    person: sidebarFilter.person,
-    repo: sidebarFilter.repo,
-    autoCreated: sidebarFilter.autoCreated,
+    person: listFilter.person,
+    repo: listFilter.repo,
+    autoCreated: listFilter.autoCreated,
   };
   if (route.view === "session") {
     liveSessionsQueryInput.selectedSessionId = route.id;
@@ -835,6 +846,7 @@ export function AppContent({
       getCurrentRoute,
       canonicalizePath,
       forgetLastSession,
+      forgetConversation,
       goBack,
     },
     source: {
@@ -956,7 +968,7 @@ export function AppContent({
           (route.view === "workspace" &&
             routeWorkspace &&
             Boolean(routeWorkspace.branch || reviewFocusPr?.branch)))));
-  const tabStripShown = tabStripVisible && !focusedPhoneReview;
+  const tabStripShown = !focusedPhoneReview && tabStripVisible;
 
   // Whether the bar is holding that name yet. It stays quiet while the page
   // below heads itself with the same word, and picks the name up once that
@@ -1203,7 +1215,7 @@ export function AppContent({
     openPrs: () => navigate({ view: "prs" }),
     openIssues: () => navigate({ view: "issues" }),
     openFeed: () => navigate({ view: "feed" }),
-    openSettings: (section) => navigate({ view: "settings", section }),
+    openSettings: (section) => navigate(settingsRoute(section)),
     openTasks: () => navigate({ view: "tasks" }),
     openAutomation: (name) => navigate({ view: "automations", id: name }),
     openPrItem: openPrWorkspace,
@@ -1294,19 +1306,9 @@ export function AppContent({
               <Settings
                 onBack={leaveSettings}
                 onOpenOnboarding={openFirstMile}
-                section={
-                  route.view === "settings"
-                    ? route.section
-                    : isToolView(route.view)
-                      ? route.view
-                      : undefined
-                }
+                section={settingsSectionOf(route)}
                 onShowRoot={() => navigate({ view: "settings" })}
-                onSelect={(key) =>
-                  isToolView(key)
-                    ? navigate({ view: key })
-                    : navigate({ view: "settings", section: key })
-                }
+                onSelect={(key) => navigate(settingsRoute(key))}
               >
                 {route.view === "automations" ? (
                   <Automations
@@ -1349,6 +1351,7 @@ export function AppContent({
                 <AppSidebar
                   data={{
                     route,
+                    places,
                     sessions,
                     registeredRepoInfo,
                     sessionsError,
@@ -1426,51 +1429,50 @@ export function AppContent({
                     </Tooltip>
                   }
                 >
-                  {/* Session/workspace identity sits above the shared tab strip. */}
-                  <TopBar
-                    className={cn(
-                      DETAIL_TOPBAR,
-                      focusedPhoneReview && "phone:hidden",
-                    )}
-                    ref={setTopbarEl}
-                  >
-                    {route.view !== "session" &&
-                      // A workspace portals in the same header row a session
-                      // does (WorkspacePane) rather than taking the plain title.
-                      !(route.view === "workspace" && routeWorkspace) &&
-                      topbarTitle && (
-                        // Where you are, not the page's heading: these routes are
-                        // pages, and a page keeps its name in its body. The bar picks
-                        // that name up once it has scrolled out of sight, the way the
-                        // chat header names the session. See hooks/useLargeTitle.ts.
-                        <TopBarTitle
-                          className={cn(
-                            DETAIL_TOPBAR_TITLE,
-                            LIST_COLUMN_VIEWS.has(route.view) && PR_PAGE_COLUMN,
-                            route.view === "archived" && ARCHIVED_PAGE_COLUMN,
-                          )}
-                        >
-                          <span
-                            className={DETAIL_TOPBAR_TITLE_TEXT}
-                            data-shown={titleHandedOver || undefined}
-                          >
-                            {topbarTitle}
-                          </span>
-                          {/* Filled by the page, if it has controls to put here. */}
-                          <TopBarActions
-                            className={cn(
-                              DETAIL_TOPBAR_ACTIONS,
-                              TOPBAR_ACTION_VIEWS.has(route.view) &&
-                                "ml-4 flex-1 pl-0",
-                            )}
-                            ref={setTopbarActionsEl}
-                          />
-                        </TopBarTitle>
+                  <PaneTopRow strip={tabStripShown && renderTabBar(null)}>
+                    <TopBar
+                      className={cn(
+                        DETAIL_TOPBAR,
+                        focusedPhoneReview && "phone:hidden",
                       )}
-                  </TopBar>
-                  {!activeTabSplit && tabStripShown && (
-                    <div className="shrink-0">{renderTabBar(null)}</div>
-                  )}
+                      ref={setTopbarEl}
+                    >
+                      {route.view !== "session" &&
+                        // A workspace portals in the same header row a session
+                        // does (WorkspacePane) rather than taking the plain title.
+                        !(route.view === "workspace" && routeWorkspace) &&
+                        topbarTitle && (
+                          // Where you are, not the page's heading: these routes are
+                          // pages, and a page keeps its name in its body. The bar picks
+                          // that name up once it has scrolled out of sight, the way the
+                          // chat header names the session. See hooks/useLargeTitle.ts.
+                          <TopBarTitle
+                            className={cn(
+                              DETAIL_TOPBAR_TITLE,
+                              LIST_COLUMN_VIEWS.has(route.view) &&
+                                PR_PAGE_COLUMN,
+                              route.view === "archived" && ARCHIVED_PAGE_COLUMN,
+                            )}
+                          >
+                            <span
+                              className={DETAIL_TOPBAR_TITLE_TEXT}
+                              data-shown={titleHandedOver || undefined}
+                            >
+                              {topbarTitle}
+                            </span>
+                            {/* Filled by the page, if it has controls to put here. */}
+                            <TopBarActions
+                              className={cn(
+                                DETAIL_TOPBAR_ACTIONS,
+                                TOPBAR_ACTION_VIEWS.has(route.view) &&
+                                  "ml-4 flex-1 pl-0",
+                              )}
+                              ref={setTopbarActionsEl}
+                            />
+                          </TopBarTitle>
+                        )}
+                    </TopBar>
+                  </PaneTopRow>
                   {splitDropSide && (
                     <div
                       className={tabSplitDropPreviewClass(splitDropSide)}

@@ -1,3 +1,4 @@
+import type { TabStripPlacement } from "../lib/split-tabs";
 import {
   useEffect,
   useEffectEvent,
@@ -205,7 +206,7 @@ interface Props {
   /** Lets the session column make room for the floating card while it is open. */
   onOpenChange?: (open: boolean) => void;
   /** The desktop tab strip sits between the header anchor and the transcript. */
-  tabStripVisible?: boolean;
+  tabStripVisible?: TabStripPlacement;
   /** Height of the goal/loop banner strip under the header, 0 when absent. */
   bannerHeight?: number;
   /** Review starts with the card shut and opens it below its own toolbar. */
@@ -456,7 +457,8 @@ export function WorkspaceSummary({
         // header's own bottom edge and 37px above the tab strip's: 8 + 12
         // with no strip, 37 + 12 with one.
         sideOffset={workspaceSummarySideOffset(
-          Boolean(tabStripVisible),
+          // Only a band sits between the header and the card.
+          tabStripVisible === "band",
           bannerHeight,
         )}
         elevation="sm"

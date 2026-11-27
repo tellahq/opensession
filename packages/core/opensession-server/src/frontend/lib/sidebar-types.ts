@@ -1,3 +1,4 @@
+import type { Place } from "./new-layout-place";
 import React from "react";
 import type { UnreadChat } from "./unread-chats";
 import type { UnifiedSession, Workspace } from "./types";
@@ -71,6 +72,9 @@ export interface Props {
   archivedActive: boolean;
   /** True while the catch-up deck is open — highlights its entry. */
   catchUpActive: boolean;
+  /** The new layout's place, which decides what this column lists. Absent in
+   *  the default layout, where it lists everything. */
+  place?: Place;
   /** Report unread destinations, including collapsed groups and sibling tabs. */
   onUnreadChatsChange?: (chats: UnreadChat[]) => void;
   /**
