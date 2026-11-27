@@ -302,9 +302,59 @@ function NoticeRow({
   const notice = entry.notice!;
   const [open, setOpen] = useState(false);
   const [continued, setContinued] = useState(false);
-  const collapsible = notice.body === "collapsed";
+  const isCompaction = notice.kind === "compaction";
+  const hasRecap = isCompaction && entry.content.trim().length > 0;
+  const collapsible = notice.body === "collapsed" || hasRecap;
   const toned = notice.tone !== "info";
   const isError = notice.tone === "error";
+
+  if (isCompaction) {
+    return (
+      <div className={cn(msgSystemRow, "my-3 w-full")} data-eid={entry.id}>
+        <div className="flex w-full items-center gap-3">
+          <span aria-hidden="true" className="h-px flex-1 bg-border-subtle" />
+          <span
+            className={cn(msgSystemText, "shrink-0 gap-1.5")}
+            data-tone="info"
+          >
+            <span>{notice.title}</span>
+            {hasRecap && (
+              <>
+                <span aria-hidden="true" className="text-faint">
+                  ·
+                </span>
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  onClick={() => setOpen((v) => !v)}
+                  className="cursor-pointer [font-family:inherit] font-medium text-dim transition-colors hover:text-fg"
+                >
+                  {open ? "Hide recap" : "Thread recap"}
+                </button>
+              </>
+            )}
+          </span>
+          <span aria-hidden="true" className="h-px flex-1 bg-border-subtle" />
+        </div>
+        {hasRecap && open && (
+          <section
+            aria-label="Thread recap"
+            className="mx-auto mt-2.5 w-full max-w-[600px] rounded-lg border border-border-subtle border-l-2 border-l-accent bg-panel px-4 py-3 text-left"
+          >
+            <div className="mb-1.5 text-label font-semibold text-dim">
+              Thread recap
+            </div>
+            <ClampedBody
+              className={cn(msgBody, "markdown")}
+              content={entry.content}
+              entry={entry}
+              sessionId={sessionId}
+            />
+          </section>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className={msgSystemRow} data-eid={entry.id}>

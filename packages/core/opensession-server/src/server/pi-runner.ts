@@ -120,6 +120,7 @@ import {
   modelPromptAdaptation,
   usesApplyPatchTool,
 } from "./pi-apply-patch";
+import { piExecutorHealthTools } from "./pi-executor-health";
 import { piSecretRedactionTools } from "./pi-secret-redaction";
 import { piSkillUnlockTools } from "./pi-skill-tools";
 import {
@@ -3256,12 +3257,23 @@ async function* runPiAttempt(
     const resourceLocks = new PiResourceLockManager();
     const customTools = piSteeringBoundaryTools(
       piSecretRedactionTools(
-        piSkillUnlockTools(
-          piGuidanceDiscoveryTools(
-            piResourceLockTools(baseCustomTools, resourceLocks, cwd),
-            guidanceDiscovery,
+        piExecutorHealthTools(
+          piSkillUnlockTools(
+            piGuidanceDiscoveryTools(
+              piResourceLockTools(baseCustomTools, resourceLocks, cwd),
+              guidanceDiscovery,
+            ),
+            mcpBridge,
           ),
-          mcpBridge,
+          {
+            onWarning: (warning) => {
+              try {
+                appendRunLines([
+                  transcriptLineRunnerNotice(warning.summary, { tone: "warn" }),
+                ]);
+              } catch {}
+            },
+          },
         ),
       ),
       () => steeringBoundaryPending,
