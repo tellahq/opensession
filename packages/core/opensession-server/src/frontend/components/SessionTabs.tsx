@@ -104,6 +104,7 @@ function ReorderTabItem({
   draggable,
   dragging,
   attached,
+  tabColor,
   onPointerDown,
   onDragStart,
   onDragEnd,
@@ -115,6 +116,8 @@ function ReorderTabItem({
   draggable: boolean;
   dragging: boolean;
   attached?: boolean;
+  /** The tab's swatch, which an attached tab's flares take their fill from. */
+  tabColor?: string | null;
   onPointerDown: (key: string, event: React.PointerEvent) => void;
   onDragStart: (key: string) => void;
   onDragEnd: (key: string) => void;
@@ -127,6 +130,8 @@ function ReorderTabItem({
       value={tabKey}
       data-tab-key={tabKey}
       data-next-active={nextActive ? "" : undefined}
+      data-colored={attached && tabColor ? "" : undefined}
+      style={attached && tabColor ? flareStyle(tabColor) : undefined}
       dragListener={draggable}
       onPointerDown={(event) => onPointerDown(tabKey, event)}
       onDragStart={() => onDragStart(tabKey)}
@@ -141,6 +146,10 @@ function ReorderTabItem({
       {children}
     </Reorder.Item>
   );
+}
+
+function flareStyle(tabColor: string): SessionTabStyle {
+  return { "--tab-color": tabColor };
 }
 
 /** Apply the edge fade only when the title is genuinely clipped. Keeping this
@@ -629,6 +638,7 @@ export function SessionTabs({
                 draggable={tabDragEnabled && editKey !== key}
                 dragging={dropSlot?.key === key}
                 attached={attached}
+                tabColor={hex}
                 onPointerDown={handleItemPointerDown}
                 onDragStart={handleItemDragStart}
                 onDragEnd={handleItemDragEnd}

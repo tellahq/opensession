@@ -22,8 +22,19 @@ function morphTiming(
   };
 }
 
+/** The tab's own corners, for the clip that reveals it. All four, in
+ *  clip-path order: an attached tab is square at its foot, and a clip that
+ *  rounded every corner alike would cut that foot off the sheet. */
 function clipRadius(element: HTMLElement): string {
-  return getComputedStyle(element).borderTopLeftRadius || "8px";
+  const style = getComputedStyle(element);
+  return [
+    style.borderTopLeftRadius,
+    style.borderTopRightRadius,
+    style.borderBottomRightRadius,
+    style.borderBottomLeftRadius,
+  ]
+    .map((radius) => radius || "8px")
+    .join(" ");
 }
 
 /**

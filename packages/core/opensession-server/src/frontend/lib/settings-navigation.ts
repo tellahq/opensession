@@ -2,6 +2,10 @@ export type SettingsReturn = {
   path: string;
   depth: number | null;
   steps: number;
+  /** Set when the page beneath was showing in Activity (the new layout's
+   *  place). Sections can move the place while Settings is open, so closing
+   *  it restores the one it was opened from. */
+  place?: "activity";
 };
 
 /**
@@ -15,6 +19,7 @@ export function settingsReturnForNavigation({
   currentReturn,
   currentPath,
   currentDepth,
+  currentInActivity = false,
   replace,
 }: {
   currentIsSettings: boolean;
@@ -22,6 +27,7 @@ export function settingsReturnForNavigation({
   currentReturn?: SettingsReturn;
   currentPath: string;
   currentDepth: number | null;
+  currentInActivity?: boolean;
   replace: boolean;
 }): SettingsReturn | undefined {
   if (!nextIsSettings) return undefined;
@@ -30,6 +36,7 @@ export function settingsReturnForNavigation({
       path: currentPath,
       depth: currentDepth,
       steps: replace ? 0 : 1,
+      ...(currentInActivity && { place: "activity" }),
     };
   if (!currentReturn) return undefined;
   return replace

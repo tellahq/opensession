@@ -888,6 +888,53 @@ describe("places", () => {
     expect(controller.place).toBe("sessions");
   });
 
+  test("closing Settings restores the place it was opened from, without history to pop", () => {
+    const fake = fakeBrowser({
+      path: "/feed",
+      state: { d: 0 },
+      singleHistoryEntry: true,
+    });
+    const controller = new AppRouteController(fake.browser);
+    controller.navigate({ view: "session", id: "theirs" });
+    expect(controller.place).toBe("activity");
+
+    controller.navigate({ view: "settings" });
+    // A section with a page of its own moves the place while Settings is open.
+    controller.navigate({ view: "goals" });
+    expect(controller.place).toBe("library");
+
+    controller.leaveSettings();
+    expect(controller.getCurrentRoute()).toEqual({
+      view: "session",
+      id: "theirs",
+    });
+    expect(controller.place).toBe("activity");
+    expect(fake.calls.at(-1)).toMatchObject({
+      type: "replace",
+      state: { place: "activity" },
+      path: "/session/theirs",
+    });
+  });
+
+  test("Back from a drill-in restores the session's place, without history to pop", () => {
+    const fake = fakeBrowser({
+      path: "/feed",
+      state: { d: 0 },
+      singleHistoryEntry: true,
+    });
+    const controller = new AppRouteController(fake.browser);
+    controller.navigate({ view: "session", id: "theirs" });
+    controller.navigate({ view: "support", threadId: "T-1" });
+    expect(controller.place).toBe("support");
+
+    controller.goBack();
+    expect(controller.getCurrentRoute()).toEqual({
+      view: "session",
+      id: "theirs",
+    });
+    expect(controller.place).toBe("activity");
+  });
+
   test("Sessions shows the list on a fresh load with no conversation to return to", () => {
     const fake = fakeBrowser({ path: "/issues", state: { d: 0 } });
     const controller = new AppRouteController(fake.browser);

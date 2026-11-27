@@ -138,8 +138,34 @@ export const TAB_SCROLL_ATTACHED = "relative z-[1] items-stretch px-2";
 export const TAB_GROUP_ATTACHED =
   "relative inline-flex flex-none items-stretch gap-0.5";
 
-export const TAB_ITEM_ATTACHED =
-  "session-tab-reorder relative inline-flex shrink-0 items-stretch";
+/** The active attached tab's fill when it wears a colour (`--tab-color`). */
+const ATTACHED_COLORED_FILL =
+  "color-mix(in_srgb,var(--tab-color)_14%,var(--bg))";
+
+/**
+ * Where the active tab meets the sheet, its border does not land on the row's
+ * hairline square: it curves outward and becomes that hairline, so the tab
+ * and the sheet under it read as one outlined shape.
+ *
+ * Each flare is an 8px box at the tab's foot, just outside it, painted by one
+ * gradient: the row shows through inside the curve, the hairline is the
+ * curve, and the tab's fill (`--tab-fill`) is the wedge under it. It overlaps
+ * the tab's own border by that border's one pixel, and sits above it, so the
+ * straight edge turns into the curve without a step.
+ *
+ * They belong to this wrapper, not to the tab. A tab can clip itself (an
+ * empty tab does, for its opening morph), and a flare is outside its box.
+ * The wrapper is the same size and never clips.
+ */
+const TAB_ITEM_ATTACHED_FLARES =
+  `[--tab-fill:var(--bg)] data-[colored]:[--tab-fill:${ATTACHED_COLORED_FILL}] ` +
+  "before:pointer-events-none before:absolute before:bottom-0 before:-left-[7px] before:z-[1] before:hidden before:size-2 before:content-[''] " +
+  "before:[background:radial-gradient(circle_at_0_0,transparent_7px,var(--divider)_7.5px,var(--divider)_8px,var(--tab-fill)_8.5px)] " +
+  "after:pointer-events-none after:absolute after:bottom-0 after:-right-[7px] after:z-[1] after:hidden after:size-2 after:content-[''] " +
+  "after:[background:radial-gradient(circle_at_100%_0,transparent_7px,var(--divider)_7.5px,var(--divider)_8px,var(--tab-fill)_8.5px)] " +
+  "[&:has(>[aria-selected=true])]:before:block [&:has(>[aria-selected=true])]:after:block";
+
+export const TAB_ITEM_ATTACHED = `session-tab-reorder relative inline-flex shrink-0 items-stretch ${TAB_ITEM_ATTACHED_FLARES}`;
 
 export const TAB_ITEM_ATTACHED_DRAGGING =
   "cursor-grabbing rounded-t-[10px] bg-panel smooth-shadow-ring-sm";
@@ -223,31 +249,17 @@ const TAB_ATTACHED_BASE =
   "relative inline-flex max-w-[200px] shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
   "rounded-t-[10px] border border-b-0 px-3 text-label shadow-none transition-[background-color,color]";
 
-/**
- * Where the active tab meets the sheet, its sides flare out into the row's
- * hairline instead of landing on it square. Each flare is an 8px box just
- * outside the tab's foot, painted by one gradient: the row shows through
- * inside the curve, the hairline is the curve, and the tab's own fill
- * (`--tab-fill`) is the wedge under it. It overlaps the tab's border by its
- * one pixel, so the border turns into the curve without a step.
- */
-const TAB_ATTACHED_FLARES =
-  "before:pointer-events-none before:absolute before:bottom-0 before:-left-2 before:size-2 before:content-[''] " +
-  "before:[background:radial-gradient(circle_at_0_0,transparent_7px,var(--divider)_7.5px,var(--divider)_8px,var(--tab-fill)_8.5px)] " +
-  "after:pointer-events-none after:absolute after:bottom-0 after:-right-2 after:size-2 after:content-[''] " +
-  "after:[background:radial-gradient(circle_at_100%_0,transparent_7px,var(--divider)_7.5px,var(--divider)_8px,var(--tab-fill)_8.5px)]";
-
 function attachedTabClass({ active, waiting, colored }: TabState): string {
   const ink = active || waiting ? "text-fg" : "text-dim hover:text-fg";
   const surface = colored
     ? active
-      ? "border-divider bg-[var(--tab-fill)] [--tab-fill:color-mix(in_srgb,var(--tab-color)_14%,var(--bg))]"
+      ? `border-divider bg-[var(--tab-fill)] [--tab-fill:${ATTACHED_COLORED_FILL}]`
       : "border-transparent bg-[color-mix(in_srgb,var(--tab-color)_9%,transparent)] " +
         "hover:bg-[color-mix(in_srgb,var(--tab-color)_16%,transparent)]"
     : active
       ? "border-divider bg-[var(--tab-fill)] [--tab-fill:var(--bg)]"
       : "border-transparent bg-transparent hover:bg-hover";
-  return `${TAB_ATTACHED_BASE} ${ink} ${surface} ${active ? TAB_ATTACHED_FLARES : ""}`;
+  return `${TAB_ATTACHED_BASE} ${ink} ${surface}`;
 }
 
 /**

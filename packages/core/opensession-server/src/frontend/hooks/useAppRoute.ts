@@ -250,12 +250,14 @@ export class AppRouteController {
     const logicalReplace = opts?.replace ?? samePath;
     const replace = this.browser.singleHistoryEntry || logicalReplace;
     const depth = entryDepth(this.browser);
+    const currentInActivity = this.currentPlace === "activity";
     const settingsReturn = settingsReturnForNavigation({
       currentIsSettings: isSettingsRoute(current),
       nextIsSettings: isSettingsRoute(next),
       currentReturn: currentNavState(this.browser)?.settingsReturn,
       currentPath: `${this.browser.location.pathname}${this.browser.location.search}${this.browser.location.hash}`,
       currentDepth: depth,
+      currentInActivity,
       replace,
     });
     const sessionReturn = sessionReturnForNavigation({
@@ -266,6 +268,7 @@ export class AppRouteController {
       // should land on the conversation the link was in.
       currentPath: routePath(current),
       currentDepth: depth,
+      currentInActivity,
       logicalReplace,
       pushed: !replace,
     });
@@ -395,22 +398,26 @@ export class AppRouteController {
   }
 
   // Pop the entries pushed since `target` was left, or rewrite this entry to
-  // it when they are gone (single-entry history, or a pruned stack).
+  // it when they are gone (single-entry history, or a pruned stack). The
+  // rewrite takes its place from the target too: the pages opened since can
+  // have moved it (Settings to Goals is Library), and it is the page being
+  // returned to that is on screen.
   private returnTo(target: SettingsReturn | SessionReturn): void {
     const restore = () => {
       const url = new URL(target.path, this.browser.location.origin);
       const route = parseRoute(url.pathname);
+      const place = target.place ?? "sessions";
       this.browser.history.replaceState(
         navState(
           target.depth,
           undefined,
           undefined,
-          !routeNamesPlace(route) && this.currentPlace === "activity",
+          !routeNamesPlace(route) && place === "activity",
         ),
         "",
         `${url.pathname}${url.search}${url.hash}`,
       );
-      this.commit(route);
+      this.commit(route, place);
       this.publish();
     };
     if (target.steps > 0) this.popOr(target.steps, restore);
