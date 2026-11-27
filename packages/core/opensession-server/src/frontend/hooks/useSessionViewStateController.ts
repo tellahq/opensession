@@ -42,11 +42,7 @@ import { useSessionRuntimeController } from "./useSessionRuntimeController";
 import { reviewLoopResult, type ReviewLoopResult } from "../lib/review-loop";
 import { useSidePanel } from "./useSidePanel";
 import { useSessionAssets } from "../components/AssetsPanel";
-import {
-  registerAssetTabOpener,
-  setOpenAsset,
-  useOpenAssetPath,
-} from "../lib/asset-overlay-store";
+import { setOpenAsset, useOpenAssetPath } from "../lib/asset-overlay-store";
 import { useSessionReports } from "../components/SessionReportsPanel";
 import { useSessionDatabases } from "../components/SessionDatabasesPanel";
 import { fetchThreadsApi } from "../lib/api";
@@ -391,10 +387,6 @@ export function useSessionViewStateController({
   useLayoutEffect(() => {
     openAssetsRef.current = openAssets;
   }, [openAssets]);
-  const openAssetFromTranscript = useCallback(
-    (path: string) => setOverlayAssetPath(path),
-    [setOverlayAssetPath],
-  );
   const closeAssetOverlay = useCallback(
     () => setOverlayAssetPath(null),
     [setOverlayAssetPath],
@@ -407,12 +399,14 @@ export function useSessionViewStateController({
     },
     [setOverlayAssetPath],
   );
-  // Transcript rows offer "Open as tab" only where this session has one.
+  // An asset opened from the chat (its chip, a link, the inline card) opens
+  // full size in the Assets tab. The overlay is only for a view with no tab.
   const canOpenAssetTab = Boolean(openAssets);
-  useEffect(() => {
-    if (!canOpenAssetTab) return;
-    return registerAssetTabOpener(session.id, promoteAssetToTab);
-  }, [canOpenAssetTab, session.id, promoteAssetToTab]);
+  const openAssetFromTranscript = useCallback(
+    (path: string) =>
+      canOpenAssetTab ? promoteAssetToTab(path) : setOverlayAssetPath(path),
+    [canOpenAssetTab, promoteAssetToTab, setOverlayAssetPath],
+  );
   const sessionReports = useSessionReports(session.id, addHandler);
   const sessionDatabases = useSessionDatabases(session.id, addHandler);
   const [threads, setThreads] = useState<CommentThread[]>([]);
