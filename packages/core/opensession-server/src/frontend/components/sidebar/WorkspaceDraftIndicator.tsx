@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { hasDraft, onDraftsChanged } from "../../lib/drafts";
-import { SIDEBAR_WS_DRAFT } from "../../lib/sidebar-classes";
+import { SIDEBAR_WS_DRAFT_YIELDS } from "../../lib/sidebar-classes";
 import { cn } from "../../ui/cn";
 import { IconPencil } from "../icons";
 
@@ -34,11 +34,7 @@ export function WorkspaceDraftIndicator({
   if (!present) return null;
   return (
     <span
-      className={cn(
-        SIDEBAR_WS_DRAFT,
-        pushed ? "ml-1.5" : "ml-auto",
-        "group-hover:hidden",
-      )}
+      className={cn(SIDEBAR_WS_DRAFT_YIELDS, pushed ? "ml-1.5" : "ml-auto")}
       data-ws-draft=""
       aria-label="Unsent draft. Return to finish it."
     >

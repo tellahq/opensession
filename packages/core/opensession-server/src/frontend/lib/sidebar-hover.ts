@@ -1,8 +1,8 @@
 import type { WorkspaceOverview } from "./api";
-import { SIDEBAR_STATUS_DOT } from "./sidebar-classes";
 import { runNeedsAttention } from "./sidebar-lanes";
 import type { MineStatus } from "./sidebar-types";
 import type { UnifiedSession, Workspace } from "./types";
+import type { StatusDotState } from "../ui/status";
 import {
   useSessionOverviewResource,
   useWorkspaceOverviewResource,
@@ -11,14 +11,12 @@ import {
 // The single prominent status line + its dot/tone. Ordering mirrors how a person
 // triages: a blocked question first, then live activity, then PR/lifecycle.
 //
-// `dotClass` is either a `sidebar-status-*` class (that dot is part of the
-// sidebar row's own subtree, still on the legacy sheet) or a plain colour
-// utility for the states only the hover card shows. Both are just a class on
-// the same span, and the two sets never co-occur.
+// `dot` is the live state's StatusDot (waiting, failed, running), or null for
+// a resting state, which the hover card shows by its tone alone.
 export interface HoverState {
   label: string;
   tone: HoverTone;
-  dotClass: string;
+  dot: StatusDotState | null;
 }
 
 export function hoverState(s: UnifiedSession): HoverState {
@@ -26,37 +24,37 @@ export function hoverState(s: UnifiedSession): HoverState {
     return {
       label: "Waiting for your input",
       tone: "blue",
-      dotClass: SIDEBAR_STATUS_DOT.waiting,
+      dot: "waiting",
     };
   if (runNeedsAttention(s))
     return {
       label: "Last run failed. Send a prompt to retry.",
       tone: "accent",
-      dotClass: SIDEBAR_STATUS_DOT.failed,
+      dot: "failed",
     };
   if (s.isRunning)
     return {
       label: "Running",
       tone: "green",
-      dotClass: SIDEBAR_STATUS_DOT.running,
+      dot: "running",
     };
   if (s.scriptRunning)
     return {
       label: "Script running",
       tone: "green",
-      dotClass: SIDEBAR_STATUS_DOT.running,
+      dot: "running",
     };
   if (s.prState === "MERGED")
-    return { label: "Merged", tone: "purple", dotClass: "bg-purple" };
+    return { label: "Merged", tone: "purple", dot: null };
   if (s.prState === "CLOSED")
-    return { label: "PR closed", tone: "dim", dotClass: "bg-red" };
+    return { label: "PR closed", tone: "dim", dot: null };
   if (s.prState === "OPEN")
     return {
       label: s.prIsDraft ? "Draft PR · in review" : "In review",
       tone: "green",
-      dotClass: "bg-green",
+      dot: null,
     };
-  return { label: "Idle", tone: "dim", dotClass: "bg-faint" };
+  return { label: "Idle", tone: "dim", dot: null };
 }
 
 export function prTone(s: UnifiedSession): string {

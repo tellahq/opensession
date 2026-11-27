@@ -11,12 +11,11 @@ import {
   SIDEBAR_GROUP,
   SIDEBAR_GROUP_NAME,
   SIDEBAR_LANE_COUNT,
-  SIDEBAR_LANE_DROP_HOVER,
-  SIDEBAR_LANE_EMPTY,
   SIDEBAR_LANE_NAME,
   SIDEBAR_STATUS_GROUP,
   sidebarChevron,
   sidebarHeader,
+  sidebarLane,
 } from "../../lib/sidebar-classes";
 import type { GroupBy } from "../../lib/sidebar-filter";
 import {
@@ -177,14 +176,10 @@ export function createWorkspaceGroupingRenderers({
       const dropHover = dropEligible && laneDropHover?.gkey === gkey;
       return (
         <div
-          className={cn(
-            SIDEBAR_STATUS_GROUP,
-            dropEligible &&
-              items.length === 0 &&
-              prs.length === 0 &&
-              SIDEBAR_LANE_EMPTY,
-            dropHover && SIDEBAR_LANE_DROP_HOVER,
-          )}
+          className={sidebarLane({
+            empty: dropEligible && items.length === 0 && prs.length === 0,
+            dropHover,
+          })}
           data-status-group
           key={gkey}
           data-lane-drop={dropEligible ? gkey : undefined}

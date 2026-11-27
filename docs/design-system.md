@@ -155,7 +155,12 @@ read the row's hover and its `data-selected` / `data-waiting` / `data-unread`
 state through `sidebarRowMarker`. A component that merges a caller's chip
 into its own look, like `KeepInSidebarMark`, takes the chip as `xstyle` and
 applies both in one `stylex.props` call, because a StyleX class string handed
-to a Tailwind `cn()` loses to the component's own utilities. Each class
+to a Tailwind `cn()` loses to the component's own utilities. A phone row's
+swipe actions are `sidebarSwipeAction({ side, open, dragging })`, and a
+session's state dot is the `StatusDot` primitive in `ui/status.tsx`: an
+element that has to keep animating under reduced motion carries a
+`data-pulse` attribute that base-theme.css hands its duration back to, since
+a class string cannot carry `!important`. Each class
 string constant is `classString(...)` from `ui/sx.ts`: pass every style one
 element wears in one call, so two styles that set the same property are
 settled by argument order, not stylesheet order. Hooks that CSS or tests read

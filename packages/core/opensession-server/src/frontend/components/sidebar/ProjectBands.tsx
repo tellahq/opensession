@@ -1,11 +1,11 @@
 import React from "react";
 import type { ReviewQueueItem } from "../../lib/review-queue";
 import {
-  SIDEBAR_ATTN_COUNT,
   SIDEBAR_GROUP_COUNT,
   SIDEBAR_GROUP_NAME,
   SIDEBAR_RAIL,
   SIDEBAR_REPO_TILE,
+  sidebarAttnCount,
   sidebarChevron,
   sidebarHeader,
 } from "../../lib/sidebar-classes";
@@ -210,7 +210,7 @@ export function ProjectBands({
                     reviews being asked of you. */}
                 {!open && project.urgent > 0 && (
                   <span
-                    className={cn(SIDEBAR_ATTN_COUNT, "bg-blue")}
+                    className={sidebarAttnCount("blue")}
                     aria-label={`${project.urgent} waiting on you`}
                   >
                     {project.urgent}

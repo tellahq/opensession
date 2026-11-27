@@ -1,19 +1,11 @@
+import { StatusDot } from "../../ui/status";
 import React from "react";
 import { facepileAvatarStyle, otherViewers } from "../../lib/presence";
 import { reviewAskerFor, wsPrRequestsReviewFrom } from "../../lib/review-queue";
 import {
-  SIDEBAR_HOVER_LAYER,
   SIDEBAR_RAIL,
-  SIDEBAR_STATUS_DOT,
-  SIDEBAR_SWIPE_ACTION,
-  SIDEBAR_SWIPE_ACTION_ARCHIVE,
-  SIDEBAR_SWIPE_ACTION_OPEN,
-  SIDEBAR_SWIPE_ACTION_STAR,
-  SIDEBAR_SWIPE_ACTION_STAR_ON,
-  SIDEBAR_SWIPE_ACTION_TRANSITION,
-  SIDEBAR_SWIPE_ACTION_UNSNOOZE,
-  SIDEBAR_SWIPE_ROW,
   SIDEBAR_ROW_TITLE,
+  SIDEBAR_SWIPE_ROW,
   SIDEBAR_WS_ACTION,
   SIDEBAR_WS_ACTION_STYLES,
   SIDEBAR_WS_FACE,
@@ -21,6 +13,7 @@ import {
   sidebarRow,
   sidebarRowActions,
   sidebarRowTime,
+  sidebarSwipeAction,
 } from "../../lib/sidebar-classes";
 import {
   isClaimed,
@@ -258,12 +251,11 @@ export function WorkspaceRow({
     >
       {isPhone && row.sessions.length > 0 && (
         <button
-          className={cn(
-            SIDEBAR_SWIPE_ACTION,
-            SIDEBAR_SWIPE_ACTION_ARCHIVE,
-            swipeSide === "archive" && SIDEBAR_SWIPE_ACTION_OPEN,
-            draggingRow ? "transition-none" : SIDEBAR_SWIPE_ACTION_TRANSITION,
-          )}
+          className={sidebarSwipeAction({
+            side: "archive",
+            open: swipeSide === "archive",
+            dragging: draggingRow,
+          })}
           data-swipe-action="archive"
           onClick={(e) => {
             e.stopPropagation();
@@ -281,12 +273,11 @@ export function WorkspaceRow({
             long-press sheet) would defeat the point of a swipe. */}
       {isPhone && isDraft && (
         <button
-          className={cn(
-            SIDEBAR_SWIPE_ACTION,
-            SIDEBAR_SWIPE_ACTION_ARCHIVE,
-            swipeSide === "archive" && SIDEBAR_SWIPE_ACTION_OPEN,
-            draggingRow ? "transition-none" : SIDEBAR_SWIPE_ACTION_TRANSITION,
-          )}
+          className={sidebarSwipeAction({
+            side: "archive",
+            open: swipeSide === "archive",
+            dragging: draggingRow,
+          })}
           data-swipe-action="delete"
           onClick={(e) => {
             e.stopPropagation();
@@ -304,12 +295,11 @@ export function WorkspaceRow({
             swipe to nothing, and waking is the one thing a parked row wants. */}
       {isPhone && snoozed && (
         <button
-          className={cn(
-            SIDEBAR_SWIPE_ACTION,
-            SIDEBAR_SWIPE_ACTION_UNSNOOZE,
-            swipeSide === "star" && SIDEBAR_SWIPE_ACTION_OPEN,
-            draggingRow ? "transition-none" : SIDEBAR_SWIPE_ACTION_TRANSITION,
-          )}
+          className={sidebarSwipeAction({
+            side: "unsnooze",
+            open: swipeSide === "star",
+            dragging: draggingRow,
+          })}
           data-swipe-action="unsnooze"
           onClick={(e) => {
             e.stopPropagation();
@@ -324,12 +314,11 @@ export function WorkspaceRow({
       )}
       {isPhone && !snoozed && (
         <button
-          className={cn(
-            SIDEBAR_SWIPE_ACTION,
-            pinned ? SIDEBAR_SWIPE_ACTION_STAR_ON : SIDEBAR_SWIPE_ACTION_STAR,
-            swipeSide === "star" && SIDEBAR_SWIPE_ACTION_OPEN,
-            draggingRow ? "transition-none" : SIDEBAR_SWIPE_ACTION_TRANSITION,
-          )}
+          className={sidebarSwipeAction({
+            side: pinned ? "starOn" : "star",
+            open: swipeSide === "star",
+            dragging: draggingRow,
+          })}
           data-swipe-action="star"
           onClick={(e) => {
             e.stopPropagation();
@@ -412,26 +401,18 @@ export function WorkspaceRow({
             the marker states what happened instead of implying a reply exists. */}
         <span className={SIDEBAR_RAIL}>
           {waiting || needsMyReview ? (
-            <span
-              className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.waiting}`}
-            />
+            <StatusDot state="waiting" />
           ) : failed ? (
-            <span
-              className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.failed}`}
-            />
+            <StatusDot state="failed" />
           ) : coordinates ? (
             // A coordinator's PR or branch is whichever thread shipped
             // last, which says little about the work: its rail is the
             // state alone, running or idle.
-            <span
-              className={`size-2 shrink-0 rounded-full ${row.running ? SIDEBAR_STATUS_DOT.running : SIDEBAR_STATUS_DOT.idle}`}
-            />
+            <StatusDot state={row.running ? "running" : "idle"} />
           ) : noSectionHeading ? (
             <WsStatusMark row={row} size={18} />
           ) : row.running ? (
-            <span
-              className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.running}`}
-            />
+            <StatusDot state="running" />
           ) : (
             <WsPrStatusMark
               sessions={row.sessions}

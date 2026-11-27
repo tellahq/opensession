@@ -78,6 +78,7 @@ import {
   media,
   motion,
   radius,
+  shadow,
   sidebarScale as scale,
   space,
   text,
@@ -517,6 +518,100 @@ export const sidebarStyles = stylex.create({
   face: {
     marginLeft: { default: null, ":not(:first-child)": scale.faceOverlap },
   },
+  draftAtRest: {
+    display: {
+      default: "inline-flex",
+      [stylex.when.ancestor(":hover", sidebarRowMarker)]: {
+        default: null,
+        [media.hover]: "none",
+      },
+    },
+  },
+
+  // ── Swipe rows: the phone swipe shell and the actions behind it ──
+  // The shell carries the 2px gap between rows, so the row inside it adds
+  // none; its corner clips the revealed actions to the row's own.
+  swipeRow: {
+    position: "relative",
+    marginTop: space.s2,
+    overflow: "hidden",
+    borderRadius: radius.control,
+    ["cornerShape"]: corner.squircle,
+  },
+  swipeAction: {
+    position: "absolute",
+    top: space.s0,
+    bottom: space.s0,
+    zIndex: 0,
+    display: "none",
+    width: scale.swipeActionWidth,
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space.s2,
+    borderStyle: "none",
+    fontSize: text.meta,
+    fontWeight: weight.heading,
+    willChange: "width",
+  },
+  swipeOpen: { display: { default: "none", [media.touch]: "flex" } },
+  swipeEase: {
+    transitionProperty: "width",
+    transitionDuration: motion.standard,
+    transitionTimingFunction: motion.ease,
+  },
+  swipeArchive: {
+    right: space.s0,
+    backgroundColor: color.red,
+    color: color.onRed,
+  },
+  swipeStar: {
+    left: space.s0,
+    backgroundColor: color.yellow,
+    color: color.onYellow,
+  },
+  swipeStarOn: {
+    left: space.s0,
+    backgroundColor: color.accent,
+    color: color.onAccent,
+  },
+  swipeUnsnooze: {
+    left: space.s0,
+    backgroundColor: color.accent,
+    color: color.onAccent,
+  },
+
+  // ── Lanes and pinned entries ──
+  laneEmpty: { opacity: scale.laneEmpty },
+  laneDropHover: {
+    borderRadius: radius.control,
+    ["cornerShape"]: corner.squircle,
+    backgroundColor: color.pressed,
+    opacity: 1,
+    boxShadow: shadow.dropRing,
+  },
+  pinEntry: { position: "relative" },
+  pinEntryDragging: {
+    zIndex: scale.dragLayer,
+    borderRadius: radius.control,
+    ["cornerShape"]: corner.squircle,
+    backgroundColor: color.page,
+    boxShadow: shadow.ringSm,
+  },
+  attnCount: {
+    minWidth: space.s16,
+    flex: "0 0 auto",
+    borderRadius: radius.pill,
+    paddingInline: space.s4,
+    textAlign: "center",
+    fontSize: scale.attnText,
+    lineHeight: scale.attnLeading,
+    fontWeight: weight.heading,
+    color: color.onRed,
+  },
+  attnBlue: { backgroundColor: color.blue },
+  attnRed: { backgroundColor: color.red },
+  automationRuns: { "--sidebar-icon-left": scale.nestedIconLeft },
 });
 
 /**
@@ -695,27 +790,54 @@ export const SIDEBAR_STATUS_GROUP = "[[data-status-group]+&]:mt-2";
  * the pointer wears a pill + accent ring, and lanes that only materialized for
  * the drag (they were empty) sit dimmed.
  */
-export const SIDEBAR_LANE_EMPTY = "opacity-55";
-export const SIDEBAR_LANE_DROP_HOVER =
-  "rounded-control bg-pressed opacity-100 shadow-[inset_0_0_0_1px_var(--accent,#6b8afd)]";
+export interface SidebarLaneOptions {
+  /** Materialized only for the drag: dimmed. */
+  empty?: boolean;
+  /** The lane under the pointer: a pill with an accent ring. */
+  dropHover?: boolean;
+}
 
-/** The drag-to-reorder wrapper around each Pinned row (Motion Reorder.Item). */
-export const SIDEBAR_PIN_ENTRY = "relative";
+/** A status lane, as a drop target or not. One StyleX call, so the drop
+ *  target's full opacity beats the empty lane's dim. */
+export function sidebarLane(options: SidebarLaneOptions = {}): string {
+  return cn(
+    SIDEBAR_STATUS_GROUP,
+    sx(
+      options.empty === true && sidebarStyles.laneEmpty,
+      options.dropHover === true && sidebarStyles.laneDropHover,
+    ),
+  );
+}
+
+/* The drag-to-reorder wrapper around each Pinned row (Motion Reorder.Item). */
+export interface SidebarPinEntryOptions {
+  /** Some drag is in flight. */
+  dragActive: boolean;
+  /** This entry is the one being dragged. */
+  dragging: boolean;
+}
 
 /**
  * While a row is being dragged it floats over its neighbours, so it needs a
  * solid background (rows are transparent over the app bg) and to win the
  * stacking order; the radius matches the row's own so the backdrop doesn't poke
- * out. `[&>*]:pointer-events-none` is the other half of the same state and used
+ * out. Muting the content's pointer events is the other half of the same state and used
  * to key off the LIST (`.sidebar-pin-list.is-drag-active`): rows sliding under
  * the pointer would otherwise fire mouseenter and pop their hover preview
  * cards, so the row content is muted and only the drag gesture sees the
  * pointer. Every entry wears it while any drag is in flight, which is what the
  * list-level selector did — so the list needs no class of its own.
  */
-export const SIDEBAR_PIN_ENTRY_DRAGGING =
-  "z-[5] rounded-control bg-bg smooth-shadow-ring-sm";
-export const SIDEBAR_PIN_DRAG_ACTIVE = "[&>*]:pointer-events-none";
+export function sidebarPinEntry(options: SidebarPinEntryOptions): string {
+  return cn(
+    // A child reach: the entry's content, not the entry.
+    options.dragActive && "[&>*]:pointer-events-none",
+    sx(
+      sidebarStyles.pinEntry,
+      options.dragging && sidebarStyles.pinEntryDragging,
+    ),
+  );
+}
 
 /**
  * The RepoTile a repo/feed band header leads with. It rides centred in the 22px
@@ -936,7 +1058,7 @@ export const SIDEBAR_AUTO_COG =
  * also how a nested row reads in Finder and the Xcode navigator. Indenting the
  * row box instead would leave one ragged left edge in a column of pills.
  */
-export const SIDEBAR_AUTOMATION_RUNS = "[--sidebar-icon-left:28px]";
+export const SIDEBAR_AUTOMATION_RUNS = sx(sidebarStyles.automationRuns);
 
 /**
  * ── Sticky machinery ────────────────────────────────────────────────────────
@@ -1209,11 +1331,14 @@ export const SIDEBAR_FILTER_DOT =
  * site's, because it carries the meaning: a repo band counts needs-input rows
  * and wears that lane's blue, while a feed band counts its attention lane and
  * wears that lane's colour (Plain's Urgent is red — SUPPORT_PRIORITY_GROUPS).
- * `rounded-full`, not `rounded-[999px]`: the old rule set no corner-shape, and
- * rounded-full is the one radius spelling base.css leaves un-squircled.
+ * A true pill: no squircle corner.
  */
-export const SIDEBAR_ATTN_COUNT =
-  "min-w-4 flex-[0_0_auto] rounded-full px-1 text-center text-[10px] leading-4 font-semibold text-white";
+export function sidebarAttnCount(tone: "blue" | "red"): string {
+  return sx(
+    sidebarStyles.attnCount,
+    tone === "blue" ? sidebarStyles.attnBlue : sidebarStyles.attnRed,
+  );
+}
 
 /**
  * ── Workspace rows: the trailing cluster ────────────────────────────────────
@@ -1332,6 +1457,13 @@ export const SIDEBAR_WS_FACE = sx(sidebarStyles.face);
  */
 export const SIDEBAR_WS_DRAFT = sx(sidebarStyles.draft);
 
+/** The same pencil on a workspace row, where it yields its spot to the hover
+ *  actions. */
+export const SIDEBAR_WS_DRAFT_YIELDS = sx(
+  sidebarStyles.draft,
+  sidebarStyles.draftAtRest,
+);
+
 /**
  * Wake countdown on a snoozed workspace row (moon + "1h"). It stands in for
  * the idle time badge, so it rests in that same right-edge slot, matches its
@@ -1351,62 +1483,46 @@ export const SIDEBAR_WS_SNOOZE = sx(sidebarStyles.snooze);
  * class, it is also what lets this name drop out of the hand-written list of
  * legacy classes base.css squircles there.
  */
-export const SIDEBAR_SWIPE_ROW =
-  "relative mt-0.5 overflow-hidden rounded-control";
+export const SIDEBAR_SWIPE_ROW = sx(sidebarStyles.swipeRow);
+
+export interface SidebarSwipeActionOptions {
+  /** `archive`: destructive, on the trailing edge because the swipe travels
+   *  left. `star`: pin, on the leading edge, in dark ink because the yellow
+   *  is too light for white. `starOn`: already pinned, the same action in
+   *  the accent, so the swipe reads as a toggle. `unsnooze`: a snoozed row's
+   *  leading edge wakes it instead (Pinned leaves snoozed rows out, so a pin
+   *  there would change nothing visible). */
+  side: "archive" | "star" | "starOn" | "unsnooze";
+  /** The gesture opened this side. Touch only: on a hover device the same
+   *  jobs are the row's hover actions, and a mouse can never open this. */
+  open: boolean;
+  /** The finger is down: no transition, which would lag the drag a frame. */
+  dragging: boolean;
+}
 
 /**
- * One revealed action behind the row. Hidden until the gesture opens its side,
- * and only on touch — on a hover device the same two jobs are the row's hover
- * actions, and a mouse can never open this. Its width tracks the drag through
- * `--swipe-action-w`, written straight onto the wrapper per frame.
+ * One revealed action behind a swiped row, its width tracking the drag
+ * through `--swipe-action-w`, written straight onto the wrapper per frame.
+ * Each side carries its own fill and its own ink. The icon's `shrink-0` is a
+ * child reach, so it stays a utility.
  */
-export const SIDEBAR_SWIPE_ACTION =
-  // `border-none`, not `border-0`: the latter zeroes the width but leaves
-  // the style at Tailwind's `solid` default, where the `border: 0` this
-  // replaced computed to `none`. Width resolves to 0 under either.
-  "absolute top-0 bottom-0 z-0 hidden w-[var(--swipe-action-w,82px)] flex-col items-center justify-center gap-0.5 border-none text-meta font-semibold will-change-[width] [&>svg]:shrink-0";
-
-/** Revealed because the gesture opened this side. Touch only, as above. */
-export const SIDEBAR_SWIPE_ACTION_OPEN = "[@media(hover:none)]:flex";
-
-/** The action grows and shrinks with the finger, except while the finger is
- *  actually down — a transition there would lag the drag by a frame. */
-export const SIDEBAR_SWIPE_ACTION_TRANSITION =
-  "transition-[width] duration-(--dur) ease-(--ease)";
-
-/**
- * Each side carries its own fill AND its own ink, so exactly one `text-*` ever
- * lands on the button. Kept off {@link SIDEBAR_SWIPE_ACTION}: a shared
- * `text-white` there plus a per-side override is two colour utilities on one
- * element, and which of those wins is Tailwind's output order, not the order
- * they are written.
- */
-
-/** Destructive, and on the trailing edge because the swipe travels left. */
-export const SIDEBAR_SWIPE_ACTION_ARCHIVE = "right-0 bg-red text-white";
-
-/** Pin, on the leading edge. Dark ink: the yellow is too light for white. */
-export const SIDEBAR_SWIPE_ACTION_STAR = "left-0 bg-yellow text-[#17130a]";
-
-/** Already pinned — the same action in the accent, so the swipe reads as a
- *  toggle rather than as a second way to pin. */
-export const SIDEBAR_SWIPE_ACTION_STAR_ON = "left-0 bg-accent text-on-accent";
-
-/** A snoozed row's leading edge wakes it instead of pinning it: a pin on a
- *  snoozed row changes nothing visible (Pinned leaves snoozed rows out), so
- *  the one swipe that side has goes to the action the row can actually take. */
-export const SIDEBAR_SWIPE_ACTION_UNSNOOZE = "left-0 bg-accent text-on-accent";
-
-export const SIDEBAR_STATUS_DOT = {
-  /** Yellow to match the "In progress" lane — green means "In review". */
-  running:
-    "bg-yellow animate-[pulse_1.4s_ease-in-out_infinite] motion-reduce:[animation-duration:1.4s]! motion-reduce:[animation-iteration-count:infinite]!",
-  /** A stopped run is actionable, but it is not a question for the person. */
-  failed: "bg-red shadow-[0_0_6px_var(--red)]",
-  waiting:
-    "bg-blue shadow-[0_0_6px_var(--blue)] animate-[pulse_1.2s_ease-in-out_infinite] motion-reduce:[animation-duration:1.2s]! motion-reduce:[animation-iteration-count:infinite]!",
-  idle: "bg-faint",
-} as const;
+export function sidebarSwipeAction(options: SidebarSwipeActionOptions): string {
+  return cn(
+    "[&>svg]:shrink-0",
+    sx(
+      sidebarStyles.swipeAction,
+      options.side === "archive"
+        ? sidebarStyles.swipeArchive
+        : options.side === "star"
+          ? sidebarStyles.swipeStar
+          : options.side === "starOn"
+            ? sidebarStyles.swipeStarOn
+            : sidebarStyles.swipeUnsnooze,
+      options.open && sidebarStyles.swipeOpen,
+      !options.dragging && sidebarStyles.swipeEase,
+    ),
+  );
+}
 
 export interface SidebarRowOptions {
   /** `rail`: the row lays its mark, title and trailing meta out on the rail

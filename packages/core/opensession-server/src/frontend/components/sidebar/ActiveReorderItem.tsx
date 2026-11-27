@@ -1,11 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { Reorder, useDragControls } from "motion/react";
 import type { ActiveRowDrag } from "../../hooks/useActiveRowDrag";
-import {
-  SIDEBAR_PIN_DRAG_ACTIVE,
-  SIDEBAR_PIN_ENTRY,
-  SIDEBAR_PIN_ENTRY_DRAGGING,
-} from "../../lib/sidebar-classes";
+import { sidebarPinEntry } from "../../lib/sidebar-classes";
 import { cn } from "../../ui/cn";
 
 /**
@@ -48,11 +44,10 @@ export function ActiveReorderItem({
       onDragStart={() => drag.onDragStart(rowKey)}
       onDragEnd={drag.onDragEnd}
       whileDrag={{ scale: 1.01 }}
-      className={cn(
-        SIDEBAR_PIN_ENTRY,
-        drag.dragKey && SIDEBAR_PIN_DRAG_ACTIVE,
-        drag.dragKey === rowKey && SIDEBAR_PIN_ENTRY_DRAGGING,
-      )}
+      className={sidebarPinEntry({
+        dragActive: !!drag.dragKey,
+        dragging: drag.dragKey === rowKey,
+      })}
       onClickCapture={drag.onClickCapture}
     >
       {children}

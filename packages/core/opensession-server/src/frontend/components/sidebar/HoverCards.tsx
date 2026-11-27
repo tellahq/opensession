@@ -1,3 +1,4 @@
+import { StatusDot, type StatusDotState } from "../../ui/status";
 import { loopScheduleLabel } from "../SessionBanners";
 import { workspaceBranchList } from "../../lib/pr-workspace";
 import type { WorkspaceOverview } from "../../lib/api";
@@ -17,7 +18,6 @@ import {
   type WsCardRow,
 } from "../../lib/sidebar-hover";
 import {
-  SIDEBAR_STATUS_DOT,
   SIDEBAR_WS_SNOOZE,
   SIDEBAR_WS_TICKER,
 } from "../../lib/sidebar-classes";
@@ -152,9 +152,7 @@ export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
           hasHead && "mt-[5px]",
         )}
       >
-        {s.isRunning && (
-          <span className={`size-2 shrink-0 rounded-full ${state.dotClass}`} />
-        )}
+        {s.isRunning && <StatusDot state={state.dot ?? "running"} />}
         <span className="min-w-0 truncate">{s.title}</span>
       </div>
 
@@ -333,9 +331,7 @@ export function WsPrStatusMark({
           className="flex shrink-0 items-center justify-center"
           style={{ width: size, height: size }}
         >
-          <span
-            className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.idle}`}
-          />
+          <StatusDot state="idle" />
         </span>
       );
     // A branch with no PR yet shows a branch glyph. A grey PR glyph read as
@@ -403,14 +399,12 @@ export function WsStatusMark({
       {child}
     </span>
   );
-  const dot = (cls: string) =>
-    slot(<span className={`size-2 shrink-0 rounded-full ${cls}`} />);
+  const dot = (state: StatusDotState) => slot(<StatusDot state={state} />);
   if (row.sessions.some((session) => session.waitingForInput))
-    return dot(SIDEBAR_STATUS_DOT.waiting);
-  if (workspaceRunNeedingAttention(row.sessions))
-    return dot(SIDEBAR_STATUS_DOT.failed);
-  if (row.status === "needsinput") return dot(SIDEBAR_STATUS_DOT.waiting);
-  if (row.running) return dot(SIDEBAR_STATUS_DOT.running);
+    return dot("waiting");
+  if (workspaceRunNeedingAttention(row.sessions)) return dot("failed");
+  if (row.status === "needsinput") return dot("waiting");
+  if (row.running) return dot("running");
   // A draft workspace has no session and so no PR to show. The flat-repo
   // grouping's mark stands in for WsPrStatusMark's own draft branch above.
   if (row.workspace?.draft && row.sessions.length === 0)
@@ -439,7 +433,7 @@ export function WsStatusMark({
   const prSession = frontingPrSession(row.sessions);
   if (row.status === "pending" && prSession && sessionPrMerged(prSession))
     return slot(<IconGitMerge size={size} className="text-purple" />);
-  return dot(SIDEBAR_STATUS_DOT.idle);
+  return dot("idle");
 }
 
 /**
@@ -576,11 +570,7 @@ function WsOverviewInfo({
           hasHead && "mt-[5px]",
         )}
       >
-        {row.running && (
-          <span
-            className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.running}`}
-          />
-        )}
+        {row.running && <StatusDot state="running" />}
         <span className="min-w-0 truncate">{row.name}</span>
       </div>
       <WsBranchesLine workspace={row.workspace} />

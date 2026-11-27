@@ -6,7 +6,6 @@ import { cn } from "../../ui/cn";
 import { ContextMenu } from "../../ui/menu";
 import type { NavigationActions } from "../../lib/navigation";
 import {
-  SIDEBAR_ATTN_COUNT,
   SIDEBAR_GROUP_COUNT,
   SIDEBAR_GROUP_NAME,
   SIDEBAR_LANE_COUNT,
@@ -14,6 +13,7 @@ import {
   SIDEBAR_RAIL,
   SIDEBAR_REPO_TILE,
   SIDEBAR_STATUS_GROUP,
+  sidebarAttnCount,
   sidebarChevron,
   sidebarHeader,
 } from "../../lib/sidebar-classes";
@@ -271,7 +271,7 @@ export function createSidebarFeedRenderers({
             </span>
             {!open && attentionCount > 0 && (
               <span
-                className={cn(SIDEBAR_ATTN_COUNT, "bg-red")}
+                className={sidebarAttnCount("red")}
                 aria-label={`${attentionCount} urgent`}
               >
                 {attentionCount}
