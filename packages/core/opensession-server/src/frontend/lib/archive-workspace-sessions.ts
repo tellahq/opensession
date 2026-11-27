@@ -21,6 +21,12 @@ export interface ArchiveWorkspaceSessionsDeps {
   rememberArchived: (ids: string[]) => void;
   dropStalePins: (sessions: UnifiedSession[]) => void;
   refreshSessions: () => void;
+  /**
+   * Every member of this workspace is now archived. The server keeps the
+   * workspace's record, so nothing else says it is no longer a place to go
+   * back to. Not called when any member failed.
+   */
+  workspaceArchived?: (workspaceId: string) => void;
 }
 
 /** Resolves false when nothing was archived. */
@@ -73,6 +79,7 @@ export async function archiveWorkspaceSessions(
     console.error("Archive workspace failed for:", failed.join(", "));
   // One entry for the whole row, so ⌘Z restores the workspace in one press.
   if (archived.length) deps.rememberArchived(archived);
+  if (oneWorkspace && !failed.length) deps.workspaceArchived?.(workspaceId);
   const done = new Set(archived);
   deps.dropStalePins(sessions.filter((s) => done.has(s.id)));
   deps.refreshSessions();

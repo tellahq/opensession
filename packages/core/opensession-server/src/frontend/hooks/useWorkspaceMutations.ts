@@ -73,6 +73,10 @@ export function useWorkspaceMutations({
       rememberArchived,
       dropStalePins,
       refreshSessions,
+      // An archived workspace keeps its record on the server, so a lookup
+      // would still find it. The Sessions button is told here instead.
+      workspaceArchived: (workspaceId) =>
+        forgetConversation({ view: "workspace", id: workspaceId }),
     });
 
   const archiveWorkspaceFromHeader = (members: UnifiedSession[]) => {
