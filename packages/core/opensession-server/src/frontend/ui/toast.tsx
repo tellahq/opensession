@@ -1,4 +1,5 @@
 import { Toast as BaseToast } from "@base-ui/react/toast";
+import * as stylex from "@stylexjs/stylex";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import {
   IconArchive,
@@ -20,7 +21,24 @@ import {
 } from "../lib/notification-classes";
 import { toastIconName, type ToastIconName } from "../lib/toast-icon";
 import { AnimatedCheck } from "./copy";
+import { cn } from "./cn";
+import { SELECTABLE } from "./dialog-styles";
+import { focusStyles } from "./focus-styles";
 import { Spinner } from "./spinner";
+import {
+  color,
+  controlHeight,
+  corner,
+  geometry,
+  leading,
+  media,
+  motion,
+  radius,
+  shadow,
+  space,
+  text,
+  weight,
+} from "./tokens.stylex";
 import { Tooltip } from "./tooltip";
 import {
   clearUndoAction,
@@ -257,7 +275,15 @@ function ToastViewport({ container }: { container?: HTMLElement | null }) {
     <BaseToast.Portal container={container ?? undefined}>
       <BaseToast.Viewport
         ref={viewportRef}
-        className={`${TOAST_NOTICE_LANE} ${container ? "absolute" : "fixed"} toast-viewport mx-auto h-[var(--toast-frontmost-height)] w-[min(480px,calc(100vw-32px))] outline-none phone:w-full phone:px-3`}
+        // `toast-viewport` is the hook ToastProgress finds its stack by.
+        className={cn(
+          stylex.props(
+            styles.viewport,
+            container ? styles.inContainer : styles.onScreen,
+          ).className,
+          "toast-viewport",
+          TOAST_NOTICE_LANE,
+        )}
       >
         {items.map((item) => (
           <ToastCard key={item.id} toast={item} />
@@ -284,29 +310,30 @@ function ToastCard({
       // until the process that owns it dismisses it.
       swipeDirection={data.ongoing ? [] : ["down", "right"]}
       onClick={data.ongoing ? undefined : () => dismissToast(data.id)}
-      className={[
-        `${data.ongoing ? "pointer-events-none" : "pointer-events-auto"} left-1/2 w-max max-w-full outline-none phone:max-w-[calc(100vw-24px)]`,
-        data.ongoing ? ONGOING_TOAST_POSITION : "absolute bottom-0",
-        "[z-index:calc(100-var(--toast-index))] [transform-origin:center_bottom]",
-        "[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)-var(--toast-index)*8px))_scale(calc(1-(var(--toast-index)*0.04)))]",
-        "data-[expanded]:[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)-var(--toast-offset-y)-var(--toast-index)*8px))_scale(1)]",
-        "transition-[transform,translate,scale,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-opacity",
-        "data-[starting-style]:opacity-0 data-[starting-style]:[translate:0_8px] data-[starting-style]:[scale:0.96] data-[ending-style]:opacity-0 data-[ending-style]:[translate:0_8px] data-[ending-style]:[scale:0.96] data-[limited]:opacity-0 motion-reduce:data-[starting-style]:[translate:0_0] motion-reduce:data-[starting-style]:[scale:1] motion-reduce:data-[ending-style]:[translate:0_0] motion-reduce:data-[ending-style]:[scale:1]",
-      ].join(" ")}
+      className={cn(
+        stylex.props(
+          styles.root,
+          data.ongoing ? styles.passive : styles.interactive,
+          !data.ongoing && styles.notice,
+        ).className,
+        data.ongoing && ONGOING_TOAST_POSITION,
+      )}
     >
       <BaseToast.Content
-        className={[
-          "relative flex max-w-full items-center gap-2 overflow-hidden whitespace-normal rounded-[999px] border border-divider-soft bg-popup",
-          "py-1.5 text-supporting font-medium leading-tight text-fg smooth-shadow-md",
-          iconName ? "pl-2.5" : "pl-3",
-          data.action ? "pr-1.5" : "pr-3",
-        ].join(" ")}
+        className={cn(
+          stylex.props(
+            styles.pill,
+            iconName ? styles.pillIconStart : styles.pillTextStart,
+            data.action ? styles.pillActionEnd : styles.pillTextEnd,
+          ).className,
+          SELECTABLE,
+        )}
       >
         <ToastStatusIcon name={iconName} ongoing={data.ongoing} />
         {/* Description renders a <p>; remove its browser margins so the
 				    visible height comes from the pill padding alone. */}
         <BaseToast.Description
-          className="my-0 min-w-0 line-clamp-2"
+          className={stylex.props(styles.message).className}
           title={data.message}
         >
           {data.message}
@@ -320,7 +347,9 @@ function ToastCard({
               }}
               // The pill stays tight, so the action carries the finger
               // target on its own: 28px of box inside a 44px tap area.
-              className="focus-ring relative -my-1 ml-1 shrink-0 cursor-pointer rounded-md px-2 py-1 text-supporting font-semibold text-accent transition-[background-color,transform] duration-150 hover:bg-hover active:scale-[0.96] phone:-my-1.5 phone:ml-0.5 phone:grid phone:min-h-7 phone:place-items-center phone:rounded-[999px] phone:px-2.5 phone:after:absolute phone:after:inset-x-0 phone:after:top-1/2 phone:after:h-11 phone:after:-translate-y-1/2 phone:after:content-['']"
+              className={
+                stylex.props(styles.action, focusStyles.ring).className
+              }
             >
               {data.action.label}
             </BaseToast.Action>
@@ -341,8 +370,9 @@ function ToastStatusIcon({
   name: ToastIconName | null;
   ongoing?: boolean;
 }) {
-  const className = "shrink-0 text-dim";
-  if (ongoing) return <Spinner className="text-dim" />;
+  const className = stylex.props(styles.glyph).className;
+  if (ongoing)
+    return <Spinner className={stylex.props(styles.dim).className} />;
 
   switch (name) {
     case "archive":
@@ -371,10 +401,7 @@ function ToastStatusIcon({
       return <IconTrash size={14} className={className} aria-hidden />;
     case "error":
       return (
-        <span
-          aria-hidden
-          className="grid size-3.5 shrink-0 place-items-center rounded-full text-meta font-semibold text-dim"
-        >
+        <span aria-hidden {...stylex.props(styles.errorGlyph)}>
           !
         </span>
       );
@@ -420,11 +447,167 @@ function ToastProgress({ duration }: { duration: number }) {
     };
   }, [duration]);
 
-  return (
-    <span
-      ref={lineRef}
-      aria-hidden
-      className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 origin-left bg-dim/35"
-    />
-  );
+  return <span ref={lineRef} aria-hidden {...stylex.props(styles.progress)} />;
 }
+
+/** A tone's ink at a fixed strength over whatever is behind it. */
+const ink = (c: string, pct: number) =>
+  `color-mix(in oklab, ${c} ${pct}%, transparent)`;
+
+// Base UI positions the stack through custom properties on each toast: its
+// index from the front, the swipe in flight, and (expanded) its offset.
+const stacked = `translateX(calc(-50% + var(--toast-swipe-movement-x))) translateY(calc(var(--toast-swipe-movement-y) - var(--toast-index) * ${geometry.toastStackStep})) scale(calc(1 - (var(--toast-index) * ${geometry.toastStackShrink})))`;
+const expanded = `translateX(calc(-50% + var(--toast-swipe-movement-x))) translateY(calc(var(--toast-swipe-movement-y) - var(--toast-offset-y) - var(--toast-index) * ${geometry.toastStackStep})) scale(1)`;
+
+const styles = stylex.create({
+  viewport: {
+    marginInline: "auto",
+    height: geometry.toastFrontHeight,
+    width: { default: geometry.toastMaxWidth, [media.phone]: "100%" },
+    paddingInline: { default: null, [media.phone]: space.s12 },
+    outline: "none",
+  },
+  onScreen: { position: "fixed" },
+  inContainer: { position: "absolute" },
+  root: {
+    left: "50%",
+    width: "max-content",
+    maxWidth: { default: "100%", [media.phone]: geometry.toastMaxWidthPhone },
+    outline: "none",
+    zIndex: "calc(100 - var(--toast-index))",
+    transformOrigin: "center bottom",
+    transform: { default: stacked, ":is([data-expanded])": expanded },
+    transitionProperty: {
+      default: "transform, translate, scale, opacity",
+      [media.reducedMotion]: "opacity",
+    },
+    transitionDuration: motion.standard,
+    transitionTimingFunction: motion.toastEase,
+    opacity: {
+      default: null,
+      ":is([data-starting-style])": 0,
+      ":is([data-ending-style])": 0,
+      ":is([data-limited])": 0,
+    },
+    translate: {
+      default: null,
+      ":is([data-starting-style])": {
+        default: motion.toastDrop,
+        [media.reducedMotion]: "0 0",
+      },
+      ":is([data-ending-style])": {
+        default: motion.toastDrop,
+        [media.reducedMotion]: "0 0",
+      },
+    },
+    scale: {
+      default: null,
+      ":is([data-starting-style])": {
+        default: motion.toastScale,
+        [media.reducedMotion]: 1,
+      },
+      ":is([data-ending-style])": {
+        default: motion.toastScale,
+        [media.reducedMotion]: 1,
+      },
+    },
+  },
+  interactive: { pointerEvents: "auto" },
+  passive: { pointerEvents: "none" },
+  notice: { position: "absolute", bottom: space.s0 },
+  // A capsule, squircled like every other rounded surface.
+  pill: {
+    position: "relative",
+    display: "flex",
+    maxWidth: "100%",
+    alignItems: "center",
+    gap: space.s8,
+    overflow: "hidden",
+    whiteSpace: "normal",
+    borderRadius: radius.capsule,
+    ["cornerShape"]: corner.squircle,
+    borderWidth: geometry.hairline,
+    borderStyle: "solid",
+    borderColor: color.dividerSoft,
+    backgroundColor: color.popup,
+    paddingBlock: space.s6,
+    fontSize: text.label,
+    fontWeight: weight.medium,
+    lineHeight: leading.tight,
+    color: color.fg,
+    boxShadow: shadow.md,
+  },
+  pillIconStart: { paddingInlineStart: space.s10 },
+  pillTextStart: { paddingInlineStart: space.s12 },
+  pillActionEnd: { paddingInlineEnd: space.s6 },
+  pillTextEnd: { paddingInlineEnd: space.s12 },
+  // Description renders a <p>; its browser margins would add to the pill.
+  message: {
+    marginBlock: space.s0,
+    minWidth: 0,
+    display: "-webkit-box",
+    overflow: "hidden",
+    WebkitBoxOrient: "vertical",
+    WebkitLineClamp: 2,
+  },
+  // The pill stays tight, so the action carries the finger target on its
+  // own: 28px of box inside a 44px tap area.
+  action: {
+    position: "relative",
+    marginBlock: {
+      default: `calc(-1 * ${space.s4})`,
+      [media.phone]: `calc(-1 * ${space.s6})`,
+    },
+    marginInlineStart: { default: space.s4, [media.phone]: space.s2 },
+    display: { default: null, [media.phone]: "grid" },
+    minHeight: { default: null, [media.phone]: geometry.rowMenuTrigger },
+    flexShrink: 0,
+    placeItems: { default: null, [media.phone]: "center" },
+    cursor: "pointer",
+    borderRadius: { default: radius.md, [media.phone]: radius.capsule },
+    ["cornerShape"]: corner.squircle,
+    paddingInline: { default: space.s8, [media.phone]: space.s10 },
+    paddingBlock: space.s4,
+    fontSize: text.label,
+    fontWeight: weight.strong,
+    color: color.accentInk,
+    backgroundColor: {
+      default: null,
+      ":hover": { default: null, [media.hover]: color.hover },
+    },
+    scale: { default: null, ":active": motion.pressScale },
+    transitionProperty: "background-color, scale",
+    transitionDuration: motion.micro,
+    transitionTimingFunction: motion.ease,
+    "::after": {
+      content: { default: null, [media.phone]: "''" },
+      position: { default: null, [media.phone]: "absolute" },
+      insetInline: { default: null, [media.phone]: space.s0 },
+      top: { default: null, [media.phone]: "50%" },
+      height: { default: null, [media.phone]: controlHeight.touch },
+      translate: { default: null, [media.phone]: "0 -50%" },
+    },
+  },
+  glyph: { flexShrink: 0, color: color.dim },
+  dim: { color: color.dim },
+  errorGlyph: {
+    display: "grid",
+    width: space.s14,
+    height: space.s14,
+    flexShrink: 0,
+    placeItems: "center",
+    borderRadius: radius.pill,
+    fontSize: text.meta,
+    fontWeight: weight.strong,
+    color: color.dim,
+  },
+  progress: {
+    pointerEvents: "none",
+    position: "absolute",
+    insetInline: space.s0,
+    bottom: space.s0,
+    height: space.s2,
+    transformOrigin: "left",
+    backgroundColor: ink(color.dim, 35),
+  },
+});

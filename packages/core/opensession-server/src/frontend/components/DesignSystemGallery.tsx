@@ -43,6 +43,7 @@ import {
   rowMenuTriggerClasses,
 } from "../ui/settings";
 import { ResponsiveDialog } from "../ui/sheet";
+import { dismissToast, toast, ToastHost } from "../ui/toast";
 import {
   EmptyState,
   InlineAlert,
@@ -63,6 +64,28 @@ import {
   IconRepo,
   IconSliders,
 } from "./icons";
+
+/** A stack of every toast shape, held long enough to look at. */
+function showToasts() {
+  const duration = 60_000;
+  toast("Session archived", {
+    duration,
+    action: { label: "Undo", onClick: () => undefined },
+  });
+  toast("Couldn't reach the runner", { duration });
+  toast("Link copied", { duration });
+}
+
+let ongoingToast: number | null = null;
+
+function toggleOngoing() {
+  if (ongoingToast !== null) {
+    dismissToast(ongoingToast);
+    ongoingToast = null;
+    return;
+  }
+  ongoingToast = toast("Starting preview", { ongoing: true });
+}
 
 function SectionLabel({ children }: { children: string }) {
   return (
@@ -452,6 +475,14 @@ export function DesignSystemGallery() {
 
         <section aria-label="States and feedback">
           <SectionLabel>States and feedback</SectionLabel>
+          <div className="mb-4 flex flex-wrap gap-2">
+            <Button size="sm" onClick={showToasts}>
+              Show toasts
+            </Button>
+            <Button size="sm" variant="ghost" onClick={toggleOngoing}>
+              Toggle live status
+            </Button>
+          </div>
           <div className="flex flex-col gap-3">
             <InlineAlert variant="info" title="Info">
               New semantic tokens live in styles/tailwind.css.
@@ -587,6 +618,8 @@ export function DesignSystemGallery() {
           </div>
         </section>
       </PageLayout>
+      {/* The gallery renders outside the app shell, so it hosts its own. */}
+      <ToastHost />
     </main>
   );
 }
