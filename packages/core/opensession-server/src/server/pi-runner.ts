@@ -107,6 +107,10 @@ import {
 } from "./run-instructions";
 import { stampIncidentDeclaration } from "./incident-declarations";
 import {
+  createPiGuidanceDiscovery,
+  piGuidanceDiscoveryTools,
+} from "./pi-guidance";
+import {
   guardStripeApprovalCall,
   recordStripeDraftInvoice,
   stripeApprovalsEnforced,
@@ -3201,8 +3205,21 @@ async function* runPiAttempt(
           break;
       }
     }
+    const guidanceDiscovery = createPiGuidanceDiscovery({
+      workspaceRoot: cwd,
+      readText: async (absPath) => {
+        try {
+          const buf = await guardedOps.read.readFile(absPath);
+          return buf.toString("utf-8");
+        } catch {
+          return null;
+        }
+      },
+      listGlob: async (pattern, baseDir) =>
+        guardedOps.find.glob(pattern, baseDir, { ignore: [], limit: 64 }),
+    });
     const customTools = piSteeringBoundaryTools(
-      baseCustomTools,
+      piGuidanceDiscoveryTools(baseCustomTools, guidanceDiscovery),
       () => steeringBoundaryPending,
     );
     // Codemode only orchestrates the tools above, so a run without any has
