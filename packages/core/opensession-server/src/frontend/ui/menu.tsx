@@ -97,6 +97,7 @@ function Popup({
   anchor,
   finalFocus,
   footer,
+  aside,
   children,
 }: {
   className?: string;
@@ -118,9 +119,22 @@ function Popup({
   finalFocus?: React.ComponentProps<typeof BaseMenu.Popup>["finalFocus"];
   /** Non-scrolling footer docked flush to the bottom edge of the popup. */
   footer?: React.ReactNode;
+  /** Non-scrolling panel docked beside the list, on its right. The list and
+   *  any footer stay one column; the aside takes the popup's full height. */
+  aside?: React.ReactNode;
   children: React.ReactNode;
 }) {
   if (useDeferredPopupRoot()) return null;
+  const list = (
+    <>
+      <div
+        {...stylex.props(popup.scroll, footer ? popup.scrollAboveFooter : null)}
+      >
+        {children}
+      </div>
+      {footer}
+    </>
+  );
   return (
     <BaseMenu.Portal
       // Base UI otherwise inherits a containing popup's portal target. The
@@ -140,20 +154,29 @@ function Popup({
       >
         <BaseMenu.Popup
           {...sx(
-            [popup.surface, footer ? popup.withFooter : null],
+            [
+              popup.surface,
+              aside ? popup.withAside : footer ? popup.withFooter : null,
+            ],
             cn(POPUP_HOOK, className),
           )}
           finalFocus={finalFocus}
         >
-          <div
-            {...stylex.props(
-              popup.scroll,
-              footer ? popup.scrollAboveFooter : null,
-            )}
-          >
-            {children}
-          </div>
-          {footer}
+          {aside ? (
+            <>
+              <div
+                {...stylex.props(
+                  popup.asideList,
+                  footer ? popup.withFooter : null,
+                )}
+              >
+                {list}
+              </div>
+              {aside}
+            </>
+          ) : (
+            list
+          )}
         </BaseMenu.Popup>
       </BaseMenu.Positioner>
     </BaseMenu.Portal>
