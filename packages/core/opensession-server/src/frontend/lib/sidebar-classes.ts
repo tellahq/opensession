@@ -367,7 +367,10 @@ export const SIDEBAR_GROUP_HEADER_INSET = `pt-[11px] pr-1 pb-[11px] pl-1 desktop
  * rows that lead nowhere between the rows that do.
  */
 export const SIDEBAR_LANE_HEADER =
-  "gap-[5px] pt-[9px] pb-[5px] text-label font-semibold desktop:h-[var(--sidebar-cap-h)] desktop:min-h-[var(--sidebar-cap-h)] desktop:pt-1 desktop:pb-1";
+  "gap-[5px] pt-[9px] pb-[5px] text-label font-semibold desktop:h-[var(--sidebar-cap-h)] desktop:min-h-[var(--sidebar-cap-h)] desktop:pt-1 desktop:pb-1 " +
+  // Under a place title the captions can be quieter: the rows' own size in a
+  // regular weight, set apart by their muted ink alone.
+  "new-layout:text-item-title new-layout:font-normal";
 
 /**
  * The heading's own name. `truncate` before any width utility: it is the pair
@@ -579,6 +582,13 @@ export const SIDEBAR_STICKY_LANE_NESTED =
  * column.
  */
 export const SIDEBAR_BAND_LABEL = "text-label font-semibold text-dim";
+
+/**
+ * The new layout names each place (Sessions, Activity, Support, Library) at the
+ * top of its sidebar. It is the sidebar's title, not a caption over a band, so
+ * it is set a clear step above the rows in full ink.
+ */
+export const SIDEBAR_PLACE_TITLE = "text-dialog-title font-semibold text-fg";
 
 /**
  * The heading's toggle button. Horizontal padding is NOT here: each band sits

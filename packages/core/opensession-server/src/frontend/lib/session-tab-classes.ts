@@ -119,14 +119,14 @@ export const TAB_SCROLL =
 /**
  * The new layout's strip (`layout.attached`). It sits in the grey window row
  * rather than in a band of its own, so it paints no fill and no closing rule:
- * the row has both. Tabs hang from 6px below the row's top edge to its bottom,
+ * the row has both. Tabs hang from 4px below the row's top edge to its bottom,
  * where the active one meets the sheet.
  *
  * No `session-tabs` hook: that name tells the top bar a strip overlaps its
  * lower edge, and this one is beside the bar, not under it.
  */
 export const TAB_STRIP_ATTACHED =
-  "group/strip relative flex min-w-0 flex-1 items-stretch gap-0.5 pt-1.5";
+  "group/strip relative flex min-w-0 flex-1 items-stretch gap-0.5 pt-1";
 
 /** Added to TAB_SCROLL: full height so a tab can reach the row's bottom edge,
  *  and above the panel's outline (WORKSPACE_SHELL, z 30) so the active tab
@@ -255,12 +255,17 @@ export type TabState = {
 /**
  * An attached tab. The active one is a piece of the sheet: its fill, a
  * hairline up both sides and over the top, and no bottom edge. The rest are
- * words on the row until they are pointed at. Every tab carries the border, in
- * a colour or not, so selecting one moves nothing.
+ * words on the row until they are pointed at, and then a pill floating clear
+ * of the sheet, not a piece of it. Every tab carries the border, in a colour or
+ * not, so selecting one moves nothing.
  */
 const TAB_ATTACHED_BASE =
   "relative inline-flex max-w-[200px] shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
-  "rounded-t-[10px] [corner-shape:round] border border-b-0 px-3 text-label shadow-none transition-[background-color,color]";
+  "[corner-shape:round] border px-3 text-item-title shadow-none transition-[background-color,color]";
+const TAB_ATTACHED_OUTLINE = {
+  active: "rounded-t-[10px] border-b-0",
+  inactive: "mb-1 rounded-[10px]",
+};
 
 function attachedTabClass({ active, waiting, colored }: TabState): string {
   const ink = active || waiting ? "text-fg" : "text-dim hover:text-fg";
@@ -272,7 +277,10 @@ function attachedTabClass({ active, waiting, colored }: TabState): string {
     : active
       ? "border-[color:var(--tab-edge,var(--divider))] bg-[var(--tab-fill)] [--tab-fill:var(--bg)]"
       : "border-transparent bg-transparent hover:bg-hover";
-  return `${TAB_ATTACHED_BASE} ${ink} ${surface}`;
+  const outline = active
+    ? TAB_ATTACHED_OUTLINE.active
+    : TAB_ATTACHED_OUTLINE.inactive;
+  return `${TAB_ATTACHED_BASE} ${outline} ${ink} ${surface}`;
 }
 
 /**

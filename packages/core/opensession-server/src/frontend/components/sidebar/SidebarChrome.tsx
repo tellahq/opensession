@@ -9,6 +9,7 @@ import {
   SIDEBAR_HEADER_BTN_PHONE,
   SIDEBAR_HOVER_LAYER,
   SIDEBAR_NAV_X,
+  SIDEBAR_PLACE_TITLE,
   SIDEBAR_STICKY_BAND,
   SIDEBAR_STICKY_BAND_ROW,
   SIDEBAR_STUCK_BACKING,
@@ -266,6 +267,8 @@ export function SidebarChrome({
                   // section down: this heading is written inline rather than
                   // composed from it only because of the strip above.
                   "shrink-0 text-label font-semibold text-dim group-hover/wshead:text-fg",
+                  // The new layout's place title instead (PlaceNav).
+                  newLayout && SIDEBAR_PLACE_TITLE,
                   isPhone && "hidden",
                 )}
                 ref={(element) => {
