@@ -332,7 +332,6 @@ import { useComposerNoteShortcut } from "../hooks/useComposerNoteShortcut";
 import { PulseDot } from "../ui/status";
 import { TURN_SPACER } from "../lib/app-shell-classes";
 import {
-  SESSION_DELETE_LABEL,
   SESSION_LINK,
   SESSION_LINK_LINEAR,
   SESSION_LINK_PLAIN,

@@ -1,5 +1,17 @@
 import type { ReactNode } from "react";
-import { SESSION_DELETE_LABEL } from "../../lib/session-viewer-classes";
+import * as stylex from "@stylexjs/stylex";
+import { PageLoader } from "../../ui/page-loader";
+import { sx } from "../../ui/sx";
+import {
+  blur,
+  color,
+  corner,
+  layer,
+  radius,
+  shadow,
+  space,
+  text,
+} from "../../ui/tokens.stylex";
 import { Button } from "../../ui/button";
 import { Modal } from "../../ui/modal";
 import { DeleteSessionDialog } from "../DeleteSessionDialog";
@@ -38,6 +50,35 @@ interface SessionViewerDialogsProps {
   branchActions: BranchDialogActions;
 }
 
+const styles = stylex.create({
+  overlay: {
+    position: "absolute",
+    inset: space.s0,
+    zIndex: layer.shellOverlay,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: color.veil,
+    backdropFilter: blur.veil,
+  },
+  card: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: space.s14,
+    borderRadius: radius.xl,
+    ["cornerShape"]: corner.squircle,
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: color.line,
+    backgroundColor: color.panel,
+    paddingInline: space.s32,
+    paddingBlock: space.s24,
+    boxShadow: shadow.lg,
+  },
+  label: { fontSize: text.label, color: color.dim },
+});
+
 export function SessionViewerDialogs({
   confirmDialog,
   deletion,
@@ -55,18 +96,14 @@ export function SessionViewerDialogs({
              .session-delete-overlay')` whether a click landed on a blocking
              surface. Drop the name and a click through this overlay starts
              dismissing what's underneath it. */
-          className="session-delete-overlay absolute inset-0 z-shell-overlay flex items-center justify-center bg-bg/72 backdrop-blur-[2px]"
+          {...sx(styles.overlay, "session-delete-overlay")}
           role="status"
           aria-live="polite"
         >
-          <div className="flex flex-col items-center gap-[14px] rounded-xl border border-line bg-panel px-8 py-[26px] smooth-shadow-lg">
-            {/* `rounded-full` rather than `rounded-[50%]`: base.css grants the
-                squircle to every `rounded-*` class EXCEPT `rounded-full`, and
-                this ring was a bare `border-radius: 50%` with no corner-shape.
-                It serialises as a clamped huge px value instead of 50%, which
-                on a square box is the same circle. */}
-            <div className="size-[30px] animate-spin rounded-full border-2 border-line-strong border-t-accent" />
-            <span className={SESSION_DELETE_LABEL}>{deletion.label}</span>
+          {/* The app's one large waiting spinner, as on an empty pane. */}
+          <div {...stylex.props(styles.card)}>
+            <PageLoader />
+            <span {...stylex.props(styles.label)}>{deletion.label}</span>
           </div>
         </div>
       )}
@@ -87,7 +124,7 @@ export function SessionViewerDialogs({
       >
         <Modal.Content>
           <Modal.Header title="Move to a branch?" />
-          <Modal.Description className="m-0 text-pretty text-supporting font-normal leading-relaxed text-dim">
+          <Modal.Description>
             {branch.mode === "create"
               ? "You need to move this session to a branch before you can create a PR."
               : "Copies this session’s changes to a new branch without removing them from the shared checkout."}

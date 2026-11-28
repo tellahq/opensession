@@ -90,6 +90,9 @@ export const color = stylex.defineConsts({
   /** The dimming under a dialog, and the lighter one under a glass palette
    *  (the palette composites the scrim through its own fill). */
   scrim: "rgb(0 0 0 / 0.25)",
+  /** A pane washed out in its own page colour while work it cannot show
+   *  finishes (a session being deleted). */
+  veil: "color-mix(in srgb, var(--bg) 72%, transparent)",
   scrimLight: "rgb(0 0 0 / 0.22)",
   /** The heavier dimming under a bottom sheet or sheet-style dialog. */
   scrimSheet: "rgb(0 0 0 / 0.45)",
@@ -691,6 +694,7 @@ export const layer = stylex.defineConsts({
  *  under a palette's. */
 export const blur = stylex.defineConsts({
   scrim: "blur(1px)",
+  veil: "blur(2px)",
   paletteScrim: "blur(6px)",
   /** The phone top bar's glass. base-theme.css swaps the fill when the
    *  browser has no backdrop-filter or the person asks for less transparency. */

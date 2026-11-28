@@ -285,7 +285,9 @@ test("SessionViewer delegates overlays and the side panel through bounded contra
 
   for (const moduleSource of [dialogs, assetOverlay, sidePanel]) {
     expect(moduleSource).not.toMatch(/\buse(?:Memo|Callback)\(/);
-    expect(moduleSource).not.toMatch(/\{\s*\.\.\./);
+    // No props bags. A StyleX style spread is not one: it is the module's
+    // own class list.
+    expect(moduleSource).not.toMatch(/\{\s*\.\.\.(?!stylex\.props\(|sx\()/);
     expect(moduleSource).not.toMatch(/\bany\b|\bts-ignore\b|\bas\s+[A-Z]/);
   }
 });

@@ -257,7 +257,7 @@ function ScriptRunRow({
             <Modal.Title className="m-0 text-balance text-dialog-title font-semibold leading-tight tracking-tight text-fg">
               Close this card?
             </Modal.Title>
-            <Modal.Description className="m-0 text-pretty text-supporting font-normal leading-relaxed text-dim">
+            <Modal.Description>
               The script is still running. Hide the card and let it finish, or
               stop it too.
             </Modal.Description>

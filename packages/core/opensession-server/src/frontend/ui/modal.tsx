@@ -462,6 +462,23 @@ function Content({
   );
 }
 
+/** A dialog's supporting line under its title: the same style as
+ *  `Modal.Header`'s `description`, so a body that sets its own copy reads the
+ *  same as one that passes it to the header. */
+function Description({
+  className,
+  ...props
+}: Omit<React.ComponentProps<typeof BaseDialog.Description>, "className"> & {
+  className?: string;
+}) {
+  return (
+    <BaseDialog.Description
+      {...props}
+      {...sx(dialogText.description, cn(SELECTABLE, className))}
+    />
+  );
+}
+
 /** `open` state for a dialog whose PARENT mounts it only while it should be
  *  open (`{searchOpen && <SessionSearch/>}`). Base UI skips
  *  [data-starting-style] for a popup that mounts already-open, so the enter
@@ -598,7 +615,7 @@ export const Modal = {
   Trigger: BaseDialog.Trigger,
   Close: BaseDialog.Close,
   Title: BaseDialog.Title,
-  Description: BaseDialog.Description,
+  Description,
   Viewport: BaseDialog.Viewport,
   Content,
   Header,

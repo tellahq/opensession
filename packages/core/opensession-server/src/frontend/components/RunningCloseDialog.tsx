@@ -23,7 +23,7 @@ export function RunningCloseDialog({
           Close running session
           {runningCount === 1 ? "" : "s"}?
         </Modal.Title>
-        <Modal.Description className="m-0 text-body leading-relaxed text-dim">
+        <Modal.Description>
           {runningCount === 1
             ? "This session is currently running. Closing it will cancel its current run."
             : `These ${runningCount ?? 0} sessions are currently running. Closing them will cancel their current runs.`}

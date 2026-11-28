@@ -86,11 +86,7 @@ export function ConfirmDialog({
       >
         <div {...stylex.props(styles.text)}>
           <Modal.Title {...stylex.props(dialogText.title)}>{title}</Modal.Title>
-          {description && (
-            <Modal.Description {...sx(dialogText.description, SELECTABLE)}>
-              {description}
-            </Modal.Description>
-          )}
+          {description && <Modal.Description>{description}</Modal.Description>}
         </div>
         <Modal.Footer>
           <Button

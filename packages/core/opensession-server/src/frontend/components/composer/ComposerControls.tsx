@@ -1,3 +1,5 @@
+import * as stylex from "@stylexjs/stylex";
+import { dialogText } from "../../ui/dialog-styles";
 import {
   forwardRef,
   useEffect,
@@ -407,11 +409,11 @@ export function StopConfirmModal({
         widthClassName="max-w-[32rem]"
         className="gap-5"
       >
-        <div className="flex flex-col">
-          <Modal.Title className="m-0 text-balance text-section-title font-semibold leading-tight tracking-tight text-fg">
+        <div className="flex flex-col gap-1.5">
+          <Modal.Title {...stylex.props(dialogText.title)}>
             Stop this response?
           </Modal.Title>
-          <Modal.Description className="m-0 mt-2 text-pretty text-base font-normal leading-relaxed text-dim">
+          <Modal.Description>
             You can ask again or send a follow-up anytime.
           </Modal.Description>
         </div>

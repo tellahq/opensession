@@ -512,11 +512,6 @@ export const SESSION_BANNER =
   "inline-flex max-w-full items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap " +
   "rounded-full border border-line bg-panel px-3 py-[3px] text-label";
 
-/** Shown while a delete (optionally + worktree) is in flight — worktree
- *  cleanup can take a few seconds, so the view shows progress instead of
- *  looking frozen. */
-export const SESSION_DELETE_LABEL = "text-label text-dim";
-
 /* ── Floating transcript pills ──────────────────────────────────────────────
  *
  * "Load all" at the top of the transcript, "Scroll to bottom" at its foot, the
