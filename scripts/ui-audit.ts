@@ -565,6 +565,17 @@ const SIGNALS: Signal[] = [
       ),
   },
   {
+    id: "solid-hover",
+    instead:
+      "the hover wash, hover:bg-hover / bg-pressed (color.hover / color.pressed): translucent ink that reads at one strength on any surface, where a solid surface vanishes on its twin and inverts in the other theme",
+    exempt: ["styles/"],
+    count: (source) =>
+      occurrences(
+        stripComments(source),
+        /(?<![\w-])(?:hover|active|data-\[highlighted\]|aria-selected|data-\[selected\]):bg-(?:raised|panel|surface|bg|sidebar|popup|page)\b/g,
+      ),
+  },
+  {
     id: "off-scale-z",
     instead:
       "a named stacking layer, z-<name> or layer.<name> (base-theme.css --layer-*), or a small integer (-z-1 to z-9) for order inside a component",

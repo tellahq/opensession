@@ -1,12 +1,13 @@
 {
-  "raw-button": 301,
+  "raw-button": 298,
   "raw-form-control": 88,
   "arbitrary-text-size": 22,
   "off-scale-motion": 7,
   "off-scale-tint": 14,
-  "arbitrary-size": 396,
-  "off-scale-spacing": 377,
+  "arbitrary-size": 395,
+  "off-scale-spacing": 374,
   "arbitrary-shadow": 18,
+  "solid-hover": 5,
   "off-scale-z": 0,
   "arbitrary-leading": 1,
   "off-scale-radius": 0,
@@ -17,7 +18,7 @@
   "stock-palette-color": 0,
   "stock-shadow": 0,
   "stylex-raw-value": 0,
-  "button-restyle": 398,
+  "button-restyle": 394,
   "button-skin": 0,
   "raw-hex-color": 5
 }
