@@ -4,6 +4,13 @@ import type { WSServerMessage } from "../lib/types";
 import { PRODUCT_NAME } from "../lib/brand";
 import { dismissToast, toast } from "../ui/toast";
 import { fetchHealthStatus, type HealthStatus } from "../lib/health";
+import { useIsPhone } from "../hooks/useIsPhone";
+import {
+  connectionStatusLabel,
+  setConnectionStatus,
+  type ConnectionStatus,
+} from "../lib/connection-status";
+import { useNewLayoutPref } from "../lib/new-layout-pref";
 import { CONNECTION_PRESENTATION_GRACE_MS } from "../lib/connection-presentation";
 import {
   bootTransition,
@@ -47,6 +54,7 @@ interface Props {
  *    answers again — that page state is suspect anyway.
  */
 export function RestartOverlay({ connected, addHandler }: Props) {
+  const isPhone = useIsPhone();
   const [phase, setPhase] = useState<RestartPhase>("ok");
   const [backOnline, setBackOnline] = useState(false);
   // Who likely caused the restart: `by` on server_restarting, or `restartBy`
@@ -243,23 +251,26 @@ export function RestartOverlay({ connected, addHandler }: Props) {
     };
   }, [phase]);
 
-  // Connection recovery uses the regular toast lane above the composer. Unlike
-  // a receipt, this status has no expiry line and stays until recovery settles.
+  // The new layout's minibar shows connection recovery in the slot above your
+  // account (components/shell/Minibar.tsx). Everywhere else it is a toast.
+  // Unlike a receipt, it has no expiry line and stays until recovery settles.
+  const inMinibar = useNewLayoutPref() && !isPhone;
   useEffect(() => {
     if (phase !== "reconnecting" && phase !== "restarting") return;
-    const restarting = phase === "restarting" || explicit.current;
-    const id = toast(
-      restarting
-        ? `Restarting${restartBy ? ` · ${restartBy}` : ""}`
-        : "Connection lost · Retrying",
-      { ongoing: true },
-    );
+    const status: NonNullable<ConnectionStatus> =
+      phase === "restarting" || explicit.current
+        ? { kind: "restarting", by: restartBy }
+        : { kind: "reconnecting" };
+    setConnectionStatus(status);
+    if (inMinibar) return () => setConnectionStatus(null);
+    const id = toast(connectionStatusLabel(status), { ongoing: true });
     statusToast.current = id;
     return () => {
+      setConnectionStatus(null);
       dismissToast(id);
       if (statusToast.current === id) statusToast.current = null;
     };
-  }, [phase, restartBy]);
+  }, [phase, restartBy, inMinibar]);
 
   if (phase !== "crashed") return null;
 

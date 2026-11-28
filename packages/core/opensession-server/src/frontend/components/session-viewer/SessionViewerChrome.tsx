@@ -90,6 +90,7 @@ import {
 import { cn } from "../../ui/cn";
 import { TAB_MENU_CONTROL } from "../../lib/session-tab-classes";
 import { useTabMenuSlot } from "../../lib/tab-menu-slot";
+import { WorkspaceFacts } from "../session/WorkspaceTitlePopover";
 import { toast } from "../../ui/toast";
 import { copySessionTranscript } from "../../lib/transcript-copy";
 import { dedupeViewers, facepileAvatarStyle } from "../../lib/presence";
@@ -276,7 +277,7 @@ interface ChromePortalLaunch {
   setLaunching: (recipeId: string | null) => void;
 }
 interface ChromeInfoActions {
-  setPreviewStatus: Dispatch<SetStateAction<PreviewStatus | null>>;
+  setPreviewStatus: (status: PreviewStatus | null) => void;
   portalTarget: PortalTarget | null;
   openPortal: ((target: PortalTarget) => void) | undefined;
   portalLaunch: ChromePortalLaunch;
@@ -997,7 +998,35 @@ export function SessionViewerChrome({
                   // From the tab, the menu hangs below the tab's foot on
                   // the sheet rather than just under its ⋯.
                   sideOffset={menuInTab ? 8 : 6}
-                  className="min-w-[240px] max-w-[min(300px,calc(100vw-24px))]"
+                  className={
+                    menuInTab
+                      ? "w-[530px]"
+                      : "min-w-[240px] max-w-[min(300px,calc(100vw-24px))]"
+                  }
+                  // From the tab, what the workspace is (its whole name and
+                  // the title card's facts) docks beside the actions.
+                  aside={
+                    menuInTab ? (
+                      <div className="w-[272px] shrink-0 border-l border-divider px-3.5 pb-2 pt-3">
+                        <div className="text-label font-medium text-fg [overflow-wrap:anywhere]">
+                          {parentSession
+                            ? session.title
+                            : workspaceName || session.title}
+                        </div>
+                        <WorkspaceFacts
+                          session={session}
+                          sessions={
+                            parentSession || !workspaceSessions?.length
+                              ? [session]
+                              : workspaceSessions
+                          }
+                          active={overflowOpen}
+                          className="mt-2"
+                          onOpenSession={() => setOverflowOpen(false)}
+                        />
+                      </div>
+                    ) : undefined
+                  }
                 >
                   {/* Quick session actions use the same focus, spacing, collision,
 								    and dismissal behavior as every other app menu. Each group is
@@ -1069,6 +1098,7 @@ export function SessionViewerChrome({
               onCommitRename={commitRename}
               onCancelRename={() => setRenameDraft(null)}
               canRename={Boolean(onRename)}
+              detailsInMenu={menuInTab}
               menu={
                 menuInTab && tabMenuSlot
                   ? createPortal(overflowMenu, tabMenuSlot)

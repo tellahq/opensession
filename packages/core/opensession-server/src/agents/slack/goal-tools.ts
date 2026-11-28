@@ -38,6 +38,8 @@ export interface GoalsToolContext {
   createdBy: string;
   /** Trusted user — gates create/update/delete/steer. */
   isAdmin: boolean;
+  /** The chat whose agent is calling, recorded on a goal it creates. */
+  currentSessionId?: string;
 }
 
 export function createGoalsMcpServer(ctx: GoalsToolContext) {
@@ -181,6 +183,7 @@ export function createGoalsMcpServer(ctx: GoalsToolContext) {
             maxWakes: args.maxWakes,
             firstWakeAt,
             createdBy: ctx.createdBy,
+            startedFrom: ctx.currentSessionId,
           });
           if ("error" in res) return text(`Couldn't create it: ${res.error}`);
           return text(

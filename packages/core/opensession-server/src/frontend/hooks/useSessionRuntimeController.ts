@@ -1,5 +1,6 @@
 import {
   use,
+  useCallback,
   useEffect,
   useEffectEvent,
   useLayoutEffect,
@@ -25,6 +26,10 @@ import {
   unhideForSession,
 } from "../lib/hides";
 import { getLane, onLanesChanged } from "../lib/lanes";
+import {
+  lastPreviewStatus,
+  rememberPreviewStatus,
+} from "../lib/preview-status-memory";
 import type { LiveTurnStore } from "../lib/live-turn-store";
 import { isPinned, onPinsChanged, togglePin } from "../lib/pins";
 import {
@@ -605,13 +610,28 @@ export function useSessionRuntimeController({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [focused, session.prUrl, session.prs, session.previewPath, staging]);
 
-  const [previewStatus, setPreviewStatus] = useState<PreviewStatus | null>(
-    null,
+  // Seeded from the session's last known status, so a tab switch draws the
+  // header's Portal button at once instead of a request later. Held with its
+  // session id: a status never carries over to another session.
+  const [preview, setPreview] = useState(() => ({
+    sessionId: session.id,
+    status: lastPreviewStatus(session.id),
+  }));
+  const previewStatus =
+    preview.sessionId === session.id
+      ? preview.status
+      : lastPreviewStatus(session.id);
+  const sessionId = session.id;
+  const setPreviewStatus = useCallback(
+    (status: PreviewStatus | null) => {
+      rememberPreviewStatus(sessionId, status);
+      setPreview({ sessionId, status });
+    },
+    [sessionId],
   );
   // The recipe the header's play button is starting, until its Portal opens.
   const [launchingPortal, setLaunchingPortal] = useState<string | null>(null);
   useEffect(() => {
-    setPreviewStatus(null);
     setLaunchingPortal(null);
   }, [session.id]);
   async function startDeclaredPortal(recipe: PreviewPortalRecipe) {

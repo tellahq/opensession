@@ -14,7 +14,12 @@ import {
   readHiddenSidebarTools,
 } from "../../lib/sidebar-tools";
 import { PLAIN_ID } from "../../lib/support-surface";
+import {
+  connectionStatusLabel,
+  useConnectionStatus,
+} from "../../lib/connection-status";
 import { Button } from "../../ui/button";
+import { Spinner } from "../../ui/spinner";
 import { cn } from "../../ui/cn";
 import { ContextMenu, Menu, MENU_ICON } from "../../ui/menu";
 import { Tooltip } from "../../ui/tooltip";
@@ -175,7 +180,8 @@ export function Minibar({
    *  one shows it. */
   onRevealSidebar: () => void;
   connected: boolean;
-  /** Sits above your account: the Update nudge, as an icon. */
+  /** Sits above your account, under the connection status: the Update
+   *  nudge, as an icon. */
   accessory?: ReactNode;
 }) {
   const navigation = useNavigation();
@@ -313,6 +319,7 @@ export function Minibar({
           </Menu.Root>
         </div>
         <div className="min-h-0 flex-1" />
+        <ConnectionStatusTile />
         {accessory}
         <Tooltip label="Your settings" side="right">
           <Button
@@ -329,5 +336,27 @@ export function Minibar({
         <MinibarItemToggles items={items} shown={shown} />
       </ContextMenu.Popup>
     </ContextMenu.Root>
+  );
+}
+
+/**
+ * A restart or a lost connection, while it lasts: a turning ring above your
+ * account, where the Update nudge lands once a restart shipped new code. It
+ * replaces the status toast, which sat on the composer.
+ */
+function ConnectionStatusTile() {
+  const status = useConnectionStatus();
+  if (!status) return null;
+  const label = connectionStatusLabel(status);
+  return (
+    <Tooltip label={label} side="right">
+      <span
+        role="status"
+        className="grid size-10 shrink-0 place-items-center text-dim animate-[update-toast-in_var(--dur-lg)_var(--ease)] motion-reduce:animate-none"
+      >
+        <Spinner size="lg" />
+        <span className="sr-only">{label}</span>
+      </span>
+    </Tooltip>
   );
 }

@@ -296,6 +296,8 @@ export interface UnifiedSession {
   goal?: string;
   /** Goal record id, when this session is driven by a Goal (src/server/goals.ts). */
   goalId?: string;
+  /** For a goal's session: the chat that started the goal. */
+  goalStartedFrom?: string;
   /**
    * The session's last run died on a terminal failure (usage limits exhausted
    * on every account, credit/API errors) — a human must act before the session
@@ -780,6 +782,7 @@ export interface NativeSessionFile {
   archivedReason?: "manual" | "idle" | "auto" | "plain";
   goal?: string; // pinned goal, appended to every prompt until cleared
   goalId?: string; // Goal record this session is driven by (src/server/goals.ts)
+  goalStartedFrom?: string; // the chat that started that goal
   lastRunError?: { message: string; at: string }; // last run died on a terminal error; cleared on the next clean run
   loop?: {
     prompt: string;

@@ -95,6 +95,8 @@ import { PrChecksPopover } from "./PrChecksPopover";
 import { PrSeriesRows } from "./PrSeriesRows";
 import { MergeUndoControl } from "./pr/MergeUndoControl";
 import { PrStackChip } from "./pr/StackPopover";
+import { PrHeadChip } from "./pr/PrHeadChip";
+import { useNewLayoutPref } from "../lib/new-layout-pref";
 import {
   IconArrowDown,
   IconArrowUp,
@@ -649,6 +651,7 @@ export function PrStatusBar({
   const [error, setError] = useState<string | null>(null);
   const [isArchived, setIsArchived] = useState(!!archived);
   const [confirmForce, forceConfirmation] = useConfirm();
+  const newLayout = useNewLayoutPref();
 
   useEffect(() => setIsArchived(!!archived), [archived]);
 
@@ -976,12 +979,16 @@ export function PrStatusBar({
   // chip and the action read as a matched pair.
   // The summary card's band is one line, so its action is a small pill: at
   // the strip's 30px it set the band's height on its own.
+  // In the new layout the header's action sits in the PR chip's hover card,
+  // a step smaller than the header's own controls.
   const actionBtn =
-    variant === "header"
-      ? PR_HEAD_BTN
-      : variant === "summary"
-        ? "min-h-6 py-0 pr-2.5 text-meta"
-        : "";
+    variant === "header" && newLayout
+      ? "min-h-7 px-3 text-label"
+      : variant === "header"
+        ? PR_HEAD_BTN
+        : variant === "summary"
+          ? "min-h-6 py-0 pr-2.5 text-meta"
+          : "";
   function withMergeUndo(button: React.ReactNode) {
     if (mergePhase !== "scheduled") return button;
     return (
@@ -1644,6 +1651,34 @@ export function PrStatusBar({
           }
         />
       </>
+    );
+  }
+
+  // The new layout's window row keeps the PR to a glyph and its number. The
+  // action waits in the chip's hover card, except while it is in flight (a
+  // push running, a merge's undo window, a prompt the agent is on), when
+  // the row shows it so it can't vanish with the card.
+  if (variant === "header" && newLayout && pr) {
+    const actionLive = !!busy || mergePhase === "scheduled" || !!prompted;
+    return (
+      <div className={PR_HEAD}>
+        <PrHeadChip
+          pr={pr}
+          tone={headline.tone}
+          label={headlineLabel}
+          error={error}
+          action={actionLive ? undefined : renderActionButton()}
+          onOpenPrTab={() => onOpenPrTab?.()}
+        />
+        <PrRefChips
+          refs={siblings}
+          maxInline={0}
+          primaryRepo={primaryRepoId}
+          onOpen={onOpenPrTab}
+        />
+        {actionLive && renderActionButton()}
+        {forceConfirmation}
+      </div>
     );
   }
 
