@@ -9,30 +9,34 @@ import Foundation
 struct ProgressUpdate: Equatable, Sendable {
     enum State: Equatable, Sendable { case running, done }
 
-    /// A reply that opens with a status line and goes on in prose ("◷
-    /// **Native build**: Running", a blank line, then why): the status, and
-    /// the prose after it. The reply then shows only its prose. Mirrors the
-    /// web's `splitLeadStatus`.
-    static func lead(of entry: TranscriptEntry) -> (update: ProgressUpdate, rest: String)? {
+    /// A reply with a status line as its first or last paragraph ("◷
+    /// **Native build**: Running", a blank line, then prose, or prose and
+    /// then the status): the prose alone, or nil when there is no such line.
+    /// The prose already says the outcome. Mirrors the web's
+    /// `withoutStatusLines`.
+    static func prose(of entry: TranscriptEntry) -> String? {
         guard entry.isAssistant, entry.isReasoning != true, entry.isError != true else { return nil }
-        let text = entry.text.drop { $0.isWhitespace }
-        guard text.hasPrefix("✓ **") || text.hasPrefix("◷ **") else { return nil }
-        // The status, a blank line, then prose.
-        let lines = text.split(maxSplits: 2, omittingEmptySubsequences: false, whereSeparator: \.isNewline)
-        guard lines.count == 3,
-              lines[1].allSatisfy(\.isWhitespace) else { return nil }
-        let prose = lines[2].trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !prose.isEmpty else { return nil }
-        var line = entry
-        line.content = String(lines[0])
-        line.contentLength = nil
-        line.contentClamped = nil
-        line.pastedTexts = nil
-        line.images = nil
-        line.videos = nil
-        line.files = nil
-        guard let update = ProgressUpdate(line) else { return nil }
-        return (update, prose)
+        func isStatus(_ paragraph: String) -> Bool {
+            let paragraph = paragraph.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard paragraph.hasPrefix("✓ **") || paragraph.hasPrefix("◷ **"),
+                  !paragraph.contains(where: \.isNewline) else { return false }
+            var line = entry
+            line.content = paragraph
+            line.contentLength = nil
+            line.contentClamped = nil
+            line.pastedTexts = nil
+            line.images = nil
+            line.videos = nil
+            line.files = nil
+            return ProgressUpdate(line) != nil
+        }
+        let whole = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var paragraphs = whole.components(separatedBy: "\n\n")
+        guard paragraphs.count > 1 else { return nil }
+        if isStatus(paragraphs[0]) { paragraphs.removeFirst() }
+        if paragraphs.count > 1, let last = paragraphs.last, isStatus(last) { paragraphs.removeLast() }
+        let rest = paragraphs.joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        return rest.isEmpty || rest == whole ? nil : rest
     }
 
     var topic: String

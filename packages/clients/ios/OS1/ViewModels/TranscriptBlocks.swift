@@ -823,20 +823,21 @@ enum TranscriptGrouping {
             live: live,
             progress: progress
         )
-        return thinkingMessages.visibleBlocks(dropLeadStatuses(project(progress, into: grouped)))
+        return thinkingMessages.visibleBlocks(dropStatusLines(project(progress, into: grouped)))
     }
 
-    /// A reply that opens with a status line ("✓ **Header icons**: Live", a
-    /// blank line, then prose) shows only its prose: the prose already says
+    /// A reply that opens or ends with a status line ("✓ **Header icons**:
+    /// Live", a blank line, then prose, or the other way round) shows only its
+    /// prose: the prose already says
     /// the outcome, and the line above it only repeated it. The footer keeps
     /// the whole text, so Copy copies the whole message. Mirrors the web's
-    /// `dropLeadStatuses`.
-    private static func dropLeadStatuses(_ blocks: [TranscriptBlock]) -> [TranscriptBlock] {
+    /// `dropStatusLines`.
+    private static func dropStatusLines(_ blocks: [TranscriptBlock]) -> [TranscriptBlock] {
         var blocks = blocks
         for index in blocks.indices {
             guard case .message(var entry) = blocks[index],
-                  let lead = ProgressUpdate.lead(of: entry) else { continue }
-            entry.content = lead.rest
+                  let prose = ProgressUpdate.prose(of: entry) else { continue }
+            entry.content = prose
             blocks[index] = .message(entry)
         }
         return blocks
