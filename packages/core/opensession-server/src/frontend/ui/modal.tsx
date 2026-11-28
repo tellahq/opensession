@@ -48,10 +48,10 @@ const styles = stylex.create({
     // corner.
     position: "relative",
     overflow: "hidden",
-    // The glass the menus are made of, denser because this one sits over a
-    // dimming backdrop. --palette-glass falls back to the opaque fill without
-    // backdrop-filter and under prefers-reduced-transparency (base.css).
-    backgroundColor: color.paletteGlass,
+    // The glass the menus are made of. --popup-glass falls back to the opaque
+    // fill without backdrop-filter and under prefers-reduced-transparency
+    // (base-theme.css).
+    backgroundColor: color.popupGlass,
     backdropFilter: "var(--popup-blur)",
     // Drops in from just above its resting place, the way a palette
     // summoned by a keystroke should.

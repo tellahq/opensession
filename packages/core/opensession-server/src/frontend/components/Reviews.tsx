@@ -444,7 +444,9 @@ export function Reviews({
                   {t.label}
                   <span
                     className={`min-w-5 rounded-full px-[7px] py-px text-center text-meta font-semibold ${
-                      on ? "bg-accent-soft text-accent" : "bg-active text-dim"
+                      on
+                        ? "bg-accent-soft text-accent-ink"
+                        : "bg-active text-dim"
                     }`}
                   >
                     {t.count}

@@ -286,7 +286,7 @@ export function Issues({ sessions, onOpenSession, topbarActionsEl }: Props) {
               Check the GitHub App connection for this workspace.
             </EmptyState>
           ) : (
-            <LoadingState>Loading issues</LoadingState>
+            <LoadingState>Loading issues…</LoadingState>
           )
         ) : groups.length === 0 ? (
           <EmptyState title={query ? "No matching issues" : "No open issues"}>

@@ -192,7 +192,7 @@ export const TurnFooter = function TurnFooter({
                   Copy link
                 </Menu.Item>
               )}
-              {(onFork || linkTo) && <Menu.Separator className="my-1" />}
+              {(onFork || linkTo) && <Menu.Separator />}
               <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-medium text-faint">
                 <IconClock size={20} />
                 {fullTime(entry.timestamp)}
@@ -208,7 +208,7 @@ export const TurnFooter = function TurnFooter({
                 same-named files a turn touched is worth more than the space. */}
               {files.length > 0 && (
                 <>
-                  <Menu.Separator className="my-1" />
+                  <Menu.Separator />
                   {/* GroupLabel MUST live inside a Group — bare it throws Base UI
                     error #31 and white-screens the app on open. */}
                   <Menu.Group>

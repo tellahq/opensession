@@ -1,11 +1,11 @@
-import { palettePill } from "../../lib/palette-classes";
+import { paletteIconBtn } from "../../lib/palette-classes";
 import { setUsageBarPref } from "../../lib/usage-bar-pref";
 import { fmtTokens, fmtUsd } from "../../lib/usage-format";
 import { usageSummary, type UsageSummaryInput } from "../../lib/usage-summary";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
-import { composerToolbarPill } from "../../lib/composer-classes";
 import { Popover } from "../../ui/popover";
+import { ContextRing } from "../UsageMeter";
 import { useCurrentUser } from "../UserPicker";
 import { ACCOUNT_TITLE, AccountValue, LimitRows } from "./UsageParts";
 
@@ -13,14 +13,11 @@ const row = "flex items-baseline justify-between gap-4";
 const value = "flex min-w-0 items-center gap-1.5 tabular-nums";
 
 /**
- * The one usage readout the composer keeps when the usage bar is hidden: a
- * short red "92% context" once the context is nearly full, the only moment it
- * needs attention. Below that it shows nothing; spend and limits stay in the
- * model menu. A ring gauge used to sit here at every fill, and at a third
- * full it read as a loading spinner. Hover or tap opens the bar's readouts as
- * one compact card, with a way to bring the bar back.
+ * The usage bar folded down to a small ring after the model pill, for when the bar
+ * is hidden. The ring is the context fill; hover or tap opens the bar's
+ * readouts as one compact card, with a way to bring the bar back.
  */
-export function ContextWarning({
+export function UsageRing({
   onOpenChange,
   ...input
 }: UsageSummaryInput & { onOpenChange?: (open: boolean) => void }) {
@@ -30,7 +27,6 @@ export function ContextWarning({
     viewer,
   );
   const pct = Math.round(fill.frac * 100);
-  if (!nearlyFull) return null;
 
   return (
     <Popover.Root onOpenChange={(open) => onOpenChange?.(open)}>
@@ -38,15 +34,20 @@ export function ContextWarning({
         openOnHover
         delay={200}
         closeDelay={100}
+        // A quiet glance, not a control: smaller than the toolbar's icon
+        // buttons and muted until the context is nearly full.
         className={cn(
-          palettePill,
-          composerToolbarPill,
-          "shrink-0 self-center tabular-nums text-red hover:text-red",
+          paletteIconBtn,
+          "size-7 shrink-0 self-center before:inset-0.5 phone:size-9 phone:[&_svg]:size-3.5",
         )}
-        aria-label={`Context ${pct}% full, ${fmtUsd(input.usage.costUsd)} spent`}
-        data-context-warning
+        aria-label={`Usage: context ${pct}% full, ${fmtUsd(input.usage.costUsd)} spent`}
+        data-usage-ring
       >
-        {pct}% context
+        <ContextRing
+          frac={fill.frac}
+          tone={nearlyFull ? "stroke-red" : "stroke-faint"}
+          size={12}
+        />
       </Popover.Trigger>
       <Popover.Popup side="top" align="end" className="w-64 p-3 text-xs">
         <div className="space-y-1.5">

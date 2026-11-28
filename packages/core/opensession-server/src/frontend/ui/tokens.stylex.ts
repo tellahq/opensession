@@ -85,7 +85,6 @@ export const color = stylex.defineConsts({
   onAccentControl: "var(--on-accent-control, var(--on-accent))",
   panelSurface: "var(--panel-surface)",
   /** A palette: denser glass than a menu, since it sits over a scrim. */
-  paletteGlass: "var(--palette-glass)",
   /** The hairline a shell on a scrim needs: firmer than a menu's. */
   dialogRing: "var(--dialog-ring)",
   /** The dimming under a dialog, and the lighter one under a glass palette
@@ -473,7 +472,9 @@ export const geometry = stylex.defineConsts({
   /** The safe areas a full-height surface keeps clear of. */
   safeTop: "env(safe-area-inset-top)",
   safeBottom: "env(safe-area-inset-bottom)",
-  /** A liveness dot, standalone and inline in text or a pill. */
+  /** A liveness dot: the chat's busy row, standalone, and inline in text or
+   * a pill. */
+  dotLarge: "9px",
   dot: "8px",
   dotInline: "7px",
   /** The fade at the end of a clipped single line. */

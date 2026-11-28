@@ -56,7 +56,7 @@ function Reactions({
           className={cn(
             "inline-flex h-6 min-h-0 w-auto items-center gap-1 rounded-full border px-2 py-0 text-meta leading-none",
             r.mine
-              ? "border-accent bg-accent-soft text-accent"
+              ? "border-accent bg-accent-soft text-accent-ink"
               : "border-transparent bg-hover text-dim hover:border-line-strong",
           )}
         >
@@ -117,7 +117,7 @@ function Files({ files }: { files: NonNullable<ChannelMessage["files"]> }) {
             href={file.permalink}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex w-fit max-w-full items-center gap-2 rounded-lg border border-line px-3 py-2 text-body text-fg hover:bg-hover"
+            className="inline-flex w-fit max-w-full items-center gap-2 rounded-lg border border-line px-3 py-2 text-body text-fg no-underline hover:bg-hover"
           >
             <IconFile size={20} className="shrink-0 text-dim" />
             <span className="truncate">{file.name}</span>
@@ -263,7 +263,7 @@ export function ChannelMessageRow({
             className="mt-0.5 rounded-md"
           />
         ) : (
-          <span className="invisible block pt-0.5 text-right text-meta leading-5 text-faint tabular-nums group-hover:visible">
+          <span className="invisible block text-right text-meta leading-5.5 text-faint tabular-nums group-hover:visible">
             {messageTime(message.ts).replace(/\s?[AP]M$/i, "")}
           </span>
         )}
@@ -271,7 +271,7 @@ export function ChannelMessageRow({
       <div className="min-w-0 flex-1">
         {head && (
           <div className="flex items-baseline gap-2">
-            <span className="select-text text-item-title font-bold text-fg">
+            <span className="select-text text-body leading-body font-bold text-fg">
               {message.userName}
             </span>
             {message.isBot && (
@@ -329,7 +329,7 @@ export function ChannelMessageRow({
         {onOpenThread && replies > 0 && (
           <ListRow
             onClick={onOpenThread}
-            className="group/replies mt-1 -ml-1 min-h-0 w-full max-w-[600px] items-center gap-2 rounded-md border border-transparent px-1 py-1 text-meta hover:border-line hover:bg-panel"
+            className="group/replies mt-1 -ml-1 min-h-0 w-full max-w-[600px] items-center gap-2 rounded-md border border-transparent px-1 py-1 text-label hover:border-line hover:bg-panel"
           >
             {!!message.replyUsers?.length && (
               <span className="flex gap-1" aria-hidden>

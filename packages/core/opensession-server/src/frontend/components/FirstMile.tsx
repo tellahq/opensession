@@ -787,7 +787,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
       </nav>
 
       {!status ? (
-        <div className="flex min-h-40 w-full max-w-card self-center justify-self-center items-center justify-center rounded-2xl bg-palette-glass px-8 py-12 [--smooth-ring-color:var(--dialog-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-lg">
+        <div className="flex min-h-40 w-full max-w-card self-center justify-self-center items-center justify-center rounded-2xl bg-popup-glass px-8 py-12 [--smooth-ring-color:var(--dialog-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-lg">
           <LoadingState>
             {failed ? "Couldn't load setup." : "Preparing your workspace…"}
           </LoadingState>
@@ -810,7 +810,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
                   : "max-w-[750px]",
             edgeSurface
               ? "bg-transparent [backdrop-filter:none]"
-              : "bg-palette-glass [--smooth-ring-color:var(--dialog-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-lg",
+              : "bg-popup-glass [--smooth-ring-color:var(--dialog-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-lg",
             panelSize?.phase === "animating" &&
               "transition-[width,height] duration-long ease-standard motion-reduce:transition-none",
           )}

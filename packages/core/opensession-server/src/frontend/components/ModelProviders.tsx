@@ -407,7 +407,7 @@ function GeminiKeyForm({
       {error && <InlineAlert>{error}</InlineAlert>}
       <SettingsFormActions>
         {onCancel && (
-          <Button variant="soft" onClick={onCancel} disabled={saving}>
+          <Button variant="ghost" onClick={onCancel} disabled={saving}>
             Cancel
           </Button>
         )}
@@ -614,7 +614,7 @@ function VertexForm({
       {error && <InlineAlert>{error}</InlineAlert>}
       <SettingsFormActions>
         {onCancel && (
-          <Button variant="soft" onClick={onCancel} disabled={saving}>
+          <Button variant="ghost" onClick={onCancel} disabled={saving}>
             Cancel
           </Button>
         )}
@@ -872,7 +872,7 @@ function AddProviderForm({
       {error && <InlineAlert>{error}</InlineAlert>}
 
       <SettingsFormActions>
-        <Button variant="soft" onClick={onClose} disabled={saving}>
+        <Button variant="ghost" onClick={onClose} disabled={saving}>
           Cancel
         </Button>
         <Button

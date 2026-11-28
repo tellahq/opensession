@@ -6,6 +6,8 @@
  * every URL is http(s).
  */
 
+import type { Embed } from "./slack-embed";
+
 export interface RichImage {
   url: string;
   alt: string;
@@ -46,6 +48,8 @@ export type RichBlock =
       url?: string;
       thumb?: RichImage;
       provider?: string;
+      /** Plays in place. */
+      embed?: Embed;
     };
 
 export interface RichField {
@@ -71,4 +75,6 @@ export interface RichAttachment {
   footerIcon?: string;
   /** An app card's own blocks, shown in place of its text. */
   blocks?: RichBlock[];
+  /** A video, or a post on X, that plays in place of the picture. */
+  embed?: Embed;
 }

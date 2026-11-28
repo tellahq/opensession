@@ -161,7 +161,7 @@ export const CARD_RADIUS = "rounded-sheet";
  * The same card rendered on the page rather than over a dimmed one: what the
  * empty state shows when there is no session to open yet.
  *
- * Not the palette's glass: `--palette-glass` is mixed to composite over a
+ * Not the palette's glass: `--popup-glass` is mixed to composite over a
  * backdrop, and on the pane's own surface there is little behind it to blur
  * (nothing at all under the mac shell's vibrancy, where the app's layers go
  * transparent). So it takes the composer's lift instead, the tokens for the

@@ -146,6 +146,17 @@ describe("accent theme", () => {
     }
   });
 
+  // A primary button's label is 13px text on the light fill, so the light
+  // fills clear text contrast, not just the 3:1 a glyph needs. Dark keeps its
+  // brighter fills, which read as the accent on a dark page.
+  test("every light fill carries button text at 4.5:1", () => {
+    for (const option of ACCENT_THEME_OPTIONS) {
+      if (option.value === "lime") continue;
+      const ink = getOnAccentInk(option.value, "light");
+      expect(contrast(option.light, ink)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   test("migrates the removed Gold accent to Lime", () => {
     storage.setItem("opensession-accent", "gold");
     expect(getAccentTheme()).toBe("lime");

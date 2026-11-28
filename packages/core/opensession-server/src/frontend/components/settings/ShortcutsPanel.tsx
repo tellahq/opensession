@@ -469,7 +469,7 @@ function RowMenu({
 function RecordingPill({ held }: { held: string[] }) {
   return (
     <span
-      className="flex items-center gap-1.5 rounded-control bg-accent-soft px-2.5 py-1 text-meta text-accent"
+      className="flex items-center gap-1.5 rounded-control bg-accent-soft px-2.5 py-1 text-meta text-accent-ink"
       role="status"
       aria-live="polite"
     >

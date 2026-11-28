@@ -198,7 +198,7 @@ export function SearchPage({
           })}
           {last && last.page < last.pages && (
             <Button variant="ghost" disabled={loading} onClick={loadMore}>
-              {loading ? "Loading" : "Show more"}
+              {loading ? "Loading…" : "Show more"}
             </Button>
           )}
         </div>

@@ -124,7 +124,7 @@ export function ClaudeSignInForm({
       {error && <InlineAlert>{error}</InlineAlert>}
 
       <div className="flex justify-end gap-2.5">
-        <Button variant="soft" onClick={handleClose} disabled={busy}>
+        <Button variant="ghost" onClick={handleClose} disabled={busy}>
           Cancel
         </Button>
         <Button

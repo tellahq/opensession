@@ -1,3 +1,6 @@
+import { useEffect, useRef, useState } from "react";
+import { z } from "zod";
+import type { Embed } from "../../../shared/slack-embed";
 import type {
   RichAttachment,
   RichBlock,
@@ -6,11 +9,142 @@ import type {
 } from "../../../shared/slack-rich";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
+import { ListRow } from "../../ui/list-row";
 import { Tooltip } from "../../ui/tooltip";
 import { IconPlay } from "../icons";
 import { SlackText } from "./SlackText";
 
 const PLAY_GLYPH = <IconPlay size={28} />;
+
+const PROVIDER_NAMES: Record<Embed["provider"], string> = {
+  youtube: "YouTube",
+  vimeo: "Vimeo",
+  loom: "Loom",
+  tella: "Tella",
+  x: "X",
+};
+
+// What X's post frame says when its height changes.
+const TweetResize = z.object({
+  "twttr.embed": z.object({
+    method: z.literal("twttr.private.resize"),
+    params: z.array(z.object({ height: z.number().positive() })).min(1),
+  }),
+});
+
+// X sends it as JSON text, or as an object in newer frames.
+const TweetMessage = z.union([
+  TweetResize,
+  z
+    .string()
+    .transform((raw, ctx) => {
+      try {
+        return JSON.parse(raw);
+      } catch {
+        ctx.addIssue({ code: "custom", message: "Not JSON" });
+        return z.NEVER;
+      }
+    })
+    .pipe(TweetResize),
+]);
+
+/** A post on X in X's own frame, which reports its height as it loads. */
+function PostFrame({ embed }: { embed: Embed }) {
+  const frame = useRef<HTMLIFrameElement>(null);
+  const [height, setHeight] = useState(320);
+  // The theme the page shows, read once: the frame is built for one.
+  const [theme] = useState(() =>
+    document.documentElement.dataset.theme === "light" ? "light" : "dark",
+  );
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== "https://platform.twitter.com") return;
+      if (event.source !== frame.current?.contentWindow) return;
+      const parsed = TweetMessage.safeParse(event.data);
+      if (parsed.success)
+        setHeight(Math.ceil(parsed.data["twttr.embed"].params[0]!.height));
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+  return (
+    <iframe
+      ref={frame}
+      title="Post on X"
+      src={`${embed.src}&theme=${theme}`}
+      style={{ height }}
+      className="block w-full max-w-138 rounded-xl border-0"
+      sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-presentation"
+      allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+      referrerPolicy="strict-origin-when-cross-origin"
+    />
+  );
+}
+
+/**
+ * A video that plays where it was shared, as Slack's do: its still with a
+ * play button until clicked, so nothing loads from the provider before
+ * then, and the provider's own player after.
+ */
+function Player({
+  embed,
+  poster,
+  title,
+  onPlay,
+}: {
+  embed: Embed;
+  poster?: RichImage;
+  title: string;
+  /** Playing a post replaces its whole preview with the post. */
+  onPlay?: () => void;
+}) {
+  const [playing, setPlaying] = useState(false);
+  // A post's preview keeps its picture's shape; a video plays in its own.
+  const aspect =
+    embed.kind === "post"
+      ? poster?.width && poster.height
+        ? poster.width / poster.height
+        : 16 / 9
+      : embed.aspect;
+  const tall = aspect < 1;
+  const box = tall ? "w-64 max-w-full" : "w-full max-w-120";
+  if (playing && embed.kind === "video")
+    return (
+      <iframe
+        title={title}
+        src={embed.src}
+        style={{ aspectRatio: String(embed.aspect) }}
+        className={cn("block h-auto rounded-lg border-0 bg-code-well", box)}
+        sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-presentation allow-forms"
+        allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+        allowFullScreen
+        referrerPolicy="strict-origin-when-cross-origin"
+      />
+    );
+  return (
+    <ListRow
+      aria-label={`Play ${title} from ${PROVIDER_NAMES[embed.provider]}`}
+      onClick={() => (onPlay ? onPlay() : setPlaying(true))}
+      style={{ aspectRatio: String(aspect) }}
+      className={cn(
+        "group/play relative block min-h-0 overflow-hidden rounded-lg border border-line bg-code-well p-0",
+        box,
+      )}
+    >
+      {poster && (
+        <Picture
+          image={poster}
+          className="absolute inset-0 size-full object-cover"
+        />
+      )}
+      <span className="absolute inset-0 flex items-center justify-center">
+        <span className="flex size-14 items-center justify-center rounded-full bg-tooltip text-tooltip-fg opacity-90 transition-transform group-hover/play:scale-105 motion-reduce:transition-none">
+          {PLAY_GLYPH}
+        </span>
+      </span>
+    </ListRow>
+  );
+}
 const SMALL_TEXT = "text-meta leading-snug text-dim";
 
 /** An app's picture: loaded straight from its host, which never learns
@@ -130,29 +264,36 @@ function Block({ block }: { block: RichBlock }) {
       );
     case "video":
       return (
-        <a
-          href={block.url}
-          target="_blank"
-          rel="noreferrer"
-          className="flex w-fit max-w-full flex-col gap-1 no-underline"
-        >
-          <span className="text-body font-bold text-link hover:underline">
-            {block.title}
-          </span>
-          {block.thumb && (
-            <span className="relative block w-fit">
-              <Picture image={block.thumb} className={BIG_PICTURE} />
-              <span className="absolute inset-0 flex items-center justify-center">
-                <span className="flex size-12 items-center justify-center rounded-full bg-tooltip text-tooltip-fg">
-                  {PLAY_GLYPH}
-                </span>
-              </span>
-            </span>
+        <div className="flex w-fit max-w-full flex-col gap-1">
+          {block.url ? (
+            <a
+              href={block.url}
+              target="_blank"
+              rel="noreferrer"
+              className="w-fit text-body font-bold text-link no-underline hover:underline"
+            >
+              {block.title}
+            </a>
+          ) : (
+            <span className="text-body font-bold text-fg">{block.title}</span>
+          )}
+          {block.embed ? (
+            <Player
+              embed={block.embed}
+              poster={block.thumb}
+              title={block.title}
+            />
+          ) : (
+            block.thumb && (
+              <a href={block.url} target="_blank" rel="noreferrer">
+                <Picture image={block.thumb} className={BIG_PICTURE} />
+              </a>
+            )
           )}
           {block.provider && (
             <span className="text-meta text-faint">{block.provider}</span>
           )}
-        </a>
+        </div>
       );
   }
 }
@@ -169,6 +310,19 @@ export function RichBlocks({ blocks }: { blocks: RichBlock[] }) {
 }
 
 function Attachment({ attachment: a }: { attachment: RichAttachment }) {
+  const [showPost, setShowPost] = useState(false);
+  const embed = a.embed;
+  if (embed?.kind === "post" && showPost)
+    return (
+      <div className="flex flex-col gap-1">
+        {a.pretext && <SlackText text={a.pretext} />}
+        <PostFrame embed={embed} />
+      </div>
+    );
+  // A video's still becomes its player; the small thumbnail beside the
+  // text goes with it.
+  const poster = embed ? (a.image ?? a.thumb) : undefined;
+  const thumb = embed ? undefined : a.thumb;
   return (
     <div className="flex flex-col gap-1">
       {a.pretext && <SlackText text={a.pretext} />}
@@ -182,7 +336,7 @@ function Attachment({ attachment: a }: { attachment: RichAttachment }) {
         <div className="flex min-w-0 flex-1 gap-3 py-0.5">
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             {a.service && (
-              <span className="flex items-center gap-1.5 text-meta font-bold text-dim">
+              <span className="flex items-center gap-1.5 text-label font-bold text-dim">
                 {a.service.icon && (
                   <Picture
                     image={{ url: a.service.icon, alt: "" }}
@@ -205,7 +359,7 @@ function Attachment({ attachment: a }: { attachment: RichAttachment }) {
                     href={a.author.link}
                     target="_blank"
                     rel="noreferrer"
-                    className="hover:underline"
+                    className="text-fg no-underline hover:underline"
                   >
                     {a.author.name}
                   </a>
@@ -249,7 +403,18 @@ function Attachment({ attachment: a }: { attachment: RichAttachment }) {
                 ))}
               </div>
             )}
-            {a.image && <Picture image={a.image} className={BIG_PICTURE} />}
+            {embed ? (
+              <Player
+                embed={embed}
+                poster={poster}
+                title={a.title || PROVIDER_NAMES[embed.provider]}
+                onPlay={
+                  embed.kind === "post" ? () => setShowPost(true) : undefined
+                }
+              />
+            ) : (
+              a.image && <Picture image={a.image} className={BIG_PICTURE} />
+            )}
             {a.footer && (
               <span className="flex items-center gap-1.5">
                 {a.footerIcon && (
@@ -262,9 +427,9 @@ function Attachment({ attachment: a }: { attachment: RichAttachment }) {
               </span>
             )}
           </div>
-          {a.thumb && (
+          {thumb && (
             <Picture
-              image={a.thumb}
+              image={thumb}
               className="size-18 shrink-0 rounded-md object-cover"
             />
           )}

@@ -266,7 +266,7 @@ enum HtmlTheme {
 
     static let lightDefaults: [String: String] = fonts.merging([
         "--background": "#ffffff", "--foreground": "#1a1a1a",
-        "--muted": "#f0f0f0", "--muted-foreground": "#646464", "--faint-foreground": "#949494",
+        "--muted": "#f0f0f0", "--muted-foreground": "#646464", "--faint-foreground": "#848484",
         "--card": "#f6f6f6", "--card-foreground": "#1a1a1a",
         "--border": "#e2e2e2", "--border-strong": "#d0d0d0", "--input": "#ebebeb",
         "--primary": "#1a1a1a", "--primary-foreground": "#ffffff",
