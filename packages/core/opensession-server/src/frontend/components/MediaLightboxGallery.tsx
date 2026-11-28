@@ -641,7 +641,7 @@ export function MediaLightboxGallery({
   // top and bottom so the image's center stays at the viewport's center.
   const phoneStagePadding = (68 + phoneBottomHeight) / 2;
   const phoneAction =
-    "grid size-11 shrink-0 place-items-center rounded-full border-0 bg-transparent p-0 text-fg transition-[transform,background-color,opacity] duration-[var(--dur-micro)] ease-[var(--ease)] active:scale-[0.96] disabled:opacity-[0.35]";
+    "grid size-11 shrink-0 place-items-center rounded-full border-0 bg-transparent p-0 text-fg transition-[transform,background-color,opacity] duration-micro ease-standard active:scale-press disabled:opacity-[0.35]";
 
   const canCopyImage = item.kind !== "video";
   const canCopyLink = !item.src.startsWith("data:");
@@ -794,7 +794,7 @@ export function MediaLightboxGallery({
           >
             <span
               className={cn(
-                "block overflow-hidden rounded-sm outline outline-1 outline-offset-1 transition-[width,height,opacity] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
+                "block overflow-hidden rounded-sm outline outline-1 outline-offset-1 transition-[width,height,opacity] duration-standard ease-standard motion-reduce:transition-none",
                 active
                   ? "h-11 w-11 opacity-100 outline-fg/85"
                   : "h-9 w-7 opacity-60 outline-transparent hover:opacity-90",
@@ -876,7 +876,7 @@ export function MediaLightboxGallery({
         className={cn(
           "pointer-events-none absolute left-[calc(16px+env(safe-area-inset-left))] [html.wco_&]:left-[max(16px,calc(env(titlebar-area-x,78px)+8px))] right-[calc(12px+env(safe-area-inset-right))] top-[calc(12px+env(safe-area-inset-top))] z-sticky grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3",
           isPhone &&
-            "transition-[opacity,transform] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
+            "transition-[opacity,transform] duration-standard ease-standard motion-reduce:transition-none",
           isPhone && !chromeVisible && "-translate-y-2 opacity-0",
         )}
         inert={isPhone && !chromeVisible ? true : undefined}
@@ -1054,7 +1054,7 @@ export function MediaLightboxGallery({
         <div
           ref={phoneBottomRef}
           className={cn(
-            "absolute inset-x-0 bottom-0 z-sticky flex flex-col gap-3 bg-linear-to-b from-transparent via-bg/85 to-bg px-0 pb-[max(14px,env(safe-area-inset-bottom))] pt-8 transition-[opacity,transform] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
+            "absolute inset-x-0 bottom-0 z-sticky flex flex-col gap-3 bg-linear-to-b from-transparent via-bg/85 to-bg px-0 pb-[max(14px,env(safe-area-inset-bottom))] pt-8 transition-[opacity,transform] duration-standard ease-standard motion-reduce:transition-none",
             !chromeVisible && "pointer-events-none translate-y-3 opacity-0",
           )}
           inert={!chromeVisible ? true : undefined}
@@ -1237,7 +1237,7 @@ export function MediaLightboxGallery({
               type="submit"
               // The filled circle a message is sent with, in the app's own
               // accent rather than a plain white chip.
-              className="grid size-9 shrink-0 place-items-center rounded-full border-0 bg-accent p-0 text-white transition-transform active:scale-[0.96] disabled:bg-white/15 disabled:text-white/40 phone:size-11"
+              className="grid size-9 shrink-0 place-items-center rounded-full border-0 bg-accent p-0 text-white transition-transform active:scale-press disabled:bg-white/15 disabled:text-white/40 phone:size-11"
               disabled={!commentText.trim() || sendingComment}
               aria-label={sendingComment ? "Sending comment" : "Send comment"}
             >

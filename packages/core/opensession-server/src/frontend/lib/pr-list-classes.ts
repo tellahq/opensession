@@ -72,9 +72,9 @@ export const PR_FEED_GROUP_LABEL = `${GROUP_LABEL} pb-2 text-label`;
 export const PR_FEED_ROW =
   "group focus-ring relative grid w-full grid-cols-[24px_minmax(0,1fr)_130px_44px] " +
   "cursor-pointer items-center gap-2.5 rounded-control border-0 bg-transparent px-3 py-3 " +
-  "text-left transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-hover " +
+  "text-left transition-colors duration-micro ease-standard hover:bg-hover " +
   "after:pointer-events-none after:absolute after:right-3 after:bottom-0 after:left-[46px] " +
-  "after:h-px after:bg-line after:transition-opacity after:duration-[var(--dur-micro)] " +
+  "after:h-px after:bg-line after:transition-opacity after:duration-micro " +
   "last:after:opacity-0 hover:after:opacity-0 " +
   "[&:has(+button:hover)]:after:opacity-0 " +
   "phone:grid-cols-[24px_minmax(0,1fr)_44px]";
@@ -82,9 +82,9 @@ export const PR_FEED_ROW =
 export const PR_ROW =
   "group focus-ring relative grid w-full grid-cols-[22px_24px_minmax(0,1fr)_130px_44px] " +
   "cursor-pointer items-center gap-2.5 rounded-control border-0 bg-transparent px-3 py-3 " +
-  "text-left transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-hover " +
+  "text-left transition-colors duration-micro ease-standard hover:bg-hover " +
   "after:pointer-events-none after:absolute after:right-3 after:bottom-0 after:left-[78px] " +
-  "after:h-px after:bg-line after:transition-opacity after:duration-[var(--dur-micro)] " +
+  "after:h-px after:bg-line after:transition-opacity after:duration-micro " +
   "last:after:opacity-0 hover:after:opacity-0 " +
   "[&:has(+button:hover)]:after:opacity-0 " +
   "phone:grid-cols-[22px_24px_minmax(0,1fr)_44px]";

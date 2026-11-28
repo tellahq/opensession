@@ -77,7 +77,7 @@ function GithubSetupStep({
         <span
           aria-hidden="true"
           className={cn(
-            "flex items-center gap-2 transition-colors duration-[var(--dur-micro)] group-hover:text-fg",
+            "flex items-center gap-2 transition-colors duration-micro group-hover:text-fg",
             actionDisabled && !complete && "opacity-40 group-hover:text-dim",
           )}
         >
@@ -109,7 +109,7 @@ function GithubSetupStep({
           <button
             type="button"
             aria-label={`Show help for ${label.toLowerCase()}`}
-            className="focus-ring pointer-events-auto ml-auto flex size-6 items-center justify-center rounded-control text-faint transition-colors duration-[var(--dur-micro)] hover:text-fg phone:size-8"
+            className="focus-ring pointer-events-auto ml-auto flex size-6 items-center justify-center rounded-control text-faint transition-colors duration-micro hover:text-fg phone:size-8"
           >
             <IconQuestionCircle size={20} />
           </button>

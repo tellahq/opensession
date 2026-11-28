@@ -293,7 +293,7 @@ function PrBarButton({
       layoutDependency={phase}
       transition={LAYOUT_TRANSITION}
       className={cn(
-        "inline-flex min-h-[30px] items-center justify-center gap-1.5 rounded-full border px-3 py-[5px] text-label leading-none font-semibold whitespace-nowrap smooth-shadow-sm transition-[background-color,border-color,color,filter,transform] duration-150 ease-in-out hover:brightness-[1.08] active:scale-[0.98] active:brightness-[0.98] focus-visible:outline-2 focus-visible:outline-[var(--accent-ink)] focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-60 disabled:shadow-none",
+        "inline-flex min-h-[30px] items-center justify-center gap-1.5 rounded-full border px-3 py-[5px] text-label leading-none font-semibold whitespace-nowrap smooth-shadow-sm transition-[background-color,border-color,color,filter,transform] duration-micro ease-standard hover:brightness-[1.08] active:scale-press-plate active:brightness-[0.98] focus-visible:outline-2 focus-visible:outline-[var(--accent-ink)] focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-60 disabled:shadow-none",
         tones[tone],
         // A leading glyph carries its own margin: the icon set draws in a
         // 4.75–19.25 span of a 24 grid, so an 18px box holds ~3.5px of

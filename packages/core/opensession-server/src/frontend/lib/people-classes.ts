@@ -16,7 +16,7 @@ export const PEOPLE_CHIP_ROW = "mb-6 flex flex-wrap items-center gap-1.5";
 export const PEOPLE_CHIP =
   "focus-ring inline-flex min-w-0 cursor-pointer items-center gap-2 rounded-[999px] " +
   "border-0 bg-panel py-1 pr-3 pl-1 text-control-label font-medium text-dim " +
-  "transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] " +
+  "transition-colors duration-micro ease-standard " +
   "hover:bg-hover hover:text-fg";
 
 /** The scope the feed is on. A wash the strength of a hover state read as one

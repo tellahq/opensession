@@ -47,10 +47,10 @@ export const INBOX_SWIPE_DONE = `${INBOX_SWIPE_ACTION_BASE} right-0 w-[var(--swi
  */
 export const INBOX_ROW =
   "group relative flex items-start gap-3 rounded-control py-2.5 pr-3 pl-3 " +
-  "transition-[color,background-color,transform] duration-[var(--dur-micro)] ease-[var(--ease)] " +
+  "transition-[color,background-color,transform] duration-micro ease-standard " +
   "hover:bg-hover focus-within:bg-hover " +
   "after:pointer-events-none after:absolute after:right-3 after:bottom-0 after:left-12 " +
-  "after:h-px after:bg-line after:transition-opacity after:duration-[var(--dur-micro)] " +
+  "after:h-px after:bg-line after:transition-opacity after:duration-micro " +
   "hover:after:opacity-0 focus-within:after:opacity-0 " +
   "phone:z-1 phone:touch-pan-y phone:bg-surface phone:py-3.5 phone:pr-3.5 phone:pl-3.5 " +
   "phone:transform-[translateX(var(--swipe-x,0))] phone:after:left-[50px]";
@@ -83,12 +83,12 @@ export const INBOX_ROW_REASON =
 /** Desktop actions replace the timestamp on hover or keyboard focus. */
 export const INBOX_ROW_ACTIONS =
   "absolute top-1.5 right-2 z-1 flex items-center gap-0.5 opacity-0 transition-opacity " +
-  "duration-[var(--dur-micro)] ease-[var(--ease)] group-hover:opacity-100 " +
+  "duration-micro ease-standard group-hover:opacity-100 " +
   "group-focus-within:opacity-100 phone:hidden";
 
 export const INBOX_ROW_TIME =
   "ml-auto flex shrink-0 items-center gap-1.5 pl-2 text-meta tabular-nums text-faint transition-opacity " +
-  "duration-[var(--dur-micro)] group-hover:opacity-0 group-focus-within:opacity-0 " +
+  "duration-micro group-hover:opacity-0 group-focus-within:opacity-0 " +
   "phone:group-hover:opacity-100 phone:group-focus-within:opacity-100";
 
 /** The count on the bell. */

@@ -111,7 +111,7 @@ export const VIEWER_BRANCH =
  */
 export const VIEWER_CRUMB_UP =
   "-mx-1.5 -my-[5px] h-7 max-w-[240px] shrink cursor-pointer overflow-hidden text-ellipsis rounded-md px-1.5 py-px leading-6.5 " +
-  "text-label font-medium text-dim transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] " +
+  "text-label font-medium text-dim transition-colors duration-micro ease-standard " +
   "hover:bg-hover hover:text-fg";
 
 /**
@@ -246,7 +246,7 @@ export const VIEWER_MESSAGES_REGION = "relative flex min-h-0 flex-1 flex-col";
 export const VIEWER_TOP_FADE =
   "pointer-events-none absolute left-0 right-[14px] top-0 z-1 h-6 " +
   "scrim-to-t " +
-  "opacity-0 transition-opacity duration-150 motion-reduce:transition-none " +
+  "opacity-0 transition-opacity duration-micro motion-reduce:transition-none " +
   "data-[scrolled]:opacity-100 phone:hidden";
 
 /**
@@ -581,7 +581,7 @@ const PILL_PRESSABLE =
   "before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] " +
   "before:[corner-shape:inherit] before:bg-transparent before:transition-colors before:content-[''] " +
   "after:absolute after:content-[''] hover:before:bg-hover " +
-  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg active:scale-[0.96]";
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg active:scale-press";
 
 export const TRANSCRIPT_PILL_BUTTON = `${TRANSCRIPT_PILL} ${PILL_PRESSABLE} after:-inset-1`;
 export const FLOATING_PILL_BUTTON = `${FLOATING_PILL} ${PILL_PRESSABLE} after:-inset-1`;

@@ -130,7 +130,7 @@ export function FileChips({
             >
               <span
                 className={cn(
-                  "block h-full bg-accent transition-[width] duration-300 ease-out motion-reduce:transition-none",
+                  "block h-full bg-accent transition-[width] duration-long ease-standard motion-reduce:transition-none",
                   percent === 0 && "w-1/5 animate-pulse",
                 )}
                 style={percent > 0 ? { width: `${percent}%` } : undefined}

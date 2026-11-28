@@ -274,7 +274,7 @@ export function Feed({
             key={member.key}
             type="button"
             className={cn(
-              "focus-ring flex min-h-8 shrink-0 items-center gap-1 rounded-md p-1 text-supporting font-medium text-fg transition-[background-color,color,scale] duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-hover active:scale-[0.96] phone:min-h-11 motion-reduce:transform-none",
+              "focus-ring flex min-h-8 shrink-0 items-center gap-1 rounded-md p-1 text-supporting font-medium text-fg transition-[background-color,color,scale] duration-micro ease-standard hover:bg-hover active:scale-press phone:min-h-11 motion-reduce:transform-none",
               selected && "bg-selected pr-1.5 font-semibold hover:bg-pressed",
             )}
             onClick={() =>
@@ -300,7 +300,7 @@ export function Feed({
             <span
               aria-hidden={!selected}
               className={cn(
-                "grid min-w-0 transition-[grid-template-columns,opacity] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
+                "grid min-w-0 transition-[grid-template-columns,opacity] duration-standard ease-standard motion-reduce:transition-none",
                 selected
                   ? "grid-cols-[1fr] opacity-100"
                   : "grid-cols-[0fr] opacity-0",

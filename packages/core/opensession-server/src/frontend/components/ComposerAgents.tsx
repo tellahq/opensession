@@ -62,8 +62,7 @@ const sectionName = "truncate text-meta font-semibold text-dim";
 /** The live dot. The keyframes stay in the stylesheet (see the report — they
  *  belong in base.css now that no class of ours carries them), and the
  *  reduced-motion blanket in base.css deliberately stops this one. */
-const liveDot =
-  "flex-none rounded-full bg-yellow animate-[composer-agents-pulse_1.4s_ease-in-out_infinite]";
+const liveDot = "flex-none rounded-full bg-yellow animate-agents";
 
 export function ComposerAgents({ runs, subagents, plan, onOpenPanel }: Props) {
   const [open, setOpen] = useState(
@@ -189,7 +188,7 @@ export function ComposerAgents({ runs, subagents, plan, onOpenPanel }: Props) {
       <IconChevronDown
         size={20}
         className={cn(
-          "flex-none text-faint transition-transform duration-[var(--dur)]",
+          "flex-none text-faint transition-transform duration-standard",
           !open && "rotate-180",
         )}
       />

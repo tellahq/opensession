@@ -239,7 +239,7 @@ export function RepoBar({
       // The title card's Repository row: the value itself opens the menu, so
       // the switch/attach control sits where the repo is named.
       <Menu.Trigger
-        className="-mr-1.5 flex h-7 min-w-0 cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-1.5 text-label text-fg transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-hover data-[popup-open]:bg-hover"
+        className="-mr-1.5 flex h-7 min-w-0 cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-1.5 text-label text-fg transition-colors duration-micro ease-standard hover:bg-hover data-[popup-open]:bg-hover"
         title="Switch or attach another repo"
         aria-label={`Repository: ${repoLabel(primary)}. Change repository`}
       >
@@ -252,7 +252,7 @@ export function RepoBar({
       </Menu.Trigger>
     ) : variant === "hero" ? (
       <Menu.Trigger
-        className="inline-flex min-h-11 max-w-full shrink-0 cursor-pointer items-center rounded-md border-0 bg-transparent px-1.5 text-label font-medium text-dim transition-[color,background-color,scale] hover:bg-hover hover:text-fg active:scale-[0.96] data-[popup-open]:bg-hover data-[popup-open]:text-fg"
+        className="inline-flex min-h-11 max-w-full shrink-0 cursor-pointer items-center rounded-md border-0 bg-transparent px-1.5 text-label font-medium text-dim transition-[color,background-color,scale] hover:bg-hover hover:text-fg active:scale-press data-[popup-open]:bg-hover data-[popup-open]:text-fg"
         title="Switch or attach another repository"
         aria-label={`Repository: ${repoLabel(primary)}. Change repository`}
       >
@@ -267,7 +267,7 @@ export function RepoBar({
       // box is the title's (VIEWER_BRANCH_EDITABLE): 28px tall, same radius,
       // and the trailing -mr-0.5 leaves a 2px seam between the two boxes.
       <Menu.Trigger
-        className="-my-[5px] -ml-[5px] -mr-0.5 flex h-7 min-w-7 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-md border-0 bg-transparent px-[5px] text-fg transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-hover data-[popup-open]:bg-hover"
+        className="-my-[5px] -ml-[5px] -mr-0.5 flex h-7 min-w-7 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-md border-0 bg-transparent px-[5px] text-fg transition-colors duration-micro ease-standard hover:bg-hover data-[popup-open]:bg-hover"
         title={`${busy ?? repoLabel(primary)}${
           attached.length > 0
             ? ` + ${attached.map((r) => repoLabel(r.repo)).join(", ")}`

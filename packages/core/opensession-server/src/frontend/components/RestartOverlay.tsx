@@ -274,7 +274,7 @@ export function RestartOverlay({ connected, addHandler }: Props) {
           className={`size-[30px] rounded-full border-2 ${
             backOnline
               ? "border-green border-t-green"
-              : "animate-[spin_0.8s_linear_infinite] border-line-strong border-t-accent"
+              : "animate-spin-quick border-line-strong border-t-accent"
           }`}
         />
         {/* Deliberately not "is restarting": that's the calm pill's copy, and

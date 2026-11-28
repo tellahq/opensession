@@ -177,7 +177,7 @@ export function WorkspaceTitlePopover({
               aria-label={`${title}. ${renameLabel}`}
               className={cn(
                 CARD_TITLE,
-                "block w-full cursor-text text-left transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-hover",
+                "block w-full cursor-text text-left transition-colors duration-micro ease-standard hover:bg-hover",
               )}
               onClick={() => setDraft(title)}
             >

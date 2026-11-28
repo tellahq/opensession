@@ -30,7 +30,7 @@ type RunnerRef = {
 };
 
 const actionClass =
-  "flex min-h-10 w-full items-center rounded-md px-2.5 text-left text-xs font-semibold text-dim outline-none transition-[color,background-color,scale] hover:bg-hover hover:text-fg focus-visible:bg-hover focus-visible:text-fg active:scale-[0.96] disabled:pointer-events-none disabled:opacity-45";
+  "flex min-h-10 w-full items-center rounded-md px-2.5 text-left text-xs font-semibold text-dim outline-none transition-[color,background-color,scale] hover:bg-hover hover:text-fg focus-visible:bg-hover focus-visible:text-fg active:scale-press disabled:pointer-events-none disabled:opacity-45";
 
 /** Live sandbox status + lifecycle controls. The compact trigger remains the
  * old provider badge; opening it resolves provider state without polling every
@@ -87,7 +87,7 @@ export function SandboxBadge({
     return (
       <Popover.Root open={open} onOpenChange={setOpen}>
         <Popover.Trigger
-          className="flex h-8 flex-none items-center gap-1.5 rounded-md border border-line bg-surface px-2 text-meta font-medium text-dim outline-none transition-[color,background-color,border-color,scale] hover:border-line-strong hover:text-fg focus-visible:border-line-strong active:scale-[0.96]"
+          className="flex h-8 flex-none items-center gap-1.5 rounded-md border border-line bg-surface px-2 text-meta font-medium text-dim outline-none transition-[color,background-color,border-color,scale] hover:border-line-strong hover:text-fg focus-visible:border-line-strong active:scale-press"
           aria-label={`Runner · ${runner.name} · ${label}`}
         >
           <span className={cn("size-2 rounded-full", dot)} aria-hidden="true" />
@@ -244,7 +244,7 @@ export function SandboxBadge({
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger
-        className="flex h-8 flex-none items-center gap-1.5 rounded-md border border-line bg-surface px-2 text-meta font-medium text-dim outline-none transition-[color,background-color,border-color,scale] hover:border-line-strong hover:text-fg focus-visible:border-line-strong active:scale-[0.96]"
+        className="flex h-8 flex-none items-center gap-1.5 rounded-md border border-line bg-surface px-2 text-meta font-medium text-dim outline-none transition-[color,background-color,border-color,scale] hover:border-line-strong hover:text-fg focus-visible:border-line-strong active:scale-press"
         data-testid="sandbox-badge"
         aria-label={`${sandboxProviderLabel(sandbox.provider)} Sandbox · ${lifecycleLabel[lifecycle]}`}
       >

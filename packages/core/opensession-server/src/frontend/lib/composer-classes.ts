@@ -185,7 +185,7 @@ export const composerMenuAnchorLeft =
    40px phone size is what the last of the three (!) competing phone blocks in
    legacy.css resolved to. */
 export const composerSend =
-  "inline-flex size-8 shrink-0 items-center justify-center rounded-full leading-none transition-[background-color,border-color,color,filter,scale] enabled:active:scale-[0.96] disabled:cursor-default disabled:opacity-35 phone:size-10";
+  "inline-flex size-8 shrink-0 items-center justify-center rounded-full leading-none transition-[background-color,border-color,color,filter,scale] enabled:active:scale-press disabled:cursor-default disabled:opacity-35 phone:size-10";
 /** Ordinary send: the accent plate. Hover takes `--accent-hover` rather than
  *  brightening — brightening a wash read as a disabled state. */
 export const composerSendDefault =

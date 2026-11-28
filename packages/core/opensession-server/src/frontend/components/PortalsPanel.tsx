@@ -194,7 +194,7 @@ export function PortalsPage({
                             )
                             .finally(() => setRequestedId(null));
                         }}
-                        className="focus-ring flex min-h-11 w-full min-w-0 items-center gap-3 rounded-control px-2 py-1.5 text-left transition-[background-color,scale] hover:bg-hover active:scale-[0.96] disabled:cursor-default disabled:opacity-45"
+                        className="focus-ring flex min-h-11 w-full min-w-0 items-center gap-3 rounded-control px-2 py-1.5 text-left transition-[background-color,scale] hover:bg-hover active:scale-press disabled:cursor-default disabled:opacity-45"
                       >
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-label font-medium text-fg">

@@ -85,7 +85,7 @@ test("indexed transcripts settle positively but cannot stay hidden forever", () 
   expect(readerController).toContain("? INDEXED_OPEN_SETTLE_MAX_MS");
   expect(readerController).toContain(": LEGACY_OPEN_SETTLE_MAX_MS,");
   expect(transcriptView).toContain(
-    '"w-full shrink-0 motion-safe:transition-opacity motion-safe:duration-150"',
+    '"w-full shrink-0 motion-safe:transition-opacity motion-safe:duration-micro"',
   );
 });
 

@@ -173,17 +173,17 @@ export function MediaLightboxViewer({
                     aria-label={`Show annotation: ${annotation.text}`}
                     aria-expanded={open}
                   >
-                    <span className="size-2.5 rounded-full bg-accent shadow-[0_1px_4px_rgb(0_0_0/0.28),0_0_0_1px_rgb(255_255_255/0.18)] transition-transform duration-[var(--dur-micro)] ease-[var(--ease)] group-hover/annotation:scale-[1.22] group-focus-within/annotation:scale-[1.22] motion-reduce:transition-none" />
+                    <span className="size-2.5 rounded-full bg-accent shadow-[0_1px_4px_rgb(0_0_0/0.28),0_0_0_1px_rgb(255_255_255/0.18)] transition-transform duration-micro ease-standard group-hover/annotation:scale-grow group-focus-within/annotation:scale-grow motion-reduce:transition-none" />
                   </button>
                   <div
                     className={cn(
-                      "absolute top-1/2 flex w-[min(260px,56vw)] -translate-y-1/2 items-center gap-1 rounded-popup bg-black/70 p-1.5 pl-3 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.1),0_10px_30px_rgb(0_0_0/0.38)] backdrop-blur-xl transition-[opacity,scale] duration-[var(--dur-micro)] ease-[var(--ease)] motion-reduce:transition-none",
+                      "absolute top-1/2 flex w-[min(260px,56vw)] -translate-y-1/2 items-center gap-1 rounded-popup bg-black/70 p-1.5 pl-3 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.1),0_10px_30px_rgb(0_0_0/0.38)] backdrop-blur-xl transition-[opacity,scale] duration-micro ease-standard motion-reduce:transition-none",
                       opensLeft
                         ? "right-full mr-1 origin-right"
                         : "left-full ml-1 origin-left",
                       open
                         ? "pointer-events-auto scale-100 opacity-100"
-                        : "pointer-events-none scale-[0.96] opacity-0 group-hover/annotation:pointer-events-auto group-hover/annotation:scale-100 group-hover/annotation:opacity-100 group-focus-within/annotation:pointer-events-auto group-focus-within/annotation:scale-100 group-focus-within/annotation:opacity-100",
+                        : "pointer-events-none scale-press opacity-0 group-hover/annotation:pointer-events-auto group-hover/annotation:scale-100 group-hover/annotation:opacity-100 group-focus-within/annotation:pointer-events-auto group-focus-within/annotation:scale-100 group-focus-within/annotation:opacity-100",
                     )}
                   >
                     <span className="min-w-0 flex-1 truncate text-label font-medium">
@@ -192,7 +192,7 @@ export function MediaLightboxViewer({
                     {onEditAnnotation && (
                       <button
                         type="button"
-                        className="grid size-10 shrink-0 place-items-center rounded-full border-0 bg-transparent p-0 text-white/70 hover:bg-white/10 hover:text-white active:scale-[0.96] phone:size-11"
+                        className="grid size-10 shrink-0 place-items-center rounded-full border-0 bg-transparent p-0 text-white/70 hover:bg-white/10 hover:text-white active:scale-press phone:size-11"
                         onClick={() => onEditAnnotation(annotation)}
                         aria-label="Edit annotation"
                       >
@@ -202,7 +202,7 @@ export function MediaLightboxViewer({
                     {onDeleteAnnotation && (
                       <button
                         type="button"
-                        className="grid size-10 shrink-0 place-items-center rounded-full border-0 bg-transparent p-0 text-white/70 hover:bg-white/10 hover:text-white active:scale-[0.96] phone:size-11"
+                        className="grid size-10 shrink-0 place-items-center rounded-full border-0 bg-transparent p-0 text-white/70 hover:bg-white/10 hover:text-white active:scale-press phone:size-11"
                         onClick={() => onDeleteAnnotation(annotation)}
                         aria-label="Delete annotation"
                       >

@@ -53,7 +53,7 @@ import { PrRefStagingMark, usePrRefStaging } from "./PrRefStagingMark";
 /** A row's fix: the band's action one size down, to fit a 31px row. */
 const ROW_ACTION =
   "inline-flex h-6 shrink-0 items-center rounded-control border px-2 text-meta font-semibold whitespace-nowrap " +
-  "transition-[background-color,filter] duration-150 focus-ring disabled:cursor-default disabled:opacity-60";
+  "transition-[background-color,filter] duration-micro focus-ring disabled:cursor-default disabled:opacity-60";
 const ROW_ACTION_TONE = {
   red: "border-[color-mix(in_srgb,var(--red)_78%,black)] bg-[var(--red)] text-white hover:brightness-[1.08]",
   "status-red":

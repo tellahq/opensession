@@ -219,7 +219,7 @@ function LoopDisclosure({
         {meta && <span className="flex-none">· {meta}</span>}
         <span
           className={cn(
-            "grid size-5 flex-none self-center place-items-center leading-none transition-transform duration-150",
+            "grid size-5 flex-none self-center place-items-center leading-none transition-transform duration-micro",
             open && "rotate-90",
           )}
         >

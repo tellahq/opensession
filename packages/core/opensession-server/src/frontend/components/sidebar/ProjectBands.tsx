@@ -231,7 +231,7 @@ export function ProjectBands({
                   <span
                     role="button"
                     tabIndex={0}
-                    className="relative ml-auto inline-flex size-7 shrink-0 items-center justify-center rounded-md text-faint opacity-100 transition-[opacity,color] duration-150 hover:text-fg focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100 before:absolute before:inset-0.5 before:z-0 before:rounded-sm before:[corner-shape:var(--cs)] before:transition-[background] before:content-[''] hover:before:bg-hover [&>*]:relative [&>*]:z-1"
+                    className="relative ml-auto inline-flex size-7 shrink-0 items-center justify-center rounded-md text-faint opacity-100 transition-[opacity,color] duration-micro hover:text-fg focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100 before:absolute before:inset-0.5 before:z-0 before:rounded-sm before:[corner-shape:var(--cs)] before:transition-[background] before:content-[''] hover:before:bg-hover [&>*]:relative [&>*]:z-1"
                     title={
                       project.repo === askBand
                         ? "New Ask session, no repo"

@@ -99,7 +99,7 @@ export function ComposerContextChip({
           className={cn(
             // `before:-inset-2` grows the hit area past the 20px box without
             // growing the pill around it.
-            "relative -mr-1 flex size-5 shrink-0 cursor-pointer items-center justify-center before:absolute before:-inset-2 enabled:active:scale-[0.96] enabled:transition-[color,transform] disabled:cursor-default disabled:opacity-50",
+            "relative -mr-1 flex size-5 shrink-0 cursor-pointer items-center justify-center before:absolute before:-inset-2 enabled:active:scale-press enabled:transition-[color,transform] disabled:cursor-default disabled:opacity-50",
             colours.remove,
           )}
         >

@@ -121,7 +121,7 @@ export const ASK_BTN_ON =
  *  `overflow-hidden` clips it to the rounded-xs corner. */
 export const ASK_SURFACE =
   "isolate " +
-  "before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-[inherit] before:[corner-shape:inherit] before:bg-[var(--palette-ask-bg)] before:opacity-0 before:transition-opacity before:duration-150 before:ease-[cubic-bezier(0.32,0.72,0,1)] " +
+  "before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-[inherit] before:[corner-shape:inherit] before:bg-[var(--palette-ask-bg)] before:opacity-0 before:transition-opacity before:duration-micro before:ease-standard " +
   "[&>*]:relative [&>*]:z-1";
 /** The one flexible footer item, last on the left beside the attach and
  *  overflow buttons. The palette has room for the model's full name, so it

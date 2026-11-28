@@ -258,7 +258,7 @@ export function SessionHeader({
           <Tooltip label={`Automation · ${session.automation}`} side="bottom">
             <a
               href={`${BASE_PATH}/automations/${encodeURIComponent(session.automationId || session.automation)}`}
-              className="-ml-1 inline-flex size-6 shrink-0 items-center justify-center rounded-control text-faint transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-hover hover:text-fg"
+              className="-ml-1 inline-flex size-6 shrink-0 items-center justify-center rounded-control text-faint transition-colors duration-micro ease-standard hover:bg-hover hover:text-fg"
               aria-label={`Open ${session.automation} automation settings`}
             >
               <IconRobot size={20} />

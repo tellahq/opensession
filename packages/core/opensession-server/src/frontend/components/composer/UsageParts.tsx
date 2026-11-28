@@ -26,7 +26,7 @@ export function Track({
     >
       <span
         className={cn(
-          "block h-full rounded-full transition-[width] duration-300",
+          "block h-full rounded-full transition-[width] duration-long",
           className,
         )}
         style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}

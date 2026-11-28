@@ -231,7 +231,7 @@ function AccentSwatch({
           aria-label={option.label}
           className="peer sr-only"
         />
-        <span className="flex size-8 items-center justify-center rounded-full border border-line bg-[linear-gradient(135deg,color-mix(in_srgb,var(--swatch)_97%,white),color-mix(in_srgb,var(--swatch)_94%,black))] text-(--swatch-ink) outline-offset-4 transition-[scale,box-shadow] duration-150 active:scale-[0.96] peer-checked:shadow-[0_0_0_2px_var(--bg-raised),0_0_0_4px_var(--swatch)] peer-focus-visible:outline-2 peer-focus-visible:outline-accent-ink">
+        <span className="flex size-8 items-center justify-center rounded-full border border-line bg-[linear-gradient(135deg,color-mix(in_srgb,var(--swatch)_97%,white),color-mix(in_srgb,var(--swatch)_94%,black))] text-(--swatch-ink) outline-offset-4 transition-[scale,box-shadow] duration-micro active:scale-press peer-checked:shadow-[0_0_0_2px_var(--bg-raised),0_0_0_4px_var(--swatch)] peer-focus-visible:outline-2 peer-focus-visible:outline-accent-ink">
           {active && <IconCheck size={20} strokeWidth={2.4} />}
         </span>
       </label>

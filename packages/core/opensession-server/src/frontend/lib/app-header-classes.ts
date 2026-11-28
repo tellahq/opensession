@@ -213,7 +213,7 @@ export const ARCHIVED_SEARCH_HEADER =
   "phone:h-[calc(max(env(safe-area-inset-top,0px),16px)+60px)]! " +
   "phone:pt-[max(env(safe-area-inset-top,0px),16px)]! " +
   "phone:transition-[height,padding-top,opacity,transform] " +
-  "phone:duration-[var(--dur)] phone:ease-[var(--ease)] " +
+  "phone:duration-standard phone:ease-standard " +
   "phone:[body.kb-open_&]:h-0! phone:[body.kb-open_&]:pt-0! " +
   "phone:[body.kb-open_&]:pointer-events-none phone:[body.kb-open_&]:opacity-0 " +
   "phone:[body.kb-open_&]:[transform:translateY(-8px)] motion-reduce:transition-none";

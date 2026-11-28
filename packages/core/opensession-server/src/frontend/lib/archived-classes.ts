@@ -54,10 +54,10 @@ export const ARCHIVED_SWIPE_ACTION =
  */
 export const ARCHIVED_ROW =
   "archived-row group relative flex items-start gap-3 rounded-control px-3 py-2.5 " +
-  "transition-[color,background-color,transform] duration-[var(--dur-micro)] ease-[var(--ease)] " +
+  "transition-[color,background-color,transform] duration-micro ease-standard " +
   "hover:bg-hover focus-within:bg-hover " +
   "after:pointer-events-none after:absolute after:right-3 after:bottom-0 after:left-[42px] " +
-  "after:h-px after:bg-line after:transition-opacity after:duration-[var(--dur-micro)] " +
+  "after:h-px after:bg-line after:transition-opacity after:duration-micro " +
   "hover:after:opacity-0 focus-within:after:opacity-0 " +
   "phone:z-1 phone:gap-2.5 phone:touch-pan-y phone:bg-surface phone:px-[18px] phone:py-4 " +
   "phone:transform-[translateX(var(--swipe-x,0))] phone:after:left-[46px]";
@@ -89,7 +89,7 @@ export const ARCHIVED_ROW_META =
 /** The timestamp and disclosure affordance step aside for Restore on hover. */
 export const ARCHIVED_ROW_TRAIL =
   "flex shrink-0 items-center gap-0.5 text-faint transition-opacity " +
-  "duration-[var(--dur-micro)] ease-[var(--ease)] group-hover:opacity-0 " +
+  "duration-micro ease-standard group-hover:opacity-0 " +
   "group-focus-within:opacity-0 phone:hidden";
 
 export const ARCHIVED_ROW_TIME =
@@ -101,7 +101,7 @@ export const ARCHIVED_ROW_TIME =
  */
 export const ARCHIVED_ROW_ACTION =
   "absolute right-3 top-1.5 z-1 opacity-0 transition-opacity " +
-  "duration-[var(--dur-micro)] ease-[var(--ease)] group-hover:opacity-100 " +
+  "duration-micro ease-standard group-hover:opacity-100 " +
   "focus-visible:opacity-100 phone:hidden";
 
 /** The page column. The archive top bar uses the same width so its search,

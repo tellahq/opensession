@@ -885,6 +885,10 @@ html[data-accent="green"] {
   --dur-micro: 0.15s;
   --dur: 0.2s;
   --dur-lg: 0.28s;
+  /* Not a UI transition: a live meter (the dictation level bars) eases from
+	   one reading to the next, so it keeps up with the input rather than with
+	   the floor above. */
+  --dur-meter: 90ms;
 }
 
 /* Reduced motion. One blanket rule rather than a guard per animation, so the

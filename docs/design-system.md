@@ -42,6 +42,12 @@ its odd values. A rule in a document does not stop that. A type does.
    (`z-sticky`, `z-chrome`, `z-modal`) and StyleX as `layer.<name>`. Inside a
    component's own stacking context, siblings take small integers (`-z-1` to
    `z-9`). `off-scale-z` counts any other z-index of 10 or more.
+   Motion is named the same way: `duration-micro/standard/long`,
+   `ease-standard`, `scale-press` (a control), `scale-press-plate` (a card)
+   and `scale-grow` (a small mark's hover), and named animations
+   (`animate-live`, `animate-waiting`, `animate-spin-quick`, ...) in
+   tailwind.css, matching StyleX's `motion`. `off-scale-motion` counts
+   arbitrary or numbered durations, easings, scales and animations.
 2. **Primitives** (`ui/*.tsx`). Authored in StyleX against the tokens. Each
    one owns its look completely and exposes `variant` / `size` for the
    choices the system has made, plus an `xstyle` prop whose type only accepts

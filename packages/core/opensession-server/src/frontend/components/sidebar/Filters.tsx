@@ -64,7 +64,7 @@ const BACKDROP = "fixed inset-0 z-sheet-scrim";
  *  washes from fusing into one block. */
 const FILTER_POPOVER =
   "fixed z-sheet-popup flex flex-col gap-0.5 rounded-popup bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] " +
-  "p-2 smooth-shadow-ring-md animate-[hovercard-in_var(--dur-micro)_var(--ease)]";
+  "p-2 smooth-shadow-ring-md animate-hovercard-in";
 
 /** The same control as a row inside the Advanced menu: label, current value,
  *  and its options one level in. Reads as a menu row rather than a panel row,

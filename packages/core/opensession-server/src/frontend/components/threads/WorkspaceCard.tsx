@@ -169,7 +169,7 @@ function ProgressRow({
               aria-label={`${shipped} of ${total} threads shipped`}
             >
               <span
-                className="block h-full rounded-[999px] bg-purple transition-[width] duration-300"
+                className="block h-full rounded-[999px] bg-purple transition-[width] duration-long"
                 style={{ width: `${(shipped / total) * 100}%` }}
               />
             </span>

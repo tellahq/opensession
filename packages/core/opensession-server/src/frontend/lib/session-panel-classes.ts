@@ -71,7 +71,7 @@ export const PANEL_SHELL =
   // A width change the person did not drag (opening Review or Browser, which
   // take half the window, or going back to a tool tab) glides rather than
   // jumps. The drag itself stays 1:1 with the pointer.
-  "transition-[width,min-width] duration-[var(--dur-lg)] ease-[var(--ease)] " +
+  "transition-[width,min-width] duration-long ease-standard " +
   "[body.resizing-panel_&]:transition-none " +
   // From 920px down it stops being a column in the layout and becomes an
   // overlay over the session, anchored under the top bar (--header-h is 0 on

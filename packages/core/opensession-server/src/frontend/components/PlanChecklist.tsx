@@ -59,10 +59,7 @@ function PlanMark({
       className={cn(
         "mt-1 size-2 flex-none rounded-full",
         status === "completed" && "bg-green",
-        status === "in_progress" && [
-          "bg-yellow",
-          live && "animate-[composer-agents-pulse_1.4s_ease-in-out_infinite]",
-        ],
+        status === "in_progress" && ["bg-yellow", live && "animate-agents"],
         status === "pending" && "border border-line",
       )}
     />

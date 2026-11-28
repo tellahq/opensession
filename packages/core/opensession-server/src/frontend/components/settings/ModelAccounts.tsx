@@ -448,7 +448,7 @@ function Meter({
       <div className="h-1 overflow-hidden rounded-full bg-active desktop:col-span-2 desktop:row-start-2 phone:col-start-2 phone:row-start-1">
         <div
           className={cn(
-            "h-full rounded-full transition-[width] duration-300",
+            "h-full rounded-full transition-[width] duration-long",
             usageToneClasses[usageTone(pct)],
           )}
           style={{ width: `${Math.min(100, Math.max(0, pct ?? 0))}%` }}

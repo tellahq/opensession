@@ -472,7 +472,7 @@ function MemoryRow({
                     <button
                       type="button"
                       aria-expanded="false"
-                      className="focus-ring inline-flex h-9 min-h-9 items-center rounded-md border-0 bg-transparent px-0 text-meta font-semibold leading-none text-dim opacity-0 transition-opacity duration-150 hover:text-fg group-hover/memory:opacity-100 group-focus-within/memory:opacity-100 phone:h-11 phone:min-h-11 phone:opacity-100"
+                      className="focus-ring inline-flex h-9 min-h-9 items-center rounded-md border-0 bg-transparent px-0 text-meta font-semibold leading-none text-dim opacity-0 transition-opacity duration-micro hover:text-fg group-hover/memory:opacity-100 group-focus-within/memory:opacity-100 phone:h-11 phone:min-h-11 phone:opacity-100"
                       onClick={() => void expand()}
                     >
                       Read all
@@ -489,7 +489,7 @@ function MemoryRow({
                     </button>
                   )}
                 </div>
-                <div className="ml-auto flex h-10 shrink-0 items-center justify-end gap-1 opacity-0 transition-opacity duration-150 group-hover/memory:opacity-100 group-focus-within/memory:opacity-100 phone:opacity-100">
+                <div className="ml-auto flex h-10 shrink-0 items-center justify-end gap-1 opacity-0 transition-opacity duration-micro group-hover/memory:opacity-100 group-focus-within/memory:opacity-100 phone:opacity-100">
                   {review && (
                     <Button
                       size="lg"

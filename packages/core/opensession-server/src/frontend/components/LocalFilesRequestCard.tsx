@@ -223,7 +223,7 @@ function RequestCard({
             className="h-1.5 overflow-hidden rounded-full bg-fg/8"
           >
             <div
-              className="h-full rounded-full bg-fg transition-[width] duration-300 motion-reduce:transition-none"
+              className="h-full rounded-full bg-fg transition-[width] duration-long motion-reduce:transition-none"
               style={{ width: `${percent}%` }}
             />
           </div>
