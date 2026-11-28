@@ -1,3 +1,5 @@
+import { popup } from "../../ui/popup-styles";
+import { sx } from "../../ui/sx";
 import * as stylex from "@stylexjs/stylex";
 import { dialogText } from "../../ui/dialog-styles";
 import {
@@ -14,10 +16,7 @@ import {
 import { motion } from "motion/react";
 import {
   composerMenuAnchorLeft,
-  composerMenuIcon,
-  composerMenuItem,
-  composerMenuPopup,
-  composerMenuWidth,
+  composerMenuPlacement,
 } from "../../lib/composer-classes";
 import { noAutofill } from "../../lib/composer-autofill";
 import { cn } from "../../ui/cn";
@@ -244,20 +243,19 @@ export function ComposerAddMenu({
       </Tooltip>
       {menu === "add" && (
         <div
-          className={cn(
-            composerMenuPopup,
-            composerMenuWidth,
-            composerMenuAnchorLeft,
+          {...sx(
+            [popup.surface, popup.scroll],
+            cn(composerMenuPlacement, composerMenuAnchorLeft),
           )}
         >
           {canAttach && (
             <ComposerPressButton
               type="button"
-              className={composerMenuItem}
+              {...stylex.props(popup.item, popup.plainItem)}
               onPress={onAttachFiles}
             >
-              <span className={composerMenuIcon}>
-                <IconPaperclip size={22} />
+              <span {...stylex.props(popup.itemGlyph)}>
+                <IconPaperclip size={20} />
               </span>
               <MenuLabel>
                 {canAttachFiles ? "Attach files" : "Attach an image"}
@@ -270,11 +268,11 @@ export function ComposerAddMenu({
           {canAttach && mentionEnabled && (
             <ComposerPressButton
               type="button"
-              className={composerMenuItem}
+              {...stylex.props(popup.item, popup.plainItem)}
               onPress={onMentionFile}
             >
-              <span className={composerMenuIcon}>
-                <IconAtSign size={22} />
+              <span {...stylex.props(popup.itemGlyph)}>
+                <IconAtSign size={20} />
               </span>
               <MenuLabel>Reference a file</MenuLabel>
               {/* Not a chord: typing @ in the field opens the same
@@ -287,14 +285,14 @@ export function ComposerAddMenu({
           {onSetGoal && (
             <ComposerPressButton
               type="button"
-              className={composerMenuItem}
+              {...stylex.props(popup.item, popup.plainItem)}
               // Opens the goal editor: `menu` is single-valued, so this
               // closes the add menu and opens the modal in one step.
               onPress={() => setMenu("goal")}
               title={goal ? `Goal: ${goal}` : undefined}
             >
-              <span className={composerMenuIcon}>
-                <IconCrosshair size={22} />
+              <span {...stylex.props(popup.itemGlyph)}>
+                <IconCrosshair size={20} />
               </span>
               <MenuLabel>{goal ? "Edit goal" : "Set a goal"}</MenuLabel>
             </ComposerPressButton>
@@ -302,7 +300,7 @@ export function ComposerAddMenu({
           {onNoteModeChange && (
             <ComposerPressButton
               type="button"
-              className={composerMenuItem}
+              {...stylex.props(popup.item, popup.plainItem)}
               onPress={() => {
                 setMenu(null);
                 onNoteModeChange(!noteMode);
@@ -311,8 +309,8 @@ export function ComposerAddMenu({
                 noteMode ? "Prompt the agent again" : "Only your team sees it"
               }
             >
-              <span className={composerMenuIcon}>
-                <IconNote size={22} />
+              <span {...stylex.props(popup.itemGlyph)}>
+                <IconNote size={20} />
               </span>
               <MenuLabel>
                 {noteMode ? "Back to prompting" : "Write a team note"}
@@ -322,7 +320,7 @@ export function ComposerAddMenu({
           {onPstackModeChange && (
             <ComposerPressButton
               type="button"
-              className={composerMenuItem}
+              {...stylex.props(popup.item, popup.plainItem)}
               onPress={() => {
                 setMenu(null);
                 onPstackModeChange(!pstackMode);
@@ -334,8 +332,8 @@ export function ComposerAddMenu({
                   : "Load the pstack playbooks and skills for every turn"
               }
             >
-              <span className={composerMenuIcon}>
-                <IconChecklist size={22} />
+              <span {...stylex.props(popup.itemGlyph)}>
+                <IconChecklist size={20} />
               </span>
               <MenuLabel>
                 {pstackMode ? "Turn off pstack mode" : "Turn on pstack mode"}

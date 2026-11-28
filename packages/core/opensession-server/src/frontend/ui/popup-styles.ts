@@ -101,6 +101,29 @@ export const popup = stylex.create({
       ":is([data-highlighted])": color.redSoft,
     },
   },
+  /** A menu row's leading glyph slot: the 20px every menu glyph draws at,
+   *  so labels line up however wide the glyphs ink. */
+  itemGlyph: {
+    display: "flex",
+    width: space.s20,
+    height: space.s20,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    color: color.dim,
+  },
+  /** A row that is a plain `<button>` rather than a Base UI item (the
+   *  composer's "+" menu keeps the phone keyboard up, so it is hand-built):
+   *  the same wash on hover, and the native `:disabled` quieting. */
+  plainItem: {
+    backgroundColor: {
+      default: null,
+      ":hover": { default: null, [media.hover]: color.hover },
+      ":disabled": "transparent",
+    },
+    cursor: { default: null, ":disabled": "default" },
+    opacity: { default: null, ":disabled": opacity.disabled },
+  },
   /** A submenu trigger stays lit while its submenu is open. */
   itemOpen: {
     backgroundColor: {

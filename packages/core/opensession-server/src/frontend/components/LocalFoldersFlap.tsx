@@ -1,3 +1,5 @@
+import * as stylex from "@stylexjs/stylex";
+import { popup } from "../ui/popup-styles";
 import {
   type ReactNode,
   useEffect,
@@ -20,7 +22,7 @@ import {
 import type { WSServerMessage } from "../lib/types";
 import { useSessionSocket } from "../hooks/useSessionSocket";
 import type { FolderGrant } from "../lib/local-folders/provider";
-import { composerMenuIcon, composerMenuItem } from "../lib/composer-classes";
+
 import { Button } from "../ui/button";
 import { Menu, MENU_ICON, MenuLabel } from "../ui/menu";
 import { ComposerPressButton } from "./composer/ComposerControls";
@@ -241,7 +243,7 @@ export function ConnectFolderMenuItem({
   return (
     <ComposerPressButton
       type="button"
-      className={composerMenuItem}
+      {...stylex.props(popup.item, popup.plainItem)}
       title="Let this session read and edit a folder on this computer while the app is open"
       onPress={() => {
         close();
@@ -250,8 +252,8 @@ export function ConnectFolderMenuItem({
         }, report);
       }}
     >
-      <span className={composerMenuIcon}>
-        <IconFolderPlus size={22} />
+      <span {...stylex.props(popup.itemGlyph)}>
+        <IconFolderPlus size={20} />
       </span>
       <MenuLabel>Connect a folder…</MenuLabel>
     </ComposerPressButton>

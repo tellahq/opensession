@@ -1,3 +1,6 @@
+import * as stylex from "@stylexjs/stylex";
+import { popup } from "../ui/popup-styles";
+import { sx } from "../ui/sx";
 import { CountBadge } from "../ui/badge";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -10,10 +13,7 @@ import { getCurrentUser } from "./UserPicker";
 import { IconChevronDown, IconClock, IconX } from "./icons";
 import {
   composerMenuAnchorRight,
-  composerMenuIcon,
-  composerMenuItem,
-  composerMenuPopup,
-  composerMenuWidth,
+  composerMenuPlacement,
 } from "../lib/composer-classes";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
@@ -216,17 +216,10 @@ export function SchedulePromptButton({
     >
       <button
         type="button"
-        className={
-          variant === "menu-item"
-            ? // The shared menu row plus only what the schedule row changes
-              // about it. `disabled:hover:bg-transparent` is load-bearing: it
-              // is what suppresses the row's own hover wash while disabled.
-              cn(
-                composerMenuItem,
-                "relative justify-start disabled:cursor-default disabled:opacity-45 disabled:hover:bg-transparent",
-              )
-            : caretButton
-        }
+        {...(variant === "menu-item"
+          ? // The shared menu row; `relative` anchors the pending count.
+            sx([popup.item, popup.plainItem], "relative")
+          : { className: caretButton })}
         onClick={() => setOpen(!open)}
         disabled={disabled}
         aria-haspopup="menu"
@@ -236,8 +229,8 @@ export function SchedulePromptButton({
       >
         {variant === "menu-item" ? (
           <>
-            <span className={composerMenuIcon}>
-              <IconClock size={22} />
+            <span {...stylex.props(popup.itemGlyph)}>
+              <IconClock size={20} />
             </span>
             <span>Schedule message</span>
           </>
@@ -258,10 +251,9 @@ export function SchedulePromptButton({
         // stylesheet (equal specificity, later wins), so the menu has always
         // been 172px.
         <div
-          className={cn(
-            composerMenuPopup,
-            composerMenuAnchorRight,
-            composerMenuWidth,
+          {...sx(
+            [popup.surface, popup.scroll],
+            cn(composerMenuPlacement, composerMenuAnchorRight),
           )}
           role="menu"
         >
@@ -310,7 +302,7 @@ export function SchedulePromptButton({
               role="menuitem"
               // text-label: the picks read a step larger than the "+" menu's
               // rows, which is what .composer-schedule-menu used to say.
-              className={cn(composerMenuItem, "text-label")}
+              {...stylex.props(popup.item, popup.plainItem)}
               onClick={() => schedule(o.at)}
               disabled={saving || !hasText}
             >
@@ -321,7 +313,7 @@ export function SchedulePromptButton({
           <button
             type="button"
             role="menuitem"
-            className={cn(composerMenuItem, "text-label")}
+            {...stylex.props(popup.item, popup.plainItem)}
             onClick={openCustom}
             disabled={!hasText}
           >

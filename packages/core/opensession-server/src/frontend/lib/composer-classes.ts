@@ -143,31 +143,12 @@ export const composerToolbarPill =
 /* ── Toolbar popover menus ─────────────────────────────────────────
    The popup surface for the "+" add menu and the send-later menu, and the
    rows that go in them. */
-/** One row in those menus. The row used to stay in the stylesheet because
- *  SessionViewer contributes one through the composer's `menuExtra` and
- *  SchedulePrompt contributes two more — but all three hosts are components,
- *  so the row lives here and they import it.
- *
- *  Only the deviations from the base button reset in styles/base.css are
- *  written: that already supplies `cursor: pointer`, `background: none`,
- *  `border: none` and zero padding. */
-export const composerMenuItem =
-  "flex w-full items-center gap-[9px] rounded-control px-[9px] py-[7px] text-left text-control-label text-fg hover:bg-hover";
-/** The row's leading glyph. A fixed 20px column so the labels line up however
- *  wide the icons draw. */
-export const composerMenuIcon =
-  "inline-flex w-5 items-center justify-center text-label text-dim";
-/** The surface those rows sit on. Edge and cast come from the same ring the
- *  Base UI menus use (ui/menu.tsx) rather than a `border-line-strong` hairline:
- *  that line is drawn for a control resting IN the page, and on a floating
- *  popup it read a step darker than every other menu on screen. */
-export const composerMenuPopup =
-  "absolute bottom-[calc(100%+6px)] z-chrome rounded-lg bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] p-1 smooth-shadow-ring-md";
-/** The menu's own floor width. Kept out of the surface above because a second
- *  `min-w-*` on the same element would not compose — the send-later menu is
- *  wider (it lists pending messages), and whichever Tailwind emitted last would
- *  win rather than the one written last. */
-export const composerMenuWidth = "min-w-menu";
+/** Where the "+" and send-later menus float: above their trigger, over the
+ *  page chrome. Their surface and rows are the shared menu's (ui/popup-styles
+ *  `surface`, `scroll`, `item` + `plainItem`, `itemIcon`); they are hand-built
+ *  only because a Base UI menu would take focus and drop the phone keyboard. */
+export const composerMenuPlacement =
+  "absolute bottom-[calc(100%+6px)] z-chrome";
 /** Default anchoring: the menu hangs off the right edge of its trigger. */
 export const composerMenuAnchorRight = "right-0";
 /** The "+" sits at the LEFT of the toolbar, so its menu grows rightward from

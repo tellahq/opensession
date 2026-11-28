@@ -308,7 +308,6 @@ import {
   TopBarTitle,
 } from "../ui/top-bar";
 import { cn } from "../ui/cn";
-import { composerMenuIcon, composerMenuItem } from "../lib/composer-classes";
 import { msgRow } from "../lib/msg-classes";
 import { Menu, MENU_ICON } from "../ui/menu";
 import { Modal } from "../ui/modal";
