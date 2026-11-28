@@ -69,6 +69,8 @@ describe("routePath", () => {
     { view: "channels", id: "C0123ABCD", thread: "1700000000.000100" },
     { view: "channels", page: "threads" },
     { view: "channels", page: "drafts" },
+    { view: "channels", page: "search" },
+    { view: "channels", page: "search", query: "in:#design onboarding/v2" },
     { view: "session", id: "os/1", subagent: ["agent/a"] },
     { view: "session", id: "os-1", asset: "reports/summary.html" },
     { view: "workspace", id: "workspace 1", tab: "conversation" },
