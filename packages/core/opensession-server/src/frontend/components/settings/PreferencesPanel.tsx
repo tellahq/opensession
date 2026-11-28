@@ -846,7 +846,10 @@ function DebugSection() {
 export function PreferencesPanel() {
   return (
     <SettingsPanel>
-      <SettingsHeader title="Preferences" />
+      <SettingsHeader
+        title="Preferences"
+        description="How new sessions start and the composer behaves."
+      />
       <NewSessionsSection />
       <ComposerSection />
       <LinksSection />
@@ -929,7 +932,10 @@ function DictationVocabularySection() {
 export function AppearancePanel() {
   return (
     <SettingsPanel>
-      <SettingsHeader title="Appearance" />
+      <SettingsHeader
+        title="Appearance"
+        description="Theme, transcript and sidebar."
+      />
       <AppearanceSection />
       <TranscriptSection />
       <SidebarSection />

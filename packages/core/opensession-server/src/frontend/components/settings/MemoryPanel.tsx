@@ -1271,7 +1271,10 @@ export function MemoryPanel() {
   if (!scopes) {
     return (
       <SettingsPanel>
-        <SettingsHeader title="Memory" />
+        <SettingsHeader
+          title="Memory"
+          description="What sessions remember, kept in git."
+        />
         {error ? (
           <InlineAlert>{error}</InlineAlert>
         ) : (
@@ -1317,7 +1320,10 @@ export function MemoryPanel() {
 
   return (
     <SettingsPanel>
-      <SettingsHeader title="Memory" />
+      <SettingsHeader
+        title="Memory"
+        description="What sessions remember, kept in git."
+      />
       {error && (
         <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
       )}

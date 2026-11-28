@@ -130,7 +130,10 @@ export function NotificationsPanel() {
 
   return (
     <SettingsPanel>
-      <SettingsHeader title="Notifications" />
+      <SettingsHeader
+        title="Notifications"
+        description="When and how you hear about your sessions."
+      />
 
       <SettingsGroupLabel>This device</SettingsGroupLabel>
       <SettingCard>

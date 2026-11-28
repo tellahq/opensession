@@ -198,7 +198,10 @@ export function ReposPanel({
   const { status, failed, refetch, applyRepo } = useSetupStatus();
   return (
     <SettingsPanel>
-      <SettingsHeader title="Repositories" />
+      <SettingsHeader
+        title="Repositories"
+        description="The code sessions work in."
+      />
       {!status ? (
         // A failure is an alert, not a quiet label under a spinner: it used
         // to render in the loading register, so the sentence saying the

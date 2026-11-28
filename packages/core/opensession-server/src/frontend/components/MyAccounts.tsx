@@ -121,7 +121,10 @@ export function MyAccountsPanel() {
 
   return (
     <SettingsPanel>
-      <SettingsHeader title="Account" />
+      <SettingsHeader
+        title="Account"
+        description="Your profile and GitHub account."
+      />
       {error && (
         <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
       )}

@@ -7,7 +7,10 @@ import { TeamSection } from "../SetupTeam";
 export function MembersPanel() {
   return (
     <SettingsPanel>
-      <SettingsHeader title="Members" />
+      <SettingsHeader
+        title="Members"
+        description="The people in this organization."
+      />
       <TeamSection onChanged={() => {}} />
     </SettingsPanel>
   );

@@ -292,7 +292,10 @@ export function Connections() {
 
   return (
     <SettingsPanel>
-      <SettingsHeader title="Connections" />
+      <SettingsHeader
+        title="Connections"
+        description="Apps and MCP servers sessions can use."
+      />
       <IntegrationsSection />
 
       {removeError && (

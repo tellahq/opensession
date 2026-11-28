@@ -373,6 +373,7 @@ export function ShortcutsPanel() {
     <SettingsPanel>
       <SettingsHeader
         title="Keyboard shortcuts"
+        description="Change any shortcut from its row menu."
         actions={
           customizedCount > 0 ? (
             <Button size="sm" variant="soft" onClick={resetAllShortcuts}>

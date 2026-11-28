@@ -361,7 +361,12 @@ export function LibraryPanel() {
     })).filter((group) => group.entries.length > 0);
   })();
 
-  const header = <SettingsHeader title="Library" />;
+  const header = (
+    <SettingsHeader
+      title="Library"
+      description="Ready-made automations and packages to add."
+    />
+  );
 
   if (error)
     return (
