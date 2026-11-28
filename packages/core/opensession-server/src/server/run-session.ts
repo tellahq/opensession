@@ -3362,6 +3362,28 @@ async function runSessionPromptInner(
     }
   }
 
+  // First engine turn of a session in a workspace: list the workspace's other
+  // sessions (title, state, last ask, outcome) so a new chat starts knowing
+  // its siblings without the person attaching any (workspace-siblings.ts).
+  // Worker sub-sessions get their brief from the parent instead.
+  if (
+    !isAutomationSession &&
+    session.workspaceId &&
+    !session.parentSessionId &&
+    !session.claudeSessionId &&
+    !session.codexThreadId &&
+    !session.piSessionId
+  ) {
+    try {
+      const { workspaceSiblingsNoteFor } = await import("./workspace-siblings");
+      const siblingsNote = await workspaceSiblingsNoteFor(session);
+      if (siblingsNote)
+        prompt = `${wrapContext(siblingsNote, "workspace-siblings")}\n\n${prompt}`;
+    } catch (e) {
+      console.error("[run-session] workspace siblings note failed:", e);
+    }
+  }
+
   // Sidebar name: make sure this session has a short generated summary title.
   // Covers tab-strip "New session" sessions (never named at creation — this is
   // their first prompt) and retries sessions whose creation-time Haiku call

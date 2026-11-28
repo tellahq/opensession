@@ -17,7 +17,7 @@ import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { duration, ease } from "../../ui/motion";
-import { EmptyState, InlineAlert } from "../../ui/state";
+import { InlineAlert } from "../../ui/state";
 import { AGENT_NAME } from "../../lib/brand";
 import { withQuotes, type Quote } from "../../lib/quotes";
 import { messageLink } from "../../lib/message-link";
@@ -82,13 +82,9 @@ import {
   IconArrowRight,
   IconArrowUp,
   IconArrowUpToLine,
-  IconCheck,
   IconChevronRight,
   IconEye,
-  IconMessage,
   IconPlus,
-  IconSparkle,
-  IconTerminal,
   IconArchive,
 } from "../icons";
 import { TURN_SPACER } from "../../lib/app-shell-classes";
@@ -321,15 +317,6 @@ interface SlackRegion {
   undoComposedSlackMessage: (sent: SlackSent) => void | Promise<void>;
 }
 
-interface EmptyConversationRegion {
-  workspaceName?: string;
-  contextSessionOptions: UnifiedSession[];
-  contextSessions: string[];
-  setContextSessions: Dispatch<SetStateAction<string[]>>;
-  showAllContextSessions: boolean;
-  setShowAllContextSessions: Dispatch<SetStateAction<boolean>>;
-}
-
 interface ActionBandRegion {
   actionBand: boolean;
   quickReplies: boolean;
@@ -446,7 +433,6 @@ interface SessionViewerMainRegionProps {
   review: ReviewRegion;
   transcript: TranscriptRegion;
   slack: SlackRegion;
-  emptyConversation: EmptyConversationRegion;
   actionBand: ActionBandRegion;
   composer: ComposerRegion;
   layout: LayoutRegion;
@@ -461,7 +447,6 @@ export function SessionViewerMainRegion({
   review,
   transcript,
   slack,
-  emptyConversation,
   actionBand,
   composer,
   layout,
@@ -595,14 +580,6 @@ export function SessionViewerMainRegion({
     handleOpenSlackComposer,
     undoComposedSlackMessage,
   } = slack;
-  const {
-    workspaceName,
-    contextSessionOptions,
-    contextSessions,
-    setContextSessions,
-    showAllContextSessions,
-    setShowAllContextSessions,
-  } = emptyConversation;
   const {
     actionBand: hasActionBand,
     quickReplies,
@@ -980,100 +957,16 @@ export function SessionViewerMainRegion({
                     // entry lands, so a live conversation reads as "no transcript"
                     // unless it wins here. A session with anything live falls
                     // through to the transcript below, which is where the sent
-                    // bubble and the streaming reply render. When the workspace has
-                    // sibling sessions, the canvas offers their transcripts as
-                    // attachable context for the first message.
+                    // bubble and the streaming reply render.
                     session.ran ? (
                       <div className="py-10 text-center text-faint">
                         No transcript available for this session
                       </div>
-                    ) : contextSessionOptions.length > 0 ? (
-                      // Simple centered empty state: the whole region centers the
-                      // heading + attachable-context chips so a fresh session reads as a
-                      // calm blank canvas rather than a top-left form.
-                      <div className="min-h-full flex flex-col items-center justify-center text-center w-full max-w-[840px] mx-auto px-4">
-                        <div className="mb-4">
-                          <div className="text-label font-medium text-dim">
-                            New session in
-                          </div>
-                          <div className="max-w-[340px] mx-auto text-item-title font-semibold leading-snug text-fg">
-                            {workspaceName ||
-                              session.branch ||
-                              "this workspace"}
-                          </div>
-                        </div>
-                        <div className="text-dim mb-3">
-                          Add session transcripts
-                        </div>
-                        <div className="flex flex-wrap items-center justify-center gap-2">
-                          {(showAllContextSessions
-                            ? contextSessionOptions
-                            : contextSessionOptions.slice(0, 4)
-                          ).map((c) => {
-                            const selected = contextSessions.includes(c.id);
-                            const codex =
-                              (c.model || "").startsWith("gpt") ||
-                              (c.model || "").startsWith("codex");
-                            const ChipIcon = selected
-                              ? IconCheck
-                              : codex
-                                ? IconTerminal
-                                : IconSparkle;
-                            return (
-                              <Button
-                                key={c.id}
-                                variant="ghost"
-                                icon={
-                                  <ChipIcon
-                                    size={20}
-                                    className={
-                                      selected ? "text-green" : undefined
-                                    }
-                                  />
-                                }
-                                onClick={() =>
-                                  setContextSessions((prev) =>
-                                    prev.includes(c.id)
-                                      ? prev.filter((id) => id !== c.id)
-                                      : [...prev, c.id],
-                                  )
-                                }
-                                title={
-                                  selected
-                                    ? "Attached · its transcript rides along with your first message"
-                                    : "Attach this session's transcript as context"
-                                }
-                                className={
-                                  selected
-                                    ? "bg-pressed text-fg hover:bg-pressed"
-                                    : "bg-hover/50"
-                                }
-                              >
-                                <span className="max-w-[200px] truncate">
-                                  {c.title || "Untitled session"}
-                                </span>
-                              </Button>
-                            );
-                          })}
-                          {!showAllContextSessions &&
-                            contextSessionOptions.length > 4 && (
-                              <Button
-                                variant="ghost"
-                                onClick={() => setShowAllContextSessions(true)}
-                              >
-                                +{contextSessionOptions.length - 4} more
-                              </Button>
-                            )}
-                        </div>
-                      </div>
                     ) : (
-                      <EmptyState
-                        icon={<IconMessage size={22} />}
-                        title="Start a conversation"
-                        className="min-h-full px-4"
-                      >
-                        Ask a question or describe your task.
-                      </EmptyState>
+                      // The composer below is the whole UI of a fresh session.
+                      // The agent learns the workspace's other sessions on its
+                      // own (server workspace-siblings.ts), so nothing to pick.
+                      <div className="min-h-full" />
                     )
                   ) : entries.length === 0 &&
                     !hasLiveConversation &&

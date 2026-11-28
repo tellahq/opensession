@@ -3227,6 +3227,29 @@ export async function handleCreateSessionMessage(
       if (foldersNote)
         openingPrompt = `${wrapContext(foldersNote, "local-folders-note")}\n\n${openingPrompt}`;
     }
+    // Joining an existing workspace: list its other sessions, the same
+    // first-turn note runSessionPromptInner gives a prompt-less tab
+    // (workspace-siblings.ts). A fork already carries its source's handoff.
+    if (
+      !ws.data.authAutomation &&
+      workspace &&
+      !createdWorkspaceNow &&
+      !forkSource
+    ) {
+      try {
+        const { workspaceSiblingsNoteFor } =
+          await import("./workspace-siblings");
+        const siblingsNote = await workspaceSiblingsNoteFor({
+          id: bksId,
+          workspaceId: workspace.id,
+          workspaceName: workspace.name,
+        });
+        if (siblingsNote)
+          openingPrompt = `${wrapContext(siblingsNote, "workspace-siblings")}\n\n${openingPrompt}`;
+      } catch (e) {
+        console.error("[create_session] workspace siblings note failed:", e);
+      }
+    }
     // Session opened from the Support view: link it to its Plain
     // thread (conversation tab + the sidebar's ticket→session
     // mapping) and hand the agent the ticket conversation so the

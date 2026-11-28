@@ -26,6 +26,7 @@ import {
 import { modelGuidanceFor, uniqueModelGuidances } from "../lib/model-guidance";
 import { isTouchPrimary } from "../lib/platform";
 import { useIsPhone } from "../hooks/useIsPhone";
+import { relevantModels } from "../lib/model-relevance";
 import { ModelGuidanceFooter } from "./ModelGuidanceFooter";
 import { ModelMark } from "./ModelMark";
 import { BrandMark } from "./BrandTile";
@@ -348,13 +349,19 @@ type ModelMenuOption = {
 };
 
 const PICKER_ROW_GAP = "mb-0.5 last:mb-0";
+/** What the desktop side panel is showing. */
+type SidePanel = "model" | "effort" | "speed" | "more";
+/** How long a pointer rests on a row before the side panel follows it. */
+const HOVER_INTENT_MS = 110;
+/** A side-panel heading: what the rows under it choose. */
+const PANEL_HEADING = "m-0 px-2 pt-1.5 pb-2 text-label font-medium text-dim";
 /** The settings rows under the models (Effort, Speed, More models, Options):
  *  the models' title size, so the two groups read as one menu. */
 const SETTING_ROW = "justify-between gap-3 py-2 text-item-title";
 /** Popup widths: with notes docked under the list, with them in a card
  *  beside it, and a cap for a menu without notes. */
 const POPUP_WIDTH = "w-[min(376px,calc(100vw-1rem))]";
-const POPUP_WIDTH_ASIDE = "w-[min(600px,calc(100vw-1rem))]";
+const POPUP_WIDTH_ASIDE = "w-[min(620px,calc(100vw-1rem))]";
 const POPUP_WIDTH_CAP = "max-w-[min(376px,calc(100vw-1rem))]";
 
 /** Ink for a weekly-remaining figure: colour only once it is running out. */
@@ -436,6 +443,30 @@ export function ModelEffortSelect({
   const [hoveredMoreModelId, setHoveredMoreModelId] = React.useState<
     string | null
   >(null);
+  // On a desktop the side panel shows one thing at a time: the hovered
+  // model's notes, or the choices behind Effort, Speed or More models.
+  const [panel, setPanel] = React.useState<SidePanel>("model");
+  const intentTimer = React.useRef<number | null>(null);
+  const clearIntent = () => {
+    if (intentTimer.current !== null) window.clearTimeout(intentTimer.current);
+    intentTimer.current = null;
+  };
+  // A pointer crossing other rows on its way into the panel must not swap
+  // the panel under it, so hover switches after a short pause. Keyboard
+  // focus switches at once.
+  const intentProps = (show: () => void) => ({
+    onPointerEnter: () => {
+      clearIntent();
+      intentTimer.current = window.setTimeout(show, HOVER_INTENT_MS);
+    },
+    onPointerLeave: clearIntent,
+    onFocus: (event: React.FocusEvent<HTMLElement>) => {
+      if (!event.currentTarget.matches(":focus-visible")) return;
+      clearIntent();
+      show();
+    },
+  });
+  React.useEffect(() => clearIntent, []);
   const draftTopIdsRef = React.useRef<string[] | null>(null);
   // A drop ends in a click on the row under the pointer; it must not pick it.
   const justDragged = React.useRef(false);
@@ -679,10 +710,18 @@ export function ModelEffortSelect({
       .filter((g) => g.options.length > 0);
     // The best five sit at the top level; the rest of the main list moves
     // under "More models".
-    const { top: topOptions, more: morePrimaryOptions } = pickTopModels(
+    const { top: topOptions, more: catalogMore } = pickTopModels(
       primaryOptions,
       savedTopOrder,
       recentModels,
+    );
+    // Only what the catalog does not already replace: no older releases,
+    // second servings of one model or speed variants (lib/model-relevance).
+    // The model in use always stays listed.
+    const morePrimaryOptions = relevantModels(
+      catalogMore,
+      primaryOptions,
+      (o) => o.id === effectiveBase || (!!model && o.value === model),
     );
     // "More models" sections by upstream provider (Anthropic / OpenAI / xAI /
     // …): a flat list stops scanning well once third-party providers join the
@@ -785,8 +824,7 @@ export function ModelEffortSelect({
     const guidance = modelGuidanceFor(option.id);
     const item = (
       <Menu.Item
-        onPointerEnter={onPreview ? () => onPreview(option.id) : undefined}
-        onFocus={onPreview ? () => onPreview(option.id) : undefined}
+        {...(onPreview ? intentProps(() => onPreview(option.id)) : {})}
         onClick={() => {
           onModelChange(routed ?? option.value);
           pushRecentModel(option.id);
@@ -916,7 +954,159 @@ export function ModelEffortSelect({
       />
     ) : undefined;
 
+  // The rows behind Effort, Speed and More models. A desktop shows them in
+  // the side panel; a phone opens them as submenus.
+  const modelDefaultEffort = supportedEffortIds.includes("high")
+    ? "high"
+    : supportedEffortIds[0];
+  const effortItems = (
+    <>
+      {effortReuploadHint && <MenuHint>{effortReuploadHint}</MenuHint>}
+      {effortOptions.map((e) => {
+        const selected = effectiveEffort === e.id;
+        return (
+          <Menu.Item
+            key={e.id}
+            onClick={() => onEffortChange!(e.id)}
+            className={cn(
+              PICKER_ROW_GAP,
+              "justify-between gap-3",
+              selected && "bg-hover",
+            )}
+          >
+            <span className="flex min-w-0 items-baseline gap-2">
+              <span className="truncate">{e.label}</span>
+              {e.id === modelDefaultEffort && (
+                <span className="text-label text-faint">Default</span>
+              )}
+            </span>
+            <Menu.Check on={selected} className="text-dim" />
+          </Menu.Item>
+        );
+      })}
+    </>
+  );
+  const speedItems = (
+    <>
+      {speedOptions.map((o) => {
+        const selected = effectiveSpeed === o;
+        return (
+          <Menu.Item
+            key={o}
+            onClick={() => {
+              // Faster tiers run on a subscription account, so picking
+              // one while on auto pins the account it will actually
+              // use: a Pro $500 login for Ultrafast.
+              const pin =
+                o === "ultrafast" ? ultrafastAccount : subscriptionAccount;
+              if (o !== "standard" && !currentAccount && pin) {
+                onAccountChange?.(pin.id);
+              }
+              onSpeedChange!(o);
+            }}
+            className={cn("justify-between gap-3", selected && "bg-hover")}
+          >
+            <span className="min-w-0 truncate">{SPEED_LABELS[o]}</span>
+            <Menu.Check on={selected} className="text-dim" />
+          </Menu.Item>
+        );
+      })}
+    </>
+  );
+  const moreModelsContent = (onPreview?: (id: string) => void) => (
+    <>
+      {reuploadHint && <MenuHint>{reuploadHint}</MenuHint>}
+      {groupedPrimary
+        ? providerGroups.map((g, i) => (
+            <React.Fragment key={g.provider}>
+              {i > 0 && <Menu.Separator className="my-1" />}
+              <Menu.Group>
+                <Menu.GroupLabel>{g.label}</Menu.GroupLabel>
+                {g.options.map((option) =>
+                  renderModelOption(option, onPreview),
+                )}
+              </Menu.Group>
+            </React.Fragment>
+          ))
+        : morePrimaryOptions.map((option) =>
+            renderModelOption(option, onPreview),
+          )}
+      {primaryFirst && otherOptions.length > 0 && (
+        <>
+          {morePrimaryOptions.length > 0 && <Menu.Separator className="my-1" />}
+          <Menu.SubmenuRoot>
+            <Menu.SubmenuTrigger className="justify-between gap-3 text-dim">
+              <span className="min-w-0 truncate">{LEGACY_GROUP_LABEL}</span>
+              <span className="flex flex-none items-center gap-1 text-dim">
+                {selectedLegacyLabel && (
+                  <span className="text-faint">{selectedLegacyLabel}</span>
+                )}
+                <IconChevronRight className="shrink-0" size={20} />
+              </span>
+            </Menu.SubmenuTrigger>
+            <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
+              {otherOptions.map((option) => renderModelOption(option))}
+            </Menu.Popup>
+          </Menu.SubmenuRoot>
+        </>
+      )}
+      {/* Without engine models the registry's own entries are the
+          rest of the list, grouped by engine. */}
+      {!primaryFirst &&
+        otherGroups.map((g, i) => (
+          <React.Fragment key={g.engine}>
+            {(i > 0 || morePrimaryOptions.length > 0) && (
+              <Menu.Separator className="my-1" />
+            )}
+            <Menu.Group>
+              {otherGroups.length > 1 && (
+                <Menu.GroupLabel>{g.label}</Menu.GroupLabel>
+              )}
+              {g.options.map((option) => renderModelOption(option, onPreview))}
+            </Menu.Group>
+          </React.Fragment>
+        ))}
+      {hiddenOnEngine > 0 && (
+        <MenuHint>
+          {hiddenOnEngine} {hiddenOnEngine === 1 ? "model" : "models"} not
+          available here
+        </MenuHint>
+      )}
+    </>
+  );
+  const sidePanel = (
+    <div className="relative my-1.5 mr-1.5 w-72 shrink-0 rounded-lg bg-hover">
+      {/* Out of flow, so the list alone sets the popup's height and the
+          panel scrolls inside it whatever it shows. */}
+      <div className="absolute inset-0 overflow-y-auto overscroll-contain p-1.5">
+        {panel === "effort" && hasEffort ? (
+          <>
+            <p className={PANEL_HEADING}>Effort for {modelLabel}</p>
+            {effortItems}
+          </>
+        ) : panel === "speed" && showSpeedRow ? (
+          <>
+            <p className={PANEL_HEADING}>Speed for {modelLabel}</p>
+            {speedItems}
+          </>
+        ) : panel === "more" && hasMoreModels ? (
+          <>
+            <p className={PANEL_HEADING}>More models</p>
+            {moreModelsContent()}
+          </>
+        ) : (
+          <ModelGuidanceFooter
+            active={topPreview}
+            sizerGuidances={topSizerGuidances}
+            placement="aside"
+          />
+        )}
+      </div>
+    </div>
+  );
+
   const menuRowTrigger = triggerVariant === "menu-row";
+
   const heroTrigger = triggerVariant === "hero";
   const fieldTrigger = triggerVariant === "field";
 
@@ -925,8 +1115,10 @@ export function ModelEffortSelect({
       open={open}
       onOpenChange={(next) => {
         if (!next) {
+          clearIntent();
           setHoveredModelId(null);
           setHoveredMoreModelId(null);
+          setPanel("model");
         }
         setMenuOpen(next);
       }}
@@ -1026,13 +1218,13 @@ export function ModelEffortSelect({
         align={heroTrigger ? "center" : "start"}
         sideOffset={6}
         footer={guidanceAside ? undefined : topGuidanceFooter}
-        aside={guidanceAside ? topGuidanceFooter : undefined}
+        aside={guidanceAside ? sidePanel : undefined}
         className={cn(
-          !topGuidanceFooter
-            ? POPUP_WIDTH_CAP
-            : guidanceAside
-              ? POPUP_WIDTH_ASIDE
-              : POPUP_WIDTH,
+          guidanceAside
+            ? POPUP_WIDTH_ASIDE
+            : topGuidanceFooter
+              ? POPUP_WIDTH
+              : POPUP_WIDTH_CAP,
           menuRowTrigger && "min-w-[220px]",
         )}
       >
@@ -1072,91 +1264,79 @@ export function ModelEffortSelect({
                   "bg-popup [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm",
               )}
             >
-              {renderModelOption(option, setHoveredModelId)}
+              {renderModelOption(option, (id) => {
+                setHoveredModelId(id);
+                setPanel("model");
+              })}
             </Reorder.Item>
           ))}
         </Reorder.Group>
         {topOptions.length > 0 && <Menu.Separator className="my-1" />}
-        {hasEffort && (
-          <Menu.SubmenuRoot>
-            <Menu.SubmenuTrigger className={SETTING_ROW}>
+        {hasEffort &&
+          (guidanceAside ? (
+            <Menu.Item
+              closeOnClick={false}
+              {...intentProps(() => setPanel("effort"))}
+              onClick={() => setPanel("effort")}
+              className={cn(SETTING_ROW, panel === "effort" && "bg-hover")}
+            >
               <span className="min-w-0 truncate">Effort</span>
               <span className="flex flex-none items-center gap-1 text-dim">
                 {effortLabel}
                 <IconChevronRight className="shrink-0 text-dim" size={20} />
               </span>
-            </Menu.SubmenuTrigger>
-            <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
-              {effortReuploadHint && <MenuHint>{effortReuploadHint}</MenuHint>}
-              {effortOptions.map((e) => {
-                const selected = effectiveEffort === e.id;
-                return (
-                  <Menu.Item
-                    key={e.id}
-                    onClick={() => onEffortChange!(e.id)}
-                    className={cn(
-                      PICKER_ROW_GAP,
-                      "justify-between gap-3",
-                      selected && "bg-hover",
-                    )}
-                  >
-                    <span className="min-w-0 truncate">{e.label}</span>
-                    <Menu.Check on={selected} className="text-dim" />
-                  </Menu.Item>
-                );
-              })}
-            </Menu.Popup>
-          </Menu.SubmenuRoot>
-        )}
-        {showSpeedRow && (
-          <Menu.SubmenuRoot>
-            <Menu.SubmenuTrigger className={SETTING_ROW}>
+            </Menu.Item>
+          ) : (
+            <Menu.SubmenuRoot>
+              <Menu.SubmenuTrigger className={SETTING_ROW}>
+                <span className="min-w-0 truncate">Effort</span>
+                <span className="flex flex-none items-center gap-1 text-dim">
+                  {effortLabel}
+                  <IconChevronRight className="shrink-0 text-dim" size={20} />
+                </span>
+              </Menu.SubmenuTrigger>
+              <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
+                {effortItems}
+              </Menu.Popup>
+            </Menu.SubmenuRoot>
+          ))}
+        {showSpeedRow &&
+          (guidanceAside ? (
+            <Menu.Item
+              closeOnClick={false}
+              {...intentProps(() => setPanel("speed"))}
+              onClick={() => setPanel("speed")}
+              className={cn(SETTING_ROW, panel === "speed" && "bg-hover")}
+            >
               <span className="min-w-0 truncate">Speed</span>
               <span className="flex flex-none items-center gap-1 text-dim">
                 {SPEED_LABELS[effectiveSpeed]}
                 <IconChevronRight className="shrink-0 text-dim" size={20} />
               </span>
-            </Menu.SubmenuTrigger>
-            <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
-              {speedOptions.map((o) => {
-                const selected = effectiveSpeed === o;
-                return (
-                  <Menu.Item
-                    key={o}
-                    onClick={() => {
-                      // Faster tiers run on a subscription account, so picking
-                      // one while on auto pins the account it will actually
-                      // use: a Pro $500 login for Ultrafast.
-                      const pin =
-                        o === "ultrafast"
-                          ? ultrafastAccount
-                          : subscriptionAccount;
-                      if (o !== "standard" && !currentAccount && pin) {
-                        onAccountChange?.(pin.id);
-                      }
-                      onSpeedChange!(o);
-                    }}
-                    className={cn(
-                      "justify-between gap-3",
-                      selected && "bg-hover",
-                    )}
-                  >
-                    <span className="min-w-0 truncate">{SPEED_LABELS[o]}</span>
-                    <Menu.Check on={selected} className="text-dim" />
-                  </Menu.Item>
-                );
-              })}
-            </Menu.Popup>
-          </Menu.SubmenuRoot>
-        )}
+            </Menu.Item>
+          ) : (
+            <Menu.SubmenuRoot>
+              <Menu.SubmenuTrigger className={SETTING_ROW}>
+                <span className="min-w-0 truncate">Speed</span>
+                <span className="flex flex-none items-center gap-1 text-dim">
+                  {SPEED_LABELS[effectiveSpeed]}
+                  <IconChevronRight className="shrink-0 text-dim" size={20} />
+                </span>
+              </Menu.SubmenuTrigger>
+              <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
+                {speedItems}
+              </Menu.Popup>
+            </Menu.SubmenuRoot>
+          ))}
         {/* The rest of the catalog, one hop away. */}
-        {hasMoreModels && (
-          <Menu.SubmenuRoot
-            onOpenChange={(next) => {
-              if (!next) setHoveredMoreModelId(null);
-            }}
-          >
-            <Menu.SubmenuTrigger className={SETTING_ROW}>
+        {hasMoreModels &&
+          (guidanceAside ? (
+            <Menu.Item
+              closeOnClick={false}
+              {...intentProps(() => setPanel("more"))}
+              onClick={() => setPanel("more")}
+              className={cn(SETTING_ROW, panel === "more" && "bg-hover")}
+            >
               <span className="min-w-0 truncate">More models</span>
               <span className="flex min-w-0 flex-none items-center gap-1 text-dim">
                 {selectedMoreOption && (
@@ -1164,86 +1344,30 @@ export function ModelEffortSelect({
                 )}
                 <IconChevronRight className="shrink-0" size={20} />
               </span>
-            </Menu.SubmenuTrigger>
-            <Menu.Popup
-              footer={guidanceAside ? undefined : moreGuidanceFooter}
-              aside={guidanceAside ? moreGuidanceFooter : undefined}
-              className={
-                !moreGuidanceFooter
-                  ? POPUP_WIDTH_CAP
-                  : guidanceAside
-                    ? POPUP_WIDTH_ASIDE
-                    : POPUP_WIDTH
-              }
+            </Menu.Item>
+          ) : (
+            <Menu.SubmenuRoot
+              onOpenChange={(next) => {
+                if (!next) setHoveredMoreModelId(null);
+              }}
             >
-              {reuploadHint && <MenuHint>{reuploadHint}</MenuHint>}
-              {groupedPrimary
-                ? providerGroups.map((g, i) => (
-                    <React.Fragment key={g.provider}>
-                      {i > 0 && <Menu.Separator className="my-1" />}
-                      <Menu.Group>
-                        <Menu.GroupLabel>{g.label}</Menu.GroupLabel>
-                        {g.options.map((option) =>
-                          renderModelOption(option, setHoveredMoreModelId),
-                        )}
-                      </Menu.Group>
-                    </React.Fragment>
-                  ))
-                : morePrimaryOptions.map((option) =>
-                    renderModelOption(option, setHoveredMoreModelId),
+              <Menu.SubmenuTrigger className={SETTING_ROW}>
+                <span className="min-w-0 truncate">More models</span>
+                <span className="flex min-w-0 flex-none items-center gap-1 text-dim">
+                  {selectedMoreOption && (
+                    <span className="truncate">{selectedMoreOption.label}</span>
                   )}
-              {primaryFirst && otherOptions.length > 0 && (
-                <>
-                  {morePrimaryOptions.length > 0 && (
-                    <Menu.Separator className="my-1" />
-                  )}
-                  <Menu.SubmenuRoot>
-                    <Menu.SubmenuTrigger className="justify-between gap-3 text-dim">
-                      <span className="min-w-0 truncate">
-                        {LEGACY_GROUP_LABEL}
-                      </span>
-                      <span className="flex flex-none items-center gap-1 text-dim">
-                        {selectedLegacyLabel && (
-                          <span className="text-faint">
-                            {selectedLegacyLabel}
-                          </span>
-                        )}
-                        <IconChevronRight className="shrink-0" size={20} />
-                      </span>
-                    </Menu.SubmenuTrigger>
-                    <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
-                      {otherOptions.map((option) => renderModelOption(option))}
-                    </Menu.Popup>
-                  </Menu.SubmenuRoot>
-                </>
-              )}
-              {/* Without engine models the registry's own entries are the
-                  rest of the list, grouped by engine. */}
-              {!primaryFirst &&
-                otherGroups.map((g, i) => (
-                  <React.Fragment key={g.engine}>
-                    {(i > 0 || morePrimaryOptions.length > 0) && (
-                      <Menu.Separator className="my-1" />
-                    )}
-                    <Menu.Group>
-                      {otherGroups.length > 1 && (
-                        <Menu.GroupLabel>{g.label}</Menu.GroupLabel>
-                      )}
-                      {g.options.map((option) =>
-                        renderModelOption(option, setHoveredMoreModelId),
-                      )}
-                    </Menu.Group>
-                  </React.Fragment>
-                ))}
-              {hiddenOnEngine > 0 && (
-                <MenuHint>
-                  {hiddenOnEngine} {hiddenOnEngine === 1 ? "model" : "models"}{" "}
-                  not available here
-                </MenuHint>
-              )}
-            </Menu.Popup>
-          </Menu.SubmenuRoot>
-        )}
+                  <IconChevronRight className="shrink-0" size={20} />
+                </span>
+              </Menu.SubmenuTrigger>
+              <Menu.Popup
+                footer={moreGuidanceFooter}
+                className={moreGuidanceFooter ? POPUP_WIDTH : POPUP_WIDTH_CAP}
+              >
+                {moreModelsContent(setHoveredMoreModelId)}
+              </Menu.Popup>
+            </Menu.SubmenuRoot>
+          ))}
         {/* Everything set once and left alone: account, fallback, usage and
             the defaults. Kept off the top level so the menu stays short. */}
         <Menu.SubmenuRoot>

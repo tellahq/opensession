@@ -121,7 +121,6 @@ test("the main conversation region owns its complete bounded JSX contract", asyn
     "TranscriptActions",
     "TranscriptInteraction",
     "SlackRegion",
-    "EmptyConversationRegion",
     "ActionBandRegion",
     "ComposerState",
     "ComposerConfiguration",
