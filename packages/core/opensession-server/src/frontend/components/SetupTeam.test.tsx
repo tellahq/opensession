@@ -26,9 +26,9 @@ test("GitHub sign-in describes automatic enrollment and optional roster editing"
   expect(markup).toContain("Add member</span></button>");
   expect(markup).toContain("Copy invite link</span></button>");
   expect(markup).toContain(
-    "Anyone who can reach this server can join by signing in with GitHub.",
+    "Anyone with GitHub who can reach this server can join",
   );
-  expect(markup).toContain("Every member can manage the workspace.");
+  expect(markup).toContain("every member can manage the workspace.");
   expect(markup).not.toContain("Only listed GitHub accounts can sign in.");
 });
 

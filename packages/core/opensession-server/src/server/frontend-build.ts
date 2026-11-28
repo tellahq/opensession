@@ -580,7 +580,6 @@ function frontendInstance() {
     githubBotLogins: githubBotLogins(),
     defaultRepoId: defaultRepo().id,
     plainWorkspaceId: plainWorkspaceId() || undefined,
-    agentationEnabled: process.env.OPENSESSION_AGENTATION === "1" || undefined,
     devMode: IS_DEV || process.env.OPENSESSION_DEMO === "1" ? true : undefined,
   };
 }

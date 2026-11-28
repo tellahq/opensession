@@ -10,19 +10,18 @@ import { IconTile } from "./BrandTile";
 import { IconPlus, IconTrash } from "./icons";
 import { SectionHeading } from "./Connections";
 import { SettingCard, rowMenuTriggerClasses } from "../ui/settings";
-import type { FeedDescriptor, Project } from "../lib/types";
+import type { FeedDescriptor } from "../lib/types";
 import { fieldClasses } from "../ui/input";
 import { errorMessage } from "../lib/error-message";
 
 /**
- * Connections → Projects. A *project* is a source of work with its own sidebar
+ * Connections → Feed projects. A *project* is a source of work with its own sidebar
  * band; a registered git repo is one kind, an MCP-backed feed (Plain, videos,
  * …) the other. Either way its branches/items become workspaces — see
  * CONCEPTS.md.
  *
- * Both kinds are listed here (`/api/projects`), but only feeds are authored
- * here: a repo project is instance config, so it is shown read-only and
- * registered under Setup → Repositories. The New-project modal walks: pick a
+ * Only feeds are listed here; repository projects live under Settings →
+ * Repositories. The New-project modal walks: pick a
  * connected MCP server
  * → pick its list-tool (live catalog) → fetch a sample call → the field
  * mapping is auto-suggested from the result and stays editable → optional
@@ -139,7 +138,6 @@ function parseArgs(text: string): JsonObject {
 
 export function ProjectsSection() {
   const [feeds, setFeeds] = useState<FeedDescriptor[] | null>(null);
-  const [projects, setProjects] = useState<Project[] | null>(null);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -150,16 +148,6 @@ export function ProjectsSection() {
       else setError(`Failed to load feeds: ${res.status}`);
     } catch (error) {
       setError(errorMessage(error, "Failed to load feeds"));
-    }
-    try {
-      // The union view: repo projects come from the registry, feed
-      // projects from the same descriptors above. Only feeds are
-      // editable here, but both belong in the list.
-      const res = await fetch(`${BASE_PATH}/api/projects`);
-      if (res.ok) setProjects((await res.json()).projects || []);
-      else setError(`Failed to load projects: ${res.status}`);
-    } catch (error) {
-      setError(errorMessage(error, "Failed to load projects"));
     }
   }, []);
   useEffect(() => {
@@ -181,35 +169,11 @@ export function ProjectsSection() {
     void load();
   }
 
-  const repoProjects = (projects || []).filter((p) => p.kind === "repo");
-
   return (
     <>
-      <SectionHeading>
-        Projects: every source of work, one band each
-      </SectionHeading>
+      <SectionHeading>Feed projects</SectionHeading>
       {error && (
         <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
-      )}
-      {!!repoProjects.length && (
-        <SettingCard>
-          {repoProjects.map((p) => (
-            <div key={p.key} className="flex items-center gap-3 px-5 py-3">
-              <IconTile name={p.id} size={30} />
-              <div className="min-w-0 flex-1">
-                <div className="text-item-title font-medium text-fg">
-                  {p.label}
-                </div>
-                <div className="truncate text-label text-dim">
-                  Repository · {p.repo?.ghRepo}
-                  {p.repo?.defaultBranch ? ` · ${p.repo.defaultBranch}` : ""}
-                  {p.repo?.sharedCheckout ? " · shared checkout" : ""}
-                  {p.repo?.isDefault ? " · default" : ""}
-                </div>
-              </div>
-            </div>
-          ))}
-        </SettingCard>
       )}
       <SettingCard>
         {(feeds || []).map((f) => (
@@ -244,7 +208,7 @@ export function ProjectsSection() {
           className="flex w-full items-center gap-2 px-5 py-3 text-control-label font-medium text-dim transition-colors hover:bg-hover hover:text-fg"
           onClick={() => setOpen(true)}
         >
-          <IconPlus size={20} /> New project
+          <IconPlus size={20} /> New feed project
         </button>
       </SettingCard>
       <NewProjectModal

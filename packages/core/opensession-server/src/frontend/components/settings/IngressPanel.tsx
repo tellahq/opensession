@@ -818,8 +818,8 @@ export function IngressPanel({
     >
       {!onboarding && !embedded && (
         <SettingsHeader
-          title="Domains and callbacks"
-          description="Set a friendly private address, then add the public endpoint external services need."
+          title="Domains"
+          description="Your team's address, and the public callback webhooks use."
         />
       )}
 

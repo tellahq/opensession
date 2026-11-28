@@ -40,7 +40,6 @@ import { IconCheck, IconPlus, IconX } from "../icons";
 import { WorkspaceSandboxDefaults } from "./SandboxDefaults";
 import { SandboxProviderLogo } from "./SandboxProviderLogo";
 import { SandboxSleepSettings } from "./SandboxSleepSettings";
-import { sandboxSleepSummary } from "../../lib/sandbox-sleep";
 
 const PROVIDERS: Array<{
   id: SandboxConnectionInfo["provider"];
@@ -50,32 +49,27 @@ const PROVIDERS: Array<{
   {
     id: "daytona",
     label: "Daytona",
-    description:
-      "Remote workspaces in your Daytona account, connected with your workspace API key.",
+    description: "Linux workspaces in your Daytona account.",
   },
   {
     id: "box",
     label: "Boat",
-    description:
-      "Persistent Linux VMs in your Boat account with fast snapshot restores and private Portals.",
+    description: "Linux VMs in your Boat account.",
   },
   {
     id: "tart",
     label: "Mac VM",
-    description:
-      "macOS virtual machines with Xcode on a Mac you paired as a Runner, one VM per session.",
+    description: "macOS VMs with Xcode on a Mac Runner.",
   },
   {
     id: "usecomputer",
     label: "use.computer",
-    description:
-      "macOS virtual machines with Xcode on Mac minis reserved in your use.computer account, connected with your account API key.",
+    description: "macOS VMs with Xcode on reserved Mac minis.",
   },
   {
     id: "modal",
     label: "Modal",
-    description:
-      "Linux containers in your Modal account, with an optional NVIDIA T4 or L4 GPU per session, connected with a Modal token.",
+    description: "Linux containers with optional GPUs.",
   },
 ];
 
@@ -519,14 +513,10 @@ function ConnectDialog({
           title={`${exists ? "Configure" : "Connect"} ${provider.label}`}
           description={
             isMac
-              ? "No credential needed: each Mac is a paired Runner. Open Session installs Tart on it, pulls the image once (about 70 GB, up to an hour), prepares a base VM, then proves a disposable VM and deletes it. Sessions land on whichever Mac has a free slot."
-              : connection.provider === "box"
-                ? "Credentials stay on this server. Open Session tests ingress, creates a disposable Boat sandbox, verifies archive/resume and snapshot restore, then archives it."
-                : isUseComputer
-                  ? "Credentials stay on this server. Open Session tests ingress, checks your active Mac reservation, creates a disposable sandbox on it, proves a snapshot restore (about six minutes), and deletes everything."
-                  : isModal
-                    ? "Credentials stay on this server. Open Session builds the base image, starts a small container without a GPU, restores a filesystem snapshot into a second one, and terminates both. Create a token at modal.com/settings/tokens."
-                    : "Credentials stay on this server. Open Session tests ingress, creates a disposable sandbox, restores a snapshot, and cleans up."
+              ? "No credential needed: each Mac is a paired Runner. The first setup downloads about 70 GB."
+              : isModal
+                ? "Credentials stay on this server. Create a token at modal.com/settings/tokens."
+                : "Credentials stay on this server. Connecting runs a short test."
           }
         />
 
@@ -814,9 +804,6 @@ function ConnectionCard({
               <p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
                 {provider.description}
               </p>
-              <p className="m-0 mt-1 text-meta text-faint">
-                {sandboxSleepSummary(connection.provider)}
-              </p>
               {macHosts.length > 0 && (
                 <p className="m-0 mt-1 text-meta text-faint">
                   {macHosts.length === 1 ? "Host" : "Hosts"}:{" "}
@@ -1023,7 +1010,7 @@ function ProjectEnvironmentDialog({
               ? `Configure ${target.repo} snapshot`
               : "Create a project snapshot"
           }
-          description="Open Session builds a reusable, credential-free project snapshot only when you opt in here. Each new session still gets its own isolated sandbox."
+          description="A credential-free snapshot, so new sandboxes start faster."
         />
         {!target ? (
           <div className="grid gap-3 sm:grid-cols-2">
@@ -1242,7 +1229,7 @@ export function SandboxesPanel() {
     <SettingsPanel>
       <SettingsHeader
         title="Sandboxes"
-        description="Connect compute you already pay for. Each session gets an isolated sandbox; project snapshots make new sandboxes start faster."
+        description="Isolated machines for sessions, on compute you already pay for."
       />
       <WorkspaceSandboxDefaults />
       {connectionsError && <InlineAlert>{connectionsError}</InlineAlert>}
@@ -1265,10 +1252,6 @@ export function SandboxesPanel() {
           />
         ))}
       </div>
-      <SettingsHint>
-        This machine remains the default. Personal and per-session choices can
-        override the workspace default.
-      </SettingsHint>
       <SandboxSleepSettings />
       {reusableEnvironments.length > 0 && (
         <>
@@ -1441,11 +1424,7 @@ export function SandboxesPanel() {
             })}
           </div>
           <SettingsHint>
-            Project snapshots expire after 24 hours and refresh only for
-            projects you have chosen here. A snapshot never contains session or
-            model credentials. Keep one ready holds a prepared Sandbox for the
-            project between sessions so the next one starts at once; it counts
-            against the live prewarm limit and is refilled after each start.
+            Snapshots refresh daily and never contain credentials.
           </SettingsHint>
         </>
       )}

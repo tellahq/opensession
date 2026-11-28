@@ -105,13 +105,6 @@ describe("SPA_HEADERS", () => {
 });
 
 describe("renderIndexHtml", () => {
-  const previousAgentation = process.env.OPENSESSION_AGENTATION;
-  afterEach(() => {
-    if (previousAgentation === undefined)
-      delete process.env.OPENSESSION_AGENTATION;
-    else process.env.OPENSESSION_AGENTATION = previousAgentation;
-  });
-
   const meta = {
     inputsHash: "x",
     entryName: "App-abc.js",
@@ -150,15 +143,6 @@ describe("renderIndexHtml", () => {
       html.indexOf("</head>", html.indexOf('rel="modulepreload"')),
     );
     expect(await renderIndexHtml(meta)).not.toContain("modulepreload");
-  });
-
-  it("only enables Agentation through the explicit runtime flag", async () => {
-    delete process.env.OPENSESSION_AGENTATION;
-    expect(await renderIndexHtml(meta)).not.toContain(
-      '"agentationEnabled":true',
-    );
-    process.env.OPENSESSION_AGENTATION = "1";
-    expect(await renderIndexHtml(meta)).toContain('"agentationEnabled":true');
   });
 });
 

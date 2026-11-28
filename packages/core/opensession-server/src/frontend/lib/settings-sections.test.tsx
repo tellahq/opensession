@@ -22,7 +22,7 @@ describe("settingsPaletteActions", () => {
       "Organization",
     );
     expect(SECTIONS.find((section) => section.key === "memory")?.label).toBe(
-      "Memories",
+      "Memory",
     );
   });
 
@@ -33,16 +33,23 @@ describe("settingsPaletteActions", () => {
     expect(SETTINGS_KEYWORDS.general).toContain("identity");
   });
 
-  test("combines model and usage settings under Providers", () => {
+  test("keeps sign-in inside General", () => {
+    expect(SECTIONS.map((section) => String(section.key))).not.toContain(
+      "authentication",
+    );
+    expect(SETTINGS_KEYWORDS.general).toContain("sign in");
+  });
+
+  test("combines model, provider and usage settings under Models", () => {
     const sections = SECTIONS.map((section) => ({
       key: String(section.key),
       label: section.label,
     }));
-    expect(sections).toContainEqual({ key: "providers", label: "Providers" });
+    expect(sections).toContainEqual({ key: "providers", label: "Models" });
     expect(sections.map((section) => section.key)).not.toContain("models");
     expect(sections.map((section) => section.key)).not.toContain("usage");
     expect(SETTINGS_KEYWORDS.providers).toEqual(
-      expect.arrayContaining(["models", "usage", "quota"]),
+      expect.arrayContaining(["providers", "usage", "quota"]),
     );
   });
 

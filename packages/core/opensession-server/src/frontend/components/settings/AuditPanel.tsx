@@ -98,7 +98,7 @@ export function AuditPanel() {
     <SettingsPanel>
       <SettingsHeader
         title="Audit log"
-        description="Review prompts, tool decisions, account switches, and confirmations from every agent run. Events are read-only and kept for 400 days."
+        description="Every prompt, tool decision and account switch. Kept for 400 days."
       />
 
       <div className="mb-3 flex flex-wrap items-center gap-2 px-5">

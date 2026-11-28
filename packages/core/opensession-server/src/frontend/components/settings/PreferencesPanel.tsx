@@ -4,13 +4,13 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import {
   fetchModels,
   fetchPersonalOutputStyle,
   fetchPersonalPrompt,
   fetchRepos,
-  request,
   savePersonalOutputStyle,
   fetchYouShouldKnow,
   saveYouShouldKnow,
@@ -26,7 +26,6 @@ import {
   setBusySendPref,
   type BusySendGesture,
   type BusySendPref,
-  type BusySendPrefs,
 } from "../../lib/busy-send-pref";
 import {
   getDefaultEffortPref,
@@ -44,7 +43,6 @@ import {
   setDefaultRepoPref,
 } from "../../lib/default-repo-pref";
 import { setDeskShownPref, useDeskShown } from "../../lib/desk-pref";
-import { setNewLayoutPref, useNewLayoutPref } from "../../lib/new-layout-pref";
 import {
   getDeskVoicePref,
   onDeskVoiceChanged,
@@ -58,11 +56,7 @@ import {
   setPinNewSessions,
   setPinNewWorkspaces,
 } from "../../lib/pins";
-import {
-  MOD_ENTER_GLYPH,
-  MOD_ENTER_LABEL,
-  type SendKeyPref,
-} from "../../lib/send-key";
+import { MOD_ENTER_GLYPH, MOD_ENTER_LABEL } from "../../lib/send-key";
 import {
   getSendKeyPref,
   onSendKeyChanged,
@@ -73,16 +67,12 @@ import {
   onSessionCheckoutPrefChanged,
   sessionCheckoutDefault,
   setSessionCheckoutDefault,
-  setSessionCheckoutPref,
-  type SessionCheckoutOverride,
-  type SessionCheckoutPrefs,
 } from "../../lib/session-checkout-pref";
 import {
   getTurnActivityPrefs,
   onTurnActivityChanged,
   setToolCallsPref,
   setTurnWorkPref,
-  type TurnActivityPrefs,
 } from "../../lib/turn-activity";
 import {
   getLiveTypingPref,
@@ -93,7 +83,6 @@ import {
   getThinkingMessagesPref,
   onThinkingMessagesChanged,
   setThinkingMessagesPref,
-  type ThinkingMessagesPref,
 } from "../../lib/thinking-messages-pref";
 import {
   getComposerPredictionsPref,
@@ -115,17 +104,6 @@ import {
   setNextChatButtonPref,
 } from "../../lib/next-chat-pref";
 import {
-  getVimModePref,
-  onVimModeChanged,
-  setVimModePref,
-} from "../../lib/vim-pref";
-import {
-  getAgentationPref,
-  onAgentationChanged,
-  setAgentationPref,
-} from "../../lib/agentation-pref";
-import { AGENTATION_ENABLED } from "../../lib/brand";
-import {
   getPrLinksOnGithubPref,
   onPrLinksOnGithubChanged,
   setPrLinksOnGithubPref,
@@ -138,11 +116,6 @@ import {
 import { setLinksInBrowserTabPref } from "../../lib/links-in-browser-tab-pref";
 import { useLinksInBrowserTab } from "../../lib/links-in-browser-tab";
 import {
-  getViewportReadoutPref,
-  onViewportReadoutChanged,
-  setViewportReadoutPref,
-} from "../../lib/viewport-readout";
-import {
   getServerHealthMonitorPref,
   onServerHealthMonitorChanged,
   setServerHealthMonitorPref,
@@ -152,8 +125,7 @@ import {
   onSessionContextRowChanged,
   setSessionContextRowPref,
 } from "../../lib/session-context-pref";
-import { setUsageBarPref, useUsageBarPref } from "../../lib/usage-bar-pref";
-import { Input, Textarea } from "../../ui/input";
+import { Textarea } from "../../ui/input";
 import { Button } from "../../ui/button";
 import {
   SettingCard,
@@ -165,16 +137,11 @@ import {
   SettingsSection,
 } from "../../ui/settings";
 import { InlineAlert, Skeleton, SkeletonBar } from "../../ui/state";
-import { Segmented, SegmentedOption } from "../../ui/segmented";
 import { Switch } from "../../ui/switch";
 import { toast } from "../../ui/toast";
 import { getCurrentUser } from "../UserPicker";
 import { Select, SettingRow } from "./shared";
-import {
-  AppearanceSection,
-  SidebarDisplayRows,
-  SidebarItemsSection,
-} from "./AppearancePanel";
+import { AppearanceSection } from "./AppearancePanel";
 import { PersonalSandboxDefaultRow } from "./SandboxDefaults";
 import { PendingSendsSection } from "./PendingSendsSection";
 import { VoiceAudioSection } from "./VoiceAudioSection";
@@ -186,376 +153,145 @@ import {
 } from "../../lib/dictation-vocabulary";
 import { RepoTile } from "../RepoTile";
 import { ModelEffortSelect } from "../ModelEffortSelect";
-import { IconPlus, IconRepo } from "../icons";
+import { IconRepo } from "../icons";
 
-// ── Desk ───────────────────────────────────────────────────────────────────
-
-interface DeskVoiceStatus {
-  configured: boolean;
-  keyMasked?: string;
-  /** The GPT-Live backend the web call delegates to (instance-wide). */
-  backendModel?: string;
+/** Subscribe a component to one local preference: its current value, kept
+ *  in step with changes from anywhere else (another tab, the sidebar, a
+ *  menu). Every pref module here exposes the same get/onChanged pair. */
+function usePref<T>(get: () => T, onChanged: (fn: () => void) => () => void) {
+  const [value, setValue] = useState<T>(get);
+  useEffect(() => onChanged(() => setValue(get())), [get, onChanged]);
+  return value;
 }
 
-/** The two backends the server accepts; anything else it refuses. */
-const DESK_VOICE_BACKENDS = [
-  { value: "gpt-5.6-terra", label: "Terra" },
-  { value: "gpt-5.6-luna", label: "Luna" },
-];
-
-function DeskVoiceBackendRow() {
-  const [saving, setSaving] = useState(false);
-  const [model, setModel] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    request<DeskVoiceStatus>("/desk/voice/status", {
-      label: "Failed to load voice settings",
-    })
-      .then((status) => setModel(status.backendModel ?? null))
-      .catch((error) =>
-        setError(errorMessage(error, "Failed to load voice settings")),
-      );
-  }, []);
-
-  async function pick(next: string) {
-    if (saving) return;
-    setSaving(true);
-    const previous = model;
-    setModel(next);
-    setError(null);
-    try {
-      const status = await request<DeskVoiceStatus>("/desk/voice/backend", {
-        method: "PUT",
-        body: { model: next },
-        label: "Failed to save the voice backend",
-      });
-      setModel(status.backendModel ?? next);
-    } catch (error: unknown) {
-      setModel(previous);
-      setError(errorMessage(error, "Failed to save the voice backend"));
-    }
-    setSaving(false);
-  }
-
+function SwitchRow({
+  title,
+  desc,
+  checked,
+  disabled,
+  onChange,
+}: {
+  title: string;
+  desc?: ReactNode;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (next: boolean) => void;
+}) {
   return (
     <SettingRow
-      title="Voice backend"
-      desc={
-        error || "Terra is OpenAI's recommended Live backend. Luna costs less."
-      }
+      title={title}
+      desc={desc}
       control={
-        <Segmented label="Voice backend" value={model} onValueChange={pick}>
-          {DESK_VOICE_BACKENDS.map(({ value, label }) => (
-            <SegmentedOption
-              key={value}
-              value={value}
-              disabled={model === null || saving}
-              className="phone:min-h-11"
-            >
-              {label}
-            </SegmentedOption>
-          ))}
-        </Segmented>
+        <Switch
+          aria-label={title}
+          checked={checked}
+          disabled={disabled}
+          onCheckedChange={onChange}
+        />
       }
     />
   );
 }
 
-function DeskVoiceApiKeyRow({ deskShown }: { deskShown: boolean }) {
-  const [status, setStatus] = useState<DeskVoiceStatus | null>(null);
-  const [apiKey, setApiKey] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
+function NewSessionsSection() {
+  // Per-user default model and effort, picked together in the same menu
+  // sessions use ("" = no preference: the instance default at its own effort).
+  const modelPref = usePref(getDefaultModelPref, onDefaultModelPrefChanged);
+  const effortPref = usePref(getDefaultEffortPref, onDefaultEffortPrefChanged);
+  // "" = no preference: the workspace's own default repo applies.
+  const repoPref = usePref(getDefaultRepoPref, onDefaultRepoPrefChanged);
+  const checkoutPrefs = usePref(
+    getSessionCheckoutPrefs,
+    onSessionCheckoutPrefChanged,
+  );
+  const [models, setModels] = useState<ModelOption[]>([]);
+  const [catalogDefault, setCatalogDefault] = useState("");
+  const [modelsError, setModelsError] = useState<string | null>(null);
+  const [repos, setRepos] = useState<RepoInfo[]>([]);
+  const [reposError, setReposError] = useState<string | null>(null);
   useEffect(() => {
-    request<DeskVoiceStatus>("/desk/voice/status", {
-      label: "Failed to load voice settings",
-    })
-      .then(setStatus)
+    fetchModels()
+      .then((result) => {
+        setModels(result.models);
+        setCatalogDefault(result.default);
+      })
       .catch((error) =>
-        setError(errorMessage(error, "Failed to load voice settings")),
+        setModelsError(errorMessage(error, "Failed to load models")),
+      );
+    fetchRepos()
+      .then(setRepos)
+      .catch((error) =>
+        setReposError(errorMessage(error, "Failed to load repositories")),
       );
   }, []);
 
-  async function put(value: string) {
-    setBusy(true);
-    setError(null);
-    try {
-      const status = await request<DeskVoiceStatus>("/desk/voice/key", {
-        method: "PUT",
-        body: { apiKey: value },
-        label: "Failed to save the API key",
-      });
-      setStatus(status);
-      setApiKey("");
-    } catch (error: unknown) {
-      setError(errorMessage(error, "Failed to save the API key"));
-    }
-    setBusy(false);
-  }
-
   return (
     <>
-      {status?.configured && (
-        <SettingRow
-          title="OpenAI API key"
-          desc={status.keyMasked}
-          control={
-            <Button size="sm" disabled={busy} onClick={() => put("")}>
-              Remove
-            </Button>
-          }
-        />
-      )}
-      <SettingRow
-        title={status?.configured ? "Replace key" : "OpenAI API key"}
-        desc={
-          error ||
-          (deskShown
-            ? "Anyone signed in can start calls."
-            : "Shared across this instance. Also powers Autocomplete.")
-        }
-        control={
-          <div className="flex items-center gap-2">
-            <Input
-              type="password"
-              autoComplete="off"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="sk-…"
-            />
-            <Button
-              size="sm"
-              variant="primary"
-              disabled={busy || !apiKey.trim()}
-              onClick={() => put(apiKey.trim())}
-            >
-              {busy ? "Saving…" : "Save"}
-            </Button>
-          </div>
-        }
-      />
-    </>
-  );
-}
-
-function LayoutPanel() {
-  const on = useNewLayoutPref();
-  return (
-    <>
-      <SettingsGroupLabel>Layout</SettingsGroupLabel>
-      <SettingCard>
-        <SettingGroup>
-          <SettingRow
-            title="New layout"
-            desc="A minibar of places beside a sidebar of your sessions. Desktop only for now."
-            control={
-              <Switch
-                aria-label="New layout"
-                checked={on}
-                onCheckedChange={setNewLayoutPref}
-              />
-            }
-          />
-        </SettingGroup>
-      </SettingCard>
-    </>
-  );
-}
-
-function DeskPanel() {
-  const shown = useDeskShown();
-  const [voice, setVoice] = useState(getDeskVoicePref);
-  useEffect(() => onDeskVoiceChanged(() => setVoice(getDeskVoicePref())), []);
-
-  return (
-    <>
-      <SettingsGroupLabel>Desk</SettingsGroupLabel>
-      <SettingCard>
-        <SettingGroup>
-          <SettingRow
-            title="Show Desk"
-            desc="Adds the Desk button, ⌘J and Open Desk in the command menu."
-            control={
-              <Switch
-                aria-label="Show Desk"
-                checked={shown}
-                onCheckedChange={setDeskShownPref}
-              />
-            }
-          />
-          {shown && (
-            <SettingRow
-              title="Voice mode"
-              control={
-                <Switch
-                  aria-label="Voice mode"
-                  checked={voice}
-                  onCheckedChange={setDeskVoicePref}
-                />
-              }
-            />
-          )}
-          {/* The key also powers composer Autocomplete, so it stays
-              reachable with the Desk hidden. */}
-          <DeskVoiceApiKeyRow deskShown={shown} />
-          {shown && <DeskVoiceBackendRow />}
-        </SettingGroup>
-      </SettingCard>
-      {shown && (
-        <SettingsHint>
-          Voice mode adds a microphone to Desk. The API key and the backend are
-          shared across this instance. The composer's model pill sets the typed
-          Desk only; it does not change a call.
-        </SettingsHint>
-      )}
-    </>
-  );
-}
-
-function LinksSection() {
-  const [onGithub, setOnGithub] = useState(getPrLinksOnGithubPref);
-  useEffect(
-    () => onPrLinksOnGithubChanged(() => setOnGithub(getPrLinksOnGithubPref())),
-    [],
-  );
-  const [autoOpen, setAutoOpen] = useState(getPreviewAutoOpenPref);
-  useEffect(
-    () => onPreviewAutoOpenChanged(() => setAutoOpen(getPreviewAutoOpenPref())),
-    [],
-  );
-  const inBrowserTab = useLinksInBrowserTab();
-
-  return (
-    <>
-      <SettingsGroupLabel>Links</SettingsGroupLabel>
+      <SettingsGroupLabel>New sessions</SettingsGroupLabel>
       <SettingCard>
         <SettingRow
-          title="Open pull requests on GitHub"
-          desc="Uses the GitHub app on a phone. Only this device."
+          title="Model"
+          desc={modelsError}
           control={
-            <Switch
-              aria-label="Open pull requests on GitHub"
-              checked={onGithub}
-              onCheckedChange={setPrLinksOnGithubPref}
+            <ModelEffortSelect
+              selection={{
+                models,
+                defaultModel: catalogDefault,
+                model: models.some((m) => m.id === modelPref) ? modelPref : "",
+                effort: effortPref,
+              }}
+              appearance={{ triggerVariant: "field" }}
+              actions={{
+                changeModel: setDefaultModelPref,
+                changeEffort: setDefaultEffortPref,
+                reset: () => {
+                  setDefaultModelPref("");
+                  setDefaultEffortPref("");
+                },
+              }}
             />
           }
         />
         <SettingRow
-          title="Open links in the Browser tab"
-          desc="Turn off to use your own browser."
+          title="Repository"
+          desc={reposError}
           control={
-            <Switch
-              aria-label="Open links in the Browser tab"
-              checked={inBrowserTab}
-              onCheckedChange={setLinksInBrowserTabPref}
+            <Select
+              label="Default repository"
+              value={repos.some((r) => r.id === repoPref) ? repoPref : ""}
+              options={[
+                {
+                  value: "",
+                  label: "Workspace default",
+                  icon: <IconRepo size={20} />,
+                },
+                ...repos.map((r) => ({
+                  value: r.id,
+                  label: r.label || r.id,
+                  icon: <RepoTile name={r.id} size={16} />,
+                })),
+              ]}
+              onChange={setDefaultRepoPref}
             />
           }
         />
-        {inBrowserTab && (
-          <SettingRow
-            title="Add a Browser tab for previews"
-            desc="Opens one when a pull request's preview is ready."
-            control={
-              <Switch
-                aria-label="Add a Browser tab for previews"
-                checked={autoOpen}
-                onCheckedChange={setPreviewAutoOpenPref}
-              />
-            }
-          />
-        )}
-      </SettingCard>
-    </>
-  );
-}
-
-function DebugSection() {
-  const [agentation, setAgentation] = useState(getAgentationPref);
-  useEffect(
-    () => onAgentationChanged(() => setAgentation(getAgentationPref())),
-    [],
-  );
-  const [viewportReadout, setViewportReadout] = useState(
-    getViewportReadoutPref,
-  );
-  useEffect(
-    () =>
-      onViewportReadoutChanged(() =>
-        setViewportReadout(getViewportReadoutPref()),
-      ),
-    [],
-  );
-  const [sessionContext, setSessionContext] = useState(
-    getSessionContextRowPref,
-  );
-  useEffect(
-    () =>
-      onSessionContextRowChanged(() =>
-        setSessionContext(getSessionContextRowPref()),
-      ),
-    [],
-  );
-  const [serverHealth, setServerHealth] = useState(getServerHealthMonitorPref);
-  useEffect(
-    () =>
-      onServerHealthMonitorChanged(() =>
-        setServerHealth(getServerHealthMonitorPref()),
-      ),
-    [],
-  );
-
-  return (
-    <>
-      <SettingsGroupLabel>Debug</SettingsGroupLabel>
-      <SettingCard>
-        {AGENTATION_ENABLED && (
-          <SettingRow
-            title="Agentation"
-            desc="Show the page annotation toolbar on desktop. Only affects you."
-            control={
-              <Switch
-                aria-label="Agentation"
-                checked={agentation}
-                onCheckedChange={setAgentationPref}
-              />
-            }
-          />
-        )}
+        <PersonalSandboxDefaultRow />
         <SettingRow
-          title="Session context"
-          desc="Show what the model received before the first message at the top of each transcript."
+          title="Code workspace"
           control={
-            <Switch
-              aria-label="Session context"
-              checked={sessionContext}
-              onCheckedChange={setSessionContextRowPref}
+            <Select
+              label="Where code sessions make changes"
+              value={sessionCheckoutDefault(checkoutPrefs)}
+              options={[
+                { value: "default", label: "Repository default" },
+                { value: "checkout", label: "Local checkout" },
+                { value: "worktree", label: "Separate worktree" },
+              ]}
+              onChange={setSessionCheckoutDefault}
             />
           }
         />
-        <SettingRow
-          title="Viewport readout"
-          desc="Show live window, keyboard, and scroll numbers in a corner of the screen. Only this device."
-          control={
-            <Switch
-              aria-label="Viewport readout"
-              checked={viewportReadout}
-              onCheckedChange={setViewportReadoutPref}
-            />
-          }
-        />
-        <SettingRow
-          title="Server health"
-          desc="Show server CPU, RAM, disk, and frame rate in the sidebar on desktop. Only this device."
-          control={
-            <Switch
-              aria-label="Server health"
-              checked={serverHealth}
-              onCheckedChange={setServerHealthMonitorPref}
-            />
-          }
-        />
+        <PersonalOutputStyleRow />
       </SettingCard>
     </>
   );
@@ -606,7 +342,7 @@ function PersonalOutputStyleRow() {
   return (
     <SettingRow
       title="Output style"
-      desc={error || "Concise skips preamble without reducing the work."}
+      desc={error || "Concise skips the preamble."}
       control={
         <Select
           label="Output style"
@@ -669,10 +405,7 @@ function YouShouldKnowRow() {
   return (
     <SettingRow
       title="You should know"
-      desc={
-        error ||
-        "A side agent flags important things you might miss during long turns. On by default."
-      }
+      desc={error || "Flags what you might miss in long turns."}
       control={
         <Switch
           aria-label="You should know"
@@ -792,10 +525,7 @@ function PersonalPromptPanel() {
                 : ""}
         </div>
       </SettingsSection>
-      <SettingsHint>
-        Used in every session you start. Syncs across devices. Automations never
-        receive it.
-      </SettingsHint>
+      <SettingsHint>Added to every session you start.</SettingsHint>
     </>
   );
 }
@@ -829,38 +559,24 @@ function BusyGestureSelect({
   );
 }
 
-/**
- * How the app looks and behaves for you: theme and accent, the composer keys,
- * what a follow-up does mid-run, and how much of a turn's work the transcript
- * shows. Everything here is yours alone, and the prefs backed by ui-prefs
- * follow you across devices.
- */
-export function PreferencesPanel() {
-  const [sendKey, setSendKey] = useState<SendKeyPref>(getSendKeyPref);
-  const [busySend, setBusySend] = useState<BusySendPrefs>(getBusySendPrefs);
-  const [vimMode, setVimMode] = useState<boolean>(getVimModePref);
-  const [quickReplies, setQuickReplies] = useState<boolean>(
+function ComposerSection() {
+  const sendKey = usePref(getSendKeyPref, onSendKeyChanged);
+  const busySend = usePref(getBusySendPrefs, onBusySendChanged);
+  const quickReplies = usePref(
     getReplySuggestionsPref,
+    onReplySuggestionsChanged,
   );
-  const [predictions, setPredictions] = useState<boolean>(
+  const predictions = usePref(
     getComposerPredictionsPref,
+    onComposerPredictionsChanged,
   );
-  useEffect(
-    () =>
-      onComposerPredictionsChanged(() =>
-        setPredictions(getComposerPredictionsPref()),
-      ),
-    [],
-  );
-  const [autocomplete, setAutocomplete] = useState<boolean>(
+  const autocomplete = usePref(
     getComposerAutocompletePref,
+    onComposerAutocompleteChanged,
   );
-  useEffect(
-    () =>
-      onComposerAutocompleteChanged(() =>
-        setAutocomplete(getComposerAutocompletePref()),
-      ),
-    [],
+  const nextChatButton = usePref(
+    getNextChatButtonPref,
+    onNextChatButtonChanged,
   );
   const [autocompleteAvailable, setAutocompleteAvailable] = useState(true);
   useEffect(() => {
@@ -872,197 +588,14 @@ export function PreferencesPanel() {
       live = false;
     };
   }, []);
-  const [nextChatButton, setNextChatButton] = useState<boolean>(
-    getNextChatButtonPref,
-  );
-  const [pinNew, setPinNew] = useState<boolean>(getPinNewSessions);
-  const [pinNewWs, setPinNewWs] = useState<boolean>(getPinNewWorkspaces);
-  useEffect(() => onSendKeyChanged(() => setSendKey(getSendKeyPref())), []);
-  useEffect(() => onBusySendChanged(() => setBusySend(getBusySendPrefs())), []);
-  useEffect(() => onVimModeChanged(() => setVimMode(getVimModePref())), []);
-  useEffect(
-    () =>
-      onReplySuggestionsChanged(() =>
-        setQuickReplies(getReplySuggestionsPref()),
-      ),
-    [],
-  );
-  useEffect(
-    () =>
-      onNextChatButtonChanged(() => setNextChatButton(getNextChatButtonPref())),
-    [],
-  );
-  useEffect(
-    () => onPinNewSessionsChanged(() => setPinNew(getPinNewSessions())),
-    [],
-  );
-  useEffect(
-    () => onPinNewWorkspacesChanged(() => setPinNewWs(getPinNewWorkspaces())),
-    [],
-  );
-  // Per-user default model and effort for NEW sessions, picked together in
-  // the same menu sessions use ("" = no preference: the instance default
-  // model from GET /api/models, at its own effort).
-  const [modelPref, setModelPref] = useState<string>(getDefaultModelPref);
-  const [effortPref, setEffortPref] = useState<string>(getDefaultEffortPref);
-  useEffect(
-    () =>
-      onDefaultEffortPrefChanged(() => setEffortPref(getDefaultEffortPref())),
-    [],
-  );
-  const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
-  const [catalogDefaultModel, setCatalogDefaultModel] = useState("");
-  const [modelOptionsError, setModelOptionsError] = useState<string | null>(
-    null,
-  );
-  useEffect(
-    () => onDefaultModelPrefChanged(() => setModelPref(getDefaultModelPref())),
-    [],
-  );
-  // Per-user default repo for NEW sessions ("" = no preference — the
-  // workspace's own default from GET /api/repos applies).
-  const [repoPref, setRepoPref] = useState<string>(getDefaultRepoPref);
-  const [repoOptions, setRepoOptions] = useState<RepoInfo[]>([]);
-  const [repoOptionsError, setRepoOptionsError] = useState<string | null>(null);
-  useEffect(
-    () => onDefaultRepoPrefChanged(() => setRepoPref(getDefaultRepoPref())),
-    [],
-  );
-  const [checkoutPrefs, setCheckoutPrefs] = useState<SessionCheckoutPrefs>(
-    getSessionCheckoutPrefs,
-  );
-  const [checkoutOverrideDraft, setCheckoutOverrideDraft] = useState<{
-    repo: string;
-    mode: SessionCheckoutOverride;
-  } | null>(null);
-  useEffect(
-    () =>
-      onSessionCheckoutPrefChanged(() =>
-        setCheckoutPrefs(getSessionCheckoutPrefs()),
-      ),
-    [],
-  );
-  const [turnActivity, setTurnActivity] =
-    useState<TurnActivityPrefs>(getTurnActivityPrefs);
-  useEffect(
-    () => onTurnActivityChanged(() => setTurnActivity(getTurnActivityPrefs())),
-    [],
-  );
-  const [thinkingMessages, setThinkingMessages] =
-    useState<ThinkingMessagesPref>(getThinkingMessagesPref);
-  useEffect(
-    () =>
-      onThinkingMessagesChanged(() =>
-        setThinkingMessages(getThinkingMessagesPref()),
-      ),
-    [],
-  );
-  const usageBar = useUsageBarPref();
-  const [liveTyping, setLiveTyping] = useState<boolean>(getLiveTypingPref);
-  useEffect(
-    () => onLiveTypingChanged(() => setLiveTyping(getLiveTypingPref())),
-    [],
-  );
-  useEffect(() => {
-    fetchModels()
-      .then((models) => {
-        setModelOptions(models.models);
-        setCatalogDefaultModel(models.default);
-      })
-      .catch((error) =>
-        setModelOptionsError(errorMessage(error, "Failed to load models")),
-      );
-  }, []);
-  useEffect(() => {
-    fetchRepos()
-      .then(setRepoOptions)
-      .catch((error) =>
-        setRepoOptionsError(errorMessage(error, "Failed to load repositories")),
-      );
-  }, []);
-
-  const checkoutDefault = sessionCheckoutDefault(checkoutPrefs);
-  const checkoutOverrideRepos = repoOptions.filter((repo) => {
-    const override = checkoutPrefs[repo.id];
-    return override !== undefined && override !== checkoutDefault;
-  });
-  const availableCheckoutRepos = repoOptions.filter(
-    (repo) => checkoutPrefs[repo.id] === undefined,
-  );
 
   return (
-    <SettingsPanel>
-      <SettingsHeader title="Preferences" />
-      <SettingsGroupLabel className="mt-0">Messages</SettingsGroupLabel>
+    <>
+      <SettingsGroupLabel>Composer</SettingsGroupLabel>
       <SettingCard>
-        {/* These choices become one starting state for every new session. */}
         <SettingGroup>
           <SettingRow
-            title="Default model"
-            desc={modelOptionsError}
-            control={
-              <ModelEffortSelect
-                selection={{
-                  models: modelOptions,
-                  defaultModel: catalogDefaultModel,
-                  model: modelOptions.some((m) => m.id === modelPref)
-                    ? modelPref
-                    : "",
-                  effort: effortPref,
-                }}
-                appearance={{ triggerVariant: "field" }}
-                actions={{
-                  changeModel: setDefaultModelPref,
-                  changeEffort: setDefaultEffortPref,
-                  // No preference for either: new sessions follow the
-                  // instance default model at its own effort.
-                  reset: () => {
-                    setDefaultModelPref("");
-                    setDefaultEffortPref("");
-                  },
-                }}
-              />
-            }
-          />
-
-          <SettingRow
-            title="Default repository"
-            desc={repoOptionsError}
-            control={
-              <Select
-                label="Default repository"
-                value={
-                  repoOptions.some((r) => r.id === repoPref) ? repoPref : ""
-                }
-                options={[
-                  {
-                    value: "",
-                    label: "Use the workspace default",
-                    icon: <IconRepo size={20} />,
-                  },
-                  ...repoOptions.map((r) => ({
-                    value: r.id,
-                    label: r.label || r.id,
-                    icon: <RepoTile name={r.id} size={16} />,
-                  })),
-                ]}
-                onChange={setDefaultRepoPref}
-              />
-            }
-          />
-          <PersonalSandboxDefaultRow />
-          <PersonalOutputStyleRow />
-          <YouShouldKnowRow />
-        </SettingGroup>
-        {/* The send key also determines which busy-turn gesture is available. */}
-        <SettingGroup>
-          <SettingRow
-            title="Send messages with"
-            desc={
-              sendKey === "mod-enter"
-                ? "↵ adds a new line."
-                : "⇧↵ adds a new line. On phones, use the send button."
-            }
+            title="Send with"
             control={
               <Select
                 label="Send messages with"
@@ -1076,8 +609,8 @@ export function PreferencesPanel() {
             }
           />
           <SettingRow
-            title="Follow-up while busy"
-            desc="Queue waits for the run to finish. Steer adds the message to the current turn."
+            title="While a turn runs"
+            desc="Queue waits. Steer joins the current turn."
             control={
               <div className="flex flex-wrap items-end justify-end gap-x-3 gap-y-2">
                 <BusyGestureSelect
@@ -1086,7 +619,7 @@ export function PreferencesPanel() {
                   value={busySend.enter}
                 />
                 {/* The modifier only has its own answer while plain Enter is
-							    the send key; otherwise ⌘↵ IS sending, set just above. */}
+                    the send key; otherwise ⌘↵ IS sending, set just above. */}
                 {sendKey === "enter" && (
                   <BusyGestureSelect
                     gesture="mod"
@@ -1098,270 +631,51 @@ export function PreferencesPanel() {
             }
           />
         </SettingGroup>
-        <SettingRow
-          title="Quick replies"
-          desc="Suggest follow-ups when a turn ends on a choice."
-          control={
-            <Switch
-              aria-label="Quick replies"
-              checked={quickReplies}
-              onCheckedChange={setReplySuggestionsPref}
-            />
-          }
-        />
-        {/* The composer's two suggestions sit together so it is clear each
-            can be switched off on its own. */}
         <SettingGroup>
-          <SettingRow
-            title="Predicted reply"
-            desc="Suggest your next message when a turn ends. Tab or double tap to use it."
-            control={
-              <Switch
-                aria-label="Predicted reply"
-                checked={predictions}
-                onCheckedChange={setComposerPredictionsPref}
-              />
-            }
+          <SwitchRow
+            title="Quick replies"
+            checked={quickReplies}
+            onChange={setReplySuggestionsPref}
           />
-          <SettingRow
+          <SwitchRow
+            title="Predicted reply"
+            checked={predictions}
+            onChange={setComposerPredictionsPref}
+          />
+          <SwitchRow
             title="Autocomplete"
             desc={
               autocompleteAvailable
-                ? "Suggest the rest of your message as you type. Tab or double tap to accept."
-                : "Needs an OpenAI key in Settings, Desk."
+                ? undefined
+                : "Needs an OpenAI key in Settings, Models."
             }
-            control={
-              <Switch
-                aria-label="Autocomplete"
-                checked={autocomplete && autocompleteAvailable}
-                disabled={!autocompleteAvailable}
-                onCheckedChange={setComposerAutocompletePref}
-              />
-            }
+            checked={autocomplete && autocompleteAvailable}
+            disabled={!autocompleteAvailable}
+            onChange={setComposerAutocompletePref}
           />
         </SettingGroup>
-        <SettingRow
+        <SwitchRow
           title="Next button"
-          control={
-            <Switch
-              aria-label="Next button"
-              checked={nextChatButton}
-              onCheckedChange={setNextChatButtonPref}
-            />
-          }
-        />
-        <SettingRow
-          title="Usage bar"
-          desc="Show context, spend, limits and the account above the composer."
-          control={
-            <Switch
-              aria-label="Usage bar"
-              checked={usageBar}
-              onCheckedChange={setUsageBarPref}
-            />
-          }
-        />
-        <SettingRow
-          title="Vim mode"
-          control={
-            <Switch
-              aria-label="Vim mode"
-              checked={vimMode}
-              onCheckedChange={setVimModePref}
-            />
-          }
+          desc="Jump to the next unread chat."
+          checked={nextChatButton}
+          onChange={setNextChatButtonPref}
         />
       </SettingCard>
-      <LinksSection />
-      <SettingsGroupLabel
-        actions={
-          !checkoutOverrideDraft && availableCheckoutRepos.length > 0 ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              icon={<IconPlus size={20} />}
-              onClick={() =>
-                setCheckoutOverrideDraft({
-                  repo: "",
-                  mode:
-                    checkoutDefault === "checkout" ? "worktree" : "checkout",
-                })
-              }
-            >
-              Add override
-            </Button>
-          ) : undefined
-        }
-      >
-        Code workspaces
-      </SettingsGroupLabel>
-      <SettingCard>
-        <SettingRow
-          title="Default for all repositories"
-          desc="Where new code sessions make changes."
-          controlClassName="phone:ml-0 phone:w-full phone:max-w-none phone:basis-full"
-          control={
-            <Select
-              label="Default code workspace"
-              value={checkoutDefault}
-              options={[
-                { value: "default", label: "Use repository defaults" },
-                { value: "checkout", label: "Local checkout" },
-                { value: "worktree", label: "Separate worktree" },
-              ]}
-              className="phone:min-h-11 phone:w-full"
-              onChange={(value) => {
-                setSessionCheckoutDefault(value);
-                setCheckoutOverrideDraft((draft) =>
-                  draft?.mode === value
-                    ? {
-                        ...draft,
-                        mode: value === "checkout" ? "worktree" : "checkout",
-                      }
-                    : draft,
-                );
-              }}
-            />
-          }
-        />
-        {checkoutOverrideRepos.map((repo) => {
-          const label = repo.label || repo.id;
-          const checkoutPref = checkoutPrefs[repo.id];
-          if (!checkoutPref) return null;
-          return (
-            <SettingRow
-              key={repo.id}
-              title={
-                <span className="flex min-w-0 items-center gap-2">
-                  <RepoTile name={repo.id} size={18} />
-                  <span className="truncate">{label}</span>
-                </span>
-              }
-              desc="Overrides the default above."
-              controlClassName="phone:ml-0 phone:w-full phone:max-w-none phone:basis-full"
-              control={
-                <Select
-                  label={`${label} code workspace`}
-                  value={checkoutPref}
-                  options={[
-                    { value: "default", label: "Use default for all" },
-                    { value: "checkout", label: "Local checkout" },
-                    { value: "worktree", label: "Separate worktree" },
-                  ]}
-                  className="phone:min-h-11 phone:w-full"
-                  onChange={(value) => setSessionCheckoutPref(repo.id, value)}
-                />
-              }
-            />
-          );
-        })}
-        {checkoutOverrideDraft && (
-          <SettingRow
-            title="New override"
-            desc="Choose a repository and workspace."
-            controlClassName="phone:ml-0 phone:w-full phone:max-w-none phone:basis-full"
-            control={
-              <div className="flex flex-wrap items-center justify-end gap-2 phone:w-full">
-                <Select
-                  label="Repository to override"
-                  value={checkoutOverrideDraft.repo}
-                  options={[
-                    {
-                      value: "",
-                      label: "Choose repository",
-                      icon: <IconRepo size={20} />,
-                    },
-                    ...availableCheckoutRepos.map((repo) => ({
-                      value: repo.id,
-                      label: repo.label || repo.id,
-                      icon: <RepoTile name={repo.id} size={16} />,
-                    })),
-                  ]}
-                  className="phone:min-h-11 phone:max-w-full"
-                  onChange={(repo) =>
-                    setCheckoutOverrideDraft((draft) =>
-                      draft ? { ...draft, repo } : draft,
-                    )
-                  }
-                />
-                <Select
-                  label="Override code workspace"
-                  value={checkoutOverrideDraft.mode}
-                  options={(
-                    [
-                      { value: "checkout", label: "Local checkout" },
-                      { value: "worktree", label: "Separate worktree" },
-                    ] satisfies {
-                      value: SessionCheckoutOverride;
-                      label: string;
-                    }[]
-                  ).filter((option) => option.value !== checkoutDefault)}
-                  className="phone:min-h-11"
-                  onChange={(mode) =>
-                    setCheckoutOverrideDraft((draft) =>
-                      draft ? { ...draft, mode } : draft,
-                    )
-                  }
-                />
-                <Button
-                  variant="soft"
-                  disabled={!checkoutOverrideDraft.repo}
-                  onClick={() => {
-                    setSessionCheckoutPref(
-                      checkoutOverrideDraft.repo,
-                      checkoutOverrideDraft.mode,
-                    );
-                    setCheckoutOverrideDraft(null);
-                  }}
-                >
-                  Add
-                </Button>
-                <Button
-                  variant="ghost"
-                  onClick={() => setCheckoutOverrideDraft(null)}
-                >
-                  Cancel
-                </Button>
-              </div>
-            }
-          />
-        )}
-      </SettingCard>
-      <SettingsHint>Changes apply to new sessions only.</SettingsHint>
-      <AppearanceSection />
-      <SettingsGroupLabel>Sidebar</SettingsGroupLabel>
-      <SettingCard>
-        <SidebarDisplayRows repos={repoOptions} />
-        <SettingGroup>
-          <SettingRow
-            title="Pin new sessions"
-            control={
-              <Switch
-                aria-label="Pin new sessions"
-                checked={pinNew}
-                onCheckedChange={setPinNewSessions}
-              />
-            }
-          />
-          <SettingRow
-            title="Pin new workspaces"
-            control={
-              <Switch
-                aria-label="Pin new workspaces"
-                checked={pinNewWs}
-                onCheckedChange={setPinNewWorkspaces}
-              />
-            }
-          />
-        </SettingGroup>
-      </SettingCard>
-      <SidebarItemsSection />
+    </>
+  );
+}
+
+function TranscriptSection() {
+  const turnActivity = usePref(getTurnActivityPrefs, onTurnActivityChanged);
+  const thinking = usePref(getThinkingMessagesPref, onThinkingMessagesChanged);
+  const liveTyping = usePref(getLiveTypingPref, onLiveTypingChanged);
+  return (
+    <>
       <SettingsGroupLabel>Transcript</SettingsGroupLabel>
       <SettingCard>
         <SettingGroup>
           <SettingRow
             title="Steps"
-            desc="Choose when steps open."
             control={
               <Select
                 label="Steps"
@@ -1376,11 +690,11 @@ export function PreferencesPanel() {
             }
           />
           <SettingRow
-            title="Thinking messages"
+            title="Thinking"
             control={
               <Select
                 label="Thinking messages"
-                value={thinkingMessages}
+                value={thinking}
                 options={[
                   { value: "none", label: "None" },
                   { value: "latest", label: "Latest" },
@@ -1405,23 +719,144 @@ export function PreferencesPanel() {
             }
           />
         </SettingGroup>
-        <SettingRow
+        <SwitchRow
           title="Live typing"
-          desc="Show replies as the model writes them."
-          control={
-            <Switch
-              aria-label="Live typing"
-              checked={liveTyping}
-              onCheckedChange={setLiveTypingPref}
-            />
-          }
+          desc="Show replies as they are written."
+          checked={liveTyping}
+          onChange={setLiveTypingPref}
+        />
+        <YouShouldKnowRow />
+      </SettingCard>
+    </>
+  );
+}
+
+function SidebarSection() {
+  const pinNew = usePref(getPinNewSessions, onPinNewSessionsChanged);
+  const pinNewWs = usePref(getPinNewWorkspaces, onPinNewWorkspacesChanged);
+  return (
+    <>
+      <SettingsGroupLabel>Sidebar</SettingsGroupLabel>
+      <SettingCard>
+        <SwitchRow
+          title="Pin new sessions"
+          checked={pinNew}
+          onChange={setPinNewSessions}
+        />
+        <SwitchRow
+          title="Pin new workspaces"
+          checked={pinNewWs}
+          onChange={setPinNewWorkspaces}
         />
       </SettingCard>
+      <SettingsHint>
+        Filters and tools are in the sidebar&rsquo;s own menu.
+      </SettingsHint>
+    </>
+  );
+}
 
+function LinksSection() {
+  const onGithub = usePref(getPrLinksOnGithubPref, onPrLinksOnGithubChanged);
+  const autoOpen = usePref(getPreviewAutoOpenPref, onPreviewAutoOpenChanged);
+  const inBrowserTab = useLinksInBrowserTab();
+  return (
+    <>
+      <SettingsGroupLabel>Links</SettingsGroupLabel>
+      <SettingCard>
+        <SwitchRow
+          title="Open links in the Browser tab"
+          desc="Off uses your own browser."
+          checked={inBrowserTab}
+          onChange={setLinksInBrowserTabPref}
+        />
+        {inBrowserTab && (
+          <SwitchRow
+            title="Open previews when ready"
+            checked={autoOpen}
+            onChange={setPreviewAutoOpenPref}
+          />
+        )}
+        <SwitchRow
+          title="Open pull requests on GitHub"
+          desc="This device only."
+          checked={onGithub}
+          onChange={setPrLinksOnGithubPref}
+        />
+      </SettingCard>
+    </>
+  );
+}
+
+function DeskSection() {
+  const shown = useDeskShown();
+  const voice = usePref(getDeskVoicePref, onDeskVoiceChanged);
+  return (
+    <>
+      <SettingsGroupLabel>Desk</SettingsGroupLabel>
+      <SettingCard>
+        <SwitchRow
+          title="Show Desk"
+          desc="Adds the Desk button and ⌘J."
+          checked={shown}
+          onChange={setDeskShownPref}
+        />
+        {shown && (
+          <SwitchRow
+            title="Voice mode"
+            checked={voice}
+            onChange={setDeskVoicePref}
+          />
+        )}
+      </SettingCard>
+    </>
+  );
+}
+
+function DebugSection() {
+  const sessionContext = usePref(
+    getSessionContextRowPref,
+    onSessionContextRowChanged,
+  );
+  const serverHealth = usePref(
+    getServerHealthMonitorPref,
+    onServerHealthMonitorChanged,
+  );
+  return (
+    <>
+      <SettingsGroupLabel>Debug</SettingsGroupLabel>
+      <SettingCard>
+        <SwitchRow
+          title="Session context"
+          desc="Show what the model received first."
+          checked={sessionContext}
+          onChange={setSessionContextRowPref}
+        />
+        <SwitchRow
+          title="Server health"
+          desc="CPU, memory and disk in the sidebar."
+          checked={serverHealth}
+          onChange={setServerHealthMonitorPref}
+        />
+      </SettingCard>
+    </>
+  );
+}
+
+/** How the app looks and behaves for you. Everything here is yours alone. */
+export function PreferencesPanel() {
+  return (
+    <SettingsPanel>
+      <SettingsHeader title="Preferences" />
+      <AppearanceSection />
+      <NewSessionsSection />
+      <ComposerSection />
+      <TranscriptSection />
+      <SidebarSection />
+      <LinksSection />
       <VoiceAudioSection />
       <DictationVocabularySection />
-      <DeskPanel />
-      <LayoutPanel />
+      <DeskSection />
       <PersonalPromptPanel />
       <PendingSendsSection />
       <DebugSection />
@@ -1451,13 +886,9 @@ function DictationVocabularySection() {
 
   return (
     <>
-      <SettingsGroupLabel>Dictation vocabulary</SettingsGroupLabel>
+      <SettingsGroupLabel>Dictation words</SettingsGroupLabel>
       <SettingCard>
         <div className="flex flex-col gap-2.5 px-3.5 py-3">
-          <div className="text-supporting text-dim">
-            Comma- or line-separated product names, code identifiers, or
-            teammate names to bias speech transcription.
-          </div>
           <Textarea
             aria-label="Dictation custom vocabulary"
             rows={2}
@@ -1494,6 +925,7 @@ function DictationVocabularySection() {
           </div>
         </div>
       </SettingCard>
+      <SettingsHint>Names and terms dictation should spell right.</SettingsHint>
     </>
   );
 }

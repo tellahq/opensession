@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Button } from "../ui/button";
-import { EmptyState, InlineAlert } from "../ui/state";
+import { InlineAlert } from "../ui/state";
 import {
   disconnectTool,
   fetchToolAccounts,
@@ -128,17 +128,14 @@ export function MyAccountsPanel() {
       )}
       <ProfileSection />
       <GithubAccounts personal />
-      <SettingsGroupLabel>Tools</SettingsGroupLabel>
+      {/* Only tools you can sign in to personally. With none, the whole
+          group stays out rather than explaining that it is empty. */}
+      {(tools === null || oauthServers.length > 0 || checking) && (
+        <SettingsGroupLabel>Tools</SettingsGroupLabel>
+      )}
       {tools === null || (oauthServers.length === 0 && checking) ? (
-        // Ghost rows, not "no tools yet": an empty state is a confident
-        // claim, and the list is merely in flight.
         <SettingCardSkeleton rows={4} icon={30} label="Loading tools" />
-      ) : oauthServers.length === 0 ? (
-        <EmptyState placement="card">
-          No tools with personal sign-in are configured yet. Add one on the
-          Connections page and it shows up here.
-        </EmptyState>
-      ) : (
+      ) : oauthServers.length === 0 ? null : (
         <SettingCard>
           {oauthServers.map((s) => {
             const mine = s.users.some(isMe);
@@ -149,18 +146,16 @@ export function MyAccountsPanel() {
                 <SettingRowText>
                   <SettingRowTitle>{displayName(s.name)}</SettingRowTitle>
                   <SettingRowDescription>
-                    {slack && mine
-                      ? "Post messages and screenshots as you after a PR merges"
-                      : slack
-                        ? "Connect to post messages and screenshots as you after a PR merges"
-                        : mine
-                          ? // Not "Connected as you": the chip beside it already
-                            // says connected, so the description says what that
-                            // buys instead of repeating the state.
-                            "Sessions use your account"
-                          : s.shared
-                            ? "Using the workspace account"
-                            : "Using the workspace key"}
+                    {slack
+                      ? "Post as you after a pull request merges"
+                      : mine
+                        ? // Not "Connected as you": the chip beside it already
+                          // says connected, so the description says what that
+                          // buys instead of repeating the state.
+                          "Sessions use your account"
+                        : s.shared
+                          ? "Using the workspace account"
+                          : "Using the workspace key"}
                   </SettingRowDescription>
                 </SettingRowText>
                 <SettingRowControl className="flex items-center gap-2">

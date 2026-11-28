@@ -859,6 +859,7 @@ export function AssetOverlay({
   onSelectPath,
   onOpenAsTab,
   onOpenNewSession,
+  finalFocus,
 }: {
   sessionId: string;
   path: string | null;
@@ -870,6 +871,8 @@ export function AssetOverlay({
   /** Promote the open file into the Assets tab (and dismiss). */
   onOpenAsTab?: (path: string) => void;
   onOpenNewSession: (prefill: NewSessionPrefill) => void;
+  /** Where focus lands on close (see ResponsiveDialog). */
+  finalFocus?: () => HTMLElement | null;
 }) {
   const isPhone = useIsPhone();
   // Survives `path` going null so the exit animation has something to show.
@@ -1004,6 +1007,7 @@ export function AssetOverlay({
       sheetClassName="top-0 h-[100dvh] max-h-none bg-black pt-[env(safe-area-inset-top,0px)] [border-radius:0]! [box-shadow:none]!"
       backdropClassName="bg-black/85"
       showPhoneGrabber={false}
+      finalFocus={finalFocus}
     >
       <div
         className={cn(

@@ -140,8 +140,6 @@ export function useSessionOverflowState(identity: OverflowIdentity) {
   const [branchConfirmMode, setBranchConfirmMode] = useState<"move" | "create">(
     "move",
   );
-  const [mobileActionMenuEl, setMobileActionMenuEl] =
-    useState<HTMLDivElement | null>(null);
   // PR actions are tucked into the overflow menu. Fetch once when the session
   // branch changes so the menu does not open first and add its actions later.
   useEffect(() => {
@@ -173,7 +171,6 @@ export function useSessionOverflowState(identity: OverflowIdentity) {
   }, [identity.sessionId]);
 
   return {
-    menu: { mobileActionMenuEl, setMobileActionMenuEl },
     git: { overflowGit },
     branch: {
       branchActionBusy,

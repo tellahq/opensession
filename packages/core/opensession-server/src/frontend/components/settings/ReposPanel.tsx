@@ -1,3 +1,4 @@
+import { DependencyCacheSection } from "./DependencyCacheSection";
 import { useEffect, useState } from "react";
 import { useSetupStatus } from "../../hooks/useSetupStatus";
 import { errorMessage } from "../../lib/error-message";
@@ -193,10 +194,7 @@ export function ReposPanel() {
   const { status, failed, refetch, applyRepo } = useSetupStatus();
   return (
     <SettingsPanel>
-      <SettingsHeader
-        title="Repositories"
-        description="Register repositories and choose where their sessions work."
-      />
+      <SettingsHeader title="Repositories" />
       {!status ? (
         // A failure is an alert, not a quiet label under a spinner: it used
         // to render in the loading register, so the sentence saying the
@@ -221,6 +219,7 @@ export function ReposPanel() {
             onChanged={refetch}
             onRepoUpdated={applyRepo}
           />
+          <DependencyCacheSection />
         </>
       )}
     </SettingsPanel>

@@ -7,7 +7,6 @@ import {
   setDeployRunning,
   type DeployDto,
 } from "../../lib/api";
-import { PRODUCT_NAME } from "../../lib/brand";
 import { Button } from "../../ui/button";
 import {
   SettingCard,
@@ -39,7 +38,7 @@ export function DeploysPanel() {
   const header = (
     <SettingsHeader
       title="Deploys"
-      description={`Web apps published from sessions, served at /d/<name>/ behind the same sign-in as ${PRODUCT_NAME}. They keep running after the session ends. Only $DATA_DIR survives a redeploy.`}
+      description="Web apps published from sessions, served at /d/<name>/."
     />
   );
 
@@ -63,10 +62,7 @@ export function DeploysPanel() {
       )}
 
       {deploys.length === 0 ? (
-        <EmptyState placement="card">
-          Nothing published yet. Ask a session to build a small internal tool
-          and publish it.
-        </EmptyState>
+        <EmptyState placement="card">Nothing published yet.</EmptyState>
       ) : (
         <SettingCard>
           {deploys.map((d) => (
@@ -133,8 +129,8 @@ export function DeploysPanel() {
         </SettingCard>
       )}
       <SettingsHint>
-        A deploy is agent-authored code running unsandboxed on this box for as
-        long as it is started. Delete anything you don't recognise.
+        Deploys run unsandboxed on this server. Delete any you don&rsquo;t
+        recognise.
       </SettingsHint>
     </SettingsPanel>
   );

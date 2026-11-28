@@ -42,7 +42,7 @@ export function PapercutsPanel() {
   const header = (
     <SettingsHeader
       title="Papercuts"
-      description="Small frictions agents log while working: retried tool calls, flaky commands, misleading errors."
+      description="Friction agents hit while working."
     />
   );
 

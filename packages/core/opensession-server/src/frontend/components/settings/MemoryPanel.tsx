@@ -1273,10 +1273,7 @@ export function MemoryPanel() {
   if (!scopes) {
     return (
       <SettingsPanel>
-        <SettingsHeader
-          title="Memories"
-          description="Durable facts scoped to your workspace, repositories, team, and Slack channels."
-        />
+        <SettingsHeader title="Memory" />
         {error ? (
           <InlineAlert>{error}</InlineAlert>
         ) : (
@@ -1322,10 +1319,7 @@ export function MemoryPanel() {
 
   return (
     <SettingsPanel>
-      <SettingsHeader
-        title="Memories"
-        description="Durable facts scoped to your workspace, repositories, team, and Slack channels."
-      />
+      <SettingsHeader title="Memory" />
       {error && (
         <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
       )}
@@ -1340,7 +1334,7 @@ export function MemoryPanel() {
                 {stats.mode === "legacy"
                   ? "Legacy rollback is active. Current facts are injected without v2 retrieval budgets."
                   : stats.mode === "repo"
-                    ? "Memory lives in git repositories. Each session gets the relevant MEMORY.md files and a checkout it can edit and push."
+                    ? "Kept in git. Each session reads the MEMORY.md files that apply."
                     : "Only pinned, trusted summaries are ambient. Other memories are retrieved when relevant."}
               </div>
             </div>

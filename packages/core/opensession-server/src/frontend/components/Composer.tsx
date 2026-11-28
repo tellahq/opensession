@@ -119,8 +119,6 @@ import {
   setBusySendPref,
   type BusySendPref,
 } from "../lib/busy-send-pref";
-import { getVimModePref, onVimModeChanged } from "../lib/vim-pref";
-import { useVimMode } from "../hooks/useVimMode";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -327,9 +325,6 @@ export function Composer({
       window.removeEventListener("blur", clearModifier);
     };
   }, []);
-  // Vim mode preference (Settings → Preferences, default off).
-  const [vimEnabled, setVimEnabled] = useState(getVimModePref);
-  useEffect(() => onVimModeChanged(() => setVimEnabled(getVimModePref())), []);
   const isControlled = value !== undefined;
   const text = isControlled ? value : innerValue;
   const setText = isControlled ? (onChange ?? (() => {})) : setInnerValue;
@@ -804,15 +799,6 @@ export function Composer({
     setMenu(null);
     startMention();
   }
-
-  // Modal editing on the draft (Settings → Preferences → Vim mode). The engine
-  // consumes keys in normal/visual modes; insert mode only claims Escape.
-  const vim = useVimMode({
-    enabled: vimEnabled,
-    textareaRef,
-    value: displayText,
-    onChange: setDisplayText,
-  });
 
   // "@"-mention file autocomplete (shared with the New-session prompt field).
   const {
@@ -1447,11 +1433,6 @@ export function Composer({
       e.preventDefault();
       return;
     }
-    // Vim mode gets the key before the send/stop logic: in insert mode it only
-    // claims Escape (drop to normal mode — a second, bare Escape in normal mode
-    // falls through here to the busy-stop below), and Enter is never consumed,
-    // so the send combos keep working in any mode.
-    if (vim.handleKeyDown(e)) return;
     // Esc twice while a run is busy interrupts the turn: the first press arms
     // it, the second within the window stops.
     if (e.key === "Escape" && busy && onStop && !disabled) {
@@ -1530,7 +1511,7 @@ export function Composer({
         // and the text slid ~20px up under the caret after the character had
         // already landed while the toolbar dipped 8px and floated back. Anything
         // in the box that isn't itself a projection node was squashed for those
-        // 300ms: the attachment rows, the note tint, the vim key bar.
+        // 300ms: the attachment rows and the note tint.
         //
         // Keyed to `minimized`, the measure is skipped entirely while you type
         // (the field just grows, as a textarea does) and taken fresh at the
@@ -1576,18 +1557,6 @@ export function Composer({
         )}
         style={surfaceStyle}
       >
-        {/* Vim mode indicator — only surfaces outside insert mode, so plain
-            typing looks identical with the pref on. Sits above the input wrap's
-            scroll-fade mask. */}
-        {vimEnabled && vim.mode !== "insert" && (
-          <div className="pointer-events-none absolute right-3 top-2 z-2 select-none rounded-sm border border-line bg-surface px-1.5 py-0.5 text-meta font-semibold tracking-wide text-dim">
-            {vim.mode === "normal"
-              ? "NORMAL"
-              : vim.mode === "visual"
-                ? "VISUAL"
-                : "V-LINE"}
-          </div>
-        )}
         <div className="flex flex-wrap items-start gap-x-1">
           <AnimatePresence initial={false}>
             {/* Ask mode first: it encloses everything else in the row, being
@@ -2275,58 +2244,6 @@ export function Composer({
             </motion.div>
           )}
         </div>
-        {/* Phone vim key bar — the on-screen keyboard has no Esc/Tab/arrow
-            keys (and the native accessory bar is WebKit chrome we can't
-            touch), so give vim users a Termius-style key row pinned above the
-            keyboard. Software keys route through vim.injectKey: consumed by
-            the engine in normal/visual mode, emulated on the textarea in
-            insert mode.
-
-            iOS tap handling is the load-bearing part: a tap's default
-            continuation is touchend → synthesized mousedown (blurs the
-            textarea, dismissing the keyboard) → click — and the blur flips
-            `focused`, which would unmount this bar BEFORE the click fires
-            (preventing pointerdown does NOT stop any of that on iOS; it lost
-            us the whole bar on-device). So each key acts on touchend and
-            cancels it, suppressing the entire mouse-synthesis chain; onClick
-            stays for mouse/pen, with a recent-touch guard for browsers that
-            fire both. The bar also stays mounted outside insert mode even if
-            focus is lost, so it can never vanish mid-interaction. */}
-        {vimEnabled &&
-          isPhone &&
-          !minimized &&
-          (focused || vim.mode !== "insert") && (
-            <div
-              className="mt-1.5 flex gap-1.5 border-t border-line pt-1.5"
-              onPointerDown={(e) => e.preventDefault()}
-              onMouseDown={(e) => e.preventDefault()}
-            >
-              {(
-                [
-                  ["esc", "Escape"],
-                  ["tab", "Tab"],
-                  ["←", "ArrowLeft"],
-                  ["↓", "ArrowDown"],
-                  ["↑", "ArrowUp"],
-                  ["→", "ArrowRight"],
-                ] as const
-              ).map(([label, key]) => (
-                <ComposerPressButton
-                  key={key}
-                  type="button"
-                  className={`h-8 flex-1 select-none rounded-md border border-line bg-surface text-label font-semibold text-dim active:bg-panel ${
-                    key === "Escape" && vim.mode !== "insert"
-                      ? "border-accent text-fg"
-                      : ""
-                  }`}
-                  onPress={() => vim.injectKey(key)}
-                  aria-label={key}
-                >
-                  {label}
-                </ComposerPressButton>
-              ))}
-            </div>
-          )}
       </motion.div>
       {/* The keyboard-shortcut hint is irrelevant on touch and eats vertical
           space right where the keyboard appears. */}

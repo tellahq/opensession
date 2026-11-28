@@ -2,7 +2,7 @@ import { BASE_PATH } from "../lib/base";
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "../ui/toast";
 import { Button } from "../ui/button";
-import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
+import { InlineAlert, LoadingState } from "../ui/state";
 import {
   SettingCard,
   SettingRow,
@@ -165,21 +165,6 @@ export function ModelProvidersPanel() {
 
   return (
     <>
-      <GeminiKeySection
-        provider={gemini}
-        loaded={providers !== null}
-        onSaved={load}
-        onDiscover={handleDiscover}
-        onRemove={handleRemove}
-      />
-
-      <VertexSection
-        provider={vertex}
-        loaded={providers !== null}
-        onSaved={load}
-        onRemove={handleRemove}
-      />
-
       <SettingsGroupLabel
         actions={
           <Button
@@ -191,7 +176,7 @@ export function ModelProvidersPanel() {
           </Button>
         }
       >
-        Your own providers
+        API keys
       </SettingsGroupLabel>
 
       {showAdd && (
@@ -207,103 +192,129 @@ export function ModelProvidersPanel() {
       <SettingCard>
         {!providers ? (
           <LoadingState placement="row">Loading providers…</LoadingState>
-        ) : ownProviders.length === 0 ? (
-          <EmptyState placement="row">
-            No providers yet. Add one to run sessions on models beyond the
-            Anthropic/OpenAI subscriptions.
-          </EmptyState>
         ) : (
-          ownProviders.map((p) => (
-            <ProviderRow
-              key={p.id}
-              provider={p}
+          <>
+            <GeminiKeyRow
+              provider={gemini}
+              onSaved={load}
               onDiscover={handleDiscover}
               onRemove={handleRemove}
             />
-          ))
+            <VertexRow
+              provider={vertex}
+              onSaved={load}
+              onRemove={handleRemove}
+            />
+            {ownProviders.map((p) => (
+              <ProviderRow
+                key={p.id}
+                provider={p}
+                onDiscover={handleDiscover}
+                onRemove={handleRemove}
+              />
+            ))}
+          </>
         )}
       </SettingCard>
-
       <SettingsHint>
-        Any provider the Pi engine supports (xAI, OpenRouter, Groq, Mistral, …)
-        with your API key, or any OpenAI-compatible gateway with its base URL.
-        Keys are stored on the server (0600) and only ever shown masked. Changes
-        apply to new session runs immediately, and saved models appear in the
-        picker without a restart. To update a provider, add it again with the
-        same id. The key, base URL and model list are replaced. Discover models
-        reads the gateway's model list into the picker. Per-model limits and
-        pricing come from a catalog in model-providers.json.
+        Keys stay on this server. Add provider takes any OpenAI-compatible
+        gateway.
       </SettingsHint>
     </>
   );
 }
 
-/** Gemini gets its own row ahead of the generic list: a key from Google AI
- * Studio is the supported way to run Gemini in a third-party agent, and a
- * Google AI Pro or Ultra plan pays for it through monthly developer credits.
- * Saving lists the key's models from the Gemini API. */
-function GeminiKeySection({
+/** A provider not set up yet: one row with a button that opens its form in
+ *  place, rather than the form standing open on the page. */
+function SetUpRow({
+  tile,
+  title,
+  desc,
+  onSetUp,
+}: {
+  tile: string;
+  title: string;
+  desc: React.ReactNode;
+  onSetUp: () => void;
+}) {
+  return (
+    <SettingRow className="items-center gap-x-3">
+      <IconTile name={tile} size={28} />
+      <SettingRowText>
+        <SettingRowTitle>{title}</SettingRowTitle>
+        <SettingRowDescription>{desc}</SettingRowDescription>
+      </SettingRowText>
+      <SettingRowControl>
+        <Button size="sm" onClick={onSetUp}>
+          Set up
+        </Button>
+      </SettingRowControl>
+    </SettingRow>
+  );
+}
+
+/** Gemini through a Google AI Studio key: the supported way to run Gemini in
+ * a third-party agent. A Google AI Pro or Ultra plan pays for it through
+ * monthly developer credits. Saving lists the key's models. */
+function GeminiKeyRow({
   provider,
-  loaded,
   onSaved,
   onDiscover,
   onRemove,
 }: {
   provider: ProviderInfo | undefined;
-  loaded: boolean;
   onSaved: () => void;
   onDiscover: (p: ProviderInfo) => void;
   onRemove: (p: ProviderInfo) => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const showForm = editing || (loaded && !provider);
-
+  if (editing)
+    return (
+      <GeminiKeyForm
+        replacing={!!provider}
+        onCancel={() => setEditing(false)}
+        onSaved={() => {
+          setEditing(false);
+          onSaved();
+        }}
+      />
+    );
+  if (!provider)
+    return (
+      <SetUpRow
+        tile="gemini"
+        title="Gemini"
+        desc={
+          <>
+            Google AI Pro and Ultra include{" "}
+            <a
+              href={GEMINI_BILLING_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="text-link underline"
+            >
+              monthly credits
+            </a>
+            .
+          </>
+        }
+        onSetUp={() => setEditing(true)}
+      />
+    );
   return (
-    <>
-      <SettingsGroupLabel>Gemini</SettingsGroupLabel>
-      <SettingCard>
-        {!loaded ? (
-          <LoadingState placement="row">Loading Gemini…</LoadingState>
-        ) : showForm ? (
-          <GeminiKeyForm
-            replacing={!!provider}
-            onCancel={provider ? () => setEditing(false) : undefined}
-            onSaved={() => {
-              setEditing(false);
-              onSaved();
-            }}
-          />
-        ) : provider ? (
-          <ProviderRow
-            provider={provider}
-            title="Gemini API"
-            tile="gemini"
-            onDiscover={onDiscover}
-            onRemove={onRemove}
-            menuItems={
-              <Menu.Item onClick={() => setEditing(true)}>
-                <IconRefresh size={20} />
-                Replace key
-              </Menu.Item>
-            }
-          />
-        ) : null}
-      </SettingCard>
-      <SettingsHint>
-        Google AI Pro and Ultra plans include monthly developer credits that pay
-        for this key. Claim them in{" "}
-        <a
-          href={GEMINI_BILLING_URL}
-          target="_blank"
-          rel="noreferrer"
-          className="text-link underline"
-        >
-          AI Studio billing
-        </a>
-        . Signing in with the plan itself is not offered: Google does not allow
-        its subscription sign-in in third-party agents.
-      </SettingsHint>
-    </>
+    <ProviderRow
+      provider={provider}
+      title="Gemini"
+      tile="gemini"
+      onDiscover={onDiscover}
+      onRemove={onRemove}
+      menuItems={
+        <Menu.Item onClick={() => setEditing(true)}>
+          <IconRefresh size={20} />
+          Replace key
+        </Menu.Item>
+      }
+    />
   );
 }
 
@@ -376,8 +387,7 @@ function GeminiKeyForm({
             >
               Google AI Studio
             </a>{" "}
-            and paste it here. Its models appear in the picker as{" "}
-            <code>pi/google/&lt;model&gt;</code>.
+            and paste it here.
           </SettingRowDescription>
         </SettingRowText>
       </div>
@@ -415,58 +425,52 @@ function GeminiKeyForm({
 
 /** Vertex AI runs Gemini on a Google Cloud project: a service account key
  * (or a Vertex API key) bills that project's Vertex quota and terms. */
-function VertexSection({
+function VertexRow({
   provider,
-  loaded,
   onSaved,
   onRemove,
 }: {
   provider: ProviderInfo | undefined;
-  loaded: boolean;
   onSaved: () => void;
   onRemove: (p: ProviderInfo) => void;
 }) {
   const [editing, setEditing] = useState(false);
-
+  if (editing)
+    return (
+      <VertexForm
+        provider={provider}
+        onCancel={() => setEditing(false)}
+        onSaved={() => {
+          setEditing(false);
+          onSaved();
+        }}
+      />
+    );
+  if (!provider)
+    return (
+      <SetUpRow
+        tile="gemini"
+        title="Vertex AI"
+        desc="Gemini on your Google Cloud project."
+        onSetUp={() => setEditing(true)}
+      />
+    );
   return (
-    <>
-      <SettingsGroupLabel>Vertex AI</SettingsGroupLabel>
-      <SettingCard>
-        {!loaded ? (
-          <LoadingState placement="row">Loading Vertex AI…</LoadingState>
-        ) : editing || !provider ? (
-          <VertexForm
-            provider={provider}
-            onCancel={provider ? () => setEditing(false) : undefined}
-            onSaved={() => {
-              setEditing(false);
-              onSaved();
-            }}
-          />
-        ) : (
-          <ProviderRow
-            provider={provider}
-            title="Vertex AI"
-            tile="gemini"
-            details={[provider.billedProject, provider.location]
-              .filter(Boolean)
-              .join(" · ")}
-            onRemove={onRemove}
-            menuItems={
-              <Menu.Item onClick={() => setEditing(true)}>
-                <IconRefresh size={20} />
-                Edit
-              </Menu.Item>
-            }
-          />
-        )}
-      </SettingCard>
-      <SettingsHint>
-        Runs Gemini on your Google Cloud project and bills that project. New
-        models Pi does not know yet run by id: add them to Picker models or type{" "}
-        <code>pi/google-vertex/&lt;model&gt;</code> in the picker.
-      </SettingsHint>
-    </>
+    <ProviderRow
+      provider={provider}
+      title="Vertex AI"
+      tile="gemini"
+      details={[provider.billedProject, provider.location]
+        .filter(Boolean)
+        .join(" · ")}
+      onRemove={onRemove}
+      menuItems={
+        <Menu.Item onClick={() => setEditing(true)}>
+          <IconRefresh size={20} />
+          Edit
+        </Menu.Item>
+      }
+    />
   );
 }
 

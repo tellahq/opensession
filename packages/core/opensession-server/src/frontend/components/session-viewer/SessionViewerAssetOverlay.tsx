@@ -13,6 +13,7 @@ interface AssetOverlayActions {
   onSelectPath: ComponentProps<typeof AssetOverlay>["onSelectPath"];
   onOpenAsTab: ComponentProps<typeof AssetOverlay>["onOpenAsTab"];
   onOpenNewSession: ComponentProps<typeof AssetOverlay>["onOpenNewSession"];
+  finalFocus: ComponentProps<typeof AssetOverlay>["finalFocus"];
 }
 
 interface SessionViewerAssetOverlayProps {
@@ -37,6 +38,7 @@ export function SessionViewerAssetOverlay({
         onSelectPath={actions.onSelectPath}
         onOpenAsTab={actions.onOpenAsTab}
         onOpenNewSession={actions.onOpenNewSession}
+        finalFocus={actions.finalFocus}
       />
     </>
   );

@@ -12,9 +12,7 @@ import {
   SettingCard,
   SettingCardSkeleton,
   SettingsGroupLabel,
-  SettingsHeader,
   SettingsHint,
-  SettingsPanel,
 } from "../../ui/settings";
 import { InlineAlert } from "../../ui/state";
 import { Switch } from "../../ui/switch";
@@ -30,7 +28,10 @@ const WARM_INTERVAL_OPTIONS: { value: string; label: string }[] = [
   { value: "24", label: "Daily" },
 ];
 
-function WarmPreviewsPanel() {
+/** Per repository: a ready worktree with dependencies installed, so sessions
+ *  on this server skip a cold install. Credential-free; live app services
+ *  start on demand as Portals. */
+export function DependencyCacheSection() {
   const [repos, setRepos] = useState<WarmTemplateEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -73,11 +74,7 @@ function WarmPreviewsPanel() {
     );
   }
 
-  const label = (
-    <SettingsGroupLabel className="mt-0">
-      Host dependency cache
-    </SettingsGroupLabel>
-  );
+  const label = <SettingsGroupLabel>Dependency cache</SettingsGroupLabel>;
 
   if (!repos)
     return (
@@ -103,9 +100,9 @@ function WarmPreviewsPanel() {
         {repos.map((entry) => {
           const s = entry.state;
           const status = entry.refreshing
-            ? "Refreshing now, updating the dependency cache…"
+            ? "Refreshing…"
             : !entry.enabled
-              ? "Off. Fresh worktrees install cold."
+              ? "Off"
               : s?.ok
                 ? `Cached at ${s.sha} · refreshed ${warmAgo(s.refreshedAt)} · ${
                     entry.spares
@@ -159,24 +156,9 @@ function WarmPreviewsPanel() {
         })}
       </SettingCard>
       <SettingsHint>
-        Keeps a host-side worktree per repo with node_modules installed,
-        refreshed from its default branch on a schedule. Host sessions adopt a
-        ready copy instead of paying a cold install.
+        Keeps a ready worktree with dependencies installed, so sessions start
+        faster.
       </SettingsHint>
     </>
-  );
-}
-
-/** Session acceleration keeps only credential-free dependency trees on disk.
- * Live app services are started on demand as Portals. */
-export function PrewarmingPanel() {
-  return (
-    <SettingsPanel>
-      <SettingsHeader
-        title="Session acceleration"
-        description="Host dependency caches make local sessions start quickly. Prepared remote projects live in Sandboxes."
-      />
-      <WarmPreviewsPanel />
-    </SettingsPanel>
   );
 }

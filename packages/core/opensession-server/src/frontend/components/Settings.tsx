@@ -42,11 +42,8 @@ import { Connections } from "./Connections";
 import { IconChevronLeft, IconChevronRight, IconSearch, IconX } from "./icons";
 import { MyAccountsPanel } from "./MyAccounts";
 import { AuditPanel } from "./settings/AuditPanel";
-import { AuthenticationPanel } from "./settings/AuthenticationPanel";
 import { DeploysPanel } from "./settings/DeploysPanel";
-import { DownloadsPanel } from "./settings/DownloadsPanel";
 import { GeneralPanel } from "./settings/GeneralPanel";
-import { IntegrationsPanel } from "./settings/IntegrationsPanel";
 import { IngressPanel } from "./settings/IngressPanel";
 import { LibraryPanel } from "./settings/LibraryPanel";
 import { MembersPanel } from "./settings/MembersPanel";
@@ -56,29 +53,17 @@ import { NotificationsPanel } from "./settings/NotificationsPanel";
 import { PapercutsPanel } from "./settings/PapercutsPanel";
 import { PreferencesPanel } from "./settings/PreferencesPanel";
 import { ShortcutsPanel } from "./settings/ShortcutsPanel";
-import { PrewarmingPanel } from "./settings/PrewarmingPanel";
 import { ReposPanel } from "./settings/ReposPanel";
 import { SandboxesPanel } from "./settings/SandboxesPanel";
 import { StoragePanel } from "./settings/StoragePanel";
 import { RunnersPanel } from "./settings/RunnersPanel";
 import { SettingsAccountCard, SettingsAccountFooter } from "./SettingsAccount";
-import { SetupPanel } from "./Setup";
 
-// The full-window Settings surface: a left sub-nav + a scrolling body, reached
-// from the "Settings" item in the account menu. Designed to grow — each area is
-// just another entry in SECTIONS and a matching panel below. The "Tools" group
-// holds the app's tool surfaces (Automations, Goals, …) — those render at their
-// own routes (<base>/automations, …) with this surface as chrome, so the
-// section is controlled by the router, not local state.
-//
-// Groups run from what one person owns to what the whole instance does:
-// "Personal" is yours alone: who sessions act as, how the app looks and
-// behaves for you, and what it notifies you about. "Organization" is shared
-// config every session runs under. "Automation" is the standing work the
-// instance does on its own:
-// those are the tool surfaces, grouped by what they are rather than sold as
-// the headline; "Infrastructure" is the machinery prepared ahead of a run; and
-// "Activity" is the read-only record agents leave behind.
+// The full-window Settings surface: a left sub-nav and a scrolling body. Each
+// area is an entry in SECTIONS (lib/settings-sections) and a panel below. The
+// Automation group holds the tool surfaces (Automations, Goals, Security),
+// which render at their own routes with this surface as chrome, so the section
+// is controlled by the router, not local state.
 
 // The nav table itself lives in lib/settings-sections, because the command
 // palette needs the same list and importing this whole component tree to read
@@ -87,7 +72,7 @@ export type { SettingsSectionKey, ToolSectionKey };
 
 /** Sections that are browsed rather than read down, and take the wider
  *  column for it (see SETTINGS_PANEL_FRAME_GALLERY). */
-const GALLERY_SECTIONS = new Set<SettingsSectionKey>(["library", "setup"]);
+const GALLERY_SECTIONS = new Set<SettingsSectionKey>(["library"]);
 
 // Settings is a dense mix of headings, row titles, labels, descriptions,
 // fields, and tool panels. Body roles share 150% leading; heading and title
@@ -225,11 +210,9 @@ function NavSearch({
  * sheet's detail page. Tool panels come in via children (App owns them). */
 function SectionPanel({
   section,
-  onOpenOnboarding,
   children,
 }: {
   section: SettingsSectionKey;
-  onOpenOnboarding: () => void;
   children?: React.ReactNode;
 }) {
   return (
@@ -239,16 +222,10 @@ function SectionPanel({
       {section === "preferences" && <PreferencesPanel />}
       {section === "shortcuts" && <ShortcutsPanel />}
       {section === "general" && <GeneralPanel />}
-      {section === "setup" && (
-        <SetupPanel onOpenOnboarding={onOpenOnboarding} />
-      )}
       {section === "repos" && <ReposPanel />}
       {section === "members" && <MembersPanel />}
-      {section === "authentication" && <AuthenticationPanel />}
       {section === "library" && <LibraryPanel />}
-      {section === "integrations" && <IntegrationsPanel />}
       {section === "audit" && <AuditPanel />}
-      {section === "downloads" && <DownloadsPanel />}
       {section === "providers" && <ProvidersPanel />}
       {section === "sandboxes" && <SandboxesPanel />}
       {section === "runners" && <RunnersPanel />}
@@ -257,7 +234,6 @@ function SectionPanel({
       {section === "memory" && <MemoryPanel />}
       {section === "ingress" && <IngressPanel />}
       {section === "storage" && <StoragePanel />}
-      {section === "prewarming" && <PrewarmingPanel />}
       {section === "papercuts" && <PapercutsPanel />}
       {section === "deploys" && <DeploysPanel />}
     </>
@@ -269,7 +245,6 @@ export function Settings({
   section,
   onSelect,
   onShowRoot,
-  onOpenOnboarding,
   children,
 }: {
   onBack: () => void;
@@ -281,7 +256,6 @@ export function Settings({
   onSelect: (key: SettingsSectionKey) => void;
   /** Phone sheet's back-to-root (navigate to sectionless /settings). */
   onShowRoot?: () => void;
-  onOpenOnboarding: () => void;
   /** The active tool's panel (App owns the tool components and their props). */
   children?: React.ReactNode;
 }) {
@@ -314,7 +288,6 @@ export function Settings({
         onSelect={onSelect}
         onShowRoot={onShowRoot}
         onBack={onBack}
-        onOpenOnboarding={onOpenOnboarding}
       >
         {children}
       </MobileSettings>
@@ -389,9 +362,7 @@ export function Settings({
         className={settingsContent(TOOL_SECTIONS.has(active))}
       >
         {TOOL_SECTIONS.has(active) ? (
-          <SectionPanel section={active} onOpenOnboarding={onOpenOnboarding}>
-            {children}
-          </SectionPanel>
+          <SectionPanel section={active}>{children}</SectionPanel>
         ) : (
           <div
             className={
@@ -400,9 +371,7 @@ export function Settings({
                 : SETTINGS_PANEL_FRAME
             }
           >
-            <SectionPanel section={active} onOpenOnboarding={onOpenOnboarding}>
-              {children}
-            </SectionPanel>
+            <SectionPanel section={active}>{children}</SectionPanel>
           </div>
         )}
       </div>
@@ -422,7 +391,6 @@ function MobileSettings({
   onSelect,
   onShowRoot,
   onBack,
-  onOpenOnboarding,
   children,
 }: {
   groups: SectionGroup[];
@@ -430,7 +398,6 @@ function MobileSettings({
   onSelect: (key: SettingsSectionKey) => void;
   onShowRoot?: () => void;
   onBack: () => void;
-  onOpenOnboarding: () => void;
   children?: React.ReactNode;
 }) {
   const [query, setQuery] = useState("");
@@ -557,18 +524,12 @@ function MobileSettings({
               {shownSection && (
                 <div data-settings-scroll className={SETTINGS_CONTENT_SHEET}>
                   {TOOL_SECTIONS.has(shownSection) ? (
-                    <SectionPanel
-                      section={shownSection}
-                      onOpenOnboarding={onOpenOnboarding}
-                    >
+                    <SectionPanel section={shownSection}>
                       {children}
                     </SectionPanel>
                   ) : (
                     <div className={SETTINGS_PANEL_FRAME_SHEET}>
-                      <SectionPanel
-                        section={shownSection}
-                        onOpenOnboarding={onOpenOnboarding}
-                      >
+                      <SectionPanel section={shownSection}>
                         {children}
                       </SectionPanel>
                     </div>
