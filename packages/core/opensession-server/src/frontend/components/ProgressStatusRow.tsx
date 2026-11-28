@@ -14,13 +14,14 @@ import {
   parseProgressUpdate,
   type FoldStatus,
   type ProgressGroup,
-  type ProgressUpdate,
 } from "../lib/progress-updates";
 
 /** Agent-reported status, not an inferred verdict from a turn ending. One row
  * per task: it shows the latest update and, opened, the earlier updates and
- * the check-back work behind them. Styled like the work folds around it: the
- * status, then a trailing chevron, then a spinner while a check-back runs. */
+ * the check-back work behind them. Agents no longer write these, so it only
+ * draws older transcripts, as quietly as the "Worked for" row: one gray line,
+ * no glyph or bold topic, then a trailing chevron and a spinner while a
+ * check-back runs. */
 export function ProgressStatusRow({
   group,
   live = false,
@@ -45,21 +46,13 @@ export function ProgressStatusRow({
   const work = React.Children.toArray(children).some(Boolean);
   const label = `${latest.topic}: ${latest.text}`;
   const status = (
-    <span className="flex min-w-0 items-start gap-2">
-      <StatusIcon
-        topic={latest.topic}
-        done={latest.state === "done"}
-        className={latest.state === "done" ? "text-green" : "text-dim"}
-      />
-      <span className="min-w-0 break-words">
-        <span className="font-medium text-fg">{latest.topic}</span>
-        <span className="text-dim">: {latest.text}</span>
-      </span>
-      {meta && <span className="flex-none text-faint">· {meta}</span>}
+    <span className="flex min-w-0 items-start gap-1.5">
+      <span className="min-w-0 break-words">{label}</span>
+      {meta && <span className="flex-none">· {meta}</span>}
     </span>
   );
   const rowClasses =
-    "-mx-2 flex w-fit max-w-[calc(100%+16px)] min-w-0 items-center gap-1.5 rounded-control border-0 bg-transparent px-2 py-1 text-left font-sans text-label leading-5 phone:min-h-11";
+    "-mx-2 flex w-fit max-w-[calc(100%+16px)] min-w-0 items-center gap-1.5 rounded-control border-0 bg-transparent px-2 py-1 text-left font-sans text-item-title leading-5 text-faint phone:min-h-11";
   return (
     <section
       className="mx-auto mb-3 w-full max-w-[var(--session-col)] text-label leading-5"
@@ -74,13 +67,16 @@ export function ProgressStatusRow({
           aria-expanded={open}
           aria-label={`${label}. Show ${work ? "work and earlier updates" : "update history"}`}
           onClick={toggle}
-          className={cn(rowClasses, "focus-ring group cursor-pointer")}
+          className={cn(
+            rowClasses,
+            "focus-ring cursor-pointer transition-colors hover:text-dim",
+          )}
         >
           {status}
           <span
             aria-hidden="true"
             className={cn(
-              "grid size-5 flex-none place-items-center text-faint transition-transform duration-micro group-hover:text-dim motion-reduce:transition-none",
+              "grid size-5 flex-none place-items-center transition-transform duration-micro motion-reduce:transition-none",
               open && "rotate-90",
             )}
           >
@@ -125,23 +121,6 @@ export function ProgressStatusRow({
         </div>
       )}
     </section>
-  );
-}
-
-/** A status as the work row's title: "◷ Native build: Running". */
-export function ProgressStatusLabel({ update }: { update: ProgressUpdate }) {
-  return (
-    <span className="flex min-w-0 items-center gap-1.5">
-      <StatusIcon
-        topic={update.topic}
-        done={update.state === "done"}
-        className={update.state === "done" ? "text-green" : "text-dim"}
-      />
-      <span className="min-w-0 truncate">
-        <span className="font-medium text-fg">{update.topic}</span>
-        <span className="text-dim">: {update.text}</span>
-      </span>
-    </span>
   );
 }
 

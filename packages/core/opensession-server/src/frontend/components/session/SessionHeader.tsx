@@ -53,9 +53,6 @@ interface SessionHeaderProps {
   onCancelRename: () => void;
   canRename: boolean;
   menu: ReactNode;
-  /** The ⋯ menu sits in the open tab and carries the workspace details, so
-   *  the header keeps only the repo switch where the title card was. */
-  detailsInMenu?: boolean;
   menuTrailing?: ReactNode;
   isPhone: boolean;
   openNewSession?: NavigationActions["openNewSessionInWorkspace"];
@@ -87,7 +84,6 @@ export function SessionHeader({
   onCancelRename,
   canRename,
   menu,
-  detailsInMenu = false,
   menuTrailing,
   isPhone,
   openNewSession,
@@ -200,8 +196,6 @@ export function SessionHeader({
               }}
             />
           </>
-        ) : detailsInMenu && !parentSession ? (
-          repoMark
         ) : (
           <WorkspaceTitlePopover
             session={session}

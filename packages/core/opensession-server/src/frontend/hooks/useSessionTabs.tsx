@@ -1258,6 +1258,16 @@ export function useSessionTabs({
     goBack,
     currentSession,
     workspaceSessions,
+    // A split's bars each have their own neighbours: a close stays in its bar.
+    tabOrderFor: (sessionId) => {
+      if (!activeTabSplit) return stripTabIds;
+      const bar = new Set(
+        activeTabSplit.right.includes(sessionId)
+          ? activeTabSplit.right
+          : activeTabSplit.left,
+      );
+      return stripTabIds.filter((id) => bar.has(id));
+    },
     activeWorkspaceId,
     openWsPanes,
     activeViewTab,

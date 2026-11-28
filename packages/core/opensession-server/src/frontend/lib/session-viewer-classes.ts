@@ -65,9 +65,13 @@ export const VIEWER_HEADER =
   // box. Keyed off the row because the controls are a mix of shared
   // primitives and one-off plates (the PR chip, Merge, the preview link),
   // exactly as the phone rule on the actions below is.
-  "new-layout:[&_:is(button,a)]:h-7.5 new-layout:[&_:is(button,a)]:min-h-7.5 " +
-  "new-layout:[&_:is(button,a):is(:has(>svg:only-child),:has(>:only-child_svg))]:w-7.5 " +
-  "new-layout:[&_svg]:size-5 " +
+  // Only the row's own controls: the workspace summary card is portaled into
+  // the header's actions (`[data-side]` is Base UI's positioner and popup), and
+  // without the exclusion its screenshot and asset tiles, themselves buttons,
+  // were squashed to 30px and their filenames cut off.
+  "new-layout:[&_:is(button,a):not([data-side]_*)]:h-7.5 new-layout:[&_:is(button,a):not([data-side]_*)]:min-h-7.5 " +
+  "new-layout:[&_:is(button,a):not([data-side]_*):is(:has(>svg:only-child),:has(>:only-child_svg))]:w-7.5 " +
+  "new-layout:[&_svg:not([data-side]_*)]:size-5 " +
   // Beside the tab strip the bar holds only its trailing controls, and the
   // collapsed-sidebar inset belongs to the strip, which now leads the row.
   "[[data-pane-top-row-tabs]~*_&]:pl-2 desktop:[.app-body.sidebar-collapsed_[data-pane-top-row-tabs]~*_&]:pl-2 " +

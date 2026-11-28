@@ -20,11 +20,6 @@ struct ProgressStatusRow: View {
     var activity = TurnActivity.standard
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// The icon column. Scaled with the icon's own font so a large Dynamic
-    /// Type checkmark never crowds the topic beside it.
-    @ScaledMetric(relativeTo: .footnote) private var iconWidth: CGFloat = 16
-    /// The gap between the icon column and its text, in every line.
-    private static let iconSpacing: CGFloat = 6
 
     private var history: [(id: String, update: ProgressUpdate)] { group.history }
 
@@ -108,34 +103,16 @@ struct ProgressStatusRow: View {
         update.topic.lowercased() == group.latest.topic.lowercased() ? update.text : update.label
     }
 
-    /// The icon sits on the first line's baseline, so a status that wraps
-    /// keeps its glyph beside the topic rather than centred on the block.
+    /// One quiet gray line like "Worked for 12s": no glyph, no bold topic.
+    /// Agents no longer write status lines, so this only draws older
+    /// transcripts, and it should not stand out from the work rows.
     private var status: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Self.iconSpacing) {
-            icon(
-                group.latest,
-                tint: group.latest.state == .done
-                    ? OS1VisualStyle.greenInk
-                    : OS1VisualStyle.textDim
-            )
-            Text("\(Text(group.latest.topic).fontWeight(.medium).foregroundStyle(OS1VisualStyle.text))\(Text(": \(group.latest.text)").foregroundStyle(OS1VisualStyle.textDim))")
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .font(.subheadline)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(group.latest.label)
-        .accessibilityAddTraits(.updatesFrequently)
-    }
-
-    /// One column width so the topic and every history line share one text
-    /// edge. The width scales with Dynamic Type alongside the glyph.
-    private func icon(_ update: ProgressUpdate, tint: Color) -> some View {
-        Image(systemName: update.symbol)
-            .font(.footnote.weight(.semibold))
-            .foregroundStyle(tint)
-            .frame(width: iconWidth)
-            .accessibilityHidden(true)
+        Text(group.latest.label)
+            .foregroundStyle(OS1VisualStyle.textFaint)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .font(.subheadline)
+            .accessibilityAddTraits(.updatesFrequently)
     }
 
     private func toggle() {

@@ -18,38 +18,29 @@ the reader needs.
 
 ## Compact progress updates
 
-For a routine progress-only reply, an agent can send one Markdown line:
+Agents no longer write status lines. The work row above a reply always reads
+`Worked for …`, the reply's first sentence carries the outcome, and a routine
+progress-only reply is one plain sentence (`Merge conflicts resolved.`).
 
-```text
-◷ **Migration**: Running
-```
+Older transcripts still hold opt-in status lines such as
+`◷ **Migration**: Running` or `✓ **Migration**: Done`. Web and native clients
+draw them quietly:
 
-A later turn uses the same topic and a checkmark for confirmed success:
+- A reply that opens with a status line, a blank line, then prose shows only
+  the prose. Copy still copies the whole message.
+- A reply that is exactly one status line becomes one gray row, styled like
+  `Worked for …`, with no glyph or bold topic. Every update in one task shares
+  that row, whatever its topic, and it takes in the check-back fold beside it.
+  Open the row to read earlier updates and that work. Human messages and team
+  notes start a new scope. Once the task ends in an ordinary answer, the
+  task's work, statuses and check-backs fold into one `Worked for …` row above
+  that answer.
 
-```text
-✓ **Migration**: Done
-```
-
-On a GitHub repository the session already shows its CI and deploy runs live
-above the input, so agents are told not to post a line that only repeats run
-state (`CI: Running`, `All checks passed`), only what the runs cannot show,
-such as merge readiness. Passing local checks get no line either.
-
-On web and native clients, every update in one task shares a single row,
-whatever its topic: `◷ **CI**: Running` followed by `◷ **Deployment**: Running`
-reads as one row that moved on. The row sits at the latest update and takes in
-the check-back fold beside it, so there is no separate "Checked back" line.
-Open the row to read earlier updates and that work. Human messages and team
-notes start a new scope. Once the task ends in an ordinary answer, the row has
-done its job: the task's work, statuses and check-backs fold into one
-`Worked for …` row above that answer, which is the report. The stored transcript is unchanged; extension and exported
-transcripts keep readable Markdown messages rather than coalescing them.
-
-This is opt-in, not a summary of arbitrary prose. The entire reply must match:
-a topic of at most 48 characters and a plain-text status of at most 200.
-Attachments, questions, extra paragraphs and clamped messages stay messages.
-Use normal replies for blockers, decisions, deliverables and verification
-limits. A completed turn alone never implies success.
+The stored transcript is unchanged; extension and exported transcripts keep
+readable Markdown messages rather than coalescing them. A status line only
+matches when it is the entire reply: a topic of at most 48 characters and a
+plain-text status of at most 200. Attachments, questions, extra paragraphs and
+clamped messages stay messages. A completed turn alone never implies success.
 
 ## Catalog
 

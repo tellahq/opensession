@@ -22,6 +22,7 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconFile,
+  IconSidebarLeft,
   IconSidebarRight,
   IconX,
 } from "../icons";
@@ -30,6 +31,7 @@ import { CommentableDiff } from "../DeferredDiff";
 import { DiffPanel } from "../DiffPanel";
 import { DiffStat } from "../DiffStat";
 import { PrFileTree } from "./PrFileTree";
+import { useNewLayoutPref } from "../../lib/new-layout-pref";
 import {
   PHONE_REVIEW_PILL,
   PHONE_REVIEW_PILL_DOCK,
@@ -144,6 +146,8 @@ export function PrFilesPage({
   groupDiff,
 }: Props) {
   const isPhone = useIsPhone();
+  // The new layout puts the changed files left of the diff, as GitHub does.
+  const treeLeft = useNewLayoutPref();
   const [filesOpen, setFilesOpen] = useState(false);
   // The sidebar can be put away entirely; the choice sticks across reviews.
   const [treeHidden, setTreeHidden] = useState(readTreeHidden);
@@ -210,7 +214,7 @@ export function PrFilesPage({
       mode={fileListMode === "hidden" ? "tree" : fileListMode}
       showFileStats={showFileStats}
       layout={filesOpen ? "sheet" : "sidebar"}
-      side="right"
+      side={treeLeft ? "left" : "right"}
       onCollapse={filesOpen ? undefined : () => hideTree(true)}
       activeFile={activeFile}
       reviewedFiles={reviewedFiles}
@@ -299,8 +303,14 @@ export function PrFilesPage({
                 variant="ghost"
                 size="sm"
                 aria-label="Show changed files"
-                icon={<IconSidebarRight size={20} />}
-                className="order-last"
+                icon={
+                  treeLeft ? (
+                    <IconSidebarLeft size={20} />
+                  ) : (
+                    <IconSidebarRight size={20} />
+                  )
+                }
+                className={treeLeft ? "order-first" : "order-last"}
                 onClick={() => hideTree(false)}
               />
             </Tooltip>
@@ -414,6 +424,14 @@ export function PrFilesPage({
             {navigator}
           </ResponsiveDialog>
         )}
+        {diffSource === "pull-request" &&
+          !isPhone &&
+          !filesOpen &&
+          !treeHidden &&
+          fileListMode !== "hidden" &&
+          files.length > 0 &&
+          treeLeft &&
+          navigator}
         <main
           ref={setScroller}
           className={cn(
@@ -425,7 +443,7 @@ export function PrFilesPage({
           )}
           aria-label="File changes"
         >
-          <div className="px-2 pb-2 phone:px-0">
+          <div className="px-2 pb-2 phone:px-0 new-layout:px-0">
             {diffSource === "worktree" ? (
               <DiffPanel
                 sessionId={sessionId}
@@ -682,13 +700,15 @@ export function PrFilesPage({
           </div>
         </main>
         {/* Changed files sit right of the diff, like GitHub's file tree
-            mirrored, so the diff starts at the pane's left edge. */}
+            mirrored, so the diff starts at the pane's left edge. The new
+            layout puts them back on the left, where GitHub has them. */}
         {diffSource === "pull-request" &&
           !isPhone &&
           !filesOpen &&
           !treeHidden &&
           fileListMode !== "hidden" &&
           files.length > 0 &&
+          !treeLeft &&
           navigator}
       </div>
       {isPhone &&

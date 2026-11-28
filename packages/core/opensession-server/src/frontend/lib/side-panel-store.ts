@@ -303,12 +303,13 @@ export function finishSidePanelOpening(key: string): void {
 }
 
 /**
- * Where `kind` opens. In the new layout a Browser page always opens in the
- * main tabs; moving one to the panel (tab menu, or dragging it over) is for
- * that page only, and does not make the next one open there.
+ * Where `kind` opens. In the new layout Review and Browser pages always open
+ * in the main tabs, where a pull request gets the full width a review needs;
+ * moving one to the panel (tab menu, or dragging it over) is for that page
+ * only, and does not make the next one open there.
  */
 export function sidePanelDockOf(kind: SidePanelDockable): "panel" | "main" {
-  if (kind === "browser" && windowWide()) return "main";
+  if (windowWide()) return "main";
   return getSidePanelState().dock[kind];
 }
 
@@ -316,7 +317,7 @@ export function setSidePanelDock(
   kind: SidePanelDockable,
   place: "panel" | "main",
 ): void {
-  if (kind === "browser" && windowWide()) return;
+  if (windowWide()) return;
   const { dock } = getSidePanelState();
   if (dock[kind] !== place) update({ dock: { ...dock, [kind]: place } });
 }

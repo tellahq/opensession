@@ -93,7 +93,8 @@ describe("window-wide panel (new layout)", () => {
     });
   });
 
-  test("Browser opens in the main tabs", () => {
+  test("Browser and Review open in the main tabs", () => {
     expect(sidePanelDockOf("browser")).toBe("main");
+    expect(sidePanelDockOf("review")).toBe("main");
   });
 });

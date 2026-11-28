@@ -56,6 +56,7 @@ import type { useAppRoute } from "./useAppRoute";
 import type { useAppViewState } from "./useAppViewState";
 import { useOnDemandViewTabs } from "./useOnDemandViewTabs";
 import { useIsPhone } from "./useIsPhone";
+import { useNewLayoutPref } from "../lib/new-layout-pref";
 import {
   getSidePanelState,
   openSidePanelTab,
@@ -118,13 +119,15 @@ export function useWorkspacePanes({
     composeInWorkspaceRef,
   } = viewState;
   // Review opens in the side panel on desktop unless it was moved to the
-  // main strip (see lib/side-panel-store). Phones have no side panel.
+  // main strip (see lib/side-panel-store). Phones have no side panel, and the
+  // new layout opens it in the main tabs, where a review has the full width.
   const isPhone = useIsPhone();
+  const newLayout = useNewLayoutPref();
   const panelDock = useSyncExternalStore(
     subscribeSidePanel,
     () => getSidePanelState().dock,
   );
-  const reviewInPanel = !isPhone && panelDock.review === "panel";
+  const reviewInPanel = !isPhone && !newLayout && panelDock.review === "panel";
   // Read at the moment a Review request lands, not a reason to re-run one.
   const reviewInPanelNow = useEffectEvent(() => reviewInPanel);
   /** Open Review in the current session's panel, when that is where it goes. */

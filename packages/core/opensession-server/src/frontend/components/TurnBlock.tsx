@@ -66,8 +66,7 @@ import {
   TurnLineStatsCard,
 } from "./TurnFooter";
 import { transcriptDisclosureLedger } from "../lib/transcript-disclosures";
-import { ProgressStatusLabel } from "./ProgressStatusRow";
-import { plainStatusText, type ProgressUpdate } from "../lib/progress-updates";
+import { plainStatusText } from "../lib/progress-updates";
 import { workSummary, workSummaryTitle } from "../lib/work-summary";
 import { turnScrollAnchor } from "../lib/transcript-block-identity";
 
@@ -87,9 +86,6 @@ interface Props {
    * hairline that divides the work from what comes next has nothing to
    * divide. */
   last?: boolean;
-  /** The status line the reply below opened with, named here instead:
-   *  "◷ Native build: Running · 35s ›". */
-  status?: ProgressUpdate;
 }
 
 /** The two Settings → Preferences answers for how work folds, kept live. */
@@ -124,7 +120,6 @@ export const TurnBlock = function TurnBlock({
   onOpenSubagent,
   sessionId,
   last = false,
-  status,
 }: Props) {
   const allTools = items.filter((it) => it.type === "tool_use");
   const tools = allTools.filter((it) => agentMessageText(it) === null);
@@ -316,14 +311,7 @@ export const TurnBlock = function TurnBlock({
         className="-mx-2 flex w-fit max-w-[calc(100%+16px)] min-w-0 cursor-pointer items-baseline gap-1.5 rounded-control border-0 bg-transparent px-2 py-1 text-left font-sans text-item-title leading-5 text-faint transition-colors hover:text-dim phone:min-h-11 phone:items-center"
       >
         <Tooltip label={!live ? fullTime(timing.completedAt) : ""}>
-          {status && !live ? (
-            <span className="flex min-w-0 items-center gap-1.5">
-              <ProgressStatusLabel update={status} />
-              {duration && <span className="flex-none">· {duration}</span>}
-            </span>
-          ) : (
-            <span className="flex-shrink-0">{title}</span>
-          )}
+          <span className="flex-shrink-0">{title}</span>
         </Tooltip>
         <span
           className={cn(
@@ -1051,7 +1039,6 @@ function SuggestedTasks({
 function turnBlockPropsEqual(prev: Props, next: Props): boolean {
   if (prev.live !== next.live) return false;
   if (prev.last !== next.last) return false;
-  if (prev.status !== next.status) return false;
   if (prev.expandWhileRunning !== next.expandWhileRunning) return false;
   if (prev.onOpenSubagent !== next.onOpenSubagent) return false;
   if (prev.sessionId !== next.sessionId) return false;

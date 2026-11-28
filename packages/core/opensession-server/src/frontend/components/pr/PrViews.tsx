@@ -65,7 +65,7 @@ function PrDescriptionCard({ descriptionHtml }: { descriptionHtml: string }) {
       </div>
     );
   return (
-    <article className="min-w-0 rounded-xl border border-line/60 bg-surface smooth-shadow-sm phone:rounded-none phone:border-0 phone:bg-transparent phone:shadow-none">
+    <article className="min-w-0 rounded-xl border border-line/60 bg-surface smooth-shadow-sm phone:rounded-none phone:border-0 phone:bg-transparent phone:shadow-none new-layout:rounded-none new-layout:border-0 new-layout:bg-transparent new-layout:shadow-none">
       {/* The identity block above already names the author at both widths,
           so the description carries no byline of its own. On a phone it reads
           as a section of the page rather than a card. */}
@@ -81,7 +81,7 @@ function PrDescriptionCard({ descriptionHtml }: { descriptionHtml: string }) {
       >
         <div
           ref={bodyRef}
-          className="markdown px-4 py-4 text-body leading-relaxed text-dim phone:px-1 phone:pb-2 phone:pt-2 phone:text-fg"
+          className="markdown px-4 py-4 text-body leading-relaxed text-dim phone:px-1 phone:pb-2 phone:pt-2 phone:text-fg new-layout:px-0 new-layout:pt-0 new-layout:text-fg"
           dangerouslySetInnerHTML={{ __html: descriptionHtml }}
         />
       </div>
@@ -132,7 +132,7 @@ export function ConversationView({
        and `mx-auto` (an auto cross-axis margin) opts it out of stretching, so
        without it the box sizes to its content and `max-w` becomes a fixed 760px
        that a phone can't fit. */
-    <div className="mx-auto flex w-full min-w-0 max-w-[760px] flex-col gap-4">
+    <div className="mx-auto flex w-full min-w-0 max-w-[760px] flex-col gap-4 new-layout:mx-0 new-layout:max-w-none">
       <PrDescriptionCard key={pr?.url} descriptionHtml={descriptionHtml} />
 
       {comments.length > 0 && (
@@ -147,7 +147,7 @@ export function ConversationView({
         </h2>
       )}
       {comments.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-line px-4 py-10 text-center text-xs text-faint">
+        <div className="rounded-xl border border-dashed border-line px-4 py-10 text-center text-xs text-faint new-layout:rounded-none new-layout:border-0 new-layout:border-t new-layout:border-solid new-layout:border-divider new-layout:px-0 new-layout:py-6 new-layout:text-left">
           No comments yet.
         </div>
       ) : (
@@ -164,10 +164,10 @@ export function ConversationView({
               /* A grid item's automatic minimum size is its min-content
                  width, so a wide comment (a deploy table, a long path) would
                  otherwise stretch the track past the viewport. */
-              className="group min-w-0 rounded-xl border border-line/60 bg-surface smooth-shadow-sm"
+              className="group min-w-0 rounded-xl border border-line/60 bg-surface smooth-shadow-sm new-layout:rounded-none new-layout:border-0 new-layout:border-t new-layout:border-divider new-layout:bg-transparent new-layout:shadow-none"
               key={`${comment.url || comment.createdAt || index}`}
             >
-              <div className="flex items-center gap-2 border-b border-divider px-4 py-3">
+              <div className="flex items-center gap-2 border-b border-divider px-4 py-3 new-layout:border-0 new-layout:px-0 new-layout:pb-0 new-layout:pt-4">
                 <PrAvatar
                   login={comment.author || "Unknown"}
                   provider={provider}
@@ -208,7 +208,7 @@ export function ConversationView({
                 )}
               </div>
               <div
-                className="markdown px-4 py-4 text-body leading-relaxed text-dim"
+                className="markdown px-4 py-4 text-body leading-relaxed text-dim new-layout:pl-9 new-layout:pr-0 new-layout:pt-2 new-layout:text-fg"
                 dangerouslySetInnerHTML={{
                   __html: renderPrCommentMarkdown(body, { repo }),
                 }}

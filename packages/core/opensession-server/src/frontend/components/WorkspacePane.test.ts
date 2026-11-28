@@ -144,8 +144,9 @@ test("a review without a PR combines and aligns its controls", () => {
     "createPortal(toolbarContents, toolbarTarget)",
   );
   expect(diffPanelSource).toContain(
-    'toolbarTarget === undefined ? "px-2.5 pt-2.5" : "px-0 pt-0"',
+    'toolbarTarget === undefined ? "pt-2.5" : "pt-0"',
   );
+  expect(diffPanelSource).toContain("flush: toolbarTarget === undefined");
 });
 
 test("sidebar Changes shares Review's code display options", () => {
@@ -198,13 +199,16 @@ test("sidebar Changes shares Review's code display options", () => {
     '"mx-2 overflow-clip rounded-lg border border-[var(--review-file-border)]"',
   );
   expect(commentableDiffSource).toContain(
-    '!stickyFileHeaders && "mt-0 rounded-none"',
+    '(flush || !stickyFileHeaders) && "mt-0 rounded-none"',
   );
   expect(commentableDiffSource).toContain(
     "style={stickyFileHeaders ? undefined : DIFF_SURFACE_STYLE[theme]}",
   );
   expect(commentableDiffSource).toContain(
     'stickyFileHeaders ? "gap-2.5" : "gap-4"',
+  );
+  expect(commentableDiffSource).toContain(
+    "flatSeparators ? FLAT_SEPARATOR_CSS : undefined",
   );
   expect(commentableDiffSource).toContain(
     'stickyFileHeaders ? "gap-[7px]" : "gap-4"',
@@ -252,7 +256,8 @@ test("wide Review keeps page navigation in the identity bar", () => {
   expect(prPanelSource).toContain('aria-label="Back to overview"');
   expect(prPanelSource).toContain("phoneNavigation");
   expect(prPanelSource).not.toContain("phonePageTabs");
-  expect(prPanelSource).toContain("{pageTabs}\n              {fileControls}");
+  expect(prPanelSource).toContain("{pageTabs}");
+  expect(prPanelSource).toMatch(/\{pageTabs\}[\s\S]{0,600}fileControls/);
   expect(prFilesPageSource).not.toContain("desktop:pt-12");
   expect(prOverviewPageSource).not.toContain("desktop:pt-12");
   expect(summarySource).not.toContain('aria-label="Pull request pages"');
@@ -323,7 +328,15 @@ test("the PR top bar leaves merge to the summary and actions menu", () => {
   expect(headerStart).toBeGreaterThan(-1);
   expect(menuStart).toBeGreaterThan(-1);
   const headerEnd = prPanelSource.indexOf("</TopBar>", headerStart);
-  expect(prPanelSource.slice(headerStart, headerEnd)).toContain("{prActions}");
+  // Both bars (old and new layout) render the shared trailing controls.
+  expect(prPanelSource.slice(headerStart, headerEnd)).toContain("{barActions}");
+  const barActionsStart = prPanelSource.indexOf("const barActions");
+  expect(
+    prPanelSource.slice(
+      barActionsStart,
+      prPanelSource.indexOf("</>", barActionsStart),
+    ),
+  ).toContain("{prActions}");
   expect(prPanelSource.slice(headerStart, headerEnd)).not.toContain(
     "Squash and merge",
   );

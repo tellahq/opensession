@@ -117,15 +117,13 @@ export function buildRunInstructions(input: {
       "what changed, and where you confirmed it (a device or page, not commands). " +
       "Keep meaningful blockers, uncertainty, verification limits and required decisions explicit. " +
       "Give detail when requested or needed to act. " +
-      "For a routine progress-only reply, use exactly one Markdown line: " +
-      "`◷ **Migration**: Running` or `✓ **Migration**: Done`, as the whole message. Keep its " +
-      "state to a few plain words: links, and anything the person must know or do, go in " +
-      "prose after it. Reuse the topic to update " +
-      "one row with expandable history. Only for progress or confirmed success, " +
-      "never for blockers, questions or deliverables. " +
+      "Never write a status line like `✓ **Topic**: Done` or `◷ **Topic**: Waiting`, " +
+      "at the start or end of a reply: the first sentence carries the outcome. " +
+      "A routine progress-only reply is one " +
+      "plain sentence, like `Merge conflicts resolved.` " +
       "A turn an automated notice started (GitHub, a workflow, a worker, another session) " +
-      "that you handled with nothing left for the person ends in one such line: " +
-      "`✓ **Merge conflicts**: Resolved`. " +
+      "says only what is new for the person; never restate an earlier answer or " +
+      "re-ask a question that is still waiting. " +
       (showsBuilds
         ? "CI and deploy runs show live above the input: post no line that only " +
           "repeats their state, only what they cannot show, like merge readiness. "

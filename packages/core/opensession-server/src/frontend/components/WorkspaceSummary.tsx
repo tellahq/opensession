@@ -1192,6 +1192,44 @@ export function WorkspaceSummaryBody({
     );
   }
 
+  /** Files edited but not yet committed, with the ask to commit them. It
+   *  belongs to Changes, so it sits in that group under the Changes row rather
+   *  than under a heading of its own, which only said "uncommitted" twice. */
+  function uncommittedRow() {
+    if (dirty <= 0) return null;
+    return (
+      <div className="mx-2 flex h-[31px] w-[calc(100%_-_16px)] min-w-0 shrink-0 items-stretch gap-1 phone:h-11">
+        <button
+          type="button"
+          className={cn(WS_SUMMARY_ROW, "mx-0 h-full w-auto min-w-0 flex-1")}
+          onClick={openUncommittedChanges}
+          title="View uncommitted changes"
+        >
+          <span className={WS_SUMMARY_RAIL}>
+            <IconClock size={20} className={WS_SUMMARY_ICON} />
+          </span>
+          <span className={WS_SUMMARY_LABEL}>
+            {dirty} file{dirty === 1 ? "" : "s"} uncommitted
+          </span>
+        </button>
+        {send && (
+          <button
+            type="button"
+            className={cn(
+              WS_SUMMARY_ACTION,
+              "focus-ring shrink-0 cursor-pointer rounded-control border-none bg-transparent px-2 hover:bg-hover disabled:cursor-default disabled:hover:bg-transparent",
+            )}
+            onClick={askCommit}
+            disabled={prompted}
+            title={`Ask ${AGENT_NAME} to commit the uncommitted changes and push`}
+          >
+            {prompted ? "Asked" : "Commit"}
+          </button>
+        )}
+      </div>
+    );
+  }
+
   /** Everything this work changed, in one row: "Changes" and the line totals.
    *  Open, it lists the files, or the commits when there is no file diff. */
   function workRow() {
@@ -1232,6 +1270,7 @@ export function WorkspaceSummaryBody({
             )}
           />
         </button>
+        {uncommittedRow()}
         {workOpen &&
           (showDiffChanges ? (
             <div className="pb-1">{changeFiles.map(fileChangeRow)}</div>
@@ -1616,43 +1655,19 @@ export function WorkspaceSummaryBody({
           />
         )}
 
-        {workRow()}
+        {workRow() ??
+          (dirty > 0 && <div className={groupClass}>{uncommittedRow()}</div>)}
 
-        {dirty > 0 && (
+        {/* The live page, right under the work it shows and above the
+				    screenshots and assets: those strips can run to a hundred frames,
+				    and the page last in the card ended up below the fold. Not on a
+				    phone, which has no side panel to keep the page in. */}
+        {browser && !embedded && (
           <div className={groupClass}>
-            <div className={WS_SUMMARY_SECTION}>Uncommitted</div>
-            <div className="mx-2 flex h-[31px] w-[calc(100%_-_16px)] min-w-0 shrink-0 items-stretch gap-1 phone:h-11">
-              <button
-                type="button"
-                className={cn(
-                  WS_SUMMARY_ROW,
-                  "mx-0 h-full w-auto min-w-0 flex-1",
-                )}
-                onClick={openUncommittedChanges}
-                title="View uncommitted changes"
-              >
-                <span className={WS_SUMMARY_RAIL}>
-                  <IconClock size={20} className={WS_SUMMARY_ICON} />
-                </span>
-                <span className={WS_SUMMARY_LABEL}>
-                  {dirty} file{dirty === 1 ? "" : "s"} uncommitted
-                </span>
-              </button>
-              {send && (
-                <button
-                  type="button"
-                  className={cn(
-                    WS_SUMMARY_ACTION,
-                    "focus-ring shrink-0 cursor-pointer rounded-control border-none bg-transparent px-2 hover:bg-hover disabled:cursor-default disabled:hover:bg-transparent",
-                  )}
-                  onClick={askCommit}
-                  disabled={prompted}
-                  title={`Ask ${AGENT_NAME} to commit the uncommitted changes and push`}
-                >
-                  {prompted ? "Asked" : "Commit"}
-                </button>
-              )}
-            </div>
+            <WorkspaceSummaryBrowser
+              frame={browser.frame}
+              onOpen={() => go(browser.onOpen)}
+            />
           </div>
         )}
 
@@ -1847,17 +1862,6 @@ export function WorkspaceSummaryBody({
                 </span>
               </button>
             )}
-          </div>
-        )}
-
-        {/* Last, like the panel tab it stands in for. Not on a phone, which
-				    has no side panel to keep the page in. */}
-        {browser && !embedded && (
-          <div className={groupClass}>
-            <WorkspaceSummaryBrowser
-              frame={browser.frame}
-              onOpen={() => go(browser.onOpen)}
-            />
           </div>
         )}
       </SummaryRest>

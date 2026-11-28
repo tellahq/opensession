@@ -119,13 +119,12 @@ export const TAB_SCROLL =
 /**
  * The new layout's strip (`layout.attached`). It sits in the grey window row
  * rather than in a band of its own, so it paints no fill and no closing rule:
- * the row has both. Tabs start `--tab-top` under the window's top edge and
- * their labels sit on the row's line, where the traffic lights and the row's
- * icons sit; the active tab carries on to the row's bottom edge, where it
- * meets the sheet. That line is the row's middle, or `--row-drop` below it in
- * a desktop shell that cannot move its lights (NEW_LAYOUT_PANE_ROW): 18px
- * down a 36px row with the tab at 2px, or 24px down a 44px one with the tab
- * at 4px.
+ * the row has both. Every tab is a pill with room on all four sides, and the
+ * pills centre on the row's line, where the traffic lights and the row's
+ * icons sit. That line is the row's middle, or `--row-drop` below it in a
+ * desktop shell that cannot move its lights (NEW_LAYOUT_PANE_ROW): 18px down
+ * a 36px row, or 24px down a 44px one. The strip itself starts `--tab-top`
+ * under the window's top edge.
  *
  * No `session-tabs` hook: that name tells the top bar a strip overlaps its
  * lower edge, and this one is beside the bar, not under it.
@@ -134,17 +133,10 @@ export const TAB_STRIP_ATTACHED =
   "group/strip relative flex min-w-0 flex-1 items-stretch gap-0.5 " +
   "[--tab-top:calc(2px+var(--row-drop,0px)/2)] pt-[var(--tab-top)]";
 
-/** Added to TAB_SCROLL: full height so a tab can reach the row's bottom edge,
- *  and above the panel's outline (WORKSPACE_SHELL, z 30) so the active tab
- *  covers it. The scroll masks itself when it overflows, which makes it a
- *  stacking context of its own, so the lift has to be here and not on the
- *  tab. The 10px at the end is room for the last tab's flare, which the
- *  scroll would otherwise clip. There is none at the start: the first tab
- *  stands on the panel's left edge (see the flares below). With the sidebar
- *  collapsed the strip starts further in, past the re-open control, and the
- *  first tab gets its flare and the room for it back. */
-export const TAB_SCROLL_ATTACHED =
-  "relative z-tab-strip items-stretch pr-2.5 [.app-body.sidebar-collapsed_&]:pl-2.5";
+/** Added to TAB_SCROLL: full height so the pills can centre on the row's
+ *  line, and 6px at each end so the first pill clears the panel's left edge
+ *  as the pills clear the row above and below them. */
+export const TAB_SCROLL_ATTACHED = "items-stretch px-1.5";
 
 /** The "+" and history controls after the tabs: lifted off the row's bottom
  *  by the same inset, so they centre on the row's middle line with the tab
@@ -153,54 +145,13 @@ export const TAB_CONTROL_ATTACHED =
   "mb-[calc(var(--tab-top)-var(--row-drop,0px))]";
 
 export const TAB_GROUP_ATTACHED =
-  "relative inline-flex flex-none items-stretch gap-0.5";
+  "relative inline-flex flex-none items-stretch gap-1";
 
-/**
- * Where the active tab meets the sheet, its border does not land on the row's
- * hairline square: it curves outward and becomes that hairline, so the tab
- * and the sheet under it read as one outlined shape.
- *
- * Each flare is an 8px box at the tab's foot, just outside it, painted by one
- * gradient: the row shows through inside the curve, the hairline is the
- * curve, and the tab's fill (`--tab-fill`) is the wedge under it. It overlaps
- * the tab's own border by that border's one pixel, and sits above it, so the
- * straight edge turns into the curve without a step.
- *
- * The curve is the band from 7px to 8px of the gradient, as wide as the
- * border it continues and on the same pixels where they meet. Each edge of
- * it is a half-pixel ramp centred on that edge, which is what smooths it.
- * All three strokes use the row's opaque `--tab-edge` (PANE_TOP_ROW), since
- * they overlap at both ends.
- *
- * One outline, one curve: a gradient can only draw a circular arc, so the
- * tab's top corners are circular arcs of the same 8px (`[corner-shape:round]`)
- * and not the app's squircle. A squircle at the top
- * of a tab whose feet are arcs reads as two different roundings.
- *
- * Every class here is spelled out in full. Tailwind reads this file as text,
- * so a class assembled from a constant is never generated.
- *
- * They belong to this wrapper, not to the tab. A tab can clip itself (an
- * empty tab does, for its opening morph), and a flare is outside its box.
- * The wrapper is the same size and never clips.
- *
- * The first tab has no flare on its left. It stands on the panel's left
- * edge, so its side is that edge carried straight up, and the panel gives up
- * its own corner under it (`--panel-tl`, WORKSPACE_SHELL).
- */
-const TAB_ITEM_ATTACHED_FLARES =
-  "[--tab-fill:var(--bg)] data-[colored]:[--tab-fill:color-mix(in_srgb,var(--tab-color)_14%,var(--bg))] " +
-  "before:pointer-events-none before:absolute before:bottom-0 before:-left-[7px] before:z-1 before:hidden before:size-2 before:content-[''] " +
-  "before:[background:radial-gradient(circle_at_0_0,transparent_6.75px,var(--tab-edge,var(--divider))_7.25px,var(--tab-edge,var(--divider))_7.75px,var(--tab-fill)_8.25px)] " +
-  "after:pointer-events-none after:absolute after:bottom-0 after:-right-[7px] after:z-1 after:hidden after:size-2 after:content-[''] " +
-  "after:[background:radial-gradient(circle_at_100%_0,transparent_6.75px,var(--tab-edge,var(--divider))_7.25px,var(--tab-edge,var(--divider))_7.75px,var(--tab-fill)_8.25px)] " +
-  "[&:has(>[aria-selected=true])]:before:block [&:has(>[aria-selected=true])]:after:block " +
-  "[.app-body:not(.sidebar-collapsed)_&]:first:before:hidden!";
-
-export const TAB_ITEM_ATTACHED = `session-tab-reorder relative inline-flex shrink-0 items-stretch ${TAB_ITEM_ATTACHED_FLARES}`;
+export const TAB_ITEM_ATTACHED =
+  "session-tab-reorder relative inline-flex shrink-0 items-stretch";
 
 export const TAB_ITEM_ATTACHED_DRAGGING =
-  "cursor-grabbing rounded-t-tab [corner-shape:round] bg-panel smooth-shadow-ring-sm";
+  "cursor-grabbing rounded-tab [corner-shape:round] bg-panel smooth-shadow-ring-sm";
 
 /**
  * The drag-to-reorder group wraps EVERY tab — sessions and view panes alike —
@@ -272,40 +223,29 @@ export type TabState = {
 };
 
 /**
- * An attached tab. The active one is a piece of the sheet: its fill, a
- * hairline up both sides and over the top, and no bottom edge. The rest are
- * words on the row until they are pointed at, and then a pill floating clear
- * of the sheet, not a piece of it. Every tab carries the border, in a colour or
- * not, so selecting one moves nothing.
+ * An attached tab: a 28px pill centred on the row's line, 4px clear of the
+ * row above and below it in the browser's 36px row. In the desktop shell the
+ * line is set by the traffic lights, so the pill has more room above it than
+ * below until the lights move up. The open tab takes the sidebar's selected
+ * fill. The rest are words on the row until they are pointed at.
  */
 const TAB_ATTACHED_BASE =
   "relative inline-flex max-w-[180px] shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
-  "[corner-shape:round] border px-2.5 text-label shadow-none transition-[background-color,color] " +
+  "rounded-tab [corner-shape:round] px-2.5 text-label shadow-none transition-[background-color,color] " +
+  "mt-[calc(var(--desktop-header-h)/2-16px)] mb-[calc(var(--desktop-header-h)/2-var(--row-drop,0px)/2-14px)] " +
   // Close sits as far in from the right edge as the label from the left.
   "[--tab-close-inset:6px]";
-const TAB_ATTACHED_OUTLINE = {
-  // The label centred between the tab's top and the row's line below it.
-  active:
-    "rounded-t-tab border-b-0 pb-[calc(var(--tab-top)-var(--row-drop,0px))]",
-  // 26px, centred on the row's line with the active tab's label.
-  inactive:
-    "mt-[calc(var(--desktop-header-h)/2-15px)] mb-[calc(var(--desktop-header-h)/2-var(--row-drop,0px)/2-13px)] rounded-tab",
-};
 
 function attachedTabClass({ active, waiting, colored }: TabState): string {
   const ink = active || waiting ? "text-fg" : "text-dim hover:text-fg";
   const surface = colored
     ? active
-      ? "border-[color:var(--tab-edge,var(--divider))] bg-[var(--tab-fill)] [--tab-fill:color-mix(in_srgb,var(--tab-color)_14%,var(--bg))]"
-      : "border-transparent bg-[color:var(--tab-color)]/10 " +
-        "hover:bg-[color:var(--tab-color)]/16"
+      ? "bg-[color:var(--tab-color)]/22"
+      : "bg-[color:var(--tab-color)]/10 hover:bg-[color:var(--tab-color)]/16"
     : active
-      ? "border-[color:var(--tab-edge,var(--divider))] bg-[var(--tab-fill)] [--tab-fill:var(--bg)]"
-      : "border-transparent bg-transparent hover:bg-hover";
-  const outline = active
-    ? TAB_ATTACHED_OUTLINE.active
-    : TAB_ATTACHED_OUTLINE.inactive;
-  return `${TAB_ATTACHED_BASE} ${outline} ${ink} ${surface}`;
+      ? "bg-selected"
+      : "bg-transparent hover:bg-hover";
+  return `${TAB_ATTACHED_BASE} ${ink} ${surface}`;
 }
 
 /**

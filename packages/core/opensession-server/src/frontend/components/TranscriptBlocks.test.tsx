@@ -708,7 +708,10 @@ describe("TranscriptBlocks compact tool runs", () => {
     ];
     const html = renderToStaticMarkup(<TranscriptBlocks entries={entries} />);
     expect(html.match(/data-progress-topic=/g)).toHaveLength(1);
-    expect(html).toContain('<span class="flex-none text-faint">· 11m</span>');
+    expect(html).toContain("Merge conflicts: Resolved");
+    expect(html).toContain('<span class="flex-none">· 11m</span>');
+    // A quiet gray line: no glyph or bold topic.
+    expect(html).not.toContain("font-medium text-fg");
     // No event row, Worked row or answer footer beside it.
     expect(html).not.toContain("now has merge conflicts");
     expect(html).not.toMatch(WORKED_TITLE);
@@ -724,7 +727,7 @@ describe("TranscriptBlocks compact tool runs", () => {
     expect(open).toContain("Ran 1 command, read 1 file");
   });
 
-  test("a reply that opens with a status names the work row above it", () => {
+  test("a reply that opens with a status shows only its prose", () => {
     setTurnPrefs(null);
     const html = renderToStaticMarkup(
       <TranscriptBlocks
@@ -740,13 +743,47 @@ describe("TranscriptBlocks compact tool runs", () => {
         ]}
       />,
     );
-    expect(html).toContain(
-      '<span class="font-medium text-fg">Native build</span>',
-    );
-    expect(html).toContain('<span class="flex-none">· 3s</span>');
-    expect(html).not.toMatch(WORKED_TITLE);
-    expect(html).not.toContain("<strong>Native build</strong>");
+    expect(html).not.toContain("Native build");
+    expect(html).toMatch(WORKED_TITLE);
     expect(html).toContain("one is already queued");
+  });
+
+  test("a status line opening a reply with no work above it is dropped too", () => {
+    setTurnPrefs(null);
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        entries={[
+          {
+            id: "answer",
+            type: "assistant",
+            content:
+              "✓ **Header icons**: Live\n\nThe bigger header icons are deployed.",
+            timestamp: "2026-08-13T06:00:35Z",
+          },
+        ]}
+      />,
+    );
+    expect(html).not.toContain("Header icons</strong>");
+    expect(html).toContain("The bigger header icons are deployed.");
+  });
+
+  test("a status line closing a reply is dropped as well", () => {
+    setTurnPrefs(null);
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        entries={[
+          {
+            id: "answer",
+            type: "assistant",
+            content:
+              "The other session is publishing.\n\n◷ **Tab padding publish**: Waiting on the other session",
+            timestamp: "2026-08-13T06:00:35Z",
+          },
+        ]}
+      />,
+    );
+    expect(html).not.toContain("Tab padding publish");
+    expect(html).toContain("The other session is publishing.");
   });
 
   test("leaves the duration to the Worked fold, not the answer's footer too", () => {

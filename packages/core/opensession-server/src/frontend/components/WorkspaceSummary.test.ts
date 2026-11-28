@@ -19,7 +19,9 @@ const apiSource = await Bun.file(
 test("workspace surfaces keep committed and uncommitted work separate", () => {
   expect(apiSource).toContain("commits?: WorkspaceCommit[]");
   expect(summarySource).toContain("function workRow()");
-  expect(summarySource).toContain(">Uncommitted</div>");
+  expect(summarySource).toContain("function uncommittedRow()");
+  expect(summarySource).toContain("{uncommittedRow()}");
+  expect(summarySource).not.toContain(">Uncommitted</div>");
   expect(summarySource).toContain("commits.map(committedRow)");
   expect(infoSource).toContain("commits.map((commit)");
   expect(infoSource).toContain(

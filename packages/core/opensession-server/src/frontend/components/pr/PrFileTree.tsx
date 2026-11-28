@@ -344,7 +344,7 @@ export function PrFileTree({
         "flex min-h-0 shrink-0 flex-col",
         layout === "sheet"
           ? "relative h-full w-full"
-          : `${WS_SUMMARY_SURFACE} sticky top-[var(--review-file-tree-top,0px)] mb-2 ${side === "right" ? "mr-2" : "ml-2"} mt-[var(--review-file-tree-gap,8px)] max-h-[calc(100dvh-var(--review-file-tree-top,0px)-16px)] desktop:max-h-[calc(100dvh-var(--desktop-header-h)-var(--review-file-tree-top,0px)-16px)]`,
+          : `${WS_SUMMARY_SURFACE} sticky top-[var(--review-file-tree-top,0px)] mb-2 ${side === "right" ? "mr-2" : "ml-2"} mt-[var(--review-file-tree-gap,8px)] max-h-[calc(100dvh-var(--review-file-tree-top,0px)-16px)] desktop:max-h-[calc(100dvh-var(--desktop-header-h)-var(--review-file-tree-top,0px)-16px)] ${FLAT_TREE[side]}`,
       )}
       style={
         layout === "sheet"
@@ -626,3 +626,10 @@ export function PrFileTree({
     </aside>
   );
 }
+/** The new layout runs Review edge to edge: the tree is a plain column split
+ *  from the diff by a hairline, not a floating glass card. */
+const FLAT_TREE = {
+  left: "new-layout:m-0 new-layout:max-h-none new-layout:self-stretch new-layout:rounded-none! new-layout:border-r new-layout:border-divider new-layout:bg-surface new-layout:shadow-none new-layout:[backdrop-filter:none]",
+  right:
+    "new-layout:m-0 new-layout:max-h-none new-layout:self-stretch new-layout:rounded-none! new-layout:border-l new-layout:border-divider new-layout:bg-surface new-layout:shadow-none new-layout:[backdrop-filter:none]",
+} as const;

@@ -340,7 +340,7 @@ export function Minibar({
 }
 
 /**
- * A restart or a lost connection, while it lasts: a turning ring above your
+ * A restart or a lost connection, while it lasts: an accent ring above your
  * account, where the Update nudge lands once a restart shipped new code. It
  * replaces the status toast, which sat on the composer.
  */
@@ -352,7 +352,7 @@ function ConnectionStatusTile() {
     <Tooltip label={label} side="right">
       <span
         role="status"
-        className="grid size-10 shrink-0 place-items-center text-dim animate-toast-in motion-reduce:animate-none"
+        className="grid size-10 shrink-0 place-items-center text-accent animate-toast-in motion-reduce:animate-none"
       >
         <Spinner size="lg" />
         <span className="sr-only">{label}</span>

@@ -647,9 +647,9 @@ export function DiffPanel({
             /* @pierre/diffs sizes its own generated markup, which no utility on our
          side can reach — hold it inside the panel from here. A parent toolbar
          supplies the review canvas's shared 8px inset; standalone Changes
-         keeps this panel's own inset. */
+         runs its files edge to edge under its own toolbar. */
             <div
-              className={`${toolbarTarget === undefined ? "px-2.5 pt-2.5" : "px-0 pt-0"} min-w-0 max-w-full overflow-clip pb-7 [&_[class*=pierre]]:max-w-full`}
+              className={`${toolbarTarget === undefined ? "pt-2.5" : "pt-0"} min-w-0 max-w-full overflow-clip pb-7 [&_[class*=pierre]]:max-w-full`}
             >
               <CommentableDiff
                 key={cur.repo}
@@ -668,6 +668,7 @@ export function DiffPanel({
                   // The sidebar owns this scrollport. Keep each file's title below its
                   // standing toolbar until the following file pushes it away.
                   stickyFileHeaders: toolbarTarget === undefined,
+                  flush: toolbarTarget === undefined,
                   groups: shownGroups,
                   groupsSource: aiGroups ? "ai" : "rules",
                   groupsLoading: grouping === "ai" && groupsLoading,

@@ -12,7 +12,6 @@ import {
 } from "../lib/provider-account";
 import { Menu } from "../ui/menu";
 import { selectTriggerClasses } from "../ui/select-classes";
-import { Badge } from "../ui/badge";
 import { cn } from "../ui/cn";
 import {
   IconBolt,
@@ -29,7 +28,6 @@ import { useIsPhone } from "../hooks/useIsPhone";
 import { relevantModels } from "../lib/model-relevance";
 import { ModelGuidanceFooter } from "./ModelGuidanceFooter";
 import { ModelMark } from "./ModelMark";
-import { BrandMark } from "./BrandTile";
 import { UserAvatar } from "./UserAvatar";
 import { useCurrentUser } from "./UserPicker";
 import { useNavigation } from "../hooks/useNavigation";
@@ -350,7 +348,7 @@ type ModelMenuOption = {
 
 const PICKER_ROW_GAP = "mb-0.5 last:mb-0";
 /** What the desktop side panel is showing. */
-type SidePanel = "model" | "effort" | "speed" | "more" | "options";
+type SidePanel = "model" | "effort" | "speed" | "more" | "account" | "options";
 /** How long a pointer rests on a row before the side panel follows it. */
 const HOVER_INTENT_MS = 110;
 /** A side-panel heading: what the rows under it choose. */
@@ -369,13 +367,6 @@ const REMAINING_TONE: Record<WeeklyRemainingRow["tone"], string> = {
   low: "text-red",
   warn: "text-yellow",
   ok: "text-green",
-};
-
-/** Brand mark for an account pool, keyed by ProviderAccountOption.provider. */
-const ACCOUNT_BRAND: Record<WeeklyRemainingRow["provider"], string> = {
-  claude: "claude",
-  codex: "codex",
-  xai: "xai",
 };
 
 /**
@@ -1077,113 +1068,118 @@ export function ModelEffortSelect({
   // Options: everything set once and left alone (fallback, account, usage
   // and the defaults). In the side panel its sections lie open under labels;
   // as a phone submenu, Account, usage and the weekly limits stay a hop away.
-  const accountRows = (
+  // Account: Auto rotates through the accounts that can run this model
+  // (yours first, then shared), or one is pinned. Only those accounts are
+  // listed, each with the weekly share it has left for this model.
+  const weeklyRowFor = (id: string) => {
+    const rows = weeklyRowsForModel.filter((row) => row.accountId === id);
+    return (
+      rows.find((row) => row.scope && modelLabel.startsWith(row.scope)) ??
+      rows.find((row) => !row.scope) ??
+      rows[0]
+    );
+  };
+  const accountItems = (
     <>
       <Menu.Item
         onClick={() => onAccountChange!("")}
         className={cn(
           PICKER_ROW_GAP,
-          "justify-between gap-3",
+          "justify-between gap-3 py-2 phone:min-h-11",
           !accountId && "bg-hover",
         )}
       >
-        <span className="min-w-0 truncate">Auto</span>
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <span className="truncate font-medium">Auto</span>
+          <span className="truncate text-label text-faint">
+            Rotates accounts, yours first
+          </span>
+        </span>
         <Menu.Check on={!accountId} className="text-dim" />
       </Menu.Item>
       {providerAccounts.map((a) => {
         const selected = a.id === accountId;
+        const row = weeklyRowFor(a.id);
         return (
           <Menu.Item
             key={a.id}
             onClick={() => onAccountChange!(a.id)}
+            title={row?.resetTitle}
             className={cn(
               PICKER_ROW_GAP,
-              "justify-between gap-3",
+              "justify-between gap-3 phone:min-h-11",
               selected && "bg-hover",
-            )}
-          >
-            <span className="min-w-0 truncate">
-              {providerAccountLabel(a)}
-              {a.owner ? ` · ${accountOwnerLabel(a.owner)}` : ""}
-              {a.usable ? "" : " · exhausted"}
-            </span>
-            <Menu.Check on={selected} className="text-dim" />
-          </Menu.Item>
-        );
-      })}
-    </>
-  );
-  const weeklyRowsContent = (
-    <>
-      {weeklyRows.map((row, i) => {
-        const pinnable = hasAccount && row.provider === accountProvider;
-        const selected = pinnable && row.accountId === accountId;
-        return (
-          <Menu.Item
-            key={`${row.accountId}-${i}`}
-            onClick={() => onAccountChange!(row.accountId)}
-            disabled={!pinnable}
-            title={
-              pinnable
-                ? `Use ${row.label} for this session`
-                : hasAccount
-                  ? "Not for this model"
-                  : undefined
-            }
-            className={cn(
-              PICKER_ROW_GAP,
-              "justify-between gap-3",
-              selected && "bg-hover",
-              !pinnable && "opacity-70",
+              !a.usable && "opacity-70",
             )}
           >
             <span className="flex min-w-0 flex-1 items-center gap-2">
-              <span className="flex size-4 shrink-0 items-center justify-center text-dim">
-                <BrandMark name={ACCOUNT_BRAND[row.provider]} size={15} />
-              </span>
-              <span className="min-w-0 truncate">{row.name}</span>
-              {row.scope && <Badge>{row.scope}</Badge>}
-            </span>
-            <span className="flex flex-none items-center gap-2 tabular-nums">
-              {row.owner ? (
+              {a.owner ? (
                 <UserAvatar
-                  name={row.owner}
-                  size={14}
+                  name={accountOwnerLabel(a.owner) ?? a.owner}
+                  size={20}
                   edge={false}
                   title="Yours"
                 />
               ) : (
                 <IconPeople
                   size={20}
-                  className="text-faint"
+                  className="shrink-0 text-faint"
                   aria-label="Shared"
                 />
               )}
-              <span className="text-faint" title={row.resetTitle}>
-                {row.day}
-              </span>
-              <span
-                className={cn("min-w-9 text-right", REMAINING_TONE[row.tone])}
-              >
-                {row.remaining}%
+              <span className="min-w-0 truncate">
+                {providerAccountLabel(a)}
               </span>
             </span>
-            <Menu.Check on={selected} className="text-dim" />
+            <span className="flex flex-none items-center gap-2 tabular-nums">
+              {!a.usable ? (
+                <span className="text-faint">Used up</span>
+              ) : (
+                row && (
+                  <span className={REMAINING_TONE[row.tone]}>
+                    {row.remaining}%
+                  </span>
+                )
+              )}
+              <Menu.Check on={selected} className="text-dim" />
+            </span>
           </Menu.Item>
         );
       })}
-      {hasAccount && weeklyRowsForModel.length > 0 && (
-        <MenuHint>Choose one to use it for this session</MenuHint>
+      {onAutoFallbackChange && (
+        <>
+          <Menu.Separator className="my-1" />
+          <Menu.CheckboxItem
+            checked={autoFallback}
+            onCheckedChange={onAutoFallbackChange}
+            closeOnClick={false}
+            className="justify-between gap-3 phone:min-h-11"
+          >
+            <span className="flex min-w-0 flex-col">
+              <span>Auto-fallback</span>
+              <span className="text-label text-faint">
+                Switch models when quota runs out
+              </span>
+            </span>
+            <Menu.Check on={autoFallback} className="text-dim" />
+          </Menu.CheckboxItem>
+        </>
       )}
       <Menu.Separator className="my-1" />
       <Menu.Item
-        className="justify-between gap-3"
+        className="justify-between gap-3 phone:min-h-11"
         onClick={() => navigation.openSettings("providers")}
       >
         <span className="min-w-0 truncate">Manage accounts</span>
         <IconChevronRight className="shrink-0 text-dim" size={20} />
       </Menu.Item>
     </>
+  );
+  /** The pinned account's (or Auto's) weekly share left, for the row. */
+  const accountReadout = weeklyReadout && (
+    <span className={cn("tabular-nums", REMAINING_TONE[weeklyReadout.tone])}>
+      {weeklyReadout.remaining}%
+    </span>
   );
   const defaultsItems = (
     <>
@@ -1211,55 +1207,13 @@ export function ModelEffortSelect({
       </Menu.Item>
     </>
   );
+  // Options: the defaults and this conversation's usage.
   const optionsItems = (inPanel: boolean) => (
     <>
-      {onAutoFallbackChange && (
-        <Menu.CheckboxItem
-          checked={autoFallback}
-          onCheckedChange={onAutoFallbackChange}
-          closeOnClick={false}
-          className="justify-between gap-3 phone:min-h-11"
-        >
-          <span className="flex min-w-0 flex-col">
-            <span>Auto-fallback</span>
-            <span className="text-supporting text-faint">
-              Switch models when quota runs out
-            </span>
-          </span>
-          <Menu.Check on={autoFallback} className="text-dim" />
-        </Menu.CheckboxItem>
-      )}
-      {hasAccount &&
-        (inPanel ? (
-          <Menu.Group>
-            <Menu.GroupLabel>Account</Menu.GroupLabel>
-            {accountRows}
-          </Menu.Group>
-        ) : (
-          <Menu.SubmenuRoot>
-            <Menu.SubmenuTrigger className="justify-between gap-3">
-              <span className="min-w-0 truncate">Account</span>
-              <span className="flex flex-none items-center gap-1 text-dim">
-                {accountLabel}
-                <IconChevronRight className="shrink-0 text-dim" size={20} />
-              </span>
-            </Menu.SubmenuTrigger>
-            <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
-              {accountRows}
-            </Menu.Popup>
-          </Menu.SubmenuRoot>
-        ))}
-      <Menu.Separator className="my-1" />
-      {/* Open in the panel, the readouts below run long; the two actions
-          stay in view above them. */}
-      {inPanel && (
-        <>
-          {defaultsItems}
-          <Menu.Separator className="my-1" />
-        </>
-      )}
+      {defaultsItems}
       {showUsage && (
         <>
+          <Menu.Separator className="my-1" />
           {inPanel ? (
             <Menu.Group>
               <Menu.GroupLabel>Conversation usage</Menu.GroupLabel>
@@ -1289,62 +1243,8 @@ export function ModelEffortSelect({
             <span className="min-w-0 truncate">Show usage bar</span>
             <Menu.Check on={usageBarOn} className="text-dim" />
           </Menu.CheckboxItem>
-          <Menu.Separator className="my-1" />
         </>
       )}
-      {weeklyRows.length > 0 && (
-        <>
-          {inPanel ? (
-            <Menu.Group>
-              <Menu.GroupLabel className="flex items-center justify-between gap-2">
-                <span>Weekly remaining</span>
-                <span className="flex items-center gap-1.5">
-                  {weeklyReadout?.scope && <Badge>{weeklyReadout.scope}</Badge>}
-                  {weeklyReadout && (
-                    <span
-                      className={cn(
-                        "tabular-nums",
-                        REMAINING_TONE[weeklyReadout.tone],
-                      )}
-                    >
-                      {weeklyReadout.remaining}%
-                    </span>
-                  )}
-                </span>
-              </Menu.GroupLabel>
-              {weeklyRowsContent}
-            </Menu.Group>
-          ) : (
-            <Menu.SubmenuRoot>
-              <Menu.SubmenuTrigger className="justify-between gap-3">
-                <span className="min-w-0 truncate">Weekly remaining</span>
-                <span className="flex flex-none items-center gap-1.5 text-dim">
-                  {/* A model with its own weekly bucket (Fable) is capped by
-                    that bucket, not the plan's 7-day window; name it so a
-                    full general week is not read as Fable headroom. */}
-                  {weeklyReadout?.scope && <Badge>{weeklyReadout.scope}</Badge>}
-                  {weeklyReadout && (
-                    <span
-                      className={cn(
-                        "tabular-nums",
-                        REMAINING_TONE[weeklyReadout.tone],
-                      )}
-                    >
-                      {weeklyReadout.remaining}%
-                    </span>
-                  )}
-                  <IconChevronRight className="shrink-0" size={20} />
-                </span>
-              </Menu.SubmenuTrigger>
-              <Menu.Popup className="w-80 max-w-[min(360px,calc(100vw-1rem))]">
-                {weeklyRowsContent}
-              </Menu.Popup>
-            </Menu.SubmenuRoot>
-          )}
-          <Menu.Separator className="my-1" />
-        </>
-      )}
-      {!inPanel && defaultsItems}
     </>
   );
   const sidePanel = (
@@ -1366,6 +1266,11 @@ export function ModelEffortSelect({
           <>
             <p className={PANEL_HEADING}>More models</p>
             {moreModelsContent()}
+          </>
+        ) : panel === "account" && hasAccount ? (
+          <>
+            <p className={PANEL_HEADING}>Account for {modelLabel}</p>
+            {accountItems}
           </>
         ) : panel === "options" ? (
           <>
@@ -1646,8 +1551,38 @@ export function ModelEffortSelect({
               </Menu.Popup>
             </Menu.SubmenuRoot>
           ))}
-        {/* Everything set once and left alone: account, fallback, usage and
-            the defaults. Kept off the top level so the menu stays short. */}
+        {hasAccount &&
+          (guidanceAside ? (
+            <Menu.Item
+              closeOnClick={false}
+              {...intentProps(() => setPanel("account"))}
+              onClick={() => setPanel("account")}
+              className={cn(SETTING_ROW, panel === "account" && "bg-hover")}
+            >
+              <span className="min-w-0 truncate">Account</span>
+              <span className="flex min-w-0 flex-none items-center gap-2 text-dim">
+                <span className="truncate">{accountLabel}</span>
+                {accountReadout}
+                <IconChevronRight className="shrink-0" size={20} />
+              </span>
+            </Menu.Item>
+          ) : (
+            <Menu.SubmenuRoot>
+              <Menu.SubmenuTrigger className={SETTING_ROW}>
+                <span className="min-w-0 truncate">Account</span>
+                <span className="flex min-w-0 flex-none items-center gap-2 text-dim">
+                  <span className="truncate">{accountLabel}</span>
+                  {accountReadout}
+                  <IconChevronRight className="shrink-0" size={20} />
+                </span>
+              </Menu.SubmenuTrigger>
+              <Menu.Popup className="w-80 max-w-[min(360px,calc(100vw-1rem))]">
+                {accountItems}
+              </Menu.Popup>
+            </Menu.SubmenuRoot>
+          ))}
+        {/* Set once and left alone: the defaults and this conversation's
+            usage. Kept off the top level so the menu stays short. */}
         {guidanceAside ? (
           <Menu.Item
             closeOnClick={false}

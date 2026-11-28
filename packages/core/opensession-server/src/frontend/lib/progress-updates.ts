@@ -90,30 +90,32 @@ export function plainStatusText(text: string): string {
     .trim();
 }
 
-/** A reply that opens with a status line and goes on in prose ("◷ **Native
- * build**: Running", a blank line, then why): the status, and the prose after
- * it. The status then names the work row above the reply instead of standing
- * as a bold line of its own. */
-export function splitLeadStatus(
-  entry: TranscriptEntry,
-): { update: ProgressUpdate; rest: string } | null {
+/** A reply with a status line as its first or last paragraph ("◷ **Native
+ * build**: Running", a blank line, then prose, or prose and then the status):
+ * the prose alone, or null when there is no such line. The prose already says
+ * the outcome, so the line only repeated it. A reply that is nothing but a
+ * status is a status row instead (`parseProgressUpdate`). */
+export function withoutStatusLines(entry: TranscriptEntry): string | null {
   if (entry.type !== "assistant" || entry.isReasoning || entry.isError)
     return null;
-  const match = /^([^\r\n]+)\r?\n\s*\n([\s\S]*\S[\s\S]*)$/.exec(
-    entry.content.trimStart(),
-  );
-  if (!match) return null;
-  const update = parseProgressUpdate({
-    ...entry,
-    content: match[1]!,
-    contentLength: undefined,
-    contentClamped: undefined,
-    pastedTexts: undefined,
-    images: undefined,
-    videos: undefined,
-    files: undefined,
-  });
-  return update ? { update, rest: match[2]!.trim() } : null;
+  const isStatus = (paragraph: string) =>
+    !/[\r\n]/.test(paragraph) &&
+    parseProgressUpdate({
+      ...entry,
+      content: paragraph,
+      contentLength: undefined,
+      contentClamped: undefined,
+      pastedTexts: undefined,
+      images: undefined,
+      videos: undefined,
+      files: undefined,
+    }) !== null;
+  let text = entry.content.trim();
+  const lead = /^([^\r\n]+)\r?\n\s*\n/.exec(text);
+  if (lead && isStatus(lead[1]!)) text = text.slice(lead[0].length).trim();
+  const trail = /\r?\n\s*\n([^\r\n]+)$/.exec(text);
+  if (trail && isStatus(trail[1]!)) text = text.slice(0, trail.index).trim();
+  return text && text !== entry.content.trim() ? text : null;
 }
 
 /** One row per task: every update between two human messages or team notes

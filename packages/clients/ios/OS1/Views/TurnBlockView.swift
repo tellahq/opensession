@@ -114,26 +114,10 @@ struct TurnBlockView: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 5) {
-                if let status = turn.leadStatus, !turn.isLive {
-                    // The reply's own status names its work: one row.
-                    Image(systemName: status.symbol)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(status.state == .done ? OS1VisualStyle.greenInk : OS1VisualStyle.textDim)
-                    Text("\(Text(status.topic).fontWeight(.medium).foregroundStyle(OS1VisualStyle.text))\(Text(": \(status.text)").foregroundStyle(OS1VisualStyle.textDim))")
-                        .font(.subheadline)
-                        .lineLimit(1)
-                    if let duration = turn.durationLabel {
-                        Text("· \(duration)")
-                            .font(.subheadline)
-                            .monospacedDigit()
-                            .fixedSize()
-                    }
-                } else {
-                    Text(turn.headerTitle)
-                        .font(.subheadline)
-                        .monospacedDigit()
-                        .fixedSize()
-                }
+                Text(turn.headerTitle)
+                    .font(.subheadline)
+                    .monospacedDigit()
+                    .fixedSize()
                 chevron
             }
             // While a closed fold is live, name the step it is on so a long
@@ -191,8 +175,7 @@ struct TurnBlockView: View {
     }
 
     private var accessibilityLabel: String {
-        guard let status = turn.leadStatus, !turn.isLive else { return turn.headerTitle }
-        return [status.label, turn.durationLabel].compactMap { $0 }.joined(separator: ", ")
+        turn.headerTitle
     }
 }
 
