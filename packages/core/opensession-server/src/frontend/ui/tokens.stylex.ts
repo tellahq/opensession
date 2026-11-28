@@ -335,6 +335,8 @@ export const motion = stylex.defineConsts({
 export const focus = stylex.defineConsts({
   ring: "2px solid var(--accent-ink)",
   offset: "2px",
+  /** Inside a list or track that clips: the ring draws on the box's edge. */
+  insetOffset: "-2px",
 });
 
 /**

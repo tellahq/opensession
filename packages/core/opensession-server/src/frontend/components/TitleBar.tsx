@@ -58,7 +58,7 @@ export function TitleBar({
     >
       <Tooltip label="Back" side="bottom" shortcut={backKeys ?? undefined}>
         <button
-          className="inline-flex size-[30px] cursor-pointer items-center justify-center rounded-md border-none bg-transparent p-0 text-dim hover:bg-hover hover:text-fg [-webkit-app-region:no-drag] [app-region:no-drag]"
+          className="focus-ring inline-flex size-[30px] cursor-pointer items-center justify-center rounded-md border-none bg-transparent p-0 text-dim hover:bg-hover hover:text-fg [-webkit-app-region:no-drag] [app-region:no-drag]"
           onClick={() => history.back()}
           aria-label="Back"
         >
@@ -71,7 +71,7 @@ export function TitleBar({
         shortcut={forwardKeys ?? undefined}
       >
         <button
-          className="inline-flex size-[30px] cursor-pointer items-center justify-center rounded-md border-none bg-transparent p-0 text-dim hover:bg-hover hover:text-fg [-webkit-app-region:no-drag] [app-region:no-drag]"
+          className="focus-ring inline-flex size-[30px] cursor-pointer items-center justify-center rounded-md border-none bg-transparent p-0 text-dim hover:bg-hover hover:text-fg [-webkit-app-region:no-drag] [app-region:no-drag]"
           onClick={() => history.forward()}
           aria-label="Forward"
         >
@@ -85,7 +85,7 @@ export function TitleBar({
           shortcut={commandMenuKeys ?? undefined}
         >
           <button
-            className="inline-flex size-[30px] cursor-pointer items-center justify-center rounded-md border-none bg-transparent p-0 text-dim hover:bg-hover hover:text-fg [-webkit-app-region:no-drag] [app-region:no-drag]"
+            className="focus-ring inline-flex size-[30px] cursor-pointer items-center justify-center rounded-md border-none bg-transparent p-0 text-dim hover:bg-hover hover:text-fg [-webkit-app-region:no-drag] [app-region:no-drag]"
             onClick={onSearch}
             aria-label="Open command menu"
           >

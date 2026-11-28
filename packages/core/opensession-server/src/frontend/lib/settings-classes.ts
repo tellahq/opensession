@@ -43,6 +43,7 @@ import {
   media,
   radius,
   corner,
+  focus,
   shadow,
   sidebarScale,
   space,
@@ -152,6 +153,8 @@ const styles = stylex.create({
   // Back and the section rows: one box, so the chevron and the section
   // glyphs share a centre line.
   navRow: {
+    outline: { default: null, ":focus-visible": focus.ring },
+    outlineOffset: { default: null, ":focus-visible": focus.insetOffset },
     display: "flex",
     cursor: "pointer",
     alignItems: "center",

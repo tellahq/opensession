@@ -7,6 +7,7 @@ import { sx } from "./sx";
 import {
   color,
   corner,
+  focus,
   media,
   motion as timing,
   radius,
@@ -72,6 +73,10 @@ const styles = stylex.create({
     padding: space.s2,
   },
   option: {
+    // Flush with the option, in the track's padding: an inset ring would sit
+    // under the knob, which is positioned and paints over it.
+    outline: { default: null, ":focus-visible": focus.ring },
+    outlineOffset: { default: null, ":focus-visible": space.s0 },
     position: "relative",
     display: "inline-flex",
     cursor: { default: "pointer", ":disabled": "default" },

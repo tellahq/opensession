@@ -79,6 +79,7 @@ import { classString as sx, type Styles } from "../ui/sx";
 import {
   color,
   corner,
+  focus,
   leading,
   media,
   motion,
@@ -211,6 +212,8 @@ export const sidebarStyles = stylex.create({
 
   // ── Headings: see sidebarHeader ──
   header: {
+    outline: { default: null, ":focus-visible": focus.ring },
+    outlineOffset: { default: null, ":focus-visible": focus.insetOffset },
     display: "flex",
     width: "100%",
     alignItems: "center",
@@ -301,6 +304,8 @@ export const sidebarStyles = stylex.create({
 
   // ── Rows: see sidebarRow ──
   row: {
+    outline: { default: null, ":focus-visible": focus.ring },
+    outlineOffset: { default: null, ":focus-visible": focus.insetOffset },
     position: "relative",
     marginTop: space.s2,
     width: "100%",
@@ -713,6 +718,8 @@ export const sidebarStyles = stylex.create({
 
   // ── Chrome and header buttons ──
   chromeButton: {
+    outline: { default: null, ":focus-visible": focus.ring },
+    outlineOffset: { default: null, ":focus-visible": focus.insetOffset },
     flexShrink: 0,
     alignItems: "center",
     justifyContent: "center",
@@ -731,6 +738,8 @@ export const sidebarStyles = stylex.create({
     transitionTimingFunction: motion.ease,
   },
   headerButton: {
+    outline: { default: null, ":focus-visible": focus.ring },
+    outlineOffset: { default: null, ":focus-visible": focus.insetOffset },
     display: "inline-flex",
     flexShrink: 0,
     alignItems: "center",

@@ -83,7 +83,10 @@ its odd values. A rule in a document does not stop that. A type does.
    each area moves to StyleX, with a parity check per component.
    Keyboard focus is one ring, 2px of accent ink: `focus-ring` draws it
    2px outside the box, and `focus-ring-inset` draws the same ring inside,
-   for a row whose rounded list clips anything outside it.
+   for a row whose rounded list clips anything outside it. In StyleX the
+   same pair is `focus.ring` with `focus.offset` or `focus.insetOffset`. A
+   control that never sets one shows the browser's own outline instead,
+   which is the thing to look for in a Tab walk.
 2. **Primitives** (`ui/*.tsx`). Authored in StyleX against the tokens. Each
    one owns its look completely and exposes `variant` / `size` for the
    choices the system has made, plus an `xstyle` prop whose type only accepts
