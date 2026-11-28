@@ -1,3 +1,5 @@
+import * as stylex from "@stylexjs/stylex";
+import { popup } from "../ui/popup-styles";
 import React, {
   useEffect,
   useEffectEvent,
@@ -75,7 +77,6 @@ import {
   composerBox,
   composerBoxExpanded,
   composerBoxMinimized,
-  composerMenuWidth,
   composerSend,
   composerSendDefault,
   composerSendMinimizedFill,
@@ -164,7 +165,7 @@ interface Props {
   /** Content visually attached to the composer above the draft field. */
   attached?: React.ReactNode;
   /** Extra row for the "+" menu, below the built-in ones. Same shape as
-   * `sendMenu`: render a `composerMenuItem` button and call `close()` when it
+   * `sendMenu`: render a menu row button (popup.item + popup.plainItem) and call `close()` when it
    * is picked. */
   menuExtra?: (context: { close: () => void }) => React.ReactNode;
   /** Optional action rendered inside the "+" menu, such as scheduling. */
@@ -1877,7 +1878,6 @@ export function Composer({
               side="top"
               align="start"
               finalFocus={textareaRef}
-              className={composerMenuWidth}
             >
               <Menu.Item onClick={changePill}>
                 <IconPencil size={20} aria-hidden className={MENU_ICON} />

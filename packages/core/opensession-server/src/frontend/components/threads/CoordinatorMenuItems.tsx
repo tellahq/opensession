@@ -1,9 +1,11 @@
+import * as stylex from "@stylexjs/stylex";
+import { popup } from "../../ui/popup-styles";
 import {
   setCoordinatorMode,
   useIsCoordinating,
 } from "../../lib/coordinator-mode";
 import { errorMessage } from "../../lib/error-message";
-import { composerMenuIcon, composerMenuItem } from "../../lib/composer-classes";
+
 import type { UnifiedSession } from "../../lib/types";
 import { useWorkspaceRecord } from "../../lib/workspace-records";
 import { Menu, MENU_ICON, MenuLabel } from "../../ui/menu";
@@ -46,7 +48,7 @@ export function CoordinatorMenuItems({
     <>
       <ComposerPressButton
         type="button"
-        className={composerMenuItem}
+        {...stylex.props(popup.item, popup.plainItem)}
         aria-pressed={on}
         title={
           on
@@ -58,8 +60,8 @@ export function CoordinatorMenuItems({
           toggleCoordinatorMode(session.id, on);
         }}
       >
-        <span className={composerMenuIcon}>
-          <IconDelegate size={22} />
+        <span {...stylex.props(popup.itemGlyph)}>
+          <IconDelegate size={20} />
         </span>
         <MenuLabel>
           {on ? "Turn off coordinator mode" : "Turn on coordinator mode"}
@@ -68,15 +70,15 @@ export function CoordinatorMenuItems({
       {workspace && (
         <ComposerPressButton
           type="button"
-          className={composerMenuItem}
+          {...stylex.props(popup.item, popup.plainItem)}
           title="Name, goal, project and who it is shared with"
           onPress={() => {
             close();
             openWorkspaceSettings(workspace.id);
           }}
         >
-          <span className={composerMenuIcon}>
-            <IconGear size={22} />
+          <span {...stylex.props(popup.itemGlyph)}>
+            <IconGear size={20} />
           </span>
           <MenuLabel>Workspace settings…</MenuLabel>
         </ComposerPressButton>

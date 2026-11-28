@@ -1,3 +1,4 @@
+import { popup } from "../../ui/popup-styles";
 import { FullPageFileDropOverlay } from "../FullPageFileDropOverlay";
 import { floatingPill } from "../../ui/floating-pill";
 import type { TabStripPlacement } from "../../lib/split-tabs";
@@ -78,7 +79,7 @@ import { BrandMark } from "../BrandMark";
 import { UsageMeter } from "../UsageMeter";
 import { cn } from "../../ui/cn";
 import { BrowserLoading } from "../BrowserPane";
-import { composerMenuIcon, composerMenuItem } from "../../lib/composer-classes";
+
 import {
   IconArrowDown,
   IconArrowRight,
@@ -1525,7 +1526,7 @@ export function SessionViewerMainRegion({
                       <>
                         <button
                           type="button"
-                          className={composerMenuItem}
+                          {...stylex.props(popup.item, popup.plainItem)}
                           disabled={!!slackComposer}
                           title="Review a message before sending it to Slack"
                           onClick={() => {
@@ -1533,7 +1534,7 @@ export function SessionViewerMainRegion({
                             void handleOpenSlackComposer();
                           }}
                         >
-                          <span className={composerMenuIcon}>
+                          <span {...stylex.props(popup.itemGlyph)}>
                             <BrandMark name="slack" size={16} />
                           </span>
                           <span {...stylex.props(styles.menuLabel)}>
@@ -1555,13 +1556,13 @@ export function SessionViewerMainRegion({
                         {isAsk && session.source === "opensession" && (
                           <button
                             type="button"
-                            className={composerMenuItem}
+                            {...stylex.props(popup.item, popup.plainItem)}
                             disabled={promoting}
                             title="Ask mode: this session can read the code but not change it"
                             onClick={() => void handlePromote(close)}
                           >
-                            <span className={composerMenuIcon}>
-                              <IconEye size={22} />
+                            <span {...stylex.props(popup.itemGlyph)}>
+                              <IconEye size={20} />
                             </span>
                             {promoting
                               ? "Switching to code…"
