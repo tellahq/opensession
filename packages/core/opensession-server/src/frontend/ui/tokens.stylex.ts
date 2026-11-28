@@ -498,6 +498,8 @@ export const geometry = stylex.defineConsts({
   /** A dialog that is a bottom sheet on a phone: its 24px of padding, plus
    *  the home indicator. */
   sheetPadBottom: "calc(24px + env(safe-area-inset-bottom))",
+  /** A full-screen phone page's foot: 16px, or the home indicator's inset. */
+  pagePadBottom: "max(16px, env(safe-area-inset-bottom, 0px))",
   /** A liveness dot: the chat's busy row, standalone, and inline in text or
    * a pill. */
   dotLarge: "9px",
@@ -561,6 +563,9 @@ export const geometry = stylex.defineConsts({
   stickyPromptMaxWidth: "min(480px, 70%)",
   /** Just below a phone pane's floating header and its docked tab strip. */
   belowPaneHeader: "calc(var(--pane-header-h) + var(--strip-clearance, 0px))",
+  /** The phone workspace page holds this much below its identity, so the
+   *  page does not jump while its sections load. */
+  infoContentMinHeight: "320px",
   /** Below the phone workspace page's taller bar: 52px plus the notch. */
   infoBarClearance: "calc(env(safe-area-inset-top, 0px) + 52px)",
   /** The live status row under a running turn: 5px above and below. */

@@ -40,7 +40,6 @@ import {
   PR_BAR_BG,
   PR_BAR_CHECKING,
   PR_BAR_ERROR,
-  PR_BAR_IN_CARD,
   PR_BAR_STACK,
   PR_BAR_STATE,
   PR_CHIP_SEAM,
@@ -950,9 +949,7 @@ export function PrStatusBar({
     if (variant === "header" || !(prs || []).some((ref) => ref.number))
       return null;
     return (
-      <div
-        className={`pr-bar wco-chrome ${PR_BAR} ${PR_BAR_BG.muted} ${PR_BAR_IN_CARD}`}
-      >
+      <div className={`pr-bar wco-chrome ${PR_BAR} ${PR_BAR_BG.muted}`}>
         {leading}
         <span className={`pr-bar-checking ${PR_BAR_CHECKING}`}>
           Checking status…
@@ -1729,9 +1726,7 @@ export function PrStatusBar({
   // The primary row is the session's own branch — the one this worktree can
   // push, pull and merge. Its other PRs stack underneath, one row each.
   const primaryRow = (
-    <div
-      className={`pr-bar wco-chrome ${PR_BAR} ${PR_BAR_BG[headlineTone]} ${PR_BAR_IN_CARD}`}
-    >
+    <div className={`pr-bar wco-chrome ${PR_BAR} ${PR_BAR_BG[headlineTone]}`}>
       {leading}
       {pr && (
         <PrStackChip

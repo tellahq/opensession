@@ -49,8 +49,8 @@ const ICON_VERSION = 6;
 // `size`; a caller that needs only some of it passes utilities here.
 //
 // `repo-tile` itself is now a bare hook, not styling: one ancestor still reaches
-// the tile through it — INFO_HERO's `[&_.repo-tile]:shadow-[…]` (the phone
-// session-info hero). The phone header used to be a second, but its tile moved
+// the tile through it — the phone workspace page's hero
+// (SessionViewerChrome, `[&_.repo-tile]:smooth-shadow-ring-sm`). The phone header used to be a second, but its tile moved
 // out of the metadata line and into the title pill's own leading slot, and the
 // rule that held it there had been matching nothing since.
 const TILE =

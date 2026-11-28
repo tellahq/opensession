@@ -1,11 +1,18 @@
 import * as stylex from "@stylexjs/stylex";
+import { sx } from "../../ui/sx";
 import {
   color,
   controlHeight,
   corner,
   geometry,
+  layer,
+  leading,
+  motion,
   radius,
   space,
+  text,
+  tracking,
+  weight,
 } from "../../ui/tokens.stylex";
 import type { TabStripPlacement } from "../../lib/split-tabs";
 import type { useSessionModelWorkflowController } from "../../hooks/useSessionModelWorkflowController";
@@ -118,13 +125,6 @@ import {
   HEADER_SESSIONBAR_USAGE,
 } from "../../lib/app-header-classes";
 import {
-  INFO_CONTENT,
-  INFO_HERO,
-  INFO_NAME,
-  INFO_PAGE,
-  INFO_SECTION,
-  INFO_SUB,
-  INFO_SUMMARY_CARD,
   SESSION_LINK,
   SESSION_LINK_LINEAR,
   SESSION_LINK_PLAIN,
@@ -333,7 +333,80 @@ interface SessionViewerChromeProps {
   summaryBrowser: { frame: PanelBrowserFrame; onOpen: () => void } | null;
 }
 
+/** The phone workspace page rises into place as it opens. */
+const infoPageIn = stylex.keyframes({
+  from: { opacity: 0, transform: `translateY(${space.s8})` },
+  to: { opacity: 1, transform: "translateY(0)" },
+});
+
 const styles = stylex.create({
+  /** The phone workspace page: a full-screen scrolling column. Its children
+   *  must not shrink (`[&>*]:shrink-0` at the call site): a column flex
+   *  container still fits its children to its own height, and the one child
+   *  that clips would give up its height first. */
+  infoPage: {
+    position: "fixed",
+    inset: 0,
+    zIndex: layer.sheet,
+    display: "flex",
+    flexDirection: "column",
+    gap: space.s2,
+    overflowY: "auto",
+    overscrollBehavior: "contain",
+    backgroundColor: color.page,
+    paddingBottom: geometry.pagePadBottom,
+    animationName: infoPageIn,
+    animationDuration: motion.standard,
+    animationTimingFunction: motion.ease,
+  },
+  /** Identity: repo tile, name, and the repo · model line. */
+  infoHero: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    paddingInline: space.s20,
+    paddingTop: space.s2,
+    paddingBottom: space.s20,
+    textAlign: "center",
+  },
+  /** The page's one heading. */
+  infoName: {
+    marginTop: space.s8,
+    maxWidth: "100%",
+    fontSize: text.pageTitle,
+    fontWeight: weight.strong,
+    lineHeight: leading.tight,
+    letterSpacing: tracking.title,
+    overflowWrap: "break-word",
+    color: color.fg,
+  },
+  infoSub: {
+    display: "flex",
+    minHeight: controlHeight.touch,
+    width: "100%",
+    maxWidth: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    columnGap: space.s4,
+    paddingInline: space.s24,
+    fontSize: text.label,
+    fontWeight: weight.medium,
+    color: color.dim,
+  },
+  infoContent: {
+    minHeight: geometry.infoContentMinHeight,
+    paddingBottom: space.s8,
+  },
+  /** Each section brings its own quiet plate. */
+  infoSummaryCard: {
+    marginInline: space.s12,
+    marginTop: space.s8,
+    display: "flex",
+    flexDirection: "column",
+    gap: space.s10,
+  },
+  /** A section rendered by its own component: the page's inset, 16px above. */
+  infoSection: { marginTop: space.s16, paddingInline: space.s12 },
   keepGap: { marginInlineEnd: space.s6 },
   contents: { display: "contents" },
   diffUnderInfoBar: { "--diff-panel-top": geometry.infoBarClearance },
@@ -1282,7 +1355,7 @@ export function SessionViewerChrome({
             isPhone && infoPageOpen
               ? createPortal(
                   <div
-                    className={INFO_PAGE}
+                    {...sx(styles.infoPage, "[&>*]:shrink-0")}
                     ref={infoPageRef}
                     role="dialog"
                     aria-modal="true"
@@ -1384,7 +1457,12 @@ export function SessionViewerChrome({
                       />
                     ) : (
                       <>
-                        <div className={INFO_HERO}>
+                        <div
+                          {...sx(
+                            styles.infoHero,
+                            "[&_.repo-tile]:smooth-shadow-ring-sm",
+                          )}
+                        >
                           {session.desk ? (
                             <IconDesk size={40} {...stylex.props(styles.dim)} />
                           ) : (
@@ -1393,10 +1471,13 @@ export function SessionViewerChrome({
                               size={40}
                             />
                           )}
-                          <h1 className={INFO_NAME} ref={infoHeroNameRef}>
+                          <h1
+                            {...stylex.props(styles.infoName)}
+                            ref={infoHeroNameRef}
+                          >
                             {workspaceName || session.title}
                           </h1>
-                          <div className={INFO_SUB}>
+                          <div {...stylex.props(styles.infoSub)}>
                             {!session.desk && hasRepoWork && (
                               <RepoBar
                                 sessionId={session.id}
@@ -1438,14 +1519,14 @@ export function SessionViewerChrome({
                             ) : null}
                           </div>
                         </div>
-                        <div className={INFO_CONTENT}>
+                        <div {...stylex.props(styles.infoContent)}>
                           <ThreadsDetailsSection
                             session={session}
                             onOpenSession={openSession}
                             onOpenAsset={openAssetFromTranscript}
                             onLeave={() => setInfoPageOpen(false)}
                           />
-                          <div className={INFO_SUMMARY_CARD}>
+                          <div {...stylex.props(styles.infoSummaryCard)}>
                             {session.sandbox && (
                               <div {...stylex.props(styles.sandboxCard)}>
                                 <SandboxBadge
@@ -1500,7 +1581,7 @@ export function SessionViewerChrome({
                           </div>
                           {(workflowRuns.length > 0 ||
                             subagents.length > 0) && (
-                            <div className={INFO_SECTION}>
+                            <div {...stylex.props(styles.infoSection)}>
                               <WorkflowPanel
                                 sessionId={session.id}
                                 runs={workflowRuns}
@@ -1522,7 +1603,7 @@ export function SessionViewerChrome({
                             </div>
                           )}
                           {sessionArtifacts.reports.length > 0 && (
-                            <div className={INFO_SECTION}>
+                            <div {...stylex.props(styles.infoSection)}>
                               <SessionReportsPanel
                                 reports={sessionArtifacts.reports}
                                 onOpenNewSession={
@@ -1532,7 +1613,7 @@ export function SessionViewerChrome({
                             </div>
                           )}
                           {sessionArtifacts.databases.length > 0 && (
-                            <div className={INFO_SECTION}>
+                            <div {...stylex.props(styles.infoSection)}>
                               <SessionDatabasesPanel
                                 databases={sessionArtifacts.databases}
                                 onOpen={(id) => {

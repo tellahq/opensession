@@ -1,7 +1,7 @@
 /* ── Keyframes the markup reaches directly ───────────────────
    These are referenced only from Tailwind utilities in the components —
    `animate-[preview-spin_0.7s_linear_infinite]`, or the longhand
-   `[animation:session-info-in_var(--dur)_var(--ease)]` — so there is no CSS
+   `[animation:<name>_var(--dur)_var(--ease)]` — so there is no CSS
    rule left in legacy.css to carry them, and that file is being emptied.
    Grep for BOTH spellings before assuming one of these is unused: the
    underscores in an arbitrary value hide the name from a naive search. */
@@ -133,28 +133,11 @@
   }
 }
 
-/* Was nested inside `@media (max-width: 720px)` in legacy.css. Top level here,
-   which is equivalent: the only thing that uses it is INFO_PAGE, and that page
-   renders solely when `useIsPhone()` is true, so the element cannot exist at a
-   width where this would have been undefined. Un-nesting also removes a trap —
-   a media-scoped keyframe whose consumer is not scoped the same way animates
-   nothing, silently. */
-@keyframes session-info-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 /* A transcript block arriving at the live edge fades up into place instead of
    popping. Applied one-shot via VirtualTranscriptList's `enter` flag (see
    newTailBlockKeys): only blocks whose key was not mounted by the previous
    build play it, so opening a session, hydrating history, and virtualizer
-   remounts never re-run it. Travel matches session-info-in; duration --dur
+   remounts never re-run it. Travel matches the phone workspace page's rise; duration --dur
    because a whole block arriving is anchored movement, not an in-place
    change. prefers-reduced-motion freezes it in the global block above. */
 @keyframes transcript-enter {

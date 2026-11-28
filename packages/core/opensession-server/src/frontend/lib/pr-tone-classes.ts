@@ -119,18 +119,16 @@ export const CHECK_TEXT: Record<CheckRank, string> = {
  * subtree rendered from two components, so their vocabulary lives here rather
  * than in either file.
  *
- * Two ancestors reach into the strip from SessionViewer — the phone bottom
- * sheet (`.viewer-panel`) and the info page's status card
- * (`.session-info-status`). Those classes belong to a component this family
- * doesn't own, so their overrides stay selectors, as arbitrary variants on the
- * strip itself, instead of becoming props on a component two callers away.
+ * One ancestor reaches into the strip from SessionViewer: the phone bottom
+ * sheet (`.viewer-panel`). That class belongs to a component this family
+ * doesn't own, so its override stays a selector, an arbitrary variant on the
+ * strip itself, instead of becoming a prop on a component two callers away.
  */
 
 /** The strip: one row of status atop the workspace panel. It is a plate rather
  *  than a band — the panel wraps it in PANEL_PR_PLATE (lib/session-panel-classes),
  *  which supplies the inset, the corner and the clip, so the strip carries no
- *  edge of its own there. The one place it still draws a border is the phone
- *  info card, where consecutive strips are rows of one card.
+ *  edge of its own there.
  *
  *  The markup also keeps the bare `pr-bar` class, and the checking line keeps
  *  `pr-bar-checking`. Neither styles anything any more — they are hooks for the
@@ -149,20 +147,8 @@ export const PR_BAR =
   "@container flex min-h-[var(--desktop-header-h)] items-center gap-2.5 px-3 py-2 " +
   // The globe (staging) icon rides inside the strip, flush to its padding.
   "[&>.staging-icon]:-ml-0.5 [&>.staging-icon]:shrink-0 " +
-  // Phone: a row of the bottom sheet, and a row of the info card.
-  "phone:[.viewer-panel_&]:min-h-[50px] phone:[.viewer-panel_&]:px-3.5 " +
-  "phone:[.session-info-status_&]:min-h-[46px] phone:[.session-info-status_&]:px-2.5 " +
-  // In the info card the strips stack as rows of one card, so there the seam
-  // is a rule. Keyed on the card alone rather than on `phone:` as well: the
-  // card only ever renders on a phone, and `phone:` is `width < 720px` while
-  // the page that draws it means `<= 720px`, so pinning the divider to the
-  // breakpoint would drop it at exactly 720.
-  "[.session-info-status_&]:border-b [.session-info-status_&]:border-divider " +
-  "[.session-info-status_&]:last:border-b-0";
-
-/** Inside the info card the strip (or the stack of strips) is the card's
- *  content, so it takes the card's corner and clips to it. */
-export const PR_BAR_IN_CARD = "phone:[.session-info-status>&]:overflow-hidden";
+  // Phone: a row of the bottom sheet.
+  "phone:[.viewer-panel_&]:min-h-[50px] phone:[.viewer-panel_&]:px-3.5";
 
 /** The strip's tone band. Purple and yellow had no soft token and were frozen
  *  as dark-theme rgba() literals, so both themes got the dark hue; mixing from
@@ -175,9 +161,8 @@ export const PR_BAR_BG: Record<PrTone, string> = {
   // The plate fill its neighbours in the panel wear (`--bg-panel` is
   // re-pointed to `--panel-plate` inside the column), so a strip with nothing
   // to report sits in the same family as the sections under it rather than
-  // reading as a white band cut across the top. The info card supplies its
-  // own surface, so there the strip stays transparent.
-  muted: "bg-panel [.session-info-status_&]:bg-transparent",
+  // reading as a white band cut across the top.
+  muted: "bg-panel",
 };
 
 /** The same band in the workspace summary card, where it plates the PR rows
@@ -197,7 +182,7 @@ export const PR_SUMMARY_BAND_BG: Record<PrTone, string> = {
 
 /** A session that shipped one feature as several PRs: the primary strip plus a
  *  row per sibling, as one continuous block of status. */
-export const PR_BAR_STACK = `flex min-w-0 flex-col ${PR_BAR_IN_CARD}`;
+export const PR_BAR_STACK = "flex min-w-0 flex-col";
 
 /** First-load placeholder ("Checking status…") so the strip holds its place
  *  instead of popping in once /pr and /git-status resolve. */

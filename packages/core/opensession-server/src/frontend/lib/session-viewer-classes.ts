@@ -570,25 +570,11 @@ export const TRANSCRIPT_SYNC_SPOT =
  * one-pixel disagreement between Tailwind's `max-[720px]` (`width < 720px`)
  * and the `max-width: 720px` that `useIsPhone` and the old sheet mean.
  *
- * `session-info-topbar` and `session-info-status` stay on the markup as bare
- * hooks: the scroll handler finds the bar with `querySelector`, and
- * lib/pr-tone-classes.ts fits the PR strip to the status card with
- * `[.session-info-status_&]`.
+ * The page itself is StyleX in SessionViewerChrome; its bar stays here because
+ * it styles the TopBar primitive through className. `session-info-topbar`
+ * stays on the markup as a bare hook: the scroll handler finds the bar with
+ * `querySelector`.
  */
-
-/** The page is a scrolling column, so nothing in it may flex.
- *
- *  `[&>*]:shrink-0` is load-bearing rather than defensive: a column flex
- *  container still lays its children out to its own height, and a child whose
- *  overflow is not `visible` has an automatic minimum size of zero — so on any
- *  session with enough below it, the PR strip's frame (INFO_STATUS, which
- *  clips) was the one child free to absorb the whole overflow. It gave up its
- *  height first and clipped the strip inside it, down to nothing on a short
- *  viewport, while the sections that cannot shrink kept theirs. */
-export const INFO_PAGE =
-  "fixed inset-0 z-sheet flex flex-col gap-0.5 overflow-y-auto overscroll-contain bg-surface " +
-  "pb-[max(16px,env(safe-area-inset-bottom,0px))] [&>*]:shrink-0 " +
-  "[animation:session-info-in_var(--dur)_var(--ease)]";
 
 const INFO_TOPBAR =
   "session-info-topbar sticky top-0 z-4 flex items-center " +
@@ -619,42 +605,6 @@ export const infoTopbarTitleClass = (scrolled: boolean) =>
     ? "opacity-100 [transform:translateY(0)]"
     : "opacity-0 [transform:translateY(5px)]");
 
-/** Identity block: repo tile, name, and the repo · model line. The tile gets a
- *  soft key shadow here that it doesn't carry elsewhere. */
-export const INFO_HERO =
-  "flex flex-col items-center gap-0 px-5 pt-0.5 pb-5 text-center " +
-  "[&_.repo-tile]:smooth-shadow-ring-sm";
-
-/** 20px in the old sheet — the page's one heading, so it snaps to
- *  `text-page-title` (22px). */
-export const INFO_NAME =
-  "mt-[9px] max-w-full text-page-title font-semibold leading-tight tracking-title break-words text-fg";
-export const INFO_SUB =
-  "flex min-h-11 w-full max-w-full items-center justify-center gap-x-1 px-6 text-label font-medium text-dim";
-
-/** Phone PR strip frame: spacing + clipping only. The status tone itself
- * reaches the outer radius, so the row does not become a card inside a card. */
-export const INFO_STATUS =
-  // `empty:hidden` for the same reason as PANEL_PR_PLATE: the strip renders
-  // nothing when the session has no pull request to report, and a wrapper with
-  // only a margin left in it is a gap with no row above it.
-  //
-  // `mx-3` + `rounded-lg`, like every plate under it: the page has one edge.
-  "session-info-status mx-3 mb-3 overflow-hidden rounded-lg empty:hidden";
-
-export const INFO_CONTENT = "min-h-[320px] pb-2";
-
-/** The phone Workspace summary's card stack. Each semantic section supplies
- * its own quiet background, so Review, Changes and media can be scanned as
- * separate groups without returning to the old bordered dashboard. */
-export const INFO_SUMMARY_CARD = "mx-3 mt-2 flex flex-col gap-2.5";
-
-/** A section rendered by a component of its own (Agents, Reports) rather than
- *  by WorkspaceInfo. It gets the page's inset and the same 16px gap the panel
- *  puts between its own sections, and no rule above it: a section is separated
- *  by its plate, never by a hairline. */
-export const INFO_SECTION = "mt-4 px-3";
-
 /**
  * The Info panel's section grammar, shared by everything that renders into it
  * (WorkspaceInfo's own blocks, plus the Portals and Agents sections beneath
@@ -677,16 +627,6 @@ export const INFO_LABEL_CLASS =
   "px-3 text-label font-semibold tracking-tight text-faint";
 export const INFO_LIST_CLASS =
   "grid gap-px overflow-hidden rounded-lg bg-panel p-1";
-
-/** Repo and model controls at the top of the phone summary card. They keep
- * their labelled two-line content, but give up the separate plate and border
- * now that the summary card supplies one shared surface. */
-export const INFO_LIST =
-  "session-info-list grid gap-px overflow-hidden rounded-2xl bg-panel p-2 " +
-  "[&>button]:min-h-11 [&>button]:w-full [&>button]:justify-start [&>button]:gap-2 [&>button]:text-left " +
-  "[&>button]:rounded-control [&>button]:border-0 " +
-  "[&>button]:bg-transparent [&>button]:px-3 [&>button]:py-2 [&>button]:text-label [&>button]:text-fg " +
-  "[&>button:hover]:bg-hover";
 
 /** The whole-workspace view embedded below the actions.
  *

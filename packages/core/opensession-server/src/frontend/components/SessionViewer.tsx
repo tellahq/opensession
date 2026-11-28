@@ -355,15 +355,6 @@ import {
   VIEWER_SUGGESTIONS_ROW,
   VIEWER_SUGGESTIONS_ROW_INLINE,
   VIEWER_SUMMARY_STEP,
-  INFO_CONTENT,
-  INFO_HERO,
-  INFO_NAME,
-  INFO_PAGE,
-  INFO_SECTION,
-  INFO_SUB,
-  INFO_SUMMARY_CARD,
-  infoTopbarClass,
-  infoTopbarTitleClass,
 } from "../lib/session-viewer-classes";
 import {
   HEADER_SESSIONBAR,
