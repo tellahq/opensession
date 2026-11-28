@@ -77,7 +77,7 @@ function GuidanceBody({
 
 /**
  * Model-picker notes on the hovered or selected model: candid strengths and
- * trade-offs. On a desktop they sit in a card beside the list (`aside`); a
+ * trade-offs. On a desktop they fill the picker's side panel (`aside`); a
  * phone, which has no hover to preview with, docks them under the list.
  * Every unique guidance card for the menu's models renders as an invisible
  * CSS Grid sizer in the same cell, so moving between models never changes
@@ -98,7 +98,7 @@ export function ModelGuidanceFooter({
       data-model-guidance-footer
       className={
         aside
-          ? "my-1.5 mr-1.5 w-64 shrink-0 self-start rounded-lg bg-hover p-3.5"
+          ? "p-2"
           : "shrink-0 border-t border-divider bg-raised/70 py-2.5 pl-3.5 pr-3"
       }
     >
