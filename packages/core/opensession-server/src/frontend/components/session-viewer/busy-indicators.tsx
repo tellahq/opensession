@@ -5,13 +5,108 @@ import { TranscriptSkeleton } from "../../ui/state";
 import { PageLoader } from "../../ui/page-loader";
 import { Spinner } from "../../ui/spinner";
 import { PulseDot } from "../../ui/status";
-import { cn } from "../../ui/cn";
+import * as stylex from "@stylexjs/stylex";
+import { sx } from "../../ui/sx";
+import {
+  color,
+  geometry,
+  space,
+  text,
+  weight,
+  leading,
+  opacity,
+} from "../../ui/tokens.stylex";
 import { TextShimmer } from "../../ui/text-shimmer";
 import { busyActivityStatus } from "../../lib/busy-activity";
 import type { RunActivity } from "@tellahq/opensession-protocol/events";
-import { msgActivityShimmer, msgRow } from "../../lib/msg-classes";
+import { msgActivityShimmer } from "../../lib/msg-classes";
 import { TRANSCRIPT_SYNC_SPOT } from "../../lib/session-viewer-classes";
 import type { LiveTurnStore } from "../../lib/live-turn-store";
+
+const styles = stylex.create({
+  setup: {
+    display: "flex",
+    minHeight: "100%",
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingInline: space.s24,
+  },
+  centered: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    textAlign: "center",
+  },
+  setupSpinner: { marginBottom: space.s12, color: color.faint },
+  title: {
+    fontSize: text.itemTitle,
+    fontWeight: weight.strong,
+    color: color.fg,
+  },
+  setupDetail: {
+    marginTop: space.s6,
+    fontSize: text.label,
+    fontWeight: weight.medium,
+    color: color.faint,
+  },
+  waiting: {
+    position: "relative",
+    display: "flex",
+    height: "100%",
+    minHeight: geometry.paneEmptyMinHeight,
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space.s4,
+    paddingInline: space.s24,
+    textAlign: "center",
+  },
+  waitingLoader: { marginBottom: space.s8, color: color.dim },
+  waitingDetail: {
+    maxWidth: geometry.paneEmptyMeasure,
+    fontSize: text.label,
+    fontWeight: weight.medium,
+    lineHeight: leading.relaxed,
+    color: color.dim,
+  },
+  fill: { minHeight: "100%" },
+  faint: { color: color.faint },
+  status: { display: "inline-flex" },
+  meta: { fontSize: text.meta, fontWeight: weight.regular },
+  label: { fontSize: text.label },
+  activity: { fontSize: text.meta, fontWeight: weight.medium },
+  tabular: { fontVariantNumeric: "tabular-nums" },
+  steerWait: {
+    fontWeight: weight.regular,
+    fontVariantNumeric: "tabular-nums",
+    opacity: opacity.quiet,
+  },
+  clip: { overflow: "hidden" },
+  // msgRow spelled out: its Tailwind `flex-col` would beat a StyleX row.
+  busyRow: {
+    marginInline: "auto",
+    marginBottom: geometry.turnGap,
+    display: "flex",
+    width: "100%",
+    maxWidth: geometry.sessionColumn,
+    marginTop: space.s2,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s2,
+    paddingInline: space.s4,
+    paddingBlock: geometry.busyRowPadBlock,
+    color: color.dim,
+  },
+  dotSlot: {
+    marginLeft: `calc(-1 * ${space.s8})`,
+    display: "grid",
+    width: space.s20,
+    height: space.s20,
+    flexShrink: 0,
+    placeItems: "center",
+  },
+});
 
 /** The chat canvas while a new session's worktree is being prepared. The
  * opening message stays visible in the composer queue until it can move into
@@ -25,14 +120,12 @@ export function WorkspaceSetup() {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0, y: -12 }}
       transition={{ type: "tween", duration: duration.base, ease }}
-      className="flex min-h-full w-full items-center justify-center px-6"
+      {...stylex.props(styles.setup)}
     >
-      <div className="flex flex-col items-center text-center">
-        <Spinner size="md" className="mb-3 text-faint" />
-        <div className="text-item-title font-semibold text-fg">
-          Setting up workspace
-        </div>
-        <div className="mt-1.5 text-label font-medium text-faint">
+      <div {...stylex.props(styles.centered)}>
+        <Spinner size="md" {...stylex.props(styles.setupSpinner)} />
+        <div {...stylex.props(styles.title)}>Setting up workspace</div>
+        <div {...stylex.props(styles.setupDetail)}>
           Your message will send when it’s ready.
         </div>
       </div>
@@ -44,14 +137,10 @@ export function WorkspaceSetup() {
 // review side).
 export function WorkspaceWaiting({ detail }: { detail: string }) {
   return (
-    <div className="relative flex h-full min-h-[240px] flex-col items-center justify-center gap-1 px-6 text-center">
-      <PageLoader className="mb-2 text-dim" />
-      <div className="text-item-title font-semibold text-fg">
-        Creating your workspace
-      </div>
-      <div className="max-w-[340px] text-label font-medium leading-relaxed text-dim">
-        {detail}
-      </div>
+    <div {...stylex.props(styles.waiting)}>
+      <PageLoader {...stylex.props(styles.waitingLoader)} />
+      <div {...stylex.props(styles.title)}>Creating your workspace</div>
+      <div {...stylex.props(styles.waitingDetail)}>{detail}</div>
     </div>
   );
 }
@@ -65,7 +154,7 @@ export function ConversationLoading() {
     const t = setTimeout(() => setVisible(true), 180);
     return () => clearTimeout(t);
   }, []);
-  if (!visible) return <div className="min-h-full" />;
+  if (!visible) return <div {...stylex.props(styles.fill)} />;
   // The fade sits on the wrapper, not on the skeleton: Motion writes inline
   // opacity, which the ghosts' own breathing animation would overwrite.
   return (
@@ -109,7 +198,7 @@ export function TranscriptSyncing() {
       }}
       className={TRANSCRIPT_SYNC_SPOT}
     >
-      <Spinner className="text-faint" />
+      <Spinner {...stylex.props(styles.faint)} />
       <span className="sr-only">Checking for new messages</span>
     </motion.div>
   );
@@ -157,13 +246,12 @@ function BusyWorking({
         role="status"
         aria-live={countingDown ? "off" : "polite"}
         aria-label={countingDown ? "Retrying" : undefined}
-        className="inline-flex"
+        {...stylex.props(styles.status)}
       >
         {status.label ? (
           <TextShimmer
-            className={cn(
-              "text-meta font-medium",
-              countingDown && "tabular-nums",
+            {...sx(
+              [styles.activity, countingDown && styles.tabular],
               msgActivityShimmer,
             )}
           >
@@ -174,7 +262,7 @@ function BusyWorking({
         )}
       </span>
       {status.detail && (
-        <span className="text-meta text-faint tabular-nums">
+        <span {...stylex.props(styles.meta, styles.faint, styles.tabular)}>
           · {status.detail}
         </span>
       )}
@@ -183,9 +271,10 @@ function BusyWorking({
         // a compaction or retry label it matches that label's size.
         <span
           aria-hidden="true"
-          className={cn(
-            "text-faint tabular-nums",
-            status.label ? "text-meta" : "text-label",
+          {...stylex.props(
+            styles.faint,
+            styles.tabular,
+            status.label ? styles.meta : styles.label,
           )}
         >
           {status.label ? `· ${status.elapsed}` : status.elapsed}
@@ -228,7 +317,7 @@ export function SteerWaiting({ since }: { since?: number }) {
     s < 60
       ? `${s}s`
       : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
-  return <span className="font-normal tabular-nums opacity-70">{label}</span>;
+  return <span {...stylex.props(styles.steerWait)}>{label}</span>;
 }
 
 // How long a stop may sit there before the label stops sounding confident.
@@ -253,7 +342,7 @@ function BusyStopping({ since }: { since: number }) {
     return () => clearTimeout(t);
   }, [since]);
   return (
-    <span className="text-meta text-faint">
+    <span {...stylex.props(styles.meta, styles.faint)}>
       {slow ? "Still stopping…" : "Stopping…"}
     </span>
   );
@@ -290,14 +379,9 @@ export function BusyInline({
         ease,
       }}
       onUpdate={onLayout}
-      className="overflow-hidden"
+      {...stylex.props(styles.clip)}
     >
-      <div
-        className={cn(
-          msgRow,
-          "mt-0.5 flex-row items-center gap-0.5 px-1 py-1.25 text-dim",
-        )}
-      >
+      <div {...sx(styles.busyRow, "msg")}>
         {/* The 8px pull hangs off the DOT, not off the row: msgRow centres
 				    itself in the reading column with `mx-auto`, and a `-ml-2` on the
 				    row overrides that auto (Tailwind emits `margin-left` after
@@ -305,7 +389,7 @@ export function BusyInline({
 				    row against the scroller's left gutter. Here it lands the dot's
 				    centre on the work fold's chevron, which hangs out by the same
 				    8px from a box that stays centred. */}
-        <span className="-ml-2 grid size-5 shrink-0 place-items-center">
+        <span {...stylex.props(styles.dotSlot)}>
           <PulseDot size={9} />
         </span>
         {stoppingSince != null ? (

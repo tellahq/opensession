@@ -14,8 +14,8 @@ describe("BusyInline", () => {
         liveTurnStore={new LiveTurnStore()}
       />,
     );
-    expect(html).toContain(
-      '<span role="status" aria-live="polite" class="inline-flex"><span class="sr-only">Working</span></span>',
+    expect(html).toMatch(
+      /<span role="status" aria-live="polite" class="[^"]*"><span class="sr-only">Working<\/span><\/span>/,
     );
     expect(html).not.toContain("data-text-shimmer");
     expect(html).toMatch(/>24s<\/span>/);

@@ -271,6 +271,8 @@ export const weight = stylex.defineConsts({
 /** The few opacities that mean something. */
 export const opacity = stylex.defineConsts({
   disabled: "0.4",
+  /** A count beside a label it qualifies (a steer's wait). */
+  quiet: "0.7",
   /** A supporting glyph beside a label on a neutral control, and the
    *  trailing chevron of a menu trigger. */
   glyphMuted: "0.6",
@@ -542,6 +544,11 @@ export const geometry = stylex.defineConsts({
   ghostRowPadBlock: "13px",
   /** The transcript's reading column, and the space between two turns. */
   sessionColumn: "var(--session-col)",
+  /** The live status row under a running turn: 5px above and below. */
+  busyRowPadBlock: "5px",
+  /** A pane's waiting state: at least this tall, its copy this wide. */
+  paneEmptyMinHeight: "240px",
+  paneEmptyMeasure: "340px",
   turnGap: "18px",
   /** A toast: as wide as its message, up to 480px, never past the window. */
   toastMaxWidth: "min(480px, calc(100vw - 32px))",
