@@ -345,9 +345,9 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
           {loading ? (
             <LoadingState>Loading…</LoadingState>
           ) : automations.length === 0 && !showModal ? (
-            <EmptyState title="No automations yet.">
+            <EmptyState title="No automations yet">
               Schedule recurring work: daily PR-review sweeps, dependency
-              checks, weekly changelog drafts, flaky-test hunts…
+              checks, weekly changelog drafts and flaky-test hunts.
             </EmptyState>
           ) : (
             <div className="flex flex-col border-t border-line">
