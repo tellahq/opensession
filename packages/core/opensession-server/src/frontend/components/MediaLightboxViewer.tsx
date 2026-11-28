@@ -223,7 +223,7 @@ export function MediaLightboxViewer({
               // what says where the selection is, so the line only has to
               // trace it. The dark hairline under it keeps the white edge
               // legible on a white screenshot.
-              className="absolute cursor-move touch-none rounded-[3px] border border-white shadow-[0_0_0_1px_rgb(0_0_0/0.22)]"
+              className="absolute cursor-move touch-none rounded-xs border border-white shadow-[0_0_0_1px_rgb(0_0_0/0.22)]"
               style={shownRegionBox}
               aria-hidden="true"
             >

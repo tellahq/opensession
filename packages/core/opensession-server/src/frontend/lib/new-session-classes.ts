@@ -66,7 +66,7 @@ export const MOBILE_PICKER =
  *  target, and it has to fit the row it shares, which is what `max-w-full`
  *  plus the label's own truncation buy. */
 export const MOBILE_TRIGGER =
-  "phone:min-h-11 phone:gap-1 phone:rounded-[999px] phone:px-2.5 phone:py-1.5 phone:text-label phone:font-medium phone:[&_svg:first-child]:size-4";
+  "phone:min-h-11 phone:gap-1 phone:rounded-capsule phone:px-2.5 phone:py-1.5 phone:text-label phone:font-medium phone:[&_svg:first-child]:size-4";
 /** The composer's own send disc, so the gesture that commits a prompt looks the
  *  same in the palette as it does in a session. Sized up to the 44px target the
  *  rest of this bar keeps. */
@@ -155,7 +155,7 @@ export const CREATE_KBD = "opacity-70";
 /** The card's corner, shared by the palette and the inline card. Round enough
  *  to sit concentric with the pill-shaped Create and model controls at its
  *  bottom edge: an 18px pill radius plus the 16px clearance around it. */
-export const CARD_RADIUS = "rounded-[calc(34px*var(--rf))]";
+export const CARD_RADIUS = "rounded-sheet";
 
 /**
  * The same card rendered on the page rather than over a dimmed one: what the

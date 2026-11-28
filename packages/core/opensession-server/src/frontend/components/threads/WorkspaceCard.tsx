@@ -164,12 +164,12 @@ function ProgressRow({
               {shipped} of {total} shipped
             </span>
             <span
-              className="ml-1 h-1 w-12 shrink overflow-hidden rounded-[999px] bg-hover"
+              className="ml-1 h-1 w-12 shrink overflow-hidden rounded-capsule bg-hover"
               role="img"
               aria-label={`${shipped} of ${total} threads shipped`}
             >
               <span
-                className="block h-full rounded-[999px] bg-purple transition-[width] duration-long"
+                className="block h-full rounded-capsule bg-purple transition-[width] duration-long"
                 style={{ width: `${(shipped / total) * 100}%` }}
               />
             </span>

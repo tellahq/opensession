@@ -20,7 +20,9 @@ export const CTX_MENU_STYLE: React.CSSProperties = {
   // No border: the edge is the shared popup ring, carried by the
   // `smooth-shadow-ring-md` class its hosts put on the same element. A
   // `--border-strong` hairline is a step darker than every other menu.
-  borderRadius: "var(--radius-popup)",
+  // The popup corner: `rounded-popup`, which Tailwind inlines, so there is
+  // no `--radius-popup` to read at runtime.
+  borderRadius: "calc(16px * var(--rf))",
   display: "flex",
   flexDirection: "column",
   gap: 1,
@@ -34,7 +36,8 @@ export const CTX_ITEM_STYLE: React.CSSProperties = {
   color: "var(--text)",
   fontSize: 13,
   padding: "6px 8px",
-  borderRadius: 6,
+  // A menu item's corner (`popup.item`); the host squircles it.
+  borderRadius: "calc(7px * var(--rf))",
   cursor: "pointer",
   whiteSpace: "nowrap",
   overflow: "hidden",

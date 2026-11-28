@@ -187,10 +187,10 @@ export function SetupWidget({
             aria-valuemin={0}
             aria-valuemax={items.length}
             aria-valuenow={completed.length}
-            className="h-1 w-8 overflow-hidden rounded-[999px] bg-active"
+            className="h-1 w-8 overflow-hidden rounded-capsule bg-active"
           >
             <div
-              className="h-full rounded-[999px] bg-accent"
+              className="h-full rounded-capsule bg-accent"
               style={{ width: `${progress}%` }}
             />
           </div>

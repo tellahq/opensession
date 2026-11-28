@@ -473,7 +473,7 @@ function Legend({
             onClick={() => onSelect(value)}
             title={active ? clearLabel : `Show only ${s.label}`}
             className={cn(
-              "flex items-center gap-1.5 rounded-[999px] px-1.5 py-1 text-meta hover:bg-hover",
+              "flex items-center gap-1.5 rounded-capsule px-1.5 py-1 text-meta hover:bg-hover",
               active ? "bg-active text-fg" : muted ? "text-faint" : "text-dim",
             )}
           >
@@ -736,7 +736,7 @@ function PersonRepoBars({
           </span>
           <span className="h-3 min-w-0 flex-1">
             <span
-              className="flex h-3 min-w-3 overflow-hidden rounded-[999px]"
+              className="flex h-3 min-w-3 overflow-hidden rounded-capsule"
               style={{ width: `${Math.max(1.5, (100 * p.total) / maxTotal)}%` }}
               onMouseLeave={() => setSegment(null)}
             >

@@ -161,8 +161,13 @@ export const radius = stylex.defineConsts({
   /** A bottom sheet's top corners, which a surface can override through
    *  `--sheet-radius`. */
   sheet: "calc(var(--sheet-radius, 34px) * var(--rf))",
-  /** A pill that keeps the squircle (Tailwind's `rounded-[999px]`). */
+  /** A pill that keeps the squircle (Tailwind's `rounded-capsule`). */
   capsule: "999px",
+  /** The composer's own corner (base-theme.css). */
+  composer: "var(--composer-radius)",
+  /** The new layout's tab and pane corners: round, unscaled. */
+  tab: "8px",
+  pane: "10px",
 });
 
 /**

@@ -14,7 +14,7 @@ export const PEOPLE_CHIP_ROW = "mb-6 flex flex-wrap items-center gap-1.5";
 
 /** One scope: everyone, a person, or an organization. */
 export const PEOPLE_CHIP =
-  "focus-ring inline-flex min-w-0 cursor-pointer items-center gap-2 rounded-[999px] " +
+  "focus-ring inline-flex min-w-0 cursor-pointer items-center gap-2 rounded-capsule " +
   "border-0 bg-panel py-1 pr-3 pl-1 text-control-label font-medium text-dim " +
   "transition-colors duration-micro ease-standard " +
   "hover:bg-hover hover:text-fg";

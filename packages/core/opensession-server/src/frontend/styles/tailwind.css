@@ -264,6 +264,18 @@
 	   sites and a tenth would have had no way of knowing it was a shape the
 	   product repeats rather than a number somebody picked. */
   --radius-avatar: calc(32% * var(--rp));
+  /* A squircled capsule: `rounded-full` is the one radius base.css leaves
+	   round, so a pill that should match the app's corners takes this. */
+  --radius-capsule: 999px;
+  /* The composer's own corner, and a sheet's (the new-session card). */
+  --radius-composer: var(--composer-radius);
+  --radius-sheet: calc(var(--sheet-radius, 34px) * var(--rf));
+  /* The new layout's tab and pane corners: round, unscaled px, because they
+	   meet hand-drawn curves of the same radius (the pane's joint with the
+	   sidebar is a 10px radial gradient). Each call site sets
+	   `[corner-shape:round]` beside them. */
+  --radius-tab: 8px;
+  --radius-pane: 10px;
   --text-xs: var(--type-label);
   --text-sm: var(--type-label);
   /* Tailwind's stock body alias, kept level with --text-body on purpose: it is

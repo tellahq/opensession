@@ -101,7 +101,7 @@
   height: 16px;
   margin: 0;
   border: 1.5px solid var(--border-strong);
-  border-radius: calc(5px * var(--rf));
+  border-radius: calc(4px * var(--rf));
   corner-shape: var(--cs);
   background: transparent;
 }

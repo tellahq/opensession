@@ -198,7 +198,7 @@ function ChecksBar({ checks }: { checks: MergeBoxChecks }) {
   return (
     <span
       aria-hidden
-      className="mt-2 flex h-1 w-full overflow-hidden rounded-[999px] bg-active"
+      className="mt-2 flex h-1 w-full overflow-hidden rounded-capsule bg-active"
     >
       <span className="bg-green" style={{ width: pct(checks.passed) }} />
       <span className="bg-red" style={{ width: pct(checks.failed) }} />

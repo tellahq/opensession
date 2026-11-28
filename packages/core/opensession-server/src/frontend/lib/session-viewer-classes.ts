@@ -125,7 +125,7 @@ export const VIEWER_BRANCH_EDITABLE =
 
 /** Inline rename input, sized to sit in place of the name. */
 export const VIEWER_BRANCH_RENAME =
-  "my-[-2px] min-w-0 max-w-[280px] rounded-[calc(8px*var(--rf))] border border-accent bg-surface " +
+  "my-[-2px] min-w-0 max-w-[280px] rounded-md border border-accent bg-surface " +
   "px-1 py-px font-[inherit] text-item-title text-[inherit] outline-none";
 
 /**
@@ -536,7 +536,7 @@ export const SESSION_DELETE_LABEL = "text-label text-dim";
  *  one property resolve by Tailwind's output order, not by the order they are
  *  written in. */
 const PILL_CHROME =
-  "inline-flex min-h-8 items-center rounded-[999px] pr-3.5 pl-2.5 " +
+  "inline-flex min-h-8 items-center rounded-capsule pr-3.5 pl-2.5 " +
   "text-label font-semibold text-fg " +
   "[--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm";
 
@@ -595,7 +595,7 @@ export const FLOATING_PILL_BUTTON = `${FLOATING_PILL} ${PILL_PRESSABLE} after:-i
  * weight, since it quotes the person's words rather than naming an action.
  */
 export const STICKY_PROMPT_PILL =
-  "pointer-events-auto inline-flex min-w-0 max-w-[min(480px,70%)] rounded-[999px] [corner-shape:round] " +
+  "pointer-events-auto inline-flex min-w-0 max-w-[min(480px,70%)] rounded-capsule [corner-shape:round] " +
   "bg-bubble-user px-3.5 py-1.5 text-left text-label text-fg smooth-shadow-sm " +
   `${PILL_PRESSABLE} after:-inset-1`;
 

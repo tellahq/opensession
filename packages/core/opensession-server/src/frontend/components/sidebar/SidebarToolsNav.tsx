@@ -74,7 +74,7 @@ export function SidebarToolRowBody({
       </span>
       {label}
       {!!count && (
-        // `rounded-full`, not `rounded-[999px]`: this pill never
+        // `rounded-full`, not `rounded-capsule`: this pill never
         // carried a corner-shape, and rounded-full is the one
         // radius spelling base.css does NOT squircle.
         <span className="ml-auto rounded-full bg-accent px-[7px] py-px text-meta leading-body font-semibold text-on-accent">

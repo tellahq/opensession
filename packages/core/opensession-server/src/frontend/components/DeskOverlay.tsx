@@ -402,14 +402,14 @@ export function DeskOverlay({
                 openOrigin === "center"
                   ? "origin-center"
                   : DESK_PANEL_ORIGIN[panel.corner],
-                "rounded-b-[var(--composer-radius)]",
+                "rounded-b-composer",
               ]
             : [
                 "h-[min(600px,85dvh)]",
                 openOrigin === "center"
                   ? "origin-center"
                   : "origin-bottom-right",
-                "rounded-b-[var(--composer-radius)] transition-[scale,translate,opacity]! duration-[100ms]! data-[starting-style]:translate-y-0! data-[starting-style]:scale-[0.9]!",
+                "rounded-b-composer transition-[scale,translate,opacity]! duration-[100ms]! data-[starting-style]:translate-y-0! data-[starting-style]:scale-[0.9]!",
               ],
         )}
         aria-label="Desk"

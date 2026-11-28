@@ -367,7 +367,7 @@ export function TeamLensMenu({
         className={cn(
           "flex min-w-0 items-center border-0 bg-transparent text-control-label text-dim",
           compact
-            ? "gap-0 rounded-[999px] py-0.5 pr-1 pl-0.5 hover:[--team-face-ring:var(--row-chip-hover)] hover:bg-[var(--team-face-ring)] hover:text-fg data-[popup-open]:[--team-face-ring:var(--row-chip-hover)] data-[popup-open]:bg-[var(--team-face-ring)] data-[popup-open]:text-fg"
+            ? "gap-0 rounded-capsule py-0.5 pr-1 pl-0.5 hover:[--team-face-ring:var(--row-chip-hover)] hover:bg-[var(--team-face-ring)] hover:text-fg data-[popup-open]:[--team-face-ring:var(--row-chip-hover)] data-[popup-open]:bg-[var(--team-face-ring)] data-[popup-open]:text-fg"
             : "gap-2.5 rounded-control p-1 hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg",
           className,
         )}

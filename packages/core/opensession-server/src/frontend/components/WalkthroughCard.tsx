@@ -25,7 +25,7 @@ const mediaUrl = (path: string) => `/media?path=${encodeURIComponent(path)}`;
  * so it can simply follow the app theme instead of sampling the image under
  * it. A tight shadow under the hairline is what lifts it off the picture.
  *
- * `rounded-[999px]`, not `rounded-full`: base.css grants squircle corners to
+ * `rounded-capsule`, not `rounded-full`: base.css grants squircle corners to
  * every `rounded-*` except that one spelling, and a pill is where the squircle
  * belongs.
  *

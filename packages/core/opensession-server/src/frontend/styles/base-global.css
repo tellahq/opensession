@@ -280,7 +280,7 @@ button {
 	   the name here matches nothing. Read this list as the set of elements
 	   legacy deliberately squircles — `rounded-full` is the one utility
 	   spelling that opts OUT, so migrating one of these to it flattens the
-	   corner at the same radius. Use `rounded-[999px]` for a squircled pill. */
+	   corner at the same radius. Use `rounded-capsule` for a squircled pill. */
   .session-link,
   .sidebar-reopen {
     corner-shape: squircle;

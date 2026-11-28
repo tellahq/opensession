@@ -33,7 +33,7 @@ import { MOBILE_CONTROL_GLASS_EFFECTS } from "./app-header-classes";
 
 /** 8px, the compact trailing controls' corner. Authored the way base.css
  * authors every corner; there is no 8px step in the radius scale. */
-const PILL = "rounded-[calc(8px*var(--rf))]";
+const PILL = "rounded-md";
 /** Tabs are round pills on desktop and phone alike. */
 const TAB_CORNERS = "rounded-full";
 
@@ -200,7 +200,7 @@ const TAB_ITEM_ATTACHED_FLARES =
 export const TAB_ITEM_ATTACHED = `session-tab-reorder relative inline-flex shrink-0 items-stretch ${TAB_ITEM_ATTACHED_FLARES}`;
 
 export const TAB_ITEM_ATTACHED_DRAGGING =
-  "cursor-grabbing rounded-t-[8px] [corner-shape:round] bg-panel smooth-shadow-ring-sm";
+  "cursor-grabbing rounded-t-tab [corner-shape:round] bg-panel smooth-shadow-ring-sm";
 
 /**
  * The drag-to-reorder group wraps EVERY tab — sessions and view panes alike —
@@ -241,7 +241,7 @@ export const TAB_DROP_SLOT =
   "pointer-events-none absolute inset-y-2 z-5 " +
   "[animation:tab-drop-slot-in_var(--dur-micro)_var(--ease)] [transition:left_var(--dur)_var(--ease)] " +
   "motion-reduce:animate-none motion-reduce:transition-none " +
-  "after:absolute after:inset-y-0 after:left-0 after:w-0.5 after:rounded-[1px] after:bg-accent after:content-['']";
+  "after:absolute after:inset-y-0 after:left-0 after:w-0.5 after:rounded-xs after:bg-accent after:content-['']";
 
 /** Trailing controls pinned after the scroll on desktop. */
 export const TAB_ACTIONS = "ml-auto flex flex-none items-center gap-[3px]";
@@ -286,10 +286,10 @@ const TAB_ATTACHED_BASE =
 const TAB_ATTACHED_OUTLINE = {
   // The label centred between the tab's top and the row's line below it.
   active:
-    "rounded-t-[8px] border-b-0 pb-[calc(var(--tab-top)-var(--row-drop,0px))]",
+    "rounded-t-tab border-b-0 pb-[calc(var(--tab-top)-var(--row-drop,0px))]",
   // 26px, centred on the row's line with the active tab's label.
   inactive:
-    "mt-[calc(var(--desktop-header-h)/2-15px)] mb-[calc(var(--desktop-header-h)/2-var(--row-drop,0px)/2-13px)] rounded-[8px]",
+    "mt-[calc(var(--desktop-header-h)/2-15px)] mb-[calc(var(--desktop-header-h)/2-var(--row-drop,0px)/2-13px)] rounded-tab",
 };
 
 function attachedTabClass({ active, waiting, colored }: TabState): string {

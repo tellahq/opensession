@@ -390,7 +390,7 @@ export function PrFileTree({
           placeholder="Search files…"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          className="phone:min-h-11 phone:text-[length:var(--text-input-phone)]"
+          className="phone:min-h-11 phone:text-input-phone"
         />
         <div className="flex items-center gap-1">
           <Button

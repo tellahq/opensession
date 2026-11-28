@@ -171,7 +171,7 @@ The UI is migrating to StyleX primitives with closed scales; read
   mistake at the corner.
 - Corners are squircles. `base.css` grants `corner-shape: squircle` to anything
   carrying a `rounded-*` class, with one exception: `rounded-full` opts out. Use
-  `rounded-[999px]` for a pill or circle that should stay a squircle, and
+  `rounded-capsule` for a pill or circle that should stay a squircle, and
   `rounded-full` only where a true circle is wanted.
 - Align a heading with the content inside the rows under it, not with the row's
   outer edge. A grouped list reads as a label over its items only when the two

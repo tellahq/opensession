@@ -279,7 +279,7 @@ function RemoteSection({
             value={url}
             placeholder="git@github.com:acme/memory-team.git"
             onChange={(event) => setUrl(event.target.value)}
-            className="phone:text-[length:var(--text-input-phone)]"
+            className="phone:text-input-phone"
           />
         </Field>
         <Button

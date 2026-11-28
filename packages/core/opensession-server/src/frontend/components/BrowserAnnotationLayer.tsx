@@ -287,7 +287,7 @@ export function BrowserAnnotationLayer({
     >
       {!pending && !press ? (
         <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center">
-          <div className="rounded-[999px] bg-popup-glass px-3 py-1.5 text-label text-fg [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-md">
+          <div className="rounded-capsule bg-popup-glass px-3 py-1.5 text-label text-fg [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-md">
             {hint}
           </div>
         </div>
@@ -359,7 +359,7 @@ export function BrowserAnnotationLayer({
                 variant="ghost"
                 size="lg"
                 icon={<IconX size={20} />}
-                className="shrink-0 rounded-[999px]"
+                className="shrink-0 rounded-capsule"
                 onClick={reset}
                 disabled={sending}
                 aria-label="Cancel comment"
@@ -371,7 +371,7 @@ export function BrowserAnnotationLayer({
                 variant="primary"
                 size="lg"
                 icon={<IconArrowUp size={20} />}
-                className="shrink-0 rounded-[999px]"
+                className="shrink-0 rounded-capsule"
                 disabled={!text.trim() || sending}
                 aria-label={sending ? "Sending comment" : "Send comment"}
               />

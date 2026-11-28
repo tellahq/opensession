@@ -61,10 +61,10 @@ export const paletteIconBtnOn =
    palette footer. It stays a pill: it is a text readout you can change, not a
    plate you press.
 
-   `rounded-full`, not `rounded-[999px]`: this control has never been a
+   `rounded-full`, not `rounded-capsule`: this control has never been a
    squircle — the stylesheet said a bare `border-radius: 999px` with no
    `corner-shape`, and the class is not in base.css's explicit squircle list.
-   `rounded-[999px]` would opt it IN and change the corner.
+   `rounded-capsule` would opt it IN and change the corner.
 
    The border is transparent, which is the rendered state rather than a
    change: ModelEffortSelect's own trigger string already carried

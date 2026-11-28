@@ -516,10 +516,10 @@ const SIGNALS: Signal[] = [
   },
   {
     id: "off-scale-radius",
-    // rounded-[999px] is sanctioned: it is the squircle-preserving pill, and
-    // rounded-full is the opt-out (see src/frontend/AGENTS.md).
+    // rounded-capsule is the squircle-preserving pill, and rounded-full is
+    // the opt-out (see src/frontend/AGENTS.md).
     instead:
-      "the radius scale — rounded-xs/sm/md/lg/xl/2xl, rounded-control/popup",
+      "the radius scale: rounded-xs/sm/md/lg/xl/2xl, rounded-control/popup/capsule/composer/sheet, and the new layout's round rounded-tab/pane",
     exempt: ["styles/"],
     count: (source) => {
       let n = 0;
@@ -527,6 +527,12 @@ const SIGNALS: Signal[] = [
         /\brounded-(?:\w+-)?\[calc\((\d+)px\s*\*\s*var\(--rf\)\)\]/g,
       ))
         if (!RADIUS_SCALE.has(Number(match[1]))) n++;
+      // A raw length: unscaled, so it renders at a different size from the
+      // squircled steps around it.
+      n += occurrences(
+        stripComments(source),
+        /\brounded-(?:[trblse]{1,2}-)?\[[0-9.]+(?:px|rem|em|%)\]/g,
+      );
       // Retired aliases: bare `rounded` (xs), `rounded-row` (control),
       // `rounded-panel` (lg), and the steps past 2xl.
       n += occurrences(

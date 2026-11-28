@@ -1858,7 +1858,7 @@ export function WorkspaceInfo({
                           // what the frames are for. What it does is tell
                           // two rows apart once you already know them.
                           className={cn(
-                            "size-3.5 shrink-0 rounded-[3px] border border-line-strong object-cover",
+                            "size-3.5 shrink-0 rounded-xs border border-line-strong object-cover",
                             a.description && "mt-0.5",
                           )}
                         />

@@ -141,7 +141,7 @@ export function PhoneDiffCommentComposer({
               placeholder={placeholder}
               value={text}
               disabled={sending}
-              className="min-h-11 w-full flex-1 resize-none rounded-md border border-line-strong bg-raised p-3 text-[length:var(--text-input-phone)] text-fg outline-none focus:border-accent"
+              className="min-h-11 w-full flex-1 resize-none rounded-md border border-line-strong bg-raised p-3 text-input-phone text-fg outline-none focus:border-accent"
               onChange={(event) => {
                 setText(event.target.value);
                 textStore.write(event.target.value);

@@ -18,7 +18,7 @@
  * `rounded-full` is deliberate on both, and is the one radius spelling that
  * opts OUT of the app's squircle: these were authored as a bare
  * `border-radius: 50%`, i.e. a true circle, not a scaled corner. Anything in
- * the chrome that squircles wants `rounded-[999px]` instead.
+ * the chrome that squircles wants `rounded-capsule` instead.
  */
 
 /**
