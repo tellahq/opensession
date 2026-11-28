@@ -72,7 +72,7 @@ const ICON_PENDING = "cursor-default text-dim";
    than reading as a disabled grey control. Its own ink supplies the hover and
    press washes, which makes the band darken under the pointer. */
 const SUMMARY_MARK =
-  "grid size-7 shrink-0 place-items-center rounded-md no-underline focus-ring " +
+  "grid size-6.5 shrink-0 place-items-center rounded-md no-underline focus-ring " +
   "transition-[background-color,scale] duration-micro ease-standard";
 /* The mark's 20px glyph sits inside a 28px target, so its visible edge already
    sits 4px inside the box. Push the box another 4px off the headline to land a

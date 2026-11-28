@@ -78,7 +78,7 @@ export function PrRefStagingMark({
         aria-label={`Preview environment${subject}`}
         aria-disabled={!openable || undefined}
         className={cn(
-          "grid size-7 place-items-center rounded-md no-underline focus-ring",
+          "grid size-6.5 place-items-center rounded-md no-underline focus-ring",
           openable ? "text-green" : "text-yellow",
           openable ? SUMMARY_MARK_HOVER : "cursor-default",
           className,

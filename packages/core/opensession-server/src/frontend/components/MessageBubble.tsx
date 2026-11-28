@@ -536,7 +536,7 @@ function TeammateAvatar({ name }: { name: string }) {
 const bubbleReveal =
   "[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-hover/bubble:opacity-100 [@media(hover:hover)]:group-focus-within/bubble:opacity-100";
 
-const bubbleActionClass = `flex size-7 flex-none cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-faint select-none hover:bg-hover hover:text-dim ${bubbleReveal}`;
+const bubbleActionClass = `flex size-6.5 flex-none phone:size-11 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-faint select-none hover:bg-hover hover:text-dim ${bubbleReveal}`;
 
 /** Put a message you already sent back into the composer, so a typo is a fix
  * and a re-send rather than a re-type.
@@ -565,7 +565,7 @@ function EditAgainButton({ onClick }: { onClick: () => void }) {
 
 /** `rounded-md`, not Button's pill: these sit in the same row of bare icons
  * as copy and link, so they share one hover shape. */
-const pendingActionClass = "size-7 min-h-7 rounded-md px-0 text-faint";
+const pendingActionClass = "rounded-md text-faint";
 
 /** Change or delete a message the conversation accepted but no run has read
  * yet. Edit takes it back into the composer, so it is never sent twice.

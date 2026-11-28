@@ -773,7 +773,7 @@ function AgentReviewCard({
         {actionable && (
           <Menu.Root>
             <Menu.Trigger
-              className="-mr-1 ml-auto grid size-6 shrink-0 place-items-center rounded-md text-faint transition-[color,background-color] hover:bg-hover hover:text-fg disabled:opacity-50"
+              className="-mr-1 ml-auto grid size-6.5 shrink-0 place-items-center rounded-md text-faint transition-[color,background-color] hover:bg-hover hover:text-fg disabled:opacity-50"
               disabled={busy !== null}
               aria-label={`${AGENT_NAME} actions`}
             >
@@ -1211,7 +1211,7 @@ function ReviewerChip({
           <Menu.Trigger
             className={
               reviewNow
-                ? "-mr-1 ml-1 grid size-6 shrink-0 place-items-center rounded-md text-faint transition-[color,background-color] hover:bg-hover hover:text-fg"
+                ? "-mr-1 ml-1 grid size-6.5 shrink-0 place-items-center rounded-md text-faint transition-[color,background-color] hover:bg-hover hover:text-fg"
                 : gitActionClass(rowTone, true)
             }
             aria-label="Review options"

@@ -49,7 +49,7 @@ function same(a?: string, b?: string): boolean {
 /** A quiet "…" trigger: visible on hover, keyboard focus, or while open,
  *  and always on touch, where there is no hover. */
 const QUIET_TRIGGER =
-  "flex size-7 shrink-0 items-center justify-center rounded-control border-0 bg-transparent text-dim transition-opacity hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg phone:size-11";
+  "flex size-6.5 shrink-0 items-center justify-center rounded-control border-0 bg-transparent text-dim transition-opacity hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg phone:size-11";
 
 function CommentBody({
   comment,

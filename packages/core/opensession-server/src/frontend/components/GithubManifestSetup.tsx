@@ -109,7 +109,7 @@ function GithubSetupStep({
           <button
             type="button"
             aria-label={`Show help for ${label.toLowerCase()}`}
-            className="focus-ring pointer-events-auto ml-auto flex size-6 items-center justify-center rounded-control text-faint transition-colors duration-micro hover:text-fg phone:size-8"
+            className="focus-ring pointer-events-auto ml-auto flex size-6.5 items-center justify-center rounded-control text-faint transition-colors duration-micro hover:text-fg phone:size-8"
           >
             <IconQuestionCircle size={20} />
           </button>
