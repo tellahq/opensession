@@ -104,7 +104,7 @@ const NEW_LAYOUT_PANE_ROW =
  * The new layout's window row over the pane: the tab strip, then the page's
  * header. It is the grey of the minibar and the sidebar, and the panel under
  * it starts at this row's bottom edge. That edge is the top of the panel's
- * outline (WORKSPACE_SHELL), which the active tab covers.
+ * outline (WORKSPACE_SHELL).
  * `components/shell/PaneTopRow.tsx` renders it. Hidden while it holds nothing,
  * on a page that brings a bar of its own. Over the desktop shell's translucent
  * material it paints nothing, so the window shows through it as it does
@@ -151,17 +151,15 @@ export const WORKSPACE_SHELL =
   // and a 4px one at the bottom. Nothing is cast across the seam. A variant rather than
   // state, so AppShell stays free of hooks.
   //
-  // The outline is one opaque colour, shared with the active tab's border and
-  // the curve at its foot (lib/session-tab-classes.ts): the divider as it
-  // reads on the chrome. The divider itself is translucent, and where two
-  // strokes of it overlap it doubles.
+  // The outline is one opaque colour: the divider as it reads on the chrome.
+  // The divider itself is translucent, and where two strokes of it overlap
+  // it doubles.
   "new-layout:border-l-0 new-layout:[box-shadow:none] " +
   "new-layout:[--tab-edge:color-mix(in_srgb,var(--border)_55%,var(--sidebar-bg))] " +
   "new-layout:mr-1.5 new-layout:mb-1 new-layout:rounded-b-[10px] new-layout:[corner-shape:round] " +
   // The outline is drawn over the content rather than as a border, because
   // the window row is inside this box and a border would run up its sides.
-  // Under a row it starts at the row's bottom edge. The tab strip sits above
-  // it (TAB_SCROLL_ATTACHED), so the active tab can cover the line.
+  // Under a row it starts at the row's bottom edge.
   "new-layout:before:pointer-events-none new-layout:before:absolute new-layout:before:inset-0 new-layout:before:z-shell-overlay " +
   "new-layout:before:rounded-[10px] new-layout:before:rounded-tl-[var(--panel-tl)] new-layout:before:border new-layout:before:border-[color:var(--tab-edge)] new-layout:before:content-[''] " +
   "new-layout:[&:has([data-pane-top-row]>:not(:empty))]:before:top-[calc(var(--desktop-header-h)-1px)] " +
@@ -178,12 +176,9 @@ export const WORKSPACE_SHELL =
   "[html.material-backdrop_&]:new-layout:[&:has([data-pane-top-row]>:not(:empty))]:[background:linear-gradient(transparent_calc(var(--desktop-header-h)-1px),var(--bg)_0)] " +
   "[html.material-backdrop_&]:new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:hidden " +
   "[html.material-backdrop_&]:new-layout:[&:has([data-pane-top-row]>:not(:empty))]:[clip-path:shape(from_0_0,hline_to_100%,vline_to_calc(var(--desktop-header-h)-1px),hline_to_calc(100%-10px),arc_to_100%_calc(var(--desktop-header-h)+9px)_of_10px_cw,vline_to_100%,hline_to_0,vline_to_calc(var(--desktop-header-h)-1px+var(--panel-tl)),arc_to_var(--panel-tl)_calc(var(--desktop-header-h)-1px)_of_var(--panel-tl)_cw,hline_to_0,close)] " +
-  // The first tab stands on the panel's left edge. While it is the open
-  // one its side is that edge carried straight up, so the panel has no corner
-  // of its own there. Not with the sidebar collapsed, where the strip starts
-  // further in and the corner is the panel's again.
+  // The panel's top-left corner, shared by the outline, the painted arc and
+  // the clip above.
   "new-layout:[--panel-tl:10px] " +
-  "[.app-body:not(.sidebar-collapsed)_&]:[&:has([data-pane-top-row-tabs]_.session-tab-reorder:first-child>[aria-selected=true])]:[--panel-tl:0px] " +
   // A page with no row is the whole panel: it keeps the same gap at the top
   // and rounds its own top corners.
   "new-layout:[&:not(:has([data-pane-top-row]>:not(:empty)))]:mt-1.5 new-layout:[&:not(:has([data-pane-top-row]>:not(:empty)))]:rounded-t-[10px] " +
