@@ -54,7 +54,7 @@ export function PapercutsPanel() {
           <InlineAlert>{error}</InlineAlert>
         ) : (
           <>
-            <SettingsGroupLabel>Repos</SettingsGroupLabel>
+            <SettingsGroupLabel>Repositories</SettingsGroupLabel>
             <SettingCardSkeleton rows={3} label="Loading papercuts" />
           </>
         )}
@@ -69,17 +69,13 @@ export function PapercutsPanel() {
         <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
       )}
 
-      <SettingsGroupLabel>Repos</SettingsGroupLabel>
+      <SettingsGroupLabel>Repositories</SettingsGroupLabel>
       <SettingCard>
         {repos.map((r) => (
           <SettingRow
             key={r.repoId}
             title={r.repoId}
-            desc={
-              r.enabled
-                ? "Sessions and automations in this repo get the log_papercut tool and the nudge to use it."
-                : "Off. Runs in this repo don't log papercuts."
-            }
+            desc={r.enabled ? "Agents here log the friction they hit." : "Off."}
             control={
               <Switch
                 aria-label={`Papercuts for ${r.repoId}`}

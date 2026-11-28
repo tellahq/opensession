@@ -799,6 +799,9 @@ export function IngressPanel({
   const pendingStatus = error
     ? { label: "Unavailable", dot: "var(--red)" }
     : { label: "Checking", dot: "var(--text-faint)" };
+  // Unset rows show only their Set up button, no status.
+  const domainSet = settings?.app.domain.health !== "not_configured";
+  const callbackSet = settings?.health !== "not_configured";
   const domainStatus = settings
     ? {
         label: ingressHealthLabel(settings.app.domain.health),
@@ -835,17 +838,17 @@ export function IngressPanel({
               <SettingRowText>
                 <SettingRowTitle>Domain</SettingRowTitle>
                 <SettingRowDescription className="selectable break-all font-mono">
-                  {domainUrl || "No domain configured"}
+                  {domainUrl || "None"}
                 </SettingRowDescription>
               </SettingRowText>
               <SettingRowControl className="flex items-center gap-2">
-                <StatusChip {...domainStatus} />
+                {domainSet && <StatusChip {...domainStatus} />}
                 <Button
                   size="sm"
                   disabled={!settings}
                   onClick={() => setSurface("domain")}
                 >
-                  Configure
+                  {domainSet ? "Configure" : "Set up"}
                 </Button>
               </SettingRowControl>
             </SettingRow>
@@ -853,17 +856,17 @@ export function IngressPanel({
               <SettingRowText>
                 <SettingRowTitle>Public callback</SettingRowTitle>
                 <SettingRowDescription className="selectable break-all font-mono">
-                  {callbackUrl || "No public callback configured"}
+                  {callbackUrl || "None"}
                 </SettingRowDescription>
               </SettingRowText>
               <SettingRowControl className="flex items-center gap-2">
-                <StatusChip {...callbackStatus} />
+                {callbackSet && <StatusChip {...callbackStatus} />}
                 <Button
                   size="sm"
                   disabled={!settings}
                   onClick={() => setSurface("callbacks")}
                 >
-                  Configure
+                  {callbackSet ? "Configure" : "Set up"}
                 </Button>
               </SettingRowControl>
             </SettingRow>
