@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { SessionBuildWire } from "@tellahq/opensession-protocol/session";
-import { buildGroupUrl, hideKey, visibleBuildGroups } from "./session-builds";
+import {
+  buildGroupUrl,
+  buildsFlapStatus,
+  createBuildsClock,
+  hideKey,
+  visibleBuildGroups,
+} from "./session-builds";
 
 const NOW = Date.parse("2026-10-14T12:00:00Z");
 const ago = (min: number) => new Date(NOW - min * 60_000).toISOString();
@@ -129,5 +135,31 @@ describe("buildGroupUrl", () => {
     expect(buildGroupUrl(branch!)).toBe(
       "https://github.com/acme/app/commit/b2",
     );
+  });
+});
+
+describe("buildsFlapStatus", () => {
+  test("says whether a flap shows and whether it still runs", () => {
+    const flapStatus = (rows: SessionBuildWire[], now = NOW) =>
+      buildsFlapStatus(visibleBuildGroups(rows, new Set(), now));
+    expect(flapStatus([])).toBe("none");
+    expect(flapStatus([row({ state: "running", endedAt: undefined })])).toBe(
+      "live",
+    );
+    expect(flapStatus([row({})])).toBe("ended");
+    expect(flapStatus([row({})], NOW + 10 * 60_000)).toBe("none");
+  });
+});
+
+describe("createBuildsClock", () => {
+  test("hands each tick to its subscribers until they leave", () => {
+    const clock = createBuildsClock(1);
+    const seen: number[] = [];
+    const off = clock.subscribe(() => seen.push(clock.get()));
+    clock.set(2);
+    off();
+    clock.set(3);
+    expect(seen).toEqual([2]);
+    expect(clock.get()).toBe(3);
   });
 });
