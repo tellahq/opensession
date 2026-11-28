@@ -283,7 +283,7 @@ function PrBarButton({
     // band, dashed, so it reads as the road not yet taken next to the solid
     // action. Nothing to fill and nothing to lift, so it drops the shadow.
     "purple-dashed":
-      "border-dashed border-purple/45 bg-transparent text-purple shadow-none hover:bg-purple/10 hover:brightness-100",
+      "border-dashed border-purple/40 bg-transparent text-purple shadow-none hover:bg-purple/10 hover:brightness-100",
   } as const;
   return (
     <motion.button

@@ -588,6 +588,21 @@
   }
 }
 
+/* The same ring drawn inside the box, for a row in a list whose rounded
+   container clips anything outside it (goal rows, automation rows). */
+@utility focus-ring-inset {
+  &:focus-visible {
+    outline: 2px solid var(--accent-ink);
+    outline-offset: -2px;
+  }
+
+  @media (forced-colors: active) {
+    &:focus-visible {
+      outline-color: Highlight;
+    }
+  }
+}
+
 @utility hit-target {
   min-inline-size: var(--spacing-hit-target);
   min-block-size: var(--spacing-hit-target);

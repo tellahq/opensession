@@ -244,7 +244,7 @@ export const DETAIL_PANE =
 export const tabSplitDropPreviewClass = (side: "left" | "right" | "panel") =>
   "pointer-events-none absolute top-[calc(var(--desktop-header-h)+36px)] bottom-2 z-shell-pane " +
   "w-[calc(var(--split-preview-share,50%)-12px)] " +
-  "rounded-[calc(10px*var(--rf))] [corner-shape:var(--cs)] border-2 border-accent " +
+  "rounded-pane [corner-shape:round] border-2 border-accent " +
   "bg-accent/16 " +
   // A hairline of white inside the accent edge, so the outline still reads
   // against a light screenshot or a pale diff behind it.

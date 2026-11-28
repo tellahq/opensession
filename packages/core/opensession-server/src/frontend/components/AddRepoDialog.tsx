@@ -126,7 +126,7 @@ export function AddRepoDialog({
 
           {error && (
             <div
-              className="rounded-md border border-red/30 bg-red-soft px-3 py-2 text-xs leading-relaxed text-red"
+              className="rounded-md border border-red/34 bg-red-soft px-3 py-2 text-xs leading-relaxed text-red"
               role="alert"
             >
               {error}
