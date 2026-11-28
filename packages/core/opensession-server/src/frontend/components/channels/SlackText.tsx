@@ -56,7 +56,7 @@ function Inline({ node }: { node: SlackInline }): ReactNode {
           href={node.href}
           target="_blank"
           rel="noreferrer"
-          className="text-link hover:underline"
+          className="text-link no-underline hover:underline"
         >
           {node.label}
         </a>
@@ -71,7 +71,7 @@ function Inlines({ nodes }: { nodes: SlackInline[] }) {
 function Block({ block }: { block: SlackBlock }) {
   if (block.type === "code")
     return (
-      <pre className="my-1 overflow-x-auto rounded-md border border-line bg-hover px-3 py-2 font-mono text-meta leading-relaxed whitespace-pre">
+      <pre className="my-1 overflow-x-auto rounded-md border border-line bg-hover px-3 py-2 font-mono text-label leading-relaxed whitespace-pre">
         {block.text}
       </pre>
     );
@@ -104,7 +104,7 @@ export function SlackText({
   return (
     <div
       className={cn(
-        "select-text whitespace-pre-wrap break-words text-body leading-snug text-fg",
+        "select-text whitespace-pre-wrap break-words text-body leading-body text-fg",
         className,
       )}
     >

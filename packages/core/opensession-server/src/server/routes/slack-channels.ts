@@ -9,6 +9,7 @@
  * point); without a grant the route 403s with a pointer to the Account page.
  */
 import { z } from "zod";
+import { embedFor } from "../../shared/slack-embed";
 import type { RouteContext } from "./context";
 import {
   SLACK_THREAD_TARGET,
@@ -1042,6 +1043,53 @@ function demoAppMessages(now: number) {
           image: {
             url: "/api/slack/demo-art/cover.svg",
             alt: "Onboarding v2",
+            width: 640,
+            height: 336,
+          },
+        },
+      ],
+    },
+    {
+      ts: `${now - 1200}.000100`,
+      userName: "Grace Hopper",
+      userId: "UDEMOGRACE",
+      isBot: false,
+      replyCount: 0,
+      reactions: [],
+      text: "The walkthrough from Friday: https://youtu.be/aqz-KE-bpKQ",
+      attachments: [
+        {
+          service: { name: "YouTube" },
+          title: "Onboarding v2 walkthrough",
+          titleLink: "https://youtu.be/aqz-KE-bpKQ",
+          embed: embedFor("https://youtu.be/aqz-KE-bpKQ"),
+          image: {
+            url: "/api/slack/demo-art/cover.svg",
+            alt: "Onboarding v2 walkthrough",
+            width: 640,
+            height: 336,
+          },
+        },
+      ],
+    },
+    {
+      ts: `${now - 900}.000100`,
+      userName: "Alan Turing",
+      userId: "UDEMOALAN",
+      isBot: false,
+      replyCount: 0,
+      reactions: [],
+      text: "Someone posted a clip of it: https://x.com/acme/status/1800000000000000000",
+      attachments: [
+        {
+          service: { name: "X (formerly Twitter)" },
+          title: "Acme (@acme) on X",
+          titleLink: "https://x.com/acme/status/1800000000000000000",
+          text: "Onboarding in three steps instead of six. Here is the new flow.",
+          embed: embedFor("https://x.com/acme/status/1800000000000000000"),
+          image: {
+            url: "/api/slack/demo-art/cover.svg",
+            alt: "",
             width: 640,
             height: 336,
           },
