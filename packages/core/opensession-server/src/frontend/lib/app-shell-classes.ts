@@ -69,9 +69,8 @@ export const APP_BODY =
  * relationship their mobile positioning rules expect.
  */
 /**
- * The new layout's window row is 36px, not 48: it holds tabs and a few
- * controls, and the sheet under it is where the room should go. Set on the
- * boxes beside the minibar because the variable is read all through them.
+ * The new layout's sidebar row: 44px in the browser. Set on the boxes beside
+ * the minibar because the variable is read all through them.
  *
  * The desktop shell's row is set by its traffic lights, which centre on the
  * sidebar's row beside them: 48px in a shell that cannot move them ((48 - 12)
@@ -80,7 +79,7 @@ export const APP_BODY =
  * so the lights keep their room at the window's corner.
  */
 export const NEW_LAYOUT_ROW_HEIGHT =
-  "[html:not(.wco)_[data-minibar]~&]:[--desktop-header-h:36px] " +
+  "[html:not(.wco)_[data-minibar]~&]:[--desktop-header-h:44px] " +
   "[html.wco_[data-minibar]~&]:[--desktop-header-h:48px] " +
   "[html.wco.titlebar-follows-row_[data-minibar]~&]:[--desktop-header-h:44px]";
 
@@ -88,33 +87,27 @@ export const NEW_LAYOUT_ROW_HEIGHT =
 export const NEW_LAYOUT_LIGHTS_ROW_PX = 44;
 
 /**
- * The workspace's share of the row in the desktop shell: 4px shorter than the
- * sidebar's row beside the lights (44px, or 40px once the lights can move up).
- * Its labels and icons keep to the lights' line by sitting `--row-drop` lower
- * than the row's middle, so the tabs start nearer the window's top and the
- * sheet starts higher.
+ * The pane's row: the top of the panel, which starts 4px under the window's
+ * top edge (WORKSPACE_SHELL). So it is 8px shorter than the sidebar's row,
+ * and its middle, where the tab labels and icons sit, is that row's middle:
+ * the line of the sidebar's icons and the traffic lights.
  */
 const NEW_LAYOUT_PANE_ROW =
   "[html:not(.wco)_[data-minibar]~&]:[--desktop-header-h:36px]" +
-  " [html.wco_[data-minibar]~&]:[--desktop-header-h:44px]" +
-  " [html.wco.titlebar-follows-row_[data-minibar]~&]:[--desktop-header-h:40px]" +
-  " [html.wco_[data-minibar]~&]:[--row-drop:4px]";
+  " [html.wco_[data-minibar]~&]:[--desktop-header-h:40px]" +
+  " [html.wco.titlebar-follows-row_[data-minibar]~&]:[--desktop-header-h:36px]";
 
 /**
- * The new layout's window row over the pane: the tab strip, then the page's
- * header. It is the grey of the minibar and the sidebar, and the panel under
- * it starts at this row's bottom edge. That edge is the top of the panel's
- * outline (WORKSPACE_SHELL).
- * `components/shell/PaneTopRow.tsx` renders it. Hidden while it holds nothing,
- * on a page that brings a bar of its own. Over the desktop shell's translucent
- * material it paints nothing, so the window shows through it as it does
- * through the minibar and the sidebar beside it.
+ * The new layout's top row of the pane: the tab strip, then the page's
+ * header. It is the top of the panel (WORKSPACE_SHELL), on the panel's own
+ * fill, and the panel's outline (`--tab-edge`) closes it off from the page
+ * under it. `components/shell/PaneTopRow.tsx` renders it. Hidden while it
+ * holds nothing, on a page that brings a bar of its own.
  */
 export const PANE_TOP_ROW =
-  "relative flex min-w-0 shrink-0 items-stretch bg-sidebar [html.material-backdrop_&]:bg-transparent " +
-  "[&:not(:has(>:not(:empty)))]:hidden " +
-  // The header's controls keep to the lights' line (NEW_LAYOUT_PANE_ROW).
-  "[&_.wco-chrome]:pt-[var(--row-drop,0px)]";
+  "relative flex min-w-0 shrink-0 items-stretch " +
+  "after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-[var(--tab-edge)] after:content-[''] " +
+  "[&:not(:has(>:not(:empty)))]:hidden";
 
 /**
  * The new layout's window-row controls beside the minibar: the sidebar
@@ -130,7 +123,7 @@ export const NEW_LAYOUT_CHROME_CONTROLS =
 /** The sidebar toggle while the sidebar is closed, at the size and the spot
  *  it has in the open sidebar's row (NEW_LAYOUT_CHROME_CONTROLS). */
 export const NEW_LAYOUT_SIDEBAR_REOPEN =
-  "new-layout:top-[calc((var(--desktop-header-h)-30px+var(--row-drop,0px))/2)] new-layout:size-7.5 new-layout:[&_svg]:size-[22px]";
+  "new-layout:top-[calc((var(--desktop-header-h)-30px)/2)] new-layout:size-7.5 new-layout:[&_svg]:size-[22px]";
 
 /** The strip's share of that row. The strip brings its own room at each end.
  *  With the sidebar collapsed, the floating re-open control sits over the
@@ -145,43 +138,25 @@ export const WORKSPACE_SHELL =
   "relative z-shell-pane flex min-h-0 min-w-0 flex-1 overflow-hidden border-l border-divider bg-surface desktop:[box-shadow:var(--content-edge-shadow)] " +
   // Collapsed sidebar: nothing to divide from or cast depth onto.
   "[.app-body.sidebar-collapsed_&]:border-l-0 [.app-body.sidebar-collapsed_&]:[box-shadow:none] " +
-  // The new layout: the minibar, the sidebar and the window row are one grey
-  // chrome, and the workspace is the only panel on it. A quiet one: a
-  // hairline outline, a 10px corner, a 6px gap to the window at the right
-  // and a 4px one at the bottom. Nothing is cast across the seam. A variant rather than
-  // state, so AppShell stays free of hooks.
+  // The new layout: the minibar and the sidebar are one grey chrome, and the
+  // workspace is the only panel on it, tabs and all. A quiet one: a hairline
+  // outline, a 10px corner, a 4px gap to the window at the top and bottom and
+  // a 6px one at the right. Nothing is cast across the seam. A variant
+  // rather than state, so AppShell stays free of hooks.
   //
   // The outline is one opaque colour: the divider as it reads on the chrome.
   // The divider itself is translucent, and where two strokes of it overlap
-  // it doubles.
+  // it doubles. In dark the page is a single step under the chrome, so the
+  // outline takes the full border colour there, or the panel and its tab row
+  // do not read as one piece.
   "new-layout:border-l-0 new-layout:[box-shadow:none] " +
   "new-layout:[--tab-edge:color-mix(in_srgb,var(--border)_55%,var(--sidebar-bg))] " +
-  "new-layout:mr-1.5 new-layout:mb-1 new-layout:rounded-b-pane new-layout:[corner-shape:round] " +
-  // The outline is drawn over the content rather than as a border, because
-  // the window row is inside this box and a border would run up its sides.
-  // Under a row it starts at the row's bottom edge.
+  "[html[data-theme=dark]_&]:new-layout:[--tab-edge:var(--border)] " +
+  "new-layout:mt-1 new-layout:mr-1.5 new-layout:mb-1 new-layout:rounded-pane new-layout:[corner-shape:round] " +
+  // The outline is drawn over the content rather than as a border, so the
+  // content's edges stay where they were in the old layout.
   "new-layout:before:pointer-events-none new-layout:before:absolute new-layout:before:inset-0 new-layout:before:z-shell-overlay " +
-  "new-layout:before:rounded-pane new-layout:before:rounded-tl-[var(--panel-tl)] new-layout:before:border new-layout:before:border-[color:var(--tab-edge)] new-layout:before:content-[''] " +
-  "new-layout:[&:has([data-pane-top-row]>:not(:empty))]:before:top-[calc(var(--desktop-header-h)-1px)] " +
-  // The bottom corners are this box's own, so its clip rounds them. The top
-  // ones are under the row and inside the box, so the chrome is painted back
-  // over the content outside each arc.
-  "new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:pointer-events-none new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:absolute new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:inset-x-0 new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:top-[calc(var(--desktop-header-h)-1px)] " +
-  "new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:z-shell-overlay new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:h-2.5 new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:content-[''] " +
-  "new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:[background:radial-gradient(circle_at_100%_100%,transparent_9.75px,var(--sidebar-bg)_10.25px)_left_top/var(--panel-tl)_var(--panel-tl)_no-repeat,radial-gradient(circle_at_0_100%,transparent_9.75px,var(--sidebar-bg)_10.25px)_right_top/10px_10px_no-repeat] " +
-  // Over the desktop shell's translucent material, opaque grey under the
-  // row or at those corners would not match the chrome around it. There the
-  // panel's fill starts at the row's bottom edge, and the corners are cut
-  // out of the box instead of painted over.
-  "[html.material-backdrop_&]:new-layout:[&:has([data-pane-top-row]>:not(:empty))]:[background:linear-gradient(transparent_calc(var(--desktop-header-h)-1px),var(--bg)_0)] " +
-  "[html.material-backdrop_&]:new-layout:[&:has([data-pane-top-row]>:not(:empty))]:after:hidden " +
-  "[html.material-backdrop_&]:new-layout:[&:has([data-pane-top-row]>:not(:empty))]:[clip-path:shape(from_0_0,hline_to_100%,vline_to_calc(var(--desktop-header-h)-1px),hline_to_calc(100%-10px),arc_to_100%_calc(var(--desktop-header-h)+9px)_of_10px_cw,vline_to_100%,hline_to_0,vline_to_calc(var(--desktop-header-h)-1px+var(--panel-tl)),arc_to_var(--panel-tl)_calc(var(--desktop-header-h)-1px)_of_var(--panel-tl)_cw,hline_to_0,close)] " +
-  // The panel's top-left corner, shared by the outline, the painted arc and
-  // the clip above.
-  "new-layout:[--panel-tl:10px] " +
-  // A page with no row is the whole panel: it keeps the same gap at the top
-  // and rounds its own top corners.
-  "new-layout:[&:not(:has([data-pane-top-row]>:not(:empty)))]:mt-1.5 new-layout:[&:not(:has([data-pane-top-row]>:not(:empty)))]:rounded-t-pane " +
+  "new-layout:before:rounded-pane new-layout:before:border new-layout:before:border-[color:var(--tab-edge)] new-layout:before:content-[''] " +
   NEW_LAYOUT_PANE_ROW +
   " " +
   // An open media viewer lifts the session input above its scrim, which
