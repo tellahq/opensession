@@ -60,7 +60,7 @@ import { MemoryPanel } from "./settings/MemoryPanel";
 import { ProvidersPanel } from "./settings/ProvidersPanel";
 import { NotificationsPanel } from "./settings/NotificationsPanel";
 import { PapercutsPanel } from "./settings/PapercutsPanel";
-import { PreferencesPanel } from "./settings/PreferencesPanel";
+import { AppearancePanel, PreferencesPanel } from "./settings/PreferencesPanel";
 import { ShortcutsPanel } from "./settings/ShortcutsPanel";
 import { ReposPanel } from "./settings/ReposPanel";
 import { SandboxesPanel } from "./settings/SandboxesPanel";
@@ -247,6 +247,7 @@ function SectionPanel({
       {TOOL_SECTIONS.has(section) && children}
       {section === "notifications" && <NotificationsPanel />}
       {section === "preferences" && <PreferencesPanel />}
+      {section === "appearance" && <AppearancePanel />}
       {section === "shortcuts" && <ShortcutsPanel />}
       {section === "general" && <GeneralPanel />}
       {section === "repos" && <ReposPanel />}

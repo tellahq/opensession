@@ -114,6 +114,12 @@ function DefaultModelRow({
     ...claudeModels.map((m) => ({ value: m.id, label: m.label })),
     ...codexModels.map((m) => ({ value: m.id, label: m.label })),
   ];
+  // A default the catalog does not list still reads as a name.
+  if (current && !items.some((item) => item.value === current))
+    items.push({
+      value: current,
+      label: shortModelLabel(current, models || []),
+    });
   // Vendor mark per row; the slot stays reserved on every row (and the
   // trigger) for alignment.
   const markFor = (m: ModelInfo) => (

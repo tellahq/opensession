@@ -108,7 +108,7 @@ function SandboxDefaultRow({ scope }: { scope: Scope }) {
       ? [
           {
             value: "workspace",
-            label: `Workspace default · ${providerLabel(workspace)}`,
+            label: `Organization default · ${providerLabel(workspace)}`,
           },
         ]
       : []),
@@ -317,7 +317,7 @@ function ProjectSandboxDefaults() {
                 title={label}
                 desc={
                   value === "workspace"
-                    ? `Follows the workspace default (${providerLabel(defaults.workspace || "none")}).`
+                    ? `Follows the organization default (${providerLabel(defaults.workspace || "none")}).`
                     : "Every new session on this project starts here."
                 }
                 control={
@@ -332,7 +332,7 @@ function ProjectSandboxDefaults() {
                       label={`${label} default environment`}
                       value={value}
                       options={[
-                        { value: "workspace", label: "Workspace default" },
+                        { value: "workspace", label: "Organization default" },
                         { value: "none", label: "This machine" },
                         ...(unavailable
                           ? [

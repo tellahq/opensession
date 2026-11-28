@@ -1,4 +1,4 @@
-// Whether this person sees the new layout (Settings → Preferences → Layout,
+// Whether this person sees the new layout (Settings → Appearance → New layout,
 // default off): a minibar of places beside a sidebar that lists only
 // sessions. A makeUserPref instance, so the choice follows the person across
 // devices. Desktop widths only for now; phones keep the page stack.

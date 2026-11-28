@@ -262,7 +262,7 @@ function NewSessionsSection() {
               options={[
                 {
                   value: "",
-                  label: "Workspace default",
+                  label: "Organization default",
                   icon: <IconRepo size={20} />,
                 },
                 ...repos.map((r) => ({
@@ -843,16 +843,13 @@ function DebugSection() {
   );
 }
 
-/** How the app looks and behaves for you. Everything here is yours alone. */
+/** How the app behaves for you. Everything here is yours alone. */
 export function PreferencesPanel() {
   return (
     <SettingsPanel>
       <SettingsHeader title="Preferences" />
-      <AppearanceSection />
       <NewSessionsSection />
       <ComposerSection />
-      <TranscriptSection />
-      <SidebarSection />
       <LinksSection />
       <VoiceAudioSection />
       <DictationVocabularySection />
@@ -927,5 +924,17 @@ function DictationVocabularySection() {
       </SettingCard>
       <SettingsHint>Names and terms dictation should spell right.</SettingsHint>
     </>
+  );
+}
+
+/** How the app looks for you: theme, layout, the transcript and the sidebar. */
+export function AppearancePanel() {
+  return (
+    <SettingsPanel>
+      <SettingsHeader title="Appearance" />
+      <AppearanceSection />
+      <TranscriptSection />
+      <SidebarSection />
+    </SettingsPanel>
   );
 }

@@ -49,6 +49,7 @@ const TOOL_VIEWS = new Set(["automations", "security", "goals"]);
 const SETTINGS_SECTIONS: ReadonlySet<string> = new Set<SettingsSectionKey>([
   "myAccounts",
   "preferences",
+  "appearance",
   "notifications",
   "shortcuts",
   "general",
@@ -67,7 +68,6 @@ const SETTINGS_SECTIONS: ReadonlySet<string> = new Set<SettingsSectionKey>([
   "audit",
 ]);
 const LEGACY_SETTINGS_SECTIONS = new Map<string, SettingsSectionKey>([
-  ["appearance", "preferences"],
   ["model", "providers"],
   ["models", "providers"],
   ["modelProviders", "providers"],

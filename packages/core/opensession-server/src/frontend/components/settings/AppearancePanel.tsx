@@ -206,7 +206,7 @@ export function AppearanceSection() {
 
   return (
     <>
-      <SettingsGroupLabel>Appearance</SettingsGroupLabel>
+      <SettingsGroupLabel>Theme</SettingsGroupLabel>
       <SettingsSection>
         <div
           className="flex justify-start gap-3 desktop:gap-4"

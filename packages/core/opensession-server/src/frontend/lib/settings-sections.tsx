@@ -14,6 +14,7 @@ import {
   IconHome,
   IconGlobe,
   IconKeyboard,
+  IconPalette,
   IconPeople,
   IconRocket,
   IconServer,
@@ -39,6 +40,7 @@ export type ToolSectionKey = "automations" | "goals" | "security";
 export type SettingsSectionKey =
   | "myAccounts"
   | "preferences"
+  | "appearance"
   | "notifications"
   | "shortcuts"
   | "general"
@@ -98,6 +100,12 @@ export const SECTIONS: SettingsSection[] = [
     label: "Preferences",
     scope: "personal",
     icon: <IconSliders />,
+  },
+  {
+    key: "appearance",
+    label: "Appearance",
+    scope: "personal",
+    icon: <IconPalette />,
   },
   {
     key: "notifications",
