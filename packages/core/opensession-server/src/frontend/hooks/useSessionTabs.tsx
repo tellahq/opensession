@@ -827,6 +827,12 @@ export function useSessionTabs({
           selectView: selectViewTab,
           moveToPanel: !isPhone && currentSession ? moveViewToPanel : undefined,
           closeView: (id) => {
+            // Closing the tab on screen lands back in the chat: put the caret
+            // in its composer, as picking the session tab does. Otherwise
+            // focus stays on whatever opened the tab (an asset card), and
+            // the Enter meant to send a message opens it again.
+            if (barViews.some((tab) => tab.id === id && tab.active))
+              setFocusComposerOnOpen(true);
             if (id.startsWith("subagent:"))
               closeSubagentTab(id.slice("subagent:".length));
             else if (id.startsWith("staging:")) closeStagingTab();
