@@ -7,7 +7,7 @@ import { Button } from "../ui/button";
 import { Card, CardList } from "../ui/card";
 import { cn } from "../ui/cn";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
-import { EmptyState } from "../ui/state";
+import { EmptyState, InlineAlert } from "../ui/state";
 import { getCurrentUser } from "./UserPicker";
 import { IconCheck, IconListCircles, IconPlus, IconX } from "./icons";
 import { Input } from "../ui/input";
@@ -273,7 +273,11 @@ export function Tasks({ addHandler, onOpenSession }: TasksProps) {
           </Button>
         </form>
 
-        {error && <div className="mb-3 text-body text-red">{error}</div>}
+        {error && (
+          <InlineAlert appearance="plain" className="mb-3">
+            {error}
+          </InlineAlert>
+        )}
 
         {tasks === null ? (
           <Card>

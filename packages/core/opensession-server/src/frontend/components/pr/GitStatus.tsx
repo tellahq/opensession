@@ -335,7 +335,7 @@ function MergeControl({
           <Menu.Trigger
             className={
               primary
-                ? "-ml-0.5 grid size-6 shrink-0 place-items-center rounded-md text-faint transition-[color,background-color] hover:bg-hover hover:text-fg disabled:opacity-60 phone:size-9"
+                ? "-ml-0.5 grid size-6.5 shrink-0 place-items-center rounded-md text-faint transition-[color,background-color] hover:bg-hover hover:text-fg disabled:opacity-60 phone:size-9"
                 : GIT_ACTION
             }
             aria-label="Merge options"

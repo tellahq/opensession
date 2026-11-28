@@ -19,7 +19,7 @@ export function CopyTextButton({
       <button
         type="button"
         aria-label={label}
-        className="focus-ring grid size-6 shrink-0 place-items-center rounded-sm border-0 bg-transparent p-0 text-faint hover:bg-hover hover:text-fg"
+        className="focus-ring grid size-6.5 shrink-0 place-items-center rounded-sm border-0 bg-transparent p-0 text-faint hover:bg-hover hover:text-fg"
         onClick={() =>
           copyToClipboard(text, () => {
             setCopied(true);

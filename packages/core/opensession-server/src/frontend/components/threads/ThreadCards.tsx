@@ -73,7 +73,7 @@ function ThreadCard({ spawned }: { spawned: SpawnedThread }) {
       <div className="group/card flex items-center gap-0.5">
         <ThreadCardBody spawned={spawned} fallbackTitle={fallbackTitle} />
         <div className="flex shrink-0 items-center gap-0.5 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-hover/card:opacity-100 [@media(hover:hover)]:group-focus-within/card:opacity-100">
-          <MessageActionButtons message={message} className="phone:size-11" />
+          <MessageActionButtons message={message} />
         </div>
       </div>
       <MessageThreadSummary message={message} />

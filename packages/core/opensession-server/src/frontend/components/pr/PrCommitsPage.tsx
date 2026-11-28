@@ -151,7 +151,7 @@ function CommitRow({
         {href && (
           <Tooltip label={`Open on ${provider.name}`}>
             <a
-              className="grid size-6 place-items-center rounded-sm text-faint no-underline hover:bg-hover hover:text-fg"
+              className="grid size-6.5 place-items-center rounded-sm text-faint no-underline hover:bg-hover hover:text-fg"
               href={href}
               target="_blank"
               rel="noopener"

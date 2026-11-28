@@ -74,7 +74,7 @@ export function MessageActionButtons({
           <Menu.Trigger
             aria-label="Add reaction"
             className={cn(
-              "flex size-7 flex-none items-center justify-center rounded-md text-faint hover:bg-hover hover:text-dim data-[popup-open]:bg-hover data-[popup-open]:text-dim data-[popup-open]:opacity-100",
+              "flex size-6.5 flex-none items-center justify-center rounded-md phone:size-11 text-faint hover:bg-hover hover:text-dim data-[popup-open]:bg-hover data-[popup-open]:text-dim data-[popup-open]:opacity-100",
               className,
             )}
           >
@@ -104,7 +104,7 @@ export function MessageActionButtons({
           size="sm"
           aria-label="Comment"
           icon={<IconMessage size={20} />}
-          className={cn("size-7 min-h-7 rounded-md px-0 text-faint", className)}
+          className={cn("rounded-md text-faint", className)}
           onClick={() => openCommentsFor(sessionId, message)}
         />
       </Tooltip>

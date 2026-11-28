@@ -8,6 +8,7 @@
   "off-scale-spacing": 374,
   "arbitrary-shadow": 18,
   "solid-hover": 5,
+  "hand-rolled-error": 1,
   "off-scale-z": 0,
   "arbitrary-leading": 1,
   "off-scale-radius": 0,
@@ -18,7 +19,7 @@
   "stock-palette-color": 0,
   "stock-shadow": 0,
   "stylex-raw-value": 0,
-  "button-restyle": 394,
+  "button-restyle": 391,
   "button-skin": 0,
   "raw-hex-color": 5
 }

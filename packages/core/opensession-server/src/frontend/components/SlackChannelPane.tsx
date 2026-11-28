@@ -6,6 +6,7 @@ import { postMessage } from "../lib/api/slack-channels";
 import { ChannelComposer } from "./channels/ChannelComposer";
 import { errorMessage } from "../lib/error-message";
 import { SlackText as MessageText } from "./channels/SlackText";
+import { InlineAlert } from "../ui/state";
 
 interface MessageReaction {
   name: string;
@@ -302,9 +303,12 @@ export function SlackChannelPane({
         </div>
       </div>
       {error && (
-        <div className="mx-auto w-full max-w-page-narrow px-5 py-2 text-xs text-red">
+        <InlineAlert
+          appearance="plain"
+          className="mx-auto w-full max-w-page-narrow px-5 py-2"
+        >
           {error}
-        </div>
+        </InlineAlert>
       )}
       <div className="mx-auto w-full max-w-[calc(var(--session-col)+40px)] shrink-0 px-5 pt-1 pb-4">
         <ChannelComposer

@@ -135,6 +135,21 @@ property, like the side panel plate) keep working unchanged.
    cards) take `rounded-2xl`. The aliases are gone from the theme and
    `off-scale-radius` counts any that come back.
 4. **Caret opacity.** The menu chevron takes the same 0.6 as every muted glyph.
+5. **One of each, decided toward fewer variants (2026-11-28).**
+   - Accent: light fills clear 4.5:1 under a 13px label (a test holds them
+     there), and `--accent-ink` sits a step past the fill so accent text on
+     `--accent-soft` clears it too. Tinted chips take `text-accent-ink`.
+   - Light `--text-faint` is `#848484`. One popup glass at 88%.
+   - A form's Cancel is `variant="ghost"`; only the confirmation alert keeps
+     its large soft pair.
+   - Menus: one floor (`geometry.popupMinWidth`), one wider step
+     (`min-w-menu-wide`), 44px rows on a phone, shared separators.
+   - An error under a control is `<InlineAlert appearance="plain">`;
+     `hand-rolled-error` counts bare red paragraphs that hold one.
+   - Page-level empty states carry their page's 22px icon; inline ones do
+     not. Visible loading text ends in an ellipsis, aria-labels do not.
+   - On a phone a settings row's control takes what the title leaves and
+     wraps under it rather than truncating its value.
 
 ### Open decisions
 

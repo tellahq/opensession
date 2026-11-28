@@ -105,6 +105,14 @@ export function ProjectBands({
           // counts whoever minted the session, including machine-started rows.
           const gkey = `repo:${project.repo}`;
           const open = isOpen(gkey);
+          const total =
+            project.rows.length +
+            project.snoozedRows.length +
+            project.needsReviewRows.length +
+            project.approvedRows.length +
+            project.awaitingReviewRows.length +
+            project.prs.length +
+            project.requestedPrs.length;
           // A collapsed band still surfaces the selected row(s) so the open
           // session never hides, without force-opening the band. Review rows
           // keep their renderer so a click still opens Review.
@@ -195,15 +203,13 @@ export function ProjectBands({
                   >
                     {project.repo === askBand ? "Ask" : repoLabel(project.repo)}
                   </span>
-                  <span className={cn(SIDEBAR_GROUP_COUNT, "shrink-0")}>
-                    {project.rows.length +
-                      project.snoozedRows.length +
-                      project.needsReviewRows.length +
-                      project.approvedRows.length +
-                      project.awaitingReviewRows.length +
-                      project.prs.length +
-                      project.requestedPrs.length}
-                  </span>
+                  {/* An empty band says so by having no rows; a "0" beside
+                      its name is noise. */}
+                  {total > 0 && (
+                    <span className={cn(SIDEBAR_GROUP_COUNT, "shrink-0")}>
+                      {total}
+                    </span>
+                  )}
                 </span>
                 {/* Work blocked on you must not vanish into a closed band. The
                     header carries the count of rows waiting for input and of

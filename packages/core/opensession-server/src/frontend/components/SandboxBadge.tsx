@@ -13,6 +13,7 @@ import { errorMessage } from "../lib/error-message";
 import { ApiError } from "../lib/api/request";
 import { sandboxProviderLabel } from "../lib/ready-sandbox-providers";
 import { sandboxSleepSummary, sleepsInLabel } from "../lib/sandbox-sleep";
+import { InlineAlert } from "../ui/state";
 
 type SandboxRef = {
   provider: string;
@@ -117,9 +118,9 @@ export function SandboxBadge({
             </div>
           </div>
           {runner.lastLifecycleError ? (
-            <div className="px-2 py-1.5 text-meta font-medium text-red">
+            <InlineAlert appearance="plain" className="px-2 py-1.5">
               {runner.lastLifecycleError}
-            </div>
+            </InlineAlert>
           ) : null}
         </Popover.Popup>
       </Popover.Root>
@@ -367,9 +368,9 @@ export function SandboxBadge({
           </details>
         ) : null}
         {status?.lastLifecycleError || error ? (
-          <div className="px-2 py-1.5 text-meta font-medium text-red">
+          <InlineAlert appearance="plain" className="px-2 py-1.5">
             {status?.lastLifecycleError || error}
-          </div>
+          </InlineAlert>
         ) : null}
       </Popover.Popup>
     </Popover.Root>

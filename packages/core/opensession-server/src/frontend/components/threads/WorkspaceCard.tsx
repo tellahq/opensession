@@ -20,6 +20,7 @@ import {
 } from "../WorkspaceCollaborators";
 import { UserAvatar } from "../UserAvatar";
 import { WorkspaceSettingsDialog } from "../WorkspaceSettingsDialog";
+import { InlineAlert } from "../../ui/state";
 
 /** A row that only reports: no pointer, no hover pill. */
 const STILL_ROW = cn(WS_SUMMARY_ROW, "cursor-default hover:bg-transparent");
@@ -213,9 +214,9 @@ function ProgressRow({
         </span>
       </div>
       {state?.error && (
-        <div className="px-4 py-1 text-meta font-medium text-red">
+        <InlineAlert appearance="plain" className="px-4 py-1">
           {state.error}
-        </div>
+        </InlineAlert>
       )}
     </>
   );

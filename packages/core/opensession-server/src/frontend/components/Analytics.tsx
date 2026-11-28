@@ -19,6 +19,7 @@ import {
   SCROLL_EDGE_DIVIDER,
 } from "../lib/app-shell-classes";
 import { useScrollEdge } from "../hooks/useScrollEdge";
+import { InlineAlert } from "../ui/state";
 
 /**
  * Analytics: what happened on/because of Open Session over a date range —
@@ -1200,7 +1201,11 @@ export function Analytics() {
         {/* No top padding: every block in here opens with its own `mt-4`,
 				    which is the gap under the bar. */}
         <div className="mx-auto w-full max-w-[1080px] px-4 pb-10 md:px-6">
-          {error && <p className="mt-4 text-body text-red">{error}</p>}
+          {error && (
+            <InlineAlert appearance="plain" className="mt-4">
+              {error}
+            </InlineAlert>
+          )}
           {!data && !error && (
             <div className="flex h-60 items-center justify-center text-body text-dim">
               Loading analytics…

@@ -17,6 +17,7 @@ import {
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { errorMessage } from "../lib/error-message";
+import { InlineAlert } from "../ui/state";
 
 /** "in 45m" / "in 3h" / "in 2d" for a future instant (short form). */
 function inTime(iso: string): string {
@@ -328,9 +329,9 @@ export function SchedulePromptButton({
             Custom time
           </button>
           {error && !customOpen && (
-            <div className="px-[9px] pt-1 pb-0.5 text-meta text-red">
+            <InlineAlert appearance="plain" className="px-[9px] pt-1 pb-0.5">
               {error}
-            </div>
+            </InlineAlert>
           )}
         </div>
       )}
@@ -379,9 +380,9 @@ export function SchedulePromptButton({
               />
             </div>
             {error && (
-              <div className="px-[9px] pt-1 pb-0.5 text-meta text-red">
+              <InlineAlert appearance="plain" className="px-[9px] pt-1 pb-0.5">
                 {error}
-              </div>
+              </InlineAlert>
             )}
             <div className="mt-5 flex justify-end gap-2">
               <Button

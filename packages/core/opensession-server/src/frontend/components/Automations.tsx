@@ -512,7 +512,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
               </div>
             )}
             <button
-              className="flex size-7 shrink-0 items-center justify-center rounded-md text-dim hover:bg-hover hover:text-fg max-[900px]:hidden"
+              className="flex size-6.5 shrink-0 items-center justify-center rounded-md text-dim hover:bg-hover hover:text-fg max-[900px]:hidden"
               onClick={() => onSelect("")}
               title="Close"
             >

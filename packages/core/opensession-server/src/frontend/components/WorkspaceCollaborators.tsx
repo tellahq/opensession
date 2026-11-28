@@ -33,6 +33,7 @@ import { IconChevronDown, IconChevronRight, IconPeople } from "./icons";
 import { UserAvatar } from "./UserAvatar";
 import { getCurrentUser, TEAM } from "./UserPicker";
 import { WorkspaceSummaryAdd } from "./WorkspaceSummaryAdd";
+import { InlineAlert } from "../ui/state";
 
 /**
  * Add/remove state for a workspace's collaborators, shared by the info
@@ -184,7 +185,9 @@ export function WorkspaceCollaborators({
         </div>
       </div>
       {error && (
-        <div className="px-3 text-meta font-medium text-red">{error}</div>
+        <InlineAlert appearance="plain" className="px-3">
+          {error}
+        </InlineAlert>
       )}
     </div>
   );
@@ -254,7 +257,9 @@ export function WorkspaceSummaryCollaborators({
         </div>
       ))}
       {error && (
-        <div className="px-4 py-1 text-meta font-medium text-red">{error}</div>
+        <InlineAlert appearance="plain" className="px-4 py-1">
+          {error}
+        </InlineAlert>
       )}
     </div>
   );
