@@ -564,7 +564,9 @@ function StatTile({
           </span>
         )}
       </div>
-      {sub && <div className="mt-1 truncate text-meta text-faint">{sub}</div>}
+      {sub && (
+        <div className="mt-1 line-clamp-2 text-meta text-faint">{sub}</div>
+      )}
     </Card>
   );
 }
