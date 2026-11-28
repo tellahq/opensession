@@ -472,6 +472,9 @@ export const geometry = stylex.defineConsts({
   /** The safe areas a full-height surface keeps clear of. */
   safeTop: "env(safe-area-inset-top)",
   safeBottom: "env(safe-area-inset-bottom)",
+  /** A dialog that is a bottom sheet on a phone: its 24px of padding, plus
+   *  the home indicator. */
+  sheetPadBottom: "calc(24px + env(safe-area-inset-bottom))",
   /** A liveness dot: the chat's busy row, standalone, and inline in text or
    * a pill. */
   dotLarge: "9px",

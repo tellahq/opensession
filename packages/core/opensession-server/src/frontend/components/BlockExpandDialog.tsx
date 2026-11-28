@@ -38,7 +38,7 @@ export function BlockExpandHost() {
       {request && (
         <Modal.Content
           widthClassName="max-w-[min(1280px,96vw)]"
-          className="w-[96vw]"
+          className="w-[96vw] phone:w-auto"
           finalFocus={false}
         >
           <Modal.Header title={request.title} />

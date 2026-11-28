@@ -116,6 +116,71 @@ const styles = stylex.create({
     },
   },
   centeredWidth: { maxWidth: geometry.dialogMaxWidth },
+  // On a phone every dialog but a confirmation is a bottom sheet: full
+  // width, the sheet's top corners, sliding up from the bottom edge the way
+  // ResponsiveDialog's sheets do. A confirmation stays centered, because a
+  // yes-or-no question reads as an interruption, not a surface to work in.
+  // StyleX's later style replaces a property outright, so each one restates
+  // the centered value as its default.
+  phoneSheet: {
+    top: { default: "50%", [media.phone]: "auto" },
+    bottom: { default: null, [media.phone]: space.s0 },
+    left: { default: "50%", [media.phone]: space.s0 },
+    right: { default: null, [media.phone]: space.s0 },
+    width: { default: geometry.dialogWidth, [media.phone]: "auto" },
+    maxHeight: {
+      default: geometry.dialogMaxHeight,
+      [media.phone]: geometry.sheetMaxHeight,
+    },
+    borderTopLeftRadius: { default: radius.xxl, [media.phone]: radius.sheet },
+    borderTopRightRadius: { default: radius.xxl, [media.phone]: radius.sheet },
+    borderBottomLeftRadius: { default: radius.xxl, [media.phone]: 0 },
+    borderBottomRightRadius: { default: radius.xxl, [media.phone]: 0 },
+    paddingBottom: {
+      default: space.s24,
+      [media.phone]: geometry.sheetPadBottom,
+    },
+    boxShadow: { default: shadow.ringLg, [media.phone]: shadow.sheet },
+    transformOrigin: { default: "center", [media.phone]: "bottom" },
+    transitionProperty: {
+      default: "scale, opacity",
+      [media.phone]: "translate",
+    },
+    transitionDuration: {
+      default: motion.standard,
+      [media.phone]: motion.long,
+    },
+    opacity: {
+      default: null,
+      [STARTING]: { default: 0, [media.phone]: 1 },
+      [ENDING]: { default: 0, [media.phone]: 1 },
+    },
+    scale: {
+      default: null,
+      [STARTING]: { default: motion.dialogEnterScale, [media.phone]: "none" },
+      [ENDING]: { default: motion.dialogExitScale, [media.phone]: "none" },
+    },
+    translate: {
+      default: "-50% -50%",
+      [media.phone]: {
+        default: "none",
+        [STARTING]: "0 100%",
+        [ENDING]: "0 100%",
+      },
+    },
+  },
+  // Only with `centeredWidth`; a caller's width class sets its own.
+  phoneSheetWidth: {
+    maxWidth: { default: geometry.dialogMaxWidth, [media.phone]: "none" },
+  },
+  backdropSheet: {
+    backgroundColor: { default: color.scrim, [media.phone]: color.scrimSheet },
+    backdropFilter: { default: blur.scrim, [media.phone]: "none" },
+    transitionDuration: {
+      default: motion.standard,
+      [media.phone]: motion.long,
+    },
+  },
   backdrop: {
     position: "fixed",
     inset: space.s0,
@@ -323,6 +388,8 @@ function Content({
 }: ModalContentProps) {
   const palette = variant === "palette";
   const floating = variant === "floating";
+  const sheetOnPhone =
+    !palette && !floating && popupProps.role !== "alertdialog";
   const popup = (
     <BaseDialog.Popup
       // Centered via a single composed transform so the enter/exit
@@ -336,7 +403,12 @@ function Content({
             ? [styles.palette, widthClassName ? null : styles.paletteWidth]
             : floating
               ? styles.floating
-              : [styles.centered, widthClassName ? null : styles.centeredWidth],
+              : [
+                  styles.centered,
+                  widthClassName ? null : styles.centeredWidth,
+                  sheetOnPhone && styles.phoneSheet,
+                  sheetOnPhone && !widthClassName && styles.phoneSheetWidth,
+                ],
         ],
         cn(widthClassName, className),
       )}
@@ -373,6 +445,7 @@ function Content({
             [
               styles.backdrop,
               palette ? styles.backdropPalette : styles.backdropModal,
+              sheetOnPhone && styles.backdropSheet,
             ],
             palette ? "palette-backdrop" : undefined,
           )}

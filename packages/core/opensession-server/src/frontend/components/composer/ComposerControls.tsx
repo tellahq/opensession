@@ -405,7 +405,7 @@ export function StopConfirmModal({
       <Modal.Content
         initialFocus={stopRef}
         widthClassName="max-w-[32rem]"
-        className="gap-5 p-7 phone:w-[calc(100vw-1.5rem)] phone:p-6"
+        className="gap-5"
       >
         <div className="flex flex-col">
           <Modal.Title className="m-0 text-balance text-section-title font-semibold leading-tight tracking-tight text-fg">

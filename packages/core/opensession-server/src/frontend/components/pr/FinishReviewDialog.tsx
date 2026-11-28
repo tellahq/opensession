@@ -68,7 +68,7 @@ export function FinishReviewDialog({
     <Modal.Root open={open} onOpenChange={(next) => !next && onClose(summary)}>
       <Modal.Content
         widthClassName="max-w-[30rem]"
-        className="bottom-[max(1rem,env(safe-area-inset-bottom))] left-auto right-4 top-auto translate-x-0 translate-y-0 origin-bottom-right phone:left-1/2 phone:right-auto phone:-translate-x-1/2 phone:origin-bottom"
+        className="desktop:bottom-4 desktop:left-auto desktop:right-4 desktop:top-auto desktop:translate-x-0 desktop:translate-y-0 desktop:origin-bottom-right"
         initialFocus={summaryRef}
         // ⌘/Ctrl+Enter submits from anywhere in the dialog, the summary
         // included, matching the other review comment fields.

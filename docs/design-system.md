@@ -150,6 +150,9 @@ property, like the side panel plate) keep working unchanged.
      not. Visible loading text ends in an ellipsis, aria-labels do not.
    - On a phone a settings row's control takes what the title leaves and
      wraps under it rather than truncating its value.
+   - A small icon button is 26px (Button `size="sm"`), 44px on a phone.
+   - On a phone `Modal.Content` is a bottom sheet. A confirmation
+     (`role="alertdialog"`, `ui/confirm.tsx`) stays centered.
 
 ### Open decisions
 
