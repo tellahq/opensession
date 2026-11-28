@@ -5,6 +5,7 @@ import { Textarea } from "../../ui/input";
 import { Modal, useEnterOnMount } from "../../ui/modal";
 
 import { REVIEW_VERDICTS, type ReviewEvent } from "../../lib/review-verdicts";
+import { InlineAlert } from "../../ui/state";
 
 interface Props {
   prNumber: number;
@@ -158,7 +159,7 @@ export function FinishReviewDialog({
             </Button>
           </div>
         )}
-        {error && <div className="text-supporting text-red">{error}</div>}
+        {error && <InlineAlert appearance="plain">{error}</InlineAlert>}
         <Modal.Footer>
           <Button onClick={() => onClose(summary)}>Cancel</Button>
           <Button

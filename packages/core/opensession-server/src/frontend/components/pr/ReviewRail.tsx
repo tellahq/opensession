@@ -23,6 +23,7 @@ import { GitStatusRows } from "./GitStatus";
 import { CommitIcon } from "./PrViews";
 import { FileRow, ReviewerRow } from "./PrRows";
 import { DiffStat } from "../DiffStat";
+import { InlineAlert } from "../../ui/state";
 
 /**
  * The Overview page's metadata column: status, reviewers, checks, commits, the
@@ -143,9 +144,9 @@ export function ReviewRail({
             merge={merge}
           />
           {mergeError && (
-            <p className="m-0 px-2 pt-1 text-supporting text-red">
+            <InlineAlert appearance="plain" className="m-0 px-2 pt-1">
               {mergeError}
-            </p>
+            </InlineAlert>
           )}
         </RailSection>
       )}

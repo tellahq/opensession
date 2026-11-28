@@ -576,6 +576,17 @@ const SIGNALS: Signal[] = [
       ),
   },
   {
+    id: "hand-rolled-error",
+    instead:
+      '<InlineAlert appearance="plain">: the error line under a control, led by the warning glyph and announced through role="alert", where a bare red paragraph is neither',
+    exempt: ["styles/", "ui/"],
+    count: (source) =>
+      occurrences(
+        stripComments(source),
+        /<(?:p|div)\s+className="[^"]*\btext-red\b[^"]*"\s*>\s*(?:\{[\w.?]*(?:[eE]rror|Detail)\}|Couldn)/g,
+      ),
+  },
+  {
     id: "off-scale-z",
     instead:
       "a named stacking layer, z-<name> or layer.<name> (base-theme.css --layer-*), or a small integer (-z-1 to z-9) for order inside a component",

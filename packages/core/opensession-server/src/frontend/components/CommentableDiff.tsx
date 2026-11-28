@@ -60,7 +60,7 @@ import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { useResolvedTheme } from "./CodeHighlight";
 import { Spinner } from "../ui/spinner";
-import { EmptyState } from "../ui/state";
+import { EmptyState, InlineAlert } from "../ui/state";
 import { Menu, MENU_ICON } from "../ui/menu";
 import { toast } from "../ui/toast";
 import { errorMessage } from "../lib/error-message";
@@ -1464,7 +1464,7 @@ const CommentForm = function CommentForm({
               }
             }}
           />
-          {error && <div className="text-label text-red">{error}</div>}
+          {error && <InlineAlert appearance="plain">{error}</InlineAlert>}
           <div className="flex justify-end gap-2">
             <Button
               variant="ghost"

@@ -11,7 +11,7 @@ import type { SessionSubagentSnapshot } from "../lib/api";
 import { cn } from "../ui/cn";
 import { Button } from "../ui/button";
 import { CardList } from "../ui/card";
-import { EmptyState } from "../ui/state";
+import { EmptyState, InlineAlert } from "../ui/state";
 import { IconStack } from "./icons";
 import { PanelPageHeader } from "./PanelPageHeader";
 import { formatDuration } from "../lib/time";
@@ -945,9 +945,9 @@ function RunCard({
         </div>
       )}
       {run.status === "error" && run.error && (
-        <div className="px-2 py-1.5 text-meta leading-snug text-red">
+        <InlineAlert appearance="plain" className="px-2 py-1.5">
           {run.error}
-        </div>
+        </InlineAlert>
       )}
       {run.status === "done" && run.result !== undefined && (
         <div>

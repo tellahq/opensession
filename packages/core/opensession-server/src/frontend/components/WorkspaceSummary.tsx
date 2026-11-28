@@ -103,6 +103,7 @@ import {
   IconRobot,
   IconStack,
 } from "./icons";
+import { InlineAlert } from "../ui/state";
 
 /**
  * The session header's compact stand-in for the right Workspace panel: one
@@ -1642,9 +1643,9 @@ export function WorkspaceSummaryBody({
             </button>
           ))}
           {reviewError && (
-            <div className="px-4 py-1 text-meta font-medium text-red">
+            <InlineAlert appearance="plain" className="px-4 py-1">
               {reviewError}
-            </div>
+            </InlineAlert>
           )}
         </div>
 

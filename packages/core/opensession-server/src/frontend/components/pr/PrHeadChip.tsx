@@ -8,6 +8,7 @@ import { Popover } from "../../ui/popover";
 import { IconArrowUpRight } from "../icons";
 import { PrStateIcon } from "./PrStateIcon";
 import { prBodyExcerpt } from "../../lib/pr-body-excerpt";
+import { InlineAlert } from "../../ui/state";
 
 /**
  * The session's PR in the new layout's window row: a state glyph and the
@@ -82,9 +83,9 @@ export function PrHeadChip({
               </span>
             </div>
             {error && (
-              <div className="mt-1 line-clamp-2 text-meta text-red">
+              <InlineAlert appearance="plain" className="mt-1 line-clamp-2">
                 {error}
-              </div>
+              </InlineAlert>
             )}
           </div>
         </div>

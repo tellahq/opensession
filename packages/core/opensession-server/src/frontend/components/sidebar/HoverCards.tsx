@@ -81,6 +81,7 @@ import { useWorkspaceCollaborators } from "../WorkspaceCollaborators";
 import { UserAvatar } from "../UserAvatar";
 import { MenuCheck } from "../../ui/menu";
 import React, { useEffect, useState } from "react";
+import { InlineAlert } from "../../ui/state";
 
 // The session card, in the shape the workspace card already proved: what the
 // session is, where it stands, what it last said, and the stills it produced.
@@ -1072,9 +1073,9 @@ function CollaboratorsSheetPage({
           <div className="px-4 py-3 text-meta text-faint">No teammates</div>
         )}
         {state?.error && (
-          <div className="px-4 py-2 text-meta font-medium text-red">
+          <InlineAlert appearance="plain" className="px-4 py-2">
             {state.error}
-          </div>
+          </InlineAlert>
         )}
       </SheetBody>
     </>

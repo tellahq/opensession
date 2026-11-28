@@ -22,6 +22,7 @@ import { DeckDone, SwipeCard } from "../ui/swipe-deck";
 import { dismissToast, toast, type ToastOptions } from "../ui/toast";
 import { UNDO_MS, ageLabel, ageTone, shuffle } from "../lib/swipe-deck";
 import { errorMessage } from "../lib/error-message";
+import { InlineAlert } from "../ui/state";
 
 /**
  * Support Tinder — the swipe deck for the Plain Todo queue, one ticket at
@@ -379,9 +380,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 
       {error ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
-          <div className="text-sm font-semibold text-red">
-            Couldn't load the queue
-          </div>
+          <InlineAlert appearance="plain">Couldn't load the queue</InlineAlert>
           <div className="max-w-sm text-sm text-dim">{error}</div>
         </div>
       ) : deck === null ? (
@@ -561,9 +560,9 @@ function TicketCard({
             </div>
           )
         ) : timeline === "error" ? (
-          <div className="text-sm text-red">
+          <InlineAlert appearance="plain">
             Couldn't load the conversation. Open it in Plain.
-          </div>
+          </InlineAlert>
         ) : timeline.entries.length === 0 ? (
           <div className="text-sm italic text-faint">
             No messages in this thread yet.

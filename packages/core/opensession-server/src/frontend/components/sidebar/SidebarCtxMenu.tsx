@@ -21,6 +21,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MenuCheck, MenuShortcut } from "../../ui/menu";
 import { TEAM } from "../UserPicker";
+import { InlineAlert } from "../../ui/state";
 
 function CtxItem({
   icon,
@@ -171,9 +172,9 @@ function CollaboratorsFlyout({
         <div className="px-2 py-1 text-meta text-faint">No teammates</div>
       )}
       {state?.error && (
-        <div className="px-2 py-1 text-meta font-medium text-red">
+        <InlineAlert appearance="plain" className="px-2 py-1">
           {state.error}
-        </div>
+        </InlineAlert>
       )}
     </div>
   );

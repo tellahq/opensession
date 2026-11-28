@@ -222,7 +222,9 @@ export function CodeStorageConfiguration({
       ) : (
         <>
           {status.error && (
-            <div className="mt-3 text-supporting text-red">{status.error}</div>
+            <InlineAlert appearance="plain" className="mt-3">
+              {status.error}
+            </InlineAlert>
           )}
           {webhook && (
             <div className="mt-4 flex flex-col gap-2 border-t border-line pt-4">

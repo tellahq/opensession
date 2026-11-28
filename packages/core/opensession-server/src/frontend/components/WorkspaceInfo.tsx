@@ -84,6 +84,7 @@ import {
   IconStack,
 } from "./icons";
 import { ensureDiffLanguages } from "../lib/diff-languages";
+import { InlineAlert } from "../ui/state";
 
 /**
  * Workspace info block at the top of the right side panel (the "Info" tab): a
@@ -963,7 +964,11 @@ function AgentReviewCard({
           )}
         </div>
       )}
-      {error && <div className="px-3 text-supporting text-red">{error}</div>}
+      {error && (
+        <InlineAlert appearance="plain" className="px-3">
+          {error}
+        </InlineAlert>
+      )}
     </div>
   );
 }
@@ -1283,7 +1288,9 @@ function ReviewerChip({
         </Menu.Root>
       </div>
       {error && (
-        <div className="px-2 pb-1 text-meta font-medium text-red">{error}</div>
+        <InlineAlert appearance="plain" className="px-2 pb-1">
+          {error}
+        </InlineAlert>
       )}
     </>
   );

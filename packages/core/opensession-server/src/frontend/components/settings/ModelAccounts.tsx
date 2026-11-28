@@ -806,9 +806,9 @@ function ClaudeAccountRows({ state }: { state: ClaudeAccountsState }) {
                       </div>
                     )}
                     {account.usage?.error && (
-                      <div className="mt-1.5 text-meta text-red">
+                      <InlineAlert appearance="plain" className="mt-1.5">
                         {account.usage.error}
-                      </div>
+                      </InlineAlert>
                     )}
                   </>
                 )}
@@ -987,7 +987,9 @@ function CodexUsageMeters({ account }: { account: CodexAccountInfo }) {
     return <div className="mt-1.5 text-meta text-faint">Checking usage…</div>;
   if (account.usage.error)
     return (
-      <div className="mt-1.5 text-meta text-red">{account.usage.error}</div>
+      <InlineAlert appearance="plain" className="mt-1.5">
+        {account.usage.error}
+      </InlineAlert>
     );
 
   const bucketName = (bucket: CodexUsageBucket) =>
@@ -1352,7 +1354,11 @@ function XaiUsageMeters({ account }: { account: XaiAccountInfo }) {
   if (!usage)
     return <div className="mt-1.5 text-meta text-faint">Checking usage…</div>;
   if (usage.error)
-    return <div className="mt-1.5 text-meta text-red">{usage.error}</div>;
+    return (
+      <InlineAlert appearance="plain" className="mt-1.5">
+        {usage.error}
+      </InlineAlert>
+    );
   const period = usage.periodType
     ? usage.periodType.replace(/^USAGE_PERIOD_TYPE_/, "").toLowerCase()
     : "";
