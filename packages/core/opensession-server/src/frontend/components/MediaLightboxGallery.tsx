@@ -1157,7 +1157,7 @@ export function MediaLightboxGallery({
           /* Fixed and placed against the region: the remark and the pixels it
 					   is about read as one thing. Kept to a single row, because on a
 					   phone a taller card would cover the picture it is describing. */
-          className="fixed z-float flex cursor-text flex-col gap-1 rounded-[22px] bg-black/55 p-1.5 shadow-[inset_0_1px_0_rgb(255_255_255/0.08),0_16px_50px_rgb(0_0_0/0.5)] backdrop-blur-2xl backdrop-saturate-150"
+          className="fixed z-float flex cursor-text flex-col gap-1 rounded-popup bg-black/55 p-1.5 shadow-[inset_0_1px_0_rgb(255_255_255/0.08),0_16px_50px_rgb(0_0_0/0.5)] backdrop-blur-2xl backdrop-saturate-150"
           // It grows out of the corner of the region it belongs to, rather
           // than fading in beside it.
           initial={reduceMotion ? false : { opacity: 0, scale: 0.94 }}

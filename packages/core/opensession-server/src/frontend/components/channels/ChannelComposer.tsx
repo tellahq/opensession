@@ -365,7 +365,7 @@ export function ChannelComposer({
           ref={textRef}
           // `composer-textarea` stays as a class name hook (the sidebar swipe
           // guard and SessionViewer's global keys look for it).
-          className="composer-textarea max-h-[40vh] min-h-11 w-full resize-none border-none bg-transparent px-3.5 py-2.5 text-body leading-relaxed text-fg outline-none [field-sizing:content] placeholder:text-faint phone:text-[length:var(--text-input-phone)]"
+          className="composer-textarea max-h-[40vh] min-h-11 w-full resize-none border-none bg-transparent px-3.5 py-2.5 text-body leading-relaxed text-fg outline-none [field-sizing:content] placeholder:text-faint phone:text-input-phone"
           placeholder={disabled && disabledHint ? disabledHint : placeholder}
           value={draft}
           disabled={disabled}

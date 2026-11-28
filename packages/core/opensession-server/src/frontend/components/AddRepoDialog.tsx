@@ -104,7 +104,7 @@ export function AddRepoDialog({
 							   affordance and has no control beside it to match. */
               className={fieldClasses(
                 "lg",
-                "h-10 border-line-strong text-sm focus:shadow-[0_0_0_3px_var(--accent-soft)]",
+                "h-10 border-line-strong text-sm focus:shadow-halo-accent",
               )}
               value={value}
               onChange={(event) =>

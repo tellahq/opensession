@@ -623,7 +623,7 @@ export function useFileMentions({
                           {item.icon || <IconPlug size={20} />}
                         </span>
                       ) : item.repo ? (
-                        <span className="shrink-0 rounded-md bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-[5px] py-px text-meta font-semibold text-accent">
+                        <span className="shrink-0 rounded-md bg-accent/16 px-[5px] py-px text-meta font-semibold text-accent">
                           {repoLabel(item.repo)}
                         </span>
                       ) : (

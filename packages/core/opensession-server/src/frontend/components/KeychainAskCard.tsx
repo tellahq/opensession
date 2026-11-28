@@ -83,7 +83,7 @@ function AskCard({
       <div className="flex items-center gap-2">
         <span
           aria-hidden="true"
-          className="h-1.5 w-1.5 shrink-0 rounded-full bg-green shadow-[0_0_0_3px_var(--green-soft)]"
+          className="h-1.5 w-1.5 shrink-0 rounded-full bg-green shadow-halo-green"
         />
         <span className="text-label font-semibold text-dim">
           {login

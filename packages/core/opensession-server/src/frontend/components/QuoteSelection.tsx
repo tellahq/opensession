@@ -408,7 +408,7 @@ export function QuoteSelection({
       initial={{ opacity: 0, scale: 0.96 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ type: "tween", duration: duration.micro, ease }}
-      className="fixed z-inline-float inline-flex min-h-8 items-stretch overflow-hidden whitespace-nowrap rounded-[999px] bg-popup text-label font-semibold text-fg [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm"
+      className="fixed z-inline-float inline-flex min-h-8 items-stretch overflow-hidden whitespace-nowrap rounded-capsule bg-popup text-label font-semibold text-fg [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm"
       style={{
         left: placement?.left ?? 0,
         top: placement?.top ?? 0,

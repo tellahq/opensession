@@ -63,7 +63,7 @@ export const REGION_HANDLES: {
     sx: -1,
     sy: -1,
     cursor: "cursor-nwse-resize",
-    mark: "absolute left-1/2 top-1/2 size-3.5 rounded-tl-[4px] border-l-[3px] border-t-[3px] phone:size-4",
+    mark: "absolute left-1/2 top-1/2 size-3.5 rounded-tl-xs border-l-[3px] border-t-[3px] phone:size-4",
   },
   {
     id: "ne",
@@ -71,7 +71,7 @@ export const REGION_HANDLES: {
     sx: 1,
     sy: -1,
     cursor: "cursor-nesw-resize",
-    mark: "absolute right-1/2 top-1/2 size-3.5 rounded-tr-[4px] border-r-[3px] border-t-[3px] phone:size-4",
+    mark: "absolute right-1/2 top-1/2 size-3.5 rounded-tr-xs border-r-[3px] border-t-[3px] phone:size-4",
   },
   {
     id: "se",
@@ -79,7 +79,7 @@ export const REGION_HANDLES: {
     sx: 1,
     sy: 1,
     cursor: "cursor-nwse-resize",
-    mark: "absolute right-1/2 bottom-1/2 size-3.5 rounded-br-[4px] border-r-[3px] border-b-[3px] phone:size-4",
+    mark: "absolute right-1/2 bottom-1/2 size-3.5 rounded-br-xs border-r-[3px] border-b-[3px] phone:size-4",
   },
   {
     id: "sw",
@@ -87,7 +87,7 @@ export const REGION_HANDLES: {
     sx: -1,
     sy: 1,
     cursor: "cursor-nesw-resize",
-    mark: "absolute left-1/2 bottom-1/2 size-3.5 rounded-bl-[4px] border-l-[3px] border-b-[3px] phone:size-4",
+    mark: "absolute left-1/2 bottom-1/2 size-3.5 rounded-bl-xs border-l-[3px] border-b-[3px] phone:size-4",
   },
   {
     id: "n",

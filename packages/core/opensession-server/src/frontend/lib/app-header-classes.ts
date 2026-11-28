@@ -156,7 +156,7 @@ export const MOBILE_CONTROL_GLASS = sx(h.glassEffects, h.glassFill);
 /**
  * One circular mobile top-bar control: Back, More and future page actions all
  * share this material, size, neutral ink and press response. `rounded-full`,
- * not `rounded-[999px]`, keeps the platform's true-circle toolbar shape.
+ * not `rounded-capsule`, keeps the platform's true-circle toolbar shape.
  */
 export const MOBILE_TOP_BAR_CONTROL = cn(
   sx(h.control, h.capsule, h.glassEffects, h.glassFill),
@@ -189,7 +189,7 @@ export const APP_LOGO_STATUS = sx(h.logoStatus);
  * folded in here (the flex box and `text-fg`); its `bottom: 0` did not, being
  * inert on a statically-positioned element.
  *
- * `rounded-full` rather than `rounded-[999px]`: the rule set no `corner-shape`,
+ * `rounded-full` rather than `rounded-capsule`: the rule set no `corner-shape`,
  * so this capsule is a round one. Both radii clamp to the same half-height
  * anyway; spelling it `999px` would hand it a squircle it never had.
  */

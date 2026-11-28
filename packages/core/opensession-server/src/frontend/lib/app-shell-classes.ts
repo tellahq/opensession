@@ -156,12 +156,12 @@ export const WORKSPACE_SHELL =
   // it doubles.
   "new-layout:border-l-0 new-layout:[box-shadow:none] " +
   "new-layout:[--tab-edge:color-mix(in_srgb,var(--border)_55%,var(--sidebar-bg))] " +
-  "new-layout:mr-1.5 new-layout:mb-1 new-layout:rounded-b-[10px] new-layout:[corner-shape:round] " +
+  "new-layout:mr-1.5 new-layout:mb-1 new-layout:rounded-b-pane new-layout:[corner-shape:round] " +
   // The outline is drawn over the content rather than as a border, because
   // the window row is inside this box and a border would run up its sides.
   // Under a row it starts at the row's bottom edge.
   "new-layout:before:pointer-events-none new-layout:before:absolute new-layout:before:inset-0 new-layout:before:z-shell-overlay " +
-  "new-layout:before:rounded-[10px] new-layout:before:rounded-tl-[var(--panel-tl)] new-layout:before:border new-layout:before:border-[color:var(--tab-edge)] new-layout:before:content-[''] " +
+  "new-layout:before:rounded-pane new-layout:before:rounded-tl-[var(--panel-tl)] new-layout:before:border new-layout:before:border-[color:var(--tab-edge)] new-layout:before:content-[''] " +
   "new-layout:[&:has([data-pane-top-row]>:not(:empty))]:before:top-[calc(var(--desktop-header-h)-1px)] " +
   // The bottom corners are this box's own, so its clip rounds them. The top
   // ones are under the row and inside the box, so the chrome is painted back
@@ -181,7 +181,7 @@ export const WORKSPACE_SHELL =
   "new-layout:[--panel-tl:10px] " +
   // A page with no row is the whole panel: it keeps the same gap at the top
   // and rounds its own top corners.
-  "new-layout:[&:not(:has([data-pane-top-row]>:not(:empty)))]:mt-1.5 new-layout:[&:not(:has([data-pane-top-row]>:not(:empty)))]:rounded-t-[10px] " +
+  "new-layout:[&:not(:has([data-pane-top-row]>:not(:empty)))]:mt-1.5 new-layout:[&:not(:has([data-pane-top-row]>:not(:empty)))]:rounded-t-pane " +
   NEW_LAYOUT_PANE_ROW +
   " " +
   // An open media viewer lifts the session input above its scrim, which
@@ -245,7 +245,7 @@ export const tabSplitDropPreviewClass = (side: "left" | "right" | "panel") =>
   "pointer-events-none absolute top-[calc(var(--desktop-header-h)+36px)] bottom-2 z-shell-pane " +
   "w-[calc(var(--split-preview-share,50%)-12px)] " +
   "rounded-[calc(10px*var(--rf))] [corner-shape:var(--cs)] border-2 border-accent " +
-  "bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] " +
+  "bg-accent/16 " +
   // A hairline of white inside the accent edge, so the outline still reads
   // against a light screenshot or a pale diff behind it.
   "shadow-[inset_0_0_0_1px_color-mix(in_srgb,white_16%,transparent)] " +

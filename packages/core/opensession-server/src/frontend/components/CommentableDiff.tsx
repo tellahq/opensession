@@ -102,7 +102,7 @@ const STICKY_FILE_HEADER_SURFACE =
 // panel's toolbar, its code directly under it, and a hairline between files.
 const FLUSH_FILE_ROW = "border-b border-divider";
 const FLUSH_FILE_HEADER_SURFACE =
-  "rounded-none bg-surface px-3.5 phone:px-3.5 group-data-[stuck]:shadow-[inset_0_-1px_0_var(--divider)]";
+  "rounded-none bg-surface px-3.5 phone:px-3.5 group-data-[stuck]:after:absolute group-data-[stuck]:after:inset-x-0 group-data-[stuck]:after:bottom-0 group-data-[stuck]:after:h-px group-data-[stuck]:after:bg-divider group-data-[stuck]:after:content-['']";
 
 /* The phone header's folder part: shrinks first and loses its start, so a
    deep path reads "…/src/" while the filename after it stays whole. */

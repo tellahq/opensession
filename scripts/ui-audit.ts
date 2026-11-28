@@ -36,6 +36,8 @@ const BUDGET_FILE = join(import.meta.dir, "ui-audit-budget.json");
 
 /** Radii the scale actually names (styles/tailwind.css), in px before `--rf`. */
 const RADIUS_SCALE = new Set([2, 4, 7, 12, 14, 16, 18, 22]);
+/** Tint steps for a translucent hue (`bg-green/10`); see styles/tailwind.css. */
+const TINT_SCALE = new Set([6, 10, 16, 22, 34, 40]);
 
 const TAILWIND_CSS = readFileSync(
   join(FRONTEND, "styles/tailwind.css"),
@@ -494,6 +496,37 @@ const SIGNALS: Signal[] = [
     },
   },
   {
+    id: "off-scale-tint",
+    instead:
+      "a hue's tint step, bg-<hue>/6, /10 (soft), /16, /22 (edge), /34 (strong) or /40 (a tinted line); a tone chip, bg-tone-<hue> and bg-tone-hover; or a named theme color (styles/tailwind.css)",
+    exempt: ["styles/"],
+    count: (source) => {
+      const code = stripComments(source);
+      let n = occurrences(
+        code,
+        /(?<![\w-])(?:bg|text|border(?:-[trblxyse])?|ring|outline|fill|stroke|decoration|divide|caret|from|to|via|placeholder)-\[(?:color:)?color-mix\(/g,
+      );
+      // A translucent wash or line of a hue off its tint steps. Text alpha
+      // (`text-fg/85`) is ink, not a tint, and is not counted.
+      for (const match of code.matchAll(
+        /(?<![\w-])(?:bg|border(?:-[trblxyse])?|ring|outline|divide|from|to|via)-(?:green|red|yellow|blue|purple|accent|accent-ink|yellow-tint|current|link|\[color:var\(--[\w-]+\)\])\/(\d+)(?![\w.])/g,
+      ))
+        if (!TINT_SCALE.has(Number(match[1]))) n++;
+      return n;
+    },
+  },
+  {
+    id: "arbitrary-shadow",
+    instead:
+      "an elevation tier (smooth-shadow-*), or a named shadow from styles/tailwind.css (shadow-halo-*, shadow-glow-blue, shadow-avatar, shadow-composer, shadow-header-control)",
+    exempt: ["styles/"],
+    count: (source) =>
+      occurrences(
+        stripComments(source),
+        /(?<![\w-])(?:drop-|inset-)?shadow-\[[^\]]+\]/g,
+      ),
+  },
+  {
     id: "off-scale-z",
     instead:
       "a named stacking layer, z-<name> or layer.<name> (base-theme.css --layer-*), or a small integer (-z-1 to z-9) for order inside a component",
@@ -516,10 +549,10 @@ const SIGNALS: Signal[] = [
   },
   {
     id: "off-scale-radius",
-    // rounded-[999px] is sanctioned: it is the squircle-preserving pill, and
-    // rounded-full is the opt-out (see src/frontend/AGENTS.md).
+    // rounded-capsule is the squircle-preserving pill, and rounded-full is
+    // the opt-out (see src/frontend/AGENTS.md).
     instead:
-      "the radius scale — rounded-xs/sm/md/lg/xl/2xl, rounded-control/popup",
+      "the radius scale: rounded-xs/sm/md/lg/xl/2xl, rounded-control/popup/capsule/composer/sheet, and the new layout's round rounded-tab/pane",
     exempt: ["styles/"],
     count: (source) => {
       let n = 0;
@@ -527,6 +560,12 @@ const SIGNALS: Signal[] = [
         /\brounded-(?:\w+-)?\[calc\((\d+)px\s*\*\s*var\(--rf\)\)\]/g,
       ))
         if (!RADIUS_SCALE.has(Number(match[1]))) n++;
+      // A raw length: unscaled, so it renders at a different size from the
+      // squircled steps around it.
+      n += occurrences(
+        stripComments(source),
+        /\brounded-(?:[trblse]{1,2}-)?\[[0-9.]+(?:px|rem|em|%)\]/g,
+      );
       // Retired aliases: bare `rounded` (xs), `rounded-row` (control),
       // `rounded-panel` (lg), and the steps past 2xl.
       n += occurrences(

@@ -55,7 +55,7 @@ export function SessionViewerDialogs({
              .session-delete-overlay')` whether a click landed on a blocking
              surface. Drop the name and a click through this overlay starts
              dismissing what's underneath it. */
-          className="session-delete-overlay absolute inset-0 z-shell-overlay flex items-center justify-center bg-[color-mix(in_srgb,var(--bg)_72%,transparent)] backdrop-blur-[2px]"
+          className="session-delete-overlay absolute inset-0 z-shell-overlay flex items-center justify-center bg-bg/72 backdrop-blur-[2px]"
           role="status"
           aria-live="polite"
         >

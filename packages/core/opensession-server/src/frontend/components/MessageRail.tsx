@@ -424,7 +424,7 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
               key={message.id}
               aria-hidden
               className={cn(
-                "absolute left-0 block origin-left rounded-[999px] bg-fg",
+                "absolute left-0 block origin-left rounded-capsule bg-fg",
                 "transition-[transform,opacity] duration-standard ease-standard",
                 "motion-reduce:transition-none",
               )}

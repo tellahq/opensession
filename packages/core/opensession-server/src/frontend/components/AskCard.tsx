@@ -299,7 +299,7 @@ export function AskCard({
       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
         <span
           aria-hidden="true"
-          className="h-1.5 w-1.5 shrink-0 rounded-full bg-green shadow-[0_0_0_3px_var(--green-soft)]"
+          className="h-1.5 w-1.5 shrink-0 rounded-full bg-green shadow-halo-green"
         />
         <span className="text-label font-semibold text-dim">
           {AGENT_NAME} needs input
@@ -438,7 +438,7 @@ export function AskCard({
                     className={cn(
                       "mt-px flex h-5 w-5 shrink-0 items-center justify-center border transition-[background-color,border-color,color]",
                       q.multiSelect
-                        ? "rounded-[calc(6px*var(--rf))] [corner-shape:var(--cs)]"
+                        ? "rounded-md [corner-shape:var(--cs)]"
                         : "rounded-full",
                       active
                         ? "border-transparent bg-fg text-bg"
@@ -462,7 +462,7 @@ export function AskCard({
 							   as an error state on a field you're simply typing in, and the
 							   caret is affordance enough. */
               className={cn(
-                "h-11 w-full rounded-[calc(12px*var(--rf))] border-0 bg-control px-3 text-base text-fg outline-none placeholder:text-faint disabled:opacity-60 sm:text-control-label [corner-shape:var(--cs)]",
+                "h-11 w-full rounded-control border-0 bg-control px-3 text-base text-fg outline-none placeholder:text-faint disabled:opacity-60 sm:text-control-label [corner-shape:var(--cs)]",
                 q.options?.length && "mt-1.5",
               )}
               placeholder={

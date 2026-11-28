@@ -95,7 +95,7 @@ describe("TranscriptBlocks shipped change action", () => {
     // not a bare <select> with an overlaid chevron.
     expect(html).toContain("aria-haspopup=");
     expect(html).not.toContain("<select");
-    expect(html).toContain("rounded-[var(--composer-radius)]");
+    expect(html).toContain("rounded-composer");
     expect(html).toContain("smooth-shadow-ring-soft");
     expect(html).not.toContain("rounded-xl bg-panel p-4");
   });

@@ -90,7 +90,7 @@ function RequestCard({
       <div className="flex items-center gap-2">
         <span
           aria-hidden="true"
-          className="h-1.5 w-1.5 shrink-0 rounded-full bg-red shadow-[0_0_0_3px_var(--red-soft)]"
+          className="h-1.5 w-1.5 shrink-0 rounded-full bg-red shadow-halo-red"
         />
         <span className="text-label font-semibold text-dim">
           {AGENT_NAME} wants to force merge a pull request

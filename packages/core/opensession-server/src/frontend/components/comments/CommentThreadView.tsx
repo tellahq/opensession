@@ -280,7 +280,7 @@ export function ThreadPassage({
   return (
     <blockquote
       className={cn(
-        "m-0 line-clamp-3 border-l-2 border-[color:var(--yellow)] pl-2.5 text-supporting text-dim",
+        "m-0 line-clamp-3 border-l-2 border-yellow pl-2.5 text-supporting text-dim",
         className,
       )}
     >
@@ -454,7 +454,7 @@ export function CommentThreadView({
       {(thread.assignee || resolved) && (
         <div className="flex flex-wrap items-center gap-1.5">
           {thread.assignee && (
-            <span className="inline-flex min-w-0 items-center gap-1 rounded-[999px] bg-fg/8 py-0.5 pl-1 pr-2 text-meta text-dim">
+            <span className="inline-flex min-w-0 items-center gap-1 rounded-capsule bg-fg/8 py-0.5 pl-1 pr-2 text-meta text-dim">
               <UserAvatar name={thread.assignee} size={14} />
               <span className="truncate">
                 {same(thread.assignee, me)

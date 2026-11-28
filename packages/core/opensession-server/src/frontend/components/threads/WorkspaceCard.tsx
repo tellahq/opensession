@@ -164,12 +164,12 @@ function ProgressRow({
               {shipped} of {total} shipped
             </span>
             <span
-              className="ml-1 h-1 w-12 shrink overflow-hidden rounded-[999px] bg-hover"
+              className="ml-1 h-1 w-12 shrink overflow-hidden rounded-capsule bg-hover"
               role="img"
               aria-label={`${shipped} of ${total} threads shipped`}
             >
               <span
-                className="block h-full rounded-[999px] bg-purple transition-[width] duration-long"
+                className="block h-full rounded-capsule bg-purple transition-[width] duration-long"
                 style={{ width: `${(shipped / total) * 100}%` }}
               />
             </span>
@@ -197,7 +197,7 @@ function ProgressRow({
                 <Menu.Trigger
                   aria-label="Add collaborator"
                   className={cn(
-                    "grid size-[22px] shrink-0 cursor-pointer place-items-center rounded-avatar border-none bg-active p-0 text-dim shadow-[var(--avatar-edge)] focus-ring",
+                    "grid size-[22px] shrink-0 cursor-pointer place-items-center rounded-avatar border-none bg-active p-0 text-dim shadow-avatar focus-ring",
                     "transition-colors hover:bg-pressed hover:text-fg data-[popup-open]:bg-pressed data-[popup-open]:text-fg",
                     people.length > 0 && "-ml-1",
                   )}

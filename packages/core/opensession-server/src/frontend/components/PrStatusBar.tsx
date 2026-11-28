@@ -259,13 +259,11 @@ function PrBarButton({
   // animation runs on this and nothing else.
   const phase = working ? "working" : "idle";
   const tones = {
-    green:
-      "bg-[var(--green)] border-[color-mix(in_srgb,var(--green)_78%,black)] text-white",
-    purple:
-      "bg-[var(--purple)] border-[color-mix(in_srgb,var(--purple)_78%,black)] text-white",
+    green: "bg-green border-green-deep text-white",
+    purple: "bg-purple border-purple-deep text-white",
     // The fix on a red band (Resolve, Fix checks). Like the card pill below,
     // it takes no shadow: on the tinted band a grey shadow only smudges.
-    red: "bg-[var(--red)] border-[color-mix(in_srgb,var(--red)_78%,black)] text-white shadow-none",
+    red: "bg-red border-red-deep text-white shadow-none",
     // The fix for a review state (Address feedback): red ink on the
     // card's own surface, so it reads as a clean cut-out of the tinted band
     // rather than a second, darker tint of the same pink. The hairline is
@@ -273,9 +271,8 @@ function PrBarButton({
     "status-red":
       "border-line bg-popup text-red shadow-none hover:bg-[color-mix(in_srgb,var(--red)_6%,var(--popup-surface))] hover:brightness-100",
     "status-yellow":
-      "border-[color-mix(in_srgb,var(--yellow)_35%,transparent)] bg-[color-mix(in_srgb,var(--yellow)_10%,var(--control-surface))] text-yellow hover:bg-[color-mix(in_srgb,var(--yellow)_16%,var(--control-surface))] hover:brightness-100",
-    solid:
-      "bg-[var(--text)] text-[var(--bg)] border-[color-mix(in_srgb,var(--text)_84%,transparent)]",
+      "border-yellow/34 bg-[color-mix(in_srgb,var(--yellow)_10%,var(--control-surface))] text-yellow hover:bg-[color-mix(in_srgb,var(--yellow)_16%,var(--control-surface))] hover:brightness-100",
+    solid: "bg-fg text-bg border-fg/84",
     // The neutral action (Ship, Create PR, Unarchive). The grey fill and the
     // hairline already say "press me" against the strip, so it takes no
     // shadow and no strong edge: stacked on the fill, those two only smudged
@@ -286,7 +283,7 @@ function PrBarButton({
     // band, dashed, so it reads as the road not yet taken next to the solid
     // action. Nothing to fill and nothing to lift, so it drops the shadow.
     "purple-dashed":
-      "border-dashed border-[color-mix(in_srgb,var(--purple)_45%,transparent)] bg-transparent text-purple shadow-none hover:bg-[color-mix(in_srgb,var(--purple)_10%,transparent)] hover:brightness-100",
+      "border-dashed border-purple/45 bg-transparent text-purple shadow-none hover:bg-purple/10 hover:brightness-100",
   } as const;
   return (
     <motion.button
@@ -295,7 +292,7 @@ function PrBarButton({
       layoutDependency={phase}
       transition={LAYOUT_TRANSITION}
       className={cn(
-        "inline-flex min-h-[30px] items-center justify-center gap-1.5 rounded-full border px-3 py-[5px] text-label leading-none font-semibold whitespace-nowrap smooth-shadow-sm transition-[background-color,border-color,color,filter,transform] duration-micro ease-standard hover:brightness-[1.08] active:scale-press-plate active:brightness-[0.98] focus-visible:outline-2 focus-visible:outline-[var(--accent-ink)] focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-60 disabled:shadow-none",
+        "inline-flex min-h-[30px] items-center justify-center gap-1.5 rounded-full border px-3 py-[5px] text-label leading-none font-semibold whitespace-nowrap smooth-shadow-sm transition-[background-color,border-color,color,filter,transform] duration-micro ease-standard hover:brightness-[1.08] active:scale-press-plate active:brightness-[0.98] focus-visible:outline-2 focus-visible:outline-accent-ink focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-60 disabled:shadow-none",
         tones[tone],
         // A leading glyph carries its own margin: the icon set draws in a
         // 4.75–19.25 span of a 24 grid, so an 18px box holds ~3.5px of

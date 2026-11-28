@@ -720,7 +720,7 @@ export function PrFilesPage({
             <div className={PHONE_REVIEW_PILL}>
               <Button
                 variant="ghost"
-                className="min-h-11 rounded-[999px] px-3"
+                className="min-h-11 rounded-capsule px-3"
                 aria-label={
                   reviewedFiles
                     ? `Files, ${reviewedCount} of ${files.length} reviewed`
@@ -738,7 +738,7 @@ export function PrFilesPage({
               {reviewProvider && (
                 <Button
                   variant="primary"
-                  className="min-h-11 rounded-[999px] px-4"
+                  className="min-h-11 rounded-capsule px-4"
                   onClick={onFinishReview}
                 >
                   Finish review{pendingCount > 0 ? ` (${pendingCount})` : ""}

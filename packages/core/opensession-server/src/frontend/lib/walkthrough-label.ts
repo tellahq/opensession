@@ -7,7 +7,7 @@ export const WALKTHROUGH_LABEL_TEXT: Record<WalkthroughMediaLabel, string> = {
 };
 
 export const WALKTHROUGH_LABEL_CLASS =
-  "rounded-[999px] bg-panel px-2 py-0.5 text-meta font-semibold leading-4 shadow-[inset_0_0_0_1px_var(--border),0_1px_1px_oklch(0_0_0_/_0.14)]";
+  "rounded-capsule bg-panel px-2 py-0.5 text-meta font-semibold leading-4 shadow-[inset_0_0_0_1px_var(--border),0_1px_1px_oklch(0_0_0_/_0.14)]";
 
 export const WALKTHROUGH_LABEL_TONE: Record<WalkthroughMediaLabel, string> = {
   before:

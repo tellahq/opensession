@@ -535,7 +535,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
   max-width: 100%;
   max-height: 360px;
   height: auto;
-  border-radius: calc(8px * var(--rf));
+  border-radius: calc(7px * var(--rf));
   corner-shape: var(--cs);
   border: 1px solid rgba(127, 127, 127, 0.25);
   margin: 6px 0;
@@ -641,7 +641,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
   padding: 12px;
   background: var(--diagram-canvas);
   border: 1px solid var(--border);
-  border-radius: calc(8px * var(--rf));
+  border-radius: calc(7px * var(--rf));
   corner-shape: var(--cs);
   overflow-x: auto;
   /* The whole chart opens the viewer, the way a picture in the transcript
@@ -668,7 +668,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
   padding: 12px;
   background: var(--diagram-canvas);
   border: 1px solid var(--border);
-  border-radius: calc(8px * var(--rf));
+  border-radius: calc(7px * var(--rf));
   corner-shape: var(--cs);
   overflow-x: auto;
 }
@@ -698,7 +698,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
   line-height: 1.4;
   color: var(--tooltip-fg);
   background: var(--tooltip-bg);
-  border-radius: calc(6px * var(--rf));
+  border-radius: calc(7px * var(--rf));
   corner-shape: var(--cs);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
   white-space: pre-line;
@@ -736,7 +736,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 .md-video {
   max-width: 100%;
   max-height: 480px;
-  border-radius: calc(8px * var(--rf));
+  border-radius: calc(7px * var(--rf));
   corner-shape: var(--cs);
   border: 1px solid rgba(127, 127, 127, 0.25);
   margin: 6px 0;
@@ -760,7 +760,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
   aspect-ratio: 16 / 9;
   margin: 6px 0;
   border: 1px solid rgba(127, 127, 127, 0.25);
-  border-radius: calc(8px * var(--rf));
+  border-radius: calc(7px * var(--rf));
   corner-shape: var(--cs);
   background: #000;
   background-clip: padding-box;
@@ -1569,7 +1569,7 @@ html[data-theme="light"] span.commit-ref:hover {
 }
 .wiki-doc img {
   max-width: 100%;
-  border-radius: calc(8px * var(--rf));
+  border-radius: calc(7px * var(--rf));
   corner-shape: var(--cs);
 }
 .wiki-doc a {
@@ -1710,13 +1710,13 @@ html[data-theme="light"] span.commit-ref:hover {
   column-gap: 12px;
   width: 100%;
   background: color-mix(in srgb, var(--accent) 6%, transparent);
-  border-radius: 3px;
+  border-radius: calc(2px * var(--rf));
 }
 .markdown pre.md-code-annotated .md-code-margin-note {
   margin-left: auto;
   padding-left: 8px;
   border-left: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
-  font-family: var(--font-sans);
+  font-family: var(--sans);
   font-size: 11px;
   font-style: normal;
   color: var(--text-dim);

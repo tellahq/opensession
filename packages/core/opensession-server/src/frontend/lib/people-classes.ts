@@ -14,7 +14,7 @@ export const PEOPLE_CHIP_ROW = "mb-6 flex flex-wrap items-center gap-1.5";
 
 /** One scope: everyone, a person, or an organization. */
 export const PEOPLE_CHIP =
-  "focus-ring inline-flex min-w-0 cursor-pointer items-center gap-2 rounded-[999px] " +
+  "focus-ring inline-flex min-w-0 cursor-pointer items-center gap-2 rounded-capsule " +
   "border-0 bg-panel py-1 pr-3 pl-1 text-control-label font-medium text-dim " +
   "transition-colors duration-micro ease-standard " +
   "hover:bg-hover hover:text-fg";
@@ -32,8 +32,7 @@ export const PEOPLE_CHIP_GLYPH =
 
 /** The same slot on the accent plate: the wash is ink, which disappears into a
  *  dark fill, so it inverts with the chip. */
-export const PEOPLE_CHIP_GLYPH_SELECTED =
-  "bg-[color-mix(in_srgb,var(--on-accent)_22%,transparent)] text-on-accent";
+export const PEOPLE_CHIP_GLYPH_SELECTED = "bg-on-accent/22 text-on-accent";
 
 /** "Shipped" and any other heading on the page. A step above the interface
  *  label it started as: it heads the whole list under it, so it reads as a

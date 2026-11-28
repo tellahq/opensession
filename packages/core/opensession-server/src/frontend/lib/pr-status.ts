@@ -28,10 +28,10 @@ export interface PrStatusInput {
  * states take translucent ink instead of a hue.
  */
 const MARK_BG = {
-  purple: "bg-[color-mix(in_srgb,var(--purple)_10%,transparent)]",
+  purple: "bg-purple/10",
   muted: "bg-hover",
   red: "bg-red-soft",
-  yellow: "bg-[color-mix(in_srgb,var(--yellow)_9%,transparent)]",
+  yellow: "bg-yellow/10",
   green: "bg-green-soft",
 } as const;
 

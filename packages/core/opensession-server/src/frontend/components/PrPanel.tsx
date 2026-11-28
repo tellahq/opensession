@@ -1558,7 +1558,7 @@ export function PrPanel({
         {merging ? "Merging…" : MERGE_CHOICE_SHORT.merge}
       </Button>
     );
-  const phoneMergeAction = landAction("min-h-11 shrink-0 rounded-[999px] px-4");
+  const phoneMergeAction = landAction("min-h-11 shrink-0 rounded-capsule px-4");
   const reviewSubmitLabel =
     reviewEvent === "APPROVE"
       ? mergeAfterReview && canMergeAfterReview

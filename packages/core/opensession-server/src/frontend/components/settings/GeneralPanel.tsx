@@ -275,9 +275,7 @@ export function OrganizationProfileSection({
         <>
           <SettingCard
             className={
-              onboarding
-                ? "mx-auto max-w-[560px] bg-[color-mix(in_srgb,var(--popup-surface)_76%,transparent)]!"
-                : undefined
+              onboarding ? "mx-auto max-w-[560px] bg-popup/76!" : undefined
             }
           >
             {onboarding ? (

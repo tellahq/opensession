@@ -530,7 +530,7 @@ export function DiffPanel({
         countClassName="font-semibold"
       />
       {d.truncated && (
-        <span className="rounded-sm bg-yellow/15 px-[7px] py-px text-meta font-bold text-yellow">
+        <span className="rounded-sm bg-yellow/16 px-[7px] py-px text-meta font-bold text-yellow">
           truncated
         </span>
       )}

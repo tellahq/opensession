@@ -28,5 +28,5 @@ export const PERSISTENT_NOTICE_SHELF =
 export const PERSISTENT_NOTICE_CARD =
   "pointer-events-auto flex w-full items-center justify-between gap-2 " +
   "rounded-control border border-[color:var(--composer-border)] bg-[var(--composer-surface)] " +
-  "smooth-shadow-md py-1.5 pr-1.5 pl-3 phone:shadow-[var(--composer-shadow)] " +
+  "smooth-shadow-md py-1.5 pr-1.5 pl-3 phone:shadow-composer " +
   "animate-toast-in motion-reduce:animate-none";

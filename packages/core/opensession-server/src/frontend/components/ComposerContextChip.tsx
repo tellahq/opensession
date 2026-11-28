@@ -16,12 +16,12 @@ const CHIP_TONE = {
     remove: "text-faint enabled:hover:text-fg",
   },
   note: {
-    box: "bg-[color-mix(in_srgb,var(--yellow-tint)_18%,transparent)] text-yellow",
+    box: "bg-yellow-tint/16 text-yellow",
     icon: "text-yellow",
     remove: "text-yellow/60 enabled:hover:text-yellow",
   },
   ask: {
-    box: "bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green",
+    box: "bg-green/16 text-green",
     icon: "text-green",
     remove: "text-green/60 enabled:hover:text-green",
   },

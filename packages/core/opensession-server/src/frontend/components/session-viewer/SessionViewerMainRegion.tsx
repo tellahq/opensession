@@ -864,7 +864,7 @@ export function SessionViewerMainRegion({
               createPortal(
                 <>
                   <motion.div
-                    className="pointer-events-none fixed inset-0 z-drop-target flex flex-col items-center justify-center bg-[color-mix(in_srgb,var(--bg-panel)_68%,transparent)] px-6 text-center"
+                    className="pointer-events-none fixed inset-0 z-drop-target flex flex-col items-center justify-center bg-panel/68 px-6 text-center"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{
@@ -1279,7 +1279,7 @@ export function SessionViewerMainRegion({
               ) : (
                 <>
                   {forkFrom && (
-                    <div className="mb-2 flex items-center justify-between gap-3 rounded-control border border-[color-mix(in_srgb,var(--accent)_40%,transparent)] bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] px-3 py-[7px] text-supporting text-fg">
+                    <div className="mb-2 flex items-center justify-between gap-3 rounded-control border border-accent/40 bg-accent/10 px-3 py-[7px] text-supporting text-fg">
                       <span>
                         {forkFrom.kind === "tip"
                           ? "Duplicating this session from the current context. Type the new direction."
@@ -1347,7 +1347,7 @@ export function SessionViewerMainRegion({
                         {isPhone && (
                           <div
                             className={cn(
-                              "pointer-events-auto mx-auto hidden h-12 shrink-0 items-center rounded-full border border-[color:var(--mobile-header-control-border)] px-0.5 text-dim shadow-[var(--mobile-header-control-shadow)] phone:flex phone:[body.kb-open_&]:hidden",
+                              "pointer-events-auto mx-auto hidden h-12 shrink-0 items-center rounded-full border border-[color:var(--mobile-header-control-border)] px-0.5 text-dim shadow-header-control phone:flex phone:[body.kb-open_&]:hidden",
                               MOBILE_CONTROL_GLASS,
                             )}
                           >

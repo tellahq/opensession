@@ -39,7 +39,7 @@ const LINK_READY = "border-green/45 text-green hover:bg-green-soft";
 /* A deploy is in flight. A rebuild still opens the previous deploy, so it stays
    a live link; a first build is not testable yet, so LINK_BUILDING below
    swallows the click (see onClick) on top of this. */
-const LINK_DEPLOYING = "border-yellow/45 text-yellow hover:bg-yellow/12";
+const LINK_DEPLOYING = "border-yellow/45 text-yellow hover:bg-yellow/10";
 const LINK_BUILDING = `${LINK_DEPLOYING} cursor-default opacity-55`;
 /* Nothing to link to yet: quiet, and no hover wash to imply it opens. */
 const LINK_PENDING = "border-line text-dim cursor-default";

@@ -880,7 +880,7 @@ export function PlainReplyBox({
               palettePill,
               "shrink-0",
               kind === "note" &&
-                "bg-[color-mix(in_srgb,var(--yellow-tint)_22%,transparent)] text-yellow hover:bg-[color-mix(in_srgb,var(--yellow-tint)_32%,transparent)] hover:text-yellow",
+                "bg-yellow-tint/22 text-yellow hover:bg-yellow-tint/34 hover:text-yellow",
             )}
             onClick={() =>
               setKind((current) => (current === "note" ? "reply" : "note"))

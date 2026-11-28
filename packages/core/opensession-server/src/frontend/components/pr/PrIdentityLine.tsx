@@ -32,7 +32,7 @@ export function PrIdentityLine({
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-supporting">
       <span
-        className={`flex h-7 items-center gap-1.5 rounded-[999px] px-2.5 font-medium ${statusMark.bgClassName} ${statusMark.className}`}
+        className={`flex h-7 items-center gap-1.5 rounded-capsule px-2.5 font-medium ${statusMark.bgClassName} ${statusMark.className}`}
         title={statusMark.label}
       >
         <PrStateIcon state={pr.state} isDraft={pr.isDraft} />

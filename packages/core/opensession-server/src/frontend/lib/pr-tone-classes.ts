@@ -83,11 +83,11 @@ export type RowActionTone = "green" | "yellow" | "red" | "blue" | "muted";
 const GIT_ACTION_TONE: Record<RowActionTone, string> = {
   muted: GIT_ACTION_NEUTRAL,
   green:
-    "bg-[color-mix(in_srgb,var(--green)_24%,var(--control-surface))] text-green enabled:hover:bg-[color-mix(in_srgb,currentColor_34%,var(--control-surface))] data-[popup-open]:bg-[color-mix(in_srgb,currentColor_34%,var(--control-surface))]",
+    "bg-tone-green text-green enabled:hover:bg-tone-hover data-[popup-open]:bg-tone-hover",
   yellow:
-    "bg-[color-mix(in_srgb,var(--yellow)_24%,var(--control-surface))] text-yellow enabled:hover:bg-[color-mix(in_srgb,currentColor_34%,var(--control-surface))] data-[popup-open]:bg-[color-mix(in_srgb,currentColor_34%,var(--control-surface))]",
-  red: "bg-[color-mix(in_srgb,var(--red)_24%,var(--control-surface))] text-red enabled:hover:bg-[color-mix(in_srgb,currentColor_34%,var(--control-surface))] data-[popup-open]:bg-[color-mix(in_srgb,currentColor_34%,var(--control-surface))]",
-  blue: "bg-[color-mix(in_srgb,var(--blue)_24%,var(--control-surface))] text-blue enabled:hover:bg-[color-mix(in_srgb,currentColor_34%,var(--control-surface))] data-[popup-open]:bg-[color-mix(in_srgb,currentColor_34%,var(--control-surface))]",
+    "bg-tone-yellow text-yellow enabled:hover:bg-tone-hover data-[popup-open]:bg-tone-hover",
+  red: "bg-tone-red text-red enabled:hover:bg-tone-hover data-[popup-open]:bg-tone-hover",
+  blue: "bg-tone-blue text-blue enabled:hover:bg-tone-hover data-[popup-open]:bg-tone-hover",
 };
 
 export function gitActionClass(tone: RowActionTone, menu = false): string {
@@ -169,9 +169,9 @@ export const PR_BAR_IN_CARD = "phone:[.session-info-status>&]:overflow-hidden";
  *  the token re-themes them. */
 export const PR_BAR_BG: Record<PrTone, string> = {
   green: "bg-green-soft",
-  purple: "bg-[color-mix(in_srgb,var(--purple)_10%,transparent)]",
+  purple: "bg-purple/10",
   red: "bg-red-soft",
-  yellow: "bg-[color-mix(in_srgb,var(--yellow)_9%,transparent)]",
+  yellow: "bg-yellow/10",
   // The plate fill its neighbours in the panel wear (`--bg-panel` is
   // re-pointed to `--panel-plate` inside the column), so a strip with nothing
   // to report sits in the same family as the sections under it rather than
@@ -188,10 +188,10 @@ export const PR_BAR_BG: Record<PrTone, string> = {
  *  popup's own raised surface, where the strip's weight reads as a highlight
  *  band instead of a tint. */
 export const PR_SUMMARY_BAND_BG: Record<PrTone, string> = {
-  green: "bg-[color-mix(in_srgb,var(--green)_11%,transparent)]",
-  purple: "bg-[color-mix(in_srgb,var(--purple)_10%,transparent)]",
-  red: "bg-[color-mix(in_srgb,var(--red)_11%,transparent)]",
-  yellow: "bg-[color-mix(in_srgb,var(--yellow)_10%,transparent)]",
+  green: "bg-green/10",
+  purple: "bg-purple/10",
+  red: "bg-red/10",
+  yellow: "bg-yellow/10",
   muted: "",
 };
 
@@ -274,14 +274,11 @@ const CHIP_SIZE: Record<ChipSize, string> = {
  *  order, not by the order they are written. */
 const CHIP_TONE: Record<PrTone, string> = {
   muted:
-    "border-line bg-control text-dim hover:bg-[color-mix(in_srgb,currentColor_12%,transparent)] active:bg-[color-mix(in_srgb,currentColor_18%,transparent)]",
-  green:
-    "border-[color-mix(in_srgb,var(--green)_22%,transparent)] bg-[color-mix(in_srgb,var(--green)_24%,var(--control-surface))] text-green hover:bg-[color-mix(in_srgb,currentColor_32%,var(--control-surface))]",
-  purple:
-    "border-[color-mix(in_srgb,var(--purple)_22%,transparent)] bg-[color-mix(in_srgb,var(--purple)_24%,var(--control-surface))] text-purple hover:bg-[color-mix(in_srgb,currentColor_32%,var(--control-surface))]",
-  red: "border-[color-mix(in_srgb,var(--red)_22%,transparent)] bg-[color-mix(in_srgb,var(--red)_24%,var(--control-surface))] text-red hover:bg-[color-mix(in_srgb,currentColor_32%,var(--control-surface))]",
-  yellow:
-    "border-[color-mix(in_srgb,var(--yellow)_22%,transparent)] bg-[color-mix(in_srgb,var(--yellow)_24%,var(--control-surface))] text-yellow hover:bg-[color-mix(in_srgb,currentColor_32%,var(--control-surface))]",
+    "border-line bg-control text-dim hover:bg-current/10 active:bg-current/16",
+  green: "border-green/22 bg-tone-green text-green hover:bg-tone-hover",
+  purple: "border-purple/22 bg-tone-purple text-purple hover:bg-tone-hover",
+  red: "border-red/22 bg-tone-red text-red hover:bg-tone-hover",
+  yellow: "border-yellow/22 bg-tone-yellow text-yellow hover:bg-tone-hover",
 };
 
 /** The same chip on a plain row: the primary chip fills with its tone because
@@ -290,13 +287,10 @@ const CHIP_TONE: Record<PrTone, string> = {
  *  the right is where the colour carries. */
 const CHIP_TONE_FLAT: Record<PrTone, string> = {
   muted: "border-line bg-control text-dim",
-  green:
-    "border-[color-mix(in_srgb,var(--green)_22%,transparent)] bg-control text-green",
-  purple:
-    "border-[color-mix(in_srgb,var(--purple)_22%,transparent)] bg-control text-purple",
-  red: "border-[color-mix(in_srgb,var(--red)_22%,transparent)] bg-control text-red",
-  yellow:
-    "border-[color-mix(in_srgb,var(--yellow)_22%,transparent)] bg-control text-yellow",
+  green: "border-green/22 bg-control text-green",
+  purple: "border-purple/22 bg-control text-purple",
+  red: "border-red/22 bg-control text-red",
+  yellow: "border-yellow/22 bg-control text-yellow",
 };
 
 export function prChipClass(tone: PrTone, size: ChipSize): string {
@@ -311,9 +305,7 @@ export function prChipClass(tone: PrTone, size: ChipSize): string {
   // Unlike a row's chip, a card's is the link itself, so it answers the
   // pointer. Mixed from its own ink so a green chip washes green.
   const hover =
-    size === "card"
-      ? " hover:bg-[color-mix(in_srgb,currentColor_12%,transparent)] active:bg-[color-mix(in_srgb,currentColor_18%,transparent)]"
-      : "";
+    size === "card" ? " hover:bg-current/10 active:bg-current/16" : "";
   return `${CHIP_BASE} ${CHIP_SIZE[size]} ${flat ? CHIP_TONE_FLAT[tone] : CHIP_TONE[tone]}${shadow ? " smooth-shadow-sm" : ""}${hover}`;
 }
 
@@ -330,7 +322,7 @@ export function prChipExternalClass(
     tone === "muted"
       ? // No ink of its own: the neutral half is an <a>, so its arrow takes
         // the link colour, and the hover wash mixes from it.
-        "border-line bg-control smooth-shadow-sm hover:bg-[color-mix(in_srgb,currentColor_12%,transparent)]"
+        "border-line bg-control smooth-shadow-sm hover:bg-current/10"
       : CHIP_TONE[tone];
   return `${geometry} ${size === "head" ? "size-[32px]" : "size-[30px]"} ${colour}`;
 }
@@ -368,9 +360,9 @@ export const PR_ROW =
   "flex min-h-[38px] items-center gap-0.5 border-t border-divider pr-2 hover:brightness-[1.08]";
 export const PR_ROW_BG: Record<PrTone, string> = {
   green: "bg-green-soft",
-  purple: "bg-[color-mix(in_srgb,var(--purple)_10%,transparent)]",
+  purple: "bg-purple/10",
   red: "bg-red-soft",
-  yellow: "bg-[color-mix(in_srgb,var(--yellow)_9%,transparent)]",
+  yellow: "bg-yellow/10",
   muted: "bg-panel",
 };
 export const PR_ROW_MAIN =
@@ -403,4 +395,4 @@ export const PR_REPO_TAB_X =
   "-mr-1 inline-flex items-center text-dim hover:text-fg";
 
 export const PR_ROW_OUT =
-  "inline-flex size-6 shrink-0 items-center justify-center rounded-md text-dim hover:bg-[color-mix(in_srgb,currentColor_14%,transparent)] hover:text-fg";
+  "inline-flex size-6 shrink-0 items-center justify-center rounded-md text-dim hover:bg-current/16 hover:text-fg";

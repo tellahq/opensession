@@ -46,12 +46,9 @@ const BASE =
   "inline-flex size-[26px] shrink-0 items-center justify-center rounded-control";
 
 const TONES = Object.fromEntries([
-  ["todo", "bg-[color-mix(in_srgb,var(--blue)_18%,transparent)] text-blue"],
-  ["done", "bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green"],
-  [
-    "snoozed",
-    "bg-[color-mix(in_srgb,var(--yellow)_20%,transparent)] text-yellow",
-  ],
+  ["todo", "bg-blue/16 text-blue"],
+  ["done", "bg-green/16 text-green"],
+  ["snoozed", "bg-yellow/22 text-yellow"],
 ]);
 
 /**

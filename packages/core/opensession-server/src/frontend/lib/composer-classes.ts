@@ -23,14 +23,14 @@
    .palette-icon-btn`, whose ::before wash is styled from the stylesheet). The
    declarations below are what that rule used to paint. */
 export const composerBox =
-  "relative border border-[color:color-mix(in_srgb,var(--composer-border)_35%,transparent)] bg-[var(--composer-surface)] shadow-[var(--composer-shadow)] transition-[border-color,box-shadow] " +
+  "relative border border-[color:var(--composer-border)]/35 bg-[var(--composer-surface)] shadow-composer transition-[border-color,box-shadow] " +
   "desktop:border-transparent desktop:[--smooth-ring-color:var(--composer-border)] desktop:smooth-shadow-ring-soft";
 
 /** Resting/expanded box. `--composer-inset-left` is read by the "+" menu to
  *  line its left edge up with the composer's outer edge rather than the
  *  button's, so it travels with the padding it describes. */
 export const composerBoxExpanded =
-  "rounded-[var(--composer-radius)] px-3.5 pt-3.5 pb-2.5 [--composer-inset-left:15px] phone:px-3 phone:pt-2.5 phone:pb-[9px] phone:[--composer-inset-left:13px]";
+  "rounded-composer px-3.5 pt-3.5 pb-2.5 [--composer-inset-left:15px] phone:px-3 phone:pt-2.5 phone:pb-[9px] phone:[--composer-inset-left:13px]";
 
 /** Phone resting pill: one row, even 4px inset, held well clear of the screen
  *  edges. The inset is wider than the expanded box's on purpose: at rest the
@@ -43,7 +43,7 @@ export const composerBoxExpanded =
  *  Motion animates the radius between this and the expanded box; the class is
  *  here so a first paint (and any non-animated host) lands on the same shape.
  *
- *  `rounded-[999px]` rather than `rounded-full`, and the difference is not
+ *  `rounded-capsule` rather than `rounded-full`, and the difference is not
  *  cosmetic: base.css grants `corner-shape: squircle` to
  *  `[class*="rounded-"]:not([class*="rounded-full"])`, so `rounded-full` is
  *  precisely the one spelling that opts OUT of the squircle. The pill is a
@@ -52,7 +52,7 @@ export const composerBoxExpanded =
  *  way; only the corner curve differs. Installed phone PWAs override that
  *  curve to `round` in base.css, while keeping this same capsule geometry. */
 export const composerBoxMinimized =
-  "mx-3.5 flex items-center gap-1 rounded-[999px] p-1 [--composer-inset-left:5px]";
+  "mx-3.5 flex items-center gap-1 rounded-capsule p-1 [--composer-inset-left:5px]";
 
 /* ── The draft field ──────────────────────────────────────────────
    `.composer-textarea` stays on the markup as a hook too: it is read as a
@@ -220,7 +220,7 @@ export const fileChipCardPaddingRemovable = "pr-[26px]";
  *  chip has always rendered; closing it up is a design change, not a migration. */
 export const fileChipCardPadding = "pr-[26px]";
 export const fileChipThumb =
-  "inline-flex size-[34px] shrink-0 items-center justify-center rounded-control bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] text-[10px] font-bold tracking-wide text-accent";
+  "inline-flex size-[34px] shrink-0 items-center justify-center rounded-control bg-accent/16 text-[10px] font-bold tracking-wide text-accent";
 export const fileChipMeta = "flex min-w-0 flex-col gap-px";
 /** The chip's title. 13px (text-label) rather than the stylesheet's off-scale
  *  12px — it is interface copy, and the card's height comes from the 34px
@@ -238,7 +238,7 @@ export const fileChipSub = "text-meta text-faint";
  *  strength made the panel behind it about three times darker than the input
  *  in front. Use the same mix everywhere so the two layers keep one edge. */
 export const composerFlapBorder =
-  "pwa-composer-edge border-[color:color-mix(in_srgb,var(--composer-border)_35%,transparent)]";
+  "pwa-composer-edge border-[color:var(--composer-border)]/35";
 
 /* ── The queue flap ───────────────────────────────────────────────
    The flap that folds out from behind the composer: a dimmer panel flush with
@@ -253,7 +253,7 @@ export const composerFlapBorder =
    to be `border-bottom-style: none`, not a zero-width solid, because the
    composer's own hairline continues it. `border-b-0` leaves the style behind. */
 export const composerQueue =
-  "relative -mb-3.5 flex flex-col gap-2 rounded-t-[var(--composer-radius)] border-x border-t " +
+  "relative -mb-3.5 flex flex-col gap-2 rounded-t-composer border-x border-t " +
   composerFlapBorder +
   " bg-[var(--composer-flap-surface)] px-3.5 pt-2.5 pb-[26px]";
 export const composerQueueTitle = "text-meta font-semibold text-faint";
@@ -291,7 +291,7 @@ export const composerQueueActions =
  *  transparent border holding layout, and disabled actions fade further. */
 export const composerQueueAction =
   "relative inline-flex size-9 items-center justify-center rounded-control text-dim disabled:cursor-default disabled:opacity-35 enabled:hover:text-fg " +
-  "before:absolute before:inset-[3px] before:z-0 before:rounded-[calc(9px*var(--rf))] before:[corner-shape:var(--cs)] before:transition-[background] before:content-[''] enabled:hover:before:bg-hover " +
+  "before:absolute before:inset-[3px] before:z-0 before:rounded-[calc((12px-3px)*var(--rf))] before:[corner-shape:var(--cs)] before:transition-[background] before:content-[''] enabled:hover:before:bg-hover " +
   "[&>*]:relative [&>*]:z-1";
 /** Destructive action: the wash goes red rather than neutral. */
 export const composerQueueActionDanger =
@@ -302,7 +302,7 @@ export const composerQueueActionDanger =
 export const composerQueueActionSteer = "text-accent enabled:hover:text-accent";
 /** A status readout, not a control: "Steered". Genuinely
  *  round (the stylesheet spelled a bare 999px with no `corner-shape`), so
- *  `rounded-full` rather than `rounded-[999px]`. */
+ *  `rounded-full` rather than `rounded-capsule`. */
 export const composerQueuePill =
   "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-transparent bg-accent-soft px-[13px] text-label font-semibold text-accent";
 /** Optimistic busy send: a transient readout, not a badge or control. Keeping
@@ -323,7 +323,7 @@ export const composerQueueContent = "flex min-w-0 flex-1 items-center gap-2";
  *  image it counts. The row centers on it instead. */
 export const composerQueueImage = "relative h-[34px] w-[46px] flex-none";
 export const composerQueueImageThumb =
-  "block size-full rounded-[calc(8px*var(--rf))] border border-line object-cover";
+  "block size-full rounded-md border border-line object-cover";
 export const composerQueueImageCount =
   "absolute -right-1 -bottom-1 h-[18px] min-w-[18px] rounded-full border border-line bg-raised px-1 text-center text-[10px] font-bold leading-4 text-dim";
 /** The message itself, one line with an ellipsis. It is genuine user content,

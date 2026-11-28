@@ -66,7 +66,7 @@ export const MOBILE_PICKER =
  *  target, and it has to fit the row it shares, which is what `max-w-full`
  *  plus the label's own truncation buy. */
 export const MOBILE_TRIGGER =
-  "phone:min-h-11 phone:gap-1 phone:rounded-[999px] phone:px-2.5 phone:py-1.5 phone:text-label phone:font-medium phone:[&_svg:first-child]:size-4";
+  "phone:min-h-11 phone:gap-1 phone:rounded-capsule phone:px-2.5 phone:py-1.5 phone:text-label phone:font-medium phone:[&_svg:first-child]:size-4";
 /** The composer's own send disc, so the gesture that commits a prompt looks the
  *  same in the palette as it does in a session. Sized up to the 44px target the
  *  rest of this bar keeps. */
@@ -110,7 +110,7 @@ export const FOOTER_ICON_BTN = cn(paletteIconBtn, "shrink-0 phone:size-11");
  *  the size the icon buttons' hover wash paints, so the row keeps one rhythm;
  *  44px on a phone, where the whole row is thumb-sized. */
 export const ASK_BTN_ON =
-  "inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-label font-medium transition-colors phone:min-h-11 phone:px-3.5 bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green hover:bg-[color-mix(in_srgb,var(--green)_26%,transparent)] disabled:cursor-default disabled:opacity-50";
+  "inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-label font-medium transition-colors phone:min-h-11 phone:px-3.5 bg-green/16 text-green hover:bg-green/26 disabled:cursor-default disabled:opacity-50";
 /** Ask mode paints the whole card, not just its toggle — the same thing the
  *  session composer does for ask and for note mode, because the mode governs
  *  everything you are about to type rather than one control in the corner.
@@ -155,7 +155,7 @@ export const CREATE_KBD = "opacity-70";
 /** The card's corner, shared by the palette and the inline card. Round enough
  *  to sit concentric with the pill-shaped Create and model controls at its
  *  bottom edge: an 18px pill radius plus the 16px clearance around it. */
-export const CARD_RADIUS = "rounded-[calc(34px*var(--rf))]";
+export const CARD_RADIUS = "rounded-sheet";
 
 /**
  * The same card rendered on the page rather than over a dimmed one: what the

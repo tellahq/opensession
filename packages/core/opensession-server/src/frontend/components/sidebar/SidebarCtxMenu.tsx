@@ -181,7 +181,7 @@ function CollaboratorsFlyout({
 
 // The popup surface, worn by the menu and by every flyout it opens.
 const POPUP_CLASS =
-  "smooth-shadow-ring-md [--smooth-ring-color:var(--popup-ring)] [corner-shape:squircle] [&_button:not(.tab-color-swatch):hover]:bg-hover!";
+  "smooth-shadow-ring-md [--smooth-ring-color:var(--popup-ring)] [corner-shape:squircle] [&_button]:[corner-shape:var(--cs)] [&_button:not(.tab-color-swatch):hover]:bg-hover!";
 
 export function SidebarCtxMenu({
   x,

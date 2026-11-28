@@ -12,7 +12,7 @@ export const PIXEL_GRID = "grid grid-cols-3 gap-px [--glow-color:currentColor]";
  * matches base.css's squircle rule — so these keep their corner shape, not just
  * their radius. */
 export const PIXEL =
-  "size-[3px] rounded-xs bg-[color-mix(in_srgb,currentColor_35%,transparent)] " +
+  "size-[3px] rounded-xs bg-current/34 " +
   "transition-[background,box-shadow,opacity] duration-micro ease-standard";
 
 /** The wave, as animation LONGHANDS rather than an `animate-[…]` shorthand.

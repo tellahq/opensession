@@ -35,7 +35,7 @@ export function NextUnreadButton({ phone = false }: { phone?: boolean }) {
     // the composer, so the composer radius turned it into a half-pill. The
     // all-corner radius replaces Button's `rounded-full` in tailwind-merge; a
     // top-only radius would leave the pill shape winning on top.
-    "rounded-[calc(16px*var(--rf))] rounded-b-none",
+    "rounded-popup rounded-b-none",
   );
 
   useEffect(() => () => clearTimeout(longPress.current), []);

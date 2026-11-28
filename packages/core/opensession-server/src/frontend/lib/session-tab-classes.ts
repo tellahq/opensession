@@ -33,7 +33,7 @@ import { MOBILE_CONTROL_GLASS_EFFECTS } from "./app-header-classes";
 
 /** 8px, the compact trailing controls' corner. Authored the way base.css
  * authors every corner; there is no 8px step in the radius scale. */
-const PILL = "rounded-[calc(8px*var(--rf))]";
+const PILL = "rounded-md";
 /** Tabs are round pills on desktop and phone alike. */
 const TAB_CORNERS = "rounded-full";
 
@@ -151,7 +151,7 @@ export const TAB_ITEM_ATTACHED =
   "session-tab-reorder relative inline-flex shrink-0 items-stretch";
 
 export const TAB_ITEM_ATTACHED_DRAGGING =
-  "cursor-grabbing rounded-[8px] [corner-shape:round] bg-panel smooth-shadow-ring-sm";
+  "cursor-grabbing rounded-tab [corner-shape:round] bg-panel smooth-shadow-ring-sm";
 
 /**
  * The drag-to-reorder group wraps EVERY tab — sessions and view panes alike —
@@ -192,7 +192,7 @@ export const TAB_DROP_SLOT =
   "pointer-events-none absolute inset-y-2 z-5 " +
   "[animation:tab-drop-slot-in_var(--dur-micro)_var(--ease)] [transition:left_var(--dur)_var(--ease)] " +
   "motion-reduce:animate-none motion-reduce:transition-none " +
-  "after:absolute after:inset-y-0 after:left-0 after:w-0.5 after:rounded-[1px] after:bg-accent after:content-['']";
+  "after:absolute after:inset-y-0 after:left-0 after:w-0.5 after:rounded-xs after:bg-accent after:content-['']";
 
 /** Trailing controls pinned after the scroll on desktop. */
 export const TAB_ACTIONS = "ml-auto flex flex-none items-center gap-[3px]";
@@ -211,7 +211,7 @@ const TAB_BASE =
   `${TAB_CORNERS} border-0 px-2.5 py-1.5 text-label shadow-none ` +
   "transition-[background-color,color] " +
   `phone:border phone:border-[color:var(--mobile-header-control-border)] ` +
-  `phone:shadow-[var(--mobile-header-control-shadow)] ${MOBILE_CONTROL_GLASS_EFFECTS}`;
+  `phone:shadow-header-control ${MOBILE_CONTROL_GLASS_EFFECTS}`;
 
 export type TabState = {
   active: boolean;
@@ -231,7 +231,7 @@ export type TabState = {
  */
 const TAB_ATTACHED_BASE =
   "relative inline-flex max-w-[180px] shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
-  "rounded-[8px] [corner-shape:round] px-2.5 text-label shadow-none transition-[background-color,color] " +
+  "rounded-tab [corner-shape:round] px-2.5 text-label shadow-none transition-[background-color,color] " +
   "mt-[calc(var(--desktop-header-h)/2-16px)] mb-[calc(var(--desktop-header-h)/2-var(--row-drop,0px)/2-14px)] " +
   // Close sits as far in from the right edge as the label from the left.
   "[--tab-close-inset:6px]";
@@ -240,9 +240,8 @@ function attachedTabClass({ active, waiting, colored }: TabState): string {
   const ink = active || waiting ? "text-fg" : "text-dim hover:text-fg";
   const surface = colored
     ? active
-      ? "bg-[color-mix(in_srgb,var(--tab-color)_22%,var(--selected))]"
-      : "bg-[color-mix(in_srgb,var(--tab-color)_9%,transparent)] " +
-        "hover:bg-[color-mix(in_srgb,var(--tab-color)_16%,transparent)]"
+      ? "bg-[color:var(--tab-color)]/22"
+      : "bg-[color:var(--tab-color)]/10 hover:bg-[color:var(--tab-color)]/16"
     : active
       ? "bg-selected"
       : "bg-transparent hover:bg-hover";
@@ -264,8 +263,8 @@ export function tabClass(state: TabState): string {
       ? "bg-[color-mix(in_srgb,var(--tab-color)_22%,var(--bg-panel))] " +
         "hover:bg-[color-mix(in_srgb,var(--tab-color)_28%,var(--bg-panel))] " +
         "phone:bg-[color-mix(in_srgb,var(--tab-color)_22%,var(--mobile-tab-surface-selected))]"
-      : "bg-[color-mix(in_srgb,var(--tab-color)_9%,transparent)] " +
-        "hover:bg-[color-mix(in_srgb,var(--tab-color)_16%,transparent)] " +
+      : "bg-[color:var(--tab-color)]/10 " +
+        "hover:bg-[color:var(--tab-color)]/16 " +
         "phone:bg-[color-mix(in_srgb,var(--tab-color)_9%,var(--mobile-tab-surface))]"
     : active
       ? "bg-panel hover:bg-hover phone:bg-[var(--mobile-tab-surface-selected)]"
@@ -353,7 +352,7 @@ const DOT_BASE = "size-1.5 shrink-0 rounded-full";
 
 export const tabDotClass = (waiting: boolean) =>
   waiting
-    ? `${DOT_BASE} bg-blue shadow-[0_0_6px_var(--blue)] animate-waiting ` +
+    ? `${DOT_BASE} bg-blue shadow-glow-blue animate-waiting ` +
       "motion-reduce:[animation-duration:1.2s]! motion-reduce:[animation-iteration-count:infinite]!"
     : `${DOT_BASE} bg-yellow animate-live ` +
       "motion-reduce:[animation-duration:1.4s]! motion-reduce:[animation-iteration-count:infinite]!";

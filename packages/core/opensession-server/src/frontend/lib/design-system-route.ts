@@ -139,9 +139,9 @@ export const RADIUS_SPECIMENS: readonly RadiusSpecimen[] = [
   { token: "rounded-xl", px: "18px", radiusClass: "rounded-xl" },
   { token: "rounded-2xl", px: "22px", radiusClass: "rounded-2xl" },
   {
-    token: "rounded-[999px]",
+    token: "rounded-capsule",
     px: "squircle pill",
-    radiusClass: "rounded-[999px]",
+    radiusClass: "rounded-capsule",
   },
   { token: "rounded-full", px: "true pill", radiusClass: "rounded-full" },
 ];

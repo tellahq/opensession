@@ -606,7 +606,7 @@ export function InlineComments({
           </div>
           {draft ? (
             <>
-              <blockquote className="m-0 line-clamp-3 border-l-2 border-[color:var(--yellow)] pl-2.5 text-supporting text-dim">
+              <blockquote className="m-0 line-clamp-3 border-l-2 border-yellow pl-2.5 text-supporting text-dim">
                 {draft.anchor.exact}
               </blockquote>
               {draftComposer}

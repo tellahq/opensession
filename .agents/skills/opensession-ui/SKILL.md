@@ -78,7 +78,7 @@ Every utility below is real and theme-aware across dark and light mode.
 - `rounded-popup` (16) — floating popovers, menus, PiP/hover cards
 - `rounded-xl` (18) — cards (`Card`)
 - `rounded-2xl` (22) — card containers (`SettingCard`, dialogs)
-- `rounded-[999px]` — squircle pill; `rounded-full` — true pill/circle (`Button`, avatars, dots)
+- `rounded-capsule`: squircle pill. `rounded-full`: true pill or circle (`Button`, avatars, dots)
 - Keep nested corners concentric: `inner radius + padding ≈ outer radius`.
 
 ### Shadows (NEVER use stock Tailwind `shadow-sm` / `shadow-md` / `shadow-lg`)

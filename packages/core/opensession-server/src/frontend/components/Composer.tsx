@@ -1821,7 +1821,7 @@ export function Composer({
               // With the mirror painting the styled draft, the field's own
               // glyphs go transparent and only the caret stays visible.
               hlActive
-                ? "relative z-1 break-words text-transparent caret-[var(--text)]"
+                ? "relative z-1 break-words text-transparent caret-fg"
                 : "text-fg",
             )}
             // In the resting pill the full prompt would clip, so show a short

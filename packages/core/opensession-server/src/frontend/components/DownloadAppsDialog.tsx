@@ -175,7 +175,7 @@ function AppCard({
   children: ReactNode;
 }) {
   return (
-    <section className="flex h-[20rem] flex-col overflow-hidden rounded-[calc(22px*var(--rf))] bg-surface desktop:h-[22rem]">
+    <section className="flex h-[20rem] flex-col overflow-hidden rounded-2xl bg-surface desktop:h-[22rem]">
       <div className="min-h-0 flex-1">{preview}</div>
       <div className="relative z-sticky flex shrink-0 flex-col px-4 pb-4 desktop:px-5 desktop:pb-5">
         <h3 className="m-0 text-section-title font-semibold leading-tight text-fg">
