@@ -221,7 +221,7 @@ const SETTINGS_KEYWORD_LOOKUP = new Map<string, string[]>(
   Object.entries(SETTINGS_KEYWORDS),
 );
 
-export type SectionLike = { key: string; label: string; group: string };
+export type SectionLike = { key: string; label: string; group?: string };
 
 export type SectionHit<T extends SectionLike> = {
   item: T;
@@ -244,7 +244,7 @@ export function matchSections<T extends SectionLike>(
   for (const item of items) {
     if (
       item.label.toLowerCase().includes(q) ||
-      item.group.toLowerCase().includes(q)
+      item.group?.toLowerCase().includes(q)
     ) {
       hits.push({ item });
       continue;

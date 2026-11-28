@@ -5,27 +5,18 @@ const HTML = new URL("../index.html", import.meta.url);
 const USER_PICKER = new URL("../components/UserPicker.tsx", import.meta.url);
 const APP_SHELL = new URL("../components/AppShell.tsx", import.meta.url);
 const FIRST_MILE = new URL("../components/FirstMile.tsx", import.meta.url);
-const SETTINGS = new URL("../components/Settings.tsx", import.meta.url);
 const SETTINGS_CLASSES = new URL("../lib/settings-classes.ts", import.meta.url);
 
 test("Electron titlebar drag regions do not depend on WCO visibility", async () => {
-  const [
-    html,
-    css,
-    userPicker,
-    appShell,
-    firstMile,
-    settings,
-    settingsClasses,
-  ] = await Promise.all([
-    Bun.file(HTML).text(),
-    readBaseCss(),
-    Bun.file(USER_PICKER).text(),
-    Bun.file(APP_SHELL).text(),
-    Bun.file(FIRST_MILE).text(),
-    Bun.file(SETTINGS).text(),
-    Bun.file(SETTINGS_CLASSES).text(),
-  ]);
+  const [html, css, userPicker, appShell, firstMile, settingsClasses] =
+    await Promise.all([
+      Bun.file(HTML).text(),
+      readBaseCss(),
+      Bun.file(USER_PICKER).text(),
+      Bun.file(APP_SHELL).text(),
+      Bun.file(FIRST_MILE).text(),
+      Bun.file(SETTINGS_CLASSES).text(),
+    ]);
 
   expect(html).toContain("window.os1.desktop === true");
   expect(html).toContain('classList.add("desktop-shell")');
@@ -51,18 +42,10 @@ test("Electron titlebar drag regions do not depend on WCO visibility", async () 
   expect(firstMile).toContain(
     'className="wco-chrome relative z-float flex h-11 shrink-0 items-start justify-center"',
   );
-  expect(settings).toContain("!TOOL_SECTIONS.has(active) && (");
-  expect(settings).toContain("className={SETTINGS_DRAG_HANDLE}");
-  // The hooks base-platform.css reads stay plain class names on the markup.
-  expect(settingsClasses).toContain('"settings-drag-handle wco-chrome"');
-  expect(settingsClasses).toContain('"settings-nav",');
-  expect(settingsClasses).toContain('"settings-content"');
-  expect(settingsClasses).toContain('tool && "settings-content-tool"');
-  expect(settingsClasses).toContain("height: geometry.desktopHeaderHeight");
+  // Settings is a modal inset under the titlebar row, so the window stays
+  // draggable above it; base-platform.css reads the plain class hook.
+  expect(settingsClasses).toContain('cn("settings-modal", sx(styles.modal))');
   expect(css).toMatch(
-    /html:is\(\.wco, \.desktop-shell\) \.settings-drag-handle \{\s*display: block;/,
-  );
-  expect(css).toMatch(
-    /html:is\(\.wco, \.desktop-shell\) \.settings-nav,\s*html:is\(\.wco, \.desktop-shell\) \.settings-content:not\(\.settings-content-tool\) \{\s*padding-top: var\(--desktop-header-h\);/,
+    /html:is\(\.wco, \.desktop-shell\) \.settings-modal \{\s*padding-top: var\(--desktop-header-h\);/,
   );
 });

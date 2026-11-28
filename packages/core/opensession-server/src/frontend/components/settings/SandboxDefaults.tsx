@@ -154,7 +154,7 @@ function SandboxDefaultRow({ scope }: { scope: Scope }) {
       desc={
         scope === "personal" ? undefined : (
           <span className="flex flex-col gap-1.5">
-            <span>For everyone in the workspace.</span>
+            <span>For everyone in the organization.</span>
             {overrides.length > 0 && (
               <span className="flex flex-col gap-1">
                 <span>

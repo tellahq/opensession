@@ -3,9 +3,10 @@ import { useIsPhone } from "../hooks/useIsPhone";
 import { useScrollEdge } from "../hooks/useScrollEdge";
 import { cn } from "../ui/cn";
 import {
-  SETTINGS_BACK,
   SETTINGS_CONTENT_SHEET,
-  SETTINGS_DRAG_HANDLE,
+  SETTINGS_HEADER,
+  SETTINGS_HEADER_BACK,
+  SETTINGS_MODAL,
   SETTINGS_NAV,
   SETTINGS_NAV_CAPTION,
   SETTINGS_NAV_GROUP,
@@ -14,6 +15,7 @@ import {
   SETTINGS_NAV_ROW,
   SETTINGS_NAV_SEARCH,
   SETTINGS_PAGE,
+  SETTINGS_PANEL,
   SETTINGS_PANEL_FRAME,
   SETTINGS_PANEL_FRAME_GALLERY,
   SETTINGS_PANEL_FRAME_SHEET,
@@ -25,16 +27,23 @@ import {
   SETTINGS_SHEET_LIST,
   SETTINGS_SHEET_ROW,
   SETTINGS_SHEET_SEARCH_BAR,
+  SETTINGS_SCRIM,
   settingsContent,
 } from "../lib/settings-classes";
 import { matchSections, type SectionHit } from "../lib/settings-search";
 import {
+  SCOPES,
   SECTIONS,
   TOOL_SECTIONS,
+  scopeLabel,
+  type SettingsScope,
   type SettingsSectionKey,
   type ToolSectionKey,
 } from "../lib/settings-sections";
+import { useNewLayoutPref } from "../lib/new-layout-pref";
+import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { Segmented, SegmentedOption } from "../ui/segmented";
 import { SETTINGS_PLATE, SettingsInSheet } from "../ui/settings";
 import { PhonePage, SheetIconButton } from "../ui/sheet";
 import { PhoneTopBar, PhoneTopBarTitle } from "../ui/top-bar";
@@ -59,8 +68,10 @@ import { StoragePanel } from "./settings/StoragePanel";
 import { RunnersPanel } from "./settings/RunnersPanel";
 import { SettingsAccountCard, SettingsAccountFooter } from "./SettingsAccount";
 
-// The full-window Settings surface: a left sub-nav and a scrolling body. Each
-// area is an entry in SECTIONS (lib/settings-sections) and a panel below. The
+// Settings: on desktop a modal over the page it was opened from, with
+// Personal, Organization and Server tabs across the top, the tab's sections in
+// a side nav and a scrolling body; on phones a sheet. Each area is an entry in
+// SECTIONS (lib/settings-sections) and a panel below. In the old layout the
 // Automation group holds the tool surfaces (Automations, Goals, Security),
 // which render at their own routes with this surface as chrome, so the section
 // is controlled by the router, not local state.
@@ -91,8 +102,24 @@ const SETTINGS_LEADING =
   "[&_.text-page-title]:!leading-title [&_.text-stat]:!leading-title";
 
 type Section = (typeof SECTIONS)[number];
-type SectionGroup = { group: string; items: Section[] };
-type FilteredGroup = { group: string; hits: SectionHit<Section>[] };
+type SectionGroup = { group?: string; items: Section[] };
+type FilteredGroup = { group?: string; hits: SectionHit<Section>[] };
+
+/** Runs of sections under a caption, in table order. `captionOf` names the
+ *  run a section belongs to; an undefined caption is a run with none. */
+function groupSections(
+  sections: Section[],
+  captionOf: (section: Section) => string | undefined,
+): SectionGroup[] {
+  const groups: SectionGroup[] = [];
+  for (const section of sections) {
+    const caption = captionOf(section);
+    let group = groups.find((entry) => entry.group === caption);
+    if (!group) groups.push((group = { group: caption, items: [] }));
+    group.items.push(section);
+  }
+  return groups;
+}
 
 /** Groups with their non-matching rows dropped, and empty groups gone with
  *  them. An empty query filters nothing, so both surfaces render one list. */
@@ -260,10 +287,12 @@ export function Settings({
   children?: React.ReactNode;
 }) {
   const isPhone = useIsPhone();
-
-  // No page-level Esc handler: Esc belongs to whatever is focused (cancelling
-  // an inline edit, closing a menu), not to the settings page itself — losing
-  // the whole page to a stray Esc is worse than having no keyboard exit.
+  // The new layout (desktop only) makes Automations, Goals and Security
+  // pages of the app, so Settings stops listing them there.
+  const toolPages = useNewLayoutPref() && !isPhone;
+  const offered = SECTIONS.filter(
+    (entry) => !(toolPages && TOOL_SECTIONS.has(entry.key)),
+  );
 
   const [query, setQuery] = useState("");
   // The search field is a sibling above the section list, not its parent, so
@@ -272,18 +301,50 @@ export function Settings({
   const [searchBar, setSearchBar] = useState<HTMLDivElement | null>(null);
   useScrollEdge(searchBar, "[data-settings-nav-scroll]");
 
-  // Group the nav entries under their group label (order preserved).
-  const groups: SectionGroup[] = [];
-  for (const s of SECTIONS) {
-    let g = groups.find((x) => x.group === s.group);
-    if (!g) groups.push((g = { group: s.group, items: [] }));
-    g.items.push(s);
-  }
+  // A bare /settings lands on Account, the first personal section, on desktop.
+  // Keep the section out of the URL so phones can stay at the nav root.
+  const active = section ?? "myAccounts";
+  const activeScope =
+    SECTIONS.find((entry) => entry.key === active)?.scope ?? "personal";
+
+  // Each tab reopens on the section last shown in it.
+  const [lastInScope, setLastInScope] = useState<
+    Partial<Record<SettingsScope, SettingsSectionKey>>
+  >({});
+  useEffect(() => {
+    setLastInScope((last) =>
+      last[activeScope] === active ? last : { ...last, [activeScope]: active },
+    );
+  }, [active, activeScope]);
+
+  // Esc closes the modal, unless it belongs to a field, a menu or a dialog
+  // opened from inside Settings.
+  useEffect(() => {
+    if (isPhone) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest("input, textarea, select, [contenteditable]")
+      )
+        return;
+      if (
+        document.querySelector(
+          '[role="dialog"]:not([data-settings-modal]), [role="alertdialog"], [role="menu"], [role="listbox"]',
+        )
+      )
+        return;
+      onBack();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isPhone, onBack]);
 
   if (isPhone)
     return (
       <MobileSettings
-        groups={groups}
+        groups={groupSections(offered, (entry) => scopeLabel(entry.scope))}
         section={section}
         onSelect={onSelect}
         onShowRoot={onShowRoot}
@@ -293,87 +354,131 @@ export function Settings({
       </MobileSettings>
     );
 
-  // A bare /settings lands on Account, the first personal section, on desktop.
-  // Keep the section out of the URL so phones can stay at the nav root.
-  const active = section ?? "myAccounts";
-  const shown = filterGroups(groups, query);
+  // A search looks through every tab, captioned by tab; otherwise the nav
+  // lists the open tab's sections.
+  const shown = query
+    ? filterGroups(
+        groupSections(offered, (entry) => scopeLabel(entry.scope)),
+        query,
+      )
+    : filterGroups(
+        groupSections(
+          offered.filter((entry) => entry.scope === activeScope),
+          (entry) => entry.group,
+        ),
+        "",
+      );
   const firstHit = shown[0]?.hits[0]?.item;
+  const openScope = (value: string) => {
+    const scope = SCOPES.find((entry) => entry.key === value)?.key;
+    if (!scope) return;
+    const target =
+      lastInScope[scope] ?? offered.find((entry) => entry.scope === scope)?.key;
+    if (target) onSelect(target);
+  };
 
   return (
-    <div className={cn(SETTINGS_PAGE, SETTINGS_LEADING)}>
-      {!TOOL_SECTIONS.has(active) && (
-        <div aria-hidden="true" className={SETTINGS_DRAG_HANDLE} />
-      )}
-      {/* Back and search stay put; only the section list scrolls, so neither
-			    they nor the account footer are lost once the list outgrows the nav. */}
-      <aside className={SETTINGS_NAV}>
-        <button className={SETTINGS_BACK} onClick={onBack}>
-          <span className={SETTINGS_NAV_ICON}>
-            <IconChevronLeft />
-          </span>
-          Back to app
-        </button>
-        <NavSearch
-          ref={setSearchBar}
-          value={query}
-          onChange={setQuery}
-          onSubmit={() => firstHit && onSelect(firstHit.key)}
-          className={SETTINGS_NAV_SEARCH}
-        />
-        {/* The attribute is what useScrollEdge finds the scrollport by. */}
-        <div data-settings-nav-scroll className={SETTINGS_NAV_LIST}>
-          {shown.map((g) => (
-            <div className={SETTINGS_NAV_GROUP} key={g.group}>
-              <div className={SETTINGS_NAV_CAPTION}>{g.group}</div>
-              {g.hits.map(({ item: s, hint }) => (
-                <button
-                  key={s.key}
-                  className={SETTINGS_NAV_ROW}
-                  data-active={active === s.key || undefined}
-                  onClick={() => onSelect(s.key)}
-                >
-                  <span className={SETTINGS_NAV_ICON}>{s.icon}</span>
-                  <span className="min-w-0 flex-1">
-                    {s.label}
-                    {hint && (
-                      <span className="block truncate text-meta font-normal text-faint">
-                        {hint}
-                      </span>
-                    )}
-                  </span>
-                </button>
-              ))}
-            </div>
-          ))}
-          {shown.length === 0 && (
-            <div className="px-2.5 py-3 text-meta text-faint">
-              Nothing matches “{query}”.
-            </div>
-          )}
-        </div>
-        <SettingsAccountFooter />
-      </aside>
-
-      {/* Tool sections fill the whole content area edge-to-edge (they carry
-			    their own layout/scrolling); settings panels keep the centered,
-			    padded reading column. */}
+    <div className={cn(SETTINGS_MODAL, SETTINGS_LEADING)}>
+      <div aria-hidden="true" className={SETTINGS_SCRIM} onClick={onBack} />
       <div
-        data-settings-scroll
-        className={settingsContent(TOOL_SECTIONS.has(active))}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Settings"
+        data-settings-modal
+        className={SETTINGS_PANEL}
       >
-        {TOOL_SECTIONS.has(active) ? (
-          <SectionPanel section={active}>{children}</SectionPanel>
-        ) : (
-          <div
-            className={
-              GALLERY_SECTIONS.has(active)
-                ? SETTINGS_PANEL_FRAME_GALLERY
-                : SETTINGS_PANEL_FRAME
-            }
-          >
-            <SectionPanel section={active}>{children}</SectionPanel>
+        <header className={SETTINGS_HEADER}>
+          <div className={SETTINGS_HEADER_BACK}>
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<IconChevronLeft size={20} />}
+              onClick={onBack}
+            >
+              Back to app
+            </Button>
           </div>
-        )}
+          <Segmented
+            label="Settings"
+            value={activeScope}
+            onValueChange={openScope}
+          >
+            {SCOPES.map((scope) => (
+              <SegmentedOption key={scope.key} value={scope.key}>
+                {scope.label}
+              </SegmentedOption>
+            ))}
+          </Segmented>
+        </header>
+        <div className={SETTINGS_PAGE}>
+          {/* Search stays put; only the section list scrolls, so neither it
+              nor the account footer is lost once the list outgrows the nav. */}
+          <aside className={SETTINGS_NAV}>
+            <NavSearch
+              ref={setSearchBar}
+              value={query}
+              onChange={setQuery}
+              onSubmit={() => firstHit && onSelect(firstHit.key)}
+              className={SETTINGS_NAV_SEARCH}
+            />
+            {/* The attribute is what useScrollEdge finds the scrollport by. */}
+            <div data-settings-nav-scroll className={SETTINGS_NAV_LIST}>
+              {shown.map((g, index) => (
+                <div className={SETTINGS_NAV_GROUP} key={g.group ?? index}>
+                  {g.group && (
+                    <div className={SETTINGS_NAV_CAPTION}>{g.group}</div>
+                  )}
+                  {g.hits.map(({ item: s, hint }) => (
+                    <button
+                      key={s.key}
+                      className={SETTINGS_NAV_ROW}
+                      data-active={active === s.key || undefined}
+                      onClick={() => onSelect(s.key)}
+                    >
+                      <span className={SETTINGS_NAV_ICON}>{s.icon}</span>
+                      <span className="min-w-0 flex-1">
+                        {s.label}
+                        {hint && (
+                          <span className="block truncate text-meta font-normal text-faint">
+                            {hint}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ))}
+              {shown.length === 0 && (
+                <div className="px-2.5 py-3 text-meta text-faint">
+                  Nothing matches “{query}”.
+                </div>
+              )}
+            </div>
+            <SettingsAccountFooter />
+          </aside>
+
+          {/* Tool sections fill the whole content area edge-to-edge (they
+              carry their own layout and scrolling); settings panels keep the
+              centered, padded reading column. */}
+          <div
+            data-settings-scroll
+            className={settingsContent(TOOL_SECTIONS.has(active))}
+          >
+            {TOOL_SECTIONS.has(active) ? (
+              <SectionPanel section={active}>{children}</SectionPanel>
+            ) : (
+              <div
+                className={
+                  GALLERY_SECTIONS.has(active)
+                    ? SETTINGS_PANEL_FRAME_GALLERY
+                    : SETTINGS_PANEL_FRAME
+                }
+              >
+                <SectionPanel section={active}>{children}</SectionPanel>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

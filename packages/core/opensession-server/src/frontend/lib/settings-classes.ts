@@ -43,6 +43,7 @@ import {
   media,
   radius,
   corner,
+  shadow,
   sidebarScale,
   space,
   text,
@@ -59,6 +60,56 @@ import { sidebarStyles } from "./sidebar-classes";
 const TITLE_HOOK = "settings-title";
 
 const styles = stylex.create({
+  // The desktop modal: a scrim over the page Settings was opened from, and a
+  // large panel inset from the window's edges, the way Amp's settings sit.
+  modal: {
+    position: "fixed",
+    inset: space.s0,
+    zIndex: layer.sheet,
+    display: "flex",
+    justifyContent: "center",
+    paddingInline: { default: space.s16, [media.desktop]: space.s48 },
+    paddingBlock: { default: space.s16, [media.desktop]: space.s40 },
+  },
+  scrim: {
+    position: "absolute",
+    inset: space.s0,
+    backgroundColor: color.scrimSheet,
+  },
+  panel: {
+    position: "relative",
+    display: "flex",
+    width: "100%",
+    maxWidth: geometry.settingsModalMaxWidth,
+    minHeight: 0,
+    flexDirection: "column",
+    overflow: "hidden",
+    borderRadius: radius.xl,
+    ["cornerShape"]: corner.squircle,
+    borderWidth: geometry.hairline,
+    borderStyle: "solid",
+    borderColor: color.dialogRing,
+    backgroundColor: color.sidebar,
+    boxShadow: shadow.lg,
+  },
+  header: {
+    position: "relative",
+    display: "flex",
+    height: geometry.settingsHeaderHeight,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    borderBottomWidth: geometry.hairline,
+    borderBottomStyle: "solid",
+    borderBottomColor: color.divider,
+    paddingInline: space.s12,
+  },
+  headerBack: {
+    position: "absolute",
+    left: space.s12,
+    top: "50%",
+    translate: "0 -50%",
+  },
   page: {
     position: "relative",
     display: "flex",
@@ -66,13 +117,6 @@ const styles = stylex.create({
     minHeight: 0,
     flex: "1 1 0%",
     backgroundColor: color.sidebar,
-  },
-  dragHandle: {
-    position: "absolute",
-    insetInline: space.s0,
-    top: space.s0,
-    zIndex: layer.sticky,
-    height: geometry.desktopHeaderHeight,
   },
   nav: {
     display: "flex",
@@ -317,15 +361,13 @@ const styles = stylex.create({
  */
 export const SETTINGS_PAGE = sx(styles.page);
 
-/**
- * The otherwise-empty desktop titlebar strip. `wco-chrome` makes it a window
- * drag region in Electron; `settings-drag-handle` lets base.css keep this
- * platform chrome out of browser and phone layouts.
- */
-export const SETTINGS_DRAG_HANDLE = cn(
-  "settings-drag-handle wco-chrome",
-  sx(styles.dragHandle),
-);
+/** The desktop modal's frame, its scrim, the panel and the tab header.
+ *  `settings-modal` is a hook: base-platform.css clears the Mac titlebar. */
+export const SETTINGS_MODAL = cn("settings-modal", sx(styles.modal));
+export const SETTINGS_SCRIM = sx(styles.scrim);
+export const SETTINGS_PANEL = sx(styles.panel);
+export const SETTINGS_HEADER = sx(styles.header);
+export const SETTINGS_HEADER_BACK = sx(styles.headerBack);
 
 /**
  * The nav column. No fill, no edge: the page under it is already the sidebar

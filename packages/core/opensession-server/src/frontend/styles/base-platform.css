@@ -261,17 +261,9 @@ html:is(.wco, .desktop-shell)
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
-/* Settings has no visible titlebar row, so its empty strip is shell-only and
-   the nav starts below it. Keeping both rules here lets the durable Electron
-   capability work even while Chromium reports WCO as hidden. */
-.settings-drag-handle {
-  display: none;
-}
-html:is(.wco, .desktop-shell) .settings-drag-handle {
-  display: block;
-}
-html:is(.wco, .desktop-shell) .settings-nav,
-html:is(.wco, .desktop-shell) .settings-content:not(.settings-content-tool) {
+/* The Settings modal keeps clear of the titlebar row, where the traffic
+   lights and the window's drag region stay usable while it is open. */
+html:is(.wco, .desktop-shell) .settings-modal {
   padding-top: var(--desktop-header-h);
 }
 /* Chromium withholds pointer events from native drag regions. While a visible
