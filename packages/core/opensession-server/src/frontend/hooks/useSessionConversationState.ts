@@ -489,12 +489,10 @@ interface DraftContextState {
 export function useSessionDraftContext({
   session,
   workspaceSessions,
-  allSessions,
   draft,
 }: {
   session: UnifiedSession;
   workspaceSessions?: UnifiedSession[];
-  allSessions?: UnifiedSession[];
   draft: DraftContextState;
 }) {
   const setContextSessionsRef = useRef(draft.setContextSessions);
@@ -532,22 +530,8 @@ export function useSessionDraftContext({
   useEffect(() => {
     if (draft.sessionHidden) setQuote(null);
   }, [draft.sessionHidden]);
-  const [showAllContextSessions, setShowAllContextSessions] = useState(false);
-  const contextSessionOptions = useMemo(() => {
-    const siblings = session.workspaceId
-      ? (allSessions || []).filter(
-          (candidate) => candidate.workspaceId === session.workspaceId,
-        )
-      : workspaceSessions || [];
-    return siblings
-      .filter((candidate) => candidate.id !== session.id && candidate.ran)
-      .sort((a, b) =>
-        (b.lastActivity || "").localeCompare(a.lastActivity || ""),
-      );
-  }, [allSessions, workspaceSessions, session.id, session.workspaceId]);
   useEffect(() => {
     setContextSessionsRef.current([]);
-    setShowAllContextSessions(false);
   }, [session.id]);
   const deskOwner = session.desk ? session.startedBy || "" : "";
   const effectiveReview = (() => {
@@ -577,11 +561,6 @@ export function useSessionDraftContext({
   return {
     quote: { quote, setQuote, clearQuote },
     composerHasDraft,
-    context: {
-      showAllContextSessions,
-      setShowAllContextSessions,
-      contextSessionOptions,
-    },
     metadata: { deskOwner, effectiveReview },
   };
 }

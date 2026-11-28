@@ -41,6 +41,7 @@ export type ContextSource =
   | "memory"
   | "repos-note"
   | "attached-session-excerpt"
+  | "workspace-siblings"
   | "external-refs"
   | "ticket"
   | "auto-continue"
@@ -63,6 +64,7 @@ const SOURCES = new Set<string>([
   "memory",
   "repos-note",
   "attached-session-excerpt",
+  "workspace-siblings",
   "external-refs",
   "ticket",
   "auto-continue",

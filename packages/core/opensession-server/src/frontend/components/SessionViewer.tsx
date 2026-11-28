@@ -894,10 +894,10 @@ export function SessionViewer({
       document.title = DEFAULT_DOC_TITLE;
     };
   }, [focused, workspaceName, session.title]);
-  // "Add session transcripts" chips on a fresh session's blank canvas: sibling
-  // workspace sessions the user can attach as context — selected ids ride the
-  // first send as `contextSessions` and the server inlines a fenced transcript
-  // digest of each. One-shot: cleared once a send consumes them.
+  // Sessions attached as context to the next send (`contextSessions`): the
+  // server inlines a fenced transcript digest of each. Only a restored queued
+  // message sets them now; a fresh session learns its workspace siblings on
+  // the server. One-shot: cleared once a send consumes them.
   const [contextSessions, setContextSessions] = useState<string[]>([]);
 
   useSessionViewerSubscription({
@@ -1077,7 +1077,6 @@ export function SessionViewer({
   const draftContext = useSessionDraftContext({
     session,
     workspaceSessions,
-    allSessions,
     draft: {
       draftKey,
       images,
@@ -1089,9 +1088,6 @@ export function SessionViewer({
   });
   const { quote, setQuote, clearQuote } = draftContext.quote;
   const { composerHasDraft } = draftContext;
-  const { showAllContextSessions, setShowAllContextSessions } =
-    draftContext.context;
-  const { contextSessionOptions } = draftContext.context;
   const { deskOwner, effectiveReview } = draftContext.metadata;
   const sendController = useSessionSendController({
     message: {
@@ -1784,14 +1780,6 @@ export function SessionViewer({
             slackComposerSent,
             handleOpenSlackComposer,
             undoComposedSlackMessage,
-          }}
-          emptyConversation={{
-            workspaceName,
-            contextSessionOptions,
-            contextSessions,
-            setContextSessions,
-            showAllContextSessions,
-            setShowAllContextSessions,
           }}
           actionBand={{
             actionBand,
