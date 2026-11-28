@@ -11,7 +11,7 @@ import { cn } from "../../ui/cn";
 import { composerChipMotion } from "../../ui/motion";
 import { ModelEffortSelect } from "../ModelEffortSelect";
 import { useUsageBarPref } from "../../lib/usage-bar-pref";
-import { UsageRing } from "./UsageRing";
+import { ContextWarning } from "./ContextWarning";
 
 interface ModelRowProps {
   minimized: boolean;
@@ -66,10 +66,11 @@ export function ModelRow({
   effortUpLabel,
   onOpenChange,
 }: ModelRowProps) {
-  // With the usage bar hidden, its readouts fold down to a ring after the
-  // pill. It rides in the pill's box so phones reorder the two together.
+  // With the usage bar hidden, a nearly full context still earns a warning
+  // after the pill. It rides in the pill's box so phones reorder the two
+  // together.
   const usageBarOn = useUsageBarPref();
-  const showRing = !usageBarOn && !!usage && usage.turns > 0;
+  const showWarning = !usageBarOn && !!usage && usage.turns > 0;
   return (
     <AnimatePresence initial={false}>
       {!minimized && (
@@ -120,8 +121,8 @@ export function ModelRow({
               changeOpen: onOpenChange,
             }}
           />
-          {showRing && (
-            <UsageRing
+          {showWarning && (
+            <ContextWarning
               usage={usage}
               models={models}
               model={model}

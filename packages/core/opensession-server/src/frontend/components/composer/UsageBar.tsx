@@ -32,8 +32,8 @@ const cellValue =
  * The usage bar: a strip that folds out from behind the composer with what a
  * person checks before the next send. How full the context is, what the
  * conversation has spent, how much of the account's limits is left, and which
- * account it runs on. Switched on from the model menu, the ring beside the
- * model pill, or Settings; a right-click (a long press on touch) hides it.
+ * account it runs on. Switched on from the model menu, the context warning beside
+ * the model pill, or Settings; a right-click (a long press on touch) hides it.
  * Context and spend open the same breakdown the model menu's "Conversation
  * usage" row does; limits open their reset times.
  */
