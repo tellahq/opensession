@@ -409,7 +409,7 @@ export function DeskOverlay({
                 openOrigin === "center"
                   ? "origin-center"
                   : "origin-bottom-right",
-                "rounded-b-composer transition-[scale,translate,opacity]! duration-[100ms]! data-[starting-style]:translate-y-0! data-[starting-style]:scale-[0.9]!",
+                "rounded-b-composer transition-[scale,translate,opacity]! duration-pop! data-[starting-style]:translate-y-0! data-[starting-style]:scale-pop!",
               ],
         )}
         aria-label="Desk"

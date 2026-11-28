@@ -202,6 +202,12 @@
   --color-green-deep: color-mix(in srgb, var(--green) 78%, black);
   --color-red-deep: color-mix(in srgb, var(--red) 78%, black);
   --color-purple-deep: color-mix(in srgb, var(--purple) 78%, black);
+  /* The composer's quiet edge on a phone, the same line its desktop ring draws. */
+  --color-composer-line: color-mix(
+    in srgb,
+    var(--composer-border) 35%,
+    transparent
+  );
 
   /* Tool-family hues (transcript timeline) */
   --color-tool-run: var(--tool-run);
@@ -489,18 +495,22 @@
   --transition-duration-standard: var(--dur);
   --transition-duration-long: var(--dur-lg);
   --transition-duration-meter: var(--dur-meter);
+  /* The desk popping open from its launcher: quicker than a popup and from
+	   further out (`scale-pop`), so it reads as springing from the button. */
+  --transition-duration-pop: 100ms;
   --ease-standard: var(--ease);
   /* A control's press tick, a card's (a large surface moves further for the
 	   same scale, so it takes less), and a small mark's hover grow. */
   --scale-press: 0.96;
   --scale-press-plate: 0.98;
   --scale-grow: 1.2;
+  --scale-pop: 0.9;
   /* Named animations. `live` breathes on anything running, `waiting` a beat
-	   quicker on anything that needs you; `spin-quick` is a small inline ring. */
+	   quicker on anything that needs you. A spinner is `animate-spin`, one turn
+	   a second, at every size. */
   --animate-live: pulse 1.4s ease-in-out infinite;
   --animate-waiting: pulse 1.2s ease-in-out infinite;
   --animate-agents: composer-agents-pulse 1.4s ease-in-out infinite;
-  --animate-spin-quick: spin 0.8s linear infinite;
   --animate-shimmer: staging-shimmer 1.4s ease-in-out infinite;
   --animate-toast-in: update-toast-in var(--dur-lg) var(--ease);
   --animate-arrow-drop: update-arrow-drop 0.6s;

@@ -38,7 +38,7 @@ export const MOBILE_FAB =
   "phone:z-fab phone:flex phone:size-[58px] phone:items-center phone:justify-center " +
   "phone:rounded-full phone:border-none phone:bg-accent phone:text-on-accent " +
   "phone:shadow-[0_4px_14px_rgba(0,0,0,0.16),0_1px_3px_rgba(0,0,0,0.10)] " +
-  "phone:transition-transform phone:active:scale-[0.92]";
+  "phone:transition-transform phone:active:scale-press";
 
 /**
  * The ⌘J Desk trigger. Desktop uses the same resting shadow and border as the
@@ -75,4 +75,4 @@ export const DESK_FAB =
   "phone:right-[calc(12px+58px+12px)] phone:bottom-[calc(18px+env(safe-area-inset-bottom,0px))] " +
   "phone:size-[58px] phone:text-fg " +
   "phone:shadow-[0_2px_10px_rgba(0,0,0,0.10),0_1px_2px_rgba(0,0,0,0.06)] " +
-  "phone:hover:translate-y-0 phone:active:scale-[0.92]";
+  "phone:hover:translate-y-0 phone:active:scale-press";

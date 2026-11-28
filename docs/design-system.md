@@ -44,9 +44,11 @@ its odd values. A rule in a document does not stop that. A type does.
    `z-9`). `off-scale-z` counts any other z-index of 10 or more.
    Motion is named the same way: `duration-micro/standard/long`,
    `ease-standard`, `scale-press` (a control), `scale-press-plate` (a card)
-   and `scale-grow` (a small mark's hover), and named animations
-   (`animate-live`, `animate-waiting`, `animate-spin-quick`, ...) in
-   tailwind.css, matching StyleX's `motion`. `off-scale-motion` counts
+   and `scale-grow` (a small mark's hover), the desk's `duration-pop` and
+   `scale-pop`, and named animations (`animate-live`, `animate-waiting`,
+   ...) in tailwind.css, matching StyleX's `motion`. Every press is
+   `scale-press`, and every spinner is `animate-spin`, one turn a second,
+   reduced motion included. `off-scale-motion` counts
    arbitrary or numbered durations, easings, scales and animations.
    Radius is the `--rf` scale (`rounded-xs` to `rounded-2xl`, `control`,
    `popup`) plus named shapes: `rounded-capsule` (a squircled pill),

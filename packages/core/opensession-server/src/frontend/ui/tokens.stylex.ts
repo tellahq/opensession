@@ -290,6 +290,10 @@ export const motion = stylex.defineConsts({
   micro: "var(--dur-micro)",
   /** Whole-control press tick. */
   pressScale: "0.96",
+  /** The desk popping open from its launcher (Tailwind `duration-pop`,
+   *  `scale-pop`). */
+  pop: "100ms",
+  popScale: "0.9",
   /** A sliding indicator (the underline under a tab). */
   slide: "200ms",
   easeOut: "cubic-bezier(0, 0, 0.2, 1)",
