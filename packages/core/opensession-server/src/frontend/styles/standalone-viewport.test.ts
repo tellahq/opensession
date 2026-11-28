@@ -1,7 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { runInNewContext } from "node:vm";
 
-import type { PanReleaseRecord } from "../lib/viewport-readout";
+/** What the standalone bootstrap (index.html) records about its phantom-pan
+ * release on `window.__os1PanRelease`. */
+interface PanReleaseRecord {
+  runs: number;
+  released: number;
+  reason: string;
+  pan: number;
+  scrollY: number;
+  scale: number;
+  viewportEvents: number;
+  scrollerEvents: number;
+}
 
 // Execute the actual pre-paint bootstrap with a controllable WebKit window.
 // Chromium phone emulation cannot reproduce iOS standalone letterboxing.

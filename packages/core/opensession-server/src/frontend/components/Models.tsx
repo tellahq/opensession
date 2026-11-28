@@ -12,12 +12,10 @@ import {
   SettingRowDescription,
   SettingRowText,
   SettingRowTitle,
-  SettingsGroupLabel,
-  SettingsHint,
 } from "../ui/settings";
 import { Switch } from "../ui/switch";
 
-// The default-model half of Settings → Providers: which model a run starts on
+// The default-model half of Settings → Models: which model a run starts on
 // and which engine carries it. The subscription accounts those runs draw from,
 // and how full they are, sit further down the same page
 // (settings/ModelAccounts.tsx). Everything here follows the Settings idiom
@@ -31,7 +29,7 @@ interface ModelInfo {
   efforts: string[];
 }
 
-/** The model half of Settings → Providers: what new runs start on. Renders as
+/** The model half of Settings → Models: what new runs start on. Renders as
  * groups, not a page: ProvidersPanel owns the header. */
 export function ModelDefaultsSection({
   onChanged,
@@ -41,14 +39,10 @@ export function ModelDefaultsSection({
 } = {}) {
   return (
     <>
-      <SettingsGroupLabel className="mt-0">Default model</SettingsGroupLabel>
       <SettingCard>
         <DefaultModelRow onChanged={onChanged} />
         <AutoFallbackRow />
       </SettingCard>
-      <SettingsHint>
-        Applies to new runs unless the session has its own model.
-      </SettingsHint>
     </>
   );
 }
@@ -130,10 +124,9 @@ function DefaultModelRow({
   return (
     <SettingRow>
       <SettingRowText>
-        <SettingRowTitle>What new sessions run on</SettingRowTitle>
+        <SettingRowTitle>Default model</SettingRowTitle>
         <SettingRowDescription>
-          {error ||
-            "Sessions and agent runs (Slack, Linear, Plain, automations without their own model) start on this."}
+          {error || "For everyone. Yours is in Preferences."}
         </SettingRowDescription>
       </SettingRowText>
       <SettingRowControl>
@@ -233,10 +226,9 @@ function AutoFallbackRow() {
   return (
     <SettingRow>
       <SettingRowText>
-        <SettingRowTitle>Auto-switch when out of credits</SettingRowTitle>
+        <SettingRowTitle>Switch when out of credits</SettingRowTitle>
         <SettingRowDescription>
-          {error ||
-            "Switch to the configured fallback when the current model runs out of credits."}
+          {error || "Moves to the fallback model."}
         </SettingRowDescription>
       </SettingRowText>
       <SettingRowControl>

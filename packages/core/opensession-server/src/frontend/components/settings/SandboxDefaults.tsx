@@ -71,8 +71,8 @@ function SandboxDefaultRow({ scope }: { scope: Scope }) {
   if (!status?.defaults) {
     return (
       <SettingRow
-        title="Default sandbox"
-        desc={loadError || "Loading available sandbox providers…"}
+        title={scope === "personal" ? "Runs in" : "Default sandbox"}
+        desc={loadError}
         control={
           <span className="text-supporting text-faint">
             {loadError ? "Unavailable" : "Loading…"}
@@ -150,11 +150,9 @@ function SandboxDefaultRow({ scope }: { scope: Scope }) {
 
   return (
     <SettingRow
-      title="New sessions run in"
+      title={scope === "personal" ? "Runs in" : "New sessions run in"}
       desc={
-        scope === "personal" ? (
-          "Where your new sessions run. The Sandbox choice in the new session menu overrides this per session."
-        ) : (
+        scope === "personal" ? undefined : (
           <span className="flex flex-col gap-1.5">
             <span>
               Where new sessions run for everyone, and which provider a Sandbox

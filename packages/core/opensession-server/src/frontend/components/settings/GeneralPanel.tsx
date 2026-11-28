@@ -23,6 +23,7 @@ import {
   SettingRowDescription,
   SettingRowText,
   SettingRowTitle,
+  SettingsGroupLabel,
   SettingsHeader,
   SettingsHint,
   SettingsPanel,
@@ -32,6 +33,11 @@ import { toast } from "../../ui/toast";
 import { InlineAlert } from "../../ui/state";
 import { IconArrowUpToLine, IconTrash } from "../icons";
 import { IdentityRows } from "../SetupIdentity";
+import { useSetupStatus } from "../../hooks/useSetupStatus";
+import { shouldReloadAfterGithubAuthEnabled } from "../../lib/github-app-setup";
+import { Segmented, SegmentedOption } from "../../ui/segmented";
+import { setupRequest, type SetupGithub } from "../setup-shared";
+import { SetupRestart } from "../SetupRestart";
 
 const NAME_INPUT_CLASS = cn(settingsInputClass, "w-[220px] max-w-full");
 
@@ -294,10 +300,9 @@ export function OrganizationProfileSection({
               <>
                 <SettingRow className="items-center">
                   <SettingRowText>
-                    <SettingRowTitle>Upload icon</SettingRowTitle>
+                    <SettingRowTitle>Icon</SettingRowTitle>
                     <SettingRowDescription>
-                      Also the browser tab icon and the installed web app icon
-                      on your Home Screen.
+                      Also the app and browser tab icon.
                     </SettingRowDescription>
                   </SettingRowText>
                   <SettingRowControl className="flex flex-wrap items-center justify-end gap-2">
@@ -316,9 +321,7 @@ export function OrganizationProfileSection({
           </SettingCard>
           {!onboarding && (
             <SettingsHint>
-              Shared by everyone in this organization. Clearing the name
-              restores the product name. On iOS, remove and re-add the web app
-              from Safari’s Share menu to update its Home Screen icon.
+              Shared by everyone in this organization.
             </SettingsHint>
           )}
         </>
@@ -329,11 +332,99 @@ export function OrganizationProfileSection({
   );
 }
 
+/** Who can sign in: nobody (the server is reached privately) or anyone with
+ *  GitHub. Saving may need a restart, which SetupRestart offers in place. */
+function SignInSection() {
+  const setup = useSetupStatus();
+  const { status, failed } = setup;
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const github = status?.github;
+
+  async function select(provider: string) {
+    if (!github) return;
+    const enabled = provider === "github";
+    if (saving || enabled === github.userPrAuth) return;
+    setSaving(true);
+    setError(null);
+    await setupRequest<{ github: SetupGithub; restartRequired: boolean }>(
+      "/api/setup/github",
+      { method: "PUT", json: { userPrAuth: enabled } },
+    )
+      .then((body) => {
+        toast(`GitHub sign-in ${enabled ? "on" : "off"}`);
+        setup.applyGithub(body.github, body.restartRequired === true);
+        if (
+          shouldReloadAfterGithubAuthEnabled(
+            github.userPrAuth,
+            body.github.userPrAuth,
+          )
+        )
+          window.location.reload();
+      })
+      .catch((cause) => {
+        const message = errorMessage(cause, "Could not update sign-in");
+        setError(message);
+        toast(message, { variant: "error" });
+      });
+    setSaving(false);
+  }
+
+  return (
+    <div className="relative">
+      <SettingsGroupLabel>Sign-in</SettingsGroupLabel>
+      {!github ? (
+        failed ? (
+          <InlineAlert>Couldn&rsquo;t load sign-in settings.</InlineAlert>
+        ) : (
+          <SettingCardSkeleton rows={1} label="Loading sign-in" />
+        )
+      ) : (
+        <SettingCard>
+          <SettingRow className="items-center">
+            <SettingRowText>
+              <SettingRowTitle>Sign in with</SettingRowTitle>
+              <SettingRowDescription>
+                {error ||
+                  "With GitHub, anyone who can reach this server can join."}
+              </SettingRowDescription>
+            </SettingRowText>
+            <SettingRowControl>
+              <Segmented
+                label="Sign in with"
+                value={github.userPrAuth ? "github" : "none"}
+                onValueChange={(value) => void select(value)}
+              >
+                <SegmentedOption
+                  value="none"
+                  disabled={saving}
+                  className="phone:min-h-11"
+                >
+                  None
+                </SegmentedOption>
+                <SegmentedOption
+                  value="github"
+                  disabled={saving}
+                  className="phone:min-h-11"
+                >
+                  GitHub
+                </SegmentedOption>
+              </Segmented>
+            </SettingRowControl>
+          </SettingRow>
+        </SettingCard>
+      )}
+      <SetupRestart setup={setup} />
+    </div>
+  );
+}
+
 export function GeneralPanel() {
   return (
     <SettingsPanel>
       <SettingsHeader title="General" className="phone:hidden" />
       <OrganizationProfileSection />
+      <SignInSection />
     </SettingsPanel>
   );
 }

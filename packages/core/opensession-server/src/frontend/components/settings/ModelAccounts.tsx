@@ -61,7 +61,7 @@ import { ClaudeSignInForm } from "./ClaudeSignInForm";
 import { RenameDialog } from "../RenameDialog";
 
 // The Claude and Codex subscription accounts runs draw from, and how full each
-// one is. Rendered by Settings → Providers; the account list and its meters live
+// one is. Rendered by Settings → Models; the account list and its meters live
 // together because the answer to "this one is spent" is an action on the row
 // (hand it an owner, connect its usage, take it out of the pool).
 

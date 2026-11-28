@@ -1273,10 +1273,7 @@ export function MemoryPanel() {
   if (!scopes) {
     return (
       <SettingsPanel>
-        <SettingsHeader
-          title="Memories"
-          description="Durable facts scoped to your workspace, repositories, team, and Slack channels."
-        />
+        <SettingsHeader title="Memory" />
         {error ? (
           <InlineAlert>{error}</InlineAlert>
         ) : (
@@ -1322,10 +1319,7 @@ export function MemoryPanel() {
 
   return (
     <SettingsPanel>
-      <SettingsHeader
-        title="Memories"
-        description="Durable facts scoped to your workspace, repositories, team, and Slack channels."
-      />
+      <SettingsHeader title="Memory" />
       {error && (
         <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
       )}
