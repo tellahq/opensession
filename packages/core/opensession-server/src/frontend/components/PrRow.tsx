@@ -207,7 +207,7 @@ export function PrRow({
             </Tooltip>
           </span>
         </ContextMenu.Trigger>
-        <ContextMenu.Popup className="min-w-[220px]">
+        <ContextMenu.Popup>
           <ContextMenu.Item onClick={onOpen}>
             <span className="grow">Open review</span>
           </ContextMenu.Item>

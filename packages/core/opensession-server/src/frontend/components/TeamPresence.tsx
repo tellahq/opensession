@@ -395,7 +395,7 @@ export function TeamLensMenu({
           </>
         )}
       </Menu.Trigger>
-      <Menu.Popup side={side} align={align} className="min-w-[210px]">
+      <Menu.Popup side={side} align={align}>
         {/* Says what the menu changes: these are lanes and rows to read, not
 				    people to open. The label has to sit inside a Group — Base UI
 				    wires it to the group it names. */}

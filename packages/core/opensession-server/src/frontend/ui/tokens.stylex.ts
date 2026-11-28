@@ -84,7 +84,6 @@ export const color = stylex.defineConsts({
   accentControl: "var(--accent-control, var(--accent))",
   onAccentControl: "var(--on-accent-control, var(--on-accent))",
   panelSurface: "var(--panel-surface)",
-  /** A palette: denser glass than a menu, since it sits over a scrim. */
   /** The hairline a shell on a scrim needs: firmer than a menu's. */
   dialogRing: "var(--dialog-ring)",
   /** The dimming under a dialog, and the lighter one under a glass palette
@@ -418,7 +417,9 @@ export const geometry = stylex.defineConsts({
   radioDot: "6px",
   /** A floating list: never narrower than a short label plus its glyph, and
    *  never taller than the room the positioner reports. */
-  popupMinWidth: "180px",
+  popupMinWidth: "200px",
+  /** The one wider step, for rows with a second line or a submenu. */
+  popupMinWidthWide: "240px",
   popupMaxHeight: "min(60dvh, 420px, var(--available-height))",
   /** A menu with a docked footer gets more room, since the footer does not
    *  scroll with the list. */

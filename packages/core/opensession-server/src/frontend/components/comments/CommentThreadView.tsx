@@ -385,7 +385,7 @@ export function CommentThreadView({
         <Menu.Trigger aria-label="Thread actions" className={QUIET_TRIGGER}>
           <IconDotsHorizontal size={20} />
         </Menu.Trigger>
-        <Menu.Popup align="end" className="min-w-[220px]">
+        <Menu.Popup align="end">
           {onSendToSession && (
             <Menu.Item onClick={() => onSendToSession(thread)}>
               <IconArrowUpRight size={20} className="text-faint" />

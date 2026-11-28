@@ -273,7 +273,7 @@ export function SupportInbox({
                 />
                 <Menu.Popup
                   align="end"
-                  className="max-h-[min(480px,70vh)] min-w-[220px] max-w-[300px]"
+                  className="max-h-[min(480px,70vh)]  max-w-[300px]"
                 >
                   <Menu.RadioGroup
                     value={label}

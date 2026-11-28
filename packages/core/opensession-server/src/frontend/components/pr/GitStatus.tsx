@@ -354,7 +354,7 @@ function MergeControl({
               </>
             )}
           </Menu.Trigger>
-          <Menu.Popup align="end" sideOffset={6} className="min-w-[200px]">
+          <Menu.Popup align="end" sideOffset={6}>
             {menu.map((choice) => (
               <Menu.Item
                 key={choice}

@@ -608,7 +608,7 @@ export function AssetActions({
             </Menu.Trigger>
             <Menu.Popup
               align="start"
-              className="max-h-[min(420px,70vh)] max-w-[min(420px,90vw)] min-w-[240px]"
+              className="max-h-[min(420px,70vh)] max-w-[min(420px,90vw)] min-w-menu-wide"
             >
               <Menu.RadioGroup
                 value={file.path}

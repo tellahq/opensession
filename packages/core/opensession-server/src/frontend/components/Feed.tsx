@@ -344,7 +344,7 @@ export function Feed({
           </Button>
         }
       />
-      <Menu.Popup align={align} className="min-w-[200px]">
+      <Menu.Popup align={align}>
         <Menu.RadioGroup
           value={repo}
           onValueChange={(value) => setRepo(String(value))}
@@ -454,7 +454,10 @@ export function Feed({
                 // emptied it. Both are on screen, so a sentence that names
                 // neither reads as "there is nothing", which is the one thing
                 // it does not mean.
-                <EmptyState title="Nothing shipped yet">
+                <EmptyState
+                  icon={<IconFeed size={22} />}
+                  title="Nothing shipped yet"
+                >
                   {scopeName && repo !== "all"
                     ? `${scopeName} hasn't shipped anything in ${repoLabel(repo)} recently.`
                     : scopeName

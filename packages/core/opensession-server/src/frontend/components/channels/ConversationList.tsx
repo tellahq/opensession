@@ -185,7 +185,7 @@ function ConversationRow({
             <span className="grow">Move to section</span>
             {SUB_ARROW}
           </ContextMenu.SubmenuTrigger>
-          <Menu.Popup className="min-w-[180px]">
+          <Menu.Popup>
             {targets.map((section) => (
               <Menu.Item
                 key={section.id}

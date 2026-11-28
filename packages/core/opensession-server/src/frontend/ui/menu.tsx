@@ -229,7 +229,12 @@ function Item({
 }: Omit<React.ComponentProps<typeof BaseMenu.Item>, "className"> & {
   className?: string;
 }) {
-  return <BaseMenu.Item {...props} {...sx(popup.item, className)} />;
+  return (
+    <BaseMenu.Item
+      {...props}
+      {...sx([popup.item, popup.touchRow], className)}
+    />
+  );
 }
 
 function SubmenuTrigger({
@@ -241,7 +246,7 @@ function SubmenuTrigger({
   return (
     <BaseMenu.SubmenuTrigger
       {...props}
-      {...sx([popup.item, popup.itemOpen], className)}
+      {...sx([popup.item, popup.itemOpen, popup.touchRow], className)}
     />
   );
 }
@@ -252,7 +257,12 @@ function RadioItem({
 }: Omit<React.ComponentProps<typeof BaseMenu.RadioItem>, "className"> & {
   className?: string;
 }) {
-  return <BaseMenu.RadioItem {...props} {...sx(popup.item, className)} />;
+  return (
+    <BaseMenu.RadioItem
+      {...props}
+      {...sx([popup.item, popup.touchRow], className)}
+    />
+  );
 }
 
 function CheckboxItem({
@@ -261,7 +271,12 @@ function CheckboxItem({
 }: Omit<React.ComponentProps<typeof BaseMenu.CheckboxItem>, "className"> & {
   className?: string;
 }) {
-  return <BaseMenu.CheckboxItem {...props} {...sx(popup.item, className)} />;
+  return (
+    <BaseMenu.CheckboxItem
+      {...props}
+      {...sx([popup.item, popup.touchRow], className)}
+    />
+  );
 }
 
 /**

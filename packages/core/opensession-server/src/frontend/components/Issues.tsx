@@ -222,7 +222,7 @@ export function Issues({ sessions, onOpenSession, topbarActionsEl }: Props) {
                 </Button>
               }
             />
-            <Menu.Popup align="end" className="min-w-[200px] max-w-[320px]">
+            <Menu.Popup align="end" className="max-w-[320px]">
               <Menu.RadioGroup
                 value={repo}
                 onValueChange={(value) => setRepo(String(value))}
@@ -289,7 +289,10 @@ export function Issues({ sessions, onOpenSession, topbarActionsEl }: Props) {
             <LoadingState>Loading issues…</LoadingState>
           )
         ) : groups.length === 0 ? (
-          <EmptyState title={query ? "No matching issues" : "No open issues"}>
+          <EmptyState
+            icon={<IconIssue size={22} />}
+            title={query ? "No matching issues" : "No open issues"}
+          >
             {query
               ? "Try another search or filter."
               : "Open issues from the registered repos appear here."}

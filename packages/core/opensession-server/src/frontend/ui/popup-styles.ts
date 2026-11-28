@@ -58,7 +58,12 @@ export const popup = stylex.create({
   /** The scroller inside the surface: a long list scrolls, the padding stays.
    *  `pan-y` keeps nested rows from claiming an iOS swipe as a press. */
   scroll: {
-    maxHeight: geometry.popupMaxHeight,
+    // A phone gives the list the taller cap: its rows are 44px, so a menu that
+    // fits at 420 on a desktop would scroll there for want of a few rows.
+    maxHeight: {
+      default: geometry.popupMaxHeight,
+      [media.phone]: geometry.popupMaxHeightFooter,
+    },
     touchAction: "pan-y",
     overflowY: "auto",
     overflowX: "hidden",

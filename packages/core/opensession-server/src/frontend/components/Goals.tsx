@@ -25,7 +25,7 @@ import { docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { CheckStatusIcon } from "./CheckStatusIcon";
-import { IconPlus } from "./icons";
+import { IconPlus, IconTarget } from "./icons";
 import { SOURCE_CHIP } from "../lib/source-chip-classes";
 import { Field, FieldGrid, Input, Textarea } from "../ui/input";
 import { OptionSelect } from "../ui/select";
@@ -223,7 +223,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
           {loading ? (
             <LoadingState>Loading…</LoadingState>
           ) : goals.length === 0 && !showForm ? (
-            <EmptyState title="No goals yet">
+            <EmptyState icon={<IconTarget size={22} />} title="No goals yet">
               A goal pursues one mission over days or weeks. It wakes itself,
               reads its ledger, ships work via PRs, measures, and iterates until
               the objective is met.

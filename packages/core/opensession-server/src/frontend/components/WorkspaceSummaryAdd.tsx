@@ -41,7 +41,7 @@ export function WorkspaceSummaryAdd({
           }
         />
       </Tooltip>
-      <Menu.Popup align="end" sideOffset={6} className="min-w-[200px]">
+      <Menu.Popup align="end" sideOffset={6}>
         {children}
       </Menu.Popup>
     </Menu.Root>
@@ -87,7 +87,7 @@ export function WorkspaceSummaryAddRow({
           className="shrink-0 text-faint group-hover/ws:text-fg"
         />
       </Menu.Trigger>
-      <Menu.Popup align="end" sideOffset={6} className="min-w-[200px]">
+      <Menu.Popup align="end" sideOffset={6}>
         {children}
       </Menu.Popup>
     </Menu.Root>

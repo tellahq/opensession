@@ -583,7 +583,7 @@ export function SessionViewerChrome({
                   <span className="grow">Archived sessions</span>
                   <IconChevronRight size={20} className="text-faint" />
                 </Menu.SubmenuTrigger>
-                <Menu.Popup className="min-w-[240px] max-w-[320px]">
+                <Menu.Popup className="min-w-menu-wide max-w-[320px]">
                   <ArchivedSessionItems
                     sessions={archivedSessions}
                     onSelect={(s) => {
@@ -995,7 +995,7 @@ export function SessionViewerChrome({
                   // From the tab, the menu hangs below the tab's foot on
                   // the sheet rather than just under its ⋯.
                   sideOffset={menuInTab ? 8 : 6}
-                  className="min-w-[240px] max-w-[min(300px,calc(100vw-24px))]"
+                  className="min-w-menu-wide max-w-[min(300px,calc(100vw-24px))]"
                 >
                   {/* Quick session actions use the same focus, spacing, collision,
 								    and dismissal behavior as every other app menu. Each group is

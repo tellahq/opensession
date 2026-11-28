@@ -43,9 +43,11 @@ export const EDGE_DIVIDER = "border-line";
  *  invisible native <select> over the trigger. So is `min-w-0`: the label
  *  already truncates, but a flex item whose own overflow is visible cannot be
  *  sized below its content, so a long repo name would push the row wider than
- *  the card instead of ellipsizing. */
+ *  the card instead of ellipsizing. `-ml-1.5` hangs the hover wash past the
+ *  card's content edge so the repo glyph, not the wash, lines up with the
+ *  prompt text below it. */
 export const TRIGGER_STRONG =
-  "relative inline-flex min-w-0 max-w-full cursor-pointer items-center gap-1.5 rounded-control px-2 py-[5px] text-item-title font-semibold text-fg transition-colors hover:bg-hover disabled:cursor-default disabled:opacity-55";
+  "relative -ml-1.5 inline-flex min-w-0 max-w-full cursor-pointer items-center gap-1.5 rounded-control px-2 py-[5px] text-item-title font-semibold text-fg transition-colors hover:bg-hover disabled:cursor-default disabled:opacity-55";
 export const CHEVRON = "-ml-0.5 shrink-0 text-faint phone:size-4";
 /** A pass-through on a desktop, where the picker is the header's one control.
  *  On a phone it is the middle slot of the title bar: it takes the space the

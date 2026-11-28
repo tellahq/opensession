@@ -979,7 +979,7 @@ export function CommentableDiff({ patch, options }: Props) {
                     }
                   />
                 </Tooltip>
-                <Menu.Popup align="end" className="min-w-[230px]">
+                <Menu.Popup align="end" className="min-w-menu-wide">
                   {isPhone && showFileStats && (s.add > 0 || s.del > 0) && (
                     <div className="flex gap-1.5 px-2.5 pt-1.5 pb-1 text-meta tabular-nums">
                       {s.add > 0 && <span className={DIFF_ADD}>+{s.add}</span>}

@@ -143,7 +143,7 @@ export function WorkspaceSettingsDialog({
                 </Button>
               }
             />
-            <Menu.Popup align="start" className="min-w-[220px]">
+            <Menu.Popup align="start">
               <CollaboratorMenuItems {...sharing} />
             </Menu.Popup>
           </Menu.Root>

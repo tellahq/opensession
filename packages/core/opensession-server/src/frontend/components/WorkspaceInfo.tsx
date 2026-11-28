@@ -778,7 +778,7 @@ function AgentReviewCard({
             >
               <IconChevronDown size={20} />
             </Menu.Trigger>
-            <Menu.Popup align="end" sideOffset={6} className="min-w-[280px]">
+            <Menu.Popup align="end" sideOffset={6} className="min-w-menu-wide">
               <Menu.Group>
                 <Menu.GroupLabel>{AGENT_NAME} actions</Menu.GroupLabel>
                 {PR_AGENT_ACTIONS.map((action) => (
@@ -1221,7 +1221,7 @@ function ReviewerChip({
               </>
             )}
           </Menu.Trigger>
-          <Menu.Popup align="start" sideOffset={6} className="min-w-[200px]">
+          <Menu.Popup align="start" sideOffset={6}>
             {req &&
               (accepted ? (
                 <Menu.Item

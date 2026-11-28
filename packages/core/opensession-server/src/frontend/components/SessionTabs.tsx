@@ -442,7 +442,7 @@ export function SessionTabs({
       >
         <IconPlus size={ctrlIconSize} />
       </ContextMenu.Trigger>
-      <ContextMenu.Popup className="min-w-[250px]">
+      <ContextMenu.Popup className="min-w-menu-wide">
         <ContextMenu.Item onClick={() => onNewSession("share")}>
           New session · share worktree
         </ContextMenu.Item>
@@ -482,7 +482,7 @@ export function SessionTabs({
       <Menu.Popup
         align="end"
         sideOffset={4}
-        className="min-w-[240px] max-w-[320px]"
+        className="min-w-menu-wide max-w-[320px]"
       >
         <ArchivedSessionItems
           sessions={archived}
@@ -590,10 +590,7 @@ export function SessionTabs({
                       )}
                     </ContextMenu.Trigger>
                     {onMoveToPanel && (
-                      <ContextMenu.Popup
-                        className="min-w-[220px]"
-                        finalFocus={false}
-                      >
+                      <ContextMenu.Popup finalFocus={false}>
                         <ContextMenu.Item onClick={() => onMoveToPanel(v.id)}>
                           <IconSidebarRight size={20} className={MENU_ICON} />
                           <span className="grow">Move to side panel</span>
@@ -794,7 +791,7 @@ export function SessionTabs({
 							    input (autoFocus) — the closing menu must not steal focus
 							    back to the tab. */}
                   <ContextMenu.Popup
-                    className="min-w-[250px]"
+                    className="min-w-menu-wide"
                     finalFocus={false}
                   >
                     <ContextMenu.Item

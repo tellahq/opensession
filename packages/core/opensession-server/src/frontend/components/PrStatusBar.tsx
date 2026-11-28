@@ -1325,7 +1325,7 @@ export function PrStatusBar({
                 Merge
                 <IconChevronDown size={20} className="-mr-0.5 opacity-60" />
               </Menu.Trigger>
-              <Menu.Popup align="end" sideOffset={6} className="min-w-[200px]">
+              <Menu.Popup align="end" sideOffset={6}>
                 {forceItem}
               </Menu.Popup>
             </Menu.Root>
@@ -1361,11 +1361,7 @@ export function PrStatusBar({
                     />
                   }
                 />
-                <Menu.Popup
-                  align="end"
-                  sideOffset={6}
-                  className="min-w-[200px]"
-                >
+                <Menu.Popup align="end" sideOffset={6}>
                   {forceItem}
                 </Menu.Popup>
               </Menu.Root>
