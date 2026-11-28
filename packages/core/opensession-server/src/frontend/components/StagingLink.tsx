@@ -85,7 +85,7 @@ const SUMMARY_MARK_PAIR = "mr-1";
    outside the thin globe circle so it reads as a halo, not a second outline.
    The bar variant's globe is only 15px, so its ring shrinks to hug it. */
 const RING_BASE =
-  "pointer-events-none absolute top-1/2 left-1/2 rounded-full border border-transparent border-t-current opacity-90 animate-spin-quick";
+  "pointer-events-none absolute top-1/2 left-1/2 rounded-full border border-transparent border-t-current opacity-90 animate-spin";
 /* base.css freezes every animation under prefers-reduced-motion and then hands
    the progress spinners their duration back — this is one of them (a stopped
    spinner makes a live deploy look hung), so it restates it for itself now that

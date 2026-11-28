@@ -20,10 +20,8 @@ const VOICE_CONTROL = new URL(
 );
 
 test("phone composers use the same quiet edge as the desktop ring", () => {
-  expect(composerBox).toContain("border-[color:var(--composer-border)]/35");
-  expect(composerFlapBorder).toContain(
-    "border-[color:var(--composer-border)]/35",
-  );
+  expect(composerBox).toContain("border-composer-line");
+  expect(composerFlapBorder).toContain("border-composer-line");
 });
 
 test("team note mode stays compact at rest and names itself when expanded", async () => {

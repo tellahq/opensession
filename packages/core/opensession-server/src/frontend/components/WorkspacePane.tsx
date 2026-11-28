@@ -1061,7 +1061,7 @@ export function WorkspacePane({
           document.body,
         )}
       <div className="flex-1 min-h-0 overflow-y-auto" />
-      <div className="w-full max-w-[760px] mx-auto px-5 pb-5 shrink-0">
+      <div className="w-full max-w-page-narrow mx-auto px-5 pb-5 shrink-0">
         <Composer
           value={prompt}
           onChange={setPrompt}

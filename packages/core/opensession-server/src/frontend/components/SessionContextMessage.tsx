@@ -142,7 +142,7 @@ export function SessionContextMessage({
             </Button>
           </span>
           {open && (
-            <div className="mx-auto mt-2 w-full max-w-[560px] rounded-lg bg-panel px-4 py-3 text-left">
+            <div className="mx-auto mt-2 w-full max-w-card rounded-lg bg-panel px-4 py-3 text-left">
               {loading ? (
                 <p className="m-0 text-label text-dim">Loading…</p>
               ) : (

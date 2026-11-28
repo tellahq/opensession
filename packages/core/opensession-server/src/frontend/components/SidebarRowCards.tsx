@@ -333,7 +333,7 @@ export function PrRowCard({ item }: { item: ReviewQueueItem }) {
             <IconGitMerge className="text-green" size={20} />
           ) : (
             <span
-              className={`size-[7px] rounded-full ${
+              className={`size-dot-inline rounded-full ${
                 item.bucket === "attention" ? "bg-yellow" : "bg-faint"
               }`}
             />

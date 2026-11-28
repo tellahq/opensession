@@ -290,6 +290,10 @@ export const motion = stylex.defineConsts({
   micro: "var(--dur-micro)",
   /** Whole-control press tick. */
   pressScale: "0.96",
+  /** The desk popping open from its launcher (Tailwind `duration-pop`,
+   *  `scale-pop`). */
+  pop: "100ms",
+  popScale: "0.9",
   /** A sliding indicator (the underline under a tab). */
   slide: "200ms",
   easeOut: "cubic-bezier(0, 0, 0.2, 1)",
@@ -463,6 +467,8 @@ export const geometry = stylex.defineConsts({
   pageNarrow: "760px",
   pageDefault: "860px",
   pageWide: "920px",
+  /** A lone card set in a column (Tailwind `max-w-card`). */
+  card: "560px",
   /** A page's own padding, and the gaps under its header and filters. These
    *  sit off the spacing scale on purpose for now; folding them in is an
    *  open decision (docs/design-system.md). */

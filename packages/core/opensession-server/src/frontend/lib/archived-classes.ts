@@ -106,4 +106,4 @@ export const ARCHIVED_ROW_ACTION =
 
 /** The page column. The archive top bar uses the same width so its search,
  *  count, and filter align with the list below, the way Pull requests does. */
-export const ARCHIVED_PAGE_COLUMN = "mx-auto w-full max-w-[860px] px-6";
+export const ARCHIVED_PAGE_COLUMN = "mx-auto w-full max-w-page px-6";

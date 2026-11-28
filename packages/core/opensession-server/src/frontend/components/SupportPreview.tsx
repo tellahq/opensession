@@ -158,7 +158,7 @@ export function SupportPreview({
     <div className="flex flex-col h-full min-h-0">
       <ConversationPane threadId={threadId} onOpenSession={onOpenSession} />
 
-      <div className="w-full max-w-[760px] mx-auto px-5 pb-5 shrink-0">
+      <div className="w-full max-w-page-narrow mx-auto px-5 pb-5 shrink-0">
         <Composer
           value={prompt}
           onChange={setPrompt}

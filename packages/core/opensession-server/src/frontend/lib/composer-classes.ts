@@ -23,7 +23,7 @@
    .palette-icon-btn`, whose ::before wash is styled from the stylesheet). The
    declarations below are what that rule used to paint. */
 export const composerBox =
-  "relative border border-[color:var(--composer-border)]/35 bg-[var(--composer-surface)] shadow-composer transition-[border-color,box-shadow] " +
+  "relative border border-composer-line bg-[var(--composer-surface)] shadow-composer transition-[border-color,box-shadow] " +
   "desktop:border-transparent desktop:[--smooth-ring-color:var(--composer-border)] desktop:smooth-shadow-ring-soft";
 
 /** Resting/expanded box. `--composer-inset-left` is read by the "+" menu to
@@ -237,8 +237,7 @@ export const fileChipSub = "text-meta text-faint";
  *  ring on desktop and a solid hairline on phone. Drawing the flap at full
  *  strength made the panel behind it about three times darker than the input
  *  in front. Use the same mix everywhere so the two layers keep one edge. */
-export const composerFlapBorder =
-  "pwa-composer-edge border-[color:var(--composer-border)]/35";
+export const composerFlapBorder = "pwa-composer-edge border-composer-line";
 
 /* ── The queue flap ───────────────────────────────────────────────
    The flap that folds out from behind the composer: a dimmer panel flush with

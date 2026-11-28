@@ -278,7 +278,7 @@ export function SlackChannelPane({
             el.scrollHeight - el.scrollTop - el.clientHeight < 80;
         }}
       >
-        <div className="mx-auto w-full max-w-[760px] px-5 py-4">
+        <div className="mx-auto w-full max-w-page-narrow px-5 py-4">
           {hasMore && (
             <div className="mb-3 flex justify-center">
               <Button size="sm" onClick={loadOlder} disabled={loadingOlder}>
@@ -302,7 +302,7 @@ export function SlackChannelPane({
         </div>
       </div>
       {error && (
-        <div className="mx-auto w-full max-w-[760px] px-5 py-2 text-xs text-red">
+        <div className="mx-auto w-full max-w-page-narrow px-5 py-2 text-xs text-red">
           {error}
         </div>
       )}

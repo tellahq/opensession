@@ -59,7 +59,7 @@ const RECORD_PILL =
 const RECORD_PILL_WIDE = "min-w-0 flex-1";
 /** The × and stop inside the red pill: white glyphs on a white wash. */
 const PILL_BUTTON =
-  "focus-ring inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-white transition-[background-color,scale] hover:bg-white/15 active:scale-[0.94] disabled:cursor-default disabled:opacity-60 disabled:hover:bg-transparent disabled:active:scale-100 phone:size-9";
+  "focus-ring inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-white transition-[background-color,scale] hover:bg-white/15 active:scale-press disabled:cursor-default disabled:opacity-60 disabled:hover:bg-transparent disabled:active:scale-100 phone:size-9";
 
 /* Waveform bars. Colour lives on the variant, never alongside a second colour
    utility on the same element. Two of those don't compose, the sheet's order

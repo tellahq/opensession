@@ -44,9 +44,11 @@ its odd values. A rule in a document does not stop that. A type does.
    `z-9`). `off-scale-z` counts any other z-index of 10 or more.
    Motion is named the same way: `duration-micro/standard/long`,
    `ease-standard`, `scale-press` (a control), `scale-press-plate` (a card)
-   and `scale-grow` (a small mark's hover), and named animations
-   (`animate-live`, `animate-waiting`, `animate-spin-quick`, ...) in
-   tailwind.css, matching StyleX's `motion`. `off-scale-motion` counts
+   and `scale-grow` (a small mark's hover), the desk's `duration-pop` and
+   `scale-pop`, and named animations (`animate-live`, `animate-waiting`,
+   ...) in tailwind.css, matching StyleX's `motion`. Every press is
+   `scale-press`, and every spinner is `animate-spin`, one turn a second,
+   reduced motion included. `off-scale-motion` counts
    arbitrary or numbered durations, easings, scales and animations.
    Radius is the `--rf` scale (`rounded-xs` to `rounded-2xl`, `control`,
    `popup`) plus named shapes: `rounded-capsule` (a squircled pill),
@@ -66,6 +68,13 @@ its odd values. A rule in a document does not stop that. A type does.
    ring), `shadow-glow-blue`, `shadow-avatar`, `shadow-composer` and
    `shadow-header-control`, mirrored as `shadow.*` and `color.tone*` in
    StyleX. `off-scale-tint` and `arbitrary-shadow` count the rest.
+   Column widths are named measures, the same in both systems:
+   `max-w-page-narrow` (760, a conversation or a PR), `max-w-page` (860),
+   `max-w-page-wide` (920, a feed or a list), `max-w-settings` (720) and
+   `max-w-card` (560, a lone card in a column), with StyleX
+   `geometry.page*` and `geometry.card`. An inline status dot is
+   `size-dot-inline`. `arbitrary-size` counts every other raw length on a
+   size, width or height utility.
 2. **Primitives** (`ui/*.tsx`). Authored in StyleX against the tokens. Each
    one owns its look completely and exposes `variant` / `size` for the
    choices the system has made, plus an `xstyle` prop whose type only accepts

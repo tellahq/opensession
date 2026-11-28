@@ -385,7 +385,7 @@ export function Feed({
           headerActionsEl,
         )}
       <div data-page-scroll className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-[920px] px-6 pb-15 pt-6 phone:px-4 phone:pb-12 phone:pt-[calc(var(--header-h)+18px)]">
+        <div className="mx-auto w-full max-w-page-wide px-6 pb-15 pt-6 phone:px-4 phone:pb-12 phone:pt-[calc(var(--header-h)+18px)]">
           {(repoOptions.length > 1 || team.length > 0) && (
             <div className="mb-5 hidden min-w-0 items-center gap-1 overflow-x-auto phone:flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {repoOptions.length > 1 && renderRepoPicker("start")}

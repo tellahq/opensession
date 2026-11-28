@@ -516,6 +516,17 @@ const SIGNALS: Signal[] = [
     },
   },
   {
+    id: "arbitrary-size",
+    instead:
+      "a spacing step (size-8, w-60), a control height, or a named measure: max-w-page-narrow/page/page-wide/settings/card, size-dot-inline, size-hit-target (styles/tailwind.css)",
+    exempt: ["styles/"],
+    count: (source) =>
+      occurrences(
+        stripComments(source),
+        /(?<![\w-])(?:size|w|h|min-w|max-w|min-h|max-h)-\[[0-9.]+(?:px|rem|em)\]/g,
+      ),
+  },
+  {
     id: "arbitrary-shadow",
     instead:
       "an elevation tier (smooth-shadow-*), or a named shadow from styles/tailwind.css (shadow-halo-*, shadow-glow-blue, shadow-avatar, shadow-composer, shadow-header-control)",

@@ -267,7 +267,7 @@ export const WS_SUMMARY_FRAME_DEPLOYING =
  *  like the globe's ring does. */
 export const WS_SUMMARY_FRAME_SPINNER =
   "size-3 shrink-0 rounded-full border-[1.5px] border-white/25 border-t-white " +
-  "animate-spin-quick " +
+  "animate-spin " +
   "motion-reduce:[animation-duration:0.7s]! motion-reduce:[animation-iteration-count:infinite]!";
 
 /** A picture in the list, centred in the rail the glyphs use. A 16px tile

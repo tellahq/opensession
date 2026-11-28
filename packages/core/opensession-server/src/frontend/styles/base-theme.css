@@ -926,7 +926,7 @@ html[data-accent="green"] {
                         us to drop; the grid still reads as a graphic at rest.
 
    PREFER PUTTING A NEW EXCEPTION ON THE ELEMENT, not in this list:
-   `motion-reduce:[animation-duration:0.8s]! motion-reduce:[animation-iteration-count:infinite]!`
+   `motion-reduce:[animation-duration:1s]! motion-reduce:[animation-iteration-count:infinite]!`
    wins here (equal specificity, and the utility sheet is linked last) and
    travels with the component. Five indicators silently froze during the
    Tailwind migration because their class name was removed from the markup
@@ -975,13 +975,13 @@ html[data-accent="green"] {
   [class*="animate-spin"],
   [class*="animate-[spin"],
   [data-progress] {
-    animation-duration: 0.8s !important;
+    animation-duration: 1s !important;
     animation-iteration-count: infinite !important;
   }
 
-  /* A spinner that turns at a rate other than the 0.8s above keeps its own
+  /* A spinner that turns at a rate other than the 1s above keeps its own
 	   exception, placed after that rule so its duration wins the tie. The
-	   0.8s spinners need no entry at all — the rule above already names them
+	   1s spinners need no entry at all — the rule above already names them
 	   by their animation utility. */
 
   /* Status pulses — opacity breathing that encodes live session state

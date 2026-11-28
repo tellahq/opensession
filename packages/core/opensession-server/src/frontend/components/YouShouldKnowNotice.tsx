@@ -106,7 +106,7 @@ export function YouShouldKnowNotice({
         <Button
           size="sm"
           variant="ghost"
-          className="flex w-full max-w-[560px] justify-start self-start font-normal text-faint"
+          className="flex w-full max-w-card justify-start self-start font-normal text-faint"
           icon={<IconCheck />}
           trailing={use === "asked" ? "Asked" : "Known"}
           onClick={() => setUnfolded(true)}
@@ -125,7 +125,7 @@ export function YouShouldKnowNotice({
   return (
     <div className={msgSystemRow} data-eid={entry.id}>
       <div
-        className="w-full max-w-[560px] self-start rounded-2xl bg-panel px-4 pt-3 pb-3.5 text-left"
+        className="w-full max-w-card self-start rounded-2xl bg-panel px-4 pt-3 pb-3.5 text-left"
         role="group"
         aria-label={tag}
       >

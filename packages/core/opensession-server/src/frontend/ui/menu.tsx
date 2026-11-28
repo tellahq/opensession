@@ -128,7 +128,10 @@ function Popup({
   const list = (
     <>
       <div
-        {...stylex.props(popup.scroll, footer ? popup.scrollAboveFooter : null)}
+        {...stylex.props(
+          popup.scroll,
+          footer || aside ? popup.scrollAboveFooter : null,
+        )}
       >
         {children}
       </div>
@@ -167,7 +170,9 @@ function Popup({
               <div
                 {...stylex.props(
                   popup.asideList,
-                  footer ? popup.withFooter : null,
+                  // A column of its own, so the list takes the popup's
+                  // taller cap rather than a plain menu's.
+                  popup.withFooter,
                 )}
               >
                 {list}

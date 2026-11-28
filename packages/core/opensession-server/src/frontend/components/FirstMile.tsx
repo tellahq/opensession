@@ -787,7 +787,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
       </nav>
 
       {!status ? (
-        <div className="flex min-h-40 w-full max-w-[560px] self-center justify-self-center items-center justify-center rounded-2xl bg-palette-glass px-8 py-12 [--smooth-ring-color:var(--dialog-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-lg">
+        <div className="flex min-h-40 w-full max-w-card self-center justify-self-center items-center justify-center rounded-2xl bg-palette-glass px-8 py-12 [--smooth-ring-color:var(--dialog-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-lg">
           <LoadingState>
             {failed ? "Couldn't load setup." : "Preparing your workspace…"}
           </LoadingState>
@@ -806,7 +806,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
               : step.id === "ready"
                 ? "max-w-[900px]"
                 : step.id === "welcome"
-                  ? "max-w-[560px]"
+                  ? "max-w-card"
                   : "max-w-[750px]",
             edgeSurface
               ? "bg-transparent [backdrop-filter:none]"

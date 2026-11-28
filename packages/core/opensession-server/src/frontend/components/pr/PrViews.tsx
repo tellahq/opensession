@@ -132,7 +132,7 @@ export function ConversationView({
        and `mx-auto` (an auto cross-axis margin) opts it out of stretching, so
        without it the box sizes to its content and `max-w` becomes a fixed 760px
        that a phone can't fit. */
-    <div className="mx-auto flex w-full min-w-0 max-w-[760px] flex-col gap-4 new-layout:mx-0 new-layout:max-w-none">
+    <div className="mx-auto flex w-full min-w-0 max-w-page-narrow flex-col gap-4 new-layout:mx-0 new-layout:max-w-none">
       <PrDescriptionCard key={pr?.url} descriptionHtml={descriptionHtml} />
 
       {comments.length > 0 && (

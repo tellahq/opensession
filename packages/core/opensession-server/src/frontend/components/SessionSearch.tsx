@@ -992,7 +992,7 @@ export function SessionSearch({
             (archivedStatus === "loading" && query.trim() !== "")) && (
             <span
               className={
-                "size-[13px] shrink-0 animate-spin-quick rounded-full border-2 border-line-strong border-t-accent " +
+                "size-[13px] shrink-0 animate-spin rounded-full border-2 border-line-strong border-t-accent " +
                 // Keeps turning under reduced motion — it is the only "still
                 // searching" signal, and the blanket rule would freeze it.
                 "motion-reduce:[animation-duration:0.7s]! motion-reduce:[animation-iteration-count:infinite]!"

@@ -1443,7 +1443,7 @@ export function PrPanel({
           className={`min-h-0 flex-1 bg-surface ${compactToolbar ? "overflow-y-visible" : "overflow-y-auto"}`}
         >
           {walkthrough && (
-            <div className="mx-auto w-full max-w-[760px] px-4 pt-4 sm:px-5">
+            <div className="mx-auto w-full max-w-page-narrow px-4 pt-4 sm:px-5">
               <WalkthroughCard walkthrough={walkthrough} />
             </div>
           )}
@@ -1461,7 +1461,7 @@ export function PrPanel({
               />
             </div>
           ) : (
-            <div className="mx-auto flex w-full max-w-[760px] flex-col gap-4 px-4 py-4 sm:px-5">
+            <div className="mx-auto flex w-full max-w-page-narrow flex-col gap-4 px-4 py-4 sm:px-5">
               <PrCard title="Git status">
                 <GitStatusRows
                   git={git}

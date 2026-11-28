@@ -195,7 +195,7 @@ function DesktopIdentity({
 }) {
   return (
     // The new layout's Review top bar carries the title and these facts.
-    <header className="mx-auto w-full max-w-[760px] space-y-3 pb-1 phone:hidden new-layout:hidden">
+    <header className="mx-auto w-full max-w-page-narrow space-y-3 pb-1 phone:hidden new-layout:hidden">
       <h1 className="m-0 break-words text-page-title font-semibold leading-tight text-fg">
         {pr.title}{" "}
         <a

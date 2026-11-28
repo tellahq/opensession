@@ -345,7 +345,7 @@ export const PR_CHIP_SEAM =
   "hover:relative hover:z-1 focus-visible:relative focus-visible:z-1";
 
 /** Sibling PRs in the header's overflow menu: a dot in each PR's own tone. */
-export const PR_SIB_DOT = "size-[7px] shrink-0 rounded-full";
+export const PR_SIB_DOT = "size-dot-inline shrink-0 rounded-full";
 export const PR_SIB_DOT_BG: Record<PrTone, string> = {
   green: "bg-green",
   purple: "bg-purple",
