@@ -2777,10 +2777,8 @@ function AddCodexAccountForm({ onAdded }: { onAdded: () => void }) {
         description={
           kind === "device" ? (
             <>
-              Sign in with ChatGPT from here, with no VPS access needed. You'll
-              get a link and a one-time code to enter on any device.
-              (Device-code login must be enabled in the ChatGPT workspace's
-              security settings.)
+              You'll get a link and a code to enter on any device. Device-code
+              login must be on in the ChatGPT workspace's security settings.
             </>
           ) : kind === "oauth" ? (
             <>

@@ -154,10 +154,7 @@ function SandboxDefaultRow({ scope }: { scope: Scope }) {
       desc={
         scope === "personal" ? undefined : (
           <span className="flex flex-col gap-1.5">
-            <span>
-              Where new sessions run for everyone, and which provider a Sandbox
-              means.
-            </span>
+            <span>For everyone in the workspace.</span>
             {overrides.length > 0 && (
               <span className="flex flex-col gap-1">
                 <span>
@@ -360,8 +357,8 @@ function ProjectSandboxDefaults() {
                 title={`${label} app`}
                 desc={
                   portals === "none"
-                    ? "Portals start beside the session: on this machine, or in its Sandbox."
-                    : "Sessions on this machine run their Portals in a Sandbox of their own, started with the first Portal and refreshed after every turn."
+                    ? "Runs beside the session."
+                    : "Runs in its own Sandbox, even for local sessions."
                 }
                 control={
                   <div
@@ -434,7 +431,7 @@ function ProjectSandboxDefaults() {
           if (!open) setScriptRepo(null);
         }}
         title={`${scriptRepo?.label || scriptRepo?.id || ""} setup script`}
-        description="Runs from the checkout right before .agents/setup, once per new Sandbox. Keep secrets in environment settings, not here."
+        description="Runs once per new Sandbox, before .agents/setup. Keep secrets out of it."
         value={
           scriptRepo
             ? (lifecycle?.preSetupScripts[scriptRepo.id] ?? null)
@@ -447,10 +444,7 @@ function ProjectSandboxDefaults() {
         }}
       />
       <SettingsHint>
-        A project set to a Sandbox always starts there, so its app runs in a
-        Sandbox Portal instead of on this server. The per-session choice in the
-        new session menu still wins. A project whose app is set to a Sandbox
-        keeps its sessions on this machine and runs only the app remotely.
+        The choice in the new session menu still wins.
       </SettingsHint>
     </>
   );
@@ -465,10 +459,6 @@ export function WorkspaceSandboxDefaults() {
       <SettingCard>
         <SandboxDefaultRow scope="workspace" />
       </SettingCard>
-      <SettingsHint>
-        This machine runs sessions in a worktree on this server. Only tested
-        providers appear here.
-      </SettingsHint>
       <ProjectSandboxDefaults />
     </>
   );

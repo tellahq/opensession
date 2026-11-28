@@ -261,8 +261,7 @@ function RemoteSection({
     <SettingsSection className="mb-3">
       <div className="text-item-title font-semibold text-fg">Remote</div>
       <p className="m-0 mt-1 text-supporting text-dim">
-        Optional. Syncs this repository with a private git remote so other tools
-        can use the same memory. GitHub repositories must be private.
+        Optional. Syncs with a private git remote.
       </p>
       <form
         className="mt-3 flex items-end gap-2 phone:flex-col phone:items-stretch"
