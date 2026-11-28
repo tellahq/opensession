@@ -549,6 +549,8 @@ export const geometry = stylex.defineConsts({
   ghostRowPadBlock: "13px",
   /** The transcript's reading column, and the space between two turns. */
   sessionColumn: "var(--session-col)",
+  /** The reading column plus the 20px gutters a row inside it pads by. */
+  sessionColumnPadded: "calc(var(--session-col) + 40px)",
   /** The live status row under a running turn: 5px above and below. */
   busyRowPadBlock: "5px",
   /** A pane's waiting state: at least this tall, its copy this wide. */

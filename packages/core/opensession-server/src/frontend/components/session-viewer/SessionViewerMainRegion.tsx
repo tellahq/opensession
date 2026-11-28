@@ -16,7 +16,10 @@ import type {
 } from "react";
 import { useMemo, useState } from "react";
 import { AnimatePresence } from "motion/react";
-import { InlineAlert } from "../../ui/state";
+import { EmptyState, InlineAlert } from "../../ui/state";
+import * as stylex from "@stylexjs/stylex";
+import { sx } from "../../ui/sx";
+import { geometry, space } from "../../ui/tokens.stylex";
 import { AGENT_NAME } from "../../lib/brand";
 import { withQuotes, type Quote } from "../../lib/quotes";
 import { messageLink } from "../../lib/message-link";
@@ -199,6 +202,39 @@ interface PaneRegion {
   terminalTabOpen: boolean;
   previewStatus: PreviewStatus | null;
 }
+
+const styles = stylex.create({
+  findScope: {
+    position: "relative",
+    display: "flex",
+    minHeight: 0,
+    flex: "1",
+    flexDirection: "column",
+  },
+  fill: { minHeight: "100%" },
+  // On the transcript's reading column, like the turns around it.
+  column: {
+    marginInline: "auto",
+    width: "100%",
+    maxWidth: geometry.sessionColumn,
+  },
+  // As wide as the composer it sits on, not the whole pane.
+  forkNotice: {
+    marginInline: "auto",
+    marginBottom: space.s8,
+    width: "100%",
+    maxWidth: geometry.sessionColumnPadded,
+  },
+  typing: {
+    marginInline: "auto",
+    marginBottom: space.s4,
+    width: "100%",
+    maxWidth: geometry.sessionColumnPadded,
+    paddingInline: space.s20,
+  },
+  menuLabel: { flexGrow: 1, whiteSpace: "nowrap" },
+  hidden: { display: "none" },
+});
 
 export interface ReviewRegion {
   openPr: PrPanelProps["onOpenPr"];
@@ -861,10 +897,7 @@ export function SessionViewerMainRegion({
         ) : (
           // data-session-find-scope: where ⌘F means "find in this session"
           // (TranscriptFind). Focus anywhere else keeps the browser's find.
-          <div
-            className="relative flex min-h-0 flex-1 flex-col"
-            data-session-find-scope
-          >
+          <div {...stylex.props(styles.findScope)} data-session-find-scope>
             <FullPageFileDropOverlay active={fileDragActive} />
             {/* The step lives here rather than on the scroller alone, so the
 					    pills floating beside it inherit it too and stay on the reading
@@ -936,21 +969,19 @@ export function SessionViewerMainRegion({
                     // through to the transcript below, which is where the sent
                     // bubble and the streaming reply render.
                     session.ran ? (
-                      <div className="py-10 text-center text-faint">
+                      <EmptyState>
                         No transcript available for this session
-                      </div>
+                      </EmptyState>
                     ) : (
                       // The composer below is the whole UI of a fresh session.
                       // The agent learns the workspace's other sessions on its
                       // own (server workspace-siblings.ts), so nothing to pick.
-                      <div className="min-h-full" />
+                      <div {...stylex.props(styles.fill)} />
                     )
                   ) : entries.length === 0 &&
                     !hasLiveConversation &&
                     !inlineRunFailure ? (
-                    <div className="py-10 text-center text-faint">
-                      Empty transcript
-                    </div>
+                    <EmptyState>Empty transcript</EmptyState>
                   ) : (
                     <LiveRunStatusContext.Provider value={liveRunStatus}>
                       <TranscriptView
@@ -1031,7 +1062,7 @@ export function SessionViewerMainRegion({
                 {inlineRunFailure && (
                   <InlineAlert
                     title="Run failed"
-                    className="mx-auto mt-3 max-w-2xl rounded-2xl border-0 text-center [&>div>div]:leading-snug [&>div>div+div]:mt-0"
+                    {...stylex.props(styles.column)}
                   >
                     {inlineRunFailure.message}
                   </InlineAlert>
@@ -1234,25 +1265,23 @@ export function SessionViewerMainRegion({
               style={summaryStepStyle}
             >
               {noEngine ? (
-                <div className="mx-auto max-w-[var(--session-col)] text-label text-faint">
+                <EmptyState placement="row" {...stylex.props(styles.column)}>
                   No engine session to resume
-                </div>
+                </EmptyState>
               ) : (
                 <>
                   {forkFrom && (
-                    <div className="mb-2 flex items-center justify-between gap-3 rounded-control border border-accent/40 bg-accent/10 px-3 py-[7px] text-supporting text-fg">
-                      <span>
-                        {forkFrom.kind === "tip"
-                          ? "Duplicating this session from the current context. Type the new direction."
-                          : "Duplicating this session from the selected message. Type the new direction."}
-                      </span>
-                      <button
-                        className="cursor-pointer bg-transparent text-label text-dim hover:text-fg"
-                        onClick={() => setForkFrom(null)}
-                      >
-                        Cancel
-                      </button>
-                    </div>
+                    <InlineAlert
+                      variant="info"
+                      role="status"
+                      retryLabel="Cancel"
+                      onRetry={() => setForkFrom(null)}
+                      {...stylex.props(styles.forkNotice)}
+                    >
+                      {forkFrom.kind === "tip"
+                        ? "Duplicating this session from the current context. Type the new direction."
+                        : "Duplicating this session from the selected message. Type the new direction."}
+                    </InlineAlert>
                   )}
                   {/* Reading, reply and unread actions float above the composer. */}
                   {hasActionBand && (
@@ -1317,7 +1346,7 @@ export function SessionViewerMainRegion({
                   )}
                   <TypingIndicator
                     presence={typingPresence}
-                    className="mx-auto mb-1 w-full max-w-[calc(var(--session-col)+40px)] px-5"
+                    className={stylex.props(styles.typing).className}
                   />
                   <Composer
                     // Uncontrolled: the draft lives in the Composer (persisted
@@ -1483,7 +1512,7 @@ export function SessionViewerMainRegion({
                           <span className={composerMenuIcon}>
                             <BrandMark name="slack" size={16} />
                           </span>
-                          <span className="grow whitespace-nowrap">
+                          <span {...stylex.props(styles.menuLabel)}>
                             Send to Slack…
                           </span>
                         </button>
@@ -1560,7 +1589,12 @@ export function SessionViewerMainRegion({
 					    surface is in front. Closing the tab unmounts them, which is what
 					    tears the PTYs down; they also die with the socket. */}
         {hasWorkspace && !waitingForWorkspace && terminalTabOpen ? (
-          <div className={showTerminal ? VIEWER_REVIEW_MAIN : "hidden"}>
+          <div
+            {...sx(
+              !showTerminal && styles.hidden,
+              showTerminal ? VIEWER_REVIEW_MAIN : undefined,
+            )}
+          >
             <ShellPanel sessionId={session.id} visible={showTerminal} />
           </div>
         ) : null}
