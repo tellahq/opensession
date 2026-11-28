@@ -155,6 +155,10 @@ property, like the side panel plate) keep working unchanged.
      (`role="alertdialog"`, `ui/confirm.tsx`) stays centered.
    - One page title: `PageTitle` and a Settings page title share
      `text.pageTitle` and `tracking.title`.
+   - A page names itself once: its large title while that is on screen, the
+     bar above once it has scrolled away (`hooks/useLargeTitle.ts`). Inside
+     the phone Settings sheet the sheet's bar names it and `PageTitle`
+     renders nothing, like `SettingsHeader`.
 
 ### Open decisions
 

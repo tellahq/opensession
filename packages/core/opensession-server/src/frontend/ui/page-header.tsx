@@ -1,6 +1,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { SELECTABLE } from "./dialog-styles";
+import { SettingsInSheet } from "./settings";
 import { sx } from "./sx";
 import {
   color,
@@ -49,6 +50,10 @@ export function PageTitle({
   className,
   ...props
 }: React.ComponentPropsWithoutRef<"h2">) {
+  // Inside the phone Settings sheet the sheet's own bar names the page, the
+  // same rule SettingsHeader keeps, so the name is never printed twice.
+  const inSheet = React.useContext(SettingsInSheet);
+  if (inSheet) return null;
   return (
     <h2
       // The anchor for the iOS large-title handoff: while this heading is on

@@ -39,15 +39,18 @@ export const LARGE_TITLE_SELECTOR = "[data-large-title]";
  * for the observer's first callback, which arrives a frame late and would flash
  * the bar's copy of the title on every route change.
  *
- * The heading is looked up inside the bar's own parent rather than handed in as
- * a ref, for the reason `useScrollEdge` does the same: the bar and
- * the page under it are never rendered by the same component. Re-resolved on
+ * The heading is looked up inside the bar's pane (its `main`, else its parent)
+ * rather than handed in as a ref, for the reason `useScrollEdge` does the
+ * same: the bar and the page under it are never rendered by the same
+ * component. Not the bar's parent alone: the new layout wraps the bar in a
+ * row of its own (PaneTopRow), and from there no page heading is ever found,
+ * so the bar printed the name while the page's title still showed it. Re-resolved on
  * every mutation batch, which is what carries the handoff across a route
  * change and a page whose body lands a moment after its frame.
  *
  * @param bar the chrome row that would show the title, or null before it mounts
  * @param name the title the bar would show, matched against the headings found
- *   inside `bar.parentElement`
+ *   inside the bar's pane
  */
 export function useLargeTitleHandoff(
   bar: HTMLElement | null,
@@ -58,7 +61,7 @@ export function useLargeTitleHandoff(
   const [handedOver, setHandedOver] = useState(true);
 
   useEffect(() => {
-    const root = bar?.parentElement;
+    const root = bar?.closest("main") ?? bar?.parentElement;
     if (!bar || !root) {
       setHandedOver(true);
       return;
