@@ -26,7 +26,6 @@ import {
   setBusySendPref,
   type BusySendGesture,
   type BusySendPref,
-  type BusySendPrefs,
 } from "../../lib/busy-send-pref";
 import {
   getDefaultEffortPref,
@@ -406,7 +405,7 @@ function YouShouldKnowRow() {
   return (
     <SettingRow
       title="You should know"
-      desc={error || "Flags things worth knowing during long turns."}
+      desc={error || "Flags what you might miss in long turns."}
       control={
         <Switch
           aria-label="You should know"

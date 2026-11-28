@@ -1,4 +1,4 @@
-import { useEffect, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   fetchLibrary,
   type LibraryEntry,
@@ -24,7 +24,6 @@ import {
   IconStatusRing,
   IconWrench,
 } from "../icons";
-import { useIsPhone } from "../../hooks/useIsPhone";
 import {
   markTileClass,
   markTileGradient,
@@ -32,20 +31,10 @@ import {
   markTileShadow,
   type MarkTone,
 } from "../../lib/mark-tile";
-import {
-  onSidebarToolsChanged,
-  readHiddenSidebarTools,
-  setSidebarToolVisible,
-  SIDEBAR_TOOL_IDS,
-  toolFitsViewport,
-  type SidebarToolId,
-} from "../../lib/sidebar-tools";
 import { SettingsHeader, SettingsHint, SettingsPanel } from "../../ui/settings";
 import { Input } from "../../ui/input";
 import { Badge } from "../../ui/badge";
-import { Segmented, SegmentedOption } from "../../ui/segmented";
 import { EmptyState, InlineAlert, Skeleton, SkeletonBar } from "../../ui/state";
-import { Switch } from "../../ui/switch";
 
 // ── The library: one browsable catalog over the things this instance can be
 // extended with. The server derives it (src/server/library.ts) from the
@@ -62,13 +51,10 @@ import { Switch } from "../../ui/switch";
 // Setup), and the card links into it. The one exception is a core tool, whose
 // switch is client state today; see the caveat rendered under that group. ──
 
-const TYPE_ORDER: LibraryEntryType[] = [
-  "tool",
-  "automation",
-  "integration",
-  "connection",
-  "package",
-];
+// Tools, integrations and first-party connections have their own homes (the
+// sidebar's menu and Settings → Connections), so the library lists only what
+// is added from here.
+const TYPE_ORDER: LibraryEntryType[] = ["automation", "package"];
 
 const TYPE_LABELS: Record<LibraryEntryType, string> = {
   tool: "Tools",
@@ -80,7 +66,7 @@ const TYPE_LABELS: Record<LibraryEntryType, string> = {
 
 const TYPE_BLURB: Record<LibraryEntryType, string> = {
   tool: "Tools appear in your sidebar.",
-  automation: "A prompt and a trigger: a schedule, an event, or a webhook.",
+  automation: "A prompt on a schedule, an event or a webhook.",
   integration: "Outside systems this instance can listen to and act in.",
   connection: "First-party MCP servers maintained with Open Session.",
   // Listed once installed rather than browsed: installing a package mounts an
@@ -227,29 +213,7 @@ function entryHref(entry: LibraryEntry): string {
     : `${BASE_PATH}${entry.href}`;
 }
 
-function sidebarToolId(entry: LibraryEntry): SidebarToolId | undefined {
-  if (entry.type !== "tool") return undefined;
-  return SIDEBAR_TOOL_IDS.find((id) => id === entry.slug);
-}
-
-function EntryControl({
-  entry,
-  toolVisible,
-  onToggleTool,
-}: {
-  entry: LibraryEntry;
-  toolVisible: boolean;
-  onToggleTool: (visible: boolean) => void;
-}) {
-  if (entry.type === "tool")
-    return (
-      <Switch
-        checked={toolVisible}
-        onCheckedChange={onToggleTool}
-        aria-label={`Show ${entry.name} in the sidebar`}
-      />
-    );
-
+function EntryControl({ entry }: { entry: LibraryEntry }) {
   if (entry.installed)
     return (
       <Badge tone="success">
@@ -337,15 +301,7 @@ function SectionHeading({
   );
 }
 
-function EntryCard({
-  entry,
-  toolVisible,
-  onToggleTool,
-}: {
-  entry: LibraryEntry;
-  toolVisible: boolean;
-  onToggleTool: (visible: boolean) => void;
-}) {
+function EntryCard({ entry }: { entry: LibraryEntry }) {
   return (
     // No fill. A card per entry stacks a plate on a plate on the page, and at
     // two dozen entries the page reads as boxes rather than as things you can
@@ -370,24 +326,15 @@ function EntryCard({
             : ""}
         </div>
       </div>
-      <EntryControl
-        entry={entry}
-        toolVisible={toolVisible}
-        onToggleTool={onToggleTool}
-      />
+      <EntryControl entry={entry} />
     </div>
   );
 }
 
 export function LibraryPanel() {
-  const isPhone = useIsPhone();
   const [entries, setEntries] = useState<LibraryEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<"all" | LibraryEntryType>("all");
-  const [hiddenTools, setHiddenTools] = useState<Set<SidebarToolId>>(() =>
-    readHiddenSidebarTools(),
-  );
 
   useEffect(() => {
     let alive = true;
@@ -399,57 +346,20 @@ export function LibraryPanel() {
     };
   }, []);
 
-  // Another surface (the sidebar's ••• menu, Settings) can flip the same
-  // switches, so mirror rather than own the state.
-  useEffect(
-    () => onSidebarToolsChanged(() => setHiddenTools(readHiddenSidebarTools())),
-    [],
-  );
-
-  const visible = (entries || []).filter((entry) => {
-    if (entry.type !== "tool") return true;
-    // A tool this width never shows can't be switched on here either.
-    const toolId = sidebarToolId(entry);
-    return toolId !== undefined && toolFitsViewport(toolId, isPhone);
-  });
-
   const groups = (() => {
     const needle = query.trim().toLowerCase();
-    const matched = visible.filter((entry) => {
-      if (filter !== "all" && entry.type !== filter) return false;
-      if (!needle) return true;
-      return (
+    const matched = (entries || []).filter(
+      (entry) =>
+        !needle ||
         entry.name.toLowerCase().includes(needle) ||
         entry.description.toLowerCase().includes(needle) ||
-        entry.category.toLowerCase().includes(needle)
-      );
-    });
+        entry.category.toLowerCase().includes(needle),
+    );
     return TYPE_ORDER.map((type) => ({
       type,
       entries: matched.filter((entry) => entry.type === type),
     })).filter((group) => group.entries.length > 0);
   })();
-
-  // What this instance already runs, led by its own mark. The catalog below
-  // says the same thing card by card; this is the one glance that answers
-  // "what is on here" before you start reading.
-  //
-  // One tile per MARK, integrations first: an automation borrows the mark of
-  // the service it works in, so the GitHub integration and the GitHub review
-  // automation both draw GitHub's square and a strip carrying both reads as
-  // a rendering bug rather than as two things being on.
-  const byMark = new Map<string | Glyph, LibraryEntry>();
-  for (const entry of [...visible].sort(
-    (a, b) =>
-      Number(b.type === "integration") - Number(a.type === "integration"),
-  )) {
-    if (entry.installed !== true) continue;
-    // A glyph rule is a singleton, so the object itself is the mark's
-    // identity, with no key to keep in sync with the table above.
-    const mark = brandFor(entry) ?? glyphFor(entry);
-    if (!byMark.has(mark)) byMark.set(mark, entry);
-  }
-  const installed = [...byMark.values()];
 
   const header = <SettingsHeader title="Library" />;
 
@@ -472,56 +382,13 @@ export function LibraryPanel() {
   return (
     <SettingsPanel className="max-w-none">
       {header}
-
-      {installed.length > 0 && (
-        <section className="mb-11 px-5">
-          <SectionHeading>Installed</SectionHeading>
-          <div className="flex flex-wrap gap-2.5 pt-4">
-            {installed.map((entry) => (
-              <a
-                key={entry.id}
-                href={entryHref(entry)}
-                title={entry.name}
-                aria-label={entry.name}
-                // The tile's own corner, so the focus ring traces the mark
-                // rather than a squarer box behind it.
-                className="rounded-control transition-opacity hover:opacity-80"
-              >
-                <EntryIcon entry={entry} size={36} />
-              </a>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <div className="flex flex-wrap items-center gap-2 px-5">
+      <div className="px-5">
         <Input
-          className="min-w-[180px] flex-1"
           placeholder="Search the library"
+          aria-label="Search the library"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        {/* The four options fit the desktop row. On a phone they are wider
-				    than the sheet and the segmented control's own tap sizing makes
-				    them wider still, so the strip scrolls rather than wrapping into
-				    a second row of chrome above the catalog. */}
-        <div className="max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <Segmented
-            label="Filter the library"
-            size="sm"
-            value={filter}
-            onValueChange={(next) => {
-              const selected = FILTERS.find((option) => option.key === next);
-              if (selected) setFilter(selected.key);
-            }}
-          >
-            {FILTERS.map((option) => (
-              <SegmentedOption key={option.key} value={option.key}>
-                {option.label}
-              </SegmentedOption>
-            ))}
-          </Segmented>
-        </div>
       </div>
 
       {groups.length === 0 && (
@@ -536,35 +403,16 @@ export function LibraryPanel() {
           {/* Two up where the column is wide enough for a row to hold a
 					    readable description, one up otherwise. The measure is the
 					    CONTAINER's, not the window's: this panel sits beside the
-					    settings nav, so a viewport query would say "wide" for a
-					    column that isn't. The gutter is wide on purpose: with no
-					    fill under a row, the air is what tells the two columns
-					    apart. */}
+					    settings nav. */}
           <div className="@container">
             <div className="grid grid-cols-1 gap-x-12 @[560px]:grid-cols-2">
-              {group.entries.map((entry) => {
-                const toolId = sidebarToolId(entry);
-                return (
-                  <EntryCard
-                    key={entry.id}
-                    entry={entry}
-                    toolVisible={
-                      toolId !== undefined && !hiddenTools.has(toolId)
-                    }
-                    onToggleTool={(next) => {
-                      if (toolId) setSidebarToolVisible(toolId, next);
-                    }}
-                  />
-                );
-              })}
+              {group.entries.map((entry) => (
+                <EntryCard key={entry.id} entry={entry} />
+              ))}
             </div>
           </div>
           <SettingsHint className="mt-4 px-0">
-            {group.type === "tool" ? (
-              <>{TYPE_BLURB.tool} Saved in this browser.</>
-            ) : (
-              TYPE_BLURB[group.type]
-            )}
+            {TYPE_BLURB[group.type]}
           </SettingsHint>
         </section>
       ))}

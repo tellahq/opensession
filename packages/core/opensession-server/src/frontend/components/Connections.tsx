@@ -1842,7 +1842,7 @@ export function GithubAccounts({
       {personal && showHint && (
         <SettingsHint>
           {active
-            ? "Sign in with GitHub to open pull requests as yourself in interactive sessions. Automations and unconnected teammates use the workspace bot."
+            ? "Sign in to open pull requests as yourself."
             : "Personal GitHub sign-in is not enabled for this workspace. Pull requests use the workspace bot."}
         </SettingsHint>
       )}

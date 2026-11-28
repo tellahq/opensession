@@ -1334,7 +1334,7 @@ export function MemoryPanel() {
                 {stats.mode === "legacy"
                   ? "Legacy rollback is active. Current facts are injected without v2 retrieval budgets."
                   : stats.mode === "repo"
-                    ? "Memory lives in git repositories. Each session gets the relevant MEMORY.md files and a checkout it can edit and push."
+                    ? "Kept in git. Each session reads the MEMORY.md files that apply."
                     : "Only pinned, trusted summaries are ambient. Other memories are retrieved when relevant."}
               </div>
             </div>

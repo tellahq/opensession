@@ -27,7 +27,6 @@ import {
   SettingCardSkeleton,
   SettingsGroupLabel,
   SettingsHeader,
-  SettingsHint,
   SettingsPanel,
 } from "../../ui/settings";
 import {

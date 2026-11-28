@@ -1010,7 +1010,7 @@ function ProjectEnvironmentDialog({
               ? `Configure ${target.repo} snapshot`
               : "Create a project snapshot"
           }
-          description="Open Session builds a reusable, credential-free project snapshot only when you opt in here. Each new session still gets its own isolated sandbox."
+          description="A credential-free snapshot, so new sandboxes start faster."
         />
         {!target ? (
           <div className="grid gap-3 sm:grid-cols-2">

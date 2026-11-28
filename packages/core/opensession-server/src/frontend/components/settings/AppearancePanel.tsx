@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { IconCheck } from "../icons";
+import { useIsPhone } from "../../hooks/useIsPhone";
 import {
   ACCENT_THEME_OPTIONS,
   getAccentTheme,
@@ -195,6 +196,7 @@ export function AppearanceSection() {
   const [accent, setAccent] = useState<AccentTheme>(getAccentTheme);
   useEffect(() => onAccentThemeChanged(() => setAccent(getAccentTheme())), []);
   const newLayout = useNewLayoutPref();
+  const isPhone = useIsPhone();
   const [diffPalette, setDiffPaletteState] =
     useState<DiffPalette>(getDiffPalette);
   useEffect(
@@ -267,17 +269,19 @@ export function AppearanceSection() {
               />
             }
           />
-          <SettingRow
-            title="New layout"
-            desc="Places in a minibar. Desktop only for now."
-            control={
-              <Switch
-                aria-label="New layout"
-                checked={newLayout}
-                onCheckedChange={setNewLayoutPref}
-              />
-            }
-          />
+          {!isPhone && (
+            <SettingRow
+              title="New layout"
+              desc="Places in a minibar."
+              control={
+                <Switch
+                  aria-label="New layout"
+                  checked={newLayout}
+                  onCheckedChange={setNewLayoutPref}
+                />
+              }
+            />
+          )}
         </SettingCard>
       </div>
     </>
