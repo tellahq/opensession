@@ -52,8 +52,10 @@ const styles = stylex.create({
     flexShrink: 0,
     touchAction: "manipulation",
     borderRadius: radius.pill,
+    // Translucent ink, not the panel surface: a sheet in dark is lighter
+    // than the panel, so a solid panel disc vanished there.
     backgroundColor: {
-      default: color.panel,
+      default: color.hover,
       ":hover": { default: null, [media.hover]: color.pressed },
     },
     paddingInline: space.s0,
