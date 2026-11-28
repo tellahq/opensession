@@ -220,7 +220,7 @@ export function SidebarChrome({
             <button
               className={cn(
                 SIDEBAR_BAND_HOOK,
-                "flex min-w-0 items-center gap-[5px] [font:inherit]",
+                "focus-ring-inset flex min-w-0 items-center gap-[5px] [font:inherit]",
                 // On phones the caption is hidden and the chevron only paints on
                 // hover, so while the band is open this button is a 22px row of
                 // nothing between the tool cards and the first project. That row

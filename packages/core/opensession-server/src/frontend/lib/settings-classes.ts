@@ -43,6 +43,7 @@ import {
   media,
   radius,
   corner,
+  focus,
   shadow,
   sidebarScale,
   space,
@@ -134,6 +135,8 @@ const styles = stylex.create({
   // Back and the section rows: one box, so the chevron and the section
   // glyphs share a centre line.
   navRow: {
+    outline: { default: null, ":focus-visible": focus.ring },
+    outlineOffset: { default: null, ":focus-visible": focus.insetOffset },
     display: "flex",
     cursor: "pointer",
     alignItems: "center",
@@ -175,6 +178,9 @@ const styles = stylex.create({
     flex: "1 1 0%",
     justifyContent: "center",
     overflowY: "auto",
+    // Room for the scrollbar on both sides, so the centered column stays put
+    // when moving between a short panel and one that scrolls.
+    scrollbarGutter: "stable both-edges",
     borderLeftWidth: geometry.hairline,
     borderLeftStyle: "solid",
     borderLeftColor: color.divider,
@@ -252,6 +258,8 @@ const styles = stylex.create({
     color: color.faint,
   },
   sheetRow: {
+    outline: { default: null, ":focus-visible": focus.ring },
+    outlineOffset: { default: null, ":focus-visible": focus.insetOffset },
     position: "relative",
     display: "flex",
     width: "100%",

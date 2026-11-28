@@ -474,6 +474,77 @@ export interface SlackUploadOptions {
   threadTs?: string;
 }
 
+/**
+ * Slack's external upload, step one and two: reserve an upload URL for one
+ * file, then send its bytes. Returns the file id to share with
+ * `completeSlackUpload`. A grant without files:write throws
+ * SLACK_RECONNECT_REQUIRED.
+ */
+export async function reserveSlackUpload(
+  filename: string,
+  bytes: Uint8Array<ArrayBuffer>,
+  altText?: string,
+  tokenOverride?: string,
+): Promise<string> {
+  const length = bytes.byteLength;
+  if (!length || length > MAX_SLACK_UPLOAD_BYTES)
+    throw new Error(
+      `Slack upload must be between 1 byte and 20 MB: ${filename}`,
+    );
+  const reserved = await slackFormCall(
+    "files.getUploadURLExternal",
+    {
+      filename,
+      length,
+      ...(altText ? { alt_txt: altText.slice(0, 1000) } : {}),
+    },
+    tokenOverride,
+  );
+  if (!reserved?.ok || !reserved.upload_url || !reserved.file_id) {
+    if (reserved?.error === "missing_scope")
+      throw new Error("SLACK_RECONNECT_REQUIRED");
+    throw new Error(
+      `Slack upload reservation failed: ${reserved?.error || "invalid response"}`,
+    );
+  }
+  const uploaded = await fetchWithTimeout(reserved.upload_url, {
+    method: "POST",
+    headers: { "Content-Type": "application/octet-stream" },
+    body: bytes,
+  });
+  if (!uploaded.ok)
+    throw new Error(`Slack file upload failed: HTTP ${uploaded.status}`);
+  return String(reserved.file_id);
+}
+
+/** Slack's external upload, last step: share reserved files as one message. */
+export async function completeSlackUpload(
+  channel: string,
+  files: Array<{ id: string; title: string }>,
+  initialComment: string,
+  threadTs?: string,
+  tokenOverride?: string,
+): Promise<any> {
+  const completed = await slackFormCall(
+    "files.completeUploadExternal",
+    {
+      files: JSON.stringify(files),
+      channel_id: channel,
+      // An empty comment is not "no comment" to Slack: it posts the share with a
+      // blank line above the files.
+      ...(initialComment ? { initial_comment: initialComment } : {}),
+      ...(threadTs ? { thread_ts: threadTs } : {}),
+    },
+    tokenOverride,
+  );
+  if (!completed?.ok) {
+    throw new Error(
+      `Slack upload completion failed: ${completed?.error || "invalid response"}`,
+    );
+  }
+  return completed;
+}
+
 /** Upload several local images and share them together as one Slack message. */
 export async function postSlackFiles(
   channel: string,
@@ -488,37 +559,17 @@ export async function postSlackFiles(
     const info = await stat(path);
     if (!info.isFile())
       throw new Error(`Slack upload path is not a regular file: ${path}`);
-    const length = info.size;
-    if (!length || length > MAX_SLACK_UPLOAD_BYTES) {
+    if (!info.size || info.size > MAX_SLACK_UPLOAD_BYTES) {
       throw new Error(`Slack upload must be between 1 byte and 20 MB: ${path}`);
     }
-    const reserved = await slackFormCall(
-      "files.getUploadURLExternal",
-      {
-        filename,
-        length,
-        ...(opts?.altText ? { alt_txt: opts.altText.slice(0, 1000) } : {}),
-      },
+    const id = await reserveSlackUpload(
+      filename,
+      new Uint8Array(await readFile(path)),
+      opts?.altText,
       tokenOverride,
     );
-    if (!reserved?.ok || !reserved.upload_url || !reserved.file_id) {
-      if (reserved?.error === "missing_scope") {
-        throw new Error("SLACK_RECONNECT_REQUIRED");
-      }
-      throw new Error(
-        `Slack upload reservation failed: ${reserved?.error || "invalid response"}`,
-      );
-    }
-    const uploaded = await fetchWithTimeout(reserved.upload_url, {
-      method: "POST",
-      headers: { "Content-Type": "application/octet-stream" },
-      body: await readFile(path),
-    });
-    if (!uploaded.ok) {
-      throw new Error(`Slack file upload failed: HTTP ${uploaded.status}`);
-    }
     files.push({
-      id: reserved.file_id,
+      id,
       // Numbered only when the caller named the set. Without a title the
       // filename is the better label: a batch can be a screenshot, a frame
       // and a clip, and "Screenshot 3" is wrong for two of them.
@@ -529,25 +580,13 @@ export async function postSlackFiles(
         : filename,
     });
   }
-
-  const completed = await slackFormCall(
-    "files.completeUploadExternal",
-    {
-      files: JSON.stringify(files),
-      channel_id: channel,
-      // An empty comment is not "no comment" to Slack: it posts the share with a
-      // blank line above the files.
-      ...(initialComment ? { initial_comment: initialComment } : {}),
-      ...(opts?.threadTs ? { thread_ts: opts.threadTs } : {}),
-    },
+  return completeSlackUpload(
+    channel,
+    files,
+    initialComment,
+    opts?.threadTs,
     tokenOverride,
   );
-  if (!completed?.ok) {
-    throw new Error(
-      `Slack upload completion failed: ${completed?.error || "invalid response"}`,
-    );
-  }
-  return completed;
 }
 
 export async function updateSlackBlocks(

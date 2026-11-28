@@ -1,15 +1,22 @@
 import {
   useEffect,
   useEffectEvent,
+  useImperativeHandle,
   useRef,
   useState,
   type ReactNode,
+  type Ref,
 } from "react";
 import {
   encodeSlackMentions,
   type SlackMentionUser,
 } from "../../../shared/slack-mentions";
 import { fetchSlackUsers } from "../../lib/api/shipped-changes";
+import { SLACK_UPLOAD_MAX_BYTES } from "../../lib/api/slack-channels";
+import {
+  addAttachments,
+  type ComposerAttachment,
+} from "../../lib/channel-attachments";
 import {
   applyFormat,
   mentionContextAt,
@@ -18,13 +25,17 @@ import {
 import { noAutofill } from "../../lib/composer-autofill";
 import { readDraft, saveDraft } from "../../lib/channel-drafts";
 import { emojiContextAt, emojiMatches, type EmojiEntry } from "../../lib/emoji";
+import { pickFiles } from "../../lib/file-picker";
 import { isApple } from "../../lib/platform";
 import { effectiveSendKey, isSendCombo } from "../../lib/send-key";
 import { Button } from "../../ui/button";
 import { Checkbox } from "../../ui/checkbox";
 import { cn } from "../../ui/cn";
 import { ListRow } from "../../ui/list-row";
+import { toast } from "../../ui/toast";
 import { Tooltip } from "../../ui/tooltip";
+import { FileChips } from "../FileChips";
+import { ImageThumbs } from "../ImageThumbs";
 import {
   IconAtSign,
   IconBold,
@@ -34,6 +45,7 @@ import {
   IconLink,
   IconListBullet,
   IconListOrdered,
+  IconPaperclip,
   IconQuote,
   IconSend,
   IconSmile,
@@ -89,10 +101,17 @@ type Suggestion =
   | { kind: "person"; user: SlackMentionUser }
   | { kind: "emoji"; entry: EmojiEntry };
 
+const ATTACH_GLYPH = <IconPaperclip size={22} />;
+
 // Slack's "Aa": the formatting row's show and hide toggle.
 const FORMATTING_GLYPH = (
   <span className="text-body font-medium underline underline-offset-2">Aa</span>
 );
+
+/** What a conversation hands its composer: files dropped anywhere on it. */
+export interface ComposerHandle {
+  addFiles: (files: File[]) => void;
+}
 
 function Divider() {
   return <span className="mx-1 h-5 w-px shrink-0 bg-divider" aria-hidden />;
@@ -117,6 +136,8 @@ export function ChannelComposer({
   initial,
   onCancel,
   onEditLast,
+  acceptFiles = false,
+  ref,
 }: {
   placeholder: string;
   disabled: boolean;
@@ -124,7 +145,7 @@ export function ChannelComposer({
   disabledHint?: string;
   /** In a thread: the label of "also send to the channel". */
   broadcastLabel?: string;
-  onSend: (text: string, broadcast: boolean) => Promise<boolean>;
+  onSend: (text: string, broadcast: boolean, files: File[]) => Promise<boolean>;
   autoFocus?: boolean;
   /** Keep what is typed as this conversation's (or thread's) draft. */
   draftOf?: { channelId: string; thread?: string };
@@ -137,6 +158,9 @@ export function ChannelComposer({
   onCancel?: () => void;
   /** Up in the empty box: edit the person's last message, as Slack does. */
   onEditLast?: () => void;
+  /** Files can be attached (the paperclip, paste, and drop). */
+  acceptFiles?: boolean;
+  ref?: Ref<ComposerHandle>;
 }) {
   const [stored] = useState(
     () =>
@@ -157,7 +181,31 @@ export function ChannelComposer({
   const [dismissedAt, setDismissedAt] = useState(-1);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const sendKey = effectiveSendKey("enter");
-  const canSend = !disabled && !sending && !!draft.trim();
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const canSend =
+    !disabled && !sending && (!!draft.trim() || attachments.length > 0);
+
+  function addFiles(files: File[]) {
+    if (!acceptFiles || disabled || !files.length) return;
+    const next = addAttachments(attachments, files, SLACK_UPLOAD_MAX_BYTES);
+    if (next.rejected) toast(next.rejected, { variant: "error" });
+    setAttachments(next.attachments);
+    textRef.current?.focus();
+  }
+  useImperativeHandle(ref, () => ({ addFiles }));
+
+  function removeAttachment(index: number) {
+    const gone = attachments[index];
+    if (gone?.url) URL.revokeObjectURL(gone.url);
+    setAttachments(attachments.filter((_, i) => i !== index));
+  }
+
+  const images = attachments
+    .map((attachment, index) => ({ attachment, index }))
+    .filter(({ attachment }) => attachment.url);
+  const others = attachments
+    .map((attachment, index) => ({ attachment, index }))
+    .filter(({ attachment }) => !attachment.url);
   const editingMessage = !!onCancel;
 
   // An edit opens with the caret after the text, ready to change its end.
@@ -260,9 +308,16 @@ export function ChannelComposer({
     const text = draft.trim();
     if (!canSend) return;
     setSending(true);
-    const sent = await onSend(encodeSlackMentions(text, mentions), broadcast);
+    const sent = await onSend(
+      encodeSlackMentions(text, mentions),
+      broadcast,
+      attachments.map((attachment) => attachment.file),
+    );
     setSending(false);
     if (sent) {
+      for (const attachment of attachments)
+        if (attachment.url) URL.revokeObjectURL(attachment.url);
+      setAttachments([]);
       setDraft("", new Map());
       setCaret(0);
       setBroadcast(false);
@@ -379,6 +434,12 @@ export function ChannelComposer({
             setHighlight(0);
           }}
           onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
+          onPaste={(event) => {
+            const files = Array.from(event.clipboardData.files);
+            if (!acceptFiles || !files.length) return;
+            event.preventDefault();
+            addFiles(files);
+          }}
           onKeyDown={(event) => {
             if (event.nativeEvent.isComposing) return;
             if (suggestions.length) {
@@ -440,7 +501,36 @@ export function ChannelComposer({
           }}
           {...noAutofill}
         />
+        {attachments.length > 0 && (
+          <div className="flex flex-wrap items-start gap-x-2 px-3.5 pb-1">
+            <ImageThumbs
+              images={images.map(({ attachment }) => attachment.url!)}
+              onRemove={(i) => removeAttachment(images[i]!.index)}
+              disabled={sending}
+            />
+            <FileChips
+              files={others.map(({ attachment }) => ({
+                name: attachment.file.name,
+                type: attachment.file.type,
+              }))}
+              onRemove={(i) => removeAttachment(others[i]!.index)}
+              disabled={sending}
+            />
+          </div>
+        )}
         <div className="flex items-center gap-0.5 px-1.5 pb-1.5">
+          {acceptFiles && (
+            <Tooltip label="Attach files">
+              <Button
+                variant="ghost"
+                size="md"
+                icon={ATTACH_GLYPH}
+                aria-label="Attach files"
+                disabled={disabled || sending}
+                onClick={() => void pickFiles().then(addFiles)}
+              />
+            </Tooltip>
+          )}
           <Tooltip label={formatting ? "Hide formatting" : "Show formatting"}>
             <Button
               variant="ghost"

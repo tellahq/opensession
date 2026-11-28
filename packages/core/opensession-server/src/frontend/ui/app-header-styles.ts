@@ -4,6 +4,7 @@ import {
   blur,
   color,
   controlHeight,
+  focus,
   geometry,
   leading,
   media,
@@ -205,6 +206,8 @@ export const appHeaderStyles = stylex.create({
   },
 
   sessionbar: {
+    outline: { default: null, ":focus-visible": focus.ring },
+    outlineOffset: { default: null, ":focus-visible": focus.insetOffset },
     display: phone("inline-flex"),
     minHeight: phone(space.s16),
     minWidth: phone(0),
@@ -253,6 +256,8 @@ export const appHeaderStyles = stylex.create({
     gap: phone(space.s10),
   },
   segment: {
+    outline: { default: null, ":focus-visible": focus.ring },
+    outlineOffset: { default: null, ":focus-visible": focus.insetOffset },
     position: phone("relative"),
     display: phone("inline-flex"),
     height: phone(geometry.headerSegmentHeight),

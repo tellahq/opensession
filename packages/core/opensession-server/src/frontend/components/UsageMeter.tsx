@@ -312,7 +312,7 @@ export function UsageMeter({
           // open, not a plate you press.
           "group flex min-h-8 items-center gap-1.5 rounded-full px-1.5 py-1 text-xs font-medium",
           "text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg",
-          "cursor-pointer select-none outline-none transition-colors",
+          "focus-ring-inset cursor-pointer select-none transition-colors",
           className,
         )}
         aria-label="Conversation cost & context"

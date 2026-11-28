@@ -1,5 +1,7 @@
+import { z } from "zod";
+import type { RichAttachment, RichBlock } from "../../../shared/slack-rich";
 import { BASE_PATH } from "../base";
-import { request } from "./request";
+import { BASE, request } from "./request";
 
 // The Channels place's Slack calls (server/routes/slack-channels.ts). Reads
 // and posts go through the signed-in person's own Slack grant.
@@ -69,6 +71,10 @@ export interface ChannelMessage {
   edited?: boolean;
   /** A thread reply also sent to the channel. */
   broadcast?: boolean;
+  /** An app's own layout, shown in place of the text. */
+  blocks?: RichBlock[];
+  /** App cards, link previews and shared messages under the text. */
+  attachments?: RichAttachment[];
   /** The reader wrote it, so they may edit or delete it. */
   mine?: boolean;
   /** For an own message: its Slack markup, to edit from. */
@@ -110,29 +116,71 @@ export function fetchMessages(
   });
 }
 
+/** A file uploaded to Slack, waiting for the message that shares it. */
+export interface UploadedFile {
+  id: string;
+  title: string;
+}
+
 /** What the server takes to post: a reply names its thread's parent. */
 export interface PostMessageBody {
   text: string;
   thread_ts?: string;
   /** A reply also sent to the channel. */
   broadcast?: boolean;
+  /** Uploaded files to share with the text as their comment. */
+  files?: UploadedFile[];
 }
 
 export function postMessage(
   id: string,
   text: string,
   thread?: { ts: string; broadcast?: boolean },
+  files: UploadedFile[] = [],
 ): Promise<{ ok: boolean; ts?: string }> {
   const body: PostMessageBody = { text };
   if (thread) {
     body.thread_ts = thread.ts;
     body.broadcast = !!thread.broadcast;
   }
+  if (files.length) body.files = files;
   return request(`${channelPath(id)}/messages`, {
     method: "POST",
     body,
     label: "Couldn't send the message",
   });
+}
+
+/** Slack's limit for one uploaded file. */
+export const SLACK_UPLOAD_MAX_BYTES = 20 * 1024 * 1024;
+
+const uploadResponse = z.object({
+  id: z.string().optional(),
+  title: z.string().optional(),
+  error: z.string().optional(),
+});
+
+/** Send one file to Slack; the next message shares it. The body is the file
+ *  itself, so a large one is not read into the page first. */
+export async function uploadFile(
+  id: string,
+  file: File,
+): Promise<UploadedFile> {
+  if (file.size > SLACK_UPLOAD_MAX_BYTES)
+    throw new Error(`${file.name} is too large (20 MB max)`);
+  const res = await fetch(`${BASE}${channelPath(id)}/uploads`, {
+    method: "POST",
+    headers: {
+      "x-file-name": encodeURIComponent(file.name || "file"),
+      "content-type": file.type || "application/octet-stream",
+    },
+    body: file,
+  });
+  const parsed = uploadResponse.safeParse(await res.json().catch(() => null));
+  const body = parsed.success ? parsed.data : null;
+  if (!res.ok || !body?.id)
+    throw new Error(body?.error || `Couldn't upload ${file.name}`);
+  return { id: body.id, title: body.title || file.name };
 }
 
 export function editMessage(

@@ -278,6 +278,11 @@ export const VIEWER_MESSAGES =
   "viewer-messages flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain " +
   // Keep the reader's place when content loads or expands above them.
   "[overflow-anchor:auto] px-5 pt-0 " +
+  // Where the platform draws a scrollbar that takes space (Windows, Linux,
+  // a Mac set to always show them), reserve the same gutter on the left so
+  // the reading column stays centered under the composer, which spans the
+  // whole pane. Overlay scrollbars reserve nothing either way.
+  "[scrollbar-gutter:stable_both-edges] " +
   "pb-[calc(var(--session-under)_+_var(--suggestions-under,0px)_+_32px)] " +
   // A focused phone composer is fixed and no longer reserves flow height,
   // while the transcript's layout viewport still extends behind the keyboard.

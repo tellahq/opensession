@@ -1248,9 +1248,10 @@ export function ModelEffortSelect({
     </>
   );
   const sidePanel = (
-    <div className="relative my-1.5 mr-1.5 w-72 shrink-0 rounded-lg bg-hover">
+    <div className="relative my-1.5 mr-1.5 min-h-60 w-72 shrink-0 rounded-lg bg-hover">
       {/* Out of flow, so the list alone sets the popup's height and the
-          panel scrolls inside it whatever it shows. */}
+          panel scrolls inside it whatever it shows. The floor keeps a model's
+          notes whole when the list is short (one or two models). */}
       <div className="absolute inset-0 overflow-y-auto overscroll-contain p-1.5">
         {panel === "effort" && hasEffort ? (
           <>

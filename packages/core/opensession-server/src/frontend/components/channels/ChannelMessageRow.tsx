@@ -29,6 +29,7 @@ import {
 import { UserAvatar } from "../UserAvatar";
 import { ChannelComposer } from "./ChannelComposer";
 import { EmojiPicker } from "./EmojiPicker";
+import { RichAttachments, RichBlocks } from "./RichContent";
 import { SlackText } from "./SlackText";
 
 function Reactions({
@@ -95,7 +96,7 @@ function Files({ files }: { files: NonNullable<ChannelMessage["files"]> }) {
               href={file.permalink}
               target="_blank"
               rel="noreferrer"
-              className="block w-fit overflow-hidden rounded-lg border border-line"
+              className="block w-fit max-w-[min(100%,480px)] overflow-hidden rounded-lg border border-line"
             >
               <img
                 src={fileSrc(file.thumb)}
@@ -103,7 +104,7 @@ function Files({ files }: { files: NonNullable<ChannelMessage["files"]> }) {
                 loading="lazy"
                 width={file.width}
                 height={file.height}
-                className="block h-auto max-h-[360px] w-auto max-w-[min(100%,480px)] object-contain"
+                className="block h-auto max-h-[360px] w-auto max-w-full object-contain"
               />
             </a>
           </div>
@@ -286,7 +287,11 @@ export function ChannelMessageRow({
             )}
           </>
         )}
+        {!!message.blocks?.length && <RichBlocks blocks={message.blocks} />}
         {!!message.files?.length && <Files files={message.files} />}
+        {!!message.attachments?.length && (
+          <RichAttachments attachments={message.attachments} />
+        )}
         {!!message.reactions?.length && (
           <Reactions
             reactions={message.reactions}

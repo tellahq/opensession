@@ -100,6 +100,7 @@ export const INBOX_BADGE =
 
 /** The desktop bell, sized with its chrome-row neighbours. */
 export const INBOX_BELL =
-  "relative inline-flex size-[30px] cursor-pointer items-center justify-center rounded-md border-none " +
-  "bg-transparent p-0 text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg " +
+  "focus-ring relative inline-flex size-[30px] cursor-pointer items-center justify-center rounded-md " +
+  "border-none bg-transparent p-0 text-dim hover:bg-hover hover:text-fg " +
+  "data-[popup-open]:bg-hover data-[popup-open]:text-fg " +
   "[-webkit-app-region:no-drag] [app-region:no-drag]";

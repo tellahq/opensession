@@ -110,7 +110,8 @@ const styles = stylex.create({
     lineHeight: leading.snug,
     color: color.dim,
   },
-  measure: { maxWidth: "46ch" },
+  // A centered block: balanced lines, so the last one is never a lone word.
+  measure: { maxWidth: "46ch", textWrap: "balance" },
   actionBlock: { marginTop: space.s4 },
   actionInline: { marginTop: space.s8 },
   loadingLabel: {

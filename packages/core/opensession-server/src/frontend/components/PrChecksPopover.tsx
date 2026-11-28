@@ -105,7 +105,7 @@ export function PrChecksPopover({
             return check.url ? (
               <a
                 key={`${check.name}:${i}`}
-                className="flex items-center gap-[9px] rounded-md px-2 py-1.5 text-fg no-underline hover:bg-surface"
+                className="flex items-center gap-[9px] rounded-md px-2 py-1.5 text-fg no-underline hover:bg-hover"
                 href={check.url}
                 target="_blank"
                 rel="noopener"

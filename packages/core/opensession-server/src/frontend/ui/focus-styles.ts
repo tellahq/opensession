@@ -15,4 +15,13 @@ export const focusStyles = stylex.create({
       [media.forcedColors]: { default: null, ":focus-visible": "Highlight" },
     },
   },
+  /** The same ring drawn inside the box, for a row in a list that clips. */
+  ringInset: {
+    outline: { default: null, ":focus-visible": focus.ring },
+    outlineOffset: { default: null, ":focus-visible": focus.insetOffset },
+    outlineColor: {
+      default: null,
+      [media.forcedColors]: { default: null, ":focus-visible": "Highlight" },
+    },
+  },
 });

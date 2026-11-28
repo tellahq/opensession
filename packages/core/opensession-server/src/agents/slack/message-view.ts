@@ -5,6 +5,7 @@
  * reduced to what a message shows. Shared by the channel, thread, Threads
  * and Sent routes (server/routes/slack-channels.ts).
  */
+import { hasLayoutBlocks, richAttachments, richBlocks } from "./rich-content";
 import { resolveSlackUser } from "./slack-api";
 
 /** Message subtypes a channel shows besides plain messages. Joins, topic
@@ -125,8 +126,16 @@ export async function messageConverter(
     if (m?.type !== "message") return null;
     if (m.subtype && !SHOWN_SUBTYPES.has(m.subtype)) return null;
     const files = messageFiles(m.files);
-    if (!m.text && !files.length) return null;
-    const text = m.text ? await renderSlackText(m.text, emojify) : "";
+    const render = (markup: string) => renderSlackText(markup, emojify);
+    // An app's own layout replaces its text, which is only the fallback.
+    const blocks = hasLayoutBlocks(m.blocks)
+      ? await richBlocks(m.blocks, render)
+      : [];
+    const attachments = await richAttachments(m.attachments, render);
+    if (!m.text && !files.length && !blocks.length && !attachments.length)
+      return null;
+    const text =
+      m.text && !blocks.length ? await renderSlackText(m.text, emojify) : "";
     const thread =
       !opts.inThread && (m.reply_count || 0) > 0
         ? {
@@ -149,6 +158,8 @@ export async function messageConverter(
       ...thread,
       reactions: reactionsOf(m),
       ...(files.length ? { files } : {}),
+      ...(blocks.length ? { blocks } : {}),
+      ...(attachments.length ? { attachments } : {}),
       ...(m.edited ? { edited: true } : {}),
       ...(m.subtype === "thread_broadcast" ? { broadcast: true } : {}),
     };

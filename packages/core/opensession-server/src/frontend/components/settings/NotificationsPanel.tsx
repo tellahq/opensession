@@ -17,6 +17,8 @@ import {
   type PushState,
 } from "../../lib/push";
 import { Button } from "../../ui/button";
+import { IconSpeaker } from "../icons";
+import { useIsPhone } from "../../hooks/useIsPhone";
 import {
   SettingCard,
   SettingsGroupLabel,
@@ -118,6 +120,7 @@ const ALERT_ROWS: {
 export function NotificationsPanel() {
   const [s, setS] = useState<NotifSettings>(getNotifSettings);
   const { alerts } = useNotifications();
+  const isPhone = useIsPhone();
   const [alertError, setAlertError] = useState<string | null>(null);
   useEffect(() => onNotifSettingsChanged(() => setS(getNotifSettings())), []);
 
@@ -155,28 +158,20 @@ export function NotificationsPanel() {
                 options={SOUND_OPTIONS}
                 onChange={(v) => patch({ sound: v })}
               />
+              {/* On a phone the row's control half holds the picker and this
+                  button together, so the button drops its word: with it the
+                  picker shrank to its first letter. */}
               <Button
                 size="sm"
                 variant="ghost"
+                icon={<IconSpeaker size={20} />}
                 onClick={() => playSound(s.sound)}
                 disabled={s.sound === "none"}
                 title="Play sound"
+                aria-label={isPhone ? "Play sound" : undefined}
+                className="shrink-0"
               >
-                <svg width="20" height="20" viewBox="0 0 16 16" fill="none">
-                  <path
-                    d="M3 6v4h2.5L9 13V3L5.5 6H3z"
-                    stroke="currentColor"
-                    strokeWidth="1.3"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M11 6.2c.6.5.9 1.1.9 1.8s-.3 1.3-.9 1.8"
-                    stroke="currentColor"
-                    strokeWidth="1.3"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                Test
+                {isPhone ? undefined : "Test"}
               </Button>
             </div>
           }

@@ -79,6 +79,8 @@ import { classString as sx, type Styles } from "../ui/sx";
 import {
   color,
   corner,
+  focus,
+  geometry,
   leading,
   media,
   motion,
@@ -211,6 +213,8 @@ export const sidebarStyles = stylex.create({
 
   // ── Headings: see sidebarHeader ──
   header: {
+    outline: { default: null, ":focus-visible": focus.ring },
+    outlineOffset: { default: null, ":focus-visible": focus.insetOffset },
     display: "flex",
     width: "100%",
     alignItems: "center",
@@ -236,6 +240,17 @@ export const sidebarStyles = stylex.create({
     minHeight: { default: null, [media.desktop]: scale.lineHeightVar },
   },
   headerLane: {
+    // A caption toggles its lane, and on a phone its 34px box is under a
+    // finger's 44: an ::after reaches into the air above and below it to
+    // make up the rest without moving anything.
+    position: { default: "relative", [media.desktop]: null },
+    "::after": {
+      content: { default: null, [media.phone]: '""' },
+      position: "absolute",
+      insetInline: space.s0,
+      top: geometry.touchBleed,
+      bottom: geometry.touchBleed,
+    },
     gap: scale.laneGap,
     paddingTop: { default: scale.lanePadTopPhone, [media.desktop]: space.s4 },
     paddingBottom: {
@@ -250,7 +265,8 @@ export const sidebarStyles = stylex.create({
   headerSelected: { backgroundColor: color.selected, color: color.fg },
   headerInert: { cursor: "default", color: color.dim },
   stickyLane: {
-    position: { default: null, [media.desktop]: "sticky" },
+    // Relative on a phone for the caption's touch ::after (see headerLane).
+    position: { default: "relative", [media.desktop]: "sticky" },
     top: { default: null, [media.desktop]: scale.bandSlotVar },
     zIndex: { default: null, [media.desktop]: scale.laneLayer },
   },
@@ -301,6 +317,8 @@ export const sidebarStyles = stylex.create({
 
   // ── Rows: see sidebarRow ──
   row: {
+    outline: { default: null, ":focus-visible": focus.ring },
+    outlineOffset: { default: null, ":focus-visible": focus.insetOffset },
     position: "relative",
     marginTop: space.s2,
     width: "100%",
@@ -713,6 +731,8 @@ export const sidebarStyles = stylex.create({
 
   // ── Chrome and header buttons ──
   chromeButton: {
+    outline: { default: null, ":focus-visible": focus.ring },
+    outlineOffset: { default: null, ":focus-visible": focus.insetOffset },
     flexShrink: 0,
     alignItems: "center",
     justifyContent: "center",
@@ -731,6 +751,8 @@ export const sidebarStyles = stylex.create({
     transitionTimingFunction: motion.ease,
   },
   headerButton: {
+    outline: { default: null, ":focus-visible": focus.ring },
+    outlineOffset: { default: null, ":focus-visible": focus.insetOffset },
     display: "inline-flex",
     flexShrink: 0,
     alignItems: "center",

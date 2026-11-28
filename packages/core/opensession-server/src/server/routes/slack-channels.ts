@@ -78,6 +78,39 @@ export const EditMessageBody = z.object({
   text: z.string().trim().min(1),
 });
 
+/** A file the composer uploaded, shared with the message that sends it. */
+const SharedFile = z.object({
+  id: z.string().regex(/^F[A-Z0-9]+$/),
+  title: z.string().trim().min(1).max(255),
+});
+
+/** A post: text, files reserved through /uploads, or both. */
+export const PostMessageBody = z
+  .object({
+    text: z.string().trim().default(""),
+    thread_ts: z.string().regex(SLACK_TS).optional(),
+    broadcast: z.boolean().optional(),
+    files: z.array(SharedFile).max(10).default([]),
+  })
+  .refine((body) => body.text || body.files.length, "text or files required");
+
+/** The name an upload carries in its header, made safe for Slack. */
+export function uploadFileName(header: string | null): string | undefined {
+  if (!header) return undefined;
+  let name: string;
+  try {
+    name = decodeURIComponent(header);
+  } catch {
+    return undefined;
+  }
+  const base = name
+    .split(/[\\/]/)
+    .pop()
+    ?.replace(/[\u0000-\u001f]/g, "")
+    .trim();
+  return base ? base.slice(0, 255) : undefined;
+}
+
 /** Slack's refusals of an edit or a delete, as one short sentence. */
 export function messageChangeError(
   error: string | undefined,
@@ -536,6 +569,80 @@ export async function handleSlackChannelRoutes(
     }
   }
 
+  const demoArtMatch = path.match(/^\/api\/slack\/demo-art\/([a-z]+\.svg)$/);
+  if (demoArtMatch && process.env.OPENSESSION_DEMO === "1")
+    return (
+      demoArt(demoArtMatch[1]!) ?? new Response("Not found", { status: 404 })
+    );
+
+  // The demo instance keeps uploaded files in memory and serves them here.
+  const demoFileMatch = path.match(/^\/api\/slack\/demo-files\/(FDEMO\d+)$/);
+  if (demoFileMatch && process.env.OPENSESSION_DEMO === "1") {
+    const file = demoFiles.get(demoFileMatch[1]!);
+    return file
+      ? new Response(file.bytes, { headers: { "Content-Type": file.type } })
+      : new Response("Not found", { status: 404 });
+  }
+
+  // One file from the composer, sent on to Slack's upload URL with the
+  // caller's grant. The message that sends it shares it (files in the POST
+  // below), as Slack's own client does.
+  const uploadMatch = path.match(/^\/api\/slack\/channels\/([^/]+)\/uploads$/);
+  if (uploadMatch && req.method === "POST") {
+    const name = uploadFileName(req.headers.get("x-file-name"));
+    if (!name)
+      return Response.json({ error: "x-file-name required" }, { status: 400 });
+    const { MAX_SLACK_UPLOAD_BYTES } =
+      await import("../../agents/slack/slack-api");
+    if (Number(req.headers.get("content-length") || 0) > MAX_SLACK_UPLOAD_BYTES)
+      return Response.json(
+        { error: `${name} is too large (20 MB max)` },
+        { status: 413 },
+      );
+    const bytes = new Uint8Array(await req.arrayBuffer());
+    if (!bytes.byteLength || bytes.byteLength > MAX_SLACK_UPLOAD_BYTES)
+      return Response.json(
+        {
+          error: bytes.byteLength
+            ? `${name} is too large (20 MB max)`
+            : `${name} is empty`,
+        },
+        { status: 413 },
+      );
+    if (process.env.OPENSESSION_DEMO === "1") {
+      const id = `FDEMO${demoFiles.size + 1}`;
+      demoFiles.set(id, {
+        name,
+        type: req.headers.get("content-type") || "application/octet-stream",
+        bytes,
+      });
+      return Response.json({ id, title: name });
+    }
+    const caller = callerOf(ctx);
+    const { mcpUserGrantToken } = await import("../mcp-oauth");
+    const grantToken = caller ? mcpUserGrantToken("slack", caller) : undefined;
+    if (!grantToken)
+      return Response.json(
+        { error: "Connect your Slack account in Settings, Account to upload" },
+        { status: 403 },
+      );
+    const { reserveSlackUpload } = await import("../../agents/slack/slack-api");
+    try {
+      const id = await reserveSlackUpload(name, bytes, undefined, grantToken);
+      return Response.json({ id, title: name });
+    } catch (e: any) {
+      return Response.json(
+        {
+          error:
+            e?.message === "SLACK_RECONNECT_REQUIRED"
+              ? "Reconnect Slack in Settings, Account to upload from here"
+              : `Couldn't upload ${name}`,
+        },
+        { status: e?.message === "SLACK_RECONNECT_REQUIRED" ? 403 : 502 },
+      );
+    }
+  }
+
   const msgsMatch = path.match(/^\/api\/slack\/channels\/([^/]+)\/messages$/);
   if (!msgsMatch) return undefined;
 
@@ -602,35 +709,42 @@ export async function handleSlackChannelRoutes(
   }
 
   if (req.method === "POST") {
-    const body = (await req.json().catch(() => null)) as {
-      text?: string;
-      thread_ts?: string;
-      broadcast?: boolean;
-    } | null;
-    const text = typeof body?.text === "string" ? body.text.trim() : "";
-    const replyTo =
-      typeof body?.thread_ts === "string" && /^\d+\.\d+$/.test(body.thread_ts)
-        ? body.thread_ts
-        : undefined;
-    if (!text)
+    const parsed = PostMessageBody.safeParse(
+      await req.json().catch(() => null),
+    );
+    if (!parsed.success)
       return Response.json({ error: "text required" }, { status: 400 });
+    const body = parsed.data;
     if (!grantToken)
       return Response.json(
         {
           error:
-            "Connect your Slack account in Settings → Account to post as yourself",
+            "Connect your Slack account in Settings, Account to post as yourself",
         },
         { status: 403 },
       );
     try {
-      const { slackApiCall } = await import("../../agents/slack/slack-api");
+      const { completeSlackUpload, slackApiCall } =
+        await import("../../agents/slack/slack-api");
+      // Files go out as one share with the text as its comment, as Slack's
+      // client sends them. Slack has no "also send to channel" for a share.
+      if (body.files.length) {
+        await completeSlackUpload(
+          channelId,
+          body.files,
+          body.text,
+          body.thread_ts,
+          grantToken,
+        );
+        return Response.json({ ok: true });
+      }
       const res = await slackApiCall(
         "chat.postMessage",
         {
           channel: channelId,
-          text,
-          ...(replyTo
-            ? { thread_ts: replyTo, reply_broadcast: !!body?.broadcast }
+          text: body.text,
+          ...(body.thread_ts
+            ? { thread_ts: body.thread_ts, reply_broadcast: !!body.broadcast }
             : {}),
         },
         grantToken,
@@ -718,6 +832,12 @@ async function editedView(
   };
 }
 
+/** The demo instance's uploads, by their FDEMO id. */
+const demoFiles = new Map<
+  string,
+  { name: string; type: string; bytes: Uint8Array<ArrayBuffer> }
+>();
+
 // The demo instance has no Slack: each demo conversation keeps a short,
 // in-memory history so the Channels place can be shown and posted to.
 const demoHistories = new Map<string, any[]>();
@@ -764,8 +884,110 @@ function demoHistory(channelId: string): any[] {
     replyCount: 0,
     reactions: [{ name: "eyes", count: 1, emoji: "👀" }],
   });
+  // #launches carries what apps post: a pull request card, an issue laid
+  // out in blocks, and a link preview.
+  if (channelId === "CDEMO0004") history.push(...demoAppMessages(now));
   demoHistories.set(channelId, history);
   return history;
+}
+
+/** App and bot messages for the demo, already in the web's shape. */
+function demoAppMessages(now: number) {
+  const app = (userName: string) => ({
+    userName,
+    isBot: true,
+    replyCount: 0,
+    reactions: [],
+  });
+  return [
+    {
+      ...app("GitHub"),
+      ts: `${now - 3000}.000100`,
+      text: "",
+      attachments: [
+        {
+          color: "36a64f",
+          title: "#42 Fix avatar upload on Safari",
+          titleLink: "https://example.test/acme/web/pull/42",
+          text: "The file input's *accept* attribute dropped HEIC. This widens it and adds a test.",
+          fields: [
+            { title: "Reviewers", value: "Grace Hopper", short: true },
+            { title: "Checks", value: "12 passed", short: true },
+          ],
+          footer: "[acme/web](https://example.test/acme/web)",
+        },
+      ],
+    },
+    {
+      ...app("Linear"),
+      ts: `${now - 2400}.000100`,
+      text: "",
+      blocks: [
+        { type: "header", text: "Onboarding: second step skips avatar" },
+        {
+          type: "section",
+          text: "*ENG-118* moved to *In review* by Alan Turing",
+          fields: ["*Priority*\nHigh", "*Cycle*\nCycle 24"],
+        },
+        {
+          type: "context",
+          items: [
+            {
+              kind: "image",
+              image: { url: "/api/slack/demo-art/avatar.svg", alt: "" },
+            },
+            { kind: "text", text: "Alan Turing · Onboarding project" },
+          ],
+        },
+        {
+          type: "actions",
+          buttons: [
+            {
+              text: "Open issue",
+              url: "https://example.test/acme/issue/ENG-118",
+            },
+            { text: "Assign to me" },
+          ],
+        },
+      ],
+    },
+    {
+      ts: `${now - 1800}.000100`,
+      userName: "Ada Lovelace",
+      userId: "UDEMOADA",
+      isBot: false,
+      replyCount: 0,
+      reactions: [],
+      text: "Launch post draft: https://example.test/blog/onboarding-v2",
+      attachments: [
+        {
+          service: { name: "Acme blog" },
+          title: "Onboarding v2: a faster first five minutes",
+          titleLink: "https://example.test/blog/onboarding-v2",
+          text: "Three steps instead of six, an avatar upload that works everywhere, and a tour you can skip.",
+          image: {
+            url: "/api/slack/demo-art/cover.svg",
+            alt: "Onboarding v2",
+            width: 640,
+            height: 336,
+          },
+        },
+      ],
+    },
+  ];
+}
+
+/** Pictures for the demo's app messages, drawn here so it needs no network. */
+function demoArt(name: string): Response | undefined {
+  const svg =
+    name === "avatar.svg"
+      ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#7b6cf6"/><text x="16" y="21" font-size="14" font-family="sans-serif" fill="#fff" text-anchor="middle">AT</text></svg>`
+      : name === "cover.svg"
+        ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 336"><defs><linearGradient id="g" x2="1" y2="1"><stop offset="0" stop-color="#5b8def"/><stop offset="1" stop-color="#a46ce8"/></linearGradient></defs><rect width="640" height="336" fill="url(#g)"/><text x="320" y="180" font-size="44" font-family="sans-serif" font-weight="700" fill="#fff" text-anchor="middle">Onboarding v2</text></svg>`
+        : undefined;
+  return svg
+    ? new Response(svg, { headers: { "Content-Type": "image/svg+xml" } })
+    : undefined;
 }
 
 async function demoChannelMessages(
@@ -801,16 +1023,26 @@ async function demoChannelMessages(
     return Response.json({ messages: history, hasMore: false, asUser: true });
   }
   if (req.method === "POST") {
-    const body = (await req.json().catch(() => null)) as {
-      text?: string;
-      thread_ts?: string;
-    } | null;
-    const text = body?.text?.trim();
-    if (!text)
+    const parsed = PostMessageBody.safeParse(
+      await req.json().catch(() => null),
+    );
+    if (!parsed.success)
       return Response.json({ error: "text required" }, { status: 400 });
+    const body = parsed.data;
+    const text = body.text;
+    const files = body.files.map((shared) => {
+      const file = demoFiles.get(shared.id);
+      return {
+        name: shared.title,
+        ...(file?.type.startsWith("image/")
+          ? { thumb: `/api/slack/demo-files/${shared.id}` }
+          : {}),
+      };
+    });
     const message = {
       ts: `${Math.floor(Date.now() / 1000)}.${String(Date.now() % 1000).padStart(6, "0")}`,
       text,
+      ...(files.length ? { files } : {}),
       source: text,
       mine: true,
       userId: "UDEMOYOU",
