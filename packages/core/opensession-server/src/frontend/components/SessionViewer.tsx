@@ -1971,6 +1971,13 @@ export function SessionViewer({
           onSelectPath: setOverlayAssetPath,
           onOpenAsTab: openAssets ? promoteAssetToTab : undefined,
           onOpenNewSession: navigation.openPrefilledSession,
+          // Back to typing on close, not to the link that opened it, whose
+          // Enter would only open it again. Phones keep the default so the
+          // keyboard does not jump up.
+          finalFocus: () => {
+            const composer = composerRef.current;
+            return !isPhone && composer && !composer.disabled ? composer : null;
+          },
         }}
       />
     </div>

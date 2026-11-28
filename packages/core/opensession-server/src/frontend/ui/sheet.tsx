@@ -217,6 +217,7 @@ export function ResponsiveDialog({
   backdropClassName,
   showPhoneGrabber = true,
   phonePresentation = "sheet",
+  finalFocus,
   children,
 }: {
   open: boolean;
@@ -244,6 +245,12 @@ export function ResponsiveDialog({
   showPhoneGrabber?: boolean;
   /** A page covers the viewport without sheet chrome, a backdrop, or drag dismissal. */
   phonePresentation?: "sheet" | "page";
+  /**
+   * Where focus goes on close instead of back to whatever opened the dialog.
+   * Return null to keep that default. For a viewer opened from a link, whose
+   * Enter would only open it again.
+   */
+  finalFocus?: () => HTMLElement | null;
   children: React.ReactNode | ((dismiss: () => void) => React.ReactNode);
 }) {
   const phonePage = phone && phonePresentation === "page";
@@ -251,6 +258,10 @@ export function ResponsiveDialog({
   const animated = phone || desktopTransition !== "none";
   const phase = usePhase(open, animated, phone ? SHEET_MS : MODAL_MS);
   const panelRef = React.useRef<HTMLDivElement>(null);
+  const finalFocusRef = React.useRef(finalFocus);
+  React.useLayoutEffect(() => {
+    finalFocusRef.current = finalFocus;
+  });
 
   const [booted, setBooted] = React.useState(open);
   React.useEffect(() => {
@@ -298,7 +309,7 @@ export function ResponsiveDialog({
     // Setup-scope helper so teardown reads the latest panel node without
     // touching `.current` directly inside the cleanup body.
     const handBackFocus = () => {
-      const prev = restoreTo;
+      const prev = finalFocusRef.current?.() ?? restoreTo;
       if (!prev || !document.body.contains(prev)) return;
       // Only take focus back if it was still ours — the user may have
       // clicked into the page behind us.
