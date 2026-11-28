@@ -534,7 +534,7 @@ export function SessionViewer({
     },
   });
   const { goBack, openNextChat } = reviewController.navigation;
-  const { openNewSession, openNewWorkspace } = reviewController.navigation;
+  const { openNewSession } = reviewController.navigation;
   const { openSession, openReview, openAssets } = reviewController.navigation;
   const { openPr, openPortal, openCurrentWorkspace } =
     reviewController.navigation;
@@ -1430,8 +1430,6 @@ export function SessionViewer({
     primaryPrNumber,
   });
   const { overflowOpen, setOverflowOpen } = chromeController.overflow;
-  const { mobileActionMenuEl, setMobileActionMenuEl } =
-    chromeController.overflow;
   const { overflowGit, branchActionBusy } = chromeController.overflow;
   const { setBranchActionBusy, branchConfirmOpen } = chromeController.overflow;
   const { setBranchConfirmOpen, branchConfirmMode } = chromeController.overflow;
@@ -1462,19 +1460,26 @@ export function SessionViewer({
     ((showReplySuggestions && replySuggestions.length > 0) ||
       quickActions.length > 0);
   /* Unread navigation floats in the action band above the composer: a pill
-     at the row's end on desktop, the glass bar's last segment on a phone. */
+     at the row's end on desktop, centred with the scroll arrow beside it on a
+     phone. */
   const nextAction =
     showNextChatButton &&
     focused &&
     (!!openNextChat || navigation.allChatsRead);
   const scrollAction = showScrollToBottom && entries.length > 0;
-  const actionBand = quickReplies || isPhone || scrollAction || nextAction;
+  const actionBand = quickReplies || scrollAction || nextAction;
+  // A phone with Next up stacks the replies over a 44px Next pill. Without
+  // Next its scroll arrow floats above the band rather than in it.
   const actionClearance = !actionBand
     ? undefined
     : isPhone
-      ? quickReplies
-        ? ACTION_WITH_REPLIES_CLEARANCE
-        : ACTION_CLEARANCE
+      ? nextAction
+        ? quickReplies
+          ? ACTION_WITH_REPLIES_CLEARANCE
+          : ACTION_CLEARANCE
+        : quickReplies
+          ? SUGGESTIONS_CLEARANCE
+          : undefined
       : (scrollAction || nextAction) && !quickReplies
         ? SCROLL_ACTION_CLEARANCE
         : SUGGESTIONS_CLEARANCE;
@@ -1548,7 +1553,6 @@ export function SessionViewer({
           headerActionsEl,
           headerRepoEl,
           headerModelEl,
-          mobileActionMenuEl,
           headerRef,
           headerActionsRef,
           panelAvailable,
@@ -1792,10 +1796,6 @@ export function SessionViewer({
             pickReplySuggestion,
             prediction: viewState.preferences.composerPrediction,
             transcriptDownKeys,
-            archiving,
-            handleArchive,
-            setMobileActionMenuEl,
-            openNewWorkspace,
           }}
           composer={{
             state: {

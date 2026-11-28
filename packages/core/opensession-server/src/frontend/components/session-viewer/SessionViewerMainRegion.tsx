@@ -48,7 +48,6 @@ import {
   WorkspaceWaiting,
 } from "./busy-indicators";
 import { LiveRunStatusContext, type LiveRunStatus } from "./live-run-status";
-import { Button } from "../../ui/button";
 import { PhoneTopBarAction } from "../../ui/top-bar";
 import { IconChevronLeft } from "../icons";
 import { NextUnreadButton } from "../NextUnreadButton";
@@ -84,11 +83,8 @@ import {
   IconArrowUpToLine,
   IconChevronRight,
   IconEye,
-  IconPlus,
-  IconArchive,
 } from "../icons";
 import { TURN_SPACER } from "../../lib/app-shell-classes";
-import { MOBILE_CONTROL_GLASS } from "../../lib/app-header-classes";
 import {
   PILL_CENTRED,
   TRANSCRIPT_ICON_BUTTON,
@@ -327,10 +323,6 @@ interface ActionBandRegion {
   pickReplySuggestion: (text: string) => void;
   prediction: string | null;
   transcriptDownKeys: string[] | null;
-  archiving: boolean;
-  handleArchive: () => void | Promise<void>;
-  setMobileActionMenuEl: (node: HTMLDivElement | null) => void;
-  openNewWorkspace?: () => void;
 }
 
 interface ComposerState {
@@ -590,10 +582,6 @@ export function SessionViewerMainRegion({
     pickReplySuggestion,
     prediction,
     transcriptDownKeys,
-    archiving,
-    handleArchive,
-    setMobileActionMenuEl,
-    openNewWorkspace,
   } = actionBand;
   const scrollAction = scrollReady;
   const {
@@ -693,6 +681,29 @@ export function SessionViewerMainRegion({
     busy: isBusy,
     entries,
   });
+
+  const scrollToBottom = (className?: string) => (
+    <Tooltip
+      label="Scroll to the bottom"
+      shortcut={transcriptDownKeys ?? undefined}
+    >
+      <button
+        className={cn(TRANSCRIPT_ICON_BUTTON, className)}
+        type="button"
+        aria-label="Scroll to the bottom"
+        onClick={() => {
+          cancelIndexAnchorHold();
+          scrollToLatest("auto");
+        }}
+      >
+        <IconArrowDown
+          size={20}
+          className="text-dim transition-transform group-hover:translate-y-px"
+          aria-hidden
+        />
+      </button>
+    </Tooltip>
+  );
 
   return (
     <>
@@ -1228,33 +1239,17 @@ export function SessionViewerMainRegion({
                 )}
               </AnimatePresence>
 
-              {scrollAction && isPhone && (
-                /* Phone keeps this above its stacked action rows. Desktop
-								   places the same control inside the shared row below. */
-                <Tooltip
-                  label="Scroll to the bottom"
-                  shortcut={transcriptDownKeys ?? undefined}
-                >
-                  <button
-                    className={cn(
-                      TRANSCRIPT_ICON_BUTTON,
-                      `absolute bottom-[calc(24px+var(--suggestions-under,0px))] left-1/2 z-5 ${PILL_CENTRED}`,
-                    )}
-                    type="button"
-                    aria-label="Scroll to the bottom"
-                    onClick={() => {
-                      cancelIndexAnchorHold();
-                      scrollToLatest("auto");
-                    }}
-                  >
-                    <IconArrowDown
-                      size={20}
-                      className="text-dim transition-transform group-hover:translate-y-px"
-                      aria-hidden
-                    />
-                  </button>
-                </Tooltip>
-              )}
+              {scrollAction &&
+                isPhone &&
+                /* With Next up, the arrow rides in the lane beside it and only
+								   floats alone while the keyboard hides that row, as in the
+								   native app. Without Next it always floats here. */
+                scrollToBottom(
+                  cn(
+                    `absolute bottom-[calc(24px+var(--suggestions-under,0px))] left-1/2 z-5 ${PILL_CENTRED}`,
+                    nextAction && "hidden phone:[body.kb-open_&]:inline-flex",
+                  ),
+                )}
             </div>
 
             <div
@@ -1317,26 +1312,7 @@ export function SessionViewerMainRegion({
                               quickReplies && SCROLL_ACTION_BESIDE_REPLIES,
                             )}
                           >
-                            <Tooltip
-                              label="Scroll to the bottom"
-                              shortcut={transcriptDownKeys ?? undefined}
-                            >
-                              <button
-                                className={TRANSCRIPT_ICON_BUTTON}
-                                type="button"
-                                aria-label="Scroll to the bottom"
-                                onClick={() => {
-                                  cancelIndexAnchorHold();
-                                  scrollToLatest("auto");
-                                }}
-                              >
-                                <IconArrowDown
-                                  size={20}
-                                  className="text-dim transition-transform group-hover:translate-y-px"
-                                  aria-hidden
-                                />
-                              </button>
-                            </Tooltip>
+                            {scrollToBottom()}
                           </div>
                         )}
                         {nextAction && !isPhone && (
@@ -1349,52 +1325,23 @@ export function SessionViewerMainRegion({
                             <NextUnreadButton key={session.id} />
                           </div>
                         )}
-                        {isPhone && (
-                          <div
-                            className={cn(
-                              "pointer-events-auto mx-auto hidden h-12 min-w-0 max-w-full items-center rounded-full border border-[color:var(--mobile-header-control-border)] px-0.5 text-dim shadow-header-control phone:flex phone:[body.kb-open_&]:hidden",
-                              MOBILE_CONTROL_GLASS,
-                            )}
-                          >
-                            {!session.archived && (
-                              <Button
-                                variant="ghost"
-                                size="lg"
-                                className="size-11 min-h-11"
-                                icon={<IconArchive size={22} aria-hidden />}
-                                aria-label="Archive and open next chat"
-                                disabled={archiving}
-                                onClick={() => void handleArchive()}
-                              />
-                            )}
-                            <div
-                              ref={setMobileActionMenuEl}
-                              className="inline-flex size-11"
-                            />
-                            <span
-                              className="mx-0.5 h-5 w-px shrink-0 bg-divider"
-                              aria-hidden
-                            />
-                            <Button
-                              variant="ghost"
-                              size="lg"
-                              className="size-11 min-h-11"
-                              icon={<IconPlus size={22} aria-hidden />}
-                              aria-label="New workspace"
-                              disabled={!openNewWorkspace}
-                              onClick={openNewWorkspace}
-                            />
-                            {nextAction && (
-                              <>
-                                <span
-                                  className="mx-0.5 h-5 w-px shrink-0 bg-divider"
-                                  aria-hidden
-                                />
+                        {isPhone &&
+                          nextAction && (
+                            // Next centred over the composer with the scroll
+                            // arrow in a lane on its left. The matching right
+                            // lane keeps the pill centred whether or not the
+                            // arrow is up. The keyboard hides the row.
+                            <div className="grid w-full grid-cols-[2.75rem_minmax(0,max-content)_2.75rem] items-center justify-center gap-2 phone:[body.kb-open_&]:hidden">
+                              {scrollAction && (
+                                <div className="pointer-events-auto col-start-1 row-start-1 justify-self-center">
+                                  {scrollToBottom("size-11")}
+                                </div>
+                              )}
+                              <div className="pointer-events-auto col-start-2 row-start-1 flex min-w-0 justify-center">
                                 <NextUnreadButton key={session.id} phone />
-                              </>
-                            )}
-                          </div>
-                        )}
+                              </div>
+                            </div>
+                          )}
                       </div>
                     </div>
                   )}

@@ -135,12 +135,16 @@ final class ProgressUpdatesTests: XCTestCase {
             "3 * 4 of the tables"
         )
         XCTAssertNil(ProgressUpdate(say("a", "✓ **CI**: ** **")))
-        // A leading status reads plain too.
-        let lead = ProgressUpdate.lead(of: say(
+        // A status opening or closing a reply is dropped; the prose stays.
+        XCTAssertEqual(ProgressUpdate.prose(of: say(
             "a",
             "◷ **Merge**: [#9](https://github.com/acme/app/pull/9) queued\n\nIt lands once CI passes."
-        ))
-        XCTAssertEqual(lead?.update.text, "#9 queued")
+        )), "It lands once CI passes.")
+        XCTAssertEqual(ProgressUpdate.prose(of: say(
+            "a",
+            "The other session is publishing.\n\n◷ **Tab padding publish**: Waiting on the other session"
+        )), "The other session is publishing.")
+        XCTAssertNil(ProgressUpdate.prose(of: say("a", "No status here.\n\nJust prose.")))
     }
 
     func testNeverFoldsReasoningUserTextErrorsAttachmentsOrClampedContent() {
