@@ -90,7 +90,7 @@ const styles = stylex.create({
   card: {
     borderRadius: radius.xxl,
     ["cornerShape"]: corner.squircle,
-    backgroundColor: color.raised,
+    backgroundColor: color.settingsPlate,
     paddingInline: space.s20,
     paddingBlock: space.s16,
   },

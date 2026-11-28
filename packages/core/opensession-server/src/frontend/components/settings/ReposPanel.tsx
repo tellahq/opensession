@@ -1,4 +1,3 @@
-import { DependencyCacheSection } from "./DependencyCacheSection";
 import { useEffect, useState } from "react";
 import { useSetupStatus } from "../../hooks/useSetupStatus";
 import { errorMessage } from "../../lib/error-message";
@@ -26,7 +25,7 @@ import {
 import { RepoTile } from "../RepoTile";
 import { Radio, RadioGroup } from "../../ui/radio";
 
-function SharedCheckoutSetting() {
+export function SharedCheckoutSetting() {
   const [settings, setSettings] = useState<WorktreeSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +58,7 @@ function SharedCheckoutSetting() {
   if (!settings.repos.length) return null;
 
   const repoNames = settings.repos.map((repo) => `"${repo.label}"`).join(", ");
-  const groupLabel = "How sessions make changes to shared checkouts";
+  const groupLabel = "Where sessions make changes";
   async function setMode(mode: SharedCheckoutMode) {
     const previous = settings;
     if (!previous || mode === previous.mode) return;
@@ -130,7 +129,7 @@ function SharedCheckoutSetting() {
  * Where a new session starts for everyone who hasn't set their own preference
  * (Settings → Preferences overrides this).
  */
-function DefaultRepoRow() {
+export function DefaultRepoRow() {
   const [repos, setRepos] = useState<RepoInfo[]>([]);
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -188,7 +187,14 @@ function DefaultRepoRow() {
 // added here and a repo added there are the same act. No restart banner:
 // registering a repo takes effect immediately.
 
-export function ReposPanel() {
+/** Every registered repository, each opening its own page. The settings
+ *  every repository shares (the default, how sessions check them out) are on
+ *  General. */
+export function ReposPanel({
+  onOpenRepo,
+}: {
+  onOpenRepo?: (id: string) => void;
+}) {
   const { status, failed, refetch, applyRepo } = useSetupStatus();
   return (
     <SettingsPanel>
@@ -210,14 +216,12 @@ export function ReposPanel() {
         )
       ) : (
         <>
-          <DefaultRepoRow />
-          <SharedCheckoutSetting />
           <ReposSection
             repos={status.repos}
             onChanged={refetch}
             onRepoUpdated={applyRepo}
+            onOpenRepo={onOpenRepo}
           />
-          <DependencyCacheSection />
         </>
       )}
     </SettingsPanel>

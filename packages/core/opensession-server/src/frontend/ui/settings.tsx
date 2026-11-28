@@ -530,7 +530,7 @@ const styles = stylex.create({
     ["cornerShape"]: corner.squircle,
     borderWidth: geometry.hairline,
     borderStyle: "solid",
-    borderColor: color.dividerSoft,
+    borderColor: color.settingsPlateEdge,
     backgroundColor: color.settingsPlate,
   },
   clip: { overflow: "hidden" },

@@ -204,6 +204,9 @@
 	   would leave a group with no edge at all. Light is the case this token
 	   exists for. See the light block. */
   --settings-plate: var(--bg-raised);
+  /* The plate's outline. A host that lays settings straight on its own
+	   surface (the desktop Settings window) clears both to transparent. */
+  --settings-plate-edge: var(--divider-soft);
   /* Interaction washes. --bg-hover/--bg-active above are absolute *surfaces*:
 	   used as a hover they land as a ~9% step on --bg but barely 2% on
 	   --bg-panel, so the same token gives a heavy wash on the composer and an

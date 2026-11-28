@@ -143,7 +143,6 @@ import { getCurrentUser } from "../UserPicker";
 import { Select, SettingRow } from "./shared";
 import { AppearanceSection } from "./AppearancePanel";
 import { PersonalSandboxDefaultRow } from "./SandboxDefaults";
-import { PendingSendsSection } from "./PendingSendsSection";
 import { VoiceAudioSection } from "./VoiceAudioSection";
 import {
   getDictationVocabulary,
@@ -855,7 +854,6 @@ export function PreferencesPanel() {
       <DictationVocabularySection />
       <DeskSection />
       <PersonalPromptPanel />
-      <PendingSendsSection />
       <DebugSection />
     </SettingsPanel>
   );

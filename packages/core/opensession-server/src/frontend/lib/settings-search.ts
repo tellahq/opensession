@@ -35,16 +35,18 @@ export const SETTINGS_KEYWORDS = {
     "act as me",
     "personal token",
     "github account",
-    // The keychain is a section of this page, so its words have to find it
-    // here — nothing else in Settings answers "secrets".
-    "keychain",
-    "credentials",
-    "secrets",
-    "grants",
-    "access request",
     "download",
     "mac app",
     "desktop app",
+  ],
+  keychain: [
+    "credentials",
+    "secrets",
+    "passwords",
+    "logins",
+    "api keys",
+    "grants",
+    "access request",
   ],
   preferences: [
     "default model",
@@ -74,7 +76,6 @@ export const SETTINGS_KEYWORDS = {
     "voice mode",
     "personal prompt",
     "standing instructions",
-    "pending sends",
     "debug",
     "session context",
     "server health",

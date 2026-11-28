@@ -92,24 +92,6 @@ const styles = stylex.create({
     backgroundColor: color.sidebar,
     boxShadow: shadow.lg,
   },
-  header: {
-    position: "relative",
-    display: "flex",
-    height: geometry.settingsHeaderHeight,
-    flexShrink: 0,
-    alignItems: "center",
-    justifyContent: "center",
-    borderBottomWidth: geometry.hairline,
-    borderBottomStyle: "solid",
-    borderBottomColor: color.divider,
-    paddingInline: space.s12,
-  },
-  headerBack: {
-    position: "absolute",
-    left: space.s12,
-    top: "50%",
-    translate: "0 -50%",
-  },
   page: {
     position: "relative",
     display: "flex",
@@ -366,8 +348,12 @@ export const SETTINGS_PAGE = sx(styles.page);
 export const SETTINGS_MODAL = cn("settings-modal", sx(styles.modal));
 export const SETTINGS_SCRIM = sx(styles.scrim);
 export const SETTINGS_PANEL = sx(styles.panel);
-export const SETTINGS_HEADER = sx(styles.header);
-export const SETTINGS_HEADER_BACK = sx(styles.headerBack);
+
+/** Settings laid straight on the window's page, as Conductor does: the plate
+ *  under each group and its outline go, leaving rows and the hairlines
+ *  between them. The phone sheet keeps its grouped plates. */
+export const SETTINGS_FLAT =
+  "[--settings-plate:transparent] [--settings-plate-edge:transparent]";
 
 /**
  * The nav column. No fill, no edge: the page under it is already the sidebar

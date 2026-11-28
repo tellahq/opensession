@@ -81,6 +81,7 @@ describe("routePath", () => {
     { view: "automations", id: "daily check" },
     { view: "goals", id: "goal/1" },
     { view: "settings", section: "preferences" },
+    { view: "settings", section: "repos", repo: "acme/web app" },
     { view: "reviews", id: "review/1" },
   ];
 

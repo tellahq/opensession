@@ -31,7 +31,8 @@ const WARM_INTERVAL_OPTIONS: { value: string; label: string }[] = [
 /** Per repository: a ready worktree with dependencies installed, so sessions
  *  on this server skip a cold install. Credential-free; live app services
  *  start on demand as Portals. */
-export function DependencyCacheSection() {
+/** Every repository's dependency cache, or one repository's on its page. */
+export function DependencyCacheSection({ repoId }: { repoId?: string } = {}) {
   const [repos, setRepos] = useState<WarmTemplateEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -97,68 +98,74 @@ export function DependencyCacheSection() {
       )}
 
       <SettingCard>
-        {repos.map((entry) => {
-          const s = entry.state;
-          const status = entry.refreshing
-            ? "Refreshing…"
-            : !entry.enabled
-              ? "Off"
-              : s?.ok
-                ? `Cached at ${s.sha} · refreshed ${warmAgo(s.refreshedAt)} · ${
-                    entry.spares
-                  } spare${entry.spares === 1 ? "" : "s"} ready`
-                : s?.lastError
-                  ? `Last refresh failed: ${s.lastError}`
-                  : "Enabled. First refresh runs shortly.";
-          return (
-            <SettingRow
-              key={entry.repoId}
-              title={entry.repoId}
-              desc={status}
-              control={
-                <div className="flex items-center gap-2">
-                  {entry.enabled && (
-                    <>
-                      <Button
-                        size="sm"
-                        disabled={entry.refreshing}
-                        onClick={() =>
-                          apply(refreshWarmTemplateNow(entry.repoId))
-                        }
-                      >
-                        {entry.refreshing ? "Building…" : "Run now"}
-                      </Button>
-                      <Select
-                        label={`Refresh interval for ${entry.repoId}`}
-                        value={String(entry.intervalHours)}
-                        options={WARM_INTERVAL_OPTIONS}
-                        onChange={(v) =>
-                          apply(
-                            updateWarmTemplate(entry.repoId, {
-                              intervalHours: parseInt(v, 10),
-                            }),
-                          )
-                        }
-                      />
-                    </>
-                  )}
-                  <Switch
-                    aria-label={`Warm deps for ${entry.repoId}`}
-                    checked={entry.enabled}
-                    onCheckedChange={(v) =>
-                      apply(updateWarmTemplate(entry.repoId, { enabled: v }))
-                    }
-                  />
-                </div>
-              }
-            />
-          );
-        })}
+        {repos
+          .filter((entry) => !repoId || entry.repoId === repoId)
+          .map((entry) => {
+            const s = entry.state;
+            const status = entry.refreshing
+              ? "Refreshing…"
+              : !entry.enabled
+                ? repoId
+                  ? "A worktree with dependencies installed, so sessions start faster."
+                  : "Off"
+                : s?.ok
+                  ? `Cached at ${s.sha} · refreshed ${warmAgo(s.refreshedAt)} · ${
+                      entry.spares
+                    } spare${entry.spares === 1 ? "" : "s"} ready`
+                  : s?.lastError
+                    ? `Last refresh failed: ${s.lastError}`
+                    : "Enabled. First refresh runs shortly.";
+            return (
+              <SettingRow
+                key={entry.repoId}
+                title={repoId ? "Keep dependencies ready" : entry.repoId}
+                desc={status}
+                control={
+                  <div className="flex items-center gap-2">
+                    {entry.enabled && (
+                      <>
+                        <Button
+                          size="sm"
+                          disabled={entry.refreshing}
+                          onClick={() =>
+                            apply(refreshWarmTemplateNow(entry.repoId))
+                          }
+                        >
+                          {entry.refreshing ? "Building…" : "Run now"}
+                        </Button>
+                        <Select
+                          label={`Refresh interval for ${entry.repoId}`}
+                          value={String(entry.intervalHours)}
+                          options={WARM_INTERVAL_OPTIONS}
+                          onChange={(v) =>
+                            apply(
+                              updateWarmTemplate(entry.repoId, {
+                                intervalHours: parseInt(v, 10),
+                              }),
+                            )
+                          }
+                        />
+                      </>
+                    )}
+                    <Switch
+                      aria-label={`Warm deps for ${entry.repoId}`}
+                      checked={entry.enabled}
+                      onCheckedChange={(v) =>
+                        apply(updateWarmTemplate(entry.repoId, { enabled: v }))
+                      }
+                    />
+                  </div>
+                }
+              />
+            );
+          })}
       </SettingCard>
-      <SettingsHint>
-        Keeps a ready worktree with dependencies installed, so sessions start
-        faster.
-      </SettingsHint>
+      {!repoId && (
+        <SettingsHint>
+          Keeps a ready worktree with dependencies installed, so sessions start
+          faster.
+        </SettingsHint>
+      )}
     </>
   );
 }

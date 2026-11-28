@@ -3,9 +3,9 @@ import { useIsPhone } from "../hooks/useIsPhone";
 import { useScrollEdge } from "../hooks/useScrollEdge";
 import { cn } from "../ui/cn";
 import {
+  SETTINGS_BACK,
   SETTINGS_CONTENT_SHEET,
-  SETTINGS_HEADER,
-  SETTINGS_HEADER_BACK,
+  SETTINGS_FLAT,
   SETTINGS_MODAL,
   SETTINGS_NAV,
   SETTINGS_NAV_CAPTION,
@@ -32,18 +32,14 @@ import {
 } from "../lib/settings-classes";
 import { matchSections, type SectionHit } from "../lib/settings-search";
 import {
-  SCOPES,
   SECTIONS,
   TOOL_SECTIONS,
   scopeLabel,
-  type SettingsScope,
   type SettingsSectionKey,
   type ToolSectionKey,
 } from "../lib/settings-sections";
 import { useNewLayoutPref } from "../lib/new-layout-pref";
-import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { Segmented, SegmentedOption } from "../ui/segmented";
 import { SETTINGS_PLATE, SettingsInSheet } from "../ui/settings";
 import { PhonePage, SheetIconButton } from "../ui/sheet";
 import { PhoneTopBar, PhoneTopBarTitle } from "../ui/top-bar";
@@ -51,10 +47,20 @@ import { Connections } from "./Connections";
 import {
   IconChevronLeft,
   IconChevronRight,
+  IconPlus,
   IconSearch,
-  IconServer,
   IconX,
 } from "./icons";
+import {
+  fetchRepos,
+  notifyReposChanged,
+  REPOS_CHANGED_EVENT,
+  type RepoInfo,
+} from "../lib/api";
+import { RepoTile } from "./RepoTile";
+import { AddRepositoryDialog } from "./SetupRepos";
+import { KeychainPanel } from "./settings/KeychainPanel";
+import { RepoPage } from "./settings/RepoPage";
 import { MyAccountsPanel } from "./MyAccounts";
 import { AuditPanel } from "./settings/AuditPanel";
 import { DeploysPanel } from "./settings/DeploysPanel";
@@ -72,10 +78,7 @@ import { ReposPanel } from "./settings/ReposPanel";
 import { SandboxesPanel } from "./settings/SandboxesPanel";
 import { StoragePanel } from "./settings/StoragePanel";
 import { RunnersPanel } from "./settings/RunnersPanel";
-import { OrganizationAppIcon } from "./OrganizationAppIcon";
 import { SettingsAccountCard, SettingsAccountFooter } from "./SettingsAccount";
-import { UserAvatar } from "./UserAvatar";
-import { useCurrentUser } from "./UserPicker";
 
 // Settings: on desktop a modal over the page it was opened from, with
 // Personal, Organization and Server tabs across the top, the tab's sections in
@@ -246,9 +249,14 @@ function NavSearch({
  * sheet's detail page. Tool panels come in via children (App owns them). */
 function SectionPanel({
   section,
+  repo,
+  onOpenRepo,
   children,
 }: {
   section: SettingsSectionKey;
+  /** On the repos section, the repository whose page is open. */
+  repo?: string;
+  onOpenRepo: (id?: string) => void;
   children?: React.ReactNode;
 }) {
   return (
@@ -259,7 +267,12 @@ function SectionPanel({
       {section === "appearance" && <AppearancePanel />}
       {section === "shortcuts" && <ShortcutsPanel />}
       {section === "general" && <GeneralPanel />}
-      {section === "repos" && <ReposPanel />}
+      {section === "repos" &&
+        (repo ? (
+          <RepoPage key={repo} repoId={repo} onRemoved={() => onOpenRepo()} />
+        ) : (
+          <ReposPanel onOpenRepo={onOpenRepo} />
+        ))}
       {section === "members" && <MembersPanel />}
       {section === "library" && <LibraryPanel />}
       {section === "audit" && <AuditPanel />}
@@ -268,6 +281,7 @@ function SectionPanel({
       {section === "runners" && <RunnersPanel />}
       {section === "connections" && <Connections />}
       {section === "myAccounts" && <MyAccountsPanel />}
+      {section === "keychain" && <KeychainPanel />}
       {section === "memory" && <MemoryPanel />}
       {section === "ingress" && <IngressPanel />}
       {section === "storage" && <StoragePanel />}
@@ -277,10 +291,32 @@ function SectionPanel({
   );
 }
 
+/** The registered repositories, for the nav's own group, kept fresh when one
+ *  is added or removed anywhere in the app. */
+function useRepoList(): RepoInfo[] {
+  const [repos, setRepos] = useState<RepoInfo[]>([]);
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      void fetchRepos()
+        .then((list) => alive && setRepos(list))
+        .catch(() => {});
+    load();
+    window.addEventListener(REPOS_CHANGED_EVENT, load);
+    return () => {
+      alive = false;
+      window.removeEventListener(REPOS_CHANGED_EVENT, load);
+    };
+  }, []);
+  return repos;
+}
+
 export function Settings({
   onBack,
   section,
+  repo,
   onSelect,
+  onSelectRepo,
   onShowRoot,
   children,
 }: {
@@ -289,21 +325,26 @@ export function Settings({
    * Undefined = no explicit section: desktop defaults to Account, while the
    * phone sheet stays on its root list of sections. */
   section?: SettingsSectionKey;
+  /** On the repos section, the repository whose page is open. */
+  repo?: string;
   /** Navigate to a section — App maps tool keys to their own routes. */
   onSelect: (key: SettingsSectionKey) => void;
+  /** Open a repository's page, or the list of them without an id. */
+  onSelectRepo: (id?: string) => void;
   /** Phone sheet's back-to-root (navigate to sectionless /settings). */
   onShowRoot?: () => void;
   /** The active tool's panel (App owns the tool components and their props). */
   children?: React.ReactNode;
 }) {
   const isPhone = useIsPhone();
-  const currentUser = useCurrentUser();
   // The new layout (desktop only) makes Automations, Goals and Security
   // pages of the app, so Settings stops listing them there.
   const toolPages = useNewLayoutPref() && !isPhone;
   const offered = SECTIONS.filter(
     (entry) => !(toolPages && TOOL_SECTIONS.has(entry.key)),
   );
+  const repos = useRepoList();
+  const [addingRepo, setAddingRepo] = useState(false);
 
   const [query, setQuery] = useState("");
   // The search field is a sibling above the section list, not its parent, so
@@ -311,22 +352,6 @@ export function Settings({
   // app's own chrome rows ask the same question the same way.
   const [searchBar, setSearchBar] = useState<HTMLDivElement | null>(null);
   useScrollEdge(searchBar, "[data-settings-nav-scroll]");
-
-  // A bare /settings lands on Account, the first personal section, on desktop.
-  // Keep the section out of the URL so phones can stay at the nav root.
-  const active = section ?? "myAccounts";
-  const activeScope =
-    SECTIONS.find((entry) => entry.key === active)?.scope ?? "personal";
-
-  // Each tab reopens on the section last shown in it.
-  const [lastInScope, setLastInScope] = useState<
-    Partial<Record<SettingsScope, SettingsSectionKey>>
-  >({});
-  useEffect(() => {
-    setLastInScope((last) =>
-      last[activeScope] === active ? last : { ...last, [activeScope]: active },
-    );
-  }, [active, activeScope]);
 
   // Esc closes the modal, unless it belongs to a field, a menu or a dialog
   // opened from inside Settings.
@@ -352,41 +377,104 @@ export function Settings({
     return () => window.removeEventListener("keydown", onKey);
   }, [isPhone, onBack]);
 
+  const panel = (key: SettingsSectionKey) => (
+    <SectionPanel section={key} repo={repo} onOpenRepo={onSelectRepo}>
+      {children}
+    </SectionPanel>
+  );
+
   if (isPhone)
     return (
       <MobileSettings
-        groups={groupSections(offered, (entry) => scopeLabel(entry.scope))}
+        groups={groupSections(
+          offered,
+          (entry) => entry.group ?? scopeLabel(entry.scope),
+        )}
         section={section}
         onSelect={onSelect}
         onShowRoot={onShowRoot}
         onBack={onBack}
-      >
-        {children}
-      </MobileSettings>
+        panel={panel}
+      />
     );
 
-  // A search looks through every tab, captioned by tab; otherwise the nav
-  // lists the open tab's sections.
-  const shown = query
-    ? filterGroups(
-        groupSections(offered, (entry) => scopeLabel(entry.scope)),
-        query,
-      )
-    : filterGroups(
-        groupSections(
-          offered.filter((entry) => entry.scope === activeScope),
-          (entry) => entry.group,
-        ),
-        "",
-      );
+  // A bare /settings lands on Account, the first personal section, on desktop.
+  // Keep the section out of the URL so phones can stay at the nav root.
+  const active = section ?? "myAccounts";
+  // One sidebar, captioned the way Conductor's is: Personal, Organization,
+  // each repository under its own caption, then Server. The repos section is
+  // the Repositories group itself, not a row of its own.
+  const shown = filterGroups(
+    groupSections(
+      offered.filter((entry) => entry.key !== "repos"),
+      (entry) => entry.group ?? scopeLabel(entry.scope),
+    ),
+    query,
+  );
+  const q = query.trim().toLowerCase();
+  const repoHits = repos.filter(
+    (entry) =>
+      !q ||
+      (entry.label || entry.id).toLowerCase().includes(q) ||
+      "repositories".includes(q),
+  );
   const firstHit = shown[0]?.hits[0]?.item;
-  const openScope = (value: string) => {
-    const scope = SCOPES.find((entry) => entry.key === value)?.key;
-    if (!scope) return;
-    const target =
-      lastInScope[scope] ?? offered.find((entry) => entry.scope === scope)?.key;
-    if (target) onSelect(target);
-  };
+  const repoGroup = (repoHits.length > 0 || !q) && (
+    <div className={SETTINGS_NAV_GROUP} key="Repositories">
+      <div className={SETTINGS_NAV_CAPTION}>Repositories</div>
+      {repoHits.map((entry) => (
+        <button
+          key={entry.id}
+          className={SETTINGS_NAV_ROW}
+          data-active={(active === "repos" && repo === entry.id) || undefined}
+          onClick={() => onSelectRepo(entry.id)}
+        >
+          <span className={SETTINGS_NAV_ICON}>
+            <RepoTile name={entry.id} size={18} />
+          </span>
+          <span className="min-w-0 flex-1 truncate">
+            {entry.label || entry.id}
+          </span>
+        </button>
+      ))}
+      {!q && (
+        <button
+          className={SETTINGS_NAV_ROW}
+          onClick={() => setAddingRepo(true)}
+        >
+          <span className={SETTINGS_NAV_ICON}>
+            <IconPlus size={20} />
+          </span>
+          Add repository
+        </button>
+      )}
+    </div>
+  );
+  // Repositories sit after Organization, the scope they belong to.
+  const organizationAt = shown.findIndex((g) => g.group === "Organization");
+  const renderGroup = (g: FilteredGroup, index: number) => (
+    <div className={SETTINGS_NAV_GROUP} key={g.group ?? index}>
+      {g.group && <div className={SETTINGS_NAV_CAPTION}>{g.group}</div>}
+      {g.hits.map(({ item: s, hint }) => (
+        <button
+          key={s.key}
+          className={SETTINGS_NAV_ROW}
+          data-active={(active === s.key && !repo) || undefined}
+          onClick={() => onSelect(s.key)}
+        >
+          <span className={SETTINGS_NAV_ICON}>{s.icon}</span>
+          <span className="min-w-0 flex-1">
+            {s.label}
+            {hint && (
+              <span className="block truncate text-meta font-normal text-faint">
+                {hint}
+              </span>
+            )}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <div className={cn(SETTINGS_MODAL, SETTINGS_LEADING)}>
@@ -398,42 +486,17 @@ export function Settings({
         data-settings-modal
         className={SETTINGS_PANEL}
       >
-        <header className={SETTINGS_HEADER}>
-          <div className={SETTINGS_HEADER_BACK}>
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={<IconChevronLeft size={20} />}
-              onClick={onBack}
-            >
-              Back to app
-            </Button>
-          </div>
-          <Segmented
-            label="Settings"
-            value={activeScope}
-            onValueChange={openScope}
-          >
-            {SCOPES.map((scope) => (
-              <SegmentedOption key={scope.key} value={scope.key}>
-                {scope.key === "personal" && (
-                  <UserAvatar name={currentUser} size={18} />
-                )}
-                {scope.key === "organization" && (
-                  <OrganizationAppIcon className="size-[18px] rounded-sm object-cover" />
-                )}
-                {scope.key === "server" && (
-                  <IconServer size={18} dense className="text-faint" />
-                )}
-                {scope.label}
-              </SegmentedOption>
-            ))}
-          </Segmented>
-        </header>
         <div className={SETTINGS_PAGE}>
-          {/* Search stays put; only the section list scrolls, so neither it
-              nor the account footer is lost once the list outgrows the nav. */}
+          {/* Back and search stay put; only the section list scrolls, so
+              neither they nor the account footer are lost once the list
+              outgrows the nav. */}
           <aside className={SETTINGS_NAV}>
+            <button className={SETTINGS_BACK} onClick={onBack}>
+              <span className={SETTINGS_NAV_ICON}>
+                <IconChevronLeft />
+              </span>
+              Back to app
+            </button>
             <NavSearch
               ref={setSearchBar}
               value={query}
@@ -443,32 +506,18 @@ export function Settings({
             />
             {/* The attribute is what useScrollEdge finds the scrollport by. */}
             <div data-settings-nav-scroll className={SETTINGS_NAV_LIST}>
-              {shown.map((g, index) => (
-                <div className={SETTINGS_NAV_GROUP} key={g.group ?? index}>
-                  {g.group && (
-                    <div className={SETTINGS_NAV_CAPTION}>{g.group}</div>
-                  )}
-                  {g.hits.map(({ item: s, hint }) => (
-                    <button
-                      key={s.key}
-                      className={SETTINGS_NAV_ROW}
-                      data-active={active === s.key || undefined}
-                      onClick={() => onSelect(s.key)}
-                    >
-                      <span className={SETTINGS_NAV_ICON}>{s.icon}</span>
-                      <span className="min-w-0 flex-1">
-                        {s.label}
-                        {hint && (
-                          <span className="block truncate text-meta font-normal text-faint">
-                            {hint}
-                          </span>
-                        )}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              ))}
-              {shown.length === 0 && (
+              {shown.map((g, index) =>
+                index === organizationAt ? (
+                  <React.Fragment key={g.group}>
+                    {renderGroup(g, index)}
+                    {repoGroup}
+                  </React.Fragment>
+                ) : (
+                  renderGroup(g, index)
+                ),
+              )}
+              {organizationAt < 0 && repoGroup}
+              {shown.length === 0 && repoHits.length === 0 && (
                 <div className="px-2.5 py-3 text-meta text-faint">
                   Nothing matches “{query}”.
                 </div>
@@ -479,13 +528,17 @@ export function Settings({
 
           {/* Tool sections fill the whole content area edge-to-edge (they
               carry their own layout and scrolling); settings panels keep the
-              centered, padded reading column. */}
+              centered reading column, laid flat on the page: rows and
+              hairlines, no plates. */}
           <div
             data-settings-scroll
-            className={settingsContent(TOOL_SECTIONS.has(active))}
+            className={cn(
+              settingsContent(TOOL_SECTIONS.has(active)),
+              SETTINGS_FLAT,
+            )}
           >
             {TOOL_SECTIONS.has(active) ? (
-              <SectionPanel section={active}>{children}</SectionPanel>
+              panel(active)
             ) : (
               <div
                 className={
@@ -494,12 +547,17 @@ export function Settings({
                     : SETTINGS_PANEL_FRAME
                 }
               >
-                <SectionPanel section={active}>{children}</SectionPanel>
+                {panel(active)}
               </div>
             )}
           </div>
         </div>
       </div>
+      <AddRepositoryDialog
+        open={addingRepo}
+        onOpenChange={setAddingRepo}
+        onAdded={() => notifyReposChanged()}
+      />
     </div>
   );
 }
@@ -516,14 +574,14 @@ function MobileSettings({
   onSelect,
   onShowRoot,
   onBack,
-  children,
+  panel,
 }: {
   groups: SectionGroup[];
   section?: SettingsSectionKey;
   onSelect: (key: SettingsSectionKey) => void;
   onShowRoot?: () => void;
   onBack: () => void;
-  children?: React.ReactNode;
+  panel: (key: SettingsSectionKey) => React.ReactNode;
 }) {
   const [query, setQuery] = useState("");
   const shown = filterGroups(groups, query);
@@ -649,14 +707,10 @@ function MobileSettings({
               {shownSection && (
                 <div data-settings-scroll className={SETTINGS_CONTENT_SHEET}>
                   {TOOL_SECTIONS.has(shownSection) ? (
-                    <SectionPanel section={shownSection}>
-                      {children}
-                    </SectionPanel>
+                    panel(shownSection)
                   ) : (
                     <div className={SETTINGS_PANEL_FRAME_SHEET}>
-                      <SectionPanel section={shownSection}>
-                        {children}
-                      </SectionPanel>
+                      {panel(shownSection)}
                     </div>
                   )}
                 </div>

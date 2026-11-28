@@ -205,9 +205,9 @@ export function describePutFailure(reason: PutFailure): string {
     case "unavailable":
       return "This browser has no local storage, so the command cannot be saved for reconnect.";
     case "full":
-      return "Pending sends are using all reserved storage. Forget one under Settings, Preferences.";
+      return "This is too large to keep for reconnect.";
     case "blocked":
-      return "Local storage is full. Forget pending sends under Settings, Preferences, or clear site data.";
+      return "This browser's storage is full, so this cannot be kept for reconnect.";
   }
 }
 
@@ -273,12 +273,22 @@ export class WsCommandOutbox {
       message: storedMessage,
       createdAt: this.now(),
     };
-    const currentBytes = this.allItems().reduce(
+    const size = utf8Bytes(item);
+    if (size > MAX_COMMAND_BYTES) return { ok: false, reason: "full" };
+    // The newest intent wins: the oldest unconfirmed commands give up their
+    // room in the budget, so a stuck one never blocks new sends and nobody
+    // has to clear them by hand.
+    const queued = this.allItems().sort((a, b) => a.createdAt - b.createdAt);
+    let queuedBytes = queued.reduce(
       (sum, stored) => sum + utf8Bytes(stored),
       0,
     );
-    if (currentBytes + utf8Bytes(item) > MAX_COMMAND_BYTES)
-      return { ok: false, reason: "full" };
+    while (queuedBytes + size > MAX_COMMAND_BYTES) {
+      const oldest = queued.shift();
+      if (!oldest) break;
+      this.forget(oldest.message.requestId);
+      queuedBytes -= utf8Bytes(oldest);
+    }
     return this.write(key, item)
       ? { ok: true }
       : { ok: false, reason: "blocked" };
@@ -357,7 +367,7 @@ export class WsCommandOutbox {
     };
   }
 
-  /** Explicit recovery escape hatch. The tombstone prevents a stale tab write. */
+  /** Drop a command for good. The tombstone prevents a stale tab write. */
   forget(id: string): boolean {
     if (!this.store || !this.write(this.retiredKey(id), this.tombstone(id)))
       return false;

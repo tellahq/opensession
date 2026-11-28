@@ -103,6 +103,7 @@ export const color = stylex.defineConsts({
   segmentedKnobEdge: "var(--segmented-knob-edge)",
   /** A settings group's plate: lighter than `raised`, held by a soft edge. */
   settingsPlate: "var(--settings-plate)",
+  settingsPlateEdge: "var(--settings-plate-edge)",
   /** `line` at a third: closes a block's shape without reading as a rule. */
   dividerSoft: "var(--divider-soft)",
   /** A control over an image: white in both themes. */
@@ -555,7 +556,6 @@ export const geometry = stylex.defineConsts({
    *  catalog column the Library takes, and the bottom air under a panel. */
   settingsNavWidth: "232px",
   settingsModalMaxWidth: "1440px",
-  settingsHeaderHeight: "52px",
   settingsContentTop: "44px",
   settingsColumnWide: "980px",
   settingsPanelBottom: "88px",

@@ -212,7 +212,8 @@ export function PersonalSandboxDefaultRow() {
  * there, whatever the workspace or a person chose; only the per-session
  * choice in the new session menu beats it.
  */
-function ProjectSandboxDefaults() {
+/** Where each project's sessions and app run, or one project's on its page. */
+export function ProjectSandboxDefaults({ repoId }: { repoId?: string } = {}) {
   const user = getCurrentUser();
   const navigation = use(NavigationContext);
   const [status, setStatus] = useState<SandboxStatusInfo | null>(null);
@@ -298,132 +299,134 @@ function ProjectSandboxDefaults() {
 
   return (
     <>
-      <SettingsGroupLabel>Projects</SettingsGroupLabel>
+      <SettingsGroupLabel>{repoId ? "Sandbox" : "Projects"}</SettingsGroupLabel>
       <SettingCard>
-        {repos.map((repo) => {
-          const value = defaults.repos?.[repo.id] ?? "workspace";
-          // Modal with a GPU is its own choice (`modal:T4`).
-          const unavailable =
-            value !== "workspace" &&
-            value !== "none" &&
-            !providers.includes(splitSandboxChoice(value).provider);
-          const portals = defaults.portals?.[repo.id] ?? "none";
-          const portalsUnavailable =
-            portals !== "none" && !providers.includes(portals);
-          const label = repo.label || repo.id;
-          return (
-            <div key={repo.id}>
-              <SettingRow
-                title={label}
-                desc={
-                  value === "workspace"
-                    ? `Follows the organization default (${providerLabel(defaults.workspace || "none")}).`
-                    : "Every new session on this project starts here."
-                }
-                control={
-                  <div
-                    className={
-                      saving === `${repo.id}:repo`
-                        ? "pointer-events-none opacity-60"
-                        : undefined
-                    }
-                  >
-                    <Select
-                      label={`${label} default environment`}
-                      value={value}
-                      options={[
-                        { value: "workspace", label: "Organization default" },
-                        { value: "none", label: "This machine" },
-                        ...(unavailable
-                          ? [
-                              {
-                                value,
-                                label: `${providerLabel(value)} · unavailable`,
-                                disabled: true,
-                              },
-                            ]
-                          : []),
-                        ...sandboxMachineChoices(providers).map((id) => ({
-                          value: id,
-                          label: providerLabel(id),
-                        })),
-                      ]}
-                      onChange={(next) => void save(repo.id, "repo", next)}
-                    />
-                  </div>
-                }
-              />
-              <SettingRow
-                title={`${label} app`}
-                desc={
-                  portals === "none"
-                    ? "Runs beside the session."
-                    : "Runs in its own Sandbox, even for local sessions."
-                }
-                control={
-                  <div
-                    className={
-                      saving === `${repo.id}:repo-portals`
-                        ? "pointer-events-none opacity-60"
-                        : undefined
-                    }
-                  >
-                    <Select
-                      label={`${label} Portal environment`}
-                      value={portals}
-                      options={[
-                        { value: "none", label: "With the session" },
-                        ...(portalsUnavailable
-                          ? [
-                              {
-                                value: portals,
-                                label: `${providerLabel(portals)} · unavailable`,
-                                disabled: true,
-                              },
-                            ]
-                          : []),
-                        ...providers.map((id) => ({
-                          value: id,
-                          label: providerLabel(id),
-                        })),
-                      ]}
-                      onChange={(next) =>
-                        void save(repo.id, "repo-portals", next)
-                      }
-                    />
-                  </div>
-                }
-              />
-              {lifecycle ? (
+        {repos
+          .filter((repo) => !repoId || repo.id === repoId)
+          .map((repo) => {
+            const value = defaults.repos?.[repo.id] ?? "workspace";
+            // Modal with a GPU is its own choice (`modal:T4`).
+            const unavailable =
+              value !== "workspace" &&
+              value !== "none" &&
+              !providers.includes(splitSandboxChoice(value).provider);
+            const portals = defaults.portals?.[repo.id] ?? "none";
+            const portalsUnavailable =
+              portals !== "none" && !providers.includes(portals);
+            const label = repo.label || repo.id;
+            return (
+              <div key={repo.id}>
                 <SettingRow
-                  title={`${label} setup script`}
+                  title={repoId ? "Sessions run in" : label}
                   desc={
-                    lifecycle.preSetupScripts[repo.id]
-                      ? "Runs before .agents/setup in every new Sandbox. Changing it refreshes the project snapshot."
-                      : "Optional. Set up Sandboxes for this project without committing anything."
+                    value === "workspace"
+                      ? `Follows the organization default (${providerLabel(defaults.workspace || "none")}).`
+                      : "Every new session on this project starts here."
                   }
                   control={
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={configuringRepo !== null}
-                        onClick={() => void configureWithAgent(repo)}
-                      >
-                        {configuringRepo === repo.id
-                          ? "Starting…"
-                          : "Configure with agent"}
-                      </Button>
-                      <Button size="sm" onClick={() => setScriptRepo(repo)}>
-                        {lifecycle.preSetupScripts[repo.id] ? "Edit" : "Add"}
-                      </Button>
+                    <div
+                      className={
+                        saving === `${repo.id}:repo`
+                          ? "pointer-events-none opacity-60"
+                          : undefined
+                      }
+                    >
+                      <Select
+                        label={`${label} default environment`}
+                        value={value}
+                        options={[
+                          { value: "workspace", label: "Organization default" },
+                          { value: "none", label: "This machine" },
+                          ...(unavailable
+                            ? [
+                                {
+                                  value,
+                                  label: `${providerLabel(value)} · unavailable`,
+                                  disabled: true,
+                                },
+                              ]
+                            : []),
+                          ...sandboxMachineChoices(providers).map((id) => ({
+                            value: id,
+                            label: providerLabel(id),
+                          })),
+                        ]}
+                        onChange={(next) => void save(repo.id, "repo", next)}
+                      />
                     </div>
                   }
                 />
-              ) : null}
-            </div>
-          );
-        })}
+                <SettingRow
+                  title={repoId ? "App runs in" : `${label} app`}
+                  desc={
+                    portals === "none"
+                      ? "Runs beside the session."
+                      : "Runs in its own Sandbox, even for local sessions."
+                  }
+                  control={
+                    <div
+                      className={
+                        saving === `${repo.id}:repo-portals`
+                          ? "pointer-events-none opacity-60"
+                          : undefined
+                      }
+                    >
+                      <Select
+                        label={`${label} Portal environment`}
+                        value={portals}
+                        options={[
+                          { value: "none", label: "With the session" },
+                          ...(portalsUnavailable
+                            ? [
+                                {
+                                  value: portals,
+                                  label: `${providerLabel(portals)} · unavailable`,
+                                  disabled: true,
+                                },
+                              ]
+                            : []),
+                          ...providers.map((id) => ({
+                            value: id,
+                            label: providerLabel(id),
+                          })),
+                        ]}
+                        onChange={(next) =>
+                          void save(repo.id, "repo-portals", next)
+                        }
+                      />
+                    </div>
+                  }
+                />
+                {lifecycle ? (
+                  <SettingRow
+                    title={repoId ? "Setup script" : `${label} setup script`}
+                    desc={
+                      lifecycle.preSetupScripts[repo.id]
+                        ? "Runs before .agents/setup in every new Sandbox. Changing it refreshes the project snapshot."
+                        : "Optional. Set up Sandboxes for this project without committing anything."
+                    }
+                    control={
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={configuringRepo !== null}
+                          onClick={() => void configureWithAgent(repo)}
+                        >
+                          {configuringRepo === repo.id
+                            ? "Starting…"
+                            : "Configure with agent"}
+                        </Button>
+                        <Button size="sm" onClick={() => setScriptRepo(repo)}>
+                          {lifecycle.preSetupScripts[repo.id] ? "Edit" : "Add"}
+                        </Button>
+                      </div>
+                    }
+                  />
+                ) : null}
+              </div>
+            );
+          })}
       </SettingCard>
       <SandboxScriptDialog
         open={Boolean(scriptRepo)}
