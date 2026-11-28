@@ -80,8 +80,6 @@ import {
   composerSend,
   composerSendDefault,
   composerSendMinimizedFill,
-  composerSendQueue,
-  composerSendSteer,
   composerSendStop,
   composerTextarea,
   composerTextareaPadding,
@@ -2165,15 +2163,9 @@ export function Composer({
                       <ComposerPressButton
                         className={cn(
                           composerSend,
-                          // A note posts straight away, so it keeps the plain
-                          // send plate even while a turn is running.
-                          noteMode
-                            ? composerSendDefault
-                            : steerSend
-                              ? composerSendSteer
-                              : busy
-                                ? composerSendQueue
-                                : composerSendDefault,
+                          // Send, queue and steer share one plate; the glyph
+                          // says which.
+                          composerSendDefault,
                           minimized && composerSendMinimizedFill,
                         )}
                         onPress={() => {

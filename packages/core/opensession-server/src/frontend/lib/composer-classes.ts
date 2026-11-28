@@ -171,13 +171,6 @@ export const composerSend =
  *  brightening — brightening a wash read as a disabled state. */
 export const composerSendDefault =
   "bg-accent text-on-accent enabled:hover:bg-accent-hover";
-/** Busy + queue keeps the send plate and changes the glyph. The old 2px ring
- *  read like a selected toggle, then hovered to dark-on-dark because its ink
- *  did not invert with the fill. */
-export const composerSendQueue = composerSendDefault;
-/** Busy + steer keeps the full accent plate too; its up-arrow glyph separates
- *  it from queue's return arrow without making the action look secondary. */
-export const composerSendSteer = composerSendDefault;
 /** Stop: the only full-strength red plate. */
 export const composerSendStop =
   "bg-red text-white enabled:hover:brightness-[1.12]";
@@ -236,7 +229,6 @@ export const composerQueue =
   "relative -mb-3.5 flex flex-col gap-2 rounded-t-composer border-x border-t " +
   composerFlapBorder +
   " bg-[var(--composer-flap-surface)] px-3.5 pt-2.5 pb-[26px]";
-export const composerQueueTitle = "text-meta font-semibold text-faint";
 export const composerQueueList = "flex flex-col gap-2";
 /** One queued/steered row. The floor is one line of body text, so a row whose
  *  point is a single message does not inherit the 40px action cluster's
@@ -257,29 +249,6 @@ export const composerQueueItemSeparated = "border-t border-line pt-2";
  *  still take clicks — a drag only starts once the pointer actually moves. */
 export const composerQueueItemDraggable =
   "cursor-grab touch-none active:cursor-grabbing";
-/** In flow at the row's trailing edge, so each row reserves exactly the width
- *  its own actions need — it used to be absolutely positioned over a fixed
- *  128px of padding, which clipped the rows carrying a pill into the text.
- *  Written before the message in the markup (it owns the row's controls) and
- *  painted after it, hence `order-1`. The negative block margins keep the 36px
- *  cluster from setting the height of a one-line row. */
-export const composerQueueActions =
-  "order-1 z-1 -mt-[11px] -mb-2.5 inline-flex shrink-0 items-center gap-0.5";
-/** A compact 36px action with the same `rounded-control` corner and inset
- *  hover wash as the composer's toolbar buttons. It remains a separate
- *  constant because the wash sits 3px in rather than 4px, there is no
- *  transparent border holding layout, and disabled actions fade further. */
-export const composerQueueAction =
-  "relative inline-flex size-9 items-center justify-center rounded-control text-dim disabled:cursor-default disabled:opacity-35 enabled:hover:text-fg " +
-  "before:absolute before:inset-[3px] before:z-0 before:rounded-[calc((12px-3px)*var(--rf))] before:[corner-shape:var(--cs)] before:transition-[background] before:content-[''] enabled:hover:before:bg-hover " +
-  "[&>*]:relative [&>*]:z-1";
-/** Destructive action: the wash goes red rather than neutral. */
-export const composerQueueActionDanger =
-  "enabled:hover:text-red enabled:hover:before:bg-red-soft";
-/** Steer stays accent at rest AND under the cursor — it is the one action on
- *  the row that is not a correction, and the shared hover would have dropped
- *  it back to plain ink. */
-export const composerQueueActionSteer = "text-accent enabled:hover:text-accent";
 /** A status readout, not a control: "Steered". Genuinely
  *  round (the stylesheet spelled a bare 999px with no `corner-shape`), so
  *  `rounded-full` rather than `rounded-capsule`. */

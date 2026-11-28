@@ -1,3 +1,4 @@
+import * as stylex from "@stylexjs/stylex";
 import { isGitHubAttribution } from "@tellahq/opensession-protocol/notices";
 import { pastedTextLineLabel } from "@tellahq/opensession-protocol/pasted-text";
 import { Reorder } from "motion/react";
@@ -12,10 +13,6 @@ import { queueDeleteLabel, type QueueReceipt } from "../lib/session-queue";
 import { personKey } from "../lib/review-queue";
 import {
   composerQueue,
-  composerQueueAction,
-  composerQueueActionDanger,
-  composerQueueActionSteer,
-  composerQueueActions,
   composerQueueBody,
   composerQueueBodyTone,
   composerQueueContent,
@@ -30,13 +27,32 @@ import {
   composerQueueList,
   composerQueueSendingShimmer,
   composerQueueSendingStatus,
-  composerQueueTitle,
 } from "../lib/composer-classes";
 import { Button } from "../ui/button";
+import { section } from "../ui/section";
+import { media, space } from "../ui/tokens.stylex";
 import { cn } from "../ui/cn";
 import { TextShimmer } from "../ui/text-shimmer";
 import { Tooltip } from "../ui/tooltip";
 import { IconArrowUp, IconPencil, IconPullRequest, IconTrash } from "./icons";
+
+const styles = stylex.create({
+  /** A row's controls, at its trailing edge (written first, painted last).
+   *  The negative block margins keep the cluster from setting the height of
+   *  a one-line row. */
+  actions: {
+    order: 1,
+    zIndex: 1,
+    display: "inline-flex",
+    flexShrink: 0,
+    alignItems: "center",
+    gap: space.s2,
+    marginBlock: {
+      default: `calc(-1 * ${space.s4})`,
+      [media.phone]: `calc(-1 * ${space.s12})`,
+    },
+  },
+});
 
 interface Props {
   currentUser: string;
@@ -138,7 +154,7 @@ export function SessionQueue({
 }: Props) {
   return (
     <div className={composerQueue} aria-label="Queued messages">
-      <div className={composerQueueTitle}>{queueTitle}</div>
+      <div {...stylex.props(section.label)}>{queueTitle}</div>
       <Reorder.Group
         as="div"
         axis="y"
@@ -178,30 +194,26 @@ export function SessionQueue({
                 canReorder && composerQueueItemDraggable,
               )}
             >
-              <div className={composerQueueActions}>
+              <div {...stylex.props(styles.actions)}>
                 {canEdit && (
                   <Tooltip label="Edit in composer">
-                    <button
-                      type="button"
-                      className={composerQueueAction}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon={<IconPencil />}
+                      aria-label="Edit in composer"
                       onClick={() => onEditQueued(item)}
-                    >
-                      <IconPencil size={20} />
-                    </button>
+                    />
                   </Tooltip>
                 )}
                 <Tooltip label={label}>
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<IconTrash />}
                     aria-label={label}
-                    className={cn(
-                      composerQueueAction,
-                      composerQueueActionDanger,
-                    )}
                     onClick={() => onDeleteQueued(item.id, index)}
-                  >
-                    <IconTrash size={20} />
-                  </button>
+                  />
                 </Tooltip>
                 {!github && (
                   <Tooltip
@@ -211,18 +223,14 @@ export function SessionQueue({
                         : "Messages with files must remain queued"
                     }
                   >
-                    <button
-                      type="button"
-                      className={cn(
-                        composerQueueAction,
-                        composerQueueActionSteer,
-                      )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon={<IconArrowUp />}
                       aria-label="Send now"
                       disabled={!canSteer}
                       onClick={() => onSteerQueued(item.id, index)}
-                    >
-                      <IconArrowUp size={20} />
-                    </button>
+                    />
                   </Tooltip>
                 )}
               </div>
@@ -248,7 +256,7 @@ export function SessionQueue({
             index > 0 && composerQueueItemSeparated,
           )}
         >
-          <div className={composerQueueActions}>
+          <div {...stylex.props(styles.actions)}>
             <span className={composerQueueSendingStatus} role="status">
               {settingUpWorkspace ? (
                 "Queued"
@@ -279,7 +287,7 @@ export function SessionQueue({
           )}
         >
           {item.state !== "failed" && (
-            <div className={composerQueueActions}>
+            <div {...stylex.props(styles.actions)}>
               <span className={composerQueueSendingStatus} role="status">
                 <TextShimmer className={composerQueueSendingShimmer}>
                   {item.state === "sending" ? "Sending" : "Waiting to send"}
