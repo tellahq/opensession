@@ -56,7 +56,7 @@ function Reactions({
           className={cn(
             "inline-flex h-6 min-h-0 w-auto items-center gap-1 rounded-full border px-2 py-0 text-meta leading-none",
             r.mine
-              ? "border-accent bg-accent-soft text-accent"
+              ? "border-accent bg-accent-soft text-accent-ink"
               : "border-transparent bg-hover text-dim hover:border-line-strong",
           )}
         >

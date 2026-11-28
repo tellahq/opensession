@@ -196,7 +196,7 @@ const STATE_LABEL: Record<SandboxConnectionInfo["state"], string> = {
 function statusClasses(state: SandboxConnectionInfo["state"]): string {
   if (state === "ready") return "bg-green-soft text-green";
   if (state === "needs_attention") return "bg-red-soft text-red";
-  if (state === "checking") return "bg-accent-soft text-accent";
+  if (state === "checking") return "bg-accent-soft text-accent-ink";
   return "bg-hover text-dim";
 }
 

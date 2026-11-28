@@ -303,7 +303,7 @@ export const composerQueueActionSteer = "text-accent enabled:hover:text-accent";
  *  round (the stylesheet spelled a bare 999px with no `corner-shape`), so
  *  `rounded-full` rather than `rounded-capsule`. */
 export const composerQueuePill =
-  "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-transparent bg-accent-soft px-[13px] text-label font-semibold text-accent";
+  "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-transparent bg-accent-soft px-[13px] text-label font-semibold text-accent-ink";
 /** Optimistic busy send: a transient readout, not a badge or control. Keeping
  *  it borderless prevents the in-flight state from reading as a pill button. */
 export const composerQueueSendingStatus =
